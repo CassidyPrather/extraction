@@ -245,7 +245,8 @@ for i in range(3):
     bolt.box((0.0065, 0.0008, 0.0009), (0.0245, 0.0528, -0.1175 + i * 0.0025), "Steel",
              bevel=0.0002, segs=1)
 
-trig = Part("trigger", origin=(0.0, 0.01, -0.035))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.018, -0.037))
 trig.sweep(catmull([(-0.037, 0.012), (-0.04, 0.002), (-0.038, -0.006), (-0.033, -0.01)], 5,
                    closed=False), section_rect(0.0048, 0.0032, 0.0011, 3), "Blued")
 

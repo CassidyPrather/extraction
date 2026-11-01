@@ -156,6 +156,9 @@ fn convert(
     })
 }
 
+/// The scan's tile on blued and stamped gun steel, metres.
+const BLUED_TILE: f32 = 0.075;
+
 /// Every material name [`ModelMaterials::get`] knows; any other name renders
 /// a flat grey. `art/common.py` must list the same names (a test checks it,
 /// and that every exported model uses only these).
@@ -163,6 +166,7 @@ fn convert(
 #[rustfmt::skip]
 pub const MATERIAL_NAMES: &[&str] = &[
     "Blued",
+    "Stamped",
     "Wood",
     "Polymer",
     "Shell",
@@ -262,7 +266,24 @@ impl ModelMaterials {
             materials.add(m)
         };
         let h = match name {
-            "Blued" => lib.get(Mat::GunMetal, server, materials),
+            // Machined steel, polished and blued: the scan's grain at half
+            // its tile (at 0.15 m it read as a casting's at 30 cm), a little
+            // glossier (docs/craft/GUNSMITHING.md, "Finishes").
+            "Blued" => derive(Mat::GunMetal, &|m| {
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
+                m.perceptual_roughness *= 0.8;
+            }),
+            // Stamped sheet under black lacquer (an AK-74's receiver and
+            // cover): near black, little metal showing, the scan's relief
+            // only as a fine orange peel.
+            "Stamped" => derive(Mat::GunMetal, &|m| {
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.065, 0.065, 0.068);
+                m.metallic = 0.2;
+                m.metallic_roughness_texture = None;
+                m.perceptual_roughness = 0.5;
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
+            }),
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),

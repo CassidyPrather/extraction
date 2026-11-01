@@ -159,6 +159,19 @@ pub fn lit(t: f32, phase: f32) -> bool {
     (t + phase).rem_euclid(BLINK) < BLINK_ON
 }
 
+/// A mine's light wakes only with someone near (m): from further off it
+/// lies dark, its ring of turned earth the only sign of it, for an eye
+/// that's looking (playtest, 28 October, 0:47:41 and 0:48:00: "very
+/// clearly visible glowing things on the ground", "a bit obvious"). Near,
+/// it blinks: a warning before the step, not a beacon across the field.
+pub const WAKE: f32 = 6.0;
+
+/// Whether its light is on, `t` seconds after it was laid, with the
+/// nearest person `nearest` metres off.
+pub fn lit_near(t: f32, phase: f32, nearest: f32) -> bool {
+    nearest <= WAKE && lit(t, phase)
+}
+
 /// A mine's state.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Mine {
@@ -219,6 +232,25 @@ impl Disarm {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// From further off than [`WAKE`] a mine never shows its light (its
+    /// ring of earth is all there is to see); near, it blinks as before.
+    #[test]
+    fn a_mine_is_dark_till_someones_near() {
+        let ticks = (0..2000).map(|k| k as f32 * 0.01);
+        assert!(
+            ticks.clone().all(|t| !lit_near(t, 0.3, WAKE + 0.5)),
+            "lit from afar"
+        );
+        assert!(
+            ticks.clone().any(|t| lit_near(t, 0.3, WAKE - 0.5)),
+            "dark up close"
+        );
+        assert!(
+            ticks.clone().all(|t| lit_near(t, 0.3, 2.0) == lit(t, 0.3)),
+            "near, its blink isn't the old blink"
+        );
+    }
 
     /// A light step doesn't set it off; a person does, after it's armed,
     /// with a click and then the blast; a fresh mine is safe.

@@ -203,7 +203,8 @@ for i in range(6):
 hammer.cut(spur_cut)
 
 # --- Trigger ------------------------------------------------------------------------------------
-trig = Part("trigger", origin=(0.0, 0.0205, -0.027))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.0295, -0.0265))
 trig.sweep(catmull([(-0.0265, 0.0238), (-0.0292, 0.016), (-0.0305, 0.0095), (-0.0285, 0.0042),
                     (-0.0245, 0.0012)], samples=3, closed=False),
            section_rect(0.0052, 0.0034, 0.0012), "Blued")

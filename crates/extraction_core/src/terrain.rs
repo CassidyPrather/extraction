@@ -44,6 +44,13 @@ pub const ROAD_END_LEDGE: f32 = 0.35;
 /// How far past a road's edge its end blends into the land, metres.
 pub const ROAD_END_APRON: f32 = 6.0;
 
+/// How far in from each end of a bridge's deck the ground under it is its
+/// abutment, built up or cut down to just under the deck, metres. Read
+/// between cells, a shorter one blended with the cut beyond it: a metre in
+/// from Cinder's works bridge the deck stood 1.2 m over the ground, a gap
+/// a body crouches under (`map_pockets`' bridge test).
+pub const ABUTMENT: f32 = 3.0;
+
 // The truck's level stand (`Heightmap::level_trucks`), in its frame: x
 // across (wheels at 1 m), z along (the cab's front 5 m ahead of its middle,
 // the ladder's foot 3.5 m behind), and how far its ramp back to the land
@@ -1005,6 +1012,23 @@ impl Heightmap {
         let terraces: Vec<(&[P2], f32, (P2, P2))> = Self::terraces(map)
             .map(|(poly, level)| (poly, level, geom::bounds(poly)))
             .collect();
+        // The ground under the bridges' decks, which `road` cut or built to
+        // them: a log pile beside Marrow's road bridge dug 0.4 m out of
+        // its abutment, a step up onto the deck's end. Points along each
+        // deck and how far either side of them.
+        let decks: Vec<(P2, f32)> = self
+            .road_lines
+            .iter()
+            .flat_map(|rl| {
+                rl.bridges.iter().flat_map(move |&(a, b)| {
+                    let n = ((b - a) / 0.5).ceil().max(1.0) as usize;
+                    (0..=n).map(move |i| {
+                        let s = a + (b - a) * i as f32 / n as f32;
+                        (geom::polyline_at(&rl.points, s).0, rl.width * 0.5 + 0.5)
+                    })
+                })
+            })
+            .collect();
         for (me, p) in map.placements.iter().enumerate() {
             if p.absolute || !crate::map::prefab_wants_pad(&p.prefab) {
                 continue;
@@ -1021,6 +1045,14 @@ impl Heightmap {
             let reach = half_w.max(half_d) + 8.0;
             let lo = [p.at[0] - reach, p.at[1] - reach];
             let hi = [p.at[0] + reach, p.at[1] + reach];
+            let decks: Vec<(P2, f32)> = decks
+                .iter()
+                .filter(|(q, r)| {
+                    q[0] + r >= lo[0] && q[0] - r <= hi[0] && q[1] + r >= lo[1] && q[1] - r <= hi[1]
+                })
+                .copied()
+                .collect();
+            let under_deck = |q: P2| decks.iter().any(|(d, r)| geom::dist(*d, q) <= *r);
             // The terraces the map declares round it that it doesn't stand
             // on: past its walls it digs none below its level (a house below
             // a terraced street dug the steps above it away); what a road
@@ -1050,7 +1082,7 @@ impl Heightmap {
                     // structures be: a booth by the gate would dig a dip in
                     // the road through it.
                     let inside = l[0].abs() <= w * 0.5 && l[1].abs() <= d * 0.5;
-                    if !inside && (hm.roads[k].weight > 0 || under_other(me, q)) {
+                    if !inside && (hm.roads[k].weight > 0 || under_other(me, q) || under_deck(q)) {
                         return;
                     }
                     let floor = if inside {
@@ -1298,7 +1330,7 @@ impl Heightmap {
                 // can't climb out of onto the road.
                 let end = bridges
                     .iter()
-                    .any(|(a, b)| arc[s] < a + 1.5 || arc[s] > b - 1.5);
+                    .any(|(a, b)| arc[s] < a + ABUTMENT || arc[s] > b - ABUTMENT);
                 if d <= half_w + 0.5 {
                     if end {
                         self.heights[k] = profile[s] - 0.05;

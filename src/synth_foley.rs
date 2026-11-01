@@ -149,6 +149,11 @@ pub const STAND_INS: &[StandIn] = &[
         render: wings,
     },
     StandIn {
+        set: "machines/chute_hiss",
+        variants: 3,
+        render: chute_hiss,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -832,6 +837,28 @@ fn wings(rng: &mut Rng, sr: f32) -> Vec<f32> {
             };
             let n = noise(rng);
             air.run(n) * stroke * 4.0 + feather.run(n) * stroke * 0.8
+        })
+        .collect()
+}
+
+/// A pneumatic chute charging: air bleeding through a valve, a breathy
+/// hiss quick to open, held, then bled off, a thin whistle coming up in
+/// it as the pressure builds. Low for a hiss, so a shower doesn't wash it
+/// out entirely.
+fn chute_hiss(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let len = (0.75 + rng.f32() * 0.25) * sr;
+    let hold = len / sr - 0.3;
+    let f = 1_800.0 * jitter(rng, 0.15);
+    let mut body = Bp::new(f, 0.8, sr);
+    let mut whistle = Bp::new(f * 1.9, 12.0, sr);
+    let mut low = Bp::new(500.0, 0.7, sr);
+    (0..len as usize)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let env = (t / 0.03).min(1.0) * (1.0 - ((t - hold) / 0.3).clamp(0.0, 1.0)).powi(2);
+            let n = noise(rng);
+            (body.run(n) * 1.4 + whistle.run(n) * 0.9 * (t / hold).min(1.0) + low.run(n) * 1.0)
+                * env
         })
         .collect()
 }

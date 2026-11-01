@@ -85,7 +85,10 @@ Things that have bitten captures, and what now guards against them:
   - its box is a sliver run off the frame's edge;
   - something nearer blocks it: each probe raycasts from the eye through
     its footprint box (`seen` in the probes file);
-  - its patch is black fog.
+  - too little of it can show: the share in line of sight times its
+    patch's contrast is under 8 levels. That's black fog when it's all
+    in sight, or a dim building partly hidden (Cinder's cellars at night,
+    41% behind the brick shed: 5).
   Rime on 844e46d8 flagged three of those: the gate beside the guard
   booth the camera is up against, at dusk and night, and a log pile in
   black fog at night. A lost building still stands where it was placed,

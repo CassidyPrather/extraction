@@ -229,6 +229,12 @@ struct Site {
 const STUCK_REPEATS: u32 = 3;
 /// How much of its grid round that waypoint it gives up, metres.
 const STUCK_BLOCK: f32 = 1.5;
+/// Indoors, how much of the building's plan round that waypoint, metres:
+/// less than of the open ground, as an aisle is narrower than a field.
+const STUCK_BLOCK_INDOORS: f32 = 0.5;
+/// Indoors, no waypoint this near a doorway is given up: the way out
+/// stays.
+const STUCK_DOOR_KEEP: f32 = 1.2;
 /// Blocked this many waypoints round one spot, it's in a pocket (a ledge
 /// it fell onto, a corner the grid can't see): it gives up wider discs and
 /// steps further out of it.
@@ -1074,7 +1080,7 @@ pub fn think(
             if r.stage == Stage::Done {
                 continue;
             }
-            spot_anomalies(&mut bot, r, &scene, here);
+            spot_anomalies(&mut bot, r, &scene, here, pos);
             spot_sealed(&mut bot, r, &scene, &mut log);
             spot_held(&mut bot, r, &scene);
             sneak(
@@ -1126,19 +1132,11 @@ pub fn think(
                     } else {
                         (here, 1)
                     };
-                    let radius = if r.pocket.1 >= POCKET_BLOCKS {
+                    let wide = r.pocket.1 >= POCKET_BLOCKS;
+                    if wide {
                         step = 8.0;
-                        STUCK_BLOCK * 2.5
-                    } else {
-                        STUCK_BLOCK
-                    };
-                    r.grid.block(
-                        extraction_core::nav::Obstacle::Circle {
-                            at: to.to_array(),
-                            radius,
-                        },
-                        0.0,
-                    );
+                    }
+                    give_up_waypoint(&mut r.plans, &mut r.grid, pos, *to, wide);
                     log.event(
                         "stuck_block",
                         json!({"x": round(to.x, 1), "z": round(to.y, 1), "pocket": r.pocket.1}),
@@ -2341,7 +2339,43 @@ fn fight_on(
 /// up to a waypoint's reach (1.2 m), and still keeps out.
 const BURNED_BERTH: f32 = 2.0;
 
-fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
+/// The building's plan `pos` is in, if any (inside its walls, or down a
+/// site).
+fn plan_at(plans: &[BuildingPlan], pos: Vec3) -> Option<usize> {
+    plans
+        .iter()
+        .position(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+}
+
+/// Walks no nearer an anomaly at `at` than `berth`: each waypoint inside
+/// it moved to the ring outside, on the side of `here`. Out of doors only:
+/// indoors the route goes by the building's plan, and a ring point
+/// straight out from the anomaly lies through a wall as often as not (a
+/// Lift in the drift out of Kettle mine's refuge moved the walk out on to
+/// a point behind the refuge's wall, and the raider stuck at it till the
+/// raid ran out: Kettle sims, 31 October). There the plan's way is the
+/// only way, and it was walked through once already.
+fn keep_off(
+    tasks: &mut std::collections::VecDeque<Task>,
+    indoors: bool,
+    here: Vec2,
+    at: Vec2,
+    berth: f32,
+) {
+    if indoors {
+        return;
+    }
+    let ring = at + (here - at).normalize_or(Vec2::X) * (berth + 0.5);
+    for t in tasks.iter_mut() {
+        if let Task::WalkTo { to, .. } = t
+            && to.distance(at) < berth
+        {
+            *to = ring;
+        }
+    }
+}
+
+fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2, pos: Vec3) {
     // In one it didn't mean to walk into: out the way it came, and never
     // that one again, reckless or not (a dive ends when it leaves).
     if !r.diving {
@@ -2371,20 +2405,14 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     }
     // Whatever it was going to (often the thing it was caught on the way
     // to), it goes no nearer one that's caught it than the ring outside.
+    let indoors = plan_at(&r.plans, pos).is_some();
     for (e, a, gt) in &scene.anomalies {
         if !r.burned.contains(&e) {
             continue;
         }
         let at = gt.translation().xz();
         let danger = a.kind.danger_radius(a.radius);
-        let ring = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
-        for t in bot.tasks.iter_mut() {
-            if let Task::WalkTo { to, .. } = t {
-                if to.distance(at) < danger + BURNED_BERTH {
-                    *to = ring;
-                }
-            }
-        }
+        keep_off(&mut bot.tasks, indoors, here, at, danger + BURNED_BERTH);
     }
     let mut new = Vec::new();
     for (e, a, gt) in &scene.anomalies {
@@ -3606,6 +3634,65 @@ fn wreck_inside(plans: &[BuildingPlan], zone: &crate::world::Zone, at: Vec3) -> 
     })
 }
 
+/// Gives up a waypoint `to` (world x, z) that a raider at `pos` keeps
+/// getting stuck short of: in the plan of the building it's in, as
+/// indoors its routes go by that plan (blocked in the open ground's grid
+/// alone, it planned back into a Sorter's wreck across a depot aisle,
+/// four times: Marrow sims, 31 October), but never by a doorway; out of
+/// doors, in the open ground's grid. `wide` in a pocket.
+fn give_up_waypoint(
+    plans: &mut [BuildingPlan],
+    grid: &mut NavGrid,
+    pos: Vec3,
+    to: Vec2,
+    wide: bool,
+) {
+    let scale = if wide { 2.5 } else { 1.0 };
+    if let Some(plan) = plan_at(plans, pos).map(|k| &mut plans[k]) {
+        let at = plan.to_local(Vec3::new(to.x, pos.y, to.y)).xz();
+        let radius = STUCK_BLOCK_INDOORS * scale;
+        let by_door = plan
+            .doors
+            .iter()
+            .flat_map(|d| [(d.a + d.b) * 0.5].into_iter().chain(d.outside))
+            .chain(plan.entries.iter().copied())
+            .any(|d| d.distance(at) < radius + STUCK_DOOR_KEEP);
+        if !by_door {
+            plan.grid.block(
+                Obstacle::Circle {
+                    at: at.to_array(),
+                    radius,
+                },
+                0.0,
+            );
+        }
+        return;
+    }
+    grid.block(
+        Obstacle::Circle {
+            at: to.to_array(),
+            radius: STUCK_BLOCK * scale,
+        },
+        0.0,
+    );
+}
+
+/// Which of `plans` has a roof over `goal` (world x, z), on the ground
+/// there: inside a building's walls, or in an underground site's kiosk,
+/// never its floors under the ground. (A wait shelter stood on the
+/// ground over Marrow's depot, and a raider in the depot, asking with its
+/// own height, made for the shelter along the depot's floor and into its
+/// wall, 11 m under the shelter: Marrow sims, 31 October.)
+fn roof_over(plans: &[BuildingPlan], zone: &crate::world::Zone, goal: Vec2) -> Option<usize> {
+    plans.iter().position(|p| roofs(p, zone, goal))
+}
+
+/// Whether `plan` has a roof over `goal`, as [`roof_over`].
+fn roofs(plan: &BuildingPlan, zone: &crate::world::Zone, goal: Vec2) -> bool {
+    let at = Vec3::new(goal.x, zone.ground(goal.x, goal.y), goal.y);
+    plan.indoors(plan.to_local(at).xz()) && (plan.levels.is_none() || plan.contains(at, 0.0))
+}
+
 /// Off a plough's road, if `here` is in its lane ahead (where it sounds
 /// its horn: it doesn't stop, and its auger takes what's there; Rime sims,
 /// 30 October, a raider walking the pass road to the RV went under one):
@@ -4166,11 +4253,10 @@ fn extract_step(
     };
     // Under a roof it's in at the door or it's not under it: in all the
     // way, by the building's plan, and not walked back out of it.
-    let goal3 = Vec3::new(goal.x, pos.y, goal.y);
-    let roof = r
-        .plans
-        .iter()
-        .position(|p| goal != approach && p.indoors(p.to_local(goal3).xz()));
+    let goal3 = Vec3::new(goal.x, zone.ground(goal.x, goal.y), goal.y);
+    let roof = (goal != approach)
+        .then(|| roof_over(&r.plans, zone, goal))
+        .flatten();
     let near = if roof.is_some() { 0.8 } else { 4.0 };
     r.at_rv = here.distance(goal) <= near;
     if here.distance(goal) > near {
@@ -4427,6 +4513,186 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
 mod run_tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Keeping off an anomaly that's caught it moves no waypoint of an
+    /// indoor route through a wall: the Lift in the drift out of Kettle
+    /// mine's refuge moved the walk out on to a point behind the refuge's
+    /// wall (seed 8, 31 October: stuck there till the raid ran out). Out of
+    /// doors, the waypoint goes round to the ring.
+    #[test]
+    fn keeping_off_an_anomaly_indoors_keeps_to_the_plan() {
+        let opts = crate::launch::LaunchOptions {
+            map: "kettle_pass".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        let mine = &plans[plans.iter().position(|p| p.name == "mine_kettle").unwrap()];
+        // From the refuge's table, out by its door and along the drift,
+        // past the Lift at (-88, 24) that caught it on the way in.
+        let from = Vec3::new(-96.4, 15.5, 30.8);
+        let exit = mine.to_local(Vec3::new(-79.875, from.y, 24.375)).xz();
+        let mut tasks: std::collections::VecDeque<Task> =
+            indoor_route(mine, from, exit, 0.35).unwrap().into();
+        let (lift, berth) = (Vec2::new(-88.0, 24.0), 3.0);
+        assert!(
+            tasks
+                .iter()
+                .any(|t| matches!(t, Task::WalkTo { to, .. } if to.distance(lift) < berth)),
+            "the route doesn't pass the Lift"
+        );
+        keep_off(
+            &mut tasks,
+            plan_at(&plans, from).is_some(),
+            from.xz(),
+            lift,
+            berth,
+        );
+        let mut at = from.xz();
+        for t in &tasks {
+            let Task::WalkTo { to, .. } = t else { continue };
+            let n = (at.distance(*to) / 0.1).ceil() as usize;
+            for k in 0..=n {
+                let p = at.lerp(*to, k as f32 / n.max(1) as f32);
+                let l = mine.to_local(Vec3::new(p.x, from.y, p.y)).xz();
+                assert!(
+                    mine.grid.walkable(l.to_array()),
+                    "the leg {at:.2?} -> {to:.2?} goes through {p:.2?}, not the mine's floor"
+                );
+            }
+            at = *to;
+        }
+        // Out of doors, round to the ring.
+        let mut out: std::collections::VecDeque<Task> = [Task::WalkTo {
+            to: lift,
+            within: 0.6,
+        }]
+        .into();
+        keep_off(&mut out, false, lift + Vec2::new(10.0, 0.0), lift, berth);
+        assert!(matches!(out[0], Task::WalkTo { to, .. } if to.distance(lift) > berth));
+    }
+
+    /// A waypoint a raider keeps sticking short of indoors is given up in
+    /// the plan it routes by, not only the open ground's grid (a Sorter's
+    /// wreck across the depot aisle took four stucks: Marrow seed 2, 31
+    /// October); one by a doorway isn't, so the way out stays.
+    #[test]
+    fn a_waypoint_given_up_indoors_is_given_up_in_its_plan() {
+        let opts = crate::launch::LaunchOptions {
+            map: "marrow_creek".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let mut plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        let mut grid = NavGrid {
+            n: 400,
+            cell: 1.0,
+            origin: -200.0,
+            cost: vec![1; 400 * 400],
+            lanes: Vec::new(),
+        };
+        let d = plans.iter().position(|p| p.name == "depot_marrow").unwrap();
+        // Where it stuck, and the stand it was making for.
+        let (pos, to) = (Vec3::new(-124.5, 12.2, -79.9), Vec2::new(-124.375, -80.725));
+        let local = |p: &BuildingPlan, w: Vec2| p.to_local(Vec3::new(w.x, pos.y, w.y)).xz();
+        assert!(plans[d].grid.walkable(local(&plans[d], to).to_array()));
+        give_up_waypoint(&mut plans, &mut grid, pos, to, false);
+        assert!(
+            !plans[d].grid.walkable(local(&plans[d], to).to_array()),
+            "the stand is still open in the depot's plan"
+        );
+        // A doorway's stays open.
+        let door = plans[d].doors[0].clone();
+        let mid = (door.a + door.b) * 0.5;
+        let at = plans[d].to_world(mid);
+        let (before, w) = (plans[d].grid.clone(), Vec2::new(at.x, at.z));
+        give_up_waypoint(&mut plans, &mut grid, at, w, true);
+        assert_eq!(plans[d].grid.cost, before.cost, "a doorway was given up");
+    }
+
+    /// No wait shelter by a rendezvous is under an underground site's
+    /// roof, though the site runs under it: Marrow's was, by the depot's
+    /// walls, and a raider in the depot made for it along the depot's
+    /// floor, into the rock 11 m under it (seed 7, 31 October: 9 stucks).
+    #[test]
+    fn a_shelter_over_a_site_isnt_under_its_roof() {
+        let (mut over, mut failed) = (0, Vec::new());
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                map: map.clone(),
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for m in zone.map.markers_of(&MarkerKind::Rendezvous) {
+                let Some((poi, _)) = extraction_core::map_lint::watched_by(&zone.map, m.at) else {
+                    continue;
+                };
+                let Some(from) = zone
+                    .map
+                    .markers_of(&MarkerKind::Poi)
+                    .find(|p| p.name == poi)
+                else {
+                    continue;
+                };
+                let Some((_, _, lee)) =
+                    extraction_core::map_lint::wait_shelter(&zone.map, m.at, from.at)
+                else {
+                    continue;
+                };
+                let lee = Vec2::from_array(lee);
+                let ground = zone.ground(lee.x, lee.y);
+                for p in plans.iter().filter(|p| p.levels.is_some()) {
+                    let l = p.to_local(Vec3::new(lee.x, ground, lee.y));
+                    if !p.indoors(l.xz()) || l.y - p.floor_at(l.xz()) < 2.5 {
+                        continue;
+                    }
+                    over += 1;
+                    if roofs(p, &zone, lee) {
+                        failed.push(format!(
+                            "{map} {}: shelter {lee:.1?} under {}",
+                            m.name, p.name
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(over > 0, "no shelter stands over a site");
+        assert!(failed.is_empty(), "{}", failed.join("\n"));
+    }
 
     /// A machine wrecked down a site is the site's to search, wherever on
     /// its walls it died (a crawler 3 m up the deep kettle's wall, made an

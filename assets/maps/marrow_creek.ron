@@ -397,7 +397,7 @@
         (prefab: "log_pile", at: (59.0, 101.0), rot: 180.0),
         (prefab: "log_pile", at: (7.3, 110.5), rot: 113.0),
         (prefab: "log_pile", at: (10.5, 11.7), rot: 79.0),
-        (prefab: "log_pile", at: (-1.5, -7.7), rot: 62.0),
+        (prefab: "log_pile", at: (-4.0, -7.0), rot: 62.0),
         (prefab: "log_pile", at: (2.5, -23.7), rot: 26.0),
         (prefab: "log_pile", at: (-12.4, -78.4), rot: 197.0),
         (prefab: "log_pile", at: (-43.7, 9.5), rot: 92.0),

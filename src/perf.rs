@@ -449,4 +449,48 @@ pub(crate) mod fight {
         std::hint::black_box(x);
         t.elapsed().as_secs_f64() * 1000.0
     }
+
+    /// The same work, `PARALLEL_CHUNKS` of it, shared by as many threads as
+    /// the machine runs at once (ms): the yardstick for what the task
+    /// pools spread (a valley's load), so fewer cores or a CPU quota read
+    /// as a slower machine, not a regression.
+    pub fn reference_parallel_ms() -> f64 {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+        let next = AtomicUsize::new(0);
+        let t = std::time::Instant::now();
+        std::thread::scope(|s| {
+            for _ in 0..threads {
+                s.spawn(|| {
+                    while next.fetch_add(1, Ordering::Relaxed) < PARALLEL_CHUNKS {
+                        reference_ms();
+                    }
+                });
+            }
+        });
+        t.elapsed().as_secs_f64() * 1000.0
+    }
+
+    /// The yardstick for a valley's load (ms): the geometric mean of the
+    /// one-thread and every-thread timings of the same work. A load is
+    /// part serial, part spread over the task pools: held to two cores of
+    /// four, the every-thread timing doubled and the loads grew 1.3-1.5x
+    /// (the mean, 1.43x, is the square root of two's), so clock speed
+    /// counts in full and the core count by its square root.
+    pub fn reference_load_ms() -> f64 {
+        let one: f64 = (0..PARALLEL_CHUNKS).map(|_| reference_ms()).sum();
+        (one * reference_parallel_ms()).sqrt()
+    }
+
+    /// How much work `reference_parallel_ms` shares out, in
+    /// `reference_ms` pieces: enough that the threads' start is noise.
+    pub const PARALLEL_CHUNKS: usize = 64;
+
+    /// The median of `n` timings of `f` (ms): one is at the mercy of
+    /// whatever else the machine was doing.
+    pub fn median_ms(n: usize, f: impl Fn() -> f64) -> f64 {
+        let mut v: Vec<f64> = (0..n.max(1)).map(|_| f()).collect();
+        v.sort_by(f64::total_cmp);
+        v[v.len() / 2]
+    }
 }

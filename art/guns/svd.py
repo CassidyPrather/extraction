@@ -311,7 +311,8 @@ selector.prism(sel, RX_HW + 0.0006, RX_HW + 0.0032, "Blued", axis="x", bevel=0.0
 selector.cyl(0.0058, RX_HW + 0.0005, RX_HW + 0.0036, "Blued", segs=14,
              xf=T(0, PIVOT[1], PIVOT[2]) @ RY(math.pi / 2), chamfer=0.0008)
 
-trig = Part("trigger", origin=(0.0, 0.014, -0.039))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.022, -0.039))
 trig.sweep(catmull([(-0.039, 0.016), (-0.0425, 0.008), (-0.0425, 0.001), (-0.039, -0.005),
                     (-0.0345, -0.007)], 3, closed=False), section_rect(0.005, 0.0034, 0.0012),
            "Blued")

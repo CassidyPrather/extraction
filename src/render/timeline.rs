@@ -100,6 +100,13 @@ impl WorldReady<'_, '_> {
         self.forest() && self.props() && self.materials()
     }
 
+    /// Ready for a picture (`dev::ShotSettle`): ready, and the near trees'
+    /// cards streamed in round where the eyes are now (a moving player's
+    /// can lag a step: that's the stream's business, not the world's).
+    pub fn ready_for_a_shot(&self) -> bool {
+        self.ready() && self.forest.near_streamed()
+    }
+
     /// What it's still waiting on, in words (for the log).
     pub fn why(&self) -> String {
         let mut out = Vec::new();

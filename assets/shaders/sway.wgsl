@@ -13,10 +13,23 @@
 
 #import bevy_pbr::{
     mesh_functions,
-    forward_io::{Vertex, VertexOutput},
     view_transformations::position_world_to_clip,
-    mesh_view_bindings::{globals, view},
+    mesh_view_bindings::view,
 }
+// Also the depth prepass's vertex shader (`render::prepass`): moved as
+// drawn. (Without the normals there it isn't widened: thinner in the
+// depth than in the picture, never wider, so it hides nothing.) Its view
+// group has the globals at 1.
+#ifdef PREPASS_PIPELINE
+#import bevy_pbr::prepass_io::{Vertex, VertexOutput}
+#import bevy_render::globals::Globals
+@group(0) @binding(1) var<uniform> globals: Globals;
+#else
+#import bevy_pbr::{
+    forward_io::{Vertex, VertexOutput},
+    mesh_view_bindings::globals,
+}
+#endif
 
 // World metres a side per metre of distance: half a pixel at about
 // 1800 px across 100 degrees.
@@ -234,6 +247,10 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 #endif
 #endif
     out.position = position_world_to_clip(out.world_position.xyz);
+#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+    out.unclipped_depth = out.position.z;
+    out.position.z = min(out.position.z, 1.0);
+#endif
 #endif
 
 #ifdef VERTEX_UVS_A
