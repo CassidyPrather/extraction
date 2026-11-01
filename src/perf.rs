@@ -171,6 +171,17 @@ mod tests {
         // lifts (a Featherstone hovers on a force every frame, by design,
         // and a force keeps a body awake).
         let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        // Nor one in an anomaly's reach: lifts, snares and wells push on
+        // whatever's in them every frame, by design (an artifact in its
+        // field). Twice the radius covers a lift's suction.
+        let anomalies: Vec<(Vec3, f32)> = {
+            let w = app.world_mut();
+            w.query::<(&GlobalTransform, &crate::anomaly::Anomaly)>()
+                .iter(w)
+                .map(|(g, a)| (g.translation(), a.radius * 2.0))
+                .collect()
+        };
+        let in_reach = |p: Vec3| anomalies.iter().any(|(c, r)| p.distance(*c) < *r);
         let positions = |w: &mut World| -> Vec<(Entity, Vec3)> {
             w.query_filtered::<(Entity, &GlobalTransform, &RigidBody, &crate::items::Item), (
                 Without<RigidBodyDisabled>,
@@ -178,7 +189,9 @@ mod tests {
                 Without<crate::interact::Held>,
             )>()
             .iter(w)
-            .filter(|(_, _, b, i)| b.is_dynamic() && catalog.get(i.kind()).lift_kg <= 0.0)
+            .filter(|(_, g, b, i)| {
+                b.is_dynamic() && catalog.get(i.kind()).lift_kg <= 0.0 && !in_reach(g.translation())
+            })
             .map(|(e, g, _, _)| (e, g.translation()))
             .collect()
         };
@@ -220,10 +233,11 @@ mod tests {
     /// drop and across the valley. Awake items keep the physics step
     /// solving their contacts every frame, and nothing that builds on
     /// rest (a merge, a cheaper tick) can. First measure (2026-11-01):
-    /// 4-8 awake a valley (1-2%), 3-4 of them within 15 m of the drop,
-    /// piled guns, magazines and boxes rocking on their contacts; the yard
-    /// none. (Stowed items, disabled, and Featherstones, which hover on a
-    /// force, aren't counted.)
+    /// 4 awake a valley (1%), 3-4 of them within 15 m of the drop, the
+    /// truck bed's pile, kept awake through the parked (kinematic)
+    /// truck's island by the hand bodies; the yard none. (Stowed items, disabled, Featherstones, which hover on a
+    /// force, and whatever's in an anomaly's reach, which pushes on it,
+    /// aren't counted.)
     #[test]
     #[ignore = "known failing (2026-11-01): stacked items never sleep; Hands un-ignores it with the fix. \
                 cargo test --lib gauge_items_fall_asleep -- --ignored --nocapture"]

@@ -333,22 +333,25 @@ gauge_items_fall_asleep` settles each valley and the yard, then counts
 the dynamic items still awake, across the valley and within 15 m of
 the drop, with the worst by kind and by creep a frame. It counts only
 bodies the physics step simulates (not stowed, disabled, or held), and
-not items that lift (a Featherstone hovers on a force, by design). It's
+not those pushed on every frame by design: items that lift (a
+Featherstone hovers on a force), and whatever's within twice an
+anomaly's radius (lifts, snares and wells push on what's in them). It's
 ignored as known failing until the physics fix (Hands'):
 
 | | dynamic items | awake | at the drop |
 | - | - | - | - |
-| Marrow Creek | 433 | 4 (1%) | 4 |
-| Kettle Pass | 376 | 6 (2%) | 3 |
-| Cinder Works | 348 | 4 (1%) | 4 |
-| Sallow Reservoir | 316 | 5 (2%) | 4 |
-| Rime Fell | 417 | 8 (2%) | 3 |
-| the yard | 13 | 0 | 0 |
+| Marrow Creek | 425 | 4 (1%) | 4 |
+| Kettle Pass | 367 | 4 (1%) | 3 |
+| Cinder Works | 343 | 4 (1%) | 4 |
+| Sallow Reservoir | 313 | 4 (1%) | 4 |
+| Rime Fell | 411 | 4 (1%) | 3 |
+| the yard | 12 | 0 | 0 |
 
-The awake are guns, magazines, clips and boxes in piles, creeping up to
-0.04 mm a frame. They rock on their contacts above Avian's angular
-sleep threshold (0.15 rad/s), and one rocker keeps its whole pile's
-island awake.
+The awake are the truck bed's pile: guns, magazines, clips and boxes,
+creeping up to 0.04 mm a frame. The parked truck is kinematic, so
+avian's islands join everything touching it, and the hand bodies,
+driven every frame, touch it: the whole bed never sleeps (Hands). The
+fix is the truck static while parked.
 
 ## CPU: a busy raid moment
 
