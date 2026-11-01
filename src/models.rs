@@ -238,6 +238,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // World props (art/props).
     "Timber",
     "Rusty",
+    "Bark",
     "Painted",
     "Plaster",
     "Concrete",
@@ -337,6 +338,9 @@ impl ModelMaterials {
             // World props (art/props).
             "Timber" => lib.get(Mat::Timber, server, materials),
             "Rusty" => lib.get(Mat::RustyMetal, server, materials),
+            // A felled trunk's bark: the spruce bark scan (a log stack;
+            // `art/props/yards.py` coarsens its tile in the model's UVs).
+            "Bark" => lib.get(Mat::BarkSpruce, server, materials),
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
