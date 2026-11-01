@@ -817,6 +817,7 @@ fn first_person_hands(
     catalog: Res<crate::items::Catalog>,
     grabbables: Query<&crate::interact::Grabbable>,
     guns: Query<&crate::weapons::Gun>,
+    parts: Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     mut players: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
     mut stage: Local<u32>,
@@ -837,6 +838,12 @@ fn first_person_hands(
     // `fp:<gun>+handle`: the right hand on its slide, charging handle or
     // bolt instead of the grip.
     let (what, on_handle) = match what.strip_suffix("+handle") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
+    // `fp:<gun>+catch`: the magazine release held, the finger that works
+    // the catch on it (`render::props::catch_index_curl`, `catch_thumb`).
+    let (what, on_catch) = match what.strip_suffix("+catch") {
         Some(w) => (w, true),
         None => (what, false),
     };
@@ -908,6 +915,7 @@ fn first_person_hands(
                 ChildOf(h),
             ));
         }
+        h
     };
     // Late enough for a map's cards and buttons to be up.
     if *stage == 15 {
@@ -962,6 +970,11 @@ fn first_person_hands(
     let Ok(grab) = grabbables.get(item) else {
         return;
     };
+    // The catch is the model's: wait for its parts.
+    let catch = crate::render::props::catch_of(item, &parts);
+    if on_catch && catch.is_none() {
+        return;
+    }
     *waiting = None;
     let point = |role: GripRole| grab.points.iter().find(|p| p.role == role);
     if let Some(primary) = point(GripRole::Primary) {
@@ -971,6 +984,12 @@ fn first_person_hands(
         let mut curl = hold_curl(Some(GripRole::Primary), trigger, 0.0);
         if let Ok(gun) = guns.get(item) {
             curl[0] = crate::render::props::gun_index_curl(Side::Right, &gun.layout, trigger);
+            if let Some(c) = catch
+                .filter(|_| on_catch)
+                .and_then(|at| crate::render::props::catch_index_curl(Side::Right, &gun.layout, at))
+            {
+                curl[0] = c;
+            }
         }
         match grab
             .points
@@ -991,23 +1010,45 @@ fn first_person_hands(
                 hold_curl(Some(handle.role), 0.0, 0.0),
             ),
             None => glove(&mut commands, Side::Right, level, curl),
-        }
+        };
         match point(GripRole::Support) {
-            Some(support) => glove(
-                &mut commands,
-                Side::Left,
-                item_at
-                    * support.local
+            Some(support) => {
+                let hold = support.local
                     * guns.get(item).map_or(Transform::IDENTITY, |g| {
                         crate::render::props::support_pose(&g.layout, Side::Left)
-                    }),
-                if guns.get(item).is_ok_and(|g| g.layout.support.is_none()) {
-                    crate::render::props::CUP_CURL
-                } else {
-                    hold_curl(Some(GripRole::Support), 0.0, 0.0)
-                },
-            ),
-            None => glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]),
+                    });
+                let h = glove(
+                    &mut commands,
+                    Side::Left,
+                    item_at * hold,
+                    if guns.get(item).is_ok_and(|g| g.layout.support.is_none()) {
+                        crate::render::props::CUP_CURL
+                    } else {
+                        hold_curl(Some(GripRole::Support), 0.0, 0.0)
+                    },
+                );
+                // A catch the gun hand's index can't reach: this thumb's.
+                let thumb = guns
+                    .get(item)
+                    .ok()
+                    .zip(catch.filter(|_| on_catch))
+                    .and_then(|(g, at)| {
+                        crate::render::props::catch_index_curl(Side::Right, &g.layout, at)
+                            .is_none()
+                            .then(|| crate::render::props::catch_thumb(Side::Left, hold, at))
+                            .flatten()
+                    });
+                if thumb.is_some() {
+                    commands.entity(h).queue(move |mut e: EntityWorldMut| {
+                        if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                            v.thumb = thumb;
+                        }
+                    });
+                }
+            }
+            None => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+            }
         }
     } else {
         // Upright in the left fist (round the hand's origin, as a grip is),

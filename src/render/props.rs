@@ -526,7 +526,7 @@ pub(crate) struct HandVisual {
     /// A tracked thumb: which way its first bone points on the unrolled
     /// glove and how far its last joint bends (radians); `None` swings it
     /// by its curl.
-    thumb: Option<(Vec3, f32)>,
+    pub(crate) thumb: Option<(Vec3, f32)>,
 }
 
 /// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
@@ -1370,7 +1370,7 @@ fn index_reach(side: Side, gun: &crate::weapons::layout::GunLayout, point: Vec3)
 
 /// Where a gun's magazine catch is, gun space: its model's `mag_catch`
 /// (or `mag_catch_heel`) part at rest.
-fn catch_of(
+pub(crate) fn catch_of(
     gun: Entity,
     parts: &Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
 ) -> Option<Vec3> {
@@ -1379,6 +1379,43 @@ fn catch_of(
         .iter()
         .find(|(p, c)| c.parent() == gun && matches!(p.moves, Moves::MagCatch | Moves::HeelCatch))
         .map(|(p, _)| p.rest.translation)
+}
+
+/// A thumb aimed `dir` with its tip joint bent `bend` (the tracked-thumb
+/// drawing in `pose_hands`): where its tip is, unrolled glove frame.
+fn thumb_tip(side: Side, dir: Vec3, bend: f32) -> Vec3 {
+    let [a, b, _] = FINGER_BONES[4];
+    let r0 = Quat::from_rotation_arc(Vec3::NEG_Z, dir) * Quat::from_rotation_z(0.6 * side.sign());
+    let r1 = Quat::from_rotation_x(-bend);
+    finger_root(side, 4) + r0 * (Vec3::NEG_Z * a + r1 * (Vec3::NEG_Z * b))
+}
+
+/// The other hand's thumb on a magazine catch at `at` (gun space), the
+/// hand drawn at `hold` (gun space): its aim and bend with the tip on the
+/// catch, if the thumb reaches. The PM's heel catch, drawn back by the
+/// thumb of the palm cupped under the butt.
+pub(crate) fn catch_thumb(side: Side, hold: Transform, at: Vec3) -> Option<(Vec3, f32)> {
+    let [a, b, _] = FINGER_BONES[4];
+    let local = hold.compute_affine().inverse().transform_point3(at);
+    let goal = glove_frame(side)
+        .compute_affine()
+        .inverse()
+        .transform_point3(local);
+    let d = goal - finger_root(side, 4);
+    let reach = d.length();
+    if reach > a + b || reach < (a - b).abs() {
+        return None;
+    }
+    // The tip joint bent to make the reach, the thumb's aim then walked
+    // round until the tip lands.
+    let cos = ((reach * reach - a * a - b * b) / (2.0 * a * b)).clamp(-1.0, 1.0);
+    let bend = cos.acos();
+    let mut dir = d / reach;
+    for _ in 0..20 {
+        let miss = goal - thumb_tip(side, dir, bend);
+        dir = (dir + miss / a).normalize();
+    }
+    (thumb_tip(side, dir, bend).distance(goal) < CATCH_REACH).then_some((dir, bend))
 }
 
 /// How close the index must pass a magazine catch to press it, metres.
@@ -1567,6 +1604,9 @@ fn pose_hands(
         // grip: left at the controller, two hands on a pistol never looked
         // like two hands on it (the 28 October playtest).
         let mut on_support = false;
+        // The gun this hand steadies, where it is: its catch may be this
+        // hand's thumb's to work (`catch_thumb`).
+        let mut steadying = None;
         if let Some(item) = hand.supporting
             && let (Ok((_, igt, g)), Ok(s)) = (held.get(item), supports.get(item))
             && let Some(p) = g
@@ -1579,6 +1619,7 @@ fn pose_hands(
                 .map_or(Transform::IDENTITY, |g| support_pose(&g.layout, v.side));
             pose = igt.mul_transform(p.local).mul_transform(hold);
             on_support = true;
+            steadying = Some((item, *igt));
         }
         // A hand working a gun's handle is drawn on it, where the handle has
         // got to: left at the controller it floated off the knob, turned
@@ -1624,6 +1665,19 @@ fn pose_hands(
         {
             target = POINTING;
             target[0] += (1.0 - POINTING[0]) * trigger;
+        }
+        // The release held on a gun whose catch the gun hand's index
+        // can't reach (the PM's heel): this hand's thumb draws it back.
+        if let Some((item, igt)) = steadying
+            && let Ok(gun) = guns.get(item)
+            && gun.catch
+            && let Some(at) = catch_of(item, &parts)
+            && catch_index_curl(v.side.other(), &gun.layout, at).is_none()
+        {
+            let hold = Transform::from_matrix(
+                (igt.compute_affine().inverse() * pose.compute_affine()).into(),
+            );
+            thumb = catch_thumb(v.side, hold, at);
         }
         for (c, want) in v.curl.iter_mut().zip(target) {
             *c += (want - *c) * ease;
@@ -2747,6 +2801,24 @@ mod glove_tests {
         let pm = layout("pm_pistol").unwrap();
         let heel = Vec3::new(0.0, -0.0385, 0.0405);
         assert_eq!(catch_index_curl(Side::Right, &pm, heel), None);
+    }
+
+    /// The PM's heel catch is the other hand's: the thumb of the palm
+    /// cupped under the butt reaches it and lands its tip on it.
+    #[test]
+    fn the_cupping_thumb_reaches_the_pms_heel_catch() {
+        use crate::weapons::layout::{cup_pose, layout};
+        let pm = layout("pm_pistol").unwrap();
+        // From the model (`assets/models/guns/pm_pistol.glb`, `mag_catch_heel`).
+        let heel = Vec3::new(0.0, -0.0385, 0.0405);
+        let hold = cup_pose(&pm)
+            .unwrap()
+            .mul_transform(support_pose(&pm, Side::Left));
+        let (dir, bend) = catch_thumb(Side::Left, hold, heel).expect("the thumb reaches the heel");
+        let tip = hold
+            .mul_transform(glove_frame(Side::Left))
+            .transform_point(thumb_tip(Side::Left, dir, bend));
+        assert!(tip.distance(heel) < 0.012, "tip at {tip}, catch at {heel}");
     }
 
     /// An AK in the hand with the magazine release held: the index goes

@@ -175,3 +175,10 @@ the frame, off the trigger) and pulled: `gun_index_curl` reaches the blade,
 but at 116 mm ahead of the hand (the other guns' 63-89 mm) only with a
 near-straight finger (curl 0.17; theirs 0.35-0.77), its tip hidden behind
 the blade from this side.
+`31_magazine_catch.jpg` (`fp:ak74,2.4,-90` / `fp:ak74+catch,2.4,-90`;
+`fp:pm_pistol,2.8,90,0,25` / `+catch`): left as held, right with the
+magazine release held. The AK's paddle (the model's `mag_catch`, just
+ahead of the guard) is the gun hand's index's: it straightens forward off
+the trigger onto it (`render::props::catch_index_curl`). The PM's heel
+catch is past any finger of the gun hand: the thumb of the palm cupped
+under the butt rises onto it (`catch_thumb`). Let go, each eases back.
