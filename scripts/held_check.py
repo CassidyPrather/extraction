@@ -28,8 +28,12 @@ from PIL import Image
 
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
                       check=True).stdout.strip()
-# Where the two shots differ by more than this (of 255, sRGB) is the thing.
+# Where the two shots differ by more than this (of 255, sRGB), and by more
+# than MASK_SHARE of what's behind, is the thing. (The share keeps out a
+# bright sky that came up with its clouds in one shot and not the other: the
+# software renderer's sky loads late now and then.)
 MASK_STEP = 10
+MASK_SHARE = 0.25
 # The least median brightness (sRGB, of 255) a thing in your hand reads at.
 FLOOR = 26.0
 
@@ -76,6 +80,7 @@ def main():
     ap.add_argument("--only")
     ap.add_argument("--size", default="1280x720")
     ap.add_argument("--floor", type=float, default=FLOOR)
+    ap.add_argument("--rescore", action="store_true", help="score the shots in --out again, without shooting")
     o = ap.parse_args()
     os.makedirs(o.out, exist_ok=True)
     failed = 0
@@ -91,12 +96,15 @@ def main():
         if o.only and name not in o.only.split(","):
             continue
         held, bare = os.path.join(o.out, name + ".png"), os.path.join(o.out, name + "_bare.png")
-        if not (shoot(o.bin, args, held, o.size) and shoot(o.bin, without_gallery(args), bare, o.size)):
+        shot = (os.path.exists(held) and os.path.exists(bare)) if o.rescore else (
+            shoot(o.bin, args, held, o.size) and shoot(o.bin, without_gallery(args), bare, o.size))
+        if not shot:
             print(f"MISSING {name}: a shot didn't come out")
             failed += 1
             continue
         (a, la), (b, lb) = luma(held), luma(bare)
-        mask = np.abs(a - b).max(axis=2) > MASK_STEP
+        d = np.abs(a - b).max(axis=2)
+        mask = (d > MASK_STEP) & (d > MASK_SHARE * b.max(axis=2))
         if mask.sum() < 200:
             print(f"MISSING {name}: the thing isn't in frame ({mask.sum()} px)")
             failed += 1
