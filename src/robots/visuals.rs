@@ -148,6 +148,10 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
         eye: materials.add(StandardMaterial {
             base_color: Color::srgb(0.1, 0.02, 0.02),
             emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+            // A signal lamp: its true size, but as bright at 60 m in fog
+            // as at 5 (fog would wash it into the grey before the shell).
+            // Each robot's own eye is cloned from this one.
+            fog_enabled: false,
             ..default()
         }),
         eye_dead: materials.add(StandardMaterial {
@@ -2300,5 +2304,56 @@ mod scan_tests {
         let look = scan_colour(Reaction::Investigate);
         assert!(look.green > hunt.green * 4.0, "{look:?} vs {hunt:?}");
         assert!(hunt.red >= 1.0 && look.red >= 1.0);
+    }
+}
+
+#[cfg(test)]
+mod lamp_tests {
+    use super::*;
+
+    /// A robot's eye and its weak-point marks are signal lamps: drawn at
+    /// their true size, and as bright through fog at 60 m as at 5, so the
+    /// fog can't wash them into the grey before the shell. This covers the
+    /// walker family's eye (each robot's own is cloned from it), the
+    /// models' `Eye` (the heavy's and the sentry's), and the marks.
+    #[test]
+    fn eyes_and_marks_hold_through_fog() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .init_resource::<crate::render::materials::MaterialLibrary>()
+            .init_resource::<crate::models::ModelMaterials>();
+        let w = app.world_mut();
+        let mut q = bevy::ecs::system::SystemState::<(
+            ResMut<crate::models::ModelMaterials>,
+            ResMut<crate::render::materials::MaterialLibrary>,
+            Res<AssetServer>,
+            ResMut<Assets<StandardMaterial>>,
+        )>::new(w);
+        let (mut model_mats, mut lib, server, mut materials) = q.get_mut(w);
+        let robot = mats(&mut materials);
+        let model_eye = model_mats.get("Eye", &mut lib, &server, &mut materials);
+        let lamps = [
+            (
+                "the walker family's eye",
+                materials.get(&robot.eye).cloned(),
+            ),
+            ("the models' Eye", materials.get(&model_eye).cloned()),
+            (
+                "a weak-point mark",
+                Some(super::super::weak_points::mark_material()),
+            ),
+        ];
+        for (what, m) in lamps {
+            let m = m.unwrap_or_else(|| panic!("{what}: no material"));
+            assert!(!m.fog_enabled, "{what}: fog washes it out at range");
+            assert!(
+                m.emissive.red.max(m.emissive.green) > 1.0,
+                "{what}: a lamp has to be lit"
+            );
+        }
+        // A dead eye is no lamp: it goes into the fog with the shell.
+        assert!(materials.get(&robot.eye_dead).unwrap().fog_enabled);
     }
 }

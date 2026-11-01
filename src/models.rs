@@ -438,7 +438,13 @@ impl ModelMaterials {
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
-            "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
+            // A robot's eye is a signal lamp: fog doesn't wash it out.
+            "Eye" => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.1, 0.02, 0.02),
+                emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+                fog_enabled: false,
+                ..default()
+            }),
             "Strange" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.45, 0.35, 0.7),
                 emissive: LinearRgba::rgb(0.6, 0.35, 1.2),
