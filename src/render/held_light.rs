@@ -76,6 +76,10 @@ fn mark_held(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut marked_ones: ResMut<Marked>,
 ) {
+    // (Nothing held, nothing to do.)
+    if held.is_empty() {
+        return;
+    }
     for item in &held {
         for e in std::iter::once(item).chain(children.iter_descendants(item)) {
             let Ok(mut m) = meshes.get_mut(e) else {
@@ -115,9 +119,13 @@ fn unmark_let_go(
     }
 }
 
-/// The gloves are always in hand: their own materials are marked.
+/// The gloves are always in hand: their own materials are marked, when
+/// they're made or changed.
 fn mark_gloves(
-    gloves: Query<&crate::render::props::GloveMaterial>,
+    gloves: Query<
+        &crate::render::props::GloveMaterial,
+        Changed<crate::render::props::GloveMaterial>,
+    >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for h in gloves.iter().flat_map(|g| g.0.iter()) {
@@ -161,5 +169,15 @@ mod tests {
             (m.metallic, m.perceptual_roughness)
         );
         assert_eq!(m.attenuation_distance, f32::INFINITY);
+        // Same pipeline: the mark is a uniform, not part of the key, and it
+        // never turns transmission on (that would move the thing into the
+        // transmissive phase).
+        assert!(MARK.is_finite());
+        use bevy::pbr::StandardMaterialKey;
+        assert_eq!(StandardMaterialKey::from(&c), StandardMaterialKey::from(&m));
+        assert_eq!(
+            (c.specular_transmission, c.diffuse_transmission),
+            (0.0, 0.0)
+        );
     }
 }
