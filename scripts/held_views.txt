@@ -1,0 +1,10 @@
+# What's in your hand against the room behind it (scripts/held_check.py):
+# the dimmest rooms on each valley's first jobs and the Rime Fell mill,
+# the PM and the AK at 30 cm, 11:00 in drizzle; and the yard at noon,
+# which must not change.
+mill_pm | --map rime_fell --camera 140,91.85,38,0,0 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather clearing --no-robots
+mill_ak | --map rime_fell --camera 140,91.85,38,0,0 --gallery ak74,0,0.3 --frames 90 --hour day --weather clearing --no-robots
+farm_pm | --map marrow_creek --camera 109,0,80,270,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots
+post_pm | --map marrow_creek --camera -22.2,0,33.5,90,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots
+ash_row_pm | --map cinder_works --camera -73,0,120.6,90,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots
+yard_pm | --map training_yard --camera 0,0,40,0,0 --gallery pm_pistol,0,0.3 --frames 40 --hour day --weather clearing --no-robots
