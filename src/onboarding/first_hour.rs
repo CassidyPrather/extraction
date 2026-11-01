@@ -972,10 +972,23 @@ pub(super) fn direct_raid(
             // its sweep": for it, as told.
             // "Down, out of its sweep": low, and away from it (a sentry
             // doesn't come after you).
+            // Those who'd listen go under the nearest roof, by the way
+            // round, as the driver teaches (a roof keeps out a drone's
+            // burst and a sentry's sweep alike): out in the open after a
+            // warning, a burst every 2 s wore them down. No roof near:
+            // low across its line.
             First::Sentry if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
-                state.low_until = now + 25.0;
-                run_for_cover(&world.zone, here, from, 1.0)
+                match under_a_roof(&world, &plans, here, &state.no_roof) {
+                    Some((tasks, b)) => {
+                        state.roof_try = Some((b, bot.failed, now));
+                        tasks
+                    }
+                    None => {
+                        state.low_until = now + 25.0;
+                        run_for_cover(&world.zone, here, from, 1.0)
+                    }
+                }
             }
             First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
@@ -1005,7 +1018,7 @@ pub(super) fn direct_raid(
                     }
                 }
                 let roof = overhead
-                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here, &state.no_roof))
+                    .then(|| under_a_roof(&world, &plans, here, &state.no_roof))
                     .flatten();
                 match roof {
                     Some((tasks, b)) => {
@@ -2043,16 +2056,18 @@ pub(super) struct Tells<'w, 's> {
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
-/// Something above you: in under a roof, through the nearest door, if one's
-/// within a sprint (trees hide nobody from overhead: only their trunks stop
-/// a look).
+/// Something above you, or a sentry's sweep on you: in under a roof,
+/// through the nearest door, if one's within a sprint (trees hide nobody
+/// from overhead: only their trunks stop a look; a roof is all a drone
+/// can't see through). To the door by the routed way (`walk`): straight at
+/// it went into the garden fence in front of it.
 fn under_a_roof(
-    entrances: Option<&crate::robots::doors::Entrances>,
+    world: &World2,
     plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
     skip: &[Entity],
 ) -> Option<(Vec<Task>, Entity)> {
-    let entrances = entrances?;
+    let entrances = &*world.entrances;
     let d = entrances
         .doors
         .iter()
@@ -2105,11 +2120,16 @@ fn under_a_roof(
         .map(|s| inside + s)
         .find(|p| standable(*p))
         .unwrap_or(inside);
-    let tasks = vec![
-        Task::WalkTo {
-            to: d.mid.xz() + out * 1.3,
+    let door_out = d.mid.xz() + out * 1.3;
+    let mut tasks = walk(world, here, door_out);
+    match tasks.last_mut() {
+        Some(Task::WalkTo { within, .. }) => *within = 0.6,
+        _ => tasks.push(Task::WalkTo {
+            to: door_out,
             within: 0.6,
-        },
+        }),
+    }
+    tasks.extend([
         Task::OpenDoor(d.door),
         Task::WalkTo {
             to: inside,
@@ -2129,7 +2149,7 @@ fn under_a_roof(
             to: d.mid.xz() + out * 1.5,
             within: 0.8,
         },
-    ];
+    ]);
     Some((tasks, d.building))
 }
 
@@ -2958,7 +2978,7 @@ pub(super) fn first_fight(
     mut tells: Tells,
     mut bots: Query<(Entity, &mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
-    entrances: Option<Res<crate::robots::doors::Entrances>>,
+    world: World2,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -3101,8 +3121,17 @@ pub(super) fn first_fight(
     // The broken walker is the one the driver says to take on (bar the
     // lost one).
     let broken = kind == "broken" && !p.lost;
+    // A drone or a sentry: under the nearest roof, by the way round, for
+    // all who'd listen (the lost one too: it's told, and does as told).
+    let roofed = matches!(kind, "drone" | "sentry") && !p.reckless && !p.hoards && !hush;
+    let roof = roofed
+        .then(|| under_a_roof(&world, &[], here, &[]))
+        .flatten();
     let answer: Vec<Task> = if (p.reckless || broken) && !hush {
         take_it_on()
+    } else if let Some((tasks, _)) = roof {
+        fight.flee_until = now + 12.0;
+        tasks
     } else if p.lost {
         // Off, anywhere.
         vec![Task::WalkTo {
@@ -3119,14 +3148,9 @@ pub(super) fn first_fight(
             within: 1.5,
         }]
     } else {
-        // For cover, as the driver says, upright and fast: under a roof
-        // from a drone.
+        // For cover, as the driver says, upright and fast (no roof near).
         fight.flee_until = now + 12.0;
-        (kind == "drone")
-            .then(|| under_a_roof(entrances.as_deref(), &[], here, &[]))
-            .flatten()
-            .map(|(t, _)| t)
-            .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
+        run_for_cover(&zone, here, from, 0.0)
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);
