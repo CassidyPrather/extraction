@@ -12,6 +12,7 @@
 
 pub mod anim;
 pub mod armour;
+pub mod broken;
 pub mod collector;
 pub mod damage;
 pub mod devices;
@@ -329,6 +330,7 @@ impl Plugin for RobotsPlugin {
                 squad::SquadPlugin,
                 subjects::SubjectsPlugin,
                 hazards::HazardsPlugin,
+                broken::BrokenPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
