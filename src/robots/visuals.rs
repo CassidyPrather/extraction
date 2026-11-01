@@ -56,6 +56,7 @@ impl Plugin for RobotVisualsPlugin {
                     super::weathering::weather_meshes,
                     part_plants,
                     drone_lamps,
+                    lamps_reach_far,
                 ),
             );
     }
@@ -2307,6 +2308,46 @@ mod scan_tests {
     }
 }
 
+/// How far a robot's lamps are drawn, metres: its eye, its weak-point
+/// marks, any mesh on it whose material the fog can't touch. Signal lamps
+/// keep their true size, so a 15 cm eye is a pixel or two at 60 m, but
+/// they stay in the picture as far as the machine does. (The render
+/// budget fades every mesh under a metre out at 200 times its size,
+/// `render::budget::small_range`: the eye went at about 30 m and a knee
+/// mark at 38, in clear air as in fog.)
+pub const LAMP_REACH: f32 = 150.0;
+
+/// A lamp's draw range, if `mat` is a lamp's.
+fn lamp_range(mat: &StandardMaterial) -> Option<bevy::camera::visibility::VisibilityRange> {
+    (!mat.fog_enabled).then(|| bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: (LAMP_REACH * 0.8)..LAMP_REACH,
+        use_aabb: false,
+    })
+}
+
+/// Every lamp on a robot is drawn to [`LAMP_REACH`], whatever range the
+/// render budget gave it for its size (put on before or after this).
+fn lamps_reach_far(
+    mut commands: Commands,
+    changed: Query<
+        (Entity, &MeshMaterial3d<StandardMaterial>),
+        Changed<MeshMaterial3d<StandardMaterial>>,
+    >,
+    parents: Query<&ChildOf>,
+    robots: Query<(), With<Robot>>,
+    materials: Res<Assets<StandardMaterial>>,
+) {
+    for (e, mat) in &changed {
+        let Some(range) = materials.get(&mat.0).and_then(lamp_range) else {
+            continue;
+        };
+        if parents.iter_ancestors(e).any(|a| robots.contains(a)) {
+            commands.entity(e).try_insert(range);
+        }
+    }
+}
+
 #[cfg(test)]
 mod signal_lamp_tests {
     use super::*;
@@ -2355,5 +2396,58 @@ mod signal_lamp_tests {
         }
         // A dead eye is no lamp: it goes into the fog with the shell.
         assert!(materials.get(&robot.eye_dead).unwrap().fog_enabled);
+    }
+
+    /// A lamp on a robot is drawn as far as the machine is, though the
+    /// render budget would fade a mesh its size out at under 40 m; the
+    /// shell beside it, and a lamp on nothing, keep the budget's range.
+    #[test]
+    fn a_robots_lamps_are_drawn_to_range() {
+        use crate::render::budget::small_range;
+        use bevy::camera::visibility::VisibilityRange;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_systems(Update, lamps_reach_far);
+        let (lamp, shell) = {
+            let mut materials = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
+            (
+                materials.add(super::super::weak_points::mark_material()),
+                materials.add(StandardMaterial::default()),
+            )
+        };
+        // As the budget ranges a 19 cm knee mark.
+        let budget = |size: f32| VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: (small_range(size) * 0.8)..small_range(size),
+            use_aabb: true,
+        };
+        let w = app.world_mut();
+        let robot = w
+            .spawn(Robot {
+                kind: super::super::RobotKind::Walker,
+                wrecked: false,
+            })
+            .id();
+        let part = w.spawn(ChildOf(robot)).id();
+        let mark = w
+            .spawn((ChildOf(part), MeshMaterial3d(lamp.clone()), budget(0.19)))
+            .id();
+        let plate = w
+            .spawn((ChildOf(part), MeshMaterial3d(shell), budget(0.19)))
+            .id();
+        let loose = w.spawn((MeshMaterial3d(lamp), budget(0.19))).id();
+        app.update();
+        let far = |e: Entity| {
+            app.world()
+                .get::<VisibilityRange>(e)
+                .map_or(f32::INFINITY, |r| r.end_margin.start)
+        };
+        assert!(far(mark) >= 60.0, "the mark fades out at {} m", far(mark));
+        assert!(
+            far(plate) < 40.0,
+            "the shell's small parts keep the budget's"
+        );
+        assert!(far(loose) < 40.0, "only a robot's lamps");
     }
 }
