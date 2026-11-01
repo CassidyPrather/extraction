@@ -245,6 +245,13 @@ LOOKALIKE = {"А": "A", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "
              "Т": "T", "Х": "X"}
 
 
+# A print, label or band laid over a face stands this far off it: an
+# item is held 0.3 to 3 m from the eye, where the depth buffer parts a
+# millimetre but not the 0.2 mm the first labels stood (`art/check.py`
+# judges items at 1 mm).
+LIFT = 0.0012
+
+
 def text(p, s, h, mat, xf, depth=0.0006, align="centre"):
     """Stencil letters `h` high, drawn in the XY plane facing +Z (raised
     `depth` off z 0), then placed by `xf`. Unknown characters are spaces."""
