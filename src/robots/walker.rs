@@ -30,8 +30,12 @@ pub const ENGAGE_AT: f32 = 0.55;
 /// Out of sight this long in a fight, it goes to where it last saw you.
 pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
-/// after you've been out of sight a while): the whine that says move.
-pub const AIM_TIME: f32 = 0.7;
+/// after you've been out of sight a while, or it's come looking and found
+/// you): the whine that says move. Every round it fires comes at least
+/// this long after its tell (a newcomer in a headset, told "Break its
+/// line", needs the time to: at 0.7 s the cautious one was shot down
+/// doing as the driver said, Robot minds' fairness runs, 1 November).
+pub const AIM_TIME: f32 = 1.5;
 /// Its aim is thrown off by this (rad) a m/s its target runs across its
 /// line of fire: sprinting across it, most rounds miss.
 pub const CROSSING_SPREAD: f32 = 0.02;
@@ -51,7 +55,7 @@ pub const BLIND_AFTER: f32 = 0.3;
 pub const BLIND_WITHIN: f32 = 4.0;
 pub const BLIND_SURE: f32 = 3.0;
 pub const BLIND_RANGE: f32 = 12.0;
-pub const BLIND_TELL: f32 = 0.4;
+pub const BLIND_TELL: f32 = AIM_TIME;
 pub const BLIND_ROUNDS: u8 = 3;
 /// Seconds between them, and their spread (wider than aimed fire).
 const BLIND_EVERY: f32 = 0.25;
@@ -1368,7 +1372,9 @@ fn walker_guns(
         }
         // Suppressing and you've dropped from sight: it keeps its rounds
         // on where you went down, a while. Gone from there, they miss.
-        if suppressing && !aware.can_see_target && aware.unseen < SUPPRESS_HOLD {
+        // (Only on someone it has its aim on already: its tell came first.)
+        if suppressing && !aware.can_see_target && aware.unseen < SUPPRESS_HOLD && w.aim >= AIM_TIME
+        {
             let (Some(lk), Some((gt, part))) = (
                 aware.last_known,
                 children.iter().find_map(|c| turrets.get(c).ok()),

@@ -130,6 +130,10 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
                 phase: (at.x * 0.37 + at.z * 0.11).fract() * 6.28,
                 looted: false,
                 lock: 0.0,
+                locks_unhit: 0,
+                engaged_at: -1.0,
+                last_engaged: -1.0,
+                broke_off_until: 0.0,
             },
             Mender {
                 patient: None,

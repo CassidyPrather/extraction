@@ -9,7 +9,7 @@
 //! - **Behind it is blind.** Its head can't turn past its arc: get round
 //!   behind it and, even with you spotted, it stares at the end of its
 //!   travel.
-//! - **It warns.** A chirp (and the lamp flaring red) a second before the
+//! - **It warns.** A chirp (and the lamp flaring red) two and a half seconds before the
 //!   first round; duck out of sight a while and it has to warn again.
 //! - **Draw it off.** A thrown thing landing within earshot swings it to
 //!   look for five seconds; a hearth or a mirror shard flying past, it
@@ -832,7 +832,7 @@ pub(crate) mod tests {
     }
 
     /// A player in front of it, in the open, in its arc: when its sweep
-    /// comes round it chirps, and only then, a second later, fires.
+    /// comes round it chirps, and only then, a few seconds later, fires.
     /// The same player behind it is never seen, never shot.
     fn stand_and_watch(behind: bool, cut: bool) -> (bool, bool, f32) {
         let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);

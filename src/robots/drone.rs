@@ -49,7 +49,27 @@ pub struct Drone {
     /// Seconds it has held a firing solution on its target: it fires only
     /// once this reaches [`LOCK_TIME`].
     pub lock: f32,
+    /// Locks on the one it's fighting that no round of it has hit since
+    /// ([`RELOCKS`])...
+    pub locks_unhit: u8,
+    /// ...when this fight began (s, `Time::elapsed`; below 0 before one),
+    /// and when it last was in it (a search between is the same fight)...
+    pub engaged_at: f32,
+    pub last_engaged: f32,
+    /// ...and, broken off, till when it leaves fighting alone.
+    pub broke_off_until: f32,
 }
+
+/// A fight it isn't winning it gives up: after this many locks without a
+/// round in, or [`FIGHT_FOR`] seconds, it breaks off back to its job, and
+/// leaves fighting alone for [`BROKEN_OFF`] (a drone that kept re-locking a
+/// newcomer hiding from it, every 24 s for three minutes, till it had
+/// them, read as unfair: Robot minds' fairness runs, 1 November).
+pub const RELOCKS: u8 = 3;
+pub const FIGHT_FOR: f32 = 60.0;
+pub const BROKEN_OFF: f32 = 60.0;
+/// Out of a fight this long (s), the next one's a new one.
+pub const FIGHT_GAP: f32 = 20.0;
 
 /// A drone settling its gun on someone, before the first burst: the chirp
 /// that tells you to get behind something. It holds still while it does
@@ -128,6 +148,10 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 phase: 0.0,
                 looted: false,
                 lock: 0.0,
+                locks_unhit: 0,
+                engaged_at: -1.0,
+                last_engaged: -1.0,
+                broke_off_until: 0.0,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
@@ -334,8 +358,27 @@ fn drone_brain(
         }
         // Alarm overrides the job.
         let leaving = matches!(*brain, Brain::Leave { .. });
-        search::react(&mut brain, aware, ENGAGE_AT);
-        search::lost_sight(&mut brain, aware, PATIENCE, pos);
+        // Broken off a fight it wasn't winning: its job, not you, a while.
+        if now >= d.broke_off_until {
+            search::react(&mut brain, aware, ENGAGE_AT);
+            search::lost_sight(&mut brain, aware, PATIENCE, pos);
+        }
+        if matches!(*brain, Brain::Engage) {
+            // (Lost you and looking: the same fight, back at it.)
+            if d.engaged_at < 0.0 || now - d.last_engaged > FIGHT_GAP {
+                d.engaged_at = now;
+                d.locks_unhit = 0;
+            }
+            d.last_engaged = now;
+            let worn = d.locks_unhit >= RELOCKS && d.lock == 0.0 && d.burst_left == 0;
+            if worn || now - d.engaged_at > FIGHT_FOR {
+                d.broke_off_until = now + BROKEN_OFF;
+                d.engaged_at = -1.0;
+                d.lock = 0.0;
+                d.burst_left = 0;
+                *brain = Brain::Transit { to: job.site };
+            }
+        }
         // On its way home it spares a burst or two, no more, and none for
         // someone under a roof (`LEAVING_FIGHT`).
         if matches!(*brain, Brain::Engage) {
@@ -531,9 +574,25 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
-    (bodies, roles): (Query<&crate::player::Body>, Query<&super::squad::SquadRole>),
+    (bodies, roles, mut hits, parents): (
+        Query<&crate::player::Body>,
+        Query<&super::squad::SquadRole>,
+        MessageReader<crate::weapons::ballistics::Hit>,
+        Query<&ChildOf>,
+    ),
 ) {
     let dt = time.delta_secs();
+    // A round of its own in the one it's fighting: that fight's going on.
+    for h in hits.read() {
+        let Some(shooter) = h.shooter else { continue };
+        let Ok((_, mut d, _, aware, ..)) = drones.get_mut(shooter) else {
+            continue;
+        };
+        let on = |x: Entity| Some(x) == aware.target;
+        if on(h.entity) || parents.get(h.entity).is_ok_and(|p| on(p.parent())) {
+            d.locks_unhit = 0;
+        }
+    }
     fighting_since.retain(|e, _| {
         drones
             .get(*e)
@@ -577,6 +636,7 @@ fn drone_guns(
         }
         if d.lock < LOCK_TIME {
             if d.lock == 0.0 {
+                d.locks_unhit = d.locks_unhit.saturating_add(1);
                 locks.write(DroneLock {
                     drone: e,
                     at: t.translation,
@@ -666,6 +726,185 @@ mod tests {
             inside.is_empty(),
             "{} goals in a building: {inside:#?}",
             inside.len()
+        );
+    }
+
+    #[derive(Resource, Default)]
+    struct Fight {
+        locks: Vec<f32>,
+        shots: Vec<f32>,
+    }
+
+    fn tally(
+        mut locks: MessageReader<DroneLock>,
+        mut shots: MessageReader<Shot>,
+        drones: Query<(), With<Drone>>,
+        time: Res<Time>,
+        mut fight: ResMut<Fight>,
+    ) {
+        let t = time.elapsed_secs();
+        fight.locks.extend(locks.read().map(|_| t));
+        fight.shots.extend(
+            shots
+                .read()
+                .filter(|s| s.shooter.is_some_and(|e| drones.contains(e)))
+                .map(|_| t),
+        );
+    }
+
+    /// A drone over the test field with you walking under it; your
+    /// health kept up (a fight, not a death, is what's tested).
+    fn drone_on_you() -> (App, Entity, Entity, Vec3) {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.init_resource::<Fight>().add_systems(Last, tally);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let at = zone.on_ground(40.0, 255.0);
+        let site = at + Vec3::new(0.0, 6.0, -15.0);
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let drone = {
+            let mut c = Commands::new(&mut queue, app.world());
+            spawn_drone(
+                &mut c,
+                site,
+                Job {
+                    kind: super::super::JobKind::Survey,
+                    site,
+                    duration: 9999.0,
+                    exit: site,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        (app, player, drone, at)
+    }
+
+    /// One tick of you: walking a small circle at `at` (seen), or far off
+    /// (out of its sight); hale either way.
+    fn step(app: &mut App, player: Entity, at: Vec3, seen: bool, i: usize) {
+        let a = i as f32 / 90.0 * 0.5;
+        let here = if seen {
+            at + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0
+        } else {
+            at + Vec3::new(400.0, 0.0, 0.0)
+        };
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = here;
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::new(-a.sin(), 0.0, a.cos());
+        let mut h = app
+            .world_mut()
+            .get_mut::<crate::health::Health>(player)
+            .unwrap();
+        h.hp = h.max;
+        h.down = false;
+        app.update();
+    }
+
+    /// A drone that keeps locking on to someone who keeps getting out of
+    /// its sight before it can fire gives up after [`RELOCKS`] locks: it
+    /// goes back to its job and doesn't lock on again for a while, though
+    /// they stand in plain view (one re-locked a hiding newcomer every
+    /// 24 s for three minutes, till it had them).
+    #[test]
+    fn a_drone_gives_up_after_its_relocks() {
+        let (mut app, player, drone, at) = drone_on_you();
+        let mut i = 0;
+        let mut seen = 0;
+        // Out of sight a beat after each lock, before it can fire.
+        while app.world().resource::<Fight>().locks.len() < RELOCKS as usize && i < 90 * 60 {
+            let locks = app.world().resource::<Fight>().locks.len();
+            let t = app.world().resource::<Time>().elapsed_secs();
+            let since = app
+                .world()
+                .resource::<Fight>()
+                .locks
+                .last()
+                .map_or(99.0, |l| t - l);
+            let visible = since > 3.5 || (since < 1.0 && locks == seen);
+            if since < 1.0 {
+                seen = locks;
+            }
+            step(
+                &mut app,
+                player,
+                at,
+                visible && since > 1.0 || since > 3.5,
+                i,
+            );
+            i += 1;
+        }
+        assert_eq!(
+            app.world().resource::<Fight>().locks.len(),
+            RELOCKS as usize,
+            "never locked {RELOCKS} times"
+        );
+        // Gone a while; then in plain view, 40 s.
+        for k in 0..90 * 3 {
+            step(&mut app, player, at, false, i + k);
+        }
+        i += 90 * 3;
+        let before = app.world().resource::<Fight>().locks.len();
+        for k in 0..90 * 40 {
+            step(&mut app, player, at, true, i + k);
+        }
+        let f = app.world().resource::<Fight>();
+        assert!(f.shots.is_empty(), "it fired: {:?}", f.shots);
+        assert_eq!(f.locks.len(), before, "locked on again: {:?}", f.locks);
+        assert!(
+            !matches!(app.world().get::<Brain>(drone), Some(Brain::Engage)),
+            "still fighting"
+        );
+    }
+
+    /// Nor does it fight anyone longer than [`FIGHT_FOR`]: then it breaks
+    /// off, and leaves them be a while.
+    #[test]
+    fn a_drone_breaks_off_a_long_fight() {
+        let (mut app, player, drone, at) = drone_on_you();
+        let mut engaged = None;
+        let mut off = None;
+        for i in 0..90 * 120 {
+            step(&mut app, player, at, true, i);
+            let t = app.world().resource::<Time>().elapsed_secs();
+            let fighting = matches!(app.world().get::<Brain>(drone), Some(Brain::Engage));
+            if fighting && engaged.is_none() {
+                engaged = Some(t);
+            }
+            if !fighting && engaged.is_some() {
+                off = Some(t);
+                break;
+            }
+        }
+        let (on, off) = (
+            engaged.expect("it fought"),
+            off.expect("it never broke off"),
+        );
+        assert!(off - on <= FIGHT_FOR + 1.0, "fought {:.0} s", off - on);
+        let locks = app.world().resource::<Fight>().locks.len();
+        for i in 0..90 * 40 {
+            step(&mut app, player, at, true, i);
+        }
+        assert_eq!(
+            app.world().resource::<Fight>().locks.len(),
+            locks,
+            "locked on again inside {BROKEN_OFF} s"
         );
     }
 
