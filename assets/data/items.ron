@@ -242,7 +242,7 @@
         // Magazines and clips
         // ---------------------------------------------------------------
         (
-            id: "pm_mag", dims: Some((0.016, 0.1, 0.03)), name: "PM magazine",
+            id: "pm_mag", dims: Some((0.016, 0.0915, 0.03)), name: "PM magazine",
             category: Magazine, size: Small, mass: 0.09, bulk: 0.1,
             magazine: Some((fits: "pm", cartridge: "9x18", capacity: 8)),
             tags: ["metal"],
