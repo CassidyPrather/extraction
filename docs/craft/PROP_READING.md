@@ -50,6 +50,11 @@ In the game, at the walk's spot, in the valley's reference weather:
   read too light on a prop. Look at it in reach; scale the model's UVs
   (`Part.uv_scale`) rather than copy the material, which lights unlike
   the shared one.
+- **Blank plates for lettering**: a pale rectangle where a stencil,
+  number or label should be reads as a placeholder (or a decal fighting
+  the face), not as paint. Letter it (`_kit.lettering`, the items'
+  stencil glyphs); a plate the game writes on carries a label point
+  instead (`depot_sign`'s `pt_label`).
 - **Primitives standing in for nature**: a box of the concrete scan is a
   sawn slab, whatever it's called. Stones are the field's
   (`world::rocks::stone_mesh`), wood is a model.
@@ -176,3 +181,15 @@ plan keeps the common plan's loot spots; a ruin keeps the common plan.
   looks at that front).
 - **Post office, plank B and C**: built, waiting on their prefab ids
   (Map design's shell table in core, and their map edits).
+
+### Blank plates (1 November)
+
+The coordinator's find in Weapon feel's `impact_burst_concrete.jpg`: the
+yard's road block had two blank pale rectangles on its face, its
+"stencilled number". The same pattern: every crate's `stencil` (pale
+bars), the wheelie bin's house number. Now lettered
+(`art/props/_kit.py`'s `lettering`): the block's ФБС 24.4.6, the crates'
+ВЕРХ and lot numbers, the bin's 14 (`docs/shots/props/stencils_after.png`,
+the line-up turned to their fronts: `art/lineup.py`'s `turn`). The
+Custodian's tag (a card with a stripe) and the depot's sign (the game
+writes on it) are what they are.
