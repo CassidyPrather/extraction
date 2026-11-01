@@ -26,18 +26,19 @@ def pillow(p, hx, hy, hz, y, mat, r=0.006):
 def field_dressing():
     s = cube(0.1)
     p = Part("body")
-    # A rubberised packet with a paper label and a red tear-strip. The
-    # label sits in a recess cut for it, flush, not on the rubber.
+    # A pale packet with a red tear-strip and a red cross on top: medical
+    # is the lightest family, red on white (docs/craft/ITEM_READING.md).
+    # The cross sits in a recess cut for it, flush, not on the wrap.
     y = -s / 2 + 0.012
-    pillow(p, s / 2 - 0.001, 0.012, s / 2 - 0.003, y, "Olive", r=0.008)
+    pillow(p, s / 2 - 0.001, 0.012, s / 2 - 0.003, y, "Pale", r=0.008)
     p.box((s - 0.01, 0.003, 0.004), (0.0, y, -s / 2 + 0.003), "Red")
     recess = Part("recess")
-    recess.box((0.026, 0.009, 0.019), (0.0, y + 0.012, 0.0005), "Paper")
+    recess.box((0.024, 0.009, 0.008), (0.0, y + 0.012, 0.0005), "Red")
+    recess.box((0.008, 0.009, 0.024), (0.0, y + 0.012, 0.0005), "Red")
     p.cut(recess)
     label = Part("label")
-    label.box((0.026, 0.0042, 0.019), (0.0, y + 0.0101, 0.0005), "Paper")
-    label.box((0.016, 0.0009, 0.003), (-0.003, y + 0.0124, -0.005), "Red")
-    label.box((0.016, 0.0009, 0.002), (-0.003, y + 0.0124, 0.0), "Red")
+    label.box((0.024, 0.0042, 0.008), (0.0, y + 0.0101, 0.0005), "Red")
+    label.box((0.008, 0.0042, 0.024), (0.0, y + 0.0101, 0.0005), "Red")
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
     return centred([p, label])
 
@@ -67,17 +68,18 @@ def regen_injector():
 
 def cleaning_kit():
     p = Part("body")
-    # A canvas roll with two leather straps, the rod poking out one end,
-    # a brush on it, and a little oiler tucked under the straps.
+    # A dark canvas roll with two leather straps, the rod poking out one
+    # end, a brush on it, and a little oiler tucked under the straps: tools
+    # are dark with bare steel (docs/craft/ITEM_READING.md).
     roll = fillet([(-0.036, -0.022), (0.036, -0.022), (0.036, 0.016), (-0.036, 0.016)],
                   [0.012, 0.012, 0.02, 0.02], 4)
-    p.prism(roll, -0.1, 0.1, "Canvas", axis="z", bevel=0.006, segs=2)
-    p.box((0.07, 0.003, 0.16), (0.0, 0.0175, 0.0), "Canvas", bevel=0.0012, segs=1,
+    p.prism(roll, -0.1, 0.1, "DarkWool", axis="z", bevel=0.006, segs=2)
+    p.box((0.07, 0.003, 0.16), (0.0, 0.0175, 0.0), "DarkWool", bevel=0.0012, segs=1,
           xf=RX(0.02))
     for z in (-0.06, 0.055):
         strap = fillet([(-0.038, -0.024), (0.038, -0.024), (0.038, 0.019), (-0.038, 0.019)],
                        [0.013, 0.013, 0.021, 0.021], 4)
-        p.prism(strap, z - 0.009, z + 0.009, "Bakelite", axis="z")
+        p.prism(strap, z - 0.009, z + 0.009, "Leather", axis="z")
         p.box((0.012, 0.004, 0.014), (0.03, 0.019, z), "Steel", bevel=0.001, segs=1)
     p.cyl(0.0035, 0.08, 0.124, "Steel", segs=8, xf=T(0.018, 0.0, 0.0))
     p.cyl(0.0055, 0.112, 0.125, "Brass", segs=10, xf=T(0.018, 0.0, 0.0))

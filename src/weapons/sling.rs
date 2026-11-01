@@ -51,7 +51,7 @@ pub fn swivels(id: &str, gun: &Gun) -> Option<(Vec3, Vec3)> {
 pub fn known_swivels(id: &str) -> Option<(Vec3, Vec3)> {
     let v = Vec3::new;
     match id {
-        "ak74" => Some((v(-0.0145, 0.039, -0.461), v(-0.022, -0.06, 0.269))),
+        "ak74" => Some((v(-0.0145, 0.039, -0.461), v(-0.022, 0.0, 0.269))),
         "mosin" => Some((v(0.0, -0.009, -0.64), v(0.0, -0.045, 0.17))),
         "sks" => Some((v(-0.0195, 0.0, -0.482), v(-0.021, -0.075, 0.152))),
         "toz_double" => Some((v(0.0, 0.006, -0.62), v(0.0, -0.111, 0.25))),

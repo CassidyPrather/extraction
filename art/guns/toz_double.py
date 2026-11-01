@@ -207,7 +207,8 @@ stock = stock_piece("stock", None, BUTT_Z)
 stock_butt = stock_piece("stock_butt", BUTT_Z, None)
 
 # --- Front trigger ---------------------------------------------------------------------------
-trig = Part("trigger", origin=(0.0, -0.012, -0.05))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, -0.011, -0.049))
 trig.sweep(catmull([(-0.049, -0.017), (-0.0505, -0.025), (-0.048, -0.032), (-0.043, -0.036)], 3,
                    closed=False), section_rect(0.0045, 0.003, 0.0011), "Blued")
 

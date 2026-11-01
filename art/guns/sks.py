@@ -307,7 +307,8 @@ carrier.lathe([(0.0, 0.0), (0.0055, 0.0), (0.0064, 0.0015), (0.0068, 0.004), (0.
                (0.0068, 0.01), (0.0063, 0.012), (0.0055, 0.013), (0.003, 0.0138), (0.0, 0.014)],
               "Steel", segs=24, xf=T(0.035, 0.054, -0.205) @ RY(math.pi / 2))
 
-trig = Part("trigger", origin=(0.0, -0.005, -0.045))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, -0.006, -0.05))
 trig.sweep(catmull([(-0.05, -0.012), (-0.052, -0.022), (-0.049, -0.031), (-0.044, -0.035)], 5,
                    closed=False), section_rect(0.005, 0.0035, 0.0012), "Blued")
 

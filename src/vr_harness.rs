@@ -307,6 +307,38 @@ mod tests {
             .on_ground(x, z)
     }
 
+    /// A power cell let fall comes to rest lying on its side, as its
+    /// model lies: stood on end it read as a magazine from across a room
+    /// (`docs/craft/ITEM_READING.md`). Dropped level, tilted, and nearly
+    /// on end.
+    #[test]
+    fn a_dropped_cell_comes_to_rest_lying_down() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let mut cells = Vec::new();
+        for (k, tilt) in [0.0f32, 30.0, 60.0].into_iter().enumerate() {
+            let at = feet + Vec3::new(-0.6 + k as f32 * 0.6, 0.4, -1.5);
+            let turn = Quat::from_rotation_x(tilt.to_radians()) * Quat::from_rotation_y(0.4);
+            cells.push((
+                tilt,
+                vr.spawn(
+                    "power_cell",
+                    Transform::from_translation(at).with_rotation(turn),
+                ),
+            ));
+        }
+        vr.step(240);
+        for (tilt, cell) in cells {
+            let gt = vr.app.world().get::<GlobalTransform>(cell).unwrap();
+            let along = gt.rotation() * Vec3::Z;
+            assert!(
+                along.y.abs() < 0.3,
+                "dropped at {tilt} degrees, it rests with its length {along:.2} (not lying down)"
+            );
+        }
+    }
+
     /// Reach a hand to an item resting in front of you and squeeze: it's
     /// in your hand; open it: it falls.
     #[test]
