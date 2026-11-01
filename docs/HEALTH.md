@@ -79,7 +79,7 @@ As of 90afc8b (gate 119) and bc66f9a.
 | test / run | class | owner | status |
 | - | - | - | - |
 | `render::part_rest::tests::a_part_gone_leaves_no_ghost` (15eadf3): the merge on the async pool, the test waiting fixed frames | a test race | Performance | fixed in 0735b5e8 (gate 116) |
-| `contract_scour_key` (Sallow): `timed out on PickUp { id: "scour_key", side: Right }` (deterministic; passed on 15eadf3) | likely the body slots (c8ef98d1, 78198b72): a refused stow holds the hand | Hands | routed |
+| `contract_scour_key` (Sallow): `timed out on PickUp { id: "scour_key", side: Right }` (deterministic; passed on 15eadf3) | Models' a44221f5 (outside-doors-only Entrances), bisected by Hands; not the body slots | Models | routed |
 | Sim: Kettle's underground take pocket at (-80..-95, 25-30) (seed 6: 25 stucks); all recover | | Robot minds / Underground | open |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
