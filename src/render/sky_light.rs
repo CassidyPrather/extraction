@@ -102,6 +102,18 @@ fn extraction_sky(d: vec3<f32>, horizon: vec3<f32>, ground: vec3<f32>) -> vec3<f
 // toward the half-sky its normal sees as it roughens; near the eye in a
 // room, the room's walls.
 fn extraction_env(at: vec3<f32>, N: vec3<f32>, V: vec3<f32>, roughness: f32) -> vec3<f32> {{
+    // The room the eye is in (`grade::room_code` on the ambient's alpha):
+    // inside it, the walls, and no sky to look up at all.
+    let walls = lights.ambient_color.rgb * XS_WALLS;
+    var inside = 0.0;
+    let code = lights.ambient_color.a;
+    if (code < 0.0) {{
+        let reach = floor(-code / 4.0);
+        inside = (1.0 - smoothstep(reach, reach + 3.0, distance(at, view.world_position.xyz))) * 0.9;
+        if (inside >= 0.899) {{
+            return walls;
+        }}
+    }}
     let horizon = fog.base_color.rgb / max(view.exposure, 1e-9);
     let ground = lights.ambient_color.rgb * XS_GROUND;
     let a = roughness * roughness;
@@ -109,15 +121,7 @@ fn extraction_env(at: vec3<f32>, N: vec3<f32>, V: vec3<f32>, roughness: f32) -> 
     let sharp = extraction_sky(normalize(mix(R, N, a)), horizon, ground);
     let sky_mean = horizon * (vec3<f32>(1.0) + XS_ZENITH) * 0.5;
     let wide = mix(ground, sky_mean, 0.5 + 0.5 * N.y);
-    var env = mix(sharp, wide, a);
-    // The room the eye is in (`grade::room_code` on the ambient's alpha).
-    let code = lights.ambient_color.a;
-    if (code < 0.0) {{
-        let reach = floor(-code / 4.0);
-        let inside = 1.0 - smoothstep(reach, reach + 3.0, distance(at, view.world_position.xyz));
-        env = mix(env, lights.ambient_color.rgb * XS_WALLS, inside * 0.9);
-    }}
-    return env;
+    return mix(mix(sharp, wide, a), walls, inside);
 }}
 #endif
 
