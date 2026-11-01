@@ -3,7 +3,8 @@ forend. Writes assets/models/guns/mp133.glb.
 
 Gun space as in src/weapons/layout.rs: origin at the palm on the stock's
 straight wrist, -Z down the bore (bore axis y = 0.045), +Y up, metres.
-The milled receiver runs z -0.235..-0.025; the 560 mm barrel to the muzzle
+The milled receiver runs z -0.235..-0.025; the 610 mm barrel (its breech
+face 637 mm back from the muzzle, the chamber in it) to the muzzle
 at z -0.795, with a ventilated rib and a front bead; the 4-shell tube
 magazine (axis y = 0.016) under it to the cap at z -0.62.
 
@@ -95,10 +96,11 @@ misc.prism(trough, -0.163, -0.099, "Steel", axis="z")
 misc.box((0.006, 0.006, 0.008), (0.0, 0.017, -0.097), "Steel", bevel=0.001)  # lifter arm
 
 # --- Trigger housing, guard, safety, action release ---------------------------------------
-# The guard bow under the receiver.
-guard_path = catmull([(-0.090, -0.003), (-0.0915, -0.018), (-0.085, -0.031), (-0.068, -0.038),
-                      (-0.042, -0.0385), (-0.024, -0.034), (-0.012, -0.022), (-0.009, -0.003)],
-                     4, closed=False)
+# The guard bow under the receiver: 8 mm deeper than first made, as a
+# photograph of an MP-133 has it (docs/craft/guns/mp133).
+guard_path = catmull([(z, -0.003 + (y + 0.003) * 1.22) for z, y in [
+    (-0.090, -0.003), (-0.0915, -0.018), (-0.085, -0.031), (-0.068, -0.038), (-0.042, -0.0385),
+    (-0.024, -0.034), (-0.012, -0.022), (-0.009, -0.003)]], 4, closed=False)
 misc.sweep(guard_path, section_rect(0.0105, 0.0052, 0.0016), "Blued")
 # Its rear web, where the crossbolt safety goes through.
 web = fillet([(-0.032, -0.003), (-0.009, -0.003), (-0.011, -0.022), (-0.019, -0.026),

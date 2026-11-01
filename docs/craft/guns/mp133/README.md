@@ -25,8 +25,14 @@ Reviewed on the bench (`docs/craft/GUNSMITHING.md`) on 1 November 2026.
 
 ## Shots
 
-`shots/before/` (`scripts/gun_bench.sh mp133 <dir>`). No model changes
-yet, so no after set.
+Same commands before and after (`scripts/gun_bench.sh mp133 <dir>`):
+`shots/before/`, `shots/after/`.
+
+| | Before | After |
+| - | - | - |
+| Right, 1 m | ![](shots/before/right_1m.jpg) | ![](shots/after/right_1m.jpg) |
+| Three-quarter, 30 cm | ![](shots/before/threeq_30cm.jpg) | ![](shots/after/threeq_30cm.jpg) |
+| Under, 30 cm | ![](shots/before/under_30cm.jpg) | ![](shots/after/under_30cm.jpg) |
 
 ## Measured
 
@@ -72,8 +78,8 @@ scored here (weapon feel owns them).
 2. **The receiver's finish**: it's alloy, anodised or painted black, not
    blued steel. It wants its own finish (the `Stamped` lacquer is close),
    tuned once the environment light lands.
-3. **The trigger guard** is smaller and shallower than the photograph's
-   by about 8 mm.
+3. ~~**The trigger guard**~~ was 8 mm shallower than the photograph's:
+   deepened.
 4. **No bolt face** to see through the ejection port with the action back.
-5. The docstring's "560 mm barrel" doesn't match its geometry (a 610 mm
-   gun).
+5. ~~The docstring's "560 mm barrel"~~: corrected to the 610 mm its
+   geometry has.
