@@ -308,6 +308,15 @@ stops; the yard, 9 posts). Nothing is over:
 | Cinder | s01 ahead, 1,821 (76%) | s01 ahead, 1,188 | s09 side, 20.5M |
 | yard | st02 ahead, 512 | st02 ahead, 841 | st08 ahead, 14.3M |
 
+**The sky, counted (since 0ce15351).** `world::sky` centres its dome on
+the eye. Until `render::mark_offscreen`, "the eye" could be the
+impostors' capture rig or the warm-up's proxy eye, which also draw into
+images. Then the dome wasn't round the gauge's eye and its full-screen
+layer went uncounted. Every walk and yard view rose by the same 6.5M
+(one layer an eye at 1800 px): a measurement fixed, not a cost added.
+Worst fragments now: Marrow s03 side 32.5M, Cinder s09 side 27.0M, the
+yard st06 ahead 16.3M, of 64.8M.
+
 The drop is the dearest stop in both valleys, and it's every raid's
 first view. At Cinder's, of 906 draws an eye:
 
@@ -356,6 +365,14 @@ drawing to a screen or headset. With both:
 | standing in a hazard's cloud | 64 | 60.9M | 26 |
 
 At 14 degrees the cloud was 72.2M; the gauge holds 12.
+
+**The sky, counted (since 0ce15351, `render::mark_offscreen`).** The
+tables above were taken with the sky dome centred on another camera,
+so its layer went uncounted. With it counted (one layer an eye), the
+bare meadow is 27.0M, not 20.6M, and at 12 degrees the cloud is 67.2M,
+over. The budget stands, since the sky is a fixed cost every frame and
+the playtest machine (a Beyond 2 on a 3060 laptop) ran 20-30 fps. The
+cloud is trimmed to keep at least 5% under it (Weapon feel).
 
 ### Items at rest, asleep
 
