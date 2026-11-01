@@ -28,4 +28,23 @@ named passes there.
   before is the current build with the plate's and its centre's colliders
   turned off.
 - `mag_*`: the PM's magazine seated, and held out by the release.
+- `soft_puff_*`: every puff (smoke, dust, gas, powder) was an alpha-blended
+  sphere, a flat grey disc with a hard edge; now one soft puff,
+  `render::puff`, turned to face the eye. Before (left, or top) is
+  39708bc5, the code before the change with the impact gallery's clock;
+  after is aabbb3f5. Each pair is from the same camera:
+  - `concrete` and `concrete_zoom` (3x): `--gallery impact` into the
+    yard's concrete road block (`--camera 5.2,0,68,180,-11 --frames 75`,
+    a quarter of a second after the rounds land). Hard white discs, then
+    soft dust.
+  - `dirt`: the same into the road (`0,0,40,0,-20`). Low contrast both
+    ways: brown dust on brown gravel.
+  - `broken_walker_5m` and `_15m`: Models' line-up
+    (`--gallery robots:walker+walker!broken,0,D`, fog, 11:00). The smoke
+    over the broken walker was a stack of grey discs; now it's soft wisps.
+    How many show is the stream's moment.
+  - `wreck_reel` (`reel:wreck,16,5`, 14:00): a smouldering wreck's soot
+    is a soft column, not a stack of circles, and not a black ball.
+  - `hazards_reel` (`reel:hazards,12,5`): the hazard clouds (frost
+    shown) are soft hazes.
 - `safety_*`, `jam_*`, `eyebox_*`, and the rest: earlier waves.

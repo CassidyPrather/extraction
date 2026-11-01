@@ -37,7 +37,7 @@ pub const KNIFE_TIP: Vec3 = Vec3::new(0.0, 0.0, -0.125);
 pub fn bayonet_tip(gun: &str) -> Option<Vec3> {
     match gun {
         "mosin" => Some(Vec3::new(0.0, 0.024, -1.332)),
-        "sks" => Some(Vec3::new(0.0, 0.0265, -0.975)),
+        "sks" => Some(Vec3::new(0.0, 0.0265, -0.935)),
         _ => None,
     }
 }

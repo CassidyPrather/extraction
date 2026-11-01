@@ -152,6 +152,17 @@ ln.cyl(0.1, -0.06, 0.06, "Yellow", segs=20, xf=reel)
 for x in (-0.07, 0.07):
     ln.cyl(0.13, x - 0.01, x + 0.01, "Dark", segs=24, xf=reel, chamfer=0.003)
 ln.cyl(0.025, -0.1, 0.1, "Dark", segs=12, xf=reel)
+# The grapnel: a spar standing up behind the reel, its three claws spread
+# at the top. A grappler was a walker with a thin tube on top at 30 m
+# (docs/craft/ROBOT_READING.md); the spar is its silhouette.
+spar = T(0, CY + 0.06, 0.33)
+ln.cyl(0.02, 0.0, 0.5, "Dark", segs=10, xf=spar @ UP)
+ln.cyl(0.032, 0.46, 0.52, "Steel", segs=12, xf=spar @ UP)
+for k in range(3):
+    a = 2 * math.pi * k / 3
+    ln.box((0.014, 0.16, 0.014), (0.0, 0.0, 0.0), "Steel", bevel=0.004, segs=1,
+           xf=spar @ T(0, 0.55, 0) @ RY(a) @ RX(0.7) @ T(0, 0.07, 0))
+
 # The line leading from the reel to the tube.
 ln.box((0.012, 0.012, 0.3), (0.0, CY + 0.075, 0.02), "Yellow")
 # Hazard band round the orb.

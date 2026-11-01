@@ -951,12 +951,26 @@ pub fn footing(
     }
 }
 
+/// A failing leg's foot, held off the ground (m, at a walker's size) and
+/// drawn in toward its hip (a share of the way).
+pub const FAILING_LIFT: f32 = 0.14;
+const FAILING_DRAW_IN: f32 = 0.18;
+
 /// Joints for each leg (hip, knee, foot), after [`step_walker`].
 pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
     std::array::from_fn(|i| {
         let hip = t.transform_point(g.shape.hip(i));
         let foot = if w.feet[i].alive {
-            w.feet[i].planted
+            let f = w.feet[i].planted;
+            // A failing leg is favoured even standing still: its foot held
+            // up off the ground and drawn in, barely touching, so the hurt
+            // reads on a walker that isn't walking.
+            if super::damage::Band::of(g.leg_health[i]) == super::damage::Band::Failing {
+                let inward = Vec3::new(hip.x - f.x, 0.0, hip.z - f.z) * FAILING_DRAW_IN;
+                f + inward + Vec3::Y * FAILING_LIFT * g.size
+            } else {
+                f
+            }
         } else {
             g.dangle[i]
         };
@@ -1327,6 +1341,11 @@ fn haul_lines(
 /// device (`devices::Hunting`) it swings onto that, slow and deliberate,
 /// and holds there through its aim: the tell before the shot.
 #[allow(clippy::type_complexity)]
+/// How far a dead gun sags (radians of pitch, barrel down): past the
+/// lowest a live one aims (-0.5), and how fast it settles there.
+pub const DEAD_GUN_DROOP: f32 = -0.85;
+const DEAD_GUN_SAG: f32 = 2.5;
+
 pub(crate) fn aim_turrets(
     mut walkers: Query<(
         &mut Walker,
@@ -1339,7 +1358,7 @@ pub(crate) fn aim_turrets(
         Has<super::hazards::Dazzled>,
         Option<&super::RobotSeed>,
     )>,
-    mut turrets: Query<&mut Transform, (With<WalkerTurret>, Without<Walker>)>,
+    mut turrets: Query<(&mut Transform, Option<&RobotPart>), (With<WalkerTurret>, Without<Walker>)>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
 ) {
@@ -1347,6 +1366,22 @@ pub(crate) fn aim_turrets(
     let now = time.elapsed_secs();
     for (mut w, t, aware, intent, children, robot, hunting, dazzled, seed) in &mut walkers {
         if robot.wrecked {
+            continue;
+        }
+        // A dead gun stops tracking and sags, barrel down, lower than a
+        // live one ever aims: it reads as harmless at a glance.
+        let mut dead = false;
+        for c in children.iter() {
+            if let Ok((mut tt, part)) = turrets.get_mut(c) {
+                if part.is_some_and(|p| !p.alive()) {
+                    dead = true;
+                    let sag =
+                        Quat::from_rotation_y(w.turret_yaw) * Quat::from_rotation_x(DEAD_GUN_DROOP);
+                    tt.rotation = tt.rotation.slerp(sag, (DEAD_GUN_SAG * dt).min(1.0));
+                }
+            }
+        }
+        if dead {
             continue;
         }
         let device = hunting
@@ -1381,7 +1416,7 @@ pub(crate) fn aim_turrets(
             .unwrap_or(0.0)
             .clamp(-0.5, 0.35);
         for c in children.iter() {
-            if let Ok(mut tt) = turrets.get_mut(c) {
+            if let Ok((mut tt, _)) = turrets.get_mut(c) {
                 tt.rotation = Quat::from_rotation_y(w.turret_yaw) * Quat::from_rotation_x(pitch);
             }
         }
@@ -1563,6 +1598,123 @@ mod tests {
     /// Feet meet what's lying about: walking over a block of rubble
     /// (Destruction's debris layer), every foot that comes down on it
     /// stands on its top, neither floating nor sunk.
+    /// A walker standing, alive, for the broken-walker tests: its parts by
+    /// role, and the app.
+    fn standing_walker() -> (App, Entity) {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..60 {
+            app.update();
+        }
+        (app, walker)
+    }
+
+    fn set_hp(app: &mut App, walker: Entity, role: super::super::PartRole, share: f32) {
+        let mut q = app.world_mut().query::<&mut RobotPart>();
+        for mut p in q.iter_mut(app.world_mut()) {
+            if p.robot == walker && p.role == role {
+                p.hp = p.max_hp * share;
+            }
+        }
+    }
+
+    /// Models' broken walker (its gun dead): the gun sags, barrel down,
+    /// lower than a live one ever aims, and stops following what it was
+    /// tracking. A live gun on the same walker tracks and sits level.
+    #[test]
+    fn a_dead_gun_droops_and_stops_tracking() {
+        let (mut app, walker) = standing_walker();
+        let barrel = |app: &mut App| {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&Transform, With<WalkerTurret>>();
+            q.iter(app.world()).next().unwrap().rotation * Vec3::NEG_Z
+        };
+        // Something to look at, off to one side, then the other.
+        let here = app.world().get::<Transform>(walker).unwrap().translation;
+        let look = |app: &mut App, x: f32| {
+            app.world_mut()
+                .get_mut::<super::super::Intent>(walker)
+                .unwrap()
+                .look = Some(here + Vec3::new(x, 0.0, -6.0));
+        };
+        look(&mut app, 4.0);
+        for _ in 0..120 {
+            app.update();
+        }
+        let live = barrel(&mut app);
+        assert!(live.y > -0.48, "a live gun sits within its aim ({live:?})");
+        set_hp(&mut app, walker, super::super::PartRole::Weapon, 0.0);
+        for _ in 0..120 {
+            app.update();
+        }
+        let dead = barrel(&mut app);
+        assert!(
+            dead.y < -0.7,
+            "a dead gun sags barrel down, past any aim ({dead:?})"
+        );
+        look(&mut app, -4.0);
+        for _ in 0..120 {
+            app.update();
+        }
+        let after = barrel(&mut app);
+        assert!(
+            after.distance(dead) < 0.05,
+            "and doesn't follow ({dead:?} -> {after:?})"
+        );
+    }
+
+    /// A failing leg (5%) is held up off the ground even standing still,
+    /// the others planted: the hurt reads on a walker that isn't walking.
+    #[test]
+    fn a_failing_leg_is_held_up_at_rest() {
+        let (mut app, walker) = standing_walker();
+        set_hp(&mut app, walker, super::super::PartRole::Leg(1), 0.05);
+        for _ in 0..90 {
+            app.update();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let poses = app.world().get::<LegPoses>(walker).unwrap().0;
+        for (i, [_, _, foot]) in poses.iter().enumerate() {
+            let up = foot.y - zone.ground(foot.x, foot.z);
+            if i == 1 {
+                assert!(up > 0.1, "the failing leg's foot is {up:.2} m up");
+            } else {
+                assert!(up < 0.04, "leg {i}'s foot is planted ({up:.2} m up)");
+            }
+        }
+    }
+
     /// How deep a sphere at `c` of radius `r` is into the box at `at`
     /// with half-extents `half` (axis-aligned), m; 0 if clear.
     fn into_box(c: Vec3, r: f32, at: Vec3, half: Vec3) -> f32 {
