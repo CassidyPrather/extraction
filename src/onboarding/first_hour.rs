@@ -2250,6 +2250,57 @@ fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
     )
 }
 
+/// A place a newcomer walks to on the way through a building
+/// (building-local).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Stop {
+    /// Walk to it.
+    At(Vec2),
+    /// Up to this side of the door, then open it.
+    Door(Entity, Vec2),
+}
+
+/// The stops along an indoor `path` from `o`: each door the way crosses,
+/// and the waypoints a straight walk can't skip. A waypoint is left out
+/// only where the walk from the last stop on to the next stays clear
+/// (dropping three in four cut a corner through the post office's table
+/// and chair, and the newcomer climbed onto the table and stuck there).
+fn indoor_stops(plan: &crate::sim::indoor::BuildingPlan, o: Vec2, path: &[Vec2]) -> Vec<Stop> {
+    let mut out = Vec::new();
+    let (mut prev, mut kept) = (o, o);
+    let last = path.len().saturating_sub(1);
+    for (i, &w) in path.iter().enumerate() {
+        let doors = plan.doors_on(prev, w);
+        if doors.is_empty()
+            && i != last
+            && plan
+                .grid
+                .line_clear(kept.to_array(), path[i + 1].to_array())
+        {
+            prev = w;
+            continue;
+        }
+        for (door, cross) in doors {
+            // This side of where the way crosses it; where that's past a
+            // jamb (by a bunker's narrow door), the waypoint before it.
+            let mut before = cross + (prev - cross).normalize_or_zero() * 0.8;
+            let clear = |a: Vec2, b: Vec2| plan.grid.line_clear(a.to_array(), b.to_array());
+            if !clear(kept, before) && prev != kept {
+                out.push(Stop::At(prev));
+                kept = prev;
+            }
+            if !clear(kept, before) {
+                before = kept;
+            }
+            out.push(Stop::Door(door, before));
+        }
+        out.push(Stop::At(w));
+        prev = w;
+        kept = w;
+    }
+    out
+}
+
 /// To `p` from `here`: indoors, round to its building's door, open it, in,
 /// and through the rooms to it (the building's plan, doors opened on the
 /// way: a find in a back room isn't reached through the wall).
@@ -2270,29 +2321,20 @@ fn way_to(
             .min_by(|a, b| a.distance(goal).total_cmp(&b.distance(goal)));
         if let Some((o, path)) = entry.and_then(|o| Some((o, plan.path(o, goal)?))) {
             t.extend(route(world, view, here, plan.world2(o)));
-            let mut prev = o;
-            let last = path.len().saturating_sub(1);
-            for (i, w) in path.into_iter().enumerate() {
-                let doors = plan.doors_on(prev, w);
-                // Every few cells, and at each door and the end.
-                if doors.is_empty() && i % 4 != 0 && i != last {
-                    continue;
-                }
-                for (door, cross) in doors {
-                    // Up to it first (the last waypoint kept may be a few
-                    // strides back): this side of where the way crosses it.
-                    let back = (prev - cross).normalize_or_zero() * 0.8;
-                    t.push(Task::WalkTo {
-                        to: plan.world2(cross + back),
+            for stop in indoor_stops(plan, o, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
                         within: 0.4,
-                    });
-                    t.push(Task::OpenDoor(door));
+                    }),
                 }
-                t.push(Task::WalkTo {
-                    to: plan.world2(w),
-                    within: 0.4,
-                });
-                prev = w;
             }
             return t;
         }
@@ -2781,6 +2823,90 @@ the Hollow.";
         assert_eq!(
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
+        );
+    }
+}
+
+#[cfg(test)]
+mod indoor_tests {
+    use super::{Stop, indoor_stops};
+    use bevy::ecs::system::SystemState;
+    use bevy::prelude::*;
+
+    /// Indoors, each straight walk between a newcomer's stops stays on the
+    /// building plan's open cells (furniture and its clearance kept out):
+    /// from the door nearest each loot spot in every building on Marrow, to
+    /// the spot. (The post office's table and chair were walked through,
+    /// and climbed.)
+    #[test]
+    fn indoor_walks_go_round_the_furniture() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let w = app.world_mut();
+        let mut st: SystemState<(
+            Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+            Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>,
+        )> = SystemState::new(w);
+        let (b, d) = st.get(w).unwrap();
+        let plans = crate::sim::indoor::plan_buildings(&b, &d);
+        let spots: Vec<Vec3> = w
+            .get_resource::<crate::world::buildings::BuildingLoot>()
+            .map(|l| l.0.iter().map(|s| s.at).collect())
+            .unwrap_or_default();
+        let (mut walks, mut cut) = (0, Vec::new());
+        for plan in &plans {
+            for spot in spots.iter().filter(|s| plan.contains(**s, 0.3)) {
+                let goal = plan.to_local(*spot).xz();
+                let Some(o) = plan
+                    .doors
+                    .iter()
+                    .filter_map(|d| d.outside)
+                    .min_by(|a, b| a.distance(goal).total_cmp(&b.distance(goal)))
+                else {
+                    continue;
+                };
+                let Some(path) = plan.path(o, goal) else {
+                    continue;
+                };
+                walks += 1;
+                let mut from = Some(o);
+                for stop in indoor_stops(plan, o, &path) {
+                    match stop {
+                        Stop::Door(_, before) => {
+                            if let Some(f) = from {
+                                if !plan.grid.line_clear(f.to_array(), before.to_array()) {
+                                    cut.push(format!("{} {f} -> {before}", plan.name));
+                                }
+                            }
+                            // Through the door: its leaf is in the way till
+                            // it's open.
+                            from = None;
+                        }
+                        Stop::At(p) => {
+                            if let Some(f) = from {
+                                if !plan.grid.line_clear(f.to_array(), p.to_array()) {
+                                    cut.push(format!("{} {f} -> {p}", plan.name));
+                                }
+                            }
+                            from = Some(p);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(walks > 50, "only {walks} indoor walks tried");
+        assert!(
+            cut.is_empty(),
+            "{} of {walks} indoor walks cut through furniture:\n{}",
+            cut.len(),
+            cut.join("\n")
         );
     }
 }
