@@ -363,7 +363,7 @@
         // Lorry 12, stuck on the third bend with the keys in (the driver's
         // note is in the road-menders' hut): on the inside of the bend,
         // its nose up the next leg.
-        (prefab: "wreck_lorry", at: (2.8, -28.2), rot: 68.0),
+        (prefab: "wreck_lorry", at: (2.3, -28.7), rot: 68.0),
         // Left on the climb to the pass by those who walked over it.
         (prefab: "wreck_lada", at: (10.2, -130.6), rot: 1.0),
         (prefab: "wreck_uaz", at: (24.5, -157.3), rot: 356.0),
