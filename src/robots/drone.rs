@@ -895,7 +895,9 @@ mod tests {
         for k in 0..8 {
             let (mut app, player, drone, _) = drone_on_you();
             let zone = app.world().resource::<crate::world::Zone>().clone();
-            let me = zone.on_ground(-19.4, 35.3);
+            // Onboarding's (-19.4, 35.3) on Marrow Creek, from its post office
+            // at (-22.2, 33.5); the test field has it at (-20, 65), turned the same.
+            let me = zone.on_ground(-17.2, 66.8);
             assert!(
                 under_a_roof(app.world().resource::<super::super::doors::Entrances>(), me),
                 "the spot isn't in the post office: {me}"
