@@ -90,7 +90,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "toz_double", dims: Some((0.075, 0.16, 1.12)),
+            id: "toz_double", dims: Some((0.075, 0.16, 1.16)),
             name: "Double-barrel shotgun",
             description: "Side-by-side twelve gauge. Break it, drop two in, snap it shut. Ejectors throw the empties over your shoulder.",
             category: Firearm, size: Bulky, mass: 3.2, bulk: 6.5,
@@ -129,7 +129,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "toz8", dims: Some((0.075, 0.17, 1.145)),
+            id: "toz8", dims: Some((0.075, 0.17, 1.115)),
             name: "TOZ-8M .22 rifle",
             description: "A club rifle: one .22 at a time, thumbed into the open chamber. Its crack doesn't carry far. Good for an eye or a rook; useless against plate. Rimfire misfires: lift the bolt and drop it to strike again.",
             category: Firearm, size: Bulky, mass: 2.9, bulk: 5.0,
@@ -857,7 +857,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_toz_double", dims: Some((0.044, 0.141, 0.306)), name: "TOZ double's stock",
+            id: "stock_toz_double", dims: Some((0.044, 0.141, 0.249)), name: "Double's stock",
             description: "The double's butt, off its through-bolt.",
             category: Material, size: Medium, mass: 0.55, bulk: 0.8,
             tags: ["wood", "gun_part"],

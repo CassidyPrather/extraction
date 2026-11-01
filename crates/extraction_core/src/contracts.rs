@@ -104,6 +104,13 @@ pub struct Contract {
     pub done: &'static str,
 }
 
+/// A career's first jobs are the ladder's own, never a contract's: the
+/// first a there-and-back, the second where the broken walker teaches the
+/// first fight (`robots::broken`). A contract's errand can be anywhere
+/// (the post counter's is the Village, under a drone's patrol), so none
+/// starts before this many jobs are done.
+pub const GENTLE_JOBS: u32 = 2;
+
 /// Within this of a planted thing's place (m).
 pub const PLANT_RADIUS: f32 = 4.0;
 /// A photograph's subject, no farther than this (m) and this close to the
@@ -117,7 +124,8 @@ pub const CONTRACTS: &[Contract] = &[
         name: "The post counter",
         giver: "the Holm boy",
         says: &["The Holm boy's grown. Wants his grandad's watch. The post office."],
-        offered: Offered::Tier { tier: 0, at: 1 },
+        // The third odd job: never the first two (`GENTLE_JOBS`).
+        offered: Offered::Tier { tier: 0, at: 2 },
         raided_all: false,
         after: &[],
         steps: &[Step::Bring {
@@ -735,12 +743,45 @@ mod tests {
         }
     }
 
+    /// No contract comes up on a career's first two jobs: those are the
+    /// gentle ones, and a contract's errand can be anywhere. (First-jobs
+    /// runs: the post counter as job 2 took every newcomer into the Village
+    /// under a drone before the broken walker.)
+    #[test]
+    fn no_contract_comes_before_the_gentle_jobs() {
+        for c in CONTRACTS {
+            if let Offered::Tier { tier, at } = c.offered {
+                let before: u32 = TIERS[..tier as usize].iter().map(|t| t.jobs).sum();
+                assert!(
+                    before + at >= GENTLE_JOBS,
+                    "{}: offered as job {}",
+                    c.id,
+                    before + at + 1
+                );
+            }
+        }
+        // And a career walked from the start meets none before.
+        let mut p = Progress::default();
+        for done in 0..GENTLE_JOBS {
+            p.done = done;
+            p.done_in_tier = done;
+            assert!(
+                next_contract(&p).is_none(),
+                "a contract as job {}",
+                done + 1
+            );
+        }
+    }
+
     #[test]
     fn the_arc_offers_each_contract_once_in_its_place() {
         let mut p = Progress::default();
         assert!(next_contract(&p).is_none(), "not the very first job");
         p.done = 1;
         p.done_in_tier = 1;
+        assert!(next_contract(&p).is_none(), "not the second either");
+        p.done = 2;
+        p.done_in_tier = 2;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("post_counter"));
         p.contracts_done.push("post_counter".into());
         p.done = 3;

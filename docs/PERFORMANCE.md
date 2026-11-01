@@ -321,6 +321,42 @@ largest side). The valley's far loot (1,400 item meshes past 100 m)
 isn't drawn already, so it saved 6-8 draws in clear weather and none in
 drizzle.
 
+### Puffs where they stack
+
+Soft puffs (`render::puff`) are 1.6 m blended quads, so each one across
+the view is a whole layer of fragments. `gauge_puffs_hold_the_stereo_budget`
+places them as `robots::fx`'s emitters keep them in steady state and
+measures both eyes from Marrow's meadow, in drizzle (bare: 20.6M of
+64.8M):
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 21.8M | 14 |
+| a firefight's wounds, 6-15 m | 64 | 20.8M | 14 |
+| standing in a hazard's cloud | 64 | 82.2M, over | 39 |
+
+The cloud's near quads each cover most of the view. Capping a puff's
+apparent half-width (`PUFF_RULE=angle:<deg>`, a trial on the scene):
+20 degrees gives 60.3M, 12 gives 38.0M. Hiding a puff the eye is inside
+does nothing, since none is.
+
+**Fixed (Weapon feel, 2026-11-01):** `render::puff`'s `face_puffs` clamps
+each puff, after its owner sets its scale, to span no more than
+`MAX_HALF_ANGLE` (12 degrees) from the eye: near the eye a puff looks
+smaller, not thicker. On the way: the eye `face_puffs` faced was the
+middle of every active 3D camera, an impostor's capture rig and warmup's
+proxy eye among them, so puffs were turned partly edge-on and none read
+as near (so the numbers above are low). It now reads only the cameras
+drawing to a screen or headset. With both:
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 27.5M | 15 |
+| a firefight's wounds, 6-15 m | 64 | 24.5M | 15 |
+| standing in a hazard's cloud | 64 | 60.9M | 26 |
+
+At 14 degrees the cloud was 72.2M; the gauge holds 12.
+
 ### Items at rest, asleep
 
 Tried and left (2026-11-01): merging resting items per material in 8 m

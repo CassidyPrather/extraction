@@ -239,8 +239,6 @@ mod tests {
     /// force, and whatever's in an anomaly's reach, which pushes on it,
     /// aren't counted.)
     #[test]
-    #[ignore = "known failing (2026-11-01): stacked items never sleep; Hands un-ignores it with the fix. \
-                cargo test --lib gauge_items_fall_asleep -- --ignored --nocapture"]
     fn gauge_items_fall_asleep() {
         let mut over = Vec::new();
         let maps = extraction_core::map::VALLEYS

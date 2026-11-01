@@ -110,3 +110,28 @@ and its knee marks hang off them).
   Robot bodies'; the line-ups follow when they land. The grey discs over
   it are the smoke being replaced by a soft puff (`render::puff`, Weapon
   feel).
+
+### The droop and leg lift (1 November)
+
+`docs/shots/robots/broken_walker_{fog,drizzle}_{colour,grey}_droop.jpg`,
+the same cameras on Robot bodies' droop and leg lift (f70e42fd), broken
+at frame 4 and shot at 140; the fog sheets add a side-on pair.
+
+- **The failing leg** reads side-on: its foot held clear of the ground.
+- **The dead gun** points up and back, about 50 degrees, nose high: a
+  dark slab standing on the orb (front-on, a black block where the
+  turret was). It reads as changed, not as drooped. Sent to Robot
+  bodies: the pitch looks sign-flipped.
+- **The smoke** is still the grey discs (Weapon feel's puff to come).
+
+### The slump (1 November)
+
+`docs/shots/robots/broken_walker_{fog,drizzle}_{colour,grey}_slump.jpg`,
+the same cameras on Robot bodies' fix (f539576b, on main 87afa914).
+
+- **The dead gun slumps**: its nose down and swung aside, a dropped
+  barrel beside the healthy walker's level turret, at 5 and 15 m in
+  colour and grey. Side-on it hangs low on the orb. Harmless now reads
+  from its shape, as the rule asks.
+- **The failing leg** still holds its foot clear.
+- **The smoke** is Weapon feel's soft puff now, not grey discs.

@@ -110,16 +110,15 @@ here (weapon feel owns them).
 
 ## What's still wrong, worst first
 
-1. **The drum.** In the left side photograph it shows edge-on, as a tall
-   narrow shape, not as the round face the model has. Either that
-   photograph has the drum turned, or the model's drum is. I haven't
-   changed it on one photograph; it wants a second, clean side view with
-   the drum on.
-2. **The jacket can't break open** about its hinge for stripping.
-3. **The rear sight**: the two photographs disagree on where it sits
+1. **The jacket can't break open** about its hinge for stripping.
+2. **The rear sight**: the two photographs disagree on where it sits
    (−0.018 and −0.066), so it stays at −0.03.
-4. **The receiver's sides** are flat slabs; the real ones carry stamped
+3. **The receiver's sides** are flat slabs; the real ones carry stamped
    ribs.
+
+(The drum, which one photograph showed edge-on, is as modelled: its flat
+face lies parallel to the gun's side, so from the side it reads as a
+circle. That photograph's magazine was at an angle or wasn't the drum.)
 
 ## What changed
 

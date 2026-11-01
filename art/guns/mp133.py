@@ -66,11 +66,11 @@ def ring(z, lo, hi, wb, wt, power, segs=24, cx=0.0):
     return out
 
 
-# --- Receiver (milled steel, flat sides, rounded top) ----------------------------------
+# --- Receiver (aluminium alloy, black; flat sides, rounded top) -------------------------
 recv = Part("receiver")
 rsec = fillet([(-RX_HW, RX_Y0), (RX_HW, RX_Y0), (RX_HW, RX_Y1), (-RX_HW, RX_Y1)],
               [0.0025, 0.0025, 0.013, 0.013], 5)
-recv.prism(rsec, RX_Z0, RX_Z1, "Blued", axis="z", bevel=0.0018, segs=2)
+recv.prism(rsec, RX_Z0, RX_Z1, "Alloy", axis="z", bevel=0.0018, segs=2)
 rc = Part("cut")
 # Ejection port, right side; the bolt shows in it when closed.
 rc.box((0.024, 0.026, 0.06), (0.018, 0.050, -0.12), "Black", bevel=0.002, segs=1)
@@ -78,8 +78,8 @@ rc.box((0.024, 0.026, 0.06), (0.018, 0.050, -0.12), "Black", bevel=0.002, segs=1
 rc.box((0.022, 0.046, 0.072), (0.0, 0.003, -0.13), "Black", bevel=0.002, segs=1)
 # Stampings on the left: the model and the chambering.
 LEFT = T(-RX_HW + 0.0004, 0, 0) @ RY(-math.pi / 2)
-text(rc, "МР-133", 0.0055, "Blued", LEFT @ T(-0.15, 0.040, 0.0), depth=0.0008)
-text(rc, "12x76", 0.0034, "Blued", LEFT @ T(-0.15, 0.030, 0.0), depth=0.0008)
+text(rc, "МР-133", 0.0055, "Alloy", LEFT @ T(-0.15, 0.040, 0.0), depth=0.0008)
+text(rc, "12x76", 0.0034, "Alloy", LEFT @ T(-0.15, 0.030, 0.0), depth=0.0008)
 recv.cut(rc, paint=True)
 
 misc = Part("static_misc")
@@ -101,11 +101,11 @@ misc.box((0.006, 0.006, 0.008), (0.0, 0.017, -0.097), "Steel", bevel=0.001)  # l
 guard_path = catmull([(z, -0.003 + (y + 0.003) * 1.22) for z, y in [
     (-0.090, -0.003), (-0.0915, -0.018), (-0.085, -0.031), (-0.068, -0.038), (-0.042, -0.0385),
     (-0.024, -0.034), (-0.012, -0.022), (-0.009, -0.003)]], 4, closed=False)
-misc.sweep(guard_path, section_rect(0.0105, 0.0052, 0.0016), "Blued")
+misc.sweep(guard_path, section_rect(0.0105, 0.0052, 0.0016), "Alloy")
 # Its rear web, where the crossbolt safety goes through.
 web = fillet([(-0.032, -0.003), (-0.009, -0.003), (-0.011, -0.022), (-0.019, -0.026),
               (-0.030, -0.012)], [0.0, 0.0, 0.004, 0.004, 0.006], 3)
-misc.prism(web, -0.0055, 0.0055, "Blued", axis="x", bevel=0.001, segs=1)
+misc.prism(web, -0.0055, 0.0055, "Alloy", axis="x", bevel=0.001, segs=1)
 # Crossbolt safety, pushed through to the right (safe): a part of its own
 # (`crossbolt`), pushed left to fire, which bares its red band on the left.
 CROSSBOLT = (0.0, -0.0125, -0.0215)
