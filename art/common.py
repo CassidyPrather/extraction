@@ -81,6 +81,7 @@ MATERIALS = {
     "Paper": ((0.85, 0.83, 0.76), 0.0, 0.9, None),
     "Strange": ((0.5, 0.35, 0.8), 0.6, 0.15, (0.6, 0.35, 1.0)),
     # World props (art/props; src/models.rs maps them).
+    "Bark": ((0.22, 0.17, 0.13), 0.0, 0.95, None),
     "Timber": ((0.55, 0.45, 0.33), 0.0, 0.8, None),
     "Rusty": ((0.4, 0.25, 0.15), 0.6, 0.7, None),
     "Painted": ((0.3, 0.38, 0.35), 0.3, 0.6, None),

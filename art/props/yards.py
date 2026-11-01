@@ -21,10 +21,14 @@ their back (+Z) to it.
 - `dog_kennel`         Hana's dog's kennel (Marrow, her house only)
 - `tub_iron`           Cinder's: an old iron bath used as a trough, sooted
 - `coal_bunker`        Kettle's: a plank bunker, coal spilled at its hatch
+- `log_stack`          felled trunks stacked to season by a road: the
+                       `log_pile` prefab's look (src/world/buildings.rs
+                       `log_pile` collides with the same logs; keep the two
+                       tables in step)
 
 Materials: Timber, Planks, Boards, Iron, Cast, Rusty, Zinc, Concrete, Brick,
 Corrugated, Shingles, Hide (soil), Leaf, Olive, Yellow, Cream, Blue, Ticking,
-Wool, DarkWool, Canvas, Char, Black.
+Wool, DarkWool, Canvas, Char, Black, Bark, Straw.
 """
 
 import math
@@ -289,6 +293,55 @@ def woodpile_lean():
     return [p]
 
 
+# --- Log stack -------------------------------------------------------------------------------
+
+# Each felled trunk: (x, y of its axis, mean radius, length, middle along
+# z, yaw). Bottom-up four, three, two, one, thick butts low and thin tops
+# high, each resting on the two under it. src/world/buildings.rs
+# `LOG_STACK` is the same table (the logs' colliders).
+LOG_STACK = (
+    (-0.785, 0.26, 0.26, 6.7, 0.05, 0.0),
+    (-0.275, 0.24, 0.24, 5.6, -0.6, 0.02),
+    (0.255, 0.28, 0.28, 6.4, 0.25, -0.015),
+    (0.795, 0.25, 0.25, 4.8, 1.0, 0.025),
+    (-0.497, 0.631, 0.21, 6.1, -0.25, -0.02),
+    (-0.071, 0.619, 0.19, 5.2, 0.8, 0.015),
+    (0.574, 0.665, 0.22, 4.3, -0.9, 0.03),
+    (-0.258, 0.926, 0.17, 5.8, 0.3, -0.025),
+    (0.223, 0.809, 0.16, 4.6, -1.0, 0.02),
+    (0.027, 1.023, 0.13, 5.0, 0.5, -0.03),
+)
+
+
+def log_stack():
+    w = Wear(351)
+    p = Part("static")
+    for k, (x, y, r, ln, mid, yaw) in enumerate(LOG_STACK):
+        # A trunk tapers, butt to top, 15% either way of its mean; the
+        # butts lie at alternate ends, as a stack is built.
+        butt, top = r * 1.15, r * 0.85
+        z0, z1 = -ln / 2, ln / 2
+        rs = (butt, top) if k % 2 == 0 else (top, butt)
+        xf = T(x, y, mid) @ RY(yaw)
+        # A little bulge and a kink along it: no turned pole.
+        bulge = 1.0 + w.j(0.04)
+        prof = [(rs[0], z0), ((rs[0] + rs[1]) / 2 * bulge, (z0 + z1) / 2 + w.j(0.4)),
+                (rs[1], z1)]
+        p.lathe(prof, "Bark", segs=12, xf=xf)
+        # The sawn ends, pale wood a few millimetres proud, a ring of bark
+        # left round each.
+        for z, rr, sgn in ((z0, rs[0], -1), (z1, rs[1], 1)):
+            face = rr * 0.86
+            a, b = (z - 0.004, z + 0.002) if sgn < 0 else (z - 0.002, z + 0.004)
+            p.cyl(face, a, b, "Straw", segs=12, xf=xf)
+    # Stakes driven in at the bottom row's outer logs, both ends: a split
+    # pole, its top cut slant.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            board(p, (0.09, 1.0, 0.09), (sx * 1.13, 0.5, sz * 2.4), "Timber", w, bevel=0.006)
+    return [p]
+
+
 # --- Washtub ----------------------------------------------------------------------------------
 
 def washtub_stand():
@@ -539,5 +592,6 @@ for name, build in (("clothes_line", clothes_line), ("clothes_line_bare", clothe
                     ("washtub_stand", washtub_stand), ("chopping_block", chopping_block),
                     ("beehive", beehive), ("hen_coop", hen_coop), ("handcart", handcart),
                     ("hand_pump", hand_pump), ("dog_kennel", dog_kennel),
-                    ("tub_iron", tub_iron), ("coal_bunker", coal_bunker)):
+                    ("tub_iron", tub_iron), ("coal_bunker", coal_bunker),
+                    ("log_stack", log_stack)):
     prop(name, build)
