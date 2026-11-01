@@ -35,6 +35,7 @@ pub struct PloughLookPlugin;
 
 impl Plugin for PloughLookPlugin {
     fn build(&self, app: &mut App) {
+        crate::render::puff::add_to(app);
         app.add_systems(Update, (dress, run_parts, gallery, spray, fly_snow));
     }
 }
@@ -484,6 +485,7 @@ fn spray(
     flakes: Query<(), With<Flake>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    puffs: Res<crate::render::puff::PuffAssets>,
     mut made: Local<Option<[(Handle<Mesh>, Handle<StandardMaterial>); 2]>>,
     mut owed: Local<(f32, f32)>,
     mut dice: Local<Dice>,
@@ -502,15 +504,16 @@ fn spray(
                         ..default()
                     }),
                 ),
+                // Powder: a soft puff (`render::puff`).
                 (
-                    meshes.add(Sphere::new(0.5).mesh().ico(2).unwrap()),
-                    materials.add(StandardMaterial {
+                    puffs.quad.clone(),
+                    materials.add(puffs.soften(StandardMaterial {
                         base_color: Color::srgba(0.95, 0.97, 1.0, 0.28),
                         emissive: LinearRgba::rgb(0.12, 0.12, 0.14),
                         alpha_mode: AlphaMode::Blend,
                         perceptual_roughness: 1.0,
                         ..default()
-                    }),
+                    })),
                 ),
             ]
         })
@@ -564,6 +567,8 @@ fn spray(
                 },
                 Mesh3d(powder.0.clone()),
                 MeshMaterial3d(powder.1.clone()),
+                crate::render::puff::SoftPuff,
+                bevy::camera::visibility::NoFrustumCulling,
                 Transform::from_translation(at).with_scale(Vec3::splat(0.2)),
                 NotShadowCaster,
             ));
