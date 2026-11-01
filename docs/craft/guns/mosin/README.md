@@ -110,7 +110,7 @@ here (weapon feel owns them).
 | Parts present | 2 | 2 | no interrupter screw or bolt-stop on the left; no cleaning rod's nut |
 | Parts move | 2 | 2 | the bolt turns, slides and cocks; the handle has a raceway; the floorplate doesn't open |
 | Controls | 2 | 2 | |
-| Finish | 1 | 2 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): blue-black, graded by the sky; the scan's grain still shows at 30 cm |
+| Finish | 1 | 2 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): blue-black, graded by the sky; not yet seen at 30 cm in the game |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 1 | 1 | serial and year on the left; the real ones are on the barrel's reinforce, with the arsenal's mark |

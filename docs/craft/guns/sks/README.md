@@ -97,7 +97,7 @@ here (weapon feel owns them).
 | Parts present | 2 | 2 | the front swivel is on the band, where the photograph has it under the gas cylinder; no takedown pin through the stock |
 | Parts move | 2 | 2 | carrier, bayonet, trigger, safety; the cover can't come off |
 | Controls | 2 | 2 | |
-| Finish | 1 | 2 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): blue-black, graded by the sky; the scan's grain still shows at 30 cm |
+| Finish | 1 | 2 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): blue-black, graded by the sky; not yet seen at 30 cm in the game |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 2 | 2 | |

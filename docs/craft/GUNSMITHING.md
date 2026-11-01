@@ -179,6 +179,7 @@ line-up, not on one gun: take every gun's `threeq_30cm` into one sheet
 | - | - | - |
 | `Blued` | machined steel, polished and blued: the gun-metal scan at a 75 mm tile, a little glossy | barrels, sight blocks, bolts, slides, milled receivers |
 | `Stamped` | stamped sheet under black lacquer over phosphate: near black, little metal, the scan's relief only | the AK-74's and RPK-74's receivers and dust covers |
+| `Alloy` | aluminium alloy, anodised or painted black: a satin charcoal, no blue, no metal | the MP-133's receiver and trigger guard |
 | `Steel` | bright steel, in the white | carriers, pins, springs |
 | `Black` | blackened steel, matt | butt plates, small fittings |
 | `Worn` | bare steel where the finish has rubbed off | edges, by `wear` |
@@ -208,13 +209,19 @@ Fourth pass (1 November), against Visual design's sky light
 Rime Fell mill: smooth metal now reflects a horizon brighter than its
 zenith, so a curve grades from a light band to a dark top. Changes:
 
-- **Blued**: reflectance about 0.09-0.10, a touch blue (gain 2.0 on the
-  scan), roughness about 0.28.
+- **Blued**: an even 0.09 reflectance, a touch blue, on the scan's
+  roughness (about 0.28) and relief.
 - **Stamped**: a lacquer at 0.02, roughness 0.35.
 - **Black**: about 0.07, matt.
 
-A first try at about 0.13 (gain 3) went blue-grey and blotchy, like a
-dusty casting: the scan's variation, tripled. In the mill the metal stays
+- **Alloy** (new): the MP-133's black aluminium receiver and guard, a
+  satin charcoal paint at 0.032 and roughness 0.36, apart from its blued
+  barrel.
+
+A first try at about 0.13 (gain 3 on the scan's albedo) went blue-grey
+and blotchy, like a dusty casting: the scan's variation, tripled. Even at
+0.1 it showed on the PM's slide at 30 cm as grain, so blued steel's
+albedo is now flat and the scan gives only its roughness and relief. In the mill the metal stays
 dark, reflecting the room. The bench has no sky light, so it shows these
 finishes flatter and lighter than the game does; judge finishes in the
 game.
@@ -227,6 +234,8 @@ game.
 | Mill, before | Mill, after |
 | - | - |
 | ![](finishes/sky_mill_before.jpg) | ![](finishes/sky_mill_after.jpg) |
+
+![The MP-133: Alloy receiver, blued barrel](finishes/sky_yard_mp133_alloy.jpg)
 
 ### 5. Hands
 

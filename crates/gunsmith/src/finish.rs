@@ -13,7 +13,8 @@
 //! Tuned against Visual design's sky light (`render::sky_light`), in the
 //! game in the yard at noon and in the Rime Fell mill: blued steel at
 //! about 0.1 reflectance and 0.28 roughness grades from the horizon's
-//! band to a darker top; at 0.13 the scan's variation went blotchy. The
+//! band to a darker top; at 0.13 the scan's variation went blotchy, and
+//! even at 0.1 it showed as grain on the PM, so the albedo is flat. The
 //! bench has no sky light, so it shows these flatter than the game does.
 
 /// How a finish is made from the gun-metal scan.
@@ -39,11 +40,13 @@ pub struct SteelFinish {
 /// 0.15 m it read as a casting's grain at 30 cm).
 pub const TILE: f32 = 0.075;
 
-/// Machined steel, polished and blued: the scan at half its tile, lifted
-/// to about 0.1 reflectance, a touch blue, a little glossier.
+/// Machined steel, polished and blued: an even 0.09 reflectance, a touch
+/// blue, on the scan's roughness and relief at half its tile. (On the
+/// scan's albedo, lifted to match, its variation read as a casting's grain
+/// at 30 cm.)
 pub const BLUED: SteelFinish = SteelFinish {
-    gain: Some([2.0, 2.05, 2.3]),
-    flat: [0.0; 3],
+    gain: None,
+    flat: [0.088, 0.09, 0.102],
     metallic: 1.0,
     roughness: 0.9,
     keep_scan_metal: true,
@@ -66,9 +69,9 @@ pub const STAMPED: SteelFinish = SteelFinish {
 /// metal showing; the scan's relief only.
 pub const ALLOY: SteelFinish = SteelFinish {
     gain: None,
-    flat: [0.03, 0.03, 0.03],
+    flat: [0.032, 0.032, 0.032],
     metallic: 0.0,
-    roughness: 0.48,
+    roughness: 0.36,
     keep_scan_metal: false,
     tile: TILE,
 };
