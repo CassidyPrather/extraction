@@ -591,6 +591,7 @@ pub(super) fn walker_brain(
                 Has<super::indoor::Dormant>,
                 Has<super::indoor::Warden>,
                 Has<super::grappler::Hauling>,
+                Option<&mut super::broken::Broken>,
             ),
         ),
     )>,
@@ -664,9 +665,20 @@ pub(super) fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, warden, hauling)),
+        (
+            local,
+            mut patrol,
+            crawler,
+            gait,
+            mut hound,
+            fleeing,
+            (dormant, warden, hauling, mut broken),
+        ),
     ) in &mut walkers
     {
+        if let Some(b) = broken.as_deref_mut() {
+            b.cooldown -= dt;
+        }
         // (The heavy thinks for itself: `heavy_mind`.)
         if gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy) {
             continue;
@@ -910,6 +922,23 @@ pub(super) fn walker_brain(
                         } else {
                             w.waited += dt;
                             intent.low = true;
+                            None
+                        }
+                    }
+                    (Some(tp), _) if broken.is_some() => {
+                        // Gun dead and a leg dragging: it limps at you, its
+                        // eye on you, and shoves you once it's there.
+                        let b = broken.as_deref_mut().unwrap();
+                        let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
+                        intent.look = Some(tp);
+                        intent.pace = super::broken::PACE;
+                        if d > super::broken::SHOVE_RANGE {
+                            Some(tp)
+                        } else {
+                            if b.cooldown <= 0.0 {
+                                b.cooldown = super::broken::SHOVE_COOLDOWN;
+                                b.shoving = true;
+                            }
                             None
                         }
                     }
@@ -1272,6 +1301,7 @@ fn walker_guns(
         &Robot,
         &Children,
         Option<&super::anim::Gait>,
+        Has<super::broken::Broken>,
     )>,
     turrets: Query<(&GlobalTransform, &RobotPart), With<WalkerTurret>>,
     parts: Query<&RobotPart>,
@@ -1306,7 +1336,7 @@ fn walker_guns(
         .filter(|(r, g)| super::squad::repositioning(Some(r), g.translation()))
         .map(|(r, _)| r.target)
         .collect();
-    for (e, mut w, brain, aware, robot, children, gait) in &mut walkers {
+    for (e, mut w, brain, aware, robot, children, gait, broken) in &mut walkers {
         w.gun_cooldown -= dt;
         // Knocked down, or getting up, it can't shoot, and must aim afresh.
         let floored = gait.is_some_and(|g| g.down() || g.rising > 0.0);
@@ -1314,7 +1344,8 @@ fn walker_guns(
         let moving_up = roles
             .get(e)
             .is_ok_and(|(r, g)| super::squad::repositioning(Some(r), g.translation()));
-        if robot.wrecked || !matches!(brain, Brain::Engage) || floored || moving_up {
+        // A broken walker's gun is dead for good (`broken`).
+        if robot.wrecked || !matches!(brain, Brain::Engage) || floored || moving_up || broken {
             w.aim = 0.0;
             blind.remove(&e);
             continue;

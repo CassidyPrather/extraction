@@ -13,7 +13,8 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `damaged` (plates on their last bolt, the core smoking, its
 //! eye guttering, walking across), `limp` (a leg shot off, then across), `crawl` (two legs shot
-//! off: it drags itself across), `hurt` (a leg at a fifth),
+//! off: it drags itself across), `hurt` (a leg at a fifth), `broken`
+//! (the broken walker: its gun dead and a leg all but gone, across),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `tells`/`tellsbefore` (a shot leg, a dead
 //! eye, a failing core and a hit rotor at 24-36 m, and the same whole),
