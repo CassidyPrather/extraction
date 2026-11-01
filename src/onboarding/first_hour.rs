@@ -803,8 +803,44 @@ pub(super) fn direct_raid(
     // stays on).
     let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
     let has_gun = guns().any(|(_, by, p)| by == player && !p);
-    if !state.racked && has_gun && state.heard.iter().any(|l| l == super::hints::ONE_UP) {
+    // (What it's told is by the gun it holds: a round up, a magazine in
+    // first, load up from the crate, or no rounds at all.)
+    use super::hints::{LOAD_UP, MAG_IN, NO_ROUNDS, ONE_UP};
+    let told = |l: &str, heard: &[String]| heard.iter().any(|h| h == l);
+    let no_rounds = told(NO_ROUNDS, &state.heard);
+    let load_up = told(LOAD_UP, &state.heard);
+    let ready_told = told(ONE_UP, &state.heard) || told(MAG_IN, &state.heard) || load_up;
+    if !state.racked && has_gun && ready_told {
         state.racked = true;
+        // "Load up from the crate": the loaded magazines in it, first.
+        if load_up {
+            let loaded: Vec<Entity> = view
+                .stash
+                .iter()
+                .flat_map(|b| b.contents.iter().copied())
+                .filter(|e| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && world.items.get(*e).is_ok_and(|(_, it, ..)| it.rounds > 0)
+                })
+                .collect();
+            state.note(
+                now,
+                Kind::Learned,
+                format!(
+                    "empty, as the driver said: {} loaded from the crate",
+                    loaded.len()
+                ),
+            );
+            let mut t = Vec::new();
+            for e in loaded {
+                t.push(Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                });
+                t.push(Task::Stow(Side::Right));
+            }
+            super::second_hour::cut_in(&mut bot, t);
+        }
         if !one_up(guns(), player) {
             state.note(now, Kind::Learned, "one up the spout, as the driver said");
             // A magazine in first if it has none with rounds (racked
@@ -827,8 +863,37 @@ pub(super) fn direct_raid(
         state.noticed = true;
         if one_up(guns(), player) {
             state.note(now, Kind::Learned, "noticed, with a round up");
+        } else if no_rounds {
+            // Nothing anywhere to load, and told so: not unready by its own
+            // doing.
+            state.note(
+                now,
+                Kind::Learned,
+                "noticed, with no rounds to load (the driver said)",
+            );
         } else {
-            state.note(now, Kind::Unready, "noticed, with nothing chambered");
+            // What it had to load: the gun's magazine, and the full ones on
+            // it (out of them after a fight, a reload had nothing in it).
+            let in_gun = guns()
+                .find(|(_, by, p)| *by == player && !p)
+                .map(|(g, ..)| g.firearm.magazine.as_ref().map_or(0, |m| m.rounds));
+            let spares = world
+                .items
+                .iter()
+                .filter(|(e, it, ..)| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && it.rounds > 0
+                        && carried(&world, &view, player, world.id(*e).unwrap_or("")).contains(e)
+                })
+                .count();
+            state.note(
+                now,
+                Kind::Unready,
+                format!(
+                    "noticed, with nothing chambered (in the gun's magazine {}, loaded spares on it {spares})",
+                    in_gun.map_or("none".to_string(), |r| r.to_string())
+                ),
+            );
         }
     }
     if !again.is_empty() {

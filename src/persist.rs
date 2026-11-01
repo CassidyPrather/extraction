@@ -486,6 +486,11 @@ fn fresh_save(map: &str) -> SaveGame {
         * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
     pistol.turn = side.to_array();
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
+    // On its back, its face up (grille, tuning window, lamp): stood up,
+    // from above it was an olive stub and an aerial on the crate's dark
+    // floor (docs/craft/ITEM_READING.md).
+    let mut radio = item("radio", 0, [-0.2, 0.04, 0.0]);
+    radio.turn = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2).to_array();
     let mut torch = item("flashlight", 0, [0.0, 0.05, 0.2]);
     torch.inserted.push(item("power_cell", 0, [0.0; 3]));
     s.stash = vec![
@@ -493,7 +498,7 @@ fn fresh_save(map: &str) -> SaveGame {
         torch,
         item("pm_mag", 8, [0.25, 0.05, -0.2]),
         item("ammo_9x18", 16, [-0.2, 0.05, -0.4]),
-        item("radio", 0, [-0.2, 0.05, 0.0]),
+        radio,
         item("field_dressing", 0, [0.2, 0.05, 0.3]),
         item("canned_stew", 0, [-0.25, 0.05, 0.4]),
         item("cleaning_kit", 0, [0.0, 0.05, -0.1]),

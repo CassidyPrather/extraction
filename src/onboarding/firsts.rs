@@ -648,6 +648,17 @@ pub fn fill(line: &str, in_crate: usize, fell: usize) -> String {
             format!("{n} things")
         }
     };
+    // (Said of what's so: none fell, or none's in the crate, is its own
+    // line, not "0 things".)
+    if fell == 0 && line.contains("{n} things") {
+        return "Truck: \"You'd nothing on you to lose.\"".into();
+    }
+    if in_crate == 0 && line.contains("{s} things") {
+        return line.replace(
+            "Crate's as you left it: {s} things.",
+            "Crate's empty, as you left it.",
+        );
+    }
     line.replace("{s} things", &things(in_crate))
         .replace("{n} things", &things(fell))
 }
