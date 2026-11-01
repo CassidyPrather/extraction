@@ -557,6 +557,8 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// The reckless one has drawn for a fight: next, ready what's in hand.
+    readying: bool,
 }
 
 impl Newcomer {
@@ -952,6 +954,15 @@ pub(super) fn direct_raid(
     if !idle_only || bot.elapsed < 0.5 {
         return;
     }
+    // Drawn for a fight: ready it as the yard taught (a magazine in, a
+    // round up, the safety off), then fire. The PM comes out of the crate
+    // empty and on safe; pulling the trigger on that does nothing.
+    if std::mem::take(&mut state.readying) {
+        let mut tasks = ready_gun(&world, player);
+        tasks.push(Task::Engage { shots: 12 });
+        super::second_hour::cut_in(&mut bot, tasks);
+        return;
+    }
     // Reckless: a machine in reach is a fight (once a minute at most).
     // (With a gun to hand: in a hand or on the body, not at the bottom of
     // the pack; the last fall may have left it out there.)
@@ -970,7 +981,8 @@ pub(super) fn direct_raid(
     {
         state.fought_at = now;
         state.note(now, Kind::Learned, "a machine in range: took it on");
-        super::second_hour::cut_in(&mut bot, vec![Task::DrawGun, Task::Engage { shots: 12 }]);
+        state.readying = true;
+        super::second_hour::cut_in(&mut bot, vec![Task::DrawGun]);
         return;
     }
     // The truck's there: whatever the walk, to it now.
@@ -2112,6 +2124,29 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
 }
 
 /// `legs`, round the buildings in the way.
+/// What readies the gun in `player`'s hand to fire: a reload when it has
+/// no magazine or none left in it, a rack when nothing's chambered, the
+/// selector when it's on safe. Nothing in hand, nothing to do.
+fn ready_gun(world: &World2, player: Entity) -> Vec<Task> {
+    use crate::weapons::flat::MacroKind;
+    use extraction_core::firearm::FireMode;
+    let Some((gun, _)) = world.guns.iter().find(|(_, h)| h.player == player) else {
+        return Vec::new();
+    };
+    let f = &gun.firearm;
+    let mut tasks = Vec::new();
+    if f.def.magazine_family.is_some() && f.magazine.as_ref().is_none_or(|m| m.rounds == 0) {
+        tasks.push(Task::Gun(MacroKind::Reload));
+    }
+    if f.chambers.iter().all(|c| c.is_none()) {
+        tasks.push(Task::Gun(MacroKind::Rack));
+    }
+    if f.fire_mode() == FireMode::Safe {
+        tasks.push(Task::Gun(MacroKind::Mode));
+    }
+    tasks
+}
+
 fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
