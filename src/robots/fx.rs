@@ -63,6 +63,9 @@ struct FxAssets {
     /// A hit's flash: a small glowing ball.
     flash: Handle<Mesh>,
     smoke: Handle<StandardMaterial>,
+    /// Dark smoke (a wreck's, a falling drone's, a dead gun's column),
+    /// unlit as every other puff is (`weapons`' all are): lit, a few far,
+    /// small puffs of it came out as single pure-black pixels.
     soot: Handle<StandardMaterial>,
     /// Blue-white, for a crawler's arcs and crackle.
     arc: Handle<StandardMaterial>,
@@ -116,12 +119,7 @@ fn assets(
             perceptual_roughness: 1.0,
             ..default()
         })),
-        soot: materials.add(puffs.soften(StandardMaterial {
-            base_color: Color::srgba(0.16, 0.15, 0.14, 0.2),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        soot: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
         arc: materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
@@ -325,7 +323,8 @@ fn climbs(r: Rise) -> f32 {
 }
 
 fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: bool, size: f32) {
-    puff_rising(commands, a, dice, at, dark, size, WISP);
+    let mat = if dark { &a.soot } else { &a.smoke };
+    puff_rising(commands, a, dice, at, mat.clone(), size, WISP);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -334,7 +333,7 @@ fn puff_rising(
     a: &FxAssets,
     dice: &mut Dice,
     at: Vec3,
-    dark: bool,
+    mat: Handle<StandardMaterial>,
     size: f32,
     r: Rise,
 ) {
@@ -349,11 +348,7 @@ fn puff_rising(
         Mesh3d(a.puff.clone()),
         crate::render::puff::SoftPuff,
         bevy::camera::visibility::NoFrustumCulling,
-        MeshMaterial3d(if dark {
-            a.soot.clone()
-        } else {
-            a.smoke.clone()
-        }),
+        MeshMaterial3d(mat),
         Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
         NotShadowCaster,
     ));
@@ -428,7 +423,7 @@ fn sputter(
                         a,
                         &mut dice,
                         at + Vec3::Y * 0.2,
-                        true,
+                        a.soot.clone(),
                         size,
                         COLUMN,
                     );
