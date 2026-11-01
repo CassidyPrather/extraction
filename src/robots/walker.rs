@@ -600,7 +600,11 @@ pub(super) fn walker_brain(
         ),
     )>,
     targets: Query<&GlobalTransform>,
-    (nav, wary): (Res<Nav>, Option<Res<super::hazards::Wary>>),
+    (nav, wary, players): (
+        Res<Nav>,
+        Option<Res<super::hazards::Wary>>,
+        Query<&GlobalTransform, With<crate::player::Player>>,
+    ),
     time: Res<Time>,
     mut convoy: MessageWriter<super::collector::ConvoyEvent>,
     entrances: Res<super::doors::Entrances>,
@@ -640,6 +644,8 @@ pub(super) fn walker_brain(
     floorings.retain(|e, _| walkers.contains(*e));
     let sweep = time.elapsed_secs() * 1.1;
     let mut paths_left = PATH_BUDGET;
+    // Where everyone's feet are, for keeping clear of them.
+    let feet: Vec<Vec3> = players.iter().map(|g| g.translation()).collect();
     // How much core each robot has left (0..1).
     let cores: std::collections::HashMap<Entity, f32> = parts
         .iter()
@@ -1194,6 +1200,13 @@ pub(super) fn walker_brain(
                 *brain = search::begin_search(at, aware, pos, navr, &entrances);
             }
         }
+        // Seen or not, its body keeps clear of anyone's: it stops short of
+        // whoever is where it's going (or in its way just ahead) rather
+        // than walking over them. A crouched newcomer keeping still, as the
+        // driver says, that one came to look for was walked onto and
+        // pressed down under the ground (first_fight_broken, one-handed,
+        // 1 November).
+        let goal = keep_clear(goal, pos, t.scale.x, &feet);
         w.repath -= dt;
         if goal != w.goal || (goal.is_some() && w.repath <= 0.0 && w.path.is_empty()) {
             // A long search costs: only so many a tick across all walkers
@@ -1220,6 +1233,28 @@ pub(super) fn walker_brain(
 /// Long path searches (to a goal further than [`SHORT_PATH`] m) all the
 /// walkers may start in one tick; the rest wait a tick or two.
 pub const PATH_BUDGET: u32 = 3;
+
+/// `goal`, kept clear of everyone at `feet` by a walker of `size` at
+/// `pos`: a goal on top of someone becomes the spot that far short of
+/// them, on its side; already that close to someone and heading their
+/// way, it stops (`broken::clear_of_you`).
+pub fn keep_clear(goal: Option<Vec3>, pos: Vec3, size: f32, feet: &[Vec3]) -> Option<Vec3> {
+    let clear = super::broken::clear_of_you(size);
+    let mut g = goal?;
+    for p in feet {
+        let off = (g - *p).with_y(0.0);
+        if off.length() < clear {
+            let side = (pos - *p).with_y(0.0).normalize_or(Vec3::X);
+            g = Vec3::new(p.x, g.y, p.z) + side * clear;
+        }
+    }
+    let ahead = (g - pos).with_y(0.0);
+    let blocked = feet.iter().any(|p| {
+        let to = (*p - pos).with_y(0.0);
+        to.length() < clear + 0.3 && ahead.dot(to) > 0.0
+    });
+    (!blocked).then_some(g)
+}
 pub const SHORT_PATH: f32 = 12.0;
 
 /// A walker with less than this share of its core left breaks off...

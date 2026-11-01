@@ -500,11 +500,12 @@ mod tests {
         );
     }
 
-    /// Up to someone crouched where it can reach them (keeping low, as
-    /// the driver says), it stops with its body clear of them and shoves
-    /// from there: never on top of them, so never pressing them down
-    /// through the ground (a crouched newcomer it limped up to sank under
-    /// the field and fell: first_fight_broken, one-handed, 1 November).
+    /// Coming to look where it heard someone who's gone low and still
+    /// there (as the driver says), it stops with its body clear of them,
+    /// seen or not: it never walks on top of them, so never presses them
+    /// down through the ground (a crouched newcomer it came to look for it
+    /// walked onto, and they sank under the field and fell:
+    /// first_fight_broken, one-handed, 1 November).
     #[test]
     fn it_never_stands_on_someone_crouched() {
         let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
@@ -524,6 +525,17 @@ mod tests {
                 spawn_broken_walker(&mut c, &zone, at, at + Vec3::Z * 300.0)
             })
             .unwrap();
+        vr.step(2);
+        // It heard you there and comes to look.
+        {
+            let w = vr.app.world_mut();
+            let mut a = w.get_mut::<super::super::Awareness>(robot).unwrap();
+            a.target = Some(vr.player);
+            a.last_known = Some(me);
+            a.suspicion = 0.45;
+            *w.get_mut::<super::super::Brain>(robot).unwrap() =
+                super::super::Brain::Investigate { at: me, left: 30.0 };
+        }
         let (mut closest, mut sank) = (f32::MAX, f32::MIN);
         for _ in 0..90 * 40 {
             vr.head(Vec3::new(0.0, 0.9, 0.0));
@@ -545,10 +557,9 @@ mod tests {
             closest = closest.min(r.xz().distance(feet.xz()));
             sank = sank.max(zone.ground(feet.x, feet.z) - feet.y);
         }
-        let seen = vr.app.world().resource::<Seen>();
         assert!(
-            seen.shoves > 0,
-            "it never shoved: {closest:.2} m at closest"
+            closest < 4.0,
+            "it never came to you: {closest:.2} m at closest"
         );
         assert!(
             closest >= clear_of_you(1.0) - 0.05,
