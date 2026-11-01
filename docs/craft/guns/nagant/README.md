@@ -122,3 +122,9 @@ The build now fails a bevelled outline whose corner is tighter than its
 bevel, since the bevel folds over itself there. The grip's heel, at the
 butt's back corner, was one. It's now rounded over about 4 mm instead of 1,
 and the butt's length and depth are unchanged.
+
+### Fourth pass: the hold's height
+
+Weapon feel gave the Nagant a kick of its own (items.ron: a straight shove,
+less climb), so `grip` rose to (0, 0.014, 0.027), the web up under the
+hammer. The bore's lever over the palm is 60 mm.

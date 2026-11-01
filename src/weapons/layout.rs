@@ -531,11 +531,11 @@ fn nagant() -> GunLayout {
         // The palm on the grip, which sits back behind the hammer
         // (art/guns/nagant.py), 8 mm forward of its middle: the trigger
         // sat 116 mm out in the hand's frame, against 63-89. A hand on a
-        // raked revolver grip sits higher still (y 0.014), but that cuts
-        // the bore's lever over the palm to 60 mm and the Nagant's kick
-        // reads as the PM's (`weapons::signature`), so the height waits
-        // on weapon feel.
-        grip: Transform::from_xyz(0.0, 0.0, 0.027),
+        // raked revolver grip sits high, the web up under the hammer
+        // (y 0.014): the bore's lever over the palm is 60 mm, and the
+        // Nagant's kick (items.ron) is a straight shove so it doesn't
+        // read as the PM's (`weapons::signature`).
+        grip: Transform::from_xyz(0.0, 0.014, 0.027),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,

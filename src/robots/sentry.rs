@@ -9,7 +9,7 @@
 //! - **Behind it is blind.** Its head can't turn past its arc: get round
 //!   behind it and, even with you spotted, it stares at the end of its
 //!   travel.
-//! - **It warns.** A chirp (and the lamp flaring red) a second before the
+//! - **It warns.** A chirp (and the lamp flaring red) two and a half seconds before the
 //!   first round; duck out of sight a while and it has to warn again.
 //! - **Draw it off.** A thrown thing landing within earshot swings it to
 //!   look for five seconds; a hearth or a mirror shard flying past, it
@@ -594,7 +594,8 @@ fn sentry_mind(
                 };
                 let muzzle = ggt.transform_point(Vec3::new(0.0, 0.0, -0.32));
                 // Its first burst is a warning: wide, and short of you,
-                // kicking up the ground at your feet.
+                // kicking up the ground at your feet, and harmless (every
+                // gunner's first shots after its tell: `tells_tests`).
                 let warning = s.gun.warning();
                 let aim = if warning {
                     let back = (muzzle - p) * Vec3::new(1.0, 0.0, 1.0);
@@ -612,7 +613,7 @@ fn sentry_mind(
                     origin: muzzle,
                     direction: (aim - muzzle).normalize_or(Vec3::NEG_Z),
                     speed: 600.0,
-                    damage: DAMAGE,
+                    damage: if warning { 0.0 } else { DAMAGE },
                     projectiles: 1,
                     spread: if warning { SPREAD * 6.0 } else { SPREAD },
                     recoil: 0.0,
@@ -832,7 +833,7 @@ pub(crate) mod tests {
     }
 
     /// A player in front of it, in the open, in its arc: when its sweep
-    /// comes round it chirps, and only then, a second later, fires.
+    /// comes round it chirps, and only then, a few seconds later, fires.
     /// The same player behind it is never seen, never shot.
     fn stand_and_watch(behind: bool, cut: bool) -> (bool, bool, f32) {
         let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
