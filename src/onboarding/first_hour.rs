@@ -826,8 +826,16 @@ pub(super) fn direct_raid(
         .read()
         .any(|ev| ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy));
     let wound = tells.harpoons.read().any(|ev| ev.to == player);
-    if coiled || charged || raised || wound || noticed_now {
+    // A machine still firing at it, hit or miss: one fight, heard all
+    // through (a drone's bursts 1.8 s apart never let it re-lock).
+    let fired_on = tells.shots.read().any(|s| s.shooter.is_some_and(on_me));
+    if coiled || charged || raised || wound || noticed_now || fired_on {
         state.said_at = now;
+    }
+    if fired_on {
+        if let Some(f) = fight.as_mut() {
+            f.last_any = Some(now);
+        }
     }
     again.retain(|f| !firsts.contains(f));
     again.truncate(1);
@@ -1884,6 +1892,8 @@ pub(super) struct Tells<'w, 's> {
     heavies: MessageReader<'w, 's, crate::robots::heavy::HeavyEvent>,
     /// A grappler winding up a throw.
     harpoons: MessageReader<'w, 's, crate::robots::grappler::HarpoonWindup>,
+    /// Rounds fired (each heard, the crack and the tracer, hit or miss).
+    shots: MessageReader<'w, 's, crate::weapons::ballistics::Shot>,
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
