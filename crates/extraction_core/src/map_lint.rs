@@ -679,7 +679,7 @@ impl Solid {
     /// A way indoors with a roof over it: a walk-in building (`ENTERABLE`)
     /// or a kiosk's stair down.
     pub(crate) fn enterable(&self) -> bool {
-        self.kiosk() || ENTERABLE.contains(&crate::map::prefab_base(&self.prefab))
+        self.kiosk() || ENTERABLE.contains(&crate::map::prefab_shell(&self.prefab))
     }
 
     /// Where a kiosk's door is, on the outside face of its -Z end (portal
