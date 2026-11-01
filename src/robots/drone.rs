@@ -209,7 +209,6 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 quiet: 0.0,
                 warning_left: 0,
                 last_shot: f32::NEG_INFINITY,
-                last_shot: f32::NEG_INFINITY,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
