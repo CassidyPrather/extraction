@@ -1,5 +1,26 @@
 # Gunsmithing
 
+> **Where I stopped (2 November 2026).** Every gun is reviewed: the AK-74,
+> PM, MP-133, Mosin, SKS, PPSh, SVD, Nagant, IZh-43, TOZ-8M, RPK-74,
+> SPSh-44 and crossbow. Each has a review in `docs/craft/guns/<id>/`. The
+> last tip, on `claude/polish-gunsmith`, holds three changes: the SPSh-44
+> (with its grip point at z 0.006, so Hands' trigger bound passes), the
+> crossbow's 150 mm draw, and Models' 0.30 m bolt.
+>
+> **What's next.** The open items, each waiting on a reference, not to be
+> guessed. Each gun's README lists them worst first.
+> - **IZh-43**: the forend's depth.
+> - **TOZ-8M**: the semi-pistol wrist.
+> - **SVD**: its heights.
+> - **PPSh**: the rear sight.
+> - **SPSh-44**: the barrel latch, and the grip panels' material.
+> - **Crossbow**: the prod's flex when drawn, which needs a mover. Weapon
+>   feel and Hands have the one-hand draw as a question.
+>
+> Any new gun starts from "What a gun must show at arm's length in VR",
+> at the end of this page. A home-made one starts from "Home-made
+> weapons".
+
 How a gun in this game is judged, and by whom: the gunsmith, working on one
 gun at a time at the bench, away from the game. This is the procedure. Follow
 it, and change it when it's wrong.
