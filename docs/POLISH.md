@@ -1,5 +1,34 @@
 # Polish round: brief for parallel sessions
 
+> **Paused 2 Nov 2026. Where things stand, for whoever resumes.**
+>
+> - **Main** (`claude/serene-clarke-rcgj62`) is green through the
+>   coordinator's gate: fmt, extraction_core, gunsmith, the full lib suite
+>   with nothing skipped, a fast build, the 41 scenarios, the 13 contracts
+>   (each on its own valley) and `second_hour`. The gate needs the fetched
+>   assets (`python3 scripts/fetch_assets.py`); the budget gauges refuse to
+>   measure without them.
+> - **Merge first on resume** (stopped before their own gate finished):
+>   1. Onboarding `claude/polish-onboarding` 25a7055c+: flat reload keeps
+>      its only magazine; bots load from loose rounds; out of buildings by
+>      the plan; round the truck to its ramp; warnings send listeners under
+>      a roof. Then its Payday line through Progression's `CardCheck`.
+>   2. Gunsmith `claude/polish-gunsmith` 782f4f26: the SPSh-44 (grip 29 mm
+>      ahead of the backstrap; it failed the curl bound before that), the
+>      crossbow, and Models' 0.30 m bolt.
+>   3. Robot minds `docs/robot_minds/melee_fairness_wip.patch` (crawler
+>      zap 0.56 s after its tell; the hound sees through "low and still"
+>      within 4 m; a heavy hunts you at the truck). Fail-first tests are in
+>      the patch; it's not built yet. Its first_hour.rs part is Onboarding's.
+> - **Each session's stop note** sits at the top of its own manual:
+>   docs/craft/{GUNSMITHING,ITEM_READING,ONBOARDING,ROBOT_READING,WALK_REVIEW}.md,
+>   docs/{ART_DIRECTION,PERFORMANCE,PROGRESSION,ROBOT_MINDS,HANDS}.md and
+>   docs/shots/weapon-feel/README.md.
+> - **For the headset:** the A/B switches `EXTRACTION_NEAR_FILL`,
+>   `EXTRACTION_FLAT_AMBIENT` and `EXTRACTION_ROOM_ADAPT` (Marrow village
+>   outdoors, the pump hall, m05). If rooms read too bright or flat,
+>   ROOM_ADAPT (1.3) is the lever.
+
 Several Claude sessions work on this repo at once, each on its own branch
 in its own container, each owning one workstream. The coordinating session
 (on `claude/serene-clarke-rcgj62`) merges the branches. Read this first,
