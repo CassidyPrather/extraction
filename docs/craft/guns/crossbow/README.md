@@ -85,6 +85,10 @@ The same command was used before and after
   - **`crates/gunsmith/src/spec.rs`**: the travel.
   - **`src/weapons/sling.rs`**: the front point.
   - **`assets/data/items.ron`**: the box is 780 mm.
+  - **The bolt**: Models shortened it to 0.30 m to suit the draw
+    (`art/items/crossbow_bolts.py`). A loaded bolt now ends 18 mm past
+    the nose, not 95. The bolt in flight (`src/weapons/crossbow.rs`)
+    matches it.
 
 ## Scores
 
@@ -115,5 +119,3 @@ actions are the lengths their parts allow.
 2. **The draw by one hand.** A leaf prod like this wants 50 kg or more:
    a foot in the stirrup and both hands, or a cocking rope. The game
    draws it with one hand, which is weapon feel's and Hands' to judge.
-3. **The bolt overhangs the nose by about 95 mm.** That's common on
-   improvised crossbows. The 380 mm bolt is an items model, so I left it.

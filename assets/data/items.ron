@@ -451,13 +451,13 @@
             tags: ["paper", "powder"],
         ),
         (
-            id: "bolt_bundle", dims: Some((0.041, 0.04, 0.38)), name: "Crossbow bolts (bundle)",
+            id: "bolt_bundle", dims: Some((0.041, 0.04, 0.30)), name: "Crossbow bolts (bundle)",
             description: "Five steel-rod bolts wired together, fletched with cut plastic bottle.",
             category: Ammo, size: Small, mass: 0.15, bulk: 0.4, cartridge: Some("bolt"), rounds: 5,
             tags: ["metal", "polymer"],
         ),
         (
-            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.38)), name: "Crossbow bolt",
+            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.30)), name: "Crossbow bolt",
             description: "A filed steel rod with plastic fletches. Shot, it lies where it came down: go and get it.",
             category: Ammo, size: Small, mass: 0.028, bulk: 0.08, cartridge: Some("bolt"), rounds: 1,
             tags: ["metal", "polymer"],
