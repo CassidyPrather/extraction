@@ -155,7 +155,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "flare_pistol", dims: Some((0.04, 0.19, 0.235)),
+            id: "flare_pistol", dims: Some((0.04, 0.17, 0.225)),
             name: "SPSh signal pistol",
             description: "A 26 mm flare gun. Break it, a cartridge in, thumb the hammer. A white star lights the ground under it as it sinks; red and green are signals. Whatever's out there looks at a flare, and goes to where it falls.",
             category: Firearm, size: Medium, mass: 1.0, bulk: 0.9,
