@@ -813,7 +813,10 @@ pub(super) fn direct_raid(
     let ready_told = told(ONE_UP, &state.heard) || told(MAG_IN, &state.heard) || load_up || in_pack;
     if !state.racked && has_gun && ready_told {
         state.racked = true;
-        // "Load up from the crate": the loaded magazines in it, first.
+        // "Load up from the crate": the loaded magazines in it, first (and
+        // then readied: two cut-ins, the later went first, and it readied
+        // before it loaded).
+        let mut first = Vec::new();
         if load_up {
             let loaded: Vec<Entity> = view
                 .stash
@@ -832,15 +835,63 @@ pub(super) fn direct_raid(
                     loaded.len()
                 ),
             );
-            let mut t = Vec::new();
+            let none = loaded.is_empty();
             for e in loaded {
-                t.push(Task::Grab {
+                first.push(Task::Grab {
                     item: e,
                     side: Side::Right,
                 });
-                t.push(Task::Stow(Side::Right));
+                first.push(Task::Stow(Side::Right));
             }
-            super::second_hour::cut_in(&mut bot, t);
+            // None loaded there, only rounds: its own magazine out of the
+            // gun, filled from a box of them, into a pouch (the reload
+            // after puts it in).
+            if none {
+                let wells: Vec<Entity> = guns()
+                    .filter(|(_, by, packed)| *by == player && !packed)
+                    .filter_map(|(g, ..)| g.magwell)
+                    .collect();
+                let mag = world
+                    .items
+                    .iter()
+                    .find(|(_, _, _, _, sock, _)| sock.is_some_and(|s| wells.contains(&s.socket)));
+                let cartridge = mag
+                    .and_then(|(_, it, ..)| world.catalog.get(it.kind()).magazine.clone())
+                    .map(|m| m.cartridge);
+                let rounds = view
+                    .stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter().copied())
+                    .find(|e| {
+                        world.items.get(*e).is_ok_and(|(_, it, ..)| {
+                            it.rounds > 0
+                                && world.catalog.get(it.kind()).cartridge.is_some()
+                                && world.catalog.get(it.kind()).cartridge == cartridge
+                        })
+                    });
+                if let (Some((m, ..)), Some(r)) = (mag, rounds) {
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        "loaded its magazine from the crate's rounds",
+                    );
+                    first.extend([
+                        Task::Stow(Side::Left),
+                        Task::Stow(Side::Right),
+                        Task::Grab {
+                            item: m,
+                            side: Side::Left,
+                        },
+                        Task::Grab {
+                            item: r,
+                            side: Side::Right,
+                        },
+                        Task::Combine,
+                        Task::Stow(Side::Right),
+                        Task::Stow(Side::Left),
+                    ]);
+                }
+            }
         }
         // "Your loaded one's in your pack: swap them": the loaded one out
         // of the pack into the holster, the empty one into the pack.
@@ -884,14 +935,14 @@ pub(super) fn direct_raid(
             state.note(now, Kind::Learned, "one up the spout, as the driver said");
             // Readied by the one drawn (a magazine in if it has none with
             // rounds, then a round up), the safety left on.
-            super::second_hour::cut_in(
-                &mut bot,
-                vec![
-                    Task::DrawGun,
-                    Task::Ready { off_safe: false },
-                    Task::Stow(Side::Right),
-                ],
-            );
+            first.extend([
+                Task::DrawGun,
+                Task::Ready { off_safe: false },
+                Task::Stow(Side::Right),
+            ]);
+        }
+        if !first.is_empty() {
+            super::second_hour::cut_in(&mut bot, first);
         }
     }
     // The first machine to have it: a round up by then, or not.
