@@ -597,7 +597,7 @@ pub(crate) struct PlayerGlove;
 /// A glove's own material, tinted while the hand is in reach of something
 /// it could take.
 #[derive(Component)]
-struct GloveMaterial(Vec<Handle<StandardMaterial>>);
+pub(crate) struct GloveMaterial(pub(crate) Vec<Handle<StandardMaterial>>);
 
 fn tint_gloves(
     visuals: Query<(&HandVisual, &GloveMaterial)>,

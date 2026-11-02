@@ -69,6 +69,11 @@ headset and smears on OLED/LCD). **Nothing pure white** except emissives.
 - **No screen-space effects per eye** unless shown to be cheap: no SSAO,
   SSR or volumetrics. Darkening and contact come from baked vertex AO,
   textures and the fog.
+- **Rooms by day** are dim but read: the eyes open `render::grade::ROOM_ADAPT`
+  (1.3) stops past the room's cut, and what's in your hand keeps its own
+  light (`render::held_light`, `scripts/held_check.py`). If playtesters
+  find rooms too bright or flat (a near white wall), lower `ROOM_ADAPT`;
+  `EXTRACTION_ROOM_ADAPT=0` shows the rooms without it.
 
 ## Fog and air
 
