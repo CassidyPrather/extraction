@@ -8,13 +8,10 @@
 >   (each on its own valley) and `second_hour`. The gate needs the fetched
 >   assets (`python3 scripts/fetch_assets.py`); the budget gauges refuse to
 >   measure without them.
-> - **Merge first on resume** (stopped before their own gate finished):
->   1. Gunsmith `claude/polish-gunsmith` 782f4f26: the SPSh-44 (grip 29 mm
->      ahead of the backstrap; it failed the curl bound before that), the
->      crossbow, and Models' 0.30 m bolt.
->   2. Onboarding's Payday line through Progression's `CardCheck` (both
+> - **First on resume:**
+>   1. Onboarding's Payday line through Progression's `CardCheck` (both
 >      halves are on main now; next (1) in ONBOARDING.md).
->   3. Robot minds `docs/robot_minds/melee_fairness_wip.patch` (crawler
+>   2. Robot minds `docs/robot_minds/melee_fairness_wip.patch` (crawler
 >      zap 0.56 s after its tell; the hound sees through "low and still"
 >      within 4 m; a heavy hunts you at the truck). Fail-first tests are in
 >      the patch; it's not built yet. Its first_hour.rs part is Onboarding's.
