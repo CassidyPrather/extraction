@@ -22,6 +22,7 @@ pub struct RobotVisualsPlugin;
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(dress_pylon_cable)
+            .add_observer(suppressing_tracers)
             .add_observer(lamps_reach_far)
             .add_observer(dirigible_tally)
             .add_systems(Update, scan_beams)
@@ -1441,6 +1442,50 @@ fn pylon_work_lights(
     }
 }
 
+/// The machines' one "about to fire" tell, for a tell `dur` long, `since`
+/// seconds in (`on` while it runs): how bright a lens's glow burns, 1 at
+/// rest. A slow pulse that quickens and swells, from about 1.5 to 8 a
+/// second, and a hard flash as the first round goes: learnt once on the
+/// sentry's chirp, read again on a drone's lock.
+pub fn tell_gain(since: f32, dur: f32, on: bool) -> f32 {
+    if !on || dur <= 0.0 {
+        return 1.0;
+    }
+    let p = (since / dur).clamp(0.0, 1.0);
+    // The last tenth of a second: the flash.
+    if dur - since < 0.1 {
+        return 7.0;
+    }
+    // Phase from a rate rising 1.5 -> 8 Hz over the tell; starting on a
+    // crest, so it's seen the moment it's heard.
+    let (f0, f1) = (1.5, 8.0);
+    let phase = f0 * since + (f1 - f0) * since * since / (2.0 * dur);
+    let wave = 0.5 + 0.5 * (std::f32::consts::TAU * phase + std::f32::consts::FRAC_PI_2).sin();
+    1.0 + (1.5 + 3.0 * p) * wave * wave
+}
+
+/// The red glow round a lens at [`tell_gain`] `gain`: dark at rest, 3.6
+/// at the flash.
+pub fn tell_halo(gain: f32) -> LinearRgba {
+    LinearRgba::rgb(1.0, 0.08, 0.03) * 0.6 * (gain - 1.0).max(0.0)
+}
+
+/// A drone's lens glow `since` seconds into its lock (`drone::LOCK_TIME`):
+/// the sentry's chirp, over the drone's lock.
+pub(crate) fn drone_lock_halo(since: f32) -> LinearRgba {
+    tell_halo(tell_gain(since, super::drone::LOCK_TIME, true))
+}
+
+/// The glow round a drone's lens while it locks on, gone with the lock.
+#[derive(Component)]
+struct LockHalo {
+    left: f32,
+    mat: Handle<StandardMaterial>,
+}
+
+/// Its radius, m (a drone's eye is half a walker's).
+const LOCK_HALO: f32 = 0.12;
+
 /// A red flare under a drone settling its gun on you.
 #[derive(Component)]
 struct LockFlare {
@@ -1455,8 +1500,43 @@ fn lock_flares(
     mut windups: MessageReader<super::sorter::SorterWindup>,
     mut flares: Query<(Entity, &mut LockFlare, &mut PointLight)>,
     time: Res<Time>,
+    (mut halos, parts, kids, mut meshes, mut materials): (
+        Query<(Entity, &mut LockHalo)>,
+        Query<&RobotPart>,
+        Query<&Children>,
+        ResMut<Assets<Mesh>>,
+        ResMut<Assets<StandardMaterial>>,
+    ),
 ) {
     for l in locks.read() {
+        // The glow round its lens, the sentry's chirp over its lock.
+        let lens = kids.get(l.drone).ok().and_then(|cs| {
+            cs.iter()
+                .find(|c| parts.get(*c).is_ok_and(|p| p.role == PartRole::Sensor))
+        });
+        if let Some(lens) = lens {
+            let mat = materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: drone_lock_halo(0.0),
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                alpha_mode: AlphaMode::Add,
+                // A lamp: held through fog, drawn as far as the drone.
+                fog_enabled: false,
+                ..default()
+            });
+            commands.spawn((
+                LockHalo {
+                    left: super::drone::LOCK_TIME,
+                    mat: mat.clone(),
+                },
+                Mesh3d(meshes.add(Sphere::new(LOCK_HALO).mesh().ico(2).unwrap())),
+                MeshMaterial3d(mat),
+                Transform::IDENTITY,
+                NotShadowCaster,
+                ChildOf(lens),
+            ));
+        }
         if let Ok(mut c) = commands.get_entity(l.drone) {
             c.with_child((
                 LockFlare {
@@ -1513,6 +1593,16 @@ fn lock_flares(
         }
     }
     let dt = time.delta_secs();
+    for (e, mut h) in &mut halos {
+        h.left -= dt;
+        if h.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        if let Some(mut m) = materials.get_mut(&h.mat) {
+            m.emissive = drone_lock_halo(super::drone::LOCK_TIME - h.left);
+        }
+    }
     for (e, mut f, mut light) in &mut flares {
         f.left -= dt;
         if f.left <= 0.0 {
@@ -2347,6 +2437,49 @@ fn lamps_reach_far(
     }
 }
 
+/// A walker pinning you (`walker::Suppressing`) fires every
+/// [`PIN_TRACER_EVERY`]th round a tracer: a stream of streaks onto where
+/// you went down reads as "keeping your head down" at a glance, against
+/// an aimed burst, which carries none. (A tracer's load is only how the
+/// round is drawn: `weapons::tracers`.)
+pub const PIN_TRACER_EVERY: u32 = 3;
+
+/// How many rounds a pinner has fired (for its tracers).
+#[derive(Component)]
+struct PinRounds(u32);
+
+/// Marks a pinner's rounds as they're made, before the tracers look for
+/// new rounds.
+fn suppressing_tracers(
+    on: On<Add, crate::weapons::ballistics::Projectile>,
+    mut commands: Commands,
+    mut rounds: Query<&mut crate::weapons::ballistics::Projectile>,
+    mut pinners: Query<Option<&mut PinRounds>, With<super::walker::Suppressing>>,
+) {
+    let Ok(mut round) = rounds.get_mut(on.event_target()) else {
+        return;
+    };
+    let Some(shooter) = round.shooter else {
+        return;
+    };
+    let Ok(fired) = pinners.get_mut(shooter) else {
+        return;
+    };
+    let n = match fired {
+        Some(mut f) => {
+            f.0 += 1;
+            f.0 - 1
+        }
+        None => {
+            commands.entity(shooter).try_insert(PinRounds(1));
+            0
+        }
+    };
+    if n % PIN_TRACER_EVERY == 0 {
+        round.load = extraction_core::ammo::Load::Tracer;
+    }
+}
+
 #[cfg(test)]
 mod signal_lamp_tests {
     use super::*;
@@ -2442,5 +2575,91 @@ mod signal_lamp_tests {
         // Fully drawn to 60 m, where a mark's size alone had it gone.
         assert!(LAMP_REACH * 0.8 >= 60.0);
         assert!(small_range(0.19) < 40.0);
+    }
+
+    /// A pinner's rounds carry a tracer every third, from its first; an
+    /// ordinary walker's carry none.
+    #[test]
+    fn a_pinners_rounds_carry_tracers() {
+        use crate::weapons::ballistics::{Projectile, ShotMods};
+        use extraction_core::ammo::Load;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_observer(suppressing_tracers);
+        let w = app.world_mut();
+        let pinner = w.spawn(super::super::walker::Suppressing).id();
+        let aimer = w.spawn_empty().id();
+        let fire = |w: &mut World, shooter: Entity| {
+            let e = w
+                .spawn(Projectile {
+                    velocity: Vec3::NEG_Z * 300.0,
+                    damage: 14.0,
+                    shooter: Some(shooter),
+                    gun: shooter,
+                    life: 1.0,
+                    mods: ShotMods::default(),
+                    mass_g: 8.0,
+                    seed: 1,
+                    passes: 0,
+                    load: Load::Standard,
+                })
+                .id();
+            w.flush();
+            w.get::<Projectile>(e).unwrap().load == Load::Tracer
+        };
+        let pinned: Vec<bool> = (0..9).map(|_| fire(w, pinner)).collect();
+        let aimed: Vec<bool> = (0..9).map(|_| fire(w, aimer)).collect();
+        assert_eq!(
+            pinned,
+            [true, false, false, true, false, false, true, false, false]
+        );
+        assert!(aimed.iter().all(|t| !t), "an aimed burst carries none");
+    }
+
+    /// The sentry's chirp and a drone's lock are one tell, learnt once:
+    /// each lens's glow, over its own tell (2.5 s and 1.5 s), pulses
+    /// faster and swells from the first instant into the same flash as the
+    /// first round goes, and is dark after. (The old chirp faded from its
+    /// brightest; the old lock had no glow on the lens at all.)
+    #[test]
+    fn the_sentry_chirp_and_the_drone_lock_are_one_tell() {
+        use extraction_core::sentry::CHIRP;
+        let red = |c: LinearRgba| c.red;
+        let machines: [(&str, f32, &dyn Fn(f32) -> LinearRgba); 2] = [
+            ("sentry", CHIRP, &|t| {
+                super::super::sentry_look::chirp_halo(t, true)
+            }),
+            ("drone", super::super::drone::LOCK_TIME, &drone_lock_halo),
+        ];
+        let mut flashes = Vec::new();
+        for (who, dur, halo) in machines {
+            let g: Vec<f32> = (0..=(dur * 240.0) as usize)
+                .map(|i| red(halo(i as f32 / 240.0)))
+                .collect();
+            let crests: Vec<f32> = (1..g.len() - 1)
+                .filter(|&i| g[i] > g[i - 1] && g[i] >= g[i + 1] && g[i] > 0.5)
+                .map(|i| i as f32 / 240.0)
+                .collect();
+            let gaps: Vec<f32> = crests.windows(2).map(|w| w[1] - w[0]).collect();
+            assert!(crests.len() >= 4, "{who}: it pulses ({crests:?})");
+            assert!(
+                gaps.last().unwrap() < &(gaps[0] * 0.6),
+                "{who}: faster ({gaps:?})"
+            );
+            assert!(g[0] > 0.5, "{who}: lit the moment it starts");
+            let peak = g.iter().cloned().fold(0.0, f32::max);
+            let at = g.iter().position(|v| *v == peak).unwrap() as f32 / 240.0;
+            assert!(
+                at >= dur - 0.1 - 1.0 / 240.0,
+                "{who}: brightest at the shot"
+            );
+            flashes.push(peak);
+        }
+        assert_eq!(flashes[0], flashes[1], "the same flash");
+        assert_eq!(
+            red(super::super::sentry_look::chirp_halo(CHIRP + 1.0, false)),
+            0.0,
+            "dark after"
+        );
     }
 }

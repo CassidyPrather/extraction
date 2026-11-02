@@ -1,5 +1,16 @@
 # Robot reading: a review procedure
 
+> **Robot bodies: where I stopped (2 November), and what's next.**
+> Pushed and in gate 163 (5a1861ef):
+> - **Suppressing look:** a pinner's gun holds on where you dropped from sight (`anim`, `a_pinners_gun_holds_on_where_you_went_down`), and every third pinner round is a tracer (`visuals::suppressing_tracers`, `a_pinners_rounds_carry_tracers`). Robot guns have no muzzle flash to make brighter or shorter, so I left that alone.
+> - **Drone lock pulse:** a drone's lock glows on its lens as the sentry's chirp does, from one curve shared with `sentry_look` (`visuals::tell_gain` / `tell_halo`, `the_sentry_chirp_and_the_drone_lock_are_one_tell`). Reels: `reel:lock`, `reel:chirp`.
+>
+> Next, when we resume:
+> 1. Re-film the pinner's tracers (`reel:pin`) once Weapon feel's `Projectile.origin` (6ed7ee78) is on main. Tracers lit 8 m past where Update first saw a round, so short flights never lit. Move the reel's spot back to ~11 m, then update `docs/shots/robot-bodies/pin_turret_before_after.png`.
+> 2. Give `a_pinners_rounds_carry_tracers`'s `Projectile { .. }` literal the new `origin` field if the integration hasn't already.
+> 3. The broken walker at 60 m now has its dead-gun column; Models' family re-shoot can include it.
+
+
 `ITEM_READING.md`'s method, applied to the machines. In a fight a newcomer
 has to know, from across a field: **what** it is, **which way it faces**,
 and **whether it can still hurt them**. The eye and the tell matter most.
