@@ -1977,7 +1977,10 @@ pub(super) fn direct_raid(
             } else if state.done_home.is_none() {
                 state.done_home = Some(done);
                 // Told to, by the driver, or read on the card.
-                let told = state.heard.iter().any(|l| l.contains("press the card"));
+                let told = state
+                    .heard
+                    .iter()
+                    .any(|l| l.to_lowercase().contains("press the card"));
                 let read = view
                     .card
                     .iter()
