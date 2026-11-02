@@ -1046,6 +1046,9 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
+                // (Pinned or not before this lock: the one that pins it
+                // still sends it under a roof.)
+                let going_home = state.pinned || matches!(state.leg, Leg::Rendezvous | Leg::Board);
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
@@ -1067,10 +1070,19 @@ pub(super) fn direct_raid(
                         state.leg = Leg::Call;
                     }
                 }
-                let roof = overhead
+                // On its way home from it (pinned, or the truck waiting):
+                // on, at a run, as the driver says ("Don't stop. Sprint
+                // across it"). Under a roof at every re-lock, the truck came
+                // to the gate and pulled out again while it hid, and the
+                // drone wore it down for eight minutes more.
+                let roof = (overhead && !going_home)
                     .then(|| under_a_roof(&world, &plans, here, &state.no_roof))
                     .flatten();
                 match roof {
+                    _ if overhead && going_home => {
+                        state.note(now, Kind::Learned, "a drone on it, homeward: ran on");
+                        vec![]
+                    }
                     Some((tasks, b)) => {
                         state.roof_try = Some((b, bot.failed, now));
                         tasks
@@ -1923,6 +1935,14 @@ pub(super) fn direct_raid(
                 state.note(now, Kind::Learned, "pressed the card: the job paid");
                 state.leg = Leg::Handed;
                 state.tries = 0;
+            } else if state.tries >= 3 && state.pinned {
+                // Given up for the drone: not done, and the card says so.
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "home, the job given up: unpaid, as it should be",
+                );
+                state.leg = Leg::Done;
             } else if state.tries >= 3 {
                 state.note(now, Kind::Stuck, "home, and the card won't take the job");
                 state.leg = Leg::Done;

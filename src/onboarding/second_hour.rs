@@ -1170,10 +1170,11 @@ pub(super) const TRUCK_BOX: (Vec2, Vec2) = (Vec2::new(0.0, -0.9), Vec2::new(1.5,
 pub(super) fn round_the_truck(here: Vec2) -> Vec<Vec2> {
     let mut round = Vec::new();
     if here.y < 4.5 {
-        let s = if here.x >= 0.0 { 1.0 } else { -1.0 };
+        // A stride clear of its side.
+        let s = if here.x >= 0.0 { 1.0 } else { -1.0 } * (TRUCK_BOX.1.x + 1.3);
         round.extend([
-            Vec2::new(s * 2.8, here.y.min(4.0)),
-            Vec2::new(s * 2.8, 6.5),
+            Vec2::new(s, here.y.min(4.0)),
+            Vec2::new(s, 6.5),
             Vec2::new(0.0, 6.5),
         ]);
     }
