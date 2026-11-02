@@ -76,6 +76,21 @@ pub fn ktx2(path: &str) -> String {
     }
 }
 
+/// A downloaded colour texture (`path` under `assets/`, one
+/// `scripts/fetch_assets.py` makes, gitignored), loaded as sRGB, if it's on
+/// disk. A checkout or a build without it gets None and draws its own
+/// fallback: loading a file that isn't there logs an ERROR, and a material
+/// whose texture never loads is never drawn (`soak::quiet`'s
+/// no_valley_logs_an_error_without_the_downloads).
+pub fn fetched_srgb(server: &AssetServer, path: &str) -> Option<Handle<Image>> {
+    crate::asset_root_path().join(path).exists().then(|| {
+        server
+            .load_builder()
+            .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
+            .load(ktx2(path))
+    })
+}
+
 /// The textures under `assets/textures` with no baked copy beside them
 /// (`scripts/bc7_textures.py` makes them; it needs etcpak). The load and
 /// VRAM gauges measure what ships, the copies: without them they'd

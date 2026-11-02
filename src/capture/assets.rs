@@ -13,6 +13,10 @@
 
 use std::path::Path;
 
+/// The `assets/textures/` folders `scripts/fetch_assets.py` makes (all
+/// gitignored), each the name of the argument that makes it.
+pub const FETCHED: [&str; 4] = ["terrain", "materials", "foliage", "sky"];
+
 /// Every generated file the manifest promises that isn't on disk, as a
 /// path under `assets/textures/`, with its group (the `fetch_assets.py`
 /// argument that makes it). Empty without a manifest (a packaged build).

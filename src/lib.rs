@@ -621,8 +621,12 @@ pub(crate) fn asset_root_path() -> std::path::PathBuf {
 }
 
 /// `assets/` next to the crate when run from a checkout, or next to the
-/// executable in a packaged build.
+/// executable in a packaged build; `EXTRACTION_ASSET_ROOT` overrides both.
 fn asset_root() -> String {
+    // A test's own tree: `soak::quiet`'s checkout without the downloads.
+    if let Some(root) = std::env::var_os("EXTRACTION_ASSET_ROOT") {
+        return root.to_string_lossy().into_owned();
+    }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let packaged = dir.join("assets");
