@@ -265,14 +265,12 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
             {
                 continue;
             }
-            // Sat down into the ground like the scatter's boulders, low and
-            // half buried, not a fresh block set on it.
             let squash = if k == 0 {
-                rng.range(0.5, 0.65)
+                rng.range(0.6, 0.8)
             } else {
                 rng.range(0.45, 0.7)
             };
-            if let Some(rock) = place(&mut rng, p, r, squash, 0.35) {
+            if let Some(rock) = place(&mut rng, p, r, squash, 0.2) {
                 here.push((p, r));
                 out.push(rock);
             }
