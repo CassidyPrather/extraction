@@ -4,7 +4,7 @@
 # which must not change.
 mill_pm | --map rime_fell --camera 140,91.85,38,0,0 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather clearing --no-robots --seed 1
 mill_ak | --map rime_fell --camera 140,91.85,38,0,0 --gallery ak74,0,0.3 --frames 90 --hour day --weather clearing --no-robots --seed 1
-farm_pm | --map marrow_creek --camera 109,0,80,270,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots --seed 1
-post_pm | --map marrow_creek --camera -22.2,0,33.5,90,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots --seed 1
-ash_row_pm | --map cinder_works --camera -73,0,120.6,90,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots --seed 1
+farm_pm | --map marrow_creek --camera 109,0,80,180,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots --seed 1
+post_pm | --map marrow_creek --camera -22.2,0,33.5,0,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots --seed 1
+ash_row_pm | --map cinder_works --camera -73,0,120.6,0,-8 --gallery pm_pistol,0,0.3 --frames 90 --hour day --weather drizzle --no-robots --seed 1
 yard_pm | --map training_yard --camera 0,0,40,0,0 --gallery pm_pistol,0,0.3 --frames 40 --hour day --weather clearing --no-robots --seed 1

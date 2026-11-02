@@ -803,23 +803,56 @@ pub(super) fn direct_raid(
     // stays on).
     let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
     let has_gun = guns().any(|(_, by, p)| by == player && !p);
-    if !state.racked && has_gun && state.heard.iter().any(|l| l == super::hints::ONE_UP) {
+    // (What it's told is by the gun it holds: a round up, a magazine in
+    // first, load up from the crate, or no rounds at all.)
+    use super::hints::{LOAD_UP, MAG_IN, NO_ROUNDS, ONE_UP};
+    let told = |l: &str, heard: &[String]| heard.iter().any(|h| h == l);
+    let no_rounds = told(NO_ROUNDS, &state.heard);
+    let load_up = told(LOAD_UP, &state.heard);
+    let ready_told = told(ONE_UP, &state.heard) || told(MAG_IN, &state.heard) || load_up;
+    if !state.racked && has_gun && ready_told {
         state.racked = true;
+        // "Load up from the crate": the loaded magazines in it, first.
+        if load_up {
+            let loaded: Vec<Entity> = view
+                .stash
+                .iter()
+                .flat_map(|b| b.contents.iter().copied())
+                .filter(|e| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && world.items.get(*e).is_ok_and(|(_, it, ..)| it.rounds > 0)
+                })
+                .collect();
+            state.note(
+                now,
+                Kind::Learned,
+                format!(
+                    "empty, as the driver said: {} loaded from the crate",
+                    loaded.len()
+                ),
+            );
+            let mut t = Vec::new();
+            for e in loaded {
+                t.push(Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                });
+                t.push(Task::Stow(Side::Right));
+            }
+            super::second_hour::cut_in(&mut bot, t);
+        }
         if !one_up(guns(), player) {
             state.note(now, Kind::Learned, "one up the spout, as the driver said");
-            // A magazine in first if it has none with rounds (racked
-            // empty, the last raid's spent one in, it chambered nothing),
-            // then a round up; the safety stays on.
-            let mut t = vec![Task::DrawGun];
-            if let Some((g, _, _)) = guns().find(|(_, by, p)| *by == player && !p) {
-                t.extend(
-                    readying(&g.firearm)
-                        .into_iter()
-                        .filter(|t| !matches!(t, Task::Gun(crate::weapons::flat::MacroKind::Mode))),
-                );
-            }
-            t.push(Task::Stow(Side::Right));
-            super::second_hour::cut_in(&mut bot, t);
+            // Readied by the one drawn (a magazine in if it has none with
+            // rounds, then a round up), the safety left on.
+            super::second_hour::cut_in(
+                &mut bot,
+                vec![
+                    Task::DrawGun,
+                    Task::Ready { off_safe: false },
+                    Task::Stow(Side::Right),
+                ],
+            );
         }
     }
     // The first machine to have it: a round up by then, or not.
@@ -827,8 +860,37 @@ pub(super) fn direct_raid(
         state.noticed = true;
         if one_up(guns(), player) {
             state.note(now, Kind::Learned, "noticed, with a round up");
+        } else if no_rounds {
+            // Nothing anywhere to load, and told so: not unready by its own
+            // doing.
+            state.note(
+                now,
+                Kind::Learned,
+                "noticed, with no rounds to load (the driver said)",
+            );
         } else {
-            state.note(now, Kind::Unready, "noticed, with nothing chambered");
+            // What it had to load: the gun's magazine, and the full ones on
+            // it (out of them after a fight, a reload had nothing in it).
+            let in_gun = guns()
+                .find(|(_, by, p)| *by == player && !p)
+                .map(|(g, ..)| g.firearm.magazine.as_ref().map_or(0, |m| m.rounds));
+            let spares = world
+                .items
+                .iter()
+                .filter(|(e, it, ..)| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && it.rounds > 0
+                        && carried(&world, &view, player, world.id(*e).unwrap_or("")).contains(e)
+                })
+                .count();
+            state.note(
+                now,
+                Kind::Unready,
+                format!(
+                    "noticed, with nothing chambered (in the gun's magazine {}, loaded spares on it {spares})",
+                    in_gun.map_or("none".to_string(), |r| r.to_string())
+                ),
+            );
         }
     }
     if !again.is_empty() {
@@ -893,10 +955,7 @@ pub(super) fn direct_raid(
                     Kind::Learned,
                     "a broken walker: took it on, as the driver said",
                 );
-                take_it_on(
-                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
-                    player,
-                )
+                take_it_on()
             }
             // "Keep your distance": back off it, and at it again.
             First::Shoved if !p.lost => {
@@ -906,10 +965,7 @@ pub(super) fn direct_raid(
                     to: here + away * 4.0,
                     within: 1.0,
                 }];
-                t.extend(take_it_on(
-                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
-                    player,
-                ));
+                t.extend(take_it_on());
                 t
             }
             // "Run across it, to cover", "Break its line", "Down, out of
@@ -1100,8 +1156,7 @@ pub(super) fn direct_raid(
     {
         state.fought_at = now;
         state.note(now, Kind::Learned, "a machine in range: took it on");
-        let guns = world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
-        super::second_hour::cut_in(&mut bot, take_it_on(guns, player));
+        super::second_hour::cut_in(&mut bot, take_it_on());
         return;
     }
     // The truck's there: whatever the walk, to it now.
@@ -2424,38 +2479,15 @@ fn shot_warns(shots: &[f32], now: f32, window: f32) -> bool {
         .any(|t| now - t >= SHOT_LEAD && now - t < window)
 }
 
-/// What readies `f` to fire: a reload when it has no magazine or none
-/// left in it, a rack when nothing's chambered, the selector when it's on
-/// safe.
-fn readying(f: &extraction_core::firearm::Firearm) -> Vec<Task> {
-    use crate::weapons::flat::MacroKind;
-    use extraction_core::firearm::FireMode;
-    let mut tasks = Vec::new();
-    if f.def.magazine_family.is_some() && f.magazine.as_ref().is_none_or(|m| m.rounds == 0) {
-        tasks.push(Task::Gun(MacroKind::Reload));
-    }
-    if f.chambers.iter().all(|c| c.is_none()) {
-        tasks.push(Task::Gun(MacroKind::Rack));
-    }
-    if f.fire_mode() == FireMode::Safe {
-        tasks.push(Task::Gun(MacroKind::Mode));
-    }
-    tasks
-}
-
-/// A fight, for the reckless one: the gun out, readied (`readying`, from
-/// the one on `player`'s body, not in the pack), and fired. The PM comes
-/// out of the crate on safe; pulling the trigger on that does nothing.
-fn take_it_on<'a>(
-    mut guns: impl Iterator<Item = (&'a crate::weapons::Gun, Entity, bool)>,
-    player: Entity,
-) -> Vec<Task> {
-    let mut tasks = vec![Task::DrawGun];
-    if let Some((g, _, _)) = guns.find(|(_, by, packed)| *by == player && !packed) {
-        tasks.extend(readying(&g.firearm));
-    }
-    tasks.push(Task::Engage { shots: 12 });
-    tasks
+/// A fight, for the reckless one: the gun out, readied by the one in hand
+/// (`Task::Ready`: the PM comes out of the crate on safe, and with two on
+/// it, the one drawn may not be the one first found), and fired.
+fn take_it_on() -> Vec<Task> {
+    vec![
+        Task::DrawGun,
+        Task::Ready { off_safe: true },
+        Task::Engage { shots: 12 },
+    ]
 }
 
 /// Whether a gun on `player`'s body has a round up (any: a rifle picked
@@ -2927,11 +2959,6 @@ pub(super) fn first_fight(
     mut bots: Query<(Entity, &mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
     entrances: Option<Res<crate::robots::doors::Entrances>>,
-    guns: Query<(
-        &crate::weapons::Gun,
-        &crate::anomaly::artifacts::CarriedBy,
-        Has<crate::interact::body::InBackpack>,
-    )>,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -3063,7 +3090,7 @@ pub(super) fn first_fight(
     let Some(what) = first_tell.filter(|_| !fight.reacted) else {
         return;
     };
-    let Ok((player, mut bot, root, _)) = bots.single_mut() else {
+    let Ok((_, mut bot, root, _)) = bots.single_mut() else {
         return;
     };
     fight.reacted = true;
@@ -3075,7 +3102,7 @@ pub(super) fn first_fight(
     // lost one).
     let broken = kind == "broken" && !p.lost;
     let answer: Vec<Task> = if (p.reckless || broken) && !hush {
-        take_it_on(guns.iter().map(|(g, by, p)| (g, by.0, p)), player)
+        take_it_on()
     } else if p.lost {
         // Off, anywhere.
         vec![Task::WalkTo {
