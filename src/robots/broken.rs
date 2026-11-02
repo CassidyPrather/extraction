@@ -517,7 +517,11 @@ mod tests {
         vr.stand(me, 0.0);
         vr.head(Vec3::new(0.0, 0.9, 0.0));
         vr.step(10);
-        let at = zone.on_ground(me.x + 9.0, me.z);
+        let at = zone.on_ground(me.x + 1.5, me.z + 1.0);
+        // What it's going to look at is past you: its way there is over you
+        // (at 52.6 s it set off for the next spot of its search, through the
+        // newcomer it had stood by).
+        let past = zone.on_ground(me.x - 1.5, me.z - 1.0);
         let robot = vr
             .app
             .world_mut()
@@ -526,19 +530,41 @@ mod tests {
             })
             .unwrap();
         vr.step(2);
-        // It heard you there and comes to look.
+        // It heard you there and comes to look, and doesn't make you out,
+        // low and still behind something (here: its sight cut to nothing,
+        // its eye whole, so it still comes as a sighted walker does).
+        vr.app
+            .world_mut()
+            .get_mut::<super::super::Senses>(robot)
+            .unwrap()
+            .sight = 0.0;
         {
             let w = vr.app.world_mut();
             let mut a = w.get_mut::<super::super::Awareness>(robot).unwrap();
             a.target = Some(vr.player);
             a.last_known = Some(me);
             a.suspicion = 0.45;
-            *w.get_mut::<super::super::Brain>(robot).unwrap() =
-                super::super::Brain::Investigate { at: me, left: 30.0 };
+            *w.get_mut::<super::super::Brain>(robot).unwrap() = super::super::Brain::Investigate {
+                at: past,
+                left: 30.0,
+            };
         }
         let (mut closest, mut sank) = (f32::MAX, f32::MIN);
-        for _ in 0..90 * 40 {
+        for _ in 0..90 * 15 {
             vr.head(Vec3::new(0.0, 0.9, 0.0));
+            {
+                let w = vr.app.world_mut();
+                let mut a = w.get_mut::<super::super::Awareness>(robot).unwrap();
+                a.last_known = Some(me);
+                a.suspicion = 0.45;
+                let mut b = w.get_mut::<super::super::Brain>(robot).unwrap();
+                if !matches!(*b, super::super::Brain::Investigate { .. }) {
+                    *b = super::super::Brain::Investigate {
+                        at: past,
+                        left: 30.0,
+                    };
+                }
+            }
             let mut h = vr
                 .app
                 .world_mut()
