@@ -356,3 +356,56 @@ action's numbers down: stroke, deflection, stress, clearance.
   `static` (the AK's dust cover and magazine catch) can't be worked. Look
   for them in the exploded view: what doesn't fly off isn't a part.
 
+- **Register on the hand, not the muzzle.** The SPSh-44's barrel was
+  right, but its breech sat 23 mm too far from the grip. Registered on the
+  muzzle, the overlay only showed a grip in the wrong place. Registered on
+  the grip at the palm's height (the model's origin), it showed what had
+  moved.
+- **Copies are references.** A licensed or straight copy (a Type 57 for
+  the SPSh-44, a vz. 44/67) is a fair photograph of the original. Check
+  the parts the copy changed against a second source.
+- **Every action, link by link.** The crossbow's latch looked right and
+  could never release: its bars pivoted in the middle, so the trigger
+  drove the hook down. Follow each force from the finger to the part.
+- **The grip point is the palm.** The hand measures reach from `grip`,
+  not the backstrap. On every gun, put `grip` the same distance in front
+  of the backstrap at the palm's height (the PM's is 29 mm). Then a
+  longer reach is the real gun's, not the layout's (`nagant`).
+
+## What a gun must show at arm's length in VR
+
+A player holds the gun at 30-60 cm and sees it at 1 m on a table or a
+wall. Model for those distances, in this order:
+
+1. **The silhouette at 1 m.** The outline from the side is what reads
+   first and what a player recognizes. Check it with an overlay before
+   anything else.
+   - Missing or extra lumps show at once: a guard, a hammer spur, a hinge
+     knuckle.
+   - Wrong lengths along the bore show too: a barrel too long, a breech
+     too far forward.
+   - Every review this round found its worst error here.
+2. **What the hands touch, as parts.** Every control a hand works is its
+   own named part, of its real size, where the real one is:
+   - trigger, magazine catch (`mag_catch`), safety, bolt or charging
+     handle, latch, hammer, string.
+   - The hand rig finds them in the model. A control welded into
+     `static`, or drawn small, is one the player gropes for.
+   - Give each control's working face its real texture, grooves or
+     serrations, because at 30 cm it's the only part in focus.
+3. **Where the hand sits.** The grip's rake and depth, and the trigger's
+   reach from `grip`, are felt before they're seen. Hands measures them
+   in the hand's frame. A grip 9° off reads as a different gun in the
+   hand, even when the eye doesn't catch it.
+4. **The finish under the sky light.** Blued, parkerized, stamped,
+   alloy, wood, Bakelite and rubber must part from each other under the
+   overcast sky (the `gunsmith::finish` table, the shots in
+   `docs/craft/finishes/`). Near-black reads as plastic. Check a finish
+   in the game's light (the yard and the Rime Fell mill), not only on the
+   bench's grey.
+5. **Seams and gaps.** At 30 cm a 4 mm see-through gap (the RPK's
+   handguards) reads as broken, and a part floating 2 mm clear fails
+   `capture::attach`. Where two parts meet, make the seam 1 mm or less.
+6. **Making marks, last.** Stamped edges, machined faces, screw heads,
+   markings and wear sell the gun at 30 cm. They can't save a wrong
+   silhouette or a control in the wrong place, so they come last.
