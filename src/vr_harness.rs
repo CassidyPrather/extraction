@@ -2072,6 +2072,61 @@ mod tests {
         );
     }
 
+    /// A crouched body leant on by something kinematic (a broken walker
+    /// limping up: Robot minds' first_fight_broken) is pushed out up or
+    /// sideways, never down through the ground: the terrain's heightfield
+    /// only holds from above, and a body pushed under it fell for ever.
+    #[test]
+    fn a_body_leant_on_is_never_pushed_under_the_ground() {
+        use crate::player::Body;
+        for (case, off, size) in [
+            (
+                "from above",
+                Vec3::new(0.0, 0.95, 0.0),
+                Vec3::new(1.0, 0.6, 1.0),
+            ),
+            (
+                "from the side",
+                Vec3::new(0.25, 0.45, 0.0),
+                Vec3::new(0.4, 1.2, 1.0),
+            ),
+        ] {
+            let mut vr = Vr::new("training_yard");
+            let feet = on_ground(&vr, OPEN.x, OPEN.z);
+            vr.stand(feet, 0.0);
+            // Crouched: the head down.
+            vr.head(Vec3::new(0.0, 0.9, 0.0));
+            vr.step(60);
+            let at = vr.root().translation;
+            vr.app.world_mut().spawn((
+                RigidBody::Kinematic,
+                Collider::cuboid(size.x, size.y, size.z),
+                CollisionLayers::new(crate::world::Layer::Robot, LayerMask::ALL),
+                Transform::from_translation(at + off),
+            ));
+            let mut lowest = f32::MAX;
+            for _ in 0..180 {
+                vr.step(1);
+                let r = vr.root().translation;
+                let ground = on_ground(&vr, r.x, r.z).y;
+                lowest = lowest.min(r.y - ground);
+            }
+            let r = vr.root().translation;
+            let ground = on_ground(&vr, r.x, r.z).y;
+            let grounded = vr.app.world().get::<Body>(vr.player).unwrap().grounded;
+            assert!(
+                lowest > -0.06,
+                "{case}: the feet went {:.2} m under the ground",
+                -lowest
+            );
+            assert!(
+                (r.y - ground).abs() < 0.3 && grounded,
+                "{case}: feet at {:.2} over the ground {ground:.2}, grounded {grounded}",
+                r.y
+            );
+        }
+    }
+
     #[test]
     fn bending_leaves_the_belt_where_it_is() {
         let mut vr = Vr::new("training_yard");

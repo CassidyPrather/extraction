@@ -152,8 +152,28 @@ fn impostor_cut(
     Some((eye, m.extension.cut.x, b.clone()))
 }
 
-/// The overdraw of what `cam` sees.
+/// Err when this checkout can't be measured honestly: the fetched
+/// textures are missing (`capture::assets::fetched`), so the sky and the
+/// cards aren't drawn as the game draws them. Checked once a run.
+/// `EXTRACTION_ALLOW_FALLBACK=1` measures anyway.
+pub fn measurable(root: &std::path::Path) -> Result<(), String> {
+    if std::env::var_os("EXTRACTION_ALLOW_FALLBACK").is_some() {
+        return Ok(());
+    }
+    crate::capture::assets::fetched(
+        root,
+        "the frame budgets would read low and pass where they should fail",
+    )
+}
+
+/// The overdraw of what `cam` sees. Panics on a checkout without the
+/// fetched textures (`measurable`): every fragment budget counts here,
+/// and a bare checkout reads 12M a stereo frame low.
 pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
+    static READY: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    if let Err(e) = READY.get_or_init(|| measurable(&crate::asset_root_path())) {
+        panic!("{e}");
+    }
     let eye_pos;
     let (view, f, eye) = {
         let g = w.get::<GlobalTransform>(cam).unwrap();
@@ -442,6 +462,31 @@ fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> 
 
 #[cfg(test)]
 mod tests {
+
+    /// A checkout without the fetched textures isn't measured: the error
+    /// names the command that makes them. One with them is.
+    #[test]
+    fn a_checkout_without_textures_is_not_measured() {
+        if std::env::var_os("EXTRACTION_ALLOW_FALLBACK").is_some() {
+            return;
+        }
+        let root = crate::asset_root_path();
+        let bare = std::env::temp_dir().join(format!("overdraw_bare_{}", std::process::id()));
+        let assets = bare.join("assets");
+        std::fs::create_dir_all(&assets).unwrap();
+        std::fs::create_dir_all(bare.join("scripts")).unwrap();
+        std::fs::copy(
+            root.join("../scripts/assets_manifest.json"),
+            bare.join("scripts/assets_manifest.json"),
+        )
+        .unwrap();
+        let err = super::measurable(&assets);
+        let _ = std::fs::remove_dir_all(&bare);
+        let err = err.unwrap_err();
+        assert!(err.contains("fetch_assets.py"), "{err}");
+        assert!(err.contains("sky"), "{err}");
+        assert_eq!(super::measurable(&root), Ok(()));
+    }
     use super::*;
 
     /// The streak replay against the analytic mean (streak area times
