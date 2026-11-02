@@ -174,7 +174,10 @@ mod tests {
         // transmissive phase).
         assert!(MARK.is_finite());
         use bevy::pbr::StandardMaterialKey;
-        assert_eq!(StandardMaterialKey::from(&c), StandardMaterialKey::from(&m));
+        assert_eq!(
+            StandardMaterialKey::from(&c).bits(),
+            StandardMaterialKey::from(&m).bits()
+        );
         assert_eq!(
             (c.specular_transmission, c.diffuse_transmission),
             (0.0, 0.0)
