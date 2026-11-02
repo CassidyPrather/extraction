@@ -852,7 +852,7 @@ pub(crate) mod tests {
                 .unwrap()
         };
         let done = |app: &App| app.world().resource::<Progression>().0.done;
-        let mut check = |app: &mut App, why: &str| {
+        let check = |app: &mut App, why: &str| {
             let said = would(app);
             let before = done(app);
             press_card(app);
