@@ -1534,7 +1534,7 @@ pub(super) fn direct_raid(
                         Kind::Confused,
                         format!("wandered off from {name}, and nothing said which way it was"),
                     );
-                    tasks.extend(way_out(&world, &view, here).0);
+                    tasks.extend(way_out(&world, &view, &plans, here).0);
                     state.leg = Leg::Call;
                     let idle = bot.tasks.pop_back();
                     bot.tasks.extend(tasks);
@@ -1670,13 +1670,13 @@ pub(super) fn direct_raid(
                 }
                 Ok(None) => {
                     state.note(now, Kind::Learned, errand_done(&errand, &world));
-                    tasks.extend(way_out(&world, &view, here).0);
+                    tasks.extend(way_out(&world, &view, &plans, here).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
                 Err(why) => {
                     state.note(now, Kind::Stuck, why);
-                    tasks.extend(way_out(&world, &view, here).0);
+                    tasks.extend(way_out(&world, &view, &plans, here).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
@@ -2667,11 +2667,50 @@ fn name_of(world: &World2, id: &str) -> String {
 }
 
 /// Indoors at `here`: out by the nearest door, and where that leaves it.
-fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
+/// Through the rooms by the building's plan, where it has one (straight at
+/// the door from behind the post office's counter, the newcomer pressed
+/// against the counter for the rest of the raid, the watch in its pack).
+fn way_out(
+    world: &World2,
+    view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    here: Vec2,
+) -> (Vec<Task>, Vec2) {
     let Some(en) = view.entrances.as_deref() else {
         return (vec![], here);
     };
     let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
+    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3)) {
+        let from = plan.to_local(at).xz();
+        let way = plan
+            .doors
+            .iter()
+            .filter_map(|d| d.outside)
+            .filter_map(|o| Some((o, plan.path(from, o)?)))
+            .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)));
+        if let Some((o, path)) = way {
+            let mut t = Vec::new();
+            for stop in indoor_stops(plan, from, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
+                        within: 0.4,
+                    }),
+                }
+            }
+            if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+                *within = 0.6;
+            }
+            return (t, plan.world2(o));
+        }
+    }
     let Some(b) = en.building_at(at) else {
         return (vec![], here);
     };
@@ -2705,6 +2744,18 @@ fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
         ],
         outside,
     )
+}
+
+/// How far a walk along `path` from `from` goes (m).
+fn path_len(from: Vec2, path: &[Vec2]) -> f32 {
+    let mut at = from;
+    path.iter()
+        .map(|p| {
+            let d = at.distance(*p);
+            at = *p;
+            d
+        })
+        .sum()
 }
 
 /// A place a newcomer walks to on the way through a building
@@ -2768,7 +2819,7 @@ fn way_to(
     here: Vec2,
     p: Vec3,
 ) -> Vec<Task> {
-    let (mut t, here) = way_out(world, view, here);
+    let (mut t, here) = way_out(world, view, plans, here);
     if let Some(plan) = plans.iter().find(|pl| pl.contains(p, 0.3)) {
         let goal = plan.to_local(p).xz();
         let entry = plan
@@ -3329,8 +3380,8 @@ mod indoor_tests {
     /// Indoors, each straight walk between a newcomer's stops stays on the
     /// building plan's open cells (furniture and its clearance kept out):
     /// from the door nearest each loot spot in every building on Marrow, to
-    /// the spot. (The post office's table and chair were walked through,
-    /// and climbed.)
+    /// the spot, and back out. (The post office's table and chair were
+    /// walked through, and climbed.)
     #[test]
     fn indoor_walks_go_round_the_furniture() {
         let opts = crate::launch::LaunchOptions {
@@ -3368,33 +3419,41 @@ mod indoor_tests {
                 let Some(path) = plan.path(o, goal) else {
                     continue;
                 };
-                walks += 1;
-                let mut from = Some(o);
-                for stop in indoor_stops(plan, o, &path) {
-                    match stop {
-                        Stop::Door(_, before) => {
-                            if let Some(f) = from {
-                                if !plan.grid.line_clear(f.to_array(), before.to_array()) {
-                                    cut.push(format!("{} {f} -> {before}", plan.name));
+                // In to the spot, and back out from it (straight at the
+                // door from behind the post office's counter, the newcomer
+                // pressed against the counter).
+                // (From where it stood to take it: the spot's on a shelf.)
+                let back = plan.path(goal, o).unwrap_or_default();
+                let stood = back.first().copied().unwrap_or(goal);
+                for (start, path) in [(o, path), (stood, back)] {
+                    walks += 1;
+                    let mut from = Some(start);
+                    for stop in indoor_stops(plan, start, &path) {
+                        match stop {
+                            Stop::Door(_, before) => {
+                                if let Some(f) = from {
+                                    if !plan.grid.line_clear(f.to_array(), before.to_array()) {
+                                        cut.push(format!("{} {f} -> {before}", plan.name));
+                                    }
                                 }
+                                // Through the door: its leaf is in the way till
+                                // it's open.
+                                from = None;
                             }
-                            // Through the door: its leaf is in the way till
-                            // it's open.
-                            from = None;
-                        }
-                        Stop::At(p) => {
-                            if let Some(f) = from {
-                                if !plan.grid.line_clear(f.to_array(), p.to_array()) {
-                                    cut.push(format!("{} {f} -> {p}", plan.name));
+                            Stop::At(p) => {
+                                if let Some(f) = from {
+                                    if !plan.grid.line_clear(f.to_array(), p.to_array()) {
+                                        cut.push(format!("{} {f} -> {p}", plan.name));
+                                    }
                                 }
+                                from = Some(p);
                             }
-                            from = Some(p);
                         }
                     }
                 }
             }
         }
-        assert!(walks > 50, "only {walks} indoor walks tried");
+        assert!(walks > 100, "only {walks} indoor walks tried");
         assert!(
             cut.is_empty(),
             "{} of {walks} indoor walks cut through furniture:\n{}",
