@@ -1160,6 +1160,27 @@ pub(super) struct World2<'w, 's> {
     pub(super) nav: Option<Res<'w, crate::robots::walker::Nav>>,
 }
 
+/// The truck's footprint, truck-local xz: its centre and half size (the
+/// bed, ±1.1 by ±1.8, and the cab ahead of it, with a body's clearance).
+pub(super) const TRUCK_BOX: (Vec2, Vec2) = (Vec2::new(0.0, -0.9), Vec2::new(1.5, 3.3));
+
+/// To the foot of the truck's steps, `at(0, 4)`, from `here` (both
+/// truck-local xz): from its front or side, round it on the side you're
+/// on first, not straight through its body.
+pub(super) fn round_the_truck(here: Vec2) -> Vec<Vec2> {
+    let mut round = Vec::new();
+    if here.y < 4.5 {
+        let s = if here.x >= 0.0 { 1.0 } else { -1.0 };
+        round.extend([
+            Vec2::new(s * 2.8, here.y.min(4.0)),
+            Vec2::new(s * 2.8, 6.5),
+            Vec2::new(0.0, 6.5),
+        ]);
+    }
+    round.push(Vec2::new(0.0, 4.0));
+    round
+}
+
 /// Down a site's stair: outside its kiosk, in at the door, the top step
 /// and the foot (world xz), and the kiosk's door.
 pub(super) struct StairWay {
@@ -1551,7 +1572,22 @@ impl World2<'_, '_> {
                 // Then up the middle of the bed, left of the bench, to just
                 // past its front: the cord is in reach there.
                 let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
-                let mut t = self.legs(here, at(0.0, 4.0));
+                // From its front or side, round it on the side you're on
+                // first: straight at the back, the truck's body was in the
+                // way, and the newcomer stood against its side at the
+                // ranger tower half an hour (the rendezvous turned to face
+                // down the track, cab first to anyone from the village).
+                let mine = truck.affine().inverse().transform_point3(Vec3::new(
+                    here.x,
+                    truck.translation().y,
+                    here.y,
+                ));
+                let mut t = Vec::new();
+                let mut from = here;
+                for p in round_the_truck(mine.xz()).into_iter().map(|p| at(p.x, p.y)) {
+                    t.extend(self.legs(from, p));
+                    from = p;
+                }
                 for (x, z) in [(0.05, 0.3), (0.05, -1.2)] {
                     t.push(Task::WalkTo {
                         to: at(x, z),

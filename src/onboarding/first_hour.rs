@@ -3262,6 +3262,31 @@ pub(super) fn first_fight(
 mod tests {
     use super::*;
 
+    /// To the truck's steps from all round it (and from against its side,
+    /// where the newcomer stood at the ranger tower), no leg goes through
+    /// its body.
+    #[test]
+    fn the_way_to_the_steps_goes_round_the_truck() {
+        let (centre, half) = super::super::second_hour::TRUCK_BOX;
+        let mut from: Vec<Vec2> = (0..24)
+            .map(|k| Vec2::from_angle(k as f32 / 24.0 * std::f32::consts::TAU) * 9.0)
+            .collect();
+        for z in [-4.0, -2.0, 0.0, 1.5] {
+            from.extend([Vec2::new(2.2, z), Vec2::new(-2.2, z)]);
+        }
+        for here in from {
+            let mut at = here;
+            for p in super::super::second_hour::round_the_truck(here) {
+                assert!(
+                    segment_hits_box(at - centre, p - centre, half).is_none(),
+                    "from {here}: {at} -> {p} goes through the truck"
+                );
+                at = p;
+            }
+            assert_eq!(at, Vec2::new(0.0, 4.0), "from {here}");
+        }
+    }
+
     /// One of every kind of job there is (the match in `errand` makes a new
     /// kind fail to build until it has a way).
     fn one_of_each() -> Vec<Job> {
