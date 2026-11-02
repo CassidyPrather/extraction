@@ -2530,6 +2530,115 @@ mod onboarding {
         vr.step(90);
     }
 
+    /// Walks the player, by the stick, through `to` (world xz) in turn,
+    /// each within `within` m or `secs` gone; where the feet end.
+    fn steer(vr: &mut Vr, to: &[Vec2], within: f32, secs: f32) -> (Vec3, Vec<bool>) {
+        let mut reached = Vec::new();
+        for t in to {
+            let mut ok = false;
+            for _ in 0..(secs * 90.0) as usize {
+                let root = *vr.app.world().get::<Transform>(vr.player).unwrap();
+                let d = *t - root.translation.xz();
+                if d.length() < within {
+                    ok = true;
+                    break;
+                }
+                let head = vr
+                    .app
+                    .world()
+                    .get::<RigInput>(vr.player)
+                    .unwrap()
+                    .head
+                    .rotation;
+                let fwd = (root.rotation * head * Vec3::NEG_Z)
+                    .xz()
+                    .normalize_or(Vec2::Y);
+                let right = Vec2::new(-fwd.y, fwd.x);
+                let dir = d.normalize();
+                vr.app
+                    .world_mut()
+                    .get_mut::<RigInput>(vr.player)
+                    .unwrap()
+                    .locomotion = Vec2::new(dir.dot(right), dir.dot(fwd)).clamp_length_max(1.0);
+                vr.step(1);
+            }
+            reached.push(ok);
+        }
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .locomotion = Vec2::ZERO;
+        vr.step(10);
+        (
+            vr.app
+                .world()
+                .get::<Transform>(vr.player)
+                .unwrap()
+                .translation,
+            reached,
+        )
+    }
+
+    /// Every rendezvous's truck can be boarded the way a person (and the
+    /// first-hour bot, `second_hour::go_home`) does: round to the back, up
+    /// the steps, into the bed (first-jobs runs: stuck behind the truck at
+    /// Marrow's ranger tower for half an hour).
+    #[test]
+    fn every_rendezvous_truck_can_be_boarded() {
+        let mut vr = Vr::new("marrow_creek");
+        vr.step(5);
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let n = zone
+            .map
+            .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+            .count();
+        let mut stuck = Vec::new();
+        for rv in 0..n {
+            vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+            vr.step(2);
+            let pose = crate::raid::truck::rv_pose(&zone, rv);
+            // Standing off its back, out of the way.
+            let at = |x: f32, z: f32| pose.transform_point(Vec3::new(x, 0.0, z)).xz();
+            let start = at(0.0, 8.0);
+            vr.stand(zone.on_ground(start.x, start.y) + Vec3::Y * 0.05, 0.0);
+            vr.step(5);
+            vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+                crate::raid::Phase::TruckWaiting {
+                    rv,
+                    left: crate::raid::TRUCK_WAIT - crate::raid::truck::UNSEEN_FOR - 5.0,
+                };
+            vr.step(5);
+            let truck = truck_pose(&mut vr);
+            let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
+            let ramp = crate::raid::truck::ladder_steps(&zone, &truck);
+            let (feet, reached) = steer(
+                &mut vr,
+                &[at(0.0, 4.0), at(0.05, 0.3), at(0.05, -1.2)],
+                0.4,
+                12.0,
+            );
+            let local = truck.compute_affine().inverse().transform_point3(feet);
+            let behind = zone.ground(at(0.0, 3.0).x, at(0.0, 3.0).y);
+            let line = format!(
+                "rv {rv}: truck at {:.1?} ({:+.2} m above the ground behind it), ramp {}, reached {reached:?}, feet local {local:.2?}",
+                truck.translation,
+                truck.translation.y - behind,
+                if ramp.is_empty() {
+                    "none".to_string()
+                } else {
+                    format!("{:.2?}", ramp[0].0)
+                }
+            );
+            println!("{line}");
+            let in_bed = local.x.abs() < 1.1 && local.z.abs() < 1.8 && local.y > FLOOR - 0.3;
+            if !in_bed {
+                stuck.push(line);
+            }
+        }
+        assert!(stuck.is_empty(), "couldn't board:\n{}", stuck.join("\n"));
+    }
+
     fn truck_pose(vr: &mut Vr) -> Transform {
         let mut q = vr
             .app
