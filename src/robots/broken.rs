@@ -28,8 +28,9 @@ pub const PACE: f32 = 0.8;
 pub const LEG_LEFT: f32 = 0.05;
 /// The leg that's gone bad.
 pub const BAD_LEG: usize = 1;
-/// Within this of you it stops and shoves (m)...
-pub const SHOVE_RANGE: f32 = 1.7;
+/// Its shove reaches this far past where its body keeps clear of you
+/// (m, [`clear_of_you`]; [`shove_reach`] is from its middle)...
+pub const SHOVE_RANGE: f32 = 0.6;
 /// ...this hard (hp)...
 pub const SHOVE_DAMAGE: f32 = 4.0;
 /// ...pushing you back this fast (m/s)...
@@ -43,6 +44,13 @@ pub const SHOVE_COOLDOWN: f32 = 3.0;
 /// that).
 pub fn clear_of_you(size: f32) -> f32 {
     super::anim::FOOT_RADIUS * size + 0.3
+}
+
+/// How far from its middle a broken walker of `size` shoves (m): reach
+/// measured from its body's edge, not its middle, so a walker kept clear of
+/// you still reaches you.
+pub fn shove_reach(size: f32) -> f32 {
+    clear_of_you(size) + SHOVE_RANGE
 }
 
 /// A broken walker shoved someone (for Lev's line and the first-fight
@@ -161,9 +169,13 @@ fn break_parts(w: &mut World, robot: Entity) {
 /// The shove, as its brain makes it (a command: `walker_brain`): whoever's
 /// within reach of `robot` loses a few hp and is pushed back a step.
 pub fn shove(w: &mut World, robot: Entity) {
-    let Some(at) = w.get::<GlobalTransform>(robot).map(|g| g.translation()) else {
+    let Some((at, size)) = w.get::<GlobalTransform>(robot).map(|g| {
+        let (scale, _, at) = g.to_scale_rotation_translation();
+        (at, scale.x)
+    }) else {
         return;
     };
+    let reach = shove_reach(size);
     if w.get::<super::Robot>(robot).is_none_or(|r| r.wrecked) {
         return;
     }
@@ -176,7 +188,7 @@ pub fn shove(w: &mut World, robot: Entity) {
     let mut hit = Vec::new();
     for (p, pt, mut health, mut body) in players.iter_mut(w) {
         let d = pt.translation() - at;
-        if d.with_y(0.0).length() > SHOVE_RANGE + 0.3 || health.down {
+        if d.with_y(0.0).length() > reach + 0.3 || health.down {
             continue;
         }
         health.hp -= SHOVE_DAMAGE;
@@ -488,7 +500,7 @@ mod tests {
         let seen = app.world().resource::<Seen>();
         assert!(!seen.shots.contains(&robot), "it fired");
         assert!(
-            closest < SHOVE_RANGE + 0.5,
+            closest < shove_reach(1.0) + 0.5,
             "it never came at you: {closest:.1} m at closest"
         );
         assert!(seen.shoves > 0, "it never shoved");

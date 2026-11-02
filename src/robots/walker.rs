@@ -942,7 +942,7 @@ pub(super) fn walker_brain(
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
                         intent.look = Some(tp);
                         intent.pace = super::broken::PACE;
-                        if d > super::broken::SHOVE_RANGE {
+                        if d > super::broken::shove_reach(t.scale.x) {
                             Some(tp)
                         } else {
                             if b.cooldown <= 0.0 {
