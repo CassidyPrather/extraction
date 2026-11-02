@@ -2079,6 +2079,20 @@ pub(super) fn direct_raid(
             return;
         }
     }
+    // Indoors, with a walk out of the building planned: out by its plan
+    // first, its doors opened (sheltered from a drone, the newcomer was in
+    // a house when the truck came; the walk to it went straight at the
+    // wall, and it stood there half an hour).
+    if let (Some(en), Some(Task::WalkTo { to, .. })) = (view.entrances.as_deref(), tasks.first()) {
+        let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
+        if let Some(b) = inside(here)
+            && inside(*to) != Some(b)
+        {
+            let (mut out, _) = way_out(&world, &view, &plans, here);
+            out.append(&mut tasks);
+            tasks = out;
+        }
+    }
     if !tasks.is_empty() {
         let idle = bot.tasks.pop_back();
         bot.tasks.extend(tasks);
@@ -2269,11 +2283,14 @@ fn under_a_roof(
             within: 0.6,
         },
         Task::Wait(20.0),
-        // And out the way it came in, not through a wall.
+        // And out the way it came in, not through a wall, the door opened
+        // again (swung to while it waited, the newcomer stood against it
+        // inside for the rest of the raid).
         Task::WalkTo {
             to: inside,
             within: 0.6,
         },
+        Task::OpenDoor(d.door),
         Task::WalkTo {
             to: d.mid.xz() + out * 1.5,
             within: 0.8,
