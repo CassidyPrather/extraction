@@ -236,6 +236,8 @@ pub const ONE_UP: &str = "Truck: \"One up the spout before you go. Safety on til
 pub const MAG_IN: &str = "Truck: \"Mag in, then one up the spout. Safety on till you need it.\"";
 /// ...the gun and every magazine on you empty, rounds in the crate.
 pub const LOAD_UP: &str = "Truck: \"That's empty, your spares too. Load up from the crate.\"";
+/// ...none on you, but a loaded gun down in your pack.
+pub const IN_PACK: &str = "Truck: \"That one's empty. Your loaded one's in your pack: swap them.\"";
 /// ...and none in the crate either.
 pub const NO_ROUNDS: &str = "Truck: \"That's empty, and you've no rounds. Go careful.\"";
 
@@ -263,6 +265,7 @@ fn one_up(
         &crate::items::Item,
         Option<&crate::anomaly::artifacts::CarriedBy>,
         &crate::weapons::Mag,
+        Option<&crate::interact::InSocket>,
     )>,
     ammo: Query<&crate::items::Item>,
     stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
@@ -321,22 +324,33 @@ fn one_up(
         mine.iter()
             .any(|g| g.firearm.def.magazine_family.as_deref() == Some(m.family.as_str()))
     };
-    let spare = mags
-        .iter()
-        .any(|(it, by, m)| it.rounds > 0 && fits(m) && by.is_some_and(|b| b.0 == me));
+    // (Not one seated in a gun: the loaded pistol down in the pack had its
+    // magazine counted as a spare, and "Mag in" had nothing to put in.)
+    let wells: Vec<Entity> = guns.iter().filter_map(|(g, ..)| g.magwell).collect();
+    let spare = mags.iter().any(|(it, by, m, sock)| {
+        it.rounds > 0
+            && fits(m)
+            && by.is_some_and(|b| b.0 == me)
+            && !sock.is_some_and(|s| wells.contains(&s.socket))
+    });
+    // A loaded gun of your own, packed away.
+    let packed = guns.iter().any(|(g, by, packed)| {
+        by.0 == me && packed && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
+    });
     let in_crate = stash.iter().flat_map(|b| b.contents.iter()).any(|e| {
         ammo.get(*e).is_ok_and(|it| {
             it.rounds > 0
-                && (mags.get(*e).is_ok_and(|(_, _, m)| fits(m))
+                && (mags.get(*e).is_ok_and(|(_, _, m, _)| fits(m))
                     || catalog.get(it.kind()).id.starts_with("ammo_"))
         })
     });
     if empty {
-        raid.say(match (in_gun, spare, in_crate) {
+        raid.say(match (in_gun, spare, packed, in_crate) {
             (true, ..) => ONE_UP,
-            (false, true, _) => MAG_IN,
-            (false, false, true) => LOAD_UP,
-            (false, false, false) => NO_ROUNDS,
+            (false, true, ..) => MAG_IN,
+            (false, false, true, _) => IN_PACK,
+            (false, false, false, true) => LOAD_UP,
+            (false, false, false, false) => NO_ROUNDS,
         });
     }
 }
