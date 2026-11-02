@@ -57,6 +57,34 @@ valley, and the one they'll judge it by.
 The walks live in `docs/craft/walks/<valley>/`: the stops, the shots,
 the answers, the sheet, the page and the fixes.
 
+## Coming home
+
+The other walk every raid has: back to the truck, laden, late, with the
+valley awake. Going home should be tense but fair, never a gauntlet.
+
+1. **The measure.** The map lint's coming-home rule (`map_lint`, after
+   the last-stretch check) walks the last `RV_APPROACH` (150 m) into each
+   rendezvous from every place whose way home it is. It reports the lines
+   they make, whether there's a second way in with the busiest shut, the
+   longest run with nothing a dash (`DASH`, 12 m) off, and how much of it
+   a spotter, a survey drone or a walker at its post watches. It flags a
+   run over `RV_OPEN` (24 m, five seconds at a run) and a rendezvous with
+   one way in. `RV_DEBUG=1` on the lint probe prints each way's points.
+2. **The shots.** Each rendezvous's main line at 150, 100, 50 and 10 m
+   out, at eye height, looking home: the same stills before and after.
+3. **The judging.** As on the way out: what's the vista, what draws the
+   eye, what is the moment for. The last 50 m should show the beacon and
+   somewhere to get down; the 150 m stop should already say "home is that
+   way".
+4. **The fix is the place's own cover.** Not a row of identical woodpiles
+   every 26 m, which reads as a level designer's corridor: an outcrop on a
+   hill flank, a wreck by a track, a woodpile by the water, a copse on a
+   shore, at the spacing the ground gives, off the way and off the views.
+   Outcrops are set by hand (`MapDef::outcrops`); everything else is a
+   placement or a forest.
+
+The coming-home walks live in `docs/craft/walks/home/`.
+
 ## Judging
 
 - A stop is judged from the shots, not from the map. If the farm is
@@ -91,5 +119,10 @@ the answers, the sheet, the page and the fixes.
   the place you crossed to get there is behind you. Give the arrival
   something ahead instead: the truck's own track on out through the
   fence (roads make the fence's gates) says "the way out" plainly.
+- Cover a dash off the way has to stand where the ground lets it: on a
+  shore road under a bank, the bank and the water leave a strip a few
+  metres wide. A piece on the bank's slope vanishes into it, and one on
+  the narrow way shuts the second way in. Look at the ground (the lint's
+  `probe_grid`) before choosing the spot.
 - A walk's fixes move its route: a job or rendezvous moved, the arrival
   stop moves with it. Show the new arrival beside the old, and say so.

@@ -372,6 +372,12 @@
         // And on the ways home from them, to the nearest rendezvous.
         (prefab: "log_pile", at: (79.5, -10.1), rot: 31.0),
         (prefab: "log_pile", at: (139.7, 22.2), rot: 98.0),
+        // Coming home: cover where a way in to a rendezvous was open for
+        // more than a dash (map_lint, coming home).
+        // Burnt out on the lookout track, in to the Fire lookout.
+        (prefab: "wreck_uaz", at: (-99.0, -98.0), rot: 20.0),
+        // Left by the sidings track, in to the North sidings.
+        (prefab: "wreck_lorry", at: (31.5, -40.0), rot: 200.0),
     ],
 
     markers: [
