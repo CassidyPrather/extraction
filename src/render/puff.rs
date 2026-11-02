@@ -297,6 +297,11 @@ mod tests {
             ),
             ("robots/recall.rs", 1, "a tally lamp"),
             (
+                "robots/sentry_look.rs",
+                1,
+                "the lens's chirp glow, additive",
+            ),
+            (
                 "robots/visuals.rs",
                 10,
                 "eyes, shells, envelopes, halos, a flare",
