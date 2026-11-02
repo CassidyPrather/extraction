@@ -73,7 +73,8 @@ The same command was used before and after
 - **Latch: a gate latch's bars pivot at their far end.** The keepers and
   pin moved to the bars' tails, at z -0.027. Now the pushrod lifts the
   bars in front of their pin, and the hooks rise off the string. The rear
-  sight moved 10 mm back, behind the keepers.
+  sight moved 10 mm back, behind the keepers, and the latch's base plate
+  runs back under it.
 - **Stirrup: about 134 mm inside**, wide enough for a boot's toe.
 - **Code and data:**
   - **`src/weapons/layout.rs`** (`crossbow()`):

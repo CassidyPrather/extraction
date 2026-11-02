@@ -354,7 +354,8 @@ kit.sphere(0.0025, (0.0, 0.0925, -0.34), "Worn", segs=10, rings=6)
 
 # --- The latch: a gate latch on a plate at the back of the rail ------------------------------
 latch = Part("latch")
-latch.box((0.043, 0.004, 0.040), (0.0, RAIL + 0.002, -0.045), "Iron", bevel=0.0008, segs=1)
+# (Long enough behind the keepers to carry the rear sight.)
+latch.box((0.043, 0.004, 0.054), (0.0, RAIL + 0.002, -0.038), "Iron", bevel=0.0008, segs=1)
 for x in (-0.0165, 0.0165):
     for z in (-0.060, -0.030):
         screw(screws, slots, 0.0024, (x, RAIL + 0.004, z), T(), turn=x * 40 + z * 9)
