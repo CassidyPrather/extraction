@@ -89,7 +89,8 @@ middle of the view.
 
 ### Rime Fell
 
-**The saddle.** Open snow all the way up to the saddle. An outcrop now
+**The saddle.** Open snow all the way up to the saddle. An outcrop, sat
+down into the snow like the fell's own boulders, now
 stands half buried on the way up, and the roadmen's woodpile lies under
 the saddle at a different spacing.
 
