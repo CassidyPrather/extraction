@@ -22,6 +22,7 @@ pub struct RobotVisualsPlugin;
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(dress_pylon_cable)
+            .add_observer(suppressing_tracers)
             .add_observer(lamps_reach_far)
             .add_observer(dirigible_tally)
             .add_systems(Update, scan_beams)
@@ -2347,6 +2348,35 @@ fn lamps_reach_far(
     }
 }
 
+/// A walker pinning you (`walker::Suppressing`) fires every
+/// [`PIN_TRACER_EVERY`]th round a tracer: a stream of streaks onto where
+/// you went down reads as "keeping your head down" at a glance, against
+/// an aimed burst, which carries none. (A tracer's load is only how the
+/// round is drawn: `weapons::tracers`.)
+pub const PIN_TRACER_EVERY: u32 = 3;
+
+/// Marks a pinner's rounds as they're made, before the tracers look for
+/// new rounds.
+fn suppressing_tracers(
+    on: On<Add, crate::weapons::ballistics::Projectile>,
+    mut rounds: Query<&mut crate::weapons::ballistics::Projectile>,
+    pinners: Query<(), With<super::walker::Suppressing>>,
+    mut fired: Local<std::collections::HashMap<Entity, u32>>,
+) {
+    let Ok(mut round) = rounds.get_mut(on.event_target()) else {
+        return;
+    };
+    let Some(shooter) = round.shooter.filter(|s| pinners.contains(*s)) else {
+        return;
+    };
+    fired.retain(|e, _| pinners.contains(*e));
+    let n = fired.entry(shooter).or_insert(0);
+    if *n % PIN_TRACER_EVERY == 0 {
+        round.load = extraction_core::ammo::Load::Tracer;
+    }
+    *n += 1;
+}
+
 #[cfg(test)]
 mod signal_lamp_tests {
     use super::*;
@@ -2442,5 +2472,44 @@ mod signal_lamp_tests {
         // Fully drawn to 60 m, where a mark's size alone had it gone.
         assert!(LAMP_REACH * 0.8 >= 60.0);
         assert!(small_range(0.19) < 40.0);
+    }
+
+    /// A pinner's rounds carry a tracer every third, from its first; an
+    /// ordinary walker's carry none.
+    #[test]
+    fn a_pinners_rounds_carry_tracers() {
+        use crate::weapons::ballistics::{Projectile, ShotMods};
+        use extraction_core::ammo::Load;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_observer(suppressing_tracers);
+        let w = app.world_mut();
+        let pinner = w.spawn(super::super::walker::Suppressing).id();
+        let aimer = w.spawn_empty().id();
+        let fire = |w: &mut World, shooter: Entity| {
+            let e = w
+                .spawn(Projectile {
+                    velocity: Vec3::NEG_Z * 300.0,
+                    damage: 14.0,
+                    shooter: Some(shooter),
+                    gun: shooter,
+                    life: 1.0,
+                    mods: ShotMods::default(),
+                    mass_g: 8.0,
+                    seed: 1,
+                    passes: 0,
+                    load: Load::Standard,
+                })
+                .id();
+            w.flush();
+            w.get::<Projectile>(e).unwrap().load == Load::Tracer
+        };
+        let pinned: Vec<bool> = (0..9).map(|_| fire(w, pinner)).collect();
+        let aimed: Vec<bool> = (0..9).map(|_| fire(w, aimer)).collect();
+        assert_eq!(
+            pinned,
+            [true, false, false, true, false, false, true, false, false]
+        );
+        assert!(aimed.iter().all(|t| !t), "an aimed burst carries none");
     }
 }

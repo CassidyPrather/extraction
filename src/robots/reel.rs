@@ -28,7 +28,8 @@
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `chirp` (a sentry 7 m off, facing you, chirping: its lens through the
-//! chirp, frame by frame), `zap` (a crawler charging and
+//! chirp, frame by frame), `pin` (a walker pinning down a spot 7 m to its
+//! right where you dropped from sight: its gun held there, its tracers), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -123,7 +124,10 @@ fn reel(
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     cases: Query<&TellCase>,
-    mut sentry_acts: MessageWriter<super::sentry::SentryEvent>,
+    (mut sentry_acts, mut awares): (
+        MessageWriter<super::sentry::SentryEvent>,
+        Query<&mut super::Awareness, Without<EyeLevel>>,
+    ),
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -607,7 +611,8 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed" => {
+                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
+                | "pin" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
@@ -702,6 +707,39 @@ fn reel(
                 damage: 7.0,
                 projectiles: 1,
                 spread: 0.0,
+                recoil: 0.0,
+                seed: frame as u64,
+            });
+        }
+    }
+    // `pin`: a walker pinning you down (`walker::Suppressing`) where you
+    // dropped from sight, 7 m to its right: its gun held on the spot, its
+    // rounds on its suppressing cadence (`walker::SUPPRESS_EVERY`).
+    let spot = eye + flat * 8.0 + right * 7.0;
+    if what == "pin" && frame == 6 {
+        if let Ok(mut a) = awares.get_mut(subject) {
+            a.last_known = Some(spot);
+            a.can_see_target = false;
+        }
+        commands.entity(subject).insert(super::walker::Suppressing);
+    }
+    if what == "pin" && frame > 20 && frame % 14 == 0 {
+        let muzzle = parts
+            .iter()
+            .find(|(_, p, _)| p.robot == subject && p.role == PartRole::Weapon)
+            .map(|(_, _, gt)| gt.translation() + Vec3::Y * 0.05);
+        if let Some(muzzle) = muzzle {
+            let at = spot + Vec3::Y * 1.0;
+            let dir = (at - muzzle).normalize_or(Vec3::NEG_Z);
+            shots.write(crate::weapons::ballistics::Shot {
+                gun: subject,
+                shooter: Some(subject),
+                origin: muzzle + dir * 0.3,
+                direction: dir,
+                speed: 450.0,
+                damage: 14.0,
+                projectiles: 1,
+                spread: super::walker::SUPPRESS_SPREAD,
                 recoil: 0.0,
                 seed: frame as u64,
             });
