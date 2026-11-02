@@ -2444,26 +2444,40 @@ fn lamps_reach_far(
 /// round is drawn: `weapons::tracers`.)
 pub const PIN_TRACER_EVERY: u32 = 3;
 
+/// How many rounds a pinner has fired (for its tracers).
+#[derive(Component)]
+struct PinRounds(u32);
+
 /// Marks a pinner's rounds as they're made, before the tracers look for
 /// new rounds.
 fn suppressing_tracers(
     on: On<Add, crate::weapons::ballistics::Projectile>,
+    mut commands: Commands,
     mut rounds: Query<&mut crate::weapons::ballistics::Projectile>,
-    pinners: Query<(), With<super::walker::Suppressing>>,
-    mut fired: Local<std::collections::HashMap<Entity, u32>>,
+    mut pinners: Query<Option<&mut PinRounds>, With<super::walker::Suppressing>>,
 ) {
     let Ok(mut round) = rounds.get_mut(on.event_target()) else {
         return;
     };
-    let Some(shooter) = round.shooter.filter(|s| pinners.contains(*s)) else {
+    let Some(shooter) = round.shooter else {
         return;
     };
-    fired.retain(|e, _| pinners.contains(*e));
-    let n = fired.entry(shooter).or_insert(0);
-    if *n % PIN_TRACER_EVERY == 0 {
+    let Ok(fired) = pinners.get_mut(shooter) else {
+        return;
+    };
+    let n = match fired {
+        Some(mut f) => {
+            f.0 += 1;
+            f.0 - 1
+        }
+        None => {
+            commands.entity(shooter).try_insert(PinRounds(1));
+            0
+        }
+    };
+    if n % PIN_TRACER_EVERY == 0 {
         round.load = extraction_core::ammo::Load::Tracer;
     }
-    *n += 1;
 }
 
 #[cfg(test)]
