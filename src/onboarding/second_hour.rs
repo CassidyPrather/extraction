@@ -1589,7 +1589,14 @@ impl World2<'_, '_> {
                     t.extend(self.legs(from, p));
                     from = p;
                 }
-                for (x, z) in [(0.05, 0.3), (0.05, -1.2)] {
+                // Square on to the ramp first (0.9 wide, off the tail to
+                // z 2.5): "there" behind it was anywhere within a metre,
+                // and from 0.7 m off its middle the way up went into the
+                // bed's edge beside the ramp, and stayed there.
+                if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+                    *within = 0.5;
+                }
+                for (x, z) in [(0.05, 2.9), (0.05, 0.3), (0.05, -1.2)] {
                     t.push(Task::WalkTo {
                         to: at(x, z),
                         within: 0.3,

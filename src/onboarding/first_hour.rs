@@ -1097,9 +1097,17 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
-                // (Pinned or not before this lock: the one that pins it
-                // still sends it under a roof.)
-                let going_home = state.pinned || matches!(state.leg, Leg::Rendezvous | Leg::Board);
+                // At the truck's tail, boarding: on, as the driver says
+                // ("Don't stop. Sprint across it"), not back to a roof with
+                // the truck there. Anywhere short of it, a roof still
+                // (pinned and running on in the open, three newcomers were
+                // shot down in under two minutes; under roofs, two got
+                // home).
+                let going_home = matches!(state.leg, Leg::Board)
+                    && world
+                        .trucks
+                        .iter()
+                        .any(|t| t.translation().xz().distance(here) < 15.0);
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
