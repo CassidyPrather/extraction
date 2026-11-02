@@ -872,7 +872,9 @@ fn flare_pistol() -> GunLayout {
     // Forward, at the front of the frame's side plate (art/guns/flare_pistol.py).
     let hinge = Vec3::new(0.0, 0.028, -0.0755);
     GunLayout {
-        grip: Transform::IDENTITY,
+        // The palm 29 mm ahead of the backstrap at its height, as on every
+        // gun (docs/craft/GUNSMITHING.md): the backstrap is at z 0.035.
+        grip: Transform::from_xyz(0.0, 0.0, 0.006),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.162),
         port: Vec3::new(0.0, bore, -0.017),
