@@ -1,5 +1,28 @@
 # Walk review
 
+> **Where I stopped (2 Nov), and what's next.** Paused at the user's
+> request. Done and on main: the first-job walks for Marrow and Cinder
+> with their fixes (`walks/marrow_creek`, `walks/cinder_works`), and coming
+> home: the lint's way-home rule and each valley's cover on its ways in
+> (`walks/home`, on main at 761533d4).
+>
+> - **Rime's saddle outcrop reads too clean and angular** (the
+>   coordinator's note). Outcrops render as the scatter's rocks do, so
+>   weathering can't be set from the map. What can be done is to sit the
+>   big stone lower and deeper, like the scatter's boulders: in
+>   `rocks::scatter_rocks`, the outcrop's `k == 0` squash from
+>   `0.6..0.8` to `0.5..0.65`, and its `place` sink from `0.2` to `0.35`.
+>   It was tried (29c14adb, with the page's new frame in 4bfbd855): every
+>   valley still lints clean and core passes, and on Rime it reads as
+>   sat into the snow. It was reverted before the game tests and
+>   scenarios ran. Re-apply it, gate it, and swap in the new frame.
+> - **Next walks:** the first-job walk for Kettle, Rime and Sallow by the
+>   same procedure, and the way home judged by vistas from the shots in
+>   `walks/home` (the 150 m stop says "home is that way" everywhere; the
+>   last 50 m shows the beacon).
+> - **Not ours, flagged:** `vr_budget::gauge_puffs_hold_the_stereo_budget`
+>   was red on c8d28dd1 and fixed on main since.
+
 The map lint measures: how far you're seen, how steep a path climbs, how
 long you walk with nothing to stop at. It can't tell you whether a walk
 is any good. This is the other half: stand on the route a newcomer takes
