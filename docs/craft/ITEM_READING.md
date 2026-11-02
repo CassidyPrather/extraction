@@ -1,5 +1,24 @@
 # Item reading: a review procedure
 
+> **Where Models stopped (2 November), and what's next.**
+> Pushed and gated, on claude/polish-models: the crossbow bolt at 0.30 m
+> (fd6c6cd5, riding with Gunsmith's tip: their in-flight bolt and
+> crossbow.glb rebuild go with it). On main before that: the truck
+> crate's radio face up; the house plans (farm, post office, plank B/C);
+> the labels' shared `LIFT` and `art/check.py`'s item gap; the stencil
+> glyphs and `art/check_glyphs.py`; the walk props (log stack, wrecks,
+> stone ring); the robot line-ups.
+> Next, when work resumes:
+> - The guns' labels pick up the fixed glyphs when Gunsmith next builds
+>   them; the depot's conveyor and cradle (a C in their codes) want their
+>   owner's rebuild (rebuilt here they lost their rollers' baked AO).
+> - Lettering at 2 m in game: Marrow's gate block wears ivy over its
+>   face, and the house crate faced away; confirm on a crate and block
+>   that face the eye.
+> - The truck crate's later kinds (the stations' kit) at reading
+>   distance, as its first three were.
+> - The walk props past the first jobs (Kettle's, Rime's, Sallow's).
+
 Every item must be told apart from every other, and its family known,
 from its shape and colour alone: at 1 m on a shelf (in reach) and at
 3 m across a room, under the light most rooms in the Zone have. The
