@@ -921,22 +921,24 @@ fn crossbow() -> GunLayout {
     let rail = 0.06;
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
-        support: Some(Vec3::new(0.0, 0.0, -0.28)),
-        muzzle: Vec3::new(0.0, rail, -0.46),
-        port: Vec3::new(0.0, 0.07, -0.2),
+        support: Some(Vec3::new(0.0, 0.0, -0.17)),
+        muzzle: Vec3::new(0.0, rail, -0.35),
+        port: Vec3::new(0.0, 0.07, -0.15),
         eject: Vec3::new(0.0, 1.0, 0.0),
-        sight: at(0.0, 0.095, -0.027),
+        sight: at(0.0, 0.095, -0.017),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::String,
-            grab: Vec3::new(0.0, 0.065, -0.33),
-            travel: 0.26,
+            grab: Vec3::new(0.0, 0.065, -0.22),
+            // A 150 mm draw: what a leaf-spring prod gives
+            // (docs/craft/guns/crossbow).
+            travel: 0.15,
         }),
-        load_port: Vec3::new(0.0, 0.07, -0.2),
+        load_port: Vec3::new(0.0, 0.07, -0.15),
         hinge: Vec3::ZERO,
         parts: vec![
             // Plank stock and tiller, the rail along its top.
-            part(bx(0.035, 0.04, 0.5), at(0.0, 0.03, -0.2), Wood, Static),
+            part(bx(0.035, 0.04, 0.29), at(0.0, 0.03, -0.135), Wood, Static),
             part(
                 bx(0.035, 0.11, 0.3),
                 Transform::from_xyz(0.0, -0.03, 0.2).with_rotation(Quat::from_rotation_x(0.1)),
@@ -944,18 +946,18 @@ fn crossbow() -> GunLayout {
                 Static,
             ),
             part(
-                bx(0.02, 0.01, 0.42),
-                at(0.0, rail - 0.005, -0.25),
+                bx(0.02, 0.01, 0.33),
+                at(0.0, rail - 0.005, -0.185),
                 Steel,
                 Static,
             ),
             // The leaf-spring prod across the front.
-            part(bx(0.6, 0.012, 0.04), at(0.0, 0.05, -0.4), Steel, Static),
+            part(bx(0.6, 0.012, 0.04), at(0.0, 0.05, -0.29), Steel, Static),
             part(bx(0.005, 0.022, 0.006), at(0.0, 0.0, -0.05), Black, Trigger),
             // The string's middle.
             part(
                 bx(0.06, 0.004, 0.004),
-                at(0.0, 0.065, -0.33),
+                at(0.0, 0.065, -0.22),
                 Black,
                 WithBolt,
             ),

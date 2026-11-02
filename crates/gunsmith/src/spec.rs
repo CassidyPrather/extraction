@@ -129,7 +129,7 @@ pub const SPECS: &[Spec] = &[
     },
     Spec {
         id: "crossbow",
-        travel: 0.26,
+        travel: 0.15,
         hinge: [0.0; 3],
         real: None,
     },

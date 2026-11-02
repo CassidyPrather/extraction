@@ -47,9 +47,9 @@ TOP = 0.054            # the tiller's top, under the rail
 RAIL = 0.058           # the rail's top
 GAP = 0.0035           # half the gap between the angles (the groove)
 TW = 0.0195            # half the plank's thickness
-REST_Z, LATCH_Z = -0.33, -0.07
+REST_Z, LATCH_Z = -0.22, -0.07   # a 150 mm draw: what a leaf spring gives (docs/craft/guns/crossbow)
 STRING_Y = 0.0605      # the string's middle where it rides over the rail
-MUZZLE = -0.46
+MUZZLE = -0.35
 
 
 def frame(origin, xa, ya, za):
@@ -97,12 +97,13 @@ def catmull3(pts, samples=4):
 # --- The prod: a car leaf spring ------------------------------------------------------------
 LT = 0.007             # leaf thickness
 PY = 0.028             # the prod's middle, heightwise
+# The main leaf and one short helper leaf: the whole spring pack would be
+# far too stiff to draw by hand, and its short free ends couldn't bend.
 LEAVES = [  # (half length, u0, u1 along the belly normal, half width)
     (0.306, -LT / 2, LT / 2, 0.022),
-    (0.200, LT / 2, 1.5 * LT, 0.021),
-    (0.120, 1.5 * LT, 2.5 * LT, 0.020),
+    (0.120, LT / 2, 1.5 * LT, 0.021),
 ]
-CLAMP_X, CLAMP_W = 0.165, 0.011
+CLAMP_X, CLAMP_W = 0.095, 0.011
 HOLE_X = 0.295
 
 
@@ -111,13 +112,13 @@ def zc(x):
     back to the tips, which are bent forward again."""
     a = abs(x)
     if a <= 0.05:
-        return -0.407
+        return -0.297
     if a <= 0.27:
-        return -0.407 + 0.066 * ((a - 0.05) / 0.22) ** 2
+        return -0.297 + 0.066 * ((a - 0.05) / 0.22) ** 2
     t = (a - 0.27) / 0.036
     h = 0.036
-    return ((2 * t ** 3 - 3 * t ** 2 + 1) * -0.341 + (t ** 3 - 2 * t ** 2 + t) * h * 0.6
-            + (-2 * t ** 3 + 3 * t ** 2) * -0.3392 + (t ** 3 - t ** 2) * h * -0.25)
+    return ((2 * t ** 3 - 3 * t ** 2 + 1) * -0.231 + (t ** 3 - 2 * t ** 2 + t) * h * 0.6
+            + (-2 * t ** 3 + 3 * t ** 2) * -0.2292 + (t ** 3 - t ** 2) * h * -0.25)
 
 
 def leaf_frame(x):
@@ -202,51 +203,51 @@ TIP_Y, TIP_Z = ANCHORS[1].y, ANCHORS[1].z
 
 # --- Stock ------------------------------------------------------------------------------------
 stock_prof = fillet([
-    (-0.3892, TOP), (-0.012, TOP),             # tiller top, under the rail
+    (-0.2792, TOP), (-0.012, TOP),             # tiller top, under the rail
     (0.035, 0.028), (0.12, 0.036),             # dip to the wrist, comb
     (0.358, 0.042), (0.358, -0.112),           # heel, butt end, toe
     (0.22, -0.090), (0.095, -0.075),           # belly
     (0.070, -0.080), (0.048, -0.071),          # under the grip
     (0.022, -0.042), (-0.004, -0.013),         # grip front
-    (-0.03, -0.008), (-0.13, -0.008),          # under the trigger
-    (-0.17, -0.004), (-0.3892, -0.004),        # tiller's underside
+    (-0.03, -0.008), (-0.10, -0.008),          # under the trigger
+    (-0.12, -0.004), (-0.2792, -0.004),        # tiller's underside
 ], [0.005, 0.008, 0.03, 0.04, 0.006, 0.008, 0.06, 0.012, 0.008, 0.01, 0.02, 0.012, 0.01, 0.02,
     0.02, 0.005], 4)
 stock = Part("stock")
 stock.prism(stock_prof, -TW, TW, "Wood", axis="x", bevel=0.004, segs=2)
 wood_cut = Part("cut")
 # The flight groove sawn down into the wood under the rail's gap.
-wood_cut.box((0.009, 0.02, 0.45), (0.0, 0.054, -0.235), "Wood")
+wood_cut.box((0.009, 0.02, 0.34), (0.0, 0.054, -0.18), "Wood")
 stock.cut(wood_cut)
 
 # Cheek blocks either side of the tiller's end, behind the prod.
-cheek = fillet([(-0.390, -0.010), (-0.350, -0.010), (-0.350, TOP), (-0.390, TOP)],
+cheek = fillet([(-0.280, -0.010), (-0.240, -0.010), (-0.240, TOP), (-0.280, TOP)],
                [0.005, 0.005, 0.0, 0.0], 3)
 nose = Part("nose")
 for sx in (-1, 1):
     a, b = sorted((sx * TW, sx * 0.046))
     nose.prism(cheek, a, b, "Wood", axis="x", bevel=0.003, segs=2)
 # The nose block in front of the prod, under the rail.
-nose.prism(fillet([(-0.4100, TOP), (-0.458, TOP), (-0.458, 0.024), (-0.449, 0.012),
-                   (-0.4100, 0.010)], [0.0, 0.004, 0.006, 0.01, 0.004], 3),
+nose.prism(fillet([(-0.3000, TOP), (-0.348, TOP), (-0.348, 0.024), (-0.339, 0.012),
+                   (-0.3000, 0.010)], [0.0, 0.004, 0.006, 0.01, 0.004], 3),
            -TW, TW, "Wood", axis="x", bevel=0.003, segs=2)
 nose_cut = Part("cut")
-nose_cut.box((0.009, 0.02, 0.06), (0.0, 0.054, -0.435), "Wood")
+nose_cut.box((0.009, 0.02, 0.06), (0.0, 0.054, -0.325), "Wood")
 nose.cut(nose_cut)
 
 # The front grip: a block screwed under the tiller, wrapped in blue tape.
 grip = Part("grip")
-grip.prism([(-0.320, -0.004), (-0.240, -0.004), (-0.240, -0.024), (-0.320, -0.024)],
+grip.prism([(-0.210, -0.004), (-0.130, -0.004), (-0.130, -0.024), (-0.210, -0.024)],
            -0.0155, 0.0155, "Wood", axis="x", bevel=0.002, segs=2)
-grip.prism([(-0.3215, -0.024), (-0.2385, -0.024), (-0.2385, -0.050), (-0.3215, -0.050)],
+grip.prism([(-0.2115, -0.024), (-0.1285, -0.024), (-0.1285, -0.050), (-0.2115, -0.050)],
            -0.017, 0.017, "Blue", axis="x", bevel=0.001, segs=1)
-grip.prism(fillet([(-0.320, -0.050), (-0.240, -0.050), (-0.243, -0.075), (-0.255, -0.086),
-                   (-0.305, -0.086), (-0.317, -0.075)], [0.0, 0.0, 0.006, 0.01, 0.01, 0.006], 3),
+grip.prism(fillet([(-0.210, -0.050), (-0.130, -0.050), (-0.133, -0.075), (-0.145, -0.086),
+                   (-0.195, -0.086), (-0.207, -0.075)], [0.0, 0.0, 0.006, 0.01, 0.01, 0.006], 3),
            -0.0155, 0.0155, "Wood", axis="x", bevel=0.003, segs=2)
 # The tape's loose end, folded flat on the right.
-grip.prism([(-0.288, -0.026), (-0.276, -0.026), (-0.272, -0.034), (-0.282, -0.040)],
+grip.prism([(-0.178, -0.026), (-0.166, -0.026), (-0.162, -0.034), (-0.172, -0.040)],
            0.017, 0.0175, "Blue", axis="x")
-for z in (-0.300, -0.260):
+for z in (-0.190, -0.150):
     screw(screws, slots, 0.0035, (0.0, -0.086, z), DOWN, turn=z * 20)
 
 # Rubber butt pad, cut from a tyre.
@@ -295,35 +296,36 @@ for sx in (-1, 1):
                segs=1)
 rcut = Part("cut")
 # The angles' sides cut away over the prod and the cheek blocks.
-rcut.box((0.06, 0.0211, 0.0604), (0.0, 0.0435, -0.380), "Steel")
+rcut.box((0.06, 0.0211, 0.0604), (0.0, 0.0435, -0.270), "Steel")
 rail.cut(rcut)
 # Screws along both angles' sides.
-for z in (-0.44, -0.30, -0.20, -0.15, -0.04):
+for z in (-0.335, -0.20, -0.15, -0.04):
     screw(screws, slots, 0.0032, (0.0235, 0.043, z), PX, turn=z * 13)
     screw(screws, slots, 0.0032, (-0.0235, 0.043, z), NX, turn=z * 17)
 
 # The U-bolts round the prod, through the cheek blocks, nutted behind.
 for sx in (-1, 1):
     x = sx * 0.033
-    kit.sweep(fillet([(-0.3415, 0.0545), (-0.4150, 0.0545), (-0.4150, 0.0015), (-0.3415, 0.0015)],
+    kit.sweep(fillet([(-0.2315, 0.0545), (-0.3050, 0.0545), (-0.3050, 0.0015), (-0.2315, 0.0015)],
                      [0.0, 0.008, 0.008, 0.0], 4, closed=False),
               section_circle(0.0042, 8), "Steel", xf=T(x, 0, 0))
     for y in (0.0545, 0.0015):
-        kit.cyl(0.0075, -0.350, -0.3445, "Iron", segs=6, chamfer=0.0008,
+        kit.cyl(0.0075, -0.240, -0.2345, "Iron", segs=6, chamfer=0.0008,
                 xf=T(x, y, 0) @ RZ(math.pi / 6))
     # A carriage bolt through the cheeks and the tiller.
-    kit.sphere(0.0065, (sx * 0.046, 0.026, -0.370), "Iron", segs=14, rings=7,
+    kit.sphere(0.0065, (sx * 0.046, 0.026, -0.260), "Iron", segs=14, rings=7,
                scale=(0.35, 1, 1))
 
 # The rebar stirrup for the foot, its ends flattened to eyes bolted to the
 # nose block's sides.
 stir = []
 for sx in (1, -1):
-    half = [(sx * 0.0255, 0.022, -0.4495), (sx * 0.028, 0.019, -0.462), (sx * 0.043, 0.006, -0.478),
-            (sx * 0.058, -0.018, -0.492), (sx * 0.062, -0.048, -0.500), (sx * 0.050, -0.066, -0.505),
-            (sx * 0.022, -0.073, -0.507)]
+    # About 134 mm inside: a boot's toe goes through.
+    half = [(sx * 0.0255, 0.022, -0.3395), (sx * 0.030, 0.019, -0.352), (sx * 0.050, 0.006, -0.368),
+            (sx * 0.068, -0.018, -0.382), (sx * 0.072, -0.048, -0.390), (sx * 0.058, -0.068, -0.395),
+            (sx * 0.026, -0.075, -0.397)]
     stir.append(half)
-spath = stir[0] + [(0.0, -0.0735, -0.5075)] + list(reversed(stir[1]))
+spath = stir[0] + [(0.0, -0.0755, -0.3975)] + list(reversed(stir[1]))
 spts = catmull3(spath, 4)
 tube3d(kit, spts, 0.0052, "Iron", sides=10, phase=0.1)
 # Its ribs.
@@ -338,17 +340,17 @@ for a, b in zip(spts, spts[1:]):
         acc += 0.009
     acc -= seg
 for sx in (-1, 1):
-    ring(kit, 0.0072, 0.0028, "Iron", xf=T(sx * 0.0225, 0.022, -0.442) @ RY(math.pi / 2),
+    ring(kit, 0.0072, 0.0028, "Iron", xf=T(sx * 0.0225, 0.022, -0.332) @ RY(math.pi / 2),
          segs=14, sides=6)
-    kit.sphere(0.0055, (sx * 0.0262, 0.022, -0.442), "Iron", segs=12, rings=6, scale=(0.4, 1, 1))
+    kit.sphere(0.0055, (sx * 0.0262, 0.022, -0.332), "Iron", segs=12, rings=6, scale=(0.4, 1, 1))
 
 # The front sight: a wire hoop over the rail's end with a bead.
 kit.sweep(fillet([(-0.019, RAIL - 0.001), (-0.019, 0.089), (0.019, 0.089), (0.019, RAIL - 0.001)],
                  [0, 0.008, 0.008, 0], 4, closed=False), section_circle(0.0015, 6), "Steel",
-          xf=T(0, 0, -0.45) @ RY(math.pi / 2))
+          xf=T(0, 0, -0.34) @ RY(math.pi / 2))
 for sx in (-1, 1):
-    kit.sphere(0.003, (sx * 0.019, RAIL, -0.45), "Steel", segs=10, rings=5, scale=(1, 0.6, 1))
-kit.sphere(0.0025, (0.0, 0.0925, -0.45), "Worn", segs=10, rings=6)
+    kit.sphere(0.003, (sx * 0.019, RAIL, -0.34), "Steel", segs=10, rings=5, scale=(1, 0.6, 1))
+kit.sphere(0.0025, (0.0, 0.0925, -0.34), "Worn", segs=10, rings=6)
 
 # --- The latch: a gate latch on a plate at the back of the rail ------------------------------
 latch = Part("latch")
@@ -359,23 +361,25 @@ for x in (-0.0165, 0.0165):
 lever = fillet([
     (-0.0755, 0.0587), (-0.0722, 0.0587), (-0.0722, 0.0618),   # the hook in front of the string
     (-0.0690, 0.0635), (-0.0660, 0.0640),                      # the notch's roof
-    (-0.050, 0.0640), (-0.034, 0.0640), (-0.032, 0.0660),      # under the pivot to the tail
-    (-0.032, 0.0730), (-0.050, 0.0770), (-0.068, 0.0740), (-0.0755, 0.0670),
-], [0.0005, 0.0005, 0.0, 0.0012, 0.0, 0.0, 0.0, 0.001, 0.001, 0.004, 0.003, 0.0012], 2)
+    (-0.050, 0.0640), (-0.026, 0.0640), (-0.023, 0.0670),      # under the bar to its pivot
+    (-0.023, 0.0745), (-0.032, 0.0770), (-0.068, 0.0740), (-0.0755, 0.0670),
+], [0.0005, 0.0005, 0.0, 0.0012, 0.0, 0.0, 0.0, 0.002, 0.003, 0.004, 0.003, 0.0012], 2)
 for sx in (-1, 1):
     a, b = sorted((sx * 0.0045, sx * 0.0085))
     latch.prism(lever, a, b, "Worn", axis="x", bevel=0.0004, segs=1)
     a, b = sorted((sx * 0.0105, sx * 0.0135))
-    latch.prism([(-0.056, RAIL + 0.004), (-0.044, RAIL + 0.004), (-0.044, 0.073), (-0.050, 0.0765),
-                 (-0.056, 0.073)], a, b, "Iron", axis="x", bevel=0.0005, segs=1)
+    # The keeper plates hold the bar's pin at its tail, as on a gate:
+    # the pushrod lifts the bar in front of it, and the hook with it.
+    latch.prism([(-0.033, RAIL + 0.004), (-0.021, RAIL + 0.004), (-0.021, 0.073), (-0.027, 0.0765),
+                 (-0.033, 0.073)], a, b, "Iron", axis="x", bevel=0.0005, segs=1)
 latch.cyl(0.0018, -0.0148, 0.0148, "Steel", segs=10, chamfer=0.0004,
-          xf=T(0, 0.0705, -0.050) @ RY(math.pi / 2))
+          xf=T(0, 0.0705, -0.027) @ RY(math.pi / 2))
 latch.box((0.017, 0.006, 0.004), (0.0, 0.070, -0.0345), "Worn", bevel=0.0006, segs=1)
 latch.cyl(0.0016, 0.050, 0.067, "Steel", segs=8, xf=T(0, 0, -0.0345) @ RX(-math.pi / 2))  # pushrod
 # The rear sight: a notched plate behind the latch, its V's floor just
 # under the front bead's top (the eye line, `pt_sight`: `capture::sightline`).
 latch.prism([(-0.012, RAIL + 0.004), (0.012, RAIL + 0.004), (0.012, 0.098), (0.003, 0.098),
-             (0.0, 0.0945), (-0.003, 0.098), (-0.012, 0.098)], -0.029, -0.025, "Iron", axis="z",
+             (0.0, 0.0945), (-0.003, 0.098), (-0.012, 0.098)], -0.019, -0.015, "Iron", axis="z",
             bevel=0.0005, segs=1)
 # The door bolt on the right: the safety.
 latch.prism(fillet([(-0.130, 0.035), (-0.085, 0.035), (-0.085, 0.051), (-0.130, 0.051)], 0.002, 2),
@@ -405,7 +409,7 @@ trig.sweep(catmull([(-0.048, 0.004), (-0.0485, -0.012), (-0.0465, -0.026), (-0.0
            "Iron")
 
 # --- Sling eyes ----------------------------------------------------------------------------------
-for z, y in ((-0.37, -0.004), (0.25, stock_y(0.25, False))):
+for z, y in ((-0.26, -0.004), (0.25, stock_y(0.25, False))):
     ring(kit, 0.0065, 0.0018, "Steel", xf=T(0, y - 0.0085, z) @ RY(math.pi / 2), segs=14,
          sides=6)
     kit.cyl(0.0019, y - 0.003, y + 0.006, "Steel", segs=8, xf=T(0, 0, z) @ RX(-math.pi / 2))
@@ -438,14 +442,14 @@ for p in (cradle, rest, drawn, trig, safety_bolt):
 join("static_rail_bolt", rb_body, rb_vanes)
 
 empty("pt_muzzle", (0.0, AXIS, MUZZLE))
-empty("pt_sight", (0.0, 0.095, -0.027))
-empty("pt_port", (0.0, 0.07, -0.2))
-empty("pt_load_port", (0.0, 0.07, -0.2))
-empty("pt_support", (0.0, 0.0, -0.28))
+empty("pt_sight", (0.0, 0.095, -0.017))
+empty("pt_port", (0.0, 0.07, -0.15))
+empty("pt_load_port", (0.0, 0.07, -0.15))
+empty("pt_support", (0.0, 0.0, -0.17))
 empty("pt_handle", (0.0, 0.065, REST_Z))
 empty("pt_latch", (0.0, 0.065, LATCH_Z))
 empty("pt_string_tips", (0.0, TIP_Y, TIP_Z))
-empty("pt_sling_front", (0.0, -0.0125, -0.37))
+empty("pt_sling_front", (0.0, -0.0125, -0.26))
 empty("pt_sling_rear", (0.0, stock_y(0.25, False) - 0.0085, 0.25))
 print(f"  string tips (anchors) at x = +-{ANCHORS[1].x:.4f}, y {TIP_Y:.4f}, z {TIP_Z:.4f}; "
       f"rail bolt nock back at z {NOCK_BACK:.4f}; rear sling at y "
