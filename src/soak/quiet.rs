@@ -135,6 +135,9 @@ mod tests {
     const SESSIONS: &[&str] = &["yard", "marrow_creek", "kettle_pass", "client_yard"];
     /// Game seconds each plays.
     const SECS: f32 = 45.0;
+    /// Game seconds a session without the downloads plays: the loads are
+    /// in its first seconds.
+    const BARE_SECS: f32 = 15.0;
 
     /// One session, alone in its own process (the parent below runs it).
     #[test]
@@ -175,76 +178,163 @@ mod tests {
                 };
                 super::super::drive::client_app(opts)
             }
+            // The whole client in a valley, robots and all.
+            s if s.starts_with("client_") => {
+                let map = &s["client_".len()..];
+                super::super::drive::client_app(super::super::drive::options(map, 1, None))
+            }
             other => panic!("no session {other}"),
         };
         app.finish();
         app.cleanup();
-        for _ in 0..(SECS * 90.0) as usize {
+        let secs = std::env::var("QUIET_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(SECS);
+        for _ in 0..(secs * 90.0) as usize {
             app.update();
         }
         let _ = std::fs::remove_dir_all(&out);
         println!("QUIET SESSION DONE {which}");
     }
 
-    /// No session logs a warning or an error that isn't on the
-    /// allow-list (each listed with why).
-    #[test]
-    fn no_session_logs_a_warning() {
+    /// What `sessions` log that isn't on the allow-list, a line a class
+    /// (empty: quiet), each played in its own child process with `env`,
+    /// `at_once` at a time.
+    fn unallowed(sessions: &[&str], env: &[(&str, &str)], at_once: usize) -> Vec<String> {
         let exe = std::env::current_exe().unwrap();
-        let children: Vec<(&str, std::process::Child)> = SESSIONS
-            .iter()
-            .map(|s| {
-                let child = std::process::Command::new(&exe)
-                    .args([
-                        "--ignored",
-                        "--exact",
-                        "soak::quiet::tests::quiet_session",
-                        "--nocapture",
-                        "--test-threads=1",
-                    ])
-                    .env("QUIET_SESSION", s)
-                    .env("RUST_LOG", "warn")
-                    .env("EXTRACTION_THREADS", "1")
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .expect("the session");
-                (*s, child)
-            })
-            .collect();
         let mut found: std::collections::BTreeMap<(String, String, String), (usize, Vec<&str>)> =
             Default::default();
-        for (s, child) in children {
-            let out = child.wait_with_output().unwrap();
-            let text = String::from_utf8_lossy(&out.stdout).into_owned()
-                + &String::from_utf8_lossy(&out.stderr);
-            assert!(
-                text.contains(&format!("QUIET SESSION DONE {s}")),
-                "the {s} session didn't finish:\n{}",
-                text.lines().rev().take(40).collect::<Vec<_>>().join("\n")
-            );
-            let mut exiting = false;
-            for line in text.lines() {
-                exiting |= EXITING.iter().any(|e| line.contains(e));
-                if let Some(c) = class(line) {
-                    if !allowed(&c.0, &c.1, &c.2, exiting) {
-                        let e = found.entry(c).or_default();
-                        e.0 += 1;
-                        if !e.1.contains(&s) {
-                            e.1.push(s);
+        for batch in sessions.chunks(at_once) {
+            let children: Vec<(&str, std::process::Child)> = batch
+                .iter()
+                .map(|s| {
+                    let child = std::process::Command::new(&exe)
+                        .args([
+                            "--ignored",
+                            "--exact",
+                            "soak::quiet::tests::quiet_session",
+                            "--nocapture",
+                            "--test-threads=1",
+                        ])
+                        .env("QUIET_SESSION", s)
+                        .env("RUST_LOG", "warn")
+                        .env("EXTRACTION_THREADS", "1")
+                        .envs(env.iter().copied())
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .spawn()
+                        .expect("the session");
+                    (*s, child)
+                })
+                .collect();
+            for (s, child) in children {
+                let out = child.wait_with_output().unwrap();
+                let text = String::from_utf8_lossy(&out.stdout).into_owned()
+                    + &String::from_utf8_lossy(&out.stderr);
+                assert!(
+                    text.contains(&format!("QUIET SESSION DONE {s}")),
+                    "the {s} session didn't finish:\n{}",
+                    text.lines().rev().take(40).collect::<Vec<_>>().join("\n")
+                );
+                let mut exiting = false;
+                for line in text.lines() {
+                    exiting |= EXITING.iter().any(|e| line.contains(e));
+                    if let Some(c) = class(line) {
+                        if !allowed(&c.0, &c.1, &c.2, exiting) {
+                            let e = found.entry(c).or_default();
+                            e.0 += 1;
+                            if !e.1.contains(&s) {
+                                e.1.push(s);
+                            }
                         }
                     }
                 }
             }
         }
-        let report: Vec<String> = found
+        found
             .iter()
             .map(|((l, t, m), (n, s))| format!("{n}x {l} {t}: {m} (in {})", s.join(", ")))
-            .collect();
+            .collect()
+    }
+
+    /// No session logs a warning or an error that isn't on the
+    /// allow-list (each listed with why).
+    #[test]
+    fn no_session_logs_a_warning() {
+        let report = unallowed(SESSIONS, &[], SESSIONS.len());
         assert!(
             report.is_empty(),
             "warnings and errors not on soak::quiet::ALLOWED (fix them, or list them there \
              with why):\n{}",
+            report.join("\n")
+        );
+    }
+
+    /// `dir/assets` as a checkout that never ran `scripts/fetch_assets.py`:
+    /// everything in `assets/` linked in but the folders it makes
+    /// (`capture::assets::FETCHED`), and `scripts/` beside it.
+    fn bare_checkout(dir: &std::path::Path) -> std::path::PathBuf {
+        use std::os::unix::fs::symlink;
+        let real = crate::asset_root_path();
+        let _ = std::fs::remove_dir_all(dir);
+        let assets = dir.join("assets");
+        std::fs::create_dir_all(assets.join("textures")).unwrap();
+        symlink(real.join("../scripts"), dir.join("scripts")).unwrap();
+        for e in std::fs::read_dir(&real).unwrap().flatten() {
+            let name = e.file_name();
+            if name == "textures" || name == ".cache" {
+                continue;
+            }
+            symlink(e.path(), assets.join(&name)).unwrap();
+        }
+        for e in std::fs::read_dir(real.join("textures")).unwrap().flatten() {
+            let name = e.file_name();
+            if crate::capture::assets::FETCHED.iter().any(|f| name == *f) {
+                continue;
+            }
+            symlink(e.path(), assets.join("textures").join(&name)).unwrap();
+        }
+        assets
+    }
+
+    /// A checkout without the downloads (the textures
+    /// `scripts/fetch_assets.py` makes) plays every valley and the yard
+    /// in the whole client with no warning or error off the allow-list:
+    /// every load of a downloaded file checks it's there and falls back
+    /// (a missing file's load is an ERROR, and once failed `soak::quiet` on
+    /// every machine without them).
+    #[test]
+    fn no_valley_logs_an_error_without_the_downloads() {
+        let dir = std::env::temp_dir().join(format!("extraction-bare-{}", std::process::id()));
+        let assets = bare_checkout(&dir);
+        assert!(
+            !crate::capture::assets::missing(
+                &assets.join("textures"),
+                &assets.join("../scripts/assets_manifest.json")
+            )
+            .is_empty(),
+            "the bare checkout still has the downloads"
+        );
+        let mut sessions: Vec<String> = vec!["client_yard".into()];
+        sessions.extend(
+            extraction_core::map::VALLEYS
+                .iter()
+                .map(|(m, _)| format!("client_{m}")),
+        );
+        let sessions: Vec<&str> = sessions.iter().map(String::as_str).collect();
+        let secs = BARE_SECS.to_string();
+        let root = assets.to_string_lossy().into_owned();
+        let report = unallowed(
+            &sessions,
+            &[("EXTRACTION_ASSET_ROOT", &root), ("QUIET_SECS", &secs)],
+            3,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            report.is_empty(),
+            "without the downloads, warnings and errors (guard the load with an exists() \
+             check and a fallback, as world::trees does):\n{}",
             report.join("\n")
         );
     }
