@@ -269,6 +269,12 @@
         ),
     ],
 
+    // Coming home: outcrops where a way in to a rendezvous was open for
+    // more than a dash (map_lint, coming home).
+    outcrops: [
+        // On the hill's flank below the crest, on the climb up to the Rail yard.
+        (at: (117.5, -40.0), radius: 1.6, stones: 3),
+    ],
     placements: [
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
@@ -411,6 +417,10 @@
         (prefab: "log_pile", at: (-43.7, 9.5), rot: 92.0),
         (prefab: "log_pile", at: (-66.5, 7.3), rot: 114.0),
         (prefab: "log_pile", at: (-31.0, -21.5), rot: 80.0),
+        // Coming home: cover where a way in to a rendezvous was open for
+        // more than a dash (map_lint, coming home).
+        // The rangers' woodpile by the track in to the Ranger tower.
+        (prefab: "log_pile", at: (-92.8, -41.1), rot: 320.0),
     ],
 
     markers: [

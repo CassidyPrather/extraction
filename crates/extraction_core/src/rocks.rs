@@ -243,6 +243,39 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
         z += cell;
         iz += 1;
     }
+    // The outcrops set by hand, the scatter's rocks moved off them.
+    for (i, o) in map.outcrops.iter().enumerate() {
+        out.retain(|r| geom::dist([r.pos[0], r.pos[2]], o.at) > o.radius * 2.5 + r.radius);
+        let mut rng = Rng::new(base ^ 0x0C7C ^ (i as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let mut here: Vec<(P2, f32)> = Vec::new();
+        for k in 0..=o.stones {
+            let (p, r) = if k == 0 {
+                (o.at, o.radius)
+            } else {
+                let r = rng.range(0.3, 0.6) * o.radius;
+                let a = rng.range(0.0, std::f32::consts::TAU);
+                let d = o.radius + r + rng.range(0.1, 0.8);
+                ([o.at[0] + a.cos() * d, o.at[1] + a.sin() * d], r)
+            };
+            if (k > 0
+                && here
+                    .iter()
+                    .any(|(q, rq)| geom::dist(*q, p) < 0.9 * (r + rq)))
+                || !ok(p, r)
+            {
+                continue;
+            }
+            let squash = if k == 0 {
+                rng.range(0.6, 0.8)
+            } else {
+                rng.range(0.45, 0.7)
+            };
+            if let Some(rock) = place(&mut rng, p, r, squash, 0.2) {
+                here.push((p, r));
+                out.push(rock);
+            }
+        }
+    }
     // Off every site kiosk, the exits' too, after the scatter: skipping
     // them in it would draw the rest of the map's rocks differently.
     let kiosks = crate::underground::kiosk_clearings(map);
@@ -327,6 +360,55 @@ mod tests {
             }
             // Same map, same rocks.
             assert_eq!(rocks, scatter_rocks(&map, &hm));
+        }
+    }
+}
+
+#[cfg(test)]
+mod outcrop_tests {
+    /// Every outcrop set by hand stands: its big stone isn't dropped on a
+    /// road, in water or by a building, where it would do nothing.
+    #[test]
+    fn every_outcrop_stands() {
+        let mut bad = Vec::new();
+        for (name, text) in crate::map::VALLEYS {
+            let map = crate::map::MapDef::from_ron(text).unwrap();
+            if map.outcrops.is_empty() {
+                continue;
+            }
+            let hm = crate::terrain::Heightmap::build(&map);
+            let rocks = super::scatter_rocks(&map, &hm);
+            for o in &map.outcrops {
+                if !rocks.iter().any(|r| {
+                    crate::geom::dist([r.pos[0], r.pos[2]], o.at) < 0.01 && r.radius == o.radius
+                }) {
+                    bad.push(format!("{name}: {:?}", o.at));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "outcrops that don't stand: {bad:#?}");
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_outcrops() {
+        let text = std::fs::read_to_string(std::env::var("MAP_FILE").unwrap()).unwrap();
+        let map = crate::map::MapDef::from_ron(&text).unwrap();
+        let hm = crate::terrain::Heightmap::build(&map);
+        let rocks = super::scatter_rocks(&map, &hm);
+        for o in &map.outcrops {
+            let near: Vec<String> = rocks
+                .iter()
+                .filter(|r| crate::geom::dist([r.pos[0], r.pos[2]], o.at) < o.radius * 3.0)
+                .map(|r| format!("r{:.1} h{:.1}", r.radius, 2.0 * r.radius * r.squash))
+                .collect();
+            eprintln!(
+                "OUTCROP {:?} water {:?} slope {:.0}: {}",
+                o.at,
+                hm.water_level(o.at),
+                hm.slope_deg(o.at),
+                near.join(", ")
+            );
         }
     }
 }

@@ -244,6 +244,12 @@
         ),
     ],
 
+    // Coming home: outcrops where a way in to a rendezvous was open for
+    // more than a dash (map_lint, coming home).
+    outcrops: [
+        // In the pass, the last climb to the truck.
+        (at: (4.0, -176.0), radius: 1.5, stones: 3),
+    ],
     placements: [
         (prefab: "log_pile", at: (-2.0, 74.0), rot: 38.0),
         (prefab: "log_pile", at: (79.0, -60.0), rot: 40.0),
