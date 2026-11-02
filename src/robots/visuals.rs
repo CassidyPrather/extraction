@@ -2602,6 +2602,7 @@ mod signal_lamp_tests {
                     seed: 1,
                     passes: 0,
                     load: Load::Standard,
+                    origin: Vec3::ZERO,
                 })
                 .id();
             w.flush();
