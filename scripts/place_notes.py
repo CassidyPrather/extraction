@@ -24,6 +24,9 @@ SPOTS = {
     "house_plank_damaged": [(-1.6 + 0.3, -0.7)],
     "farmhouse": [(-2.0 + 0.3, -0.8)],
     "house_brick": [(-2.0 + 0.3, -0.8)],
+    # The post office's counter (buildings::HousePlan::PostOffice: its
+    # middle (0.75, -0.5), the loot's), a hand along from the loot.
+    "post_office": [(0.75 - 1.2, -0.5)],
     "cabin_log": [(0.3, 0.55)],
     "shop": [(-1.6, -0.4)],
     "pump_station": [(5.5 + 0.3, -3.0)],
@@ -92,7 +95,7 @@ Keep still when the little flying one looks at you. It sees you move.
 Tell Lev I'm not angry. I've written to him as well, for when he comes.
 
 - Mum""", "Village note"),
-        ("house_brick", (-22.2, 33.5), "Note", """POST OFFICE - UNDELIVERED
+        ("post_office", (-22.2, 33.5), "Note", """POST OFFICE - UNDELIVERED
 
 To O. Vey, station chief, Hollow survey post.
 

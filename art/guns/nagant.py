@@ -168,8 +168,10 @@ static.sweep(guard, section_rect(0.0065, 0.003, 0.001, 3), "Blued")
 
 # Grip: walnut panels on a bird's-head frame, the lanyard ring at the butt.
 # Short, and set back behind the hammer: a long reach forward to the trigger.
+# The heel is rounded at least as much as the bevel, or the bevel folds.
 grip_prof = catmull([(0.012, 0.016), (0.017, 0.004), (0.022, -0.013), (0.0248, -0.029),
-                     (0.026, -0.040), (0.036, -0.043), (0.056, -0.041), (0.057, -0.034),
+                     (0.026, -0.040), (0.036, -0.043), (0.052, -0.042), (0.0565, -0.0385),
+                     (0.0573, -0.030),
                      (0.0567, -0.017), (0.053, 0.001), (0.046, 0.017), (0.037, 0.030),
                      (0.030, 0.034), (0.020, 0.026)], samples=4)
 
