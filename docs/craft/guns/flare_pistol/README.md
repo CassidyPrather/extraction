@@ -112,5 +112,9 @@ here (weapon feel owns them).
   - **Lanyard**: a flat wire stirrup under the butt.
 - **`src/weapons/layout.rs`** (`flare_pistol()`): muzzle -0.162, the port
   and load port at the new breech, the hinge, and the blockout.
+- **`src/weapons/layout.rs`**: `grip` is at (0, 0, 0.006), 29 mm ahead of
+  the backstrap at the palm's height, as on every gun. At z 0 the trigger
+  was 60 mm ahead of the hand, and Hands' pull came to a cramped curl of
+  0.83, over the 0.8 bound.
 - **`crates/gunsmith/src/spec.rs`**: the hinge.
 - **`assets/data/items.ron`**: the box is 225 × 170 mm.
