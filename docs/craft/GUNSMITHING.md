@@ -294,6 +294,47 @@ same command. Run `art/check.py` (the models' lints are the models
 owner's, and must stay clean), the weapons tests, and the bench. Update the
 scores. Then the next gun.
 
+### Home-made weapons
+
+A home-made weapon has no real gun to measure against. It still has to be
+something a person could build from what's lying about, and then work by
+hand. Review it in place of steps 1 and 3; the rest stands.
+
+1. **Name the stock parts.** List each part as what it was before: a car's
+   leaf spring, a plank, angle iron, a gate latch, rebar, a door bolt. Size
+   each to the real thing: a leaf's thickness and width, an angle's
+   section, a bolt's thread. A part no shed or scrapyard holds needs a
+   reason.
+2. **Work every action through.** For each thing it does, follow the force
+   from the hand to the part and say what stops it:
+   - **Cocking**: the stroke and what bends to give it. A spring-steel
+     leaf yields at about 1.2-1.5 GPa: a tip's deflection is at most about
+     2σL²/3Et (L the free arm from the clamp, t the leaf's thickness). Check
+     that the string or rod keeps its length between rest and drawn. The
+     drawn length comes from the parts' limits, not from the reach of an
+     arm.
+   - **Holding**: what catches the drawn load, and that it holds without a
+     hand on it.
+   - **Release**: trace the trigger's travel through every link to the
+     catch, and check each link turns the right way. A seesaw lever turns
+     a push the wrong way round: lifting the tail of a lever pivoted at its
+     middle drives the hook down.
+   - **Safety**: what it blocks, and that it does block it.
+3. **Size it for a body.**
+   - A foot stirrup takes a boot's toe: about 120-140 mm inside.
+   - A grip takes a hand of the hand rig's size.
+   - A trigger sits in the finger's reach from the grip (`docs/craft/guns/nagant`).
+   - The support hand has somewhere to go clear of a moving string or
+     slide.
+   - Every edge the hands work is eased.
+4. **Read it at arm's length.** At 1 m, it should read as made: saw cuts,
+   bolt heads, tape, wire, mixed materials, uneven spacing. Keep it neat
+   enough that nothing looks broken by mistake.
+
+Score the same rows. Proportion is then "the parts are the sizes of their
+stock, and the actions are the lengths their parts allow". Write each
+action's numbers down: stroke, deflection, stress, clearance.
+
 ## What the reviews have taught
 
 - **Measure first, against a photograph.** The AK-74 looked "off" in a
