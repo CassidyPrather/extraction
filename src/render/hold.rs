@@ -70,7 +70,7 @@ fn bones(side: Side, finger: usize, c: f32) -> impl Iterator<Item = Bone> {
 }
 
 /// The thumb's way (its first bone's, on the unrolled glove) curled `c`.
-fn thumb_way(side: Side, c: f32) -> Vec3 {
+pub(crate) fn thumb_way(side: Side, c: f32) -> Vec3 {
     joint_rotation_spread(side, 4, 0, c, 0.0) * Vec3::NEG_Z
 }
 
@@ -636,7 +636,7 @@ pub fn taken(side: Side, half: Vec3) -> Transform {
 }
 
 /// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).
-const THUMB_BEND: f32 = 0.9;
+pub(crate) const THUMB_BEND: f32 = 0.9;
 /// How far the thumb may be raised toward the palm's plane to lie on a
 /// flat side, or lowered to reach round a narrow one (added to its way's
 /// height on the unrolled glove), nearest its own way first.
