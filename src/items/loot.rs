@@ -10,8 +10,39 @@ use super::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::world::Zone;
 
+/// The tables, and the raid of the career they roll for (`None`: no
+/// career, every family; kept by `follow_the_career`).
 #[derive(Resource, Clone)]
-pub struct Loot(pub std::sync::Arc<LootTables>);
+pub struct Loot(pub std::sync::Arc<LootTables>, pub Option<u32>);
+
+impl Loot {
+    /// Rolls `table` for this raid of the career: a family not out yet
+    /// stays out, whatever rolls it (a wreck, a cargo pod, a crate, the
+    /// driver's cache), as at the zone's markers.
+    pub fn roll(
+        &self,
+        table: &str,
+        catalog: &extraction_core::items::ItemCatalog,
+        rng: &mut Rng,
+    ) -> Vec<extraction_core::loot::Drop> {
+        self.0.roll_at(table, None, self.1, catalog, rng)
+    }
+}
+
+/// Keeps `Loot`'s raid the career's.
+fn follow_the_career(
+    loot: Option<ResMut<Loot>>,
+    opts: Res<LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
+) {
+    let Some(mut loot) = loot else {
+        return;
+    };
+    let raid = career_raid_of(&opts, progression.as_deref());
+    if loot.1 != raid {
+        loot.1 = raid;
+    }
+}
 
 pub struct LootPlugin;
 
@@ -32,7 +63,8 @@ impl Plugin for LootPlugin {
                     .in_set(LootSpawnSystems),
             )
                 .after(crate::world::buildings::spawn_buildings),
-        );
+        )
+        .add_systems(PreUpdate, follow_the_career);
     }
 }
 
@@ -141,7 +173,7 @@ fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
         error!("loot.ron: {e}");
         LootTables::from_ron(BUILTIN_LOOT, &catalog).expect("built-in loot parses")
     });
-    commands.insert_resource(Loot(std::sync::Arc::new(tables)));
+    commands.insert_resource(Loot(std::sync::Arc::new(tables), None));
 }
 
 /// A crate set down under loot in the open (dressed by `render::props`).
@@ -516,6 +548,36 @@ mod tests {
             for id in rolled_on(&mut app, r).keys() {
                 if !arrived(&loot, Some(r), id) {
                     early.push(format!("{id} on raid {r}, out from {:?}", loot.arrives(id)));
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
+    }
+
+    /// Whatever else rolls a table (a robot's wreck, a cargo pod, a
+    /// packed crate, the driver's cache) rolls for the career's raid
+    /// too: on a first raid, every table only gives what's out.
+    #[test]
+    fn every_roll_follows_the_career() {
+        let mut app = career_app();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .raids_by_map = vec![("marrow_creek".into(), 0)];
+        app.update();
+        let loot = app.world().resource::<Loot>().clone();
+        assert_eq!(loot.1, Some(0));
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut rng = Rng::new(5);
+        let mut early = std::collections::BTreeSet::new();
+        let names: Vec<String> = loot.0.names().cloned().collect();
+        for t in &names {
+            for _ in 0..40 {
+                for d in loot.roll(t, &cat.0, &mut rng) {
+                    let id = &cat.0.get(d.kind).id;
+                    if !arrived(&loot.0, Some(0), id) {
+                        early.insert(format!("{t}: {id}"));
+                    }
                 }
             }
         }
