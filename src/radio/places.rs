@@ -226,15 +226,18 @@ pub fn reach(def: &extraction_core::items::ItemDef) -> f32 {
 /// (`items::loot::roll_zone_loot`), so a zone restored from a save keeps
 /// what it had instead of getting another set, and a new cycle lays them
 /// again as it re-rolls the loot. A player laid here comes with a cell,
-/// part run down: it was someone's.
+/// part run down: it was someone's. `arrived` says whether a kind is out
+/// yet on this raid of a career (the loot's `from_raid`): a tape laid
+/// before the tables have tapes waits for them, as a scene's things do.
 pub fn lay_tapes(
     commands: &mut Commands,
     zone: &crate::world::Zone,
     catalog: &crate::items::Catalog,
     map: &str,
+    arrived: &dyn Fn(&str) -> bool,
 ) {
     let mut taken = Vec::new();
-    for p in PLACES.iter().filter(|p| p.map == map) {
+    for p in PLACES.iter().filter(|p| p.map == map && arrived(p.item)) {
         let Some(kind) = catalog.kind(p.item) else {
             warn!("no item {}", p.item);
             continue;
