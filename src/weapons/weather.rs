@@ -522,7 +522,7 @@ pub struct WeatheredLook {
     shown: (u8, u8, u8, u8),
     /// Each mesh, its own copy of its material, and the copy's original
     /// colour and roughness.
-    mats: Vec<(Entity, Handle<StandardMaterial>, Color, f32, f32)>,
+    mats: Vec<(Entity, Handle<StandardMaterial>, Color, f32, f32, Ages)>,
 }
 
 /// Rust's colour, and how far a worn-out gun's metal goes toward it (the
@@ -544,6 +544,8 @@ const PLAIN_RUST: f32 = 0.6;
 const RUSTED_AT: f32 = 0.35;
 /// Worn wood, Bakelite and polymer: faded and scuffed pale.
 const SCUFF_COLOUR: Vec3 = Vec3::new(0.42, 0.38, 0.33);
+/// Anodising worn through to the aluminium under it.
+const BARE_ALLOY: Vec3 = Vec3::new(0.45, 0.46, 0.47);
 const SCUFF_TINT: f32 = 0.35;
 /// Powder fouling: a dull grey film of burnt powder on the metal (not the
 /// wood), flatter and greyer as it builds. On near-black bluing a darker
@@ -551,6 +553,28 @@ const SCUFF_TINT: f32 = 0.35;
 /// weather's brown on all of it, the grip too.
 const SOOT_COLOUR: Vec3 = Vec3::new(0.15, 0.15, 0.145);
 const SOOT_TINT: f32 = 0.6;
+
+/// How a finish ages: steel rusts; aluminium wears through to bare grey;
+/// wood, Bakelite, polymer and rubber fade. Steel and aluminium take the
+/// powder's film; the rest doesn't.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Ages {
+    Rusts,
+    Bares,
+    Fades,
+}
+
+/// How a model material ages, by its name (`models::ModelMaterials`), or,
+/// for one made elsewhere, by its metallic.
+pub fn ages(name: Option<&str>, metallic: f32) -> Ages {
+    match name {
+        Some("Steel" | "Blued" | "Stamped" | "Black" | "Iron" | "Dark") => Ages::Rusts,
+        Some("Alloy") => Ages::Bares,
+        Some(_) => Ages::Fades,
+        None if metallic > 0.5 => Ages::Rusts,
+        None => Ages::Fades,
+    }
+}
 
 /// How rusted a gun shows at `condition`, 0 to 1: nothing above
 /// [`WEAR_FROM`], plain by [`PLAIN_RUST_AT`], through by [`RUSTED_AT`].
@@ -585,6 +609,7 @@ pub fn weather_looks(
         )>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    model_mats: Option<Res<crate::models::ModelMaterials>>,
 ) {
     for (e, gun, w, look) in &mut guns {
         let grime = gun.firearm.grime.clamp(0.0, 1.0);
@@ -617,9 +642,13 @@ pub fn weather_looks(
                     {
                         let (base, rough) = (orig.base_color, orig.perceptual_roughness);
                         let metallic = orig.metallic;
+                        let how = ages(
+                            model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
+                            metallic,
+                        );
                         let own = materials.add(orig);
                         commands.entity(c).insert(MeshMaterial3d(own.clone()));
-                        mats.push((c, own, base, rough, metallic));
+                        mats.push((c, own, base, rough, metallic, how));
                     }
                     if let Ok(cs) = children.get(c) {
                         stack.extend(cs.iter());
@@ -638,15 +667,14 @@ pub fn weather_looks(
                     continue;
                 }
                 look.shown = shown;
-                for (mesh, h, base, rough, metallic) in &look.mats {
-                    let metal = *metallic > 0.5;
+                for (mesh, h, base, rough, metallic, how) in &look.mats {
                     let b = base.to_linear();
                     let own = Vec3::new(b.red, b.green, b.blue);
                     // Metal rusts and takes the soot; the rest fades.
-                    let (aged, sooted) = if metal {
-                        (own.lerp(RUST_COLOUR, RUST_TINT * worn), soot)
-                    } else {
-                        (own.lerp(SCUFF_COLOUR, SCUFF_TINT * worn), 0.0)
+                    let (aged, sooted) = match how {
+                        Ages::Rusts => (own.lerp(RUST_COLOUR, RUST_TINT * worn), soot),
+                        Ages::Bares => (own.lerp(BARE_ALLOY, SCUFF_TINT * worn), soot),
+                        Ages::Fades => (own.lerp(SCUFF_COLOUR, SCUFF_TINT * worn), 0.0),
                     };
                     let c = aged
                         .lerp(SOOT_COLOUR, SOOT_TINT * sooted)
