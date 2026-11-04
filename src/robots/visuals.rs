@@ -58,6 +58,7 @@ impl Plugin for RobotVisualsPlugin {
                     super::weathering::weather_meshes,
                     part_plants,
                     drone_lamps,
+                    melee_tells,
                 ),
             );
     }
@@ -1461,8 +1462,13 @@ pub fn tell_gain(since: f32, dur: f32, on: bool) -> f32 {
     let (f0, f1) = (1.5, 8.0);
     let phase = f0 * since + (f1 - f0) * since * since / (2.0 * dur);
     let wave = 0.5 + 0.5 * (std::f32::consts::TAU * phase + std::f32::consts::FRAC_PI_2).sin();
-    1.0 + (1.5 + 3.0 * p) * wave * wave
+    // (Never out between pulses while it runs: a tell is seen for all of
+    // its lead, however short.)
+    1.0 + TELL_FLOOR + (1.5 - TELL_FLOOR + 3.0 * p) * wave * wave
 }
+
+/// How far above rest a tell's glow stays between its pulses.
+const TELL_FLOOR: f32 = 0.5;
 
 /// The red glow round a lens at [`tell_gain`] `gain`: dark at rest, 3.6
 /// at the flash.
@@ -1474,6 +1480,127 @@ pub fn tell_halo(gain: f32) -> LinearRgba {
 /// the sentry's chirp, over the drone's lock.
 pub(crate) fn drone_lock_halo(since: f32) -> LinearRgba {
     tell_halo(tell_gain(since, super::drone::LOCK_TIME, true))
+}
+
+/// Where a melee machine is in its lead to a blow, read off its own state
+/// (Robot minds' timings: `indoor::ZAP_CHARGE`, `hound_mind::CROUCH_TIME`,
+/// `heavy::RAISE_TIME`).
+#[derive(Clone, Copy, Debug)]
+pub enum MeleeLead {
+    /// A crawler `charge` seconds into charging its zap (0: not).
+    Crawler { charge: f32 },
+    /// A hound `crouch` seconds from its lunge (0: not coiled), or
+    /// `lunging` at you and not yet bitten.
+    Hound { crouch: f32, lunging: bool },
+    /// A heavy `raise` seconds into raising its arm, or `slam`ming it.
+    Heavy { raise: Option<f32>, slam: bool },
+}
+
+/// The glow round a melee machine's lens: the sentry's and the drone's
+/// tell, over its own lead, flashing as the blow comes; dark otherwise.
+pub fn melee_halo(lead: MeleeLead) -> LinearRgba {
+    let flash = tell_halo(tell_gain(1.0, 1.0, true));
+    match lead {
+        MeleeLead::Crawler { charge } => {
+            let dur = super::indoor::ZAP_CHARGE;
+            tell_halo(tell_gain(charge.min(dur), dur, charge > 0.0))
+        }
+        MeleeLead::Hound { lunging: true, .. } => flash,
+        MeleeLead::Hound { crouch, .. } => {
+            let dur = super::hound_mind::CROUCH_TIME;
+            tell_halo(tell_gain(dur - crouch, dur, crouch > 0.0))
+        }
+        MeleeLead::Heavy { slam: true, .. } => flash,
+        MeleeLead::Heavy { raise, .. } => {
+            let dur = super::heavy::RAISE_TIME;
+            raise.map_or(LinearRgba::BLACK, |t| {
+                tell_halo(tell_gain(t.min(dur), dur, true))
+            })
+        }
+    }
+}
+
+/// A melee machine's lens glow (on its sensor part): its material.
+#[derive(Component)]
+struct MeleeLens(Handle<StandardMaterial>);
+
+/// Every melee machine's lens burns its tell through its lead
+/// ([`melee_halo`]): the glow hung on its eye the first time it's needed.
+#[allow(clippy::type_complexity)]
+fn melee_tells(
+    mut commands: Commands,
+    crawlers: Query<(&super::indoor::Crawler, &Children)>,
+    hounds: Query<(&super::hound_mind::HoundMind, &Children)>,
+    heavies: Query<(&super::heavy::Arm, &Children)>,
+    parts: Query<(&RobotPart, Option<&MeleeLens>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use super::heavy::ArmState;
+    let leads = crawlers
+        .iter()
+        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.09))
+        .chain(hounds.iter().map(|(h, k)| {
+            (
+                MeleeLead::Hound {
+                    crouch: h.crouch,
+                    lunging: h.lunge > 0.0 && !h.bit,
+                },
+                k,
+                0.1,
+            )
+        }))
+        .chain(heavies.iter().map(|(a, k)| {
+            (
+                MeleeLead::Heavy {
+                    raise: (a.state == ArmState::Raise).then_some(a.t),
+                    slam: a.state == ArmState::Slam,
+                },
+                k,
+                0.22,
+            )
+        }));
+    for (lead, kids, r) in leads {
+        let Some((eye, lens)) = kids
+            .iter()
+            .filter_map(|c| parts.get(c).ok().map(|(p, l)| (c, p, l)))
+            .find(|(_, p, _)| p.role == PartRole::Sensor)
+            .map(|(c, _, l)| (c, l))
+        else {
+            continue;
+        };
+        let want = melee_halo(lead);
+        match lens {
+            Some(MeleeLens(h)) => {
+                if let Some(mut m) = materials.get_mut(h) {
+                    if m.emissive != want {
+                        m.emissive = want;
+                    }
+                }
+            }
+            None if want != LinearRgba::BLACK => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    emissive: want,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.0,
+                    alpha_mode: AlphaMode::Add,
+                    // A lamp: held through fog, drawn as far as the machine.
+                    fog_enabled: false,
+                    ..default()
+                });
+                commands.entity(eye).try_insert(MeleeLens(mat.clone()));
+                commands.spawn((
+                    Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
+                    MeshMaterial3d(mat),
+                    Transform::IDENTITY,
+                    NotShadowCaster,
+                    ChildOf(eye),
+                ));
+            }
+            None => {}
+        }
+    }
 }
 
 /// The glow round a drone's lens while it locks on, gone with the lock.
@@ -2662,5 +2789,64 @@ mod signal_lamp_tests {
             0.0,
             "dark after"
         );
+    }
+
+    /// Each melee machine's lens glows red through the whole of its lead
+    /// to a blow, never out between pulses, and flashes as it lands: the
+    /// crawler's charge, the hound's coil (and its lunge till it bites),
+    /// the heavy's raise (and its slam). At rest, dark. (Before, none of
+    /// them had a glow: a crawler's charge was a sound and a blue swell.)
+    #[test]
+    fn each_melee_tell_shows_for_its_whole_lead() {
+        use super::super::{heavy::RAISE_TIME, hound_mind::CROUCH_TIME, indoor::ZAP_CHARGE};
+        let lit = |l: MeleeLead| melee_halo(l).red;
+        let steps = |dur: f32| (1..=60).map(move |i| dur * i as f32 / 60.0 - 1e-3);
+        for (who, dur, lead) in [
+            (
+                "crawler",
+                ZAP_CHARGE,
+                &(|t| MeleeLead::Crawler { charge: t }) as &dyn Fn(f32) -> MeleeLead,
+            ),
+            ("hound", CROUCH_TIME, &|t| MeleeLead::Hound {
+                crouch: CROUCH_TIME - t,
+                lunging: false,
+            }),
+            ("heavy", RAISE_TIME, &|t| MeleeLead::Heavy {
+                raise: Some(t),
+                slam: false,
+            }),
+        ] {
+            let dim = steps(dur).map(|t| lit(lead(t))).fold(f32::MAX, f32::min);
+            assert!(dim >= 0.25, "{who}: its glow goes out in its lead ({dim})");
+            let end = lit(lead(dur - 0.02));
+            assert!(end >= 3.0, "{who}: it flashes as the blow comes ({end})");
+        }
+        assert!(
+            lit(MeleeLead::Hound {
+                crouch: 0.0,
+                lunging: true
+            }) >= 3.0,
+            "lunging"
+        );
+        assert!(
+            lit(MeleeLead::Heavy {
+                raise: None,
+                slam: true
+            }) >= 3.0,
+            "slamming"
+        );
+        for rest in [
+            MeleeLead::Crawler { charge: 0.0 },
+            MeleeLead::Hound {
+                crouch: 0.0,
+                lunging: false,
+            },
+            MeleeLead::Heavy {
+                raise: None,
+                slam: false,
+            },
+        ] {
+            assert_eq!(lit(rest), 0.0, "{rest:?}: dark at rest");
+        }
     }
 }
