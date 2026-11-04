@@ -99,3 +99,42 @@ Progression's gun order, on 4 November 2026. They were shot the same way.
 
 Checked and holding on all three: the silhouettes from both sides at 1 m,
 and wood against blued steel and black alloy in the yard and the mill.
+
+## Third pass: the rest of the order
+
+The SKS, Nagant, PPSh, RPK-74 and SVD, on 4 November 2026, on main
+b175290f. They were shot the same way.
+
+| SKS | Nagant | PPSh | RPK-74 | SVD |
+| - | - | - | - | - |
+| ![](sheet_sks.jpg) | ![](sheet_nagant.jpg) | ![](sheet_ppsh.jpg) | ![](sheet_rpk74.jpg) | ![](sheet_svd.jpg) |
+
+### Findings, worst first
+
+All five read as themselves at 1 m from both sides and hold up at 30 cm:
+
+- **SKS**: the bolt handle, the receiver cover, the gas tube and
+  handguard, the fixed box ahead of the guard.
+- **Nagant**: the reworked frame, the raked grip and the lanyard ring.
+- **PPSh**: the receiver, the jacket's slots and the drum.
+- **RPK-74**: the handguard seam, closed last round.
+- **SVD**: the thumbhole, the cheek rest and the receiver.
+
+Their finishes part in the yard and the mill, and no seam is open. So
+there's no geometry fix in this pass. Two notes:
+
+1. **The PPSh drum's "71".** A 9 mm enamel "71" is on the drum's right
+   face (`art/mags/ppsh_drum.py`; it came in by a merge, not from me).
+   Real drums carry a small stamped serial, not their capacity in paint.
+   If it's there for legibility, it can stay; otherwise it should go.
+   That's for the magazine's owner and Legibility to call, so I haven't
+   touched it.
+
+   ![](ppsh_drum_71.jpg)
+
+2. **The SKS's trigger guard** reads as a thin strip from the side (a
+   9.5 × 3 mm section, seen edge on). That's how a stamped guard looks
+   from the side, and it reads as a guard. It's unchecked against a
+   photograph, so I've left it.
+
+   ![](sks_guard.jpg)
