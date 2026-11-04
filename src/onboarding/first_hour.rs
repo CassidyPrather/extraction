@@ -2790,7 +2790,7 @@ fn route(world: &World2, _view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
 /// fence and the wire).
 pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
-    let mut t = vec![];
+    let mut pts: Vec<Vec2> = vec![];
     let boxes = walk_boxes(world);
     for p in round_buildings(world, from, to) {
         // Something solid in the way that has no doors (the stoves at Cinder
@@ -2815,16 +2815,30 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
         way.push(p);
         // The grid's cells are too coarse to see a short bank: its way can
         // still go up one (the radio mast's, again). Round each that's left.
+        // The grid's waypoints and a bank's sidestep know nothing of
+        // buildings: each out of any it lands in (bar the end), and each
+        // stretch to one round them (from against the pump house's wall,
+        // a grid waypoint past it was walked to straight through it).
         for q in way {
             for r in round_banks(&world.zone, at, q, 3) {
-                // (The grid's waypoints and a bank's sidestep know nothing
-                // of buildings: out of any they land in, bar the end.)
-                let r = if r == to { r } else { clear_of(&boxes, r) };
-                t.extend(world.legs(at, r));
+                pts.push(r);
                 at = r;
             }
         }
         at = p;
+    }
+    // The grid's waypoints and a bank's sidestep know nothing of buildings:
+    // each out of any it lands in (bar the end), and each stretch round any
+    // in its way (from by the pump house, a waypoint past it was walked to
+    // straight through it, and two newcomers stood at its wall).
+    let mut t = vec![];
+    let mut at = from;
+    for r in pts {
+        let r = if r == to { r } else { clear_of(&boxes, r) };
+        for q in round_boxes(&boxes, at, r) {
+            t.extend(world.legs(at, q));
+            at = q;
+        }
     }
     t
 }
@@ -3791,6 +3805,61 @@ mod indoor_tests {
         let open = Vec2::new(-60.0, -40.0);
         assert!(!inside(open));
         assert_eq!(super::clear_of(&boxes, open), open);
+    }
+
+    /// The walk on from against the pumping station's wall, where both
+    /// newcomers stood: no stretch of it goes through a building (its
+    /// machines'-grid detour went straight through the pump house).
+    #[test]
+    fn the_walk_from_the_pump_house_wall_goes_round_it() {
+        let opts = crate::launch::LaunchOptions {
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut st: bevy::ecs::system::SystemState<super::World2> =
+            bevy::ecs::system::SystemState::new(w);
+        let world = st.get(w).unwrap();
+        assert!(world.nav.is_some(), "the machines' grid is up");
+        let boxes = super::walk_boxes(&world);
+        let rv = Vec2::new(-108.0, -50.0);
+        for (from, to) in [
+            (Vec2::new(-84.3, -5.4), Vec2::new(-72.15, -8.33)),
+            (Vec2::new(-90.2, 0.1), Vec2::new(-72.15, -8.33)),
+            // Home to the ranger tower from the post office, the village,
+            // the logging camp and the drop.
+            (Vec2::new(-16.2, 33.5), rv),
+            (Vec2::new(-30.0, 40.0), rv),
+            (Vec2::new(-90.9, 80.3), rv),
+            (Vec2::new(22.0, 150.0), rv),
+            (Vec2::new(-60.0, 10.0), rv),
+            (Vec2::new(-74.8, 8.8), rv),
+        ] {
+            let mut at = from;
+            for t in super::walk(&world, from, to) {
+                let crate::bot::Task::WalkTo { to: p, .. } = t else {
+                    continue;
+                };
+                for (xf, half) in &boxes {
+                    let inv = xf.compute_affine().inverse();
+                    let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                    let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                    assert!(
+                        segment_hits_box(a, b, *half).is_none(),
+                        "from {from}: {at} -> {p} goes through a building at {}",
+                        xf.translation.xz()
+                    );
+                }
+                at = p;
+            }
+            assert!(at.distance(to) < 0.1, "from {from}: ends at {at}");
+        }
     }
 
     /// Outdoors, a walk straight through a solid with no way in (a log
