@@ -202,7 +202,9 @@ pub enum ArmState {
 }
 
 /// How long each arm state takes.
-pub const RAISE_TIME: f32 = 1.2;
+/// (Raise to harm at least 1.5 s, the bar every attack's tell meets: the
+/// arm's rise is the warning, the slam follows.)
+pub const RAISE_TIME: f32 = 1.3;
 pub const SLAM_TIME: f32 = 0.22;
 pub const RECOVER_TIME: f32 = 0.9;
 pub const REACH_TIME: f32 = 0.9;

@@ -240,9 +240,13 @@ fn count_raids(
     // Back from a raid with a fetch the Zone isn't giving up: something
     // else instead (rolled by `offer_job`).
     if home && progression.0.fetch_gone_stale(raid.raids) {
-        if let Some(Job::Fetch { item, .. }) = progression.0.job.take() {
-            let name = want_name(&catalog, &item);
-            raid.say(lines::fetch_swapped(&name));
+        match progression.0.job.take() {
+            Some(Job::Fetch { item, .. }) => {
+                let name = want_name(&catalog, &item);
+                raid.say(lines::fetch_swapped(&name));
+            }
+            Some(job) => raid.say(lines::job_swapped(&job_place(&job))),
+            None => {}
         }
         progression.0.swaps += 1;
     }
@@ -966,7 +970,7 @@ fn tailgate(
 }
 
 /// The job's place, by name: "Old farm", "house by the well".
-fn job_place(job: &Job) -> String {
+pub(crate) fn job_place(job: &Job) -> String {
     match job {
         Job::Scout { place, .. } | Job::Bring { place, .. } | Job::Plant { place, .. } => {
             place.clone()

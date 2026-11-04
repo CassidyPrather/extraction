@@ -30,6 +30,12 @@
             name: "Yard track", kind: Gravel, width: 4.0, smoothing: 10.0,
             points: [(0.0, 104.0), (0.0, 70.0), (2.0, 30.0), (0.0, -20.0), (0.0, -78.0)],
         ),
+        // The gate's apron: the track widened to the gate's width through
+        // it, so its posts and blocks stand on one level.
+        (
+            name: "Gate apron", kind: Gravel, width: 14.0, shoulder: 3.0, smoothing: 8.0,
+            points: [(0.0, 81.0), (0.0, 67.0)],
+        ),
     ],
 
     forests: [
