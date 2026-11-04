@@ -964,6 +964,33 @@ pub fn first_job(id: &str, map: &MapDef) -> Option<Job> {
         })
 }
 
+/// Whether a career with `done` jobs done comes home free by the gate it
+/// went out by (a short run with no fuel can burnt): its gentle jobs'
+/// way back is the way it came, not across the valley to a rendezvous
+/// (Map design's lint: job 2 in Kettle 75 m there, 506 m home).
+pub fn free_short_run(done: u32) -> bool {
+    done < crate::contracts::GENTLE_JOBS
+}
+
+/// Where a career's job at `done` (a gentle one) can send it in valley
+/// `id`: job 1's place, or every scout place job 2 can roll (the tier's,
+/// less job 1's: `roll_job`'s `elsewhere`). A fetch has no place. Empty
+/// past the gentle jobs. For the map lint's ways there and home.
+pub fn gentle_job_places(id: &str, map: &MapDef, done: u32) -> Vec<(String, [f32; 2])> {
+    if !free_short_run(done) {
+        return Vec::new();
+    }
+    let first = first_job(id, map).and_then(|j| match j {
+        Job::Scout { place, at, .. } => Some((place, at)),
+        _ => None,
+    });
+    if done == 0 {
+        return first.into_iter().collect();
+    }
+    let last = first.as_ref().map(|(p, _)| p.as_str());
+    elsewhere(places(map, TIERS[0].danger), |p| p.0.as_str(), last)
+}
+
 /// The next job for `progress`, rolled from the career seed and the job's
 /// number. `here` is the valley the truck is in; `valleys` every valley
 /// jobs may send you to (it should include `here`).
@@ -1599,5 +1626,39 @@ mod tests {
         };
         let text = ron::to_string(&p).unwrap();
         assert_eq!(ron::from_str::<Progress>(&text).unwrap(), p);
+    }
+
+    /// Job 2 rolls only among `gentle_job_places(.., 1)`, and job 1 is
+    /// `gentle_job_places(.., 0)`: the map lint's ways home hold for every
+    /// place a gentle job can send you.
+    #[test]
+    fn gentle_jobs_go_where_gentle_job_places_says() {
+        for (id, text) in crate::map::VALLEYS
+            .iter()
+            .filter(|v| FIRST_VALLEYS.contains(&v.0))
+        {
+            let map = MapDef::from_ron(text).unwrap();
+            let one = gentle_job_places(id, &map, 0);
+            assert_eq!(one.len(), 1, "{id}: job 1");
+            let two = gentle_job_places(id, &map, 1);
+            assert!(!two.is_empty(), "{id}: job 2");
+            let valleys = [Valley { id, map: &map }];
+            for seed in 0..60u64 {
+                let mut p = Progress {
+                    done: 1,
+                    last_place: Some(one[0].0.clone()),
+                    ..Default::default()
+                };
+                p.tier = 0;
+                if let Job::Scout { place, .. } = roll_job(&p, seed, id, &valleys) {
+                    assert!(
+                        two.iter().any(|(n, _)| *n == place),
+                        "{id}: {place} not in {two:?}"
+                    );
+                }
+            }
+            assert!(gentle_job_places(id, &map, 2).is_empty());
+        }
+        assert!(free_short_run(0) && free_short_run(1) && !free_short_run(2));
     }
 }
