@@ -802,20 +802,6 @@ pub(super) fn direct_raid(
         && bot.elapsed < 0.2
     {
         let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
-        // (Traced: what it sees where a walk starts by a building.)
-        if en
-            .shells
-            .iter()
-            .any(|sh| sh.xf.translation.xz().distance(here) < sh.half.length() + 1.0)
-        {
-            info!(
-                "first hour: walk start at {here:.1} (y {:.2}, ground {:.2}) to {to:.1}: indoors {:?}, there {:?}",
-                root.translation.y,
-                world.zone.ground(here.x, here.y),
-                inside(here),
-                inside(to)
-            );
-        }
         if let Some(b) = inside(here)
             && inside(to) != Some(b)
             && !en
