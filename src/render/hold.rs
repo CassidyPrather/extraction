@@ -69,6 +69,41 @@ fn bones(side: Side, finger: usize, c: f32) -> impl Iterator<Item = Bone> {
     out.into_iter()
 }
 
+/// The thumb's way (its first bone's, on the unrolled glove) curled `c`.
+fn thumb_way(side: Side, c: f32) -> Vec3 {
+    joint_rotation_spread(side, 4, 0, c, 0.0) * Vec3::NEG_Z
+}
+
+/// The thumb's bones in the hand's frame, its first bone pointing `dir`
+/// on the unrolled glove and its last joint bent `bend` radians: as
+/// `props::pose_hands` draws a thumb aimed (a tracked one, or one on a
+/// catch).
+fn thumb_bones(side: Side, dir: Vec3, bend: f32) -> impl Iterator<Item = Bone> {
+    let frame = glove_frame(side).to_matrix();
+    let root = Mat4::from_translation(finger_root(side, 4))
+        * Mat4::from_quat(
+            Quat::from_rotation_arc(Vec3::NEG_Z, dir.normalize())
+                * Quat::from_rotation_z(0.6 * side.sign()),
+        );
+    let [l0, l1, _] = FINGER_BONES[4];
+    let mid = root * Mat4::from_translation(Vec3::new(0.0, 0.0, -l0));
+    let tip = mid * Mat4::from_quat(Quat::from_rotation_x(-bend));
+    let r = |j: usize| (RADII[4][j] + RADII[4][j + 1]) * 0.5;
+    [
+        Bone {
+            a: frame.transform_point3(root.transform_point3(Vec3::ZERO)),
+            b: frame.transform_point3(mid.transform_point3(Vec3::ZERO)),
+            r: r(0),
+        },
+        Bone {
+            a: frame.transform_point3(tip.transform_point3(Vec3::ZERO)),
+            b: frame.transform_point3(tip.transform_point3(Vec3::new(0.0, 0.0, -l1))),
+            r: r(1),
+        },
+    ]
+    .into_iter()
+}
+
 /// Points over the palm's underside and edges, in the hand's frame (the
 /// glove's palm, `art/hands/gloves.py`: about 85 mm across, 25 mm
 /// thick, from the knuckles to the wrist).
@@ -191,14 +226,19 @@ impl Grasp {
     }
 }
 
-/// How a glove curled `curl` and moved `shift` (in the hand's frame) sits
-/// on a box of half-size `half` lying at `item` in the hand's frame.
-pub fn grasp(side: Side, half: Vec3, item: Transform, curl: [f32; 5], shift: Vec3) -> Grasp {
+/// How a glove seated `seat` sits on a box of half-size `half` lying at `item` in the hand's frame.
+pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
     let to_box = item.compute_affine().inverse();
+    let shift = seat.shift;
     let mut gap = [f32::MAX; 6];
     let mut face = [Vec3::ZERO; 6];
     for f in 0..5 {
-        for b in bones(side, f, curl[f]) {
+        let parts: Vec<Bone> = if f == 4 {
+            thumb_bones(side, seat.thumb.0, seat.thumb.1).collect()
+        } else {
+            bones(side, f, seat.curl[f]).collect()
+        };
+        for b in parts {
             let a = to_box.transform_point3(b.a + shift);
             let bb = to_box.transform_point3(b.b + shift);
             let (g, p) = bone_gap(a, bb, b.r, half);
@@ -225,6 +265,10 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, curl: [f32; 5], shift: Vec
 pub struct Seat {
     pub shift: Vec3,
     pub curl: [f32; 5],
+    /// The thumb aimed (its way on the unrolled glove, its last joint's
+    /// bend): raised toward the palm's plane to lie on a flat side, where
+    /// curled it would swing into it.
+    pub thumb: (Vec3, f32),
 }
 
 /// How far the glove may slide to find a hold, metres, and the step.
@@ -235,12 +279,19 @@ const PRESS: f32 = 0.12;
 /// A finger that meets nothing as it closes: a relaxed fist.
 const MISS_CURL: f32 = 0.7;
 
-/// The curl at which a finger first meets the box, given the glove's
-/// `shift`; `MISS_CURL` if it never does, and `None` if it's in the box
-/// already open.
-fn close_on(side: Side, finger: usize, half: Vec3, to_box: &Affine3A, shift: Vec3) -> Option<f32> {
+/// The curl at which a finger comes to rest on the box, given the glove's
+/// `shift`: the first, from open, at which it's on the surface (closing
+/// onto it from outside, or, if it starts in it, lifting out onto it, as
+/// the thumb, below the palm, may); `MISS_CURL` if it never meets the
+/// box, and `None` if it can't help but sink in.
+fn close_on<I: Iterator<Item = Bone>>(
+    at: impl Fn(f32) -> I,
+    half: Vec3,
+    to_box: &Affine3A,
+    shift: Vec3,
+) -> Option<f32> {
     let gap = |c: f32| {
-        bones(side, finger, c)
+        at(c)
             .map(|b| {
                 bone_gap(
                     to_box.transform_point3(b.a + shift),
@@ -252,38 +303,49 @@ fn close_on(side: Side, finger: usize, half: Vec3, to_box: &Affine3A, shift: Vec
             })
             .fold(f32::MAX, f32::min)
     };
-    if gap(0.0) < 0.0 {
-        return None;
+    let on = |g: f32| (-SINK * 0.5..=TOUCH).contains(&g);
+    // Where between two curls the gap crosses nought.
+    let cross = |mut lo: f32, mut hi: f32| {
+        let out = gap(lo) > 0.0;
+        for _ in 0..7 {
+            let m = (lo + hi) * 0.5;
+            if (gap(m) > 0.0) == out {
+                lo = m;
+            } else {
+                hi = m;
+            }
+        }
+        if out { lo } else { hi }
+    };
+    let steps = 20;
+    let mut prev = (0.0, gap(0.0));
+    if on(prev.1) {
+        return Some(0.0);
     }
-    let steps = 16;
-    let mut prev = 0.0;
+    let mut ever_in = prev.1 < 0.0;
     for k in 1..=steps {
         let c = k as f32 / steps as f32;
-        if gap(c) <= 0.0 {
-            // Back to the first touch.
-            let (mut lo, mut hi) = (prev, c);
-            for _ in 0..6 {
-                let m = (lo + hi) * 0.5;
-                if gap(m) <= 0.0 {
-                    hi = m;
-                } else {
-                    lo = m;
-                }
-            }
-            return Some(lo);
+        let g = gap(c);
+        if on(g) {
+            return Some(c);
         }
-        prev = c;
+        if (g > 0.0) != (prev.1 > 0.0) {
+            return Some(cross(prev.0, c));
+        }
+        ever_in |= g < 0.0;
+        prev = (c, g);
     }
-    Some(MISS_CURL)
+    (!ever_in).then_some(MISS_CURL)
 }
 
 /// The open hand's least gap to the box with the glove moved `shift`:
-/// the palm's, and each finger's straight.
+/// the palm's, and each finger's straight (not the thumb's: open, it hangs
+/// below the palm, and would hold it off what it holds).
 fn open_gap(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> f32 {
     let palm = palm_points(side)
         .map(|p| sdf(to_box.transform_point3(p + shift), half))
         .fold(f32::MAX, f32::min);
-    (0..5)
+    (0..4)
         .flat_map(|f| bones(side, f, 0.0))
         .map(|b| {
             bone_gap(
@@ -349,17 +411,22 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
         let shift = side_shift + n * lo;
         let mut curl = [0.0; 5];
         let mut open = true;
-        for (f, c) in curl.iter_mut().enumerate() {
-            match close_on(side, f, half, &to_box, shift) {
+        for (f, c) in curl.iter_mut().enumerate().take(4) {
+            match close_on(|c| bones(side, f, c), half, &to_box, shift) {
                 Some(v) => *c = v,
                 None => open = false,
             }
         }
-        if !open {
+        let Some(thumb) = close_thumb(side, half, &to_box, shift).filter(|_| open) else {
             continue;
-        }
-        let seat = Seat { shift, curl };
-        let g = grasp(side, half, item, curl, shift);
+        };
+        curl[4] = thumb.2;
+        let seat = Seat {
+            shift,
+            curl,
+            thumb: (thumb.0, thumb.1),
+        };
+        let g = grasp(side, half, item, &seat);
         if g.fault().is_none() {
             return seat;
         }
@@ -372,9 +439,35 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
         Seat {
             shift: Vec3::ZERO,
             curl: [MISS_CURL; 5],
+            thumb: (thumb_way(side, MISS_CURL), THUMB_BEND * MISS_CURL),
         },
         |(_, s)| s,
     )
+}
+
+/// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).
+const THUMB_BEND: f32 = 0.9;
+/// How far the thumb may be raised toward the palm's plane to lie on a
+/// flat side (added to its way's height on the unrolled glove).
+const THUMB_LIFTS: [f32; 5] = [0.0, 0.12, 0.24, 0.36, 0.5];
+
+/// The thumb closed onto the box: its way, bend and curl, raised no more
+/// than it must be to rest on it (`close_on` for each lift in turn);
+/// `None` if every way sinks in.
+fn close_thumb(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> Option<(Vec3, f32, f32)> {
+    let way = |c: f32, lift: f32| (thumb_way(side, c) + Vec3::Y * lift).normalize();
+    let mut missed = None;
+    for lift in THUMB_LIFTS {
+        let at = |c: f32| thumb_bones(side, way(c, lift), THUMB_BEND * c);
+        match close_on(at, half, to_box, shift) {
+            Some(c) if c != MISS_CURL => return Some((way(c, lift), THUMB_BEND * c, c)),
+            Some(c) => {
+                missed.get_or_insert((way(c, lift), THUMB_BEND * c, c));
+            }
+            None => {}
+        }
+    }
+    missed
 }
 
 #[cfg(test)]
@@ -463,8 +556,7 @@ mod tests {
 
     /// How the glove holds a box: seated on it.
     fn glove_on(side: Side, half: Vec3, item: Transform) -> Grasp {
-        let s = seat(side, half, item);
-        grasp(side, half, item, s.curl, s.shift)
+        grasp(side, half, item, &seat(side, half, item))
     }
 
     /// Every kind a hand holds free is held: taken every way, in either
