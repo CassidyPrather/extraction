@@ -47,6 +47,12 @@ pub const SURGE_LAST: f32 = 60.0;
 pub const TRUCK_TRANSIT: f32 = 120.0;
 /// Seconds the truck waits at a rendezvous before giving up.
 pub const TRUCK_WAIT: f32 = 300.0;
+/// The last call before the truck goes without you (s left of its wait).
+pub const LAST_CALL: f32 = 60.0;
+const _: () = assert!(
+    LAST_CALL < TRUCK_WAIT,
+    "every wait has room for its last call"
+);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Phase {
@@ -418,8 +424,20 @@ pub(crate) fn tick_raid(
                 raid.phase = Phase::TruckCalled { rv, eta };
             }
         }
-        Phase::TruckWaiting { rv, left } => {
-            let left = left - dt;
+        Phase::TruckWaiting { rv, left: was } => {
+            let left = was - dt;
+            // A minute to go: said before every departure without you, by
+            // radio, wherever you are.
+            if was > LAST_CALL && left <= LAST_CALL {
+                let name = rendezvous(&zone)
+                    .get(rv)
+                    .map_or_else(|| "gate".to_string(), |r| r.0.clone());
+                let n = raid.clock as u32;
+                raid.say(lines::fill_time(
+                    &lines::fill(lines::pick(lines::LAST_CALL, n), &name, 0.0, ""),
+                    LAST_CALL,
+                ));
+            }
             // Someone in the back: it doesn't leave them, it takes them
             // (as the bell would).
             let in_bed = aboard.iter().any(|(p, input)| {
@@ -641,6 +659,61 @@ pub(crate) fn drop_everything(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// No truck goes without you unwarned: a minute before it does, it says
+    /// so over the radio (the five minutes said on arrival was all a
+    /// newcomer stuck on the way heard before "Can't stay"). At a
+    /// rendezvous and at the gate.
+    #[test]
+    fn the_truck_never_goes_without_its_last_call() {
+        for rv in [0, SHORT_EXFIL] {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(100),
+            ));
+            app.finish();
+            app.cleanup();
+            app.update();
+            // Out in the valley, nowhere near the truck's bed.
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let far = app.world().resource::<Zone>().on_ground(120.0, -60.0);
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = far;
+            app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+                rv,
+                left: LAST_CALL + 3.0,
+            };
+            let mut called = false;
+            let mut gone = false;
+            for _ in 0..(10 * 80) {
+                app.update();
+                let raid = app.world().resource::<Raid>();
+                called |= raid.log.iter().any(|(l, _)| {
+                    lines::LAST_CALL.iter().any(|p| {
+                        let tail = p.rsplit(". ").next().unwrap_or(p).trim_end_matches('"');
+                        l.contains(tail)
+                    })
+                });
+                if raid.phase == Phase::Out {
+                    gone = true;
+                    break;
+                }
+            }
+            assert!(gone, "rv {rv}: the truck never went");
+            assert!(called, "rv {rv}: it went without its last call");
+        }
+    }
 
     #[test]
     fn the_short_exfil_burns_a_can_of_fuel() {
