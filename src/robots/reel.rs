@@ -492,6 +492,48 @@ fn reel(
                 commands.entity(w).remove::<Senses>().remove::<Brain>();
                 w
             }
+            "awarewalker" | "awaredrone" | "awareheavy" => {
+                // Four of a machine where you meet it in fog (walkers at
+                // 30 m, drones at 40, heavies at 15), facing you: at work,
+                // searching, hunting you, and at its tell (an aim, a lock,
+                // a raise), left to right: `visuals::awareness`'s rows.
+                let (d, gap) = match what {
+                    "awaredrone" => (40.0, 0.09),
+                    "awareheavy" => (15.0, 0.3),
+                    _ => (30.0, 0.09),
+                };
+                let ms: Vec<Entity> = [-1.5f32, -0.5, 0.5, 1.5]
+                    .iter()
+                    .enumerate()
+                    .map(|(k, x)| {
+                        let p = eye + flat * d + right * (x * d * gap);
+                        let at = zone.on_ground(p.x, p.z);
+                        let m = match what {
+                            "awaredrone" => {
+                                let at = at + Vec3::Y * 2.5;
+                                spawn_drone(&mut commands, at, job(at))
+                            }
+                            "awareheavy" => super::heavy::spawn_heavy(
+                                &mut commands,
+                                &zone,
+                                &catalog,
+                                at,
+                                job(at),
+                            ),
+                            _ => spawn_walker(&mut commands, &zone, at, job(at)),
+                        };
+                        commands
+                            .entity(m)
+                            .remove::<Senses>()
+                            .remove::<Brain>()
+                            .insert(EyeLevel(k.min(2) as u8));
+                        m
+                    })
+                    .collect();
+                state.others = ms[1..].to_vec();
+                state.subject = Some(ms[0]);
+                return;
+            }
             "stalk" => {
                 // Three hounds 12 m off in the fog, facing you: at rest, at
                 // a stalk (heard you, going low), and coiled to lunge: rest,
@@ -705,7 +747,9 @@ fn reel(
         || what == "strikes"
         || what == "melee"
         || what == "stalk"
-        || what == "aim")
+        || what == "aim"
+        || what == "awarewalker"
+        || what == "awareheavy")
         && frame == 5
     {
         // Turned to face you.
@@ -726,7 +770,7 @@ fn reel(
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
-                | "pin" | "melee" | "stalk" | "aim" => {
+                | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
@@ -1166,6 +1210,35 @@ fn reel(
                 a.state = super::heavy::ArmState::Raise;
                 a.t = 0.0;
                 a.from = a.claw;
+            }
+        }
+    }
+    if what == "awarewalker" && frame > WARMUP {
+        // The fourth aims at you, again and again.
+        let lead = super::walker::AIM_TIME;
+        let t = ((frame - WARMUP - 1) as f32 / 30.0) % (lead + 0.5);
+        if let Some(Ok(mut w)) = state.others.get(2).map(|e| walkers.get_mut(*e)) {
+            w.aim = if t < lead { t + 1e-3 } else { 0.0 };
+        }
+    }
+    if what == "awareheavy" && frame > WARMUP {
+        // The fourth raises its arm at you, again and again.
+        let (_, _, arms, _, _) = &mut melee;
+        let every = ((super::heavy::RAISE_TIME + 1.0) * 30.0) as u32;
+        if (frame - WARMUP - 1) % every == 0 {
+            if let Some(Ok(mut a)) = state.others.get(2).map(|e| arms.get_mut(*e)) {
+                a.state = super::heavy::ArmState::Raise;
+                a.t = 0.0;
+                a.from = a.claw;
+            }
+        }
+    }
+    if what == "awaredrone" && frame > WARMUP {
+        // The fourth locks on, again and again.
+        let every = ((super::drone::LOCK_TIME + 0.5) * 30.0) as u32;
+        if (frame - WARMUP - 1) % every == 0 {
+            if let Some(&d) = state.others.get(2) {
+                drone_locks.write(super::drone::DroneLock { drone: d, at: eye });
             }
         }
     }
