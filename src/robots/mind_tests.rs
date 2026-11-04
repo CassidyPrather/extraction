@@ -5585,13 +5585,14 @@ fn a_hound_loses_you_low_and_still() {
         last = now;
     }
     assert_eq!(bites, 1, "it came for you standing");
-    // Low, and still, as the driver says.
+    // Low, and still, as the driver says: crouched as the stick crouches
+    // you (the desk rig's and the bot's crouched eye, 1.05 m), not a squat.
     app.world_mut()
         .get_mut::<RigInput>(player)
         .unwrap()
         .head
         .translation
-        .y = 0.9;
+        .y = 1.05;
     let mut later = 0;
     let mut last = hp(&app, player);
     for _ in 0..90 * 20 {
