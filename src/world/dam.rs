@@ -228,8 +228,8 @@ fn scour_outlet(b: &mut Builder, c: f32) {
     // The face's foot is at local z 2 (the lowest course stands 4 out).
     let (inn, out) = (2.0, 3.2);
     let mid = (inn + out) * 0.5;
-    let (w, h) = (4.0, 5.0);
-    let jamb = 1.0;
+    let (w, h) = (6.0, 7.0);
+    let jamb = 1.4;
     for side in [-1.0f32, 1.0] {
         b.bx(
             Vec3::new(jamb, h + 0.5, out - inn),
@@ -256,7 +256,7 @@ fn scour_outlet(b: &mut Builder, c: f32) {
         Vec3::new(c, (h + 0.5) * 0.5, inn + 0.03),
         Mat::Charred,
     );
-    let bars = 9;
+    let bars = 11;
     for k in 0..bars {
         let x = c - w * 0.5 + 0.2 + (w - 0.4) * k as f32 / (bars - 1) as f32;
         // One bar bent out and gone at its foot.
@@ -271,7 +271,7 @@ fn scour_outlet(b: &mut Builder, c: f32) {
             Mat::RustyMetal,
         );
     }
-    for y in [1.4, 3.4] {
+    for y in [1.8, 4.6] {
         b.deco(
             Vec3::new(w, 0.1, 0.1),
             Vec3::new(c, y, inn + 0.35),
