@@ -53,3 +53,88 @@ Checked and holding:
   Bakelite part from each other in the yard. In the mill they hold, a
   step darker.
 - **Seams**: none open apart from the AK's handguard line (above).
+
+## Second pass: the next three a player meets
+
+The TOZ-8M (raid 3), the IZh-43 (raid 4) and the MP-133 (raid 5), in
+Progression's gun order, on 4 November 2026. They were shot the same way.
+
+| TOZ-8M | IZh-43, before | IZh-43, after | MP-133, before | MP-133, after |
+| - | - | - | - | - |
+| ![](sheet_toz8.jpg) | ![](sheet_toz_double_before.jpg) | ![](sheet_toz_double_after.jpg) | ![](sheet_mp133_before.jpg) | ![](sheet_mp133_after.jpg) |
+
+### Findings, worst first
+
+1. **The IZh-43's action ended at the breech.**
+   - **What 30 cm showed:** a dark gap under the chambers, the lumps and a
+     bare forend iron hanging below, then a deep forend swelling under the
+     hand.
+   - **The real gun:** a dealer's side view of a 20 in IZh-43, measured
+     from its barrels, shows the action's bar running 69 mm on under the
+     chambers to the hinge. A slim forend meets it flush and tapers from
+     50 mm under the rib's top to 30.
+   - **Fixed:** the bar, a forward hinge, and the forend redrawn to those
+     numbers. The support hand now sits on the forend's underside. This
+     settles that gun's open item, "the forend looks deeper". Details are
+     in `docs/craft/guns/toz_double/README.md`, second pass.
+
+   | Before | After |
+   | - | - |
+   | ![](izh_bar_before.jpg) | ![](izh_bar_after.jpg) |
+
+2. **The MP-133's ejection port was too short for its hull.** It was 60
+   mm, and a fired 70 mm hull can't pass. It's now 78 mm, back from the
+   barrel's breech, with the bolt lengthened to fill it closed. Details
+   are in `docs/craft/guns/mp133/README.md`.
+
+   | Before | After |
+   | - | - |
+   | ![](mp133_port_before.jpg) | ![](mp133_port_after.jpg) |
+
+3. **The TOZ-8M reads right at 30 cm**: the bolt and its knob, the
+   receiver's dovetail, the sights, the guard and the butt swivel. I left
+   it alone. Its open item, the semi-pistol wrist, still has no side view
+   or drawing to measure against; I found only text and listings without
+   usable photographs.
+
+Checked and holding on all three: the silhouettes from both sides at 1 m,
+and wood against blued steel and black alloy in the yard and the mill.
+
+## Third pass: the rest of the order
+
+The SKS, Nagant, PPSh, RPK-74 and SVD, on 4 November 2026, on main
+b175290f. They were shot the same way.
+
+| SKS | Nagant | PPSh | RPK-74 | SVD |
+| - | - | - | - | - |
+| ![](sheet_sks.jpg) | ![](sheet_nagant.jpg) | ![](sheet_ppsh.jpg) | ![](sheet_rpk74.jpg) | ![](sheet_svd.jpg) |
+
+### Findings, worst first
+
+All five read as themselves at 1 m from both sides and hold up at 30 cm:
+
+- **SKS**: the bolt handle, the receiver cover, the gas tube and
+  handguard, the fixed box ahead of the guard.
+- **Nagant**: the reworked frame, the raked grip and the lanyard ring.
+- **PPSh**: the receiver, the jacket's slots and the drum.
+- **RPK-74**: the handguard seam, closed last round.
+- **SVD**: the thumbhole, the cheek rest and the receiver.
+
+Their finishes part in the yard and the mill, and no seam is open. So
+there's no geometry fix in this pass. Two notes:
+
+1. **The PPSh drum's "71".** A 9 mm enamel "71" is on the drum's right
+   face (`art/mags/ppsh_drum.py`; it came in by a merge, not from me).
+   Real drums carry a small stamped serial, not their capacity in paint.
+   If it's there for legibility, it can stay; otherwise it should go.
+   That's for the magazine's owner and Legibility to call, so I haven't
+   touched it.
+
+   ![](ppsh_drum_71.jpg)
+
+2. **The SKS's trigger guard** reads as a thin strip from the side (a
+   9.5 × 3 mm section, seen edge on). That's how a stamped guard looks
+   from the side, and it reads as a guard. It's unchecked against a
+   photograph, so I've left it.
+
+   ![](sks_guard.jpg)

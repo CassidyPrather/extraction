@@ -420,7 +420,7 @@
         // Coming home: cover where a way in to a rendezvous was open for
         // more than a dash (map_lint, coming home).
         // The rangers' woodpile by the track in to the Ranger tower.
-        (prefab: "log_pile", at: (-92.8, -41.1), rot: 320.0),
+        (prefab: "log_pile", at: (-91.5, -42.8), rot: 300.0),
     ],
 
     markers: [

@@ -166,12 +166,50 @@ pub fn grow_on(id: &str, geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> 
     if extraction_core::map::prefab_is_vehicle(id) {
         return Growth::default();
     }
-    grow(geo, occ, seed, north)
+    grow_clear_of(geo, occ, seed, north, lettered(id))
+}
+
+/// The faces of a prefab that carry painted lettering, kept clear of ivy:
+/// a point on the face and its outward normal (building-local). The
+/// quarantine gate's blocks are stencilled on the face the walk out to the
+/// truck meets, and that face is their shaded north: the ivy smothered it
+/// in every valley, and the lettering was never read
+/// (docs/craft/ITEM_READING.md).
+pub fn lettered(id: &str) -> &'static [(Vec3, Vec3)] {
+    const GATE: [(Vec3, Vec3); 2] = [
+        (Vec3::new(-5.2, 0.6, -0.7), Vec3::NEG_Z),
+        (Vec3::new(5.2, 0.6, -0.7), Vec3::NEG_Z),
+    ];
+    match id {
+        "quarantine_gate" => &GATE,
+        _ => &[],
+    }
+}
+
+/// Whether the face `f` is one of `clear`'s lettered faces.
+fn is_lettered(f: &Face, clear: &[(Vec3, Vec3)]) -> bool {
+    clear.iter().any(|(at, n)| {
+        f.n.dot(*n) > 0.9 && (f.c - *at).dot(*n).abs() < 0.05 && {
+            let d = f.c - *at;
+            (d - *n * d.dot(*n)).length() < 1.0
+        }
+    })
 }
 
 /// The ivy on a building: its pieces, its occlusion and sky (`occ`), its
 /// seed, and `north` (building-local) for the shaded side.
 pub fn grow(geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
+    grow_clear_of(geo, occ, seed, north, &[])
+}
+
+/// `grow`, keeping clear of the lettered faces `clear` (`lettered`).
+fn grow_clear_of(
+    geo: &Geo,
+    occ: &Occluders,
+    seed: u64,
+    north: Vec3,
+    clear: &[(Vec3, Vec3)],
+) -> Growth {
     let mut out = Growth::default();
     let v = vigour(seed);
     if v <= 0.0 {
@@ -192,6 +230,9 @@ pub fn grow(geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
             }
             // Its foot near the ground (the plinth's top at most).
             if f.foot() > 0.8 || f.c.y + f.hv * f.v.y < 0.6 {
+                continue;
+            }
+            if is_lettered(&f, clear) {
                 continue;
             }
             let probe = f.c + f.n * 0.06;
@@ -920,6 +961,38 @@ mod tests {
         assert!(!warm(&kettle, line + 1.0));
         let marrow = crate::world::load_map_def("marrow_creek");
         assert!(warm(&marrow, 500.0));
+    }
+
+    /// Painted lettering stays readable: no ivy leaf lies over a
+    /// prefab's lettered face (`lettered`), whatever the seed, while the
+    /// rest of it still grows ivy.
+    #[test]
+    fn ivy_keeps_off_lettering() {
+        for id in ["quarantine_gate"] {
+            let geo = crate::world::buildings::prefab(id).unwrap();
+            let occ = crate::world::buildings::occluders(&geo);
+            let mut grown = 0;
+            for k in 1..48u64 {
+                let g = grow_on(id, &geo, &occ, k * 7919, Vec3::NEG_Z);
+                grown += g.leaves.len();
+                for l in &g.leaves {
+                    for (at, n) in lettered(id) {
+                        let d = l.at - *at;
+                        let off = d.dot(*n);
+                        let across = d - *n * off;
+                        assert!(
+                            !(off > -0.02
+                                && off < 0.15
+                                && across.x.abs() < 0.7
+                                && across.y.abs() < 0.6),
+                            "{id} seed {k}: a leaf at {:?} over the lettering at {at:?}",
+                            l.at
+                        );
+                    }
+                }
+            }
+            assert!(grown > 0, "{id}: no ivy at all");
+        }
     }
 
     /// No ivy on a vehicle: a wreck's body or a boxcar isn't a ruin's wall.
