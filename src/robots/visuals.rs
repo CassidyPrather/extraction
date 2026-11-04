@@ -1612,10 +1612,7 @@ pub const SHORT_LEADS: &[(&str, &str)] = &[
 /// Attacks under [`MIN_LEAD`] today with the change that brings them to
 /// it on its way; each comes off this list as it lands (the test fails
 /// while one that's met the bar is still on it).
-pub const PENDING_LEADS: &[(&str, &str)] = &[(
-    "heavy slam",
-    "Heavy's RAISE_TIME 1.3 s: its raise and slam 1.52 s",
-)];
+pub const PENDING_LEADS: &[(&str, &str)] = &[];
 
 /// The machines' attacks that aren't a lead to a blow, and why each is fair
 /// without one.
