@@ -18,7 +18,7 @@ use super::{Phase, Raid};
 use crate::interact::body::Backpack;
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::items::loot::Loot;
-use crate::items::{Catalog, Item, SpawnItem, spawn_item};
+use crate::items::{Catalog, Item, SpawnItem};
 use crate::progression::{Progression, lines};
 use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::world::{Layer, Zone};
@@ -747,6 +747,7 @@ fn card_text(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::items::spawn_item;
     use crate::progression::Progression;
 
     /// The driver's cache keeps off your usual ways, where it can.

@@ -824,7 +824,7 @@ pub(crate) mod tests {
     fn a_found_gun_comes_up_dirty_for_its_wear() {
         let mut app = crate::raid::requests::tests::app();
         let catalog = app.world().resource::<Catalog>().clone();
-        let mut lay = |app: &mut App, id: &str, condition: f32, found: bool| {
+        let lay = |app: &mut App, id: &str, condition: f32, found: bool| {
             let mut queue = bevy::ecs::world::CommandQueue::default();
             let e = {
                 let mut c = Commands::new(&mut queue, app.world());
