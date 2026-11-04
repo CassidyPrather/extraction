@@ -93,6 +93,14 @@ pub const WAITING: &[&str] = &[
     "Truck: \"{rv}, {b}. I hear them.\"",
 ];
 
+/// Waiting at `{rv}`, `{t}` left (`LAST_CALL`): said before every
+/// departure without you, over the radio, wherever you are (the five
+/// minutes said on arrival was all a newcomer heard before \"Can't stay\").
+pub const LAST_CALL: &[&str] = &[
+    "Truck: \"{t} left at {rv}. Then I go.\"",
+    "Truck: \"{rv}. {t} more, then I'm gone.\"",
+];
+
 pub const GAVE_UP: &[&str] = &[
     "Truck: \"Can't stay. Call me again when you're close.\"",
     "Truck: \"Pulling out. Call when you're close.\"",
@@ -580,6 +588,7 @@ mod tests {
             ON_THE_WAY,
             ARRIVED,
             WAITING,
+            LAST_CALL,
             GAVE_UP,
             SHORT_RUN,
             PULLING_OUT,

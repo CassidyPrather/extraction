@@ -914,6 +914,78 @@ mod tests {
         );
     }
 
+    /// The upstream parapet is a parapet the whole way along the crest, the
+    /// viewing bay's rail included: at every x but the tower bridge's way
+    /// through, something solid on the parapet's line tops the crest's
+    /// ground beside it by 0.9 m, with no gap under it a body goes through.
+    #[test]
+    fn the_crest_edge_stands_over_the_crest() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        let hm = extraction_core::terrain::Heightmap::build(&map);
+        // A body's least size (m): no gap in the guard as big.
+        const BODY: f32 = 0.5;
+        let mut bad = Vec::new();
+        for (id, len, open) in [
+            ("dam_back", 245.0f32, Some(-22.5f32)),
+            ("dam_back_end", 35.0, None),
+        ] {
+            let g = geo(id).unwrap();
+            for p in map.placements.iter().filter(|p| p.prefab == id) {
+                assert!(
+                    p.rot.abs() < 0.01,
+                    "{id} turned: the test's frame is its own"
+                );
+                let y0 = p.y;
+                let z = -1.45;
+                let mut x = -len * 0.5 + 0.5;
+                while x < len * 0.5 - 0.5 {
+                    if open.is_some_and(|o| (x - o).abs() < 1.4) {
+                        x += 0.25;
+                        continue;
+                    }
+                    // Solid spans up the parapet's line at x, over the crest.
+                    let mut spans: Vec<(f32, f32)> = g
+                        .pieces
+                        .iter()
+                        .filter(|q| q.collide)
+                        .filter_map(|q| {
+                            let Shape::Box(s) = q.shape else { return None };
+                            let c = q.at.translation;
+                            let inside =
+                                (x - c.x).abs() <= s.x * 0.5 && (z - c.z).abs() <= s.z * 0.5;
+                            let (lo, hi) = (c.y - s.y * 0.5, c.y + s.y * 0.5);
+                            (inside && hi > BACK_H + 0.01).then_some((lo.max(BACK_H), hi))
+                        })
+                        .collect();
+                    spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+                    let (mut reach, mut gap) = (BACK_H, 0.0f32);
+                    for (lo, hi) in spans {
+                        gap = gap.max(lo - reach);
+                        reach = reach.max(hi);
+                    }
+                    let at = [p.at[0] + x, p.at[1] + z + 1.0];
+                    // You stand on the dam's own top there, or the ground
+                    // banked against it, whichever's higher.
+                    let ground = hm.height(at).max(y0 + BACK_H);
+                    if y0 + reach < ground + 0.9 || gap >= BODY {
+                        bad.push(format!(
+                            "{id} x {:.2}: guard top {:.2}, gap {gap:.2}, crest {ground:.2}",
+                            at[0],
+                            y0 + reach
+                        ));
+                    }
+                    x += 0.25;
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "the crest's edge unguarded:\n{}",
+            bad.join("\n")
+        );
+    }
+
     /// Nothing on the dam's downstream faces is a ledge: every top a body
     /// could land on below the crest is under something (the next course,
     /// the embankment's stone) or weathered past standing, but for the

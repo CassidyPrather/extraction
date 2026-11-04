@@ -62,8 +62,9 @@ pub struct Plough {
     pub horn: f32,
     /// Whether it's ploughing now (moving, in snow): the plume and roar.
     pub ploughing: bool,
-    /// The road's last ploughed metre, for laying the bank.
-    pub banked: f32,
+    /// The slots of road it's banked ([`bank_slot`]): each once, so a
+    /// pass back down lays no second bank over the first.
+    pub banked: std::collections::HashSet<i32>,
     /// Its heading, degrees (the game's yaw).
     pub yaw: f32,
     /// Whether it needs snow lying to run (a scenario's plough doesn't).
@@ -86,9 +87,18 @@ pub struct Buried {
     pub dug: f32,
 }
 
-/// A section of bank by the road (for its look).
-#[derive(Component, Debug, Clone, Copy)]
-pub struct BankPiece;
+/// A section of bank by the road: its `slot` is which [`BANK_STEP`] of
+/// the road it lies beside ([`bank_slot`]), one to a slot however often
+/// the plough passes, so the look can sweep a road's pieces into one bank.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BankPiece {
+    pub slot: i32,
+}
+
+/// Which slot of bank `s` metres along the road is in.
+pub fn bank_slot(s: f32) -> i32 {
+    (s / BANK_STEP).floor() as i32
+}
 
 /// Stretches of road it's cleared, and when (the raid clock, last
 /// cleared): straight runs of up to [`RUN_LEN`], each new bit of lane
@@ -212,7 +222,7 @@ pub fn spawn_plough(commands: &mut Commands, zone: &Zone, road: Vec<[f32; 2]>) -
                 jammed: 0.0,
                 horn: 0.0,
                 ploughing: false,
-                banked: 0.0,
+                banked: Default::default(),
                 yaw,
                 needs_snow: true,
             },
@@ -330,26 +340,12 @@ fn plough_drive(
                 Vec2::new(ground.x, ground.z),
                 now,
             );
-            // The bank, every few metres of new road ploughed, on the
-            // downhill side.
-            if (s - p.banked).abs() >= BANK_STEP {
-                p.banked = s;
-                let side = bank_dir(&zone, ground, dir);
-                let b = ground + side * rules::BANK_OUT;
-                // (Not at a junction or a hut's door, nor in a gallery.)
-                let bank_here = rules::bank_ok(&zone.map, [b.x, b.z]);
-                if bank_here {
-                    commands.spawn((
-                        Name::new("Plough bank"),
-                        BankPiece,
-                        OfPlough(e),
-                        Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(
-                            Quat::from_rotation_y(
-                                -extraction_core::sentry::bearing([0.0, 0.0], dir).to_radians(),
-                            ),
-                        ),
-                        Visibility::default(),
-                    ));
+            // The bank, a section to each slot of road ploughed (once,
+            // whichever way it's going), on the downhill side.
+            let slot = bank_slot(s);
+            if p.banked.insert(slot) {
+                if let Some(piece) = bank_piece(&zone, &p.road, slot) {
+                    commands.spawn((Name::new("Plough bank"), piece, OfPlough(e)));
                 }
             }
         }
@@ -419,6 +415,26 @@ fn pack_lanes(
 /// Which piece of bank belongs to which plough.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct OfPlough(pub Entity);
+
+/// The section of bank for `slot` of `road`: beside the slot's start on
+/// the downhill side, along the road; none at a junction or a hut's door,
+/// nor in a gallery.
+pub fn bank_piece(zone: &Zone, road: &[[f32; 2]], slot: i32) -> Option<impl Bundle> {
+    let (at, dir) = rules::along(road, slot as f32 * BANK_STEP);
+    let ground = zone.on_ground(at[0], at[1]);
+    let b = ground + bank_dir(zone, ground, dir) * rules::BANK_OUT;
+    rules::bank_ok(&zone.map, [b.x, b.z]).then(|| {
+        (
+            BankPiece { slot },
+            Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(
+                Quat::from_rotation_y(
+                    -extraction_core::sentry::bearing([0.0, 0.0], dir).to_radians(),
+                ),
+            ),
+            Visibility::default(),
+        )
+    })
+}
 
 /// The downhill side of the road at `at` going along `dir` (unit, world).
 fn bank_dir(zone: &Zone, at: Vec3, dir: [f32; 2]) -> Vec3 {
@@ -1052,5 +1068,44 @@ mod tests {
         let on = vr.app.world().get::<Transform>(e).unwrap().translation;
         assert!(on.distance(still) > 1.0, "the jam cleared and it went on");
         assert!(vr.app.world().get::<ColliderDisabled>(cell.0).is_some());
+    }
+
+    /// Up the road and back down it leaves one bank, not a second laid
+    /// over the first: a section to each slot of road, whichever way.
+    #[test]
+    fn up_and_back_banks_the_road_once() {
+        let (mut vr, _, e) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 236.0));
+        let leg = |vr: &crate::vr_harness::Vr| vr.app.world().get::<Plough>(e).unwrap().run.leg;
+        let mut went = 0;
+        while !matches!(leg(&vr), Leg::Top(_)) {
+            vr.step(9);
+            went += 1;
+            assert!(went < 200, "it never got up the road");
+        }
+        let up = slots(&mut vr);
+        let banked =
+            |vr: &crate::vr_harness::Vr| vr.app.world().get::<Plough>(e).unwrap().banked.len();
+        // (Some slots lie where no bank goes: by a path, a door.)
+        assert!(banked(&vr) >= 5, "banked {} slots going up", banked(&vr));
+        assert!(!up.is_empty(), "no bank at all");
+        // (Past its wait at the top.)
+        vr.app.world_mut().get_mut::<Plough>(e).unwrap().run.leg = Leg::Down(24.0);
+        while !matches!(leg(&vr), Leg::Rest(_)) {
+            vr.step(9);
+            went += 1;
+            assert!(went < 400, "it never got back down");
+        }
+        let both = slots(&mut vr);
+        let mut once = both.clone();
+        once.dedup();
+        assert_eq!(both, once, "a slot banked twice");
+        assert!(both.len() <= up.len() + 1, "{up:?} then {both:?}");
+    }
+
+    fn slots(vr: &mut crate::vr_harness::Vr) -> Vec<i32> {
+        let mut q = vr.app.world_mut().query::<&BankPiece>();
+        let mut s: Vec<i32> = q.iter(vr.app.world()).map(|b| b.slot).collect();
+        s.sort();
+        s
     }
 }
