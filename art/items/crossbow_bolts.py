@@ -7,7 +7,7 @@ _kit.py; the bolts lie along Z, point to -Z.
 
 `add_bolt` is imported by art/guns/crossbow.py for the bolt lying in the
 rail, so the two always match. In bolt space the rod's axis is the Z axis,
-its back (nock) at z = +0.19 and its point at z = -0.19, the cock vane
+its back (nock) at z = +HALF and its point at z = -HALF, the cock vane
 pointing -Y (down into the crossbow's flight groove); the nock slot runs
 across X, the way the string lies.
 """
@@ -24,13 +24,16 @@ from _kit import item, transform, wanted  # noqa: E402
 from common import RZ, T, Part  # noqa: E402
 
 ROD_R = 0.004
-HALF = 0.19          # the bolt is 0.38 m long
+HALF = 0.15          # the bolt is 0.30 m long: the crossbow's 150 mm draw
+# (art/guns/crossbow.py) leaves it 2 cm past the nose; at 0.38 it stood 95 mm out.
+# Everything along the bolt was laid out on 0.38 and keeps its proportions.
+S = HALF / 0.19
 VANE_TIP = 0.014     # how far a vane reaches from the axis
 NOCK_DEPTH = 0.006   # the notch sawn into the back
 # A vane (z along the bolt, r out from the axis): cut from a bottle, low at
 # the front, rising to a swept-back tip near the back.
-VANE = [(0.100, 0.0036), (0.165, 0.0036), (0.168, 0.0125), (0.161, VANE_TIP), (0.128, 0.0105),
-        (0.100, 0.0052)]
+VANE = [(0.100 * S, 0.0036), (0.165 * S, 0.0036), (0.168 * S, 0.0125), (0.161 * S, VANE_TIP),
+        (0.128 * S, 0.0105), (0.100 * S, 0.0052)]
 
 
 def tube3d(p, pts, r, mat, sides=6, closed=False, phase=0.0):
@@ -70,12 +73,14 @@ def add_bolt(body, vanes, cut, xf, roll=0.0, segs=12):
     x = xf @ RZ(roll)
     # The rod in pieces, the thread whippings that bind the vanes' ends
     # between them (so no face lies just over another).
-    for z0, z1, r, mat in ((-0.165, 0.095, ROD_R, "Steel"), (0.095, 0.102, 0.0047, "Black"),
-                           (0.102, 0.165, ROD_R, "Steel"), (0.165, 0.171, 0.0047, "Black")):
+    for z0, z1, r, mat in ((-0.165 * S, 0.095 * S, ROD_R, "Steel"),
+                           (0.095 * S, 0.095 * S + 0.007, 0.0047, "Black"),
+                           (0.095 * S + 0.007, 0.165 * S, ROD_R, "Steel"),
+                           (0.165 * S, 0.165 * S + 0.006, 0.0047, "Black")):
         body.cyl(r, z0, z1, mat, segs=segs, xf=x)
-    body.cyl(ROD_R, 0.171, HALF, "Steel", segs=segs, xf=x, chamfer=0.0007)
+    body.cyl(ROD_R, 0.165 * S + 0.006, HALF, "Steel", segs=segs, xf=x, chamfer=0.0007)
     # Filed point: four flat facets ground on, their shoulders showing.
-    body.lathe([(0.0, -0.160), (0.0042, -0.160), (0.0, -HALF)], "Steel", segs=4,
+    body.lathe([(0.0, -HALF + 0.030), (0.0042, -HALF + 0.030), (0.0, -HALF)], "Steel", segs=4,
                xf=x @ RZ(math.pi / 4))
     # Three vanes, the odd (cock) vane down.
     for k in range(3):
@@ -99,7 +104,7 @@ def crossbow_bolt():
     body, vanes, cut = Part("body"), Part("vanes"), Part("cut")
     add_bolt(body, vanes, cut, T())
     body.cut(cut)
-    # dims (0.03, 0.03, 0.38): resting on the box floor.
+    # dims (0.03, 0.03, 0.30): resting on the box floor.
     return on_floor([body, vanes], 0.015)
 
 
@@ -177,7 +182,7 @@ def bolt_bundle():
     body.cut(cut)
     wr = 0.0008
     top = max(c[1] for c in CENTRES) + ROD_R + wr
-    for z in (-0.09, 0.065):
+    for z in (-0.09 * S, 0.065 * S):
         tube3d(wire, hull_loop(z, ROD_R + wr * 0.8), wr, "Copper", sides=5, closed=True,
                phase=0.3)
         # The ends twisted together and the twist folded down along the
@@ -190,7 +195,7 @@ def bolt_bundle():
                 pts.append((0.0011 * math.cos(a), top + wr + 0.0011 * math.sin(a) * 0.6,
                             z + 0.002 + 0.016 * u))
             tube3d(wire, pts, wr * 0.85, "Copper", sides=4)
-    # dims (0.045, 0.04, 0.38): resting on the box floor.
+    # dims (0.041, 0.04, 0.30): resting on the box floor.
     return on_floor([body, vanes, wire], 0.02)
 
 

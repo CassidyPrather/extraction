@@ -297,9 +297,14 @@ mod tests {
             ),
             ("robots/recall.rs", 1, "a tally lamp"),
             (
+                "robots/sentry_look.rs",
+                1,
+                "the lens's chirp glow, additive",
+            ),
+            (
                 "robots/visuals.rs",
-                10,
-                "eyes, shells, envelopes, halos, a flare",
+                11,
+                "eyes, shells, envelopes, halos, a flare, a drone's lock glow",
             ),
             ("robots/weak_points.rs", 1, "a knee's mark"),
             ("weapons/flares.rs", 1, "a flare's burning ball"),

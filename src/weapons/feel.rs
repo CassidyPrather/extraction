@@ -2748,4 +2748,37 @@ mod macro_reload_tests {
             "after the reload {rounds} rounds (magazine {mag:?})"
         );
     }
+
+    /// The flat reload with no other magazine for the gun on you: the one
+    /// it had goes back in, not onto the ground (first_jobs_reckless
+    /// pressed it with nothing spare, threw away its only magazine, and
+    /// had nothing to load from the crate's loose rounds after).
+    #[test]
+    fn a_flat_reload_with_no_spare_keeps_the_magazine() {
+        let mut r = hold("pm_pistol", false, false);
+        let only = seat_mag(&mut r, "pm_mag", 0);
+        let player = r.vr.player;
+        let gun = r.gun;
+        let steps = macro_steps(MacroKind::Reload, &gun_mut(&mut r));
+        r.vr.app
+            .world_mut()
+            .entity_mut(player)
+            .insert(GunMacro::default());
+        r.vr.app
+            .world_mut()
+            .get_mut::<GunMacro>(player)
+            .unwrap()
+            .start(gun, steps);
+        r.vr.step(240);
+        let g = gun_mut(&mut r);
+        let well = g.magwell.unwrap();
+        let has = g.firearm.magazine.is_some();
+        let seated = r.vr.app.world().get::<Socket>(well).unwrap().occupant;
+        assert_eq!(
+            seated,
+            Some(only),
+            "its only magazine isn't back in the well"
+        );
+        assert!(has, "the well holds it, the gun reads none");
+    }
 }

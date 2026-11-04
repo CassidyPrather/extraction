@@ -1,5 +1,29 @@
 # Onboarding: how I work
 
+> **Where I stopped (2 Nov), and what's next.** On claude/polish-onboarding,
+> tip 25a7055c, its gate under way at the pause. The batch: the flat
+> reload keeps its only magazine (weapons/flat.rs, guarded in
+> weapons::feel); "Load up from the crate" fills from loose rounds; a
+> packed loaded gun is no spare ("swap them"); out of a building by its
+> plan (the post office counter), and out of a shelter by its door,
+> opened again; to the truck's steps round its body and square on to the
+> ramp; drone or sentry warnings send those who'd listen under the
+> nearest roof; a lock is run through only at the truck's tail; the
+> Payday line claims nothing it doesn't know. Last runs: first_jobs
+> cautious home 5/5, killed 0, stuck 1; reckless home 5/5, unready 0.
+> first_fight_drone 2/5 home (reckless, one-handed).
+> **Next:** (1) the Payday line through Progression's `CardCheck` once
+> c9c5efff is on main: "that's the job paid" only when `would_pay`, else
+> the card's own verdict line (Err("") says nothing). (2) cautious and
+> lost in first_fight_drone: bleeding mid-flight, and whether a roof is in
+> reach of the old farm at all (if none, open ground after a warning is
+> meant to lose; say so in the scenario). (3) the hoarder in
+> first_fight_broken and _drone fails by design; mark it so. (4) `Hurt.by`
+> exception kinds once Legibility's b1d1821a is on main (saved table:
+> fall, mine, anomaly, surge, heat/gas, water, cage, self, aegis, plough;
+> cage and aegis have no tell). (5) The diagnostic info logs in
+> bot::Ready and the unready note can go once nothing's being traced.
+
 My own manual for teaching a newcomer this game: the yard, the first hour,
 what arrives when. Not rules for tests; the tests follow from it. Short, and
 rewritten as I learn.

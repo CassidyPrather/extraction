@@ -213,7 +213,10 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
-            First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
+            // (True whether the job's done or not: home pinned by a drone,
+            // the job given up, "that's the job paid" was said, and the
+            // card wouldn't pay it.)
+            First::Payday => &["Truck: \"Home. Press the card: if the job's done, that pays it.\""],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }

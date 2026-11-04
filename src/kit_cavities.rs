@@ -84,7 +84,7 @@ pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
     ("ak_mag", Vec3::new(0.0, 0.0, -0.016)),
     // Its grip is short and set back now (docs/craft/guns/nagant).
     ("nagant", Vec3::new(0.0, 0.015, -0.060)),
-    ("flare_pistol", Vec3::new(0.0, 0.0, -0.074)),
+    ("flare_pistol", Vec3::new(0.0, -0.011, -0.052)),
     ("ammo_762x25", Vec3::new(0.0, -0.006, -0.001)),
     ("bolt_bundle", Vec3::new(0.0, -0.009, 0.0)),
     ("robot_ammo_belt", Vec3::new(0.0, -0.021, -0.002)),
