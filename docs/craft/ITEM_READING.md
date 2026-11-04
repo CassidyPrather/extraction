@@ -206,3 +206,23 @@ splint's straps' undersides in the slats'; the car bonnet's brace arms
 `art/items/_kit.py`'s `LIFT` (1.2 mm) off what it's on, and `art/check.py`
 judges items at 1 mm (held 0.3 to 3 m from the eye; props stay at 3 mm).
 All 192 item models check clean.
+
+### The truck's crate, as a newcomer opens it (1 November)
+
+The crate shows only what the first stations use (`onboarding::
+stash_station`): the PM pistol (its magazine in it), the radio, and at
+the first station the cleaning kit. In game, from the truck's bed, about
+a metre away, under the room's light (`render::grade` `ROOM_ADAPT`):
+
+- **The pistol**: laid on its side already (stood on its grip it was a
+  stick); black and bakelite, its ring round it. Reads.
+- **The radio stood up**: from above an olive stub and an aerial on the
+  crate's dark floor, its face (grille, tuning window, lamp) unseen. Now
+  it lies on its back, its face up (`persist::fresh_save`'s `turn`, as
+  the pistol's): `docs/shots/items/truck_crate_radio_before_after.png`.
+- **The cleaning kit**: a dark canvas roll, leather straps, brass rod
+  ends: distinct on the boards (`truck_crate_first_three.png`, the kit
+  shown early for the shot).
+
+**How it rests is part of its silhouette**, again, and so is which face is
+up: an item in a crate is seen from above.

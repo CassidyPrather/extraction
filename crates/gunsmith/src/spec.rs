@@ -124,12 +124,12 @@ pub const SPECS: &[Spec] = &[
     Spec {
         id: "flare_pistol",
         travel: 0.0,
-        hinge: [0.0, 0.032, -0.065],
+        hinge: [0.0, 0.028, -0.0755],
         real: None,
     },
     Spec {
         id: "crossbow",
-        travel: 0.26,
+        travel: 0.15,
         hinge: [0.0; 3],
         real: None,
     },

@@ -9,6 +9,21 @@
 use crate::geom::P2;
 use serde::{Deserialize, Serialize};
 
+/// A rock outcrop: a big stone `radius` across with a few smaller ones
+/// round it, the scatter's rocks kept off it (`rocks::scatter_rocks`).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutcropDef {
+    pub at: P2,
+    pub radius: f32,
+    /// Smaller stones beside it.
+    #[serde(default = "default_outcrop_stones")]
+    pub stones: u32,
+}
+
+fn default_outcrop_stones() -> u32 {
+    3
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MapDef {
     pub name: String,
@@ -59,6 +74,10 @@ pub struct MapDef {
     /// ground is all stone.
     #[serde(default)]
     pub scree: f32,
+    /// Rock outcrops set by hand where open ground wants something to
+    /// get behind (`rocks`), on top of the scatter.
+    #[serde(default)]
+    pub outcrops: Vec<OutcropDef>,
     /// Where snow can lie (m): above it, falling weather comes as snow
     /// and lies on what faces up. None: the valley's too low
     /// (`world::snow`).

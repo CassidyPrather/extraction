@@ -708,7 +708,7 @@ pub fn blow_ivy(
 /// Leaves drawn here for when the birch atlas isn't built: a 128-texel
 /// square of overlapping pointed leaves, cut out by alpha (the cards' UVs
 /// take any part of it).
-fn leaf_image() -> Image {
+pub(crate) fn leaf_image() -> Image {
     let n = 128u32;
     let mut rng = fastrand::Rng::with_seed(0x1eaf);
     let leaves: Vec<(Vec2, Vec2, f32)> = (0..70)

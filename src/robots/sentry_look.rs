@@ -44,6 +44,10 @@ struct Lights {
     glow: Handle<StandardMaterial>,
     eye: Handle<StandardMaterial>,
     lamp: Handle<StandardMaterial>,
+    /// A glow round the lens, dark at rest, that the chirp pulses: the
+    /// lens alone is a few pixels already at full red from 7 m, so how
+    /// bright it burns can't be seen; how far its glow reaches can.
+    halo: Handle<StandardMaterial>,
     /// Seconds of the chirp's flare left.
     flare: f32,
 }
@@ -66,6 +70,7 @@ fn dress_sentries(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
     lights: Query<&Lights>,
 ) {
     if heads.is_empty() && pieces.is_empty() {
@@ -149,6 +154,16 @@ fn dress_sentries(
             glow: own(&glow, &mut materials),
             eye: own(&eye, &mut materials),
             lamp: own(&lamp, &mut materials),
+            halo: materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: LinearRgba::BLACK,
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                alpha_mode: AlphaMode::Add,
+                // A lamp: held through fog, and drawn as far as the sentry.
+                fog_enabled: false,
+                ..default()
+            }),
             flare: 0.0,
         };
         hang(
@@ -173,14 +188,23 @@ fn dress_sentries(
             };
             // The part sits at its offset already.
             match part.role {
-                PartRole::Sensor => hang(
-                    &mut commands,
-                    &mut materials,
-                    Some(&l),
-                    c,
-                    "eye",
-                    Transform::IDENTITY,
-                ),
+                PartRole::Sensor => {
+                    hang(
+                        &mut commands,
+                        &mut materials,
+                        Some(&l),
+                        c,
+                        "eye",
+                        Transform::IDENTITY,
+                    );
+                    commands.spawn((
+                        Mesh3d(meshes.add(Sphere::new(HALO).mesh().ico(2).unwrap())),
+                        MeshMaterial3d(l.halo.clone()),
+                        Transform::IDENTITY,
+                        NotShadowCaster,
+                        ChildOf(c),
+                    ));
+                }
                 PartRole::Weapon => hang(
                     &mut commands,
                     &mut materials,
@@ -248,17 +272,29 @@ fn light_sentries(
         }
         l.flare = (l.flare - dt).max(0.0);
         let on = s.powered && !robot.wrecked;
-        let (glow, eye, lamp) = if on {
-            let f = 1.0 + 4.0 * l.flare / rules::CHIRP;
+        let (glow, eye, lamp, halo) = if on {
+            let since = rules::CHIRP - l.flare;
+            let f = super::visuals::tell_gain(since, rules::CHIRP, l.flare > 0.0);
             (
                 LinearRgba::rgb(1.2, 4.8, 6.0),
                 LinearRgba::rgb(9.0 * f, 1.0, 0.5),
                 LinearRgba::rgb(20.0, 18.0, 14.0),
+                chirp_halo(since, l.flare > 0.0),
             )
         } else {
-            (LinearRgba::BLACK, LinearRgba::BLACK, LinearRgba::BLACK)
+            (
+                LinearRgba::BLACK,
+                LinearRgba::BLACK,
+                LinearRgba::BLACK,
+                LinearRgba::BLACK,
+            )
         };
-        for (h, want) in [(&l.glow, glow), (&l.eye, eye), (&l.lamp, lamp)] {
+        for (h, want) in [
+            (&l.glow, glow),
+            (&l.eye, eye),
+            (&l.lamp, lamp),
+            (&l.halo, halo),
+        ] {
             if let Some(mut m) = materials.get_mut(h) {
                 if m.emissive != want {
                     m.emissive = want;
@@ -266,6 +302,15 @@ fn light_sentries(
             }
         }
     }
+}
+
+/// The lens's glow's radius, m.
+const HALO: f32 = 0.2;
+
+/// The lens's glow `since` seconds into a chirp: the machines' one tell
+/// (`visuals::tell_gain`), over [`rules::CHIRP`].
+pub(super) fn chirp_halo(since: f32, flaring: bool) -> LinearRgba {
+    super::visuals::tell_halo(super::visuals::tell_gain(since, rules::CHIRP, flaring))
 }
 
 /// At night, a powered sentry's searchlight burns down its line of sight.

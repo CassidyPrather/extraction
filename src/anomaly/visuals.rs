@@ -637,12 +637,11 @@ fn init_assets(
     mut images: ResMut<Assets<Image>>,
     server: Res<AssetServer>,
 ) {
-    let leaf: Handle<Image> = server
-        .load_builder()
-        .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
-        .load(crate::render::textures::ktx2(
-            "textures/foliage/birch_leaves/albedo.ktx2",
-        ));
+    // The birch atlas is downloaded (`fetch_assets.py`); without it, the
+    // ivy's drawn leaves.
+    let leaf =
+        crate::render::textures::fetched_srgb(&server, "textures/foliage/birch_leaves/albedo.ktx2")
+            .unwrap_or_else(|| images.add(crate::world::overgrowth::leaf_image()));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
     let (mark, _) = mark_texture(&mut images, Pattern::Plain);

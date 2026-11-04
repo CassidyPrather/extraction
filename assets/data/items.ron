@@ -71,7 +71,7 @@
             firearm: Some((
                 action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
                 modes: [Semi], double_action: true, gate_offset: 5,
-                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.9, walk: -0.3),
+                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.56, walk: -0.3, push: 2.2),
                 wear_per_shot: 0.0004,
             )),
             tags: ["metal", "wood"],
@@ -155,7 +155,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "flare_pistol", dims: Some((0.04, 0.19, 0.235)),
+            id: "flare_pistol", dims: Some((0.04, 0.17, 0.225)),
             name: "SPSh signal pistol",
             description: "A 26 mm flare gun. Break it, a cartridge in, thumb the hammer. A white star lights the ground under it as it sinks; red and green are signals. Whatever's out there looks at a flare, and goes to where it falls.",
             category: Firearm, size: Medium, mass: 1.0, bulk: 0.9,
@@ -169,7 +169,7 @@
         ),
 
         (
-            id: "crossbow", dims: Some((0.62, 0.21, 0.885)),
+            id: "crossbow", dims: Some((0.62, 0.21, 0.78)),
             name: "Home-made crossbow",
             description: "A cut-down leaf spring on a plank, a gate latch for a nut. Draw the string back to the latch by hand, lay a bolt in the groove, loose it. Silent; the bolts come back if you go and get them. Never loose it empty.",
             category: Firearm, size: Bulky, mass: 3.3, bulk: 9.0,
@@ -451,13 +451,13 @@
             tags: ["paper", "powder"],
         ),
         (
-            id: "bolt_bundle", dims: Some((0.041, 0.04, 0.38)), name: "Crossbow bolts (bundle)",
+            id: "bolt_bundle", dims: Some((0.041, 0.04, 0.30)), name: "Crossbow bolts (bundle)",
             description: "Five steel-rod bolts wired together, fletched with cut plastic bottle.",
             category: Ammo, size: Small, mass: 0.15, bulk: 0.4, cartridge: Some("bolt"), rounds: 5,
             tags: ["metal", "polymer"],
         ),
         (
-            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.38)), name: "Crossbow bolt",
+            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.30)), name: "Crossbow bolt",
             description: "A filed steel rod with plastic fletches. Shot, it lies where it came down: go and get it.",
             category: Ammo, size: Small, mass: 0.028, bulk: 0.08, cartridge: Some("bolt"), rounds: 1,
             tags: ["metal", "polymer"],

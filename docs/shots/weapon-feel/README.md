@@ -55,3 +55,31 @@ named passes there.
   (`--gallery impact`, as above). On concrete the dust now bursts from
   the marks; on dirt it's still brown on brown.
 - `safety_*`, `jam_*`, `eyebox_*`, and the rest: earlier waves.
+
+## Where I stopped (2 November, paused for usage)
+
+On `claude/polish-weapon-feel` at 6ed7ee78, gated green (lib 1329, core
+317, 41/41 scenarios, 13/13 contracts), for the coordinator's final gate:
+
+- **Tracers light from the muzzle** (6ed7ee78): `Projectile.origin`; a
+  tracer landing inside about 22 m now streaks. Any `Projectile { .. }`
+  literal on another branch needs `origin`.
+- **The Nagant's own kick** (dc0699c6): `climb 0.56, push 2.2`, so
+  Gunsmith can raise its hold to (0, 0.014, 0.027); green at both holds.
+- **On main already:** soft puffs (`render::puff`), the impact burst, the
+  10 degree near-puff cap under Performance's stereo gauge, the shared
+  analog press (`rig::pressed`), steady aim, the gun-sound audits.
+
+What's next, when work resumes:
+
+- After 6ed7ee78 lands: Gunsmith raises the Nagant's hold; check
+  `every_gun_has_its_own_kick_and_stays_in_hand` on main (expected
+  mosin ~ nagant 18.9).
+- `audio_handling.py`'s KNOWN holds only the Nagant's cylinder (Audio's
+  to fix); it flags when it clears.
+- If lit puffs show black pixels beyond Robot bodies' gun column, or on a
+  GPU, make every puff unlit in `PuffAssets::soften` (a class change,
+  with before/after shots).
+- The hazard cloud has 13% headroom on the stereo budget (56.4M of
+  64.8M); a later effect that eats it should get a per-view cap on near
+  puffs, not a smaller angle.
