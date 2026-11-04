@@ -105,6 +105,7 @@ pub struct CardCheck<'w, 's> {
     catalog: Res<'w, Catalog>,
     logbook: Res<'w, crate::raid::logbook::Logbook>,
     canaries: Query<'w, 's, &'static crate::world::workings::Canary>,
+    zone: Option<Res<'w, crate::world::Zone>>,
 }
 
 impl CardCheck<'_, '_> {
@@ -168,91 +169,121 @@ impl CardCheck<'_, '_> {
                 .collect()
         };
         let in_stash = |id: &str, n: u32| in_stash_as(id, n, true);
-        let handed: Vec<(Entity, Entity)> = match &job {
-            Job::Fetch { item: id, n } => {
-                let have = in_stash(id, *n);
-                if (have.len() as u32) < *n {
-                    // There are some, but shot through.
-                    if in_stash_as(id, *n, false).len() > have.len() {
-                        return Err((lines::FETCH_WORN).into());
+        let handed = (|| -> Result<Vec<(Entity, Entity)>, String> {
+            Ok(match &job {
+                Job::Fetch { item: id, n } => {
+                    let have = in_stash(id, *n);
+                    if (have.len() as u32) < *n {
+                        // There are some, but shot through.
+                        if in_stash_as(id, *n, false).len() > have.len() {
+                            return Err((lines::FETCH_WORN).into());
+                        }
+                        return Err((lines::fetch_short(
+                            have.len(),
+                            *n,
+                            &crate::progression::want_name(&self.catalog, id),
+                        ))
+                        .into());
                     }
-                    return Err((lines::fetch_short(
-                        have.len(),
-                        *n,
-                        &crate::progression::want_name(&self.catalog, id),
-                    ))
-                    .into());
+                    have
                 }
-                have
-            }
-            Job::Recover { overnight, .. } => {
-                let have = in_stash(RECOVER_ITEM, 1);
-                if have.is_empty() {
-                    return Err((lines::NO_RECORDER).into());
+                Job::Recover { overnight, .. } => {
+                    let have = in_stash(RECOVER_ITEM, 1);
+                    if have.is_empty() {
+                        return Err((lines::NO_RECORDER).into());
+                    }
+                    // An expedition counts when the raid it came home on had a
+                    // night out in it.
+                    if *overnight && !self.logbook.last.as_ref().is_some_and(|e| e.nights > 0) {
+                        return Err((lines::EXPEDITION_NO_NIGHT).into());
+                    }
+                    have
                 }
-                // An expedition counts when the raid it came home on had a
-                // night out in it.
-                if *overnight && !self.logbook.last.as_ref().is_some_and(|e| e.nights > 0) {
-                    return Err((lines::EXPEDITION_NO_NIGHT).into());
+                Job::Letter => {
+                    let have = in_stash(LETTER_ITEM, 1);
+                    if have.is_empty() {
+                        return Err((lines::NO_LETTER).into());
+                    }
+                    have
                 }
-                have
-            }
-            Job::Letter => {
-                let have = in_stash(LETTER_ITEM, 1);
-                if have.is_empty() {
-                    return Err((lines::NO_LETTER).into());
+                Job::Ledger => {
+                    let have = in_stash(LEDGER_ITEM, 1);
+                    if have.is_empty() {
+                        return Err((lines::NO_LEDGER).into());
+                    }
+                    have
                 }
-                have
-            }
-            Job::Ledger => {
-                let have = in_stash(LEDGER_ITEM, 1);
-                if have.is_empty() {
-                    return Err((lines::NO_LEDGER).into());
+                Job::Scout { place, seen, .. } => {
+                    if !seen {
+                        return Err((lines::scout_not_seen(place)).into());
+                    }
+                    Vec::new()
                 }
-                have
-            }
-            Job::Scout { place, seen, .. } => {
-                if !seen {
-                    return Err((lines::scout_not_seen(place)).into());
+                Job::Bring { item: id, .. } => {
+                    // A living thing comes home living (a canary that went
+                    // quiet in the gas doesn't count).
+                    let all = in_stash(id, u32::MAX);
+                    let have: Vec<_> = all
+                        .iter()
+                        .copied()
+                        .filter(|(_, e)| self.canaries.get(*e).map_or(true, |c| c.life > 0.0))
+                        .take(1)
+                        .collect();
+                    if have.is_empty() && !all.is_empty() {
+                        return Err((lines::BROUGHT_DEAD).into());
+                    }
+                    if have.is_empty() {
+                        return Err((lines::not_brought(&crate::progression::want_name(
+                            &self.catalog,
+                            id,
+                        )))
+                        .into());
+                    }
+                    have
                 }
-                Vec::new()
-            }
-            Job::Bring { item: id, .. } => {
-                // A living thing comes home living (a canary that went
-                // quiet in the gas doesn't count).
-                let all = in_stash(id, u32::MAX);
-                let have: Vec<_> = all
-                    .iter()
-                    .copied()
-                    .filter(|(_, e)| self.canaries.get(*e).map_or(true, |c| c.life > 0.0))
-                    .take(1)
-                    .collect();
-                if have.is_empty() && !all.is_empty() {
-                    return Err((lines::BROUGHT_DEAD).into());
+                Job::Plant { place, planted, .. } => {
+                    if !planted {
+                        return Err((lines::not_planted(place)).into());
+                    }
+                    Vec::new()
                 }
-                if have.is_empty() {
-                    return Err((lines::not_brought(&crate::progression::want_name(
-                        &self.catalog,
-                        id,
-                    )))
-                    .into());
+                Job::Photograph { taken, .. } => {
+                    if !taken {
+                        return Err((lines::NO_PHOTO).into());
+                    }
+                    Vec::new()
                 }
-                have
-            }
-            Job::Plant { place, planted, .. } => {
-                if !planted {
-                    return Err((lines::not_planted(place)).into());
-                }
-                Vec::new()
-            }
-            Job::Photograph { taken, .. } => {
-                if !taken {
-                    return Err((lines::NO_PHOTO).into());
-                }
-                Vec::new()
-            }
-        };
+            })
+        })()
+        .map_err(|l| self.with_the_way(l, &job, progress, raid, opts))?;
         Ok(handed)
+    }
+
+    /// A job not done after a raid out on it: the driver says which way it
+    /// is from the drop, as well as what's missing (cautious, first_jobs:
+    /// "It's not by the radio mast yet.", word for word, five raids
+    /// running, and nothing to go on).
+    fn with_the_way(
+        &self,
+        line: String,
+        job: &Job,
+        progress: &extraction_core::progression::Progress,
+        raid: &Raid,
+        opts: &crate::launch::LaunchOptions,
+    ) -> String {
+        if raid.raids <= progress.job_raid {
+            return line;
+        }
+        let (Some(zone), Some((map, mark))) = (&self.zone, job.still_at()) else {
+            return line;
+        };
+        if map != opts.map {
+            return line;
+        }
+        let Some(drop) = zone.marker(&MarkerKind::Insertion).map(|m| m.at) else {
+            return line;
+        };
+        lines::with_way(&line, &crate::raid::lines::way(drop, mark))
     }
 
     /// Whether pressing the card now would pay the job.
@@ -686,10 +717,15 @@ fn card_text(
         }
         None => text += lines::NOTHING_YET,
     }
+    // What the tier's jobs come to, on every one of them (first_jobs: a
+    // tier's middle raids ended with nothing on the card to look forward
+    // to): the fitting, and whether there's something in it for you.
     if let Some(u) = p.next_fitting().first() {
-        if p.done_in_tier + 1 == tier.jobs {
+        let left = tier.jobs.saturating_sub(p.done_in_tier);
+        let gift = !crate::progression::gifts(*u).is_empty();
+        if left > 0 {
             text += "\n";
-            text += &lines::promise(u.name());
+            text += &lines::promise_in(left, u.name(), gift);
         }
     }
     if let Some(c) = &requests.cache {
@@ -1063,5 +1099,97 @@ pub(crate) mod tests {
         assert_eq!(app.world().resource::<Progression>().0.done, before + 1);
         assert!(app.world().get_entity(stone).is_err(), "handed over");
         assert!(app.world().get_entity(case).is_ok(), "the case stays");
+    }
+
+    /// A job not done after a raid out on it: the card's line says which
+    /// way it is from the drop (cautious, first_jobs: "It's not by the radio
+    /// mast yet." five raids running, nothing to go on). Not on the raid
+    /// it was given: there's been no try yet.
+    #[test]
+    fn a_job_still_not_done_says_which_way() {
+        let mut app = app();
+        let raids = app.world().resource::<Raid>().raids;
+        {
+            let mut p = app.world_mut().resource_mut::<Progression>();
+            p.0.job = Some(Job::Plant {
+                map: "marrow_creek".into(),
+                place: "Radio mast".into(),
+                item: "relay_box".into(),
+                at: [-54.0, -78.8],
+                planted: false,
+            });
+            p.0.job_raid = raids;
+            p.0.last_raid = None;
+        }
+        let last = |app: &App| {
+            app.world()
+                .resource::<Raid>()
+                .log
+                .iter()
+                .rev()
+                .find(|(l, _)| l.contains("radio mast"))
+                .map(|(l, _)| l.clone())
+                .unwrap_or_default()
+        };
+        press_card(&mut app);
+        let first = last(&app);
+        assert!(
+            first.contains("radio mast") && !first.contains("from the drop"),
+            "{first}"
+        );
+        app.world_mut().resource_mut::<Raid>().raids = raids + 1;
+        press_card(&mut app);
+        let again = last(&app);
+        assert!(
+            again.contains("from the drop") && again.ends_with('"') && again.contains(" m "),
+            "{again}"
+        );
+    }
+
+    /// Every job of a tier says what the tier comes to, not only its last
+    /// (first_jobs: a tier's middle raids ended with nothing to look
+    /// forward to): how many jobs to the fitting, and, unnamed, that
+    /// there's something in it when there is.
+    #[test]
+    fn every_job_of_a_tier_says_what_it_comes_to() {
+        let mut app = app();
+        let card = |app: &mut App, done_in_tier: u32| {
+            {
+                let mut p = app.world_mut().resource_mut::<Progression>();
+                p.0.tier = 1;
+                p.0.done = 3 + done_in_tier;
+                p.0.done_in_tier = done_in_tier;
+                p.0.upgrades = vec!["stash_rack".into()];
+                p.0.contract = None;
+                p.0.job = Some(Job::Scout {
+                    map: "marrow_creek".into(),
+                    place: "Old farm".into(),
+                    at: [89.5, 88.5],
+                    seen: false,
+                });
+            }
+            app.update();
+            app.update();
+            let e = one::<With<RequestCard>>(app);
+            app.world()
+                .get::<ScreenText>(e)
+                .unwrap()
+                .text
+                .replace('\n', " ")
+        };
+        let first = card(&mut app, 0);
+        assert!(
+            first.contains(
+                "Three jobs and I'll fit a vice on the bench. There's something in it for you."
+            ),
+            "{first}"
+        );
+        let last = card(&mut app, 2);
+        assert!(
+            last.contains(
+                "Do this and I'll fit a vice on the bench. There's something in it for you."
+            ),
+            "{last}"
+        );
     }
 }

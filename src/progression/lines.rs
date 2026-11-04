@@ -80,6 +80,24 @@ pub fn promise(fitting: &str) -> String {
     format!("Do this and I'll fit {fitting}.")
 }
 
+/// Under every job of a tier: how many jobs to the fitting (`left`, this
+/// one in it), and, unnamed, whether it comes with something for you.
+pub fn promise_in(left: u32, fitting: &str, gift: bool) -> String {
+    let words = ["", "", "Two", "Three", "Four", "Five", "Six"];
+    let head = match left {
+        0 | 1 => promise(fitting),
+        n => format!(
+            "{} jobs and I'll fit {fitting}.",
+            words.get(n as usize).copied().unwrap_or("A few")
+        ),
+    };
+    if gift {
+        format!("{head} There's something in it for you.")
+    } else {
+        head
+    }
+}
+
 pub const NOTHING_YET: &str = "Nothing yet.";
 
 // --- Pressing the card, not done ------------------------------------------
@@ -101,6 +119,15 @@ pub const BROUGHT_DEAD: &str = "Driver: \"It's not singing. He wanted it alive.\
 
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
     format!("Driver: \"That's {have} of {n} {name}. In the stash, mind.\"")
+}
+
+/// A not-done line with the way to it, from the drop ("north, 240 m"),
+/// inside the driver's quote.
+pub fn with_way(line: &str, way: &str) -> String {
+    match line.strip_suffix('"') {
+        Some(said) => format!("{said} {} from the drop.\"", cap_first(way)),
+        None => format!("{line} {} from the drop.", cap_first(way)),
+    }
 }
 
 pub fn scout_not_seen(place: &str) -> String {
@@ -163,6 +190,11 @@ pub fn gift(u: Upgrade) -> &'static str {
         Upgrade::Aerial => GIFT_SMG,
         _ => GIFT_CARBINE,
     }
+}
+
+/// A scout or a recover he's given up waiting for.
+pub fn job_swapped(place: &str) -> String {
+    format!("Driver: \"Forget {}. New job on the card.\"", the(place))
 }
 
 /// A fetch he's given up waiting for.
@@ -415,6 +447,7 @@ mod tests {
             GIFT_CARBINE.into(),
             GIFT_SMG.into(),
             fetch_swapped(name),
+            job_swapped(place),
             scout_noticed(place),
             job_this_way(place, "north-west, 1480 m", true),
             job_waiting(place, Some("north-west, 1480 m")),

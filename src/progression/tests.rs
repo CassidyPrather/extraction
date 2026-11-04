@@ -557,6 +557,54 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
     assert_eq!(progress(&app).done, 1, "a swap isn't a job done");
 }
 
+/// A scout nobody gets to goes the same way as a fetch: after
+/// `FETCH_PATIENCE` raids the driver puts something else on the card
+/// (cautious, first_jobs: five raids on one place, and nothing else to
+/// want). A contract's step waits.
+#[test]
+fn a_place_nobody_gets_to_gives_way_to_another_job() {
+    for contract in [false, true] {
+        let mut app = crate::raid::requests::tests::app();
+        {
+            let mut p = app.world_mut().resource_mut::<Progression>();
+            p.0.done = 1;
+            p.0.job = Some(Job::Scout {
+                map: "marrow_creek".into(),
+                place: "Radio mast".into(),
+                at: [-54.0, -78.8],
+                seen: false,
+            });
+            p.0.job_raid = 0;
+            if contract {
+                p.0.contract = Some(extraction_core::contracts::Active {
+                    id: "mast_relay".into(),
+                    step: 0,
+                });
+            }
+        }
+        for raid in 1..=extraction_core::progression::FETCH_PATIENCE {
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+            app.world_mut().resource_mut::<Raid>().raids = raid;
+            app.update();
+            home(&mut app);
+            app.update();
+        }
+        let job = progress(&app).job;
+        let same = matches!(&job, Some(Job::Scout { place, .. }) if place == "Radio mast");
+        assert_eq!(same, contract, "contract {contract}: {job:?}");
+        if !contract {
+            assert!(
+                app.world()
+                    .resource::<Raid>()
+                    .log
+                    .iter()
+                    .any(|(l, _)| l.contains("Forget the radio mast")),
+                "said so"
+            );
+        }
+    }
+}
+
 #[test]
 fn the_second_and_third_tiers_hand_over_guns() {
     let mut app = crate::raid::requests::tests::app();
