@@ -134,7 +134,9 @@ pub fn current(opts: &LaunchOptions) -> Option<&'static Persona> {
 pub const FIGHT: &str = "first_fight";
 /// The machines a first fight can be with.
 /// (`broken`: the broken walker a career's second job meets, `robots::broken`.)
-pub const ENCOUNTERS: [&str; 6] = ["walker", "drone", "hush", "sentry", "night", "broken"];
+pub const ENCOUNTERS: [&str; 8] = [
+    "walker", "drone", "hush", "sentry", "night", "broken", "hound", "heavy",
+];
 
 /// What a first-hour or first-fight `--scenario` asks for: the newcomers,
 /// and the encounters (none: the plain first hour, yard and raid).
@@ -3279,6 +3281,27 @@ pub(super) fn first_fight(
                     &zone,
                     site,
                     site + Vec3::new(0.0, 0.0, -300.0),
+                );
+                p
+            }
+            // The melee machines, on their rounds off the way as the walker
+            // is: they close to strike, so how near they are when you first
+            // know is the fight.
+            "hound" => {
+                let p = at + side * 20.0;
+                let site = zone.on_ground(p.x, p.y);
+                crate::robots::hound::spawn_hound(&mut commands, &zone, site, job(site));
+                p
+            }
+            "heavy" => {
+                let p = at + side * 25.0;
+                let site = zone.on_ground(p.x, p.y);
+                crate::robots::heavy::spawn_heavy(
+                    &mut commands,
+                    &zone,
+                    &world.catalog,
+                    site,
+                    job(site),
                 );
                 p
             }

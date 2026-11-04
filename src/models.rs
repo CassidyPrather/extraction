@@ -335,7 +335,14 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.22, 0.25, 0.12);
                 m.metallic = 0.3;
             }),
-            "Canvas" => lib.get(Mat::Canvas, server, materials),
+            // The canvas scan's weave at a real cloth's: laid a metre to a
+            // repeat, its cells were 5 mm, and on the rig's pouches at the
+            // belt, a sack or a canteen's cover, cloth in reach read as a
+            // knitted net (docs/craft/ITEM_READING.md). Four repeats a
+            // metre, as the rag cloth's.
+            "Canvas" => derive(Mat::Canvas, &|m| {
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+            }),
             "Planks" => lib.get(Mat::Planks, server, materials),
             "Boards" => lib.get(Mat::WoodFloor, server, materials),
             "Iron" => lib.get(Mat::DarkMetal, server, materials),
