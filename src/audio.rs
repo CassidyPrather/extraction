@@ -65,9 +65,14 @@ struct RoofRain {
 /// Water that runs where a map says it does, beyond its rivers: Sallow's
 /// scour valves, still open, roaring out of the valve house at the dam's
 /// toe into the river (loud at the toe and the face stair's foot, fading
-/// up the valley). (map, xz, height above ground.) The creek's recording,
-/// slowed and louder, until an outflow can be recorded.
-pub const OUTFLOWS: &[(&str, [f32; 2], f32)] = &[("Sallow Reservoir", [12.0, 176.0], 1.0)];
+/// up the valley), and out of the scours' outlets in the dam's foot west
+/// of the stair (`world::dam::SCOUR_OUTLETS`, between the two). (map, xz,
+/// height above ground.) The creek's recording, slowed and louder, until
+/// an outflow can be recorded.
+pub const OUTFLOWS: &[(&str, [f32; 2], f32)] = &[
+    ("Sallow Reservoir", [12.0, 176.0], 1.0),
+    ("Sallow Reservoir", [-58.8, 154.0], 1.5),
+];
 
 #[derive(Component)]
 struct OutflowLoop;
