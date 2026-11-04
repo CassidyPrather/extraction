@@ -120,6 +120,17 @@ fn palm_points(side: Side) -> impl Iterator<Item = Vec3> {
     })
 }
 
+/// The thumb's root, the ball of the thumb on the palm's thumb side: as
+/// much the palm as the thumb (`art/hands/gloves.py`'s thenar pad, its
+/// root radius), lower than the rest of the palm and never moving with
+/// the thumb. In the hand's frame, and its radius.
+fn thenar(side: Side) -> (Vec3, f32) {
+    (
+        glove_frame(side).transform_point(finger_root(side, 4)),
+        RADII[4][0],
+    )
+}
+
 /// Which way the palm faces, in the hand's frame.
 pub fn palm_normal(side: Side) -> Vec3 {
     glove_frame(side).rotation * Vec3::NEG_Y
@@ -248,9 +259,13 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
             }
         }
     }
-    for p in palm_points(side) {
-        let q = to_box.transform_point3(p + shift);
-        let g = sdf(q, half);
+    let (ball, r) = thenar(side);
+    let ball = (to_box.transform_point3(ball + shift), r);
+    for (q, r) in palm_points(side)
+        .map(|p| (to_box.transform_point3(p + shift), 0.0))
+        .chain([ball])
+    {
+        let g = sdf(q, half) - r;
         if g < gap[5] {
             gap[5] = g;
             face[5] = normal(q, half);
@@ -342,9 +357,13 @@ fn close_on<I: Iterator<Item = Bone>>(
 /// the palm's, and each finger's straight (not the thumb's: open, it hangs
 /// below the palm, and would hold it off what it holds).
 fn open_gap(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> f32 {
+    let (ball, r) = thenar(side);
     let palm = palm_points(side)
         .map(|p| sdf(to_box.transform_point3(p + shift), half))
-        .fold(f32::MAX, f32::min);
+        .fold(
+            sdf(to_box.transform_point3(ball + shift), half) - r,
+            f32::min,
+        );
     (0..4)
         .flat_map(|f| bones(side, f, 0.0))
         .map(|b| {
@@ -443,6 +462,21 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
         },
         |(_, s)| s,
     )
+}
+
+/// A thing of half-size `half` as a hand takes it up: its thinnest side
+/// to the palm, its length along the fist, its near side at the hand.
+pub fn taken(side: Side, half: Vec3) -> Transform {
+    let n = palm_normal(side);
+    let mut axes = [(Vec3::X, half.x), (Vec3::Y, half.y), (Vec3::Z, half.z)];
+    axes.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let (thin, long) = (axes[0], axes[2]);
+    // Its thinnest axis onto the palm's facing, its longest onto the
+    // fist's (the hand's Y).
+    let to = Mat3::from_cols(n, Vec3::Y, n.cross(Vec3::Y));
+    let from = Mat3::from_cols(thin.0, long.0, thin.0.cross(long.0));
+    let turn = Quat::from_mat3(&(to * from.transpose()));
+    Transform::from_translation(n * thin.1).with_rotation(turn)
 }
 
 /// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).

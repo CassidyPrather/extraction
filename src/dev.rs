@@ -1078,22 +1078,26 @@ fn first_person_hands(
             }
         }
     } else {
-        // Upright in the left fist (round the hand's origin, as a grip is),
-        // the right open.
-        let thinnest = catalog.kind(what).map_or(0.04, |k| {
-            let def = catalog.get(k);
-            def.dims.map_or((def.bulk / 1000.0).cbrt(), |d| {
-                d.into_iter().fold(f32::MAX, f32::min)
-            })
+        // In the left hand as a hand takes it (`render::hold::taken`), the
+        // glove seated on it as the game seats it; the right open.
+        let half = catalog.kind(what).map_or(Vec3::splat(0.02), |k| {
+            Vec3::from(catalog.get(k).size_m()) * 0.5
         });
         let hand = rest(Side::Left);
-        commands.entity(item).insert(view(hand));
-        glove(
+        let in_hand = crate::render::hold::taken(Side::Left, half);
+        let seat = crate::render::hold::seat(Side::Left, half, in_hand);
+        commands.entity(item).insert(view(hand * in_hand));
+        let h = glove(
             &mut commands,
             Side::Left,
-            hand,
-            hold_curl(None, 0.0, thinnest),
+            hand * Transform::from_translation(seat.shift),
+            seat.curl,
         );
+        commands.entity(h).queue(move |mut e: EntityWorldMut| {
+            if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                v.thumb = Some(seat.thumb);
+            }
+        });
         glove(&mut commands, Side::Right, rest(Side::Right), [0.15; 5]);
     }
 }
