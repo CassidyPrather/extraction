@@ -164,7 +164,8 @@ pub const CONTRACTS: &[Contract] = &[
             },
         ],
         kit: &[("relay_box", 1)],
-        pay: &[("power_cell", 2), ("ammo_545", 2)],
+        // Rounds for the gun you have this early (the AK's are raids off).
+        pay: &[("power_cell", 2), ("ammo_9x18", 2)],
         trust: 1,
         // (Learning how their relays talk, you learn to drown them out.)
         unlocks: &[Unlock::Recipe("pack_545_ap"), Unlock::Recipe("make_jammer")],
@@ -815,5 +816,42 @@ mod tests {
         p.trust = 5;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("the_heavy"));
         assert_eq!(recipes(&p), vec!["pack_545_ap", "make_jammer"]);
+    }
+
+    /// The first raid of a career a contract can be on the card: one job
+    /// a raid, up the ladder's tiers (its `at`th job), or past all of it.
+    fn soonest(c: &Contract) -> u32 {
+        let before = |tier: u32| {
+            TIERS
+                .iter()
+                .take(tier as usize)
+                .map(|t| t.jobs)
+                .sum::<u32>()
+        };
+        match c.offered {
+            Offered::Tier { tier, at } => before(tier) + at,
+            Offered::Deep { .. } => before(TIERS.len() as u32),
+        }
+    }
+
+    /// What a contract hands over (its kit and its pay) is out by the
+    /// raid it can first be offered on (the loot's `from_raid`): Lev's
+    /// mast relay, on raid 3, paid AK rounds five raids before any AK.
+    #[test]
+    fn contracts_pay_in_what_is_out() {
+        use crate::items::{BUILTIN_CATALOG, ItemCatalog};
+        use crate::loot::{BUILTIN_LOOT, LootTables};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        let mut early = Vec::new();
+        for c in CONTRACTS {
+            let at = soonest(c);
+            for (id, _) in c.kit.iter().chain(c.pay) {
+                if let Some(out) = loot.arrives(id).filter(|r| *r > at) {
+                    early.push(format!("{}: {id} on raid {at}, out from {out}", c.id));
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
     }
 }
