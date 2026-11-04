@@ -231,8 +231,11 @@ third job. Each run starts from a fresh career that has done the yard.
 
 The hoarder heeds no warning: it carries on picking things up, and out
 in the open after a warning is meant to lose. Its going down is counted
-by design, not as a failure (`run_fights`); the scenario fails only when
-a newcomer who does as the driver says doesn't come through. Every
+by design, not as a failure (`run_fights`), and so is the reckless one's
+against the drone, which it takes on in the open, when the drone's
+warning played (its lock-on chirp, read from the run) with a roof in
+reach. The scenario fails only when a newcomer who does as the driver
+says doesn't come through. Every
 encounter is met within a sprint of a roof (the drone's nearest door is
 14 m off, `a_roof_is_in_reach_of_the_first_fights_drone`).
 
