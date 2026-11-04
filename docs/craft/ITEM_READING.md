@@ -15,8 +15,8 @@
 > - Lettering at 2 m in game: Marrow's gate block wears ivy over its
 >   face, and the house crate faced away; confirm on a crate and block
 >   that face the eye.
-> - The truck crate's later kinds (the stations' kit) at reading
->   distance, as its first three were.
+> - ~~The truck crate's later kinds at reading distance~~: done 4
+>   November (the magazine on its side; the rounds out from under the map).
 > - The walk props past the first jobs (Kettle's, Rime's, Sallow's).
 
 Every item must be told apart from every other, and its family known,
@@ -245,3 +245,22 @@ a metre away, under the room's light (`render::grade` `ROOM_ADAPT`):
 
 **How it rests is part of its silhouette**, again, and so is which face is
 up: an item in a crate is seen from above.
+
+### The truck's crate, all its kinds (4 November)
+
+`docs/shots/items/truck_crate_all_before_after.jpg`: the crate as it
+stands after the yard (every station's kit unfolded; shown so for the
+shot, not in code), from the truck's bed at about a metre, the room's
+light. Twelve kinds; ten read at a glance: the stew's lid, the radio
+face up, the map case, the bolts' orange tape, the torch, the cleaning
+roll, the detector's yellow face, the dressing's red cross, the compass
+dial, the pistol. Two didn't:
+
+- **The spare PM magazine stood up**: a dark sliver from above (its feed
+  lips). It lies on its side now, its length and the top round showing.
+- **The 9x18 rounds weren't there at all**: laid out under the map case
+  (`fresh_save` had them a hand apart). Now out in the open between the
+  torch and the dressing, the card box's print and its brass showing.
+
+A crate's layout is part of reading its items: nothing under anything,
+and each lying with its telling face up.
