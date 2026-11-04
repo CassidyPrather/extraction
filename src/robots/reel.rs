@@ -521,6 +521,11 @@ fn reel(
                 for e in [hound, heavy] {
                     commands.entity(e).remove::<Senses>().remove::<Brain>();
                 }
+                // (A hound's mind comes with its senses, which it's here
+                // without: given it.)
+                commands
+                    .entity(hound)
+                    .insert(super::hound_mind::HoundMind::default());
                 commands
                     .entity(crawler)
                     .remove::<Senses>()
@@ -669,7 +674,7 @@ fn reel(
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
-                | "pin" => {
+                | "pin" | "melee" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
