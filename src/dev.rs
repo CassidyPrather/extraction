@@ -138,12 +138,41 @@ fn screenshot_when_ready(
         let _ = std::fs::create_dir_all(dir);
     }
     let mut save = save_to_disk(path.clone());
+    let alpha = alpha_path(path);
     commands.spawn(Screenshot::primary_window()).observe(
         move |captured: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
+            if std::env::var_os("EXTRACTION_SHOT_ALPHA").is_some() {
+                save_alpha(&captured.image, &alpha);
+            }
             save(captured);
             exit.write(AppExit::Success);
         },
     );
+}
+
+/// `EXTRACTION_SHOT_ALPHA=1`: beside the shot, `<name>_alpha.png`, the
+/// frame's alpha as grey. The headset's compositor blends each eye by it
+/// (`render::hold_rate`, `BLEND_TEXTURE_SOURCE_ALPHA`): anything below
+/// white there is drawn toward black in the headset, though a desktop
+/// shot (RGB) never shows it.
+fn alpha_path(path: &std::path::Path) -> std::path::PathBuf {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("shot");
+    path.with_file_name(format!("{stem}_alpha.png"))
+}
+
+fn save_alpha(image: &Image, path: &std::path::Path) {
+    match image.clone().try_into_dynamic() {
+        Ok(img) => {
+            let mut alpha = img.to_rgba8();
+            for p in alpha.pixels_mut() {
+                p.0 = [p.0[3], p.0[3], p.0[3], 255];
+            }
+            if let Err(e) = alpha.save(path) {
+                warn!("screenshot alpha: {e}");
+            }
+        }
+        Err(e) => warn!("screenshot alpha: {e}"),
+    }
 }
 
 /// `--gallery sights:<gun>`: the gun's sight line on the camera's, its

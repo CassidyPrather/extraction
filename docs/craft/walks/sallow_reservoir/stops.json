@@ -1,0 +1,242 @@
+[
+ {
+  "n": 1,
+  "name": "s01",
+  "s": 0,
+  "kind": "drop",
+  "note": "",
+  "at": [
+   25.0,
+   262.0
+  ],
+  "h": 31.2,
+  "fwd": 357,
+  "side": 56,
+  "side_what": "Filter house (90 m)"
+ },
+ {
+  "n": 2,
+  "name": "s02",
+  "s": 30,
+  "kind": "fork",
+  "note": "Filter house lane / River road",
+  "at": [
+   23.5,
+   232.0
+  ],
+  "h": 30.6,
+  "fwd": 357,
+  "side": 75,
+  "side_what": "Filter house (79 m)"
+ },
+ {
+  "n": 3,
+  "name": "s03",
+  "s": 42,
+  "kind": "fork",
+  "note": "River road / West road",
+  "at": [
+   22.9,
+   220.0
+  ],
+  "h": 30.4,
+  "fwd": 357,
+  "side": 84,
+  "side_what": "Filter house (78 m)"
+ },
+ {
+  "n": 4,
+  "name": "s04",
+  "s": 79,
+  "kind": "job",
+  "note": "bring (scour_key: Valve house)",
+  "at": [
+   21.0,
+   183.0
+  ],
+  "h": 29.8,
+  "fwd": 357,
+  "side": 110,
+  "side_what": "Filter house (84 m)"
+ },
+ {
+  "n": 5,
+  "name": "s05",
+  "s": 120,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   -13.0,
+   163.0
+  ],
+  "h": 30.1,
+  "fwd": 276,
+  "side": 113,
+  "side_what": "Valve house (38 m)"
+ },
+ {
+  "n": 6,
+  "name": "s06",
+  "s": 160,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   -18.0,
+   154.8
+  ],
+  "h": 33.0,
+  "fwd": 89,
+  "side": 358,
+  "side_what": "Draw-off tower (47 m)"
+ },
+ {
+  "n": 7,
+  "name": "s07",
+  "s": 200,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   22.0,
+   154.1
+  ],
+  "h": 39.9,
+  "fwd": 89,
+  "side": 180,
+  "side_what": "Valve house (24 m)"
+ },
+ {
+  "n": 8,
+  "name": "s08",
+  "s": 240,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   62.0,
+   153.5
+  ],
+  "h": 46.7,
+  "fwd": 89,
+  "side": 239,
+  "side_what": "Valve house (47 m)"
+ },
+ {
+  "n": 9,
+  "name": "s09",
+  "s": 291,
+  "kind": "crest",
+  "note": "",
+  "at": [
+   107.0,
+   139.0
+  ],
+  "h": 52.0,
+  "fwd": 78,
+  "side": 185,
+  "side_what": "Filter house (73 m)"
+ },
+ {
+  "n": 10,
+  "name": "s10",
+  "s": 320,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   135.5,
+   133.0
+  ],
+  "h": 52.0,
+  "fwd": 78,
+  "side": 204,
+  "side_what": "Filter house (87 m)"
+ },
+ {
+  "n": 11,
+  "name": "s11",
+  "s": 360,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   174.7,
+   124.7
+  ],
+  "h": 51.9,
+  "fwd": 78,
+  "side": 157,
+  "side_what": "The spillway (103 m)"
+ },
+ {
+  "n": 12,
+  "name": "s12",
+  "s": 400,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   211.6,
+   114.0
+  ],
+  "h": 51.6,
+  "fwd": 11,
+  "side": 55,
+  "side_what": "radio_mast (69 m)"
+ },
+ {
+  "n": 13,
+  "name": "s13",
+  "s": 440,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   219.0,
+   74.6
+  ],
+  "h": 49.2,
+  "fwd": 11,
+  "side": 90,
+  "side_what": "radio_mast (49 m)"
+ },
+ {
+  "n": 14,
+  "name": "s14",
+  "s": 480,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   224.7,
+   35.0
+  ],
+  "h": 47.0,
+  "fwd": 358,
+  "side": 133,
+  "side_what": "radio_mast (59 m)"
+ },
+ {
+  "n": 15,
+  "name": "s15",
+  "s": 520,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   223.0,
+   -5.0
+  ],
+  "h": 45.8,
+  "fwd": 0,
+  "side": 151,
+  "side_what": "radio_mast (92 m)"
+ },
+ {
+  "n": 16,
+  "name": "s16",
+  "s": 570,
+  "kind": "rendezvous",
+  "note": "Gauge house",
+  "at": [
+   236.0,
+   -46.0
+  ],
+  "h": 45.7,
+  "fwd": 65,
+  "side": 21,
+  "side_what": "Gauge house (26 m)"
+ }
+]

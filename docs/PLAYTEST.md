@@ -721,6 +721,12 @@ the same line without the `$env:` and `Remove-Item` parts.
 
 That's eight runs, about two minutes each.
 
+**At the village, also read the `cpu:` line** (both village runs). It
+ends `render world N ms (1% M)`: the renderer's own CPU time a frame,
+which runs beside the game's. Note both figures. If the 1% figure is over
+11.1 ms, the renderer alone can't keep 90 Hz there; tell us. It decides
+whether we change Bevy's shadow code.
+
 **What the numbers mean.** For each switch, take the mean of the three
 `gpu:` totals with it on and with it off.
 

@@ -549,6 +549,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "factory_hall" => [36.0, 13.8, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
         "target" => [2.4, 1.7, 2.0],
+        // A snow pole on Rime's col track (src/world/fell.rs).
+        "snow_pole" => [0.2, 2.5, 0.2],
         // Landmarks (src/world/buildings.rs); the headframe's back struts
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
@@ -1039,6 +1041,8 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "boxcar"
             | "target"
             | "fence_garden"
+            // A pole stands in the snow as it lies.
+            | "snow_pole"
             // Stepped down its slope: the map terraces the ground for it.
             | "ore_mill"
             // On the line's grade.

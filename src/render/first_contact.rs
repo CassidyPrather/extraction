@@ -136,10 +136,52 @@ impl Loading {
     }
 }
 
+/// Every file under the asset root (`crate::asset_root_path`; its dot
+/// directories aside) read once per process, before any load is
+/// timed, so the clock measures the game's load (decode, upload, spawn) and
+/// not the disk. The Verifier's first run after a container restart loaded
+/// Marrow Creek in 28.0 s against 8.1 (372 frames, each 40-90 ms: waiting on
+/// arrivals, not busy); the next, after evicting `assets/`, the libraries and
+/// the test binary from the page cache (`posix_fadvise`), in 5.5-5.9 s, as
+/// warm. So the cold time is block IO below the page cache, a fresh
+/// container's disk, which no code here causes or can fix; the ceilings
+/// were calibrated warm. Warming beats excluding IO from the span: an
+/// asset's read and decode share Bevy's loader tasks and can't be told
+/// apart from outside, while reading the files first is a short walk.
+fn read_assets_once() {
+    static READ: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    READ.get_or_init(|| {
+        fn read(dir: &std::path::Path, buf: &mut [u8]) {
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    // `.cache/`: fetch_assets.py's downloads, never loaded.
+                    if !e.file_name().to_string_lossy().starts_with('.') {
+                        read(&p, buf);
+                    }
+                } else if let Ok(mut f) = std::fs::File::open(&p) {
+                    use std::io::Read;
+                    while f.read(buf).is_ok_and(|n| n > 0) {}
+                }
+            }
+        }
+        let t = Instant::now();
+        read(&crate::asset_root_path(), &mut vec![0; 1 << 20]);
+        println!(
+            "assets read ahead of the clock in {:.2} s",
+            t.elapsed().as_secs_f64()
+        );
+    });
+}
+
 /// A valley's client, loaded (and how long it took), with what arrives
 /// each frame noted; settled too (for a walk) if `settled`.
 fn loaded_app(map: &str, settled: bool) -> (App, Loading) {
     profile();
+    read_assets_once();
     let t = Instant::now();
     let mut app = client_threads(map, "clearing", None);
     as_the_game_runs(&mut app);

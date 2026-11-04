@@ -337,6 +337,61 @@ fn rolls_for(richness: f32, rng: &mut Rng) -> usize {
 }
 
 /// Rolls every building loot spot (shelves, tables, crates).
+/// A career's first raids put a small thing where it's seen (Models'
+/// shots of Marrow's first houses: the 9x18 box, matches, bolt and cell
+/// were specks on a low shelf in drizzle light): from waist to eye height,
+/// a tiny one on a flat top (or the high shelf), in the same building.
+pub const PLACED_RAIDS: u32 = 2;
+
+/// From waist to eye height (m above the floor).
+pub const SEEN_FROM: f32 = 0.75;
+pub const SEEN_TO: f32 = 1.6;
+
+/// Whether a thing of `size` sits well at `spot` for a newcomer.
+pub fn sits_well(
+    spot: &crate::world::buildings::LootSpot,
+    size: extraction_core::items::SizeClass,
+) -> bool {
+    use extraction_core::items::SizeClass;
+    let Some(lift) = spot.lift else {
+        return !matches!(size, SizeClass::Tiny | SizeClass::Small);
+    };
+    let seen = (SEEN_FROM..=SEEN_TO).contains(&lift);
+    match size {
+        // A shelf under another board is shaded and edge-on; the high
+        // one's near the eye.
+        SizeClass::Tiny => seen && (spot.top || lift >= 1.0),
+        SizeClass::Small => seen,
+        _ => true,
+    }
+}
+
+/// The most things a first raid moves onto one spot: a pile any higher
+/// hides what's behind it, the thing the move is for.
+pub const MOVED_PILE: usize = 4;
+
+/// A spot in `building` a thing of `size` sits well at and that isn't
+/// piled up yet: flat tops first, the emptiest of them.
+fn better_spot(
+    spots: &[crate::world::buildings::LootSpot],
+    building: usize,
+    size: extraction_core::items::SizeClass,
+    piled: &std::collections::HashMap<usize, usize>,
+    rng: &mut Rng,
+) -> Option<usize> {
+    let pile = |k: usize| piled.get(&k).copied().unwrap_or(0);
+    let good: Vec<usize> = (0..spots.len())
+        .filter(|&k| {
+            spots[k].building == building && sits_well(&spots[k], size) && pile(k) < MOVED_PILE
+        })
+        .collect();
+    let tops: Vec<usize> = good.iter().copied().filter(|&k| spots[k].top).collect();
+    let pick = if tops.is_empty() { good } else { tops };
+    let least = pick.iter().map(|&k| pile(k)).min()?;
+    let pick: Vec<usize> = pick.into_iter().filter(|&k| pile(k) == least).collect();
+    Some(pick[rng.below(pick.len())])
+}
+
 fn spawn_building_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -350,7 +405,32 @@ fn spawn_building_loot(
     let mut n = 0;
     let notes = notes_lying(zone);
     let valley = extraction_core::loot::valley_key(&zone.map.name);
-    for spot in &spots.0 {
+    let placed = raid.is_some_and(|r| r < PLACED_RAIDS);
+    // How many things each spot has (a pile climbs: `building_roll`).
+    let mut piled: std::collections::HashMap<usize, usize> = Default::default();
+    // A first raid's small things that sit badly, moved once every spot's
+    // own roll is in (so a spot's pile counts what's rolled there too).
+    let mut moving = Vec::new();
+    let mut lay = |to: usize,
+                   drop: extraction_core::loot::Drop,
+                   piled: &mut std::collections::HashMap<usize, usize>,
+                   rng: &mut Rng| {
+        let pile = piled.entry(to).or_default();
+        let i = *pile;
+        *pile += 1;
+        let at = clear_of_notes(spots.0[to].at + building_roll(i), &notes);
+        spawn_item(
+            commands,
+            catalog,
+            SpawnItem {
+                kind: drop.kind,
+                transform: Transform::from_translation(at)
+                    .with_rotation(Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU))),
+                condition: drop.condition,
+            },
+        );
+    };
+    for (j, spot) in spots.0.iter().enumerate() {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| {
@@ -358,21 +438,19 @@ fn spawn_building_loot(
                     .roll_at(spot.table, Some(&valley), raid, catalog, &mut rng)
             })
             .collect();
-        for (i, drop) in drops.into_iter().enumerate() {
-            let at = clear_of_notes(spot.at + building_roll(i), &notes);
-            spawn_item(
-                commands,
-                catalog,
-                SpawnItem {
-                    kind: drop.kind,
-                    transform: Transform::from_translation(at).with_rotation(
-                        Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU)),
-                    ),
-                    condition: drop.condition,
-                },
-            );
+        for drop in drops {
             n += 1;
+            if placed && !sits_well(spot, catalog.get(drop.kind).size) {
+                moving.push((j, drop));
+            } else {
+                lay(j, drop, &mut piled, &mut rng);
+            }
         }
+    }
+    for (j, drop) in moving {
+        let size = catalog.get(drop.kind).size;
+        let to = better_spot(&spots.0, spots.0[j].building, size, &piled, &mut rng).unwrap_or(j);
+        lay(to, drop, &mut piled, &mut rng);
     }
     info!(
         "{n} items rolled into {} building loot spots",
@@ -479,7 +557,7 @@ fn spawn_dev_cache(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
@@ -592,5 +670,73 @@ mod tests {
             }
         }
         assert!(early.is_empty(), "{early:#?}");
+    }
+
+    /// On a career's first raids a small thing lies where it's seen: from
+    /// waist to eye height, a tiny one on a flat top or the high shelf
+    /// (Models' shots of Marrow's first houses: the 9x18 box, matches,
+    /// bolt and cell were specks on a low shelf), wherever its building has
+    /// such a spot. Later raids leave loot where it's rolled.
+    #[test]
+    fn a_first_raids_small_things_lie_in_sight() {
+        use extraction_core::items::SizeClass;
+        let mut app = career_app();
+        let spots = app
+            .world()
+            .resource::<crate::world::buildings::BuildingLoot>()
+            .0
+            .clone();
+        let cat = app.world().resource::<Catalog>().clone();
+        for r in 0..PLACED_RAIDS {
+            rolled_on(&mut app, r);
+            // Each small thing in a building, by the spot it was laid at
+            // (piles climb a little), and how many things each spot has.
+            let mut laid = Vec::new();
+            let mut per = vec![0usize; spots.len()];
+            let mut q = app.world_mut().query::<(&Item, &GlobalTransform)>();
+            for (item, gt) in q.iter(app.world()) {
+                let at = gt.translation();
+                let Some((k, _)) = spots
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| {
+                        s.at.xz().distance(at.xz()) < 0.4 && (at.y - s.at.y).abs() < 1.0
+                    })
+                    .min_by(|a, b| a.1.at.distance(at).total_cmp(&b.1.at.distance(at)))
+                else {
+                    continue;
+                };
+                per[k] += 1;
+                let def = cat.0.get(item.kind);
+                if matches!(def.size, SizeClass::Tiny | SizeClass::Small) {
+                    laid.push((def.id.clone(), def.size, k));
+                }
+            }
+            // Out of sight only where every spot in sight in its building
+            // is piled up already.
+            let room = |b: usize, size: SizeClass| {
+                (0..spots.len()).any(|k| {
+                    spots[k].building == b && sits_well(&spots[k], size) && per[k] < MOVED_PILE
+                })
+            };
+            let badly: Vec<String> = laid
+                .iter()
+                .filter(|(_, size, k)| {
+                    !sits_well(&spots[*k], *size) && room(spots[*k].building, *size)
+                })
+                .map(|(id, _, k)| format!("{id} at {:?} (lift {:?})", spots[*k].at, spots[*k].lift))
+                .collect();
+            assert!(
+                laid.len() > 10,
+                "raid {r}: only {} small things in buildings",
+                laid.len()
+            );
+            assert!(
+                badly.is_empty(),
+                "raid {r}: {} of {} small things out of sight: {badly:#?}",
+                badly.len(),
+                laid.len()
+            );
+        }
     }
 }

@@ -357,13 +357,27 @@ pub fn camera_bundle(weather: &Weather) -> impl Bundle {
     (
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
-            fov: 75f32.to_radians(),
+            fov: desktop_fov().to_radians(),
             near: NEAR_CLIP,
             far: 2000.0,
             ..default()
         }),
         camera_look(weather),
     )
+}
+
+/// The desktop view's vertical field of view, degrees: 75, or
+/// `EXTRACTION_FOV` (a shot as one headset eye sees it: 100, with a
+/// square `--size`). The headset's own eyes take the runtime's.
+fn desktop_fov() -> f32 {
+    static FOV: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *FOV.get_or_init(|| {
+        std::env::var("EXTRACTION_FOV")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|f| (20.0..=150.0).contains(f))
+            .unwrap_or(75.0)
+    })
 }
 
 /// How close to the eye things still draw: iron sights sit a few

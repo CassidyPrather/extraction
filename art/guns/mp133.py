@@ -72,8 +72,10 @@ rsec = fillet([(-RX_HW, RX_Y0), (RX_HW, RX_Y0), (RX_HW, RX_Y1), (-RX_HW, RX_Y1)]
               [0.0025, 0.0025, 0.013, 0.013], 5)
 recv.prism(rsec, RX_Z0, RX_Z1, "Alloy", axis="z", bevel=0.0018, segs=2)
 rc = Part("cut")
-# Ejection port, right side; the bolt shows in it when closed.
-rc.box((0.024, 0.026, 0.06), (0.018, 0.050, -0.12), "Black", bevel=0.002, segs=1)
+# Ejection port, right side; the bolt shows in it when closed. 78 mm,
+# back from the barrel's breech: a fired 70 mm hull has to clear it (it
+# was 60).
+rc.box((0.024, 0.026, 0.078), (0.018, 0.050, -0.1185), "Black", bevel=0.002, segs=1)
 # Loading port underneath, the shell lifter recessed in it.
 rc.box((0.022, 0.046, 0.072), (0.0, 0.003, -0.13), "Black", bevel=0.002, segs=1)
 # Stampings on the left: the model and the chambering.
@@ -223,7 +225,7 @@ sw.sweep(loop, section_rect(0.0028, 0.0028, 0.0008), "Steel")
 BOLT_O = (0.0, BORE, -0.13)
 bolt = Part("bolt", origin=BOLT_O)
 # Bolt: the side of it fills the ejection port when closed.
-BZ0, BZ1 = BREECH + 0.001, -0.113
+BZ0, BZ1 = BREECH + 0.001, -0.080   # filling the port (open, its tail runs into the stock)
 bolt.prism(fillet([(-0.006, 0.039), (0.014, 0.039), (0.014, 0.061), (-0.006, 0.061)], 0.002, 2),
            BZ0, BZ1, "Steel", axis="z", bevel=0.001, segs=1)
 # Extractor claw on the right of the bolt face, and the bolt's lightening flat.
