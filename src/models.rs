@@ -753,6 +753,37 @@ mod tests {
         (lo.x <= hi.x).then_some((lo, hi))
     }
 
+    /// Every kind of item looks like itself: none falls back to the item
+    /// placeholder, a plain slab in its category's colour (the walker's
+    /// armour plate did, pried off a wreck: the one piece of salvage that
+    /// didn't say what it was). A gun is built from its layout
+    /// (`weapons`, `models/guns/`), a magazine loads from `models/mags/`,
+    /// the anomaly items are drawn by `anomaly::visuals` (`OWN_LOOKS`);
+    /// every other kind has `models/items/<id>.glb`.
+    #[test]
+    fn no_item_falls_back_to_the_placeholder() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models");
+        let mut bare = Vec::new();
+        for (_, def) in cat.iter() {
+            let path = match def.category {
+                Category::Firearm => root.join("guns").join(format!("{}.glb", def.id)),
+                Category::Magazine => root.join("mags").join(format!("{}.glb", def.id)),
+                _ if crate::anomaly::visuals::OWN_LOOKS.contains(&def.id.as_str()) => continue,
+                _ => root.join("items").join(format!("{}.glb", def.id)),
+            };
+            if !path.exists() {
+                bare.push(def.id.clone());
+            }
+        }
+        assert!(
+            bare.is_empty(),
+            "{} kinds would be the placeholder slab: {bare:?}",
+            bare.len()
+        );
+    }
+
     /// Every item model fits the box its collider is (`dims`, or a cube of
     /// its bulk): it doesn't stick out of it, rests on its floor rather
     /// than floating above or sinking into the ground, and a flat or long
