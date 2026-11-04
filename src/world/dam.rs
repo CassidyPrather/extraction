@@ -225,7 +225,9 @@ pub const SCOUR_OUTLETS: [f32; 2] = [-67.0, -50.6];
 /// behind a grille gone to rust, and its worn sill running out to its
 /// channel (the map's water).
 fn scour_outlet(b: &mut Builder, c: f32) {
-    // The face's foot is at local z 2 (the lowest course stands 4 out).
+    // The face's foot is at local z 2 (the lowest course stands 4 out,
+    // the one above it 3.4).
+    const NEXT_COURSE: f32 = 1.4;
     let (inn, out) = (2.0, 3.2);
     let mid = (inn + out) * 0.5;
     let (w, h) = (6.0, 7.0);
@@ -243,8 +245,18 @@ fn scour_outlet(b: &mut Builder, c: f32) {
         Vec3::new(c, (lintel.0 + lintel.1) * 0.5, mid),
         Mat::DressedStone,
     );
-    // Its top weathered back to the face, as every set-back's is.
-    weathering(b, c, w + jamb * 2.0, out, inn, lintel.1, Mat::DressedStone);
+    // Its top weathered back as every set-back's is, and on past the
+    // foot course's front to the next course's face: stopped at the foot
+    // course it left a notch 10 m up to stand in.
+    weathering(
+        b,
+        c,
+        w + jamb * 2.0,
+        out,
+        NEXT_COURSE,
+        lintel.1,
+        Mat::DressedStone,
+    );
     b.deco(
         Vec3::new(0.9, 1.5, 0.15),
         Vec3::new(c, (lintel.0 + lintel.1) * 0.5, out + 0.07),
