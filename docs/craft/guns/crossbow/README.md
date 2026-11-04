@@ -116,6 +116,9 @@ actions are the lengths their parts allow.
    full draw, so the drawn string is 15% too long (it was 28%). It needs
    the prod to bend with the draw: a bone or blend shape, which the
    game's movers don't have yet.
-2. **The draw by one hand.** A leaf prod like this wants 50 kg or more:
-   a foot in the stirrup and both hands, or a cocking rope. The game
-   draws it with one hand, which is weapon feel's and Hands' to judge.
+2. **The draw by one hand: decided.** Weapon feel chose not to require a
+   foot in the stirrup. Feet aren't tracked, bending to the floor in a
+   headset is a fall risk, and seated play couldn't do it. The draw is
+   heavy instead: the string follows only a firm, steady pull of about a
+   quarter second (`weapons::drag`). The stirrup stays modelled, as on the
+   real gun. Bracing for a lighter draw may come later.

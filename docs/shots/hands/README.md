@@ -182,3 +182,9 @@ ahead of the guard) is the gun hand's index's: it straightens forward off
 the trigger onto it (`render::props::catch_index_curl`). The PM's heel
 catch is past any finger of the gun hand: the thumb of the palm cupped
 under the butt rises onto it (`catch_thumb`). Let go, each eases back.
+`32_crossbow_redraw.jpg` (`fp:crossbow,1.5,90` and `fp:crossbow+handle,1.5,90`;
+left before, right Gunsmith's ef8141d): the shorter draw a leaf-spring
+prod gives (the string's rest from z -0.33 to -0.22) and the front grip
+110 mm back. Top, the support palm under the new front grip, up into it;
+below, the fist closed on the string at its new rest. Both follow the
+layout (`support_pose`, `handle_pose`): nothing of the hands' changed.
