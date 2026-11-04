@@ -35,6 +35,15 @@ pub struct Piece {
 pub struct LootSpot {
     pub at: Vec3,
     pub table: &'static str,
+    /// Height above the floor it's on, where the builder knows it (`None`:
+    /// a spot laid bare, low as like as not).
+    pub lift: Option<f32>,
+    /// A flat top in the room's open view (a table, counter, bench, a box's
+    /// lid), not a shelf under another board.
+    pub top: bool,
+    /// Which of the map's placements it's in (`map.placements` order; 0
+    /// in a prefab's own geometry).
+    pub building: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -399,7 +408,25 @@ impl Builder {
     }
 
     pub fn loot(&mut self, at: Vec3, table: &'static str) -> &mut Self {
-        self.geo.loot.push(LootSpot { at, table });
+        self.geo.loot.push(LootSpot {
+            at,
+            table,
+            lift: None,
+            top: false,
+            building: 0,
+        });
+        self
+    }
+
+    /// A loot spot `lift` above the floor at `floor` (a top, or a shelf).
+    pub fn loot_at(&mut self, floor: Vec3, lift: f32, top: bool, table: &'static str) -> &mut Self {
+        self.geo.loot.push(LootSpot {
+            at: floor + Vec3::Y * lift,
+            table,
+            lift: Some(lift),
+            top,
+            building: 0,
+        });
         self
     }
 
@@ -1229,7 +1256,7 @@ impl Builder {
             vec![("table", Transform::from_translation(at).with_rotation(rot))],
         );
         if let Some(t) = loot {
-            self.loot(at + Vec3::Y * 0.82, t);
+            self.loot_at(at, 0.82, true, t);
         }
         self
     }
@@ -1247,7 +1274,7 @@ impl Builder {
             );
             if let Some(t) = loot {
                 if k == 1 || k == 2 {
-                    self.loot(at + Vec3::Y * (y + 0.05), t);
+                    self.loot_at(at, y + 0.05, false, t);
                 }
             }
         }
@@ -1334,7 +1361,7 @@ impl Builder {
         ));
         self.dress(from, models);
         if let Some(t) = loot {
-            self.loot(at + Vec3::Y * 0.95, t);
+            self.loot_at(at, 0.95, true, t);
         }
         self
     }
@@ -1377,7 +1404,7 @@ impl Builder {
             )],
         );
         if let Some(t) = loot {
-            self.loot(at + Vec3::Y * (size + 0.05), t);
+            self.loot_at(at, size + 0.05, true, t);
         }
         self
     }
@@ -1405,7 +1432,7 @@ impl Builder {
             vec![(model, Transform::from_translation(at).with_rotation(rot))],
         );
         if let Some(t) = loot {
-            self.loot(at + Vec3::Y * (size.y + 0.05), t);
+            self.loot_at(at, size.y + 0.05, true, t);
         }
         self
     }
@@ -1450,7 +1477,7 @@ impl Builder {
             )],
         );
         if let Some(t) = loot {
-            self.loot(at + Vec3::Y * 0.98, t);
+            self.loot_at(at, 0.98, true, t);
         }
         self
     }
@@ -2175,10 +2202,7 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
         // What didn't burn: the stove, the bedstead, a table's legs, a
         // steel locker.
         b.stove(Vec3::new(-x * 0.35, f, z - 0.45), 0.0);
-        b.geo.loot.push(LootSpot {
-            at: Vec3::new(-x * 0.35, f + 0.9, z - 0.45),
-            table: "kitchen",
-        });
+        b.loot_at(Vec3::new(-x * 0.35, f, z - 0.45), 0.9, true, "kitchen");
         let at = Vec3::new(x - 0.6, f, z - 1.2);
         let from = b.geo.pieces.len();
         b.bx(
@@ -2195,7 +2219,7 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
             Vec3::new(x - 0.35, f, -z * 0.75),
             -std::f32::consts::FRAC_PI_2,
         );
-        b.loot(Vec3::new(x * 0.35, f + 0.05, z - 0.5), "house");
+        b.loot_at(Vec3::new(x * 0.35, f, z - 0.5), 0.05, false, "house");
         burn(b, start);
     }
 }
@@ -2346,10 +2370,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
         );
     }
     b.stove(Vec3::new(-x * 0.35, top - 0.45, z - 0.45), 0.0);
-    b.geo.loot.push(LootSpot {
-        at: Vec3::new(-x * 0.35, top + 0.45, z - 0.45),
-        table: "kitchen",
-    });
+    b.loot(Vec3::new(-x * 0.35, top + 0.45, z - 0.45), "kitchen");
     let (a, c) = (
         Vec3::new(-x * 0.2, top + 0.05, -z * 0.1),
         Vec3::new(x * 0.55, top + 0.9, z * 0.6),
@@ -2709,7 +2730,7 @@ fn cabin_ruin(b: &mut Builder, ruin: Ruin) {
         }
         // What didn't burn: the stove, the bedstead, the table's legs.
         b.stove(Vec3::new(2.6, f, 2.3), 0.0);
-        b.loot(Vec3::new(2.6, f + 0.9, 2.3), "kitchen");
+        b.loot_at(Vec3::new(2.6, f, 2.3), 0.9, false, "kitchen");
         let at = Vec3::new(-2.8, f, 1.5);
         let from = b.geo.pieces.len();
         b.bx(
@@ -2723,8 +2744,8 @@ fn cabin_ruin(b: &mut Builder, ruin: Ruin) {
         b.bx(Vec3::new(1.2, 0.3, 0.7), at + Vec3::Y * 0.15, Mat::Timber);
         b.dress(from, vec![("table_burnt", Transform::from_translation(at))]);
         // The shelf's and the crate's things in the ash.
-        b.loot(Vec3::new(-1.0, f + 0.1, 2.4), "house");
-        b.loot(Vec3::new(2.9, f + 0.05, -2.4), "tools");
+        b.loot_at(Vec3::new(-1.0, f, 2.4), 0.1, false, "house");
+        b.loot_at(Vec3::new(2.9, f, -2.4), 0.05, false, "tools");
         burn(b, start);
     }
 }
@@ -2892,7 +2913,7 @@ fn shop_ruin(b: &mut Builder, ruin: Ruin) {
                         .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
                 )],
             );
-            b.loot(Vec3::new(x, f + 0.4, 0.2), "food_common");
+            b.loot_at(Vec3::new(x, f, 0.2), 0.4, false, "food_common");
         }
         b.crate_box(Vec3::new(-3.9, f, 2.6), 0.7, Some("food_common"));
         b.crate_box(Vec3::new(-2.0, f, 2.7), 0.6, Some("tools"));
@@ -2910,7 +2931,7 @@ fn shop_ruin(b: &mut Builder, ruin: Ruin) {
             Vec3::new(-0.31, f + 0.87, -0.4),
             Mat::Timber,
         );
-        b.loot(Vec3::new(-0.3, f + 0.95, -0.4), "food_common");
+        b.loot_at(Vec3::new(-0.3, f, -0.4), 0.95, false, "food_common");
         // The roof's fall: a slab from the floor onto the counter's end,
         // another broken across a heap in the corner.
         slab_down(
@@ -2940,10 +2961,10 @@ fn shop_ruin(b: &mut Builder, ruin: Ruin) {
         for (ax, az) in [(-2.9, 1.05), (3.1, 1.05), (-2.0, 2.7), (-3.8, 2.6)] {
             ash(b, Vec3::new(ax, f, az));
         }
-        b.loot(Vec3::new(2.4, f + 0.1, 0.9), "food_common");
-        b.loot(Vec3::new(-2.0, f + 0.1, 2.7), "tools");
+        b.loot_at(Vec3::new(2.4, f, 0.9), 0.1, false, "food_common");
+        b.loot_at(Vec3::new(-2.0, f, 2.7), 0.1, false, "tools");
         b.locker(Vec3::new(3.6, f, 3.0), 0.0);
-        b.loot(Vec3::new(2.6, f + 0.05, 2.9), "medical");
+        b.loot_at(Vec3::new(2.6, f, 2.9), 0.05, false, "medical");
         burn(b, start);
     }
 }
@@ -5726,7 +5747,7 @@ pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> 
 /// Logic: colliders, doors and loot spots for every generated prefab.
 pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     let mut loot = BuildingLoot::default();
-    for p in &zone.map.placements {
+    for (i, p) in zone.map.placements.iter().enumerate() {
         let Some(geo) = prefab(&p.prefab) else {
             continue;
         };
@@ -5755,7 +5776,8 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         for s in &geo.loot {
             loot.0.push(LootSpot {
                 at: loot_spot_at(&zone, &t, s.at),
-                table: s.table,
+                building: i,
+                ..s.clone()
             });
         }
         for l in &geo.ladders {

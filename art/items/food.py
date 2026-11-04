@@ -96,11 +96,8 @@ def water_bottle():
     # `capture::scale`.) The cap keeps the old one's place and axis, the
     # other hand's twist handle (`first_aid::cap_bottles`, 12 mm under
     # the top).
-    # The canvas at its real weave: the library's is laid a metre to a
-    # repeat, and on a 7 cm flask its cells were 5 mm, a knitted net.
-    p.uv_scale = 5.0
     p.lathe([(0.0, -0.04), (0.032, -0.04), (0.032, 0.05), (0.0295, 0.068), (0.021, 0.085),
-             (0.0145, 0.093), (0.0125, 0.096), (0.0125, 0.1), (0.0, 0.1)], "Zinc", segs=24,
+             (0.0145, 0.093), (0.0125, 0.096), (0.0125, 0.1), (0.0, 0.1)], "Aluminium", segs=24,
             xf=UP)
     # The cover: canvas over the body, its hem bound, a seam down the
     # back and a strap tab with its snap at the side.

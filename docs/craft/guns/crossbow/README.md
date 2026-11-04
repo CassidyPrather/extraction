@@ -120,5 +120,5 @@ actions are the lengths their parts allow.
    foot in the stirrup. Feet aren't tracked, bending to the floor in a
    headset is a fall risk, and seated play couldn't do it. The draw is
    heavy instead: the string follows only a firm, steady pull of about a
-   quarter second (`weapons::drag`). The stirrup stays modelled, as on the
+   quarter second (`weapons::drag`, DRAW_WEIGHT 0.8; weapon feel's ae8ccd8f). The stirrup stays modelled, as on the
    real gun. Bracing for a lighter draw may come later.

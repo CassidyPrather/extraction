@@ -28,7 +28,8 @@
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `chirp` (a sentry 7 m off, facing you, chirping: its lens through the
-//! chirp, frame by frame), `melee` (a crawler, a hound and a heavy side by side
+//! chirp, frame by frame), `stalk` (three hounds 12 m off: at rest, stalking, coiled),
+//! `aim` (a walker aiming and a grappler winding up, 8 m off), `melee` (a crawler, a hound and a heavy side by side
 //! facing you, each run through its lead to a blow: the lens tells), `lock` (a drone hovering 8 m off, its lock on
 //! you set off by the reel: its lens through the lock), `pin` (a walker pinning down a spot 7 m to its
 //! right where you dropped from sight: its gun held there, its tracers), `zap` (a crawler charging and
@@ -136,6 +137,8 @@ fn reel(
             Query<&mut super::indoor::Crawler>,
             Query<&mut super::hound_mind::HoundMind>,
             Query<&mut super::heavy::Arm>,
+            Query<&mut super::grappler::Grappler>,
+            Query<(&mut Brain, &mut super::Intent)>,
         ),
         Res<crate::items::Catalog>,
     ),
@@ -489,6 +492,53 @@ fn reel(
                 commands.entity(w).remove::<Senses>().remove::<Brain>();
                 w
             }
+            "stalk" => {
+                // Three hounds 12 m off in the fog, facing you: at rest, at
+                // a stalk (heard you, going low), and coiled to lunge: rest,
+                // stalk and tell side by side.
+                let at = |k: f32| {
+                    let p = eye + flat * 12.0 + right * (k * 3.2);
+                    zone.on_ground(p.x, p.z)
+                };
+                let hs: Vec<Entity> = [-1.0, 0.0, 1.0]
+                    .iter()
+                    .map(|k| {
+                        let a = at(*k);
+                        let h = super::hound::spawn_hound(&mut commands, &zone, a, job(a));
+                        commands
+                            .entity(h)
+                            .remove::<Senses>()
+                            .insert(super::hound_mind::HoundMind::default());
+                        h
+                    })
+                    .collect();
+                for h in [hs[0], hs[2]] {
+                    commands.entity(h).remove::<Brain>();
+                }
+                commands.entity(hs[1]).insert(Brain::Investigate {
+                    at: at(0.0),
+                    left: 1.0e6,
+                });
+                state.others = vec![hs[1], hs[2]];
+                state.subject = Some(hs[0]);
+                return;
+            }
+            "aim" => {
+                // A walker settling its aim on you and a grappler rearing
+                // back to throw, 8 m off: their tells on the body.
+                let wa = eye + flat * 8.0 - right * 2.2;
+                let wa = zone.on_ground(wa.x, wa.z);
+                let w = spawn_walker(&mut commands, &zone, wa, job(wa));
+                let ga = eye + flat * 8.0 + right * 2.2;
+                let ga = zone.on_ground(ga.x, ga.z);
+                let g = super::grappler::spawn_grappler(&mut commands, &zone, ga, job(ga));
+                for e in [w, g] {
+                    commands.entity(e).remove::<Senses>().remove::<Brain>();
+                }
+                state.others = vec![g];
+                state.subject = Some(w);
+                return;
+            }
             "melee" => {
                 // The melee machines side by side, facing you, each run
                 // through its lead to a blow (below): a crawler's charge,
@@ -653,7 +703,9 @@ fn reel(
         || what == "eyesfar"
         || what == "dying"
         || what == "strikes"
-        || what == "melee")
+        || what == "melee"
+        || what == "stalk"
+        || what == "aim")
         && frame == 5
     {
         // Turned to face you.
@@ -674,7 +726,7 @@ fn reel(
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
-                | "pin" | "melee" => {
+                | "pin" | "melee" | "stalk" | "aim" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
@@ -1051,8 +1103,49 @@ fn reel(
             }
         }
     }
+    if what == "stalk" {
+        // Held facing you (the stalker's brain would turn it about).
+        let face = flat.x.atan2(flat.z);
+        for e in std::iter::once(subject).chain(state.others.iter().copied()) {
+            if let Ok(mut w) = walkers.get_mut(e) {
+                w.yaw = face;
+                w.path.clear();
+            }
+        }
+    }
+    if what == "stalk" && frame > WARMUP {
+        let (_, hounds, _, _, brains) = &mut melee;
+        if let Some(Ok((mut b, mut i))) = state.others.first().map(|e| brains.get_mut(*e)) {
+            // (Held at its stalk: its mind would move it on.)
+            if !matches!(*b, Brain::Investigate { .. }) {
+                *b = Brain::Investigate {
+                    at: eye + flat * 12.0,
+                    left: 1.0e6,
+                };
+            }
+            i.low = true;
+        }
+        if let Some(Ok(mut h)) = state.others.get(1).map(|e| hounds.get_mut(*e)) {
+            // Coiled, over and over: its tell.
+            let lead = super::hound_mind::CROUCH_TIME;
+            let t = ((frame - WARMUP) as f32 / 30.0) % lead;
+            h.crouch = lead - t;
+        }
+    }
+    if what == "aim" && frame > WARMUP {
+        let (_, _, _, grapplers, _) = &mut melee;
+        let t = (frame - WARMUP - 1) as f32 / 30.0;
+        if let Ok(mut w) = walkers.get_mut(subject) {
+            let lead = super::walker::AIM_TIME;
+            w.aim = if t < lead { t + 1e-3 } else { 0.0 };
+        }
+        if let Some(Ok(mut g)) = state.others.first().map(|e| grapplers.get_mut(*e)) {
+            let lead = super::grappler::WINDUP;
+            g.windup = if t < lead { t + 1e-3 } else { 0.0 };
+        }
+    }
     if what == "melee" && frame > WARMUP {
-        let (crawlers, hounds, arms) = &mut melee;
+        let (crawlers, hounds, arms, _, _) = &mut melee;
         let t = (frame - WARMUP - 1) as f32 / 30.0;
         if let Ok(mut c) = crawlers.get_mut(subject) {
             let lead = super::indoor::ZAP_CHARGE;

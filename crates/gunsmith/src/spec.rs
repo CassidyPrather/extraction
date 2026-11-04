@@ -136,7 +136,7 @@ pub const SPECS: &[Spec] = &[
     Spec {
         id: "toz_double",
         travel: 0.0,
-        hinge: [0.0, 0.012, -0.11],
+        hinge: [0.0, 0.010, -0.176],
         real: None,
     },
 ];
