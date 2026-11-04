@@ -343,7 +343,7 @@ fn cargo(
                 .id();
             if let Some(loot) = &loot {
                 let mut queue = Vec::new();
-                for drop in loot.0.roll("cargo_pod", &catalog, &mut rng.0) {
+                for drop in loot.roll("cargo_pod", &catalog, &mut rng.0) {
                     queue.push(drop);
                 }
                 for (i, drop) in queue.into_iter().enumerate() {

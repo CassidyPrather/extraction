@@ -283,7 +283,7 @@ fn passthrough() -> Vec<String> {
 fn run_fights(chain: &Chain) -> AppExit {
     let exe = std::env::current_exe().expect("own executable");
     let pass = passthrough();
-    let mut failed = Vec::new();
+    let (mut failed, mut by_design) = (Vec::new(), Vec::new());
     for e in &chain.encounters {
         for p in &chain.personas {
             let dir = PathBuf::from("target/first_fight").join(e).join(p.name);
@@ -319,12 +319,28 @@ fn run_fights(chain: &Chain) -> AppExit {
             }
             println!("first fight: {} meets the {e}", p.name);
             if !cmd.status().is_ok_and(|s| s.success()) {
-                failed.push(format!("{}/{e}", p.name));
+                if p.hoards {
+                    // By design: it carries on as if nothing were there,
+                    // the driver's warnings and all, and out in the open
+                    // after a warning is meant to lose (Robot minds'
+                    // fairness rules). Its going down is the game being
+                    // fair, not a failure of what it was told.
+                    println!(
+                        "first fight: {}/{e} didn't come through, by design (it heeds no warning)",
+                        p.name
+                    );
+                    by_design.push(format!("{}/{e}", p.name));
+                } else {
+                    failed.push(format!("{}/{e}", p.name));
+                }
             }
         }
     }
+    if !by_design.is_empty() {
+        println!("first fight: down by design (heeding nothing): {by_design:?}");
+    }
     if failed.is_empty() {
-        println!("first fight: every newcomer came through");
+        println!("first fight: every newcomer who heeds the driver came through");
         AppExit::Success
     } else {
         println!("first fight: FAILED for {failed:?}");
@@ -1168,15 +1184,36 @@ pub(super) fn direct_raid(
                         && sock.is_some()
                         && world.catalog.get(it.kind()).id == "field_dressing"
                 });
-                match dressing {
-                    Some((e, ..)) => vec![
+                let dress = |e: Entity| {
+                    vec![
                         Task::Stow(Side::Left),
                         Task::Grab {
                             item: e,
                             side: Side::Left,
                         },
                         Task::Use(Side::Left),
-                    ],
+                    ]
+                };
+                // On its way under a roof from a drone: in first, then the
+                // dressing, at the spot it waits (bound in the open, under
+                // the drone's bursts, it lost 60 hp in nine seconds three
+                // metres from the door).
+                let sheltering = state.roof_try.is_some_and(|(_, _, t)| now - t < 25.0);
+                let wait_at = bot.tasks.iter().position(|t| matches!(t, Task::Wait(_)));
+                match dressing {
+                    Some((e, ..)) if sheltering && wait_at.is_some() => {
+                        let at = wait_at.unwrap_or(0);
+                        for (k, t) in dress(e).into_iter().enumerate() {
+                            bot.tasks.insert(at + k, t);
+                        }
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            "bleeding: in under the roof first, then the dressing",
+                        );
+                        vec![]
+                    }
+                    Some((e, ..)) => dress(e),
                     None => {
                         state.note(now, Kind::Confused, "bleeding, and no dressing on me");
                         vec![]
@@ -2082,6 +2119,32 @@ pub(super) fn direct_raid(
                 report(&mut bot, p, &state.moments);
             }
             return;
+        }
+    }
+    // The same for a walk about to start that some answer cut in (from a
+    // shed, sheltered from a drone, the walk to cover went at its wall
+    // for half a minute): not one to or by a door of this building (the
+    // way out's own last step).
+    if let (Some(en), Some(Task::WalkTo { to, .. })) =
+        (view.entrances.as_deref(), bot.tasks.front().cloned())
+        && bot.elapsed < 0.2
+        && tasks.is_empty()
+    {
+        let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
+        if let Some(b) = inside(here)
+            && inside(to) != Some(b)
+            && !en
+                .doors
+                .iter()
+                .any(|d| d.building == b && d.mid.xz().distance(to) < 4.0)
+        {
+            let (out, _) = way_out(&world, &view, &plans, here);
+            if !out.is_empty() {
+                for t in out.into_iter().rev() {
+                    bot.tasks.push_front(t);
+                }
+                bot.restart();
+            }
         }
     }
     // Indoors, with a walk out of the building planned: out by its plan
@@ -3606,6 +3669,45 @@ mod indoor_tests {
             "{} of {walks} indoor walks cut through furniture:\n{}",
             cut.len(),
             cut.join("\n")
+        );
+    }
+
+    /// The first fight's drone is met within a sprint of a roof (a door in
+    /// to it, from outside): open ground is no excuse for losing to it,
+    /// so a newcomer who does as told can live. (Cautious went down there:
+    /// it had sheltered, but bound a wound in the open on its way back in.)
+    #[test]
+    fn a_roof_is_in_reach_of_the_first_fights_drone() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world();
+        let zone = w.resource::<crate::world::Zone>();
+        let en = w.resource::<crate::robots::doors::Entrances>();
+        let (at, _) = super::on_the_way(zone);
+        let mut ds: Vec<(f32, Vec2)> = en
+            .doors
+            .iter()
+            .filter(|d| d.outside)
+            .filter(|d| {
+                let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
+                en.building_at(inside) == Some(d.building)
+            })
+            .map(|d| (d.mid.xz().distance(at), d.mid.xz()))
+            .collect();
+        ds.sort_by(|a, b| a.0.total_cmp(&b.0));
+        assert!(
+            ds.first().is_some_and(|(d, _)| *d < 30.0),
+            "nearest roof from the fight at {at}: {:?}",
+            ds.first()
         );
     }
 

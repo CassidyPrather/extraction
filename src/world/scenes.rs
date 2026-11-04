@@ -660,6 +660,7 @@ fn unlock_scenes(
     raid: Res<crate::raid::Raid>,
     epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     catalog: Res<Catalog>,
+    loot: Option<Res<crate::items::loot::Loot>>,
     mut staged: ResMut<Staged>,
 ) {
     let Some(zone) = zone else {
@@ -677,7 +678,12 @@ fn unlock_scenes(
         }
         info!("scene opens: {}", scene.name);
         stage(&mut commands, &zone, &id, scene, raid.recalled);
-        lay_things(&mut commands, &zone, scene, &catalog);
+        let career = crate::items::loot::career_raid_of(&opts, progression.as_deref());
+        let arrived = |id: &str| {
+            loot.as_ref()
+                .is_none_or(|l| crate::items::loot::arrived(&l.0, career, id))
+        };
+        lay_things(&mut commands, &zone, scene, &catalog, &arrived);
         staged.0.insert(id);
     }
 }
@@ -849,23 +855,35 @@ pub fn note_pose(scene: Transform, note: &Note) -> Transform {
 
 /// Lays out this map's open scenes' things, with the loot: each Surge
 /// cycle puts them back.
+///
+/// `arrived` says whether a kind is out yet on this raid of a career (the
+/// loot's `from_raid`): a scene's thing that isn't stays out, as it would
+/// from a table (the Farm barricade's AK magazine on a first raid, four
+/// raids before any AK: the designer's "too many item types at once").
 pub fn spawn_things(
     commands: &mut Commands,
     map: &str,
     zone: &Zone,
     catalog: &Catalog,
     at: Standing,
+    arrived: &dyn Fn(&str) -> bool,
 ) {
     for (_, scene) in of(map) {
         if scene.open(at) && stands(zone, scene) {
-            lay_things(commands, zone, scene, catalog);
+            lay_things(commands, zone, scene, catalog, arrived);
         }
     }
 }
 
-fn lay_things(commands: &mut Commands, zone: &Zone, scene: &Scene, catalog: &Catalog) {
+fn lay_things(
+    commands: &mut Commands,
+    zone: &Zone,
+    scene: &Scene,
+    catalog: &Catalog,
+    arrived: &dyn Fn(&str) -> bool,
+) {
     let t = pose(zone, scene);
-    for thing in &scene.items {
+    for thing in scene.items.iter().filter(|t| arrived(&t.id)) {
         let Some(kind) = catalog.kind(&thing.id) else {
             warn!("scene {}: no item {}", scene.name, thing.id);
             continue;

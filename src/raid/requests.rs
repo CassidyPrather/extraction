@@ -404,7 +404,7 @@ fn place_cache(
         _ => 3,
     };
     let drops: Vec<_> = (0..piles * order.rolls)
-        .flat_map(|_| loot.0.roll(order.table, catalog, rng))
+        .flat_map(|_| loot.roll(order.table, catalog, rng))
         .collect();
     for (i, drop) in drops.into_iter().enumerate() {
         let off = Vec3::new(
