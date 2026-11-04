@@ -1,26 +1,14 @@
 # Progression
 
-> **Where I stopped (2 November, paused).** Everything is pushed on
-> `claude/polish-progression` (head c9c5efff, main merged), and it's in
-> the coordinator's gate 162. The last change was `raid::requests::CardCheck`:
-> the card's pay check as a public system param, with `verdict()` and
-> `would_pay()`. `press_card` uses the same check, and the test
-> `would_pay_is_what_pressing_does` fails if the card and the check ever
-> disagree. Earlier work is all merged: two gentle jobs before the first
-> contract (`GENTLE_JOBS`), no rolled job in the place you were just
-> paid for, the boarding test at every rendezvous truck, the stick-flick
-> filter, the crouch drop and the "why you can't run" lines.
->
-> **What's next.**
-> - Onboarding takes `CardCheck` for the Payday line once c9c5efff is on
->   main. It says "that's the job paid" only when `would_pay` holds;
->   otherwise it says the verdict line.
-> - Onboarding reruns `first_jobs_cautious` on the merged main and
->   sends the table to the coordinator. If a job stalls there and the
->   stall is the career's, not the bot's, that's mine.
-> - Gating on a checkout older than the `dressed_stone` material needs
->   `python3 scripts/fetch_assets.py materials` first. Otherwise two
->   render-budget tests fail.
+> **Where it stands (4 November).** `CardCheck` (`would_pay`, `verdict`)
+> and Onboarding's Payday line are on main. `first_jobs_cautious` on
+> main 8d5c1105 shows the career behaving as it should. There are two
+> gentle jobs before the first contract, and job 2 goes somewhere other
+> than job 1. Every pay or no-pay matches the card, and the mast relay
+> was given up unpaid after a drone pin. The stalls left are the bot's
+> WalkTo timeouts: at the logging camp, and around the post office and
+> the south-west. Those are with Onboarding. One of them comes back here
+> only if a job turns out to be placed somewhere unreachable.
 
 Why go on raid 10, or raid 30? The game already has raids, the truck as
 home, a no-currency economy (loot feeds the bench, the kitchen and the
