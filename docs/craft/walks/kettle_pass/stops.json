@@ -1,0 +1,347 @@
+[
+ {
+  "n": 1,
+  "name": "s01",
+  "s": 0,
+  "kind": "drop",
+  "note": "",
+  "at": [
+   90.9,
+   202.4
+  ],
+  "h": 14.3,
+  "fwd": 58,
+  "side": 109,
+  "side_what": "radio_mast (34 m)"
+ },
+ {
+  "n": 2,
+  "name": "s02",
+  "s": 40,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   125.0,
+   180.8
+  ],
+  "h": 15.3,
+  "fwd": 64,
+  "side": 184,
+  "side_what": "radio_mast (33 m)"
+ },
+ {
+  "n": 3,
+  "name": "s03",
+  "s": 61,
+  "kind": "fork",
+  "note": "Camp ford / Camp road",
+  "at": [
+   143.2,
+   172.4
+  ],
+  "h": 15.4,
+  "fwd": 93,
+  "side": 206,
+  "side_what": "radio_mast (46 m)"
+ },
+ {
+  "n": 4,
+  "name": "s04",
+  "s": 75,
+  "kind": "job",
+  "note": "the career's first (Logging camp)",
+  "at": [
+   157.0,
+   173.0
+  ],
+  "h": 15.4,
+  "fwd": 91,
+  "side": 220,
+  "side_what": "radio_mast (53 m)"
+ },
+ {
+  "n": 5,
+  "name": "s05",
+  "s": 120,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   114.4,
+   184.9
+  ],
+  "h": 14.7,
+  "fwd": 247,
+  "side": 163,
+  "side_what": "radio_mast (30 m)"
+ },
+ {
+  "n": 6,
+  "name": "s06",
+  "s": 160,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   86.9,
+   175.7
+  ],
+  "h": 14.7,
+  "fwd": 335,
+  "side": 136,
+  "side_what": "radio_mast (52 m)"
+ },
+ {
+  "n": 7,
+  "name": "s07",
+  "s": 200,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   70.0,
+   139.4
+  ],
+  "h": 15.6,
+  "fwd": 316,
+  "side": 229,
+  "side_what": "Gatekeeper's cottage (27 m)"
+ },
+ {
+  "n": 8,
+  "name": "s08",
+  "s": 240,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   41.0,
+   113.0
+  ],
+  "h": 14.8,
+  "fwd": 351,
+  "side": 169,
+  "side_what": "Gatekeeper's cottage (45 m)"
+ },
+ {
+  "n": 9,
+  "name": "s09",
+  "s": 280,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   23.9,
+   80.2
+  ],
+  "h": 13.6,
+  "fwd": 307,
+  "side": 216,
+  "side_what": "chapel (53 m)"
+ },
+ {
+  "n": 10,
+  "name": "s10",
+  "s": 326,
+  "kind": "door",
+  "note": "house_plank",
+  "at": [
+   -9.0,
+   49.0
+  ],
+  "h": 16.1,
+  "fwd": 27,
+  "side": 236,
+  "side_what": "the house_plank's door"
+ },
+ {
+  "n": 11,
+  "name": "s11",
+  "s": 372,
+  "kind": "fork",
+  "note": "Pass road / Quarry road",
+  "at": [
+   18.9,
+   13.1
+  ],
+  "h": 21.4,
+  "fwd": 340,
+  "side": 196,
+  "side_what": "Miners' Row (68 m)"
+ },
+ {
+  "n": 12,
+  "name": "s12",
+  "s": 400,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   7.2,
+   -10.3
+  ],
+  "h": 23.8,
+  "fwd": 327,
+  "side": 244,
+  "side_what": "headframe (70 m)"
+ },
+ {
+  "n": 13,
+  "name": "s13",
+  "s": 418,
+  "kind": "fork",
+  "note": "Mine road / Pass road",
+  "at": [
+   -2.2,
+   -24.7
+  ],
+  "h": 25.3,
+  "fwd": 26,
+  "side": 230,
+  "side_what": "headframe (70 m)"
+ },
+ {
+  "n": 14,
+  "name": "s14",
+  "s": 440,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   8.3,
+   -39.7
+  ],
+  "h": 26.0,
+  "fwd": 51,
+  "side": 326,
+  "side_what": "Switchback hut (69 m)"
+ },
+ {
+  "n": 15,
+  "name": "s15",
+  "s": 466,
+  "kind": "fork",
+  "note": "Lodge track / Pass road",
+  "at": [
+   28.7,
+   -56.0
+  ],
+  "h": 26.6,
+  "fwd": 54,
+  "side": 305,
+  "side_what": "Switchback hut (72 m)"
+ },
+ {
+  "n": 16,
+  "name": "s16",
+  "s": 480,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   40.0,
+   -64.4
+  ],
+  "h": 27.1,
+  "fwd": 56,
+  "side": 295,
+  "side_what": "Switchback hut (77 m)"
+ },
+ {
+  "n": 17,
+  "name": "s17",
+  "s": 520,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   73.5,
+   -86.9
+  ],
+  "h": 29.3,
+  "fwd": 56,
+  "side": 346,
+  "side_what": "radio_mast (77 m)"
+ },
+ {
+  "n": 18,
+  "name": "s18",
+  "s": 545,
+  "kind": "door",
+  "note": "cabin_log",
+  "at": [
+   94.4,
+   -101.0
+  ],
+  "h": 30.8,
+  "fwd": 56,
+  "side": 324,
+  "side_what": "the cabin_log's door"
+ },
+ {
+  "n": 19,
+  "name": "s19",
+  "s": 560,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   106.1,
+   -108.9
+  ],
+  "h": 31.5,
+  "fwd": 56,
+  "side": 252,
+  "side_what": "Charcoal hut (18 m)"
+ },
+ {
+  "n": 20,
+  "name": "s20",
+  "s": 600,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   138.2,
+   -133.5
+  ],
+  "h": 33.2,
+  "fwd": 47,
+  "side": 239,
+  "side_what": "Charcoal hut (57 m)"
+ },
+ {
+  "n": 21,
+  "name": "s21",
+  "s": 621,
+  "kind": "door",
+  "note": "cabin_log",
+  "at": [
+   153.8,
+   -148.1
+  ],
+  "h": 33.4,
+  "fwd": 47,
+  "side": 319,
+  "side_what": "the cabin_log's door"
+ },
+ {
+  "n": 22,
+  "name": "s22",
+  "s": 640,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   167.2,
+   -160.7
+  ],
+  "h": 33.5,
+  "fwd": 47,
+  "side": 211,
+  "side_what": "Hunting lodge (16 m)"
+ },
+ {
+  "n": 23,
+  "name": "s23",
+  "s": 652,
+  "kind": "rendezvous",
+  "note": "Hunting lodge",
+  "at": [
+   176.1,
+   -169.2
+  ],
+  "h": 33.5,
+  "fwd": 47,
+  "side": 218,
+  "side_what": "Hunting lodge (28 m)"
+ }
+]
