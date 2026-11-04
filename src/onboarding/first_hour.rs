@@ -793,6 +793,31 @@ pub(super) fn direct_raid(
     if plans.is_empty() && !view.buildings.is_empty() {
         *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
     }
+    // Indoors, a walk about to start that some answer cut in (from a
+    // shed, sheltered from a drone, the walk to cover went at its wall
+    // for half a minute): not one to or by a door of this building (the
+    // way out's own last step).
+    if let (Some(en), Some(Task::WalkTo { to, .. })) =
+        (view.entrances.as_deref(), bot.tasks.front().cloned())
+        && bot.elapsed < 0.2
+    {
+        let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
+        if let Some(b) = inside(here)
+            && inside(to) != Some(b)
+            && !en
+                .doors
+                .iter()
+                .any(|d| d.building == b && d.mid.xz().distance(to) < 4.0)
+        {
+            let (out, _) = way_out(&world, &view, &plans, here);
+            if !out.is_empty() {
+                for t in out.into_iter().rev() {
+                    bot.tasks.push_front(t);
+                }
+                bot.restart();
+            }
+        }
+    }
     // The first time, what the driver says; after, the machine's own tell
     // (the chirp, the gun settling): a newcomer who's learned what one
     // means keeps doing as told.
@@ -2118,32 +2143,6 @@ pub(super) fn direct_raid(
                 report(&mut bot, p, &state.moments);
             }
             return;
-        }
-    }
-    // The same for a walk about to start that some answer cut in (from a
-    // shed, sheltered from a drone, the walk to cover went at its wall
-    // for half a minute): not one to or by a door of this building (the
-    // way out's own last step).
-    if let (Some(en), Some(Task::WalkTo { to, .. })) =
-        (view.entrances.as_deref(), bot.tasks.front().cloned())
-        && bot.elapsed < 0.2
-        && tasks.is_empty()
-    {
-        let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
-        if let Some(b) = inside(here)
-            && inside(to) != Some(b)
-            && !en
-                .doors
-                .iter()
-                .any(|d| d.building == b && d.mid.xz().distance(to) < 4.0)
-        {
-            let (out, _) = way_out(&world, &view, &plans, here);
-            if !out.is_empty() {
-                for t in out.into_iter().rev() {
-                    bot.tasks.push_front(t);
-                }
-                bot.restart();
-            }
         }
     }
     // Indoors, with a walk out of the building planned: out by its plan
