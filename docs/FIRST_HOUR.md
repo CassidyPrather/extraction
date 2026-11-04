@@ -394,11 +394,14 @@ across it, to cover", 4 to 25 s ahead.
 Found, and fixed in the game:
 - **Nothing said how a job is paid.** The newcomers rode home and the
   job sat unpaid into the next session, so job 2 never came. Home from
-  the Zone with a job on the card, the driver now says "Home. Press the
-  card: if the job's done, that pays it." (once a career,
-  `firsts::payday`; it said "that's the job paid" until a newcomer came
+  the Zone with a job on the card, the driver now says so, once a career
+  (`firsts::payday`), as the card stands (`requests::CardCheck`): "Home.
+  Press the card: that's the job paid." when pressing it would pay, else
+  "Home. Press the card once the job's done: it pays it." and the card's
+  own reason ("Not in the stash", "You've not been up to the old farm
+  yet"). It said "that's the job paid" to everyone until a newcomer came
   home pinned by a drone, the job given up, and the card rightly wouldn't
-  pay).
+  pay.
 - **A drone sees down through trees and round walls.** Robot sight is a
   ray stopped only by solid things, and trees only have trunks. Against
   a drone the only cover is a roof. The drone line goes on: "Under a
