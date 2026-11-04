@@ -1675,7 +1675,7 @@ fn melee_tells(
         };
         let r = match (crawler, hound, arm, sorter) {
             (Some(_), ..) => 0.17,
-            (_, Some(_), ..) => 0.14,
+            (_, Some(_), ..) => 0.2,
             (_, _, Some(_), _) => 0.22,
             (.., Some(_)) => 0.25,
             _ => 0.18,

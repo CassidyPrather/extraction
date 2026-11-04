@@ -1103,6 +1103,16 @@ fn reel(
             }
         }
     }
+    if what == "stalk" {
+        // Held facing you (the stalker's brain would turn it about).
+        let face = flat.x.atan2(flat.z);
+        for e in std::iter::once(subject).chain(state.others.iter().copied()) {
+            if let Ok(mut w) = walkers.get_mut(e) {
+                w.yaw = face;
+                w.path.clear();
+            }
+        }
+    }
     if what == "stalk" && frame > WARMUP {
         let (_, hounds, _, _, brains) = &mut melee;
         if let Some(Ok((_, mut i))) = state.others.first().map(|e| brains.get_mut(*e)) {
