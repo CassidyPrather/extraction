@@ -58,9 +58,11 @@ impl Plugin for RobotVisualsPlugin {
                     super::weathering::weather_meshes,
                     part_plants,
                     drone_lamps,
-                    melee_tells,
                 ),
-            );
+            )
+            // (After every Update has had its say on where each is in its
+            // lead.)
+            .add_systems(PostUpdate, melee_tells);
     }
 }
 
@@ -1539,7 +1541,7 @@ fn melee_tells(
     use super::heavy::ArmState;
     let leads = crawlers
         .iter()
-        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.09))
+        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.12))
         .chain(hounds.iter().map(|(h, k)| {
             (
                 MeleeLead::Hound {
@@ -1547,7 +1549,7 @@ fn melee_tells(
                     lunging: h.lunge > 0.0 && !h.bit,
                 },
                 k,
-                0.1,
+                0.14,
             )
         }))
         .chain(heavies.iter().map(|(a, k)| {
@@ -1593,7 +1595,9 @@ fn melee_tells(
                 commands.spawn((
                     Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
                     MeshMaterial3d(mat),
-                    Transform::IDENTITY,
+                    // Out in front of the lens, clear of its visor and
+                    // its mark's ring (a sensor part looks along -Z).
+                    Transform::from_xyz(0.0, 0.0, -r * 0.8),
                     NotShadowCaster,
                     ChildOf(eye),
                 ));
