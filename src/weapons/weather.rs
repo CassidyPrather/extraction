@@ -520,7 +520,9 @@ fn sting(
 #[derive(Component)]
 pub struct WeatheredLook {
     shown: (u8, u8, u8),
-    mats: Vec<(Handle<StandardMaterial>, Color, f32)>,
+    /// Each mesh, its own copy of its material, and the copy's original
+    /// colour and roughness.
+    mats: Vec<(Entity, Handle<StandardMaterial>, Color, f32)>,
 }
 
 /// Rust's colour, and how far a worn-out gun's finish goes toward it (the
@@ -564,10 +566,10 @@ pub fn weather_looks(
         );
         match look {
             None => {
-                if shown == (0, 0, 0) {
-                    continue;
-                }
-                // Its own copies of its materials, to weather.
+                // Its own copies of its materials, to weather: made for every
+                // gun from the start (clean too), so that a hand taking it
+                // marks *these* (`render::held_light`), and its look still
+                // changes in the hand (cleaned at the bench, wiped, worn).
                 let mut mats = Vec::new();
                 let mut stack: Vec<Entity> = children
                     .get(e)
@@ -583,7 +585,7 @@ pub fn weather_looks(
                         let (base, rough) = (orig.base_color, orig.perceptual_roughness);
                         let own = materials.add(orig);
                         commands.entity(c).insert(MeshMaterial3d(own.clone()));
-                        mats.push((own, base, rough));
+                        mats.push((c, own, base, rough));
                     }
                     if let Ok(cs) = children.get(c) {
                         stack.extend(cs.iter());
@@ -602,18 +604,26 @@ pub fn weather_looks(
                     continue;
                 }
                 look.shown = shown;
-                for (h, base, rough) in &look.mats {
-                    let Some(mut m) = materials.get_mut(h) else {
-                        continue;
-                    };
+                for (mesh, h, base, rough) in &look.mats {
                     let b = base.to_linear();
                     let c = Vec3::new(b.red, b.green, b.blue)
                         .lerp(RUST_COLOUR, RUST_TINT * worn)
                         .lerp(GRIME_COLOUR, GRIME_TINT * grime)
                         * (1.0 - 0.15 * wet);
-                    m.base_color = Color::LinearRgba(LinearRgba::new(c.x, c.y, c.z, b.alpha));
-                    m.perceptual_roughness =
+                    let colour = Color::LinearRgba(LinearRgba::new(c.x, c.y, c.z, b.alpha));
+                    let roughness =
                         (rough + 0.35 * grime + 0.3 * worn - 0.55 * wet).clamp(0.08, 1.0);
+                    // Its own copy, and the copy it shows if that's another:
+                    // a held gun wears a marked copy of its own (made from it,
+                    // so its alone), which would keep the look it had when
+                    // taken.
+                    let shown_h = meshes.get(*mesh).ok().map(|m| m.0.clone());
+                    for handle in std::iter::once(h.clone()).chain(shown_h.filter(|s| s != h)) {
+                        if let Some(mut m) = materials.get_mut(&handle) {
+                            m.base_color = colour;
+                            m.perceptual_roughness = roughness;
+                        }
+                    }
                 }
             }
         }
