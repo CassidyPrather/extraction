@@ -18,6 +18,10 @@
 > - ~~The truck crate's later kinds at reading distance~~: done 4
 >   November (the magazine on its side; the rounds out from under the map).
 > - The walk props past the first jobs (Kettle's, Rime's, Sallow's).
+> - ~~The first raid's loot in Marrow's first-job houses, in game
+>   light~~: done 4 November (below, "The first raid's houses").
+> - Cinder's Ash Row at raid 0 (the room cameras I had predate the map's
+>   move; Ash Row is now at (-34.5, 108.2)).
 
 Every item must be told apart from every other, and its family known,
 from its shape and colour alone: at 1 m on a shelf (in reach) and at
@@ -264,3 +268,45 @@ dial, the pistol. Two didn't:
 
 A crate's layout is part of reading its items: nothing under anything,
 and each lying with its telling face up.
+
+## The first raid's houses (4 November)
+
+What a newcomer meets on their first raid, in game light (drizzle,
+11:00), from 1.2 m: the eye standing in the room, turned to each loot
+spot as it would walk up to it. The roll is a career's raid 0 (a fresh
+`--save`; a scenario or a screenshot without a save rolls every
+family). The houses roll 12 kinds then: ammo_9x18, bolt, canned_stew,
+cleaning_kit, crackers, field_dressing, gun_oil, matches, pm_mag,
+power_cell, tea_tin, water_bottle. Progression's stagger
+(claude/polish-progression) keeps raid 1 the same: the PM family is the
+only gun family until raid 3.
+
+![farmhouse table](../shots/items/raid0_marrow_farmhouse_0.jpg)
+![farmhouse kitchen](../shots/items/raid0_marrow_farmhouse_2.jpg)
+![plank C shelf](../shots/items/raid0_marrow_plank_c_0.jpg)
+
+- **The food reads.** The tea tin's red ЧАЙ on yellow, the stew's dark
+  tin with its white band, the crackers' box, the water's ВОДА: each
+  is its kind at 1.2 m, and none is mistaken for the table's own
+  dishes (the plates and cups are white and plain; the loot is
+  labelled).
+- **The small things are specks, true to size.** The 9x18 box (4 x 3 x
+  7 cm), the matches, the bolt and the power cell are a few pixels at
+  1.2 m on a shelf. They are their real sizes, and the hands
+  read them when picked up; nothing to fix in the models. If the
+  first raid wants them found sooner, that's how loot is shown (a
+  glint, a place they're kept together), not their size.
+- **Nothing lies under anything.** The rolled loot stood clear of the
+  shelves' books and the tables' dishes in every view.
+- **The water bottle is called "Canteen".** The model is a clear PET
+  bottle with a paper ВОДА label and a red cap; the name and
+  description (and `capture::scale`'s "an army canteen") say a
+  canteen. One of them should change; flagged to the coordinator,
+  not changed here (the rename was deliberate, docs/PLAYTEST.md).
+- **Fixed: the dress form read as a giant blue bottle** (plank C's
+  seamstress, beside the shelf the newcomer loots). It tapered straight
+  up to a narrow neck, and the dress covered it to 1.4 m. Now the
+  shoulders are square and wider than the waist, the neck carries a
+  wooden cap, and the dress is pinned up only to the bust:
+  ![dress form, before and after](../shots/props/dress_form_before_after.jpg)
+
