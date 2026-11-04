@@ -605,44 +605,52 @@ mod tests {
     /// back to its work, and doesn't take you up again from afar.
     #[test]
     fn walk_away_and_it_lets_you_go() {
-        let (mut app, heavy) =
-            super::super::heavy::tests::world_with_heavy([40.0, 230.0], [40.0, 230.0], true);
-        let zone = app.world().resource::<Zone>().clone();
-        let player = app
-            .world_mut()
-            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .unwrap();
-        let mut at = Vec2::new(40.0, 214.0);
-        let place = |app: &mut App, at: Vec2| {
-            let p = zone.on_ground(at.x, at.y);
-            app.world_mut()
-                .get_mut::<Transform>(player)
-                .unwrap()
-                .translation = p;
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let home = zone.on_ground(40.0, 230.0);
+        let mut at = Vec2::new(40.0, 218.0);
+        vr.stand(zone.on_ground(at.x, at.y), 0.0);
+        let heavy = {
+            let mut c = vr.app.world_mut().commands();
+            let e = super::super::heavy::spawn_heavy(
+                &mut c,
+                &zone,
+                &catalog,
+                home,
+                Job {
+                    kind: JobKind::Watch,
+                    site: home,
+                    duration: 999.0,
+                    exit: home,
+                },
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        let engaged = |vr: &crate::vr_harness::Vr| {
+            matches!(vr.app.world().get::<Brain>(heavy), Some(Brain::Engage))
         };
         // It sees you and comes for you.
-        let mut engaged = false;
+        let mut came = false;
         for _ in 0..(90 * 20) {
-            place(&mut app, at);
-            app.update();
-            if matches!(app.world().get::<Brain>(heavy), Some(Brain::Engage)) {
-                engaged = true;
+            vr.step(1);
+            if engaged(&vr) {
+                came = true;
                 break;
             }
         }
-        assert!(engaged, "it came for you");
+        assert!(came, "it came for you");
         // You walk away, a brisk walk, and keep walking.
         let mut let_go_at = None;
         for k in 0..(90 * 40) {
             at.y -= 2.0 / 90.0;
-            place(&mut app, at);
-            app.update();
-            if !matches!(app.world().get::<Brain>(heavy), Some(Brain::Engage)) {
-                let_go_at.get_or_insert(k);
-            } else {
+            vr.stand(zone.on_ground(at.x, at.y), 0.0);
+            vr.step(1);
+            if engaged(&vr) {
                 let_go_at = None;
+            } else {
+                let_go_at.get_or_insert(k);
             }
         }
         let k = let_go_at.expect("it let you go");
@@ -652,14 +660,8 @@ mod tests {
             k as f32 / 90.0
         );
         // Standing off at a distance now: it leaves you be.
-        for _ in 0..(90 * 10) {
-            place(&mut app, at);
-            app.update();
-        }
-        assert!(
-            !matches!(app.world().get::<Brain>(heavy), Some(Brain::Engage)),
-            "it doesn't take you up again from afar"
-        );
+        vr.step(90 * 10);
+        assert!(!engaged(&vr), "it doesn't take you up again from afar");
     }
 
     #[test]
