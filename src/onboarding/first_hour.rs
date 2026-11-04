@@ -542,6 +542,13 @@ pub(super) fn errand(job: &Job) -> Errand {
     }
 }
 
+/// The errand, in the valley the job is in: a job pencilled in another
+/// valley isn't gone after here (a Marrow job's place, walked to inside
+/// Cinder, stood the newcomer in a corner of the works).
+pub(super) fn errand_here(job: &Job, map: &str) -> Option<Errand> {
+    job.map().is_none_or(|m| m == map).then(|| errand(job))
+}
+
 #[derive(Default)]
 pub(super) struct Newcomer {
     leg: Leg,
@@ -1567,7 +1574,7 @@ pub(super) fn direct_raid(
                 .progression
                 .as_ref()
                 .and_then(|p| p.0.job.as_ref())
-                .and_then(|j| match errand(j) {
+                .and_then(|j| match errand_here(j, &opts.map)? {
                     Errand::Leave { item, .. } => Some(item),
                     Errand::Photo(_) => Some("camera".to_owned()),
                     _ => None,
@@ -1587,7 +1594,7 @@ pub(super) fn direct_raid(
                 .progression
                 .as_ref()
                 .and_then(|p| p.0.job.as_ref())
-                .map(errand);
+                .and_then(|j| errand_here(j, &opts.map));
             // Off the ledge under the hatch, what the driver passes through:
             // his spare radio (the last one went with the rest at a fall),
             // and what the job takes out (a thing to leave, the camera).
@@ -3747,6 +3754,25 @@ mod tests {
                 taken: false,
             },
         ]
+    }
+
+    /// A job in another valley isn't gone after here: its place is that
+    /// valley's (a Marrow job's place, walked to inside Cinder, stuck the
+    /// newcomer in a corner of the works). One with no valley goes anywhere.
+    #[test]
+    fn a_job_in_another_valley_isnt_gone_after_here() {
+        for job in one_of_each() {
+            assert_eq!(
+                errand_here(&job, "marrow_creek"),
+                Some(errand(&job)),
+                "{job:?}"
+            );
+            assert_eq!(
+                errand_here(&job, "cinder_works").is_some(),
+                job.map().is_none(),
+                "{job:?}"
+            );
+        }
     }
 
     /// Every kind of job has a way for the newcomer to do it, and the card
