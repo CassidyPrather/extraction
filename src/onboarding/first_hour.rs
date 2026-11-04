@@ -810,12 +810,19 @@ pub(super) fn direct_raid(
         && bot.elapsed < 0.2
     {
         let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
+        // (Not the way out's own step: to just outside one of its doors,
+        // on its outside, in line with the doorway. Anywhere else by the
+        // building's wall, a walk round it from inside went at the wall:
+        // a waypoint stepped out of the shed's box by its door.)
+        let exit_step = |d: &crate::robots::doors::Entrance| {
+            let out = d.out.xz().normalize_or(Vec2::Y);
+            let off = to - d.mid.xz();
+            let along = off.dot(out);
+            (0.8..3.0).contains(&along) && (off - out * along).length() < 0.8
+        };
         if let Some(b) = inside(here)
             && inside(to) != Some(b)
-            && !en
-                .doors
-                .iter()
-                .any(|d| d.building == b && d.mid.xz().distance(to) < 4.0)
+            && !en.doors.iter().any(|d| d.building == b && exit_step(d))
         {
             let (out, _) = way_out(&world, &view, &plans, here);
             if !out.is_empty() {
