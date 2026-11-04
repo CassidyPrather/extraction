@@ -463,6 +463,15 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
     let n = palm_normal(side);
     let u = n.any_orthonormal_vector();
     let w = n.cross(u);
+    // Turned, round the thing's nearest point to the hand (beside the
+    // palm's facing): a rod end-on to the palm, turned, lies off past the
+    // fist's end.
+    let centre = if slide > SLIDE {
+        let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
+        near - n * near.dot(n)
+    } else {
+        Vec3::ZERO
+    };
     let reach = (slide / SLIDE_STEP).round() as i32;
     let mut spots: Vec<(i32, i32)> = (-reach..=reach)
         .flat_map(|a| (-reach..=reach).map(move |b| (a, b)))
@@ -470,7 +479,7 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
     spots.sort_by_key(|(a, b)| a * a + b * b);
     let mut best: Option<(usize, Seat)> = None;
     for (a, b) in spots {
-        let side_shift = (u * a as f32 + w * b as f32) * SLIDE_STEP;
+        let side_shift = centre + (u * a as f32 + w * b as f32) * SLIDE_STEP;
         // The open hand onto it: the furthest along the palm's facing it
         // can go without sinking in (from standing off, in towards it).
         let gap = |s: f32| open_gap(side, half, &to_box, side_shift + n * s);
@@ -557,8 +566,9 @@ pub fn taken(side: Side, half: Vec3) -> Transform {
 /// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).
 const THUMB_BEND: f32 = 0.9;
 /// How far the thumb may be raised toward the palm's plane to lie on a
-/// flat side (added to its way's height on the unrolled glove).
-const THUMB_LIFTS: [f32; 5] = [0.0, 0.12, 0.24, 0.36, 0.5];
+/// flat side, or lowered to reach round a narrow one (added to its way's
+/// height on the unrolled glove), nearest its own way first.
+const THUMB_LIFTS: [f32; 8] = [0.0, 0.12, -0.12, 0.24, -0.24, 0.36, 0.5, 0.65];
 
 /// The thumb closed onto the box: its way, bend and curl, raised no more
 /// than it must be to rest on it (`close_on` for each lift in turn);
