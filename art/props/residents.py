@@ -306,11 +306,17 @@ def dress_form():
         rod(p, (0, 0.5, 0), (0.2 * math.cos(a), 0.0, 0.2 * math.sin(a)), 0.012, "Timber",
             segs=5)
     rod(p, (0, 0.5, 0), (0, 0.95, 0), 0.015, "Timber", segs=6)
-    p.lathe([(0.0, 0.95), (0.13, 0.96), (0.15, 1.05), (0.12, 1.18), (0.15, 1.33),
-             (0.13, 1.42), (0.05, 1.47), (0.03, 1.52), (0.0, 1.52)], "Cream", segs=16,
-            xf=S(1.0, 1.0, 0.7) @ UP)
-    p.lathe([(0.0, 0.7), (0.21, 0.72), (0.16, 1.0), (0.13, 1.12), (0.16, 1.32),
-             (0.14, 1.4), (0.0, 1.4)], "Blue", segs=16, xf=S(1.0, 1.0, 0.75) @ UP)
+    # A body, not a bottle: the shoulders square and wider than the
+    # waist, a neck on them with its wooden cap, and the dress pinned up
+    # only to the bust so the shoulders show above it (it was a straight
+    # taper to a neck, in blue to 1.4 m: a giant bottle across the room).
+    p.lathe([(0.0, 0.95), (0.11, 0.96), (0.15, 1.02), (0.12, 1.12), (0.15, 1.24),
+             (0.16, 1.30), (0.18, 1.37), (0.17, 1.41), (0.06, 1.44), (0.045, 1.46),
+             (0.045, 1.53), (0.0, 1.53)], "Cream", segs=20, xf=S(1.0, 1.0, 0.68) @ UP)
+    p.cyl(0.055, 1.53, 1.555, "Timber", segs=12, xf=UP)
+    p.lathe([(0.0, 0.68), (0.22, 0.70), (0.19, 0.85), (0.165, 1.0), (0.13, 1.11),
+             (0.155, 1.22), (0.168, 1.30), (0.0, 1.30)], "Blue", segs=20,
+            xf=S(1.0, 1.0, 0.72) @ UP)
     return [p]
 
 

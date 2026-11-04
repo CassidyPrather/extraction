@@ -223,6 +223,17 @@ mod vr_tests {
         };
         draw(&mut r, 0.6);
         assert!(!gun_mut(&mut r).firearm.locked_back, "short: not caught");
+        // A flick all the way back and let go: the prod's too heavy for it
+        // (`weapons::DRAW_WEIGHT`), and nothing's caught.
+        r.vr.hand(Side::Left, string, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(10);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(2);
+        glide_side(&mut r, Side::Left, string, string + back * travel * 1.1, 3);
+        r.vr.trigger(Side::Left, 0.0);
+        r.vr.move_hand(Side::Left, r.feet + Vec3::new(-0.4, 1.0, 0.0));
+        r.vr.step(4);
+        assert!(!gun_mut(&mut r).firearm.locked_back, "a flick: not caught");
         draw(&mut r, 1.1);
         assert!(gun_mut(&mut r).firearm.locked_back, "on the latch");
         take(&mut r, "crossbow_bolt", 1);
