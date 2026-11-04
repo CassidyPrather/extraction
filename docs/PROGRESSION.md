@@ -1,5 +1,15 @@
 # Progression
 
+> **Where it stands (4 November).** `CardCheck` (`would_pay`, `verdict`)
+> and Onboarding's Payday line are on main. `first_jobs_cautious` on
+> main 8d5c1105 shows the career behaving as it should. There are two
+> gentle jobs before the first contract, and job 2 goes somewhere other
+> than job 1. Every pay or no-pay matches the card, and the mast relay
+> was given up unpaid after a drone pin. The stalls left are the bot's
+> WalkTo timeouts: at the logging camp, and around the post office and
+> the south-west. Those are with Onboarding. One of them comes back here
+> only if a job turns out to be placed somewhere unreachable.
+
 Why go on raid 10, or raid 30? The game already has raids, the truck as
 home, a no-currency economy (loot feeds the bench, the kitchen and the
 driver), a career across three valleys and an ending (recalling the

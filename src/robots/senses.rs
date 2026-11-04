@@ -270,7 +270,11 @@ pub fn exposure(c: &SightCase) -> f32 {
     };
     let e = range * fog * light * posture * hidden * motion * canopy;
     if c.distance < POINT_BLANK {
-        e.max(0.9)
+        // Point blank, the cone, fog, grass, light and trees hide nothing;
+        // how low you are and how still still count, so a machine that sees
+        // movement more than shape (a hound) loses you low and still, as
+        // the driver says, even this close.
+        e.max(0.9 * posture * motion)
     } else {
         e
     }
@@ -398,6 +402,7 @@ pub(crate) fn perceive(
         With<Player>,
     >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
+    raid: Option<Res<crate::raid::Raid>>,
     (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight, among): (
         Res<Lighting>,
         Option<Res<crate::hearing::Hearing>>,
@@ -504,11 +509,15 @@ pub(crate) fn perceive(
         /// (`signs::LOAD_SHOWS`).
         load: Option<f32>,
     }
+    let home = raid
+        .as_deref()
+        .is_some_and(|r| super::search::at_home(&r.phase));
     let targets: Vec<Seen> = players
         .iter()
-        // A player who's down isn't a target (`search::forget_the_downed`).
+        // A player who's down isn't a target (`search::forget_the_downed`),
+        // nor one pulling out or at base (`search::let_go_at_home`).
         .filter(|(_, gt, _, health)| {
-            !cloaks.hides(gt.translation()) && !health.is_some_and(|h| h.down)
+            !home && !cloaks.hides(gt.translation()) && !health.is_some_and(|h| h.down)
         })
         .map(|(e, gt, body, _)| {
             let feet = gt.translation();

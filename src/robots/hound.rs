@@ -34,7 +34,9 @@ pub struct HoundCrouch {
 }
 
 /// How long a hound stays coiled.
-pub const COIL_TIME: f32 = 0.6;
+// (The gunners' bar, `walker::AIM_TIME`: get low and still in it and
+// a hound loses you, which a 0.6 s coil left no time for.)
+pub const COIL_TIME: f32 = super::walker::AIM_TIME;
 /// How long the gait lets a lunge carry it past its top speed.
 pub const LEAP_TIME: f32 = 0.4;
 

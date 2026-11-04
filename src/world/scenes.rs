@@ -660,6 +660,7 @@ fn unlock_scenes(
     raid: Res<crate::raid::Raid>,
     epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     catalog: Res<Catalog>,
+    loot: Option<Res<crate::items::loot::Loot>>,
     mut staged: ResMut<Staged>,
 ) {
     let Some(zone) = zone else {
@@ -677,7 +678,12 @@ fn unlock_scenes(
         }
         info!("scene opens: {}", scene.name);
         stage(&mut commands, &zone, &id, scene, raid.recalled);
-        lay_things(&mut commands, &zone, scene, &catalog);
+        let career = crate::items::loot::career_raid_of(&opts, progression.as_deref());
+        let arrived = |id: &str| {
+            loot.as_ref()
+                .is_none_or(|l| crate::items::loot::arrived(&l.0, career, id))
+        };
+        lay_things(&mut commands, &zone, scene, &catalog, &arrived);
         staged.0.insert(id);
     }
 }
@@ -849,23 +855,35 @@ pub fn note_pose(scene: Transform, note: &Note) -> Transform {
 
 /// Lays out this map's open scenes' things, with the loot: each Surge
 /// cycle puts them back.
+///
+/// `arrived` says whether a kind is out yet on this raid of a career (the
+/// loot's `from_raid`): a scene's thing that isn't stays out, as it would
+/// from a table (the Farm barricade's AK magazine on a first raid, four
+/// raids before any AK: the designer's "too many item types at once").
 pub fn spawn_things(
     commands: &mut Commands,
     map: &str,
     zone: &Zone,
     catalog: &Catalog,
     at: Standing,
+    arrived: &dyn Fn(&str) -> bool,
 ) {
     for (_, scene) in of(map) {
         if scene.open(at) && stands(zone, scene) {
-            lay_things(commands, zone, scene, catalog);
+            lay_things(commands, zone, scene, catalog, arrived);
         }
     }
 }
 
-fn lay_things(commands: &mut Commands, zone: &Zone, scene: &Scene, catalog: &Catalog) {
+fn lay_things(
+    commands: &mut Commands,
+    zone: &Zone,
+    scene: &Scene,
+    catalog: &Catalog,
+    arrived: &dyn Fn(&str) -> bool,
+) {
     let t = pose(zone, scene);
-    for thing in &scene.items {
+    for thing in scene.items.iter().filter(|t| arrived(&t.id)) {
         let Some(kind) = catalog.kind(&thing.id) else {
             warn!("scene {}: no item {}", scene.name, thing.id);
             continue;
@@ -1207,5 +1225,35 @@ mod tests {
         }
         assert!(standing(&mut app), "up once the rank is reached");
         assert!(items(&mut app) > before, "with its things");
+    }
+
+    /// Job 1's first find: the crackers on the Farm crate, within 2 m of
+    /// the Old farm point and at waist height, on a career's first raid
+    /// (Onboarding: one food, where every persona goes, cautious included).
+    #[test]
+    fn job_ones_first_find_is_at_the_old_farm() {
+        let mut app = crate::items::loot::tests::career_app();
+        crate::items::loot::tests::rolled_on(&mut app, 0);
+        let zone = app.world().resource::<Zone>().clone();
+        let farm = zone
+            .map
+            .markers
+            .iter()
+            .find(|m| m.name == "Old farm")
+            .expect("the Old farm point")
+            .at;
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut q = app
+            .world_mut()
+            .query::<(&crate::items::Item, &GlobalTransform)>();
+        let near: Vec<Vec3> = q
+            .iter(app.world())
+            .filter(|(i, _)| cat.0.get(i.kind).id == "crackers")
+            .map(|(_, t)| t.translation())
+            .filter(|p| Vec2::new(p.x, p.z).distance(Vec2::from_array(farm)) <= 2.0)
+            .collect();
+        assert_eq!(near.len(), 1, "crackers by the Old farm: {near:?}");
+        let lift = near[0].y - zone.ground(near[0].x, near[0].z);
+        assert!((0.7..=1.2).contains(&lift), "at {lift:.2} m");
     }
 }
