@@ -143,6 +143,9 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
     }
     if turrets {
         stair_wall(b);
+        for x in SCOUR_OUTLETS {
+            scour_outlet(b, x - DAM_FACE_AT.0);
+        }
         // A turret at each end over the parapet: what you see of the dam
         // from the truck, either side of the valley.
         for x in [-hl + 3.0, hl - 3.0] {
@@ -210,6 +213,83 @@ fn stair_height(x: f32) -> f32 {
     let (x0, x1) = STAIR_RUN;
     let (h0, h1) = STAIR_RISE;
     h0 + (h1 - h0) * ((x - x0) / (x1 - x0)).clamp(0.0, 1.0)
+}
+
+/// The scour outlets' map x, at the foot of the long downstream face west
+/// of the face stair: where the reservoir went, still running, in the
+/// face between its pilasters. The way up the stair turns at them.
+pub const SCOUR_OUTLETS: [f32; 2] = [-67.0, -50.6];
+
+/// A scour outlet at local x `c` in the foot of the long downstream face:
+/// a dressed stone surround proud of the face, the dark of the culvert
+/// behind a grille gone to rust, and its worn sill running out to its
+/// channel (the map's water).
+fn scour_outlet(b: &mut Builder, c: f32) {
+    // The face's foot is at local z 2 (the lowest course stands 4 out).
+    let (inn, out) = (2.0, 3.2);
+    let mid = (inn + out) * 0.5;
+    let (w, h) = (4.0, 5.0);
+    let jamb = 1.0;
+    for side in [-1.0f32, 1.0] {
+        b.bx(
+            Vec3::new(jamb, h + 0.5, out - inn),
+            Vec3::new(c + side * (w + jamb) * 0.5, (h + 0.5) * 0.5, mid),
+            Mat::DressedStone,
+        );
+    }
+    let lintel = (h + 0.5, h + 1.7);
+    b.bx(
+        Vec3::new(w + jamb * 2.0, lintel.1 - lintel.0, out - inn),
+        Vec3::new(c, (lintel.0 + lintel.1) * 0.5, mid),
+        Mat::DressedStone,
+    );
+    // Its top weathered back to the face, as every set-back's is.
+    weathering(b, c, w + jamb * 2.0, out, inn, lintel.1, Mat::DressedStone);
+    b.deco(
+        Vec3::new(0.9, 1.5, 0.15),
+        Vec3::new(c, (lintel.0 + lintel.1) * 0.5, out + 0.07),
+        Mat::Boulder,
+    );
+    // The culvert's dark, and its grille.
+    b.deco(
+        Vec3::new(w, h + 0.5, 0.05),
+        Vec3::new(c, (h + 0.5) * 0.5, inn + 0.03),
+        Mat::Charred,
+    );
+    let bars = 9;
+    for k in 0..bars {
+        let x = c - w * 0.5 + 0.2 + (w - 0.4) * k as f32 / (bars - 1) as f32;
+        // One bar bent out and gone at its foot.
+        let (y0, y1) = if k == 6 {
+            (1.6, h + 0.4)
+        } else {
+            (0.0, h + 0.4)
+        };
+        b.deco(
+            Vec3::new(0.08, y1 - y0, 0.08),
+            Vec3::new(x, (y0 + y1) * 0.5, inn + 0.35),
+            Mat::RustyMetal,
+        );
+    }
+    for y in [1.4, 3.4] {
+        b.deco(
+            Vec3::new(w, 0.1, 0.1),
+            Vec3::new(c, y, inn + 0.35),
+            Mat::RustyMetal,
+        );
+    }
+    // The sill the water's worn smooth (the channel takes it on from the
+    // footprint's edge), and the wet stain it leaves down the face.
+    b.deco(
+        Vec3::new(w, 0.3, 1.4),
+        Vec3::new(c, -0.05, inn + 0.7),
+        Mat::Sodden,
+    );
+    b.deco(
+        Vec3::new(w + jamb * 2.0 + 0.6, 3.0, 0.03),
+        Vec3::new(c, lintel.1 + 1.5, inn + 0.01),
+        Mat::Sodden,
+    );
 }
 
 /// The run of one of the stair's terraces (m), and how far the ground
