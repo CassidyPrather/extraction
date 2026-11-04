@@ -305,8 +305,8 @@ only gun family until raid 3.
   are the old ones, so the twist handle still sits on it. Two lessons:
   a cover to the shoulders made it a dark olive lump on a dark table
   (the bare metal is what's seen), and the library canvas, laid a metre
-  to a repeat, wove 5 mm cells on a 7 cm flask, a knitted net (an item
-  in canvas wants `uv_scale` near 5):
+  to a repeat, wove 5 mm cells on a 7 cm flask, a knitted net (fixed
+  for every model in canvas, below):
   ![canteen, before and after](../shots/items/canteen_before_after.jpg)
 - **Fixed: the dress form read as a giant blue bottle** (plank C's
   seamstress, beside the shelf the newcomer loots). It tapered straight
@@ -314,4 +314,25 @@ only gun family until raid 3.
   shoulders are square and wider than the waist, the neck carries a
   wooden cap, and the dress is pinned up only to the bust:
   ![dress form, before and after](../shots/props/dress_form_before_after.jpg)
+
+### Ash Row at raid 0 (4 November)
+
+Cinder's first houses, the same rig (raid 0, drizzle, 11:00, 1.2 m):
+the plank house's table (a 9x18 box), its crate by the bed (two PM
+magazines and a box), the shop's counter (tea, a glass), its shelves
+(crackers, stew, a dressing with its red cross). The same reading as
+Marrow's: the food and the dressing read, the PM family is small and
+dark on a dark crate top, true to size (Progression's placement rule
+puts first-raid small kinds on lit tops). The stool's yellow seat seen
+from above is a disc; it is a stool.
+
+**Fixed: canvas read as a knitted net, everywhere in reach.** Looking
+down at the plank house's crate, the player's own rig pouches at the
+belt were a quilted check: the canvas scan, laid a metre to a repeat,
+weaves 5 mm cells. The gloves (six repeats a metre) and the rag cloth
+(four) had already been scaled; plain `Canvas` hadn't. It is four
+repeats a metre now (`models.rs`), for the rig, the sacks, the bags,
+the bedroll and the canteen's cover alike; the canteen's own scale went
+back to one.
+![rig pouches, before and after](../shots/items/canvas_weave_rig_before_after.jpg)
 
