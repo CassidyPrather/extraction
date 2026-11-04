@@ -29,6 +29,80 @@ impl Loot {
     }
 }
 
+/// Found lying about (rolled loot, a wreck's, a pod's, the driver's
+/// cache): a gun found so comes up dirty for its wear (`found_dirt`), so
+/// the bench and the cleaning kit are plainly worth it (Gunsmith). Not the
+/// kit, a gift, the armoury, or a sealed crate's: those come clean.
+#[derive(Component)]
+pub struct Found;
+
+/// What a found gun of `id` in `condition` carries: (grime, fouling).
+/// Nothing above condition 0.6, where rust goes plain and the action drags
+/// (so it looks dirty when it handles dirty), and never so much that a
+/// found gun jams past about 10% before it's cleaned (Weapon feel's
+/// limits: 0.06 a grime, 0.03 a fouling, on wear's 7.4% at 0.3). The PM,
+/// a newcomer's own gun, rolled in raid-0 houses, comes clean.
+pub fn found_dirt(id: &str, condition: f32) -> (f32, f32) {
+    if id == "pm_pistol" {
+        return (0.0, 0.0);
+    }
+    let dirt = ((0.6 - condition) / 0.3).clamp(0.0, 1.0);
+    (0.28 * dirt, 0.28 * dirt)
+}
+
+/// The most a found gun jams before it's cleaned (Weapon feel).
+pub const FOUND_JAMS: f32 = 0.10;
+
+/// How much of `found_dirt` a gun can take and stay under [`FOUND_JAMS`]
+/// (0..1): a very worn one jams near it from wear alone, and takes less.
+pub fn jam_room(gun: &extraction_core::firearm::Firearm) -> f32 {
+    let mut g = gun.clone();
+    g.grime = 0.0;
+    g.fouling = 0.0;
+    let clean = g.malfunction_chance();
+    let (grime, fouling) = found_dirt("", g.condition);
+    if grime + fouling <= 0.0 {
+        return 1.0;
+    }
+    g.grime = grime;
+    g.fouling = fouling;
+    let per = g.malfunction_chance() - clean;
+    if per <= 0.0 {
+        return 1.0;
+    }
+    ((FOUND_JAMS - clean).max(0.0) / per).min(1.0)
+}
+
+/// `spawn_item`, for something found lying about ([`Found`]).
+pub fn spawn_found(commands: &mut Commands, catalog: &Catalog, item: SpawnItem) -> Entity {
+    let e = spawn_item(commands, catalog, item);
+    commands.entity(e).insert(Found);
+    e
+}
+
+/// A found gun's dirt, once it's a gun (`weapons::setup_gun_items`).
+fn dirty_found_guns(
+    mut commands: Commands,
+    mut guns: Query<(Entity, &Item, Option<&mut crate::weapons::Gun>), With<Found>>,
+    catalog: Res<Catalog>,
+) {
+    for (e, item, gun) in &mut guns {
+        let def = catalog.get(item.kind());
+        if def.firearm.is_none() {
+            commands.entity(e).remove::<Found>();
+            continue;
+        }
+        let Some(mut gun) = gun else {
+            continue;
+        };
+        let (grime, fouling) = found_dirt(&def.id, gun.firearm.condition);
+        let scale = jam_room(&gun.firearm);
+        gun.firearm.grime = gun.firearm.grime.max(grime * scale);
+        gun.firearm.fouling = gun.firearm.fouling.max(fouling * scale);
+        commands.entity(e).remove::<Found>();
+    }
+}
+
 /// Keeps `Loot`'s raid the career's.
 fn follow_the_career(
     loot: Option<ResMut<Loot>>,
@@ -64,7 +138,8 @@ impl Plugin for LootPlugin {
             )
                 .after(crate::world::buildings::spawn_buildings),
         )
-        .add_systems(PreUpdate, follow_the_career);
+        .add_systems(PreUpdate, follow_the_career)
+        .add_systems(Update, dirty_found_guns);
     }
 }
 
@@ -297,7 +372,7 @@ fn spawn_marker_loot(
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let offset = marker_roll(i);
-            let e = spawn_item(
+            let e = spawn_found(
                 commands,
                 catalog,
                 SpawnItem {
@@ -419,7 +494,7 @@ fn spawn_building_loot(
         let i = *pile;
         *pile += 1;
         let at = clear_of_notes(spots.0[to].at + building_roll(i), &notes);
-        spawn_item(
+        spawn_found(
             commands,
             catalog,
             SpawnItem {
@@ -738,5 +813,64 @@ pub(crate) mod tests {
                 laid.len()
             );
         }
+    }
+
+    /// A gun found lying about comes up dirty for its wear, so cleaning is
+    /// plainly worth it (Gunsmith), within Weapon feel's limits: nothing
+    /// above condition 0.6, the PM clean, and no found gun jamming past
+    /// FOUND_JAMS before it's cleaned. A gun that isn't found (the kit's,
+    /// a gift) is untouched.
+    #[test]
+    fn a_found_gun_comes_up_dirty_for_its_wear() {
+        let mut app = crate::raid::requests::tests::app();
+        let catalog = app.world().resource::<Catalog>().clone();
+        let mut lay = |app: &mut App, id: &str, condition: f32, found: bool| {
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                let item = SpawnItem {
+                    kind: catalog.kind(id).unwrap(),
+                    transform: Transform::from_xyz(0.0, 50.0, 0.0),
+                    condition,
+                };
+                if found {
+                    spawn_found(&mut c, &catalog, item)
+                } else {
+                    spawn_item(&mut c, &catalog, item)
+                }
+            };
+            queue.apply(app.world_mut());
+            for _ in 0..3 {
+                app.update();
+            }
+            let g = &app.world().get::<crate::weapons::Gun>(e).unwrap().firearm;
+            (g.grime, g.fouling, g.malfunction_chance())
+        };
+        for id in [
+            "toz8",
+            "toz_double",
+            "mp133",
+            "sks",
+            "mosin",
+            "ak74",
+            "ppsh",
+            "svd",
+        ] {
+            for c in [0.25, 0.3, 0.45] {
+                let (grime, fouling, jams) = lay(&mut app, id, c, true);
+                assert!(grime > 0.0 && fouling > 0.0, "{id} at {c}: clean");
+                let wear_only = lay(&mut app, id, c, false).2;
+                assert!(
+                    jams <= FOUND_JAMS.max(wear_only) + 1e-4,
+                    "{id} at {c}: jams {jams:.3}"
+                );
+            }
+            let (grime, fouling, _) = lay(&mut app, id, 0.7, true);
+            assert_eq!((grime, fouling), (0.0, 0.0), "{id} at 0.7");
+            let (grime, fouling, _) = lay(&mut app, id, 0.3, false);
+            assert_eq!((grime, fouling), (0.0, 0.0), "{id}, not found");
+        }
+        let (grime, fouling, _) = lay(&mut app, "pm_pistol", 0.3, true);
+        assert_eq!((grime, fouling), (0.0, 0.0), "the PM comes clean");
     }
 }
