@@ -1541,7 +1541,7 @@ fn melee_tells(
     use super::heavy::ArmState;
     let leads = crawlers
         .iter()
-        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.12))
+        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.17))
         .chain(hounds.iter().map(|(h, k)| {
             (
                 MeleeLead::Hound {
@@ -1597,7 +1597,7 @@ fn melee_tells(
                     MeshMaterial3d(mat),
                     // Out in front of the lens, clear of its visor and
                     // its mark's ring (a sensor part looks along -Z).
-                    Transform::from_xyz(0.0, 0.0, -r * 0.8),
+                    Transform::from_xyz(0.0, 0.0, -r),
                     NotShadowCaster,
                     ChildOf(eye),
                 ));
