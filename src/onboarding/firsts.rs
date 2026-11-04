@@ -234,7 +234,11 @@ impl First {
             }
             // (It sees well, and it's slow: low and still is a walker's
             // answer, and two went down to its blows that way.)
-            First::Heavy => &["Truck: \"Big one, and slow. Walk away from it. Don't hide.\""],
+            // (And keep going: it hunts on, slow, and 15 m off it caught
+            // up again at the job.)
+            First::Heavy => {
+                &["Truck: \"Big one, and slow. Walk away, and keep going. Don't hide.\""]
+            }
         }
     }
 }

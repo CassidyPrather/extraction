@@ -541,6 +541,10 @@ pub(super) struct Newcomer {
     done_home: Option<u32>,
     /// Keeping low till then (backing off behind cover).
     low_until: f32,
+    /// The heavy that raised its arm at it, while it's still after it.
+    heavy: Option<Entity>,
+    /// Walking off from it till then (each walk away's length).
+    walking_off_until: f32,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1045,10 +1049,39 @@ pub(super) fn direct_raid(
     // grappler's windup), and a machine noticing it.
     let coiled = tells.hounds.read().any(|ev| on_me(ev.hound));
     let charged = tells.crawlers.read().any(|ev| on_me(ev.crawler));
-    let raised = tells
-        .heavies
-        .read()
-        .any(|ev| ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy));
+    let mut raised = false;
+    for ev in tells.heavies.read() {
+        if ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy) {
+            raised = true;
+            state.heavy = Some(ev.heavy);
+        }
+    }
+    // A heavy still after it: walking on, as long as it is ("walk away and
+    // keep going": 15 m bought twelve seconds, and the heavy, hunting on
+    // at 1.3 to a walk's 2.4, caught it back at the job). Done when it's
+    // lost it, or fallen far behind.
+    if let Some(h) = state.heavy
+        && !p.reckless
+        && !p.hoards
+    {
+        let at = world.robot_at(h).map(|g| g.xz());
+        match at {
+            Some(from) if on_me(h) && from.distance(here) < 35.0 => {
+                if now > state.walking_off_until {
+                    state.walking_off_until = now + 8.0;
+                    super::second_hour::cut_in(&mut bot, walk_away(&world, here, from));
+                }
+            }
+            _ => {
+                state.heavy = None;
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "walked off from the heavy till it lost me",
+                );
+            }
+        }
+    }
     let wound = tells.harpoons.read().any(|ev| ev.to == player);
     // A machine still firing at it, hit or miss: one fight, heard all
     // through (a drone's bursts 1.8 s apart never let it re-lock).
