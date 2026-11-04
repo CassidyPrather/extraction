@@ -1205,6 +1205,13 @@ pub(super) fn direct_raid(
                     None => run_for_cover(&world.zone, here, from, 0.0),
                 }
             }
+            // "Big one, and slow. Walk away from it": off, upright, at a
+            // walk (a heavy sees a still shape as well as a moving one;
+            // its hunt is 1.3 m/s to a walk's 2.4).
+            First::Heavy if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 10.0);
+                walk_away(&world, here, from)
+            }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
             First::ComingToLook if !p.reckless && !p.hoards => {
@@ -2381,6 +2388,15 @@ fn under_a_roof(
     Some((tasks, d.building))
 }
 
+/// Away from a slow machine at `from`, at a walk, by the way round: 15 m
+/// off, and a breath to look back.
+fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
+    let away = (here - from).normalize_or(Vec2::Y);
+    let mut t = walk(world, here, here + away * 15.0);
+    t.push(Task::Wait(2.0));
+    t
+}
+
 /// Into cover from a machine at `from`: round the far side of the nearest
 /// building within a sprint, or, in the open, hard across its line.
 /// `leave` > 0: it saw you here, and is coming to look. Back off from it,
@@ -3478,8 +3494,13 @@ pub(super) fn first_fight(
     // someone low and still, even close by), not upright for cover, which
     // it runs down. For all who'd listen.
     let hound = kind == "hound" && !p.reckless && !p.hoards && !hush;
+    // A heavy: "Walk away from it. Don't hide."
+    let heavy = kind == "heavy" && !p.reckless && !p.hoards && !hush;
     let answer: Vec<Task> = if (p.reckless || broken) && !hush {
         take_it_on()
+    } else if heavy {
+        fight.flee_until = 0.0;
+        walk_away(&world, here, from)
     } else if hound {
         fight.low_until = now + 30.0;
         fight.flee_until = 0.0;

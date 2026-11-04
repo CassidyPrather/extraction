@@ -72,6 +72,9 @@ pub enum First {
     BrokenNoticed,
     /// A broken walker shoved you: it can still hurt, close in.
     Shoved,
+    /// A heavy's arm rising at you: slow, and it sees well, so hiding
+    /// doesn't lose it; walking away does.
+    Heavy,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -124,6 +127,7 @@ pub const ALL: &[First] = &[
     First::ComingToLook,
     First::BrokenNoticed,
     First::Shoved,
+    First::Heavy,
 ];
 
 impl First {
@@ -153,6 +157,7 @@ impl First {
                 | First::ComingToLook
                 | First::BrokenNoticed
                 | First::Shoved
+                | First::Heavy
         )
     }
 
@@ -227,6 +232,9 @@ impl First {
             First::Shoved => {
                 &["Truck: \"It can still shove. Keep your distance, aim for the eye.\""]
             }
+            // (It sees well, and it's slow: low and still is a walker's
+            // answer, and two went down to its blows that way.)
+            First::Heavy => &["Truck: \"Big one, and slow. Walk away from it. Don't hide.\""],
         }
     }
 }
@@ -289,6 +297,7 @@ impl Plugin for FirstsPlugin {
                         jams,
                         robots_heard,
                         drone_locks,
+                        heavy_raised,
                         machines_on_you,
                         lamed,
                         pack_full,
@@ -464,6 +473,25 @@ fn machines_on_you(
     }
     if hushed {
         m.meet(First::Hush);
+    }
+}
+
+/// A heavy raising its arm at you, close.
+fn heavy_raised(
+    mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
+    minds: Query<&Awareness>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut m: Meet,
+) {
+    let Some(me) = locals.iter().next() else {
+        return;
+    };
+    for ev in events.read() {
+        if ev.what == crate::robots::heavy::HeavyAct::Raise
+            && minds.get(ev.heavy).is_ok_and(|a| a.target == Some(me))
+        {
+            m.meet(First::Heavy);
+        }
     }
 }
 
