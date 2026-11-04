@@ -308,6 +308,8 @@ fn radio_calls(
                         let n = raid.clock as u32;
                         raid.say(if first_job {
                             lines::FIRST_SHORT_RUN
+                        } else if free {
+                            lines::GENTLE_SHORT_RUN
                         } else {
                             lines::pick(lines::SHORT_RUN, n)
                         });
@@ -650,7 +652,12 @@ mod tests {
     #[test]
     fn the_short_exfil_burns_a_can_of_fuel() {
         let past = extraction_core::contracts::GENTLE_JOBS;
-        assert!(short_exfil_burns_the_can(past), "the can was burnt");
+        let (burnt, said) = short_exfil_burns_the_can(past);
+        assert!(burnt, "the can was burnt");
+        assert!(
+            said.iter().any(|l| lines::SHORT_RUN.contains(&l.as_str())),
+            "{said:?}"
+        );
     }
 
     /// The gentle jobs both come home free by the gate (job 2 in Kettle
@@ -658,17 +665,26 @@ mod tests {
     #[test]
     fn the_gentle_jobs_short_run_is_on_the_house() {
         for done in 0..extraction_core::contracts::GENTLE_JOBS {
+            let (burnt, said) = short_exfil_burns_the_can(done);
+            assert!(!burnt, "job {}: the can was kept", done + 1);
+            // Said as it is: free, and no can claimed (Onboarding).
+            let line = if done == 0 {
+                lines::FIRST_SHORT_RUN
+            } else {
+                lines::GENTLE_SHORT_RUN
+            };
+            assert!(said.iter().any(|l| l == line), "job {}: {said:?}", done + 1);
             assert!(
-                !short_exfil_burns_the_can(done),
-                "job {}: the can was kept",
+                !said.iter().any(|l| lines::SHORT_RUN.contains(&l.as_str())),
+                "job {}: a can claimed",
                 done + 1
             );
         }
     }
 
     /// Calls the truck to the short exfil with a can in the stash, `done` jobs
-    /// into the career; true when the can went.
-    fn short_exfil_burns_the_can(done: u32) -> bool {
+    /// into the career; true when the can went, and what was said.
+    fn short_exfil_burns_the_can(done: u32) -> (bool, Vec<String>) {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -732,7 +748,14 @@ mod tests {
                 ..
             }
         ));
-        app.world().get_entity(can).is_err()
+        let said = app
+            .world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .map(|(l, _)| l.clone())
+            .collect();
+        (app.world().get_entity(can).is_err(), said)
     }
 
     /// The truck says how long it'll be, and that's how long it is: called
