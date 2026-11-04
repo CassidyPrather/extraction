@@ -868,6 +868,13 @@ fn first_person_hands(
         Some(w) => (w, true),
         None => (what, false),
     };
+    // `fp:<item>+palm`: a thing held free shown on the upturned palm, the
+    // fingers curled up onto it (from above, the back of the hand hid
+    // them).
+    let (what, palm_up) = match what.strip_suffix("+palm") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
     *stage += 1;
     for mut v in &mut players {
         *v = Visibility::Hidden;
@@ -1083,7 +1090,11 @@ fn first_person_hands(
         let half = catalog.kind(what).map_or(Vec3::splat(0.02), |k| {
             Vec3::from(catalog.get(k).size_m()) * 0.5
         });
-        let hand = rest(Side::Left);
+        let mut hand = rest(Side::Left);
+        if palm_up {
+            let palm = hand.rotation * crate::render::hold::palm_normal(Side::Left);
+            hand.rotation = Quat::from_rotation_arc(palm, Vec3::Y) * hand.rotation;
+        }
         let in_hand = crate::render::hold::taken(Side::Left, half);
         let seat = crate::render::hold::seat(Side::Left, half, in_hand);
         commands.entity(item).insert(view(hand * in_hand));
