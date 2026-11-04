@@ -522,7 +522,7 @@ pub struct WeatheredLook {
     shown: (u8, u8, u8, u8),
     /// Each mesh, its own copy of its material, and the copy's original
     /// colour and roughness.
-    mats: Vec<(Entity, Handle<StandardMaterial>, Color, f32, bool)>,
+    mats: Vec<(Entity, Handle<StandardMaterial>, Color, f32, f32)>,
 }
 
 /// Rust's colour, and how far a worn-out gun's metal goes toward it (the
@@ -545,11 +545,12 @@ const RUSTED_AT: f32 = 0.35;
 /// Worn wood, Bakelite and polymer: faded and scuffed pale.
 const SCUFF_COLOUR: Vec3 = Vec3::new(0.42, 0.38, 0.33);
 const SCUFF_TINT: f32 = 0.35;
-/// Powder fouling: grey-black soot on the metal (not the wood), darker and
-/// flatter as it builds. Grime ([`GRIME_COLOUR`]) is the weather's brown on
-/// all of it.
-const SOOT_COLOUR: Vec3 = Vec3::new(0.035, 0.035, 0.035);
-const SOOT_TINT: f32 = 0.45;
+/// Powder fouling: a dull grey film of burnt powder on the metal (not the
+/// wood), flatter and greyer as it builds. On near-black bluing a darker
+/// soot didn't show; the grey film does. Grime ([`GRIME_COLOUR`]) is the
+/// weather's brown on all of it, the grip too.
+const SOOT_COLOUR: Vec3 = Vec3::new(0.15, 0.15, 0.145);
+const SOOT_TINT: f32 = 0.6;
 
 /// How rusted a gun shows at `condition`, 0 to 1: nothing above
 /// [`WEAR_FROM`], plain by [`PLAIN_RUST_AT`], through by [`RUSTED_AT`].
@@ -615,10 +616,10 @@ pub fn weather_looks(
                         && let Some(orig) = materials.get(&m.0).cloned()
                     {
                         let (base, rough) = (orig.base_color, orig.perceptual_roughness);
-                        let metal = orig.metallic > 0.5;
+                        let metallic = orig.metallic;
                         let own = materials.add(orig);
                         commands.entity(c).insert(MeshMaterial3d(own.clone()));
-                        mats.push((c, own, base, rough, metal));
+                        mats.push((c, own, base, rough, metallic));
                     }
                     if let Ok(cs) = children.get(c) {
                         stack.extend(cs.iter());
@@ -637,11 +638,12 @@ pub fn weather_looks(
                     continue;
                 }
                 look.shown = shown;
-                for (mesh, h, base, rough, metal) in &look.mats {
+                for (mesh, h, base, rough, metallic) in &look.mats {
+                    let metal = *metallic > 0.5;
                     let b = base.to_linear();
                     let own = Vec3::new(b.red, b.green, b.blue);
                     // Metal rusts and takes the soot; the rest fades.
-                    let (aged, sooted) = if *metal {
+                    let (aged, sooted) = if metal {
                         (own.lerp(RUST_COLOUR, RUST_TINT * worn), soot)
                     } else {
                         (own.lerp(SCUFF_COLOUR, SCUFF_TINT * worn), 0.0)
@@ -651,7 +653,11 @@ pub fn weather_looks(
                         .lerp(GRIME_COLOUR, GRIME_TINT * grime)
                         * (1.0 - 0.15 * wet);
                     let colour = Color::LinearRgba(LinearRgba::new(c.x, c.y, c.z, b.alpha));
-                    let roughness = (rough + 0.35 * grime + 0.3 * worn + 0.25 * sooted
+                    // A film of burnt powder or dirt is no metal: it takes the
+                    // steel's sheen (on bluing, near black, the sheen is most
+                    // of what shows, so a tint alone didn't read).
+                    let sheen = (metallic * (1.0 - 0.75 * sooted - 0.5 * grime)).max(0.0);
+                    let roughness = (rough + 0.35 * grime + 0.3 * worn + 0.35 * sooted
                         - 0.55 * wet)
                         .clamp(0.08, 1.0);
                     // Its own copy, and the copy it shows if that's another:
@@ -663,6 +669,7 @@ pub fn weather_looks(
                         if let Some(mut m) = materials.get_mut(&handle) {
                             m.base_color = colour;
                             m.perceptual_roughness = roughness;
+                            m.metallic = sheen;
                         }
                     }
                 }
