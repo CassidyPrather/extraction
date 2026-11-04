@@ -229,6 +229,13 @@ A newcomer met no machine at all on that route in the first-hour runs, so
 the machine is placed by hand; a natural one would come on the second or
 third job. Each run starts from a fresh career that has done the yard.
 
+The hoarder heeds no warning: it carries on picking things up, and out
+in the open after a warning is meant to lose. Its going down is counted
+by design, not as a failure (`run_fights`); the scenario fails only when
+a newcomer who does as the driver says doesn't come through. Every
+encounter is met within a sprint of a roof (the drone's nearest door is
+14 m off, `a_roof_is_in_reach_of_the_first_fights_drone`).
+
 | Machine | Placed | Tells watched |
 | - | - | - |
 | walker | on Watch, 25 m off the route | Noticed (eye brightens), WalkerAim (clank, servo; 0.7 s to the shot) |
@@ -394,11 +401,14 @@ across it, to cover", 4 to 25 s ahead.
 Found, and fixed in the game:
 - **Nothing said how a job is paid.** The newcomers rode home and the
   job sat unpaid into the next session, so job 2 never came. Home from
-  the Zone with a job on the card, the driver now says "Home. Press the
-  card: if the job's done, that pays it." (once a career,
-  `firsts::payday`; it said "that's the job paid" until a newcomer came
+  the Zone with a job on the card, the driver now says so, once a career
+  (`firsts::payday`), as the card stands (`requests::CardCheck`): "Home.
+  Press the card: that's the job paid." when pressing it would pay, else
+  "Home. Press the card once the job's done: it pays it." and the card's
+  own reason ("Not in the stash", "You've not been up to the old farm
+  yet"). It said "that's the job paid" to everyone until a newcomer came
   home pinned by a drone, the job given up, and the card rightly wouldn't
-  pay).
+  pay.
 - **A drone sees down through trees and round walls.** Robot sight is a
   ray stopped only by solid things, and trees only have trunks. Against
   a drone the only cover is a roof. The drone line goes on: "Under a

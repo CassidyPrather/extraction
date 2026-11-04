@@ -123,19 +123,18 @@ for (py, pz) in ((HY, HZ), (HAMMER_PIN[1], HAMMER_PIN[2])):
 # The firing pin's tip, just inside its hole.
 pins.cyl(0.0016, SHIELD + 0.0006, SHIELD + 0.006, "Steel", segs=10, xf=ON_BORE)
 
-# Barrel latch: a flat lever on the left of the side plate, its serrated
-# thumb piece in front of the grip; pressing it lets the barrel drop.
+# Barrel catch: a small grooved block standing out of the frame's left
+# side just behind the breech, over the side plate (the vz. 44/67's left
+# side, open and closed). Pressed, it frees the barrel's lug.
 latch = Part("latch")
-lp = fillet([(-0.056, 0.0262), (-0.022, 0.0258), (-0.0175, 0.0255), (-0.0105, 0.0285),
-             (-0.0095, 0.0345), (-0.013, 0.0368), (-0.019, 0.032), (-0.024, 0.0312),
-             (-0.056, 0.0312)], [0.0022, 0.0, 0.002, 0.002, 0.0015, 0.0015, 0.002, 0.0, 0.0022], 3)
-latch.prism(lp, -FRAME_HW - 0.0022, -FRAME_HW + 0.0003, "Blued", axis="x", bevel=0.0005, segs=1)
+latch.prism(fillet([(-0.0098, 0.0382), (-0.0028, 0.0382), (-0.0028, 0.0482), (-0.0098, 0.0482)],
+                   0.0012, 2),
+            -FRAME_HW - 0.0022, -FRAME_HW + 0.0003, "Blued", axis="x", bevel=0.0005, segs=1)
+latch_cut = Part("cut")
 for i in range(4):
-    z = -0.0168 + i * 0.0018
-    latch.box((0.0012, 0.0045, 0.0007), (-FRAME_HW - 0.0022, 0.0315 + i * 0.0006, z), "Blued",
-              xf=RX(0.6, about=(-FRAME_HW - 0.0022, 0.0315, z)))
-latch.cyl(0.0024, -FRAME_HW - 0.0029, -FRAME_HW - 0.0016, "Steel", segs=12,
-          xf=T(0, 0.0287, -0.046) @ RY(math.pi / 2), chamfer=0.0004)
+    latch_cut.box((0.0012, 0.0084, 0.0007), (-FRAME_HW - 0.0022, 0.0432, -0.0083 + i * 0.0016),
+                  "Blued")
+latch.cut(latch_cut)
 
 # --- Grip: panels on both sides, inset in the frame's straps -------------------------------------
 gp = fillet([(-0.0175, 0.0245), (-0.0095, 0.002), (-0.0035, -0.016), (0.0035, -0.032),

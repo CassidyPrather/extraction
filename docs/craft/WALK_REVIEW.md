@@ -1,5 +1,24 @@
 # Walk review
 
+> **Where I stopped (2 Nov), and what's next.** Paused at the user's
+> request; resumed 4 Nov. Done and on main: the first-job walks for Marrow and Cinder
+> with their fixes (`walks/marrow_creek`, `walks/cinder_works`), and coming
+> home: the lint's way-home rule and each valley's cover on its ways in
+> (`walks/home`, on main at 761533d4).
+>
+> - **Rime's saddle outcrop** sits into the snow now (resumed 4 Nov:
+>   the big stone's squash `0.5..0.65`, sink `0.35`, as the scatter's
+>   boulders).
+> - **Next in the lint:** cover beside the way home, never on it. A way
+>   home keeps 1 m clear of every solid prop and boulder, and an outcrop
+>   stands 3 m off it, both checked against the routed way.
+> - **Next walks:** the first-job walk for Kettle, Rime and Sallow by the
+>   same procedure, and the way home judged by vistas from the shots in
+>   `walks/home` (the 150 m stop says "home is that way" everywhere; the
+>   last 50 m shows the beacon).
+> - **Not ours, flagged:** `vr_budget::gauge_puffs_hold_the_stereo_budget`
+>   was red on c8d28dd1 and fixed on main since.
+
 The map lint measures: how far you're seen, how steep a path climbs, how
 long you walk with nothing to stop at. It can't tell you whether a walk
 is any good. This is the other half: stand on the route a newcomer takes
