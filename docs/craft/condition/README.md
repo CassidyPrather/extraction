@@ -76,7 +76,7 @@ reads, and in the hand, where it matters, the gun is at 30 cm.
 
 | Gun | Fouled | Grimy | Worn | Near failure | Sheet |
 | - | - | - | - | - | - |
-| PM | slide and frame grey, matte; Bakelite grip unchanged: reads at 30 cm | all dull grey-brown, grip too: reads | metal rust-brown, grip faded: reads, also at 1 m | rust through: reads (close to worn) | ![](sheet_pm_pistol.jpg) |
+| PM | slide and frame grey, matte, black at the port and muzzle; Bakelite grip unchanged: reads at 30 cm | all dull grey-brown, grip too: reads | metal rust-brown, edges rubbed bright, grip faded: reads, also at 1 m | edges rust orange, unlike worn's bright edges: reads | ![](sheet_pm_pistol.jpg) |
 | TOZ-8M | receiver and barrel grey: reads at 30 cm | metal dull, stock darker: reads | receiver and barrel rust: reads | reads | ![](sheet_toz8.jpg) |
 | IZh-43 | barrels grey; the bright action matte: reads | action and stock dull: reads | the action goes rust-brown: reads strongly | reads | ![](sheet_toz_double.jpg) |
 | MP-133 | the alloy receiver takes the grey film: reads | dull: reads | receiver worn to bare pale grey, steel bolt rusts in the port: reads | reads | ![](sheet_mp133.jpg) |
@@ -85,16 +85,36 @@ reads, and in the hand, where it matters, the gun is at 30 cm.
 | SKS | grey: reads at 30 cm | dull: reads | rust: reads | reads | ![](sheet_sks.jpg) |
 | AK-74 | the lacquered receiver greys; plum polymer unchanged: reads | dull: reads | receiver rust-brown; polymer faded: reads | reads | ![](sheet_ak74.jpg) |
 
+## Patterned wear
+
+Near failure used to look only a little worse than worn, and fouling lay
+evenly over the metal. Wear now has a pattern, from one shader patch for
+every gun and no textures (`render::wear`):
+- **Fouling** gathers black at the muzzle and the ejection port and
+  thins over a few centimetres, on top of the grey film.
+- **Edges** (bevels and roundings, where the hand and the holster
+  rub) wear bright as the gun wears. Below weapon feel's 0.35 line
+  they rust through instead, orange and rough. So worn shows bright
+  edges and near failure shows rusted ones: different at a glance.
+- **The art's bare edge steel** (`Worn`, from `art/common.py`'s
+  `wear`) now rusts with the rest of the steel. It used to fade, as
+  wood does.
+
+Edges are found from how fast the shading normal turns across the
+pixel, so no gun needs new data. The muzzle and port are points in
+each mesh's own space, written when the condition changes, never per
+frame, so the slide takes its soot with it. The material fields used
+are ones only glass reads, and none of them is in a pipeline key, so
+no new pipelines.
+
+![Clean, fouled, worn, near failure: the PM at 30 cm](pm_patterned.jpg)
+
 ## Still open
 
-1. **Near failure looks only a little worse than worn.** By 0.45 the
-   rust is already 85% of the way. A further cue for the last stretch,
-   pitting or bare metal at the edges, needs patterned wear: a mask or
-   texture, not a whole-material tint. It's worth doing if near failure
-   matters to play. Weapon feel's softer 0.35 line is where it would
-   start.
-2. **Fouling builds evenly over the metal.** Real fouling gathers at the
-   port and muzzle first. That also needs patterned wear.
+1. **Flat faces wear only at their edges.** Real guns also rub bright on
+   the flats the hand rests on (the slide's grip serrations, the front
+   of the trigger guard). That needs a contact map per gun; edges carry
+   most of it.
 
 ## When a newcomer meets it
 

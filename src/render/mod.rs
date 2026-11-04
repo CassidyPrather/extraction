@@ -59,6 +59,7 @@ pub mod vram;
 pub mod warmup;
 pub mod water_material;
 pub mod wayfind_shots;
+pub mod wear;
 pub mod world_props;
 pub mod wounds;
 
@@ -83,6 +84,7 @@ impl Plugin for RenderPlugin {
         }
         app.add_plugins(sky_light::SkyLightPlugin);
         app.add_plugins(held_light::HeldLightPlugin);
+        app.add_plugins(wear::GunWearPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
