@@ -625,8 +625,8 @@ fn gallery(
             s if s.starts_with("sights:") => {
                 spawn_static(&mut commands, &s["sights:".len()..], eye + fwd * 0.5);
             }
-            // `first_person_hands` and `wear_kit` have these.
-            s if s.starts_with("fp:") || s.starts_with("kit") => {}
+            // `first_person_hands`, `wear_kit` and `weapons::cycle` have these.
+            s if s.starts_with("fp:") || s.starts_with("kit") || s.starts_with("cycle:") => {}
             // A Mosin as made, and under it one sawn down to an obrez at
             // the vice (`weapons::gunsmith`), and an AK with and without
             // its stock.
