@@ -543,6 +543,8 @@ pub(super) struct Newcomer {
     low_until: f32,
     /// The heavy that raised its arm at it, while it's still after it.
     heavy: Option<Entity>,
+    /// The hound that coiled at it, while it's still close and has it.
+    hound: Option<Entity>,
     /// Walking off from it till then (each walk away's length).
     walking_off_until: f32,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
@@ -1047,7 +1049,38 @@ pub(super) fn direct_raid(
     // The other machines' own tells on it warn as well (Legibility's
     // survey: a hound's coil, a crawler's charge, a heavy's raised arm, a
     // grappler's windup), and a machine noticing it.
-    let coiled = tells.hounds.read().any(|ev| on_me(ev.hound));
+    let mut coiled = false;
+    for ev in tells.hounds.read() {
+        if on_me(ev.hound) {
+            coiled = true;
+            state.hound = Some(ev.hound);
+        }
+    }
+    // A hound after it: low and still, from its coil, and held as long as
+    // it's close and has it (a hound loses someone low and still; up and
+    // back to the job after 29 s, the newcomer was bitten down with the
+    // hound still by it). Up and on once it's moved off or lost it.
+    if let Some(h) = state.hound
+        && !p.reckless
+        && !p.hoards
+    {
+        match world.robot_at(h).map(|g| g.xz()) {
+            Some(from) if on_me(h) && from.distance(here) < 15.0 => {
+                state.low_until = state.low_until.max(now + 1.0);
+                if !matches!(bot.tasks.front(), Some(Task::Wait(_))) {
+                    super::second_hour::cut_in(&mut bot, vec![Task::Wait(2.0)]);
+                }
+            }
+            _ => {
+                state.hound = None;
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "kept low and still till the hound moved off",
+                );
+            }
+        }
+    }
     let charged = tells.crawlers.read().any(|ev| on_me(ev.crawler));
     let mut raised = false;
     for ev in tells.heavies.read() {
