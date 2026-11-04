@@ -1201,6 +1201,19 @@ fn paper(text: String, size: Vec2) -> ScreenText {
     }
 }
 
+/// A station by its number (1-based) or its title, any case, spaces as
+/// underscores: its number.
+pub fn station_index(n: &str) -> Option<usize> {
+    if let Ok(k) = n.parse::<usize>() {
+        return Some(k);
+    }
+    let want = n.to_lowercase().replace('_', " ");
+    STATIONS
+        .iter()
+        .position(|s| s.title.to_lowercase() == want)
+        .map(|i| i + 1)
+}
+
 /// `EXTRACTION_YARD_AT=N` (a dev aid, for screenshots of station N lit):
 /// the stations before N start done; `N.K`, and station N's steps before
 /// its Kth too.
@@ -1208,9 +1221,11 @@ fn dev_start_at(mut ob: ResMut<Onboarding>) {
     let Some(v) = std::env::var("EXTRACTION_YARD_AT").ok() else {
         return;
     };
-    // "N" or "N.K": station N, at its step K (1-based).
+    // "N" or "N.K": station N, at its step K (1-based). N is its number or
+    // its title, any case, spaces as underscores ("the_range", "first_aid"):
+    // by name, a script of shots doesn't drift as stations come and go.
     let mut it = v.split('.');
-    let Some(n) = it.next().and_then(|n| n.parse::<usize>().ok()) else {
+    let Some(n) = it.next().and_then(|n| station_index(n)) else {
         return;
     };
     let k = it.next().and_then(|k| k.parse::<usize>().ok()).unwrap_or(1);
@@ -2383,6 +2398,33 @@ pub mod bot;
 
 #[cfg(test)]
 mod tests {
+    /// Every station in scripts/onboarding_shots.sh is one the yard has,
+    /// by name (by number they drifted onto blank boards as stations came
+    /// and went).
+    #[test]
+    fn the_shots_script_names_stations_the_yard_has() {
+        assert_eq!(super::station_index("1"), Some(1));
+        assert_eq!(
+            super::station_index("the_range"),
+            super::station_index("THE RANGE")
+        );
+        let script = std::fs::read_to_string("scripts/onboarding_shots.sh").unwrap();
+        let mut n = 0;
+        for line in script.lines().map(str::trim).filter(|l| l.starts_with('"')) {
+            let station = line
+                .trim_matches('"')
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("");
+            assert!(
+                super::station_index(station).is_some(),
+                "{station}: no such station ({line})"
+            );
+            n += 1;
+        }
+        assert!(n >= 10, "only {n} shots");
+    }
+
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
 
