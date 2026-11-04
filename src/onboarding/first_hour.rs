@@ -1416,6 +1416,16 @@ pub(super) fn direct_raid(
         if line.trim_start().starts_with("FAIL") && !state.reported {
             state.note(now, Kind::Stuck, line.trim().to_string());
         }
+        // A walk that didn't get there: the rest of that walk was planned
+        // from where it isn't (on the far side of the camp's fence, it
+        // pressed against the wire leg after leg, sixty times). Dropped,
+        // so what's next is planned from here.
+        if line.contains("timed out on WalkTo") {
+            while matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) && bot.tasks.len() > 1 {
+                bot.tasks.pop_front();
+            }
+            bot.restart();
+        }
     }
     // A first raid that runs on past half an hour has lost its way.
     if now > 1800.0 && state.leg != Leg::Done {
