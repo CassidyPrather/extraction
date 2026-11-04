@@ -1707,9 +1707,13 @@ impl Shows {
             0.0
         }
     }
-    /// How bright its eye's glow is by day (an additive emissive).
-    pub fn glow(&self) -> f32 {
-        eye_glow(self.suspicion, if self.sees { 1.0 } else { 0.0 }, 1.0, 1.0).red * self.lit
+    /// How bright its eye's glow is in `light` (an additive emissive).
+    pub fn glow(&self, light: f32) -> f32 {
+        eye_glow(self.suspicion, self.x(), light, 1.0).red * self.lit
+    }
+    /// How well it sees you (exposure).
+    fn x(&self) -> f32 {
+        if self.sees { 1.0 } else { 0.0 }
     }
 }
 
@@ -1726,16 +1730,35 @@ pub struct Awake {
     /// Whether its glows (its eye's, a tell's) hold their size past
     /// [`GLOW_HOLDS_AT`] (`HeldSize`).
     pub held: bool,
+    /// Its eye's halo after dark (radius, m; 0 none: `world::halos`).
+    pub night_halo: f32,
     /// Its body across (m): what a crouch or a run shows over.
     pub body: f32,
     /// The states a player needs to tell apart, in the order they come.
     pub states: Vec<(&'static str, Shows)>,
 }
 
-/// The fog you meet them in: a pea-souper's visibility (m,
-/// `world::weather`). The eye, its glow and a tell's are lamps the fog
-/// can't touch; the body's shape fades into it.
-pub const AWARE_FOG: f32 = 150.0;
+/// The light and weather you meet them in: fog by day, drizzle at dusk,
+/// fog at night (`world::weather`'s own). The eye, its glow and a tell's
+/// are lamps the fog can't touch; the body's shape fades into the fog
+/// and the dark; after dark the eye has its halo (`world::halos`).
+pub fn aware_weathers() -> [(&'static str, crate::world::weather::Conditions); 3] {
+    use crate::world::weather::{Conditions, Hour, WeatherKind};
+    [
+        (
+            "fog, day",
+            Conditions::compose(WeatherKind::PeaSouper, Hour::Day, 0),
+        ),
+        (
+            "drizzle, dusk",
+            Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 0),
+        ),
+        (
+            "fog, night",
+            Conditions::compose(WeatherKind::PeaSouper, Hour::Night, 0),
+        ),
+    ]
+}
 /// Two states read apart when this many pixels (headset, at its render
 /// scale) differ between them: a 4 x 4 patch.
 pub const READS_PX: f32 = 16.0;
@@ -1756,6 +1779,7 @@ pub fn awareness() -> Vec<Awake> {
         eye: (0.284 * size, 0.072 * size),
         glow: EYE_GLOW * size,
         held: true,
+        night_halo: 1.2 * size,
         body: 0.8 * size,
         states: vec![
             ("at work", Shows::AT_WORK),
@@ -1778,6 +1802,7 @@ pub fn awareness() -> Vec<Awake> {
             eye: (0.13 * hs, 0.012 * hs),
             glow: EYE_GLOW * hs,
             held: true,
+            night_halo: 1.2 * hs,
             body: 0.6 * hs,
             states: vec![
                 (
@@ -1825,6 +1850,7 @@ pub fn awareness() -> Vec<Awake> {
             eye: (0.052, 0.051),
             glow: DRONE_EYE_GLOW,
             held: true,
+            night_halo: 0.6,
             body: 0.5,
             states: vec![
                 ("on patrol", Shows::AT_WORK),
@@ -1839,6 +1865,7 @@ pub fn awareness() -> Vec<Awake> {
             eye: (0.186 * heavy::SIZE, 0.052 * heavy::SIZE),
             glow: 0.0,
             held: true,
+            night_halo: 0.0,
             body: 1.6,
             states: vec![
                 ("at work", Shows::AT_WORK),
@@ -1853,6 +1880,7 @@ pub fn awareness() -> Vec<Awake> {
             eye: (0.06, 0.06),
             glow: super::sentry_look::HALO,
             held: false,
+            night_halo: 0.0,
             body: 0.5,
             states: vec![
                 ("sweeping", Shows::AT_WORK),
@@ -1891,12 +1919,15 @@ pub const AWARE_ELSEWHERE: &[(&str, &str)] = &[
 ];
 
 /// How many pixels differ between two of a machine's states at its range
-/// (a headset's, at its render scale). Its lamp: its eye, or its glow
-/// where that's bright enough to see pulse, its rhythm and size; while a
-/// tell burns, the tell's glow in its place (`tells_over_moods`), with its
-/// own quickening rhythm (`tell_gain`). And, through the fog, its body's
-/// crouch and pace (a second's travel).
-pub fn aware_px(m: &Awake, a: &Shows, b: &Shows) -> f32 {
+/// in `c`'s light and weather (a headset's, at its render scale). Its
+/// lamp: its eye, or its glow where that's bright enough to see pulse
+/// (after dark only near: the halo takes over from 15 m), its rhythm and
+/// size; while a tell burns, the tell's glow in its place
+/// (`tells_over_moods`), with its own quickening rhythm (`tell_gain`).
+/// After dark its halo, steady, brighter as it knows more, the tell's
+/// while one burns. And, through the fog and the dark, its body's crouch
+/// and pace (a second's travel).
+pub fn aware_px(m: &Awake, a: &Shows, b: &Shows, c: &crate::world::weather::Conditions) -> f32 {
     use std::f32::consts::PI;
     let deg = crate::render::legibility::eye_px_per_deg();
     let px_m = |r: f32| deg * (1.0 / r).atan().to_degrees();
@@ -1906,15 +1937,34 @@ pub fn aware_px(m: &Awake, a: &Shows, b: &Shows) -> f32 {
     } else {
         px
     };
-    let fog = (-3.0 * m.range / AWARE_FOG).exp();
+    // How dark it is (`alert_eyes`' night: 1 by 0.25 of a day's light).
+    let dark = if crate::world::halos::halos_show(c) {
+        (1.0 - c.light / 0.25).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let fog = (-3.0 * m.range / c.visibility).exp();
+    // (A body's shape in the dark: a quarter of the day's light is enough.)
+    let shape = fog * (c.light / 0.25).min(1.0);
     let eye = m.eye.0 * m.eye.1 * px * px;
-    let glow = PI * (m.glow * held).powi(2);
+    // After dark a glow that hands over to a halo fades out from 15 m to
+    // 25 (`alert_eyes`' near), as the dark comes.
+    let near = if m.night_halo > 0.0 {
+        1.0 - dark * (1.0 - (1.0 - (m.range - 15.0) / 10.0).clamp(0.0, 1.0))
+    } else {
+        1.0
+    };
+    let glow = PI * (m.glow * held).powi(2) * near;
     // (Rhythm in Hz; a tell's is its own, -1.)
     let lamp = |s: &Shows| {
         if s.halo > 0.0 {
             (-1.0, PI * (s.halo * held).powi(2))
         } else {
-            let g = if s.glow() >= GLOW_SEEN { glow } else { 0.0 };
+            let g = if s.glow(c.light) >= GLOW_SEEN {
+                glow
+            } else {
+                0.0
+            };
             (s.hz(), eye.max(g) * s.lit)
         }
     };
@@ -1931,10 +1981,22 @@ pub fn aware_px(m: &Awake, a: &Shows, b: &Shows) -> f32 {
         la.min(lb)
     };
     let mut d = rhythm.max((la - lb).abs());
+    // After dark, the halo: its rhythm, the eye's or a tell's
+    // (`alert_eyes`), over all of it, through the fog. (Brighter alone
+    // doesn't count: through the tone map a searching walker's halo at
+    // 30 m is a red 4 levels over one at work's.)
+    // (Against a dusk sky it hardly shows: counted as the dark comes.)
+    if m.night_halo > 0.0 {
+        let area = PI * (m.night_halo * px).powi(2) * fog * dark;
+        let beat = |s: &Shows| if s.halo > 0.0 { -1.0 } else { s.hz() };
+        if beat(a) != beat(b) {
+            d = d.max(area);
+        }
+    }
     d += eye * (a.lit - b.lit).abs();
     let body = m.body * px;
-    d += (a.low - b.low).abs() * px * body * fog;
-    d += (a.pace - b.pace).abs() * px * body * fog;
+    d += (a.low - b.low).abs() * px * body * shape;
+    d += (a.pace - b.pace).abs() * px * body * shape;
     d
 }
 
@@ -2554,6 +2616,11 @@ pub const DRONE_EYE_GLOW: f32 = 0.08;
 /// its glow still the size it is at 15 (`awareness`).
 pub const GLOW_HOLDS_AT: f32 = 15.0;
 
+/// A tell's lens glow, carried in its machine's halo after dark, this
+/// much brighter (a hunting mood's halo is 4.4; a tell's glow 0.3 at its
+/// floor to 3.6 at its flash, `tell_halo`).
+pub const TELL_IN_HALO: f32 = 3.0;
+
 /// A glow on a robot that holds the size it looks at [`GLOW_HOLDS_AT`]
 /// past it (`alert_eyes` sizes them): its eye's, and a tell's on its
 /// lens, so the tell is never lost inside the mood at range.
@@ -2664,9 +2731,11 @@ fn stalk_eyes(
 fn alert_eyes(
     mut commands: Commands,
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
-    (mut halos, mut glows): (
+    (mut halos, mut glows, lenses, locks): (
         Query<(&Eye, &mut crate::world::halos::Halo)>,
         Query<(&mut Transform, &GlobalTransform), With<HeldSize>>,
+        Query<(&RobotPart, &MeleeLens)>,
+        Query<&LockHalo>,
     ),
     gaits: Query<&super::anim::Gait>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
@@ -2764,6 +2833,26 @@ fn alert_eyes(
         ));
     }
     let eye_at = cameras.iter().next().map(|g| g.translation());
+    // Whose tell burns (a lens's lead, a drone's lock), in what glow: after
+    // dark its halo carries it (below), as its glow gives way to it by day
+    // (`tells_over_moods`).
+    let mut tells: std::collections::HashMap<Entity, LinearRgba> = Default::default();
+    let glowing = |h: &Handle<StandardMaterial>| {
+        materials
+            .get(h)
+            .map(|m| m.emissive)
+            .filter(|e| *e != LinearRgba::BLACK)
+    };
+    for (p, l) in &lenses {
+        if let Some(e) = glowing(&l.0) {
+            tells.insert(p.robot, e);
+        }
+    }
+    for l in &locks {
+        if let Some(e) = glowing(&l.mat) {
+            tells.insert(l.robot, e);
+        }
+    }
     let halos_on = conditions
         .as_deref()
         .is_some_and(crate::world::halos::halos_show);
@@ -2830,13 +2919,19 @@ fn alert_eyes(
         // halo takes over. By day there's no halo: the glow carries the
         // eye's rhythm out to where the eye's too small to (held to its
         // size at `GLOW_HOLDS_AT`, below).
+        // (At dusk the halos are on but a dusk sky outshines them: the glow
+        // hands over only as the dark comes, `night`.)
         let near = match (eye_at, places.get(robot)) {
             (Some(c), Ok(gt)) if halos_on => {
-                (1.0 - (c.distance(gt.translation()) - 15.0) / 10.0).clamp(0.0, 1.0)
+                let fade = (1.0 - (c.distance(gt.translation()) - 15.0) / 10.0).clamp(0.0, 1.0);
+                1.0 - night * (1.0 - fade)
             }
             _ => 1.0,
         };
-        let k = (1.2 + 1.2 * a + 1.6 * x) * stutter.min(1.0);
+        // (Its halo after dark pulses with the eye: past 25 m it's all of
+        // the eye there is, and a brighter halo alone barely reads, a red
+        // a few levels up through the tone map.)
+        let k = (1.2 + 1.2 * a + 1.6 * x) * stutter.min(1.0) * pulse;
         moods.insert(
             robot,
             (
@@ -2874,6 +2969,10 @@ fn alert_eyes(
                 } else {
                     1.2 * gaits.get(part.robot).map_or(1.0, |g| g.size)
                 };
+                // Its tell, while one burns: a hunting halo's steady glare
+                // would swallow the tell's red quickening, the halo the
+                // size of the whole machine at range.
+                let color = tells.get(&part.robot).map_or(color, |t| *t * TELL_IN_HALO);
                 crate::world::halos::Halo { color, radius }
             }
             // Dead (or stuttering off): dark.
@@ -3364,21 +3463,23 @@ mod signal_lamp_tests {
     fn every_machines_awareness_reads_at_its_range() {
         let mut table = String::new();
         let mut bad = Vec::new();
-        for m in awareness() {
-            assert!(
-                !AWARE_ELSEWHERE.iter().any(|(n, _)| *n == m.machine),
-                "{}: in the table and excused from it",
-                m.machine
-            );
-            for (i, (na, a)) in m.states.iter().enumerate() {
-                for (nb, b) in &m.states[i + 1..] {
-                    let px = aware_px(&m, a, b);
-                    table += &format!(
-                        "{:9} {:>3} m  {:>20} / {:<20} {:>7.1} px\n",
-                        m.machine, m.range, na, nb, px
-                    );
-                    if px < READS_PX {
-                        bad.push(format!("{}: {na} / {nb} {px:.1} px", m.machine));
+        for (w, c) in aware_weathers() {
+            for m in awareness() {
+                assert!(
+                    !AWARE_ELSEWHERE.iter().any(|(n, _)| *n == m.machine),
+                    "{}: in the table and excused from it",
+                    m.machine
+                );
+                for (i, (na, a)) in m.states.iter().enumerate() {
+                    for (nb, b) in &m.states[i + 1..] {
+                        let px = aware_px(&m, a, b, &c);
+                        table += &format!(
+                            "{w:14} {:9} {:>3} m  {:>20} / {:<20} {:>7.1} px\n",
+                            m.machine, m.range, na, nb, px
+                        );
+                        if px < READS_PX {
+                            bad.push(format!("{w}, {}: {na} / {nb} {px:.1} px", m.machine));
+                        }
                     }
                 }
             }

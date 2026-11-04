@@ -130,3 +130,20 @@ The reels show the two weakest rows, and the walker at 30 m. Each strip runs lef
 ![walker at 30 m](awareness_walker_30m_before_after.png)
 
 Before, the four drones differ only in a pixel of eye, and the four heavies' eyes are the same. After, the drones read faint red, red pulse, orange-white, then the larger red lock. The heavy's eye is steady, then pulsing, then bright. The walkers read faint, red, hot, then the tell's red.
+
+### At dusk and at night
+
+The table runs in three lights from `world::weather`'s own conditions (`aware_weathers`): fog by day, drizzle at dusk, fog at night. After dark the eye has its halo (`world::halos`), the glow hands over to the halo as the dark comes, and a body's crouch or pace fades with the light.
+
+The reels showed three faults, each fixed in `alert_eyes`:
+
+- **Brightness alone didn't read after dark.** The night halo was steady. A searching walker's halo at 30 m was 4 levels of red over one at work's (58 against 62), and nothing pulsed. The halo now carries the eye's rhythm. The model credits only rhythm, not brightness steps.
+- **A tell was lost in the night halo.** A telling walker or drone kept the hunting halo's orange glare, with only a small red sphere inside it. The halo now carries the tell's own red quickening while one burns (`TELL_IN_HALO`).
+- **At dusk the glow handed over to a halo a dusk sky outshines.** The halos switch on at a light of 0.5, but at dusk (0.36) they barely show, so walkers at 30 m were their 15 px eyes alone. The glow now fades into the halo only as the dark comes (`night`).
+
+The weakest rows after dark are the heavy (113 px: its eye, no halo) and the sentry (132 px: its lens glow), the same as by day. Each strip runs at work, searching, hunting, then its tell, before beside after:
+
+![walker, dusk](awareness_walker_dusk_before_after.png)
+![walker, night](awareness_walker_night_before_after.png)
+![drone, dusk](awareness_drone_dusk_before_after.png)
+![drone, night](awareness_drone_night_before_after.png)
