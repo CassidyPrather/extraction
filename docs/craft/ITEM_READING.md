@@ -12,9 +12,8 @@
 > - The guns' labels pick up the fixed glyphs when Gunsmith next builds
 >   them; the depot's conveyor and cradle (a C in their codes) want their
 >   owner's rebuild (rebuilt here they lost their rollers' baked AO).
-> - Lettering at 2 m in game: Marrow's gate block wears ivy over its
->   face, and the house crate faced away; confirm on a crate and block
->   that face the eye.
+> - ~~Lettering at 2 m in game~~: done 4 November (the crate reads; the
+>   gate blocks' ivy kept off their lettering; below).
 > - ~~The truck crate's later kinds at reading distance~~: done 4
 >   November (the magazine on its side; the rounds out from under the map).
 > - The walk props past the first jobs (Kettle's, Rime's, Sallow's).
@@ -335,4 +334,20 @@ repeats a metre now (`models.rs`), for the rig, the sacks, the bags,
 the bedroll and the canteen's cover alike; the canteen's own scale went
 back to one.
 ![rig pouches, before and after](../shots/items/canvas_weave_rig_before_after.jpg)
+
+### Lettering at 2 m (4 November)
+
+Face-on from 2 m, standing, in drizzle at 11:00.
+
+- **A supply crate reads.** Marrow's pump keeper's store: ТАРА over
+  17-6, cream on the olive boards, every glyph its own.
+  ![supply crate at 2 m](../shots/props/supply_crate_2m.jpg)
+- **Fixed: the gate blocks' lettering was under ivy, in every valley.**
+  The quarantine gate's blocks carry ФБС 24.3.6 on the face the walk
+  out to the truck meets, which is their shaded north, the face ivy
+  favours most. Marrow's, Kettle's and Cinder's were all sheets of
+  leaves. `overgrowth::lettered` names a prefab's lettered faces and
+  the ivy keeps off them; the rest of the gate grows as before
+  (`ivy_keeps_off_lettering`). Kettle above, Cinder below:
+  ![gate blocks, before and after](../shots/props/gate_block_ivy_before_after.jpg)
 
