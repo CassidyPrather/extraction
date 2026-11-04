@@ -527,6 +527,18 @@ pub(crate) struct HandVisual {
     /// glove and how far its last joint bends (radians); `None` swings it
     /// by its curl.
     pub(crate) thumb: Option<(Vec3, f32)>,
+    /// Seated on a thing held free (`render::hold`): the thing, where it
+    /// lies in the hand, and the seat.
+    pub(crate) seat: Option<(Entity, Transform, Seating)>,
+}
+
+/// A seat being worked out off the frame, or worked out: the search can
+/// take tens of milliseconds for a small thing taken awkwardly, too long
+/// for the frame the hand closes on it. Meanwhile the glove is drawn as
+/// it was.
+pub(crate) enum Seating {
+    Pending(bevy::tasks::Task<super::hold::Seat>),
+    Ready(super::hold::Seat),
 }
 
 /// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
@@ -538,7 +550,7 @@ struct Finger {
 }
 
 /// Segment lengths per finger, knuckle outwards, metres.
-const FINGER_BONES: [[f32; 3]; 5] = [
+pub(crate) const FINGER_BONES: [[f32; 3]; 5] = [
     [0.040, 0.025, 0.020],
     [0.044, 0.028, 0.022],
     [0.041, 0.026, 0.020],
@@ -581,6 +593,7 @@ fn spawn_hand_visuals(
                 curl: [0.0; 5],
                 spread: std::array::from_fn(rest_spread),
                 thumb: None,
+                seat: None,
             },
             PlayerGlove,
         ));
@@ -828,7 +841,7 @@ fn glove_model(side: Side) -> &'static str {
 /// A finger's first joint on the (unrolled) glove: fingers point along -Z
 /// from the palm's front edge and curl toward its underside (-Y); the index
 /// is on the thumb's side.
-fn finger_root(side: Side, finger: usize) -> Vec3 {
+pub(crate) fn finger_root(side: Side, finger: usize) -> Vec3 {
     let thumb_side = -side.sign();
     if finger == 4 {
         Vec3::new(0.038 * thumb_side, -0.008, -0.005)
@@ -845,7 +858,7 @@ const FAN: f32 = 0.04;
 
 /// A finger's own spread with the hand open, radians toward the thumb: the
 /// fingers fan away from the index (see `FAN`).
-fn rest_spread(finger: usize) -> f32 {
+pub(crate) fn rest_spread(finger: usize) -> f32 {
     -(finger.min(3) as f32) * FAN
 }
 
@@ -998,7 +1011,13 @@ fn joint_rotation(side: Side, finger: usize, joint: usize, c: f32) -> Quat {
 }
 
 /// `joint_rotation` with the finger spread `spread` (see `finger_aim_spread`).
-fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread: f32) -> Quat {
+pub(crate) fn joint_rotation_spread(
+    side: Side,
+    finger: usize,
+    joint: usize,
+    c: f32,
+    spread: f32,
+) -> Quat {
     if joint == 0 {
         return finger_aim_spread(side, finger, c, spread);
     }
@@ -1030,6 +1049,7 @@ pub(crate) fn spawn_hand(
                 curl,
                 spread: std::array::from_fn(rest_spread),
                 thumb: None,
+                seat: None,
             },
             GloveMaterial(vec![glove.clone()]),
             Transform::default(),
@@ -1584,6 +1604,10 @@ fn pose_hands(
     guns: Query<&crate::weapons::Gun>,
     supports: Query<&crate::interact::Supported>,
     parts: Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
+    boxes: Query<(
+        &avian3d::prelude::Collider,
+        Has<crate::interact::carry::Bulky>,
+    )>,
     gun_at: Query<
         &Transform,
         (
@@ -1607,12 +1631,70 @@ fn pose_hands(
         let input = inputs.get(parent.parent()).map(|i| i.hand(v.side));
         let grip = input.map_or(0.0, |i| i.grip);
         let trigger = input.map_or(0.0, |i| i.trigger);
+        // Held free, one-handed: drawn closed on it (`render::hold`), not
+        // a fist wherever the hand took it.
+        let mut seated = None;
+        let mut keep_seat = false;
         if let Some(item) = hand.holding {
             if let Ok((h, igt, g)) = held.get(item) {
-                if let Some(p) = g.points.get(h.point).filter(|p| p.role != GripRole::Free) {
-                    pose = igt.mul_transform(p.local);
+                match g.points.get(h.point).map(|p| (p.role, p.local)) {
+                    Some((role, local)) if role != GripRole::Free => {
+                        pose = igt.mul_transform(local);
+                    }
+                    Some(_) => {
+                        if let Ok((collider, false)) = boxes.get(item)
+                            && let Some(cuboid) = collider.shape_scaled().as_cuboid()
+                        {
+                            keep_seat = true;
+                            let seat = match &mut v.seat {
+                                Some((e, at, state)) if *e == item && *at == h.offset => {
+                                    match state {
+                                        Seating::Ready(seat) => Some(*seat),
+                                        Seating::Pending(task) => {
+                                            bevy::tasks::futures::check_ready(task).inspect(
+                                                |seat| {
+                                                    *state = Seating::Ready(*seat);
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    let he = cuboid.half_extents;
+                                    let half = Vec3::new(he.x, he.y, he.z);
+                                    let (side, offset) = (v.side, h.offset);
+                                    let state = match bevy::tasks::AsyncComputeTaskPool::try_get() {
+                                        Some(pool) => Seating::Pending(pool.spawn(async move {
+                                            super::hold::seat(side, half, offset)
+                                        })),
+                                        None => {
+                                            Seating::Ready(super::hold::seat(side, half, offset))
+                                        }
+                                    };
+                                    let ready = match &state {
+                                        Seating::Ready(seat) => Some(*seat),
+                                        Seating::Pending(_) => None,
+                                    };
+                                    v.seat = Some((item, h.offset, state));
+                                    ready
+                                }
+                            };
+                            if let Some(seat) = seat {
+                                pose = igt
+                                    .mul_transform(Transform::from_matrix(
+                                        h.offset.compute_affine().inverse().into(),
+                                    ))
+                                    .mul_transform(seat.glove());
+                                seated = Some(seat);
+                            }
+                        }
+                    }
+                    None => {}
                 }
             }
+        }
+        if !keep_seat {
+            v.seat = None;
         }
         // The other hand on a gun's support (the handguard, a palm cupped
         // under a pistol's grip) sits on it as the grip hand sits on the
@@ -1660,6 +1742,9 @@ fn pose_hands(
         let mut target = curl_targets(
             hand, v.side, grip, trigger, thumb_rest, &held, &bounds, &guns, &parts,
         );
+        if let Some(seat) = seated {
+            target = seat.curl;
+        }
         let mut spread = std::array::from_fn(rest_spread);
         let free = hand.holding.is_none() && hand.handle.is_none() && hand.supporting.is_none();
         let tracked = input.ok().and_then(|i| i.fingers);
@@ -1693,6 +1778,10 @@ fn pose_hands(
                 (igt.compute_affine().inverse() * pose.compute_affine()).into(),
             );
             thumb = catch_thumb(v.side, hold, catch_face(&gun.layout, at));
+        }
+        // Seated, the thumb lies where the seat found it a side to rest on.
+        if let Some(seat) = seated {
+            thumb = Some(seat.thumb);
         }
         for (c, want) in v.curl.iter_mut().zip(target) {
             *c += (want - *c) * ease;
@@ -2483,6 +2572,7 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
+                    seat: None,
                 },
                 Transform::default(),
             ))
@@ -2624,6 +2714,7 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
+                    seat: None,
                 },
                 Transform::default(),
             )
@@ -2923,6 +3014,7 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
+                    seat: None,
                 },
                 Transform::default(),
             ))
@@ -3011,6 +3103,88 @@ mod glove_tests {
         assert!(g.trigger == 0.0 && !g.pulled, "the trigger never moved");
     }
 
+    /// A glove holding a thing free ends drawn on its seat
+    /// (`render::hold::seat`, worked out off the frame): where the seat
+    /// puts it, curled as it says, its thumb laid where it found a side.
+    #[test]
+    fn a_glove_holding_a_thing_free_is_drawn_on_its_seat() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(11),
+            ))
+            .add_systems(Update, pose_hands);
+        let player = app
+            .world_mut()
+            .spawn((Transform::default(), RigInput::default()))
+            .id();
+        let hand = app
+            .world_mut()
+            .spawn((Hand::default(), Transform::default(), ChildOf(player)))
+            .id();
+        let glove = app
+            .world_mut()
+            .spawn((
+                HandVisual {
+                    hand,
+                    side: Side::Right,
+                    curl: [0.0; 5],
+                    spread: std::array::from_fn(rest_spread),
+                    thumb: None,
+                    seat: None,
+                },
+                Transform::default(),
+            ))
+            .id();
+        // A power cell, taken as a hand picks it up.
+        let half = Vec3::new(0.01, 0.01, 0.03);
+        let offset = super::super::hold::taken(Side::Right, half);
+        let cell = app
+            .world_mut()
+            .spawn((
+                Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Held {
+                    player,
+                    hand,
+                    side: Side::Right,
+                    point: 0,
+                    offset,
+                },
+                avian3d::prelude::Collider::cuboid(0.02, 0.02, 0.06),
+                offset,
+            ))
+            .id();
+        app.world_mut().get_mut::<Hand>(hand).unwrap().holding = Some(cell);
+        let want = super::super::hold::seat(Side::Right, half, offset);
+        for _ in 0..300 {
+            app.update();
+        }
+        let v = app.world().get::<HandVisual>(glove).unwrap();
+        for f in 0..4 {
+            assert!(
+                (v.curl[f] - want.curl[f]).abs() < 0.02,
+                "curl {:?} vs the seat's {:?}",
+                v.curl,
+                want.curl
+            );
+        }
+        let (dir, bend) = v.thumb.expect("the seat's thumb");
+        assert!(
+            dir.distance(want.thumb.0) < 0.01 && (bend - want.thumb.1).abs() < 0.01,
+            "thumb {dir} {bend} vs {:?}",
+            want.thumb
+        );
+        let at = *app.world().get::<Transform>(glove).unwrap();
+        let drawn = want.glove();
+        assert!(
+            at.translation.distance(drawn.translation) < 1e-4
+                && at.rotation.angle_between(drawn.rotation) < 1e-3,
+            "drawn at {at:?}, the seat's {drawn:?}"
+        );
+    }
+
     /// Tracked fingers drive a free glove, curl and spread; a held gun
     /// keeps the glove's wrap round its grip.
     #[test]
@@ -3039,6 +3213,7 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
+                    seat: None,
                 },
                 Transform::default(),
             ))

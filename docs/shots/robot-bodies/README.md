@@ -96,3 +96,54 @@ Not weak, by design: a walker's core (four rounds), every plate, a drone's body,
 The walker is kinematic, so nothing physical stopped a foot planted in a wall. Its path is Robot minds' (`walker::keep_off_walls` keeps its centre 1.3 m off buildings). The body now guards its own feet: each step's target is cast for from the body at hip height against `Layer::World`, and a foot aimed through a wall comes down 0.14 m short of it (`anim::wall_clear`, `step_walker_walled`). A slope rising under the ray isn't a wall, and rubble (`Layer::Debris`) is still stood on. `anim::tests::feet_never_land_in_a_wall` walks a walker along a wall 0.5 m off its middle. With the guard switched off, a foot came down 0.18 m inside it; with it, none does.
 
 No shot: a wall tall enough to matter hides the far feet from any camera that shows the walker, and a cut-away view isn't something the reel can stage yet. `reel:wall` stages the walk for a look in the game.
+
+## Awareness reads at range in fog
+
+Each machine that hunts you has four states a player needs to tell apart: at work, searching, hunting you, and its tell. They must read apart at the range you meet the machine, in a pea-souper by day. `visuals::awareness` is the table: one row per machine, with its range, its eye's lit size and its glow, and what each state shows. `aware_px` counts the pixels that differ between two states at the headset's render scale. The eye and glows are lamps the fog can't touch; a crouch or a pace is fogged. `every_machines_awareness_reads_at_its_range` holds every pair of a machine's states to `READS_PX` (16 px) apart. The machines left out are in `AWARE_ELSEWHERE`, each with its reason:
+
+- The spotter's lamp is its own awareness cue.
+- The minelayer flees instead of hunting.
+- The sorter is met at a few metres.
+- The plough and the mender are blind to you.
+
+| Machine | Range | Weakest pair | px |
+|---|---|---|---|
+| drone | 40 m | searching / hunting | 59 |
+| heavy | 15 m | searching / hunting | 113 |
+| sentry | 25 m | any | 132 |
+| hound | 12 m | heading for a sound / hunting | 157 |
+| walker | 30 m | any but tell | 206 |
+| grappler | 14 m | searching / hunting | 236 |
+| crawler | 8 m | searching / hunting | 259 |
+
+What was wrong, and what changed:
+
+- **Eye glow, beyond 25 m.** The glow faded out past 25 m even by day, when no halo takes over. That left the eye alone, and a drone's eye is 1 px at 40 m, so a searching drone and a hunting one were the same pixel. Now the glow carries the eye's rhythm by day. Past `GLOW_HOLDS_AT` (15 m) it holds the size it looks there (`HeldSize`).
+- **Tell glows.** A tell's glow holds its size the same way. While a tell burns, the mood glow gives way to it (`tells_over_moods`). Otherwise a hunting machine's hot glow hid the red quickening of its aim or lock.
+- **Heavy and sentry.** The heavy's eye and the sentry's lens burned the same whatever they knew. They now use the walker family's mood through `visuals::eye_mood`: steady at work, a slow pulse while searching, a fast one seeing you. The sentry's lens glow carries this between chirps (`eye_glow`).
+- **The hound's stalk.** Its eye is a 3.5 px sliver at 12 m. Its second cue is its body: the stalk crouches (`anim::LOW`) and slows to `STALK_PACE`. These are 800 px or more against every other state.
+
+The reels show the two weakest rows, and the walker at 30 m. Each strip runs left to right: at work, searching, hunting, its tell. It shows five frames 1/6 s apart, before beside after, in fog at 11:00 (`reel:awaredrone`, `reel:awareheavy`, `reel:awarewalker`):
+
+![drone at 40 m](awareness_drone_40m_before_after.png)
+![heavy at 15 m](awareness_heavy_15m_before_after.png)
+![walker at 30 m](awareness_walker_30m_before_after.png)
+
+Before, the four drones differ only in a pixel of eye, and the four heavies' eyes are the same. After, the drones read faint red, red pulse, orange-white, then the larger red lock. The heavy's eye is steady, then pulsing, then bright. The walkers read faint, red, hot, then the tell's red.
+
+### At dusk and at night
+
+The table runs in three lights from `world::weather`'s own conditions (`aware_weathers`): fog by day, drizzle at dusk, fog at night. After dark the eye has its halo (`world::halos`), the glow hands over to the halo as the dark comes, and a body's crouch or pace fades with the light.
+
+The reels showed three faults, each fixed in `alert_eyes`:
+
+- **Brightness alone didn't read after dark.** The night halo was steady. A searching walker's halo at 30 m was 4 levels of red over one at work's (58 against 62), and nothing pulsed. The halo now carries the eye's rhythm. The model credits only rhythm, not brightness steps.
+- **A tell was lost in the night halo.** A telling walker or drone kept the hunting halo's orange glare, with only a small red sphere inside it. The halo now carries the tell's own red quickening while one burns (`TELL_IN_HALO`).
+- **At dusk the glow handed over to a halo a dusk sky outshines.** The halos switch on at a light of 0.5, but at dusk (0.36) they barely show, so walkers at 30 m were their 15 px eyes alone. The glow now fades into the halo only as the dark comes (`night`).
+
+The weakest rows after dark are the heavy (113 px: its eye, no halo) and the sentry (132 px: its lens glow), the same as by day. Each strip runs at work, searching, hunting, then its tell, before beside after:
+
+![walker, dusk](awareness_walker_dusk_before_after.png)
+![walker, night](awareness_walker_night_before_after.png)
+![drone, dusk](awareness_drone_dusk_before_after.png)
+![drone, night](awareness_drone_night_before_after.png)

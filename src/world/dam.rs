@@ -212,14 +212,26 @@ fn stair_height(x: f32) -> f32 {
     h0 + (h1 - h0) * ((x - x0) / (x1 - x0)).clamp(0.0, 1.0)
 }
 
-/// The face stair's walls, in the long downstream face's space: masonry
-/// thick enough to hold the bank's whole fall to the grass, its top a
-/// metre over the steps or the landing (a parapet to lean a rifle on, and
-/// what stops you stepping off 20 m of embankment), in panels of about 4 m
-/// stepping up with the stair.
-fn stair_wall(b: &mut Builder) {
-    let (fx, fz, fy) = DAM_FACE_AT;
-    let ly = STAIR_WALL_FOOT - fy;
+/// The run of one of the stair's terraces (m), and how far the ground
+/// blends up into the next one past its end (the map's `blend`).
+const TERRACE_RUN: f32 = 8.0;
+const TERRACE_BLEND: f32 = 2.5;
+
+/// The highest the stair's ground comes by map x: the terrace x is on, at
+/// the height the linear rise reaches at that terrace's east end (the map
+/// sets each terrace there), blended up toward the next past it.
+/// `stair_height` alone runs up to a terrace's height under its west end.
+fn stair_ground_max(x: f32) -> f32 {
+    let x0 = STAIR_RUN.0;
+    let steps = ((x + TERRACE_BLEND - x0) / TERRACE_RUN).ceil();
+    stair_height(x0 + steps * TERRACE_RUN)
+}
+
+/// The stair walls' panels, map x and z of the centre, size in plan, and
+/// the coping's height: about 4 m long, each a metre over the highest the
+/// stair's ground comes beside it.
+fn stair_wall_panels() -> Vec<(f32, f32, f32, f32, f32)> {
+    let mut out = Vec::new();
     for (x0, x1, z0, z1) in STAIR_WALLS {
         let along_x = x1 - x0 > z1 - z0;
         let len = if along_x { x1 - x0 } else { z1 - z0 };
@@ -245,19 +257,33 @@ fn stair_wall(b: &mut Builder) {
                     x1,
                 )
             };
-            let top = stair_height(high) + 1.0 - STAIR_WALL_FOOT;
-            let (lx, lz) = (cx - fx, cz - fz);
-            b.bx(
-                Vec3::new(sx, top, sz),
-                Vec3::new(lx, ly + top * 0.5, lz),
-                Mat::DressedStone,
-            );
-            b.deco(
-                Vec3::new(sx + 0.06, 0.1, sz + 0.1),
-                Vec3::new(lx, ly + top + 0.05, lz),
-                Mat::Boulder,
-            );
+            out.push((cx, cz, sx, sz, stair_ground_max(high) + 1.0));
         }
+    }
+    out
+}
+
+/// The face stair's walls, in the long downstream face's space: masonry
+/// thick enough to hold the bank's whole fall to the grass, its top a
+/// metre over the steps or the landing (a parapet to lean a rifle on, and
+/// what stops you stepping off 20 m of embankment), in panels of about 4 m
+/// stepping up with the stair.
+fn stair_wall(b: &mut Builder) {
+    let (fx, fz, fy) = DAM_FACE_AT;
+    let ly = STAIR_WALL_FOOT - fy;
+    for (cx, cz, sx, sz, coping) in stair_wall_panels() {
+        let top = coping - STAIR_WALL_FOOT;
+        let (lx, lz) = (cx - fx, cz - fz);
+        b.bx(
+            Vec3::new(sx, top, sz),
+            Vec3::new(lx, ly + top * 0.5, lz),
+            Mat::DressedStone,
+        );
+        b.deco(
+            Vec3::new(sx + 0.06, 0.1, sz + 0.1),
+            Vec3::new(lx, ly + top + 0.05, lz),
+            Mat::Boulder,
+        );
     }
 }
 
@@ -850,6 +876,114 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every stair wall panel stands a parapet over the ground beside it,
+    /// the real ground and not the stair's model of it: sampled along each
+    /// panel on the stair's side (a wall flush with the walk let a raider
+    /// step off 15 m of bank).
+    #[test]
+    fn the_stair_walls_stand_over_the_walk() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        let hm = extraction_core::terrain::Heightmap::build(&map);
+        let mut low = Vec::new();
+        for (cx, cz, sx, sz, coping) in stair_wall_panels() {
+            for f in 0..=8 {
+                let t = f as f32 / 8.0 - 0.5;
+                // The walk side: north of the outer wall, west of the
+                // landing's east wall.
+                let at = if sx > sz {
+                    [cx + sx * t, cz - sz * 0.5 - 0.6]
+                } else {
+                    [cx - sx * 0.5 - 0.6, cz + sz * t]
+                };
+                let ground = hm.height(at);
+                if coping < ground + 0.9 {
+                    low.push(format!(
+                        "({:.1}, {:.1}): coping {coping:.2}, ground {ground:.2}",
+                        at[0], at[1]
+                    ));
+                }
+            }
+        }
+        assert!(
+            low.is_empty(),
+            "stair wall under a parapet's height:\n{}",
+            low.join("\n")
+        );
+    }
+
+    /// The upstream parapet is a parapet the whole way along the crest, the
+    /// viewing bay's rail included: at every x but the tower bridge's way
+    /// through, something solid on the parapet's line tops the crest's
+    /// ground beside it by 0.9 m, with no gap under it a body goes through.
+    #[test]
+    fn the_crest_edge_stands_over_the_crest() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        let hm = extraction_core::terrain::Heightmap::build(&map);
+        // A body's least size (m): no gap in the guard as big.
+        const BODY: f32 = 0.5;
+        let mut bad = Vec::new();
+        for (id, len, open) in [
+            ("dam_back", 245.0f32, Some(-22.5f32)),
+            ("dam_back_end", 35.0, None),
+        ] {
+            let g = geo(id).unwrap();
+            for p in map.placements.iter().filter(|p| p.prefab == id) {
+                assert!(
+                    p.rot.abs() < 0.01,
+                    "{id} turned: the test's frame is its own"
+                );
+                let y0 = p.y;
+                let z = -1.45;
+                let mut x = -len * 0.5 + 0.5;
+                while x < len * 0.5 - 0.5 {
+                    if open.is_some_and(|o| (x - o).abs() < 1.4) {
+                        x += 0.25;
+                        continue;
+                    }
+                    // Solid spans up the parapet's line at x, over the crest.
+                    let mut spans: Vec<(f32, f32)> = g
+                        .pieces
+                        .iter()
+                        .filter(|q| q.collide)
+                        .filter_map(|q| {
+                            let Shape::Box(s) = q.shape else { return None };
+                            let c = q.at.translation;
+                            let inside =
+                                (x - c.x).abs() <= s.x * 0.5 && (z - c.z).abs() <= s.z * 0.5;
+                            let (lo, hi) = (c.y - s.y * 0.5, c.y + s.y * 0.5);
+                            (inside && hi > BACK_H + 0.01).then_some((lo.max(BACK_H), hi))
+                        })
+                        .collect();
+                    spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+                    let (mut reach, mut gap) = (BACK_H, 0.0f32);
+                    for (lo, hi) in spans {
+                        gap = gap.max(lo - reach);
+                        reach = reach.max(hi);
+                    }
+                    let at = [p.at[0] + x, p.at[1] + z + 1.0];
+                    // You stand on the dam's own top there, or the ground
+                    // banked against it, whichever's higher.
+                    let ground = hm.height(at).max(y0 + BACK_H);
+                    if y0 + reach < ground + 0.9 || gap >= BODY {
+                        bad.push(format!(
+                            "{id} x {:.2}: guard top {:.2}, gap {gap:.2}, crest {ground:.2}",
+                            at[0],
+                            y0 + reach
+                        ));
+                    }
+                    x += 0.25;
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "the crest's edge unguarded:\n{}",
+            bad.join("\n")
+        );
     }
 
     /// Nothing on the dam's downstream faces is a ledge: every top a body
