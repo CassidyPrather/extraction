@@ -9,7 +9,7 @@
 >
 > **What's next.** The open items, each waiting on a reference, not to be
 > guessed. Each gun's README lists them worst first.
-> - **IZh-43**: the forend's depth.
+> - **IZh-43**: the stock's drop and comb (the forend and action bar are settled).
 > - **TOZ-8M**: the semi-pistol wrist.
 > - **SVD**: its heights.
 > - **PPSh**: the rear sight.

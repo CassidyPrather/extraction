@@ -53,3 +53,49 @@ Checked and holding:
   Bakelite part from each other in the yard. In the mill they hold, a
   step darker.
 - **Seams**: none open apart from the AK's handguard line (above).
+
+## Second pass: the next three a player meets
+
+The TOZ-8M (raid 3), the IZh-43 (raid 4) and the MP-133 (raid 5), in
+Progression's gun order, on 4 November 2026. They were shot the same way.
+
+| TOZ-8M | IZh-43, before | IZh-43, after | MP-133, before | MP-133, after |
+| - | - | - | - | - |
+| ![](sheet_toz8.jpg) | ![](sheet_toz_double_before.jpg) | ![](sheet_toz_double_after.jpg) | ![](sheet_mp133_before.jpg) | ![](sheet_mp133_after.jpg) |
+
+### Findings, worst first
+
+1. **The IZh-43's action ended at the breech.**
+   - **What 30 cm showed:** a dark gap under the chambers, the lumps and a
+     bare forend iron hanging below, then a deep forend swelling under the
+     hand.
+   - **The real gun:** a dealer's side view of a 20 in IZh-43, measured
+     from its barrels, shows the action's bar running 69 mm on under the
+     chambers to the hinge. A slim forend meets it flush and tapers from
+     50 mm under the rib's top to 30.
+   - **Fixed:** the bar, a forward hinge, and the forend redrawn to those
+     numbers. The support hand now sits on the forend's underside. This
+     settles that gun's open item, "the forend looks deeper". Details are
+     in `docs/craft/guns/toz_double/README.md`, second pass.
+
+   | Before | After |
+   | - | - |
+   | ![](izh_bar_before.jpg) | ![](izh_bar_after.jpg) |
+
+2. **The MP-133's ejection port was too short for its hull.** It was 60
+   mm, and a fired 70 mm hull can't pass. It's now 78 mm, back from the
+   barrel's breech, with the bolt lengthened to fill it closed. Details
+   are in `docs/craft/guns/mp133/README.md`.
+
+   | Before | After |
+   | - | - |
+   | ![](mp133_port_before.jpg) | ![](mp133_port_after.jpg) |
+
+3. **The TOZ-8M reads right at 30 cm**: the bolt and its knob, the
+   receiver's dovetail, the sights, the guard and the butt swivel. I left
+   it alone. Its open item, the semi-pistol wrist, still has no side view
+   or drawing to measure against; I found only text and listings without
+   usable photographs.
+
+Checked and holding on all three: the silhouettes from both sides at 1 m,
+and wood against blued steel and black alloy in the yard and the mill.
