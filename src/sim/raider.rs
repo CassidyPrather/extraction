@@ -2698,13 +2698,29 @@ fn indoor_path(
     within: f32,
     through_held: bool,
 ) -> Option<Vec<Task>> {
-    let a = plan.to_local(from).xz();
+    let here = plan.to_local(from).xz();
+    // Standing where the plan has no floor just outside a wall (by a
+    // porch's steps), the grid's nearest floor can be through the wall:
+    // start from the nearest on this side of it, and walk there first
+    // (Marrow seed 1, 4 November: from beside a plank house's porch the
+    // route went straight at the loot through its front wall).
+    let a = if plan.grid.walkable(here.to_array()) {
+        here
+    } else {
+        near_walkable_same_side(plan, here).unwrap_or(here)
+    };
     let path = if through_held {
         plan.path_through_held(a, goal)?
     } else {
         plan.path(a, goal)?
     };
     let mut tasks = Vec::new();
+    if a.distance(here) > 0.3 {
+        tasks.push(Task::WalkTo {
+            to: plan.world2(a),
+            within: 0.3,
+        });
+    }
     // A long straight run (an underground site's long stair) in legs, each
     // well inside a walk's time.
     let walk = |tasks: &mut Vec<Task>, from: Vec2, to: Vec2, within: f32| {
@@ -4848,6 +4864,117 @@ mod run_tests {
                 "one in the open is the site's"
             );
         }
+    }
+
+    /// A take route from just outside a building's walls, where the plan
+    /// has no floor (beside a porch's steps, against the wall), goes in by
+    /// a door, not straight through the wall to the nearest floor indoors
+    /// (Marrow seed 1, 4 November: from beside house_plank's porch, a walk
+    /// at the loot through its front wall, a stuck). From every such point
+    /// round every building with a door, on every map, to a floor cell at
+    /// its middle: no walk on the route enters the footprint over a wall
+    /// (but through a doorway or an open bay).
+    #[test]
+    fn a_route_from_against_a_wall_goes_in_by_the_door() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for plan in plans
+                .iter()
+                .filter(|p| p.levels.is_none() && !p.doors.is_empty())
+            {
+                let g = &plan.grid;
+                let h = plan.half;
+                let inside = |q: Vec2, pad: f32| q.x.abs() < h.x - pad && q.y.abs() < h.y - pad;
+                // Somewhere to go: the floor cell nearest the middle.
+                let Some(goal) = g.nearest_walkable([0.0, 0.0]).map(Vec2::from_array) else {
+                    continue;
+                };
+                if !inside(goal, 0.3) {
+                    continue;
+                }
+                // Round the walls 0.4 m out, every 0.5 m, where there's no floor.
+                let mut starts = Vec::new();
+                let (w, d) = (h.x + 0.4, h.y + 0.4);
+                let mut t = -w;
+                while t <= w {
+                    starts.extend([Vec2::new(t, -d), Vec2::new(t, d)]);
+                    t += 0.5;
+                }
+                let mut t = -d;
+                while t <= d {
+                    starts.extend([Vec2::new(-w, t), Vec2::new(w, t)]);
+                    t += 0.5;
+                }
+                for start in starts.into_iter().filter(|q| !g.walkable(q.to_array())) {
+                    let from = plan.to_world(start);
+                    let Some(route) = indoor_path(plan, from, goal, 0.3, true) else {
+                        continue;
+                    };
+                    tried += 1;
+                    let mut last = start;
+                    for task in &route {
+                        let Task::WalkTo { to, .. } = task else {
+                            continue;
+                        };
+                        let next = plan.to_local(Vec3::new(to.x, from.y, to.y)).xz();
+                        // Into the footprint from outside it, with no
+                        // doorway on the way, over cells the plan has shut
+                        // (a wall; not an open bay), past the start's own.
+                        let len = last.distance(next);
+                        // (A wall, the body's clearance round it, is 0.2 m
+                        // of shut cells in a row at least; a line clipping
+                        // a cell's corner crosses a few centimetres.)
+                        let mut run = 0.0f32;
+                        let mut walled = false;
+                        let mut d = 0.4;
+                        while d < len {
+                            let shut = !g.walkable(last.lerp(next, d / len).to_array());
+                            run = if shut { run + 0.05 } else { 0.0 };
+                            walled |= run >= 0.2;
+                            d += 0.05;
+                        }
+                        if !inside(last, 0.0)
+                            && inside(next, 0.3)
+                            && plan.doors_on(last, next).is_empty()
+                            && walled
+                        {
+                            bad.push(format!(
+                                "{map} {} at {:.0?}: from {start:.2?}, {last:.2?} -> {next:.2?} through the wall",
+                                plan.name, plan.xf.translation
+                            ));
+                            break;
+                        }
+                        last = next;
+                    }
+                }
+            }
+        }
+        assert!(tried >= 100, "only {tried} routes tried");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} routes in through a wall:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
     }
 
     /// A wreck over a loot spot leaves nowhere to stand in reach of it, as
