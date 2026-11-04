@@ -1226,4 +1226,34 @@ mod tests {
         assert!(standing(&mut app), "up once the rank is reached");
         assert!(items(&mut app) > before, "with its things");
     }
+
+    /// Job 1's first find: the crackers on the Farm crate, within 2 m of
+    /// the Old farm point and at waist height, on a career's first raid
+    /// (Onboarding: one food, where every persona goes, cautious included).
+    #[test]
+    fn job_ones_first_find_is_at_the_old_farm() {
+        let mut app = crate::items::loot::tests::career_app();
+        crate::items::loot::tests::rolled_on(&mut app, 0);
+        let zone = app.world().resource::<Zone>().clone();
+        let farm = zone
+            .map
+            .markers
+            .iter()
+            .find(|m| m.name == "Old farm")
+            .expect("the Old farm point")
+            .at;
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut q = app
+            .world_mut()
+            .query::<(&crate::items::Item, &GlobalTransform)>();
+        let near: Vec<Vec3> = q
+            .iter(app.world())
+            .filter(|(i, _)| cat.0.get(i.kind).id == "crackers")
+            .map(|(_, t)| t.translation())
+            .filter(|p| Vec2::new(p.x, p.z).distance(Vec2::from_array(farm)) <= 2.0)
+            .collect();
+        assert_eq!(near.len(), 1, "crackers by the Old farm: {near:?}");
+        let lift = near[0].y - zone.ground(near[0].x, near[0].z);
+        assert!((0.7..=1.2).contains(&lift), "at {lift:.2} m");
+    }
 }
