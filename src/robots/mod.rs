@@ -591,7 +591,7 @@ fn wreck_loot(
         commands.entity(e).insert(Salvaged);
         timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
-        let mut drops = loot.0.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
+        let mut drops = loot.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
         // And whatever came through whole is there to unbolt.
         let whole: Vec<PartRole> = parts
             .iter()

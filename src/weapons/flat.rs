@@ -347,12 +347,34 @@ fn run_macros(
             Step::Rotate => gun.firearm.rotate_cylinder(),
             Step::EjectGate => gun.firearm.eject_at_gate(),
             Step::DropMag => {
-                mac.stripped = gun
+                let inside = gun
                     .magwell
                     .and_then(|w| sockets.get(w).ok())
                     .and_then(|s| s.occupant);
-                drop.write(DropMagazine { gun: e });
-                Vec::new()
+                // A reload with nothing to swap in keeps the one it has: a
+                // hand doesn't drop the gun's only magazine (it fell to the
+                // floor, heard, and jumped back in at InsertBestMag). A
+                // clearing (ReseatMag ahead) strips it whatever.
+                let reload = mac
+                    .steps
+                    .iter()
+                    .any(|(_, s)| matches!(s, Step::InsertBestMag));
+                let family = gun.firearm.def.magazine_family.clone().unwrap_or_default();
+                let spare = mags.iter().any(|(m, _, mag, in_socket, in_bag)| {
+                    Some(m) != inside
+                        && mag.family == family
+                        && (in_bag.is_some()
+                            || in_socket.is_some_and(|s| {
+                                owners.get(s.socket).is_ok_and(|(_, o)| Some(o.0) == player)
+                            }))
+                });
+                if reload && !spare && inside.is_some() {
+                    Vec::new()
+                } else {
+                    mac.stripped = inside;
+                    drop.write(DropMagazine { gun: e });
+                    Vec::new()
+                }
             }
             Step::ReseatMag | Step::InsertBestMag => {
                 // The fullest fitting magazine on the body or in the bag.

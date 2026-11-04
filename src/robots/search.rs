@@ -208,7 +208,7 @@ impl Plugin for SearchPlugin {
             .init_resource::<MindLog>()
             .add_systems(
                 FixedUpdate,
-                (call_out, forget_the_downed).after(super::perceive),
+                (call_out, forget_the_downed, let_go_at_home).after(super::perceive),
             )
             .add_systems(FixedPostUpdate, (announce, coming_back).chain())
             .add_systems(Update, log_pulled)
@@ -343,6 +343,43 @@ fn forget_the_downed(
             }
         }
     }
+}
+
+/// Pulling out in the truck, or at base: nothing out there has you any
+/// more (`perceive` doesn't see you there), so whatever had you gives up
+/// as it would on someone gone down (first fights: a heavy that had
+/// followed the hoarder slammed it dead by the truck after it was paid).
+pub fn let_go_at_home(
+    raid: Option<Res<crate::raid::Raid>>,
+    players: Query<(), With<crate::player::Player>>,
+    mut robots: Query<(&mut Awareness, &mut Brain, &mut Job)>,
+) {
+    if !raid.is_some_and(|r| at_home(&r.phase)) {
+        return;
+    }
+    for (mut aware, mut brain, mut job) in &mut robots {
+        if !aware.target.is_some_and(|t| players.contains(t)) {
+            continue;
+        }
+        aware.target = None;
+        aware.last_known = None;
+        aware.can_see_target = false;
+        aware.suspicion = 0.0;
+        if matches!(
+            *brain,
+            Brain::Engage | Brain::Investigate { .. } | Brain::Search { .. }
+        ) {
+            give_up(&mut brain, &mut job);
+        }
+    }
+}
+
+/// The truck pulling out with you, or you at base.
+pub fn at_home(phase: &crate::raid::Phase) -> bool {
+    matches!(
+        phase,
+        crate::raid::Phase::Extracting { .. } | crate::raid::Phase::AtBase
+    )
 }
 
 pub fn give_up(brain: &mut Brain, job: &mut Job) {

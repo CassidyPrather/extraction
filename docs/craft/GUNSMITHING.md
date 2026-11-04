@@ -9,11 +9,11 @@
 >
 > **What's next.** The open items, each waiting on a reference, not to be
 > guessed. Each gun's README lists them worst first.
-> - **IZh-43**: the forend's depth.
+> - **IZh-43**: the stock's drop and comb (the forend and action bar are settled).
 > - **TOZ-8M**: the semi-pistol wrist.
 > - **SVD**: its heights.
 > - **PPSh**: the rear sight.
-> - **SPSh-44**: the barrel latch, and the grip panels' material.
+> - **SPSh-44**: the grip panels' material (the barrel catch is settled).
 > - **Crossbow**: the prod's flex when drawn, which needs a mover. Weapon
 >   feel and Hands have the one-hand draw as a question.
 >

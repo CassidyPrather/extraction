@@ -138,12 +138,41 @@ fn screenshot_when_ready(
         let _ = std::fs::create_dir_all(dir);
     }
     let mut save = save_to_disk(path.clone());
+    let alpha = alpha_path(path);
     commands.spawn(Screenshot::primary_window()).observe(
         move |captured: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
+            if std::env::var_os("EXTRACTION_SHOT_ALPHA").is_some() {
+                save_alpha(&captured.image, &alpha);
+            }
             save(captured);
             exit.write(AppExit::Success);
         },
     );
+}
+
+/// `EXTRACTION_SHOT_ALPHA=1`: beside the shot, `<name>_alpha.png`, the
+/// frame's alpha as grey. The headset's compositor blends each eye by it
+/// (`render::hold_rate`, `BLEND_TEXTURE_SOURCE_ALPHA`): anything below
+/// white there is drawn toward black in the headset, though a desktop
+/// shot (RGB) never shows it.
+fn alpha_path(path: &std::path::Path) -> std::path::PathBuf {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("shot");
+    path.with_file_name(format!("{stem}_alpha.png"))
+}
+
+fn save_alpha(image: &Image, path: &std::path::Path) {
+    match image.clone().try_into_dynamic() {
+        Ok(img) => {
+            let mut alpha = img.to_rgba8();
+            for p in alpha.pixels_mut() {
+                p.0 = [p.0[3], p.0[3], p.0[3], 255];
+            }
+            if let Err(e) = alpha.save(path) {
+                warn!("screenshot alpha: {e}");
+            }
+        }
+        Err(e) => warn!("screenshot alpha: {e}"),
+    }
 }
 
 /// `--gallery sights:<gun>`: the gun's sight line on the camera's, its
@@ -868,6 +897,13 @@ fn first_person_hands(
         Some(w) => (w, true),
         None => (what, false),
     };
+    // `fp:<item>+palm`: a thing held free shown on the upturned palm, the
+    // fingers curled up onto it (from above, the back of the hand hid
+    // them).
+    let (what, palm_up) = match what.strip_suffix("+palm") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
     *stage += 1;
     for mut v in &mut players {
         *v = Visibility::Hidden;
@@ -1078,22 +1114,25 @@ fn first_person_hands(
             }
         }
     } else {
-        // Upright in the left fist (round the hand's origin, as a grip is),
-        // the right open.
-        let thinnest = catalog.kind(what).map_or(0.04, |k| {
-            let def = catalog.get(k);
-            def.dims.map_or((def.bulk / 1000.0).cbrt(), |d| {
-                d.into_iter().fold(f32::MAX, f32::min)
-            })
+        // In the left hand as a hand takes it (`render::hold::taken`), the
+        // glove seated on it as the game seats it; the right open.
+        let half = catalog.kind(what).map_or(Vec3::splat(0.02), |k| {
+            Vec3::from(catalog.get(k).size_m()) * 0.5
         });
-        let hand = rest(Side::Left);
-        commands.entity(item).insert(view(hand));
-        glove(
-            &mut commands,
-            Side::Left,
-            hand,
-            hold_curl(None, 0.0, thinnest),
-        );
+        let mut hand = rest(Side::Left);
+        if palm_up {
+            let palm = hand.rotation * crate::render::hold::palm_normal(Side::Left);
+            hand.rotation = Quat::from_rotation_arc(palm, Vec3::Y) * hand.rotation;
+        }
+        let in_hand = crate::render::hold::taken(Side::Left, half);
+        let seat = crate::render::hold::seat(Side::Left, half, in_hand);
+        commands.entity(item).insert(view(hand * in_hand));
+        let h = glove(&mut commands, Side::Left, hand * seat.glove(), seat.curl);
+        commands.entity(h).queue(move |mut e: EntityWorldMut| {
+            if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                v.thumb = Some(seat.thumb);
+            }
+        });
         glove(&mut commands, Side::Right, rest(Side::Right), [0.15; 5]);
     }
 }

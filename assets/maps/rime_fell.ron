@@ -31,7 +31,7 @@
     cell: 1.0,
     base_height: 96.0,
     noise: (seed: 151, amplitude: 3.5, scale: 110.0, octaves: 5, detail: 0.25),
-    rim: (width: 60.0, height: 14.0),
+    rim: (width: 45.0, height: 14.0),
     fence_inset: 38.0,
     // Thin, clear, cold air.
     haze: Some((0.93, 0.98, 1.08)),
@@ -114,11 +114,17 @@
         // the chutes cross it.
         (
             name: "Pass road", kind: Asphalt, width: 6.0, smoothing: 45.0,
-            points: [(-10.0, 306.0), (-10.0, 266.0), (-60.0, 258.0), (-140.0, 245.0), (-205.0, 232.0),
+            points: [(-10.0, 296.0), (-10.0, 266.0), (-60.0, 258.0), (-140.0, 245.0), (-205.0, 232.0),
                      (-228.0, 212.0), (-215.0, 192.0), (-150.0, 182.0), (-80.0, 170.0), (-58.0, 158.0),
                      (-66.0, 140.0), (-130.0, 128.0), (-200.0, 118.0), (-226.0, 100.0), (-212.0, 80.0),
                      (-150.0, 68.0), (-90.0, 52.0), (-40.0, 30.0)],
             galleries: [(at: (-150.0, 180.0), length: 44.0), (at: (-175.0, 122.0), length: 46.0)],
+        ),
+        // The gate's apron: the road widened to the gate's width through
+        // it, so its posts and blocks stand on one level.
+        (
+            name: "Gate apron", kind: Asphalt, width: 14.0, shoulder: 3.0, smoothing: 8.0,
+            points: [(-10.0, 293.0), (-10.0, 278.0)],
         ),
         // The funicular: track and service stair straight up the slope from
         // the valley station to the top station.
@@ -345,7 +351,7 @@
 
     markers: [
         (kind: Insertion, at: (-10.0, 266.0), rot: 0.0, name: "South gate"),
-        (kind: TruckStop, at: (-10.0, 300.0), rot: 0.0, name: "South gate"),
+        (kind: TruckStop, at: (-10.0, 296.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (-4.0, 272.0), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (-115.0, -264.0), name: "The saddle"),
         (kind: Rendezvous, at: (70.0, -262.0), name: "The col"),

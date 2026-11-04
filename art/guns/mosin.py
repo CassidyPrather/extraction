@@ -255,12 +255,14 @@ recv.cyl(0.0168, RING_F, RING_R, "Blued", segs=40, xf=T(0, BORE, 0), chamfer=0.0
 # The receiver body: a round tube around the bolt, flattened underneath.
 recv.tube(0.0148, 0.0094, RING_R - 0.002, -0.014, "Blued", segs=32, xf=T(0, BORE, 0))
 recv.box((0.025, 0.018, 0.163), (0, BORE - 0.012, -0.0955), "Blued", bevel=0.002)
-# Rear tang running down onto the wrist.
-tang = fillet([(-0.016, BORE - 0.014), (0.004, BORE - 0.014), (0.045, 0.024), (0.05, 0.0275),
-               (0.04, 0.0305), (-0.016, 0.034)], [0.0014, 0.003, 0.003, 0.003, 0.003, 0.0014], 3)
+# Rear tang running down onto the wrist, inlet: its underside follows the
+# wrist's top half a millimetre under the wood (it stood 5 mm clear at its
+# end, a rod over the wrist at 30 cm).
+tang = fillet([(-0.016, BORE - 0.014), (0.004, 0.0295), (0.045, 0.0183), (0.05, 0.0208),
+               (0.04, 0.0238), (-0.016, 0.034)], [0.0014, 0.003, 0.003, 0.003, 0.003, 0.0014], 3)
 recv.prism(tang, -0.0075, 0.0075, "Blued", axis="x", bevel=0.0012, segs=2)
 # The tang screw through the wrist, and the ejector screw on the left.
-screw(screws, slots, 0.0033, (0.0, 0.0311, 0.027), RX(math.atan2(0.0035, 0.056)), turn=1.1)
+screw(screws, slots, 0.0033, (0.0, 0.0262, 0.027), RX(math.atan2(0.0102, 0.056)), turn=1.1)
 ey = BORE - 0.005
 screw(screws, slots, 0.0028, (-math.sqrt(0.0148 ** 2 - 0.005 ** 2) + 0.0002, ey, -0.075),
       RZ(math.pi / 2), turn=0.4)

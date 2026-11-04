@@ -10,8 +10,39 @@ use super::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::world::Zone;
 
+/// The tables, and the raid of the career they roll for (`None`: no
+/// career, every family; kept by `follow_the_career`).
 #[derive(Resource, Clone)]
-pub struct Loot(pub std::sync::Arc<LootTables>);
+pub struct Loot(pub std::sync::Arc<LootTables>, pub Option<u32>);
+
+impl Loot {
+    /// Rolls `table` for this raid of the career: a family not out yet
+    /// stays out, whatever rolls it (a wreck, a cargo pod, a crate, the
+    /// driver's cache), as at the zone's markers.
+    pub fn roll(
+        &self,
+        table: &str,
+        catalog: &extraction_core::items::ItemCatalog,
+        rng: &mut Rng,
+    ) -> Vec<extraction_core::loot::Drop> {
+        self.0.roll_at(table, None, self.1, catalog, rng)
+    }
+}
+
+/// Keeps `Loot`'s raid the career's.
+fn follow_the_career(
+    loot: Option<ResMut<Loot>>,
+    opts: Res<LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
+) {
+    let Some(mut loot) = loot else {
+        return;
+    };
+    let raid = career_raid_of(&opts, progression.as_deref());
+    if loot.1 != raid {
+        loot.1 = raid;
+    }
+}
 
 pub struct LootPlugin;
 
@@ -32,7 +63,8 @@ impl Plugin for LootPlugin {
                     .in_set(LootSpawnSystems),
             )
                 .after(crate::world::buildings::spawn_buildings),
-        );
+        )
+        .add_systems(PreUpdate, follow_the_career);
     }
 }
 
@@ -70,11 +102,21 @@ pub const ROLL_STEPS: usize = 5;
 /// before; a test app counted as a career's raid 0 rolled other loot, and
 /// the gate failed on two bugs that loot showed up).
 fn career_raid(world: &World, opts: &LaunchOptions) -> Option<u32> {
+    career_raid_of(
+        opts,
+        world.get_resource::<crate::progression::Progression>(),
+    )
+}
+
+/// [`career_raid`], from the career as a system has it.
+pub fn career_raid_of(
+    opts: &LaunchOptions,
+    progression: Option<&crate::progression::Progression>,
+) -> Option<u32> {
     if opts.sim_run.is_some() || crate::persist::career_path(opts).is_none() {
         return None;
     }
-    let p = world.get_resource::<crate::progression::Progression>()?;
-    Some(p.0.raids_by_map.iter().map(|(_, n)| *n).sum())
+    Some(progression?.0.raids_by_map.iter().map(|(_, n)| *n).sum())
 }
 
 /// One part of `roll_zone_loot`: the markers' loot, the scenes' things,
@@ -103,17 +145,27 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
                 zone,
                 catalog,
                 crate::world::scenes::gates(world, &opts.map),
+                &|id| arrived(&loot.0, raid, id),
             ),
             2 => {
                 if let Some(spots) = world.get_resource::<crate::world::buildings::BuildingLoot>() {
                     spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed, raid);
                 }
             }
-            _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map),
+            _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map, &|id| {
+                arrived(&loot.0, raid, id)
+            }),
         }
     }
     queue.apply(world);
 }
+/// Whether kind `id` is out yet on career raid `raid` (`None`: no career,
+/// everything is): the raid any table first drops it, for the sources
+/// that aren't tables (a scene's things). A kind no table drops is out.
+pub fn arrived(loot: &LootTables, raid: Option<u32>, id: &str) -> bool {
+    raid.is_none_or(|r| loot.arrives(id).is_none_or(|a| a <= r))
+}
+
 fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
     let path = crate::asset_root_path().join("data/loot.ron");
     let text = std::fs::read_to_string(path).unwrap_or_else(|_| BUILTIN_LOOT.to_owned());
@@ -121,7 +173,7 @@ fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
         error!("loot.ron: {e}");
         LootTables::from_ron(BUILTIN_LOOT, &catalog).expect("built-in loot parses")
     });
-    commands.insert_resource(Loot(std::sync::Arc::new(tables)));
+    commands.insert_resource(Loot(std::sync::Arc::new(tables), None));
 }
 
 /// A crate set down under loot in the open (dressed by `render::props`).
@@ -285,6 +337,61 @@ fn rolls_for(richness: f32, rng: &mut Rng) -> usize {
 }
 
 /// Rolls every building loot spot (shelves, tables, crates).
+/// A career's first raids put a small thing where it's seen (Models'
+/// shots of Marrow's first houses: the 9x18 box, matches, bolt and cell
+/// were specks on a low shelf in drizzle light): from waist to eye height,
+/// a tiny one on a flat top (or the high shelf), in the same building.
+pub const PLACED_RAIDS: u32 = 2;
+
+/// From waist to eye height (m above the floor).
+pub const SEEN_FROM: f32 = 0.75;
+pub const SEEN_TO: f32 = 1.6;
+
+/// Whether a thing of `size` sits well at `spot` for a newcomer.
+pub fn sits_well(
+    spot: &crate::world::buildings::LootSpot,
+    size: extraction_core::items::SizeClass,
+) -> bool {
+    use extraction_core::items::SizeClass;
+    let Some(lift) = spot.lift else {
+        return !matches!(size, SizeClass::Tiny | SizeClass::Small);
+    };
+    let seen = (SEEN_FROM..=SEEN_TO).contains(&lift);
+    match size {
+        // A shelf under another board is shaded and edge-on; the high
+        // one's near the eye.
+        SizeClass::Tiny => seen && (spot.top || lift >= 1.0),
+        SizeClass::Small => seen,
+        _ => true,
+    }
+}
+
+/// The most things a first raid moves onto one spot: a pile any higher
+/// hides what's behind it, the thing the move is for.
+pub const MOVED_PILE: usize = 4;
+
+/// A spot in `building` a thing of `size` sits well at and that isn't
+/// piled up yet: flat tops first, the emptiest of them.
+fn better_spot(
+    spots: &[crate::world::buildings::LootSpot],
+    building: usize,
+    size: extraction_core::items::SizeClass,
+    piled: &std::collections::HashMap<usize, usize>,
+    rng: &mut Rng,
+) -> Option<usize> {
+    let pile = |k: usize| piled.get(&k).copied().unwrap_or(0);
+    let good: Vec<usize> = (0..spots.len())
+        .filter(|&k| {
+            spots[k].building == building && sits_well(&spots[k], size) && pile(k) < MOVED_PILE
+        })
+        .collect();
+    let tops: Vec<usize> = good.iter().copied().filter(|&k| spots[k].top).collect();
+    let pick = if tops.is_empty() { good } else { tops };
+    let least = pick.iter().map(|&k| pile(k)).min()?;
+    let pick: Vec<usize> = pick.into_iter().filter(|&k| pile(k) == least).collect();
+    Some(pick[rng.below(pick.len())])
+}
+
 fn spawn_building_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -298,7 +405,32 @@ fn spawn_building_loot(
     let mut n = 0;
     let notes = notes_lying(zone);
     let valley = extraction_core::loot::valley_key(&zone.map.name);
-    for spot in &spots.0 {
+    let placed = raid.is_some_and(|r| r < PLACED_RAIDS);
+    // How many things each spot has (a pile climbs: `building_roll`).
+    let mut piled: std::collections::HashMap<usize, usize> = Default::default();
+    // A first raid's small things that sit badly, moved once every spot's
+    // own roll is in (so a spot's pile counts what's rolled there too).
+    let mut moving = Vec::new();
+    let mut lay = |to: usize,
+                   drop: extraction_core::loot::Drop,
+                   piled: &mut std::collections::HashMap<usize, usize>,
+                   rng: &mut Rng| {
+        let pile = piled.entry(to).or_default();
+        let i = *pile;
+        *pile += 1;
+        let at = clear_of_notes(spots.0[to].at + building_roll(i), &notes);
+        spawn_item(
+            commands,
+            catalog,
+            SpawnItem {
+                kind: drop.kind,
+                transform: Transform::from_translation(at)
+                    .with_rotation(Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU))),
+                condition: drop.condition,
+            },
+        );
+    };
+    for (j, spot) in spots.0.iter().enumerate() {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| {
@@ -306,21 +438,19 @@ fn spawn_building_loot(
                     .roll_at(spot.table, Some(&valley), raid, catalog, &mut rng)
             })
             .collect();
-        for (i, drop) in drops.into_iter().enumerate() {
-            let at = clear_of_notes(spot.at + building_roll(i), &notes);
-            spawn_item(
-                commands,
-                catalog,
-                SpawnItem {
-                    kind: drop.kind,
-                    transform: Transform::from_translation(at).with_rotation(
-                        Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU)),
-                    ),
-                    condition: drop.condition,
-                },
-            );
+        for drop in drops {
             n += 1;
+            if placed && !sits_well(spot, catalog.get(drop.kind).size) {
+                moving.push((j, drop));
+            } else {
+                lay(j, drop, &mut piled, &mut rng);
+            }
         }
+    }
+    for (j, drop) in moving {
+        let size = catalog.get(drop.kind).size;
+        let to = better_spot(&spots.0, spots.0[j].building, size, &piled, &mut rng).unwrap_or(j);
+        lay(to, drop, &mut piled, &mut rng);
     }
     info!(
         "{n} items rolled into {} building loot spots",
@@ -422,6 +552,191 @@ fn spawn_dev_cache(
                     it.rounds = rounds.to_owned();
                 }
             });
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// The kinds lying in the zone, and how many of each.
+    fn kinds(app: &mut App) -> BTreeMap<String, u32> {
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut out = BTreeMap::new();
+        let mut q = app.world_mut().query::<&Item>();
+        for it in q.iter(app.world()) {
+            *out.entry(cat.0.get(it.kind).id.clone()).or_default() += 1;
+        }
+        out
+    }
+
+    /// Marrow on career raid `r`: everything rolled as a raid starts
+    /// (`roll_zone_loot`: markers, scenes, buildings, tapes, artifacts),
+    /// with nothing else lying about.
+    pub(crate) fn rolled_on(app: &mut App, r: u32) -> BTreeMap<String, u32> {
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .raids_by_map = vec![("marrow_creek".into(), r)];
+        let items: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<Item>>()
+            .iter(app.world())
+            .collect();
+        for e in items {
+            if let Ok(e) = app.world_mut().get_entity_mut(e) {
+                e.despawn();
+            }
+        }
+        roll_zone_loot(app.world_mut());
+        app.update();
+        kinds(app)
+    }
+
+    pub(crate) fn career_app() -> App {
+        let save = std::env::temp_dir().join(format!("loot_career_{}.ron", std::process::id()));
+        let _ = std::fs::remove_file(&save);
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            save: Some(save),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        app
+    }
+
+    /// Every source a raid's loot is rolled from waits for a kind's
+    /// `from_raid`, not only the tables: the Farm barricade laid an AK
+    /// magazine on a first raid, four raids before any AK (the designer's
+    /// "too many item types at once").
+    #[test]
+    fn nothing_turns_up_before_its_raid() {
+        let mut app = career_app();
+        let loot = app.world().resource::<Loot>().0.clone();
+        let mut early = Vec::new();
+        for r in 0..6 {
+            let rolled = rolled_on(&mut app, r);
+            // Hana's tape is there from the first, by her letter.
+            assert!(
+                rolled.contains_key("tape_practice"),
+                "raid {r}: no tape_practice"
+            );
+            for id in rolled.keys() {
+                // A laid story beat (Radio's, by Story's ask).
+                if crate::radio::places::FROM_THE_START.contains(&id.as_str()) {
+                    continue;
+                }
+                if !arrived(&loot, Some(r), id) {
+                    early.push(format!("{id} on raid {r}, out from {:?}", loot.arrives(id)));
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
+    }
+
+    /// Whatever else rolls a table (a robot's wreck, a cargo pod, a
+    /// packed crate, the driver's cache) rolls for the career's raid
+    /// too: on a first raid, every table only gives what's out.
+    #[test]
+    fn every_roll_follows_the_career() {
+        let mut app = career_app();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .raids_by_map = vec![("marrow_creek".into(), 0)];
+        app.update();
+        let loot = app.world().resource::<Loot>().clone();
+        assert_eq!(loot.1, Some(0));
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut rng = Rng::new(5);
+        let mut early = std::collections::BTreeSet::new();
+        let names: Vec<String> = loot.0.names().cloned().collect();
+        for t in &names {
+            for _ in 0..40 {
+                for d in loot.roll(t, &cat.0, &mut rng) {
+                    let id = &cat.0.get(d.kind).id;
+                    if !arrived(&loot.0, Some(0), id) {
+                        early.insert(format!("{t}: {id}"));
+                    }
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
+    }
+
+    /// On a career's first raids a small thing lies where it's seen: from
+    /// waist to eye height, a tiny one on a flat top or the high shelf
+    /// (Models' shots of Marrow's first houses: the 9x18 box, matches,
+    /// bolt and cell were specks on a low shelf), wherever its building has
+    /// such a spot. Later raids leave loot where it's rolled.
+    #[test]
+    fn a_first_raids_small_things_lie_in_sight() {
+        use extraction_core::items::SizeClass;
+        let mut app = career_app();
+        let spots = app
+            .world()
+            .resource::<crate::world::buildings::BuildingLoot>()
+            .0
+            .clone();
+        let cat = app.world().resource::<Catalog>().clone();
+        for r in 0..PLACED_RAIDS {
+            rolled_on(&mut app, r);
+            // Each small thing in a building, by the spot it was laid at
+            // (piles climb a little), and how many things each spot has.
+            let mut laid = Vec::new();
+            let mut per = vec![0usize; spots.len()];
+            let mut q = app.world_mut().query::<(&Item, &GlobalTransform)>();
+            for (item, gt) in q.iter(app.world()) {
+                let at = gt.translation();
+                let Some((k, _)) = spots
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| {
+                        s.at.xz().distance(at.xz()) < 0.4 && (at.y - s.at.y).abs() < 1.0
+                    })
+                    .min_by(|a, b| a.1.at.distance(at).total_cmp(&b.1.at.distance(at)))
+                else {
+                    continue;
+                };
+                per[k] += 1;
+                let def = cat.0.get(item.kind);
+                if matches!(def.size, SizeClass::Tiny | SizeClass::Small) {
+                    laid.push((def.id.clone(), def.size, k));
+                }
+            }
+            // Out of sight only where every spot in sight in its building
+            // is piled up already.
+            let room = |b: usize, size: SizeClass| {
+                (0..spots.len()).any(|k| {
+                    spots[k].building == b && sits_well(&spots[k], size) && per[k] < MOVED_PILE
+                })
+            };
+            let badly: Vec<String> = laid
+                .iter()
+                .filter(|(_, size, k)| {
+                    !sits_well(&spots[*k], *size) && room(spots[*k].building, *size)
+                })
+                .map(|(id, _, k)| format!("{id} at {:?} (lift {:?})", spots[*k].at, spots[*k].lift))
+                .collect();
+            assert!(
+                laid.len() > 10,
+                "raid {r}: only {} small things in buildings",
+                laid.len()
+            );
+            assert!(
+                badly.is_empty(),
+                "raid {r}: {} of {} small things out of sight: {badly:#?}",
+                badly.len(),
+                laid.len()
+            );
         }
     }
 }

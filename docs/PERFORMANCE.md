@@ -1030,6 +1030,30 @@ to BC7 (below, "Textures"). The valleys' budget is 2 GiB
 At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
 GB. Under half the ceiling either way: nothing to stream or cut yet.
 
+**4 November, on main b175290f** (the report now names each valley's
+five biggest things of any kind):
+
+| valley | total | textures | meshes | shadows | eye targets |
+|---|---|---|---|---|---|
+| Marrow Creek | 1545 MB | 209 | 236 | 16 | 1084 |
+| Kettle Pass | 1660 MB | 200 | 361 | 16 | 1084 |
+| Cinder Works | 1588 MB | 189 | 299 | 16 | 1084 |
+| Sallow Reservoir | 1627 MB | 187 | 340 | 16 | 1084 |
+| Rime Fell | 1709 MB | 177 | 432 | 16 | 1084 |
+
+Every valley's five biggest are the same: the eye targets (1084 MB), the
+sun's shadow maps (16 MB), then the three terrain maps (9.3 MB each). The
+meshes are hundreds of small ones, none in the top five. Every valley is
+under the 2 GiB budget and well under the 4.5 GB ceiling, so there's
+nothing to cut.
+
+MSAA and memory: at 2980² the two eyes' targets take 64 bytes a pixel
+at 4x MSAA (1084 MB), 40 at 2x (678 MB) and 28 without MSAA (474 MB).
+Memory isn't what MSAA costs here: 4x fits with 2.8 GB to spare under the
+ceiling. Its cost is GPU bandwidth (−25% to −46% frame time with it off
+on lavapipe, "What costs what"), and the SMOOTHING card (`--msaa 2|0`)
+already trades it. No change.
+
 ## Small things' shadows
 
 At the gates half the sun's shadow-pass meshes were smaller than 10 cm
@@ -1413,6 +1437,45 @@ they tightened by half when it halved. They are now in reference
 units: an event's worst frame is held to the frame budget's 160, and a
 load's frames to 530.
 
+### The render world, split (4 November)
+
+The 28 October playtest had the render world at 10–16 ms a frame. To
+split it by system for the first time, a Chrome-traced fast build
+(`--features bevy/trace_chrome`) ran the Marrow village view (m02, both
+eyes, drizzle) under lavapipe. The extract, prepare and queue systems,
+leaving out the render graph (lavapipe's own rasterising):
+
+| system | ms a frame |
+|---|---|
+| `bevy_pbr::gpu_preprocess::prepare_preprocess_bind_groups` | 7.9 (26%) |
+| `write_binned_instance_buffers`, opaque + shadow | 1.7 + 1.6 |
+| `apply_extract_commands` | 1.1 |
+| `prepare_material_bind_groups` | 1.05 |
+| `extract_meshes_for_gpu_building` | 0.74 |
+| the rest, each | 0.2–0.75 |
+| **all render-world systems** | **29.7** |
+
+The largest, `prepare_preprocess_bind_groups`, rebuilds a bind group for
+every view × render phase, every frame, unconditionally (bevy_pbr 0.19.1
+`gpu_preprocess.rs`). Its cost follows the number of views, not meshes.
+The views are each eye, plus each eye's two sun cascades:
+`prepare_lights` gives every camera its own shadow views, so the eyes
+can't share them without patching bevy_pbr. That patch is off the table
+unless the headset shows the render world over 11.1 ms (`docs/PLAYTEST.md`
+4h now reads it from the `cpu:` line).
+
+Fewer mesh instances don't move it much either. The same run at
+`--detail 0.5` drew 668 meshes in view against 670, and 427 shadow draws
+against 478. The bench's render-world CPU went from 24.1 to 23.2 ms,
+4%, inside the run-to-run noise (the bind-group system alone read 7.9
+and 10.2). Merging more static meshes would buy less than the 10% that
+would justify it. The buildings are already merged per material in
+seven groups, and merging across buildings would break their culling and
+their rebuild after damage. Not pursued.
+
+Lavapipe makes bind-group creation dearer than a real driver does, so
+read the shares here, not the milliseconds.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
@@ -1426,13 +1489,13 @@ Where Performance stopped, in order:
      near fill on, always ran in lavapipe's slow wall-time mode (about
      8.5 s against 6.8 s a frame). No timed pass moved, and `shadows=0`
      put both runs in the slow mode, so the GPU work doesn't explain it.
-2. **A fresh baseline on main**: the walk, yard, valley and puff stereo
-   gauges (`cargo test --lib -- --include-ignored gauge_`), after the m05
-   trim (54.2M), `add_sky` and the 10° puff cap. Re-read the stereo
-   budget's margins from it.
-3. **The 28 October CPU side** (above): Marrow's main thread at 12.1 ms
-   against 11.3, and the render world at 10–16 ms. Both grow with mesh
-   entities.
+2. **A fresh baseline on main**: done 4 November on 8d5c1105, all within
+   budget. The tightest are m05 at 54.2M (84% of 64.8M) and a hazard's
+   cloud at 49.9M (77%).
+3. **The 28 October CPU side**: done as far as this machine can tell.
+   The main thread is at 30.5 reference units (ceiling 160), and the
+   render world's split is in "The render world, split" above. The
+   headset's `cpu:` line (PLAYTEST 4h) settles the rest.
 4. **Open for others:**
    - `perf::gauge_items_fall_asleep` (Hands): items near the insertion
      that never sleep, from a one-step contact loss.

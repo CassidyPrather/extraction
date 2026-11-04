@@ -89,6 +89,18 @@ pub struct Vram {
     pub targets: u64,
     /// Textures by folder, biggest first.
     pub by_folder: Vec<(String, u64)>,
+    /// The single biggest things, of every kind (a texture, a mesh, the
+    /// eye targets, the sun's shadow maps), biggest first: where a cut
+    /// would come from.
+    pub top: Vec<(String, u64)>,
+}
+
+/// The `n` biggest of `items`, biggest first (ties by name, so a report
+/// reads the same each run).
+pub fn biggest(mut items: Vec<(String, u64)>, n: usize) -> Vec<(String, u64)> {
+    items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    items.truncate(n);
+    items
 }
 
 impl Vram {
@@ -101,9 +113,23 @@ pub fn measure(world: &mut World, eye_px: u64) -> Vram {
     let mut v = Vram::default();
     let server = world.resource::<AssetServer>().clone();
     let mut folders: std::collections::HashMap<String, u64> = Default::default();
+    let mut items: Vec<(String, u64)> = Vec::new();
     for (id, image) in world.resource::<Assets<Image>>().iter() {
         let b = image_bytes(image);
         v.textures += b;
+        let d = &image.texture_descriptor;
+        items.push((
+            server.get_path(id).map_or_else(
+                || {
+                    format!(
+                        "texture made in game, {}x{}x{} {:?}",
+                        d.size.width, d.size.height, d.size.depth_or_array_layers, d.format
+                    )
+                },
+                |p| format!("texture {}", p.path().display()),
+            ),
+            b,
+        ));
         let folder = server
             .get_path(id)
             .map(|p| {
@@ -117,11 +143,17 @@ pub fn measure(world: &mut World, eye_px: u64) -> Vram {
     let mut by: Vec<(String, u64)> = folders.into_iter().collect();
     by.sort_by(|a, b| b.1.cmp(&a.1));
     v.by_folder = by;
-    v.meshes = world
-        .resource::<Assets<Mesh>>()
-        .iter()
-        .map(|(_, m)| mesh_bytes(m))
-        .sum();
+    for (id, m) in world.resource::<Assets<Mesh>>().iter() {
+        let b = mesh_bytes(m);
+        v.meshes += b;
+        items.push((
+            server.get_path(id).map_or_else(
+                || format!("mesh made in game, {} vertices", m.count_vertices()),
+                |p| format!("mesh {p}"),
+            ),
+            b,
+        ));
+    }
     // The sun: a depth layer a cascade, and cascades are per view (both
     // eyes have their own); each shadowed point light a cube, shared.
     let map = world
@@ -144,6 +176,15 @@ pub fn measure(world: &mut World, eye_px: u64) -> Vram {
         q.iter(world).map(|m| m.samples() as u64).max().unwrap_or(4)
     };
     v.targets = eye_targets_bytes(eye_px, samples);
+    items.push((
+        format!("the eye targets, 2 x {eye_px}² at {samples}x MSAA"),
+        v.targets,
+    ));
+    items.push((
+        format!("the sun's shadow maps, {cascades} cascades x 2 eyes at {map}²"),
+        map * map * 4 * cascades * 2,
+    ));
+    v.top = biggest(items, 5);
     v
 }
 
@@ -170,6 +211,10 @@ pub(crate) fn report(map: &str, world: &mut World) -> u64 {
     for (f, b) in v.by_folder.iter().take(6) {
         println!("        {f}: {:.0} MB", *b as f64 / MB);
     }
+    println!("      the five biggest:");
+    for (what, b) in &v.top {
+        println!("        {:7.1} MB  {what}", *b as f64 / MB);
+    }
     let _ = map;
     v.total()
 }
@@ -195,5 +240,31 @@ fn vram_counts_add_up() {
     assert_eq!(
         eye_targets_bytes(100, 4),
         2 * 100 * 100 * (32 + 16 + 8 + 4 + 4)
+    );
+}
+
+/// The report's five biggest are the five biggest of any kind, biggest
+/// first, the same order every run.
+#[test]
+fn the_biggest_five_are_the_biggest_of_any_kind() {
+    let items = vec![
+        ("mesh a".to_string(), 10),
+        ("texture b".to_string(), 50),
+        ("the eye targets".to_string(), 900),
+        ("texture c".to_string(), 50),
+        ("mesh d".to_string(), 1),
+        ("texture e".to_string(), 70),
+        ("shadow maps".to_string(), 200),
+    ];
+    let top: Vec<String> = biggest(items, 5).into_iter().map(|(n, _)| n).collect();
+    assert_eq!(
+        top,
+        [
+            "the eye targets",
+            "shadow maps",
+            "texture e",
+            "texture b",
+            "texture c"
+        ]
     );
 }
