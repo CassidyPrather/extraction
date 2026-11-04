@@ -10,11 +10,12 @@
 //! `<screenshot stem>_NNN.png`:
 //!
 //! ```text
-//! scripts/shot.sh target/reel/pm.png 0,0,30,0,0 99999 --map training_yard \
-//!     --no-robots --gallery cycle:pm
+//! scripts/shot.sh target/reel/pm.png 0,0,30,0,-15 99999 --map training_yard \
+//!     --no-robots --weather clearing --hour 11 --gallery cycle:pm
 //! ```
 //!
-//! The camera given is the eye: the player stands under it.
+//! The camera given is the eye (the player stands under it); pitched down
+//! 15 degrees, the hands at the chest and the sights both show.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
@@ -493,6 +494,7 @@ fn film(
     mut commands: Commands,
     opts: Res<crate::launch::LaunchOptions>,
     cycle: Option<Res<Cycle>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
     mut frame: Local<u32>,
     mut shot: Local<u32>,
 ) {
@@ -513,9 +515,12 @@ fn film(
         commands.insert_resource(Time::<Fixed>::from_hz(HZ as f64));
         return;
     }
-    // After the free camera's placed (`render`): then the rig is ours.
-    if *frame == 8 {
-        commands.insert_resource(Cycle::new());
+    // Once everything's in, and the free camera's placed (`render`): then
+    // the rig is ours.
+    if cycle.is_none() {
+        if loaded.is_some() && *frame > 8 {
+            commands.insert_resource(Cycle::new());
+        }
         return;
     }
     let Some(cycle) = cycle else {
@@ -681,5 +686,20 @@ mod tests {
             .filter(|e| matches!(e, FireEvent::Fired { .. }))
             .count();
         assert_eq!(fired, 5, "{}", c.report());
+        // Three shots in the string, the third locking it back: two slams
+        // home, not three.
+        let homes = c
+            .ticks
+            .iter()
+            .filter(|t| t.beat == "fire" || t.beat == "slide lock")
+            .flat_map(|t| &t.events)
+            .filter(|e| matches!(e, FireEvent::CarrierHome))
+            .count();
+        assert_eq!(homes, 2, "{}", c.report());
+        // Each case lands somewhere of its own.
+        let out: Vec<f32> = c.shots().iter().filter_map(|s| s.case_out_m).collect();
+        let span =
+            out.iter().fold(0.0f32, |m, x| m.max(*x)) - out.iter().fold(9.0f32, |m, x| m.min(*x));
+        assert!(out.len() >= 4 && span > 0.1, "{out:?}");
     }
 }
