@@ -1,8 +1,8 @@
 # Hands and body: where I stopped
 
-Paused 2 November at the coordinator's word. Branch `claude/polish-hands`;
-everything handed back is on main (last: 4a3c7175, main d600a153). Shots
-of the work are in `docs/shots/hands/` (its README lists them).
+Resumed 4 November. Branch `claude/polish-hands`, main 8d5c1105 merged
+(0cf59cff). Shots of the work are in `docs/shots/hands/` (its README
+lists them).
 
 ## Landed this round
 
@@ -20,13 +20,14 @@ of the work are in `docs/shots/hands/` (its README lists them).
 - Items lying still go to sleep (`items::rest`).
 - The ground holds a body up whatever leans on it (`player::under_the_ground`).
 - `--camera X,0,Z` stands its eye over the floor the player lands on.
+- Flat reload with no spare (review of Onboarding's 2c16dce7): the only
+  magazine never leaves the well (1cc661a5); a clearing still strips it.
+- Gunsmith's crossbow is on main; the hands follow it by rule
+  (`docs/shots/hands/32_crossbow_redraw.jpg`).
+- `perf::gauge_items_fall_asleep` green on main: 0 items awake on every map.
 
 ## What's next
 
-- Merge main when Gunsmith's crossbow (ef8141d) lands: the hands follow it
-  by rule (`docs/shots/hands/32_crossbow_redraw.jpg`); nothing to change.
-- Review Onboarding's flat-reload fix (2c16dce7) when it's on main; the VR
-  release is already pinned (the dropped magazine is kept, rounds and all).
 - Help Gunsmith with the SPSh-44's trigger reach if asked: it came in at
   curl 0.83 (cramped, 60 mm); the grip point 29 mm ahead of the backstrap
   should bring it near the PM's 76 mm, or a measured ceiling if the real
