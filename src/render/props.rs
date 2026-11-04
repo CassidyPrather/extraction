@@ -597,7 +597,7 @@ pub(crate) struct PlayerGlove;
 /// A glove's own material, tinted while the hand is in reach of something
 /// it could take.
 #[derive(Component)]
-struct GloveMaterial(Vec<Handle<StandardMaterial>>);
+pub(crate) struct GloveMaterial(pub(crate) Vec<Handle<StandardMaterial>>);
 
 fn tint_gloves(
     visuals: Query<(&HandVisual, &GloveMaterial)>,
@@ -2086,6 +2086,13 @@ mod glove_tests {
     /// right way round, not as a mirror image.
     /// Merged into one skinned mesh, every piece keeps its vertices and
     /// triangles, each vertex wholly on its piece's joint.
+    /// How far a pulled index curls on a gun's trigger, healthy: the guns'
+    /// own range (0.35 to 0.77) with a little either side.
+    const PULL_CURL: (f32, f32) = (0.3, 0.8);
+    /// The Nagant's floor: its own long reach, measured (curl 0.29 at the
+    /// PM-placed hold).
+    const NAGANT_PULL_FLOOR: f32 = 0.25;
+
     /// Every gun with a layout (`weapons::layout::layout`).
     const GUNS: [&str; 13] = [
         "pm_pistol",
@@ -2769,6 +2776,7 @@ mod glove_tests {
     fn a_pulled_index_meets_each_guns_trigger() {
         use crate::weapons::layout::{Moves, layout};
         let mut misses = Vec::new();
+        let mut stretched = Vec::new();
         let mut checked = 0;
         for id in GUNS {
             let gun = layout(id).unwrap();
@@ -2793,11 +2801,33 @@ mod glove_tests {
             if miss >= 0.012 {
                 misses.push(format!("{id}: by {:.1} mm", miss * 1000.0));
             }
+            // And with a bent finger: a pull at a near-straight index is a
+            // stretch to a trigger too far from the hand (the Nagant's,
+            // 116 mm off, curl 0.17, before Gunsmith's 7635c7e1).
+            let floor = match id {
+                // The real gun's reach is long: backstrap to trigger face
+                // 85.5 mm against the PM's 68 (Gunsmith, from the photo; the
+                // grip point set 29 mm ahead of the backstrap as on the PM,
+                // 5c2422d). Its pull is a shade straighter, measured, not a
+                // looser range for every gun.
+                "nagant" => NAGANT_PULL_FLOOR,
+                _ => PULL_CURL.0,
+            };
+            if !(floor..=PULL_CURL.1).contains(&c) {
+                stretched.push(format!(
+                    "{id}: curl {c:.2}, the trigger {:.0} mm ahead",
+                    -at.z * 1000.0
+                ));
+            }
         }
         assert!(checked >= 10, "only {checked} guns have a trigger");
         assert!(
             misses.is_empty(),
             "the index misses the trigger: {misses:?}"
+        );
+        assert!(
+            stretched.is_empty(),
+            "a pull outside {PULL_CURL:?}: {stretched:?}"
         );
     }
 

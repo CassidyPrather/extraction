@@ -688,6 +688,56 @@ Note the session log's `gpu: ... ms a frame` lines from each run, and
 anything that looks wrong in the second: trees with holes in them,
 grass flickering, or shadows that jump.
 
+### 4h. Lighting switches, a frame-time A/B (15 minutes)
+
+Three lighting changes passed every test that can be run without a GPU.
+Only the headset can tell whether each one costs frame time. Each has a
+switch that turns it off. Compare on and off at the same spot, standing
+still.
+
+**Every run** adds `--hold-rate 0`, so the eyes stay one size and the GPU's
+time shows up as milliseconds, not blur. Each run also adds
+`--no-robots --weather drizzle --hour day`. Stand still for 30 seconds,
+hands in view, then quit. The session log (`logs/session-*.log`, newest)
+has a `gpu: N ms a frame (...)` line and a `frames: ... mean, 1% ...` line
+every 10 seconds. Write down the last three `gpu:` totals and the last
+`frames:` 1% figure.
+
+Set a switch in PowerShell, run, then clear it so the next run starts
+clean:
+
+```powershell
+$env:EXTRACTION_NEAR_FILL="0"; cargo run --release -- --map marrow_creek --camera 2.8,0,98.9,0 --hold-rate 0 --no-robots --weather drizzle --hour day; Remove-Item Env:EXTRACTION_NEAR_FILL
+```
+
+(In bash: `EXTRACTION_NEAR_FILL=0 cargo run --release -- ...`.) "On" is
+the same line without the `$env:` and `Remove-Item` parts.
+
+| # | Where (`--camera`) | Runs | What changes |
+| - | - | - | - |
+| 1 | Marrow village street, outdoors: `2.8,0,98.9,0` | on; `EXTRACTION_NEAR_FILL=0` | The near fill: held things and the gloves keep some light in rooms. Outdoors it should cost nothing |
+| 2 | Marrow, in the spruce west of the road (m05): `-78.3,0,151.7,30` | on; `EXTRACTION_FLAT_AMBIENT=1` | The sky's light (shaded ambient, not flat) |
+| 3 | The pump hall, under the pumping station. Start at the outfall stair on the river bank, `-83,0,48,180`, and walk down it to the big pumps (about 20 m) | on; `EXTRACTION_NEAR_FILL=0`; `EXTRACTION_FLAT_AMBIENT=1`; `EXTRACTION_ROOM_ADAPT=0` | All three, indoors. `ROOM_ADAPT=0` turns off the eye adapting to a dim room |
+
+That's eight runs, about two minutes each.
+
+**What the numbers mean.** For each switch, take the mean of the three
+`gpu:` totals with it on and with it off.
+
+- **Turn it off** (tell us; the switch is the fix until it's cheaper) if
+  either is true:
+  - "on" is **0.5 ms or more** above "off" at the same spot (5% of the
+    11.1 ms a 90 Hz frame has);
+  - the `frames:` 1% figure is over 11.1 ms with it on and under with it
+    off.
+- **Keep it** if "on" is within 0.5 ms of "off", or cheaper. Indoors, the
+  near fill is expected to be cheaper.
+- A difference that flips between two tries of the same run is noise.
+  Run that pair once more before deciding.
+
+Note how each one looks too: whether the room or the forest reads better
+on or off is worth as much as the milliseconds.
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -753,6 +803,9 @@ grass flickering, or shadows that jump.
 | `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
 | `--a2c 0` | Hard leaves: the trees' leaves cut sharp, not smoothed (`--a2c 1`, the default, smooths them) |
 | `EXTRACTION_PREPASS=1` (environment) | The depth prepass experiment (4g): leaves are hard while it's on |
+| `EXTRACTION_NEAR_FILL=0` (environment) | No near fill: held things and the gloves get only the room's light (4h) |
+| `EXTRACTION_FLAT_AMBIENT=1` (environment) | Flat ambient light, not the sky's shaded light (4h) |
+| `EXTRACTION_ROOM_ADAPT=0` (environment) | The eye doesn't adapt to a dim room (4h) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |

@@ -563,6 +563,7 @@ fn shoot_for_screenshot(
             seed: *frame as u64,
             passes: 0,
             load: default(),
+            origin: Vec3::new(cam.x, eye_y, cam.z),
         },
         Transform::from_translation(Vec3::new(cam.x, eye_y, cam.z)),
     ));

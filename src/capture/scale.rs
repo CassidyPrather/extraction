@@ -275,8 +275,10 @@ pub fn ammo(id: &str) -> Option<(f32, Rule)> {
     if id.starts_with("flare_") {
         return Some((0.078, Fit));
     }
+    // A leaf-spring crossbow's 150 mm draw shoots 250 to 300 mm bolts
+    // (art/items/crossbow_bolts.py).
     if id == "crossbow_bolt" || id == "bolt_bundle" {
-        return Some((0.38, Fit));
+        return Some((0.30, Fit));
     }
     if id.starts_with("ammo_") {
         // Paper packets and card boxes of 8 to 30.

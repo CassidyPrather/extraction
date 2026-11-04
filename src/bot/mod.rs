@@ -1298,6 +1298,11 @@ fn run_tasks(
                 if off_safe && f.fire_mode() == extraction_core::firearm::FireMode::Safe {
                     steps.push(Task::Gun(MacroKind::Mode));
                 }
+                info!(
+                    "bot: ready: magazine {:?}, chambered {}: {steps:?}",
+                    f.magazine.as_ref().map(|m| m.rounds),
+                    f.chambers.iter().any(|c| c.is_some())
+                );
                 bot.next();
                 for t in steps.into_iter().rev() {
                     bot.tasks.push_front(t);
