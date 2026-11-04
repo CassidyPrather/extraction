@@ -53,7 +53,7 @@ impl Plugin for RobotVisualsPlugin {
                     lock_flares,
                     scorch,
                     dress_debris,
-                    alert_eyes,
+                    (alert_eyes, stalk_eyes).chain(),
                     shell_by_light,
                     super::weathering::weather_meshes,
                     part_plants,
@@ -2174,6 +2174,64 @@ pub const DAZZLED_GUTTER: f32 = 0.85;
 #[derive(Component)]
 struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
 
+/// A hound stalking you (Investigate, going low: `hound_mind`'s stalk)
+/// keeps its eye down to this much of what it would burn...
+pub const STALK_DIM: f32 = 0.15;
+/// ...and narrowed to this much of its height: a low, slitted ember,
+/// unlike its dull red at rest and nothing like the red pulse of a tell.
+pub const STALK_SLIT: f32 = 0.4;
+
+/// A stalking hound's eye, from the glow its mood would give it.
+pub fn stalk_eye(c: LinearRgba) -> LinearRgba {
+    c * STALK_DIM
+}
+
+/// An eye narrowed while its hound stalks: its height before.
+#[derive(Component)]
+struct Slit(f32);
+
+/// A stalking hound's eye dims and narrows (after `alert_eyes` has set its
+/// mood); back as it was once it's out of the stalk.
+#[allow(clippy::type_complexity)]
+fn stalk_eyes(
+    mut commands: Commands,
+    hounds: Query<(&AlertEye, &super::Brain, Option<&super::Intent>), With<super::hound::Hound>>,
+    mut eyes: Query<(Entity, &Eye, &mut Transform, Option<&Slit>)>,
+    parts: Query<&RobotPart>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let stalking = |robot: Entity| {
+        hounds.get(robot).is_ok_and(|(_, b, i)| {
+            matches!(b, super::Brain::Investigate { .. }) && i.is_some_and(|i| i.low)
+        })
+    };
+    for (own, ..) in hounds.iter().filter(|(_, b, i)| {
+        matches!(b, super::Brain::Investigate { .. }) && i.is_some_and(|i| i.low)
+    }) {
+        for h in [&own.0, &own.1] {
+            if let Some(mut m) = materials.get_mut(h) {
+                m.emissive = stalk_eye(m.emissive);
+            }
+        }
+    }
+    for (e, eye, mut t, slit) in &mut eyes {
+        let Ok(part) = parts.get(eye.part) else {
+            continue;
+        };
+        match (stalking(part.robot), slit) {
+            (true, None) => {
+                commands.entity(e).insert(Slit(t.scale.y));
+                t.scale.y *= STALK_SLIT;
+            }
+            (false, Some(Slit(y))) => {
+                t.scale.y = *y;
+                commands.entity(e).remove::<Slit>();
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Eyes say what the robot knows: a dull red at work, brighter as its
 /// suspicion rises, and hot (toward orange-white) while it can make you
 /// out. In the dark or fog that change is the first thing you see.
@@ -3002,5 +3060,37 @@ mod signal_lamp_tests {
         ] {
             assert_eq!(melee_halo(rest).red, 0.0, "{rest:?}");
         }
+    }
+
+    /// A stalking hound's eye reads as neither at rest nor a tell: its
+    /// mood's red (suspicious, it would burn brighter than at rest) dims
+    /// to well under a resting eye, and narrows, while a tell burns well
+    /// over a resting eye with its glow. The eye is a lamp (fogless, drawn
+    /// far): what it reads as at 5 m it reads as at 10-15 m in fog.
+    #[test]
+    fn a_stalking_hounds_eye_is_neither_rest_nor_a_tell() {
+        use crate::render::tells::eye_colour;
+        let red = |c: [f32; 3]| c[0];
+        let rest = red(eye_colour(0.0, 0.0));
+        // Stalking: it's heard you (suspicious), it doesn't see you.
+        let stalk = stalk_eye(LinearRgba::rgb(
+            eye_colour(0.6, 0.0)[0],
+            eye_colour(0.6, 0.0)[1],
+            eye_colour(0.6, 0.0)[2],
+        ))
+        .red;
+        // A tell: it sees you, and its lens's glow at the floor of its pulse.
+        let tell = red(eye_colour(1.0, 1.0))
+            + melee_halo(MeleeLead::Hound {
+                crouch: 0.3,
+                lunging: false,
+            })
+            .red;
+        assert!(rest / stalk >= 2.5, "stalk {stalk} against rest {rest}");
+        assert!(tell / rest >= 2.0, "tell {tell} against rest {rest}");
+        assert!(STALK_SLIT <= 0.5, "and narrowed");
+        let mut assets = Assets::<StandardMaterial>::default();
+        let eye = mats(&mut assets).eye;
+        assert!(!assets.get(&eye).unwrap().fog_enabled);
     }
 }
