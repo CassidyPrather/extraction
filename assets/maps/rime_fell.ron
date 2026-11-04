@@ -313,6 +313,19 @@
         (prefab: "observatory", at: (-208.0, -210.0), rot: 55.0, tag: "observatory"),
         // The col track's refuge, halfway over the white: a roof in the snow.
         (prefab: "shed", at: (2.4, -83.3), rot: 246.0, tag: "track_refuge"),
+        // Snow poles up the col track, one every 20 m on the walker's left (walk
+        // review: over the white a sign or a cairn is a speck at 40 m).
+        (prefab: "snow_pole", at: (0.2, -38.9), rot: 0.0),
+        (prefab: "snow_pole", at: (-3.6, -57.2), rot: 0.0),
+        (prefab: "snow_pole", at: (-9.4, -77.3), rot: 0.0),
+        (prefab: "snow_pole", at: (-8.7, -99.2), rot: 0.0),
+        (prefab: "snow_pole", at: (-1.9, -119.6), rot: 0.0),
+        (prefab: "snow_pole", at: (5.6, -137.2), rot: 0.0),
+        (prefab: "snow_pole", at: (8.9, -155.1), rot: 0.0),
+        (prefab: "snow_pole", at: (6.9, -172.9), rot: 0.0),
+        (prefab: "snow_pole", at: (4.5, -194.9), rot: 0.0),
+        (prefab: "snow_pole", at: (12.3, -216.5), rot: 0.0),
+        (prefab: "snow_pole", at: (25.7, -232.5), rot: 0.0),
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),

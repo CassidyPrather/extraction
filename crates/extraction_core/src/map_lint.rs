@@ -3760,7 +3760,7 @@ mod tests {
     fn probe_edges() {
         let only = std::env::var("MAP_ID").ok();
         for (id, text) in crate::map::VALLEYS {
-            if only.as_deref().is_some_and(|o| o != *id as &str) {
+            if only.as_deref().is_some_and(|o| o != id) {
                 continue;
             }
             let map = MapDef::from_ron(text).unwrap();
