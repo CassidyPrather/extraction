@@ -970,10 +970,12 @@ fn crossbow() -> GunLayout {
 fn toz() -> GunLayout {
     use Mat::*;
     use Moves::*;
-    let hinge = Vec3::new(0.0, 0.012, -0.11);
+    // At the front of the action's bar (art/guns/toz_double.py).
+    let hinge = Vec3::new(0.0, 0.010, -0.176);
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
-        support: Some(Vec3::new(0.0, 0.0, -0.36)),
+        // On the slim forend's underside, mid-length.
+        support: Some(Vec3::new(0.0, 0.011, -0.30)),
         muzzle: Vec3::new(0.0, 0.035, -0.8385),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
@@ -981,7 +983,7 @@ fn toz() -> GunLayout {
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::BreakBarrels,
-            grab: Vec3::new(0.0, 0.0, -0.36),
+            grab: Vec3::new(0.0, 0.011, -0.30),
             travel: 0.0,
         }),
         load_port: Vec3::new(0.0, 0.04, -0.12),
@@ -997,6 +999,8 @@ fn toz() -> GunLayout {
             ),
             // Action (the receiver block) and trigger guard.
             part(bx(0.048, 0.055, 0.1), at(0.0, 0.015, -0.075), Steel, Static),
+            // The action's bar under the chambers, out to the hinge.
+            part(bx(0.048, 0.02, 0.07), at(0.0, 0.011, -0.15), Steel, Static),
             part(
                 bx(0.006, 0.005, 0.06),
                 at(0.0, -0.025, -0.06),
@@ -1025,7 +1029,7 @@ fn toz() -> GunLayout {
                 Barrels,
             ),
             part(bx(0.008, 0.006, 0.70), at(0.0, 0.05, -0.47), Blued, Barrels),
-            part(bx(0.044, 0.035, 0.24), at(0.0, 0.008, -0.31), Wood, Barrels),
+            part(bx(0.044, 0.02, 0.21), at(0.0, 0.016, -0.29), Wood, Barrels),
         ],
     }
 }

@@ -1,5 +1,18 @@
 # Art direction
 
+> **Where visual design stopped (2 November 2026, paused).** On main
+> as of 7a28e6a0:
+> - analytic sky environment light (`render/sky_light.rs`);
+> - rooms lit for the first jobs (`ROOM_ADAPT`, `render/grade.rs`);
+> - held items and gloves readable in dim rooms (`render/held_light.rs`, checked with `scripts/held_check.py`);
+> - no rain under any roof (`world/rain.rs`).
+>
+> **What's next:**
+> - The headset check, owned by the coordinator and Performance:
+>   - the village with `EXTRACTION_NEAR_FILL=0` and `=1`, to confirm the software renderer's wall-time mode isn't real (code review found no per-frame work);
+>   - whether rooms by day read too bright or flat. `ROOM_ADAPT` (1.3) is the lever: see "Rooms by day" below.
+> - After that, the next coordinator brief.
+
 The look the visual changes are held to. `DESIGN.md` says what the game
 is; this says what it should look like, and why. Check every visual
 change against it, with before and after shots from the lookbook
@@ -198,6 +211,59 @@ Night is half the game, and it must be both beautiful and playable.
   pale against the dark forest, dark-edged against the sky.
 - The darkest areas the player stands in (forest floor under spruce)
   must still show texture.
+
+### Alpha in the eye images (4 November 2026)
+
+The headset's compositor blends each eye by its alpha: the projection
+layer is sent with `BLEND_TEXTURE_SOURCE_ALPHA` (`render::hold_rate`).
+Anything drawn below full alpha goes toward black in the headset, and a
+desktop shot never shows it, since a shot is RGB. To see it,
+`EXTRACTION_SHOT_ALPHA=1` saves `<name>_alpha.png` beside a shot.
+
+**Were the bare-pole spruces in the real game?** Yes, on the desktop
+and in the headset alike. A far tree is its impostor, and the impostor
+is the captured picture. The capture is drawn unlit. The wet patch
+(`render::fog`) kept an opaque surface's alpha, its sky openness, for
+the lighting to read and reset, but unlit there's no lighting, so it was
+never reset. The spruce's opaque core came out at its needles' texture
+alpha, and the impostor's 0.5 cut dropped most of it. Fixed in 7022aab9:
+unlit opaque is 1 again, as in Bevy.
+
+**Which other surfaces go through the same path, checked as a class?**
+- Every unlit opaque `StandardMaterial`: 37 of them, in weapons fx,
+  gadgets, anomalies, signs, beacons, robots' fx and onboarding. Their
+  alpha went into the eye image, so any with a texture or colour alpha
+  below 1 was darkened in the headset only.
+- Every image a camera renders off screen: impostors, gadget feeds,
+  screens, warm-up and budget probes. Of these, only the impostors use
+  the alpha they capture; the rest show on opaque materials.
+- The one fix covers the whole class. Lit opaque surfaces were already
+  1 (`extraction_wet` sets it).
+
+Measured with the alpha shots, before and after the fix, at five
+views:
+
+| View | Pixels below full alpha, before → after |
+|---|---|
+| Truck bed | 0 → 0 |
+| Rime Fell mill, a gun held | 0 → 0 |
+| Yard pen | 1.46% → 1.09% |
+| The shimmer | 1.00% → 0.78% |
+| Yard at night | 0.82% → 0.65% |
+
+What the fix took away was the spruces' cores
+(`docs/shots/visual-design/spruce/pen_alpha_map.jpg`: cyan was fixed,
+magenta is left).
+
+**What's left, from before the patch:** the edges of the leaf cards
+(pine, birch, bushes) with soft leaves, which is alpha to coverage
+under MSAA. The resolved edge keeps its partial alpha, down to about
+0.52, so in the headset a leaf's edge is drawn up to half darker than
+on a desktop. Alpha to coverage takes its coverage from the alpha it
+writes, so the shader can't write 1 there. The class fix is the
+layer's flag: a single opaque projection layer has nothing behind it
+to blend with, so without `BLEND_TEXTURE_SOURCE_ALPHA` the compositor
+ignores alpha altogether. That's Performance's file; it's put to them.
 
 ## Frame budget
 
