@@ -252,21 +252,32 @@ fn dress_sentries(
     }
 }
 
-/// Powered: strips cyan, lens red, lamp lit; the chirp flares the lens.
-/// Without power, or wrecked: dark.
+/// Powered: strips cyan, lens red, lamp lit; the lens says what it knows
+/// of you as every machine's eye does (`visuals::eye_mood`), its glow
+/// carrying that to range; the chirp flares the lens. Without power, or
+/// wrecked: dark.
 fn light_sentries(
-    mut sentries: Query<(Entity, &Sentry, &Robot, &mut Lights)>,
+    mut sentries: Query<(
+        Entity,
+        &Sentry,
+        &Robot,
+        &mut Lights,
+        Option<&super::Awareness>,
+    )>,
     mut events: MessageReader<SentryEvent>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
     time: Res<Time>,
 ) {
+    let light = conditions.map_or(1.0, |c| c.light);
+    let now = time.elapsed_secs();
     let dt = time.delta_secs();
     let chirps: Vec<Entity> = events
         .read()
         .filter(|e| e.what == SentryAct::Chirp)
         .map(|e| e.sentry)
         .collect();
-    for (e, s, robot, mut l) in &mut sentries {
+    for (e, s, robot, mut l, aware) in &mut sentries {
         if chirps.contains(&e) {
             l.flare = rules::CHIRP;
         }
@@ -274,12 +285,28 @@ fn light_sentries(
         let on = s.powered && !robot.wrecked;
         let (glow, eye, lamp, halo) = if on {
             let since = rules::CHIRP - l.flare;
-            let f = super::visuals::tell_gain(since, rules::CHIRP, l.flare > 0.0);
+            let flaring = l.flare > 0.0;
+            let f = super::visuals::tell_gain(since, rules::CHIRP, flaring);
+            let t = now + e.index_u32() as f32 * 0.37;
+            // (Its lens's own lamp colour; the chirp outshines its mood.)
+            let mood = aware.map_or(1.0, |a| super::visuals::eye_mood(a, t));
+            let lens_glow = match aware {
+                Some(a) if !flaring => {
+                    let x = if a.can_see_target {
+                        a.exposure.clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let pulse = crate::render::tells::eye_pulse(a.suspicion, a.can_see_target, t);
+                    super::visuals::eye_glow(a.suspicion.clamp(0.0, 1.0), x, light, pulse)
+                }
+                _ => chirp_halo(since, flaring),
+            };
             (
                 LinearRgba::rgb(1.2, 4.8, 6.0),
-                LinearRgba::rgb(9.0 * f, 1.0, 0.5),
+                LinearRgba::rgb(9.0 * f.max(mood), 1.0, 0.5),
                 LinearRgba::rgb(20.0, 18.0, 14.0),
-                chirp_halo(since, l.flare > 0.0),
+                lens_glow,
             )
         } else {
             (
@@ -305,7 +332,7 @@ fn light_sentries(
 }
 
 /// The lens's glow's radius, m.
-const HALO: f32 = 0.2;
+pub const HALO: f32 = 0.2;
 
 /// The lens's glow `since` seconds into a chirp: the machines' one tell
 /// (`visuals::tell_gain`), over [`rules::CHIRP`].
