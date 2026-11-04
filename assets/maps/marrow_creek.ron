@@ -175,9 +175,13 @@
             name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
             points: [(-38.6, -26.3), (-22.2, -30.6), (-12.0, -50.0), (-4.0, -66.0), (6.0, -78.0)],
         ),
+        // Straight over the creek, and straight on for 6 m off the bridge's
+        // south end before it turns east: a walker turning onto the 1.6 m
+        // deck at its end cut the corner and went down the bank beside it
+        // (Verifier's smoke seed 2, and 3 and 8 before).
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-85.7, 63.5), (-90.0, 50.0), (-95.0, 35.1), (-90.0, -1.9), (-89.0, -13.5), (-88.5, -25.5), (-87.0, -37.5), (-72.0, -38.0), (-56.0, -35.0), (-38.6, -26.3)],
+            points: [(-85.7, 63.5), (-90.0, 50.0), (-95.0, 35.1), (-90.0, -1.9), (-89.2, -13.5), (-87.6, -37.5), (-87.2, -44.0), (-80.0, -45.0), (-72.0, -40.0), (-56.0, -35.0), (-38.6, -26.3)],
             bridges: [(at: (-88.4, -26.0), length: 22.0)],
         ),
     ],
@@ -420,7 +424,7 @@
         // Coming home: cover where a way in to a rendezvous was open for
         // more than a dash (map_lint, coming home).
         // The rangers' woodpile by the track in to the Ranger tower.
-        (prefab: "log_pile", at: (-91.5, -42.8), rot: 300.0),
+        (prefab: "log_pile", at: (-95.5, -45.5), rot: 300.0),
     ],
 
     markers: [
