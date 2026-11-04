@@ -1346,6 +1346,10 @@ fn run_tasks(
                     bot.next();
                     continue;
                 };
+                // Shots out, not pulls: a dud doesn't count, and nor does
+                // a hang-fire until it goes. (Counted first: the shot that
+                // jams it is a shot, though the jam's cleared next.)
+                bot.fired += shots_out.iter().filter(|g| **g == gun_e).count() as u32;
                 // Settle the aim, then pulse the trigger.
                 if bot.elapsed < 0.6 {
                     continue;
@@ -1353,9 +1357,6 @@ fn run_tasks(
                 if clear_stoppage(&mut bot, &mut mac, gun_e, gun) {
                     continue;
                 }
-                // Shots out, not pulls: a dud doesn't count, and nor does
-                // a hang-fire until it goes.
-                bot.fired += shots_out.iter().filter(|g| **g == gun_e).count() as u32;
                 if mac.busy() {
                     bot.trigger = false;
                     continue;
