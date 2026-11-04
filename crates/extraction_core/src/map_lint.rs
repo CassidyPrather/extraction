@@ -441,11 +441,14 @@ pub const PASS_FROM: f32 = 10.0;
 /// A routed way (a main route, a first job's walk, a way home) keeps this
 /// far, metres, from the lip of a fall...
 pub const EDGE_NEAR: f32 = 3.0;
-/// ...that drops more than this (m: a landing hurts from about 3.3 m,
-/// `health::SAFE_LANDING`), with nothing standing between.
-pub const EDGE_DROP: f32 = 3.5;
-/// A face this steep (degrees) is a fall, not a slope you slide down.
-pub const EDGE_STEEP: f32 = 55.0;
+/// ...that drops more than this, with nothing standing between (m: a
+/// landing hurts past 8 m/s, `health::SAFE_LANDING`, about 3.3 m of fall,
+/// at 9 hp a m/s over; from here it costs over 10 hp, a fall and not a
+/// stumble)...
+pub const EDGE_DROP: f32 = 4.2;
+/// ...down a face this steep all the way (degrees): a fall, not a bank
+/// you slide down.
+pub const EDGE_STEEP: f32 = 60.0;
 /// One finding every this many metres along a way, metres.
 pub const EDGE_SPACING: f32 = 20.0;
 pub const FIGURE_TALL: f32 = 1.75;
@@ -547,13 +550,14 @@ pub const VIEW_MAX: usize = 16;
 /// wreck on a road through a village would cost it a house.
 ///
 /// A log pile is one too: ten logs and four stakes drawn as one model, no
-/// roof, nothing inside.
+/// roof, nothing inside. So is a snow pole: one 9 cm stick, painted.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
     "wreck_uaz",
     "wreck_lorry",
     "log_pile",
+    "snow_pole",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
@@ -1224,7 +1228,7 @@ pub(crate) fn walk_height(hm: &Heightmap, p: P2) -> f32 {
 /// [`EDGE_STEEP`] all the way down) with no solid thing between. Water at
 /// the foot catches you; a bridge deck has its rails. The lip, the point
 /// and the fall, worst first along the way, a hit every [`EDGE_SPACING`].
-pub(crate) fn unwalled_edges(hm: &Heightmap, solids: &[Solid], way: &[P2]) -> Vec<(P2, P2, f32)> {
+pub(crate) fn unwalled_edges(hm: &Heightmap, walls: &[Rect], way: &[P2]) -> Vec<(P2, P2, f32)> {
     const DIRS: usize = 16;
     const DS: f32 = 0.5;
     let steep = EDGE_STEEP.to_radians().tan() * DS;
@@ -1262,7 +1266,8 @@ pub(crate) fn unwalled_edges(hm: &Heightmap, solids: &[Solid], way: &[P2]) -> Ve
                 foot += DS;
             }
             let fall = hm.height(at(lip)) - hm.height(at(foot));
-            if fall < EDGE_DROP {
+            // A fall, not a bank: the whole face that steep.
+            if fall < EDGE_DROP || fall < (foot - lip) * EDGE_STEEP.to_radians().tan() {
                 continue;
             }
             if hm
@@ -1273,9 +1278,9 @@ pub(crate) fn unwalled_edges(hm: &Heightmap, solids: &[Solid], way: &[P2]) -> Ve
             }
             // Something solid between the way and the lip.
             let n = ((lip + DS) / 0.25).ceil() as usize;
-            let walled = solids
+            let walled = walls
                 .iter()
-                .any(|s| (0..=n).any(|i| s.rect.sdf(at(i as f32 * 0.25)) < 0.0));
+                .any(|w| (0..=n).any(|i| w.sdf(at(i as f32 * 0.25)) < 0.0));
             if walled {
                 continue;
             }
@@ -1289,6 +1294,64 @@ pub(crate) fn unwalled_edges(hm: &Heightmap, solids: &[Solid], way: &[P2]) -> Ve
         }
     }
     hits
+}
+
+/// The ways a raid walks, named: the main routes, each first job's walk
+/// there and home to its nearest rendezvous, and each place's way to its
+/// nearest rendezvous, on comfortable ground, sampled every [`STEP`].
+pub(crate) fn routed_ways(
+    map: &MapDef,
+    comfy: &NavGrid,
+    routes: &[Route],
+) -> Vec<(String, Vec<P2>)> {
+    let id = map.name.to_lowercase().replace(' ', "_");
+    let rvs: Vec<P2> = map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| m.at)
+        .collect();
+    let mut ways: Vec<(String, Vec<P2>)> = routes
+        .iter()
+        .map(|rt| (format!("the route to {}", rt.to), rt.points.clone()))
+        .collect();
+    let Some(ins) = map.markers_of(&MarkerKind::Insertion).next().map(|m| m.at) else {
+        return ways;
+    };
+    let nearest = |at: P2| {
+        rvs.iter()
+            .copied()
+            .min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)))
+    };
+    let mut add = |name: String, a: P2, b: Option<P2>| {
+        if let Some(p) = b.and_then(|b| comfy.path(a, b)) {
+            ways.push((name, resample(&p)));
+        }
+    };
+    for (what, at) in first_jobs(map, &id) {
+        add(format!("the way to {what}"), ins, Some(at));
+        add(format!("the way home from {what}"), at, nearest(at));
+    }
+    for m in map.markers_of(&MarkerKind::Poi) {
+        add(format!("the way home from {}", m.name), m.at, nearest(m.at));
+    }
+    ways
+}
+
+/// What stands between a way and an edge: everything solid, and the walls
+/// a prefab's model builds outside its footprint ([`crate::map::prefab_walls`]).
+pub(crate) fn edge_walls(map: &MapDef, solids: &[Solid]) -> Vec<Rect> {
+    let mut out: Vec<Rect> = solids.iter().map(|s| s.rect).collect();
+    for p in &map.placements {
+        let yaw = p.rot.to_radians();
+        let (s, c) = yaw.sin_cos();
+        for ([lx, lz], half) in crate::map::prefab_walls(&p.prefab) {
+            out.push(Rect {
+                at: [p.at[0] + lx * c - lz * s, p.at[1] + lx * s + lz * c],
+                half: *half,
+                yaw,
+            });
+        }
+    }
+    out
 }
 
 /// Whether a point is inside the quarantine fence (the playable valley),
@@ -3720,6 +3783,26 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // -- The Surge: a roof in reach, and its anomalies off the walls -------------
     crate::map_surge::check(map, hm, &comfy, &comfy_seen, &routes, &targets, &mut r);
 
+    // -- Edges: no routed way past an unwalled fall -------------------------------
+    {
+        let walls = edge_walls(map, &solids);
+        let mut edges = 0;
+        for (name, way) in routed_ways(map, &comfy, &routes) {
+            for (lip, _, fall) in unwalled_edges(hm, &walls, &way) {
+                edges += 1;
+                find(
+                    &mut r,
+                    Rule::Footing,
+                    format!("{name} passes {fall:.1} m of unwalled fall within {EDGE_NEAR} m"),
+                    lip,
+                );
+            }
+        }
+        r.measures.push(format!(
+            "edges: {edges} unwalled falls over {EDGE_DROP} m within {EDGE_NEAR} m of a way"
+        ));
+    }
+
     r.routes = routes;
     r.findings.sort_by_key(|f| f.rule);
     r
@@ -3766,37 +3849,11 @@ mod tests {
             let map = MapDef::from_ron(text).unwrap();
             let hm = Heightmap::build(&map);
             let comfy = crate::map_nav::zone_grid(&map, &hm, COMFORT_SLOPE);
-            let solids = solids(&map);
+            let walls = edge_walls(&map, &solids(&map));
             let r = lint(&map, &hm);
-            let rvs: Vec<P2> = map
-                .markers_of(&MarkerKind::Rendezvous)
-                .map(|m| m.at)
-                .collect();
-            let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
-            let nearest = |at: P2| {
-                *rvs.iter()
-                    .min_by(|a, b| dist(**a, at).total_cmp(&dist(**b, at)))
-                    .unwrap()
-            };
-            let mut ways: Vec<(String, Vec<P2>)> = r
-                .routes
-                .iter()
-                .map(|rt| (format!("route to {}", rt.to), rt.points.clone()))
-                .collect();
-            for (what, at) in first_jobs(&map, id) {
-                for (leg, a, b) in [("there", ins, at), ("home", at, nearest(at))] {
-                    if let Some(p) = comfy.path(a, b) {
-                        ways.push((format!("first job {what} {leg}"), resample(&p)));
-                    }
-                }
-            }
-            for m in map.markers_of(&MarkerKind::Poi) {
-                if let Some(p) = comfy.path(m.at, nearest(m.at)) {
-                    ways.push((format!("{} home", m.name), resample(&p)));
-                }
-            }
+            let ways = routed_ways(&map, &comfy, &r.routes);
             for (name, way) in &ways {
-                for (lip, p, fall) in unwalled_edges(&hm, &solids, way) {
+                for (lip, p, fall) in unwalled_edges(&hm, &walls, way) {
                     println!(
                         "{id}: {name}: {fall:.1} m fall, lip ({:.1}, {:.1}) {:.1} m off ({:.1}, {:.1})",
                         lip[0],
@@ -3808,6 +3865,40 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The unwalled-edge rule sees a real fall: Sallow's main route climbs
+    /// the dam's face stair along 20 m of embankment, which only the face's
+    /// stair walls ([`crate::map::prefab_walls`]) close off. Without them
+    /// the route passes the fall (Verifier's seed-6 raider walked off it);
+    /// with them, nothing.
+    #[test]
+    fn the_edge_rule_sees_the_dam_stair() {
+        let map = MapDef::from_ron(crate::map::SALLOW_RESERVOIR).unwrap();
+        let hm = Heightmap::build(&map);
+        let comfy = crate::map_nav::zone_grid(&map, &hm, COMFORT_SLOPE);
+        let solids = solids(&map);
+        let r = lint(&map, &hm);
+        let ways = routed_ways(&map, &comfy, &r.routes);
+        let bare: Vec<Rect> = solids.iter().map(|s| s.rect).collect();
+        let walls = edge_walls(&map, &solids);
+        let on_stair = |hits: &[(P2, P2, f32)]| {
+            hits.iter()
+                .filter(|(lip, _, _)| {
+                    (-30.0..103.0).contains(&lip[0]) && (150.0..161.0).contains(&lip[1])
+                })
+                .count()
+        };
+        let (mut open, mut walled) = (0, 0);
+        for (_, way) in &ways {
+            open += on_stair(&unwalled_edges(&hm, &bare, way));
+            walled += on_stair(&unwalled_edges(&hm, &walls, way));
+        }
+        assert!(
+            open > 0,
+            "no fall seen off the face stair without its walls"
+        );
+        assert_eq!(walled, 0, "the face stair's walls don't close its edge");
     }
 
     /// Every valley on [`crate::map::VALLEYS`] lints clean: a new valley is

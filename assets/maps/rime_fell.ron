@@ -230,7 +230,7 @@
     outcrops: [
         // Cairns on the col track (walk review: waymarks over the white).
         (at: (-3.8, -96.1), radius: 0.7, stones: 5),
-        (at: (-51.9, -245.6), radius: 0.7, stones: 5),
+        (at: (-51.9, -242.0), radius: 0.7, stones: 5),
         // On the way up to the saddle.
         (at: (-109.0, -187.0), radius: 1.8, stones: 4),
     ],
@@ -315,17 +315,16 @@
         (prefab: "shed", at: (2.4, -83.3), rot: 246.0, tag: "track_refuge"),
         // Snow poles up the col track, one every 20 m on the walker's left (walk
         // review: over the white a sign or a cairn is a speck at 40 m).
-        (prefab: "snow_pole", at: (0.2, -38.9), rot: 0.0),
-        (prefab: "snow_pole", at: (-3.6, -57.2), rot: 0.0),
-        (prefab: "snow_pole", at: (-9.4, -77.3), rot: 0.0),
-        (prefab: "snow_pole", at: (-8.7, -99.2), rot: 0.0),
-        (prefab: "snow_pole", at: (-1.9, -119.6), rot: 0.0),
-        (prefab: "snow_pole", at: (5.6, -137.2), rot: 0.0),
-        (prefab: "snow_pole", at: (8.9, -155.1), rot: 0.0),
-        (prefab: "snow_pole", at: (6.9, -172.9), rot: 0.0),
-        (prefab: "snow_pole", at: (4.5, -194.9), rot: 0.0),
-        (prefab: "snow_pole", at: (12.3, -216.5), rot: 0.0),
-        (prefab: "snow_pole", at: (25.7, -232.5), rot: 0.0),
+        (prefab: "snow_pole", at: (-1.6, -55.1), rot: 0.0),
+        (prefab: "snow_pole", at: (-11.8, -72.4), rot: 0.0),
+        (prefab: "snow_pole", at: (-14.6, -95.5), rot: 0.0),
+        (prefab: "snow_pole", at: (-5.4, -114.7), rot: 0.0),
+        (prefab: "snow_pole", at: (6.1, -132.1), rot: 0.0),
+        (prefab: "snow_pole", at: (14.0, -148.1), rot: 0.0),
+        (prefab: "snow_pole", at: (12.1, -164.0), rot: 0.0),
+        (prefab: "snow_pole", at: (3.1, -181.8), rot: 0.0),
+        (prefab: "snow_pole", at: (13.4, -223.3), rot: 0.0),
+        (prefab: "snow_pole", at: (28.8, -237.3), rot: 0.0),
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
@@ -400,7 +399,7 @@
         // Waymarks over the white between Coldharbour and the col (walk review:
         // 200 m of snow with nothing to steer by).
         (kind: Sign(text: "COL TRACK\nThe col and the observatory: keep the poles on your left.\nRefuge hut halfway."), at: (11.4, -25.5), rot: 30.0, name: "Col track sign"),
-        (kind: Sign(text: "THE COL, ahead\nGATE TRACK, right\nIn cloud, wait at the refuge."), at: (21.7, -146.4), rot: 44.0, name: "Col fork sign"),
+        (kind: Sign(text: "THE COL, ahead\nGATE TRACK, right\nIn cloud, wait at the refuge."), at: (24.0, -148.0), rot: 101.0, name: "Col fork sign"),
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
         (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),
