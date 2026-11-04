@@ -298,11 +298,16 @@ only gun family until raid 3.
   glint, a place they're kept together), not their size.
 - **Nothing lies under anything.** The rolled loot stood clear of the
   shelves' books and the tables' dishes in every view.
-- **The water bottle is called "Canteen".** The model is a clear PET
-  bottle with a paper ВОДА label and a red cap; the name and
-  description (and `capture::scale`'s "an army canteen") say a
-  canteen. One of them should change; flagged to the coordinator,
-  not changed here (the rename was deliberate, docs/PLAYTEST.md).
+- **Fixed: the canteen was a plastic bottle.** Named, drunk and scaled
+  as a canteen (Hands' rename for the twist-cap drink), it was a clear
+  PET bottle labelled ВОДА. Now it is an aluminium flask, its lower half
+  in a canvas cover, under a black screw cap; the cap's place and axis
+  are the old ones, so the twist handle still sits on it. Two lessons:
+  a cover to the shoulders made it a dark olive lump on a dark table
+  (the bare metal is what's seen), and the library canvas, laid a metre
+  to a repeat, wove 5 mm cells on a 7 cm flask, a knitted net (an item
+  in canvas wants `uv_scale` near 5):
+  ![canteen, before and after](../shots/items/canteen_before_after.jpg)
 - **Fixed: the dress form read as a giant blue bottle** (plank C's
   seamstress, beside the shelf the newcomer loots). It tapered straight
   up to a narrow neck, and the dress covered it to 1.4 m. Now the
