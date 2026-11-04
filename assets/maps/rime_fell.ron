@@ -380,8 +380,8 @@
         (kind: Poi, at: (-208.0, -210.0), name: "The observatory"),
         // Waymarks over the white between Coldharbour and the col (walk review:
         // 200 m of snow with nothing to steer by).
-        (kind: Sign(text: "COL TRACK\nThe col and the observatory: keep the poles on your left.\nRefuge hut halfway."), at: (11.4, -25.5), rot: 168.0, name: "Col track sign"),
-        (kind: Sign(text: "THE COL, ahead\nGATE TRACK, right\nIn cloud, wait at the refuge."), at: (21.7, -146.4), rot: 152.0, name: "Col fork sign"),
+        (kind: Sign(text: "COL TRACK\nThe col and the observatory: keep the poles on your left.\nRefuge hut halfway."), at: (11.4, -25.5), rot: 30.0, name: "Col track sign"),
+        (kind: Sign(text: "THE COL, ahead\nGATE TRACK, right\nIn cloud, wait at the refuge."), at: (21.7, -146.4), rot: 44.0, name: "Col fork sign"),
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
         (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),
