@@ -678,12 +678,19 @@ mod tests {
         grasp(side, half, item, &seat(side, half, item))
     }
 
+    /// Kinds known not to be held every way yet, and why: this list only
+    /// shrinks. A kind off it that fails, or one on it that now passes,
+    /// fails the test (take it off).
+    const STILL_FAILING: &[(&str, &str)] = &[(
+        "vest",
+        "1 hold of 240: taken by a face 39 x 46 cm, the palm stops 7 mm off its padding",
+    )];
+
     /// Every kind a hand holds free is held: taken every way, in either
     /// hand, the glove sinks no more than `SINK` into its box, the thumb
     /// and two fingers touch it, and the palm is on it or the thumb closes
     /// against a finger. A new kind in the table is checked by being there.
     #[test]
-    #[ignore = "in progress: the seat isn't on the glove yet"]
     fn every_free_held_kind_is_held_by_the_glove() {
         let catalog = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
         let first = first_raid(&catalog);
@@ -712,17 +719,31 @@ mod tests {
                     }
                 }
             }
-            if let Some(why) = worst {
-                let tag = if first.contains(&def.id) {
-                    " (first raid)"
-                } else {
-                    ""
-                };
-                bad.push(format!(
-                    "{}{tag}: {failed} of {tries} holds fail, e.g. {why}",
+            let known = STILL_FAILING.iter().any(|(id, _)| *id == def.id);
+            match worst {
+                Some(why) if !known => {
+                    let tag = if first.contains(&def.id) {
+                        " (first raid)"
+                    } else {
+                        ""
+                    };
+                    bad.push(format!(
+                        "{}{tag}: {failed} of {tries} holds fail, e.g. {why}",
+                        def.id
+                    ));
+                }
+                None if known => bad.push(format!(
+                    "{}: held every way now: take it off STILL_FAILING",
                     def.id
-                ));
+                )),
+                _ => {}
             }
+        }
+        for (id, _) in STILL_FAILING {
+            assert!(
+                catalog.iter().any(|(_, d)| d.id == *id && held_free(d)),
+                "{id} on STILL_FAILING isn't a kind held free"
+            );
         }
         assert!(kinds > 100, "only {kinds} kinds held free");
         assert!(
