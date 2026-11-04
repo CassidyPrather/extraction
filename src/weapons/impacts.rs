@@ -304,6 +304,8 @@ pub(crate) struct FxAssets {
     pub(crate) cone: Handle<Mesh>,
     pub(crate) flash: Handle<StandardMaterial>,
     pub(crate) smoke: Handle<StandardMaterial>,
+    /// Smoke as it thins ([`Thins`]): step 0 is [`Self::smoke`].
+    pub(crate) smoke_thin: [Handle<StandardMaterial>; THIN_STEPS],
 }
 
 #[derive(Resource)]
@@ -324,7 +326,7 @@ impl Plugin for ImpactFxPlugin {
             rng: Rng::new(0x1A9C7),
         })
         .add_systems(Startup, fx_assets)
-        .add_systems(Update, (spawn_fx, fly_bits, age_decals).chain());
+        .add_systems(Update, (spawn_fx, fly_bits, thin_bits, age_decals).chain());
     }
 }
 
@@ -350,8 +352,15 @@ fn fx_assets(
         soft(0.6, 0.59, 0.56, 0.32),
         soft(0.38, 0.35, 0.3, 0.32),
         soft(0.8, 0.82, 0.8, 0.3),
-        soft(0.72, 0.72, 0.7, 0.22),
+        soft(0.72, 0.72, 0.7, SMOKE_ALPHA),
     );
+    let smoke_thin = std::array::from_fn(|i| {
+        if i == 0 {
+            smoke.clone()
+        } else {
+            soft(0.72, 0.72, 0.7, SMOKE_ALPHA * THIN_RATIO.powi(i as i32))
+        }
+    });
     let mut m = |r: f32, g: f32, b: f32, a: f32, glow: f32, rough: f32, metal: f32| {
         materials.add(StandardMaterial {
             base_color: Color::srgba(r, g, b, a),
@@ -397,6 +406,7 @@ fn fx_assets(
         ),
         flash,
         smoke,
+        smoke_thin,
     };
     commands.insert_resource(assets);
 }
@@ -419,6 +429,8 @@ pub(crate) struct Spray {
     pub(crate) align: bool,
     pub(crate) spin: f32,
     pub(crate) wind: f32,
+    /// Smoke: thins as it spreads ([`Thins`]).
+    pub(crate) thins: bool,
 }
 
 pub(crate) const SPRAY: Spray = Spray {
@@ -436,7 +448,41 @@ pub(crate) const SPRAY: Spray = Spray {
     align: false,
     spin: 0.0,
     wind: 0.0,
+    thins: false,
 };
+
+/// Smoke thins as it spreads: the same smoke through more air. A puff
+/// that only grew stayed as thick as it left the muzzle, a white ball
+/// hanging by the gun. Its opacity steps down (a shared material per
+/// step, [`FxAssets::smoke_thin`]) so it covers no more than it did.
+#[derive(Component)]
+pub(crate) struct Thins;
+
+/// The steps a thinning puff goes through, each this much thinner.
+pub(crate) const THIN_STEPS: usize = 5;
+/// Smoke's opacity as it leaves.
+pub(crate) const SMOKE_ALPHA: f32 = 0.22;
+pub(crate) const THIN_RATIO: f32 = 0.6;
+
+/// A puff's size against its start, `k` through its life.
+pub(crate) fn puff_scale(grow: f32, k: f32) -> f32 {
+    (1.0 + grow * k) * (1.0 - k * k * k)
+}
+
+/// The widest a puff has spread by `k` through its life, against its
+/// first size: it shrinks away at the end, but it doesn't thicken again.
+pub(crate) fn spread_by(grow: f32, k: f32) -> f32 {
+    (0..=16)
+        .map(|i| puff_scale(grow, k * i as f32 / 16.0))
+        .fold(1.0, f32::max)
+}
+
+/// The thinning step for a puff `scale` times its first size: the
+/// first that's no thicker than its first coverage spread over its area.
+pub(crate) fn thin_step(scale: f32) -> usize {
+    let area = (scale * scale).max(1.0);
+    ((area.ln() / (1.0 / THIN_RATIO).ln()).ceil() as usize).min(THIN_STEPS - 1)
+}
 
 /// A robot hit, by the part and whether it hurt: what it hurt shows
 /// (fragments off armour, a fizzing short off a sensor, oil from a joint,
@@ -784,6 +830,9 @@ pub(crate) fn spray_bits(
                 NotShadowReceiver,
             ))
             .id();
+        if s.thins {
+            commands.entity(e).insert(Thins);
+        }
         // A puff turns to face the eye.
         if mesh == a.puff {
             commands.entity(e).insert((
@@ -911,6 +960,22 @@ fn fly_bits(
         } else if b.spin != Vec3::ZERO {
             let w = b.spin * dt;
             t.rotation = Quat::from_scaled_axis(w) * t.rotation;
+        }
+    }
+}
+
+/// Thinning smoke takes the step its spread has come to.
+fn thin_bits(
+    mut bits: Query<(&Bit, &mut MeshMaterial3d<StandardMaterial>), With<Thins>>,
+    assets: Option<Res<FxAssets>>,
+) {
+    let Some(a) = assets else {
+        return;
+    };
+    for (b, mut m) in &mut bits {
+        let step = thin_step(spread_by(b.grow, b.age / b.life));
+        if m.0 != a.smoke_thin[step] {
+            m.0 = a.smoke_thin[step].clone();
         }
     }
 }

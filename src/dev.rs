@@ -19,6 +19,7 @@ impl Plugin for DevPlugin {
                     gallery,
                     turn_line_up.after(gallery),
                     break_line_up.after(gallery),
+                    kill_line_up.after(gallery),
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
@@ -261,6 +262,26 @@ fn turn_line_up(
     }
 }
 
+/// `<robot>!dead` in a line-up: wrecked a few frames in, once it has its
+/// parts, as a kill wrecks it.
+#[derive(Resource)]
+struct DeadLineUp(Vec<Entity>, u32);
+
+fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::robots::Robot>) {
+    let Some(mut dead) = dead else {
+        return;
+    };
+    dead.1 += 1;
+    if dead.1 != 4 {
+        return;
+    }
+    for e in &dead.0 {
+        if let Ok(mut r) = robots.get_mut(*e) {
+            r.wrecked = true;
+        }
+    }
+}
+
 /// `walker!broken` in a line-up: the job-2 walker, its gun dead and one
 /// leg failing (5%), as `robots::reel` breaks a walker. Broken a few frames
 /// in, so it has its parts, and left a second for the smoke and limp.
@@ -439,6 +460,7 @@ fn gallery(
                 let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
+                let mut dead = Vec::new();
                 let d = dist.unwrap_or(30.0);
                 let right = Vec3::new(-flat.z, 0.0, flat.x);
                 let gap = (d * 0.16).max(3.5);
@@ -446,10 +468,16 @@ fn gallery(
                 // you), then turned YAW.
                 let face_cam = flat.x.atan2(flat.z) + turn.to_radians();
                 for (i, id) in ids.iter().enumerate() {
+                    // `heavy!dead`: wrecked once it stands, its salvage
+                    // seated on it (`robots::salvage`), to read the wreck.
+                    let (id, wreck): (&str, bool) = match id.strip_suffix("!dead") {
+                        Some(base) => (base, true),
+                        None => (id, false),
+                    };
                     let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
                     let at = eye + flat * d + right * off;
                     let at = zone.on_ground(at.x, at.z);
-                    let e = match *id {
+                    let e = match id {
                         "walker" | "walker!broken" => {
                             crate::robots::walker::spawn_walker(&mut commands, &zone, at, job(at))
                         }
@@ -490,15 +518,24 @@ fn gallery(
                     };
                     // Turned once it stands where its spawn put it (its
                     // own height over the ground).
-                    if *id != "sentry" {
+                    if wreck {
+                        // Not held in place: a wreck falls where it dies.
+                        commands.entity(e).insert(
+                            Transform::from_translation(at).with_rotation(Quat::from_rotation_y(
+                                face_cam + std::f32::consts::PI,
+                            )),
+                        );
+                        dead.push(e);
+                    } else if id != "sentry" {
                         line_up.push((e, face_cam, None));
                     }
-                    if *id == "walker!broken" {
+                    if id == "walker!broken" {
                         broken.push(e);
                     }
                 }
                 commands.insert_resource(LineUp(line_up));
                 commands.insert_resource(BrokenWalkers(broken, 0));
+                commands.insert_resource(DeadLineUp(dead, 0));
             }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
@@ -625,8 +662,8 @@ fn gallery(
             s if s.starts_with("sights:") => {
                 spawn_static(&mut commands, &s["sights:".len()..], eye + fwd * 0.5);
             }
-            // `first_person_hands` and `wear_kit` have these.
-            s if s.starts_with("fp:") || s.starts_with("kit") => {}
+            // `first_person_hands`, `wear_kit` and `weapons::cycle` have these.
+            s if s.starts_with("fp:") || s.starts_with("kit") || s.starts_with("cycle:") => {}
             // A Mosin as made, and under it one sawn down to an obrez at
             // the vice (`weapons::gunsmith`), and an AK with and without
             // its stock.
