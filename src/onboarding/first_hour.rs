@@ -549,6 +549,8 @@ pub(super) struct Newcomer {
     hound: Option<Entity>,
     /// Walking off from it till then (each walk away's length).
     walking_off_until: f32,
+    /// When it first raised its arm at it.
+    heavy_since: f32,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1095,6 +1097,9 @@ pub(super) fn direct_raid(
     for ev in tells.heavies.read() {
         if ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy) {
             raised = true;
+            if state.heavy != Some(ev.heavy) {
+                state.heavy_since = now;
+            }
             state.heavy = Some(ev.heavy);
         }
     }
@@ -1108,7 +1113,11 @@ pub(super) fn direct_raid(
     {
         let at = world.robot_at(h).map(|g| g.xz());
         match at {
-            Some(from) if on_me(h) && from.distance(here) < 35.0 => {
+            // (For a minute and a half at most: off from a heavy hunting
+            // 300 s, the newcomer walked to and fro and never got home.)
+            Some(from)
+                if on_me(h) && from.distance(here) < 35.0 && now - state.heavy_since < 90.0 =>
+            {
                 if now > state.walking_off_until {
                     state.walking_off_until = now + 8.0;
                     super::second_hour::cut_in(&mut bot, walk_away(&world, here, from));
@@ -1116,11 +1125,7 @@ pub(super) fn direct_raid(
             }
             _ => {
                 state.heavy = None;
-                state.note(
-                    now,
-                    Kind::Learned,
-                    "walked off from the heavy till it lost me",
-                );
+                state.note(now, Kind::Learned, "walked off from the heavy, then on");
             }
         }
     }
