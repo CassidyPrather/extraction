@@ -2843,9 +2843,16 @@ mod macro_reload_tests {
             .get_mut::<GunMacro>(player)
             .unwrap()
             .start(gun, steps);
-        r.vr.step(240);
+        // And it never leaves the well: with nothing to swap in, a hand
+        // doesn't drop it (it fell to the floor and jumped back in 0.6 s
+        // later, its drop heard).
+        let well = gun_mut(&mut r).magwell.unwrap();
+        for f in 0..240 {
+            r.vr.step(1);
+            let seated = r.vr.app.world().get::<Socket>(well).unwrap().occupant;
+            assert_eq!(seated, Some(only), "out of the well at frame {f}");
+        }
         let g = gun_mut(&mut r);
-        let well = g.magwell.unwrap();
         let has = g.firearm.magazine.is_some();
         let seated = r.vr.app.world().get::<Socket>(well).unwrap().occupant;
         assert_eq!(

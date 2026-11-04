@@ -513,7 +513,6 @@ fn burst(
         return;
     };
     for (i, drop) in loot
-        .0
         .roll(&table.0, catalog, &mut rng)
         .into_iter()
         .enumerate()

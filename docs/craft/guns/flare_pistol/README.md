@@ -72,23 +72,19 @@ here (weapon feel owns them).
 | Sections | 2 | 2 | |
 | Parts present | 2 | 3 | the barrel's flat-sided lug on the side plate, the stirrup |
 | Parts move | 3 | 3 | barrel on its hinge, hammer, trigger |
-| Controls | 2 | 2 | the latch isn't checked against a photograph |
+| Controls | 2 | 3 | the barrel catch, from the vz. 44/67's left side (second pass) |
 | Finish | 2 | 2 | |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 2 | 2 | |
-| **Total (of 30)** | **19** | **24** | |
+| **Total (of 30)** | **19** | **25** | |
 
 ## What's still wrong, worst first
 
-1. **The barrel latch.** The model's lever on the left of the side plate
-   isn't in either photograph. The Czech left side shows a small block at
-   the breech band's foot instead. It needs a clear left-side view of an
-   SPSh-44 to settle.
-2. **The grip panels' material.** The Type 57's panels are wood and the
+1. **The grip panels' material.** The Type 57's panels are wood and the
    vz. 44/67's checkered Bakelite. The model keeps checkered Bakelite,
    unchecked against an SPSh-44.
-3. **The hammer spur** stands a millimetre or two proud of the photograph
+2. **The hammer spur** stands a millimetre or two proud of the photograph
    at its back.
 
 ## What changed
@@ -118,3 +114,15 @@ here (weapon feel owns them).
   0.83, over the 0.8 bound.
 - **`crates/gunsmith/src/spec.rs`**: the hinge.
 - **`assets/data/items.ron`**: the box is 225 × 170 mm.
+
+### Second pass: the barrel catch
+
+The model had a long lever on the left of the side plate, with a thumb
+piece in front of the grip. Neither photograph shows one.
+
+The vz. 44/67's left side, closed and with the barrel tipped open, shows
+the plate bare apart from the hinge pin. Instead, a small catch stands out
+of the frame's left just behind the breech, over the plate, and the
+barrel's lug carries the notch it holds. The lever is gone. In its place
+is that catch, about 7 × 10 mm and grooved, at z -0.0098 to -0.0028, y
+0.038 to 0.048.
