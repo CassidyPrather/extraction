@@ -159,3 +159,35 @@ longer culled by the render budget's size fade).
   read, where the 60 m family was grey shapes before.
 - **30 m**: the same, sharper; facing still reads from the walker's brow
   and eye.
+
+## What a robot leaves behind (4 November)
+
+Can a player tell, by looking, what comes off a wreck and what it is?
+`--gallery robots:walker!dead+heavy!dead+drone!dead,YAW,DIST` wrecks the
+line-up's machines where they stand (`src/dev.rs`), their salvage seated
+on them (`robots::salvage`). In fog at 11:00, from 1 to 4 m, standing:
+![wrecks close](../shots/robots/wrecks_close.jpg)
+
+- **Where:** the parts that come off carry the affordance's orange rings
+  (the heavy's hip bolts, the walker's live cell with its "not yet"
+  slash), so *which part* is never a guess where the ring is in view.
+- **What, by the part itself:** at 1 m on a shelf every salvage item is
+  its own shape: the sensor eye, the servo, the robot cell, the rotor
+  assembly, the ammo belt, the walker's knee actuator (its white caps and
+  glow rings, the walker's own), the drone's rotor motor; the heavy's
+  cell, knee (its cyan ring), claw (its fingers), the gun pod with the
+  cable you cut, the heavy plate, the sorter's servo pack.
+  ![small salvage](../shots/robots/salvage_lineup_small.jpg)
+  ![heavy salvage](../shots/robots/salvage_lineup_heavy.jpg)
+- **Fixed: the walker's armour plate had no model.** Pried off a walker
+  or drone wreck (`robots::armour` spawns `robot_plate`), it fell back to
+  the item placeholder, a plain white slab. It is a curved piece of the
+  walker's shell now, its dark rim under it, the bolt tabs torn where the
+  crowbar levered it off, the scorch where it was hit
+  (`art/items/robot_parts.py`):
+  ![robot plate, before and after](../shots/robots/robot_plate_before_after.jpg)
+- **Flagged to Robot bodies: the walker falls on its belly**, its hip
+  servo seats under it: from standing you can't see that servos come off
+  a walker; a crouch shows them. The drone breaks up small on the road:
+  its rotor motor reads once you're over it, not before.
+
