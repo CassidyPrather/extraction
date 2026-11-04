@@ -28,7 +28,8 @@
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `chirp` (a sentry 7 m off, facing you, chirping: its lens through the
-//! chirp, frame by frame), `lock` (a drone hovering 8 m off, its lock on
+//! chirp, frame by frame), `melee` (a crawler, a hound and a heavy side by side
+//! facing you, each run through its lead to a blow: the lens tells), `lock` (a drone hovering 8 m off, its lock on
 //! you set off by the reel: its lens through the lock), `pin` (a walker pinning down a spot 7 m to its
 //! right where you dropped from sight: its gun held there, its tracers), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
@@ -101,6 +102,8 @@ const STRIKE_ROW: [PartRole; 4] = [
 struct Reel {
     frame: u32,
     subject: Option<Entity>,
+    /// `melee`'s hound and heavy (the subject is its crawler).
+    others: Vec<Entity>,
     shots: u32,
     every: u32,
     taken: u32,
@@ -125,10 +128,16 @@ fn reel(
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     cases: Query<&TellCase>,
-    (mut sentry_acts, mut awares, mut drone_locks): (
+    (mut sentry_acts, mut awares, mut drone_locks, mut melee, catalog): (
         MessageWriter<super::sentry::SentryEvent>,
         Query<&mut super::Awareness, Without<EyeLevel>>,
         MessageWriter<super::drone::DroneLock>,
+        (
+            Query<&mut super::indoor::Crawler>,
+            Query<&mut super::hound_mind::HoundMind>,
+            Query<&mut super::heavy::Arm>,
+        ),
+        Res<crate::items::Catalog>,
     ),
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
@@ -480,6 +489,46 @@ fn reel(
                 commands.entity(w).remove::<Senses>().remove::<Brain>();
                 w
             }
+            "melee" => {
+                // The melee machines side by side, facing you, each run
+                // through its lead to a blow (below): a crawler's charge,
+                // a hound's coil and lunge, a heavy's raise and slam.
+                let c_at = zone.on_ground(
+                    (eye + flat * 6.0 - right * 2.6).x,
+                    (eye + flat * 6.0 - right * 2.6).z,
+                );
+                let crawler = super::walker::spawn_walker_sized(
+                    &mut commands,
+                    &zone,
+                    c_at,
+                    job(c_at),
+                    false,
+                    40.0,
+                    super::indoor::CRAWLER_SIZE,
+                    None,
+                );
+                commands
+                    .entity(crawler)
+                    .insert((super::indoor::Crawler::default(), super::Breed("Crawler")));
+                let h_at = zone.on_ground((eye + flat * 6.0).x, (eye + flat * 6.0).z);
+                let hound = super::hound::spawn_hound(&mut commands, &zone, h_at, job(h_at));
+                let v_at = zone.on_ground(
+                    (eye + flat * 8.5 + right * 3.4).x,
+                    (eye + flat * 8.5 + right * 3.4).z,
+                );
+                let heavy =
+                    super::heavy::spawn_heavy(&mut commands, &zone, &catalog, v_at, job(v_at));
+                for e in [hound, heavy] {
+                    commands.entity(e).remove::<Senses>().remove::<Brain>();
+                }
+                commands
+                    .entity(crawler)
+                    .remove::<Senses>()
+                    .remove::<Brain>();
+                state.others = vec![hound, heavy];
+                state.subject = Some(crawler);
+                return;
+            }
             "chirp" => {
                 // A sentry 7 m off, facing you, its chirp set off by the
                 // reel (below) so the frames run through it: the lens's
@@ -595,7 +644,13 @@ fn reel(
         aware.can_see_target = sees;
         aware.exposure = if sees { 1.0 } else { 0.0 };
     }
-    if (what == "eyes" || what == "eyesfar" || what == "dying" || what == "strikes") && frame == 5 {
+    if (what == "eyes"
+        || what == "eyesfar"
+        || what == "dying"
+        || what == "strikes"
+        || what == "melee")
+        && frame == 5
+    {
         // Turned to face you.
         for mut w in &mut walkers {
             w.yaw = flat.x.atan2(flat.z);
@@ -988,6 +1043,31 @@ fn reel(
                     from,
                     to: eye - Vec3::Y * 0.5 + right * 0.9,
                 });
+            }
+        }
+    }
+    if what == "melee" && frame > WARMUP {
+        let (crawlers, hounds, arms) = &mut melee;
+        let t = (frame - WARMUP - 1) as f32 / 30.0;
+        if let Ok(mut c) = crawlers.get_mut(subject) {
+            let lead = super::indoor::ZAP_CHARGE;
+            c.charge = if t < lead { t + 1e-3 } else { 0.0 };
+        }
+        if let Some(Ok(mut h)) = state.others.first().map(|e| hounds.get_mut(*e)) {
+            let lead = super::hound_mind::CROUCH_TIME;
+            h.crouch = (lead - t).max(0.0);
+            h.lunge = if t >= lead && t < lead + 0.3 {
+                0.3
+            } else {
+                0.0
+            };
+            h.bit = false;
+        }
+        if frame == WARMUP + 1 {
+            if let Some(Ok(mut a)) = state.others.get(1).map(|e| arms.get_mut(*e)) {
+                a.state = super::heavy::ArmState::Raise;
+                a.t = 0.0;
+                a.from = a.claw;
             }
         }
     }
