@@ -45,6 +45,60 @@ Every gun passes as it stands; nothing needed fixing beyond the crossbow
 catches on the latch and it fails. A closed-bolt stroke that completes must
 also chamber a round, and one that doesn't must not.
 
+## The PM's whole cycle, by hand
+
+The PM is a newcomer's only gun for their first three raids.
+`weapons::cycle` scripts its whole cycle the way a headset drives the
+hands, so every beat runs the real game:
+1. Draw from the holster.
+2. Rack the slide.
+3. Raise the gun to the eye, cupped.
+4. Fire three shots, the last locking the slide back.
+5. Drop the magazine, take a spare from the pouch and seat it.
+6. Release the slide stop (B), then fire a shot.
+7. Stovepipe, then clear it with a rack.
+8. Fire a last shot.
+
+Headless, `weapons::cycle::tests::the_pm_cycle_runs_by_hand` prints each
+beat's timing and each shot's numbers. Rendered,
+`--gallery cycle:pm` films the same script from the eye at 30 fps:
+
+```text
+extraction --screenshot OUT/pm.png --frames 999999 --camera 0,0,30,0,-15 \
+    --map training_yard --no-robots --weather clearing --hour 11 --gallery cycle:pm
+```
+
+The reels are `pm_cycle_before.mp4` (the code before the three fixes
+below, with the reel itself) and `pm_cycle_after.mp4`.
+
+| Beat | In the game (measured) | A real PM | What you get in the headset |
+| - | - | - | - |
+| Draw | The hand reaches the grip and lifts it out; the script's pace is 0.74 s. | Drawing to a ready hold takes about 1 s. | The gun comes out where the hand is. Nothing to fix. |
+| Rack | Cocked at 0.39 s, chambered at 0.46 s, over 30 mm of travel. A clean gun has no drag. | 30 mm of travel against a stiff recoil spring. | It cycles, but a clean slide has no weight in the hand. Noted below, not fixed. |
+| Aim | The eye line runs over the rear notch onto the front blade (`capture::sightline`). | The same. | Fine. |
+| Shot | Cupped: the muzzle rises 4.7° at its peak (0.056 s) and is back within 15% by 0.14 s. The gun pushes 6 mm into the hand. The slide is drawn back and home over 0.07 s (6 frames at 90 Hz). The flash lasts 0.035 s. | A compact blowback pistol held in two hands flips about 5-8° and is back within a quarter-second. A real slide cycles in about 15 ms. | The kick and return read well. The slide is drawn slower than life so that 90 Hz can show it. |
+| Smoke | **Before:** three puffs grew to 27 cm each at full opacity, a white ball half a metre across hanging by the gun for over a second. | A 9x18 in daylight leaves a faint wisp. | **Fixed:** the smoke thins as it spreads (`impacts::Thins`). |
+| Case | **Before:** every case flew the same arc and landed 1.607 m out, every shot. | Thrown right, 1-3 m, scattered. | **Fixed:** each case strays up to 11° and 18% in speed and tumbles at its own rate; they land 1.3-1.6 m out. |
+| Slide lock | **Before:** the shot that locks the slide back still played the slam home: the bolt-close sound, a buzz and a dip forward. | The slide stays back and nothing slams. Feeling that is how you know you're empty. | **Fixed:** a slide held back on its stop, or on a stuck case, runs back and stays (`feel::Cycling::Held`). The same applies to the SKS and SVD. |
+| Mag out | A held A hangs the magazine 3.5 cm out; the other hand takes it, or let go, it falls. | The heel catch: the magazine is pulled out. | Fine. |
+| Mag in | Seated from below, 0.83 s into the beat. | The same. | Fine. |
+| Slide release | B: chambered and home on the same tick. | The slide stop lever. | Fine. |
+| Stovepipe | The trigger does nothing (the action is open); a rack clears it in 0.4 s. | Tap, rack. | Fine. In the reel the stovepipe is injected with a live round chambered, so its clear throws out a live round. |
+
+Held by:
+- `feel::vr_tests::the_shot_that_empties_it_leaves_the_slide_back_and_nothing_slams_home`
+  (PM, SKS and SVD; all three failed before the fix).
+- `weapons::casing_tests::no_two_cases_fly_alike`.
+- `muzzle::tests::muzzle_smoke_thins_as_it_spreads`.
+- The cycle test itself, which checks for two slams home in the three-shot string, not three, and that cases land in scattered places.
+
+Not fixed, for later: a clean PM's slide has no resistance in the hand.
+Drag comes only from wear, fouling or cold (`Firearm::action_drag`), so
+a newcomer racks it like a drawer. A spring weight for every slide and
+charging handle, as the crossbow's draw has (`DRAW_WEIGHT`), would
+give it one. That would need retuning the flick rule in the
+hand-worked mechanisms table above, where a flick racks a slide.
+
 ## The shots
 
 - `models/`: the gun model passes (see `models/README.md`).
