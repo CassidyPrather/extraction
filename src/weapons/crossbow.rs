@@ -162,7 +162,7 @@ pub fn quarrel_visuals(
             .get_or_insert_with(|| {
                 (
                     meshes.add(
-                        Cylinder::new(0.004, 0.38)
+                        Cylinder::new(0.004, 0.30)
                             .mesh()
                             .build()
                             .rotated_by(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),

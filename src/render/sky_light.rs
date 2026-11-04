@@ -26,7 +26,8 @@
 //! ambient), not open sky.
 //!
 //! `EXTRACTION_FLAT_AMBIENT=1` leaves Bevy's ambient as it was (the A/B
-//! for frame cost, `scripts/bench.sh`).
+//! for frame cost, `scripts/bench.sh`) (what's in your hands in a room
+//! gets its own light: `render::held_light`).
 //!
 //! A source edit against a pinned Bevy, like `render::fog`: if the anchors
 //! stop matching, it warns once and the ambient stays flat.

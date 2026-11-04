@@ -529,8 +529,15 @@ fn nagant() -> GunLayout {
     let gate = Vec3::new(0.016, 0.053, -0.012);
     GunLayout {
         // The palm on the grip, which sits back behind the hammer
-        // (art/guns/nagant.py): it was under the hammer, a long pole.
-        grip: Transform::from_xyz(0.0, 0.0, 0.035),
+        // (art/guns/nagant.py). Placed as on the PM: 29 mm ahead of the
+        // backstrap at the palm's height, so the trigger lies 17 mm
+        // further out than the PM's, as on the real guns (backstrap to
+        // trigger 85.5 mm here, the PM's 68). A hand on a raked revolver
+        // grip sits high, the web up under the hammer (y 0.014): the
+        // bore's lever over the palm is 60 mm, and the Nagant's kick
+        // (items.ron) is a straight shove so it doesn't read as the PM's
+        // (`weapons::signature`).
+        grip: Transform::from_xyz(0.0, 0.014, 0.018),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
@@ -565,7 +572,7 @@ fn nagant() -> GunLayout {
             ),
             part(
                 bx(0.004, 0.024, 0.005),
-                at(0.0, 0.016, -0.04),
+                at(0.0, 0.016, -0.036),
                 Black,
                 Trigger,
             ),
@@ -771,7 +778,7 @@ fn toz8() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.4)),
-        muzzle: Vec3::new(0.0, bore, -0.84),
+        muzzle: Vec3::new(0.0, bore, -0.81),
         port: Vec3::new(0.0, 0.05, -0.15),
         eject: Vec3::new(0.7, 0.8, 0.2),
         sight: at(0.0, 0.062, -0.03),
@@ -798,8 +805,8 @@ fn toz8() -> GunLayout {
                 Static,
             ),
             part(
-                Shape::Cylinder(0.008, 0.64),
-                at(0.0, bore, -0.52),
+                Shape::Cylinder(0.008, 0.61),
+                at(0.0, bore, -0.505),
                 Blued,
                 Static,
             ),
@@ -830,7 +837,7 @@ fn toz8() -> GunLayout {
 fn rpk74() -> GunLayout {
     let mut l = ak74();
     let bore = 0.058;
-    l.muzzle = Vec3::new(0.0, bore, -0.82);
+    l.muzzle = Vec3::new(0.0, bore, -0.795);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
     // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
     // was before the AK was measured.
@@ -857,44 +864,49 @@ fn rpk74() -> GunLayout {
 }
 
 /// The SPSh-44 (art/guns/flare_pistol.py): a 26 mm break-open signal
-/// pistol; the barrel tips down about the hinge under its breech.
+/// pistol; the barrel tips down about the hinge forward of its breech.
 fn flare_pistol() -> GunLayout {
     use Mat::*;
     use Moves::*;
     let bore = 0.055;
-    let hinge = Vec3::new(0.0, 0.032, -0.065);
+    // Forward, at the front of the frame's side plate (art/guns/flare_pistol.py).
+    let hinge = Vec3::new(0.0, 0.028, -0.0755);
     GunLayout {
-        grip: Transform::IDENTITY,
+        // The palm 29 mm ahead of the backstrap at its height, as on every
+        // gun (docs/craft/GUNSMITHING.md): the backstrap is at z 0.035.
+        grip: Transform::from_xyz(0.0, 0.0, 0.006),
         support: None,
-        muzzle: Vec3::new(0.0, bore, -0.19),
-        port: Vec3::new(0.0, bore, -0.04),
+        muzzle: Vec3::new(0.0, bore, -0.162),
+        port: Vec3::new(0.0, bore, -0.017),
         eject: Vec3::new(0.0, 0.6, 1.0),
         sight: at(0.0, 0.085, 0.01),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::BreakBarrels,
-            grab: Vec3::new(0.0, bore, -0.15),
+            grab: Vec3::new(0.0, bore, -0.13),
             travel: 0.0,
         }),
-        load_port: Vec3::new(0.0, bore, -0.04),
+        load_port: Vec3::new(0.0, bore, -0.017),
         hinge,
         parts: vec![
+            // Grip, raked back about 20 degrees.
             part(
-                bx(0.03, 0.1, 0.04),
-                Transform::from_xyz(0.0, -0.01, 0.01).with_rotation(Quat::from_rotation_x(-0.25)),
+                bx(0.03, 0.1, 0.045),
+                Transform::from_xyz(0.0, -0.035, 0.025).with_rotation(Quat::from_rotation_x(-0.35)),
                 Bakelite,
                 Static,
             ),
-            part(bx(0.026, 0.04, 0.08), at(0.0, 0.04, -0.02), Blued, Static),
+            // Side plate and breech.
+            part(bx(0.025, 0.05, 0.11), at(0.0, 0.04, -0.03), Blued, Static),
             part(
-                bx(0.005, 0.02, 0.005),
-                at(0.0, 0.012, -0.03),
+                bx(0.005, 0.03, 0.01),
+                at(0.0, 0.002, -0.019),
                 Black,
                 Trigger,
             ),
             part(
-                Shape::Cylinder(0.017, 0.155),
-                at(0.0, bore, -0.112),
+                Shape::Cylinder(0.0155, 0.15),
+                at(0.0, bore, -0.087),
                 Blued,
                 Barrels,
             ),
@@ -911,22 +923,24 @@ fn crossbow() -> GunLayout {
     let rail = 0.06;
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
-        support: Some(Vec3::new(0.0, 0.0, -0.28)),
-        muzzle: Vec3::new(0.0, rail, -0.46),
-        port: Vec3::new(0.0, 0.07, -0.2),
+        support: Some(Vec3::new(0.0, 0.0, -0.17)),
+        muzzle: Vec3::new(0.0, rail, -0.35),
+        port: Vec3::new(0.0, 0.07, -0.15),
         eject: Vec3::new(0.0, 1.0, 0.0),
-        sight: at(0.0, 0.095, -0.027),
+        sight: at(0.0, 0.095, -0.017),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::String,
-            grab: Vec3::new(0.0, 0.065, -0.33),
-            travel: 0.26,
+            grab: Vec3::new(0.0, 0.065, -0.22),
+            // A 150 mm draw: what a leaf-spring prod gives
+            // (docs/craft/guns/crossbow).
+            travel: 0.15,
         }),
-        load_port: Vec3::new(0.0, 0.07, -0.2),
+        load_port: Vec3::new(0.0, 0.07, -0.15),
         hinge: Vec3::ZERO,
         parts: vec![
             // Plank stock and tiller, the rail along its top.
-            part(bx(0.035, 0.04, 0.5), at(0.0, 0.03, -0.2), Wood, Static),
+            part(bx(0.035, 0.04, 0.29), at(0.0, 0.03, -0.135), Wood, Static),
             part(
                 bx(0.035, 0.11, 0.3),
                 Transform::from_xyz(0.0, -0.03, 0.2).with_rotation(Quat::from_rotation_x(0.1)),
@@ -934,18 +948,18 @@ fn crossbow() -> GunLayout {
                 Static,
             ),
             part(
-                bx(0.02, 0.01, 0.42),
-                at(0.0, rail - 0.005, -0.25),
+                bx(0.02, 0.01, 0.33),
+                at(0.0, rail - 0.005, -0.185),
                 Steel,
                 Static,
             ),
             // The leaf-spring prod across the front.
-            part(bx(0.6, 0.012, 0.04), at(0.0, 0.05, -0.4), Steel, Static),
+            part(bx(0.6, 0.012, 0.04), at(0.0, 0.05, -0.29), Steel, Static),
             part(bx(0.005, 0.022, 0.006), at(0.0, 0.0, -0.05), Black, Trigger),
             // The string's middle.
             part(
                 bx(0.06, 0.004, 0.004),
-                at(0.0, 0.065, -0.33),
+                at(0.0, 0.065, -0.22),
                 Black,
                 WithBolt,
             ),
@@ -960,7 +974,7 @@ fn toz() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.36)),
-        muzzle: Vec3::new(0.0, 0.035, -0.82),
+        muzzle: Vec3::new(0.0, 0.035, -0.8385),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
         sight: at(0.0, 0.0534, -0.05),
@@ -976,8 +990,8 @@ fn toz() -> GunLayout {
             // Stock and wrist.
             part(bx(0.04, 0.045, 0.14), at(0.0, -0.005, 0.02), Wood, Static),
             part(
-                bx(0.042, 0.13, 0.28),
-                Transform::from_xyz(0.0, -0.035, 0.22).with_rotation(Quat::from_rotation_x(0.12)),
+                bx(0.042, 0.13, 0.23),
+                Transform::from_xyz(0.0, -0.035, 0.195).with_rotation(Quat::from_rotation_x(0.12)),
                 Wood,
                 Static,
             ),
@@ -999,18 +1013,18 @@ fn toz() -> GunLayout {
             part(bx(0.01, 0.006, 0.04), at(0.0, 0.045, -0.04), Blued, Static),
             // Barrels, rib and forend: all of it tips at the hinge.
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(-0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(-0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
-            part(bx(0.008, 0.006, 0.68), at(0.0, 0.05, -0.46), Blued, Barrels),
+            part(bx(0.008, 0.006, 0.70), at(0.0, 0.05, -0.47), Blued, Barrels),
             part(bx(0.044, 0.035, 0.24), at(0.0, 0.008, -0.31), Wood, Barrels),
         ],
     }

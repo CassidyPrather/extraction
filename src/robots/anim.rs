@@ -1361,6 +1361,7 @@ pub(crate) fn aim_turrets(
         Option<&super::devices::Hunting>,
         Has<super::hazards::Dazzled>,
         Option<&super::RobotSeed>,
+        Has<super::walker::Suppressing>,
     )>,
     mut turrets: Query<(&mut Transform, Option<&RobotPart>), (With<WalkerTurret>, Without<Walker>)>,
     targets: Query<&GlobalTransform>,
@@ -1368,7 +1369,9 @@ pub(crate) fn aim_turrets(
 ) {
     let dt = time.delta_secs();
     let now = time.elapsed_secs();
-    for (mut w, t, aware, intent, children, robot, hunting, dazzled, seed) in &mut walkers {
+    for (mut w, t, aware, intent, children, robot, hunting, dazzled, seed, suppressing) in
+        &mut walkers
+    {
         if robot.wrecked {
             continue;
         }
@@ -1398,6 +1401,15 @@ pub(crate) fn aim_turrets(
                 .filter(|_| aware.can_see_target)
                 .and_then(|p| targets.get(p).ok())
                 .map(|g| g.translation() + Vec3::Y * 1.1)
+                // Pinning you (`walker::Suppressing`) and you've gone down:
+                // its gun stays on where you went, where its rounds go
+                // (`walker`: last known, a metre up), not swinging off.
+                .or_else(|| {
+                    aware
+                        .last_known
+                        .filter(|_| suppressing)
+                        .map(|p| p + Vec3::Y * 1.0)
+                })
                 .or(intent.and_then(|i| i.look))
         });
         let local = at.map(|p| t.rotation.inverse() * (p - t.translation));
@@ -1651,6 +1663,62 @@ mod tests {
                 p.hp = p.max_hp * share;
             }
         }
+    }
+
+    /// A walker pinning you (`walker::Suppressing`) when you drop out of
+    /// sight keeps firing where you went down; its gun stays on that spot,
+    /// held steady, so the rounds come from where it points. An ordinary
+    /// walker that loses you lets its gun go.
+    #[test]
+    fn a_pinners_gun_holds_on_where_you_went_down() {
+        let (mut app, walker) = standing_walker();
+        let here = app.world().get::<Transform>(walker).unwrap().translation;
+        let went_down = here + Vec3::new(5.0, 0.0, -6.0);
+        {
+            let mut a = app
+                .world_mut()
+                .get_mut::<super::super::Awareness>(walker)
+                .unwrap();
+            a.last_known = Some(went_down);
+            a.can_see_target = false;
+        }
+        // Where its gun points, as a bearing off where it's looking: the
+        // turret's forward against the line to `went_down`, on the level.
+        let off = |app: &mut App| {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<WalkerTurret>>();
+            let g = *q.iter(app.world()).next().unwrap();
+            let f = g.rotation() * Vec3::NEG_Z;
+            let to = went_down - g.translation();
+            Vec2::new(f.x, f.z).angle_to(Vec2::new(to.x, to.z)).abs()
+        };
+        for _ in 0..90 {
+            app.update();
+        }
+        let loose = off(&mut app);
+        app.world_mut()
+            .entity_mut(walker)
+            .insert(super::super::walker::Suppressing);
+        for _ in 0..90 {
+            app.update();
+        }
+        let mut held = Vec::new();
+        for _ in 0..30 {
+            app.update();
+            held.push(off(&mut app));
+        }
+        let worst = held.iter().cloned().fold(0.0f32, f32::max);
+        assert!(
+            loose > 0.3,
+            "not pinning, it lets its gun go ({loose} rad off)"
+        );
+        assert!(
+            worst < 0.08,
+            "pinning, its gun is on the spot ({worst} rad off)"
+        );
+        let spread = worst - held.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(spread < 0.01, "and holds steady there ({spread} rad)");
     }
 
     /// Models' broken walker (its gun dead): the gun sags, barrel down,

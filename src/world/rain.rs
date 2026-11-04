@@ -324,77 +324,76 @@ fn rain_intensity(
     }
 }
 
-/// Prefabs with a roof over their floor.
-fn roofed(prefab: &str) -> bool {
-    matches!(
-        prefab,
-        "house_plank"
-            | "farmhouse"
-            | "house_brick"
-            | "cabin_log"
-            | "shop"
-            | "shed"
-            | "barn"
-            | "sawmill"
-            | "pump_station"
-            | "bus_depot"
-            | "rail_shed"
-            | "mast_hut"
-            | "guard_booth"
-            | "factory_hall"
-            | "ore_mill"
-            | "observatory"
-            | "funicular_lower"
-            | "funicular_upper"
-    )
+/// The least share of a building's footprint under its roof for rain to
+/// keep out of it: a burnt or drowned house open to the sky lets it in.
+pub const SHELTER_ROOFED: f32 = 0.8;
+
+/// A building's box for the shader, if it's roofed: (centre x, centre z,
+/// bottom y, top y), (half width, half depth, cos yaw, sin yaw), just
+/// inside its walls (rain still falls past the eaves and in the doorway).
+/// From the buildings the game takes for indoors (`robots::doors`
+/// `Entrances`), every one with a way in: a list of prefabs kept by hand
+/// went stale (Models' new plans, `house_plank_b`, `post_office`, and every
+/// damaged and drowned variant, had it raining in the front room).
+pub fn shelter(shell: &crate::robots::doors::Shell) -> Option<[Vec4; 2]> {
+    if let Some(cover) = shell.cover {
+        let (roofed, cells) = cover.roofed();
+        if cells == 0 || (roofed as f32) < SHELTER_ROOFED * cells as f32 {
+            return None;
+        }
+    }
+    let at = shell.xf.translation;
+    // The game turns a placement by -rot about +Y; the shader undoes it.
+    let (yaw, _, _) = shell.xf.rotation.to_euler(EulerRot::YXZ);
+    let (s, c) = (-yaw).sin_cos();
+    Some([
+        Vec4::new(at.x, at.z, at.y - 2.0, at.y + shell.height),
+        Vec4::new(shell.half.x - 0.15, shell.half.y - 0.15, c, s),
+    ])
 }
 
-/// Every roof on the map, as the shader wants it, with its centre.
+/// The CPU twin of `rain.wgsl`'s `sheltered`, for one box.
+pub fn sheltered(b: &[Vec4; 2], p: Vec3) -> bool {
+    let (a, b) = (b[0], b[1]);
+    let d = Vec2::new(p.x - a.x, p.z - a.y);
+    let lx = d.x * b.z + d.y * b.w;
+    let lz = -d.x * b.w + d.y * b.z;
+    lx.abs() < b.x && lz.abs() < b.y && p.y > a.z && p.y < a.w
+}
+
+/// Every roof on the map, as the shader wants it, with its centre, and how
+/// many buildings it was made from.
 #[derive(Default)]
-struct Roofs(Vec<(Vec2, [Vec4; 2])>);
+struct Roofs(Vec<(Vec2, [Vec4; 2])>, usize);
 
 /// Hands the roofs nearest the camera to the rain and ash, whenever the
-/// camera has moved a few metres.
+/// camera has moved a few metres (or the buildings have come in).
 fn shelter_nearby(
-    zone: Res<super::Zone>,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     rain: Query<&MeshMaterial3d<RainMaterial>>,
     mut materials: ResMut<Assets<RainMaterial>>,
-    mut roofs: Local<Option<Roofs>>,
+    mut roofs: Local<Roofs>,
     mut last: Local<Option<Vec3>>,
     mut count: Local<usize>,
 ) {
-    let roofs = roofs.get_or_insert_with(|| {
-        Roofs(
-            zone.map
-                .placements
+    let shells = entrances.as_ref().map_or(&[][..], |e| &e.shells[..]);
+    let fresh = roofs.1 != shells.len();
+    if fresh {
+        *roofs = Roofs(
+            shells
                 .iter()
-                .filter(|p| roofed(&p.prefab))
-                .map(|p| {
-                    let t = super::buildings::placement_transform(&zone, p);
-                    let [w, h, d] = extraction_core::map::prefab_footprint(&p.prefab);
-                    let (s, c) = p.rot.to_radians().sin_cos();
-                    let at = Vec2::new(p.at[0], p.at[1]);
-                    let y = t.translation.y;
-                    (
-                        at,
-                        [
-                            Vec4::new(at.x, at.y, y - 2.0, y + h),
-                            // Just inside the walls: rain still falls past
-                            // the eaves and in the doorway.
-                            Vec4::new(w * 0.5 - 0.15, d * 0.5 - 0.15, c, s),
-                        ],
-                    )
-                })
+                .filter_map(|s| shelter(s).map(|b| (s.xf.translation.xz(), b)))
                 .collect(),
-        )
-    });
+            shells.len(),
+        );
+    }
     let Some(eye) = cams.iter().next().map(|g| g.translation()) else {
         return;
     };
     // Re-sort when the camera moves, or a new rain material appears.
     let n = rain.iter().count();
-    if last.is_some_and(|l| l.distance(eye) < 3.0) && *count == n {
+    if !fresh && last.is_some_and(|l| l.distance(eye) < 3.0) && *count == n {
         return;
     }
     *last = Some(eye);
@@ -412,6 +411,70 @@ fn shelter_nearby(
     for m in &rain {
         if let Some(mut mat) = materials.get_mut(&m.0) {
             mat.shelters = shelters;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::robots::doors::Shell;
+    use crate::world::buildings;
+
+    /// Under any roofed building with a way in (every prefab, at any turn)
+    /// no rain falls in the room, and past its walls it does; a building
+    /// open to the sky (burnt, drowned) lets it in. The game's own
+    /// indoors (`Shell::contains`) agrees about the room's middle.
+    #[test]
+    fn no_rain_falls_under_any_roof() {
+        // Models' plans and the variants a hand-kept list had missed (the
+        // plans aren't in `PREFABS` either: named too).
+        let named = [
+            "house_plank_b",
+            "house_plank_c",
+            "post_office",
+            "house_brick_damaged",
+        ];
+        let mut checked = Vec::new();
+        for id in buildings::PREFABS.into_iter().chain(named) {
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            if geo.doors.is_empty() {
+                continue;
+            }
+            for rot in [0.0f32, 90.0, 180.0, 237.0] {
+                let xf = Transform::from_xyz(12.0, 3.0, -7.0)
+                    .with_rotation(Quat::from_rotation_y(-rot.to_radians()));
+                let shell = Shell::of(Entity::PLACEHOLDER, id, xf);
+                let Some(b) = shelter(&shell) else {
+                    // Open to the sky: rain is right.
+                    let (r, n) = shell.cover.map_or((1, 1), |c| c.roofed());
+                    assert!(
+                        (r as f32) < SHELTER_ROOFED * n as f32,
+                        "{id}: roofed but no shelter"
+                    );
+                    continue;
+                };
+                let room = xf.transform_point(Vec3::new(0.0, 1.5, 0.0));
+                assert!(sheltered(&b, room), "{id} at {rot}: raining in the room");
+                assert!(
+                    shell.contains(room),
+                    "{id} at {rot}: the room's middle isn't indoors"
+                );
+                let past = xf.transform_point(Vec3::new(shell.half.x + 1.5, 1.5, 0.0));
+                assert!(!sheltered(&b, past), "{id} at {rot}: dry past the wall");
+            }
+            checked.push(id);
+        }
+        // Models' plans and the variants a hand-kept list had missed.
+        for id in [
+            "house_plank_b",
+            "house_plank_c",
+            "post_office",
+            "house_brick_damaged",
+        ] {
+            assert!(checked.contains(&id), "{id} not checked");
         }
     }
 }

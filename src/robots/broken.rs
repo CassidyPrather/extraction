@@ -28,14 +28,30 @@ pub const PACE: f32 = 0.8;
 pub const LEG_LEFT: f32 = 0.05;
 /// The leg that's gone bad.
 pub const BAD_LEG: usize = 1;
-/// Within this of you it stops and shoves (m)...
-pub const SHOVE_RANGE: f32 = 1.7;
+/// Its shove reaches this far past where its body keeps clear of you
+/// (m, [`clear_of_you`]; [`shove_reach`] is from its middle)...
+pub const SHOVE_RANGE: f32 = 0.6;
 /// ...this hard (hp)...
 pub const SHOVE_DAMAGE: f32 = 4.0;
 /// ...pushing you back this fast (m/s)...
 pub const SHOVE_PUSH: f32 = 2.5;
 /// ...and again after this long (s).
 pub const SHOVE_COOLDOWN: f32 = 3.0;
+
+/// Someone's middle is at least this far from a walker of `size` whose
+/// feet don't touch them (m): its feet's reach, and a body's width. It
+/// stops there to shove ([`SHOVE_RANGE`] is how far its shove reaches past
+/// that).
+pub fn clear_of_you(size: f32) -> f32 {
+    super::anim::FOOT_RADIUS * size + 0.3
+}
+
+/// How far from its middle a broken walker of `size` shoves (m): reach
+/// measured from its body's edge, not its middle, so a walker kept clear of
+/// you still reaches you.
+pub fn shove_reach(size: f32) -> f32 {
+    clear_of_you(size) + SHOVE_RANGE
+}
 
 /// A broken walker shoved someone (for Lev's line and the first-fight
 /// check).
@@ -153,9 +169,13 @@ fn break_parts(w: &mut World, robot: Entity) {
 /// The shove, as its brain makes it (a command: `walker_brain`): whoever's
 /// within reach of `robot` loses a few hp and is pushed back a step.
 pub fn shove(w: &mut World, robot: Entity) {
-    let Some(at) = w.get::<GlobalTransform>(robot).map(|g| g.translation()) else {
+    let Some((at, size)) = w.get::<GlobalTransform>(robot).map(|g| {
+        let (scale, _, at) = g.to_scale_rotation_translation();
+        (at, scale.x)
+    }) else {
         return;
     };
+    let reach = shove_reach(size);
     if w.get::<super::Robot>(robot).is_none_or(|r| r.wrecked) {
         return;
     }
@@ -168,7 +188,7 @@ pub fn shove(w: &mut World, robot: Entity) {
     let mut hit = Vec::new();
     for (p, pt, mut health, mut body) in players.iter_mut(w) {
         let d = pt.translation() - at;
-        if d.with_y(0.0).length() > SHOVE_RANGE + 0.3 || health.down {
+        if d.with_y(0.0).length() > reach + 0.3 || health.down {
             continue;
         }
         health.hp -= SHOVE_DAMAGE;
@@ -480,7 +500,7 @@ mod tests {
         let seen = app.world().resource::<Seen>();
         assert!(!seen.shots.contains(&robot), "it fired");
         assert!(
-            closest < SHOVE_RANGE + 0.5,
+            closest < shove_reach(1.0) + 0.5,
             "it never came at you: {closest:.1} m at closest"
         );
         assert!(seen.shoves > 0, "it never shoved");
@@ -490,6 +510,101 @@ mod tests {
             "{lost} hp lost to {} shoves",
             seen.shoves
         );
+    }
+
+    /// Coming to look where it heard someone who's gone low and still
+    /// there (as the driver says), it stops with its body clear of them,
+    /// seen or not: it never walks on top of them, so never presses them
+    /// down through the ground (a crouched newcomer it came to look for it
+    /// walked onto, and they sank under the field and fell:
+    /// first_fight_broken, one-handed, 1 November).
+    #[test]
+    fn it_never_stands_on_someone_crouched() {
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        vr.app
+            .init_resource::<Seen>()
+            .add_systems(PostUpdate, count);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let me = zone.on_ground(40.0, 255.0);
+        vr.stand(me, 0.0);
+        vr.head(Vec3::new(0.0, 0.9, 0.0));
+        vr.step(10);
+        let at = zone.on_ground(me.x + 1.5, me.z + 1.0);
+        // What it's going to look at is past you: its way there is over you
+        // (at 52.6 s it set off for the next spot of its search, through the
+        // newcomer it had stood by).
+        let past = zone.on_ground(me.x - 1.5, me.z - 1.0);
+        let robot = vr
+            .app
+            .world_mut()
+            .run_system_once(move |mut c: Commands, zone: Res<Zone>| {
+                spawn_broken_walker(&mut c, &zone, at, at + Vec3::Z * 300.0)
+            })
+            .unwrap();
+        vr.step(2);
+        // It heard you there and comes to look, and doesn't make you out,
+        // low and still behind something (here: its sight cut to nothing,
+        // its eye whole, so it still comes as a sighted walker does).
+        vr.app
+            .world_mut()
+            .get_mut::<super::super::Senses>(robot)
+            .unwrap()
+            .sight = 0.0;
+        {
+            let w = vr.app.world_mut();
+            let mut a = w.get_mut::<super::super::Awareness>(robot).unwrap();
+            a.target = Some(vr.player);
+            a.last_known = Some(me);
+            a.suspicion = 0.45;
+            *w.get_mut::<super::super::Brain>(robot).unwrap() = super::super::Brain::Investigate {
+                at: past,
+                left: 30.0,
+            };
+        }
+        let (mut closest, mut sank) = (f32::MAX, f32::MIN);
+        for _ in 0..90 * 15 {
+            vr.head(Vec3::new(0.0, 0.9, 0.0));
+            {
+                let w = vr.app.world_mut();
+                let mut a = w.get_mut::<super::super::Awareness>(robot).unwrap();
+                a.last_known = Some(me);
+                a.suspicion = 0.45;
+                let mut b = w.get_mut::<super::super::Brain>(robot).unwrap();
+                if !matches!(*b, super::super::Brain::Investigate { .. }) {
+                    *b = super::super::Brain::Investigate {
+                        at: past,
+                        left: 30.0,
+                    };
+                }
+            }
+            let mut h = vr
+                .app
+                .world_mut()
+                .get_mut::<crate::health::Health>(vr.player)
+                .unwrap();
+            h.hp = h.max;
+            h.down = false;
+            vr.step(1);
+            let r = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(robot)
+                .unwrap()
+                .translation();
+            let feet = vr.feet();
+            closest = closest.min(r.xz().distance(feet.xz()));
+            sank = sank.max(zone.ground(feet.x, feet.z) - feet.y);
+        }
+        assert!(
+            closest < 4.0,
+            "it never came to you: {closest:.2} m at closest"
+        );
+        assert!(
+            closest >= clear_of_you(1.0) - 0.05,
+            "on top of you: {closest:.2} m from its middle (its feet reach {:.2})",
+            super::super::anim::FOOT_RADIUS
+        );
+        assert!(sank < 0.3, "pressed {sank:.2} m under the ground");
     }
 
     /// A newcomer kills it: the reckless one, on its first raid, meets it

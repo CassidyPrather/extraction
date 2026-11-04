@@ -1,5 +1,26 @@
 # Gunsmithing
 
+> **Where I stopped (2 November 2026).** Every gun is reviewed: the AK-74,
+> PM, MP-133, Mosin, SKS, PPSh, SVD, Nagant, IZh-43, TOZ-8M, RPK-74,
+> SPSh-44 and crossbow. Each has a review in `docs/craft/guns/<id>/`. The
+> last tip, on `claude/polish-gunsmith`, holds three changes: the SPSh-44
+> (with its grip point at z 0.006, so Hands' trigger bound passes), the
+> crossbow's 150 mm draw, and Models' 0.30 m bolt.
+>
+> **What's next.** The open items, each waiting on a reference, not to be
+> guessed. Each gun's README lists them worst first.
+> - **IZh-43**: the forend's depth.
+> - **TOZ-8M**: the semi-pistol wrist.
+> - **SVD**: its heights.
+> - **PPSh**: the rear sight.
+> - **SPSh-44**: the barrel latch, and the grip panels' material.
+> - **Crossbow**: the prod's flex when drawn, which needs a mover. Weapon
+>   feel and Hands have the one-hand draw as a question.
+>
+> Any new gun starts from "What a gun must show at arm's length in VR",
+> at the end of this page. A home-made one starts from "Home-made
+> weapons".
+
 How a gun in this game is judged, and by whom: the gunsmith, working on one
 gun at a time at the bench, away from the game. This is the procedure. Follow
 it, and change it when it's wrong.
@@ -110,6 +131,11 @@ part visible from outside and every part a hand can work, and for each:
 - What do you see when it's worked? (The bolt back: the bolt face, the
   extractor, the empty chamber, the follower. The dust cover off: the
   recoil spring and carrier.)
+- Is every control a hand works its own named part where the real one
+  is, so the hands find it from the model? Above all the magazine catch
+  or latch: `mag_catch` (a paddle tipping about its pin, the AK's and
+  RPK's) or `mag_catch_heel` (drawn back at the butt, the PM's). The hand
+  rule picks which finger reaches it from where the part sits.
 
 ### 3. Proportions
 
@@ -289,6 +315,47 @@ same command. Run `art/check.py` (the models' lints are the models
 owner's, and must stay clean), the weapons tests, and the bench. Update the
 scores. Then the next gun.
 
+### Home-made weapons
+
+A home-made weapon has no real gun to measure against. It still has to be
+something a person could build from what's lying about, and then work by
+hand. Review it in place of steps 1 and 3; the rest stands.
+
+1. **Name the stock parts.** List each part as what it was before: a car's
+   leaf spring, a plank, angle iron, a gate latch, rebar, a door bolt. Size
+   each to the real thing: a leaf's thickness and width, an angle's
+   section, a bolt's thread. A part no shed or scrapyard holds needs a
+   reason.
+2. **Work every action through.** For each thing it does, follow the force
+   from the hand to the part and say what stops it:
+   - **Cocking**: the stroke and what bends to give it. A spring-steel
+     leaf yields at about 1.2-1.5 GPa: a tip's deflection is at most about
+     2σL²/3Et (L the free arm from the clamp, t the leaf's thickness). Check
+     that the string or rod keeps its length between rest and drawn. The
+     drawn length comes from the parts' limits, not from the reach of an
+     arm.
+   - **Holding**: what catches the drawn load, and that it holds without a
+     hand on it.
+   - **Release**: trace the trigger's travel through every link to the
+     catch, and check each link turns the right way. A seesaw lever turns
+     a push the wrong way round: lifting the tail of a lever pivoted at its
+     middle drives the hook down.
+   - **Safety**: what it blocks, and that it does block it.
+3. **Size it for a body.**
+   - A foot stirrup takes a boot's toe: about 120-140 mm inside.
+   - A grip takes a hand of the hand rig's size.
+   - A trigger sits in the finger's reach from the grip (`docs/craft/guns/nagant`).
+   - The support hand has somewhere to go clear of a moving string or
+     slide.
+   - Every edge the hands work is eased.
+4. **Read it at arm's length.** At 1 m, it should read as made: saw cuts,
+   bolt heads, tape, wire, mixed materials, uneven spacing. Keep it neat
+   enough that nothing looks broken by mistake.
+
+Score the same rows. Proportion is then "the parts are the sizes of their
+stock, and the actions are the lengths their parts allow". Write each
+action's numbers down: stroke, deflection, stress, clearance.
+
 ## What the reviews have taught
 
 - **Measure first, against a photograph.** The AK-74 looked "off" in a
@@ -310,3 +377,56 @@ scores. Then the next gun.
   `static` (the AK's dust cover and magazine catch) can't be worked. Look
   for them in the exploded view: what doesn't fly off isn't a part.
 
+- **Register on the hand, not the muzzle.** The SPSh-44's barrel was
+  right, but its breech sat 23 mm too far from the grip. Registered on the
+  muzzle, the overlay only showed a grip in the wrong place. Registered on
+  the grip at the palm's height (the model's origin), it showed what had
+  moved.
+- **Copies are references.** A licensed or straight copy (a Type 57 for
+  the SPSh-44, a vz. 44/67) is a fair photograph of the original. Check
+  the parts the copy changed against a second source.
+- **Every action, link by link.** The crossbow's latch looked right and
+  could never release: its bars pivoted in the middle, so the trigger
+  drove the hook down. Follow each force from the finger to the part.
+- **The grip point is the palm.** The hand measures reach from `grip`,
+  not the backstrap. On every gun, put `grip` the same distance in front
+  of the backstrap at the palm's height (the PM's is 29 mm). Then a
+  longer reach is the real gun's, not the layout's (`nagant`).
+
+## What a gun must show at arm's length in VR
+
+A player holds the gun at 30-60 cm and sees it at 1 m on a table or a
+wall. Model for those distances, in this order:
+
+1. **The silhouette at 1 m.** The outline from the side is what reads
+   first and what a player recognizes. Check it with an overlay before
+   anything else.
+   - Missing or extra lumps show at once: a guard, a hammer spur, a hinge
+     knuckle.
+   - Wrong lengths along the bore show too: a barrel too long, a breech
+     too far forward.
+   - Every review this round found its worst error here.
+2. **What the hands touch, as parts.** Every control a hand works is its
+   own named part, of its real size, where the real one is:
+   - trigger, magazine catch (`mag_catch`), safety, bolt or charging
+     handle, latch, hammer, string.
+   - The hand rig finds them in the model. A control welded into
+     `static`, or drawn small, is one the player gropes for.
+   - Give each control's working face its real texture, grooves or
+     serrations, because at 30 cm it's the only part in focus.
+3. **Where the hand sits.** The grip's rake and depth, and the trigger's
+   reach from `grip`, are felt before they're seen. Hands measures them
+   in the hand's frame. A grip 9° off reads as a different gun in the
+   hand, even when the eye doesn't catch it.
+4. **The finish under the sky light.** Blued, parkerized, stamped,
+   alloy, wood, Bakelite and rubber must part from each other under the
+   overcast sky (the `gunsmith::finish` table, the shots in
+   `docs/craft/finishes/`). Near-black reads as plastic. Check a finish
+   in the game's light (the yard and the Rime Fell mill), not only on the
+   bench's grey.
+5. **Seams and gaps.** At 30 cm a 4 mm see-through gap (the RPK's
+   handguards) reads as broken, and a part floating 2 mm clear fails
+   `capture::attach`. Where two parts meet, make the seam 1 mm or less.
+6. **Making marks, last.** Stamped edges, machined faces, screw heads,
+   markings and wear sell the gun at 30 cm. They can't save a wrong
+   silhouette or a control in the wrong place, so they come last.

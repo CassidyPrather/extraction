@@ -18,6 +18,7 @@ pub mod gpu_lost;
 pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
+pub mod held_light;
 pub mod hold_rate;
 pub mod hurt;
 pub mod kit;
@@ -80,6 +81,7 @@ impl Plugin for RenderPlugin {
             app.add_plugins(stress::StressPlugin);
         }
         app.add_plugins(sky_light::SkyLightPlugin);
+        app.add_plugins(held_light::HeldLightPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
@@ -140,7 +142,9 @@ impl Plugin for RenderPlugin {
             PostUpdate,
             grade::dim_indoors.after(crate::world::underground::go_dark),
         )
-        .add_systems(Update, attach_flat_camera)
+        .init_resource::<StoodEye>()
+        .add_systems(Update, (attach_flat_camera, stand_the_eye))
+        .add_systems(PostUpdate, mark_offscreen)
         .add_systems(
             Update,
             grade::adapt_eyes.after(crate::world::sky::WeatherLook),
@@ -153,9 +157,115 @@ impl Plugin for RenderPlugin {
 #[derive(Component)]
 pub struct OffscreenCamera;
 
+/// Every 3D camera drawing into an image (the impostors' capture rig,
+/// the warm-up's proxy eye, a scope's lens, the bench's second eye) is
+/// marked [`OffscreenCamera`] as it comes, so the systems looking for
+/// "the eye" (`EyeCamera`: puffs facing it, rain round it, the sky,
+/// sound) never take one for the player's. Unmarked, the capture rig's
+/// and the proxy eye's cameras turned the puffs edge-on to a point off to
+/// the side (Weapon feel, 2026-11-01). The headset's eyes draw into
+/// their swapchain's views, not images: they stay eyes.
+fn mark_offscreen(
+    mut commands: Commands,
+    cams: Query<
+        (Entity, &bevy::camera::RenderTarget),
+        (
+            With<Camera3d>,
+            Without<OffscreenCamera>,
+            Or<(
+                Added<bevy::camera::RenderTarget>,
+                Changed<bevy::camera::RenderTarget>,
+            )>,
+        ),
+    >,
+) {
+    for (e, target) in &cams {
+        if matches!(target, bevy::camera::RenderTarget::Image(_)) {
+            commands.entity(e).try_insert(OffscreenCamera);
+        }
+    }
+}
+
+#[cfg(test)]
+mod offscreen_tests {
+    use super::*;
+
+    /// A camera drawing into an image is no eye; a window's camera is.
+    #[test]
+    fn a_camera_drawing_into_an_image_is_offscreen() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .add_systems(PostUpdate, mark_offscreen);
+        let image = app
+            .world_mut()
+            .resource_mut::<Assets<Image>>()
+            .add(Image::default());
+        let capture = app
+            .world_mut()
+            .spawn((
+                Camera3d::default(),
+                bevy::camera::RenderTarget::Image(image.into()),
+            ))
+            .id();
+        let eye = app.world_mut().spawn(Camera3d::default()).id();
+        app.update();
+        assert!(app.world().get::<OffscreenCamera>(capture).is_some());
+        assert!(app.world().get::<OffscreenCamera>(eye).is_none());
+    }
+}
+
 /// The camera `--camera` puts anywhere (screenshots, the tour).
 #[derive(Component)]
 pub struct FreeCamera;
+
+/// A free camera standing there (`--camera X,0,Z`): its eye goes 1.7 m
+/// over whatever the player stands on once they're on their feet, not over
+/// the terrain (a house's floor can stand a metre above it: the lens was
+/// at bed height, the player's hands above it). Once, then left alone;
+/// and not at all if something else has placed the camera first (a
+/// gauge's views, the tour): it holds where it put the camera.
+#[derive(Component)]
+pub struct StandingEye(pub Vec3);
+
+/// Where a standing free camera's eye ended up (`StandingEye`), once it
+/// has: what's put in front of the camera waits for it (`dev::gallery`).
+#[derive(Resource, Default)]
+pub struct StoodEye(pub Option<f32>);
+
+/// How high a standing eye is over the feet, metres.
+pub const EYE_OVER_FEET: f32 = 1.7;
+
+fn stand_the_eye(
+    mut commands: Commands,
+    mut cams: Query<(Entity, &mut Transform, &StandingEye), Without<LocalPlayer>>,
+    players: Query<(&Transform, &crate::player::Body), With<LocalPlayer>>,
+    mut stood: ResMut<StoodEye>,
+) {
+    let Some((feet, body)) = players.iter().next() else {
+        return;
+    };
+    if !body.grounded {
+        return;
+    }
+    for (e, mut t, put) in &mut cams {
+        // Placed by something else meanwhile: that's where it's wanted.
+        if t.translation.distance(put.0) > 1e-3 {
+            commands.entity(e).remove::<StandingEye>();
+            continue;
+        }
+        let y = feet.translation.y + EYE_OVER_FEET;
+        if (y - t.translation.y).abs() > 0.05 {
+            info!(
+                "free camera: standing on {:.2}, the eye from {:.2} to {y:.2}",
+                feet.translation.y, t.translation.y
+            );
+        }
+        t.translation.y = y;
+        stood.0 = Some(y);
+        commands.entity(e).remove::<StandingEye>();
+    }
+}
 
 /// The 3D cameras that might be a player's eyes, as a query filter: see
 /// [`eyes`].
@@ -197,35 +307,40 @@ fn attach_flat_camera(
         let ground = zone.ground(pos.x, pos.z);
         // A height of 0 (or less) means standing there, eyes 1.7 m up.
         // Underground (in a site's rooms or on its stairs), as given.
-        let y = if crate::world::underground::floor_under(&zone, pos).is_some() {
+        let underground = crate::world::underground::floor_under(&zone, pos).is_some();
+        let standing = !underground && pos.y <= 0.0;
+        let y = if underground {
             pos.y
-        } else if pos.y <= 0.0 {
-            ground + 1.7
+        } else if standing {
+            ground + EYE_OVER_FEET
         } else {
             pos.y.max(ground + 0.3)
         };
-        commands
-            .spawn((
-                Name::new("Free camera"),
-                FreeCamera,
-                Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
-                    EulerRot::YXZ,
-                    -yaw.to_radians(),
-                    pitch.to_radians(),
-                    0.0,
-                )),
-                camera_bundle(&weather),
-            ))
-            .with_children(|c| {
-                // Held up by the eye and aimed where it looks, as anyone
-                // looking at something by torchlight does.
-                if opts.torch {
-                    c.spawn((
-                        crate::gadgets::visuals::torch_beam(),
-                        Transform::from_xyz(0.15, -0.1, 0.0),
-                    ));
-                }
-            });
+        let mut cam = commands.spawn((
+            Name::new("Free camera"),
+            FreeCamera,
+            Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
+                EulerRot::YXZ,
+                -yaw.to_radians(),
+                pitch.to_radians(),
+                0.0,
+            )),
+            camera_bundle(&weather),
+        ));
+        if standing {
+            cam.insert(StandingEye(Vec3::new(pos.x, y, pos.z)));
+        }
+        let cam = cam.id();
+        commands.entity(cam).with_children(|c| {
+            // Held up by the eye and aimed where it looks, as anyone
+            // looking at something by torchlight does.
+            if opts.torch {
+                c.spawn((
+                    crate::gadgets::visuals::torch_beam(),
+                    Transform::from_xyz(0.15, -0.1, 0.0),
+                ));
+            }
+        });
         return;
     }
     for (head, parent) in &heads {
@@ -296,4 +411,78 @@ pub fn centre(mesh: Mesh) -> (Mesh, bevy::camera::primitives::Aabb, Transform) {
     let mesh = mesh.translated_by(-c);
     let aabb = mesh.compute_aabb().unwrap_or_default();
     (mesh, aabb, Transform::from_translation(c))
+}
+
+#[cfg(test)]
+mod eye_tests {
+    use super::*;
+
+    /// `--camera X,0,Z` over a house whose floor stands a metre above the
+    /// terrain: the eye goes 1.7 m over the floor the player lands on (it
+    /// was 1.7 m over the terrain, at bed height, with the player's hands
+    /// above the lens), once, and is left alone after.
+    #[test]
+    fn a_standing_camera_eye_is_over_the_floor_the_player_stands_on() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<StoodEye>()
+            .add_systems(Update, stand_the_eye);
+        let terrain = 20.0;
+        let floor = terrain + 1.05;
+        let cam = app
+            .world_mut()
+            .spawn((
+                FreeCamera,
+                StandingEye(Vec3::new(0.0, terrain + EYE_OVER_FEET, 0.0)),
+                Transform::from_xyz(0.0, terrain + EYE_OVER_FEET, 0.0),
+            ))
+            .id();
+        let player = app
+            .world_mut()
+            .spawn((
+                LocalPlayer,
+                Transform::from_xyz(0.0, floor, 0.0),
+                crate::player::Body::default(),
+            ))
+            .id();
+        app.update();
+        let y = |app: &App| app.world().get::<Transform>(cam).unwrap().translation.y;
+        assert_eq!(y(&app), terrain + EYE_OVER_FEET, "waits for the feet");
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .grounded = true;
+        app.update();
+        assert!(
+            (y(&app) - (floor + EYE_OVER_FEET)).abs() < 1e-4,
+            "eye at {}",
+            y(&app)
+        );
+        assert_eq!(app.world().resource::<StoodEye>().0, Some(y(&app)));
+        // Then left alone (the tour, a gallery's pose, move it).
+        app.world_mut()
+            .get_mut::<Transform>(cam)
+            .unwrap()
+            .translation
+            .y = 50.0;
+        app.update();
+        assert_eq!(y(&app), 50.0);
+        // A camera placed by something else before the player lands (a
+        // gauge's views) stays where it was put.
+        let placed = Vec3::new(5.0, 30.0, 5.0);
+        let other = app
+            .world_mut()
+            .spawn((
+                FreeCamera,
+                StandingEye(Vec3::new(0.0, terrain + EYE_OVER_FEET, 0.0)),
+                Transform::from_translation(placed),
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Transform>(other).unwrap().translation,
+            placed
+        );
+        assert!(app.world().get::<StandingEye>(other).is_none());
+    }
 }

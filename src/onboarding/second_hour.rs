@@ -94,6 +94,8 @@ pub struct Run {
     salvage: bool,
     /// A magazine given for the shot that's heard.
     topped_up: bool,
+    /// A gun given for that shot, the last fall having taken its own.
+    rearmed: bool,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -164,7 +166,13 @@ pub(super) fn direct(
     // The radio: each first time met gets the bot's answer, now.
     for FirstMet(f) in met.read() {
         let (response, tasks): (&'static str, Vec<Task>) = match f {
-            First::Jam(_) => ("rack it", vec![Task::Gun(MacroKind::Rack)]),
+            // (Out first: by the time it's said, the jammed gun may be
+            // back on the hip, and a rack with an empty hand fails.)
+            First::Jam(_) if world.armed(player) => {
+                ("rack it", vec![Task::DrawGun, Task::Gun(MacroKind::Rack)])
+            }
+            // Said after a fall that took the gun: nothing to rack.
+            First::Jam(_) => ("(no gun on it to rack)", vec![]),
             First::Worn => ("carry on; mend it at the bench later", vec![]),
             // Not on into it: back out the way it came, a few steps.
             First::Anomaly if world.nearest_is_burner(here) => {
@@ -323,7 +331,7 @@ pub(super) fn direct(
         });
         bot.log.push(format!("  radio: {f:?} -> {response}"));
         if !tasks.is_empty() {
-            cut_in(&mut bot, tasks);
+            cut_in(&mut bot, routed(&world, here, tasks));
             let wait = match f {
                 First::DroneLock => 60.0,
                 First::Underground | First::Lamed => 25.0,
@@ -558,7 +566,20 @@ pub(super) fn direct(
                     let away = world
                         .nearest_anomaly(here)
                         .map_or(Vec2::Y, |(_, at)| (here - at.xz()).normalize_or(Vec2::Y));
-                    let spot = here + away * 4.0;
+                    // Clear of every anomaly's edge as `bulky_near` takes
+                    // it (radius + 2 m): 4 m off, by the one it had just
+                    // met, it dropped them where it wouldn't pick them up,
+                    // and the pack was never full.
+                    let clear = |p: Vec2| {
+                        !world
+                            .anomalies
+                            .iter()
+                            .any(|(a, agt)| agt.translation().xz().distance(p) < a.radius + 3.0)
+                    };
+                    let spot = (4..30)
+                        .map(|k| here + away * k as f32)
+                        .find(|p| clear(*p))
+                        .unwrap_or(here + away * 4.0);
                     let at = Vec3::new(spot.x, world.zone.ground(spot.x, spot.y), spot.y);
                     let _ = world.drop_items(&mut commands, at, &["fuel_can"; 4]);
                     tasks.push(Wait(0.5));
@@ -623,11 +644,27 @@ pub(super) fn direct(
                     }
                 }
                 let ins = world.insertion();
-                tasks.extend(world.legs(here, ins + Vec2::new(0.0, -25.0)));
+                tasks.extend(super::first_hour::walk(
+                    &world,
+                    here,
+                    ins + Vec2::new(0.0, -25.0),
+                ));
             }
         }
         Step::Heard => {
-            if !firsts.met(First::Heard) && !run.topped_up && world.rounds(player).unwrap_or(0) < 3
+            if !firsts.met(First::Heard) && !world.armed(player) && !run.rearmed {
+                // A gun to fire the shot with, if what it had went down with
+                // it at the last fall (it reloaded an empty hand), as the
+                // drone's step does.
+                run.rearmed = true;
+                let kit = world.drop_kit(&mut commands, root.translation);
+                tasks.push(Wait(0.5));
+                for (&item, side) in kit.iter().zip([Side::Right, Side::Left]) {
+                    tasks.push(GrabFromHere { item, side });
+                }
+            } else if !firsts.met(First::Heard)
+                && !run.topped_up
+                && world.rounds(player).unwrap_or(0) < 3
             {
                 // Rounds to fire the shot with: a magazine from the crate.
                 run.topped_up = true;
@@ -704,7 +741,7 @@ pub(super) fn direct(
                 // door first.
                 let mut from = here;
                 for to in s.round.iter().chain([&s.outside]) {
-                    tasks.extend(world.legs(from, to.xz()));
+                    tasks.extend(super::first_hour::walk(&world, from, to.xz()));
                     from = to.xz();
                 }
                 run.walks += 1;
@@ -756,7 +793,7 @@ pub(super) fn direct(
                 // Round the kiosk to its door, in, and down the stair.
                 let mut from = here;
                 for to in w.round.iter().chain([&w.outside]) {
-                    tasks.extend(world.legs(from, *to));
+                    tasks.extend(super::first_hour::walk(&world, from, *to));
                     from = *to;
                 }
                 if let Some(d) = w.door.filter(|d| !world.door_open(*d)) {
@@ -796,14 +833,32 @@ pub(super) fn direct(
                 if let Some(k) = world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
                     let mut from = here;
                     for to in k.round.iter().chain([&k.outside]) {
-                        tasks.extend(world.legs(from, *to));
+                        tasks.extend(super::first_hour::walk(&world, from, *to));
                         from = *to;
                     }
                 }
                 advance(&mut run, Step::Home2);
             } else if run.walker.is_none() {
-                // A walker at work in the open, 12 m off.
-                let at = here + Vec2::new(-12.0, 0.0);
+                // A walker at work in the open, 12 m off: in a direction
+                // with no building on the line or under the spot (due west,
+                // it stood in the post office, and all 25 shots went into
+                // its wall).
+                let open = |p: Vec2| {
+                    world.entrances.shells.iter().all(|s| {
+                        let inv = s.xf.compute_affine().inverse();
+                        let a = inv.transform_point3(Vec3::new(here.x, 0.0, here.y)).xz();
+                        let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                        super::first_hour::segment_hits_box(a, b, s.half + Vec2::splat(1.0))
+                            .is_none()
+                    })
+                };
+                let at = (0..8)
+                    .map(|k| {
+                        let a = std::f32::consts::PI + k as f32 * std::f32::consts::FRAC_PI_4;
+                        here + Vec2::new(a.cos(), a.sin()) * 12.0
+                    })
+                    .find(|p| open(*p))
+                    .unwrap_or(here + Vec2::new(-12.0, 0.0));
                 let site = world.zone.on_ground(at.x, at.y);
                 run.walker = Some(crate::robots::walker::spawn_walker(
                     &mut commands,
@@ -833,6 +888,18 @@ pub(super) fn direct(
                     side: Side::Left,
                 }));
                 tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload), Wait(1.0)]);
+            } else if let Some(leg) = leg
+                && run.tries > 0
+                && run.tries % 8 == 0
+                && leg.xz().distance(here) > 6.0
+            {
+                // Missing it from 12 m (all 25, one run): a few strides
+                // nearer every eight shots (a leg is thin).
+                tasks.push(WalkTo {
+                    to: here + (leg.xz() - here).normalize_or_zero() * 3.0,
+                    within: 0.8,
+                });
+                run.tries += 1;
             } else if let Some(leg) = leg {
                 // Single aimed shots at a leg (a leg is thin).
                 if world.gun_clear(player) == Some(false) {
@@ -867,7 +934,7 @@ pub(super) fn direct(
                 world.remains_item(player),
             ) {
                 (Some(at), Some(item)) if run.tries < 3 => {
-                    tasks.extend(world.legs(here, at.xz()));
+                    tasks.extend(super::first_hour::walk(&world, here, at.xz()));
                     tasks.push(Grab {
                         item,
                         side: Side::Right,
@@ -907,6 +974,45 @@ pub(super) fn direct(
 /// Tasks ahead of whatever the bot was doing. A shot it was taking is
 /// done with (resumed later, it would only be noise), and the trigger
 /// and the aim are let go: held through a walk, a rifle keeps firing.
+/// `tasks` from `here` with each walk outdoors (neither end under a
+/// roof, a few strides or more) by the routed way (`first_hour::walk`):
+/// the answers' own straight walks ("move off low", out round the house)
+/// went into a garden's fence. Walks indoors, by a door, are as they were.
+fn routed(world: &World2, here: Vec2, tasks: Vec<Task>) -> Vec<Task> {
+    // (At chest height over the ground there: a shell's box is from its
+    // floor up.)
+    let indoors = |p: Vec2| {
+        let y = world.zone.ground(p.x, p.y) + 1.0;
+        world
+            .entrances
+            .building_at(Vec3::new(p.x, y, p.y))
+            .is_some()
+    };
+    let mut at = here;
+    let mut out = Vec::new();
+    for t in tasks {
+        match t {
+            Task::WalkTo { to, within }
+                if within >= 1.0 && to.distance(at) > 4.0 && !indoors(at) && !indoors(to) =>
+            {
+                let mut way = super::first_hour::walk(world, at, to);
+                // The last stretch as asked (how near counts as there).
+                if let Some(Task::WalkTo { within: w, .. }) = way.last_mut() {
+                    *w = within;
+                }
+                out.extend(way);
+                at = to;
+            }
+            Task::WalkTo { to, .. } => {
+                at = to;
+                out.push(t);
+            }
+            t => out.push(t),
+        }
+    }
+    out
+}
+
 pub(super) fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
     if matches!(bot.tasks.front(), Some(Task::Fire { .. })) {
         bot.tasks.pop_front();
@@ -998,6 +1104,17 @@ pub(super) struct World2<'w, 's> {
             Has<crate::interact::body::InBackpack>,
         ),
     >,
+    /// Guns down in someone's pack, and whose.
+    pub(super) packed_guns: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::weapons::Gun,
+            &'static crate::anomaly::artifacts::CarriedBy,
+        ),
+        With<crate::interact::body::InBackpack>,
+    >,
     pub(super) hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     pub(super) anomalies:
         Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
@@ -1020,6 +1137,15 @@ pub(super) struct World2<'w, 's> {
     pub(super) remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
+    /// Every building and where it stands (for the way round them).
+    pub(super) buildings: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Building,
+            &'static Transform,
+        ),
+    >,
     pub(super) comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
     pub(super) owners: Query<'w, 's, &'static crate::interact::SocketOwner>,
     pub(super) gun_ids: Query<'w, 's, (), With<crate::weapons::Gun>>,
@@ -1032,6 +1158,28 @@ pub(super) struct World2<'w, 's> {
     /// The machines' walking grid: round what isn't a building with doors
     /// (a blast furnace's stoves, a wall, a slag heap).
     pub(super) nav: Option<Res<'w, crate::robots::walker::Nav>>,
+}
+
+/// The truck's footprint, truck-local xz: its centre and half size (the
+/// bed, ±1.1 by ±1.8, and the cab ahead of it, with a body's clearance).
+pub(super) const TRUCK_BOX: (Vec2, Vec2) = (Vec2::new(0.0, -0.9), Vec2::new(1.5, 3.3));
+
+/// To the foot of the truck's steps, `at(0, 4)`, from `here` (both
+/// truck-local xz): from its front or side, round it on the side you're
+/// on first, not straight through its body.
+pub(super) fn round_the_truck(here: Vec2) -> Vec<Vec2> {
+    let mut round = Vec::new();
+    if here.y < 4.5 {
+        // A stride clear of its side.
+        let s = if here.x >= 0.0 { 1.0 } else { -1.0 } * (TRUCK_BOX.1.x + 1.3);
+        round.extend([
+            Vec2::new(s, here.y.min(4.0)),
+            Vec2::new(s, 6.5),
+            Vec2::new(0.0, 6.5),
+        ]);
+    }
+    round.push(Vec2::new(0.0, 4.0));
+    round
 }
 
 /// Down a site's stair: outside its kiosk, in at the door, the top step
@@ -1379,6 +1527,8 @@ impl World2<'_, '_> {
     /// Home: radio called (by the Surge step); wait for the truck, walk to
     /// it, ring.
     pub(super) fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
+        // The truck within this of the rendezvous is the one waiting there (m).
+        const RV_NEAR: f32 = 40.0;
         match raid.phase {
             Phase::Out => match self.radio_in_hand() {
                 true => vec![Task::Use(Side::Left), Task::Wait(1.0)],
@@ -1394,17 +1544,59 @@ impl World2<'_, '_> {
                 },
             },
             Phase::TruckCalled { .. } => vec![Task::Wait(20.0)],
-            Phase::TruckWaiting { .. } => {
+            Phase::TruckWaiting { rv, .. } => {
+                let Some(truck) = self.trucks.iter().next() else {
+                    return vec![Task::Wait(1.0)];
+                };
+                // Waiting at a rendezvous, it pulls in there unseen, up to
+                // `truck::UNSEEN_FOR` after it says so: till then it's
+                // still at base. To the rendezvous, and wait for it (it
+                // went back to the base truck, 250 m, and was left there).
+                let waiting_at = (rv != crate::raid::SHORT_EXFIL)
+                    .then(|| {
+                        self.zone
+                            .map
+                            .markers_of(&MarkerKind::Rendezvous)
+                            .nth(rv)
+                            .map(|m| Vec2::from(m.at))
+                    })
+                    .flatten();
+                if let Some(p) = waiting_at
+                    && truck.translation().xz().distance(p) > RV_NEAR
+                {
+                    let mut t = self.legs(here, p);
+                    t.push(Task::Wait(2.0));
+                    return t;
+                }
                 // Round to the back and up its steps, as a person would
                 // (straight at it, the bot met the truck's side).
                 // Then up the middle of the bed, left of the bench, to just
                 // past its front: the cord is in reach there.
-                let Some(truck) = self.trucks.iter().next() else {
-                    return vec![Task::Wait(1.0)];
-                };
                 let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
-                let mut t = self.legs(here, at(0.0, 4.0));
-                for (x, z) in [(0.05, 0.3), (0.05, -1.2)] {
+                // From its front or side, round it on the side you're on
+                // first: straight at the back, the truck's body was in the
+                // way, and the newcomer stood against its side at the
+                // ranger tower half an hour (the rendezvous turned to face
+                // down the track, cab first to anyone from the village).
+                let mine = truck.affine().inverse().transform_point3(Vec3::new(
+                    here.x,
+                    truck.translation().y,
+                    here.y,
+                ));
+                let mut t = Vec::new();
+                let mut from = here;
+                for p in round_the_truck(mine.xz()).into_iter().map(|p| at(p.x, p.y)) {
+                    t.extend(self.legs(from, p));
+                    from = p;
+                }
+                // Square on to the ramp first (0.9 wide, off the tail to
+                // z 2.5): "there" behind it was anywhere within a metre,
+                // and from 0.7 m off its middle the way up went into the
+                // bed's edge beside the ramp, and stayed there.
+                if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+                    *within = 0.5;
+                }
+                for (x, z) in [(0.05, 2.9), (0.05, 0.3), (0.05, -1.2)] {
                     t.push(Task::WalkTo {
                         to: at(x, z),
                         within: 0.3,
@@ -1432,7 +1624,11 @@ impl World2<'_, '_> {
             .filter(|(e, _, gt, held, sock, bag)| {
                 held.is_none()
                     && sock.is_none()
-                    && bag.is_none()
+                    // Loose, or in a bag nobody's carrying: the truck's crate,
+                    // where the driver says it is after a fall ("On the
+                    // ledge"; set off without, the bot met its first jam
+                    // with an empty hand).
+                    && bag.is_none_or(|b| self.bags.get(b.bag).is_ok_and(|(bp, _)| !bp.carried))
                     && gt.translation().xz().distance(near) < 30.0
                     && matches!(self.id(*e), Some("ak74" | "pm_pistol" | "sks" | "mosin"))
             })

@@ -386,6 +386,15 @@ fn run_macros(
                             best = Some((m.1.rounds, m.0));
                         }
                     }
+                    // Nothing else for it on you: the one it took out goes
+                    // back in, not left on the ground (a reload with no
+                    // spare threw away the only magazine).
+                    if best.is_none() {
+                        best = mac
+                            .stripped
+                            .take()
+                            .and_then(|m| mags.get(m).ok().map(|m| (m.1.rounds, m.0)));
+                    }
                 }
                 if let (Some((_, mag_e)), Some(well)) = (best, gun.magwell) {
                     if let Ok((_, _, _, in_socket, in_bag)) = mags.get(mag_e) {

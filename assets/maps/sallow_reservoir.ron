@@ -419,8 +419,32 @@
             mix: [(Spruce, 0.7), (Pine, 0.3)],
             polygon: [(150.0, -282.0), (282.0, -282.0), (282.0, -180.0), (250.0, -190.0), (180.0, -255.0)],
         ),
+        // Coming home: copses where a way in to a rendezvous was open for
+        // more than a dash (map_lint, coming home).
+        (name: "Causeway willows", seed: 143, density: 1.2, undergrowth: 0.5,
+         mix: [(Birch, 0.7), (Pine, 0.3)],
+         polygon: [(-128.0, -239.0), (-118.0, -238.0), (-117.0, -247.0), (-127.0, -248.0)]),
+        (name: "Draw-off birches", seed: 144, density: 2.4, undergrowth: 0.5,
+         mix: [(Birch, 0.7), (Pine, 0.3)],
+         polygon: [(-8.0, -155.0), (7.0, -155.0), (8.0, -169.0), (-7.0, -170.0)]),
     ],
 
+    // Coming home: outcrops where a way in to a rendezvous was open for
+    // more than a dash (map_lint, coming home).
+    outcrops: [
+        // By the keepers' way down to the Inflow bridge.
+        (at: (74.0, -180.0), radius: 1.5, stones: 3),
+        // Above the old road, on the way to Sallow Head.
+        (at: (-88.7, -220.6), radius: 1.5, stones: 3),
+        // Down from the Draw-off tower to the Inflow bridge.
+        (at: (0.6, -190.8), radius: 1.6, stones: 3),
+        // Over the silt fans, on the way to the Inflow bridge.
+        (at: (95.0, -253.0), radius: 1.5, stones: 3),
+        // Over the silt fans.
+        (at: (131.0, -252.0), radius: 1.3, stones: 2),
+        // By the spillway track, in to the Gauge house.
+        (at: (231.0, 56.0), radius: 1.5, stones: 3),
+    ],
     placements: [
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
@@ -530,6 +554,20 @@
 
         // Where the robots come and go.
         (prefab: "robot_gate", at: (222.0, -232.0), rot: 315.0),
+        // Coming home: cover where a way in to a rendezvous was open for
+        // more than a dash (map_lint, coming home).
+        // A woodpile by the water, beside the west shore road.
+        (prefab: "log_pile", at: (-253.0, -174.0), rot: 0.0),
+        // Ditched on the west shore, short of Sallow Head.
+        (prefab: "wreck_lada", at: (-248.0, -206.0), rot: 140.0),
+        // Sallow Head's woodpile, off the truck's way in.
+        (prefab: "log_pile", at: (-189.1, -250.1), rot: 317.0),
+        // A woodpile on the slope to the Inflow bridge.
+        (prefab: "log_pile", at: (23.7, -205.6), rot: 33.0),
+        // By the keepers' way down to the Inflow bridge.
+        (prefab: "log_pile", at: (28.5, -222.0), rot: 354.0),
+        // On the shore track, short of the Inflow bridge.
+        (prefab: "log_pile", at: (55.0, -267.0), rot: 270.0),
     ],
 
     markers: [

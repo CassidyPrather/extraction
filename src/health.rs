@@ -97,7 +97,9 @@ fn take_hits(
         let Ok((mut h, gt, fx)) = players.get_mut(player) else {
             continue;
         };
-        if h.down {
+        // A round that carries no harm (a drone's warning burst kicking up
+        // the ground short of you) isn't a hit.
+        if h.down || hit.damage <= 0.0 {
             continue;
         }
         // Whatever armour it met takes its share first.
