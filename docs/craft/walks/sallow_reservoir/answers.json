@@ -1,0 +1,110 @@
+{
+ "title": "Sallow Reservoir: the first job's walk",
+ "intro": [
+  "The career's first job in Sallow (bring the scour key to the Valve house, scour_key), then on to the nearest way out, the Gauge house: 570 m in all, in the valley's reference weather. Walked by the procedure in `docs/craft/WALK_REVIEW.md`; shots from `walk.stills`, stops from `stops.json`."
+ ],
+ "stops": {
+  "s01": {
+   "beat": "threshold",
+   "vista": "A road into misted pines and birches.",
+   "discover": "Side: more birches, a roof faint.",
+   "for": "The drop: a road into the trees."
+  },
+  "s02": {
+   "beat": "choice",
+   "vista": "The road on, a grey wall far ahead in the mist (the dam).",
+   "discover": "Side: grass, birches.",
+   "for": "A fork, the dam's wall the only subject."
+  },
+  "s03": {
+   "beat": "calm",
+   "vista": "The road on toward the dam, a boulder and a birch by the fork.",
+   "discover": "Side: the trees.",
+   "for": "Walking toward the dam."
+  },
+  "s04": {
+   "beat": "nothing",
+   "vista": "Arriving, a brick wall and a rusted door fill the frame.",
+   "discover": "Side: the Valve house's corner, the trees.",
+   "for": "'You're there' as a wall: the job's place is a door you stand at."
+  },
+  "s05": {
+   "beat": "tension",
+   "vista": "The dam's foot: a long masonry wall over you on the right, a hut far ahead.",
+   "discover": "Side: the valve house and a hut by the dam.",
+   "for": "Under the dam: it should be awe; it's a corridor."
+  },
+  "s06": {
+   "beat": "nothing",
+   "vista": "A path between the dam's wall and a bank, a lamp far up.",
+   "discover": "Side: the dam's face.",
+   "for": "Walled in, no vista."
+  },
+  "s07": {
+   "beat": "climb",
+   "vista": "Up the dam's side, the draw-off tower's lamp, pines beyond.",
+   "discover": "Side: the valve house's roof below.",
+   "for": "Climbing out of the corridor."
+  },
+  "s08": {
+   "beat": "climb",
+   "vista": "The path up between walls, the tower's lamp close.",
+   "discover": "Side: the spillway's edge, pines.",
+   "for": "Still walled; the top's near."
+  },
+  "s09": {
+   "beat": "reveal",
+   "vista": "On the dam top: a road along it, the filter house's wall and lamp.",
+   "discover": "Side: the filter house and its tower.",
+   "for": "Topping the dam, but the water isn't in the frame."
+  },
+  "s10": {
+   "beat": "calm",
+   "vista": "Open grass, a boulder, a road bending away.",
+   "discover": "Side: the filter house and its lamps.",
+   "for": "Walking on."
+  },
+  "s11": {
+   "beat": "calm",
+   "vista": "Grass and the far woods, a shed's corner.",
+   "discover": "Side: the spillway track.",
+   "for": "Calm, and long."
+  },
+  "s12": {
+   "beat": "approach",
+   "vista": "The shore road along the reservoir's mud, a beacon faint ahead.",
+   "discover": "Side: pines on the bank.",
+   "for": "The way out begins to show."
+  },
+  "s13": {
+   "beat": "approach",
+   "vista": "The road by the water, a gantry in the reservoir, the beacon.",
+   "discover": "Side: a bank and a boulder.",
+   "for": "Home along the shore."
+  },
+  "s14": {
+   "beat": "calm",
+   "vista": "The road under the bank, the reservoir's flats.",
+   "discover": "Side: the bank.",
+   "for": "Walking."
+  },
+  "s15": {
+   "beat": "approach",
+   "vista": "The road on, the beacon closer, the flats.",
+   "discover": "Side: the bank and its trees.",
+   "for": "Nearly home."
+  },
+  "s16": {
+   "beat": "relief",
+   "vista": "The gauge house's brick corner and a bank.",
+   "discover": "Side: the beacon's pole, the gauge house.",
+   "for": "Arrived; the beacon is beside, not ahead."
+  }
+ },
+ "notes": [
+  "A wall in your face (s04): the scour key's job ends at the valve house door, nose to the brick; there's no frame of the place.",
+  "A corridor under the dam (s05 to s08, 120 to 240 m): the route runs along the dam's foot between its wall and a bank. The dam should be the valley's awe; here it's a wall you walk beside, and the reservoir is never seen.",
+  "A reveal with nothing in it (s09): on the dam top the water should open out; the frame looks along the road at the filter house instead.",
+  "The rest is calm and plain: the shore road to the Gauge house is fine, if long."
+ ]
+}

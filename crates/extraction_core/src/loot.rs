@@ -287,8 +287,16 @@ pub fn idea(def: &crate::items::ItemDef, catalog: &ItemCatalog) -> String {
 }
 
 /// The most new ideas ([`idea`]) a raid of a career brings after the
-/// first (the first is the starter set): the designer's "too many item
-/// types at once", measured. A raid-0 house has its own cap (tests).
+/// first: the designer's "too many item types at once", measured.
+///
+/// Raid 0 is exempt on purpose, because everything on it is new. It's the
+/// starter set, held instead by a raid-0 house's own cap of 14 kinds
+/// (`a_first_raids_houses_draw_from_a_starter_set`) and by Onboarding's
+/// budget. Zone-wide on Marrow, raid 0 shows 15 ideas (19 kinds). Of
+/// those ideas, 4 are the anomalies' artifacts and 2 the robots' parts
+/// (rolled by those systems, not in houses), and 4 come with the kit
+/// (the PM's family, the dressing, the cleaning kit, bolts). So a first
+/// house shows far fewer.
 pub const MAX_NEW_IDEAS: usize = 12;
 
 #[cfg(test)]
