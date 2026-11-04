@@ -753,10 +753,7 @@ mod tests {
     /// Kinds known not to be held every way yet, and why: this list only
     /// shrinks. A kind off it that fails, or one on it that now passes,
     /// fails the test (take it off).
-    const STILL_FAILING: &[(&str, &str)] = &[(
-        "vest",
-        "1 hold of 240: taken by a face 39 x 46 cm, the palm stops 7 mm off its padding",
-    )];
+    const STILL_FAILING: &[(&str, &str)] = &[];
 
     /// Every kind a hand holds free is held: taken every way, in either
     /// hand, the glove sinks no more than `SINK` into its box, the thumb
