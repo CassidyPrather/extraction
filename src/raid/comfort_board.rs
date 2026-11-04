@@ -80,10 +80,12 @@ pub const CARDS: &[(ComfortCard, f32, f32)] = &[
     // And under that, the gun's steadying.
     (ComfortCard::SteadyAim, 1.08, -0.15),
     // Past the stash's end, a fifth column: the row that was over
-    // the stash, where the rack's brace (once fitted) hid it.
-    (ComfortCard::Binaural, 1.62, 0.20),
-    (ComfortCard::Score, 1.44, 0.20),
+    // the stash, where the rack's brace (once fitted) hid it. Under the
+    // driver's note (1.47 m and up, z 0.12 to 0.48), over the second
+    // rack's shelf.
     (ComfortCard::Captions, 1.26, 0.20),
+    (ComfortCard::Binaural, 1.08, 0.20),
+    (ComfortCard::Score, 0.90, 0.20),
 ];
 
 fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {

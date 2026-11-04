@@ -694,7 +694,7 @@ pub(super) struct RaidView<'w, 's> {
     hatch: Res<'w, crate::raid::lev::Handovers>,
     /// What the driver's firsts said, filled (for the report: a line's
     /// template quoted "{s} things" where "Crate's empty" was said).
-    spoken: Option<Res<'w, super::firsts::Filled>>,
+    spoken: Option<Res<'w, super::firsts::Spoken>>,
     buildings: Query<
         'w,
         's,
@@ -2296,7 +2296,7 @@ pub(super) fn direct_raid(
                 if let Some(filled) = view.spoken.as_ref() {
                     for m in state.moments.iter_mut() {
                         if let Some((t, said)) = filled
-                            .0
+                            .2
                             .iter()
                             .find(|(t, said)| said != t && !said.is_empty() && m.2.ends_with(*t))
                         {

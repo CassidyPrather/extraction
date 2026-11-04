@@ -260,13 +260,14 @@ pub struct FirstMet(pub First);
 
 /// Everything these said, and when (for the bot run's report and tests).
 #[derive(Resource, Default, Debug, Clone)]
-pub struct Spoken(pub Vec<String>, pub Vec<f32>);
-
-/// Each first's line as it was filled: (its template, what's said), for
-/// the bots' report (which noted the template, "{s} things", where
-/// "Crate's empty" was said).
-#[derive(Resource, Default, Debug, Clone)]
-pub struct Filled(pub Vec<(&'static str, String)>);
+/// (Its third: each first's line as it was filled, (its template, what's
+/// said), for the bots' report, which noted the template, "{s} things",
+/// where "Crate's empty" was said.)
+pub struct Spoken(
+    pub Vec<String>,
+    pub Vec<f32>,
+    pub Vec<(&'static str, String)>,
+);
 
 /// Other systems' moments: write this when one happens (each is said once
 /// a career, like the rest). E.g. `MeetFirst(First::NotePinned)` when a
@@ -278,6 +279,11 @@ pub struct MeetFirst(pub First);
 #[derive(Resource, Default)]
 struct Queue {
     lines: VecDeque<String>,
+    /// Each first's lines as filled, till the speaker passes them on to
+    /// `Spoken` (kept here, not in a resource of their own: one more on
+    /// every first's system reordered the schedule, and a physics soak
+    /// test fell through the world's edge).
+    filled: Vec<(&'static str, String)>,
     quiet: f32,
 }
 
@@ -298,7 +304,6 @@ impl Plugin for FirstsPlugin {
         app.init_resource::<Firsts>()
             .init_resource::<Queue>()
             .init_resource::<Spoken>()
-            .init_resource::<Filled>()
             .add_message::<FirstMet>()
             .add_message::<MeetFirst>()
             .add_systems(
@@ -341,14 +346,13 @@ fn meet(
     firsts: &mut Firsts,
     queue: &mut Queue,
     out: &mut MessageWriter<FirstMet>,
-    filled: &mut Filled,
     fill: &dyn Fn(&str) -> String,
 ) -> bool {
     if !firsts.0.insert(f.key()) {
         return false;
     }
     for l in f.lines() {
-        filled.0.push((l, fill(l)));
+        queue.filled.push((l, fill(l)));
     }
     info!("first time: {f:?}");
     if f.urgent() {
@@ -377,30 +381,17 @@ struct Meet<'w> {
     firsts: ResMut<'w, Firsts>,
     queue: ResMut<'w, Queue>,
     out: MessageWriter<'w, FirstMet>,
-    filled: ResMut<'w, Filled>,
 }
 
 impl Meet<'_> {
     fn meet(&mut self, f: First) -> bool {
-        meet(
-            f,
-            &mut self.firsts,
-            &mut self.queue,
-            &mut self.out,
-            &mut self.filled,
-            &|l| l.to_string(),
-        )
+        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, &|l| {
+            l.to_string()
+        })
     }
 
     fn meet_filled(&mut self, f: First, fill: &dyn Fn(&str) -> String) -> bool {
-        meet(
-            f,
-            &mut self.firsts,
-            &mut self.queue,
-            &mut self.out,
-            &mut self.filled,
-            fill,
-        )
+        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, fill)
     }
 
     fn met(&self, f: First) -> bool {
@@ -926,6 +917,8 @@ fn speak(
     mut spoken: ResMut<Spoken>,
     time: Res<Time>,
 ) {
+    let filled: Vec<_> = queue.filled.drain(..).collect();
+    spoken.2.extend(filled);
     queue.quiet -= time.delta_secs();
     if queue.quiet > 0.0 {
         return;
