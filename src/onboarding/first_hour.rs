@@ -2416,6 +2416,12 @@ const ROUND: f32 = 2.0;
 /// straight line through the village went into a house wall and stayed
 /// there): the waypoints after `from`.
 fn round_buildings(world: &World2, from: Vec2, to: Vec2) -> Vec<Vec2> {
+    round_boxes(&walk_boxes(world, from, to), from, to)
+}
+
+/// What a walk from `from` to `to` goes round: the fence, the buildings,
+/// the solids and the sites' kiosks (bar one it starts or ends in).
+fn walk_boxes(world: &World2, from: Vec2, to: Vec2) -> Vec<(Transform, Vec2)> {
     let mut boxes: Vec<(Transform, Vec2)> = fence_boxes(&world.zone);
     boxes.extend(world.entrances.shells.iter().map(|s| (s.xf, s.half)));
     boxes.extend(
@@ -2442,7 +2448,29 @@ fn round_buildings(world: &World2, from: Vec2, to: Vec2) -> Vec<Vec2> {
             .into_iter()
             .filter(|k| !within(k, from) && !within(k, to)),
     );
-    round_boxes(&boxes, from, to)
+    boxes
+}
+
+/// `p`, or, inside one of `boxes` (with a body's clearance), out of it to
+/// its nearest side, a stride clear (a sidestep round a bank landed in the
+/// pumping station's kiosk, and the newcomer stood against its wall).
+fn clear_of(boxes: &[(Transform, Vec2)], p: Vec2) -> Vec2 {
+    let mut p = p;
+    for (xf, half) in boxes {
+        let a = xf.compute_affine();
+        let l = a.inverse().transform_point3(Vec3::new(p.x, 0.0, p.y));
+        let (hx, hz) = (half.x + 0.6, half.y + 0.6);
+        if l.x.abs() >= hx || l.z.abs() >= hz {
+            continue;
+        }
+        let out = if hx - l.x.abs() < hz - l.z.abs() {
+            Vec3::new(l.x.signum() * (half.x + ROUND), 0.0, l.z)
+        } else {
+            Vec3::new(l.x, 0.0, l.z.signum() * (half.y + ROUND))
+        };
+        p = a.transform_point3(out).xz();
+    }
+    p
 }
 
 /// Every underground site's kiosks on the surface, as boxes (the sites
@@ -2797,6 +2825,7 @@ fn route(world: &World2, _view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
 pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
+    let boxes = walk_boxes(world, from, to);
     for p in round_buildings(world, from, to) {
         // Something solid in the way that has no doors (the stoves at Cinder
         // Works' blast furnace held a newcomer twenty minutes): the
@@ -2822,6 +2851,9 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
         // still go up one (the radio mast's, again). Round each that's left.
         for q in way {
             for r in round_banks(&world.zone, at, q, 3) {
+                // (The grid's waypoints and a bank's sidestep know nothing
+                // of buildings: out of any they land in, bar the end.)
+                let r = if r == to { r } else { clear_of(&boxes, r) };
                 t.extend(world.legs(at, r));
                 at = r;
             }
@@ -3747,6 +3779,47 @@ mod indoor_tests {
             "nearest roof from the fight at {at}: {:?}",
             ds.first()
         );
+    }
+
+    /// A waypoint the grid or a bank's sidestep puts inside a building's
+    /// box steps out of it, clear: the walk home past the pumping station
+    /// was sent to (-82.2, -5.4), in its kiosk, and stood at its wall.
+    #[test]
+    fn a_waypoint_in_a_building_steps_out_of_it() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let en = app.world().resource::<crate::robots::doors::Entrances>();
+        let boxes: Vec<(Transform, Vec2)> = en.shells.iter().map(|s| (s.xf, s.half)).collect();
+        let stall = Vec2::new(-82.16, -5.35);
+        let inside = |p: Vec2| {
+            boxes.iter().any(|(xf, h)| {
+                let l = xf
+                    .compute_affine()
+                    .inverse()
+                    .transform_point3(Vec3::new(p.x, 0.0, p.y));
+                l.x.abs() < h.x + 0.3 && l.z.abs() < h.y + 0.3
+            })
+        };
+        assert!(
+            inside(stall),
+            "the stall's waypoint is in the pumping station's box"
+        );
+        let out = super::clear_of(&boxes, stall);
+        assert!(!inside(out), "{stall} -> {out}, still in a box");
+        assert!(out.distance(stall) < 4.0, "{stall} -> {out}: too far");
+        // Clear of every box already: left as it is.
+        let open = Vec2::new(-60.0, -40.0);
+        assert!(!inside(open));
+        assert_eq!(super::clear_of(&boxes, open), open);
     }
 
     /// Outdoors, a walk straight through a solid with no way in (a log
