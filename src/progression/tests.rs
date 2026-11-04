@@ -909,3 +909,30 @@ fn the_ledger_job_puts_the_ledger_in_its_bay_and_takes_it_home() {
         .collect();
     assert!(log.iter().any(|l| l == lines::LEDGER_HOME), "{log:?}");
 }
+
+/// What the driver hands over with a fitting is out by the soonest raid
+/// it can come (one job a raid up the ladder): his SKS with the vice came
+/// a raid before SKS rounds rolled anywhere, a carbine with one box and
+/// none to find (first_jobs, against the loot's one-family-a-raid).
+#[test]
+fn a_gift_comes_with_its_family_out() {
+    use extraction_core::loot::{BUILTIN_LOOT, LootTables};
+    let catalog =
+        extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+            .unwrap();
+    let loot = LootTables::from_ron(BUILTIN_LOOT, &catalog).unwrap();
+    let mut early = Vec::new();
+    let mut jobs = 0;
+    for tier in TIERS.iter() {
+        jobs += tier.jobs;
+        // Fitted home from the tier's last job: the next raid is raid `jobs`.
+        for u in tier.fits {
+            for (id, ..) in crate::progression::gifts(*u) {
+                if let Some(out) = loot.arrives(id).filter(|r| *r > jobs) {
+                    early.push(format!("{u:?}: {id} on raid {jobs}, out from {out}"));
+                }
+            }
+        }
+    }
+    assert!(early.is_empty(), "{early:#?}");
+}
