@@ -35,6 +35,8 @@ pub mod reverb;
 pub mod signature;
 pub mod sling;
 pub mod stoppages;
+#[cfg(test)]
+mod strokes;
 pub mod tracers;
 pub mod visuals;
 pub mod wear;

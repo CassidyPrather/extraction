@@ -20,6 +20,31 @@ named passes there.
 | **F7.** Loading is too fussy to line up (0:20:22 to 0:21:03) | Fixed | The same test, with the box at the magazine's lips: the touch is measured from the nearer of the magazine's middle and its lips, 16 cm. |
 | The range's "shoot it empty" could stall after a short fill (found on the way) | Fixed | `vr_harness::onboarding::station_the_range`: a squeeze on a slide already back counts. |
 
+## Hand-worked mechanisms: flick, steady, let go short
+
+The crossbow's lesson as a class rule: every hand-worked handle on every
+gun, three strokes, held by
+`weapons::strokes::every_hand_worked_mechanism_completes_as_its_kind_should`
+(a flick is past the end in three ticks; a steady pull past the end over
+half a second; short is half way, then let go).
+
+| Handle (guns) | A flick completes | A steady pull completes | Let go short |
+| - | - | - | - |
+| Slide (PM) | Yes: racked hard is how it's worked | Yes, and chambers | Springs home; nothing chambered |
+| Charging handle, closed bolt (AK, RPK, SKS, SVD) | Yes, as a slide | Yes, and chambers | Springs home; nothing chambered |
+| Charging handle, open bolt (PPSh) | Yes: catches on the sear | Yes | Rides home, not caught |
+| Turn bolt (Mosin, TOZ-8) | Yes: a bolt thrown fast is still worked | Yes | Stays where left (no spring) |
+| Pump (MP-133) | Yes | Yes | Stays where left (no spring) |
+| Break action (TOZ double, flare pistol) | Yes: a smart push opens it | Yes | Stays shut short of 6 cm |
+| String (crossbow) | No: the prod's too heavy (`DRAW_WEIGHT`) | Yes: catches on the latch | Slaps home, not caught |
+
+The Nagant has no handle (a loading gate), so it isn't in the table.
+
+Every gun passes as it stands; nothing needed fixing beyond the crossbow
+(ae8ccd8f). The test bites: with `DRAW_WEIGHT` at 0 the crossbow's flick
+catches on the latch and it fails. A closed-bolt stroke that completes must
+also chamber a round, and one that doesn't must not.
+
 ## The shots
 
 - `models/`: the gun model passes (see `models/README.md`).
@@ -72,9 +97,8 @@ On `claude/polish-weapon-feel` at 6ed7ee78, gated green (lib 1329, core
 
 What's next, when work resumes:
 
-- After 6ed7ee78 lands: Gunsmith raises the Nagant's hold; check
-  `every_gun_has_its_own_kick_and_stays_in_hand` on main (expected
-  mosin ~ nagant 18.9).
+- (Done: Gunsmith's raised Nagant hold is on main since 5c2422d, and
+  `every_gun_has_its_own_kick_and_stays_in_hand` passes there.)
 - `audio_handling.py`'s KNOWN holds only the Nagant's cylinder (Audio's
   to fix); it flags when it clears.
 - If lit puffs show black pixels beyond Robot bodies' gun column, or on a
