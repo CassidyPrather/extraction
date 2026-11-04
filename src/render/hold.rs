@@ -239,8 +239,7 @@ impl Grasp {
 
 /// How a glove seated `seat` sits on a box of half-size `half` lying at `item` in the hand's frame.
 pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
-    let to_box = item.compute_affine().inverse();
-    let shift = seat.shift;
+    let to_box = item.compute_affine().inverse() * seat.glove().compute_affine();
     let mut gap = [f32::MAX; 6];
     let mut face = [Vec3::ZERO; 6];
     for f in 0..5 {
@@ -250,8 +249,8 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
             bones(side, f, seat.curl[f]).collect()
         };
         for b in parts {
-            let a = to_box.transform_point3(b.a + shift);
-            let bb = to_box.transform_point3(b.b + shift);
+            let a = to_box.transform_point3(b.a);
+            let bb = to_box.transform_point3(b.b);
             let (g, p) = bone_gap(a, bb, b.r, half);
             if g < gap[f] {
                 gap[f] = g;
@@ -260,9 +259,9 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
         }
     }
     let (ball, r) = thenar(side);
-    let ball = (to_box.transform_point3(ball + shift), r);
+    let ball = (to_box.transform_point3(ball), r);
     for (q, r) in palm_points(side)
-        .map(|p| (to_box.transform_point3(p + shift), 0.0))
+        .map(|p| (to_box.transform_point3(p), 0.0))
         .chain([ball])
     {
         let g = sdf(q, half) - r;
@@ -279,11 +278,22 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Seat {
     pub shift: Vec3,
+    /// The glove turned from the hand (about its origin, then moved
+    /// `shift`): only where, as the hand is turned, the glove can't close
+    /// on it at all (a rod end-on to the palm).
+    pub turn: Quat,
     pub curl: [f32; 5],
     /// The thumb aimed (its way on the unrolled glove, its last joint's
     /// bend): raised toward the palm's plane to lie on a flat side, where
     /// curled it would swing into it.
     pub thumb: (Vec3, f32),
+}
+
+impl Seat {
+    /// The glove's pose in the hand's frame.
+    pub fn glove(&self) -> Transform {
+        Transform::from_translation(self.shift).with_rotation(self.turn)
+    }
 }
 
 /// How far the glove may slide to find a hold, metres, and the step.
@@ -384,6 +394,68 @@ fn open_gap(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> f32 {
 /// touches, the thing is held ([`Grasp::fault`]); failing all, the one
 /// with most fingers on it.
 pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
+    let (mut best, held) = seat_as(side, half, item);
+    if held {
+        return best;
+    }
+    // Turned to the nearest ways a hand could hold its box (each side of
+    // it square to the palm and the fist), nearest first.
+    let mut turns: Vec<Quat> = square_turns()
+        .map(|m| item.rotation * m.inverse())
+        .filter(|t| t.angle_between(Quat::IDENTITY) > 0.05)
+        .collect();
+    turns.sort_by(|a, b| {
+        a.angle_between(Quat::IDENTITY)
+            .total_cmp(&b.angle_between(Quat::IDENTITY))
+    });
+    let mut best_score = score(&grasp(side, half, item, &best));
+    for turn in turns.into_iter().take(TURNS) {
+        let inside = Transform::from_translation(turn.inverse() * item.translation)
+            .with_rotation(turn.inverse() * item.rotation);
+        let (s, held) = seat_as(side, half, inside);
+        let s = Seat {
+            shift: turn * s.shift,
+            turn,
+            ..s
+        };
+        if held {
+            return s;
+        }
+        let sc = score(&grasp(side, half, item, &s));
+        if sc > best_score {
+            (best, best_score) = (s, sc);
+        }
+    }
+    best
+}
+
+/// How many turns of the glove `seat` tries before it gives up.
+const TURNS: usize = 8;
+
+/// A hold that isn't one, ranked: fingers and thumb on it.
+fn score(g: &Grasp) -> usize {
+    g.fingers() + usize::from(g.touches(4)) * 2
+}
+
+/// The 24 turns that lay a box's sides square to the hand's axes.
+fn square_turns() -> impl Iterator<Item = Quat> {
+    let axes = [
+        Vec3::X,
+        Vec3::NEG_X,
+        Vec3::Y,
+        Vec3::NEG_Y,
+        Vec3::Z,
+        Vec3::NEG_Z,
+    ];
+    axes.into_iter().flat_map(move |x| {
+        axes.into_iter()
+            .filter(move |y| x.dot(*y).abs() < 0.5)
+            .map(move |y| Quat::from_mat3(&Mat3::from_cols(x, y, x.cross(y))))
+    })
+}
+
+/// `seat` with the glove as the hand is turned, and whether it holds.
+fn seat_as(side: Side, half: Vec3, item: Transform) -> (Seat, bool) {
     let to_box = item.compute_affine().inverse();
     let n = palm_normal(side);
     let u = n.any_orthonormal_vector();
@@ -442,26 +514,26 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
         curl[4] = thumb.2;
         let seat = Seat {
             shift,
+            turn: Quat::IDENTITY,
             curl,
             thumb: (thumb.0, thumb.1),
         };
         let g = grasp(side, half, item, &seat);
         if g.fault().is_none() {
-            return seat;
+            return (seat, true);
         }
-        let score = g.fingers() + usize::from(g.touches(4)) * 2;
+        let score = score(&g);
         if best.is_none_or(|(s, _)| score > s) {
             best = Some((score, seat));
         }
     }
-    best.map_or(
-        Seat {
-            shift: Vec3::ZERO,
-            curl: [MISS_CURL; 5],
-            thumb: (thumb_way(side, MISS_CURL), THUMB_BEND * MISS_CURL),
-        },
-        |(_, s)| s,
-    )
+    let fist = Seat {
+        shift: Vec3::ZERO,
+        turn: Quat::IDENTITY,
+        curl: [MISS_CURL; 5],
+        thumb: (thumb_way(side, MISS_CURL), THUMB_BEND * MISS_CURL),
+    };
+    (best.map_or(fist, |(_, s)| s), false)
 }
 
 /// A thing of half-size `half` as a hand takes it up: its thinnest side

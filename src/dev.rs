@@ -1087,12 +1087,7 @@ fn first_person_hands(
         let in_hand = crate::render::hold::taken(Side::Left, half);
         let seat = crate::render::hold::seat(Side::Left, half, in_hand);
         commands.entity(item).insert(view(hand * in_hand));
-        let h = glove(
-            &mut commands,
-            Side::Left,
-            hand * Transform::from_translation(seat.shift),
-            seat.curl,
-        );
+        let h = glove(&mut commands, Side::Left, hand * seat.glove(), seat.curl);
         commands.entity(h).queue(move |mut e: EntityWorldMut| {
             if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
                 v.thumb = Some(seat.thumb);

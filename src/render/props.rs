@@ -1649,7 +1649,7 @@ fn pose_hands(
                                 .mul_transform(Transform::from_matrix(
                                     h.offset.compute_affine().inverse().into(),
                                 ))
-                                .mul_transform(Transform::from_translation(seat.shift));
+                                .mul_transform(seat.glove());
                             seated = Some(seat);
                         }
                     }
