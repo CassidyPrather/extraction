@@ -3280,9 +3280,7 @@ mod glove_tests {
             .id();
         app.world_mut().get_mut::<Hand>(hand).unwrap().holding = Some(cell);
         let want = super::super::hold::seat(Side::Right, half, offset);
-        for _ in 0..300 {
-            app.update();
-        }
+        until_seated(&mut app, &[glove], |_| {});
         let v = app.world().get::<HandVisual>(glove).unwrap();
         for f in 0..4 {
             assert!(
@@ -3305,6 +3303,32 @@ mod glove_tests {
                 && at.rotation.angle_between(drawn.rotation) < 1e-3,
             "drawn at {at:?}, the seat's {drawn:?}"
         );
+    }
+
+    /// Runs `app` until each glove has its seat and has settled on it (a
+    /// second after it landed: the curls ease too), `each` after every
+    /// frame. Seats are worked out on the shared async pool, which a full
+    /// test run keeps busy: not a fixed count of frames, but no more than
+    /// 20 s.
+    fn until_seated(app: &mut App, gloves: &[Entity], mut each: impl FnMut(&mut App)) {
+        let start = std::time::Instant::now();
+        loop {
+            app.update();
+            each(app);
+            let settled = gloves.iter().all(|g| {
+                matches!(
+                    app.world().get::<HandVisual>(*g).and_then(|v| v.seat.as_ref()),
+                    Some((_, Seating::Ready { age, .. })) if *age >= 1.0
+                )
+            });
+            if settled {
+                return;
+            }
+            assert!(
+                start.elapsed().as_secs_f32() < 20.0,
+                "no seat landed in 20 s"
+            );
+        }
     }
 
     /// A seated glove's app: a player, its two hands and their gloves.
@@ -3393,13 +3417,12 @@ mod glove_tests {
         app.world_mut().get_mut::<Hand>(hands[0]).unwrap().holding = Some(item);
         let mut last = *app.world().get::<Transform>(gloves[0]).unwrap();
         let mut worst = (0.0f32, 0.0f32);
-        for _ in 0..120 {
-            app.update();
+        until_seated(&mut app, &gloves[..1], |app| {
             let at = *app.world().get::<Transform>(gloves[0]).unwrap();
             worst.0 = worst.0.max(at.translation.distance(last.translation));
             worst.1 = worst.1.max(at.rotation.angle_between(last.rotation));
             last = at;
-        }
+        });
         assert!(
             want.shift.length() > 0.01 || want.turn.angle_between(Quat::IDENTITY) > 0.5,
             "a seat worth settling onto: {want:?}"
@@ -3469,9 +3492,7 @@ mod glove_tests {
             .get_mut::<Hand>(hands[1])
             .unwrap()
             .supporting = Some(door);
-        for _ in 0..300 {
-            app.update();
-        }
+        until_seated(&mut app, &gloves, |_| {});
         for (i, side) in [Side::Right, Side::Left].into_iter().enumerate() {
             let v = app.world().get::<HandVisual>(gloves[i]).unwrap();
             let at = *app.world().get::<Transform>(gloves[i]).unwrap();
