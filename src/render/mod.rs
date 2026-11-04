@@ -19,6 +19,7 @@ pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
 pub mod held_light;
+pub mod hold;
 pub mod hold_rate;
 pub mod hurt;
 pub mod kit;

@@ -538,7 +538,7 @@ struct Finger {
 }
 
 /// Segment lengths per finger, knuckle outwards, metres.
-const FINGER_BONES: [[f32; 3]; 5] = [
+pub(crate) const FINGER_BONES: [[f32; 3]; 5] = [
     [0.040, 0.025, 0.020],
     [0.044, 0.028, 0.022],
     [0.041, 0.026, 0.020],
@@ -828,7 +828,7 @@ fn glove_model(side: Side) -> &'static str {
 /// A finger's first joint on the (unrolled) glove: fingers point along -Z
 /// from the palm's front edge and curl toward its underside (-Y); the index
 /// is on the thumb's side.
-fn finger_root(side: Side, finger: usize) -> Vec3 {
+pub(crate) fn finger_root(side: Side, finger: usize) -> Vec3 {
     let thumb_side = -side.sign();
     if finger == 4 {
         Vec3::new(0.038 * thumb_side, -0.008, -0.005)
@@ -845,7 +845,7 @@ const FAN: f32 = 0.04;
 
 /// A finger's own spread with the hand open, radians toward the thumb: the
 /// fingers fan away from the index (see `FAN`).
-fn rest_spread(finger: usize) -> f32 {
+pub(crate) fn rest_spread(finger: usize) -> f32 {
     -(finger.min(3) as f32) * FAN
 }
 
@@ -998,7 +998,13 @@ fn joint_rotation(side: Side, finger: usize, joint: usize, c: f32) -> Quat {
 }
 
 /// `joint_rotation` with the finger spread `spread` (see `finger_aim_spread`).
-fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread: f32) -> Quat {
+pub(crate) fn joint_rotation_spread(
+    side: Side,
+    finger: usize,
+    joint: usize,
+    c: f32,
+    spread: f32,
+) -> Quat {
     if joint == 0 {
         return finger_aim_spread(side, finger, c, spread);
     }
