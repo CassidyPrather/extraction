@@ -270,7 +270,12 @@ fn radio_calls(
     // A career's first job comes home from the gate it went out by, free:
     // the way back is the way it came, not across the valley to a
     // rendezvous (`docs/FIRST_HOUR.md`).
-    let first_job = progression.is_some_and(|p| p.0.done == 0);
+    // (And the second: a newcomer's gentle jobs all come home the way they
+    // went, or job 2 in Kettle was 75 m there and 506 m home with no fuel
+    // in the crate: Map design's lint.)
+    let done = progression.as_ref().map(|p| p.0.done);
+    let first_job = done == Some(0);
+    let free = done.is_some_and(extraction_core::progression::free_short_run);
     for call in calls.read() {
         match raid.phase {
             Phase::Out => {
@@ -285,7 +290,7 @@ fn radio_calls(
                     .markers_of(&MarkerKind::ShortExfil)
                     .any(|m| extraction_core::geom::dist(m.at, here) < 40.0);
                 if at_short {
-                    let mut paid = first_job;
+                    let mut paid = free;
                     for mut stash in &mut stashes {
                         let can = stash.contents.iter().copied().find(|e| {
                             items
@@ -644,12 +649,21 @@ mod tests {
 
     #[test]
     fn the_short_exfil_burns_a_can_of_fuel() {
-        assert!(short_exfil_burns_the_can(1), "the can was burnt");
+        let past = extraction_core::contracts::GENTLE_JOBS;
+        assert!(short_exfil_burns_the_can(past), "the can was burnt");
     }
 
+    /// The gentle jobs both come home free by the gate (job 2 in Kettle
+    /// was 75 m there and 506 m home to a rendezvous: Map design's lint).
     #[test]
-    fn the_first_jobs_short_run_is_on_the_house() {
-        assert!(!short_exfil_burns_the_can(0), "the can was kept");
+    fn the_gentle_jobs_short_run_is_on_the_house() {
+        for done in 0..extraction_core::contracts::GENTLE_JOBS {
+            assert!(
+                !short_exfil_burns_the_can(done),
+                "job {}: the can was kept",
+                done + 1
+            );
+        }
     }
 
     /// Calls the truck to the short exfil with a can in the stash, `done` jobs
