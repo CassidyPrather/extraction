@@ -576,5 +576,23 @@ for name, build in (("felt_boots", felt_boots), ("snow_shovel", snow_shovel),
                     ("stove_pipe_rack", stove_pipe_rack)):
     prop(name, build)
 
-for name, build in (("sledge", sledge), ("snow_shovel_out", snow_shovel_out)):
+def snow_pole():
+    """A snow pole marking a track over open snow: a 9 cm pole 2.5 m out
+    of the snow, its top half banded red and white to be seen against
+    the white from a pole or two off, a cap on top."""
+    p = Part("static")
+    r = 0.045
+    # The foot, weathered timber, from below the snow to half way.
+    p.cyl(r, -0.3, 1.25, "Timber", segs=10, xf=UP)
+    # Five bands, red at the top.
+    for k in range(5):
+        y0 = 1.25 + k * 0.25
+        mat = "Red" if (4 - k) % 2 == 0 else "Enamel"
+        p.cyl(r, y0, y0 + 0.25, mat, segs=10, xf=UP)
+    p.cyl(r + 0.008, 2.5, 2.53, "Iron", segs=10, xf=UP, chamfer=0.006)
+    return [p]
+
+
+for name, build in (("sledge", sledge), ("snow_shovel_out", snow_shovel_out),
+                    ("snow_pole", snow_pole)):
     outdoor(name, build)

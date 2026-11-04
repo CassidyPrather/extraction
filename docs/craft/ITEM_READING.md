@@ -351,3 +351,22 @@ Face-on from 2 m, standing, in drizzle at 11:00.
   (`ivy_keeps_off_lettering`). Kettle above, Cinder below:
   ![gate blocks, before and after](../shots/props/gate_block_ivy_before_after.jpg)
 
+### The farmhouse with Progression's placement rule (4 November)
+
+Progression's rule (claude/polish-progression, d525af94): on a
+career's first two raids a Tiny or Small kind rolled at a spot out of
+0.75–1.6 m moves to one in reach in the same building; a Tiny one
+needs a flat top or the 1.25 shelf (the 0.80 shelf sits under a board,
+shaded and seen edge-on). The same cameras at raid 0, main left, the
+rule right (the roll differs; where each kind lands is the point):
+![farmhouse, before and after the rule](../shots/items/raid0_farmhouse_placement_before_after.jpg)
+The kitchen worktop now carries a matchbox and a dressing, lit; the
+low shelf holds Small kinds (crackers, a dressing) only:
+![the tops, close](../shots/items/raid0_farmhouse_placement_tops.jpg)
+
+**Fixed: the canteen read black indoors.** From the door, two canteens
+on the table were near-black bottles: their aluminium was `Zinc`,
+0.9 metallic, a mirror of the dark room. They are `Aluminium` now, an
+army flask's oxidised matte (lighter, half as metallic, rougher):
+![canteen, zinc and aluminium](../shots/items/canteen_aluminium_before_after.jpg)
+

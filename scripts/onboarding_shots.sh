@@ -15,8 +15,8 @@ trap 'rm -rf "$DATA"' EXIT
 # underscores), not its number: stations come and go, and by number the
 # shots drifted onto blank boards.
 SHOTS=(
-  "truck_bed your_kit -0.3,15.77,95.4,180,-14"
-  "settings settings -0.3,15.77,95.4,180,-14"
+  "truck_bed your_kit -0.3,16.3,95.4,180,-14"
+  "settings settings -0.3,16.3,95.4,180,-14"
   "off_the_steps getting_about -0.6,0,94.3,345,-6"
   "getting_about getting_about -3.5,0,91.5,0,-6"
   "out_of_reach out_of_reach -3.4,0,86.8,345,4"
