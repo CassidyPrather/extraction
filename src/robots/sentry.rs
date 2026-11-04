@@ -9,7 +9,7 @@
 //! - **Behind it is blind.** Its head can't turn past its arc: get round
 //!   behind it and, even with you spotted, it stares at the end of its
 //!   travel.
-//! - **It warns.** A chirp (and the lamp flaring red) a second before the
+//! - **It warns.** A chirp (and the lamp flaring red) two and a half seconds before the
 //!   first round; duck out of sight a while and it has to warn again.
 //! - **Draw it off.** A thrown thing landing within earshot swings it to
 //!   look for five seconds; a hearth or a mirror shard flying past, it
@@ -594,7 +594,8 @@ fn sentry_mind(
                 };
                 let muzzle = ggt.transform_point(Vec3::new(0.0, 0.0, -0.32));
                 // Its first burst is a warning: wide, and short of you,
-                // kicking up the ground at your feet.
+                // kicking up the ground at your feet, and harmless (every
+                // gunner's first shots after its tell: `tells_tests`).
                 let warning = s.gun.warning();
                 let aim = if warning {
                     let back = (muzzle - p) * Vec3::new(1.0, 0.0, 1.0);
@@ -612,7 +613,7 @@ fn sentry_mind(
                     origin: muzzle,
                     direction: (aim - muzzle).normalize_or(Vec3::NEG_Z),
                     speed: 600.0,
-                    damage: DAMAGE,
+                    damage: if warning { 0.0 } else { DAMAGE },
                     projectiles: 1,
                     spread: if warning { SPREAD * 6.0 } else { SPREAD },
                     recoil: 0.0,
@@ -759,6 +760,7 @@ pub(crate) mod tests {
 
     pub(crate) fn world_with_sentry(at: [f32; 2], centre: f32, arc: f32) -> (App, Entity) {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -831,10 +833,10 @@ pub(crate) mod tests {
     }
 
     /// A player in front of it, in the open, in its arc: when its sweep
-    /// comes round it chirps, and only then, a second later, fires.
+    /// comes round it chirps, and only then, a few seconds later, fires.
     /// The same player behind it is never seen, never shot.
     fn stand_and_watch(behind: bool, cut: bool) -> (bool, bool, f32) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app
             .init_resource::<Acts>()
             .init_resource::<Hurts>()
@@ -921,7 +923,7 @@ pub(crate) mod tests {
             out.0.extend(shots.read().map(|s| s.seed));
         }
         let run = |pad: usize| {
-            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
             vr.app.init_resource::<Seeds>().add_systems(Update, seeds);
             for k in 0..pad {
                 vr.app.world_mut().spawn(Name::new(format!("pad {k}")));
@@ -972,7 +974,7 @@ pub(crate) mod tests {
         use crate::interact::GripRole;
         use crate::interact::tools::cutters::{JAWS, LEFT};
         use crate::rig::Side;
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {
             let mut c = vr.app.world_mut().commands();
@@ -1092,7 +1094,7 @@ pub(crate) mod tests {
     /// heavy.
     #[test]
     fn a_heavy_walks_into_its_fire() {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app
             .init_resource::<RobotHits>()
             .add_systems(Update, count_robot_hits);
@@ -1119,16 +1121,26 @@ pub(crate) mod tests {
             vr.app.world_mut().flush();
             (s, h)
         };
+        // Standing in the line of fire (not off round a search of its post,
+        // whose tour goes wherever the post's surroundings send it).
+        *vr.app.world_mut().get_mut::<Brain>(heavy).unwrap() = Brain::Working {
+            at: zone.on_ground(40.0, 223.0),
+            left: 999.0,
+        };
         vr.stand(zone.on_ground(40.0, 214.0), 0.0);
-        vr.step(90 * 15);
-        let fired = vr
-            .app
-            .world()
-            .get::<Sentry>(sentry)
-            .unwrap()
-            .gun
-            .warned
-            .is_some();
+        // Opened up at any time in it (its warning lapses once it's lost you).
+        let mut fired = false;
+        for _ in 0..15 {
+            vr.step(90);
+            fired |= vr
+                .app
+                .world()
+                .get::<Sentry>(sentry)
+                .unwrap()
+                .gun
+                .warned
+                .is_some();
+        }
         let hits = vr.app.world().resource::<RobotHits>().0;
         assert!(fired, "it opened up on you");
         assert!(hits > 0, "and the heavy in the way took {hits} rounds");

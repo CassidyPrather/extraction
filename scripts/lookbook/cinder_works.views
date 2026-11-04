@@ -1,13 +1,13 @@
 # Cinder Works lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m; ~h over the ground; =y as given, underground too).
-c01_gate        -110,0,255,10,-2     # from the insertion, up the valley
-c02_ash_row     -55,0,190,0,-3       # Ash Row
-c03_canal       -60,0,72,90,-6       # along the canal
-c04_works       0,0,40,53,4          # the works and the chimney
-c05_dead_wood   -150,0,-150,0,-2     # inside the burnt wood
-c06_wood_edge   -120,0,-220,315,0    # toward the fire lookout
-c07_slag        170,0,-60,18,-3      # the slag heaps
-c08_ash_pit     -170,0,0,270,-6      # the ash pit
-c09_sidings     75,0,-200,0,-3       # north sidings
-c10_chimney     -20,0,-100,115,6     # the chimney from the north-west
-c11_aerial      -110,45,300,15,-8    # over the gate, toward the chimney
-c13_cellars_pit -191.0,=13.17,166.5,262,-2  # the furnace cellars: over the ash pit from the near ledge
+c01_gate        -71,0,184,10,-2     # from the insertion, up the valley
+c02_ash_row     -40,0,144,0,-3       # Ash Row
+c03_canal       -43,0,45,90,-6       # along the canal
+c04_works       -5,0,43,53,4          # the works and the chimney
+c05_dead_wood   -104,0,-99,0,-2     # inside the burnt wood
+c06_wood_edge   -77,0,-169,315,0    # toward the fire lookout
+c07_slag        134,0,-47,18,-3      # the slag heaps
+c08_ash_pit     -119,0,0,270,-6      # the ash pit
+c09_sidings     52,0,-126,0,-3       # north sidings
+c10_chimney     -11,0,-68,115,6     # the chimney from the north-west
+c11_aerial      -72,45,227,15,-8    # over the gate, toward the chimney
+c13_cellars_pit -134.5,=13.17,117.5,262,-2  # the furnace cellars: over the ash pit from the near ledge

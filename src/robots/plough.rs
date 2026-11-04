@@ -816,7 +816,7 @@ mod tests {
     /// A plough on a straight road from `a` toward `b` (x/z), running
     /// whatever the snow.
     fn world(a: Vec2, b: Vec2) -> (crate::vr_harness::Vr, Zone, Entity) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {
@@ -900,6 +900,7 @@ mod tests {
     #[test]
     fn the_machines_leave_the_director_room() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: true,
             ..Default::default()
         };

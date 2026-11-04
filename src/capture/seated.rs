@@ -127,7 +127,7 @@ fn tris(path: &std::path::Path) -> Vec<glb::Tri> {
 
 /// How far into `solid` the deepest of `pts` lies, and how many lie in
 /// deeper than [`DEPTH`]: (depth, count, a point).
-fn through(solid: &[[Vec3; 3]], pts: &[Vec3]) -> (f32, usize, Vec3) {
+pub(crate) fn through(solid: &[[Vec3; 3]], pts: &[Vec3]) -> (f32, usize, Vec3) {
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     for t in solid {
         for p in t {
@@ -376,22 +376,7 @@ mod tests {
     }
 
     /// Faults waiting on their owners, by the start of their line.
-    const KNOWN: &[&str] = &[
-        // The scopes' bodies sit 2-3 mm down over the receivers' rear
-        // sights: their mount heights (`gadgets::gun_mount_points`) and
-        // models together (Models, next round).
-        "ak74 through pso_scope",
-        "rpk74 through pu_scope",
-        "ak74 through pu_scope",
-        "rpk74 through pso_scope",
-        "sks through pso_scope",
-        "svd through pso_scope",
-        "pu_scope in ak74: faces fight",
-        "pu_scope in rpk74: faces fight",
-        // The drum's body beds 4 mm into the stock's well (Models, next
-        // round).
-        "ppsh_drum through ppsh",
-    ];
+    const KNOWN: &[&str] = &[];
 
     /// Every magazine sits in every gun it fits without going through it
     /// or fighting it.

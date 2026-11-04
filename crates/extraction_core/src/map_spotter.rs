@@ -59,6 +59,9 @@ pub struct Spotter {
     pub name: String,
     /// Its winch.
     pub at: P2,
+    /// How far it sees: its own sight, or less where its winch stands in a
+    /// region that caps how far machines notice (`Region::notice`).
+    pub sight: f32,
 }
 
 impl Spotter {
@@ -73,6 +76,7 @@ impl Spotter {
                 m.name.clone()
             },
             at: m.at,
+            sight: spotter::SIGHT,
         })
     }
 
@@ -88,7 +92,7 @@ impl Spotter {
         let d = dist(self.at, p);
         let drop = self.eye(hm) - (hm.height(p) + BODY);
         d > 0.5
-            && d.hypot(drop) <= spotter::SIGHT
+            && d.hypot(drop) <= self.sight
             && drop.atan2(d).abs() <= (spotter::FOV * 0.5).to_radians()
     }
 
@@ -115,7 +119,7 @@ impl Spotter {
 }
 
 fn field_with(s: &Spotter, hm: &Heightmap, blocks: &[Block], g: &NavGrid) -> Field {
-    let r = spotter::SIGHT;
+    let r = s.sight;
     let mut seen = vec![false; g.n * g.n];
     let (mut reachable, mut visible) = (0, 0);
     let lo = g.cell_of([s.at[0] - r, s.at[1] - r]).unwrap_or((0, 0));
@@ -146,7 +150,20 @@ fn field_with(s: &Spotter, hm: &Heightmap, blocks: &[Block], g: &NavGrid) -> Fie
 
 /// The map's spotters.
 pub fn spotters(map: &MapDef) -> Vec<Spotter> {
-    map.markers.iter().filter_map(Spotter::of).collect()
+    map.markers
+        .iter()
+        .filter_map(Spotter::of)
+        .map(|mut s| {
+            for reg in &map.regions {
+                if let Some(n) = reg.notice {
+                    if crate::geom::point_in_polygon(&reg.polygon, s.at) {
+                        s.sight = s.sight.min(n);
+                    }
+                }
+            }
+            s
+        })
+        .collect()
 }
 
 /// Metres of a route (points every `map_lint::STEP`) on seen cells, and

@@ -6,7 +6,8 @@ nothing else in the model.
     blender -b --factory-startup --python art/check.py -- assets/models/vehicles/truck.glb ...
 
 A directory checks every .glb under it. Prints each fault with where it
-is, in game space (metres, +Y up), and exits 1 if any model has one.
+is, in game space (metres, +Y up), and exits 1 if any model has one, or
+if two of the lettering's stencil glyphs are twins (`check_glyphs.py`).
 """
 
 import os
@@ -17,8 +18,11 @@ import bpy
 from mathutils import Vector
 
 # Faces closer than this along their normal, overlapping by more than
-# MIN_AREA, z-fight at a few metres in a headset.
+# MIN_AREA, z-fight at a few metres in a headset. An item is held 0.3 to
+# 3 m from the eye, where a millimetre parts (its prints stand
+# `art/items/_kit.py`'s LIFT off what they're on).
 PLANE_GAP = 0.003
+ITEM_GAP = 0.001
 MIN_AREA = 2e-4
 # A piece whose bounds come no nearer than this to any other piece floats.
 TOUCH = 0.005
@@ -92,19 +96,19 @@ def clip(subject, clipper):
     return out
 
 
-def zfighting(objs):
+def zfighting(objs, gap=PLANE_GAP):
     faces = faces_of(objs)
     buckets = defaultdict(list)
     for i, f in enumerate(faces):
         n = f[1]
-        buckets[(round(n.x, 2), round(n.y, 2), round(n.z, 2), round(f[2] / PLANE_GAP))].append(i)
+        buckets[(round(n.x, 2), round(n.y, 2), round(n.z, 2), round(f[2] / gap))].append(i)
     hits = defaultdict(lambda: [0.0, None])
     for idx in buckets.values():
         for x in range(len(idx)):
             for y in range(x + 1, len(idx)):
                 a, b = faces[idx[x]], faces[idx[y]]
                 # Neighbours share a vertex; a face can't fight itself.
-                if abs(a[2] - b[2]) > PLANE_GAP or a[4] & b[4]:
+                if abs(a[2] - b[2]) > gap or a[4] & b[4]:
                     continue
                 # A node and its far stand-ins (`<name>_lod1`, `_lod2`) are
                 # never drawn together.
@@ -189,7 +193,8 @@ def main():
     bad = 0
     for path in paths:
         objs = load(path)
-        faults = zfighting(objs) + floating(objs)
+        item = os.sep + "items" + os.sep in os.path.abspath(path)
+        faults = zfighting(objs, ITEM_GAP if item else PLANE_GAP) + floating(objs)
         # World props carry their baked ambient occlusion (art/props/_kit.py
         # `bake_ao`) as a colour attribute; one without it would read flat.
         if os.sep + "props" + os.sep in os.path.abspath(path):
@@ -200,7 +205,15 @@ def main():
             print("    " + f)
         bad += bool(faults)
     print(f"{len(paths) - bad} of {len(paths)} models clean")
-    sys.exit(1 if bad else 0)
+    # The stencil glyphs the models' lettering is drawn in: none two alike
+    # at reading size (art/check_glyphs.py).
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import check_glyphs
+    found, n = check_glyphs.twins()
+    for iou, a, b in found:
+        print(f"FAIL glyphs {a} and {b} alike ({iou:.2f})")
+    print(f"{n} glyphs, {len(found)} twin pairs")
+    sys.exit(1 if bad or found else 0)
 
 
 main()

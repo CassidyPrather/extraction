@@ -479,16 +479,31 @@ fn fresh_save(map: &str) -> SaveGame {
         inserted: Vec::new(),
         loads: Default::default(),
     };
-    let mut pistol = item("pm_pistol", 0, [0.2, 0.05, -0.4]);
+    // On its side, the grip up and toward you, the muzzle away (stood on
+    // its grip, from above it was a stick: the top of the slide).
+    let mut pistol = item("pm_pistol", 0, [0.2, 0.068, -0.4]);
+    let side = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+        * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+    pistol.turn = side.to_array();
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
+    // On its back, its face up (grille, tuning window, lamp): stood up,
+    // from above it was an olive stub and an aerial on the crate's dark
+    // floor (docs/craft/ITEM_READING.md).
+    let mut radio = item("radio", 0, [-0.2, 0.04, 0.0]);
+    radio.turn = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2).to_array();
+    // The spare magazine on its side: stood up, from above it was a dark
+    // sliver (its feed lips) on the crate's floor.
+    let mut mag = item("pm_mag", 8, [0.25, 0.04, -0.2]);
+    mag.turn = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array();
     let mut torch = item("flashlight", 0, [0.0, 0.05, 0.2]);
     torch.inserted.push(item("power_cell", 0, [0.0; 3]));
     s.stash = vec![
         pistol,
         torch,
-        item("pm_mag", 8, [0.25, 0.05, -0.2]),
-        item("ammo_9x18", 16, [-0.2, 0.05, -0.4]),
-        item("radio", 0, [-0.2, 0.05, 0.0]),
+        mag,
+        // Clear of the map case (under it at (-0.2, -0.4), it was hidden).
+        item("ammo_9x18", 16, [0.2, 0.05, 0.12]),
+        radio,
         item("field_dressing", 0, [0.2, 0.05, 0.3]),
         item("canned_stew", 0, [-0.25, 0.05, 0.4]),
         item("cleaning_kit", 0, [0.0, 0.05, -0.1]),

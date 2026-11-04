@@ -17,6 +17,8 @@ impl Plugin for DevPlugin {
                     count_frames,
                     screenshot_when_ready,
                     gallery,
+                    turn_line_up.after(gallery),
+                    break_line_up.after(gallery),
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
@@ -32,6 +34,8 @@ impl Plugin for DevPlugin {
                     treat_for_gallery,
                     spall_for_gallery,
                     plate_hits_for_gallery,
+                    impact_hits_for_gallery,
+                    present_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
@@ -43,7 +47,16 @@ impl Plugin for DevPlugin {
 struct FrameCount {
     frames: u32,
     requested: bool,
+    settle: ShotSettle,
 }
+
+/// Frames a screenshot waits after everything's in. On the software
+/// renderer a shot 5 frames after "everything in" had no ground, trees
+/// or gallery subject near the camera (a far truck and lamps only); 9
+/// frames after, all of it. Fixed `--frames` raced that, so a gun
+/// close-up came out empty in one half of a before/after and not the
+/// other.
+const SHOT_SETTLE: u32 = 15;
 
 fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
@@ -54,10 +67,34 @@ fn count_frames(mut count: ResMut<FrameCount>) {
 /// hang a shot).
 const SHOT_WAIT_MAX: f32 = 180.0;
 
-/// `--screenshot`: after `--frames` frames, and once the ground's and the
-/// buildings' materials are on the GPU and the buildings dressed
-/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
-/// had trees floating over no ground.
+/// One rule for every capture (`--screenshot`, the tour's views and so
+/// the lookbook): the world all in (`timeline::Loaded`, and
+/// `WorldReady`: the forest with the near trees' cards round the eye,
+/// the buildings dressed, every material and pipeline ready) for
+/// [`SHOT_SETTLE`] frames running, counted again from nothing whenever
+/// it isn't (a camera moved to the next view, new cards streaming in).
+#[derive(Default, Clone, Copy)]
+pub(crate) struct ShotSettle {
+    ready_for: u32,
+}
+
+impl ShotSettle {
+    /// This frame's: whether the shot can be taken.
+    pub(crate) fn tick(&mut self, ready: bool) -> bool {
+        self.ready_for = if ready { self.ready_for + 1 } else { 0 };
+        self.ready_for > SHOT_SETTLE
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.ready_for = 0;
+    }
+}
+
+/// `--screenshot`: after `--frames` frames, and once everything's in
+/// (`timeline::Loaded`, the world ready) and has been for [`SHOT_SETTLE`]
+/// frames: taken at a fixed frame, a slow machine's shot had trees
+/// floating over no ground, and one just after everything was in had no
+/// ground at all.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -65,11 +102,18 @@ fn screenshot_when_ready(
     world: crate::render::timeline::WorldReady,
     time: Res<Time<Real>>,
     loading: Option<Res<crate::rig::loading::LoadingView>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
-    if count.requested || count.frames < opts.frames {
+    if count.requested {
+        return;
+    }
+    let settled = count
+        .settle
+        .tick(loaded.is_some() && world.ready_for_a_shot());
+    if count.frames < opts.frames {
         return;
     }
     // In a headset, the world once the loading view has lifted
@@ -78,13 +122,13 @@ fn screenshot_when_ready(
         l.lifted_at
             .is_some_and(|t| crate::render::timeline::since_start() - t > 2.0)
     }) || std::env::var_os("EXTRACTION_SHOT_LOADING").is_some();
-    if !(world.materials() && world.props() && shown) {
+    if !(settled && world.materials() && world.props() && shown) {
         if time.elapsed_secs() < SHOT_WAIT_MAX {
             return;
         }
         warn!(
             "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
-             (materials ready: {}, buildings dressed: {})",
+             (materials ready: {}, buildings dressed: {}, settled: {settled})",
             world.materials(),
             world.props()
         );
@@ -108,8 +152,10 @@ fn screenshot_when_ready(
 fn sights_to_the_eye(
     opts: Res<LaunchOptions>,
     zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
     mut guns: Query<(
         &crate::weapons::Gun,
+        &crate::items::Item,
         &mut Transform,
         &mut crate::weapons::feel::Handling,
     )>,
@@ -118,9 +164,9 @@ fn sights_to_the_eye(
     else {
         return;
     };
-    if !spec.starts_with("sights:") {
+    let Some(id) = spec.strip_prefix("sights:") else {
         return;
-    }
+    };
     let ground = zone.ground(cam.x, cam.z);
     let eye_y = if cam.y == 0.0 {
         ground + 1.7
@@ -129,7 +175,12 @@ fn sights_to_the_eye(
     };
     let eye = Vec3::new(cam.x, eye_y, cam.z);
     let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
-    for (gun, mut tf, mut handling) in &mut guns {
+    // The gallery's gun only: one lying in the zone would come to the eye
+    // too, over it.
+    for (gun, item, mut tf, mut handling) in &mut guns {
+        if catalog.get(item.kind()).id != id {
+            continue;
+        }
         // The eye 4 cm behind the rear sight, on the line to the front post.
         let rear = gun.layout.sight.translation;
         let front = crate::weapons::feel::front_post(gun);
@@ -141,10 +192,90 @@ fn sights_to_the_eye(
     }
 }
 
+/// A `--gallery robots:` line-up: each machine, the yaw it faces (a
+/// walker's `yaw`), and where it stood when it came (taken on its first
+/// frame).
+#[derive(Resource)]
+struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
+
+/// Holds a line-up's machines still, facing the way they were asked.
+/// A walker-bodied one is held by its walk: no mind, no path, its
+/// `Walker::yaw` set, so its legs stay under it (snapping its body back
+/// each frame left its drawn legs striding on, and its knee marks hanging
+/// off them). Anything else (a drone) is pinned where it came.
+fn turn_line_up(
+    mut commands: Commands,
+    line_up: Option<ResMut<LineUp>>,
+    mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
+    mut walkers: Query<&mut crate::robots::walker::Walker>,
+) {
+    let Some(mut line_up) = line_up else {
+        return;
+    };
+    for (e, yaw, at) in line_up.0.iter_mut() {
+        if let Ok(mut w) = walkers.get_mut(*e) {
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+                *at = Some(Vec3::ZERO);
+            }
+            w.yaw = *yaw;
+            w.path.clear();
+            continue;
+        }
+        if let Ok(mut t) = placed.get_mut(*e) {
+            let at = *at.get_or_insert(t.translation);
+            t.translation = at;
+        }
+    }
+}
+
+/// `walker!broken` in a line-up: the job-2 walker, its gun dead and one
+/// leg failing (5%), as `robots::reel` breaks a walker. Broken a few frames
+/// in, so it has its parts, and left a second for the smoke and limp.
+#[derive(Resource)]
+struct BrokenWalkers(Vec<Entity>, u32);
+
+fn break_line_up(
+    broken: Option<ResMut<BrokenWalkers>>,
+    mut parts: Query<(Entity, &mut crate::robots::RobotPart, &GlobalTransform)>,
+    mut destroyed: MessageWriter<crate::robots::PartDestroyed>,
+) {
+    use crate::robots::PartRole;
+    let Some(mut broken) = broken else {
+        return;
+    };
+    broken.1 += 1;
+    if broken.1 != 4 {
+        return;
+    }
+    for (e, mut p, gt) in &mut parts {
+        if !broken.0.contains(&p.robot) {
+            continue;
+        }
+        match p.role {
+            PartRole::Weapon => {
+                p.hp = 0.0;
+                destroyed.write(crate::robots::PartDestroyed {
+                    robot: p.robot,
+                    part: e,
+                    role: p.role,
+                    at: gt.translation(),
+                });
+            }
+            PartRole::Leg(1) => p.hp = p.max_hp * 0.05,
+            _ => {}
+        }
+    }
+}
+
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
 /// `--camera` to look at, held still. SUBJECT is a gun id (shown from its
 /// right side with its magazine seated), a magazine id, `guns` (all four
-/// stacked), `drone` or `walker`; `<gun>+open` works its action instead of
+/// stacked), `drone`, `walker` or `metals` (a roughness ladder of metal
+/// spheres); `<gun>+open` works its action instead of
 /// seating a magazine. YAW turns it about the vertical (degrees),
 /// DIST is how far ahead it sits (metres), SHIFT slides it along its own
 /// Z so another part of a long gun is centred (-0.4 frames an AK's muzzle).
@@ -155,7 +286,10 @@ fn sights_to_the_eye(
 fn gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
-    zone: Option<Res<crate::world::Zone>>,
+    (zone, stood): (
+        Option<Res<crate::world::Zone>>,
+        Res<crate::render::StoodEye>,
+    ),
     catalog: Res<crate::items::Catalog>,
     mut guns: Query<&mut crate::weapons::Gun>,
     mut sockets: Query<&mut crate::interact::Socket>,
@@ -175,6 +309,12 @@ fn gallery(
     else {
         return;
     };
+    // Standing there (y 0), the eye is put once the player is on their
+    // feet (`render::StandingEye`): what goes in front of it waits.
+    let standing = cam.y <= 0.0 && crate::world::underground::floor_under(&zone, cam).is_none();
+    if standing && stood.0.is_none() {
+        return;
+    }
     *stage += 1;
     if *stage == 3 {
         let mut parts = spec.split(',');
@@ -183,7 +323,9 @@ fn gallery(
         let first = first
             .replace("+grime", "")
             .replace("+wet", "")
-            .replace("+fog", "");
+            .replace("+fog", "")
+            // `+present`: the mag release held (`present_for_gallery`).
+            .replace("+present", "");
         let first = first.as_str();
         // `pm_pistol+dry`: run dry, the slide held back on an empty
         // magazine (`weapons::stoppages`).
@@ -205,13 +347,12 @@ fn gallery(
         let turn: f32 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         let dist: Option<f32> = parts.next().and_then(|v| v.parse().ok());
         let shift: f32 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        // The camera as `render` places it.
-        // As the camera places itself: y 0 stands you there, eyes 1.7 m up.
+        // The camera as `render` places it: standing, 1.7 m over the
+        // player's feet; else as given.
         let ground = zone.ground(cam.x, cam.z);
-        let eye_y = if cam.y == 0.0 {
-            ground + 1.7
-        } else {
-            cam.y.max(ground + 0.3)
+        let eye_y = match stood.0.filter(|_| standing) {
+            Some(y) => y,
+            None => cam.y.max(ground + 0.3),
         };
         let eye = Vec3::new(cam.x, eye_y, cam.z);
         let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
@@ -259,6 +400,77 @@ fn gallery(
                         .with_rotation(facing),
                 );
             }
+            s if s.starts_with("robots:") => {
+                // A line-up of machines side by side, DIST ahead, each
+                // turned YAW from facing the camera, for reading them at a
+                // glance (`docs/craft/ROBOT_READING.md`):
+                // `robots:walker+drone+grappler+sentry+hound+heavy`;
+                // `walker!broken` is a walker with its gun dead and a leg
+                // failing.
+                let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
+                let mut line_up = Vec::new();
+                let mut broken = Vec::new();
+                let d = dist.unwrap_or(30.0);
+                let right = Vec3::new(-flat.z, 0.0, flat.x);
+                let gap = (d * 0.16).max(3.5);
+                // Facing the camera (as `robots::reel` turns a walker to
+                // you), then turned YAW.
+                let face_cam = flat.x.atan2(flat.z) + turn.to_radians();
+                for (i, id) in ids.iter().enumerate() {
+                    let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * d + right * off;
+                    let at = zone.on_ground(at.x, at.z);
+                    let e = match *id {
+                        "walker" | "walker!broken" => {
+                            crate::robots::walker::spawn_walker(&mut commands, &zone, at, job(at))
+                        }
+                        "drone" => crate::robots::drone::spawn_drone(
+                            &mut commands,
+                            at + Vec3::Y * 2.5,
+                            job(at),
+                        ),
+                        "grappler" => crate::robots::grappler::spawn_grappler(
+                            &mut commands,
+                            &zone,
+                            at,
+                            job(at),
+                        ),
+                        "hound" => {
+                            crate::robots::hound::spawn_hound(&mut commands, &zone, at, job(at))
+                        }
+                        "heavy" => crate::robots::heavy::spawn_heavy(
+                            &mut commands,
+                            &zone,
+                            &catalog,
+                            at,
+                            job(at),
+                        ),
+                        "sentry" => {
+                            let toward = -flat;
+                            let centre = toward.x.atan2(-toward.z) + turn.to_radians();
+                            crate::robots::sentry::spawn_sentry(
+                                &mut commands,
+                                &zone,
+                                at.xz(),
+                                centre,
+                                0.0,
+                                at.xz(),
+                            )
+                        }
+                        _ => continue,
+                    };
+                    // Turned once it stands where its spawn put it (its
+                    // own height over the ground).
+                    if *id != "sentry" {
+                        line_up.push((e, face_cam, None));
+                    }
+                    if *id == "walker!broken" {
+                        broken.push(e);
+                    }
+                }
+                commands.insert_resource(LineUp(line_up));
+                commands.insert_resource(BrokenWalkers(broken, 0));
+            }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
                 // the camera, looking where the camera looks.
@@ -274,6 +486,39 @@ fn gallery(
                     commands
                         .entity(e)
                         .insert(Transform::from_translation(at).with_rotation(look));
+                }
+            }
+            "metals" => {
+                // A roughness ladder of metal spheres, to judge the light
+                // on metal by (`render::sky_light`): blued steel above
+                // (albedo 0.13, gun steel's), bright steel below, rough
+                // 0.1 to 0.7 left to right.
+                let at = eye + fwd * dist.unwrap_or(1.2);
+                let right = flat.cross(Vec3::Y).normalize_or(Vec3::X);
+                let ball = meshes.add(Sphere::new(0.07).mesh().uv(32, 16));
+                for (row, base) in [
+                    Color::linear_rgb(0.12, 0.13, 0.16),
+                    Color::linear_rgb(0.56, 0.57, 0.58),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    for (i, rough) in [0.1, 0.25, 0.4, 0.55, 0.7].into_iter().enumerate() {
+                        let m = materials.add(StandardMaterial {
+                            base_color: base,
+                            metallic: 1.0,
+                            perceptual_roughness: rough,
+                            ..default()
+                        });
+                        let p = at
+                            + right * ((i as f32 - 2.0) * 0.18)
+                            + Vec3::Y * (0.1 - row as f32 * 0.2);
+                        commands.spawn((
+                            Mesh3d(ball.clone()),
+                            MeshMaterial3d(m),
+                            Transform::from_translation(p),
+                        ));
+                    }
                 }
             }
             "pylon" => {
@@ -300,7 +545,8 @@ fn gallery(
                     }
                     _ => {
                         let at = eye + flat * dist.unwrap_or(4.0);
-                        let at = Vec3::new(at.x, zone.ground(at.x, at.z) + 0.45, at.z);
+                        let y = crate::robots::dirigible::pod_rest(|x, z| zone.ground(x, z), at);
+                        let at = Vec3::new(at.x, y, at.z);
                         commands.spawn((
                             crate::robots::dirigible::CargoPod {
                                 carrier: Entity::PLACEHOLDER,
@@ -455,6 +701,14 @@ fn gallery(
                     warn!("gallery: no item {id}");
                     return;
                 };
+                // At arm's length it stands in for one in your hand: lit as
+                // one (`render::held_light`).
+                let in_hand = at.distance(eye) <= 0.8;
+                if in_hand {
+                    commands
+                        .entity(gun)
+                        .insert(crate::render::held_light::ShownInHand);
+                }
                 let family = catalog
                     .kind(id)
                     .and_then(|k| catalog.get(k).firearm.as_ref())
@@ -472,6 +726,11 @@ fn gallery(
                 if open || jam {
                     opening.push(gun);
                 } else if let Some(mag) = mag.and_then(|m| spawn_static(&mut commands, &m, at)) {
+                    if in_hand {
+                        commands
+                            .entity(mag)
+                            .insert(crate::render::held_light::ShownInHand);
+                    }
                     pending_mags.push((gun, mag));
                     if dry {
                         told.push((gun, 4));
@@ -579,6 +838,7 @@ fn first_person_hands(
     catalog: Res<crate::items::Catalog>,
     grabbables: Query<&crate::interact::Grabbable>,
     guns: Query<&crate::weapons::Gun>,
+    parts: Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     mut players: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
     mut stage: Local<u32>,
@@ -599,6 +859,12 @@ fn first_person_hands(
     // `fp:<gun>+handle`: the right hand on its slide, charging handle or
     // bolt instead of the grip.
     let (what, on_handle) = match what.strip_suffix("+handle") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
+    // `fp:<gun>+catch`: the magazine release held, the finger that works
+    // the catch on it (`render::props::catch_index_curl`, `catch_thumb`).
+    let (what, on_catch) = match what.strip_suffix("+catch") {
         Some(w) => (w, true),
         None => (what, false),
     };
@@ -630,9 +896,18 @@ fn first_person_hands(
         .nth(3)
         .and_then(|z| z.parse().ok())
         .unwrap_or(0.0);
+    // `fp:WHAT,ZOOM,TURN,TRIGGER,TILT` then tips it TILT degrees about the
+    // view's left-right axis, its underside up to the eye (a supporting
+    // hand under a handguard).
+    let tilt: f32 = spec
+        .split(',')
+        .nth(4)
+        .and_then(|z| z.parse().ok())
+        .unwrap_or(0.0);
     let pivot = eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom;
     let view = move |t: Transform| {
-        let q = Quat::from_rotation_y(turn.to_radians());
+        let q = Quat::from_axis_angle(right, tilt.to_radians())
+            * Quat::from_rotation_y(turn.to_radians());
         Transform::from_translation(pivot + q * (t.translation - pivot))
             .with_rotation(q * t.rotation)
     };
@@ -661,6 +936,7 @@ fn first_person_hands(
                 ChildOf(h),
             ));
         }
+        h
     };
     // Late enough for a map's cards and buttons to be up.
     if *stage == 15 {
@@ -715,6 +991,11 @@ fn first_person_hands(
     let Ok(grab) = grabbables.get(item) else {
         return;
     };
+    // The catch is the model's: wait for its parts.
+    let catch = crate::render::props::catch_of(item, &parts);
+    if on_catch && catch.is_none() {
+        return;
+    }
     *waiting = None;
     let point = |role: GripRole| grab.points.iter().find(|p| p.role == role);
     if let Some(primary) = point(GripRole::Primary) {
@@ -724,6 +1005,12 @@ fn first_person_hands(
         let mut curl = hold_curl(Some(GripRole::Primary), trigger, 0.0);
         if let Ok(gun) = guns.get(item) {
             curl[0] = crate::render::props::gun_index_curl(Side::Right, &gun.layout, trigger);
+            if let Some(c) = catch
+                .filter(|_| on_catch)
+                .and_then(|at| crate::render::props::catch_index_curl(Side::Right, &gun.layout, at))
+            {
+                curl[0] = c;
+            }
         }
         match grab
             .points
@@ -734,20 +1021,61 @@ fn first_person_hands(
             Some(handle) => glove(
                 &mut commands,
                 Side::Right,
-                Transform::from_translation((item_at * handle.local).translation)
-                    .with_rotation(level.rotation),
+                match guns.get(item).ok().and_then(|g| g.layout.handle.as_ref()) {
+                    Some(h) => {
+                        item_at * crate::render::props::handle_pose(h, 0.0, 0.0, Side::Right)
+                    }
+                    None => Transform::from_translation((item_at * handle.local).translation)
+                        .with_rotation(level.rotation),
+                },
                 hold_curl(Some(handle.role), 0.0, 0.0),
             ),
             None => glove(&mut commands, Side::Right, level, curl),
-        }
+        };
         match point(GripRole::Support) {
-            Some(support) => glove(
-                &mut commands,
-                Side::Left,
-                item_at * support.local,
-                hold_curl(Some(GripRole::Support), 0.0, 0.0),
-            ),
-            None => glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]),
+            Some(support) => {
+                let hold = support.local
+                    * guns.get(item).map_or(Transform::IDENTITY, |g| {
+                        crate::render::props::support_pose(&g.layout, Side::Left)
+                    });
+                let h = glove(
+                    &mut commands,
+                    Side::Left,
+                    item_at * hold,
+                    if guns.get(item).is_ok_and(|g| g.layout.support.is_none()) {
+                        crate::render::props::CUP_CURL
+                    } else {
+                        hold_curl(Some(GripRole::Support), 0.0, 0.0)
+                    },
+                );
+                // A catch the gun hand's index can't reach: this thumb's.
+                let thumb = guns
+                    .get(item)
+                    .ok()
+                    .zip(catch.filter(|_| on_catch))
+                    .and_then(|(g, at)| {
+                        crate::render::props::catch_index_curl(Side::Right, &g.layout, at)
+                            .is_none()
+                            .then(|| {
+                                crate::render::props::catch_thumb(
+                                    Side::Left,
+                                    hold,
+                                    crate::render::props::catch_face(&g.layout, at),
+                                )
+                            })
+                            .flatten()
+                    });
+                if thumb.is_some() {
+                    commands.entity(h).queue(move |mut e: EntityWorldMut| {
+                        if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                            v.thumb = thumb;
+                        }
+                    });
+                }
+            }
+            None => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+            }
         }
     } else {
         // Upright in the left fist (round the hand's origin, as a grip is),
@@ -1322,6 +1650,33 @@ fn spall_for_gallery(
     }
 }
 
+/// `--gallery pm_pistol+present`: the gun with its mag release held, the
+/// magazine out of its catch and hanging out of the well for the other
+/// hand (`weapons::reload::Presented`).
+fn present_for_gallery(
+    opts: Res<LaunchOptions>,
+    guns: Query<(Entity, &crate::weapons::Gun)>,
+    mut present: MessageWriter<crate::weapons::reload::PresentMagazine>,
+    mut frames: Local<u32>,
+) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|g| g.contains("+present"))
+    {
+        return;
+    }
+    *frames += 1;
+    // Once the gallery's magazine is seated.
+    if *frames == 12 {
+        for (e, g) in &guns {
+            if g.firearm.magazine.is_some() {
+                present.write(crate::weapons::reload::PresentMagazine { gun: e });
+            }
+        }
+    }
+}
+
 /// `--gallery plate`: five pistol rounds from the camera into the steel
 /// plate of the range target nearest it, one a frame, spread over its
 /// face: the sparks and the marks they leave (or, on a plate with no
@@ -1396,6 +1751,72 @@ fn plate_hits_for_gallery(
             spread: 0.0,
             recoil: 0.0,
             seed: i as u64,
+        });
+    }
+}
+
+/// `--gallery impact`: three rifle rounds from the camera along its line
+/// of sight, a frame apart, into whatever it looks at (the ground, a
+/// wall): what each throws up as it flies. The clock runs a sixtieth of
+/// a second a frame: the rounds land at frames 60 to 62, so `--frames 75`
+/// shows them a quarter of a second on.
+fn impact_hits_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    if opts.gallery.as_deref() != Some("impact") {
+        return;
+    }
+    for im in impacts.read() {
+        info!("gallery impact: {:?} at {}", im.kind, im.point);
+    }
+    let (Some((cam, yaw, pitch)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y <= 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    state.0 += 1;
+    if state.0 == 1 {
+        // The clock a sixtieth of a second a frame, however slowly the
+        // frames render, so a frame count is an age: a puff a quarter of a
+        // second after the shot is frame 75.
+        commands.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / 60.0),
+        ));
+    }
+    if state.0 == 3 {
+        state.1 = Some(commands.spawn(Name::new("Gallery rifle")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    // The camera's own turn (`render`'s free camera).
+    let turn = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    const ON_LINE: [(f32, f32); 3] = [(0.0, 0.0), (0.012, 0.006), (-0.01, 0.01)];
+    // Late enough that the colliders are in.
+    const FROM: u32 = 60;
+    if (FROM..FROM + ON_LINE.len() as u32).contains(&state.0) {
+        let (x, y) = ON_LINE[(state.0 - FROM) as usize];
+        let dir = (turn * Vec3::new(x, y, -1.0)).normalize();
+        shots.write(crate::weapons::ballistics::Shot {
+            gun,
+            shooter: Some(gun),
+            // From in front of the camera's own body, which would take it.
+            origin: eye + dir * 0.6,
+            direction: dir,
+            speed: 715.0,
+            damage: 30.0,
+            projectiles: 1,
+            spread: 0.0,
+            recoil: 0.0,
+            seed: u64::from(state.0),
         });
     }
 }
@@ -1600,5 +2021,29 @@ fn pose_body_for_gallery(
             Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
     } else if *frames > 20 {
         *cam = head;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A shot is never taken in the frames just after everything's in,
+    /// however few `--frames` asked for (a gun close-up shot 5 frames
+    /// after came out as fog with no gun), and not while anything's
+    /// arriving again (a lookbook view before its near trees' cards).
+    #[test]
+    fn a_shot_waits_for_the_world_to_settle() {
+        let mut s = ShotSettle::default();
+        assert!(!s.tick(false), "not before everything's in");
+        for i in 0..SHOT_SETTLE {
+            assert!(!s.tick(true), "{} frames after", i + 1);
+        }
+        assert!(s.tick(true));
+        assert!(!s.tick(false), "something arriving again");
+        assert!(!s.tick(true), "counted again from nothing");
+        s.reset();
+        assert!(!s.tick(true));
+        assert!(SHOT_SETTLE >= 10, "9 frames after was the first good shot");
     }
 }

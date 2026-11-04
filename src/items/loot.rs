@@ -10,8 +10,39 @@ use super::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::world::Zone;
 
+/// The tables, and the raid of the career they roll for (`None`: no
+/// career, every family; kept by `follow_the_career`).
 #[derive(Resource, Clone)]
-pub struct Loot(pub std::sync::Arc<LootTables>);
+pub struct Loot(pub std::sync::Arc<LootTables>, pub Option<u32>);
+
+impl Loot {
+    /// Rolls `table` for this raid of the career: a family not out yet
+    /// stays out, whatever rolls it (a wreck, a cargo pod, a crate, the
+    /// driver's cache), as at the zone's markers.
+    pub fn roll(
+        &self,
+        table: &str,
+        catalog: &extraction_core::items::ItemCatalog,
+        rng: &mut Rng,
+    ) -> Vec<extraction_core::loot::Drop> {
+        self.0.roll_at(table, None, self.1, catalog, rng)
+    }
+}
+
+/// Keeps `Loot`'s raid the career's.
+fn follow_the_career(
+    loot: Option<ResMut<Loot>>,
+    opts: Res<LaunchOptions>,
+    progression: Option<Res<crate::progression::Progression>>,
+) {
+    let Some(mut loot) = loot else {
+        return;
+    };
+    let raid = career_raid_of(&opts, progression.as_deref());
+    if loot.1 != raid {
+        loot.1 = raid;
+    }
+}
 
 pub struct LootPlugin;
 
@@ -32,7 +63,8 @@ impl Plugin for LootPlugin {
                     .in_set(LootSpawnSystems),
             )
                 .after(crate::world::buildings::spawn_buildings),
-        );
+        )
+        .add_systems(PreUpdate, follow_the_career);
     }
 }
 
@@ -64,6 +96,29 @@ pub fn roll_zone_loot(world: &mut World) {
 /// so the same loot.
 pub const ROLL_STEPS: usize = 5;
 
+/// Which raid of a career this is, for the loot's `from_raid` (the first is
+/// raid 0: raids set off before it, every valley's), or `None` with no
+/// career in play: a sim, a test's world, a gallery (every entry rolls, as
+/// before; a test app counted as a career's raid 0 rolled other loot, and
+/// the gate failed on two bugs that loot showed up).
+fn career_raid(world: &World, opts: &LaunchOptions) -> Option<u32> {
+    career_raid_of(
+        opts,
+        world.get_resource::<crate::progression::Progression>(),
+    )
+}
+
+/// [`career_raid`], from the career as a system has it.
+pub fn career_raid_of(
+    opts: &LaunchOptions,
+    progression: Option<&crate::progression::Progression>,
+) -> Option<u32> {
+    if opts.sim_run.is_some() || crate::persist::career_path(opts).is_none() {
+        return None;
+    }
+    Some(progression?.0.raids_by_map.iter().map(|(_, n)| *n).sum())
+}
+
 /// One part of `roll_zone_loot`: the markers' loot, the scenes' things,
 /// the buildings' loot, the tapes, the artifacts.
 pub fn roll_zone_loot_step(world: &mut World, step: usize) {
@@ -74,6 +129,7 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
     let opts = world.resource::<LaunchOptions>().clone();
     let cycle = world.resource::<crate::raid::Raid>().cycle;
     let seed = cycle_seed(&opts, cycle);
+    let raid = career_raid(world, &opts);
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let zone = world.resource::<Zone>();
@@ -82,24 +138,34 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
         let mut commands =
             Commands::new_from_entities(&mut queue, world.entity_allocator(), world.entities());
         match step {
-            0 => spawn_marker_loot(&mut commands, zone, loot, catalog, seed),
+            0 => spawn_marker_loot(&mut commands, zone, loot, catalog, seed, raid),
             1 => crate::world::scenes::spawn_things(
                 &mut commands,
                 &opts.map,
                 zone,
                 catalog,
                 crate::world::scenes::gates(world, &opts.map),
+                &|id| arrived(&loot.0, raid, id),
             ),
             2 => {
                 if let Some(spots) = world.get_resource::<crate::world::buildings::BuildingLoot>() {
-                    spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
+                    spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed, raid);
                 }
             }
-            _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map),
+            _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map, &|id| {
+                arrived(&loot.0, raid, id)
+            }),
         }
     }
     queue.apply(world);
 }
+/// Whether kind `id` is out yet on career raid `raid` (`None`: no career,
+/// everything is): the raid any table first drops it, for the sources
+/// that aren't tables (a scene's things). A kind no table drops is out.
+pub fn arrived(loot: &LootTables, raid: Option<u32>, id: &str) -> bool {
+    raid.is_none_or(|r| loot.arrives(id).is_none_or(|a| a <= r))
+}
+
 fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
     let path = crate::asset_root_path().join("data/loot.ron");
     let text = std::fs::read_to_string(path).unwrap_or_else(|_| BUILTIN_LOOT.to_owned());
@@ -107,7 +173,7 @@ fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
         error!("loot.ron: {e}");
         LootTables::from_ron(BUILTIN_LOOT, &catalog).expect("built-in loot parses")
     });
-    commands.insert_resource(Loot(std::sync::Arc::new(tables)));
+    commands.insert_resource(Loot(std::sync::Arc::new(tables), None));
 }
 
 /// A crate set down under loot in the open (dressed by `render::props`).
@@ -204,6 +270,7 @@ fn spawn_marker_loot(
     loot: &Loot,
     catalog: &Catalog,
     seed: u64,
+    raid: Option<u32>,
 ) {
     let mut rng = Rng::new(seed ^ 0x100);
     let notes = notes_lying(zone);
@@ -223,7 +290,10 @@ fn spawn_marker_loot(
         // A marker is a place someone meant to leave something: never bare.
         let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng).max(1);
         let drops: Vec<_> = (0..rolls)
-            .flat_map(|_| loot.0.roll_in(table, Some(&valley), catalog, &mut rng))
+            .flat_map(|_| {
+                loot.0
+                    .roll_at(table, Some(&valley), raid, catalog, &mut rng)
+            })
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let offset = marker_roll(i);
@@ -274,6 +344,7 @@ fn spawn_building_loot(
     loot: &Loot,
     catalog: &Catalog,
     seed: u64,
+    raid: Option<u32>,
 ) {
     let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
@@ -282,7 +353,10 @@ fn spawn_building_loot(
     for spot in &spots.0 {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
-            .flat_map(|_| loot.0.roll_in(spot.table, Some(&valley), catalog, &mut rng))
+            .flat_map(|_| {
+                loot.0
+                    .roll_at(spot.table, Some(&valley), raid, catalog, &mut rng)
+            })
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let at = clear_of_notes(spot.at + building_roll(i), &notes);
@@ -401,5 +475,122 @@ fn spawn_dev_cache(
                 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// The kinds lying in the zone, and how many of each.
+    fn kinds(app: &mut App) -> BTreeMap<String, u32> {
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut out = BTreeMap::new();
+        let mut q = app.world_mut().query::<&Item>();
+        for it in q.iter(app.world()) {
+            *out.entry(cat.0.get(it.kind).id.clone()).or_default() += 1;
+        }
+        out
+    }
+
+    /// Marrow on career raid `r`: everything rolled as a raid starts
+    /// (`roll_zone_loot`: markers, scenes, buildings, tapes, artifacts),
+    /// with nothing else lying about.
+    pub(crate) fn rolled_on(app: &mut App, r: u32) -> BTreeMap<String, u32> {
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .raids_by_map = vec![("marrow_creek".into(), r)];
+        let items: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<Item>>()
+            .iter(app.world())
+            .collect();
+        for e in items {
+            if let Ok(e) = app.world_mut().get_entity_mut(e) {
+                e.despawn();
+            }
+        }
+        roll_zone_loot(app.world_mut());
+        app.update();
+        kinds(app)
+    }
+
+    pub(crate) fn career_app() -> App {
+        let save = std::env::temp_dir().join(format!("loot_career_{}.ron", std::process::id()));
+        let _ = std::fs::remove_file(&save);
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            save: Some(save),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        app
+    }
+
+    /// Every source a raid's loot is rolled from waits for a kind's
+    /// `from_raid`, not only the tables: the Farm barricade laid an AK
+    /// magazine on a first raid, four raids before any AK (the designer's
+    /// "too many item types at once").
+    #[test]
+    fn nothing_turns_up_before_its_raid() {
+        let mut app = career_app();
+        let loot = app.world().resource::<Loot>().0.clone();
+        let mut early = Vec::new();
+        for r in 0..6 {
+            let rolled = rolled_on(&mut app, r);
+            // Hana's tape is there from the first, by her letter.
+            assert!(
+                rolled.contains_key("tape_practice"),
+                "raid {r}: no tape_practice"
+            );
+            for id in rolled.keys() {
+                // A laid story beat (Radio's, by Story's ask).
+                if crate::radio::places::FROM_THE_START.contains(&id.as_str()) {
+                    continue;
+                }
+                if !arrived(&loot, Some(r), id) {
+                    early.push(format!("{id} on raid {r}, out from {:?}", loot.arrives(id)));
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
+    }
+
+    /// Whatever else rolls a table (a robot's wreck, a cargo pod, a
+    /// packed crate, the driver's cache) rolls for the career's raid
+    /// too: on a first raid, every table only gives what's out.
+    #[test]
+    fn every_roll_follows_the_career() {
+        let mut app = career_app();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .raids_by_map = vec![("marrow_creek".into(), 0)];
+        app.update();
+        let loot = app.world().resource::<Loot>().clone();
+        assert_eq!(loot.1, Some(0));
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut rng = Rng::new(5);
+        let mut early = std::collections::BTreeSet::new();
+        let names: Vec<String> = loot.0.names().cloned().collect();
+        for t in &names {
+            for _ in 0..40 {
+                for d in loot.roll(t, &cat.0, &mut rng) {
+                    let id = &cat.0.get(d.kind).id;
+                    if !arrived(&loot.0, Some(0), id) {
+                        early.insert(format!("{t}: {id}"));
+                    }
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
     }
 }

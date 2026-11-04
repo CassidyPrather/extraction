@@ -52,7 +52,9 @@ RADII = [
     [0.0096, 0.0089, 0.0082, 0.0075],
     [0.0092, 0.0085, 0.0078, 0.0072],
     [0.0084, 0.0077, 0.0071, 0.0066],
-    [0.0112, 0.0103, 0.0094],
+    # The thumb: broad at its root (the thenar), slimmer to its tip, not a
+    # sausage of one width.
+    [0.0122, 0.0102, 0.0086],
 ]
 SIDES = 16
 
@@ -258,18 +260,20 @@ def palm(ts):
 
     # The cuff: a short gauntlet over the wrist, with a padded strap and
     # its tab, open at the arm's end.
-    # Closed at the arm's end by a low dome: an open cuff showed a black
-    # hole whenever the hand pointed away from the eye.
+    # Closed at the arm's end by a low dome, right to its middle: an open
+    # cuff showed a black hole whenever the hand pointed away from the eye,
+    # and a dome stopped short left a dark ring there. (Leather there drew
+    # the eye: with the arms hidden it's the cuff's end you see, holding
+    # anything out in front.)
     prof = [  # (z, grow over the wrist's shape, scale about its centre)
         (0.030, 0.0008, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
         (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
-        (0.079, 0.0030, 1), (0.090, 0.0034, 1), (0.0925, 0.0034, 0.985),
-        (0.0945, 0.0034, 0.95), (0.0965, 0.0034, 0.87), (0.0983, 0.0034, 0.74),
-        (0.0998, 0.0034, 0.55), (0.1008, 0.0034, 0.3),
+        (0.079, 0.0030, 1), (0.090, 0.0034, 1),
+        (0.0935, 0.0034, 0.985), (0.0968, 0.0034, 0.940), (0.1000, 0.0034, 0.866), (0.1029, 0.0034, 0.766), (0.1053, 0.0034, 0.643), (0.1073, 0.0034, 0.500), (0.1088, 0.0034, 0.342), (0.1097, 0.0034, 0.174), (0.1100, 0.0034, 0.000),
     ]
     zw = Z_WRIST - 0.001
     _, yc0, _ = palm_shape(zw)
-    centre = Vector((0.0, yc0, 0.0))
+    centre = Vector((0.0, yc0, zw))
     rings = [[centre + (palm_point(zw, 2 * math.pi * k / segs, g) - centre) * sc
               + Vector((0, 0, z - zw)) for k in range(segs)] for z, g, sc in prof]
     _, faces = p.loft(rings, "Glove")
@@ -282,12 +286,18 @@ def palm(ts):
     x = -ts * (w * 0.97 + 0.0055)
     p.box((0.0055, 0.016, 0.02), (x - ts * 0.0012, yc + 0.003, 0.0675), "Padding",
           bevel=0.0018, segs=2)
-    # Each wrist carries the display's housing (`wrist_mount` in
-    # src/render/props.rs: the panel lies 4 mm over this housing's top,
-    # y 0.0255), strapped over the cuff's back; the panel shows on the
-    # hand that isn't the gun hand.
-    p.box((0.052, 0.013, 0.082), (0.0, 0.019, 0.0625), "Padding", bevel=0.003, segs=2)
-    p.box((0.058, 0.004, 0.012), (0.0, 0.0165, 0.0625), "Padding", bevel=0.0015, segs=1)
+    return p
+
+
+def housing():
+    """The wrist display's housing, strapped over the cuff's back: its own
+    node (`wrist_housing`), drawn only on the hand that isn't the gun hand,
+    the one the display shows on (`render::props`). As long and wide as the
+    panel needs (`render::comfort::WRIST_SIZE`), only as thick as a watch:
+    the panel lies 4 mm over its top, y 0.0195 (`wrist_on_glove`)."""
+    p = Part("wrist_housing")
+    p.box((0.052, 0.007, 0.082), (0.0, 0.016, 0.0625), "Padding", bevel=0.0025, segs=2)
+    p.box((0.058, 0.004, 0.012), (0.0, 0.0155, 0.0625), "Padding", bevel=0.0015, segs=1)
     return p
 
 
@@ -302,6 +312,7 @@ def glove(side):
     main_guard()
     ts = 1.0 if side == "left" else -1.0
     palm_obj = make(palm(ts))
+    parent(make(housing()), palm_obj)
     for f in range(5):
         prev, chain = palm_obj, T(*finger_root(f, ts)) @ finger_aim(f, ts)
         bones = [b for b in FINGER_BONES[f] if b > 0]

@@ -93,7 +93,12 @@ fn light_patched() -> String {
     format!("{WET_WGSL}{LIGHT_PATCHED}")
 }
 const OPAQUE_ANCHOR: &str = "        // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0\n        color.a = 1.0;\n";
-const OPAQUE_PATCHED: &str = "        // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0\n        // EXTRACTION_WET: kept (the sky openness) until the lighting reads it.\n        color.a = clamp(color.a, 0.0, 1.0);\n";
+/// Lit, an opaque surface's alpha is kept (the sky openness) until the
+/// lighting reads it, and set to 1 there. Unlit there's no lighting to
+/// read or reset it: 1, as Bevy has it. (Kept, a spruce's opaque core
+/// came out of the impostors' unlit capture at its needles' alpha, and
+/// the far spruces were bare poles past the 0.5 cut.)
+const OPAQUE_PATCHED: &str = "        // NOTE: If rendering as opaque, alpha should be ignored so set to 1.0\n        // EXTRACTION_WET: kept (the sky openness) until the lighting reads it; unlit, 1.\n        color.a = select(1.0, clamp(color.a, 0.0, 1.0), (material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u);\n";
 /// Wetness rides the fog colour's alpha as `1 - wetness * WET_CODE`.
 pub const WET_CODE: f32 = 0.002;
 /// Lying snow rides the fog's lobe exponent: a whole number, plus
@@ -102,7 +107,16 @@ pub const SNOW_CODE: f32 = 0.01;
 /// A snow line no ground reaches.
 pub const NO_SNOW: f32 = 1.0e5;
 
+/// The wet patch's source, for `render::held_light`'s test.
+#[cfg(test)]
+pub(crate) fn wet_wgsl_for_tests() -> &'static str {
+    WET_WGSL
+}
+
 const WET_WGSL: &str = r#"
+// `render::held_light::MARK` and `SHARE` (a test holds them equal).
+const XS_HELD_MARK: f32 = 3.0e33;
+const XS_HELD_SHARE: f32 = 0.5;
 // The room the eye is in (`render::grade::dim_indoors`): how far its walls
 // cut the sky's light (1 out of doors) and how far it reaches (m), off the
 // ambient's alpha, which the lighting never reads.
@@ -152,6 +166,13 @@ fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
         let sky = select(open, 1.0, opaque && p.material.base_color.a < -0.5);
         let back = extraction_outdoors(room, p.world_position.xyz) * smoothstep(0.8, 0.95, sky);
         o.diffuse_occlusion = p.diffuse_occlusion * mix(1.0, 1.0 / room.x, back);
+        // What a hand holds, and the gloves (`render::held_light` marks
+        // their materials): it keeps half the stops the room cuts, so the
+        // slide and the grip read in the dimmest room. Walls, beds and props
+        // beside you don't.
+        if (p.material.attenuation_distance == XS_HELD_MARK) {
+            o.diffuse_occlusion = o.diffuse_occlusion * pow(1.0 / room.x, XS_HELD_SHARE);
+        }
     }
 #ifdef DISTANCE_FOG
     if (snow > 0.002 && HF_SNOW_LINE < 1.0e4) {
@@ -512,6 +533,8 @@ mod tests {
         assert!(a.contains("let in = extraction_wet(in_dry);"));
         assert!(a.contains("fn extraction_wet("));
         assert!(!a.contains(OPAQUE_ANCHOR));
+        // Unlit (the impostors' capture), opaque is still 1.
+        assert!(a.contains("1.0, clamp(color.a, 0.0, 1.0), (material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_UNLIT_BIT) == 0u"));
         assert_eq!(unpatched(&a), src);
         // Patched twice, still once.
         let b = patch(&a, &HeightFog::default()).unwrap();

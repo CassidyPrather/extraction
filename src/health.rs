@@ -36,6 +36,9 @@ pub struct Hurt {
     pub player: Entity,
     pub amount: f32,
     pub from: Vec3,
+    /// Who did it, when anyone did (a machine, another player, the player
+    /// themselves): what a hit's warning is owed by.
+    pub by: Option<Entity>,
 }
 
 /// A hit was turned aside by the aegis knot.
@@ -94,7 +97,9 @@ fn take_hits(
         let Ok((mut h, gt, fx)) = players.get_mut(player) else {
             continue;
         };
-        if h.down {
+        // A round that carries no harm (a drone's warning burst kicking up
+        // the ground short of you) isn't a hit.
+        if h.down || hit.damage <= 0.0 {
             continue;
         }
         // Whatever armour it met takes its share first.
@@ -118,6 +123,7 @@ fn take_hits(
             player,
             amount: damage,
             from: hit.point - hit.velocity.normalize_or_zero() * 5.0,
+            by: hit.shooter,
         });
         if h.hp <= 0.0 {
             h.down = true;

@@ -870,6 +870,7 @@ mod tests {
 
     fn app(robots: bool) -> App {
         let opts = LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots,
             ..Default::default()
         };
@@ -1176,6 +1177,7 @@ mod tests {
             seed: 0,
             passes: 0,
             load: Default::default(),
+            origin: Vec3::ZERO,
         }
     }
 

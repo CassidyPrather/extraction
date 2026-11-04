@@ -244,7 +244,7 @@ pub const STASH_RACK: f32 = 100.0;
 pub const LETTER_ITEM: &str = "hana_letter";
 pub const LETTER_MAP: &str = "marrow_creek";
 /// The "Village note" on that table.
-pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
+pub const LETTER_AT: [f32; 2] = [-19.6, 62.2];
 
 /// The tier index from which nights come (after "Runs").
 pub const NIGHTS_FROM: u32 = 3;
@@ -256,7 +256,7 @@ pub const LEDGER_ITEM: &str = "intake_ledger";
 pub const DEPOT_PREFAB: &str = "depot_marrow";
 pub const LEDGER_MAP: &str = "marrow_creek";
 /// World (x, y, z): the bay's floor, clear of its crates.
-pub const LEDGER_AT: [f32; 3] = [-262.0, 11.31, -179.4];
+pub const LEDGER_AT: [f32; 3] = [-154.0, 8.21, -68.5];
 
 /// Raids the driver waits on a fetch before asking for something else.
 pub const FETCH_PATIENCE: u32 = 3;
@@ -509,6 +509,18 @@ impl Job {
         }
     }
 
+    /// Its place by name, if it has one (a scout's place, a recover's
+    /// region, a contract step's place).
+    pub fn place_name(&self) -> Option<String> {
+        match self {
+            Job::Scout { place, .. } | Job::Bring { place, .. } | Job::Plant { place, .. } => {
+                Some(place.clone())
+            }
+            Job::Recover { region, .. } => Some(region.clone()),
+            Job::Fetch { .. } | Job::Photograph { .. } | Job::Letter | Job::Ledger => None,
+        }
+    }
+
     /// Where it still wants you to go, if anywhere: its mark, until its
     /// part out there is done (the place seen, the relay down). A thing to
     /// bring home is done once you have it, which the game knows.
@@ -552,6 +564,18 @@ impl Drift {
     }
 }
 
+/// `from` less the place just done (`last`), if anything else is left.
+fn elsewhere<T>(from: Vec<T>, name: impl Fn(&T) -> &str, last: Option<&str>) -> Vec<T> {
+    let Some(last) = last else {
+        return from;
+    };
+    if from.iter().any(|t| name(t) != last) {
+        from.into_iter().filter(|t| name(t) != last).collect()
+    } else {
+        from
+    }
+}
+
 /// The career's standing with the driver.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Progress {
@@ -580,6 +604,10 @@ pub struct Progress {
     /// Fetches the driver gave up waiting for (varies the next roll).
     #[serde(default)]
     pub swaps: u32,
+    /// The place of the last job done (a scout's place, a recover's region):
+    /// the next rolled job goes elsewhere if anywhere else will do.
+    #[serde(default)]
+    pub last_place: Option<String>,
     /// What the driver's caches lean to, once the ladder's done (an
     /// [`ORDERS`] id; none: anything).
     #[serde(default)]
@@ -724,6 +752,7 @@ impl Progress {
         &'static [Upgrade],
         Option<&'static crate::contracts::Contract>,
     ) {
+        self.last_place = self.job.as_ref().and_then(Job::place_name);
         let finished = self.advance_contract();
         (self.complete_tier(), finished)
     }
@@ -889,7 +918,7 @@ fn mean(points: &[[f32; 2]]) -> [f32; 2] {
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
-        crate::map::prefab_base(prefab),
+        crate::map::prefab_shell(prefab),
         "house_plank"
             | "house_brick"
             | "cabin_log"
@@ -970,7 +999,8 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
     if let Some(v) = valley {
         match kind {
             JobKind::Scout => {
-                let p = places(v.map, tier.danger);
+                let last = progress.last_place.as_deref();
+                let p = elsewhere(places(v.map, tier.danger), |p| p.0.as_str(), last);
                 if !p.is_empty() {
                     let (place, at) = p[rng.below(p.len())].clone();
                     return Job::Scout {
@@ -1010,6 +1040,7 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                     deep.sort_by(|a, b| {
                         crate::geom::dist(b.1, ins).total_cmp(&crate::geom::dist(a.1, ins))
                     });
+                    let deep = elsewhere(deep, |d| d.0.as_str(), progress.last_place.as_deref());
                     if let Some((region, _)) = deep.into_iter().next() {
                         return Job::Recover {
                             map: v.id.to_owned(),
@@ -1028,7 +1059,9 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                     .filter(|s| (lo..=hi).contains(&s.2) || tier.jobs == 0)
                     .map(|s| s.0)
                     .collect();
-                let above = regions(v.map, tier.danger);
+                let last = progress.last_place.as_deref();
+                let below = elsewhere(below, |r| r.as_str(), last);
+                let above = elsewhere(regions(v.map, tier.danger), |r| r.as_str(), last);
                 if !below.is_empty() && (rng.chance(0.5) || above.is_empty()) {
                     return Job::Recover {
                         map: v.id.to_owned(),
@@ -1103,6 +1136,59 @@ mod tests {
         for (t, m) in [(0.0, 300.0), (200.0, 250.0), (400.0, 120.0), (900.0, 20.0)] {
             assert!(!back.update(m, t));
         }
+    }
+
+    /// A rolled job goes somewhere other than the job just done, whenever
+    /// anywhere else will do (first-jobs runs: job 2 rolled the Old farm
+    /// again, the place job 1 had just sent you to).
+    #[test]
+    fn a_rolled_job_goes_somewhere_else() {
+        let maps: Vec<(&str, crate::map::MapDef)> = crate::map::VALLEYS
+            .into_iter()
+            .map(|(id, text)| (id, crate::map::MapDef::from_ron(text).unwrap()))
+            .collect();
+        let vs: Vec<Valley> = maps.iter().map(|(id, map)| Valley { id, map }).collect();
+        let marrow = &maps.iter().find(|(id, _)| *id == "marrow_creek").unwrap().1;
+        for (tier, kind) in [(0u32, "a scout"), (1, "a recover")] {
+            let names: Vec<String> = if tier == 0 {
+                places(marrow, TIERS[0].danger)
+                    .into_iter()
+                    .map(|p| p.0)
+                    .collect()
+            } else {
+                regions(marrow, TIERS[1].danger)
+            };
+            assert!(names.len() >= 2, "{kind}: somewhere else to go: {names:?}");
+            let last = names[0].clone();
+            let mut rolled = 0;
+            for seed in 0..300 {
+                let p = Progress {
+                    tier,
+                    done: 3 * tier + 1,
+                    done_in_tier: 1,
+                    last_place: Some(last.clone()),
+                    ..Default::default()
+                };
+                let job = roll_job(&p, seed, "marrow_creek", &vs);
+                if let Some(n) = job.place_name() {
+                    rolled += 1;
+                    assert_ne!(n, last, "{kind} rolled the place just done (seed {seed})");
+                }
+            }
+            assert!(rolled > 0, "{kind}: some rolls with a place");
+        }
+        // Done, the job's place is remembered.
+        let mut p = Progress {
+            job: Some(Job::Scout {
+                map: "marrow_creek".into(),
+                place: "Old farm".into(),
+                at: [0.0, 0.0],
+                seen: true,
+            }),
+            ..Default::default()
+        };
+        p.complete_job();
+        assert_eq!(p.last_place.as_deref(), Some("Old farm"));
     }
 
     #[test]

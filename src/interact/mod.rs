@@ -86,6 +86,13 @@ pub struct Grabbable {
     pub points: Vec<GrabPoint>,
 }
 
+/// On a hand whose last letting go was at a body slot that couldn't take
+/// what it held: it held on to it (with a tick) rather than drop it, and
+/// lets go as ever the next time it closes and opens. (Checks that an open
+/// hand holds nothing pass it over: `soak::chaos`.)
+#[derive(Component, Debug)]
+pub struct StowRefused;
+
 /// On an item while a hand holds it.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Held {
@@ -105,6 +112,11 @@ pub struct Supported {
     pub point: usize,
 }
 
+/// The turn (radians, half a degree) at which a held item's steadying
+/// (`HoldFeel::steady`) is down to half: a tremor is well inside it, a
+/// swing far outside.
+pub const STEADY_GATE: f32 = 0.0087;
+
 /// How a held item handles, set by whoever owns its feel (the weapons
 /// module: recoil, sway, a heavy gun's lag). The hand's target is smoothed
 /// in the player's space (so walking or riding never trails it), then
@@ -114,6 +126,9 @@ pub struct HoldFeel {
     pub offset: Transform,
     /// Seconds: how softly the item follows the hand (0 snaps).
     pub lag: f32,
+    /// Seconds more of it in its turning only: a hold that steadies the
+    /// hand's tremor (a second hand, a stock), not where it goes.
+    pub steady: f32,
     /// The smoothed target, player space.
     pub smoothed: Option<Transform>,
 }
@@ -581,9 +596,11 @@ fn grip_from_input(
     driver: Res<crate::rig::RigDriver>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     spatial: SpatialQuery,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut actions: MessageWriter<HandAction>,
     mut events: MessageWriter<InteractEvent>,
 ) {
+    let terrain = terrain.iter().next();
     for (player, input, children) in &players {
         let torso = torsos
             .iter()
@@ -610,9 +627,10 @@ fn grip_from_input(
             let finger_grab =
                 comfort.as_ref().is_some_and(|c| c.finger_grab) && wrapped && !hand.fingers_closed;
             hand.fingers_closed = wrapped;
-            let pressed = !hand.grip_down && (grip > 0.6 || finger_grab);
+            let pressed = !hand.grip_down && (crate::rig::pressed(false, grip) || finger_grab);
             let holds = hand.holding.is_some() || hand.supporting.is_some();
-            let released = hand.grip_down && grip < 0.35 && !(holds && wrapped);
+            let released =
+                hand.grip_down && !crate::rig::pressed(true, grip) && !(holds && wrapped);
             // What the grip would take: the glove tints and the controller
             // ticks as something comes into reach.
             let hover = if busy || !locals.contains(player) || *driver != crate::rig::RigDriver::Xr
@@ -627,6 +645,7 @@ fn grip_from_input(
                     &parents,
                     &seats,
                     &spatial,
+                    terrain,
                 )
                 .map(|(e, _)| e)
             };
@@ -650,6 +669,7 @@ fn grip_from_input(
                         &parents,
                         &seats,
                         &spatial,
+                        terrain,
                     ) {
                         actions.write(HandAction::Grab {
                             player,
@@ -687,8 +707,8 @@ fn grip_from_input(
                     });
                 }
             }
-            let t_pressed = !hand.trigger_down && trigger > 0.6;
-            let t_released = hand.trigger_down && trigger < 0.35;
+            let t_pressed = !hand.trigger_down && crate::rig::pressed(false, trigger);
+            let t_released = hand.trigger_down && !crate::rig::pressed(true, trigger);
             if t_pressed {
                 hand.trigger_down = true;
                 if !busy {
@@ -700,6 +720,7 @@ fn grip_from_input(
                         &parents,
                         &seats,
                         &spatial,
+                        terrain,
                     ) {
                         hand.handle_by_trigger = true;
                         actions.write(HandAction::Grab {
@@ -758,6 +779,7 @@ fn find_grab(
     parents: &Query<&ChildOf>,
     (owners, mags, presented): &Seats,
     spatial: &SpatialQuery,
+    terrain: Option<Entity>,
 ) -> Option<(Entity, usize)> {
     let reach = Collider::sphere(0.07);
     let mut touching = spatial.shape_intersections(
@@ -772,7 +794,11 @@ fn find_grab(
             hand.translation,
             Quat::IDENTITY,
             // (A wreck's limbs are the robot's parts: `carry::Draggable`.)
-            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot]),
+            // Not the terrain: nothing on it is grabbed, and a sphere's
+            // test against the map's heightfield is 28 ms
+            // (`world::sphere_in_world`).
+            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
+                .with_excluded_entities(terrain),
         ) {
             let mut up = hit;
             for _ in 0..4 {
@@ -1122,9 +1148,11 @@ fn apply_hand_actions(
                 let Some((hand_e, hand_world)) = hand_of(&players, &hands, player, side) else {
                     continue;
                 };
-                commands
-                    .entity(hand_e)
-                    .remove::<(crate::gadgets::climbing::RopeGrip, hand_climb::HandHold)>();
+                commands.entity(hand_e).remove::<(
+                    crate::gadgets::climbing::RopeGrip,
+                    hand_climb::HandHold,
+                    StowRefused,
+                )>();
                 let Ok((_, _, mut hand)) = hands.get_mut(hand_e) else {
                     continue;
                 };
@@ -1187,6 +1215,9 @@ fn apply_hand_actions(
                 // Socket in reach?
                 let pos = gt.translation();
                 let mut target = None;
+                // A body slot in reach it doesn't fit (`body::slot_fit`).
+                let mut refused = false;
+                let def = it.map(|i| catalog.get(i.kind()));
                 for (se, sgt, socket, owner) in &sockets {
                     if socket.occupant.is_some()
                         || !accepts_item(&socket.kind, size, family.as_deref(), is_gun, mount)
@@ -1194,6 +1225,10 @@ fn apply_hand_actions(
                         continue;
                     }
                     if owner.is_some_and(|o| o.0 == item) {
+                        continue;
+                    }
+                    if def.is_some_and(|d| !fits_body_slot(&socket.kind, d)) {
+                        refused |= sgt.translation().distance(pos) < socket.radius;
                         continue;
                     }
                     let mut d = sgt.translation().distance(pos);
@@ -1248,6 +1283,20 @@ fn apply_hand_actions(
                 if stowed {
                     continue;
                 }
+                // Let go at a slot it doesn't fit, and nothing else to take
+                // it: it stays in the hand, with a tick, rather than drop at
+                // your feet (the slot would never have held it).
+                if refused && let Ok((_, _, Some(held), ..)) = items.get(item) {
+                    let held = *held;
+                    commands.entity(item).insert(held);
+                    commands.entity(hand_e).insert(StowRefused);
+                    if let Ok((_, _, mut h)) = hands.get_mut(hand_e) {
+                        h.holding = Some(item);
+                    }
+                    events.write(InteractEvent::Refused { item });
+                    continue;
+                }
+
                 commands.entity(item).insert((
                     GravityScale(1.0),
                     LinearVelocity(velocity),
@@ -1280,6 +1329,7 @@ fn apply_hand_actions(
                         o.is_some_and(|o| o.0 == player)
                             && s.occupant.is_none()
                             && accepts_item(&s.kind, def.size, None, def.firearm.is_some(), None)
+                            && fits_body_slot(&s.kind, def)
                     })
                     .map(|(e, _, s, _)| (slot_rank(&s.kind, def.magazine.is_some()), e))
                     .collect();
@@ -1417,6 +1467,16 @@ pub fn accepts_item(
         SocketKind::Body(slot) => slot.accepts(size),
         SocketKind::MagWell(family) => mag_family == Some(family.as_str()),
         SocketKind::Mount(m) => mount == Some(*m),
+    }
+}
+
+/// Whether a thing physically fits a socket: a body slot's pocket, pouch,
+/// holster or mount has room for it (`body::slot_fit`); anything else
+/// fits if it's taken (`accepts_item`).
+pub fn fits_body_slot(kind: &SocketKind, def: &extraction_core::items::ItemDef) -> bool {
+    match kind {
+        SocketKind::Body(slot) => body::slot_fit(*slot, 0, def).is_some(),
+        _ => true,
     }
 }
 
@@ -1655,14 +1715,24 @@ pub(crate) fn follow_hands(
             let local = Transform::from_matrix(
                 (root.compute_affine().inverse() * target.compute_affine()).into(),
             );
-            let k = if feel.lag > 0.0 {
-                1.0 - (-dt / feel.lag).exp()
-            } else {
-                1.0
+            let follow = |tau: f32| {
+                if tau > 0.0 {
+                    1.0 - (-dt / tau).exp()
+                } else {
+                    1.0
+                }
             };
+            // Steadying gives way as the hands turn further from where the
+            // item points: a tremor's few tenths of a degree are damped, a
+            // deliberate swing goes through (`STEADY_GATE`).
+            let gap = feel
+                .smoothed
+                .map_or(0.0, |s| s.rotation.angle_between(local.rotation));
+            let steady = feel.steady / (1.0 + (gap / STEADY_GATE).powi(2));
+            let (k, k_turn) = (follow(feel.lag), follow(feel.lag + steady));
             let s = feel.smoothed.map_or(local, |s| Transform {
                 translation: s.translation.lerp(local.translation, k),
-                rotation: s.rotation.slerp(local.rotation, k),
+                rotation: s.rotation.slerp(local.rotation, k_turn),
                 scale: Vec3::ONE,
             });
             feel.smoothed = Some(s);

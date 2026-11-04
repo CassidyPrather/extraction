@@ -928,6 +928,14 @@ mod tests {
             .map(|(e, _)| e)
     }
 
+    fn count(r: &mut Range, id: &str) -> usize {
+        let catalog = r.vr.app.world().resource::<Catalog>().clone();
+        let mut q = r.vr.app.world_mut().query::<&Item>();
+        q.iter(r.vr.app.world())
+            .filter(|i| catalog.get(i.kind()).id == id)
+            .count()
+    }
+
     /// A Mosin clamped in the vice, the right hand saws across its barrel
     /// 250 mm out from the breech: through, it's an obrez: the barrel's
     /// that long, the bullet leaves slower, the muzzle's come back, and
@@ -938,7 +946,8 @@ mod tests {
         let gun = r.gun;
         clamp(&mut r, gun, Side::Right);
         let before = gun_mut(&mut r).layout.muzzle;
-        let scrap_before = find(&mut r, "scrap_metal");
+        // (The yard's buildings' loot may have scrap in it already.)
+        let scrap_before = count(&mut r, "scrap_metal");
         let near = r.feet + Vec3::new(0.35, 1.0, 0.0);
         let saw = r.vr.spawn("hacksaw", Transform::from_translation(near));
         r.vr.app
@@ -1007,7 +1016,7 @@ mod tests {
         assert!(g.layout.muzzle.z > before.z + 0.4, "the muzzle's come back");
         let _ = &mut g;
         assert!(
-            find(&mut r, "scrap_metal").is_some() && scrap_before.is_none(),
+            count(&mut r, "scrap_metal") == scrap_before + 1,
             "the end's off"
         );
     }

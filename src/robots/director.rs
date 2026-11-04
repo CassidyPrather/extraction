@@ -52,9 +52,50 @@ pub struct Director {
     pub heat: f32,
     /// Seconds before another shot adds heat.
     pub heat_gap: f32,
+    /// A career's second job's broken walker set out yet (`broken`)...
+    pub broken_placed: bool,
+    /// ...and how long nothing else is sent out (s): while it stands, and
+    /// a little after (`broken::QUIET_AFTER`), so nothing armed answers the
+    /// newcomer's first fight.
+    pub quiet: f32,
     /// The relays' network: jams, silent relays, distrusted ones
     /// (`network`). Reports go through `queue_report`.
     pub net: super::network::RelayNet,
+}
+
+/// Roaming machines at once in a full valley (`REFERENCE_KM2` of ground
+/// to walk), and fewest in a small one: a valley's strength goes with its
+/// walkable ground, so a pulled-in valley isn't the same patrol on a third
+/// of the room (Marrow, 30 October: 6 on 0.085 km² against 6 on 0.28,
+/// and its raiders died at its Gate). No valley gets more than a full one.
+pub const FULL_ACTIVE: usize = 6;
+pub const FEWEST_ACTIVE: usize = 3;
+/// A full valley's walkable ground inside its fence (km²: Kettle, Cinder,
+/// Sallow, Rime measure 0.278..0.287).
+pub const REFERENCE_KM2: f32 = 0.28;
+
+/// A valley's walkable ground inside its quarantine fence (km²), off the
+/// ground machines' grid.
+pub fn walkable_km2(
+    nav: &extraction_core::nav::NavGrid,
+    map: &extraction_core::map::MapDef,
+) -> f32 {
+    let inner = map.size * 0.5 - map.fence_inset;
+    let mut n = 0usize;
+    for j in 0..nav.n {
+        for i in 0..nav.n {
+            let c = nav.centre(i, j);
+            if c[0].abs() < inner && c[1].abs() < inner && nav.walkable(c) {
+                n += 1;
+            }
+        }
+    }
+    n as f32 * nav.cell * nav.cell / 1e6
+}
+
+/// Roaming machines at once for a valley of `km2` walkable ground.
+pub fn max_active_for(km2: f32) -> usize {
+    ((FULL_ACTIVE as f32 * km2 / REFERENCE_KM2).round() as usize).clamp(FEWEST_ACTIVE, FULL_ACTIVE)
 }
 
 /// Heat: a reported shot adds a point, at most one per this (s)...
@@ -118,12 +159,14 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         next_job: 25.0,
         responses: Vec::new(),
         response_cooldown: 0.0,
-        max_active: 6,
+        max_active: FULL_ACTIVE,
         next_logistics: 150.0,
         chatter: Vec::new(),
         visits: Vec::new(),
         heat: 0.0,
         heat_gap: 0.0,
+        broken_placed: false,
+        quiet: 0.0,
         net: Default::default(),
     });
 }
@@ -271,12 +314,25 @@ fn run_director(
         ),
     >,
     pylons: Query<(), With<super::pylon::Pylon>>,
+    brokens: Query<&Robot, With<super::broken::Broken>>,
     time: Res<Time>,
     // What the valley remembers of your ways (`memory`): patrols lean on it.
     mind: Option<Res<super::memory::ZoneMind>>,
     progression: Option<Res<crate::progression::Progression>>,
+    nav: Option<Res<super::walker::Nav>>,
+    mut sized: Local<bool>,
 ) {
     let mind = mind.as_deref();
+    // The valley's strength, once its ground's known.
+    if !*sized && let Some(nav) = nav {
+        *sized = true;
+        let km2 = walkable_km2(&nav.0, &zone.map);
+        director.max_active = max_active_for(km2);
+        info!(
+            "director: {:.3} km\u{b2} to walk, {} roaming at most",
+            km2, director.max_active
+        );
+    }
     // A career's first job: its place is left alone (a survey drone sent
     // to the Old farm met every newcomer the driver sent there, on open
     // ground, on their first raid). `docs/FIRST_HOUR.md`.
@@ -296,6 +352,33 @@ fn run_director(
     director.next_job -= dt;
     let active = robots.iter().filter(|r| !r.wrecked).count();
     let exit = gate(&zone);
+    // A career's second job: a broken walker on its way, the first fight a
+    // newcomer can win, and nothing else sent out till it's done.
+    if !director.broken_placed {
+        director.broken_placed = true;
+        if let Some(at) = progression
+            .as_ref()
+            .and_then(|p| super::broken::second_job_meet(&zone, &p.0))
+        {
+            // (The Verifier's release check reads this line.)
+            let job = progression.as_ref().map_or(0, |p| p.0.done + 1);
+            info!(
+                "broken walker placed at ({:.1}, {:.1}) for job {job}",
+                at.x, at.z
+            );
+            super::broken::spawn_broken_walker(&mut commands, &zone, at, exit);
+            director.quiet = super::broken::QUIET_MAX;
+        }
+    }
+    if director.quiet > 0.0 {
+        director.quiet -= dt;
+        // (Spawned this tick, it isn't in the query yet.)
+        if !brokens.is_empty() && brokens.iter().all(|r| r.wrecked) {
+            director.quiet = director.quiet.min(super::broken::QUIET_AFTER);
+        }
+        director.responses.clear();
+        return;
+    }
     // Responses first.
     let mut dispatch = Vec::new();
     for r in &mut director.responses {
@@ -471,5 +554,39 @@ mod first_job_tests {
             .expect("the Old farm");
         assert!(survey_places(zone, None).contains(&farm));
         assert!(!survey_places(zone, Some(Vec2::from_array(farm))).contains(&farm));
+    }
+}
+
+#[cfg(test)]
+mod strength_tests {
+    use super::*;
+
+    /// Every valley's roaming machines per km\u{b2} of walkable ground stays
+    /// within a band of a full valley's: a pulled-in valley isn't the same
+    /// patrol on a third of the ground. The band's floor and cap are the
+    /// only way out of it, and only a valley smaller than a full one's
+    /// third may sit above it, at [`FEWEST_ACTIVE`].
+    #[test]
+    fn patrol_strength_goes_with_the_ground() {
+        let reference = FULL_ACTIVE as f32 / REFERENCE_KM2;
+        let mut out = vec![];
+        for (id, _) in extraction_core::map::VALLEYS {
+            let zone = crate::world::Zone::load(id);
+            let nav = super::super::walker::walker_grid(&zone.map, &zone.hm);
+            let km2 = walkable_km2(&nav, &zone.map);
+            let n = max_active_for(km2);
+            let density = n as f32 / km2;
+            let r = density / reference;
+            let floored = n == FEWEST_ACTIVE
+                && km2 < REFERENCE_KM2 * FEWEST_ACTIVE as f32 / FULL_ACTIVE as f32;
+            if !(0.75..=1.3).contains(&r) && !floored {
+                out.push(format!("{id}: {n} on {km2:.3} km\u{b2} ({density:.0}/km\u{b2}, {r:.2}x a full valley's)"));
+            }
+            assert!(n <= FULL_ACTIVE, "{id}: {n} is more than a full valley's");
+        }
+        assert!(
+            out.is_empty(),
+            "patrols out of step with their ground: {out:#?}"
+        );
     }
 }

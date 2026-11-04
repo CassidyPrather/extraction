@@ -855,6 +855,72 @@ pub fn wall_clear(
     }
 }
 
+/// How far a walker's body (its orb, the hips round it, plates proud of
+/// it) stands out from its middle, at a walker's size.
+pub const BODY_REACH: f32 = 0.45;
+/// How far its body keeps off a wall.
+const BODY_SKIN: f32 = 0.03;
+/// How much of the way out of a wall a body is eased each tick.
+const EASE_OUT: f32 = 0.25;
+
+/// Where a body moving from `before` to `after` this tick can get to: up
+/// to the first wall in its way (`cast(from, dir, reach)` gives the
+/// distance to it and its normal), then sliding along it. A floor-like hit
+/// (the ground rising) doesn't stop it; only its sideways motion is held.
+pub fn body_clear(
+    before: Vec3,
+    after: Vec3,
+    cast: impl FnOnce(Vec3, Dir3, f32) -> Option<(f32, Vec3)>,
+) -> Vec3 {
+    let flat = Vec3::new(after.x - before.x, 0.0, after.z - before.z);
+    let len = flat.length();
+    let Ok(dir) = Dir3::new(flat) else {
+        return after;
+    };
+    let Some((d, n)) = cast(before, dir, len + BODY_SKIN).filter(|(_, n)| n.y.abs() < 0.6) else {
+        return after;
+    };
+    let keep = (d - BODY_SKIN).clamp(0.0, len);
+    let stop = before + dir * keep;
+    // The rest of the way, along the wall (not into it).
+    let n = Vec3::new(n.x, 0.0, n.z).normalize_or_zero();
+    let rest = flat * (1.0 - keep / len);
+    let slide = rest - n * rest.dot(n).min(0.0);
+    // (Round a trunk or into a corner the slide may graze in by a hair:
+    // `body_out` eases it back, so it rounds a curve instead of sticking.)
+    let slid = stop + slide;
+    Vec3::new(slid.x, after.y, slid.z)
+}
+
+/// How far to move a body at `at`, `reach` round, out of the wall it's in
+/// (`ray(from, dir, reach)` gives the distance and normal of what's that
+/// way): rays all round find the nearest wall face, and it's pushed back
+/// to `reach` off it. Nothing near, nothing.
+pub fn body_out(
+    at: Vec3,
+    reach: f32,
+    mut ray: impl FnMut(Vec3, Dir3, f32) -> Option<(f32, Vec3)>,
+) -> Vec3 {
+    let mut push = Vec3::ZERO;
+    let mut deepest = 0.0f32;
+    for k in 0..12 {
+        let a = k as f32 * std::f32::consts::TAU / 12.0;
+        let Ok(dir) = Dir3::new(Vec3::new(a.cos(), 0.0, a.sin())) else {
+            continue;
+        };
+        if let Some((d, n)) = ray(at, dir, reach).filter(|(_, n)| n.y.abs() < 0.6) {
+            let n = Vec3::new(n.x, 0.0, n.z).normalize_or_zero();
+            // How far it's in, measured square to the face.
+            let into = reach - d * (-dir.dot(n)).max(0.0);
+            if into > deepest {
+                deepest = into;
+                push = n * into;
+            }
+        }
+    }
+    push
+}
+
 /// The walkable surface under `p` (probed from `p`, about hip height):
 /// steps, floors and kerbs by a ray down (`ray(from, reach)` gives the
 /// distance to what it hits), else the terrain. Below the terrain (an
@@ -885,12 +951,26 @@ pub fn footing(
     }
 }
 
+/// A failing leg's foot, held off the ground (m, at a walker's size) and
+/// drawn in toward its hip (a share of the way).
+pub const FAILING_LIFT: f32 = 0.14;
+const FAILING_DRAW_IN: f32 = 0.18;
+
 /// Joints for each leg (hip, knee, foot), after [`step_walker`].
 pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
     std::array::from_fn(|i| {
         let hip = t.transform_point(g.shape.hip(i));
         let foot = if w.feet[i].alive {
-            w.feet[i].planted
+            let f = w.feet[i].planted;
+            // A failing leg is favoured even standing still: its foot held
+            // up off the ground and drawn in, barely touching, so the hurt
+            // reads on a walker that isn't walking.
+            if super::damage::Band::of(g.leg_health[i]) == super::damage::Band::Failing {
+                let inward = Vec3::new(hip.x - f.x, 0.0, hip.z - f.z) * FAILING_DRAW_IN;
+                f + inward + Vec3::Y * FAILING_LIFT * g.size
+            } else {
+                f
+            }
         } else {
             g.dangle[i]
         };
@@ -923,8 +1003,21 @@ pub(crate) fn walk(
     time: Res<Time>,
     mut steps: MessageWriter<WalkerStep>,
     snow: Option<Res<crate::world::snow::Snow>>,
+    bodies: Query<(Option<&RigidBody>, Option<&ColliderOf>)>,
 ) {
     let dt = time.delta_secs();
+    // What a walker's body stops at: what's built (static), not a door
+    // leaf (it swings, and a walker shoulders or batters it).
+    let built = |e: Entity| {
+        let body = bodies
+            .get(e)
+            .ok()
+            .and_then(|(_, of)| of.map(|o| o.body))
+            .unwrap_or(e);
+        bodies
+            .get(body)
+            .map_or(true, |(rb, _)| rb.is_none_or(|rb| *rb == RigidBody::Static))
+    };
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
     let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
@@ -1000,6 +1093,7 @@ pub(crate) fn walk(
                     .map(|h| (h.distance, h.normal))
             })
         };
+        let before = t.translation;
         step_walker_walled(
             &mut w,
             &mut g,
@@ -1010,6 +1104,60 @@ pub(crate) fn walk(
             &mut landed,
             &mut clear,
         );
+        // A foot that's standing in a wall (it was stood there, or the
+        // wall's new) steps out of it.
+        let hip_y = t.translation.y;
+        for i in 0..LEGS {
+            let f = w.feet[i];
+            if !f.alive || f.t < 1.0 {
+                continue;
+            }
+            let from = Vec3::new(t.translation.x, hip_y, t.translation.z);
+            let c = clear(from, f.planted);
+            if Vec2::new(c.x - f.planted.x, c.z - f.planted.z).length() > 0.02 {
+                let to = Vec3::new(c.x, ground(Vec3::new(c.x, hip_y, c.z)), c.z);
+                let f = &mut w.feet[i];
+                f.from = f.planted;
+                f.to = to;
+                f.t = 0.0;
+                g.retargeted[i] = true;
+                g.dur[i] = g.dur[i].max(0.25);
+            }
+        }
+        // Its body stops at a wall and slides along it (it's kinematic:
+        // nothing else would stop it).
+        let orb = Collider::sphere(BODY_REACH * size);
+        let walls = SpatialQueryFilter::from_mask([Layer::World]);
+        t.translation = body_clear(before, t.translation, |from, dir, reach| {
+            spatial
+                .cast_shape_predicate(
+                    &orb,
+                    from,
+                    Quat::IDENTITY,
+                    dir,
+                    // (What it starts in, the ground under a crouched body
+                    // or a wall it was stood in, isn't in its way: it's
+                    // eased out of a wall below.)
+                    &ShapeCastConfig {
+                        ignore_origin_penetration: true,
+                        ..ShapeCastConfig::from_max_distance(reach)
+                    },
+                    &walls,
+                    &|e| built(e),
+                )
+                .map(|h| (h.distance, h.normal2))
+        });
+        // And one already in a wall (stood there, or knocked into it) is
+        // eased out of it.
+        // (A share a tick, not all at once: a body shouldered into a window
+        // is there long enough for the glass to give, `destruction::glass`.)
+        let here = t.translation;
+        t.translation += EASE_OUT
+            * body_out(here, BODY_REACH * size, |o, dir, reach| {
+                spatial
+                    .cast_ray_predicate(o, dir, reach, true, &walls, &|e| built(e))
+                    .map(|h| (h.distance, h.normal))
+            });
         if let Some(snow) = snow.as_ref().filter(|s| s.cover > 0.05) {
             // Lying snow packs to ice under it: steep ground is treacherous.
             let ice = |p: Vec3| {
@@ -1024,6 +1172,16 @@ pub(crate) fn walk(
             slip_feet(&mut w, &mut g, dt, ice, &mut ground);
         }
         poses.0 = leg_poses(&w, &g, &t);
+        // A knee that would bend out into a wall bends in instead, toward
+        // the body (which is clear of it).
+        let middle = t.translation;
+        for [hip, knee, foot] in poses.0.iter_mut() {
+            let c = clear(*hip, *knee);
+            if Vec2::new(c.x - knee.x, c.z - knee.z).length() > 0.01 {
+                let inward = Vec3::new(middle.x - hip.x, 0.0, middle.z - hip.z).normalize_or_zero();
+                *knee = solve_knee_sized(*hip, *foot, inward + Vec3::Y * 0.3, size);
+            }
+        }
         // Leg colliders follow the lower segments (local to the root).
         // Built from parts rather than a matrix, so the scale stays exactly
         // one: a capsule scaled by 0.9999999 is rebuilt as a convex hull,
@@ -1183,6 +1341,15 @@ fn haul_lines(
 /// device (`devices::Hunting`) it swings onto that, slow and deliberate,
 /// and holds there through its aim: the tell before the shot.
 #[allow(clippy::type_complexity)]
+/// How a dead gun slumps: its barrel down as far as it goes clear of the
+/// orb (the turret sits 6 cm over it: any lower and the barrel's in the
+/// shell), slewed off its line and listing over on its ring, which no
+/// live gun does; and how fast it settles there.
+pub const DEAD_GUN_DROOP: f32 = -0.42;
+pub const DEAD_GUN_SLEW: f32 = 0.6;
+pub const DEAD_GUN_LIST: f32 = 0.38;
+const DEAD_GUN_SAG: f32 = 2.5;
+
 pub(crate) fn aim_turrets(
     mut walkers: Query<(
         &mut Walker,
@@ -1194,15 +1361,35 @@ pub(crate) fn aim_turrets(
         Option<&super::devices::Hunting>,
         Has<super::hazards::Dazzled>,
         Option<&super::RobotSeed>,
+        Has<super::walker::Suppressing>,
     )>,
-    mut turrets: Query<&mut Transform, (With<WalkerTurret>, Without<Walker>)>,
+    mut turrets: Query<(&mut Transform, Option<&RobotPart>), (With<WalkerTurret>, Without<Walker>)>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let now = time.elapsed_secs();
-    for (mut w, t, aware, intent, children, robot, hunting, dazzled, seed) in &mut walkers {
+    for (mut w, t, aware, intent, children, robot, hunting, dazzled, seed, suppressing) in
+        &mut walkers
+    {
         if robot.wrecked {
+            continue;
+        }
+        // A dead gun stops tracking and sags, barrel down, lower than a
+        // live one ever aims: it reads as harmless at a glance.
+        let mut dead = false;
+        for c in children.iter() {
+            if let Ok((mut tt, part)) = turrets.get_mut(c) {
+                if part.is_some_and(|p| !p.alive()) {
+                    dead = true;
+                    let sag = Quat::from_rotation_y(w.turret_yaw + DEAD_GUN_SLEW)
+                        * Quat::from_rotation_z(DEAD_GUN_LIST)
+                        * Quat::from_rotation_x(DEAD_GUN_DROOP);
+                    tt.rotation = tt.rotation.slerp(sag, (DEAD_GUN_SAG * dt).min(1.0));
+                }
+            }
+        }
+        if dead {
             continue;
         }
         let device = hunting
@@ -1214,6 +1401,15 @@ pub(crate) fn aim_turrets(
                 .filter(|_| aware.can_see_target)
                 .and_then(|p| targets.get(p).ok())
                 .map(|g| g.translation() + Vec3::Y * 1.1)
+                // Pinning you (`walker::Suppressing`) and you've gone down:
+                // its gun stays on where you went, where its rounds go
+                // (`walker`: last known, a metre up), not swinging off.
+                .or_else(|| {
+                    aware
+                        .last_known
+                        .filter(|_| suppressing)
+                        .map(|p| p + Vec3::Y * 1.0)
+                })
                 .or(intent.and_then(|i| i.look))
         });
         let local = at.map(|p| t.rotation.inverse() * (p - t.translation));
@@ -1237,7 +1433,7 @@ pub(crate) fn aim_turrets(
             .unwrap_or(0.0)
             .clamp(-0.5, 0.35);
         for c in children.iter() {
-            if let Ok(mut tt) = turrets.get_mut(c) {
+            if let Ok((mut tt, _)) = turrets.get_mut(c) {
                 tt.rotation = Quat::from_rotation_y(w.turret_yaw) * Quat::from_rotation_x(pitch);
             }
         }
@@ -1419,6 +1615,343 @@ mod tests {
     /// Feet meet what's lying about: walking over a block of rubble
     /// (Destruction's debris layer), every foot that comes down on it
     /// stands on its top, neither floating nor sunk.
+    /// A walker standing, alive, for the broken-walker tests: its parts by
+    /// role, and the app.
+    fn standing_walker() -> (App, Entity) {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..60 {
+            app.update();
+        }
+        (app, walker)
+    }
+
+    fn set_hp(app: &mut App, walker: Entity, role: super::super::PartRole, share: f32) {
+        let mut q = app.world_mut().query::<&mut RobotPart>();
+        for mut p in q.iter_mut(app.world_mut()) {
+            if p.robot == walker && p.role == role {
+                p.hp = p.max_hp * share;
+            }
+        }
+    }
+
+    /// A walker pinning you (`walker::Suppressing`) when you drop out of
+    /// sight keeps firing where you went down; its gun stays on that spot,
+    /// held steady, so the rounds come from where it points. An ordinary
+    /// walker that loses you lets its gun go.
+    #[test]
+    fn a_pinners_gun_holds_on_where_you_went_down() {
+        let (mut app, walker) = standing_walker();
+        let here = app.world().get::<Transform>(walker).unwrap().translation;
+        let went_down = here + Vec3::new(5.0, 0.0, -6.0);
+        {
+            let mut a = app
+                .world_mut()
+                .get_mut::<super::super::Awareness>(walker)
+                .unwrap();
+            a.last_known = Some(went_down);
+            a.can_see_target = false;
+        }
+        // Where its gun points, as a bearing off where it's looking: the
+        // turret's forward against the line to `went_down`, on the level.
+        let off = |app: &mut App| {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<WalkerTurret>>();
+            let g = *q.iter(app.world()).next().unwrap();
+            let f = g.rotation() * Vec3::NEG_Z;
+            let to = went_down - g.translation();
+            Vec2::new(f.x, f.z).angle_to(Vec2::new(to.x, to.z)).abs()
+        };
+        for _ in 0..90 {
+            app.update();
+        }
+        let loose = off(&mut app);
+        app.world_mut()
+            .entity_mut(walker)
+            .insert(super::super::walker::Suppressing);
+        for _ in 0..90 {
+            app.update();
+        }
+        let mut held = Vec::new();
+        for _ in 0..30 {
+            app.update();
+            held.push(off(&mut app));
+        }
+        let worst = held.iter().cloned().fold(0.0f32, f32::max);
+        assert!(
+            loose > 0.3,
+            "not pinning, it lets its gun go ({loose} rad off)"
+        );
+        assert!(
+            worst < 0.08,
+            "pinning, its gun is on the spot ({worst} rad off)"
+        );
+        let spread = worst - held.iter().cloned().fold(f32::MAX, f32::min);
+        assert!(spread < 0.01, "and holds steady there ({spread} rad)");
+    }
+
+    /// Models' broken walker (its gun dead): the gun sags, barrel down,
+    /// lower than a live one ever aims, and stops following what it was
+    /// tracking. A live gun on the same walker tracks and sits level.
+    #[test]
+    fn a_dead_gun_droops_and_stops_tracking() {
+        let (mut app, walker) = standing_walker();
+        // The barrel in the world: its mount (the turret's pivot), its
+        // muzzle (walker.py: the barrel runs to z -0.53 off the pivot), the
+        // orb it sits on, and how far it lists off the body's up.
+        let gun = |app: &mut App| {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<WalkerTurret>>();
+            let g = *q.iter(app.world()).next().unwrap();
+            let body = *app.world().get::<GlobalTransform>(walker).unwrap();
+            let mount = g.translation();
+            let muzzle = g.transform_point(Vec3::new(0.0, -0.005, -0.53));
+            // (A list is a roll: the ring's side axis tipped off level, which
+            // turning and aiming never do.)
+            let side = body.rotation().inverse() * (g.rotation() * Vec3::X);
+            let list = side.y.clamp(-1.0, 1.0).asin().abs();
+            (mount, muzzle, body.translation(), list)
+        };
+        let here = app.world().get::<Transform>(walker).unwrap().translation;
+        let look = |app: &mut App, x: f32| {
+            app.world_mut()
+                .get_mut::<super::super::Intent>(walker)
+                .unwrap()
+                .look = Some(here + Vec3::new(x, 0.0, -6.0));
+        };
+        look(&mut app, 4.0);
+        for _ in 0..120 {
+            app.update();
+        }
+        let (mount, muzzle, _, list) = gun(&mut app);
+        assert!(
+            muzzle.y > mount.y - 0.2,
+            "a live gun aims ahead ({:.2})",
+            muzzle.y - mount.y
+        );
+        assert!(list < 0.05, "a live gun sits square ({list:.2} rad)");
+        set_hp(&mut app, walker, super::super::PartRole::Weapon, 0.0);
+        for _ in 0..120 {
+            app.update();
+        }
+        let (mount, muzzle, orb, list) = gun(&mut app);
+        // (Down, and listing: a live gun aimed low hangs as far, but never
+        // lists, so it's the two together that read as dead.)
+        assert!(
+            muzzle.y < mount.y - 0.15,
+            "a dead gun's muzzle hangs below its mount ({:.2} m)",
+            muzzle.y - mount.y
+        );
+        assert!(list > 0.25, "and it lists over on its ring ({list:.2} rad)");
+        // All along the barrel, clear of the orb (0.4) by its own radius.
+        for k in 0..=8 {
+            let r = 0.17 + 0.36 * k as f32 / 8.0;
+            let p = mount + (muzzle - mount) * (r / 0.53);
+            assert!(
+                p.distance(orb) > 0.415,
+                "the barrel's in the shell ({:.3} m from the orb's middle)",
+                p.distance(orb)
+            );
+        }
+        // (The body may turn to look; the gun doesn't turn on it.)
+        let on_body = |app: &App, p: Vec3| {
+            app.world()
+                .get::<GlobalTransform>(walker)
+                .unwrap()
+                .affine()
+                .inverse()
+                .transform_point3(p)
+        };
+        let before = on_body(&app, muzzle);
+        look(&mut app, -4.0);
+        for _ in 0..120 {
+            app.update();
+        }
+        let (_, after, _, _) = gun(&mut app);
+        let after = on_body(&app, after);
+        assert!(
+            after.distance(before) < 0.02,
+            "and doesn't follow ({before:?} -> {after:?})"
+        );
+    }
+
+    /// A failing leg (5%) is held up off the ground even standing still,
+    /// the others planted: the hurt reads on a walker that isn't walking.
+    #[test]
+    fn a_failing_leg_is_held_up_at_rest() {
+        let (mut app, walker) = standing_walker();
+        set_hp(&mut app, walker, super::super::PartRole::Leg(1), 0.05);
+        for _ in 0..90 {
+            app.update();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let poses = app.world().get::<LegPoses>(walker).unwrap().0;
+        for (i, [_, _, foot]) in poses.iter().enumerate() {
+            let up = foot.y - zone.ground(foot.x, foot.z);
+            if i == 1 {
+                assert!(up > 0.1, "the failing leg's foot is {up:.2} m up");
+            } else {
+                assert!(up < 0.04, "leg {i}'s foot is planted ({up:.2} m up)");
+            }
+        }
+    }
+
+    /// How deep a sphere at `c` of radius `r` is into the box at `at`
+    /// with half-extents `half` (axis-aligned), m; 0 if clear.
+    fn into_box(c: Vec3, r: f32, at: Vec3, half: Vec3) -> f32 {
+        let d = (c - at).abs() - half;
+        let outside = d.max(Vec3::ZERO).length();
+        if outside > 0.0 {
+            (r - outside).max(0.0)
+        } else {
+            r - d.max_element()
+        }
+    }
+
+    /// The playtest's walker seen through a wall (0:57:47): walkers swept
+    /// along a wall closer than their legs reach, walked straight at one,
+    /// and turned beside one. No part of the body, its orb or any leg from
+    /// hip to knee to foot, goes more than a few cm into the wall.
+    #[test]
+    fn no_part_of_a_walker_passes_into_a_wall() {
+        // (offset of its path from the wall face, the path's turns, size)
+        let cases: [(&str, f32, Vec<Vec3>, f32); 5] = [
+            (
+                "along, 0.55 m off",
+                0.55,
+                vec![Vec3::new(6.0, 0.0, 0.0)],
+                1.0,
+            ),
+            ("along, 0.3 m off", 0.3, vec![Vec3::new(6.0, 0.0, 0.0)], 1.0),
+            ("straight at it", 2.5, vec![Vec3::new(0.0, 0.0, 4.0)], 1.0),
+            (
+                "turning beside it",
+                0.7,
+                vec![Vec3::new(2.5, 0.0, 0.0), Vec3::new(2.5, 0.0, -4.0)],
+                1.0,
+            ),
+            (
+                "a crawler along it",
+                0.3,
+                vec![Vec3::new(5.0, 0.0, 0.0)],
+                0.6,
+            ),
+        ];
+        let mut worst = Vec::new();
+        for (name, off, turns, size) in cases {
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let at = zone.on_ground(40.0, 230.0);
+            // The wall along +x, its near face `off` from the path, on +z.
+            let half = Vec3::new(8.0, 1.6, 0.15);
+            let wall = Vec3::new(
+                at.x + 2.0,
+                zone.ground(at.x, at.z + off) + half.y - 0.4,
+                at.z + off + half.z,
+            );
+            app.world_mut().spawn((
+                RigidBody::Static,
+                Collider::cuboid(2.0 * half.x, 2.0 * half.y, 2.0 * half.z),
+                CollisionLayers::new(Layer::World, LayerMask::ALL),
+                Transform::from_translation(wall),
+            ));
+            let walker = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let job = super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                };
+                let e = super::super::walker::spawn_walker_sized(
+                    &mut c, &zone, at, job, false, 1.0e6, size, None,
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                q.apply(app.world_mut());
+                e
+            };
+            for _ in 0..20 {
+                app.update();
+            }
+            app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+                turns.iter().map(|d| at + *d).collect();
+            let mut deepest = (0.0f32, "");
+            for tick in 0..(90 * 7) {
+                app.update();
+                // (Where it was stood is spawning's: from its first steps.)
+                if tick < 90 {
+                    continue;
+                }
+                let t = *app.world().get::<Transform>(walker).unwrap();
+                let poses = app.world().get::<LegPoses>(walker).unwrap().0;
+                let orb = into_box(t.translation, 0.4 * size, wall, half);
+                if orb > deepest.0 {
+                    deepest = (orb, "orb");
+                }
+                for [hip, knee, foot] in poses {
+                    for (a, b, part) in [(hip, knee, "thigh"), (knee, foot, "shin")] {
+                        for k in 0..=8 {
+                            let p = a.lerp(b, k as f32 / 8.0);
+                            let d = into_box(p, 0.05 * size, wall, half);
+                            if d > deepest.0 {
+                                deepest = (d, part);
+                            }
+                        }
+                    }
+                }
+            }
+            worst.push((name, deepest));
+        }
+        eprintln!("{worst:?}");
+        for (name, (d, part)) in worst {
+            assert!(d < 0.05, "{name}: its {part} went {d:.2} m into the wall");
+        }
+    }
+
     /// A foot aimed through a wall comes down short of it; a slope under
     /// the ray isn't a wall; nothing in the way, it goes where it was aimed.
     #[test]

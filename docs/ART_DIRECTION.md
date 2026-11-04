@@ -1,5 +1,18 @@
 # Art direction
 
+> **Where visual design stopped (2 November 2026, paused).** On main
+> as of 7a28e6a0:
+> - analytic sky environment light (`render/sky_light.rs`);
+> - rooms lit for the first jobs (`ROOM_ADAPT`, `render/grade.rs`);
+> - held items and gloves readable in dim rooms (`render/held_light.rs`, checked with `scripts/held_check.py`);
+> - no rain under any roof (`world/rain.rs`).
+>
+> **What's next:**
+> - The headset check, owned by the coordinator and Performance:
+>   - the village with `EXTRACTION_NEAR_FILL=0` and `=1`, to confirm the software renderer's wall-time mode isn't real (code review found no per-frame work);
+>   - whether rooms by day read too bright or flat. `ROOM_ADAPT` (1.3) is the lever: see "Rooms by day" below.
+> - After that, the next coordinator brief.
+
 The look the visual changes are held to. `DESIGN.md` says what the game
 is; this says what it should look like, and why. Check every visual
 change against it, with before and after shots from the lookbook
@@ -69,6 +82,11 @@ headset and smears on OLED/LCD). **Nothing pure white** except emissives.
 - **No screen-space effects per eye** unless shown to be cheap: no SSAO,
   SSR or volumetrics. Darkening and contact come from baked vertex AO,
   textures and the fog.
+- **Rooms by day** are dim but read: the eyes open `render::grade::ROOM_ADAPT`
+  (1.3) stops past the room's cut, and what's in your hand keeps its own
+  light (`render::held_light`, `scripts/held_check.py`). If playtesters
+  find rooms too bright or flat (a near white wall), lower `ROOM_ADAPT`;
+  `EXTRACTION_ROOM_ADAPT=0` shows the rooms without it.
 
 ## Fog and air
 
@@ -257,6 +275,26 @@ Layers a pixel by kind, from `gauge_marrow_creek_holds_the_budget`
 
 In the forest, the cost is the near, alpha-tested cards, not the far
 forest: the impostors stay under 1.7 layers even at the edge.
+
+The spruce's core (2026-10-31). Settled close up (m05, the tester's
+"ugly as sin"), the near spruces were black cones behind sparse
+cards. The core was the far crown shrunk inside the cards, and the
+cards' shadow left it ambient light only. It drew at about an eighth of
+the needles' green. Now it:
+
+- wears the needle atlas, opaque, a sprig to each skirt point (about
+  a metre);
+- is shaded grey at 0.55 by the crown's own light and dark
+  (`trees::core_of`);
+- takes no shadow (`NotShadowReceiver`).
+
+On the centre spruce of m05, the near-black share went from 58% to
+27%. Narrower too (0.55 of the crown across, not 0.62), so its whorl
+tips stay inside the cards. It costs one texture sample on a draw that
+was there, and saves the shadow lookups.
+
+Before and after, settled: `docs/shots/performance/spruce_core_m05_before_after.jpg`
+(m05) and `spruce_core_s4_step_before_after.jpg` (a few metres on).
 
 Open, next steps:
 

@@ -9,6 +9,21 @@
 use crate::geom::P2;
 use serde::{Deserialize, Serialize};
 
+/// A rock outcrop: a big stone `radius` across with a few smaller ones
+/// round it, the scatter's rocks kept off it (`rocks::scatter_rocks`).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutcropDef {
+    pub at: P2,
+    pub radius: f32,
+    /// Smaller stones beside it.
+    #[serde(default = "default_outcrop_stones")]
+    pub stones: u32,
+}
+
+fn default_outcrop_stones() -> u32 {
+    3
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MapDef {
     pub name: String,
@@ -59,6 +74,10 @@ pub struct MapDef {
     /// ground is all stone.
     #[serde(default)]
     pub scree: f32,
+    /// Rock outcrops set by hand where open ground wants something to
+    /// get behind (`rocks`), on top of the scatter.
+    #[serde(default)]
+    pub outcrops: Vec<OutcropDef>,
     /// Where snow can lie (m): above it, falling weather comes as snow
     /// and lies on what faces up. None: the valley's too low
     /// (`world::snow`).
@@ -439,13 +458,33 @@ pub fn prefab_base(id: &str) -> &str {
         .unwrap_or(id)
 }
 
+/// Buildings with a plan of their own inside another's walls: the same
+/// footprint, doors and windows, so the map's rules take them as that
+/// one (`buildings` builds each its own rooms and furniture).
+pub const SHELLS: [(&str, &str); 3] = [
+    ("post_office", "house_brick"),
+    ("house_plank_b", "house_plank"),
+    ("house_plank_c", "house_plank"),
+];
+
+/// The prefab whose walls a placement stands in: a ruin's house, a
+/// variant's shell (any other id as it is). What footprints, doors and
+/// the lint go by; [`prefab_base`] still tells a ruin from its house.
+pub fn prefab_shell(id: &str) -> &str {
+    let base = prefab_base(id);
+    SHELLS
+        .iter()
+        .find(|(v, _)| *v == base)
+        .map_or(base, |(_, shell)| shell)
+}
+
 /// Walls a prefab builds out past its footprint, as centre and half
 /// extents (x, z) in the prefab's own frame, unrotated. They aren't
 /// footprint (the lint doesn't count them as standing anywhere), but the
 /// nav grid blocks them: nothing walks through a wall it can't see. The
 /// prefab's own tests check these agree with what it builds.
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
-    match prefab_base(id) {
+    match prefab_shell(id) {
         // The face stair's walls (world::dam::stair_wall): along the
         // stair and the landing's south side, and the landing's east side.
         "dam_face" => &[([79.0, 10.6], [66.5, 1.5]), ([144.0, 5.55], [1.5, 3.55])],
@@ -476,7 +515,7 @@ pub fn prefab_wheels(id: &str) -> Option<[[f32; 2]; 4]> {
 }
 
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
-    let mut f = match prefab_base(id) {
+    let mut f = match prefab_shell(id) {
         "quarantine_gate" => [12.0, 7.0, 3.0],
         "guard_booth" => [2.6, 2.7, 2.6],
         "sawmill" => [24.0, 6.3, 12.0],
@@ -503,7 +542,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // Kit's car wrecks (`art/vehicles/wrecks.py`).
         "wreck_lada" => [1.8, 1.45, 4.3],
         "wreck_uaz" => [1.9, 2.0, 4.1],
-        "wreck_lorry" => [2.6, 2.2, 6.4],
+        // (Its body is 7.0 m nose to tail: `buildings::tests::
+        // solid_pieces_stay_in_the_footprint`.)
+        "wreck_lorry" => [2.6, 2.2, 7.0],
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 13.8, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
@@ -600,14 +641,14 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             width: 2.0,
             clear: 3.6,
         }];
-        return match base {
+        return match prefab_shell(base) {
             "house_plank" => &PLANK,
             "farmhouse" | "house_brick" => &WIDE,
             "chapel" => &CHAPEL,
             _ => &[],
         };
     }
-    match prefab_base(id) {
+    match prefab_shell(id) {
         "house_plank" => &[Entrance {
             at: [0.0, -3.59],
             out: [0.0, -1.0],
@@ -866,7 +907,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
 /// under it, less a margin, and still be footed. `qa` in the game checks
 /// this against the models.
 pub fn prefab_foundation(id: &str) -> f32 {
-    match prefab_base(id) {
+    match prefab_shell(id) {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
         | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
@@ -965,6 +1006,21 @@ pub fn under_stepped(map: &MapDef, q: P2) -> bool {
     })
 }
 
+/// A prefab's ground contacts where they're a few posts or blocks with
+/// open ground between (a road through a gate), in its own space: each
+/// one's middle and half extents, x and z. The whole footprint can't take a
+/// pad ([`prefab_wants_pad`]: it would terrace the road), so the terrain
+/// levels a small one under each contact at the prefab's footing
+/// (`terrain::Heightmap::level_posts`).
+pub fn prefab_post_pads(id: &str) -> &'static [([f32; 2], [f32; 2])] {
+    match id {
+        // Each side's road block (x 5.2, 1.4 m square) and the gate post
+        // beside it (x 4.3): `buildings::quarantine_gate`.
+        "quarantine_gate" => &[([-5.04, 0.0], [0.87, 0.7]), ([5.04, 0.0], [0.87, 0.7])],
+        _ => &[],
+    }
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a
@@ -1008,6 +1064,37 @@ impl MapDef {
             .filter(move |m| std::mem::discriminant(&m.kind) == std::mem::discriminant(kind))
     }
 
+    /// Where the truck stands: its base stop (rear to the drop) and each
+    /// rendezvous (bed to the valley's middle), with its yaw as the game
+    /// turns it (`Quat::from_rotation_y(yaw)` turning its rear, +Z, that
+    /// way; `raid::truck::base_pose`, `rv_pose`).
+    pub fn truck_stands(&self) -> Vec<(String, P2, f32)> {
+        let ins = self
+            .markers_of(&MarkerKind::Insertion)
+            .next()
+            .map_or([0.0, 0.0], |m| m.at);
+        let yaw_to = |from: P2, to: P2| {
+            let d = crate::geom::sub(to, from);
+            if crate::geom::len(d) < 1e-3 {
+                0.0
+            } else {
+                d[0].atan2(d[1])
+            }
+        };
+        let mut out = Vec::new();
+        for m in self.markers_of(&MarkerKind::TruckStop) {
+            out.push((format!("its stop ({})", m.name), m.at, yaw_to(m.at, ins)));
+        }
+        for m in self.markers_of(&MarkerKind::Rendezvous) {
+            out.push((
+                format!("the rendezvous {}", m.name),
+                m.at,
+                yaw_to(m.at, [0.0, 0.0]),
+            ));
+        }
+        out
+    }
+
     /// Which region a point is in, if any (first match wins).
     /// Loot rolls per spot at `p` (1 outside any region).
     pub fn richness_at(&self, p: P2) -> f32 {
@@ -1032,6 +1119,13 @@ pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_res
 /// The fifth (docs/FIFTH_VALLEY.md).
 pub const RIME_FELL: &str = include_str!("../../../assets/maps/rime_fell.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
+/// The test field's id: a valley only tests load, never on [`VALLEYS`],
+/// the career or the truck's way (the game serves it to its own tests
+/// alone). The ground Marrow Creek had before its places were pulled in,
+/// so the mechanics tests that staged scenes on its open meadow keep
+/// theirs.
+pub const TEST_FIELD_ID: &str = "test_field";
+pub const TEST_FIELD: &str = include_str!("../../../assets/test/test_field.ron");
 
 /// Every valley the truck drives to, (map id, map text), in the order a
 /// career meets them. Tests that hold "every valley" to something go over
@@ -1049,6 +1143,32 @@ pub const VALLEYS: [(&str, &str); 5] = [
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    /// A building with a plan of its own in another's walls stands on
+    /// that one's footprint, doors and foundation, and counts as a
+    /// building you can go into; it isn't taken for a ruin of it.
+    #[test]
+    fn a_variant_stands_in_its_shell() {
+        for (variant, shell) in SHELLS {
+            assert_eq!(prefab_shell(variant), shell);
+            assert_eq!(prefab_base(variant), variant, "{variant} read as a ruin");
+            assert_eq!(prefab_footprint(variant), prefab_footprint(shell));
+            assert_eq!(prefab_entrances(variant), prefab_entrances(shell));
+            assert_eq!(prefab_foundation(variant), prefab_foundation(shell));
+            assert_eq!(prefab_walls(variant), prefab_walls(shell));
+            assert!(crate::progression::is_building(variant), "{variant}");
+            assert!(crate::map_lint::ENTERABLE.contains(&prefab_shell(variant)));
+            // Its ruins are its shell's.
+            for s in RUIN_STATES {
+                let ruin = format!("{variant}{s}");
+                assert_eq!(prefab_shell(&ruin), shell);
+                assert_eq!(
+                    prefab_entrances(&ruin),
+                    prefab_entrances(&format!("{shell}{s}"))
+                );
+            }
+        }
+    }
 
     /// A road's avalanche galleries read like its bridges, and a road
     /// written before galleries existed has none.
@@ -1134,13 +1254,13 @@ mod tests {
         assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
         let hm = Heightmap::build(&map);
         assert!(
-            hm.water_level([40.0, 130.0]).is_some(),
+            hm.water_level([40.0, 103.7]).is_some(),
             "the beck under the bridge"
         );
-        assert!(hm.water_level([-42.0, 125.0]).is_none(), "the Row is dry");
+        assert!(hm.water_level([-30.5, 93.0]).is_none(), "the Row is dry");
         // It climbs: the pass is well above the gate.
-        let gate = hm.height([120.0, 270.0]);
-        let pass = hm.height([10.0, -250.0]);
+        let gate = hm.height([90.9, 202.4]);
+        let pass = hm.height([9.6, -190.0]);
         assert!(pass - gate > 15.0, "gate {gate:.1}, pass {pass:.1}");
         for m in map.markers.iter().filter(|m| {
             matches!(
@@ -1159,15 +1279,15 @@ mod tests {
         assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
         let hm = Heightmap::build(&map);
         assert!(
-            hm.water_level([20.0, 56.0]).is_some(),
+            hm.water_level([14.0, 46.0]).is_some(),
             "the canal under the bridge"
         );
-        assert!(hm.water_level([-50.0, 155.0]).is_none(), "Ash Row is dry");
-        assert!(hm.water_level([75.0, -20.0]).is_none(), "the works are dry");
+        assert!(hm.water_level([-34.5, 108.2]).is_none(), "Ash Row is dry");
+        assert!(hm.water_level([56.2, -9.5]).is_none(), "the works are dry");
         let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
         for rv in map.markers_of(&MarkerKind::Rendezvous) {
             assert!(
-                crate::geom::dist(ins.at, rv.at) > 350.0,
+                crate::geom::dist(ins.at, rv.at) > 350.0 * crate::map_lint::valley_scale(&map),
                 "{} is too close to the insertion",
                 rv.name
             );
@@ -1299,9 +1419,9 @@ mod tests {
     #[test]
     fn risk_pays_in_loot() {
         let map = MapDef::from_ron(MARROW_CREEK).unwrap();
-        let village = map.richness_at([5.0, 70.0]);
-        let hollow = map.richness_at([150.0, -40.0]);
-        let rail = map.richness_at([185.0, -215.0]);
+        let village = map.richness_at([-12.0, 45.0]);
+        let hollow = map.richness_at([82.5, -22.0]);
+        let rail = map.richness_at([95.0, -113.8]);
         assert!(village < 1.0, "the village is picked over ({village})");
         assert!(rail > 1.0 && hollow > rail, "{rail} {hollow}");
     }
@@ -1309,15 +1429,15 @@ mod tests {
     #[test]
     fn marrow_creek_parses_and_builds() {
         let map = MapDef::from_ron(MARROW_CREEK).expect("map parses");
-        assert_eq!(map.size, 640.0);
+        assert_eq!(map.size, 388.0);
         assert!(map.markers_of(&MarkerKind::Rendezvous).count() >= 2);
         let hm = Heightmap::build(&map);
         // The creek has water, and the village bridge leaves it alone.
         assert!(
-            hm.water_level([11.0, 10.0]).is_some(),
+            hm.water_level([8.6, -20.2]).is_some(),
             "creek under the bridge"
         );
-        assert!(hm.water_level([5.0, 70.0]).is_none(), "village is dry");
+        assert!(hm.water_level([-12.0, 45.0]).is_none(), "village is dry");
         // Every insertion and rendezvous is on walkable ground.
         for m in map
             .markers
@@ -1335,7 +1455,7 @@ mod tests {
         let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
         for rv in map.markers_of(&MarkerKind::Rendezvous) {
             assert!(
-                crate::geom::dist(ins.at, rv.at) > 350.0,
+                crate::geom::dist(ins.at, rv.at) > 350.0 * crate::map_lint::valley_scale(&map),
                 "{} is too close to the insertion",
                 rv.name
             );

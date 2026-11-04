@@ -183,11 +183,33 @@ pub fn fence_visuals(
         perceptual_roughness: 0.7,
         ..default()
     });
-    let post = meshes.add(Cuboid::new(0.08, 2.8, 0.08));
-    // The wire, merged a cell at a time: a strand per span was five
-    // entities every 3 m round the whole map (a thousand in some views).
+    // Posts and plates merged a cell at a time, as the wire is: a post
+    // was its own model entity every 3 m round the map (745 in Marrow
+    // Creek, a third of the valley's static mesh entities), each culled,
+    // bounded and specialised every frame (`budget::mesh_census`). A
+    // steel stake per post until the concrete post's model is in
+    // (`merge_fence_posts`).
+    let stake = Mesh::from(Cuboid::new(0.08, 2.8, 0.08));
+    let plate = Mesh::from(Cuboid::new(0.5, 0.35, 0.02));
     let mut wires: std::collections::HashMap<(i32, i32), Mesh> = Default::default();
-    let plate = meshes.add(Cuboid::new(0.5, 0.35, 0.02));
+    let mut posts: std::collections::HashMap<(i32, i32), Vec<Transform>> = Default::default();
+    let mut plates: std::collections::HashMap<(i32, i32), Mesh> = Default::default();
+    let cell_of = |x: f32, z: f32| {
+        (
+            (x / WIRE_CELL).floor() as i32,
+            (z / WIRE_CELL).floor() as i32,
+        )
+    };
+    let add = |into: &mut std::collections::HashMap<(i32, i32), Mesh>, cell, piece: Mesh| match into
+        .get_mut(&cell)
+    {
+        Some(m) => {
+            let _ = m.merge(&piece);
+        }
+        None => {
+            into.insert(cell, piece);
+        }
+    };
     let mut k = 0usize;
     for run in fence_runs(&zone) {
         let len = run.a.distance(run.b);
@@ -197,29 +219,16 @@ pub fn fence_visuals(
         for i in 0..=n {
             let p = run.a.lerp(run.b, i as f32 / n as f32);
             let y = zone.ground(p.x, p.y);
-            // A steel stake until the concrete post's model is in.
-            commands
-                .spawn((
-                    Transform::from_xyz(p.x, y, p.y).with_rotation(yaw),
-                    Visibility::default(),
-                    crate::render::world_props::SwapIn::one("fence_post"),
-                    POST_REACH,
-                ))
-                .with_child((
-                    Mesh3d(post.clone()),
-                    MeshMaterial3d(metal.clone()),
-                    Transform::from_xyz(0.0, 1.3, 0.0),
-                    crate::render::world_props::Blockout,
-                ));
+            let cell = cell_of(p.x, p.y);
+            posts
+                .entry(cell)
+                .or_default()
+                .push(Transform::from_xyz(p.x, y, p.y).with_rotation(yaw));
             if i < n {
                 let q = run.a.lerp(run.b, (i + 1) as f32 / n as f32);
                 let yq = zone.ground(q.x, q.y);
                 let span = Vec3::new(q.x - p.x, yq - y, q.y - p.y);
                 let rot = Quat::from_rotation_arc(Vec3::X, span.normalize());
-                let cell = (
-                    (p.x / WIRE_CELL).floor() as i32,
-                    (p.y / WIRE_CELL).floor() as i32,
-                );
                 for h in [0.5, 1.1, 1.7, 2.3, 2.65] {
                     let mid = Vec3::new(p.x, y + h, p.y) + span * 0.5;
                     let piece = Mesh::from(Cuboid::new(1.0, 0.012, 0.012)).transformed_by(
@@ -227,24 +236,18 @@ pub fn fence_visuals(
                             .with_rotation(rot)
                             .with_scale(Vec3::new(span.length(), 1.0, 1.0)),
                     );
-                    match wires.get_mut(&cell) {
-                        Some(m) => {
-                            let _ = m.merge(&piece);
-                        }
-                        None => {
-                            wires.insert(cell, piece);
-                        }
-                    }
+                    add(&mut wires, cell, piece);
                 }
                 k += 1;
                 if k % 9 == 0 {
                     let mid = Vec3::new(p.x, y + 1.4, p.y) + span * 0.5;
-                    commands.spawn((
-                        Mesh3d(plate.clone()),
-                        MeshMaterial3d(sign.clone()),
-                        Transform::from_translation(mid).with_rotation(rot),
-                        POST_REACH,
-                    ));
+                    add(
+                        &mut plates,
+                        cell,
+                        plate
+                            .clone()
+                            .transformed_by(Transform::from_translation(mid).with_rotation(rot)),
+                    );
                 }
             }
         }
@@ -265,6 +268,124 @@ pub fn fence_visuals(
             },
         ));
     }
+    for (_, mesh) in plates {
+        commands.spawn((
+            Name::new("Fence plates"),
+            crate::render::centred(&mut meshes, mesh),
+            MeshMaterial3d(sign.clone()),
+            post_range(),
+        ));
+    }
+    let mut stakes = Vec::new();
+    for (_, at) in &posts {
+        let mut cell: Option<Mesh> = None;
+        for t in at {
+            let piece = stake
+                .clone()
+                .transformed_by(*t * Transform::from_xyz(0.0, 1.3, 0.0));
+            match cell.as_mut() {
+                Some(m) => {
+                    let _ = m.merge(&piece);
+                }
+                None => cell = Some(piece),
+            }
+        }
+        if let Some(mesh) = cell {
+            stakes.push(
+                commands
+                    .spawn((
+                        Name::new("Fence stakes"),
+                        crate::render::centred(&mut meshes, mesh),
+                        MeshMaterial3d(metal.clone()),
+                        post_range(),
+                    ))
+                    .id(),
+            );
+        }
+    }
+    commands.insert_resource(FencePosts {
+        posts,
+        stakes,
+        done: false,
+    });
+}
+
+/// Every fence post's place, by wire cell, and the merged stakes standing
+/// in for them until the post's model is in.
+#[derive(Resource)]
+pub struct FencePosts {
+    posts: std::collections::HashMap<(i32, i32), Vec<Transform>>,
+    stakes: Vec<Entity>,
+    done: bool,
+}
+
+/// Client: once the concrete post's model has loaded, each cell's posts
+/// become one mesh per material, and the stakes go. (A model that's
+/// missing or broken leaves the stakes.)
+pub fn merge_fence_posts(
+    mut commands: Commands,
+    posts: Option<ResMut<FencePosts>>,
+    mut props: crate::render::world_props::PropModels,
+    mut cache: ResMut<crate::render::world_props::PropMeshes>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(mut posts) = posts else {
+        return;
+    };
+    if posts.done {
+        return;
+    }
+    use crate::render::world_props::Resolved;
+    match props.resolve("fence_post") {
+        Resolved::Loading => return,
+        Resolved::Missing => {
+            posts.done = true;
+            return;
+        }
+        Resolved::Ready => {}
+    }
+    let parts = cache.get("fence_post", &mut props, &meshes).to_vec();
+    if parts.is_empty() {
+        return;
+    }
+    for at in posts.posts.values() {
+        for (mat, part) in &parts {
+            let mut cell: Option<Mesh> = None;
+            for t in at {
+                let piece = part.clone().transformed_by(*t);
+                match cell.as_mut() {
+                    Some(m) => {
+                        let _ = m.merge(&piece);
+                    }
+                    None => cell = Some(piece),
+                }
+            }
+            if let Some(mesh) = cell {
+                let material = props.material(mat, &mut materials);
+                commands.spawn((
+                    Name::new("Fence posts"),
+                    crate::render::centred(&mut meshes, mesh),
+                    MeshMaterial3d(material),
+                    post_range(),
+                ));
+            }
+        }
+    }
+    for e in std::mem::take(&mut posts.stakes) {
+        commands.entity(e).try_despawn();
+    }
+    posts.done = true;
+}
+
+/// A post's or plate's fade, for a cell of them: `POST_REACH` from the
+/// cell's nearest edge, as `LodReach` fades one.
+fn post_range() -> bevy::camera::visibility::VisibilityRange {
+    bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: (POST_REACH.0 * 0.8)..POST_REACH.0,
+        use_aabb: true,
+    }
 }
 
 /// An 8 cm post is under a pixel wide past about 90 m (and crawls): it
@@ -275,3 +396,19 @@ const POST_REACH: crate::render::budget::LodReach = crate::render::budget::LodRe
 const WIRE_CELL: f32 = 16.0;
 /// ... and fades out round this far from a cell's centre.
 const WIRE_FADE: f32 = 40.0;
+
+#[cfg(test)]
+mod fence_where {
+    #[test]
+    #[ignore = "prints where Marrow Creek's first fence run is"]
+    fn fence_where() {
+        let zone = super::Zone::load("marrow_creek");
+        let r = &super::fence_runs(&zone)[0];
+        println!(
+            "FENCE {:?} {:?} ground {}",
+            r.a,
+            r.b,
+            zone.ground(r.a.x, r.a.y)
+        );
+    }
+}

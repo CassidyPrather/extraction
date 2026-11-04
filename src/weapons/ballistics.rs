@@ -45,6 +45,9 @@ pub struct Projectile {
     pub passes: u8,
     /// What it's loaded with (AP, a tracer, a slug).
     pub load: Load,
+    /// Where it left the muzzle (a tracer lights counting from here, not
+    /// from wherever the frame first sees it).
+    pub origin: Vec3,
 }
 
 /// A round glanced off a hard face (for the whine and a spray of sparks).
@@ -275,6 +278,7 @@ pub(crate) fn fire_shots(
                     seed: rng.next_u64(),
                     passes: 0,
                     load,
+                    origin: shot.origin,
                 },
                 Transform::from_translation(shot.origin),
             ));

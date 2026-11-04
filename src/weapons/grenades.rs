@@ -251,6 +251,7 @@ fn burn_fuses(
                     load: Default::default(),
                     seed: rng.next_u64(),
                     passes: 0,
+                    origin: at + dir * 0.04,
                 },
                 Transform::from_translation(at + dir * 0.04),
             ));
@@ -398,7 +399,7 @@ pub(crate) fn explosion_fx(
             },
             Spray {
                 n: 12,
-                mesh: |a| a.ball.clone(),
+                mesh: |a| a.puff.clone(),
                 mat: |a| a.soil_dust.clone(),
                 size: Vec3::splat(0.5),
                 out: 2.5,

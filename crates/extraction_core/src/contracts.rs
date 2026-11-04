@@ -104,6 +104,13 @@ pub struct Contract {
     pub done: &'static str,
 }
 
+/// A career's first jobs are the ladder's own, never a contract's: the
+/// first a there-and-back, the second where the broken walker teaches the
+/// first fight (`robots::broken`). A contract's errand can be anywhere
+/// (the post counter's is the Village, under a drone's patrol), so none
+/// starts before this many jobs are done.
+pub const GENTLE_JOBS: u32 = 2;
+
 /// Within this of a planted thing's place (m).
 pub const PLANT_RADIUS: f32 = 4.0;
 /// A photograph's subject, no farther than this (m) and this close to the
@@ -117,7 +124,8 @@ pub const CONTRACTS: &[Contract] = &[
         name: "The post counter",
         giver: "the Holm boy",
         says: &["The Holm boy's grown. Wants his grandad's watch. The post office."],
-        offered: Offered::Tier { tier: 0, at: 1 },
+        // The third odd job: never the first two (`GENTLE_JOBS`).
+        offered: Offered::Tier { tier: 0, at: 2 },
         raided_all: false,
         after: &[],
         steps: &[Step::Bring {
@@ -125,7 +133,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Village",
             item: "holm_watch",
             // The post office's counter, in the village.
-            near: Some([-20.0, 65.0]),
+            near: Some([-22.2, 33.5]),
         }],
         kit: &[],
         pay: &[("field_dressing", 1), ("matches", 2)],
@@ -156,7 +164,8 @@ pub const CONTRACTS: &[Contract] = &[
             },
         ],
         kit: &[("relay_box", 1)],
-        pay: &[("power_cell", 2), ("ammo_545", 2)],
+        // Rounds for the gun you have this early (the AK's are raids off).
+        pay: &[("power_cell", 2), ("ammo_9x18", 2)],
         trust: 1,
         // (Learning how their relays talk, you learn to drown them out.)
         unlocks: &[Unlock::Recipe("pack_545_ap"), Unlock::Recipe("make_jammer")],
@@ -175,7 +184,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Village",
             item: "tape_practice",
             // Hana's house by the well (Radio lays the tape there).
-            near: Some([-17.3, 93.7]),
+            near: Some([-19.6, 62.2]),
         }],
         kit: &[],
         pay: &[("canned_stew", 2), ("tea_tin", 1)],
@@ -359,7 +368,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Pumping station",
             item: "pump_log",
             // The sump, at the pump wells' bottom.
-            near: Some([-186.0, 42.0]),
+            near: Some([-96.0, 32.1]),
         }],
         kit: &[],
         pay: &[("power_cell", 2), ("chemlight", 3)],
@@ -383,7 +392,7 @@ pub const CONTRACTS: &[Contract] = &[
             item: "canary",
             // The cage landing, at the deep workings' shaft foot (the
             // layout keeps a canary on its bench every cycle).
-            near: Some([-56.2, 123.6]),
+            near: Some([-20.2, 111.6]),
         }],
         kit: &[],
         pay: &[("tea_tin", 1), ("regen_injector", 1)],
@@ -406,7 +415,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Miners' Row",
             item: "deputy_lamp",
             // The old heading, in the deep workings.
-            near: Some([-65.0, 135.5]),
+            near: Some([-29.0, 123.5]),
         }],
         kit: &[],
         pay: &[("regen_injector", 1), ("chemlight", 2)],
@@ -429,7 +438,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Cutter's farm",
             item: "charging_manifest",
             // The far ledge, in the furnace cellars.
-            near: Some([-207.0, 166.0]),
+            near: Some([-160.3, 106.3]),
         }],
         kit: &[],
         pay: &[("steel_plate", 1), ("ammo_762r_ap", 2)],
@@ -648,7 +657,7 @@ mod tests {
         }
         // And the surface's are on it.
         let m = &v.iter().find(|(v, _)| *v == "marrow_creek").unwrap().1;
-        assert_eq!(down_site(m, [-20.0, 65.0]), None);
+        assert_eq!(down_site(m, [-22.2, 33.5]), None);
     }
 
     #[test]
@@ -735,12 +744,45 @@ mod tests {
         }
     }
 
+    /// No contract comes up on a career's first two jobs: those are the
+    /// gentle ones, and a contract's errand can be anywhere. (First-jobs
+    /// runs: the post counter as job 2 took every newcomer into the Village
+    /// under a drone before the broken walker.)
+    #[test]
+    fn no_contract_comes_before_the_gentle_jobs() {
+        for c in CONTRACTS {
+            if let Offered::Tier { tier, at } = c.offered {
+                let before: u32 = TIERS[..tier as usize].iter().map(|t| t.jobs).sum();
+                assert!(
+                    before + at >= GENTLE_JOBS,
+                    "{}: offered as job {}",
+                    c.id,
+                    before + at + 1
+                );
+            }
+        }
+        // And a career walked from the start meets none before.
+        let mut p = Progress::default();
+        for done in 0..GENTLE_JOBS {
+            p.done = done;
+            p.done_in_tier = done;
+            assert!(
+                next_contract(&p).is_none(),
+                "a contract as job {}",
+                done + 1
+            );
+        }
+    }
+
     #[test]
     fn the_arc_offers_each_contract_once_in_its_place() {
         let mut p = Progress::default();
         assert!(next_contract(&p).is_none(), "not the very first job");
         p.done = 1;
         p.done_in_tier = 1;
+        assert!(next_contract(&p).is_none(), "not the second either");
+        p.done = 2;
+        p.done_in_tier = 2;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("post_counter"));
         p.contracts_done.push("post_counter".into());
         p.done = 3;
@@ -774,5 +816,42 @@ mod tests {
         p.trust = 5;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("the_heavy"));
         assert_eq!(recipes(&p), vec!["pack_545_ap", "make_jammer"]);
+    }
+
+    /// The first raid of a career a contract can be on the card: one job
+    /// a raid, up the ladder's tiers (its `at`th job), or past all of it.
+    fn soonest(c: &Contract) -> u32 {
+        let before = |tier: u32| {
+            TIERS
+                .iter()
+                .take(tier as usize)
+                .map(|t| t.jobs)
+                .sum::<u32>()
+        };
+        match c.offered {
+            Offered::Tier { tier, at } => before(tier) + at,
+            Offered::Deep { .. } => before(TIERS.len() as u32),
+        }
+    }
+
+    /// What a contract hands over (its kit and its pay) is out by the
+    /// raid it can first be offered on (the loot's `from_raid`): Lev's
+    /// mast relay, on raid 3, paid AK rounds five raids before any AK.
+    #[test]
+    fn contracts_pay_in_what_is_out() {
+        use crate::items::{BUILTIN_CATALOG, ItemCatalog};
+        use crate::loot::{BUILTIN_LOOT, LootTables};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        let mut early = Vec::new();
+        for c in CONTRACTS {
+            let at = soonest(c);
+            for (id, _) in c.kit.iter().chain(c.pay) {
+                if let Some(out) = loot.arrives(id).filter(|r| *r > at) {
+                    early.push(format!("{}: {id} on raid {at}, out from {out}", c.id));
+                }
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
     }
 }

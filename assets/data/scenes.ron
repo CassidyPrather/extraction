@@ -11,7 +11,7 @@
         map: "marrow_creek",
         name: "Farm barricade",
         // Behind crates in the farmyard, facing the Gate.
-        at: (181.0, 158.0),
+        at: (100.0, 92.8),
         rot: 315.0,
         pieces: [
             Crate(at: (-0.9, -1.0), size: 0.9),
@@ -37,7 +37,7 @@
         name: "Path marker",
         // Where the ranger's path leaves the footbridge: the pump keeper's
         // word for the quiet way.
-        at: (-184.0, -42.0),
+        at: (-83.5, -44.5),
         rot: 0.0,
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.5),
@@ -53,7 +53,7 @@
         map: "marrow_creek",
         name: "Survey table",
         // The survey team's table on the Hollow's edge, below the post.
-        at: (114.0, -14.0),
+        at: (40.5, 18.5),
         rot: 60.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -77,7 +77,7 @@
         map: "kettle_pass",
         name: "Supper at the charcoal hut",
         // Laid for two outside the hut, and left.
-        at: (128.0, -147.0),
+        at: (98.2, -112.5),
         rot: 220.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -97,7 +97,7 @@
         map: "kettle_pass",
         name: "Quarry watch",
         // A chair facing the quarry, binoculars beside it.
-        at: (160.0, -80.0),
+        at: (120.2, -58.1),
         rot: 135.0,
         pieces: [
             Chair(at: (0.0, 0.0), rot: 0.0),
@@ -118,7 +118,7 @@
         map: "cinder_works",
         name: "The inspector",
         // In the works garage, by the office: he said he'd wait.
-        at: (-25.5, -24.5),
+        at: (-31.5, -17.0),
         rot: 90.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -141,7 +141,7 @@
         map: "cinder_works",
         name: "Last fire in the dead wood",
         // Someone who sat out a Surge in the open, by the woodward's cabin.
-        at: (-66.0, -167.0),
+        at: (-42.9, -119.2),
         rot: 10.0,
         pieces: [
             Pallet(at: (0.0, 0.0), rot: 20.0),
@@ -160,7 +160,7 @@
         map: "kettle_pass",
         name: "Waiting out the beck",
         // A camp on the bank above the ford, for a night the water was up.
-        at: (194.0, 165.0),
+        at: (143.5, 114.4),
         rot: 250.0,
         pieces: [
             Campfire(at: (0.0, 0.0)),
@@ -178,7 +178,7 @@
         name: "Switchback post",
         // Drums and a crate across the verge where the soldiers watched
         // the pass road on the last day.
-        at: (-33.0, -135.0),
+        at: (-23.0, -102.5),
         rot: 180.0,
         pieces: [
             Barrel(at: (-0.8, -0.6)),
@@ -195,7 +195,7 @@
         map: "cinder_works",
         name: "Engine shed tea break",
         // Two cups and the crib table in the north sidings' engine shed.
-        at: (47.5, -258.0),
+        at: (24.5, -183.8),
         rot: 195.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -215,7 +215,7 @@
         name: "Bus depot queue",
         // Chairs set out for the queue on the 14th, and what was left on
         // them when the buses went.
-        at: (30.0, -205.0),
+        at: (18.8, -97.0),
         rot: 180.0,
         pieces: [
             Chair(at: (-1.5, 0.0), rot: 0.0),
@@ -240,7 +240,7 @@
         name: "Stone pickers",
         // Someone who went into the ash pit for the stones and didn't come
         // up: their mate's kit at the rim.
-        at: (-160.0, 45.0),
+        at: (-108.0, 4.0),
         rot: 270.0,
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.7),
@@ -263,9 +263,9 @@
         name: "Shelter dorm",
         // Under the village, in the civil-defence shelter's dorm (room
         // "dorm", site bunker_marrow): she came down after they took Jan.
-        at: (-13.3, 100.4),
+        at: (-15.5, 68.9),
         rot: 90.0,
-        floor: Some(11.61),
+        floor: Some(12.28),
         pieces: [
             Chair(at: (0.0, 0.0), rot: 0.0),
             Remains(at: (0.0, 0.0), rot: 0.0, seated: true),
@@ -287,9 +287,9 @@
         name: "Refuge board",
         // The mine's refuge chamber (room "refuge", site mine_kettle): the
         // last shift waited here for an all-clear, then walked out.
-        at: (-95.0, 30.0),
+        at: (-80.4, 20.7),
         rot: 0.0,
-        floor: Some(15.44),
+        floor: Some(15.95),
         pieces: [
             Table(at: (0.0, 0.0), rot: 90.0),
             Chair(at: (0.65, 0.0), rot: 270.0),
@@ -310,9 +310,9 @@
         name: "Valve three",
         // Under the works, in the valve chamber off the pump room (room
         // "valve_chamber", site tunnel_cinder): a fitter's last job.
-        at: (81.4, -37.8),
+        at: (62.6, -27.3),
         rot: 0.0,
-        floor: Some(15.88),
+        floor: Some(15.93),
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.6),
             Chair(at: (0.0, 0.7), rot: 0.0),
@@ -335,7 +335,7 @@
         map: "marrow_creek",
         name: "Rusty's corner",
         // Behind the house by the well: the dog's bed and his tin.
-        at: (-25.5, 96.0),
+        at: (-27.7, 64.5),
         rot: 90.0,
         after: Some(Tier(1)),
         pieces: [
@@ -357,9 +357,9 @@
         name: "Hana's basket",
         // In the shelter's hall under the village (room "hall", site
         // bunker_marrow): left on the floor for Mrs Holm.
-        at: (-7.5, 93.0),
+        at: (-9.7, 61.5),
         rot: 0.0,
-        floor: Some(11.61),
+        floor: Some(12.28),
         after: Some(Tier(2)),
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.4),
@@ -378,7 +378,7 @@
         map: "marrow_creek",
         name: "By the well",
         // Her chair at the well, and her basket dropped.
-        at: (-27.0, 105.5),
+        at: (-29.2, 74.0),
         rot: 330.0,
         after: Some(Tier(3)),
         pieces: [
@@ -399,7 +399,7 @@
         map: "marrow_creek",
         name: "Valley office copy",
         // The inspector's carbon, dropped from the post office's sack.
-        at: (-27.5, 61.0),
+        at: (-29.7, 29.5),
         rot: 270.0,
         after: Some(Tier(4)),
         pieces: [
@@ -417,7 +417,7 @@
         name: "At the fence",
         // After the recall: by the south gate where the soldiers turned bus
         // four back, his flask and a note on a crate.
-        at: (33.0, 290.0),
+        at: (15.0, 168.5),
         rot: 180.0,
         after: Some(Recalled),
         pieces: [
@@ -439,7 +439,7 @@
         // After the ending (he's been down to the Depot with you): a chair
         // by the well, facing her house (off the lane bank's foot, whose
         // rise tilted the ground under it).
-        at: (-27.0, 105.0),
+        at: (-29.2, 73.5),
         rot: 25.0,
         after: Some(Ended),
         pieces: [
@@ -463,7 +463,7 @@
         map: "kettle_pass",
         name: "Top of the raise",
         // Where the mine's escape raise comes up on the west slope.
-        at: (-117.0, 41.0),
+        at: (-102.4, 31.7),
         rot: 90.0,
         after: Some(Visits(1)),
         pieces: [
@@ -481,7 +481,7 @@
         map: "kettle_pass",
         name: "Dusek's hide",
         // On the quarry's lip by the pump house: a winter's watching.
-        at: (136.0, -43.0),
+        at: (90.8, -29.5),
         rot: 150.0,
         after: Some(Visits(3)),
         pieces: [
@@ -505,7 +505,7 @@
         map: "kettle_pass",
         name: "The shelter door",
         // At the quarry shelter: he went in for his key.
-        at: (187.5, -50.5),
+        at: (141.3, -36.7),
         rot: 240.0,
         after: Some(Visits(5)),
         pieces: [
@@ -528,7 +528,7 @@
         map: "cinder_works",
         name: "Fitter's bench",
         // By the canal pumps: the fitter's own book.
-        at: (166.0, 40.0),
+        at: (106.0, 32.9),
         rot: 0.0,
         after: Some(Visits(1)),
         pieces: [
@@ -550,7 +550,7 @@
         map: "cinder_works",
         name: "Letters by hand",
         // The inspector's satchel, left in the works yard.
-        at: (228.0, 4.0),
+        at: (164.8, -2.3),
         rot: 90.0,
         after: Some(Visits(3)),
         pieces: [
@@ -568,7 +568,7 @@
         map: "cinder_works",
         name: "The far stair",
         // Where the service tunnel comes up behind the works.
-        at: (67.0, -60.0),
+        at: (48.1, -49.5),
         rot: 0.0,
         after: Some(Visits(5)),
         pieces: [
@@ -591,8 +591,8 @@
         map: "marrow_creek",
         name: "Hauler's tag",
         // On a pallet of bicycles in the sorting hall.
-        at: (-231.5, -188.0),
-        floor: Some(15.31),
+        at: (-123.5, -77.1),
+        floor: Some(12.21),
         note: Some((
             name: "Hauler's tag",
             text: "INTAKE 00412\nBicycle (1). Marrow, village.\nCondition: kept.",
@@ -605,8 +605,8 @@
         name: "Tag office desk",
         // The tag office's desk: the intake terminal and the review docket
         // nobody stamped.
-        at: (-212.8, -192.5),
-        floor: Some(15.31),
+        at: (-104.8, -81.6),
+        floor: Some(12.21),
         note: Some((
             name: "Review docket",
             text: "REVIEW DOCKET - MARROW, KETTLE, CINDER\nPrepared for the Authority's review, 1 April.\nItems for decision: 48,212. Personnel: 31.\nRecommendation: ______\nStamp: ______\nPrepared by P. Rus, Inspector",
@@ -631,8 +631,8 @@
         map: "marrow_creek",
         name: "Marek crate",
         // Bay K-14, the long crate. Closed; her basket strapped on top.
-        at: (-263.6, -178.6),
-        floor: Some(11.31),
+        at: (-155.6, -67.7),
+        floor: Some(8.21),
         note: Some((
             name: "Marek tag",
             text: "CUSTODIAN - KEPT\nMAREK, H. Civilian. Marrow.\nRecovered: village, 3 FEB.\nWith: basket (1).\nReview: pending.",
@@ -644,8 +644,8 @@
     (
         map: "marrow_creek",
         name: "The dog's crate",
-        at: (-264.3, -177.1),
-        floor: Some(11.31),
+        at: (-156.3, -66.2),
+        floor: Some(8.21),
         note: Some((
             name: "Dog's tag",
             text: "CUSTODIAN - KEPT\nMAREK. Domestic animal (1).\nRecovered: village, 14 NOV.\nTag on collar: RUSTY.\nReview: pending.",
@@ -656,8 +656,8 @@
     (
         map: "marrow_creek",
         name: "Holm crate",
-        at: (-260.4, -177.2),
-        floor: Some(11.31),
+        at: (-152.4, -66.3),
+        floor: Some(8.21),
         note: Some((
             name: "Holm tag",
             text: "CUSTODIAN - KEPT\nHOLM, J. Civilian. Marrow.\nRecovered: street, 3 NOV.\nReview: pending.",
@@ -669,8 +669,8 @@
         map: "marrow_creek",
         name: "Vey's crate",
         // In the kept stacks' middle row: the survey chief, from the Hollow.
-        at: (-260.5, -194.0),
-        floor: Some(11.31),
+        at: (-152.5, -83.1),
+        floor: Some(8.21),
         note: Some((
             name: "Vey tag",
             text: "CUSTODIAN - KEPT\nVEY, O. Institute survey.\nRecovered: the Hollow, 23 NOV.\nWith: notebook (1).\nReview: pending.",
@@ -684,9 +684,9 @@
         name: "Pump control desk",
         // The drowned pump station's control desk (room "control", site
         // pump_marrow): the rest of the pump keeper's log.
-        at: (-162.6, 13.8),
+        at: (-72.6, 3.9),
         rot: 0.0,
-        floor: Some(17.61),
+        floor: Some(14.61),
         pieces: [],
         note: Some((
             name: "Pump log, below",
@@ -700,9 +700,9 @@
         name: "Brabec's locker",
         // By his locker in the sump (site pump_marrow; the boots are the
         // layout's), under 2.4 m of water until it's pumped.
-        at: (-188.4, 40.2),
+        at: (-98.4, 30.3),
         rot: 0.0,
-        floor: Some(12.61),
+        floor: Some(9.60),
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.4),
         ],
@@ -716,17 +716,18 @@
         name: "Deep refuge",
         // The old workings' refuge (room "refuge", site deep_kettle): a
         // family that wouldn't go over the pass.
-        at: (-66.0, 151.6),
+        at: (-30.0, 139.6),
         rot: 0.0,
-        floor: Some(-0.22),
+        floor: Some(1.66),
         pieces: [
             Bedroll(at: (0.4, 0.6), rot: 90.0),
             Bedroll(at: (0.4, -0.6), rot: 90.0),
             Lantern(at: (1.2, 0.0, 0.0)),
-            Crate(at: (1.0, 0.9), size: 0.4),
+            // Clear of the bedroll's end (it stood 3 cm into it).
+            Crate(at: (1.0, 1.35), size: 0.4),
         ],
         items: [
-            (id: "old_photo", at: (1.0, 0.4, 0.9), condition: 0.5),
+            (id: "old_photo", at: (1.0, 0.4, 1.35), condition: 0.5),
         ],
         note: Some((
             name: "Novakova's note",
@@ -740,9 +741,9 @@
         name: "Sorting ledge",
         // The cellars' far ledge, over the ash pit (room "far_ledge", site
         // cellars_cinder): where the furnace's charge was sorted.
-        at: (-208.0, 168.0),
+        at: (-161.3, 108.3),
         rot: 0.0,
-        floor: Some(11.47),
+        floor: Some(13.38),
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.5),
         ],
@@ -759,20 +760,21 @@
         name: "The second lorry",
         // The depot yard: what was left for the luggage lorry on the 15th,
         // one piece a household, labelled. It never came.
-        at: (15.0, -239.0),
+        at: (3.8, -131.0),
         rot: 0.0,
         pieces: [
             Prop(model: "suitcase_shut", at: (-3.2, 0.0, -0.6), rot: 10.0, size: (0.62, 0.22, 0.47)),
             Prop(model: "suitcase_shut", at: (-3.2, 0.22, -0.6), rot: -5.0, size: (0.62, 0.22, 0.47)),
             Prop(model: "suitcase_shut", at: (-2.4, 0.0, -0.9), rot: 35.0, size: (0.62, 0.22, 0.47)),
-            Prop(model: "belongings_box", at: (-1.6, 0.0, -0.5), rot: -10.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "belongings_box", at: (-1.6, 0.0, -0.5), rot: -10.0, size: (0.56, 0.413, 0.4)),
             Prop(model: "bundle", at: (-1.0, 0.0, -0.9), rot: 20.0, size: (0.49, 0.39, 0.4)),
-            Prop(model: "belongings_box", at: (-0.4, 0.0, -0.4), rot: 5.0, size: (0.56, 0.46, 0.4)),
-            Prop(model: "bundle", at: (-0.4, 0.46, -0.4), rot: -30.0, size: (0.49, 0.39, 0.4), collide: false),
+            Prop(model: "belongings_box", at: (-0.4, 0.0, -0.4), rot: 5.0, size: (0.56, 0.413, 0.4)),
+            // On the box's lid (0.413 up; at 0.46 it floated over it).
+            Prop(model: "bundle", at: (-0.4, 0.413, -0.4), rot: -30.0, size: (0.49, 0.39, 0.4), collide: false),
             Prop(model: "suitcase_shut", at: (0.3, 0.0, -0.8), rot: 80.0, size: (0.62, 0.22, 0.47)),
             Crate(at: (1.2, -0.6), size: 0.5),
             Prop(model: "suitcase_open", at: (1.2, 0.5, -0.6), rot: -15.0, size: (0.68, 0.12, 0.64)),
-            Prop(model: "picture_frame", at: (-1.6, 0.46, -0.5), rot: 15.0, size: (0.3, 0.03, 0.24), collide: false),
+            Prop(model: "picture_frame", at: (-1.6, 0.413, -0.5), rot: 15.0, size: (0.3, 0.03, 0.24), collide: false),
             Crate(at: (2.4, -0.5), size: 0.7),
         ],
         items: [
@@ -792,7 +794,7 @@
         name: "Fiala's walker",
         // The lodge meadow: a machine that came to the fence every evening,
         // and lay down here. Jam jars of flowers on its back.
-        at: (215.0, -200.0),
+        at: (159.1, -147.2),
         rot: 0.0,
         pieces: [
             Prop(model: "walker_wreck", at: (0.0, 0.0, 0.0), rot: 30.0, size: (1.0, 0.67, 1.5)),
@@ -816,17 +818,18 @@
         name: "The charging queue",
         // By the blast furnace: the carts of the last charge, held when the
         // fire got out into the north wood on 26 Feb, and never fed.
-        at: (-150.0, 178.0),
+        at: (-103.3, 118.3),
         rot: 0.0,
         pieces: [
             Pallet(at: (-6.0, 0.0), rot: 0.0),
-            Prop(model: "belongings_box", at: (-6.2, 0.144, 0.0), size: (0.56, 0.46, 0.4)),
+            Prop(model: "belongings_box", at: (-6.2, 0.144, 0.0), size: (0.56, 0.413, 0.4)),
             Prop(model: "bundle", at: (-5.7, 0.144, 0.1), rot: 25.0, size: (0.49, 0.39, 0.4)),
             Pallet(at: (-3.5, 0.0), rot: 0.0),
             Prop(model: "suitcase_shut", at: (-3.5, 0.144, 0.0), size: (0.62, 0.22, 0.47)),
             Prop(model: "suitcase_shut", at: (-3.5, 0.364, 0.0), rot: 15.0, size: (0.62, 0.22, 0.47)),
-            Pallet(at: (-1.0, 0.0), rot: 0.0),
-            Prop(model: "bed", at: (-1.0, 0.144, 0.0), rot: 90.0, size: (0.91, 0.9, 1.96)),
+            // The bed on its legs on the ground (on a pallet half its
+            // length, its legs hung off it).
+            Prop(model: "bed", at: (-1.0, 0.0, 0.0), rot: 90.0, size: (0.91, 0.9, 1.96)),
             Pallet(at: (1.5, 0.0), rot: 0.0),
             Prop(model: "books", at: (1.3, 0.144, 0.0), rot: 10.0, size: (0.5, 0.12, 0.27), collide: false),
             Prop(model: "dishes", at: (1.8, 0.144, 0.1), rot: -20.0, size: (0.45, 0.1, 0.35), collide: false),
@@ -883,13 +886,14 @@
         // In the village street by the post office, where the collector
         // took Jan Holm on 3 Nov with the shelter's lamp oil on his cart.
         // Hana left it where it stopped.
-        at: (-16.0, 76.0),
+        at: (-18.2, 44.5),
         rot: 0.0,
         pieces: [
             Pallet(at: (0.0, 0.0), rot: 15.0),
-            Prop(model: "belongings_box", at: (-0.25, 0.144, 0.0), rot: 15.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "belongings_box", at: (-0.25, 0.144, 0.0), rot: 15.0, size: (0.56, 0.413, 0.4)),
             Prop(model: "bundle", at: (0.3, 0.144, 0.1), rot: -20.0, size: (0.49, 0.39, 0.4)),
-            Prop(model: "lantern", at: (-0.25, 0.604, 0.0), size: (0.12, 0.27, 0.12), collide: false),
+            // On the box's lid (0.413 up; it floated 5 cm over it).
+            Prop(model: "lantern", at: (-0.25, 0.557, 0.0), size: (0.12, 0.27, 0.12), collide: false),
             Prop(model: "boots", at: (0.9, 0.0, 0.7), rot: 40.0, size: (0.22, 0.25, 0.34), collide: false),
         ],
         items: [
@@ -908,7 +912,7 @@
         name: "The lamp board",
         // By the mine: the lamp checks on their board, every one back on
         // its hook the day the pit shut, but the Nováks'.
-        at: (-200.0, -57.0),
+        at: (-150.9, -44.5),
         rot: 90.0,
         pieces: [
             Prop(model: "shelf_metal", at: (0.0, 0.0, -0.4), size: (1.06, 1.8, 0.36)),
@@ -934,7 +938,7 @@
         // Below the fire lookout, at the edge of the north-west wood: the
         // butts and the charred beam where the works and Ash Row held the
         // fire on 26 Feb till the wind went round.
-        at: (-160.0, -116.0),
+        at: (-108.5, -64.6),
         rot: 135.0,
         pieces: [
             Barrel(at: (-3.5, 0.0)),

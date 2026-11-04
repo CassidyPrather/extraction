@@ -14,6 +14,8 @@
 //! - **Marked** ([`mark`]): a lit orange knee ball, or a ring round an eye,
 //!   a rotor, a gun or a weak core, the size of what you can hit. It goes
 //!   out when the part does: a dead part's no target.
+//! - **A gone part's no target** ([`GoneHitVolume`]): shot off, it lets
+//!   rounds through to what's behind it.
 //! - **Nothing else orange**: the robots' models' hazard paint ("Warn",
 //!   "Yellow") is painted the robots' own teal glow instead ([`paint`]),
 //!   and their lamps stay off orange (tested).
@@ -150,7 +152,60 @@ pub struct WeakPointsPlugin;
 
 impl Plugin for WeakPointsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (mark_weak_points, mark_out).chain());
+        app.add_systems(Update, (mark_weak_points, mark_out).chain())
+            .add_systems(
+                FixedUpdate,
+                gone_parts_let_rounds_by.after(super::damage_parts),
+            );
+    }
+}
+
+/// A part that's gone stops being something to hit: rounds pass where it
+/// was to what's behind (a crawler's shot-off emitter no longer shields
+/// its core). Its collider is put out of every query and contact while
+/// it's dead, and back if it's mended (`mender`). Its body stays drawn
+/// (a dead leg still drags, an eye's socket still spits). The core is the
+/// exception: its going wrecks the robot, and a wreck is hit, cut and
+/// salvaged as one.
+#[derive(Component)]
+pub struct GoneHitVolume;
+
+fn gone_parts_let_rounds_by(
+    mut commands: Commands,
+    parts: Query<(Entity, &RobotPart, Has<GoneHitVolume>), Changed<RobotPart>>,
+    // (Something else switched it back on: a heavy's plate coming off
+    // uncovers what was behind it, dead or not.)
+    switched_on: Query<Entity, (With<GoneHitVolume>, Without<ColliderDisabled>)>,
+) {
+    for e in &switched_on {
+        commands.entity(e).try_insert(ColliderDisabled);
+    }
+    for (e, part, gone) in &parts {
+        let dead = !part.alive() && part.role != PartRole::Core;
+        if dead && !gone {
+            commands
+                .entity(e)
+                .try_insert((GoneHitVolume, ColliderDisabled));
+        } else if !dead && gone {
+            commands
+                .entity(e)
+                .try_remove::<(GoneHitVolume, ColliderDisabled)>();
+        }
+    }
+}
+
+/// The weak-point marks' one material: "shoot here" orange.
+pub(super) fn mark_material() -> StandardMaterial {
+    StandardMaterial {
+        base_color: SHOOT_HERE,
+        // (Lit enough to carry through fog, not so much it washes out to
+        // white: it must read orange.)
+        emissive: LinearRgba::rgb(1.6, 0.42, 0.0),
+        perceptual_roughness: 0.5,
+        // A signal lamp, like the eye: its true size, its brightness held
+        // through fog.
+        fog_enabled: false,
+        ..default()
     }
 }
 
@@ -213,14 +268,7 @@ fn mark_weak_points(
             let m = MarkAssets {
                 ball: meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap()),
                 ring: meshes.add(Torus::new(0.5 - RING, 0.5)),
-                mat: materials.add(StandardMaterial {
-                    base_color: SHOOT_HERE,
-                    // (Lit enough to carry through fog, not so much it
-                    // washes out to white: it must read orange.)
-                    emissive: LinearRgba::rgb(1.6, 0.42, 0.0),
-                    perceptual_roughness: 0.5,
-                    ..default()
-                }),
+                mat: materials.add(mark_material()),
             };
             commands.insert_resource(m.clone());
             m
@@ -351,23 +399,9 @@ mod tests {
         assert_eq!(paint("Shell"), "Shell");
     }
 
-    /// Every robot, as each is made: every weak point it has is at least
-    /// [`WEAK_ACROSS`] across at its size (it holds a VR pistol's cone at
-    /// 25 m) and wears a mark; its plates and strong parts don't. Prints
-    /// what each subtends at 15 and 25 m.
-    #[test]
-    fn every_robots_weak_points_are_big_and_marked() {
-        use super::super::{Job, JobKind, Robot, RobotKind};
-        let mut app = crate::headless_app(
-            crate::LaunchOptions {
-                robots: false,
-                ..Default::default()
-            },
-            false,
-        );
-        app.finish();
-        app.cleanup();
-        app.update();
+    /// One of every robot, spread along a row, as each is made.
+    fn every_robot(app: &mut App) {
+        use super::super::{Job, JobKind};
         let zone = app.world().resource::<crate::world::Zone>().clone();
         let catalog = app.world().resource::<crate::items::Catalog>().clone();
         let job = |at: Vec3| Job {
@@ -438,6 +472,26 @@ mod tests {
             pylon::spawn_pylon(&mut c, spot(16.0), 300.0, spot(16.0));
             q.apply(app.world_mut());
         }
+    }
+
+    /// Every robot, as each is made: every weak point it has is at least
+    /// [`WEAK_ACROSS`] across at its size (it holds a VR pistol's cone at
+    /// 25 m) and wears a mark; its plates and strong parts don't. Prints
+    /// what each subtends at 15 and 25 m.
+    #[test]
+    fn every_robots_weak_points_are_big_and_marked() {
+        use super::super::{Robot, RobotKind};
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        every_robot(&mut app);
         for _ in 0..12 {
             app.update();
         }
@@ -494,5 +548,248 @@ mod tests {
         for k in [RobotKind::Walker, RobotKind::Drone] {
             assert!(kinds.contains(&format!("{k:?}")), "{k:?} has no weak point");
         }
+    }
+
+    /// A gone part's no target: every robot with every part but its core
+    /// shot off, a round fired through each dead part at its robot's
+    /// middle passes it by (and a crawler's, through its dead emitter,
+    /// reaches its core: the bot's 59 of 60 rounds into a dead one).
+    #[test]
+    fn rounds_pass_through_gone_parts() {
+        use crate::weapons::ballistics::{Hit, Shot};
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        every_robot(&mut app);
+        for _ in 0..12 {
+            app.update();
+        }
+        // First the playtest's case on its own: a crawler, its emitter
+        // shot off and nothing else, shot through the emitter at its core.
+        let fire = |app: &mut App, from: Vec3, to: Vec3| -> Vec<Entity> {
+            let mut cursor = app.world().resource::<Messages<Hit>>().get_cursor_current();
+            app.world_mut().write_message(Shot {
+                gun: Entity::PLACEHOLDER,
+                shooter: None,
+                origin: from,
+                direction: (to - from).normalize_or(Vec3::NEG_Z),
+                speed: 700.0,
+                damage: 1.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: 7,
+            });
+            // (Read each tick: a message lasts two.)
+            let mut got = Vec::new();
+            for _ in 0..4 {
+                app.update();
+                let hits = app.world().resource::<Messages<Hit>>();
+                got.extend(cursor.read(hits).map(|h| h.entity));
+            }
+            got
+        };
+        let mut q = app
+            .world_mut()
+            .query::<(Entity, &mut RobotPart, &GlobalTransform)>();
+        let crawler = q
+            .iter(app.world())
+            .find(|(_, p, _)| {
+                p.role == PartRole::Weapon
+                    && app
+                        .world()
+                        .get::<super::super::Breed>(p.robot)
+                        .is_some_and(|b| b.0 == "Crawler")
+            })
+            .map(|(e, p, g)| (e, p.robot, g.translation()))
+            .expect("a crawler's emitter");
+        let (emitter, robot, at) = crawler;
+        let core = q
+            .iter(app.world())
+            .find(|(_, p, _)| p.robot == robot && p.role == PartRole::Core)
+            .map(|(_, _, g)| g.translation())
+            .unwrap();
+        let from = at + (at - core).normalize_or(Vec3::NEG_Z) * 2.5;
+        let live = fire(&mut app, from, core);
+        let names: Vec<String> = live
+            .iter()
+            .map(|e| format!("{:?}", app.world().get::<RobotPart>(*e).map(|p| p.role)))
+            .collect();
+        assert!(
+            live.first() == Some(&emitter),
+            "live, it shields the core: {names:?}"
+        );
+        q.get_mut(app.world_mut(), emitter).unwrap().1.hp = 0.0;
+        for _ in 0..3 {
+            app.update();
+        }
+        let dead = fire(&mut app, from, core);
+        let first = dead.first().copied();
+        let what = first.and_then(|e| app.world().get::<RobotPart>(e));
+        assert!(
+            first != Some(emitter) && what.is_some_and(|p| p.robot == robot && p.alive()),
+            "shot off, a round through it goes on to what's behind it: {:?}",
+            what.map(|p| p.role)
+        );
+        eprintln!("through the dead emitter: {:?}", what.map(|p| p.role));
+        // Then every part but the cores, gone, on every robot.
+        let mut q = app.world_mut().query::<&mut RobotPart>();
+        for mut p in q.iter_mut(app.world_mut()) {
+            if p.role != PartRole::Core {
+                p.hp = 0.0;
+            }
+        }
+        for _ in 0..3 {
+            app.update();
+        }
+        let mut q = app
+            .world_mut()
+            .query::<(Entity, &RobotPart, &GlobalTransform)>();
+        let gone: Vec<(Entity, Entity, PartRole)> = q
+            .iter(app.world())
+            .filter(|(_, p, _)| p.role != PartRole::Core)
+            .map(|(e, p, _)| (e, p.robot, p.role))
+            .collect();
+        assert!(gone.len() > 40, "{} parts", gone.len());
+        let mut stopped = Vec::new();
+        for (part, robot, role) in gone {
+            let world = app.world();
+            let (Some(pg), Some(rg)) = (
+                world.get::<GlobalTransform>(part),
+                world.get::<GlobalTransform>(robot),
+            ) else {
+                continue;
+            };
+            let (at, middle) = (pg.translation(), rg.translation());
+            let out = (at - middle).normalize_or(Vec3::Z);
+            let origin = at + out * 2.5;
+            let mut cursor = world.resource::<Messages<Hit>>().get_cursor_current();
+            app.world_mut().write_message(Shot {
+                gun: Entity::PLACEHOLDER,
+                shooter: None,
+                origin,
+                direction: (middle - origin).normalize_or(-out),
+                speed: 700.0,
+                damage: 1.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: 7,
+            });
+            for _ in 0..4 {
+                app.update();
+                let hits = app.world().resource::<Messages<Hit>>();
+                for h in cursor.read(hits) {
+                    if h.entity == part {
+                        stopped.push(format!("{role:?} of {robot:?}"));
+                    }
+                }
+            }
+        }
+        assert!(
+            stopped.is_empty(),
+            "rounds stopped on gone parts: {stopped:?}"
+        );
+    }
+
+    /// A mark rides its joint: a walker, a crawler and a hound walked
+    /// about, every leg's knee mark stays on the knee the leg is drawn
+    /// with (`walker::LegPoses`), frame by frame, moving or not.
+    #[test]
+    fn marks_ride_their_joints() {
+        use super::super::walker::{LegPoses, Walker, WalkerLeg};
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let job = |at: Vec3| super::super::Job {
+            kind: super::super::JobKind::Survey,
+            site: at,
+            duration: 999.0,
+            exit: at,
+        };
+        let mut bodies = Vec::new();
+        {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            for (k, size) in [1.0f32, super::super::indoor::CRAWLER_SIZE]
+                .into_iter()
+                .enumerate()
+            {
+                let at = zone.on_ground(40.0 + 8.0 * k as f32, 230.0);
+                let e = super::super::walker::spawn_walker_sized(
+                    &mut c,
+                    &zone,
+                    at,
+                    job(at),
+                    true,
+                    1.0e6,
+                    size,
+                    None,
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                bodies.push((e, at));
+            }
+            let at = zone.on_ground(56.0, 230.0);
+            let e = super::super::hound::spawn_hound(&mut c, &zone, at, job(at));
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            bodies.push((e, at));
+            q.apply(app.world_mut());
+        }
+        for _ in 0..20 {
+            app.update();
+        }
+        for (e, at) in &bodies {
+            if let Some(mut w) = app.world_mut().get_mut::<Walker>(*e) {
+                w.path = vec![
+                    *at + Vec3::new(6.0, 0.0, 4.0),
+                    *at + Vec3::new(0.0, 0.0, 8.0),
+                ];
+            }
+        }
+        let mut worst = 0.0f32;
+        let mut checked = 0;
+        for _ in 0..(60 * 6) {
+            app.update();
+            let mut marks = app.world_mut().query::<(&WeakMark, &GlobalTransform)>();
+            let marks: Vec<(Entity, Vec3)> = marks
+                .iter(app.world())
+                .map(|(m, g)| (m.part, g.translation()))
+                .collect();
+            for (part, at) in marks {
+                let world = app.world();
+                let (Some(p), Some(leg)) =
+                    (world.get::<RobotPart>(part), world.get::<WalkerLeg>(part))
+                else {
+                    continue;
+                };
+                let Some(poses) = world.get::<LegPoses>(p.robot) else {
+                    continue;
+                };
+                let knee = poses.0[leg.index][1];
+                worst = worst.max(at.distance(knee));
+                checked += 1;
+            }
+        }
+        assert!(checked > 1000, "{checked} mark-frames");
+        assert!(worst < 0.03, "a knee mark came {worst:.2} m off its knee");
     }
 }

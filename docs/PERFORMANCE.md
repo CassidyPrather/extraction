@@ -142,6 +142,8 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
 | Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
+| ...and over 6x6 (288 m) | `world::trees` | Both eyes: Kettle aerial 1786 > 1632, row 1774 > 1690; Marrow aerial 2076 > 1976; Cinder aerial 1702 > 1596. Fragments the same in clear weather, +0.05 layers at most in a storm. `docs/shots/performance/impostor_blocks_6x6_before_after.jpg` |
+| Breakable parts (shutters, boards, crates, panels, sash leaves, drawers) merged per 16 m cell per material while nothing's near or changing them; the cell is parts again the frame a hand, tool, hit, swing, pane or the Surge reaches one (`EXTRACTION_PART_REST=0`: off) | `render::part_rest` | One eye: Marrow gate 1013 > 591 draws, village 1032 > 648, spruce 940 > 661, aerial 1038 > 806; triangles the same. In a real render, Marrow's gate view merged 1132 part meshes into 224 before the shot, and the picture is the same |
 
 Shared tools for the next ones (in `render::budget`):
 
@@ -150,6 +152,54 @@ Shared tools for the next ones (in `render::budget`):
 - `ShadowReach(m)` on a mesh: it casts the sun's shadow only within `m`
   (a `VisibilityRange` can't do this: the cascades use the camera's).
 - Items get a range from their catalogue size by themselves.
+
+Tried and left (31 October): card outlines cut band by band (twelve
+bands, 26 points) instead of the 8-sided hull. The polygon follows a
+sprig's notches, so Marrow's spruce view went 64.5M > 53.3M fragments
+both eyes, with the same picture. But a card became 24 triangles where it
+was 6, and cards within 30 m draw into the sun's cascades too: the
+spruce view went 534k > 718k triangles and its shadows 402k > 839k, over
+the 700k budget. Most of that view's card layers (4.1 of 7.5) are the
+one or two trees within 10 m.
+
+### Depth prepass (headset experiment, off by default)
+
+`EXTRACTION_PREPASS=1` gives every player view a depth prepass: both
+eyes, the flat camera, the mirror, and the warm-up proxy, so its
+pipelines are warmed too (`render::prepass`). Without it, a pixel behind
+stacked cards is shaded for every card in front of it. Marrow's spruce
+view is 10 layers a pixel, 7.5 of them cards. With it, every layer's
+alpha is tested once in a depth-only pass, and the main pass shades only
+what's in front. That costs a second geometry pass an eye. The software
+renderer can't say whether it pays, so it waits for a headset:
+`docs/PLAYTEST.md` 4g has the run.
+
+What it takes to draw right:
+- The materials whose vertex shaders move their geometry give the
+  prepass their own vertex (and fragment) shaders, so the depth is where
+  the picture is. Those are the cards (sway, the near shrink, the dither
+  to the impostor), the impostors (turned to the eye, cut near), and the
+  ground cover (blown). `tree_sway.wgsl`, `impostor.wgsl` and `sway.wgsl`
+  serve both pipelines (`#ifdef PREPASS_PIPELINE`). Off, they return
+  Bevy's default prepass shaders, so nothing else, the sun's shadows
+  included, changes.
+- Leaves are a hard alpha test while it's on (`trees::foliage_alpha`).
+  The prepass has no colour for alpha to coverage to read, so a
+  coverage-cut card wrote its whole outline into the depth and hid the
+  world behind its gaps.
+- The ground cover's widening needs the normals the prepass doesn't
+  have, so its depth is slightly thinner than its picture. That is never
+  wider, so it hides nothing.
+- A `discard` in a WGSL function of our own, called from the fragment,
+  dropped cards that should have drawn (on lavapipe at least). The
+  dithers are written out in each entry point.
+
+Checked on the software renderer: with the prepass, all 13 of Marrow's
+lookbook views differ from the same views with hard leaves and no
+prepass by no more than two runs of either differ from each other. That
+is 0-6% of pixels past 24 levels: wind, rain, and whether the near trees'
+cards had streamed in by the shot's frame 60, which a lookbook shot
+sometimes catches before they have.
 
 ## Where it stands
 
@@ -233,6 +283,148 @@ multiview passes wouldn't change that). Recommendation: not now. If
 the headset's `cpu:` line shows the render world over budget, the
 cheaper levers are fewer entities a view (the draw budget) first; watch
 upstream Bevy for multiview, and take it when it lands rather than fork.
+
+### Along the walks the designer takes
+
+`vr_budget` holds Map design's walk reviews to the stereo budget:
+
+- `gauge_every_walk_holds_the_stereo_budget` reads every valley's
+  `docs/craft/walks/<map>/walk.stills`, each stop ahead and to the side,
+  in the reference weather (drizzle; `WALK_WEATHER` for another).
+  `WALKS_DIR` reads the walks from elsewhere.
+- `gauge_yard_stations_hold_the_stereo_budget` covers the yard's
+  stations: from in front of each post, looking at it and turned a
+  quarter right, and from the truck.
+
+A view at 75% or more of a budget prints what it spends on, the six
+kinds most drawn and most shadowed (`WALK_TOP` for more).
+
+First measure (2026-11-01; Marrow Creek and Cinder Works, 12 and 11
+stops; the yard, 9 posts). Nothing is over:
+
+| | worst draws (of 2,400) | worst shadow draws (of 1,800) | worst fragments (of 64.8M) |
+| - | - | - | - |
+| Marrow | s01 ahead, 1,606 | s01 ahead, 1,494 (83%) | s03 side, 26.0M |
+| Cinder | s01 ahead, 1,821 (76%) | s01 ahead, 1,188 | s09 side, 20.5M |
+| yard | st02 ahead, 512 | st02 ahead, 841 | st08 ahead, 14.3M |
+
+**The sky, counted (since 0ce15351).** `world::sky` centres its dome on
+the eye. Until `render::mark_offscreen`, "the eye" could be the
+impostors' capture rig or the warm-up's proxy eye, which also draw into
+images. Then the dome wasn't round the gauge's eye and its full-screen
+layer went uncounted. Every walk and yard view rose by the same 6.5M
+(one layer an eye at 1800 px): a measurement fixed, not a cost added.
+Worst fragments now: Marrow s03 side 32.5M, Cinder s09 side 27.0M, the
+yard st06 ahead 16.3M, of 64.8M.
+
+The drop is the dearest stop in both valleys, and it's every raid's
+first view. At Cinder's, of 906 draws an eye:
+
+- about half are items: the kit beside the truck (750 meshes within
+  10 m), each drawn on its own;
+- the rest are buildings (155), the forest (82), and the truck, which
+  casts 48 shadow meshes, plus 11 for its bench and 7 for its stash.
+
+Tried and left: a draw range on loose items by size (600x their
+largest side). The valley's far loot (1,400 item meshes past 100 m)
+isn't drawn already, so it saved 6-8 draws in clear weather and none in
+drizzle.
+
+### Puffs where they stack
+
+Soft puffs (`render::puff`) are 1.6 m blended quads, so each one across
+the view is a whole layer of fragments. `gauge_puffs_hold_the_stereo_budget`
+places them as `robots::fx`'s emitters keep them in steady state and
+measures both eyes from Marrow's meadow, in drizzle (bare: 20.6M of
+64.8M):
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 21.8M | 14 |
+| a firefight's wounds, 6-15 m | 64 | 20.8M | 14 |
+| standing in a hazard's cloud | 64 | 82.2M, over | 39 |
+
+The cloud's near quads each cover most of the view. Capping a puff's
+apparent half-width (`PUFF_RULE=angle:<deg>`, a trial on the scene):
+20 degrees gives 60.3M, 12 gives 38.0M. Hiding a puff the eye is inside
+does nothing, since none is.
+
+**Fixed (Weapon feel, 2026-11-01):** `render::puff`'s `face_puffs` clamps
+each puff, after its owner sets its scale, to span no more than
+`MAX_HALF_ANGLE` from the eye: near the eye a puff looks
+smaller, not thicker. On the way: the eye `face_puffs` faced was the
+middle of every active 3D camera, an impostor's capture rig and warmup's
+proxy eye among them, so puffs were turned partly edge-on and none read
+as near (so the numbers above are low). It now reads only the cameras
+drawing to a screen or headset. With both:
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 27.5M | 15 |
+| a firefight's wounds, 6-15 m | 64 | 24.5M | 15 |
+| standing in a hazard's cloud | 64 | 60.9M | 26 |
+
+That was at 12 degrees (at 14 the cloud was 72.2M).
+
+**The sky, counted (since 0ce15351, `render::mark_offscreen`).** The
+tables above were taken with the sky dome centred on another camera,
+so its layer went uncounted. With it counted (one layer an eye), the
+bare meadow is 27.0M, not 20.6M, and at 12 degrees the cloud is 67.2M,
+over. The budget stands, since the sky is a fixed cost every frame and
+the playtest machine (a Beyond 2 on a 3060 laptop) ran 20-30 fps. The
+cloud is trimmed to keep at least 5% under it (Weapon feel): 11
+degrees gave 61.7M, short of that, so the cap is 10:
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 32.2M | 15 |
+| a firefight's wounds, 6-15 m | 64 | 30.8M | 16 |
+| standing in a hazard's cloud | 64 | 56.4M | 23 |
+
+### m05, the spruce view, after the sky
+
+With the sky counted where nothing opaque hides it
+(`overdraw::add_sky`), m05_spruce was the one view over: 10.16 layers
+of 10 one eye, 65.7M of 64.8M both. A spruce now draws its upright fin
+card on every other plate, not every plate (`trees::build_tree`). The
+drooping plates carry the skirt's outline, and the textured core its
+density. That's a quarter fewer cards a near spruce. m05: 8.37 layers,
+54.2M (-18%); m06 3.67, m08 3.12.
+
+Before and after, settled (`docs/shots/performance/spruce_fins_*`):
+0.8-4% of pixels change, and the stand reads as dense as before.
+
+### Items at rest, asleep
+
+Tried and left (2026-11-01): merging resting items per material in 8 m
+cells, as `part_rest` does for breakables. Items share few materials (a
+gun model's own, a box's kind), so Cinder Works' merged cells drew 672
+meshes for 914: 26% fewer, and nothing measurable at the drop.
+
+What it found instead: some items never sleep. `perf::tests::
+gauge_items_fall_asleep` settles each valley and the yard, then counts
+the dynamic items still awake, across the valley and within 15 m of
+the drop, with the worst by kind and by creep a frame. It counts only
+bodies the physics step simulates (not stowed, disabled, or held), and
+not those pushed on every frame by design: items that lift (a
+Featherstone hovers on a force), and whatever's within twice an
+anomaly's radius (lifts, snares and wells push on what's in them). It's
+ignored as known failing until the physics fix (Hands'):
+
+| | dynamic items | awake | at the drop |
+| - | - | - | - |
+| Marrow Creek | 425 | 4 (1%) | 4 |
+| Kettle Pass | 367 | 4 (1%) | 3 |
+| Cinder Works | 343 | 4 (1%) | 4 |
+| Sallow Reservoir | 313 | 4 (1%) | 4 |
+| Rime Fell | 411 | 4 (1%) | 3 |
+| the yard | 12 | 0 | 0 |
+
+The awake are the truck bed's pile: guns, magazines, clips and boxes,
+creeping up to 0.04 mm a frame. The parked truck is kinematic, so
+avian's islands join everything touching it, and the hand bodies,
+driven every frame, touch it: the whole bed never sleeps (Hands). The
+fix is the truck static while parked.
 
 ## CPU: a busy raid moment
 
@@ -619,6 +811,38 @@ Rime Fell is now the slowest, and the preload decides it.
 
 What's left is the 213 models decoding. The relaunch around it is 0.9 s
 to close and about 0.2 s to start again.
+
+#### The ceiling, in units
+
+The ceiling used to be absolute seconds, and it failed the Verifier's
+runs on a container about 1.3x slower than this one. It is now in units
+of `perf::fight::reference_load_ms` (`first_contact::LOAD_UNITS`),
+timed just before each valley loads. It takes the median of 25:
+medians of 9 drifted 35% apart between runs, medians of 25 12%
+(`perf::tests::reference_load_noise`). `LOAD_SLACK` still
+scales it on top.
+
+The yardstick is a fixed piece of work, timed two ways:
+
+- on one thread;
+- shared over every thread.
+
+It takes the geometric mean of the two, because a load is part serial,
+part spread over the task pools. Held to two cores of four
+(`taskset -c 0,1`), the every-thread timing doubled but the loads grew
+only 1.3-1.5x. Units against the every-thread timing alone fell by a
+quarter there. Against the mean, the five valleys held within 8%:
+
+| valley | 4 cores | 2 cores | ceiling |
+| - | - | - | - |
+| Marrow Creek | 231 | 242 | 320 |
+| Kettle Pass | 307 | 284 | 400 |
+| Cinder Works | 206 | 213 | 280 |
+| Sallow Reservoir | 254 | 255 | 330 |
+| Rime Fell | 316 | 291 | 410 |
+
+The gauge prints each valley's units and reference, so a slow run says
+whether the machine was slow or the valley heavier.
 
 ## Textures
 
@@ -1120,3 +1344,103 @@ content's own cost isn't fixed yet. It splits two ways:
     the default without `--mirror`, and costs next to nothing.
   - Bevy doesn't time shadow passes (no diagnostic span). Count their
     draws per view before judging the GPU's share.
+
+### Marrow's main thread, profiled (30 October)
+
+The busy moment by system (`system_profile`, with tracing, one thread,
+after Map design's ford rises and birch belt): main schedule 44.6 ms,
+Update 14.0, PostUpdate 12.7, FixedPostUpdate 7.0. The named costs are
+Bevy's own, and each grows with the valley's mesh entities (11,136):
+
+| system | ms a frame |
+|---|---|
+| `check_visibility_cpu_culling` | 2.3 |
+| `check_entities_needing_specialization<StandardMaterial>` | 1.45 |
+| `propagate_parent_transforms` + `mark_dirty_trees` | 2.1 |
+| `check_visibility_ranges` | 0.7 |
+| `calculate_bounds` | 0.5 |
+
+Update's 14 ms is spread over hundreds of small systems, inflated by
+the tracing spans.
+
+Found on the way: the drones' beacon and halo were rewritten every
+frame with the same value, and the shell's glow followed the light's
+creep. Each write re-specialises every mesh wearing the material. These
+are now written only on a change, and the light is stepped in 64ths.
+`budget`'s `gauge_no_shared_material_rewritten_each_frame` holds every
+material worn by four or more meshes to that, and names the fields a
+write changed. It didn't move the 1.45 ms: that's the check's
+per-entity baseline.
+
+The lever is fewer mesh entities. Merge static props per material at
+load, as the guns were (`weapons`' merged parts).
+
+### One thread for the main world (30 October)
+
+"Update's 14 ms spread over hundreds of small systems" was mostly
+Bevy's multi-threaded executor. The main world has about 1,500
+systems, and most do a few microseconds of work. Handing each one to a
+thread costs more than the work: a thousand idle systems take 1 to
+2.5 ms a frame on that executor and 0.02 ms on the single-threaded
+one (`executor_tests`).
+
+The game now loads on every core, then switches the main world to one
+thread (`one_thread_once_loaded` in `lib.rs`). The switch comes once
+the forest is built and every building's props are in. A load on one
+thread was slower, because the load's building and decoding systems do
+share the cores: Sallow took 11.5 s against 5.4. The renderer keeps
+its own threads, and `par_iter` and the physics solver still use the
+task pool.
+
+Measured on four cores, multi-threaded against one thread:
+
+| | multi-threaded | one thread |
+|---|---|---|
+| Marrow's busy moment (every core) | 20.5-21.9 ms | 11.7-13.7 ms |
+| Update in it | 4.4-4.6 ms | 1.9-2.2 ms |
+| worst minute, CPU p99 (units of 160) | 73-94 | 31-40 |
+| homecoming's worst frame | 77-102 ms | 60-63 ms |
+| a valley's load | unchanged | unchanged |
+
+To weigh the two executors again on another machine, such as a
+headset PC with more cores, run
+`BUDGET_EXECUTOR=multi BUDGET_THREADS=all cargo test --lib -- --ignored
+--nocapture gauge_a_busy_moment`. That keeps the multi-threaded
+executor after the load and gives it every core.
+
+The hitch ceilings were once multiples of the busy moment's median, so
+they tightened by half when it halved. They are now in reference
+units: an event's worst frame is held to the frame budget's 160, and a
+load's frames to 530.
+
+## What's next (paused 2 November)
+
+Where Performance stopped, in order:
+
+1. **The headset A/B** (`docs/PLAYTEST.md` 4h): the near fill, the sky's
+   light and room adaptation, each on and off at the Marrow village, the
+   spruce at m05 and the pump hall, with `--hold-rate 0`. A switch that
+   costs 0.5 ms or more at its spot, or that alone takes the 1% figure
+   over 11.1 ms, goes off.
+   - One lavapipe oddity to settle there: the village outdoors, with the
+     near fill on, always ran in lavapipe's slow wall-time mode (about
+     8.5 s against 6.8 s a frame). No timed pass moved, and `shadows=0`
+     put both runs in the slow mode, so the GPU work doesn't explain it.
+2. **A fresh baseline on main**: the walk, yard, valley and puff stereo
+   gauges (`cargo test --lib -- --include-ignored gauge_`), after the m05
+   trim (54.2M), `add_sky` and the 10° puff cap. Re-read the stereo
+   budget's margins from it.
+3. **The 28 October CPU side** (above): Marrow's main thread at 12.1 ms
+   against 11.3, and the render world at 10–16 ms. Both grow with mesh
+   entities.
+4. **Open for others:**
+   - `perf::gauge_items_fall_asleep` (Hands): items near the insertion
+     that never sleep, from a one-step contact loss.
+   - Robot minds' and Gunsmith's sessions: run
+     `scripts/fetch_assets.py` first. Tier 1 now fails without the
+     downloads (`docs/TESTING.md`).
+
+Gate notes: `cargo test -j1 --workspace`, since the lib and lib-test
+builds at once run out of memory here. The near-fill A/B scripts are not
+kept; `scripts/bench.sh` with a views file of two or three views is the
+pattern.

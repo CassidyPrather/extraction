@@ -21,12 +21,13 @@ rig_open.glb has the same slot pieces with their flaps open (the game
 takes only the open flaps from it).
 
 backpack.glb (lid closed) and backpack_open.glb (lid open), in the pack's space (the stowing box, half 0.17 x 0.24 x
-0.1, centred; the harness straps on its -Z face): `pack` (an open-topped
-bag, hollow so what's in it shows when it's open), `pack_lid_closed`,
-`pack_lid_open`.
+0.1, centred; the harness straps on its -Z face): `pack` (a bag open on its
+outer face, +Z, hollow so what's in it shows when it's open),
+`pack_lid_closed` and `pack_lid_open` (the front panel over the opening,
+zipped shut, or folded down from its bottom edge).
 
 Slot positions, from body.rs (`slot_layout`), torso space:
-holster (0.22, -0.42, 0.02); pouches (-0.14 + 0.09 k, -0.16, -0.13);
+holster (0.22, -0.42, 0.02); pouches (-0.14 + 0.09 k, -0.16, -0.155);
 pockets (+-0.17, -0.45, -0.08); mount (-0.13, 0.06, -0.12).
 """
 
@@ -40,7 +41,7 @@ from common import (Part, RX, RY, S, T, TO_BLENDER, export, fillet, join, main_g
 from mathutils import Vector
 
 HOLSTER = Vector((0.22, -0.42, 0.02))
-POUCH_Y, POUCH_Z = -0.16, -0.13
+POUCH_Y, POUCH_Z = -0.16, -0.155
 POCKET = Vector((0.17, -0.45, -0.08))
 MOUNT = Vector((-0.13, 0.06, -0.12))
 
@@ -150,20 +151,24 @@ def harness():
 # --- Holster ---------------------------------------------------------------
 
 def holster():
-    """Slot space: a PM hung barrel down (slide along slot -Z, its rear at
-    y 0.02), grip back (+Z) out of the mouth."""
+    """Slot space: a pistol hung barrel down (slide along slot -Z, its rear
+    at y 0.02), grip back (+Z) out of the mouth. Its cavity is
+    `src/kit_cavities.rs` HOLSTER: 41 mm across, for a Nagant's cylinder;
+    its back cut away above the trigger guard (HOLSTER_BACK_MOUTH), so the
+    grip stands clear of it rather than through it."""
     p = Part("holster")
-    # Side profile (z, y): round the slide and the trigger guard.
+    # Side profile (z, y): round the slide and the trigger guard, the back
+    # sloping away from the guard up to the front of the mouth.
     prof = fillet([(-0.1, 0.012), (-0.1, -0.125), (-0.075, -0.155), (-0.035, -0.155),
-                   (0.006, -0.075), (0.012, 0.012)], 0.012, 3)
-    p.prism(prof, -0.019, 0.019, "Leather", axis="x", bevel=0.007, segs=2)
+                   (0.006, -0.075), (0.010, -0.042), (-0.002, 0.012)], 0.012, 3)
+    p.prism(prof, -0.0235, 0.0235, "Leather", axis="x", bevel=0.007, segs=2)
     # A welt round its front edge, sewn.
     welt = fillet([(-0.103, 0.006), (-0.103, -0.127), (-0.077, -0.158), (-0.035, -0.158),
                    (-0.015, -0.12)], 0.01, 2)
     pts = [Vector((0.0, y, z)) for z, y in welt]
     strap(p, pts, 0.008, 0.006, "Leather", up=(1, 0, 0))
     # The loop it hangs from the belt by, on its inner side.
-    p.box((0.008, 0.07, 0.034), (-0.022, -0.005, -0.03), "Leather", bevel=0.002, segs=1)
+    p.box((0.008, 0.07, 0.034), (-0.0275, -0.005, -0.03), "Leather", bevel=0.002, segs=1)
     return p
 
 
@@ -171,39 +176,44 @@ def holster_flap(open_):
     p = Part("holster_flap_open" if open_ else "holster_flap_closed")
     if not open_:
         # Over the mouth, and down the front to a stud.
-        p.box((0.042, 0.007, 0.118), (0.0, 0.016, -0.043), "Leather", bevel=0.0025, segs=2)
-        p.box((0.04, 0.05, 0.007), (0.0, -0.009, -0.106), "Leather", bevel=0.0025, segs=2)
+        p.box((0.051, 0.007, 0.104), (0.0, 0.016, -0.05), "Leather", bevel=0.0025, segs=2)
+        p.box((0.049, 0.05, 0.007), (0.0, -0.009, -0.106), "Leather", bevel=0.0025, segs=2)
         p.cyl(0.005, 0.0, 0.004, "Iron", segs=10, xf=T(0.0, -0.025, -0.109) @ RX(math.pi))
     else:
         # Thrown forward off the mouth and lying flat down the front, on the
         # welt (it stood out from it: the 28 October playtest, 0:35:26).
-        p.box((0.04, 0.006, 0.012), (0.0, 0.016, -0.1), "Leather", bevel=0.0025, segs=2)
-        p.box((0.04, 0.11, 0.006), (0.0, -0.039, -0.11), "Leather", bevel=0.0025, segs=2)
+        p.box((0.049, 0.006, 0.012), (0.0, 0.016, -0.1), "Leather", bevel=0.0025, segs=2)
+        p.box((0.049, 0.11, 0.006), (0.0, -0.039, -0.11), "Leather", bevel=0.0025, segs=2)
     return p
 
 
 # --- Pouches ---------------------------------------------------------------
 
-# A magazine stands in it centred on the slot: an AK's is 0.026 x 0.2 x 0.09.
-PH = (-0.108, 0.025)  # bottom, mouth (slot y)
+# A magazine stands in it centred on its cavity (`src/kit_cavities.rs`,
+# POUCH): an AK-74's curves forward, 130 mm front to back over what's in
+# the pouch (Gunsmith's, shaped from the gun). Deep enough for that.
+PH = (-0.118, 0.025)  # bottom, mouth (slot y)
+PZ = -0.090  # its front (slot z); its back is on the chest panel
 
 
 def pouch():
     p = Part("pouch")
-    prof = fillet([(-0.053, PH[0]), (0.05, PH[0]), (0.05, PH[1]), (-0.053, PH[1])], 0.008, 2)
+    prof = fillet([(PZ, PH[0]), (0.05, PH[0]), (0.05, PH[1]), (PZ, PH[1])], 0.008, 2)
     p.prism(prof, -0.021, 0.021, "Canvas", axis="x", bevel=0.005, segs=2)
     # A band of webbing round it, and a seam down its front.
-    p.box((0.052, 0.016, 0.112), (0.0, -0.07, -0.0015), "Olive", bevel=0.002, segs=1)
-    p.box((0.003, 0.11, 0.004), (0.0, -0.04, -0.0545), "Canvas", bevel=0.001, segs=1)
+    p.box((0.052, 0.016, 0.05 - PZ + 0.002), (0.0, -0.07, (0.05 + PZ) / 2), "Olive", bevel=0.002,
+          segs=1)
+    p.box((0.003, 0.11, 0.004), (0.0, -0.04, PZ - 0.0015), "Canvas", bevel=0.001, segs=1)
     return p
 
 
 def pouch_flap(open_):
     p = Part("pouch_flap_open" if open_ else "pouch_flap_closed")
     if not open_:
-        p.box((0.046, 0.006, 0.106), (0.0, PH[1] + 0.0025, -0.0015), "Canvas", bevel=0.002, segs=1)
-        p.box((0.044, 0.04, 0.006), (0.0, PH[1] - 0.016, -0.057), "Canvas", bevel=0.002, segs=1)
-        p.cyl(0.004, 0.0, 0.003, "Iron", segs=10, xf=T(0.0, PH[1] - 0.026, -0.0605) @ RX(math.pi))
+        p.box((0.046, 0.006, 0.05 - PZ - 0.004), (0.0, PH[1] + 0.0025, (0.05 + PZ) / 2), "Canvas",
+              bevel=0.002, segs=1)
+        p.box((0.044, 0.04, 0.006), (0.0, PH[1] - 0.016, PZ - 0.004), "Canvas", bevel=0.002, segs=1)
+        p.cyl(0.004, 0.0, 0.003, "Iron", segs=10, xf=T(0.0, PH[1] - 0.026, PZ - 0.0075) @ RX(math.pi))
     else:
         # Open, folded back down the pouch's back, against the belt: from
         # the front the pouch looks the same full as empty (its front
@@ -233,12 +243,30 @@ def pocket_flap(open_):
 
 
 def mount():
-    """An open loop (a light or radio slides down into it), on the left
-    shoulder strap."""
+    """A webbing sleeve on the left shoulder strap, open top and bottom: the
+    radio slides down into it, thin side out (its cavity is
+    `src/kit_cavities.rs` MOUNT: 72 x 110 x 50 mm inside); a chemlight or a
+    compass hangs in it."""
     p = Part("mount")
-    p.tube(0.024, 0.019, -0.05, 0.002, "Olive", segs=16,
-           xf=T(0.0, 0.0, -0.008) @ RX(-math.pi / 2))
-    p.box((0.03, 0.06, 0.006), (0.0, -0.02, 0.016), "Olive", bevel=0.0015, segs=1)
+    ix, iz0, iz1 = 0.036, -0.04, 0.01  # inside: half width, front, back (slot z)
+    y0, y1 = -0.08, 0.03  # bottom, top (slot y)
+    t = 0.004
+    h, ym = y1 - y0, (y0 + y1) / 2
+    # Front and back panels, the sides between them.
+    p.box((2 * ix + 2 * t, h, t), (0.0, ym, iz0 - t / 2), "Olive", bevel=0.0015, segs=1)
+    p.box((2 * ix + 2 * t, h, t), (0.0, ym, iz1 + t / 2), "Olive", bevel=0.0015, segs=1)
+    for sx in (-1, 1):
+        p.box((t, h, iz1 - iz0), (sx * (ix + t / 2), ym, (iz0 + iz1) / 2), "Olive",
+              bevel=0.0015, segs=1)
+    # Webbing bands round it, and the tab it's sewn to the strap by.
+    b, zm, d = 0.002, (iz0 + iz1) / 2, iz1 - iz0
+    for y in (y0 + 0.018, y1 - 0.018):
+        for z in (iz0 - t - b / 2, iz1 + t + b / 2):
+            p.box((2 * ix + 2 * t + 2 * b, 0.016, b), (0.0, y, z), "Olive", bevel=0.0007, segs=1)
+        for sx in (-1, 1):
+            p.box((b, 0.016, d + 2 * t), (sx * (ix + t + b / 2), y, zm), "Olive", bevel=0.0007,
+                  segs=1)
+    p.box((0.03, 0.06, 0.006), (0.0, y1 + 0.02, iz1 + 0.006), "Olive", bevel=0.0015, segs=1)
     return p
 
 
@@ -249,29 +277,29 @@ def pack():
     hx, hy, hz = 0.175, 0.245, 0.105
     outline = fillet([(-hx, -hz), (hx, -hz), (hx, hz), (-hx, hz)], 0.04, 4)
     p.prism(outline, -hy, hy, "Canvas", axis="y", bevel=0.012, segs=2)
+    # A panel loader: it opens on its outer face (+Z, away from your back),
+    # so held in front of you it's the cavity you see, not the top of the
+    # bag (the playtest: "opening from the side, facing you"). Lined in a
+    # grey-green cloth, a shade off the canvas, so the inside reads as a
+    # space and what's in it shows.
     inner = Part("pack_inside")
     w = 0.007
-    io = fillet([(-hx + w, -hz + w), (hx - w, -hz + w), (hx - w, hz - w), (-hx + w, hz - w)],
+    io = fillet([(-hx + w, -hy + w), (hx - w, -hy + w), (hx - w, hy - w), (-hx + w, hy - w)],
                 0.034, 4)
-    inner.prism(io, -hy + 0.012, hy + 0.05, "Canvas", axis="y")
-    p.cut(inner)
+    inner.prism(io, -hz + 0.012, hz + 0.05, "GreyGreen", axis="z")
+    p.cut(inner, paint=True)
     return p
 
 
 def pack_extras():
     p = Part("pack_extras")
     hx, hy, hz = 0.175, 0.245, 0.105
-    # Side pockets and a big outer pocket on the face away from the back.
+    # Side pockets (the big outer pocket rides on the front panel, `lid`).
     for sx in (-1, 1):
         prof = fillet([(-0.05, -0.2), (0.05, -0.2), (0.05, -0.02), (-0.05, -0.02)], 0.02, 3)
         p.prism([(z, y) for z, y in prof], sx * hx - 0.01 * sx, sx * (hx + 0.035), "Canvas",
                 axis="x", bevel=0.008, segs=2)
         p.box((0.006, 0.03, 0.09), (sx * (hx + 0.037), -0.04, 0.0), "Leather", bevel=0.0015, segs=1)
-    prof = fillet([(-0.13, -0.22), (0.13, -0.22), (0.13, -0.04), (-0.13, -0.04)], 0.03, 3)
-    p.prism(prof, hz - 0.01, hz + 0.04, "Canvas", axis="z", bevel=0.01, segs=2)
-    for x in (-0.07, 0.07):
-        p.box((0.022, 0.12, 0.006), (x, -0.07, hz + 0.042), "Leather", bevel=0.0015, segs=1)
-        p.box((0.028, 0.02, 0.006), (x, -0.12, hz + 0.045), "Iron", bevel=0.0015, segs=1)
     # Shoulder straps on its back (-Z) face, padded at the top.
     for sx in (-1, 1):
         x = 0.085 * sx
@@ -284,19 +312,25 @@ def pack_extras():
 
 
 def lid(open_):
+    """The front panel over the opening, with the big outer pocket on it;
+    open, it's unzipped round the top and sides and folded down, hanging
+    from the bottom edge."""
     p = Part("pack_lid_open" if open_ else "pack_lid_closed")
     hx, hy, hz = 0.175, 0.245, 0.105
-    outline = fillet([(-hx - 0.006, -hz - 0.004), (hx + 0.006, -hz - 0.004),
-                      (hx + 0.006, hz + 0.02), (-hx - 0.006, hz + 0.02)], 0.04, 4)
-    hinge = (0.0, hy + 0.012, -hz)
-    if not open_:
-        p.prism(outline, hy - 0.004, hy + 0.024, "Canvas", axis="y", bevel=0.009, segs=2)
-        for x in (-0.07, 0.07):
-            p.box((0.022, 0.1, 0.006), (x, hy - 0.04, hz + 0.024), "Leather", bevel=0.0015, segs=1)
-    else:
-        # Thrown back, hanging down outside the straps.
-        xf = T(0.0, 0.0, -0.058) @ RX(math.pi / 2, about=hinge)
-        p.prism(outline, hy - 0.004, hy + 0.024, "Canvas", axis="y", bevel=0.009, segs=2, xf=xf)
+    outline = fillet([(-hx - 0.004, -hy - 0.004), (hx + 0.004, -hy - 0.004),
+                      (hx + 0.004, hy + 0.004), (-hx - 0.004, hy + 0.004)], 0.04, 4)
+    hinge = (0.0, -hy, hz)
+    xf = RX(math.pi - 0.2, about=hinge) if open_ else None
+    p.prism(outline, hz - 0.004, hz + 0.016, "Canvas", axis="z", bevel=0.007, segs=2, xf=xf)
+    prof = fillet([(-0.13, -0.22), (0.13, -0.22), (0.13, -0.04), (-0.13, -0.04)], 0.03, 3)
+    p.prism(prof, hz + 0.01, hz + 0.05, "Canvas", axis="z", bevel=0.01, segs=2, xf=xf)
+    for x in (-0.07, 0.07):
+        p.box((0.022, 0.12, 0.006), (x, -0.07, hz + 0.052), "Leather", bevel=0.0015, segs=1,
+              xf=xf)
+        p.box((0.028, 0.02, 0.006), (x, -0.12, hz + 0.055), "Iron", bevel=0.0015, segs=1, xf=xf)
+    # The zip pull, at the panel's top corner.
+    p.box((0.008, 0.02, 0.004), (hx - 0.03, hy - 0.005, hz + 0.018), "Iron", bevel=0.001,
+          segs=1, xf=xf)
     return p
 
 

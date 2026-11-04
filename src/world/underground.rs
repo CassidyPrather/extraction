@@ -2889,7 +2889,7 @@ pub struct KeptCrate {
 
 /// Where the small crate's collar disc hangs, in the crate's own space
 /// (`pt_disc` of `depot_crate_small`).
-pub const KEPT_DISC: Vec3 = Vec3::new(0.24, 0.174, -0.304);
+pub const KEPT_DISC: Vec3 = Vec3::new(0.24, 0.174, -0.301);
 
 /// Logic, once a site's built: its kept crates, each its own entity in
 /// the site's space (the building draws only their colliders).

@@ -204,9 +204,11 @@ def washstand():
     rod(p, (0.035, top + 0.19, 0.0), (0.085, top + 0.15, 0.0), 0.008, "Enamel", segs=5)
     rod(p, (0.085, top + 0.15, 0.0), (0.06, top + 0.07, 0.0), 0.008, "Enamel", segs=5)
     # The towel rail on the side, and the towel over it.
-    rod(p, (0.33, top - 0.12, -0.13), (0.33, top - 0.12, 0.13), 0.008, "Timber", segs=6)
+    # Its brackets out from the legs (z 0.17: at 0.13 they and the rail,
+    # towel and all, hung in the air).
+    rod(p, (0.33, top - 0.12, -0.17), (0.33, top - 0.12, 0.17), 0.008, "Timber", segs=6)
     for sz in (-1, 1):
-        rod(p, (0.288, top - 0.12, sz * 0.13), (0.33, top - 0.12, sz * 0.13), 0.007, "Timber",
+        rod(p, (0.284, top - 0.12, sz * 0.17), (0.33, top - 0.12, sz * 0.17), 0.007, "Timber",
             segs=5)
     # The towel draped over it: its fold on the rail, both halves hanging
     # against it (they hung 3 mm clear of it).
@@ -231,9 +233,11 @@ def snowshoes():
         t = 0.024
         ring(p, 1.0, t / rx, (0, 0, 0), "Timber", segs=20,
              xf=T(x, cy, z) @ S(rx, ry, 0.022 * rx / t))
-        tip = (0.0, -0.009, z)
+        # The tail's ends on the frame's line (x 0.6 of the way out is
+        # 0.8 up the ellipse) and over the nail's shank.
+        tip = (0.0, -0.004, z)
         for sx in (-1, 1):
-            rod(p, (x + sx * rx * 0.6, cy + ry * 0.78, z), tip, 0.011, "Timber", segs=5)
+            rod(p, (x + sx * rx * 0.6, cy + ry * 0.8, z), tip, 0.011, "Timber", segs=5)
         # The gut webbing filling it, a rawhide lacing over it.
         p.cyl(1.0, -0.0015, 0.0015, "Straw", segs=16,
               xf=T(x, cy, z) @ S(rx - 0.01, ry - 0.01, 1.0))

@@ -14,6 +14,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
+pub mod assets;
 pub mod attach;
 pub mod checks;
 pub mod cinematic;
@@ -21,9 +22,12 @@ pub mod fighting;
 pub mod footing;
 pub mod glb;
 pub mod landmarks;
+pub mod overlap;
 pub mod path;
 pub mod scale;
 pub mod seated;
+pub mod sightline;
+pub mod stowed;
 pub mod sweep;
 pub mod trailer;
 

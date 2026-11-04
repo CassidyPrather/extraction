@@ -849,7 +849,7 @@ pub(super) fn boarded(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
     // Only the common houses (their walls all 0.18 m, as the boards are
     // set for).
     let house = matches!(
-        extraction_core::map::prefab_base(prefab),
+        extraction_core::map::prefab_shell(prefab),
         "house_plank" | "farmhouse" | "house_brick"
     );
     let share = if !house {

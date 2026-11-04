@@ -139,6 +139,150 @@ mod tests {
         );
     }
 
+    /// What a settled valley's loose items are doing: how many dynamic
+    /// items, how many still awake (anywhere, and within 15 m of where the
+    /// truck drops you), the awake by kind, and the worst creeps (mm a
+    /// frame over 30 frames, by name).
+    fn awake_items(
+        map: &str,
+    ) -> (
+        usize,
+        usize,
+        usize,
+        Vec<(String, usize)>,
+        Vec<(f32, String)>,
+    ) {
+        use avian3d::prelude::*;
+        let _counting = crate::render::budget::tests::counted();
+        let mut app = crate::render::budget::tests::client_threads(map, "clearing", None);
+        crate::render::budget::tests::settle(&mut app);
+        for _ in 0..120 {
+            app.update();
+        }
+        let drop = {
+            let zone = app.world().resource::<crate::world::Zone>();
+            zone.map
+                .markers_of(&extraction_core::map::MarkerKind::Insertion)
+                .next()
+                .map(|m| Vec2::from(m.at))
+        };
+        // Only bodies the physics step simulates: a stowed item (a pack,
+        // the crate, a socket) is disabled, never asleep. And not one that
+        // lifts (a Featherstone hovers on a force every frame, by design,
+        // and a force keeps a body awake).
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        // Nor one in an anomaly's reach: lifts, snares and wells push on
+        // whatever's in them every frame, by design (an artifact in its
+        // field). Twice the radius covers a lift's suction.
+        let anomalies: Vec<(Vec3, f32)> = {
+            let w = app.world_mut();
+            w.query::<(&GlobalTransform, &crate::anomaly::Anomaly)>()
+                .iter(w)
+                .map(|(g, a)| (g.translation(), a.radius * 2.0))
+                .collect()
+        };
+        let in_reach = |p: Vec3| anomalies.iter().any(|(c, r)| p.distance(*c) < *r);
+        let positions = |w: &mut World| -> Vec<(Entity, Vec3)> {
+            w.query_filtered::<(Entity, &GlobalTransform, &RigidBody, &crate::items::Item), (
+                Without<RigidBodyDisabled>,
+                Without<ColliderDisabled>,
+                Without<crate::interact::Held>,
+            )>()
+            .iter(w)
+            .filter(|(_, g, b, i)| {
+                b.is_dynamic() && catalog.get(i.kind()).lift_kg <= 0.0 && !in_reach(g.translation())
+            })
+            .map(|(e, g, _, _)| (e, g.translation()))
+            .collect()
+        };
+        let before = positions(app.world_mut());
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+        let mut creep = Vec::new();
+        let (mut awake, mut awake_at_drop) = (0, 0);
+        for (e, was) in &before {
+            let Some(g) = w.get::<GlobalTransform>(*e) else {
+                continue;
+            };
+            let now = g.translation();
+            let name = w.get::<Name>(*e).map_or("?".into(), |n| n.to_string());
+            let mm = (now - *was).length() * 1000.0 / 30.0;
+            if w.get::<Sleeping>(*e).is_none() {
+                awake += 1;
+                if drop.is_some_and(|d| now.xz().distance(d) < 15.0) {
+                    awake_at_drop += 1;
+                }
+                *kinds.entry(name.clone()).or_default() += 1;
+                creep.push((mm, name));
+            }
+        }
+        let mut kinds: Vec<(String, usize)> = kinds.into_iter().collect();
+        kinds.sort_by(|a, b| b.1.cmp(&a.1));
+        creep.sort_by(|a, b| b.0.total_cmp(&a.0));
+        (before.len(), awake, awake_at_drop, kinds, creep)
+    }
+
+    /// Of a settled valley's dynamic items, at most this share awake: a
+    /// settled item should be asleep (`soak::census`).
+    const AWAKE_SHARE: f32 = 0.02;
+
+    /// Every valley and the yard, settled: loose items asleep, at the
+    /// drop and across the valley. Awake items keep the physics step
+    /// solving their contacts every frame, and nothing that builds on
+    /// rest (a merge, a cheaper tick) can. First measure (2026-11-01):
+    /// 4 awake a valley (1%), 3-4 of them within 15 m of the drop, the
+    /// truck bed's pile, kept awake through the parked (kinematic)
+    /// truck's island by the hand bodies; the yard none. (Stowed items, disabled, Featherstones, which hover on a
+    /// force, and whatever's in an anomaly's reach, which pushes on it,
+    /// aren't counted.)
+    #[test]
+    fn gauge_items_fall_asleep() {
+        let mut over = Vec::new();
+        let maps = extraction_core::map::VALLEYS
+            .iter()
+            .map(|v| v.0)
+            .chain([crate::camp::TRAINING_YARD]);
+        for map in maps {
+            let (n, awake, at_drop, kinds, creep) = awake_items(map);
+            let share = awake as f32 / n.max(1) as f32;
+            println!(
+                "{map}: {awake} of {n} dynamic items awake ({:.0}%), {at_drop} within 15 m of the drop",
+                share * 100.0
+            );
+            let top = |v: &[(String, usize)]| {
+                v.iter()
+                    .take(8)
+                    .map(|(k, c)| format!("{k} {c}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            println!("    awake by kind: {}", top(&kinds));
+            println!(
+                "    worst creep (mm a frame): {}",
+                creep
+                    .iter()
+                    .take(8)
+                    .map(|(mm, k)| format!("{k} {mm:.3}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            if share > AWAKE_SHARE || at_drop > 0 {
+                over.push(format!(
+                    "{map}: {awake} of {n} awake ({:.0}%), {at_drop} at the drop",
+                    share * 100.0
+                ));
+            }
+        }
+        assert!(
+            over.is_empty(),
+            "items still awake once settled:\n{}",
+            over.join("\n")
+        );
+    }
+
     /// The ceiling for `headless_ticks_hold_their_floor`.
     const HEADLESS_TICK_UNITS: f64 = 60.0;
 
@@ -149,6 +293,37 @@ mod tests {
             let (units, tick, reference) = headless_units(armed);
             println!(
                 "armed {armed}: tick {tick:.2} ms, reference {reference:.3}: {units:.1} units"
+            );
+        }
+    }
+
+    /// How steady the load yardstick is: single samples, and medians of
+    /// `n`, one after another for about a minute. The spread within a
+    /// median is jitter (a longer sample helps); between medians, drift
+    /// (only sampling across the load helps).
+    #[test]
+    #[ignore = "calibration: cargo test --lib reference_load_noise -- --ignored --nocapture"]
+    fn reference_load_noise() {
+        use super::fight::{median_ms, reference_load_ms};
+        let spread = |v: &[f64]| {
+            let lo = v.iter().copied().fold(f64::MAX, f64::min);
+            let hi = v.iter().copied().fold(0.0, f64::max);
+            (lo, hi, hi / lo - 1.0)
+        };
+        let singles: Vec<f64> = (0..60).map(|_| reference_load_ms()).collect();
+        let (lo, hi, s) = spread(&singles);
+        println!("60 single: {lo:.2}-{hi:.2} ms ({:.0}%)", s * 100.0);
+        for n in [9, 25] {
+            let t = std::time::Instant::now();
+            let mut medians = Vec::new();
+            while t.elapsed().as_secs() < 30 {
+                medians.push(median_ms(n, reference_load_ms));
+            }
+            let (lo, hi, s) = spread(&medians);
+            println!(
+                "{} medians of {n}: {lo:.2}-{hi:.2} ms ({:.0}%)",
+                medians.len(),
+                s * 100.0
             );
         }
     }
@@ -448,5 +623,49 @@ pub(crate) mod fight {
         }
         std::hint::black_box(x);
         t.elapsed().as_secs_f64() * 1000.0
+    }
+
+    /// The same work, `PARALLEL_CHUNKS` of it, shared by as many threads as
+    /// the machine runs at once (ms): the yardstick for what the task
+    /// pools spread (a valley's load), so fewer cores or a CPU quota read
+    /// as a slower machine, not a regression.
+    pub fn reference_parallel_ms() -> f64 {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+        let next = AtomicUsize::new(0);
+        let t = std::time::Instant::now();
+        std::thread::scope(|s| {
+            for _ in 0..threads {
+                s.spawn(|| {
+                    while next.fetch_add(1, Ordering::Relaxed) < PARALLEL_CHUNKS {
+                        reference_ms();
+                    }
+                });
+            }
+        });
+        t.elapsed().as_secs_f64() * 1000.0
+    }
+
+    /// The yardstick for a valley's load (ms): the geometric mean of the
+    /// one-thread and every-thread timings of the same work. A load is
+    /// part serial, part spread over the task pools: held to two cores of
+    /// four, the every-thread timing doubled and the loads grew 1.3-1.5x
+    /// (the mean, 1.43x, is the square root of two's), so clock speed
+    /// counts in full and the core count by its square root.
+    pub fn reference_load_ms() -> f64 {
+        let one: f64 = (0..PARALLEL_CHUNKS).map(|_| reference_ms()).sum();
+        (one * reference_parallel_ms()).sqrt()
+    }
+
+    /// How much work `reference_parallel_ms` shares out, in
+    /// `reference_ms` pieces: enough that the threads' start is noise.
+    pub const PARALLEL_CHUNKS: usize = 64;
+
+    /// The median of `n` timings of `f` (ms): one is at the mercy of
+    /// whatever else the machine was doing.
+    pub fn median_ms(n: usize, f: impl Fn() -> f64) -> f64 {
+        let mut v: Vec<f64> = (0..n.max(1)).map(|_| f()).collect();
+        v.sort_by(f64::total_cmp);
+        v[v.len() / 2]
     }
 }

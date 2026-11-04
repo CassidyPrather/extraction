@@ -465,7 +465,9 @@ pub fn slits(geo: &buildings::Geo) -> Vec<(usize, usize, f32, f32, Vec3)> {
                 Shape::Cylinder(r, h) => Vec3::new(2.0 * r, h, 2.0 * r),
             };
             let l = q.at.rotation.inverse() * (p - q.at.translation);
-            (l.abs() - s * 0.5).max_element() < -0.0005
+            // On a face counts: a crack's middle on the seam between two
+            // boxes that fill it (a wall's end and its corner cap).
+            (l.abs() - s * 0.5).max_element() < 0.0005
         })
     };
     let mut out = Vec::new();
@@ -706,67 +708,19 @@ mod tests {
         // The first run's tally (30 October), to work down: mostly pieces
         // 2-3 mm off what holds them, and parts shut inside shells (an
         // eye's iris in its glass). Take a model out when it's clean.
-        "guns/mp133:",
-        "guns/pm_pistol:",
-        "guns/rpk74:",
-        "guns/sks:",
-        "guns/svd:",
-        "items/binoculars:",
-        "items/car_bonnet:",
-        "items/car_door:",
-        "items/climbing_kit:",
-        "items/deployable_cover:",
-        "items/emp_grenade:",
-        "items/robot_gunpod:",
-        "items/spare_parts:",
-        "items/stock_sks:",
-        "items/vest:",
-        "props/armchair:",
-        "props/bar_rack:",
+        // Loose by design: checked into blocks a little off true, the gaps black.
         "props/beam_charred:",
-        "props/belongings_box:",
-        "props/books_charred:",
-        "props/bow_saw:",
-        "props/cellar_vent:",
-        "props/chair:",
-        "props/charcoal_sack:",
+        // Loose by design: split pieces on the ground beside a block dug 15 cm in (the lint's floor
+        // is the block's buried foot).
         "props/chopping_block:",
-        "props/clothes_line:",
-        "props/control_stand:",
-        "props/cot:",
-        "props/counter_drawers:",
-        "props/depot_bin:",
-        "props/depot_conveyor:",
-        "props/depot_crate_long_open:",
-        "props/depot_crate_small:",
-        "props/depot_crate_small_open:",
-        "props/dishes_broken:",
-        "props/exercise_books:",
-        "props/filter_unit:",
-        "props/gate_valve:",
-        "props/gramophone:",
-        "props/kept_bicycle:",
-        "props/landing_net:",
-        "props/locker:",
-        "props/logbook:",
-        "props/reading_glasses:",
-        "props/rope_coil:",
-        "props/shelf_metal:",
-        "props/snowshoes:",
-        "props/stash_stand:",
-        "props/suitcase_open:",
-        "props/suitcase_shut:",
+        // Loose by design: fallen legs and boards on the floor; the ash heap sinks below it, so the
+        // lint's floor is under the debris.
         "props/table_burnt:",
-        "props/terminal:",
-        "props/till:",
-        "props/washstand:",
-        "props/winch:",
+        // Loose by design: round logs resting on each other touch along lines the vertex test can't
+        // see.
         "props/woodpile:",
+        // Loose by design: as the woodpile, logs resting on logs.
         "props/woodpile_lean:",
-        "props/workbench:",
-        "vehicles/bench:",
-        "vehicles/stash_crate:",
-        "vehicles/truck:",
     ];
 
     /// No building has a crack between its boxes, and every door hangs in
@@ -816,26 +770,7 @@ mod tests {
     }
 
     /// Building faults waiting on their owners, by the start of their line.
-    const BUILDINGS_KNOWN: &[&str] = &[
-        // The first run's tally (30 October): cracks between the halls',
-        // depots', towers' and ruins' boxes, to close by their builders'
-        // rules as the gable's was (Models, next round).
-        "boxcar:",
-        "cabin_log_burnt:",
-        "chapel:",
-        "farmhouse_burnt:",
-        "farmhouse_damaged:",
-        "house_brick:",
-        "house_brick_burnt:",
-        "house_brick_damaged:",
-        "house_plank_burnt:",
-        "house_plank_damaged:",
-        "pump_station:",
-        "ranger_tower:",
-        "sawmill:",
-        "shop:",
-        "shop_burnt:",
-        "shop_damaged:",
-        "survey_tower:",
-    ];
+    /// Every prefab is crack-free (30 October, the third round): keep it
+    /// that way, and fix a new one in its builder.
+    const BUILDINGS_KNOWN: &[&str] = &[];
 }

@@ -12,6 +12,7 @@
 
 pub mod anim;
 pub mod armour;
+pub mod broken;
 pub mod collector;
 pub mod damage;
 pub mod devices;
@@ -93,6 +94,88 @@ pub enum RobotKind {
     Pylon,
     /// The Depot's ceiling gantry (see `sorter`).
     Sorter,
+}
+
+/// No machine's tell before it does harm is shorter than this (s): long
+/// enough to see or hear and do something about (a newcomer was hit with
+/// nothing to read first: Onboarding's first_jobs_reckless).
+/// `tells_tests::every_machines_tell_is_long_enough_to_read` holds each to it.
+pub const MIN_TELL: f32 = 0.5;
+
+#[cfg(test)]
+mod tells_tests {
+    /// Each machine's tell before it hurts: the drone's lock, the walker's
+    /// aim and its fire through a wall, the sentry's chirp, the hound's
+    /// crouch, the crawler's charge, the heavy's raised arm, the grappler's
+    /// wind-up, the sorter's; and the cage's bell before it drops.
+    #[test]
+    fn every_machines_tell_is_long_enough_to_read() {
+        let tells = [
+            ("drone lock", super::drone::LOCK_TIME),
+            ("walker aim", super::walker::AIM_TIME),
+            ("walker through a wall", super::walker::BLIND_TELL),
+            ("sentry chirp", extraction_core::sentry::CHIRP),
+            ("hound crouch", super::hound_mind::CROUCH_TIME),
+            ("crawler charge", super::indoor::ZAP_CHARGE),
+            ("heavy's raised arm", super::heavy::RAISE_TIME),
+            ("grappler wind-up", super::grappler::WINDUP),
+            ("sorter wind-up", super::sorter::WINDUP),
+            // Not a machine's, but the same rule: the cage's bell, then the
+            // wait before it comes down on whoever's under it (Underground's).
+            ("cage bell's wait", crate::world::cage::BELL_WAIT),
+            // And an artifact's: the wet aegis fizzes before it shocks.
+            ("aegis fizz", extraction_core::anomaly::AEGIS_TELL),
+        ];
+        let short: Vec<_> = tells
+            .iter()
+            .filter(|(_, t)| *t < super::MIN_TELL)
+            .map(|(w, t)| format!("{w}: {t} s"))
+            .collect();
+        assert!(short.is_empty(), "under {} s: {short:?}", super::MIN_TELL);
+        // And a drone that goes quiet tells again before it fires.
+        assert!(super::drone::RETELL > super::drone::BURST_GAP);
+    }
+
+    /// The gunners, each to its own rule for what comes after its tell
+    /// before a round can hurt you (Robot minds' fair first fights, 1
+    /// November): the sentry's and the drone's first burst after every
+    /// tell is a harmless warning; the walker's warning is its full aim,
+    /// the machine you're meant to respect. The behaviour is held in each
+    /// one's own tests (`it_chirps_before_it_fires`, `its_first_burst_warns`,
+    /// `a_drones_first_burst_after_a_lock_warns`,
+    /// `every_walker_round_comes_a_full_aim_after_its_tell`).
+    #[test]
+    fn every_gunner_warns_before_it_hurts() {
+        use extraction_core::sentry;
+        // (who, what hurts first comes this long after its tell at least, s)
+        let gunners = [
+            (
+                "sentry",
+                sentry::CHIRP + sentry::ROUND_GAP * (sentry::BURST - 1) as f32 + sentry::BURST_GAP,
+            ),
+            ("drone", super::drone::LOCK_TIME + super::drone::BURST_GAP),
+            ("walker", super::walker::AIM_TIME),
+        ];
+        let floors = [("sentry", 2.5), ("drone", 3.3), ("walker", 1.5)];
+        for ((who, first), (_, floor)) in gunners.iter().zip(floors) {
+            assert!(
+                *first >= floor - 1e-4,
+                "{who}: first harm {first} s after its tell"
+            );
+        }
+        // The sentry's first burst after its chirp is its warning.
+        let mut g = sentry::Gun::default();
+        assert_eq!(g.step(true, 0.01), sentry::GunAct::Chirp);
+        let first = (0..1000)
+            .find_map(|_| (g.step(true, 0.01) == sentry::GunAct::Fire).then(|| g.warning()));
+        assert_eq!(
+            first,
+            Some(true),
+            "the sentry's first round wasn't a warning"
+        );
+        // The drone's warning is a whole burst, landing short of you.
+        assert!(super::drone::WARNING_SHORT > 1.0 && super::drone::BURST > 0);
+    }
 }
 
 #[derive(Component, Debug)]
@@ -288,6 +371,7 @@ impl Plugin for RobotsPlugin {
                 squad::SquadPlugin,
                 subjects::SubjectsPlugin,
                 hazards::HazardsPlugin,
+                broken::BrokenPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
@@ -507,7 +591,7 @@ fn wreck_loot(
         commands.entity(e).insert(Salvaged);
         timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
-        let mut drops = loot.0.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
+        let mut drops = loot.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
         // And whatever came through whole is there to unbolt.
         let whole: Vec<PartRole> = parts
             .iter()

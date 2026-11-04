@@ -52,16 +52,24 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("sks", 1.02, Fit, "SKS, 1020 mm"),
     ("nagant", 0.235, Fit, "M1895, 235 mm"),
     ("ppsh", 0.843, Fit, "PPSh-41, 843 mm"),
-    ("toz_double", 1.14, Fit, "TOZ-34, about 1140 mm"),
+    (
+        "toz_double",
+        1.15,
+        Fit,
+        "IZh-43, 720-725 mm barrels: about 1150 mm",
+    ),
     ("mp133", 1.13, Fit, "MP-133, 1130 mm"),
     ("svd", 1.225, Fit, "SVD, 1225 mm"),
-    ("toz8", 1.11, Fit, "TOZ-8M, 1110 mm"),
+    ("toz8", 1.113, Fit, "TOZ-8M, 1113 mm, 640 mm barrel"),
     ("rpk74", 1.06, Fit, "RPK-74, 1060 mm (bipod down)"),
     ("flare_pistol", 0.22, Fit, "SPSh-44, 220 mm"),
     ("crossbow", 0.9, Made, "a home-made crossbow"),
     // Magazines: height along the curve or diameter.
     ("pm_mag", 0.1, Fit, "PM magazine"),
-    ("ak_mag", 0.2, Fit, "AK-74 magazine"),
+    // (Its bounds' longest side: about 0.2 m along its curve, 0.17 m
+    // top to foot in its own frame, off a side photograph of the real
+    // gun, docs/craft/guns/ak74.)
+    ("ak_mag", 0.17, Fit, "AK-74 magazine, curved"),
     (
         "mosin_clip",
         0.077,
@@ -162,10 +170,12 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     // Gun parts: the gun's own.
     ("stock_mosin", 0.265, Fit, "the Mosin's butt"),
     ("stock_sks", 0.242, Fit, "the SKS's butt"),
-    ("stock_toz_double", 0.306, Fit, "the TOZ's butt"),
+    ("stock_toz_double", 0.249, Fit, "the IZh-43's butt"),
     ("stock_mp133", 0.358, Fit, "the MP-133's butt"),
-    ("stock_ak74", 0.29, Fit, "the AK's butt"),
-    ("stock_rpk74", 0.29, Fit, "the RPK's butt"),
+    // Receiver to butt plate, off the same photograph (it was drawn 30 mm
+    // long and 35 mm deep).
+    ("stock_ak74", 0.26, Fit, "the AK's butt"),
+    ("stock_rpk74", 0.245, Fit, "the RPK's butt"),
     (
         "bolt_mosin",
         0.14,
@@ -265,8 +275,10 @@ pub fn ammo(id: &str) -> Option<(f32, Rule)> {
     if id.starts_with("flare_") {
         return Some((0.078, Fit));
     }
+    // A leaf-spring crossbow's 150 mm draw shoots 250 to 300 mm bolts
+    // (art/items/crossbow_bolts.py).
     if id == "crossbow_bolt" || id == "bolt_bundle" {
-        return Some((0.38, Fit));
+        return Some((0.30, Fit));
     }
     if id.starts_with("ammo_") {
         // Paper packets and card boxes of 8 to 30.
@@ -372,10 +384,7 @@ mod tests {
     }
 
     /// Items off their size waiting on their owners: (id, why).
-    const KNOWN: &[(&str, &str)] = &[(
-        "nagant",
-        "11% short of an M1895's 235 mm; its layout (`weapons::layout`) and model scale together (Weapon feel)",
-    )];
+    const KNOWN: &[(&str, &str)] = &[];
 
     /// Every row names an item that exists.
     #[test]

@@ -30,11 +30,14 @@ from _kit import text  # noqa: E402
 
 main_guard()
 
+# Laid out against two side photographs scaled to the published 843 mm
+# (`docs/craft/guns/ppsh/README.md`).
 BORE = 0.052
-RX0, RX1 = -0.2, 0.012         # receiver front and rear
+RX0, RX1 = -0.232, 0.012       # receiver front (the jacket's hinge) and rear
 RHW = 0.0165
-MUZZLE = -0.52
-WELL_Z = -0.152                # the magazine well's centre
+MUZZLE = -0.5143               # the compensator's face, on the bore
+WELL_Z = -0.187                # the magazine well's centre
+WOOD_F = -0.13                 # the stock's front: bare steel ahead of it
 
 
 def screw(p, cutter, r, pos, xf, turn=0.6, mat="Blued", segs=12):
@@ -62,18 +65,20 @@ def lerp_table(t, table):
 
 # --- Stock: wood from the magazine well back to the butt ---------------------------------
 stock_prof = [
-    (-0.205, 0.03), (0.0, 0.03),                # under the receiver
-    (0.03, 0.026), (0.07, 0.016),               # wrist to comb
-    (0.315, 0.004),                             # heel
-    (0.315, -0.112),                            # toe
-    (0.21, -0.095), (0.1, -0.072), (0.05, -0.058), (0.03, -0.038),  # belly, grip
-    (-0.005, -0.022), (-0.06, -0.012),          # behind the guard
-    (-0.11, -0.005), (-0.125, 0.004),           # up to the well
-    (-0.18, 0.004), (-0.205, 0.012),            # the forend ahead of the well
+    (WOOD_F, 0.03), (0.0, 0.03),                # under the receiver
+    (0.03, 0.026), (0.065, 0.013),              # wrist, down to the comb
+    (0.095, 0.006), (0.145, 0.011),             # the comb
+    (0.315, -0.006),                            # heel
+    (0.315, -0.128),                            # toe
+    (0.2, -0.095), (0.145, -0.071),             # belly
+    (0.118, -0.061), (0.098, -0.066),           # the knob under the grip
+    (0.075, -0.040), (0.04, -0.018),            # the grip, slim
+    (0.0, -0.008), (-0.06, -0.004),             # behind the guard
+    (WOOD_F + 0.008, -0.004), (WOOD_F, 0.008),
 ]
-stock_prof = fillet(stock_prof, [0.004, 0.004, 0.012, 0.03, 0.0, 0.0, 0.05, 0.04, 0.012, 0.01,
-                                 0.01, 0.008, 0.006, 0.004, 0.004, 0.004], 4)
-WIDTH = [(-0.21, 0.02), (-0.02, 0.021), (0.03, 0.0165), (0.08, 0.017), (0.32, 0.021)]
+stock_prof = fillet(stock_prof, [0.004, 0.004, 0.012, 0.02, 0.02, 0.04, 0.0, 0.0, 0.04, 0.015,
+                                 0.01, 0.012, 0.015, 0.01, 0.008, 0.006, 0.004, 0.004], 4)
+WIDTH = [(WOOD_F, 0.02), (-0.02, 0.021), (0.03, 0.0165), (0.08, 0.017), (0.32, 0.021)]
 
 
 def stock_w(z, yc, h):
@@ -82,16 +87,15 @@ def stock_w(z, yc, h):
 
 
 stock = Part("stock")
-stock.stock(stock_prof, -0.2045, 0.3145, "Wood", stock_w, stations=110, segs=28,
+stock.stock(stock_prof, WOOD_F + 0.0005, 0.3145, "Wood", stock_w, stations=110, segs=28,
             power=lambda z: 3.4 if z < 0.0 else 2.5)
 sc = Part("cut")
-# The magazine well through the stock, and the sling slot in the butt.
-sc.box((0.03, 0.06, 0.064), (0.0, 0.0, WELL_Z), "Wood", bevel=0.003, segs=1)
+# The sling slot in the butt.
 sc.prism(fillet([(0.15, -0.055), (0.19, -0.063), (0.19, -0.071), (0.15, -0.063)], 0.0035, 2),
          -0.04, 0.04, "Wood", axis="x")
 stock.cut(sc)
 furn = Part("furniture")
-bp = fillet([(0.3145, 0.0055), (0.324, 0.0045), (0.324, -0.113), (0.3145, -0.1135)],
+bp = fillet([(0.3145, -0.0045), (0.324, -0.0055), (0.324, -0.129), (0.3145, -0.1295)],
             [0.0, 0.002, 0.002, 0.0], 2)
 furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
 furn.box((0.024, 0.05, 0.004), (0.0, -0.05, 0.3255), "Blued", bevel=0.0012)
@@ -103,13 +107,14 @@ furn.lathe([(0.0, 0.0), (0.0034, 0.0), (0.0034, 0.0014), (0.0026, 0.0024), (0.0,
 screws = Part("screws")
 slots = Part("cut")
 # The butt plate's two screws, into the heel and the toe.
-for y in (-0.008, -0.098):
+for y in (-0.016, -0.114):
     screw(screws, slots, 0.0034, (0.0, y, 0.324), RX(math.pi / 2), turn=0.5 - y * 11)
-# The front sling swivel on the stock's left, ahead of the magazine well.
-swivel = [(-0.185 + 0.009 * math.cos(a), 0.015 + 0.009 * math.sin(a))
+# The front sling swivel on the jacket's left, under its slots.
+SWIVEL = (-0.019, BORE - 0.0125, -0.35)
+swivel = [(SWIVEL[2] + 0.009 * math.cos(a), SWIVEL[1] + 0.009 * math.sin(a))
           for a in [math.pi + math.pi * i / 14 for i in range(15)]]
-furn.sweep(swivel, section_rect(0.0025, 0.0025, 0.0007, 3), "Blued", xf=T(-0.021, 0, 0))
-furn.box((0.004, 0.006, 0.022), (-0.0195, 0.017, -0.185), "Blued", bevel=0.001)
+furn.sweep(swivel, section_rect(0.0025, 0.0025, 0.0007, 3), "Blued", xf=T(SWIVEL[0], 0, 0))
+furn.box((0.008, 0.006, 0.022), (-0.0155, SWIVEL[1], SWIVEL[2]), "Blued", bevel=0.001)
 
 # --- Receiver: the lower half, and the cover hinged at the front -------------------------
 recv = Part("receiver")
@@ -125,7 +130,8 @@ text(rc, "ЛХ 5520", 0.0042, "Blued", LEFT @ T(-0.06, 0.04, 0.0), depth=0.0012)
 recv.cut(rc)
 cover = fillet([(-0.0165, 0.052), (0.0165, 0.052), (0.0165, 0.064), (0.0, 0.0705),
                 (-0.0165, 0.064)], [0.0013, 0.0013, 0.006, 0.01, 0.006], 3)
-recv.prism(cover, -0.135, RX1, "Blued", axis="z", bevel=0.0012, segs=1)
+# It runs on from the jacket, the ejection port cut in it.
+recv.prism(cover, RX0 + 0.006, RX1, "Blued", axis="z", bevel=0.0012, segs=1)
 cc = Part("cut")
 cc.box((0.018, 0.03, 0.05), (0.004, 0.06, -0.16), "Blued", bevel=0.002, segs=1)
 # Serial and year stamped on the cover's upper left, where the shooter
@@ -134,7 +140,7 @@ cc.box((0.018, 0.03, 0.05), (0.004, 0.06, -0.16), "Blued", bevel=0.002, segs=1)
 # letters follow.)
 SLOPE = math.atan2(0.0065, 0.0165)
 for s_, z in (("ПГ 3047", -0.098), ("1943", -0.068)):
-    sink = 0.0012 * (RX1 - 0.0012 - z) / (RX1 - 0.0012 + 0.135) + 0.0006
+    sink = 0.0012 * (RX1 - 0.0012 - z) / (RX1 - 0.0012 + 0.135) + 0.0006  # (lean as drawn)
     at = T(-0.0088 + sink * math.sin(SLOPE), 0.0705 - 0.0088 * math.tan(SLOPE)
            - sink * math.cos(SLOPE), z) @ RZ(SLOPE) @ RY(-math.pi / 2) @ RX(-math.pi / 2)
     text(cc, s_, 0.0034, "Blued", at, depth=0.0012)
@@ -148,14 +154,14 @@ recv.lathe([(0.0, 0.0), (0.0034, 0.0), (0.0034, 0.0022), (0.0027, 0.003), (0.0, 
 for i in range(3):
     recv.box((0.011, 0.0008, 0.0008), (0.0, 0.0632, RX1 + 0.0004 + i * 0.0022),
              "Blued", bevel=0.0002, segs=1)
-recv.cyl(0.004, -0.019, 0.019, "Blued", segs=20, xf=T(0, 0.054, -0.205) @ RY(math.pi / 2))
+recv.cyl(0.004, -0.019, 0.019, "Blued", segs=20, xf=T(0, 0.054, RX0) @ RY(math.pi / 2))
 # The hinge pin's peened heads.
 for sx in (-1, 1):
     recv.lathe([(0.0, 0.0), (0.0026, 0.0), (0.0024, 0.0008), (0.0014, 0.0014), (0.0, 0.0015)],
-               "Steel", segs=12, xf=T(sx * 0.0188, 0.054, -0.205) @ RY(sx * math.pi / 2))
+               "Steel", segs=12, xf=T(sx * 0.0188, 0.054, RX0) @ RY(sx * math.pi / 2))
 # Rivets along the foot of the receiver's sides.
 for sx in (-1, 1):
-    for z in (-0.19, -0.105, -0.012):
+    for z in (-0.215, -0.105, -0.012):
         recv.lathe([(0.0, -0.0005), (0.0019, -0.0005), (0.0019, 0.0002), (0.0013, 0.0009),
                     (0.0, 0.0011)], "Blued", segs=10,
                    xf=T(sx * RHW, 0.036, z) @ RY(sx * math.pi / 2))
@@ -172,52 +178,66 @@ for sx in (-1, 1):
                segs=1)
 # The magazine catch behind the well, and the well's housing under the
 # receiver.
-recv.box((0.014, 0.022, 0.006), (0.0, 0.014, WELL_Z + 0.035), "Blued", bevel=0.0015)
+recv.box((0.014, 0.018, 0.006), (0.0, 0.001, WELL_Z + 0.027), "Blued", bevel=0.0015)
 
 housing = Part("housing")
-housing.prism(fillet([(WELL_Z - 0.03, 0.03), (WELL_Z + 0.03, 0.03), (WELL_Z + 0.03, 0.012),
-                      (WELL_Z - 0.03, 0.012)], 0.003, 2), -0.016, 0.016, "Blued", axis="x",
-              bevel=0.0012, segs=1)
+# The receiver's front, bare steel from the hinge back to the wood, and the
+# magazine well's housing standing below it.
+housing.prism(fillet([(RX0, 0.03), (WOOD_F + 0.004, 0.03), (WOOD_F + 0.004, 0.004),
+                      (RX0 + 0.012, 0.004)], [0.002, 0.0, 0.002, 0.006], 2), -RHW, RHW,
+              "Blued", axis="x", bevel=0.0012, segs=1)
+housing.prism(fillet([(WELL_Z - 0.024, 0.01), (WELL_Z + 0.024, 0.01), (WELL_Z + 0.024, -0.008),
+                      (WELL_Z - 0.024, -0.008)], 0.003, 2), -0.0175, 0.0175, "Blued",
+              axis="x", bevel=0.0012, segs=1)
 # The drum's feed tower goes up through it (it stood through solid steel:
 # `capture::seated`): 21 x 38 mm, 0.6 mm clear.
 hc = Part("cut")
-hc.box((0.0222, 0.03, 0.0392), (0.0, 0.021, WELL_Z - 0.005), "Blued")
+hc.box((0.0222, 0.048, 0.0392), (0.0, 0.012, WELL_Z - 0.005), "Blued")
 housing.cut(hc)
 # Trigger guard.
-guard = catmull([(-0.075, 0.012), (-0.078, -0.004), (-0.066, -0.018), (-0.045, -0.02),
-                 (-0.024, -0.016), (-0.012, -0.006), (-0.006, 0.0)], 6, closed=False)
+# Long and deep, its bottom straight.
+guard = catmull([(-0.078, 0.012), (-0.081, -0.012), (-0.075, -0.029), (-0.06, -0.034),
+                 (-0.02, -0.034), (-0.006, -0.028), (-0.002, -0.012), (0.0, 0.0)], 6,
+                closed=False)
 recv.sweep(guard, section_rect(0.009, 0.003, 0.001, 3), "Blued")
 
 # --- Barrel jacket: a perforated tube, slanted at the front ---------------------------
 jacket = Part("jacket")
-jacket.tube(0.0175, 0.0155, -0.545, -0.2, "Blued", segs=40, xf=T(0, BORE, 0), chamfer=0.0008)
+jacket.tube(0.0175, 0.0155, MUZZLE - 0.012, RX0 + 0.006, "Blued", segs=40, xf=T(0, BORE, 0),
+            chamfer=0.0008)
+# The compensator's face, closed but for the bullet's hole: the jacket's
+# front cut 15 degrees off upright, its top lip forward, so the gas
+# striking the lip pushes the muzzle down.
+FACE = RX(math.radians(-15), about=(0, BORE, MUZZLE))
+jacket.cyl(0.0182, MUZZLE, MUZZLE + 0.0016, "Blued", segs=40, xf=FACE @ T(0, BORE, 0))
 jc = Part("cut")
-# Rows of long cooling slots round the jacket (not along its bottom).
-for k in range(7):
-    z = -0.255 - k * 0.032
-    for a in (90, 140, 40, 200, -20):
+# Four long cooling slots down each side.
+for z in (-0.452, -0.395, -0.339, -0.285):
+    for a in (-90, 90):
         rot = RZ(math.radians(a), about=(0, BORE, 0))
-        jc.box((0.012, 0.04, 0.02), (0.0, BORE + 0.02, z), "Blued", bevel=0.005, segs=2,
+        jc.box((0.014, 0.04, 0.048), (0.0, BORE + 0.02, z), "Blued", bevel=0.0065, segs=3,
                xf=rot)
-# The compensator: the jacket's front cut on a slant, open at the top.
-# (A plane at 45 degrees, from the top at z -0.505 to the bottom at -0.54:
-# the gas blows up and forward and pushes the muzzle down.)
-jc.box((0.1, 0.1, 0.1), (0.0, BORE, -0.5725), "Blued",
-       xf=RX(math.radians(45), about=(0, BORE, -0.5225)))
+jc.box((0.1, 0.1, 0.1), (0.0, BORE, MUZZLE - 0.05), "Blued", xf=FACE)
+jc.cyl(0.0045, MUZZLE - 0.01, MUZZLE + 0.01, "Blued", segs=20, xf=T(0, BORE, 0))
+# A round port through either side, behind the face.
+jc.cyl(0.0075, -0.03, 0.03, "Blued", segs=24, xf=T(0, BORE, -0.497) @ RY(math.pi / 2))
 jacket.cut(jc)
 barrel = Part("barrel")
-barrel.lathe([(0.0039, MUZZLE + 0.016), (0.0075, MUZZLE + 0.016), (0.0082, -0.47),
+# 269 mm, its muzzle 35 mm behind the compensator's face.
+barrel.lathe([(0.0039, -0.479), (0.0075, -0.479), (0.0082, -0.45),
               (0.0095, -0.21), (0.0, -0.21)], "Blued", segs=24, xf=T(0, BORE, 0))
 # The front sight in its ears on the jacket's top, near the front.
-barrel.prism(fillet([(-0.488, BORE + 0.015), (-0.47, BORE + 0.015), (-0.474, BORE + 0.028),
-                     (-0.484, BORE + 0.028)], 0.0012, 2), -0.0014, 0.0014, "Blued", axis="x",
-             bevel=0.0004, segs=1)
+FS = 0.037  # moved back from where it was drawn, to the photographs'
+barrel.prism(fillet([(-0.488 + FS, BORE + 0.015), (-0.47 + FS, BORE + 0.015),
+                     (-0.474 + FS, BORE + 0.028), (-0.484 + FS, BORE + 0.028)], 0.0012, 2),
+             -0.0014, 0.0014, "Blued", axis="x", bevel=0.0004, segs=1)
 for sx in (-1, 1):
-    barrel.prism(fillet([(-0.49, BORE + 0.014), (-0.468, BORE + 0.014), (-0.472, BORE + 0.029),
-                         (-0.486, BORE + 0.029)], 0.0012, 2), sx * 0.008 - 0.0015,
+    barrel.prism(fillet([(-0.49 + FS, BORE + 0.014), (-0.468 + FS, BORE + 0.014),
+                         (-0.472 + FS, BORE + 0.029), (-0.486 + FS, BORE + 0.029)], 0.0012, 2),
+                 sx * 0.008 - 0.0015,
                  sx * 0.008 + 0.0015, "Blued", axis="x", bevel=0.0004, segs=1)
-# The muzzle's front bearing ring inside the compensator.
-barrel.tube(0.0155, 0.0042, -0.505, -0.497, "Blued", segs=40, xf=T(0, BORE, 0))
+# The muzzle's bearing ring, holding it in the jacket.
+barrel.tube(0.0155, 0.0042, -0.483, -0.475, "Blued", segs=40, xf=T(0, BORE, 0))
 
 # --- Moving parts ------------------------------------------------------------------------
 bolt = Part("bolt", origin=(0.0, BORE, -0.1))
@@ -242,8 +262,9 @@ for i in range(3):
     bolt.box((0.0065, 0.0008, 0.0009), (0.0245, 0.0528, -0.1175 + i * 0.0025), "Steel",
              bevel=0.0002, segs=1)
 
-trig = Part("trigger", origin=(0.0, 0.01, -0.035))
-trig.sweep(catmull([(-0.037, 0.012), (-0.04, 0.002), (-0.038, -0.006), (-0.033, -0.01)], 5,
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.018, -0.037))
+trig.sweep(catmull([(-0.037, 0.012), (-0.04, 0.0), (-0.038, -0.012), (-0.032, -0.019)], 5,
                    closed=False), section_rect(0.0048, 0.0032, 0.0011, 3), "Blued")
 
 SEL_PIVOT = (0.0, 0.01, -0.06)
@@ -264,8 +285,8 @@ empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.08, 0.0))
 empty("magwell", (0.0, 0.026, WELL_Z))
 
-# Where a sling attaches: the swivel on the stock's left ahead of the well, and the slot through the butt.
-empty("pt_sling_front", (-0.021, 0.006, -0.185))
+# Where a sling attaches: the swivel on the jacket's left, and the slot through the butt.
+empty("pt_sling_front", (SWIVEL[0], SWIVEL[1] - 0.009, SWIVEL[2]))
 empty("pt_sling_rear", (0.0, -0.063, 0.17))
 report()
 export("assets/models/guns/ppsh.glb")

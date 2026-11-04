@@ -1,5 +1,29 @@
 # Polish round: brief for parallel sessions
 
+> **Paused 2 Nov 2026. Where things stand, for whoever resumes.**
+>
+> - **Main** (`claude/serene-clarke-rcgj62`) is green through the
+>   coordinator's gate: fmt, extraction_core, gunsmith, the full lib suite
+>   with nothing skipped, a fast build, the 41 scenarios, the 13 contracts
+>   (each on its own valley) and `second_hour`. The gate needs the fetched
+>   assets (`python3 scripts/fetch_assets.py`); the budget gauges refuse to
+>   measure without them.
+> - **First on resume:**
+>   1. Onboarding's Payday line through Progression's `CardCheck` (both
+>      halves are on main now; next (1) in ONBOARDING.md).
+>   2. Robot minds `docs/robot_minds/melee_fairness_wip.patch` (crawler
+>      zap 0.56 s after its tell; the hound sees through "low and still"
+>      within 4 m; a heavy hunts you at the truck). Fail-first tests are in
+>      the patch; it's not built yet. Its first_hour.rs part is Onboarding's.
+> - **Each session's stop note** sits at the top of its own manual:
+>   docs/craft/{GUNSMITHING,ITEM_READING,ONBOARDING,ROBOT_READING,WALK_REVIEW}.md,
+>   docs/{ART_DIRECTION,PERFORMANCE,PROGRESSION,ROBOT_MINDS,HANDS}.md and
+>   docs/shots/weapon-feel/README.md.
+> - **For the headset:** the A/B switches `EXTRACTION_NEAR_FILL`,
+>   `EXTRACTION_FLAT_AMBIENT` and `EXTRACTION_ROOM_ADAPT` (Marrow village
+>   outdoors, the pump hall, m05). If rooms read too bright or flat,
+>   ROOM_ADAPT (1.3) is the lever.
+
 Several Claude sessions work on this repo at once, each on its own branch
 in its own container, each owning one workstream. The coordinating session
 (on `claude/serene-clarke-rcgj62`) merges the branches. Read this first,

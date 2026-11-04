@@ -81,41 +81,110 @@ struct Slots {
     room_floor: Vec3,
     /// The partition's face towards the front room, between its doorways.
     partition: Vec3,
-    /// The windows' sills: (middle, length along the wall, wall's yaw).
-    sills: Vec<(Vec3, f32, f32)>,
+    /// The windows' sills, as the house's walls were built
+    /// (`buildings::Geo::sills`): a ruin's breached wall has none.
+    sills: Vec<Ledge>,
+    /// The front wall's two, -X first.
+    front: [Ledge; 2],
 }
 
-fn slots(w: f32, d: f32) -> Slots {
+/// A window sill's ledge in the room (`buildings::Sill`).
+#[derive(Clone, Copy, Debug)]
+struct Ledge {
+    /// Its top's middle.
+    at: Vec3,
+    /// Its top on the wall's centre line, at the window's middle.
+    wall: Vec3,
+    /// The window's width.
+    len: f32,
+    /// Along the wall `rot * X`, into the room `rot * Z`.
+    rot: Quat,
+}
+
+impl Ledge {
+    fn new(s: &super::buildings::Sill) -> Self {
+        Ledge {
+            at: s.at + s.rot * Vec3::Z * ((s.back + s.edge) * 0.5),
+            wall: s.at,
+            len: s.len,
+            rot: s.rot,
+        }
+    }
+
+    /// A thing on it, `along` the wall from the window's middle, turned
+    /// `yaw` from facing out of the window. Things stand on the -X half,
+    /// clear of where a broken sash's right casement swings in
+    /// (`window_sash_broken`).
+    fn put(&self, model: &'static str, along: f32, yaw: f32) -> (&'static str, Transform) {
+        self.put_in(model, along, 0.0, yaw)
+    }
+
+    /// As `put`, `into` the room from the ledge's middle.
+    fn put_in(
+        &self,
+        model: &'static str,
+        along: f32,
+        into: f32,
+        yaw: f32,
+    ) -> (&'static str, Transform) {
+        (
+            model,
+            Transform::from_translation(self.at + self.rot * Vec3::new(along, 0.0, into))
+                .with_rotation(self.rot * Quat::from_rotation_y(yaw)),
+        )
+    }
+}
+
+/// The sills of `prefab`'s windows, as its recipe builds them.
+fn ledges(prefab: &str) -> Vec<Ledge> {
+    super::buildings::prefab(prefab)
+        .map(|g| g.sills.iter().map(Ledge::new).collect())
+        .unwrap_or_default()
+}
+
+fn slots(w: f32, d: f32, prefab: &str) -> Slots {
+    use super::buildings::{HousePlan, house_layout};
     let f = 0.5;
     // The floorboards' top (`Builder::plinth`'s 3 cm floor): what stands
     // on the floor stood 3 cm into it (`capture::footing`).
     let floor = f + 0.03;
-    let (x, z) = (w * 0.5, d * 0.5);
+    let z = d * 0.5;
     let pz = z - d * 0.42;
-    let table = Vec3::new(-x * 0.4, f + 0.785, -z * 0.2);
-    let shelf = Vec3::new(x - 0.3, f, -z * 0.4);
-    let mut sills = Vec::new();
-    // Inside the walls' middles (as `shell` builds them: front, +X, back,
-    // -X; the sill's top 0.925 up its wall).
-    let sill_y = f + 0.9 + 0.025;
-    for s in [w * 0.2, w * 0.8] {
-        sills.push((Vec3::new(-x + s, sill_y, -z), 1.0, 0.0));
-    }
-    for s in [d * 0.3, d * 0.75] {
-        sills.push((
-            Vec3::new(x, sill_y, -z + s),
-            1.0,
-            std::f32::consts::FRAC_PI_2,
-        ));
-    }
+    // The furniture where the house's plan stood it (a ruin's is the
+    // common plan).
+    // (Plank B dresses as the common plan, mirrored afterwards: `dress`.)
+    let plan = match HousePlan::of(prefab) {
+        HousePlan::PlankB => HousePlan::Common,
+        plan => plan,
+    };
+    let l = house_layout(plan, w, d);
+    // The table's top, or the post office's counter's (`Builder::counter`
+    // 0.9 high; its loot at 0.95), its two ends along it.
+    let (table, along) = {
+        let (at, yaw) = l.table;
+        let along = Quat::from_rotation_y(yaw) * Vec3::X;
+        if plan == HousePlan::PostOffice {
+            (at + Vec3::Y * 0.9, along * 2.2)
+        } else {
+            (at + Vec3::Y * 0.785, along)
+        }
+    };
+    let shelf = l.shelf.0;
+    // The counter's far end from its middle (the back wall's way).
+    let counter_end = l.counter.0 + Vec3::new(0.0, 0.9, -0.6);
+    let sills = ledges(prefab);
+    let mut front: Vec<Ledge> = sills
+        .iter()
+        .filter(|l| (l.rot * Vec3::Z).z > 0.9)
+        .copied()
+        .collect();
+    front.sort_by(|a, b| a.at.x.total_cmp(&b.at.x));
+    let front = [front[0], front[front.len() - 1]];
     Slots {
-        table: [table - Vec3::X * 0.4, table + Vec3::X * 0.42],
+        table: [table - along * 0.4, table + along * 0.42],
         shelf: [shelf + Vec3::Y * 0.315, shelf + Vec3::Y * 1.665],
-        kitchen: [
-            Vec3::new(-x * 0.6, f + 0.315, z - 0.3),
-            Vec3::new(-x + 0.4, f + 0.9, z - 1.4 - 0.6),
-        ],
-        bed: Vec3::new(x - 0.6, f + 0.56, z - 1.4),
+        kitchen: [l.kitchen_shelf + Vec3::Y * 0.315, counter_end],
+        bed: l.bed + Vec3::new(0.0, 0.56, -0.2),
         door_floor: [
             Vec3::new(-0.95, floor, -z + 0.45),
             Vec3::new(0.95, floor, -z + 0.45),
@@ -124,9 +193,10 @@ fn slots(w: f32, d: f32) -> Slots {
             Vec3::new(-1.1, f + 1.7, -z + 0.09),
             Vec3::new(1.1, f + 1.7, -z + 0.09),
         ],
-        room_floor: Vec3::new(x * 0.25, floor, -z * 0.45),
+        room_floor: l.room_floor,
         partition: Vec3::new(0.0, f + 1.05, pz - 0.05),
         sills,
+        front,
     }
 }
 
@@ -158,7 +228,7 @@ pub fn dress(
     if std::env::var("EXTRACTION_NO_CLUTTER").is_ok_and(|v| v == "1") {
         return Vec::new();
     }
-    let base = extraction_core::map::prefab_base(prefab);
+    let base = extraction_core::map::prefab_shell(prefab);
     // A drowned house was emptied sixty years before the water came: what
     // the silt holds is old and sparse.
     if prefab.ends_with("_drowned") {
@@ -183,7 +253,7 @@ pub fn dress(
     } else {
         None
     };
-    let s = slots(w, d);
+    let s = slots(w, d, prefab);
     let story = special(valley, base, tag, at);
     let mut out = Vec::new();
     match ruin {
@@ -199,9 +269,7 @@ pub fn dress(
                 s.kitchen[0] - Vec3::Y * 0.315 + Vec3::Z * -0.5,
                 0.0,
             ));
-            for &(c, len, yaw) in &s.sills {
-                out.push(sill_ash(c, len, yaw));
-            }
+            out.extend(s.sills.iter().map(sill_ash));
         }
         Some(Ruin::Drowned) => {}
         Some(Ruin::Damaged) => {
@@ -220,12 +288,8 @@ pub fn dress(
                 Valley::Marrow => out.push(on("suitcase_shut", s.door_floor[0], 0.2)),
                 Valley::Kettle => out.push(on("boots", s.door_floor[0], 0.3)),
                 Valley::Rime => out.push(on("felt_boots", s.door_floor[0], 0.3)),
-                // The front's sills (a damaged house's +X wall is breached).
-                Valley::Cinder => {
-                    for &(c, len, yaw) in &s.sills[..2] {
-                        out.push(sill_ash(c, len, yaw));
-                    }
-                }
+                // Its sills (a damaged house's +X wall is breached: none).
+                Valley::Cinder => out.extend(s.sills.iter().map(sill_ash)),
             }
         }
         None => {
@@ -233,9 +297,11 @@ pub fn dress(
                 Valley::Marrow if story != Some(Story::Hana) => {
                     out.push(on("suitcase_open", s.bed, 0.1));
                     out.push(on("suitcase_shut", s.door_floor[0], 0.15));
+                    // Behind the suitcase, off the doorway (beside it, the
+                    // bundle went 10 cm into the case).
                     out.push(on(
                         "bundle",
-                        s.door_floor[0] + Vec3::new(0.45, 0.0, 0.1),
+                        s.door_floor[0] + Vec3::new(-0.05, 0.0, 0.52),
                         0.0,
                     ));
                     out.push(on("belongings_box", s.room_floor + Vec3::X * 0.6, 0.3));
@@ -294,9 +360,7 @@ pub fn dress(
                     out.push(on("books_charred", s.shelf[1], std::f32::consts::FRAC_PI_2));
                     out.push(on("dishes_broken", s.room_floor + Vec3::Z * 0.4, 0.5));
                     out.push(on("frame_charred", s.door_floor[1], 0.6));
-                    for &(c, len, yaw) in &s.sills {
-                        out.push(sill_ash(c, len, yaw));
-                    }
+                    out.extend(s.sills.iter().map(sill_ash));
                 }
             }
             if valley != Valley::Cinder {
@@ -308,6 +372,31 @@ pub fn dress(
                 }
             }
         }
+    }
+    // A farm's kitchen-living room (`buildings::HousePlan::Farm`): the
+    // corner by the stove where the boots dry and the wood waits, the
+    // churn by the door, the flour in the pantry.
+    if ruin.is_none()
+        && super::buildings::HousePlan::of(prefab) == super::buildings::HousePlan::Farm
+    {
+        let l = super::buildings::house_layout(super::buildings::HousePlan::Farm, w, d);
+        let (stove, f) = (l.stove.0, l.room_floor.y);
+        out.push(on(
+            "firewood_basket",
+            Vec3::new(stove.x + 0.75, f, stove.z),
+            0.3,
+        ));
+        out.push(on(
+            "felt_boots",
+            Vec3::new(stove.x + 0.15, f, stove.z - 0.75),
+            0.2,
+        ));
+        out.push(on(
+            "milk_churn",
+            s.door_floor[1] + Vec3::new(0.35, 0.0, 0.0),
+            0.0,
+        ));
+        out.push(on("flour_sacks", Vec3::new(-w * 0.25 + 1.3, f, 1.3), 0.4));
     }
     // Who lived here (`Resident`), in a whole house Story hasn't written
     // about: a few of their things where the valley's leave room.
@@ -331,6 +420,9 @@ pub fn dress(
             out.push(wall("coat_hook", s.door_wall[0]));
         }
         Some(Story::ShotFirer) => {
+            // His helmet where the dishes were (both, they went through
+            // each other).
+            out.retain(|(n, _)| *n != "dishes");
             out.push(on("helmet_lamp", s.table[0] + Vec3::Z * 0.2, -0.4));
             out.push(wall("tally_board", s.door_wall[1] + Vec3::Y * 0.1));
         }
@@ -339,6 +431,10 @@ pub fn dress(
         }
         Some(Story::PostOffice) => {
             out.push(on("pigeonholes", s.partition, 0.0));
+            // Its counter's (`buildings::HousePlan::PostOffice`): the
+            // parcel scales, not a family's dishes.
+            out.retain(|(m, _)| *m != "dishes");
+            out.push(on("shop_scales", s.table[0], 0.0));
         }
         Some(Story::MineOffice) => {
             out.push(on("ledger_open", s.kitchen[1] + Vec3::Z * 0.2, 0.3));
@@ -348,6 +444,16 @@ pub fn dress(
     if let Some(n) = named {
         out.retain(|(m, _)| !n.drop.contains(m));
         out.extend(n.things);
+    }
+    // Plank B is the common plan mirrored across the door's axis
+    // (`buildings::HousePlan::PlankB`): its things, set out as the common
+    // plan's, mirror with it (the residents' kits keep to their walls).
+    if super::buildings::HousePlan::of(prefab) == super::buildings::HousePlan::PlankB {
+        for (_, t) in &mut out {
+            t.translation.x = -t.translation.x;
+            let q = t.rotation;
+            t.rotation = Quat::from_xyzw(q.x, -q.y, -q.z, q.w);
+        }
     }
     clear_of_notes(map, xf, out)
 }
@@ -424,7 +530,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
     };
     let house = |f: fn(&Slots) -> Vec<(&'static str, Transform)>, drop: &'static [&'static str]| {
         plan(base).map(|(w, d)| Named {
-            things: f(&slots(w, d)),
+            things: f(&slots(w, d, prefab)),
             drop,
         })
     };
@@ -433,7 +539,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
         .find(|v| n.contains(v))?;
     match (valley, prefab) {
         // The shop shut on 13 October: "pay me when you're back".
-        ("marrow", "shop") if here(-16.0, 35.0) => {
+        ("marrow", "shop") if here(-18.2, 3.5) => {
             let f = 0.3;
             things(vec![
                 on("till", Vec3::new(-2.2, f + 0.9, -0.45), 0.1),
@@ -443,20 +549,20 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             ])
         }
         // J., the logging foreman.
-        ("marrow", "cabin_log") if here(-185.0, 190.0) => things(vec![
+        ("marrow", "cabin_log") if here(-110.8, 113.5) => things(vec![
             facing("axe_pegs", Vec3::new(-0.4, cf + 1.5, -cz), pz),
             on("whetstone", Vec3::new(0.38, cf + 0.785, 0.38), 0.3),
             on("boots", Vec3::new(1.95, cf, 2.2), 0.3),
         ]),
         // Tomas of J.'s crew: his tally on the wall by the bed, as his
         // note has it.
-        ("marrow", "cabin_log") if here(-145.0, 190.0) => things(vec![facing(
+        ("marrow", "cabin_log") if here(-70.8, 113.5) => things(vec![facing(
             "tally_board",
             Vec3::new(-cx, cf + 1.45, 1.0),
             px,
         )]),
         // Ondrej Brabec, the pump keeper, who knocked on wood.
-        ("marrow", "pump_station") if here(-200.0, 22.0) => {
+        ("marrow", "pump_station") if here(-110.0, 12.1) => {
             let f = 0.3;
             things(vec![
                 facing("horseshoe", Vec3::new(0.0, f + 2.3, -4.85), pz),
@@ -465,7 +571,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             ])
         }
         // The crossing keeper: the railwayman, his flags.
-        ("kettle", "house_plank") if here(76.0, 222.0) => house(
+        ("kettle", "house_plank") if here(49.0, 157.7) => house(
             |s| {
                 let mut v = Resident::Railwayman.things(s, 8.0, 7.0);
                 v.push(on(
@@ -478,7 +584,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // The weir book's keeper.
-        ("kettle", "house_plank") if here(-99.0, 154.0) => house(
+        ("kettle", "house_plank") if here(-74.2, 115.5) => house(
             |s| {
                 vec![
                     wall("waders", s.door_wall[1] + Vec3::Y * 0.1),
@@ -488,7 +594,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // The Nováks, who hid in the deep mine: small boots, a drawing.
-        ("kettle", "house_plank") if here(-42.0, 125.0) => house(
+        ("kettle", "house_plank") if here(-30.5, 93.0) => house(
             |s| {
                 let mut v = Resident::Family.things(s, 8.0, 7.0);
                 v.push(on(
@@ -501,14 +607,14 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // Old Fiala's lodge.
-        ("kettle", "cabin_log") if here(205.0, -205.0) => things(vec![
+        ("kettle", "cabin_log") if here(149.1, -152.2) => things(vec![
             facing("traps_hook", Vec3::new(-0.4, cf + 1.6, -cz), pz),
             facing("antlers", Vec3::new(1.0, cf + 1.85, cz), nz),
             facing("hide_frame", Vec3::new(cx, cf + 1.3, -1.2), nx),
         ]),
         // Mirek Hájek, the charcoal burner: "my name's on the frame so you
         // know whose it was".
-        ("kettle", "cabin_log") if here(119.0, -138.0) => things(vec![
+        ("kettle", "cabin_log") if here(89.2, -103.5) => things(vec![
             on(
                 "bed_name_mirek",
                 Vec3::new(-2.8, cf + 0.32, 1.5 - 0.975 - 0.03),
@@ -517,13 +623,13 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             on("charcoal_sack", Vec3::new(-0.45, cf, -2.4), 0.5),
         ]),
         // The sexton's chapel: the hymns still up from the last Sunday.
-        ("kettle", "chapel") if here(-8.0, 150.0) => things(vec![facing(
+        ("kettle", "chapel") if here(-7.4, 123.4) => things(vec![facing(
             "hymn_board",
             Vec3::new(3.0, 0.5 + 1.9, 7.0 - 0.175),
             nz,
         )]),
         // The scavenger off Lev's truck: a bedroll, a tin, lately.
-        ("cinder", "house_plank_damaged") if here(0.0, 150.0) => house(
+        ("cinder", "house_plank_damaged") if here(-13.0, 98.0) => house(
             |_| {
                 vec![
                     on("bedroll", Vec3::new(-4.0 + 0.95, 0.5, -3.5 + 1.1), PI * 0.5),
@@ -533,7 +639,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // T. Veselý, the woodward.
-        ("cinder", "cabin_log") if here(-75.0, -159.0) => things(vec![
+        ("cinder", "cabin_log") if here(-51.9, -111.2) => things(vec![
             facing("axe_pegs", Vec3::new(-0.4, cf + 1.5, -cz), pz),
             facing("bow_saw", Vec3::new(0.45, cf + 1.75, -cz), pz),
         ]),
@@ -544,11 +650,8 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
                 vec![
                     on("cup_one", s.table[0], 0.0),
                     on("walking_stick", edge, 0.0),
-                    (
-                        "reading_glasses",
-                        Transform::from_translation(s.sills[0].0 + Vec3::Z * 0.1),
-                    ),
-                    on("photo_church", s.sills[1].0 + Vec3::Z * 0.1, PI),
+                    s.front[0].put("reading_glasses", -0.3, 0.0),
+                    s.front[1].put("photo_church", -0.25, PI),
                 ]
             },
             &["dishes"],
@@ -569,7 +672,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
         // feet: her chair at the window, her slippers, her peg empty.
         ("sallow", _) if here(-210.0, -222.0) => house(
             |s| {
-                let w = s.sills[0].0;
+                let w = s.front[0].wall;
                 vec![
                     on("armchair", Vec3::new(w.x, 0.5, w.z + 0.6), 0.0),
                     on("slippers", Vec3::new(w.x + 0.15, 0.5, w.z + 1.15), 0.2),
@@ -742,7 +845,10 @@ fn kit(prefab: &str, kettle: bool) -> Vec<(&'static str, Transform)> {
                 facing("wall_clock", Vec3::new(3.44, 0.3 + 2.4, -3.2), nx),
                 facing("gauge_board", Vec3::new(0.0, 0.3 + 1.5, z), nz),
                 facing("wall_telephone", Vec3::new(x, 0.3 + 1.5, -2.4), nx),
-                on("ledger_open", Vec3::new(4.95, 0.3 + 0.785, -3.0), 0.2),
+                // On the office table's -X end (`pump_station`'s, 1.2 long
+                // at x 5.5: at 4.95 the ledger lay off its end in the air),
+                // clear of the loot in its middle.
+                on("ledger_open", Vec3::new(5.13, 0.3 + 0.785, -3.0), 0.0),
                 against("oil_cans", Vec3::new(-3.9, f, -z), pz, cans),
                 against("toolbox", Vec3::new(-x, f, 2.2), px, tools),
                 on(lamp, Vec3::new(-6.2, 0.3 + 0.94, -3.5), 0.0),
@@ -836,14 +942,10 @@ fn hall(w: f32, d: f32, kettle: bool) -> Vec<(&'static str, Transform)> {
     v
 }
 
-/// Ash on a sill: the unit-metre film stretched along it.
-fn sill_ash(c: Vec3, len: f32, yaw: f32) -> (&'static str, Transform) {
-    (
-        "ash_film",
-        Transform::from_translation(c)
-            .with_rotation(Quat::from_rotation_y(yaw))
-            .with_scale(Vec3::new(len, 1.0, 1.0)),
-    )
+/// Ash on a sill: the unit-metre film stretched along its ledge.
+fn sill_ash(l: &Ledge) -> (&'static str, Transform) {
+    let (model, t) = l.put("ash_film", 0.0, 0.0);
+    (model, t.with_scale(Vec3::new(l.len, 1.0, 1.0)))
 }
 
 /// Who lived in a house, from its seed: each leaves three or so telling
@@ -901,14 +1003,8 @@ impl Resident {
     fn things(self, s: &Slots, w: f32, d: f32) -> Vec<(&'static str, Transform)> {
         let f = 0.5;
         let (x, z) = (w * 0.5, d * 0.5);
-        // On a front sill, a little in from the sash, facing the room.
-        let sill = |k: usize, model: &'static str, along: f32| {
-            let (c, _, _) = s.sills[k];
-            (
-                model,
-                Transform::from_translation(c + Vec3::new(along, 0.0, 0.1)),
-            )
-        };
+        // On a front sill.
+        let sill = |k: usize, model: &'static str, along: f32| s.front[k].put(model, along, 0.0);
         // The partition's face, a picture's height up.
         let partition = |model: &'static str, along: f32| {
             on(model, s.partition + Vec3::new(along, 0.35, 0.0), 0.0)
@@ -917,12 +1013,18 @@ impl Resident {
         let corner = Vec3::new(-x + 0.75, f, -z + 0.5);
         match self {
             Resident::Teacher => vec![
-                sill(0, "globe", -0.15),
-                sill(1, "exercise_books", 0.1),
+                // Its sphere back off the glass, its foot on the ledge.
+                s.front[0].put_in("globe", -0.25, 0.0325, 0.0),
+                sill(1, "exercise_books", -0.25),
                 partition("slate_board", -0.5),
             ],
             Resident::Family => vec![
-                on("cot", corner, 0.0),
+                // Along the -X wall, clear of the front window's sill.
+                on(
+                    "cot",
+                    Vec3::new(-x + 0.4, f, -z + 0.65),
+                    std::f32::consts::FRAC_PI_2,
+                ),
                 on(
                     "rocking_horse",
                     s.room_floor + Vec3::new(-0.45, 0.0, 0.85),
@@ -940,29 +1042,24 @@ impl Resident {
             ],
             Resident::OldCouple => vec![
                 on("two_cups", s.table[0], 0.1),
-                sill(0, "reading_glasses", 0.2),
+                sill(0, "reading_glasses", -0.3),
                 wall("walking_stick", s.door_wall[1]),
             ],
             Resident::Seamstress => vec![
-                // Under the front's +X window, facing in.
+                // Before the front's +X window, facing in, its head clear
+                // of the sill's board.
                 on(
                     "sewing_machine",
-                    Vec3::new(s.sills[1].0.x, f, -z + 0.09 + 0.3),
+                    Vec3::new(s.front[1].at.x, f, -z + 0.09 + 0.47),
                     std::f32::consts::PI,
                 ),
                 on("dress_form", corner, 0.4),
-                sill(0, "cloth_pinned", 0.0),
+                sill(0, "cloth_pinned", -0.25),
             ],
             Resident::RadioHam => vec![
-                {
-                    let (c, _, _) = s.sills[1];
-                    on(
-                        "radio_set",
-                        c + Vec3::new(0.0, 0.0, 0.12),
-                        std::f32::consts::PI,
-                    )
-                },
-                sill(0, "logbook", 0.0),
+                // Its back off the frame by its lead (`radio_set`).
+                s.front[1].put_in("radio_set", -0.26, 0.0225, std::f32::consts::PI),
+                sill(0, "logbook", -0.25),
             ],
             Resident::Railwayman => vec![
                 partition("timetable", 0.55),
@@ -996,8 +1093,8 @@ fn special(valley: Valley, base: &str, tag: &str, at: Vec2) -> Option<Story> {
         (_, _, "post_office") => Some(Story::PostOffice),
         (_, _, "mine_office") => Some(Story::MineOffice),
         (_, _, "foreman") => Some(Story::Foreman),
-        (Valley::Marrow, "house_plank", _) if here(-18.0, 95.0) => Some(Story::Hana),
-        (Valley::Kettle, "house_plank", _) if here(-30.0, 72.0) => Some(Story::ShotFirer),
+        (Valley::Marrow, "house_plank", _) if here(-20.2, 63.5) => Some(Story::Hana),
+        (Valley::Kettle, "house_plank", _) if here(-22.1, 54.9) => Some(Story::ShotFirer),
         _ => None,
     }
 }
@@ -1152,7 +1249,7 @@ pub fn yard(
     if std::env::var("EXTRACTION_NO_CLUTTER").is_ok_and(|v| v == "1") {
         return Vec::new();
     }
-    let base = extraction_core::map::prefab_base(prefab);
+    let base = extraction_core::map::prefab_shell(prefab);
     let Some((w, d)) = plan(base) else {
         return Vec::new();
     };
@@ -1474,7 +1571,7 @@ mod tests {
         let root = crate::asset_root_path();
         for base in ["house_plank", "farmhouse", "house_brick"] {
             let (w, d) = plan(base).unwrap();
-            let s = slots(w, d);
+            let s = slots(w, d, base);
             let geo = crate::world::buildings::prefab(base).unwrap();
             for r in RESIDENTS {
                 let things = r.things(&s, w, d);
@@ -1521,18 +1618,18 @@ mod tests {
         let root = crate::asset_root_path();
         let mut map = crate::world::load_map_def("marrow_creek");
         let named_at = [
-            ("marrow", "shop", -16.0, 35.0),
-            ("marrow", "cabin_log", -185.0, 190.0),
-            ("marrow", "cabin_log", -145.0, 190.0),
-            ("marrow", "pump_station", -200.0, 22.0),
-            ("kettle", "house_plank", 76.0, 222.0),
-            ("kettle", "house_plank", -99.0, 154.0),
-            ("kettle", "house_plank", -42.0, 125.0),
-            ("kettle", "cabin_log", 205.0, -205.0),
-            ("kettle", "cabin_log", 119.0, -138.0),
-            ("kettle", "chapel", -8.0, 150.0),
-            ("cinder", "house_plank_damaged", 0.0, 150.0),
-            ("cinder", "cabin_log", -75.0, -159.0),
+            ("marrow", "shop", -18.2, 3.5),
+            ("marrow", "cabin_log", -110.8, 113.5),
+            ("marrow", "cabin_log", -70.8, 113.5),
+            ("marrow", "pump_station", -110.0, 12.1),
+            ("kettle", "house_plank", 49.0, 157.7),
+            ("kettle", "house_plank", -74.2, 115.5),
+            ("kettle", "house_plank", -30.5, 93.0),
+            ("kettle", "cabin_log", 149.1, -152.2),
+            ("kettle", "cabin_log", 89.2, -103.5),
+            ("kettle", "chapel", -7.4, 123.4),
+            ("cinder", "house_plank_damaged", -13.0, 98.0),
+            ("cinder", "cabin_log", -51.9, -111.2),
             ("sallow", "house_brick", -58.0, 206.0),
             ("sallow", "shop", -180.0, -222.0),
             ("sallow", "cabin_log", -160.0, 112.0),
@@ -1565,7 +1662,7 @@ mod tests {
             &map,
             "cabin_log",
             "",
-            &Transform::from_xyz(119.0, 0.0, -138.0),
+            &Transform::from_xyz(89.2, 0.0, -103.5),
             false,
         );
         assert!(mirek.iter().any(|(m, _)| *m == "bed_name_mirek"));
@@ -1574,7 +1671,7 @@ mod tests {
             &map,
             "cabin_log",
             "",
-            &Transform::from_xyz(-145.0, 0.0, 190.0),
+            &Transform::from_xyz(-70.8, 0.0, 113.5),
             false,
         );
         assert!(tomas.iter().any(|(m, _)| *m == "tally_board"));
@@ -1630,7 +1727,7 @@ mod tests {
         for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
             let map = crate::world::load_map_def(name);
             for p in &map.placements {
-                let base = extraction_core::map::prefab_base(&p.prefab);
+                let base = extraction_core::map::prefab_shell(&p.prefab);
                 let Some((w, d)) = plan(base) else { continue };
                 let inner = Vec2::new(w * 0.5 - 0.09, d * 0.5 - 0.09);
                 let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
@@ -1685,6 +1782,223 @@ mod tests {
                 .and_then(|g| g.bounds_of(|_| true))
         }))?;
         Some(corners(lo, hi, |c| t.transform_point(c)))
+    }
+
+    /// Every house's things, building-local, with its sills: in every
+    /// valley's houses as placed (Story's and the ruins' ash too), and
+    /// every resident in every kind of house.
+    fn housed() -> Vec<(
+        String,
+        Vec<crate::world::buildings::Sill>,
+        Vec<(&'static str, Transform)>,
+    )> {
+        let mut out = Vec::new();
+        for name in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "rime_fell",
+            "sallow_reservoir",
+        ] {
+            let map = crate::world::load_map_def(name);
+            for p in &map.placements {
+                let base = extraction_core::map::prefab_shell(&p.prefab);
+                if plan(base).is_none() {
+                    continue;
+                }
+                let geo = crate::world::buildings::prefab(&p.prefab).unwrap();
+                let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
+                out.push((
+                    format!("{name} {} at {:?}", p.prefab, p.at),
+                    geo.sills.clone(),
+                    dress(&map, &p.prefab, &p.tag, &xf, true),
+                ));
+            }
+        }
+        for base in ["house_plank", "farmhouse", "house_brick"] {
+            let (w, d) = plan(base).unwrap();
+            let s = slots(w, d, base);
+            let geo = crate::world::buildings::prefab(base).unwrap();
+            for r in RESIDENTS {
+                out.push((
+                    format!("{base} {r:?}"),
+                    geo.sills.clone(),
+                    r.things(&s, w, d),
+                ));
+            }
+        }
+        out
+    }
+
+    type Boxes = std::collections::HashMap<&'static str, Option<[(Vec3, Vec3); 2]>>;
+
+    /// A model's box at `t` in a sill's own space (x along the wall, y
+    /// up from its top, z into the room from the wall's centre line), and
+    /// its feet's (its points within `footing::BAND` of its lowest).
+    fn on_sill(
+        cache: &mut Boxes,
+        model: &'static str,
+        t: &Transform,
+        sill: &crate::world::buildings::Sill,
+    ) -> Option<[(Vec3, Vec3); 2]> {
+        let root = crate::asset_root_path();
+        let boxes = (*cache.entry(model).or_insert_with(|| {
+            let path = root.join(crate::render::world_props::path(model));
+            let tris = crate::capture::glb::triangles(&path).ok()?;
+            let bound = |pts: &mut dyn Iterator<Item = Vec3>| {
+                pts.fold(None, |b: Option<(Vec3, Vec3)>, p| {
+                    Some(b.map_or((p, p), |(a, z)| (a.min(p), z.max(p))))
+                })
+            };
+            let body = bound(&mut tris.iter().flat_map(|t| t.p))?;
+            let low = body.0.y + crate::capture::footing::BAND;
+            let foot = bound(&mut tris.iter().flat_map(|t| t.p).filter(|p| p.y < low))?;
+            Some([body, foot])
+        }))?;
+        let inv = sill.rot.inverse();
+        Some(boxes.map(|(lo, hi)| corners(lo, hi, |c| inv * (t.transform_point(c) - sill.at))))
+    }
+
+    /// What stands on a window's sill stands on it all over: its feet on
+    /// the ledge between the frame and the board's edge, nothing of it in
+    /// the frame (or through the glass), and inside the opening where the
+    /// wall's thickness is (a radio ham's set hung half off the
+    /// farmhouse's sills, and stood in the frame). The windows' places
+    /// come from the walls as built (`buildings::Geo::sills`).
+    #[test]
+    fn sill_things_stand_on_their_sills() {
+        let mut cache = Boxes::new();
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for (house, sills, things) in housed() {
+            for (model, t) in &things {
+                // On a sill: its feet's middle over the board, at its top.
+                let Some((sill, [body, foot])) = sills.iter().find_map(|s| {
+                    let [body, foot] = on_sill(&mut cache, model, t, s)?;
+                    let mid = (foot.0 + foot.1) * 0.5;
+                    (mid.x.abs() < s.len * 0.5 + 0.05
+                        && mid.z > 0.0
+                        && mid.z < s.edge + 0.1
+                        && foot.0.y.abs() < 0.1)
+                        .then_some((s, [body, foot]))
+                }) else {
+                    continue;
+                };
+                seen += 1;
+                let reach = |b: (Vec3, Vec3)| b.0.x.abs().max(b.1.x.abs());
+                let fault = if foot.0.y.abs() > crate::capture::footing::FLOAT {
+                    Some(format!("its foot {:.0} mm off the top", foot.0.y * 1000.0))
+                } else if body.0.z < sill.back - 0.002 {
+                    Some(format!(
+                        "{:.0} mm into the frame",
+                        (sill.back - body.0.z) * 1000.0
+                    ))
+                } else if foot.1.z > sill.edge + 0.002 {
+                    Some(format!(
+                        "its foot {:.0} mm off the edge",
+                        (foot.1.z - sill.edge) * 1000.0
+                    ))
+                } else if reach(foot) > sill.len * 0.5 + 0.05 {
+                    Some("off the board's end".to_string())
+                } else if body.0.z < sill.inner && reach(body) > sill.len * 0.5 {
+                    Some("into the wall beside the window".to_string())
+                } else {
+                    None
+                };
+                if let Some(f) = fault {
+                    bad.push(format!("{house}: {model}: {f}"));
+                }
+            }
+        }
+        assert!(seen > 40, "only {seen} things on sills");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// A sill's board, where it comes into the room, clears the room's
+    /// furniture and things (all but what stands on it).
+    #[test]
+    fn sills_clear_the_rooms_things() {
+        let root = crate::asset_root_path();
+        let mut cache = Boxes::new();
+        let mut tris: std::collections::HashMap<&'static str, Vec<[Vec3; 3]>> =
+            std::collections::HashMap::new();
+        let mut bad = std::collections::BTreeSet::new();
+        let mut rooms = housed();
+        for base in ["house_plank", "farmhouse", "house_brick"] {
+            for v in ["", "_damaged", "_burnt"] {
+                let id = format!("{base}{v}");
+                let geo = crate::world::buildings::prefab(&id).unwrap();
+                let things = geo
+                    .props
+                    .iter()
+                    .filter(|p| p.inside)
+                    .flat_map(|p| p.models.iter().copied())
+                    .collect();
+                rooms.push((id, geo.sills.clone(), things));
+            }
+        }
+        for (house, sills, things) in rooms {
+            for s in &sills {
+                // The board's room side, a little shrunk.
+                let board = (
+                    Vec3::new(-s.len * 0.5 - 0.045, -0.045, s.inner + 0.005),
+                    Vec3::new(s.len * 0.5 + 0.045, -0.005, s.edge - 0.005),
+                );
+                for (model, t) in &things {
+                    if model.starts_with("window_") || crate::capture::footing::exempt(model) {
+                        continue;
+                    }
+                    let Some([b, _]) = on_sill(&mut cache, model, t, s) else {
+                        continue;
+                    };
+                    if b.0.y > -0.006 {
+                        continue;
+                    }
+                    if !overlap(b, board) {
+                        continue;
+                    }
+                    let tris = tris.entry(*model).or_insert_with(|| {
+                        let path = root.join(crate::render::world_props::path(model));
+                        crate::capture::glb::triangles(&path)
+                            .map(|v| v.into_iter().map(|t| t.p).collect())
+                            .unwrap_or_default()
+                    });
+                    let inv = s.rot.inverse();
+                    let (c, h) = ((board.0 + board.1) * 0.5, (board.1 - board.0) * 0.5);
+                    let hit = tris
+                        .iter()
+                        .any(|p| tri_in_box(c, h, p.map(|q| inv * (t.transform_point(q) - s.at))));
+                    if hit {
+                        let base = house.split(" at ").next().unwrap_or(&house).to_string();
+                        bad.insert(format!("{base}: {model} by the sill at {:.2}", s.at));
+                    }
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "{}",
+            bad.into_iter().collect::<Vec<_>>().join("\n")
+        );
+    }
+
+    /// Whether a triangle meets the box `c` +- `h` (separating axes).
+    fn tri_in_box(c: Vec3, h: Vec3, p: [Vec3; 3]) -> bool {
+        let v = p.map(|q| q - c);
+        let e = [v[1] - v[0], v[2] - v[1], v[0] - v[2]];
+        let mut axes = vec![Vec3::X, Vec3::Y, Vec3::Z, e[0].cross(e[1])];
+        for a in [Vec3::X, Vec3::Y, Vec3::Z] {
+            for e in e {
+                axes.push(a.cross(e));
+            }
+        }
+        axes.into_iter()
+            .filter(|a| a.length_squared() > 1e-12)
+            .all(|a| {
+                let d = v.map(|q| q.dot(a));
+                let r = h.dot(a.abs());
+                d[0].min(d[1]).min(d[2]) <= r && d[0].max(d[1]).max(d[2]) >= -r
+            })
     }
 
     /// The box round the eight corners of `lo`..`hi` taken through `f`.
@@ -1858,7 +2172,7 @@ mod tests {
         // set's.
         let mut map = crate::world::load_map_def("marrow_creek");
         map.markers.clear();
-        for (prefab, x, z) in [("shop", -16.0, 35.0), ("cabin_log", -185.0, 190.0)] {
+        for (prefab, x, z) in [("shop", -18.2, 3.5), ("cabin_log", -110.8, 113.5)] {
             let xf = Transform::from_xyz(x, 0.0, z);
             let things = dress(&map, prefab, "", &xf, false);
             let set = kit(prefab, false);
@@ -1885,7 +2199,7 @@ mod tests {
     #[test]
     fn storys_houses_have_their_things() {
         let map = crate::world::load_map_def("marrow_creek");
-        let xf = Transform::from_xyz(-18.0, 0.0, 95.0);
+        let xf = Transform::from_xyz(-20.2, 0.0, 63.5);
         let hana = dress(&map, "house_plank", "", &xf, false);
         let names: Vec<_> = hana.iter().map(|(n, _)| *n).collect();
         assert!(
@@ -1900,7 +2214,7 @@ mod tests {
             !names.iter().any(|n| n.starts_with("suitcase")),
             "{names:?}"
         );
-        let s = slots(8.0, 7.0);
+        let s = slots(8.0, 7.0, "house_plank");
         let table = s.table[0].lerp(s.table[1], 0.5);
         assert!(
             hana.iter()
@@ -1939,7 +2253,7 @@ mod tests {
             };
             let (mut houses, mut yards) = (0, 0);
             for p in &map.placements {
-                let base = extraction_core::map::prefab_base(&p.prefab);
+                let base = extraction_core::map::prefab_shell(&p.prefab);
                 if plan(base).is_none() {
                     continue;
                 }
@@ -1961,7 +2275,7 @@ mod tests {
                 let [w, _, d] = prefab_footprint(&p.prefab);
                 let (hw, hd) = (w * 0.5, d * 0.5);
                 let door = prefab_entrances(&p.prefab)[0];
-                let hana = name == "marrow_creek" && Vec2::from(p.at) == Vec2::new(-18.0, 95.0);
+                let hana = name == "marrow_creek" && Vec2::from(p.at) == Vec2::new(-20.2, 63.5);
                 assert_eq!(
                     yard.iter().any(|(m, _)| *m == "dog_kennel"),
                     hana,

@@ -16,13 +16,17 @@ use crate::items::{Catalog, Item};
 use crate::world::buildings::{Building, Door, DoorLeaf};
 
 /// A doorway: the door, its building, the middle of the opening (world,
-/// about chest height) and the way out (unit, horizontal).
+/// about chest height) and the way out (unit, horizontal), and whether
+/// it's a way in from outside. An inside door (a shop's back room's) is a
+/// doorway too, the way through to its room, with its `out` the side away
+/// from the building's middle; it's no way in (`approach` passes it by).
 #[derive(Clone, Copy, Debug)]
 pub struct Entrance {
     pub door: Entity,
     pub building: Entity,
     pub mid: Vec3,
     pub out: Vec3,
+    pub outside: bool,
 }
 
 /// A building's box, for "is this point indoors?".
@@ -79,6 +83,23 @@ pub struct Entrances {
 }
 
 impl Entrances {
+    /// The highest top of any building over (x, z), `pad` round its
+    /// footprint (world y), if one's there: what a flyer's height is over.
+    pub fn top_at(&self, x: f32, z: f32, pad: f32) -> Option<f32> {
+        self.shells
+            .iter()
+            .filter(|s| {
+                let l = s.xf.compute_affine().inverse().transform_point3(Vec3::new(
+                    x,
+                    s.xf.translation.y,
+                    z,
+                ));
+                l.x.abs() < s.half.x + pad && l.z.abs() < s.half.y + pad
+            })
+            .map(|s| s.xf.translation.y + s.height)
+            .reduce(f32::max)
+    }
+
     /// The building `p` is inside (under its roof), if any.
     pub fn building_at(&self, p: Vec3) -> Option<Entity> {
         self.shells
@@ -97,7 +118,7 @@ impl Entrances {
     ) -> Option<(Entrance, bool)> {
         self.doors
             .iter()
-            .filter(|e| e.building == building)
+            .filter(|e| e.building == building && e.outside)
             .map(|e| (*e, is_open(e.door)))
             .min_by(|(a, ao), (b, bo)| {
                 // Open first, then nearest.
@@ -174,20 +195,28 @@ fn index_entrances(
         }
         entrances.shells.push(Shell::of(b, &building.prefab, *xf));
         for (door, leaf, _) in mine {
-            let d = leaf.0;
-            let rot = Quat::from_rotation_y(d.yaw);
-            let mid = d.hinge + rot * Vec3::new(d.width * 0.5, 1.2, 0.0);
-            let n = rot * Vec3::Z;
-            let n = if Vec2::new(mid.x, mid.z).dot(Vec2::new(n.x, n.z)) >= 0.0 {
-                n
-            } else {
-                -n
+            // An outside door faces out of its listed opening. An inside
+            // one faces away from the building's middle, and is marked no
+            // way in: offered as one, it sent a player at the Cinder shop's
+            // window wall (Onboarding's run). It stays listed: a route
+            // through to its room takes it (the contracts' scour key).
+            let (mid, n, outside) = match outside_doorway(&building.prefab, &leaf.0) {
+                Some((mid, n)) => (mid, n, true),
+                None => {
+                    let d = leaf.0;
+                    let rot = Quat::from_rotation_y(d.yaw);
+                    let mid = d.hinge + rot * Vec3::new(d.width * 0.5, 1.2, 0.0);
+                    let n = rot * Vec3::Z;
+                    let away = Vec2::new(mid.x, mid.z).dot(Vec2::new(n.x, n.z)) >= 0.0;
+                    (mid, if away { n } else { -n }, false)
+                }
             };
             entrances.doors.push(Entrance {
                 door,
                 building: b,
                 mid: xf.transform_point(mid),
                 out: (xf.rotation * n).with_y(0.0).normalize_or(Vec3::Z),
+                outside,
             });
         }
     }
@@ -196,6 +225,30 @@ fn index_entrances(
         entrances.doors.len(),
         entrances.shells.len()
     );
+}
+
+/// A door leaf's doorway in its building's space (the middle of the
+/// opening at chest height, the way out), if it's one of the building's
+/// outside doors (`map::prefab_entrances`): its middle on the listed
+/// opening's line, within its width, facing the same way.
+pub fn outside_doorway(prefab: &str, d: &crate::world::buildings::DoorDef) -> Option<(Vec3, Vec3)> {
+    let rot = Quat::from_rotation_y(d.yaw);
+    let mid = d.hinge + rot * Vec3::new(d.width * 0.5, 1.2, 0.0);
+    let n = rot * Vec3::Z;
+    extraction_core::map::prefab_entrances(prefab)
+        .iter()
+        .find_map(|e| {
+            let out = Vec3::new(e.out[0], 0.0, e.out[1]);
+            let at = Vec3::new(e.at[0], mid.y, e.at[1]);
+            let off = mid - at;
+            // In the wall (the leaf hangs within its thickness of the
+            // face), across the opening within its width.
+            let across = off - out * off.dot(out);
+            (n.dot(out).abs() > 0.9
+                && off.dot(out).abs() < 0.6
+                && across.length() < e.width * 0.5 + 0.1)
+                .then_some((mid, out))
+        })
 }
 
 /// A wedge set down against the foot of a closed door jams it; picked up,
@@ -260,6 +313,191 @@ fn wedges(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every doorway a robot or a tutorial is sent to (`Entrances`) is an
+    /// outside door of its building, where the building has its opening
+    /// and facing out of it; and every outside door that has a leaf is
+    /// one. In every valley, as placed (a shop's inside door was listed,
+    /// facing out through its window: Onboarding's Cinder run).
+    #[test]
+    fn every_entrance_is_an_outside_door() {
+        use crate::world::buildings;
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for id in buildings::PREFABS {
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            let listed = extraction_core::map::prefab_entrances(id);
+            let kept: Vec<(Vec3, Vec3)> = geo
+                .doors
+                .iter()
+                .filter_map(|d| outside_doorway(id, d))
+                .collect();
+            for (mid, out) in &kept {
+                checked += 1;
+                // Through the opening: a step in from the face is inside
+                // the walls, a step out isn't (the shell's own box).
+                let f = extraction_core::map::prefab_footprint(id);
+                let half = Vec2::new(f[0], f[2]) * 0.5;
+                let inside = |p: Vec3| p.x.abs() < half.x && p.z.abs() < half.y;
+                if !inside(*mid - *out * 0.6) {
+                    bad.push(format!(
+                        "{id}: the doorway at {mid:.2} opens from outside its box"
+                    ));
+                }
+            }
+            // Each listed opening with a leaf in it is kept, once.
+            for e in listed {
+                let at = Vec2::new(e.at[0], e.at[1]);
+                let leaves = geo
+                    .doors
+                    .iter()
+                    .filter(|d| {
+                        let rot = Quat::from_rotation_y(d.yaw);
+                        let m = d.hinge + rot * Vec3::new(d.width * 0.5, 0.0, 0.0);
+                        Vec2::new(m.x, m.z).distance(at) < e.width * 0.5 + 0.6
+                    })
+                    .count();
+                let found = kept
+                    .iter()
+                    .filter(|(m, _)| Vec2::new(m.x, m.z).distance(at) < e.width * 0.5 + 0.6)
+                    .count();
+                if leaves > 0 && found != 1 {
+                    bad.push(format!(
+                        "{id}: the opening at {at:.2} has {leaves} leaves, {found} doorways"
+                    ));
+                }
+            }
+            // Leaves left out: they're inside doors, not on any listed
+            // opening (print them, the shop's among them).
+            for d in &geo.doors {
+                if outside_doorway(id, d).is_none() {
+                    println!("{id}: inside door at {:.2}", d.hinge);
+                }
+            }
+        }
+        assert!(checked >= 20, "only {checked} doorways");
+        // Placed: each building's doorways, turned and set where the game
+        // sets it, are the map's doors there (what the map lint keeps
+        // clear and the raiders' plans walk through).
+        let mut placed = 0;
+        for (name, _) in extraction_core::map::VALLEYS {
+            let map = crate::world::load_map_def(name);
+            let doors = extraction_core::map_doors::doors(&map);
+            for (i, p) in map.placements.iter().enumerate() {
+                let Some(geo) = buildings::prefab(&p.prefab) else {
+                    continue;
+                };
+                let turn = Quat::from_rotation_y(-p.rot.to_radians());
+                for d in &geo.doors {
+                    let Some((mid, out)) = outside_doorway(&p.prefab, d) else {
+                        continue;
+                    };
+                    placed += 1;
+                    let (mid, out) = (turn * mid, turn * out);
+                    let at = Vec2::new(p.at[0] + mid.x, p.at[1] + mid.z);
+                    let ok = doors.iter().any(|m| {
+                        m.placement == i
+                            && Vec2::from(m.face).distance(at) < m.width * 0.5 + 0.6
+                            && Vec2::from(m.out).dot(Vec2::new(out.x, out.z)) > 0.9
+                    });
+                    if !ok {
+                        bad.push(format!(
+                            "{name} {} at {:?} rot {}: its doorway at {at:.2} out {out:.2} is no door of the map's",
+                            p.prefab, p.at, p.rot
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(placed > 100, "only {placed} placed doorways");
+        assert!(
+            bad.is_empty(),
+            "entrances off their doors:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// Every door of every building is in `Entrances`, once: an outside one
+    /// marked outside (on its listed opening, facing out of it), an inside
+    /// one marked inside, and `approach` only ever offers an outside one.
+    /// Dropping the inside doors (to keep them from being offered as ways
+    /// in) lost the Valve house's inner door, the way to the scour key
+    /// (the contracts' scenario).
+    #[test]
+    fn every_door_is_in_entrances_marked_inside_or_out() {
+        use crate::world::buildings;
+        use bevy::ecs::system::RunSystemOnce;
+        let mut bad = Vec::new();
+        let mut inside = 0;
+        for id in buildings::PREFABS {
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            if geo.doors.is_empty() {
+                continue;
+            }
+            let mut world = World::new();
+            world.init_resource::<Entrances>();
+            let b = world
+                .spawn((
+                    Building {
+                        prefab: id.to_string(),
+                    },
+                    Transform::IDENTITY,
+                ))
+                .id();
+            for d in &geo.doors {
+                world.spawn((DoorLeaf(*d), ChildOf(b)));
+            }
+            world.run_system_once(index_entrances).unwrap();
+            let en = world.resource::<Entrances>();
+            if en.doors.len() != geo.doors.len() {
+                bad.push(format!(
+                    "{id}: {} leaves, {} entrances",
+                    geo.doors.len(),
+                    en.doors.len()
+                ));
+            }
+            for (d, e) in geo.doors.iter().zip(&en.doors) {
+                let listed = outside_doorway(id, d).is_some();
+                if e.outside != listed {
+                    bad.push(format!(
+                        "{id}: a door at {:.2} marked outside {}",
+                        d.hinge, e.outside
+                    ));
+                }
+                inside += usize::from(!e.outside);
+            }
+            if let Some((a, _)) = en.approach(b, Vec3::new(0.0, 0.0, -50.0), |_| false)
+                && !a.outside
+            {
+                bad.push(format!("{id}: approached by an inside door"));
+            }
+        }
+        assert!(
+            inside >= 4,
+            "only {inside} inside doors (the shops, the pump station, the depot)"
+        );
+        assert!(bad.is_empty(), "entrances:\n{}", bad.join("\n"));
+    }
+
+    /// The shop's inside door isn't a way in; its two outside ones are.
+    #[test]
+    fn the_shops_inside_door_is_no_entrance() {
+        let geo = crate::world::buildings::prefab("shop").unwrap();
+        let outs: Vec<_> = geo
+            .doors
+            .iter()
+            .filter_map(|d| outside_doorway("shop", d))
+            .collect();
+        assert_eq!(geo.doors.len(), 3, "the shop's leaves");
+        assert_eq!(outs.len(), 2, "its outside doors: {outs:?}");
+        for (_, out) in outs {
+            assert!(out.x.abs() < 0.01, "a shop door facing {out}");
+        }
+    }
 
     /// Whatever doors it has, a point under a prefab's roof is indoors
     /// and one under the sky isn't (a burnt house under the half of its

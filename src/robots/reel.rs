@@ -13,18 +13,25 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `damaged` (plates on their last bolt, the core smoking, its
 //! eye guttering, walking across), `limp` (a leg shot off, then across), `crawl` (two legs shot
-//! off: it drags itself across), `hurt` (a leg at a fifth),
+//! off: it drags itself across), `hurt` (a leg at a fifth), `broken`
+//! (the broken walker: its gun dead and a leg all but gone, across),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `tells`/`tellsbefore` (a shot leg, a dead
 //! eye, a failing core and a hit rotor at 24-36 m, and the same whole),
 //! `knockdown` (a heavy round into a walker's
-//! side: down, and up again), `strikes` (four walkers at 15 m shot in the
+//! side: down, and up again), `disarmed` (a walker standing still, its
+//! gun shot dead and a leg at 5%: harmless at a glance; Robot minds'
+//! `broken` is the same walker coming at you), `strikes` (four walkers at 15 m shot in the
 //! front plate, the core, the eye and a knee: a shrug, a wound and two
 //! hits that tell, `damage::strike`), `wall` (a walker along a wall nearer
 //! than its legs reach: its feet come down short of it), `rubble` (a walker over a heap of broken
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
-//! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
+//! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `chirp` (a sentry 7 m off, facing you, chirping: its lens through the
+//! chirp, frame by frame), `melee` (a crawler, a hound and a heavy side by side
+//! facing you, each run through its lead to a blow: the lens tells), `lock` (a drone hovering 8 m off, its lock on
+//! you set off by the reel: its lens through the lock), `pin` (a walker pinning down a spot 7 m to its
+//! right where you dropped from sight: its gun held there, its tracers), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -95,6 +102,8 @@ const STRIKE_ROW: [PartRole; 4] = [
 struct Reel {
     frame: u32,
     subject: Option<Entity>,
+    /// `melee`'s hound and heavy (the subject is its crawler).
+    others: Vec<Entity>,
     shots: u32,
     every: u32,
     taken: u32,
@@ -119,6 +128,17 @@ fn reel(
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     cases: Query<&TellCase>,
+    (mut sentry_acts, mut awares, mut drone_locks, mut melee, catalog): (
+        MessageWriter<super::sentry::SentryEvent>,
+        Query<&mut super::Awareness, Without<EyeLevel>>,
+        MessageWriter<super::drone::DroneLock>,
+        (
+            Query<&mut super::indoor::Crawler>,
+            Query<&mut super::hound_mind::HoundMind>,
+            Query<&mut super::heavy::Arm>,
+        ),
+        Res<crate::items::Catalog>,
+    ),
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -163,7 +183,7 @@ fn reel(
     if frame == 3 {
         let walk_start = eye + flat * 6.0 - right * 4.5;
         let e = match what {
-            "drone" | "dronewreck" => {
+            "drone" | "dronewreck" | "lock" => {
                 let at = eye + flat * 8.0 + Vec3::Y * 0.8;
                 spawn_drone(&mut commands, at, job(at))
             }
@@ -296,7 +316,7 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" => {
+            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" | "disarmed" => {
                 let at = eye
                     + flat
                         * match what {
@@ -469,6 +489,67 @@ fn reel(
                 commands.entity(w).remove::<Senses>().remove::<Brain>();
                 w
             }
+            "melee" => {
+                // The melee machines side by side, facing you, each run
+                // through its lead to a blow (below): a crawler's charge,
+                // a hound's coil and lunge, a heavy's raise and slam.
+                let c_at = zone.on_ground(
+                    (eye + flat * 6.0 - right * 2.6).x,
+                    (eye + flat * 6.0 - right * 2.6).z,
+                );
+                let crawler = super::walker::spawn_walker_sized(
+                    &mut commands,
+                    &zone,
+                    c_at,
+                    job(c_at),
+                    false,
+                    40.0,
+                    super::indoor::CRAWLER_SIZE,
+                    None,
+                );
+                commands
+                    .entity(crawler)
+                    .insert((super::indoor::Crawler::default(), super::Breed("Crawler")));
+                let h_at = zone.on_ground((eye + flat * 6.0).x, (eye + flat * 6.0).z);
+                let hound = super::hound::spawn_hound(&mut commands, &zone, h_at, job(h_at));
+                let v_at = zone.on_ground(
+                    (eye + flat * 8.5 + right * 3.4).x,
+                    (eye + flat * 8.5 + right * 3.4).z,
+                );
+                let heavy =
+                    super::heavy::spawn_heavy(&mut commands, &zone, &catalog, v_at, job(v_at));
+                for e in [hound, heavy] {
+                    commands.entity(e).remove::<Senses>().remove::<Brain>();
+                }
+                // (A hound's mind comes with its senses, which it's here
+                // without: given it.)
+                commands
+                    .entity(hound)
+                    .insert(super::hound_mind::HoundMind::default());
+                commands
+                    .entity(crawler)
+                    .remove::<Senses>()
+                    .remove::<Brain>();
+                state.others = vec![hound, heavy];
+                state.subject = Some(crawler);
+                return;
+            }
+            "chirp" => {
+                // A sentry 7 m off, facing you, its chirp set off by the
+                // reel (below) so the frames run through it: the lens's
+                // tell (`sentry_look::chirp_gain`).
+                let at = eye + flat * 7.0;
+                let toward = extraction_core::sentry::bearing([at.x, at.z], [eye.x, eye.z]);
+                let power = Vec2::new(at.x, at.z) + Vec2::new(right.x, right.z) * 6.0;
+                super::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    Vec2::new(at.x, at.z),
+                    toward,
+                    0.0,
+                    power,
+                )
+            }
             "scan" => {
                 // A walker 6 m off that notices a device in front of you
                 // (devices::DeviceNoticed): its scan beam, red, then
@@ -525,7 +606,11 @@ fn reel(
         };
         // Deaf and blind: it's here to be looked at, not to hunt.
         commands.entity(e).remove::<Senses>();
-        if what.starts_with("drone") {
+        if what == "chirp" {
+            state.subject = Some(e);
+            return;
+        }
+        if what.starts_with("drone") || what == "lock" {
             // No brain: the reel flies it (below).
             commands.entity(e).remove::<Brain>();
         } else {
@@ -554,7 +639,7 @@ fn reel(
         let k = frame as f32 / 30.0 * std::f32::consts::TAU / 7.0;
         let centre = eye + flat * 8.0 + Vec3::Y * 0.8;
         d.goal = centre + right * (k.sin() * 4.5) + flat * ((2.0 * k).sin() * 2.0);
-        if what == "dronewreck" {
+        if what == "dronewreck" || what == "lock" {
             d.goal = centre;
         }
     }
@@ -564,7 +649,13 @@ fn reel(
         aware.can_see_target = sees;
         aware.exposure = if sees { 1.0 } else { 0.0 };
     }
-    if (what == "eyes" || what == "eyesfar" || what == "dying" || what == "strikes") && frame == 5 {
+    if (what == "eyes"
+        || what == "eyesfar"
+        || what == "dying"
+        || what == "strikes"
+        || what == "melee")
+        && frame == 5
+    {
         // Turned to face you.
         for mut w in &mut walkers {
             w.yaw = flat.x.atan2(flat.z);
@@ -582,7 +673,10 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" => vec![],
+                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
+                | "pin" | "melee" => {
+                    vec![]
+                }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
@@ -595,6 +689,7 @@ fn reel(
         for (e, mut p, gt) in &mut parts {
             let shot_off = match what {
                 "crawl" => matches!(p.role, PartRole::Leg(0) | PartRole::Leg(1)),
+                "disarmed" => matches!(p.role, PartRole::Leg(1) | PartRole::Weapon),
                 _ => p.role == PartRole::Leg(1),
             };
             if p.robot != subject || !shot_off {
@@ -612,6 +707,17 @@ fn reel(
                     });
                 }
                 "hurt" => p.hp = p.max_hp * 0.2,
+                // Models' broken walker: its gun dead, a leg at 5%.
+                "disarmed" if role == PartRole::Weapon => {
+                    p.hp = 0.0;
+                    destroyed.write(PartDestroyed {
+                        robot: subject,
+                        part: e,
+                        role,
+                        at: gt.translation(),
+                    });
+                }
+                "disarmed" => p.hp = p.max_hp * 0.05,
                 _ => {}
             }
         }
@@ -663,6 +769,40 @@ fn reel(
                 damage: 7.0,
                 projectiles: 1,
                 spread: 0.0,
+                recoil: 0.0,
+                seed: frame as u64,
+            });
+        }
+    }
+    // `pin`: a walker pinning you down (`walker::Suppressing`) where you
+    // dropped from sight, 7 m to its right: its gun held on the spot, its
+    // rounds on its suppressing cadence (`walker::SUPPRESS_EVERY`), every
+    // third a tracer, lit from the muzzle.
+    let spot = eye + flat * 8.0 + right * 7.0;
+    if what == "pin" && frame == 6 {
+        if let Ok(mut a) = awares.get_mut(subject) {
+            a.last_known = Some(spot);
+            a.can_see_target = false;
+        }
+        commands.entity(subject).insert(super::walker::Suppressing);
+    }
+    if what == "pin" && frame > 20 && frame % 14 == 0 {
+        let muzzle = parts
+            .iter()
+            .find(|(_, p, _)| p.robot == subject && p.role == PartRole::Weapon)
+            .map(|(_, _, gt)| gt.translation() + Vec3::Y * 0.05);
+        if let Some(muzzle) = muzzle {
+            let at = spot + Vec3::Y * 1.0;
+            let dir = (at - muzzle).normalize_or(Vec3::NEG_Z);
+            shots.write(crate::weapons::ballistics::Shot {
+                gun: subject,
+                shooter: Some(subject),
+                origin: muzzle + dir * 0.3,
+                direction: dir,
+                speed: 450.0,
+                damage: 14.0,
+                projectiles: 1,
+                spread: super::walker::SUPPRESS_SPREAD,
                 recoil: 0.0,
                 seed: frame as u64,
             });
@@ -910,6 +1050,44 @@ fn reel(
                 });
             }
         }
+    }
+    if what == "melee" && frame > WARMUP {
+        let (crawlers, hounds, arms) = &mut melee;
+        let t = (frame - WARMUP - 1) as f32 / 30.0;
+        if let Ok(mut c) = crawlers.get_mut(subject) {
+            let lead = super::indoor::ZAP_CHARGE;
+            c.charge = if t < lead { t + 1e-3 } else { 0.0 };
+        }
+        if let Some(Ok(mut h)) = state.others.first().map(|e| hounds.get_mut(*e)) {
+            let lead = super::hound_mind::CROUCH_TIME;
+            h.crouch = (lead - t).max(0.0);
+            h.lunge = if t >= lead && t < lead + 0.3 {
+                0.3
+            } else {
+                0.0
+            };
+            h.bit = false;
+        }
+        if frame == WARMUP + 1 {
+            if let Some(Ok(mut a)) = state.others.get(1).map(|e| arms.get_mut(*e)) {
+                a.state = super::heavy::ArmState::Raise;
+                a.t = 0.0;
+                a.from = a.claw;
+            }
+        }
+    }
+    if what == "lock" && frame == WARMUP + 1 {
+        drone_locks.write(super::drone::DroneLock {
+            drone: subject,
+            at: eye,
+        });
+    }
+    if what == "chirp" && frame == WARMUP + 1 {
+        sentry_acts.write(super::sentry::SentryEvent {
+            sentry: subject,
+            at: eye + flat * 7.0,
+            what: super::sentry::SentryAct::Chirp,
+        });
     }
     if frame < WARMUP || (frame - WARMUP) % state.every != 0 || state.taken >= state.shots {
         return;

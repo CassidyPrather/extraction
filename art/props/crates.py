@@ -24,8 +24,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import UP, Wear, board, bolt, prop, rod  # noqa: E402
-from common import Part, T, fillet, section_circle  # noqa: E402
+from _kit import UP, Wear, board, bolt, lettering, prop, rod  # noqa: E402
+from common import RY, Part, T, fillet, section_circle  # noqa: E402
 
 T_BOARD = 0.022
 
@@ -104,11 +104,19 @@ def rope_handle(p, x, y, sx, span=0.17):
     p.sweep(path, section_circle(0.011, 6), "Rope", xf=T(x + sx * 0.02, y, 0.0))
 
 
-def stencil(p, x, y, z, sz, rows=((0.3, 0.05), (0.18, 0.035)), gap=0.025):
-    """Painted stencil marks 4 mm proud of a front at z (facing sz)."""
+
+def stencil(p, x, y, z, sz, rows=((0.42, 0.08), (0.26, 0.05)), gap=0.025,
+            words=("ТАРА", "17-6")):
+    """Painted stencil lettering on a front at z (facing sz): a line per
+    row, each `h` high and no wider than its `w` (blank pale bars read as
+    placeholder plates)."""
     yy = y
-    for w, h in rows:
-        p.box((w, h, 0.004), (x, yy, z + sz * 0.002), "Cream")
+    face = RY(0.0) if sz > 0 else RY(math.pi)
+    for (w, h), word in zip(rows, words):
+        # A letter's advance is 0.725 h: shrink a line to its width.
+        hh = min(h, w / max(0.725 * len(word), 0.1))
+        # From 1 mm inside the face, so the paint stands on it.
+        lettering(p, word, hh, "Cream", T(x, yy, z - sz * 0.001) @ face)
         yy -= h + gap
 
 
@@ -159,7 +167,8 @@ def crate_army():
     corner_plates(p, W, D, Hb - 0.104)
     for sx in (-1, 1):
         rope_handle(p, sx * W / 2, 0.62, sx)
-    stencil(p, 0.0, 0.62, -(D / 2), -1, rows=((0.42, 0.06), (0.3, 0.04), (0.16, 0.04)))
+    stencil(p, 0.0, 0.62, -(D / 2), -1, rows=((0.56, 0.09), (0.4, 0.05), (0.26, 0.05)),
+            words=("ТАРА", "НЕТТО 30", "17-6"))
     return [p]
 
 
@@ -202,8 +211,8 @@ def supply_crate():
             segs=6)
     for sx in (-1, 1):
         rope_handle(p, sx * W / 2, y0 + Hb * 0.62, sx, span=0.15)
-    stencil(p, 0.0, 0.06, -(D / 2), -1, rows=((0.46, 0.06), (0.26, 0.04)))
-    stencil(p, -0.12, 0.06 + 0.005, D / 2, 1, rows=((0.2, 0.04),))
+    stencil(p, 0.0, 0.06, -(D / 2), -1, rows=((0.56, 0.08), (0.34, 0.05)))
+    stencil(p, -0.12, 0.06 + 0.005, D / 2, 1, rows=((0.26, 0.06),), words=("Г-41",))
     return [p]
 
 
@@ -222,7 +231,9 @@ def stash_stand():
             p.box((0.004, 0.06, 0.07), (sx * 0.427, bed + 0.03, sz * 0.54), "Iron")
             p.box((0.06, 0.004, 0.07), (sx * 0.459, bed + 0.002, sz * 0.54), "Iron")
             bolt(p, (sx * 0.47, bed + 0.004, sz * 0.54), (0, 1, 0), r=0.008)
-        board(p, (0.05, 0.07, 1.04), (sx * 0.39, under - 0.022 - 0.035 - 0.004, 0.0), "Timber",
+        # Up to the boards (4 mm under them: the middle ones rested on
+        # nothing).
+        board(p, (0.05, 0.07, 1.04), (sx * 0.39, under - 0.022 - 0.035 + 0.001, 0.0), "Timber",
               bevel=0.004)
         board(p, (0.04, 0.05, 1.04), (sx * 0.39, bed + 0.08, 0.0), "Timber", bevel=0.004)
     for sz in (-1, 1):

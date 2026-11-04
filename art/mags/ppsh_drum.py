@@ -59,7 +59,9 @@ tower = fillet([(-0.0105, CY + R - 0.01), (0.0105, CY + R - 0.01), (0.0105, TOP 
                 (0.006, TOP), (-0.006, TOP), (-0.0105, TOP - 0.004)],
                [0.002, 0.002, 0.003, 0.002, 0.002, 0.003], 2)
 body.prism(tower, -0.024, 0.014, "Blued", axis="z", bevel=0.0012, segs=1)
-body.box((0.022, 0.004, 0.03), (0.0, TOP - 0.006, 0.004), "Blued", bevel=0.001)
+# The lips' plate, within the tower's length (it ran 5 mm past its back
+# into the gun's housing: `capture::seated`).
+body.box((0.022, 0.004, 0.026), (0.0, TOP - 0.006, 0.0), "Blued", bevel=0.001)
 body.box((0.016, 0.01, 0.006), (0.0, TOP - 0.012, -0.018), "Blued", bevel=0.0015)
 
 # The window: a curved slot round the right face, over the outer turn.

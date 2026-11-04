@@ -96,8 +96,9 @@ def terminal():
     t.cut(rc, paint=True)
     t.box((0.336, 0.256, 0.004), (0.0, 0.23, 0.124), "Glass", segs=1)
     # Vents on the top, a power switch and lamp on the front below the screen.
+    # On the flat of the top (they stood over the slope behind it).
     for k in range(5):
-        t.box((0.24, 0.003, 0.012), (0.0, 0.4115, -0.12 - 0.025 * k), "Black", segs=1)
+        t.box((0.24, 0.003, 0.012), (0.0, 0.4115, 0.05 - 0.022 * k), "Black", segs=1)
     t.box((0.02, 0.012, 0.008), (0.17, 0.06, 0.142), "Black", segs=1)
     t.cyl(0.004, 0.0, 0.003, "Warn", segs=8, xf=T(0.14, 0.06, 0.14))
     # The base under it.

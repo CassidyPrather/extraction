@@ -107,6 +107,7 @@ pub struct Threats(pub Vec<Threat>);
 fn gather_threats(
     mut threats: ResMut<Threats>,
     players: Query<(Entity, &GlobalTransform, &crate::player::Body), With<crate::player::Player>>,
+    trucks: Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
     robots: Query<(Entity, &GlobalTransform, &crate::robots::Robot)>,
     mut last: Local<std::collections::HashMap<Entity, Vec3>>,
     time: Res<Time>,
@@ -121,6 +122,15 @@ fn gather_threats(
         return;
     }
     for (e, gt, body) in &players {
+        // In a truck's bed, behind its sides and under its cover, the
+        // birds don't see you (the yard's first steps are taken in one,
+        // its rooks 27 m off).
+        if trucks
+            .iter()
+            .any(|(t, truck)| truck.in_bed(t, gt.translation()))
+        {
+            continue;
+        }
         threats.0.push(Threat {
             entity: e,
             at: gt.translation(),

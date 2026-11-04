@@ -67,7 +67,9 @@ for sx in (-1, 1):
         angle(b, LEG, (sx * (HX - 0.02), FLOOR, sz * (HZ - 0.02)), rot)
         # Feet bolted to the bed.
         b.box((0.08, 0.008, 0.08), (sx * (HX - 0.04), FLOOR + 0.004, sz * (HZ - 0.04)), "Iron")
-for y in (TOP - 0.08, FLOOR + 0.12):
+# The top's rails up under its planks (1 cm under them: the middle planks
+# rested on nothing).
+for y in (TOP - 0.069, FLOOR + 0.12):
     for sx in (-1, 1):
         b.box((0.008, 0.04, 2 * HZ - 0.06), (sx * (HX - 0.035), y, 0.0), "Paint")
     for sz in (-1, 1):
@@ -103,7 +105,7 @@ b.box((0.004, 0.11, 0.022), (-HX + 0.021, 0.33, 0.6), "Black")
 
 # --- Tray: sheet steel painted grey-green with rolled lips and two handles -------------------
 TX, TZ = 0.27, 0.43
-TY = TOP + 0.005
+TY = TOP + 0.0025  # its sheet a hair into the top (it lay 2 mm over it)
 b.box((2 * TX, 0.006, 2 * TZ), (0.0, TY, 0.0), "GreyGreen", bevel=0.002, segs=1)
 for sx in (-1, 1):
     b.box((0.006, 0.05, 2 * TZ), (sx * TX, TY + 0.025, 0.0), "GreyGreen", bevel=0.002, segs=1)
@@ -146,14 +148,15 @@ b.box((0.06, 0.012, 0.05), (VX, vy + 0.078, VZ + 0.045), "Iron", bevel=0.002, se
 
 # --- Tool rack at the back, under the display --------------------------------
 RX_ = HX - 0.015
-b.box((0.02, 0.26, 0.9), (RX_, TOP + 0.16, 0.12), "Boards", bevel=0.004, segs=1)
+# The board into its posts either end (5 mm short of them).
+b.box((0.02, 0.26, 0.92), (RX_, TOP + 0.16, 0.12), "Boards", bevel=0.004, segs=1)
 for z in (-0.355, 0.595):
     b.box((0.03, 0.3, 0.04), (RX_, TOP + 0.15, z), "Paint", bevel=0.004, segs=1)
 # Spanners hanging on pegs, smallest to largest.
 for k in range(5):
     z = -0.22 + k * 0.07
     L = 0.12 + k * 0.025
-    b.cyl(0.004, RX_ - 0.03, RX_ - 0.01, "Iron", segs=6, xf=T(0, TOP + 0.24, z) @ ALONG_X)
+    b.cyl(0.004, RX_ - 0.03, RX_ - 0.008, "Iron", segs=6, xf=T(0, TOP + 0.24, z) @ ALONG_X)
     b.box((0.006, L, 0.014 + k * 0.002), (RX_ - 0.022, TOP + 0.24 - L / 2 + 0.01, z), "Steel",
           bevel=0.002, segs=1)
     b.cyl(0.013 + k * 0.002, -0.003, 0.003, "Steel", segs=12,
@@ -161,16 +164,19 @@ for k in range(5):
 # A hammer and a pair of pliers hung by their handles.
 b.box((0.022, 0.24, 0.03), (RX_ - 0.03, TOP + 0.13, 0.25), "Wood", bevel=0.006, segs=1)
 b.box((0.03, 0.03, 0.1), (RX_ - 0.03, TOP + 0.02, 0.25), "Iron", bevel=0.004, segs=1)
-b.cyl(0.004, RX_ - 0.03, RX_ - 0.01, "Iron", segs=6, xf=T(0, TOP + 0.24, 0.25) @ ALONG_X)
+b.cyl(0.004, RX_ - 0.03, RX_ - 0.008, "Iron", segs=6, xf=T(0, TOP + 0.24, 0.25) @ ALONG_X)
 for sz in (-1, 1):
-    b.box((0.008, 0.16, 0.012), (RX_ - 0.024, TOP + 0.15, 0.4 + sz * 0.012), "Black",
+    b.box((0.008, 0.16, 0.012), (RX_ - 0.024, TOP + 0.162, 0.4 + sz * 0.012), "Black",
           bevel=0.003, segs=1, xf=RX(sz * 0.08, about=(RX_ - 0.024, TOP + 0.24, 0.4)))
-b.cyl(0.004, RX_ - 0.03, RX_ - 0.01, "Iron", segs=6, xf=T(0, TOP + 0.24, 0.4) @ ALONG_X)
+b.cyl(0.004, RX_ - 0.03, RX_ - 0.008, "Iron", segs=6, xf=T(0, TOP + 0.24, 0.4) @ ALONG_X)
 
 # --- On the shelf: a tin of bolts and a coil of wire ----------------------
-SY = FLOOR + 0.16
+# A millimetre into the slats (on them, no deeper).
+SY = FLOOR + 0.159
 b.lathe([(0.0, SY), (0.055, SY), (0.055, SY + 0.11), (0.051, SY + 0.11), (0.051, SY + 0.006),
          (0.0, SY + 0.006)], "Iron", segs=20, xf=T(-0.12, 0, 0.45) @ UP)
+# The bolts on a heap filling the tin (they hung 8 cm over its floor).
+b.cyl(0.051, SY + 0.006, SY + 0.087, "Iron", segs=16, xf=T(-0.12, 0, 0.45) @ UP)
 for k in range(9):
     a = 2 * math.pi * k / 9
     r = 0.025 * (k % 3) / 2
@@ -178,7 +184,7 @@ for k in range(9):
           xf=T(-0.12 + r * math.cos(a), 0, 0.45 + r * math.sin(a)) @ UP)
 for k in range(5):
     b.lathe([(0.075, -0.003), (0.079, 0.0), (0.075, 0.003), (0.071, 0.0)], "Copper", segs=24,
-            xf=T(0.1, SY + 0.012 + k * 0.006, -0.35) @ UP, closed=True)
+            xf=T(0.1, SY + 0.002 + k * 0.006, -0.35) @ UP, closed=True)  # on the slats
 
 make(b, worn={"mats": ("Paint", "Blue"), "amount": 0.4})
 report()

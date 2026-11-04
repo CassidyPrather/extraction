@@ -3,7 +3,8 @@ forend. Writes assets/models/guns/mp133.glb.
 
 Gun space as in src/weapons/layout.rs: origin at the palm on the stock's
 straight wrist, -Z down the bore (bore axis y = 0.045), +Y up, metres.
-The milled receiver runs z -0.235..-0.025; the 560 mm barrel to the muzzle
+The milled receiver runs z -0.235..-0.025; the 610 mm barrel (its breech
+face 637 mm back from the muzzle, the chamber in it) to the muzzle
 at z -0.795, with a ventilated rib and a front bead; the 4-shell tube
 magazine (axis y = 0.016) under it to the cap at z -0.62.
 
@@ -65,11 +66,11 @@ def ring(z, lo, hi, wb, wt, power, segs=24, cx=0.0):
     return out
 
 
-# --- Receiver (milled steel, flat sides, rounded top) ----------------------------------
+# --- Receiver (aluminium alloy, black; flat sides, rounded top) -------------------------
 recv = Part("receiver")
 rsec = fillet([(-RX_HW, RX_Y0), (RX_HW, RX_Y0), (RX_HW, RX_Y1), (-RX_HW, RX_Y1)],
               [0.0025, 0.0025, 0.013, 0.013], 5)
-recv.prism(rsec, RX_Z0, RX_Z1, "Blued", axis="z", bevel=0.0018, segs=2)
+recv.prism(rsec, RX_Z0, RX_Z1, "Alloy", axis="z", bevel=0.0018, segs=2)
 rc = Part("cut")
 # Ejection port, right side; the bolt shows in it when closed.
 rc.box((0.024, 0.026, 0.06), (0.018, 0.050, -0.12), "Black", bevel=0.002, segs=1)
@@ -77,8 +78,8 @@ rc.box((0.024, 0.026, 0.06), (0.018, 0.050, -0.12), "Black", bevel=0.002, segs=1
 rc.box((0.022, 0.046, 0.072), (0.0, 0.003, -0.13), "Black", bevel=0.002, segs=1)
 # Stampings on the left: the model and the chambering.
 LEFT = T(-RX_HW + 0.0004, 0, 0) @ RY(-math.pi / 2)
-text(rc, "МР-133", 0.0055, "Blued", LEFT @ T(-0.15, 0.040, 0.0), depth=0.0008)
-text(rc, "12x76", 0.0034, "Blued", LEFT @ T(-0.15, 0.030, 0.0), depth=0.0008)
+text(rc, "МР-133", 0.0055, "Alloy", LEFT @ T(-0.15, 0.040, 0.0), depth=0.0008)
+text(rc, "12x76", 0.0034, "Alloy", LEFT @ T(-0.15, 0.030, 0.0), depth=0.0008)
 recv.cut(rc, paint=True)
 
 misc = Part("static_misc")
@@ -95,15 +96,16 @@ misc.prism(trough, -0.163, -0.099, "Steel", axis="z")
 misc.box((0.006, 0.006, 0.008), (0.0, 0.017, -0.097), "Steel", bevel=0.001)  # lifter arm
 
 # --- Trigger housing, guard, safety, action release ---------------------------------------
-# The guard bow under the receiver.
-guard_path = catmull([(-0.090, -0.003), (-0.0915, -0.018), (-0.085, -0.031), (-0.068, -0.038),
-                      (-0.042, -0.0385), (-0.024, -0.034), (-0.012, -0.022), (-0.009, -0.003)],
-                     4, closed=False)
-misc.sweep(guard_path, section_rect(0.0105, 0.0052, 0.0016), "Blued")
+# The guard bow under the receiver: 8 mm deeper than first made, as a
+# photograph of an MP-133 has it (docs/craft/guns/mp133).
+guard_path = catmull([(z, -0.003 + (y + 0.003) * 1.22) for z, y in [
+    (-0.090, -0.003), (-0.0915, -0.018), (-0.085, -0.031), (-0.068, -0.038), (-0.042, -0.0385),
+    (-0.024, -0.034), (-0.012, -0.022), (-0.009, -0.003)]], 4, closed=False)
+misc.sweep(guard_path, section_rect(0.0105, 0.0052, 0.0016), "Alloy")
 # Its rear web, where the crossbolt safety goes through.
 web = fillet([(-0.032, -0.003), (-0.009, -0.003), (-0.011, -0.022), (-0.019, -0.026),
               (-0.030, -0.012)], [0.0, 0.0, 0.004, 0.004, 0.006], 3)
-misc.prism(web, -0.0055, 0.0055, "Blued", axis="x", bevel=0.001, segs=1)
+misc.prism(web, -0.0055, 0.0055, "Alloy", axis="x", bevel=0.001, segs=1)
 # Crossbolt safety, pushed through to the right (safe): a part of its own
 # (`crossbolt`), pushed left to fire, which bares its red band on the left.
 CROSSBOLT = (0.0, -0.0125, -0.0215)
@@ -125,7 +127,9 @@ barrel.lathe([(0.0093, BREECH), (0.0128, BREECH), (0.0128, -0.262), (0.0119, -0.
               (0.0110, -0.45), (0.0106, MUZZLE + 0.004), (0.0101, MUZZLE), (0.0093, MUZZLE)],
              "Blued", segs=24, xf=T(0, BORE, 0), closed=True)
 # The rib: a flat strip on posts, its top level with the receiver's.
-RIB_R, RIB_F = 0.0635, 0.0610
+# The bead's top on the eye line just over the receiver (`pt_sight`,
+# `capture::sightline`): the rib's front was 2 mm lower.
+RIB_R, RIB_F = 0.0635, 0.0632
 barrel.prism([(RX_Z0 + 0.002, RIB_R - 0.003), (MUZZLE + 0.002, RIB_F - 0.003),
               (MUZZLE + 0.002, RIB_F), (RX_Z0 + 0.002, RIB_R)],
              -0.004, 0.004, "Blued", axis="x", bevel=0.0007, segs=1)
@@ -171,11 +175,16 @@ loop = [(SW_F + 0.0095 * math.cos(a), TUBE - 0.0165 + 0.0095 * math.sin(a))
         for a in [math.pi + math.pi * i / 10 for i in range(11)]]
 tube.sweep(loop, section_rect(0.0028, 0.0028, 0.0008), "Steel")
 
-# --- Buttstock: straight wrist, birch, rubber pad -------------------------------------------
+# --- Buttstock: semi-pistol grip, birch, rubber pad --------------------------------------------
+# The MP-133's neck dips into a grip behind the guard, where the raked hand
+# (the layout's grip, 0.35 rad) closes on it, and rises to a butt 118 mm
+# deep. (It was the older IZh-81's straight wrist and a 135 mm butt:
+# docs/craft/guns/mp133.)
 TOP = catmull([(-0.026, 0.0645), (-0.012, 0.0615), (0.015, 0.050), (0.06, 0.037), (0.12, 0.030),
                (0.20, 0.0195), (0.31, 0.0085)], 4, closed=False)
-BOT = catmull([(-0.026, -0.006), (-0.006, -0.0075), (0.025, -0.015), (0.07, -0.030),
-               (0.20, -0.082), (0.31, -0.127)], 4, closed=False)
+BOT = catmull([(-0.026, -0.006), (-0.006, -0.0075), (0.022, -0.030), (0.046, -0.060),
+               (0.064, -0.064), (0.09, -0.054), (0.13, -0.056), (0.20, -0.075), (0.31, -0.110)],
+              4, closed=False)
 WIDTH = [(-0.026, 0.0179), (-0.006, 0.0172), (0.02, 0.0158), (0.06, 0.0162), (0.13, 0.0192),
          (0.31, 0.0205)]
 POWER = [(-0.026, 3.6), (0.0, 3.0), (0.03, 2.3), (0.13, 2.5), (0.31, 2.9)]
@@ -219,9 +228,14 @@ bolt.prism(fillet([(-0.006, 0.039), (0.014, 0.039), (0.014, 0.061), (-0.006, 0.0
            BZ0, BZ1, "Steel", axis="z", bevel=0.001, segs=1)
 # Extractor claw on the right of the bolt face, and the bolt's lightening flat.
 bolt.box((0.003, 0.007, 0.012), (0.0150, 0.047, BZ0 + 0.0115), "Steel", bevel=0.0008, segs=1)
-# The action bars, both sides of the tube, from inside the forend into the receiver.
+# The action bars, both sides of the tube, from inside the forend back to
+# the slide under the bolt that they drive (they stopped 75 mm short:
+# `capture::attach`).
+# (At 15 mm out, not 13: their inner faces lay 1 mm off the loading port's
+# walls, and z-fought them, `art/check.py`.)
 for sx in (-1, 1):
-    bolt.box((0.0018, 0.008, 0.27), (sx * 0.0131, TUBE, -0.365), "Blued", bevel=0.0005, segs=1)
+    bolt.box((0.0018, 0.008, 0.375), (sx * 0.0150, TUBE, -0.3125), "Blued", bevel=0.0005, segs=1)
+bolt.box((0.028, 0.025, 0.02), (0.0, 0.0275, -0.135), "Blued", bevel=0.001, segs=1)
 # The forend: ribbed birch round the tube, rounded at the nose.
 FZ0, FZ1 = -0.515, -0.330
 F_TOP = 0.031
@@ -258,7 +272,8 @@ for z, k in stations:
 bolt.loft(frings, "Wood")
 
 # --- Trigger --------------------------------------------------------------------------------
-trig = Part("trigger", origin=(0.0, 0.0, -0.047))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.007, -0.0465))
 trig.sweep(catmull([(-0.0465, 0.001), (-0.0485, -0.010), (-0.0505, -0.019), (-0.0495, -0.026),
                     (-0.0455, -0.031)], 3, closed=False), section_rect(0.0045, 0.0032, 0.0012),
            "Blued")
@@ -272,7 +287,7 @@ make(trig, worn={})
 make(crossbolt, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.068, -0.03))
+empty("pt_sight", (0.0, 0.0665, -0.03))
 empty("pt_port", (0.022, 0.05, -0.12))
 empty("pt_load_port", (0.0, 0.0, -0.13))
 empty("pt_support", (0.0, 0.012, -0.42))

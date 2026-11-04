@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod census;
 pub mod first_hour;
 pub mod firsts;
 pub mod hints;
@@ -67,6 +68,7 @@ pub enum Goal {
     FillMag,
     SeatMag,
     Rack,
+    DeadTrigger,
     Safety,
     HitPlate,
     RunDry,
@@ -95,12 +97,13 @@ impl Goal {
             Goal::Crouch => "Crouch",
             Goal::Run => "Run",
             Goal::PutAway => "Holster the pistol",
-            Goal::Pocket => "Pocket the radio",
+            Goal::Pocket => "Radio on your chest",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
             Goal::FillMag => "Rounds into the mag",
             Goal::SeatMag => "Mag into the pistol",
             Goal::Rack => "Rack the slide",
+            Goal::DeadTrigger => "Squeeze it. Nothing?",
             Goal::Safety => "Safety off",
             Goal::HitPlate => "Hit a plate",
             Goal::RunDry => "Shoot it empty",
@@ -110,8 +113,8 @@ impl Goal {
             Goal::FireAgain => "Fire again",
             Goal::OpenDoor => "Open the door",
             Goal::Search => "Take the dressing",
-            Goal::Wrist => "Read your wrist",
-            Goal::Dressing => "Use a dressing",
+            Goal::Wrist => "You're bleeding: look",
+            Goal::Dressing => "Dress the cut",
             Goal::Probe => "A part at the sparks",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
@@ -173,7 +176,7 @@ impl Goal {
             // shoulder (the pack).
             (Goal::PutAway, false) => &["hip", "open your hand"],
             (Goal::PutAway, true) => &["g"],
-            (Goal::Pocket, false) => &["pocket", "open your hand"],
+            (Goal::Pocket, false) => &["chest", "open your hand"],
             (Goal::Pocket, true) => &["g"],
             (Goal::Pack, false) => &["shoulder", "open your hand"],
             (Goal::Pack, true) => &["g"],
@@ -188,8 +191,13 @@ impl Goal {
             (Goal::Rack, true) => &["v"],
             (Goal::Safety, false) => &["click the stick"],
             (Goal::Safety, true) => &["x"],
-            (Goal::HitPlate | Goal::RunDry | Goal::FireAgain, false) => &["trigger"],
-            (Goal::HitPlate | Goal::RunDry | Goal::FireAgain, true) => &["mouse"],
+            // The trigger against the safety (`TriggerBlocked`), then a shot.
+            (Goal::DeadTrigger | Goal::HitPlate | Goal::RunDry | Goal::FireAgain, false) => {
+                &["trigger"]
+            }
+            (Goal::DeadTrigger | Goal::HitPlate | Goal::RunDry | Goal::FireAgain, true) => {
+                &["mouse"]
+            }
             (Goal::DropMag, false) => &["a on the gun hand"],
             (Goal::DropMag, true) => &["b"],
             // The slide stop (B), or a rack.
@@ -197,11 +205,11 @@ impl Goal {
             (Goal::SlideRelease, true) => &["v"],
             (Goal::OpenDoor | Goal::Search, false) => &["grip"],
             (Goal::OpenDoor | Goal::Search, true) => &["e"],
-            (Goal::Wrist, false) => &["look at the back"],
+            (Goal::Wrist, false) => &["watch hand", "look at it"],
             (Goal::Wrist, true) => &["h"],
             // `interact::first_aid`: circled round a limb, not the holding
             // arm; one-handed, the button (`how_for`).
-            (Goal::Dressing, false) => &["circle it", "other forearm"],
+            (Goal::Dressing, false) => &["circle it", "the cut"],
             (Goal::Dressing, true) => &["u"],
             (Goal::Probe, false) => &["grip", "open your hand"],
             (Goal::Probe, true) => &["q"],
@@ -284,7 +292,7 @@ impl Goal {
             (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip.\nOpen your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
-            (Goal::Pocket, false) => "Hold it to a chest pocket.\nOpen your hand.",
+            (Goal::Pocket, false) => "Hold it to your chest.\nOpen your hand.",
             (Goal::Pocket, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "The box: over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
@@ -296,8 +304,10 @@ impl Goal {
             (Goal::SeatMag, true) => "Table's pistol in hand.\nPress R.",
             (Goal::Rack, false) => "Other hand on the slide:\nTRIGGER, pull back, let go.",
             (Goal::Rack, true) => "Pistol in hand. Press V.",
-            (Goal::Safety, false) => "Click the stick on the\npistol's hand: safe, fire.",
-            (Goal::Safety, true) => "Pistol in hand. Press X.",
+            (Goal::DeadTrigger, false) => "Aim at a plate.\nSqueeze TRIGGER.",
+            (Goal::DeadTrigger, true) => "Aim at a plate.\nLeft mouse fires.",
+            (Goal::Safety, false) => "That's the safety. Click\nthe stick on the gun hand.",
+            (Goal::Safety, true) => "That's the safety.\nPress X.",
             (Goal::HitPlate, false) => "Line up the sights.\nSqueeze TRIGGER.",
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::RunDry, false) => "Squeeze TRIGGER at the\nplates till it stays back.",
@@ -314,9 +324,9 @@ impl Goal {
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "The white roll, ringed on\nthe crate. Squeeze GRIP.",
             (Goal::Search, true) => "The white roll, ringed on\nthe crate. Look. Press E.",
-            (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
-            (Goal::Wrist, true) => "Hold H to check yourself.",
-            (Goal::Dressing, false) => "One hand: circle it round\nthe other forearm 1.5x.",
+            (Goal::Wrist, false) => "It's buzzing. Raise your\nwatch hand, look at it.",
+            (Goal::Wrist, true) => "You're bleeding. Hold H\nto check yourself.",
+            (Goal::Dressing, false) => "One hand: circle it round\nthe cut, 1.5 turns.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the sparks.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo at the sparks.",
@@ -437,6 +447,7 @@ pub const STATIONS: &[Station] = &[
             Goal::FillMag,
             Goal::SeatMag,
             Goal::Rack,
+            Goal::DeadTrigger,
             Goal::Safety,
             Goal::HitPlate,
         ],
@@ -562,6 +573,14 @@ pub struct Onboarding {
     pub sent_to: Option<usize>,
     /// The driver's said how to mark a moment.
     pub told_mark: bool,
+    /// The house's crate has scratched your watch arm (`the_scratch`).
+    pub scratched: bool,
+    /// The rooks by the truck have gone up, and you've been told why that
+    /// matters (`the_rooks`).
+    pub rooks: bool,
+    /// The house's rats have run, and you've been told what they mean
+    /// (`the_rats`).
+    pub rats: bool,
 }
 
 impl Onboarding {
@@ -731,6 +750,10 @@ impl Plugin for OnboardingPlugin {
                     .chain(),
             )
             .add_systems(
+                Update,
+                (census::census, census::houses).run_if(|| census::on()),
+            )
+            .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
             )
@@ -749,7 +772,17 @@ impl Plugin for OnboardingPlugin {
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
-                    (lamps, signs, checklist, one_thing_to_read, mark_the_step),
+                    the_scratch,
+                    the_rooks,
+                    the_rats,
+                    (
+                        lamps,
+                        signs,
+                        checklist,
+                        one_thing_to_read,
+                        stash_by_station,
+                        mark_the_step,
+                    ),
                     warn_near_anomalies,
                     hurry_the_truck,
                     out_of_the_truck.after(crate::raid::tick_raid),
@@ -784,6 +817,8 @@ pub fn yard_shows(ob: &Onboarding, what: Panel) -> bool {
         Panel::Sign(i) => !in_truck(i) || current == Some(i),
         Panel::Skip(i) => current == Some(i),
         Panel::Settings | Panel::Other => true,
+        // Nothing to start over before anything's been done.
+        Panel::StartOver => !ob.done.is_empty(),
         Panel::SettingsCard => ob.is_done(Goal::Button),
         Panel::List => false,
         Panel::Truck => current.is_none_or(|i| i >= station_of(Goal::CallTruck)),
@@ -797,6 +832,7 @@ pub enum Panel {
     Skip(usize),
     Settings,
     SettingsCard,
+    StartOver,
     List,
     Truck,
     Other,
@@ -829,7 +865,7 @@ fn one_thing_to_read(
             (Some(s), _) => Panel::Sign(s.0),
             (_, Some(OnboardCard::Skip(i))) => Panel::Skip(*i),
             (_, Some(OnboardCard::Push)) => Panel::Settings,
-            (_, Some(_)) => Panel::Other,
+            (_, Some(OnboardCard::StartOver)) => Panel::StartOver,
             _ if setting => Panel::SettingsCard,
             _ if list => Panel::List,
             _ if in_the_truck(e) => Panel::Truck,
@@ -851,6 +887,72 @@ fn one_thing_to_read(
                     .remove::<Folded>();
             }
             _ => {}
+        }
+    }
+}
+
+/// The station whose lesson a starter-kit kind belongs to: the crate in the
+/// truck shows only what's been reached (the designer, after the yard:
+/// "bombarded with too many item types at once"; the crate held thirteen
+/// kinds at the first step). `None`: from the start.
+pub fn stash_station(id: &str) -> Option<usize> {
+    let at = |g: Goal| Some(station_of(g));
+    match id {
+        "pm_pistol" | "radio" => None,
+        "cleaning_kit" => at(Goal::FarGrab),
+        "pm_mag" | "ammo_9x18" => at(Goal::FillMag),
+        "flashlight" | "power_cell" => at(Goal::OpenDoor),
+        "field_dressing" | "canned_stew" => at(Goal::Wrist),
+        "detector" | "bolt" => at(Goal::Probe),
+        // The map and the compass, for the way home and the first job.
+        _ => at(Goal::CallTruck),
+    }
+}
+
+/// Folds the stash crate's starter kit away till its station
+/// ([`stash_station`]), and unfolds it all once the yard's done.
+#[allow(clippy::type_complexity)]
+fn stash_by_station(
+    mut commands: Commands,
+    ob: Res<Onboarding>,
+    bags: Query<&Backpack, With<Stash>>,
+    items: Query<(&Item, Option<&Folded>, Option<&CollisionLayers>)>,
+    children: Query<&Children>,
+    catalog: Res<Catalog>,
+) {
+    let reached = |s: Option<usize>| match (s, ob.current()) {
+        (None, _) | (_, None) => true,
+        (Some(s), Some(c)) => c >= s,
+    };
+    for bag in &bags {
+        for &e in &bag.contents {
+            let Ok((item, _, _)) = items.get(e) else {
+                continue;
+            };
+            let show = reached(stash_station(&catalog.get(item.kind()).id));
+            // It, and what's seated in it (the torch's cell, the pistol's
+            // magazine).
+            for e in std::iter::once(e).chain(children.iter_descendants(e)) {
+                let Ok((_, folded, layers)) = items.get(e) else {
+                    continue;
+                };
+                match (show, folded) {
+                    (false, None) => {
+                        commands.entity(e).insert((
+                            Folded(layers.copied().unwrap_or_default()),
+                            Visibility::Hidden,
+                            CollisionLayers::NONE,
+                        ));
+                    }
+                    (true, Some(f)) => {
+                        commands
+                            .entity(e)
+                            .insert((f.0, Visibility::Inherited))
+                            .remove::<Folded>();
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }
@@ -922,6 +1024,131 @@ fn mark_the_step(
     }
 }
 
+/// First aid with something to aid: taking the dressing in the house, the
+/// crate's nail catches your watch arm, a scratch that bleeds (slowly)
+/// till it's dressed. The watch buzzes till you look at it. The wrist and
+/// the dressing were read-then-do; now there's a cut to find and to wrap.
+#[allow(clippy::too_many_arguments)]
+fn the_scratch(
+    mut done: MessageReader<GoalDone>,
+    mut ob: ResMut<Onboarding>,
+    mut players: Query<
+        (
+            &mut crate::health::Health,
+            Option<&mut crate::interact::wounds::Wounds>,
+        ),
+        With<LocalPlayer>,
+    >,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut raid: ResMut<Raid>,
+    mut haptics: MessageWriter<Haptic>,
+    time: Res<Time>,
+    mut buzz: Local<f32>,
+) {
+    let watch = comfort
+        .as_ref()
+        .map_or(Side::Left, |c| c.gun_side().other());
+    let Some((mut health, wounds)) = players.iter_mut().next() else {
+        return;
+    };
+    // (At first aid without it, the house skipped: there and then.)
+    let at_first_aid = ob.current() == Some(station_of(Goal::Wrist));
+    for d in done
+        .read()
+        .map(|d| d.goal)
+        .chain(at_first_aid.then_some(Goal::Search))
+    {
+        if d == Goal::Search && !ob.scratched {
+            ob.scratched = true;
+            if let Some(mut w) = wounds {
+                w.0.push(crate::interact::wounds::Wound {
+                    limb: crate::interact::wounds::Limb::Forearm(watch),
+                    along: 0.55,
+                    around: 0.0,
+                    bleed: SCRATCH_BLEED,
+                    dressed: false,
+                });
+            }
+            health.bleeding = health.bleeding.max(SCRATCH_BLEED);
+            raid.say(SCRATCH_LINE);
+            haptics.write(Haptic {
+                side: watch,
+                amplitude: 0.8,
+                seconds: 0.25,
+            });
+            break;
+        }
+    }
+    if !ob.scratched || ob.is_done(Goal::Dressing) {
+        return;
+    }
+    // It bleeds till it's dressed (bleeding wears off on its own), but
+    // never takes much.
+    if health.hp > 60.0 {
+        health.bleeding = health.bleeding.max(SCRATCH_BLEED);
+    }
+    // The watch buzzes, every couple of seconds, till you've looked.
+    if ob.next_goal() == Some(Goal::Wrist) {
+        *buzz += time.delta_secs();
+        if *buzz > 2.0 {
+            *buzz = 0.0;
+            haptics.write(Haptic {
+                side: watch,
+                amplitude: 0.5,
+                seconds: 0.12,
+            });
+        }
+    }
+}
+
+/// How fast the yard's scratch bleeds, hp/s.
+pub const SCRATCH_BLEED: f32 = 0.08;
+pub const SCRATCH_LINE: &str = "Driver: \"That crate's nail got your arm. Look at your watch.\"";
+
+/// Where the yard's rooks sit: a shed's roof west of GETTING ABOUT
+/// (`wildlife::flock::spawn_flocks`), out of a walker's flushing reach
+/// from the truck and the station, inside a runner's.
+pub const ROOKS_AT: [f32; 2] = [-30.0, 95.0];
+pub const ROOKS_LINE: &str = "Driver: \"Hear them go? Out there the machines hear that too. \
+Crouch and walk, and they let you nearer.\"";
+
+/// Getting about with something to get about near: the run that puts the
+/// rooks up off the shed. Turning, crouching and running were three ticks
+/// on a board; now the run has a sound, a sky full of birds, and a reason
+/// to crouch out there. Said once, the first time you put them up.
+fn the_rooks(
+    mut flushed: MessageReader<crate::wildlife::Flushed>,
+    mut ob: ResMut<Onboarding>,
+    mut raid: ResMut<Raid>,
+) {
+    for f in flushed.read() {
+        if f.cause == crate::wildlife::FlushCause::Player && !ob.rooks {
+            ob.rooks = true;
+            raid.say(ROOKS_LINE);
+        }
+    }
+}
+
+/// The practice house's prefab: the one in the yard that always has rats.
+pub const RATS_HOUSE: &str = "house_plank";
+pub const RATS_LINE: &str = "Driver: \"Only rats. Sat quiet, they'd mean nobody's been in.\"";
+
+/// THE HOUSE with something in it: the practice house always has rats
+/// (`wildlife::rats`), along the walls, and they bolt squeaking for the
+/// corners as you come in. Opening a door and looking round was two ticks;
+/// now the first door has something behind it, and the driver says what
+/// rats tell you out there.
+fn the_rats(
+    mut scurried: MessageReader<crate::wildlife::rats::Scurried>,
+    mut ob: ResMut<Onboarding>,
+    mut raid: ResMut<Raid>,
+) {
+    if scurried.read().count() > 0 && !ob.rats {
+        ob.rats = true;
+        raid.say(RATS_LINE);
+    }
+}
+
 /// The stations in the truck's bed (the kit, the settings): no post of
 /// their own, no SKIP card.
 pub fn in_truck(i: usize) -> bool {
@@ -975,18 +1202,28 @@ fn paper(text: String, size: Vec2) -> ScreenText {
 }
 
 /// `EXTRACTION_YARD_AT=N` (a dev aid, for screenshots of station N lit):
-/// the stations before N start done.
+/// the stations before N start done; `N.K`, and station N's steps before
+/// its Kth too.
 fn dev_start_at(mut ob: ResMut<Onboarding>) {
-    let Some(n) = std::env::var("EXTRACTION_YARD_AT")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-    else {
+    let Some(v) = std::env::var("EXTRACTION_YARD_AT").ok() else {
         return;
     };
+    // "N" or "N.K": station N, at its step K (1-based).
+    let mut it = v.split('.');
+    let Some(n) = it.next().and_then(|n| n.parse::<usize>().ok()) else {
+        return;
+    };
+    let k = it.next().and_then(|k| k.parse::<usize>().ok()).unwrap_or(1);
     ob.done = STATIONS
         .iter()
         .take(n.saturating_sub(1))
         .flat_map(|s| s.goals.iter().copied())
+        .chain(
+            STATIONS
+                .get(n.saturating_sub(1))
+                .into_iter()
+                .flat_map(|s| s.goals.iter().copied().take(k.saturating_sub(1))),
+        )
         .collect();
     ob.greeted = true;
 }
@@ -1515,7 +1752,8 @@ fn watch_hands(
                     if matches!(s.kind, SocketKind::Body(_))
                         && owner.is_some_and(|o| locals.contains(o.0))
                     {
-                        // The pistol holstered; the radio pocketed.
+                        // The pistol holstered; the radio in its sleeve on
+                        // the chest (it fits no pocket: `body::slot_fit`).
                         match id(*item) {
                             Some("pm_pistol") => complete(&mut ob, Goal::PutAway, &mut out),
                             Some("radio") => complete(&mut ob, Goal::Pocket, &mut out),
@@ -1591,6 +1829,10 @@ fn watch_guns(
             extraction_core::firearm::Event::Chambered => {
                 complete(&mut ob, Goal::Rack, &mut out);
                 complete(&mut ob, Goal::SlideRelease, &mut out);
+            }
+            // A squeeze that meets the safety: what the safety is, felt.
+            extraction_core::firearm::Event::TriggerBlocked => {
+                complete(&mut ob, Goal::DeadTrigger, &mut out)
             }
             // A short-filled magazine can run dry on the plate shot,
             // before this step is asked: a squeeze on the slide already
@@ -2144,6 +2386,105 @@ mod tests {
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
 
+    /// The truck's crate shows the first station's kit and nothing else
+    /// (the designer: "bombarded with too many item types at once"); every
+    /// other starter kind waits for the station that teaches it, in order.
+    #[test]
+    fn the_crate_shows_only_what_the_first_station_uses() {
+        let kit = [
+            "pm_pistol",
+            "radio",
+            "pm_mag",
+            "ammo_9x18",
+            "flashlight",
+            "power_cell",
+            "field_dressing",
+            "canned_stew",
+            "cleaning_kit",
+            "map_case",
+            "compass",
+            "detector",
+            "bolt",
+        ];
+        let first: Vec<_> = kit
+            .iter()
+            .filter(|id| stash_station(id).is_none())
+            .collect();
+        assert!(first.len() <= 3, "at the start: {first:?}");
+        for id in kit {
+            if let Some(s) = stash_station(id) {
+                assert!(s > station_of(Goal::Pocket), "{id} before the kit's done");
+            }
+        }
+    }
+
+    /// The rooks by the truck sit where walking off the tailgate to
+    /// GETTING ABOUT leaves them be, standing up or crouched, and a run
+    /// from the station's lamp puts them up.
+    #[test]
+    fn the_rooks_go_up_for_a_run_not_a_walk() {
+        use crate::wildlife::{Threat, ThreatKind, flock::flush_radius};
+        let zone = crate::world::Zone::load(TRAINING_YARD);
+        let (_, perches) = crate::wildlife::perches::survey(&zone);
+        let site = perches
+            .sites
+            .iter()
+            .min_by(|a, b| {
+                let d = |s: &crate::wildlife::perches::PerchSite| {
+                    s.centre.xz().distance(Vec2::from(ROOKS_AT))
+                };
+                d(a).total_cmp(&d(b))
+            })
+            .expect("a perch in the yard");
+        assert!(
+            site.centre.xz().distance(Vec2::from(ROOKS_AT)) < 3.0,
+            "no roof at ROOKS_AT: the nearest is {} at {}",
+            site.prefab,
+            site.centre
+        );
+        // Room for the whole flock (birds left over circle for ever).
+        let species = crate::wildlife::flock::Species::for_map(TRAINING_YARD);
+        assert!(
+            site.spots.len() >= species.flock_size().0,
+            "{} perches on the {} for a flock of at least {}",
+            site.spots.len(),
+            site.prefab,
+            species.flock_size().0
+        );
+        let near = |p: Vec2| {
+            site.spots
+                .iter()
+                .map(|s| s.0.xz().distance(p))
+                .fold(f32::MAX, f32::min)
+        };
+        let reach = |speed: f32, crouched: bool| {
+            flush_radius(&Threat {
+                entity: Entity::PLACEHOLDER,
+                at: Vec3::ZERO,
+                speed,
+                kind: ThreatKind::Player { crouched },
+            })
+        };
+        let walk = reach(crate::player::WALK_SPEED, false);
+        let run = reach(crate::player::SPRINT_SPEED, false);
+        let station = Vec2::from(STATIONS[station_of(Goal::Run)].at);
+        // Off the back of the truck and along to the lamp, walking.
+        let tailgate = Vec2::new(0.0, 92.0);
+        for i in 0..=20 {
+            let p = tailgate.lerp(station, i as f32 / 20.0);
+            assert!(
+                near(p) > walk + 1.0,
+                "walking at {p} is {:.1} m from the rooks, inside {walk:.1}",
+                near(p)
+            );
+        }
+        assert!(
+            near(station) < run - 3.0,
+            "a run from the lamp is {:.1} m off, outside {run:.1}",
+            near(station)
+        );
+    }
+
     /// A headset whose session starts 10 s in (the playtest's took 3 to
     /// 19) hears only headset words: no line is said and no board names a
     /// control till it's known which, and "press E" never reaches the
@@ -2323,6 +2664,7 @@ mod tests {
             MARK_LINE_VR,
             MARK_LINE_FLAT,
             SPENT_LINE,
+            SCRATCH_LINE,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)

@@ -24,6 +24,9 @@ SPOTS = {
     "house_plank_damaged": [(-1.6 + 0.3, -0.7)],
     "farmhouse": [(-2.0 + 0.3, -0.8)],
     "house_brick": [(-2.0 + 0.3, -0.8)],
+    # The post office's counter (buildings::HousePlan::PostOffice: its
+    # middle (0.75, -0.5), the loot's), a hand along from the loot.
+    "post_office": [(0.75 - 1.2, -0.5)],
     "cabin_log": [(0.3, 0.55)],
     "shop": [(-1.6, -0.4)],
     "pump_station": [(5.5 + 0.3, -3.0)],
@@ -68,7 +71,7 @@ def ron_str(s):
 # note names exists.
 NOTES = {
     "marrow_creek": [
-        ("guard_booth", (47.8, 285.0), "Note", """SOUTH GATE - DUTY LOG, 14 OCT
+        ("guard_booth", (29.8, 163.5), "Note", """SOUTH GATE - DUTY LOG, 14 OCT
 
 0600. Buses out of the depot, 9 of 9.
 
@@ -79,7 +82,7 @@ NOTES = {
 1300. A dog barking in the village all afternoon.
 
 2200. Lights by the well. Not ours.""", "Gate log"),
-        ("house_plank", (-18.0, 95.0), "Note", """Anna -
+        ("house_plank", (-20.2, 63.5), "Note", """Anna -
 
 They said three days. That was three weeks ago. Lev drove the four and
 wouldn't look at me, so I stayed for the dog.
@@ -92,7 +95,7 @@ Keep still when the little flying one looks at you. It sees you move.
 Tell Lev I'm not angry. I've written to him as well, for when he comes.
 
 - Mum""", "Village note"),
-        ("house_brick", (-20.0, 65.0), "Note", """POST OFFICE - UNDELIVERED
+        ("post_office", (-22.2, 33.5), "Note", """POST OFFICE - UNDELIVERED
 
 To O. Vey, station chief, Hollow survey post.
 
@@ -102,7 +105,7 @@ keys at the review.
 
 P. Rus, Inspector
 Quarantine Authority, valley office, 20 Nov.""", "Post office letter"),
-        ("shop", (-16.0, 35.0), "Note", """CREDIT BOOK
+        ("shop", (-18.2, 3.5), "Note", """CREDIT BOOK
 
 Holm - bread, paraffin. 3.40
 
@@ -115,7 +118,7 @@ Brabec - nails, tea. 1.95
 Vey (survey) - batteries x12, chalk. Paid.
 
 13 Oct. Shut till further notice. Pay me when you're back.""", "Credit book"),
-        ("cabin_log", (-185.0, 190.0), "Note", """Walkers:
+        ("cabin_log", (-110.8, 113.5), "Note", """Walkers:
 
 Don't waste rounds on the shell. The eye under the front plate, or the
 knees. They go down like a felled tree.
@@ -125,7 +128,7 @@ The flyers are glass and wire. One good hit.
 And never shoot near the well. It doesn't like it.
 
 - J., logging camp""", "Foreman's note"),
-        ("pump_station", (-200.0, 22.0), "Note", """PUMP LOG - O. Brabec
+        ("pump_station", (-110.0, 12.1), "Note", """PUMP LOG - O. Brabec
 
 The Authority says the Surge is theirs: "scheduled discharge". It was
 here first. 9 Oct, before any machine, the sky went the colour of a
@@ -137,7 +140,7 @@ a quiet hour, a word about where the stones are.
 My grandmother fed it bread. It was slower then.
 
 Don't give it your gun.""", "Pump station note"),
-        ("bus_depot", (25.0, -225.0), "Terminal", [
+        ("bus_depot", (13.8, -117.0), "Terminal", [
             """QUARANTINE AUTHORITY
 CUSTODIAN NETWORK - MARROW
 
@@ -177,7 +180,7 @@ Last login: P.RUS (Cinder)
 Custodian continues SWEEP until
 recalled.""",
         ], "Depot office terminal"),
-        ("mast_hut", (-112.0, -160.0), "Terminal", [
+        ("mast_hut", (-46.0, -63.8), "Terminal", [
             """RELAY LOG - MAST M1
 
 Pylons extend the Custodian's
@@ -208,7 +211,7 @@ Nobody else is going to keep it.
 Going down at first light to read the centre stakes. Taking the box.
 
 - O.V.""", "Survey log"),
-        ("ranger_tower", (-240.0, -138.0), "Note", """From up here you can see the Hollow
+        ("ranger_tower", (-146.0, -82.0), "Note", """From up here you can see the Hollow
 glow after dark. The survey team went in with the chief's lockbox and
 came back without the chief. The box is still down there, where the
 ground lifts. Bring a light. Don't run.
@@ -216,7 +219,7 @@ ground lifts. Bring a light. Don't run.
 Lamp to Kettle tower, 2100: no answer from Emil three nights now.
 
 - M. Sedlak""", "Ranger's note"),
-        ("cabin_log", (-145.0, 190.0), "Note", """Crew tally, on the wall by the bed:
+        ("cabin_log", (-70.8, 113.5), "Note", """Crew tally, on the wall by the bed:
 
 Mon 14 logs   Tue 16   Wed 15
 Thu - buses
@@ -227,7 +230,7 @@ at night with the split log, the latch is no good.
 - Tomas, J.'s crew""", "Cabin tally"),
     ],
     "kettle_pass": [
-        ("guard_booth", (127.8, 285.0), "Note", """SOUTH GATE, KETTLE - DUTY LOG
+        ("guard_booth", (98.7, 217.4), "Note", """SOUTH GATE, KETTLE - DUTY LOG
 
 3 Jan. Snow. Nothing in, nothing out.
 
@@ -237,7 +240,7 @@ says. He's been up here too long.
 12 Feb. Smoke over the hill from Cinder. Orders: none.
 
 1 Apr. Review postponed. Post to stand down. Leave the stove.""", "Gate log"),
-        ("house_brick", (-55.0, 60.0), "Note", """MINE OFFICE
+        ("house_brick", (-45.4, 44.8), "Note", """MINE OFFICE
 
 Inspector Rus took Karel's key to the quarry blast shelter and locked
 the Kettle depot key inside "for safe keeping". He signed for it in our
@@ -247,7 +250,7 @@ A week later the shelter started to burn without fire. Nobody goes up
 to the quarry now.
 
 - Irena, clerk""", "Mine office note"),
-        ("house_plank", (-30.0, 72.0), "Note", """K. Dusek, shot-firer.
+        ("house_plank", (-22.1, 54.9), "Note", """K. Dusek, shot-firer.
 
 Shelter: poured concrete, 30 cm. Steel door, one lock. My key, until
 the inspector took it.
@@ -260,7 +263,7 @@ I have fired four hundred shots up there. I know what a shelter is for.
 That one is keeping something in.
 
 Vey came up from Marrow to look. He went white.""", "Shot-firer's note"),
-        ("house_plank", (76.0, 222.0), "Note", """Last train out, 15 Oct, 1140.
+        ("house_plank", (49.0, 157.7), "Note", """Last train out, 15 Oct, 1140.
 Eleven wagons, people on the roofs.
 
 I closed the crossing gates behind it like always. Nobody told me to
@@ -270,12 +273,12 @@ Every morning since, I close them at 1140.
 
 The machines wait for the gates now. They stand at the barrier, very
 patient, till I lift it.""", "Crossing keeper's note"),
-        ("chapel", (-8.0, 150.0), "Note", """Sunday. Nobody came to the chapel
+        ("chapel", (-7.4, 123.4), "Note", """Sunday. Nobody came to the chapel
 but the machines. One of them stood at the back the whole service,
 very still, and then cleaned the windows.
 
 The pass road is the only way the trucks still come in.""", "Chapel note"),
-        ("pump_station", (-200.0, -100.0), "Terminal", [
+        ("pump_station", (-151.3, -86.5), "Terminal", [
             """CUSTODIAN NETWORK - KETTLE
 
 Depot GATE-K: ACTIVE
@@ -291,7 +294,7 @@ Note: field activity near the
 quarry. Unshielded personnel
 should not approach.""",
         ], "Pump station terminal"),
-        ("mast_hut", (75.0, -210.0), "Terminal", [
+        ("mast_hut", (63.6, -155.1), "Terminal", [
             """RELAY LOG - MAST K2
 
 Grapplers carry stock to the
@@ -309,7 +312,7 @@ AUTHORITY UPLINK    NO CARRIER
 
 Holding reports for uplink.""",
         ], "Mast terminal"),
-        ("ranger_tower", (-48.0, -233.0), "Note", """KETTLE TOWER
+        ("ranger_tower", (-43.2, -171.6), "Note", """KETTLE TOWER
 
 Marta's lamp from Marrow, 2100, three long: all well. Answered.
 
@@ -322,7 +325,7 @@ The lamp battery is nearly gone. If I stop answering, Marta, it's the
 battery.
 
 - Emil""", "Ranger's log"),
-        ("house_plank", (-99.0, 154.0), "Note", """WEIR BOOK - KETTLE BECK
+        ("house_plank", (-74.2, 115.5), "Note", """WEIR BOOK - KETTLE BECK
 
 Level 0.62. Clear.
 
@@ -332,14 +335,14 @@ Level 0.61. The water tastes of pennies the day after a Surge, then it
 doesn't.
 
 Level 0.58. Nobody to send these to. Writing them anyway.""", "Weir book"),
-        ("mast_hut", (-40.0, -128.0), "Note", """Lorry 12, 15 Oct.
+        ("mast_hut", (-30.0, -95.5), "Note", """Lorry 12, 15 Oct.
 
 Stuck on the third bend with forty from Miners' Row in the back. Walked
 them over the pass on foot, the old ones on the soldiers' shoulders.
 
 Left the lorry on the bend with the keys in. The machines had it by
 morning.""", "Lorry driver's note"),
-        ("pump_station", (125.0, -42.0), "Note", """QUARRY PUMPS
+        ("pump_station", (79.8, -28.5), "Note", """QUARRY PUMPS
 
 Pit dry at 0600. Pumps one and two running.
 
@@ -348,7 +351,7 @@ warm.
 
 Turned the pumps off. Whatever is down there, it wants to be under
 water. Let it.""", "Quarry pumps note"),
-        ("cabin_log", (205.0, -205.0), "Note", """Lodge book.
+        ("cabin_log", (149.1, -152.2), "Note", """Lodge book.
 
 Snow on the saddle again. The machines walked the fence line all
 night, very slowly, as if counting the posts.
@@ -356,7 +359,7 @@ night, very slowly, as if counting the posts.
 If you hear the hum, you're carrying too many of the bright stones. Put some down.
 
 - Fiala""", "Lodge book"),
-        ("cabin_log", (119.0, -138.0), "Note", """The kiln wants four days' watching, so it's getting four days.
+        ("cabin_log", (89.2, -103.5), "Note", """The kiln wants four days' watching, so it's getting four days.
 
 They say the buses are the last. Fine. If it's cold when you come, it went
 out without me and I walked down after all.
@@ -366,7 +369,7 @@ Bed's dry. My name's on the frame so you know whose it was.
 - Mirek Hajek, burner""", "Burner's note"),
     ],
     "cinder_works": [
-        ("guard_booth", (-102.2, 285.0), "Note", """SOUTH GATE, CINDER - DUTY LOG
+        ("guard_booth", (-61.8, 211.1), "Note", """SOUTH GATE, CINDER - DUTY LOG
 
 19 Feb. Fire in the north-west wood since the 12th. The works still
 burning loads; machines in from the Gate every hour.
@@ -375,7 +378,7 @@ burning loads; machines in from the Gate every hour.
 
 1 Apr. Review postponed. We stand down. The inspector stays: says he'll
 wait for them in the works garage.""", "Gate log"),
-        ("factory_hall", (75.0, -20.0), "Terminal", [
+        ("factory_hall", (56.2, -9.5), "Terminal", [
             """WORKS LOG - R. KRAL
 
 Authority contract: burn all
@@ -399,7 +402,7 @@ KEY-C is down there still.
 He sits in the garage with
 the radio, waiting.""",
         ], "Foreman's terminal"),
-        ("bus_depot", (-20.0, -30.0), "Terminal", [
+        ("bus_depot", (-26.0, -22.5), "Terminal", [
             """CUSTODIAN NETWORK - CINDER
 
 Depot GATE-C: ACTIVE
@@ -417,7 +420,7 @@ P.RUS   recall       KEYS 0/3
 
 No session since 9 JUN.""",
         ], "Garage terminal"),
-        ("house_brick", (-110.0, 175.0), "Note", """Ruben says the ash is from the fire.
+        ("house_brick", (-73.0, 120.6), "Note", """Ruben says the ash is from the fire.
 The fire was out by March. I sweep the step every morning, and every
 morning there's more, and it isn't coming down. It's coming up, out of
 the cracks, worst by the slag heaps.
@@ -426,7 +429,7 @@ The chimney is the best landmark: walk toward it in the fog and you'll
 find the road.
 
 - V.""", "Foreman's house note"),
-        ("house_plank_damaged", (0.0, 150.0), "Note", """Came in on the driver's truck, same as
+        ("house_plank_damaged", (-13.0, 98.0), "Note", """Came in on the driver's truck, same as
 you, I expect. He's all right. He won't come past the fence. I asked
 him why once. He said he tried, the first day, and they turned him back,
 and now he's used to it.
@@ -435,7 +438,7 @@ Pull the cord in the back when you want out. Don't be late for the
 Surge.
 
 He keeps a count of us. Don't add to it.""", "House note"),
-        ("ranger_tower", (-178.0, -168.0), "Note", """FIRE LOOKOUT - CINDER, 12 FEB
+        ("ranger_tower", (-126.5, -116.5), "Note", """FIRE LOOKOUT - CINDER, 12 FEB
 
 1540. Black smoke, works yard.
 
@@ -447,7 +450,7 @@ He keeps a count of us. Don't add to it.""", "House note"),
 empty.
 
 Marta answered. Kettle didn't.""", "Lookout log"),
-        ("pump_station", (-172.0, 32.0), "Note", """SLUICE HOUSE - ASH PIT
+        ("pump_station", (-120.4, 22.4), "Note", """SLUICE HOUSE - ASH PIT
 
 Works order: drain the pit to the canal.
 
@@ -455,7 +458,7 @@ The pit won't drain. The ash floats. It drifts against the current, back
 toward the slag heaps.
 
 Sluice shut. I'm not opening it again.""", "Sluice house note"),
-        ("mast_hut", (95.0, -238.0), "Terminal", [
+        ("mast_hut", (72.0, -163.8), "Terminal", [
             """RELAY LOG - MAST C3
 
 Heat damage: housing, cabling.
@@ -467,7 +470,7 @@ Repair requested: 1 APR.
 
 Requests held for uplink.""",
         ], "Mast terminal"),
-        ("cabin_log", (-75.0, -159.0), "Note", """Woodward's book, last page.
+        ("cabin_log", (-51.9, -111.2), "Note", """Woodward's book, last page.
 
 The works' smoke came down the valley at noon and didn't lift. I've wet
 the roof and the woodpile and I'm stopping here.

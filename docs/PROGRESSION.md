@@ -1,5 +1,15 @@
 # Progression
 
+> **Where it stands (4 November).** `CardCheck` (`would_pay`, `verdict`)
+> and Onboarding's Payday line are on main. `first_jobs_cautious` on
+> main 8d5c1105 shows the career behaving as it should. There are two
+> gentle jobs before the first contract, and job 2 goes somewhere other
+> than job 1. Every pay or no-pay matches the card, and the mast relay
+> was given up unpaid after a drone pin. The stalls left are the bot's
+> WalkTo timeouts: at the logging camp, and around the post office and
+> the south-west. Those are with Onboarding. One of them comes back here
+> only if a job turns out to be placed somewhere unreachable.
+
 Why go on raid 10, or raid 30? The game already has raids, the truck as
 home, a no-currency economy (loot feeds the bench, the kitchen and the
 driver), a career across three valleys and an ending (recalling the
@@ -59,7 +69,8 @@ now and then a gun, left out in the Zone for you to fetch: 150 m or more
 from the truck, and off your usual ways if anywhere is, since the machines
 walk those now, `robots::memory`). A finished job
 is replaced by the next one straight away, so you read the next job before
-you set off.
+you set off. A rolled job goes somewhere other than the job just done, when
+anywhere else will do (`Progress::last_place`).
 
 ### This session (3-6 raids, about one Surge cycle): a tier
 
@@ -208,7 +219,7 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 
 | Contract | For | Offered | Steps | Pays | Opens |
 | - | - | - | - | - | - |
-| The post counter | the Holm boy | the second odd job | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
+| The post counter | the Holm boy | the third odd job (no contract is a career's first two jobs: `GENTLE_JOBS`) | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
 | The mast relay | Lev | head of Errands | plant a relay up the Radio mast (Marrow); a radio | 2 power cells, 2 boxes 5.45, trust 1 | re-pack 5.45 AP |
 | Anna's tape | Anna | the third Errand | bring Anna's practice tape from Hana's house by the well (Marrow village) | 2 tins of stew, a tea tin, trust 1 | |
 | Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 dressings, trust 2 | re-pack 7.62x39 AP |

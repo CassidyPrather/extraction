@@ -343,7 +343,7 @@ fn cargo(
                 .id();
             if let Some(loot) = &loot {
                 let mut queue = Vec::new();
-                for drop in loot.0.roll("cargo_pod", &catalog, &mut rng.0) {
+                for drop in loot.roll("cargo_pod", &catalog, &mut rng.0) {
                     queue.push(drop);
                 }
                 for (i, drop) in queue.into_iter().enumerate() {
@@ -455,8 +455,10 @@ mod tests {
 
     #[test]
     fn a_logistics_run_lands_a_full_pod() {
+        // A full valley's ground (its patrol strength: `director`).
         let opts = crate::LaunchOptions {
             robots: true,
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);

@@ -238,8 +238,10 @@ mod tests {
 
     /// A body a short walk from the Gate, with one thing in the bag.
     fn app_with_remains() -> (App, Entity) {
+        // A full valley's ground (its patrol strength: `director`).
         let opts = crate::LaunchOptions {
             robots: true,
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);

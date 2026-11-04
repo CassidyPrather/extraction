@@ -55,15 +55,21 @@ def flashlight():
 # --- Power cell ------------------------------------------------------------------------------
 
 def power_cell():
+    """Lying along Z, on its side, as a cell rests on a shelf: a standing
+    cell read as a magazine from across a room (docs/craft/ITEM_READING.md).
+    Bays turn it to their own way (`gadgets`'s cell mounts)."""
     p = Part("body")
     p.lathe([(0.0, -0.027), (0.0085, -0.027), (0.0095, -0.026), (0.0095, 0.026), (0.0085, 0.027),
-             (0.0, 0.027)], "Olive", segs=16, xf=UP)
-    # Contacts at both ends, a charge window, a printed band.
-    p.cyl(0.004, 0.027, 0.03, "Steel", segs=10, xf=UP, chamfer=0.001)
-    p.cyl(0.006, -0.0285, -0.027, "Steel", segs=10, xf=UP)
+             (0.0, 0.027)], "Black", segs=16)
+    # Contacts at both ends, a charge window, a copper band: power is a
+    # dark body with a bright end (docs/craft/ITEM_READING.md), not
+    # another dark upright beside a magazine.
+    p.cyl(0.004, 0.027, 0.03, "Brass", segs=10, chamfer=0.001)
+    p.cyl(0.006, -0.0285, -0.027, "Steel", segs=10)
+    # The charge window on top as it lies.
     p.lathe([(0.0096, -0.01), (0.0099, -0.009), (0.0099, 0.012), (0.0096, 0.013)], "Glow",
-            segs=6, xf=UP, start=-25, sweep=50, closed=True)
-    p.tube(0.0097, 0.009, 0.018, 0.024, "Cream", segs=16, xf=UP)
+            segs=6, start=65, sweep=50, closed=True)
+    p.tube(0.0097, 0.009, 0.014, 0.026, "Copper", segs=16)
     return [p]
 
 
@@ -162,7 +168,9 @@ def binoculars():
     p.cyl(0.004, -0.032, -0.03, "Steel", segs=10)
     # Neck strap lugs.
     for sx in (-1, 1):
-        p.box((0.004, 0.01, 0.01), (sx * 0.078, 0.015, 0.0), "Steel", bevel=0.001, segs=1)
+        # Out from the prism housings' outer faces (x 0.071; they stood
+        # 5 mm off them).
+        p.box((0.011, 0.01, 0.01), (sx * 0.076, 0.015, 0.0), "Steel", bevel=0.001, segs=1)
     return [p]
 
 
@@ -190,9 +198,11 @@ def emp_grenade():
     spoon = [(0.0, 0.052), (0.02, 0.052), (0.031, 0.046), (0.034, 0.03), (0.034, -0.02)]
     p.sweep([(z, y) for z, y in spoon], section_rect(0.012, 0.0015), "Olive",
             xf=RY(-math.pi / 2))
+    # The ring hangs on its pin, the pin through its rim (it stood 7 mm
+    # past the pin's end, square to it).
     p.lathe([(0.009, -0.0012), (0.0105, 0.0), (0.009, 0.0012), (0.0075, 0.0)], "Steel", segs=14,
-            xf=T(0.02, 0.05, 0.0) @ ALONG_X, closed=True)
-    p.cyl(0.0012, 0.008, 0.012, "Steel", segs=6, xf=T(0, 0.05, 0.0) @ ALONG_X)
+            xf=T(0.0195, 0.05, 0.0) @ RX(math.pi / 2), closed=True)
+    p.cyl(0.0012, 0.008, 0.0125, "Steel", segs=6, xf=T(0, 0.05, 0.0) @ ALONG_X)
     return [p]
 
 
@@ -439,7 +449,9 @@ def deployable_cover():
             p.box((0.012, 0.004, 0.04), (sx * 0.262, top + 0.006, z), "Iron", bevel=0.001, segs=1)
     # Carry handle.
     for sx in (-1, 1):
-        p.box((0.012, 0.03, 0.02), (sx * 0.06, top + 0.019, 0.005), "Steel", bevel=0.002, segs=1)
+        # From the top leaf (they stood 4 mm over it) into the grip.
+        p.box((0.012, 0.034, 0.02), (sx * 0.06, top + 0.017, 0.005), "Steel", bevel=0.002,
+              segs=1)
     p.cyl(0.009, -0.07, 0.07, "Rubber", segs=12, xf=T(0, top + 0.034, 0.005) @ ALONG_X)
     # Rubber bumpers on the front corners.
     for sx in (-1, 1):
@@ -469,7 +481,7 @@ def climbing_kit():
     p.lathe([(0.0215, -0.007), (0.0235, -0.007), (0.0235, 0.007), (0.0215, 0.007)], "Olive",
             segs=18, closed=True, xf=T(0.034, yb + 0.054, -0.03) @ RZ(0.2) @ UP)
     p.box((0.012, 0.018, 0.006), (0.0, 0.0, 0.0), "Steel", bevel=0.001, segs=1,
-          xf=T(-0.012, yb + 0.055, -0.0365) @ RX(0.12))
+          xf=T(-0.012, yb + 0.055, -0.0276) @ RX(0.12))  # on the belt's face (z -0.025)
     ring(p, 0.009, 0.0016, "Steel", xf=T(0.008, yb + 0.066, -0.04) @ S(1.0, 1.6, 1.0) @ RY(0.3),
          segs=14, sides=5)
     # Grapnel: shank, eye, four tines.
@@ -556,7 +568,9 @@ def matches():
     t = 0.0006
     zc = (z0 + z1) / 2
     p.box((w, t, z1 - z0), (0.0, yb + t / 2, zc), "Boards")
-    panel(p, "y", -w / 2, w / 2, z0, z1, yb + h - t, yb + h, "Paper",
+    # Its label blue, yellow and red: not another pale box beside the
+    # rounds' (docs/craft/ITEM_READING.md).
+    panel(p, "y", -w / 2, w / 2, z0, z1, yb + h - t, yb + h, "Blue",
           [(-0.0068, 0.0068, -0.0045, 0.0115, "Yellow"), (-0.004, 0.004, -0.0005, 0.0075, "Red")])
     for sx in (-1, 1):
         p.box((t, h - 2 * t, z1 - z0), (sx * (w - t) / 2, yb + h / 2, zc), "Bakelite")

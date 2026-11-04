@@ -13,7 +13,7 @@
 #   name | owner | what to look for | game arguments [| before's arguments]
 #
 # - Game arguments are the game's own flags. The rig adds --screenshot,
-#   --size, --new-game, a fresh --data-dir, --frames 30 and --seed 7
+#   --size, --new-game, a fresh --data-dir, --frames 60 and --seed 7
 #   (unless you give your own --frames or --seed).
 # - Leading NAME=value words go into the game's environment
 #   (EXTRACTION_YARD_AT=5 starts the yard at station 5).

@@ -314,6 +314,28 @@ fn cart_collider() -> Collider {
 
 /// The yaw (as placements turn, radians for `from_rotation_y`) along a
 /// polyline at `s`: its long axis (Z) along the leg.
+/// Each cart's footprint where it's set down on its rail: its middle
+/// (site-local x/z), its half extents across and along, and its yaw; for
+/// a plan of the site to route round (`sim::indoor`), the carts being
+/// bodies of their own and not the site's pieces.
+pub fn cart_footprints(prefab: &str) -> Vec<(Vec2, Vec2, f32)> {
+    let Some(l) = ug::layout(prefab) else {
+        return Vec::new();
+    };
+    l.carts
+        .iter()
+        .filter_map(|c| {
+            let rail = l.rails.get(c.rail)?;
+            let p = ug::along(rail, c.at);
+            Some((
+                Vec2::from(p),
+                Vec2::new(BED.x + 0.1, BED.z),
+                rail_yaw(rail, c.at),
+            ))
+        })
+        .collect()
+}
+
 fn rail_yaw(pts: &[[f32; 2]], s: f32) -> f32 {
     let a = ug::along(pts, (s - 0.2).max(0.0));
     let b = ug::along(pts, s + 0.2);

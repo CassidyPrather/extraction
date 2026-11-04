@@ -85,7 +85,10 @@ Things that have bitten captures, and what now guards against them:
   - its box is a sliver run off the frame's edge;
   - something nearer blocks it: each probe raycasts from the eye through
     its footprint box (`seen` in the probes file);
-  - its patch is black fog.
+  - too little of it can show: the share in line of sight times its
+    patch's contrast is under 8 levels. That's black fog when it's all
+    in sight, or a dim building partly hidden (Cinder's cellars at night,
+    41% behind the brick shed: 5).
   Rime on 844e46d8 flagged three of those: the gate beside the guard
   booth the camera is up against, at dusk and night, and a log pile in
   black fog at night. A lost building still stands where it was placed,
@@ -104,6 +107,20 @@ Things that have bitten captures, and what now guards against them:
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.
+
+## Textures first
+
+Materials, foliage cards, terrain and sky are made by
+`scripts/fetch_assets.py` and gitignored. Without them (or without a set
+added to the manifest since) the game draws flat fallback colours: guns
+with no gun metal. So a capture (`--cinematic`, `--sweep`, `--trailer`)
+or a `--screenshot` checks first, against `scripts/assets_manifest.json`,
+and stops with the missing files and the command that makes them
+(`capture::assets`). `scripts/build_at.sh`, and so the visual diff and
+the before/after rig, checks the same way with `scripts/check_textures.py`
+before it builds, because an old build predates the game's check but
+takes its textures from this checkout. `EXTRACTION_ALLOW_FALLBACK=1`
+shoots the fallback on purpose.
 
 ## Cinematics: `--cinematic FILE`
 

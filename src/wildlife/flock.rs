@@ -165,7 +165,7 @@ impl Species {
     }
 
     /// Birds in a flock, at least and at most.
-    fn flock_size(self) -> (usize, usize) {
+    pub fn flock_size(self) -> (usize, usize) {
         match self {
             Species::Rook => (10, 20),
             Species::Raven => (4, 8),
@@ -280,23 +280,40 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
         0
     };
     for _ in 0..count {
-        // Far from the flocks already placed: the best of a few tries.
-        let pick = (0..8)
-            .map(|_| rng.below(perches.sites.len()))
-            .filter(|&i| {
-                !taken.contains(&i)
-                    && !perches.sites[i].wading
-                    && perches.sites[i].spots.len() >= species.flock_size().0
-            })
-            .max_by(|&a, &b| {
-                let far = |i: usize| {
-                    taken
-                        .iter()
-                        .map(|&t| perches.sites[t].centre.distance(perches.sites[i].centre))
-                        .fold(f32::MAX, f32::min)
-                };
-                far(a).total_cmp(&far(b))
-            });
+        // The yard's flock sits by its first station, to be put up by your
+        // first run (`onboarding::ROOKS_AT`)...
+        let yard = (map == "training_yard").then(|| {
+            let at = crate::onboarding::ROOKS_AT;
+            (0..perches.sites.len())
+                .filter(|&i| {
+                    !perches.sites[i].wading
+                        && perches.sites[i].spots.len() >= species.flock_size().0
+                })
+                .min_by(|&a, &b| {
+                    let d = |i: usize| perches.sites[i].centre.xz().distance(Vec2::from(at));
+                    d(a).total_cmp(&d(b))
+                })
+        });
+        // ...elsewhere, far from the flocks already placed: the best of a
+        // few tries.
+        let pick = yard.flatten().or_else(|| {
+            (0..8)
+                .map(|_| rng.below(perches.sites.len()))
+                .filter(|&i| {
+                    !taken.contains(&i)
+                        && !perches.sites[i].wading
+                        && perches.sites[i].spots.len() >= species.flock_size().0
+                })
+                .max_by(|&a, &b| {
+                    let far = |i: usize| {
+                        taken
+                            .iter()
+                            .map(|&t| perches.sites[t].centre.distance(perches.sites[i].centre))
+                            .fold(f32::MAX, f32::min)
+                    };
+                    far(a).total_cmp(&far(b))
+                })
+        });
         let Some(site) = pick else {
             continue;
         };

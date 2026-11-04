@@ -898,7 +898,7 @@ mod tests {
     fn under_the_cabin_eave_is_out_of_doors() {
         let mut app = app("marrow_creek");
         let zone = app.world().resource::<crate::world::Zone>().clone();
-        let (x, z) = (-149.1, 189.0);
+        let (x, z) = (-74.9, 112.5);
         let space = probe_at(&mut app, Vec3::new(x, zone.ground(x, z) + 1.6, z));
         assert!(space.roof.is_some(), "under the eave: {space:?}");
         assert!(!crate::audio::indoor_space(&space), "{space:?}");

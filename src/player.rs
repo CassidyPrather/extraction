@@ -457,6 +457,24 @@ pub fn move_bodies(
         body.velocity = velocity;
         let moved = Vec3::new(new_centre.x - centre.x, 0.0, new_centre.z - centre.z).length();
         root.translation = new_centre - under - Vec3::Y * height * 0.5;
+        // The ground holds you up, whatever leans on you: the terrain's
+        // heightfield only collides from above, so a body pushed out of an
+        // overlap downward (a broken walker limping onto a crouched player)
+        // went under it and fell for ever. Feet under the surface go back
+        // on it, the fall stopped.
+        let feet = root.translation + under;
+        if let Some(surface) = under_the_ground(&zone, feet) {
+            let depth = surface - feet.y;
+            if !depth.is_finite() || depth > crate::items::lost::BELOW {
+                error!(
+                    "player {entity}: {depth:.2} m under the ground at {feet:.2}, back on it at {surface:.2}"
+                );
+            }
+            root.translation.y = surface - under.y;
+            body.velocity.y = body.velocity.y.max(0.0);
+            body.grounded = true;
+            body.airborne = 0.0;
+        }
 
         if swimming {
             // Strokes: the water's own sound, slower than steps.
@@ -482,6 +500,28 @@ pub fn move_bodies(
             }
         }
     }
+}
+
+/// How far feet may be under the terrain's surface before they're put
+/// back on it, metres (the heightfield and `Zone::ground` agree to well
+/// under this; a capsule on a slope stands above the surface under it).
+pub const UNDER_SKIN: f32 = 0.05;
+
+/// Where the ground's surface is, if `feet` are under it: under the
+/// terrain by more than [`UNDER_SKIN`], not down an underground site (on
+/// its stairs or in its rooms) nor over a stairwell's opened ground. Not
+/// finite: the ground at the origin's.
+pub fn under_the_ground(zone: &Zone, feet: Vec3) -> Option<f32> {
+    if !feet.is_finite() {
+        return Some(zone.ground(0.0, 0.0));
+    }
+    if crate::world::underground::floor_under(zone, feet).is_some()
+        || !zone.ground_solid_at(feet.x, feet.z)
+    {
+        return None;
+    }
+    let surface = zone.ground(feet.x, feet.z);
+    (feet.y < surface - UNDER_SKIN).then_some(surface)
 }
 
 /// What gets shot is as tall as the body is ([`Body::height`]): duck behind
@@ -809,10 +849,10 @@ mod tests {
             .iter(app.world())
             .next()
             .unwrap();
-        // The deepest spot across the canal at x = -100.
-        let (at, w) = (40..80)
+        // The deepest spot across the canal at x = -70.
+        let (at, w) = (25..60)
             .filter_map(|z| {
-                let p = [-100.0, z as f32];
+                let p = [-70.0, z as f32];
                 zone.hm
                     .water_level(p)
                     .map(|w| (p, w, w - zone.hm.height(p)))

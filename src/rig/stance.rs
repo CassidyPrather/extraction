@@ -30,9 +30,9 @@ use crate::interact::body::Torso;
 
 /// The pelvis (hip joints' middle) under the torso anchor, metres.
 pub const PELVIS_BELOW_CHEST: f32 = 0.45;
-/// The neck's base under the eyes, and behind them.
-const NECK_BELOW_EYES: f32 = 0.2;
-const NECK_BEHIND_EYES: f32 = 0.06;
+/// The neck's base under the head's pivot on it
+/// (`interact::body::neck_pivot`).
+const NECK_BELOW_PIVOT: f32 = 0.1;
 /// The shoulders in the chest's frame, from the neck's base (x right; the
 /// left mirrored). With the neck 0.2 m under the eyes, they sit 0.26 m
 /// under them, as the arms always had them.
@@ -294,10 +294,10 @@ fn stand(
         st.legs = ((hips_up - ANKLE) / (THIGH + SHIN) * 1.03).clamp(0.8, 1.25);
         let (thigh, shin) = (THIGH * st.legs, SHIN * st.legs);
 
-        // The neck: under and a little behind the eyes, whatever they look at.
-        let look = head.rotation * Vec3::NEG_Z;
-        let flat = Vec3::new(look.x, 0.0, look.z).normalize_or(fwd);
-        let neck = head.translation - up * NECK_BELOW_EYES - flat * NECK_BEHIND_EYES;
+        // The neck: under where the head turns on it, so looking down
+        // swings the eyes forward and leaves the body upright (the torso
+        // anchor hangs under the same point).
+        let neck = crate::interact::body::neck_pivot(&head) - up * NECK_BELOW_PIVOT;
 
         // Seated too, the hips hang from the anchor: the slots stay at the
         // heights they're built for (`rig::seated` lifts the view to a

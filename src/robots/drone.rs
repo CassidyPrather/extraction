@@ -49,7 +49,81 @@ pub struct Drone {
     /// Seconds it has held a firing solution on its target: it fires only
     /// once this reaches [`LOCK_TIME`].
     pub lock: f32,
+    /// Locks on the one it's fighting that no round of it has hit since
+    /// ([`RELOCKS`])...
+    pub locks_unhit: u8,
+    /// ...when this fight began (s, `Time::elapsed`; below 0 before one),
+    /// and when it last was in it (a search between is the same fight)...
+    pub engaged_at: f32,
+    pub last_engaged: f32,
+    /// ...and, broken off, till when it leaves fighting alone.
+    pub broke_off_until: f32,
+    /// Seconds locked on without a shot (its gun swung off you, a pause):
+    /// past [`RETELL`] it locks on afresh, chirp and all, before it fires
+    /// again (`lose_a_quiet_lock`).
+    pub quiet: f32,
+    /// Rounds of its warning burst left: set at a lock after a lull
+    /// ([`WARN_AFTER`]), the first burst after it kicks up the ground short
+    /// of you and hurts no one ([`WARNING_SHORT`])...
+    pub warning_left: u32,
+    /// ...and when it last fired (s, `Time::elapsed`).
+    pub last_shot: f32,
 }
+
+/// A lock after this long without firing (or its first) warns before it
+/// hurts (s). In a fight it's already in, a lock lost and found again
+/// between bursts doesn't start the warning over (or every burst of a drone
+/// that dodges about between them would be one).
+pub const WARN_AFTER: f32 = 10.0;
+
+/// The first burst after a lock that comes after a lull ([`WARN_AFTER`]) is
+/// a warning, as the sentry's is: its
+/// rounds land this far short of your feet (m), wider, and do no harm. A
+/// newcomer hears the chirp and sees the dirt kick up, and the first round
+/// that hurts comes no sooner than [`LOCK_TIME`] + [`BURST_GAP`] after the
+/// chirp (two bursts, 54 hp, landed in 2 s on a newcomer who only moved
+/// when the first one hit: Onboarding's first_jobs_cautious).
+pub const WARNING_SHORT: f32 = 2.5;
+/// Rounds in a burst, and each one's harm (hp).
+pub const BURST: u32 = 3;
+pub const DAMAGE: f32 = 9.0;
+
+/// Whether someone standing at `feet` is under a roof, out of any
+/// drone's reach (`drone_guns`; `drone_brain` sends one going home off
+/// them by the same test).
+pub fn under_a_roof(entrances: &super::doors::Entrances, feet: Vec3) -> bool {
+    entrances.building_at(feet + Vec3::Y * 0.5).is_some()
+}
+
+/// How long a locked drone may go without firing before its next burst
+/// needs a fresh lock (and its chirp): longer than a burst's gap. One that
+/// went quiet 24 s and then fired again, with nothing new to see or hear,
+/// hit a newcomer four times unwarned (Onboarding's first_jobs_reckless).
+pub const RETELL: f32 = 4.0;
+
+/// Locked on and not firing: past [`RETELL`] the lock goes, so the next
+/// burst comes after a fresh chirp. Whether it went.
+pub fn lose_a_quiet_lock(d: &mut Drone, dt: f32) -> bool {
+    d.quiet += dt;
+    if d.quiet > RETELL {
+        d.lock = 0.0;
+        d.quiet = 0.0;
+        true
+    } else {
+        false
+    }
+}
+
+/// A fight it isn't winning it gives up: after this many locks without a
+/// round in, or [`FIGHT_FOR`] seconds, it breaks off back to its job, and
+/// leaves fighting alone for [`BROKEN_OFF`] (a drone that kept re-locking a
+/// newcomer hiding from it, every 24 s for three minutes, till it had
+/// them, read as unfair: Robot minds' fairness runs, 1 November).
+pub const RELOCKS: u8 = 3;
+pub const FIGHT_FOR: f32 = 60.0;
+pub const BROKEN_OFF: f32 = 60.0;
+/// Out of a fight this long (s), the next one's a new one.
+pub const FIGHT_GAP: f32 = 20.0;
 
 /// A drone settling its gun on someone, before the first burst: the chirp
 /// that tells you to get behind something. It holds still while it does
@@ -128,6 +202,13 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 phase: 0.0,
                 looted: false,
                 lock: 0.0,
+                locks_unhit: 0,
+                engaged_at: -1.0,
+                last_engaged: -1.0,
+                broke_off_until: 0.0,
+                quiet: 0.0,
+                warning_left: 0,
+                last_shot: f32::NEG_INFINITY,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
@@ -234,6 +315,29 @@ pub const STANDOFF: f32 = 20.0;
 /// ...this high over the ground (m), higher when it has lost sight of you
 /// (to look over what you're behind)...
 pub const FIGHT_ALTITUDE: (f32, f32) = (8.0, 13.0);
+/// Clear of a roof under a goal, at least this (m): over a building, a
+/// drone's height is over its top, not the ground round it.
+pub const OVER_ROOF: f32 = 4.0;
+
+/// Where a drone flies to for `p` at `h` over what's under it: the
+/// ground there or under the drone (`ground`), whichever is higher, and
+/// any building's top there, `OVER_ROOF` clear (Robot bodies' flyer sweep,
+/// 31 October: a goal over a house put the drone pressed to its wall,
+/// trying to fly into it).
+pub fn cruise_at(
+    zone: &Zone,
+    entrances: &super::doors::Entrances,
+    p: Vec3,
+    ground: f32,
+    h: f32,
+) -> Vec3 {
+    let under = zone.ground(p.x, p.z).max(ground);
+    let y = match entrances.top_at(p.x, p.z, 2.0) {
+        Some(top) => (under + h).max(top + OVER_ROOF),
+        None => under + h,
+    };
+    Vec3::new(p.x, y, p.z)
+}
 /// ...circling (rad/s), faster while you're looking at it: it slides out
 /// of your aim, round to your flank. Across your view at its standoff
 /// that's about 9 and 14 degrees a second: a moving target a pistol in a
@@ -294,7 +398,7 @@ fn drone_brain(
             intent.look = Some(f.from);
             continue;
         }
-        let cruise = |p: Vec3, h: f32| Vec3::new(p.x, zone.ground(p.x, p.z).max(ground) + h, p.z);
+        let cruise = |p: Vec3, h: f32| cruise_at(&zone, &entrances, p, ground, h);
         // Someone indoors: hover outside a doorway, low, and look in
         // (further back from one that's shut, waiting for it to open).
         let peek = |at: Vec3| {
@@ -311,8 +415,30 @@ fn drone_brain(
         }
         // Alarm overrides the job.
         let leaving = matches!(*brain, Brain::Leave { .. });
-        search::react(&mut brain, aware, ENGAGE_AT);
-        search::lost_sight(&mut brain, aware, PATIENCE, pos);
+        // Broken off a fight it wasn't winning: its job, not you, a while.
+        if now >= d.broke_off_until {
+            search::react(&mut brain, aware, ENGAGE_AT);
+            search::lost_sight(&mut brain, aware, PATIENCE, pos);
+        }
+        if matches!(*brain, Brain::Engage) {
+            // (Lost you and looking: the same fight, back at it.)
+            if d.engaged_at < 0.0 || now - d.last_engaged > FIGHT_GAP {
+                d.engaged_at = now;
+                d.locks_unhit = 0;
+            }
+            d.last_engaged = now;
+            let worn = d.locks_unhit >= RELOCKS && d.lock == 0.0 && d.burst_left == 0;
+            if worn || now - d.engaged_at > FIGHT_FOR {
+                d.broke_off_until = now + BROKEN_OFF;
+                d.engaged_at = -1.0;
+                // Back from its job it starts from nothing: a fresh lock,
+                // chirp and all, before its first round (`RETELL`).
+                d.lock = 0.0;
+                d.quiet = 0.0;
+                d.burst_left = 0;
+                *brain = Brain::Transit { to: job.site };
+            }
+        }
         // On its way home it spares a burst or two, no more, and none for
         // someone under a roof (`LEAVING_FIGHT`).
         if matches!(*brain, Brain::Engage) {
@@ -323,11 +449,7 @@ fn drone_brain(
                 let indoors = aware
                     .target
                     .and_then(|p| targets.get(p).ok())
-                    .is_some_and(|g| {
-                        entrances
-                            .building_at(g.translation() + Vec3::Y * 0.5)
-                            .is_some()
-                    });
+                    .is_some_and(|g| under_a_roof(&entrances, g.translation()));
                 if now > until || indoors {
                     off_duty.remove(&e);
                     *brain = Brain::Leave { to: job.exit };
@@ -508,9 +630,29 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
-    (bodies, roles): (Query<&crate::player::Body>, Query<&super::squad::SquadRole>),
+    (bodies, roles, mut hits, parents, entrances): (
+        Query<&crate::player::Body>,
+        Query<&super::squad::SquadRole>,
+        MessageReader<crate::weapons::ballistics::Hit>,
+        Query<&ChildOf>,
+        Res<super::doors::Entrances>,
+    ),
 ) {
     let dt = time.delta_secs();
+    // A round of its own in the one it's fighting: that fight's going on.
+    for h in hits.read() {
+        // A warning round in them isn't a fight being won.
+        let Some(shooter) = h.shooter.filter(|_| h.damage > 0.0) else {
+            continue;
+        };
+        let Ok((_, mut d, _, aware, ..)) = drones.get_mut(shooter) else {
+            continue;
+        };
+        let on = |x: Entity| Some(x) == aware.target;
+        if on(h.entity) || parents.get(h.entity).is_ok_and(|p| on(p.parent())) {
+            d.locks_unhit = 0;
+        }
+    }
     fighting_since.retain(|e, _| {
         drones
             .get(*e)
@@ -523,6 +665,7 @@ fn drone_guns(
         let moving_up = super::squad::repositioning(roles.get(e).ok(), t.translation);
         if robot.wrecked || !matches!(brain, Brain::Engage) || moving_up {
             d.lock = 0.0;
+            d.quiet = 0.0;
             continue;
         }
 
@@ -530,6 +673,7 @@ fn drone_guns(
             // A moment behind cover doesn't shake it; a while does.
             if aware.unseen > 1.5 {
                 d.lock = 0.0;
+                d.quiet = 0.0;
             }
             continue;
         }
@@ -540,6 +684,18 @@ fn drone_guns(
         else {
             continue;
         };
+        // Only a roof stops it, and a roof always does: someone under one
+        // it neither locks on to nor fires at, whatever gap it sees them
+        // through (a door, a window). It hangs about over the building
+        // till its fight wears out (`FIGHT_FOR`) and it goes back to its
+        // job. (Through the post office's door it killed a newcomer who'd
+        // taken cover as the driver said: first_jobs_cautious, seed 1.)
+        if under_a_roof(&entrances, target - Vec3::Y * 1.2) {
+            d.lock = 0.0;
+            d.quiet = 0.0;
+            d.burst_left = 0;
+            continue;
+        }
         let Some((gun_gt, part)) = children.iter().find_map(|c| guns.get(c).ok()) else {
             continue;
         };
@@ -554,12 +710,19 @@ fn drone_guns(
         }
         if d.lock < LOCK_TIME {
             if d.lock == 0.0 {
+                d.locks_unhit = d.locks_unhit.saturating_add(1);
+                if time.elapsed_secs() - d.last_shot > WARN_AFTER {
+                    d.warning_left = BURST;
+                }
                 locks.write(DroneLock {
                     drone: e,
                     at: t.translation,
                 });
             }
             d.lock += dt;
+            continue;
+        }
+        if lose_a_quiet_lock(&mut d, dt) {
             continue;
         }
         if d.gun_cooldown > 0.0 {
@@ -572,8 +735,19 @@ fn drone_guns(
             continue;
         }
         if d.burst_left == 0 {
-            d.burst_left = 3;
+            d.burst_left = BURST;
         }
+        // The warning: at the ground short of your feet, on the line from
+        // it to you, wide, harmless.
+        let warning = d.warning_left > 0;
+        let to = if warning {
+            d.warning_left -= 1;
+            let feet = target - Vec3::Y * 1.2;
+            let back = (muzzle - feet).with_y(0.0).normalize_or_zero();
+            (feet + back * WARNING_SHORT - muzzle).normalize_or(to)
+        } else {
+            to
+        };
         // Someone running across its line is hard to hit from up here.
         let crossing = aware
             .target
@@ -589,13 +763,19 @@ fn drone_guns(
             origin: muzzle,
             direction: to,
             speed: 380.0,
-            damage: 9.0,
+            damage: if warning { 0.0 } else { DAMAGE },
             projectiles: 1,
-            spread: 0.035 + CROSSING_SPREAD * crossing,
+            spread: if warning {
+                0.035 * 2.0
+            } else {
+                0.035 + CROSSING_SPREAD * crossing
+            },
             recoil: 0.0,
             seed: *seed,
         });
         d.burst_left -= 1;
+        d.quiet = 0.0;
+        d.last_shot = time.elapsed_secs();
         d.gun_cooldown = if d.burst_left == 0 { BURST_GAP } else { 0.11 };
     }
 }
@@ -603,6 +783,428 @@ fn drone_guns(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A drone's goal over a building is over its roof, clear, in every
+    /// valley: never inside it, where the drone would press against its
+    /// wall trying to get there (Robot bodies' flyer sweep, 31 October).
+    #[test]
+    fn a_drones_goal_clears_every_roof() {
+        let mut inside = vec![];
+        let mut tried = 0;
+        for (id, _) in extraction_core::map::VALLEYS {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: id.to_string(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..3 {
+                app.update();
+            }
+            let zone = app.world().resource::<Zone>().clone();
+            let entrances = app.world().resource::<super::super::doors::Entrances>();
+            for s in &entrances.shells {
+                let c = s.xf.translation;
+                let top = c.y + s.height;
+                tried += 1;
+                let g = cruise_at(&zone, entrances, c, zone.ground(c.x, c.z), FIGHT_ALTITUDE.0);
+                if g.y < top + OVER_ROOF - 1e-3 {
+                    inside.push(format!(
+                        "{id} at ({:.0}, {:.0}): goal {:.1} under its top {:.1}",
+                        c.x, c.z, g.y, top
+                    ));
+                }
+            }
+        }
+        assert!(tried >= 20, "tried {tried}");
+        assert!(
+            inside.is_empty(),
+            "{} goals in a building: {inside:#?}",
+            inside.len()
+        );
+    }
+
+    /// Firing steadily (bursts 1.8 s apart) it keeps its lock; gone quiet
+    /// past [`RETELL`], it locks on afresh, so its next burst comes after a
+    /// chirp.
+    #[test]
+    fn a_drone_gone_quiet_chirps_again_before_it_fires() {
+        let mut d = Drone {
+            thrust: [0.0; 4],
+            rotor_alive: [true; 4],
+            gun_cooldown: 0.0,
+            burst_left: 0,
+            grounded: 0.0,
+            goal: Vec3::ZERO,
+            phase: 0.0,
+            looted: false,
+            lock: LOCK_TIME,
+            quiet: 0.0,
+            warning_left: 0,
+            last_shot: f32::NEG_INFINITY,
+            locks_unhit: 0,
+            engaged_at: -1.0,
+            last_engaged: -1.0,
+            broke_off_until: 0.0,
+        };
+        let dt = 1.0 / 90.0;
+        // Bursts: the gap between them, then a shot (which resets `quiet`).
+        for _ in 0..5 {
+            for _ in 0..(BURST_GAP / dt) as usize {
+                assert!(
+                    !lose_a_quiet_lock(&mut d, dt),
+                    "lost its lock between bursts"
+                );
+            }
+            d.quiet = 0.0;
+        }
+        assert_eq!(d.lock, LOCK_TIME);
+        // Its gun off you for a while: the lock goes.
+        let lost = (0..(RETELL / dt) as usize + 10).any(|_| lose_a_quiet_lock(&mut d, dt));
+        assert!(lost && d.lock == 0.0, "still locked after {RETELL} s quiet");
+    }
+
+    #[derive(Resource, Default)]
+    struct Fight {
+        locks: Vec<f32>,
+        shots: Vec<f32>,
+        /// Harmless rounds it fired (its warnings).
+        warnings: usize,
+        /// When it hurt you, and how much.
+        hurts: Vec<(f32, f32)>,
+    }
+
+    fn tally(
+        mut locks: MessageReader<DroneLock>,
+        mut shots: MessageReader<Shot>,
+        mut hurts: MessageReader<crate::health::Hurt>,
+        drones: Query<(), With<Drone>>,
+        time: Res<Time>,
+        mut fight: ResMut<Fight>,
+    ) {
+        let t = time.elapsed_secs();
+        fight.locks.extend(locks.read().map(|_| t));
+        for s in shots.read() {
+            if s.shooter.is_some_and(|e| drones.contains(e)) {
+                fight.shots.push(t);
+                fight.warnings += (s.damage <= 0.0) as usize;
+            }
+        }
+        for h in hurts.read() {
+            if h.by.is_some_and(|e| drones.contains(e)) {
+                fight.hurts.push((t, h.amount));
+            }
+        }
+    }
+
+    /// Only a roof stops it, and a roof always does: someone in the post
+    /// office a step in and aside from its door, where three newcomers who'd
+    /// taken cover from a drone were shot through the doorway, is never
+    /// locked on to or fired at by a drone coming at them from any side
+    /// (first_jobs_cautious, seed 1).
+    #[test]
+    fn no_drone_fires_at_someone_under_a_roof() {
+        // Onboarding's (-19.4, 35.3) on Marrow Creek, from its post office at
+        // (-22.2, 33.5); the test field has it at (-20, 65), turned the same.
+        // On its floor (a step above the ground outside). And the control:
+        // in the open 12 m east of its door, where the same drone does fire
+        // (else this would pass on a drone that never fires at all).
+        let spot = |zone: &crate::world::Zone| zone.on_ground(-17.2, 66.8) + Vec3::Y * 0.65;
+        let open = |zone: &crate::world::Zone| zone.on_ground(-5.0, 66.8);
+        let fight = |k: usize, indoors: bool| {
+            let ang = k as f32 * std::f32::consts::TAU / 8.0;
+            let (mut app, player, _drone, me) = drone_over(|zone| {
+                let me = if indoors { spot(zone) } else { open(zone) };
+                (me, me + Vec3::new(ang.sin() * 15.0, 6.0, ang.cos() * 15.0))
+            });
+            for _ in 0..30 {
+                app.update();
+            }
+            if indoors {
+                assert!(
+                    under_a_roof(app.world().resource::<super::super::doors::Entrances>(), me),
+                    "the spot isn't in the post office: {me}"
+                );
+            }
+            for i in 0..90 * 40 {
+                // On the move (as anyone ducking in from a drone is): what
+                // it notices; held to the spot.
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = me;
+                let a = i as f32 / 90.0;
+                app.world_mut()
+                    .get_mut::<crate::player::Body>(player)
+                    .unwrap()
+                    .velocity = Vec3::new(a.cos(), 0.0, a.sin()) * 1.4;
+                let mut h = app
+                    .world_mut()
+                    .get_mut::<crate::health::Health>(player)
+                    .unwrap();
+                h.hp = h.max;
+                h.down = false;
+                app.update();
+            }
+            let f = app.world().resource::<Fight>();
+            (f.locks.len(), f.shots.len())
+        };
+        let (_, shots) = fight(0, false);
+        assert!(shots > 0, "the control: no shots at someone in the open");
+        let fired: Vec<String> = (0..8)
+            .map(|k| (k, fight(k, true)))
+            .filter(|(_, (l, s))| *l > 0 || *s > 0)
+            .map(|(k, (l, s))| format!("bearing {k}: {l} locks, {s} shots"))
+            .collect();
+        assert!(fired.is_empty(), "under the post office roof: {fired:?}");
+    }
+
+    /// Its first burst after every lock warns and hurts no one: standing
+    /// in plain view, nothing hurts you sooner than `LOCK_TIME` +
+    /// `BURST_GAP` after its chirp, and never more than one burst's harm
+    /// in any two seconds (two bursts in 2 s killed the cautious newcomer
+    /// who moved only once the first hit: first_jobs_cautious, seed 1).
+    #[test]
+    fn a_drones_first_burst_after_a_lock_warns() {
+        let (mut app, player, drone, at) = drone_on_you();
+        // Walking about till it's seen you, then on the spot, stepping
+        // toward it (moving, so it sees you: standing still hides you from
+        // a drone; but not across its line, which is hard to hit, and this
+        // is about what hits you).
+        for i in 0..90 * 5 {
+            step(&mut app, player, at, true, i);
+        }
+        for _ in 0..90 * 55 {
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at;
+            let to = app.world().get::<Transform>(drone).unwrap().translation - at;
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = to.with_y(0.0).normalize_or_zero() * 1.4;
+            let mut h = app
+                .world_mut()
+                .get_mut::<crate::health::Health>(player)
+                .unwrap();
+            h.hp = h.max;
+            h.down = false;
+            app.update();
+        }
+        let f = app.world().resource::<Fight>();
+        assert!(
+            !f.locks.is_empty() && !f.hurts.is_empty(),
+            "no fight: locks {:?}, shots {:?} ({} warnings)",
+            f.locks,
+            f.shots,
+            f.warnings
+        );
+        assert!(
+            f.warnings >= BURST as usize,
+            "it never warned: {} shots",
+            f.shots.len()
+        );
+        // The floor itself: 1.5 s chirp, then a harmless burst, then 1.8 s.
+        const FIRST_HARM: f32 = 3.3;
+        // Every lock after a lull (none of its rounds in the WARN_AFTER
+        // before it): nothing hurts you within FIRST_HARM of it.
+        let soon: Vec<String> = f
+            .locks
+            .iter()
+            .filter(|l| !f.shots.iter().any(|s| *s < **l && *s > **l - WARN_AFTER))
+            .flat_map(|l| {
+                f.hurts
+                    .iter()
+                    .filter(move |(t, _)| *t >= *l && *t < l + FIRST_HARM - 0.05)
+                    .map(move |(t, _)| format!("hurt {:.2} s after a lock", t - l))
+            })
+            .collect();
+        assert!(soon.is_empty(), "{soon:?}");
+        let worst = f
+            .hurts
+            .iter()
+            .map(|(t0, _)| {
+                f.hurts
+                    .iter()
+                    .filter(|(t, _)| *t >= *t0 && *t < t0 + 2.0)
+                    .map(|(_, a)| a)
+                    .sum::<f32>()
+            })
+            .fold(0.0, f32::max);
+        assert!(
+            worst <= BURST as f32 * DAMAGE + 0.01,
+            "{worst} hp in 2 s (a burst is {})",
+            BURST as f32 * DAMAGE
+        );
+    }
+
+    /// A drone over the test field with you walking under it; your
+    /// health kept up (a fight, not a death, is what's tested).
+    fn drone_on_you() -> (App, Entity, Entity, Vec3) {
+        drone_over(|zone| {
+            let at = zone.on_ground(40.0, 255.0);
+            (at, at + Vec3::new(0.0, 6.0, -15.0))
+        })
+    }
+
+    /// The same, with you at and its job's site where `place` says.
+    fn drone_over(
+        place: impl Fn(&crate::world::Zone) -> (Vec3, Vec3),
+    ) -> (App, Entity, Entity, Vec3) {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.init_resource::<Fight>().add_systems(Last, tally);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let (at, site) = place(&zone);
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let drone = {
+            let mut c = Commands::new(&mut queue, app.world());
+            spawn_drone(
+                &mut c,
+                site,
+                Job {
+                    kind: super::super::JobKind::Survey,
+                    site,
+                    duration: 9999.0,
+                    exit: site,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        (app, player, drone, at)
+    }
+
+    /// One tick of you: walking a small circle at `at` (seen), or far off
+    /// (out of its sight); hale either way.
+    fn step(app: &mut App, player: Entity, at: Vec3, seen: bool, i: usize) {
+        let a = i as f32 / 90.0 * 0.5;
+        let here = if seen {
+            at + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0
+        } else {
+            at + Vec3::new(400.0, 0.0, 0.0)
+        };
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = here;
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::new(-a.sin(), 0.0, a.cos());
+        let mut h = app
+            .world_mut()
+            .get_mut::<crate::health::Health>(player)
+            .unwrap();
+        h.hp = h.max;
+        h.down = false;
+        app.update();
+    }
+
+    /// A drone that keeps locking on to someone who keeps getting out of
+    /// its sight before it can fire gives up after [`RELOCKS`] locks: it
+    /// goes back to its job and doesn't lock on again for a while, though
+    /// they stand in plain view (one re-locked a hiding newcomer every
+    /// 24 s for three minutes, till it had them).
+    #[test]
+    fn a_drone_gives_up_after_its_relocks() {
+        let (mut app, player, drone, at) = drone_on_you();
+        let mut i = 0;
+        let mut seen = 0;
+        // Out of sight a beat after each lock, before it can fire.
+        while app.world().resource::<Fight>().locks.len() < RELOCKS as usize && i < 90 * 60 {
+            let locks = app.world().resource::<Fight>().locks.len();
+            let t = app.world().resource::<Time>().elapsed_secs();
+            let since = app
+                .world()
+                .resource::<Fight>()
+                .locks
+                .last()
+                .map_or(99.0, |l| t - l);
+            let visible = since > 3.5 || (since < 1.0 && locks == seen);
+            if since < 1.0 {
+                seen = locks;
+            }
+            step(
+                &mut app,
+                player,
+                at,
+                visible && since > 1.0 || since > 3.5,
+                i,
+            );
+            i += 1;
+        }
+        assert_eq!(
+            app.world().resource::<Fight>().locks.len(),
+            RELOCKS as usize,
+            "never locked {RELOCKS} times"
+        );
+        // Gone a while; then in plain view, 40 s.
+        for k in 0..90 * 3 {
+            step(&mut app, player, at, false, i + k);
+        }
+        i += 90 * 3;
+        let before = app.world().resource::<Fight>().locks.len();
+        for k in 0..90 * 40 {
+            step(&mut app, player, at, true, i + k);
+        }
+        let f = app.world().resource::<Fight>();
+        assert!(f.shots.is_empty(), "it fired: {:?}", f.shots);
+        assert_eq!(f.locks.len(), before, "locked on again: {:?}", f.locks);
+        assert!(
+            !matches!(app.world().get::<Brain>(drone), Some(Brain::Engage)),
+            "still fighting"
+        );
+    }
+
+    /// Nor does it fight anyone longer than [`FIGHT_FOR`]: then it breaks
+    /// off, and leaves them be a while.
+    #[test]
+    fn a_drone_breaks_off_a_long_fight() {
+        let (mut app, player, drone, at) = drone_on_you();
+        let mut engaged = None;
+        let mut off = None;
+        for i in 0..90 * 120 {
+            step(&mut app, player, at, true, i);
+            let t = app.world().resource::<Time>().elapsed_secs();
+            let fighting = matches!(app.world().get::<Brain>(drone), Some(Brain::Engage));
+            if fighting && engaged.is_none() {
+                engaged = Some(t);
+            }
+            if !fighting && engaged.is_some() {
+                off = Some(t);
+                break;
+            }
+        }
+        let (on, off) = (
+            engaged.expect("it fought"),
+            off.expect("it never broke off"),
+        );
+        assert!(off - on <= FIGHT_FOR + 1.0, "fought {:.0} s", off - on);
+        let locks = app.world().resource::<Fight>().locks.len();
+        for i in 0..90 * 40 {
+            step(&mut app, player, at, true, i);
+        }
+        assert_eq!(
+            app.world().resource::<Fight>().locks.len(),
+            locks,
+            "locked on again inside {BROKEN_OFF} s"
+        );
+    }
 
     #[derive(Resource, Default)]
     struct Heard {

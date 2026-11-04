@@ -499,6 +499,12 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
         let w = t.transform_point(p);
         zone.ground(w.x, w.z) - t.translation.y
     };
+    // What stands on the ground: its footprint (the scene's frame, before
+    // settling) and how it was moved. A thing stacked on another (a case on
+    // a pallet, jars on a walker's back) moves with what's under it: set
+    // down on the ground itself, it went into it.
+    let mut grounded: Vec<(Vec2, Vec2, Transform)> = Vec::new();
+    let mut stacked: Vec<(usize, Vec2, f32)> = Vec::new();
     for d in 0..geo.props.len() {
         let range = geo.props[d].pieces.clone();
         // Its feet, in the scene's frame: its boxes' bottom corners, or
@@ -516,6 +522,19 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
                 }
             }
         }
+        // A model's floor is its origin: its boxes (colliders, tilted to
+        // follow a body) can dip below what's drawn, and the drawn remains
+        // stood 10 cm over the ground on them. Their footprint, at its floor.
+        if let Some(y) = geo.props[d]
+            .models
+            .iter()
+            .map(|(_, at)| at.translation.y)
+            .reduce(f32::min)
+        {
+            for f in &mut feet {
+                f.y = y;
+            }
+        }
         if feet.is_empty() {
             for (_, at) in &geo.props[d].models {
                 for (x, z) in [(-0.25, -0.25), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)] {
@@ -527,6 +546,11 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
             continue;
         };
         feet.retain(|f| f.y < base + 0.03);
+        if base > 0.05 {
+            let mid = feet.iter().fold(Vec2::ZERO, |a, f| a + f.xz()) / feet.len() as f32;
+            stacked.push((d, mid, base));
+            continue;
+        }
         let pts: Vec<Vec3> = feet
             .iter()
             .map(|f| Vec3::new(f.x, ground(*f), f.z))
@@ -563,6 +587,27 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
             .fold(f32::MIN, f32::max);
         moved.translation.y -= worst;
         for i in range.clone() {
+            geo.pieces[i].at = moved * geo.pieces[i].at;
+        }
+        for (_, at) in &mut geo.props[d].models {
+            *at = moved * *at;
+        }
+        let (lo, hi) = feet.iter().fold(
+            (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+            |(lo, hi), f| (lo.min(f.xz()), hi.max(f.xz())),
+        );
+        grounded.push((lo, hi, moved));
+    }
+    for (d, mid, base) in stacked {
+        // On what's under it, or kept as high over the ground as it stood.
+        let moved = grounded
+            .iter()
+            .find(|(lo, hi, _)| mid.cmpge(*lo).all() && mid.cmple(*hi).all())
+            .map(|(_, _, m)| *m)
+            .unwrap_or_else(|| {
+                Transform::from_xyz(0.0, ground(Vec3::new(mid.x, base, mid.y)), 0.0)
+            });
+        for i in geo.props[d].pieces.clone() {
             geo.pieces[i].at = moved * geo.pieces[i].at;
         }
         for (_, at) in &mut geo.props[d].models {
@@ -615,6 +660,7 @@ fn unlock_scenes(
     raid: Res<crate::raid::Raid>,
     epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
     catalog: Res<Catalog>,
+    loot: Option<Res<crate::items::loot::Loot>>,
     mut staged: ResMut<Staged>,
 ) {
     let Some(zone) = zone else {
@@ -632,7 +678,12 @@ fn unlock_scenes(
         }
         info!("scene opens: {}", scene.name);
         stage(&mut commands, &zone, &id, scene, raid.recalled);
-        lay_things(&mut commands, &zone, scene, &catalog);
+        let career = crate::items::loot::career_raid_of(&opts, progression.as_deref());
+        let arrived = |id: &str| {
+            loot.as_ref()
+                .is_none_or(|l| crate::items::loot::arrived(&l.0, career, id))
+        };
+        lay_things(&mut commands, &zone, scene, &catalog, &arrived);
         staged.0.insert(id);
     }
 }
@@ -804,23 +855,35 @@ pub fn note_pose(scene: Transform, note: &Note) -> Transform {
 
 /// Lays out this map's open scenes' things, with the loot: each Surge
 /// cycle puts them back.
+///
+/// `arrived` says whether a kind is out yet on this raid of a career (the
+/// loot's `from_raid`): a scene's thing that isn't stays out, as it would
+/// from a table (the Farm barricade's AK magazine on a first raid, four
+/// raids before any AK: the designer's "too many item types at once").
 pub fn spawn_things(
     commands: &mut Commands,
     map: &str,
     zone: &Zone,
     catalog: &Catalog,
     at: Standing,
+    arrived: &dyn Fn(&str) -> bool,
 ) {
     for (_, scene) in of(map) {
         if scene.open(at) && stands(zone, scene) {
-            lay_things(commands, zone, scene, catalog);
+            lay_things(commands, zone, scene, catalog, arrived);
         }
     }
 }
 
-fn lay_things(commands: &mut Commands, zone: &Zone, scene: &Scene, catalog: &Catalog) {
+fn lay_things(
+    commands: &mut Commands,
+    zone: &Zone,
+    scene: &Scene,
+    catalog: &Catalog,
+    arrived: &dyn Fn(&str) -> bool,
+) {
     let t = pose(zone, scene);
-    for thing in &scene.items {
+    for thing in scene.items.iter().filter(|t| arrived(&t.id)) {
         let Some(kind) = catalog.kind(&thing.id) else {
             warn!("scene {}: no item {}", scene.name, thing.id);
             continue;

@@ -28,8 +28,13 @@ from common import (Part, RX, RY, RZ, T, area2, catmull, empty, export, fillet, 
 
 main_guard()
 
+# Laid out along the bore against a side photograph scaled to the
+# published 1225 mm (`docs/craft/guns/svd/README.md`); its heights aren't
+# trusted (the photograph's vertical scale is in doubt), so none moved.
 BORE = 0.058
 MUZZLE = -0.955
+WELL_Z = -0.185         # the magazine's centre: well ahead of the guard
+GB = -0.10              # the gas block moved forward by this, to the photograph's
 RX_HW = 0.0175          # receiver half width
 RX_Z0, RX_Z1 = -0.27, 0.03
 RX_Y0, RX_Y1 = 0.015, 0.080
@@ -68,7 +73,7 @@ for sx in (-1, 1):
     rc.box((0.004, 0.022, 0.12), (sx * (RX_HW + 0.0012), 0.034, -0.205), "Blued", bevel=0.0015,
            segs=1)
 # Magazine opening underneath.
-rc.box((0.0285, 0.03, 0.09), (0, RX_Y0, -0.12), "Blued")
+rc.box((0.0285, 0.03, 0.09), (0, RX_Y0, WELL_Z + 0.004), "Blued")
 recv.cut(rc)
 
 misc = Part("static_misc")
@@ -99,9 +104,13 @@ guard_path = catmull([(-0.064, 0.016), (-0.067, 0.004), (-0.061, -0.009), (-0.04
                       (-0.028, -0.018), (-0.016, -0.012), (-0.010, -0.004)], samples=4,
                      closed=False)
 misc.sweep(guard_path, section_rect(0.009, 0.003, 0.0010), "Blued")
-misc.box((0.012, 0.003, 0.06), (0, 0.0155, -0.04), "Blued", bevel=0.0008, segs=1)
-misc.prism(fillet([(-0.0755, 0.016), (-0.0705, 0.016), (-0.068, 0.002), (-0.0725, 0.0),
-                   (-0.0755, 0.006)], 0.0012, 2), -0.0055, 0.0055, "Blued", axis="x",
+# The trigger group's floor, from the magazine's catch back past the guard.
+misc.box((0.012, 0.003, 0.125), (0, 0.0155, -0.0725), "Blued", bevel=0.0008, segs=1)
+# The catch, just behind the magazine (it sat at the guard's front, with
+# the magazine against it).
+CZ = WELL_Z + 0.0525
+misc.prism(fillet([(CZ, 0.016), (CZ + 0.005, 0.016), (CZ + 0.0075, 0.002), (CZ + 0.003, 0.0),
+                   (CZ, 0.006)], 0.0012, 2), -0.0055, 0.0055, "Blued", axis="x",
            bevel=0.0006, segs=1)
 
 # --- Barrel, gas block, sights, flash hider ----------------------------------------------
@@ -112,18 +121,20 @@ barrel.lathe([(0.0, -0.86), (0.0040, -0.86), (0.0040, -0.876), (0.0098, -0.876),
              xf=T(0, BORE, 0))
 # Gas block with the piston cylinder, the regulator ahead of it
 # (a sleeve on the barrel, the piston's cylinder over it, a web between).
-barrel.cyl(0.0158, -0.566, -0.517, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.0015)
-barrel.cyl(0.0122, -0.566, -0.517, "Blued", segs=18, xf=T(0, 0.084, 0), chamfer=0.0015)
-barrel.prism([(-0.565, BORE), (-0.518, BORE), (-0.518, 0.084), (-0.565, 0.084)], -0.0095, 0.0095,
-             "Blued", axis="x")
-barrel.lathe([(0.0, -0.583), (0.0082, -0.583), (0.0092, -0.579), (0.0092, -0.565),
-              (0.0, -0.565)], "Blued", segs=16, xf=T(0, 0.084, 0))
+# (The block well ahead of the handguard, the piston's cylinder running
+# back from it into the handguard.)
+barrel.cyl(0.0158, -0.566 + GB, -0.517 + GB, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.0015)
+barrel.cyl(0.0122, -0.566 + GB, -0.555, "Blued", segs=18, xf=T(0, 0.084, 0), chamfer=0.0015)
+barrel.prism([(-0.565 + GB, BORE), (-0.518 + GB, BORE), (-0.518 + GB, 0.084), (-0.565 + GB, 0.084)],
+             -0.0095, 0.0095, "Blued", axis="x")
+barrel.lathe([(0.0, -0.583 + GB), (0.0082, -0.583 + GB), (0.0092, -0.579 + GB),
+              (0.0092, -0.565 + GB), (0.0, -0.565 + GB)], "Blued", segs=16, xf=T(0, 0.084, 0))
 rg = Part("cut")
 # The regulator's slot (set with a cartridge rim).
-rg.box((0.022, 0.0028, 0.006), (0, 0.084, -0.583), "Blued")
+rg.box((0.022, 0.0028, 0.006), (0, 0.084, -0.583 + GB), "Blued")
 barrel.cut(rg)
 # Front sling swivel on the left of the gas block.
-sling = [(-0.543 + 0.009 * math.cos(a), 0.052 - 0.009 * math.sin(a))
+sling = [(-0.543 + GB + 0.009 * math.cos(a), 0.052 - 0.009 * math.sin(a))
          for a in [math.pi * i / 8 for i in range(9)]]
 barrel.sweep(sling, section_rect(0.0028, 0.0028, 0.0008), "Steel", xf=T(-0.0162, 0, 0))
 # Front sight: a sleeve on the barrel, the tower, the post in its ring hood;
@@ -132,7 +143,7 @@ barrel.cyl(0.0128, -0.874, -0.838, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0
 barrel.prism(fillet([(-0.871, 0.06), (-0.842, 0.06), (-0.846, 0.091), (-0.867, 0.091)],
                     0.0015, 2), -0.0065, 0.0065, "Blued", axis="x", bevel=0.0008, segs=1)
 barrel.tube(0.0128, 0.0110, -0.870, -0.843, "Blued", segs=22, xf=T(0, 0.1, 0), chamfer=0.0006)
-barrel.prism(fillet([(-0.860, 0.089), (-0.853, 0.089), (-0.8545, 0.106), (-0.8585, 0.106)],
+barrel.prism(fillet([(-0.860, 0.089), (-0.853, 0.089), (-0.8545, 0.1071), (-0.8585, 0.1071)],
                     0.0006, 1), -0.0013, 0.0013, "Blued", axis="x", bevel=0.0003, segs=1)
 barrel.prism(fillet([(-0.872, BORE - 0.0105), (-0.838, BORE - 0.0105), (-0.842, BORE - 0.022),
                      (-0.868, BORE - 0.022)], 0.0015, 2), -0.0045, 0.0045, "Blued", axis="x",
@@ -151,7 +162,8 @@ barrel.prism(fillet(notch, [0.0005, 0.0005, 0.0005, 0.0003, 0.0, 0.0006, 0.0, 0.
              -0.225, -0.219, "Blued", axis="z")
 for k in range(10):
     z = -0.2775 + k * 0.0052
-    y = 0.0985 + (z + 0.282) / 0.06 * 0.003 + 0.0045
+    # On the leaf's top (they floated 2 mm over it: `capture::attach`).
+    y = 0.1005 + (z + 0.282) / 0.06 * 0.004 - 0.0001
     w = 0.008 if k % 2 == 0 else 0.0045
     barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn")
 
@@ -167,7 +179,7 @@ for k in range(5):
 hider.cut(hc)
 
 # --- Handguard: two wooden halves, six cooling slots a side, the rings --------------------
-HG0, HG1 = -0.519, -0.287
+HG0, HG1 = -0.562, -0.287
 HG_YB, HG_YT = 0.027, 0.099
 
 
@@ -179,11 +191,10 @@ hg = Part("handguard")
 hg.stock([(HG0 - 0.001, HG_YB), (HG1 + 0.001, HG_YB), (HG1 + 0.001, HG_YT), (HG0 - 0.001, HG_YT)],
          HG0, HG1, "Wood", hg_w, stations=6, segs=28, power=2.7)
 hgc = Part("cut")
+# Three cooling slots a side, running along it.
 for sx in (-1, 1):
-    for k in range(6):
-        zc = -0.326 + k * -0.031
-        hgc.box((0.012, 0.032, 0.0085), (sx * 0.0225, 0.064, zc), "Black", round_=0.0042,
-                xf=RX(0.18, about=(0, 0.064, zc)))
+    for zc in (-0.534, -0.479, -0.424):
+        hgc.box((0.012, 0.0065, 0.022), (sx * 0.0225, 0.068, zc), "Black", round_=0.0032)
     # The seam between the halves along the top.
 hgc.box((0.0016, 0.012, 0.25), (0, HG_YT, (HG0 + HG1) / 2), "Black")
 hg.cut(hgc, paint=True)
@@ -194,8 +205,9 @@ ring_sec = [(x * 1.07, 0.063 + (y - 0.063) * 1.06) for x, y in
 rings.prism(ring_sec, HG1 - 0.002, HG1 + 0.012, "Blued", axis="z", bevel=0.0008, segs=1)
 rings.prism(ring_sec, HG0 - 0.004, HG0 + 0.007, "Blued", axis="z", bevel=0.0008, segs=1)
 # The rear ring's latch lever on the right.
-rings.box((0.0035, 0.024, 0.007), (0.0245, 0.05, HG1 + 0.005), "Blued", bevel=0.0008,
-          xf=RX(-0.3, about=(0.0245, 0.05, HG1 + 0.005)))
+# (Bearing on the ring: it stood 2 mm off it, `capture::attach`.)
+rings.box((0.0035, 0.024, 0.007), (0.0228, 0.05, HG1 + 0.005), "Blued", bevel=0.0008,
+          xf=RX(-0.3, about=(0.0228, 0.05, HG1 + 0.005)))
 
 # --- Skeleton stock: laminated wood, the thumbhole behind the grip ------------------------
 def comb_y(z):
@@ -209,7 +221,7 @@ outer = [
     (-0.0215, 0.007), (-0.0245, 0.0175), (0.022, 0.0175),  # grip front, under the receiver
 ]
 outer = fillet(outer, [0.0, 0.0, 0.0, 0.03, 0.012, 0.012, 0.01, 0.0, 0.0], 4)
-hole = fillet([(0.041, 0.030), (0.199, comb_y(0.199) - 0.032), (0.201, -0.054), (0.055, -0.066)],
+hole = fillet([(0.045, 0.030), (0.158, comb_y(0.158) - 0.032), (0.162, -0.054), (0.058, -0.066)],
               [0.011, 0.016, 0.016, 0.014], 5)
 
 
@@ -250,6 +262,11 @@ for side, a in steps:
 hcut = Part("cut")
 hcut.loft(loops, "Wood")
 stock.cut(hcut)
+# The opening through the butt behind the thumbhole.
+bc = Part("cut")
+bc.prism(fillet([(0.205, 0.042), (0.245, 0.042), (0.245, -0.018), (0.205, -0.018)], 0.008, 4),
+         -0.04, 0.04, "Wood", axis="x")
+stock.cut(bc)
 pad = Part("buttpad")
 pad_prof = fillet([(0.2545, comb_y(0.255) + 0.0005), (0.2705, comb_y(0.255) + 0.0005),
                    (0.272, -0.0835), (0.2565, -0.0835)], [0.004, 0.004, 0.004, 0.004], 2)
@@ -309,7 +326,8 @@ selector.prism(sel, RX_HW + 0.0006, RX_HW + 0.0032, "Blued", axis="x", bevel=0.0
 selector.cyl(0.0058, RX_HW + 0.0005, RX_HW + 0.0036, "Blued", segs=14,
              xf=T(0, PIVOT[1], PIVOT[2]) @ RY(math.pi / 2), chamfer=0.0008)
 
-trig = Part("trigger", origin=(0.0, 0.014, -0.039))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.022, -0.039))
 trig.sweep(catmull([(-0.039, 0.016), (-0.0425, 0.008), (-0.0425, 0.001), (-0.039, -0.005),
                     (-0.0345, -0.007)], 3, closed=False), section_rect(0.005, 0.0034, 0.0012),
            "Blued")
@@ -321,14 +339,14 @@ for p in (carrier, selector, trig):
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 # The eye behind the notch, on the line over the front post.
-empty("pt_sight", (0.0, 0.1068, 0.0))
+empty("pt_sight", (0.0, 0.1071, 0.0))
 empty("pt_port", (RX_HW, 0.0705, -0.148))
 empty("pt_support", (0.0, 0.03, -0.40))
 empty("pt_handle", (0.047, 0.0645, -0.2))
-# The magazine's box centre sits under here, its top level with this point:
-# its feed lips' centre lands at z -0.12.
-empty("magwell", (0.0, 0.019, -0.124))
-empty("pt_sling_front", (-0.0162, 0.043, -0.543))
+# The magazine's box centre sits under here, its top level with this point.
+# (At -0.124 its round lay half behind the open bolt's face, at -0.12.)
+empty("magwell", (0.0, 0.019, WELL_Z))
+empty("pt_sling_front", (-0.0162, 0.043, -0.543 + GB))
 empty("pt_sling_rear", (-0.0237, -0.074, 0.222))
 # Where the PSO-1's clamp seats on the side rail's outer face.
 empty("pt_rail", (-0.0262, 0.0652, -0.10))

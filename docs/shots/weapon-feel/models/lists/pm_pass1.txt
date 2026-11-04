@@ -1,0 +1,6 @@
+before fbdca63e
+after  45ac1caf
+pm_side | Weapon feel | Edges wear bright; the grip red-brown, its checkering showing | --camera 40,0,262,0,0 --gallery pm_pistol,0,0.3
+pm_quarter | Weapon feel | Bevel highlights along slide and frame | --camera 40,0,262,0,0 --gallery pm_pistol,40,0.3
+pm_rear | Weapon feel | The left side: worn edges, the grip's checkering | --camera 40,0,262,0,0 --gallery pm_pistol,150,0.3
+pm_behind | Weapon feel | From behind at arm's length: the rear notch | --camera 40,0,262,0,-6 --gallery pm_pistol,90,0.45

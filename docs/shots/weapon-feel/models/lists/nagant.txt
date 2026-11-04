@@ -1,0 +1,3 @@
+before 8f226a36
+after  2fb744f9
+nagant_rake | Weapon feel | The grip raked back below the palm: 209 to 235 mm | --camera 40,0,262,0,0 --gallery nagant,0,0.4

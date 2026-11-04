@@ -22,6 +22,8 @@ pub struct RobotVisualsPlugin;
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(dress_pylon_cable)
+            .add_observer(suppressing_tracers)
+            .add_observer(lamps_reach_far)
             .add_observer(dirigible_tally)
             .add_systems(Update, scan_beams)
             .add_plugins((
@@ -57,7 +59,10 @@ impl Plugin for RobotVisualsPlugin {
                     part_plants,
                     drone_lamps,
                 ),
-            );
+            )
+            // (After every Update has had its say on where each is in its
+            // lead.)
+            .add_systems(PostUpdate, melee_tells);
     }
 }
 
@@ -148,6 +153,10 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
         eye: materials.add(StandardMaterial {
             base_color: Color::srgb(0.1, 0.02, 0.02),
             emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+            // A signal lamp: its true size, but as bright at 60 m in fog
+            // as at 5 (fog would wash it into the grey before the shell).
+            // Each robot's own eye is cloned from this one.
+            fog_enabled: false,
             ..default()
         }),
         eye_dead: materials.add(StandardMaterial {
@@ -1436,6 +1445,178 @@ fn pylon_work_lights(
     }
 }
 
+/// The machines' one "about to fire" tell, for a tell `dur` long, `since`
+/// seconds in (`on` while it runs): how bright a lens's glow burns, 1 at
+/// rest. A slow pulse that quickens and swells, from about 1.5 to 8 a
+/// second, and a hard flash as the first round goes: learnt once on the
+/// sentry's chirp, read again on a drone's lock.
+pub fn tell_gain(since: f32, dur: f32, on: bool) -> f32 {
+    if !on || dur <= 0.0 {
+        return 1.0;
+    }
+    let p = (since / dur).clamp(0.0, 1.0);
+    // The last tenth of a second: the flash.
+    if dur - since < 0.1 {
+        return 7.0;
+    }
+    // Phase from a rate rising 1.5 -> 8 Hz over the tell; starting on a
+    // crest, so it's seen the moment it's heard.
+    let (f0, f1) = (1.5, 8.0);
+    let phase = f0 * since + (f1 - f0) * since * since / (2.0 * dur);
+    let wave = 0.5 + 0.5 * (std::f32::consts::TAU * phase + std::f32::consts::FRAC_PI_2).sin();
+    // (Never out between pulses while it runs: a tell is seen for all of
+    // its lead, however short.)
+    1.0 + TELL_FLOOR + (1.5 - TELL_FLOOR + 3.0 * p) * wave * wave
+}
+
+/// How far above rest a tell's glow stays between its pulses.
+const TELL_FLOOR: f32 = 0.5;
+
+/// The red glow round a lens at [`tell_gain`] `gain`: dark at rest, 3.6
+/// at the flash.
+pub fn tell_halo(gain: f32) -> LinearRgba {
+    LinearRgba::rgb(1.0, 0.08, 0.03) * 0.6 * (gain - 1.0).max(0.0)
+}
+
+/// A drone's lens glow `since` seconds into its lock (`drone::LOCK_TIME`):
+/// the sentry's chirp, over the drone's lock.
+pub(crate) fn drone_lock_halo(since: f32) -> LinearRgba {
+    tell_halo(tell_gain(since, super::drone::LOCK_TIME, true))
+}
+
+/// Where a melee machine is in its lead to a blow, read off its own state
+/// (Robot minds' timings: `indoor::ZAP_CHARGE`, `hound_mind::CROUCH_TIME`,
+/// `heavy::RAISE_TIME`).
+#[derive(Clone, Copy, Debug)]
+pub enum MeleeLead {
+    /// A crawler `charge` seconds into charging its zap (0: not).
+    Crawler { charge: f32 },
+    /// A hound `crouch` seconds from its lunge (0: not coiled), or
+    /// `lunging` at you and not yet bitten.
+    Hound { crouch: f32, lunging: bool },
+    /// A heavy `raise` seconds into raising its arm, or `slam`ming it.
+    Heavy { raise: Option<f32>, slam: bool },
+}
+
+/// The glow round a melee machine's lens: the sentry's and the drone's
+/// tell, over its own lead, flashing as the blow comes; dark otherwise.
+pub fn melee_halo(lead: MeleeLead) -> LinearRgba {
+    let flash = tell_halo(tell_gain(1.0, 1.0, true));
+    match lead {
+        MeleeLead::Crawler { charge } => {
+            let dur = super::indoor::ZAP_CHARGE;
+            tell_halo(tell_gain(charge.min(dur), dur, charge > 0.0))
+        }
+        MeleeLead::Hound { lunging: true, .. } => flash,
+        MeleeLead::Hound { crouch, .. } => {
+            let dur = super::hound_mind::CROUCH_TIME;
+            tell_halo(tell_gain(dur - crouch, dur, crouch > 0.0))
+        }
+        MeleeLead::Heavy { slam: true, .. } => flash,
+        MeleeLead::Heavy { raise, .. } => {
+            let dur = super::heavy::RAISE_TIME;
+            raise.map_or(LinearRgba::BLACK, |t| {
+                tell_halo(tell_gain(t.min(dur), dur, true))
+            })
+        }
+    }
+}
+
+/// A melee machine's lens glow (on its sensor part): its material.
+#[derive(Component)]
+struct MeleeLens(Handle<StandardMaterial>);
+
+/// Every melee machine's lens burns its tell through its lead
+/// ([`melee_halo`]): the glow hung on its eye the first time it's needed.
+#[allow(clippy::type_complexity)]
+fn melee_tells(
+    mut commands: Commands,
+    crawlers: Query<(&super::indoor::Crawler, &Children)>,
+    hounds: Query<(&super::hound_mind::HoundMind, &Children)>,
+    heavies: Query<(&super::heavy::Arm, &Children)>,
+    parts: Query<(&RobotPart, Option<&MeleeLens>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use super::heavy::ArmState;
+    let leads = crawlers
+        .iter()
+        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.17))
+        .chain(hounds.iter().map(|(h, k)| {
+            (
+                MeleeLead::Hound {
+                    crouch: h.crouch,
+                    lunging: h.lunge > 0.0 && !h.bit,
+                },
+                k,
+                0.14,
+            )
+        }))
+        .chain(heavies.iter().map(|(a, k)| {
+            (
+                MeleeLead::Heavy {
+                    raise: (a.state == ArmState::Raise).then_some(a.t),
+                    slam: a.state == ArmState::Slam,
+                },
+                k,
+                0.22,
+            )
+        }));
+    for (lead, kids, r) in leads {
+        let Some((eye, lens)) = kids
+            .iter()
+            .filter_map(|c| parts.get(c).ok().map(|(p, l)| (c, p, l)))
+            .find(|(_, p, _)| p.role == PartRole::Sensor)
+            .map(|(c, _, l)| (c, l))
+        else {
+            continue;
+        };
+        let want = melee_halo(lead);
+        match lens {
+            Some(MeleeLens(h)) => {
+                if let Some(mut m) = materials.get_mut(h) {
+                    if m.emissive != want {
+                        m.emissive = want;
+                    }
+                }
+            }
+            None if want != LinearRgba::BLACK => {
+                let mat = materials.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    emissive: want,
+                    perceptual_roughness: 1.0,
+                    reflectance: 0.0,
+                    alpha_mode: AlphaMode::Add,
+                    // A lamp: held through fog, drawn as far as the machine.
+                    fog_enabled: false,
+                    ..default()
+                });
+                commands.entity(eye).try_insert(MeleeLens(mat.clone()));
+                commands.spawn((
+                    Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
+                    MeshMaterial3d(mat),
+                    // Out in front of the lens, clear of its visor and
+                    // its mark's ring (a sensor part looks along -Z).
+                    Transform::from_xyz(0.0, 0.0, -r),
+                    NotShadowCaster,
+                    ChildOf(eye),
+                ));
+            }
+            None => {}
+        }
+    }
+}
+
+/// The glow round a drone's lens while it locks on, gone with the lock.
+#[derive(Component)]
+struct LockHalo {
+    left: f32,
+    mat: Handle<StandardMaterial>,
+}
+
+/// Its radius, m (a drone's eye is half a walker's).
+const LOCK_HALO: f32 = 0.12;
+
 /// A red flare under a drone settling its gun on you.
 #[derive(Component)]
 struct LockFlare {
@@ -1450,8 +1631,43 @@ fn lock_flares(
     mut windups: MessageReader<super::sorter::SorterWindup>,
     mut flares: Query<(Entity, &mut LockFlare, &mut PointLight)>,
     time: Res<Time>,
+    (mut halos, parts, kids, mut meshes, mut materials): (
+        Query<(Entity, &mut LockHalo)>,
+        Query<&RobotPart>,
+        Query<&Children>,
+        ResMut<Assets<Mesh>>,
+        ResMut<Assets<StandardMaterial>>,
+    ),
 ) {
     for l in locks.read() {
+        // The glow round its lens, the sentry's chirp over its lock.
+        let lens = kids.get(l.drone).ok().and_then(|cs| {
+            cs.iter()
+                .find(|c| parts.get(*c).is_ok_and(|p| p.role == PartRole::Sensor))
+        });
+        if let Some(lens) = lens {
+            let mat = materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: drone_lock_halo(0.0),
+                perceptual_roughness: 1.0,
+                reflectance: 0.0,
+                alpha_mode: AlphaMode::Add,
+                // A lamp: held through fog, drawn as far as the drone.
+                fog_enabled: false,
+                ..default()
+            });
+            commands.spawn((
+                LockHalo {
+                    left: super::drone::LOCK_TIME,
+                    mat: mat.clone(),
+                },
+                Mesh3d(meshes.add(Sphere::new(LOCK_HALO).mesh().ico(2).unwrap())),
+                MeshMaterial3d(mat),
+                Transform::IDENTITY,
+                NotShadowCaster,
+                ChildOf(lens),
+            ));
+        }
         if let Ok(mut c) = commands.get_entity(l.drone) {
             c.with_child((
                 LockFlare {
@@ -1508,6 +1724,16 @@ fn lock_flares(
         }
     }
     let dt = time.delta_secs();
+    for (e, mut h) in &mut halos {
+        h.left -= dt;
+        if h.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        if let Some(mut m) = materials.get_mut(&h.mat) {
+            m.emissive = drone_lock_halo(super::drone::LOCK_TIME - h.left);
+        }
+    }
     for (e, mut f, mut light) in &mut flares {
         f.left -= dt;
         if f.left <= 0.0 {
@@ -2300,5 +2526,331 @@ mod scan_tests {
         let look = scan_colour(Reaction::Investigate);
         assert!(look.green > hunt.green * 4.0, "{look:?} vs {hunt:?}");
         assert!(hunt.red >= 1.0 && look.red >= 1.0);
+    }
+}
+
+/// How far a robot's lamps are drawn, metres: its eye, its weak-point
+/// marks, any mesh on it whose material the fog can't touch. Signal lamps
+/// keep their true size, so a 15 cm eye is a pixel or two at 60 m, but
+/// they stay in the picture as far as the machine does. (The render
+/// budget fades every mesh under a metre out at 200 times its size,
+/// `render::budget::small_range`: the eye went at about 30 m and a knee
+/// mark at 38, in clear air as in fog.)
+pub const LAMP_REACH: f32 = 150.0;
+
+/// Whether `mat` is a lamp's: the fog can't touch it.
+fn is_lamp(mat: &StandardMaterial) -> bool {
+    !mat.fog_enabled
+}
+
+/// Every lamp on a robot is drawn to [`LAMP_REACH`]: the render budget's
+/// own marker (`LodReach`), put on as its material goes on, so it's there
+/// before the budget ranges the mesh by its size (once its bounds are
+/// known, later in the frame).
+fn lamps_reach_far(
+    on: On<Insert, MeshMaterial3d<StandardMaterial>>,
+    mut commands: Commands,
+    lit: Query<&MeshMaterial3d<StandardMaterial>>,
+    parents: Query<&ChildOf>,
+    robots: Query<(), With<Robot>>,
+    materials: Res<Assets<StandardMaterial>>,
+) {
+    let e = on.event_target();
+    let lamp = lit
+        .get(e)
+        .ok()
+        .and_then(|m| materials.get(&m.0))
+        .is_some_and(is_lamp);
+    if lamp && parents.iter_ancestors(e).any(|a| robots.contains(a)) {
+        commands
+            .entity(e)
+            .try_insert(crate::render::budget::LodReach(LAMP_REACH));
+    }
+}
+
+/// A walker pinning you (`walker::Suppressing`) fires every
+/// [`PIN_TRACER_EVERY`]th round a tracer: a stream of streaks onto where
+/// you went down reads as "keeping your head down" at a glance, against
+/// an aimed burst, which carries none. (A tracer's load is only how the
+/// round is drawn: `weapons::tracers`.)
+pub const PIN_TRACER_EVERY: u32 = 3;
+
+/// How many rounds a pinner has fired (for its tracers).
+#[derive(Component)]
+struct PinRounds(u32);
+
+/// Marks a pinner's rounds as they're made, before the tracers look for
+/// new rounds.
+fn suppressing_tracers(
+    on: On<Add, crate::weapons::ballistics::Projectile>,
+    mut commands: Commands,
+    mut rounds: Query<&mut crate::weapons::ballistics::Projectile>,
+    mut pinners: Query<Option<&mut PinRounds>, With<super::walker::Suppressing>>,
+) {
+    let Ok(mut round) = rounds.get_mut(on.event_target()) else {
+        return;
+    };
+    let Some(shooter) = round.shooter else {
+        return;
+    };
+    let Ok(fired) = pinners.get_mut(shooter) else {
+        return;
+    };
+    let n = match fired {
+        Some(mut f) => {
+            f.0 += 1;
+            f.0 - 1
+        }
+        None => {
+            commands.entity(shooter).try_insert(PinRounds(1));
+            0
+        }
+    };
+    if n % PIN_TRACER_EVERY == 0 {
+        round.load = extraction_core::ammo::Load::Tracer;
+    }
+}
+
+#[cfg(test)]
+mod signal_lamp_tests {
+    use super::*;
+
+    /// A robot's eye and its weak-point marks are signal lamps: drawn at
+    /// their true size, and as bright through fog at 60 m as at 5, so the
+    /// fog can't wash them into the grey before the shell. This covers the
+    /// walker family's eye (each robot's own is cloned from it), the
+    /// models' `Eye` (the heavy's and the sentry's), and the marks.
+    #[test]
+    fn eyes_and_marks_hold_through_fog() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .init_resource::<crate::render::materials::MaterialLibrary>()
+            .init_resource::<crate::models::ModelMaterials>();
+        let w = app.world_mut();
+        let mut q = bevy::ecs::system::SystemState::<(
+            ResMut<crate::models::ModelMaterials>,
+            ResMut<crate::render::materials::MaterialLibrary>,
+            Res<AssetServer>,
+            ResMut<Assets<StandardMaterial>>,
+        )>::new(w);
+        let (mut model_mats, mut lib, server, mut materials) = q.get_mut(w).unwrap();
+        let robot = mats(&mut materials);
+        let model_eye = model_mats.get("Eye", &mut lib, &server, &mut materials);
+        let lamps = [
+            (
+                "the walker family's eye",
+                materials.get(&robot.eye).cloned(),
+            ),
+            ("the models' Eye", materials.get(&model_eye).cloned()),
+            (
+                "a weak-point mark",
+                Some(super::super::weak_points::mark_material()),
+            ),
+        ];
+        for (what, m) in lamps {
+            let m = m.unwrap_or_else(|| panic!("{what}: no material"));
+            assert!(!m.fog_enabled, "{what}: fog washes it out at range");
+            assert!(
+                m.emissive.red.max(m.emissive.green) > 1.0,
+                "{what}: a lamp has to be lit"
+            );
+        }
+        // A dead eye is no lamp: it goes into the fog with the shell.
+        assert!(materials.get(&robot.eye_dead).unwrap().fog_enabled);
+    }
+
+    /// A lamp on a robot is drawn as far as the machine is: it carries
+    /// the budget's `LodReach`, which the budget ranges it by (fading over
+    /// the last fifth) in place of its size, which would have it gone
+    /// under 40 m. The shell beside it, and a lamp on nothing, don't.
+    #[test]
+    fn a_robots_lamps_are_drawn_to_range() {
+        use crate::render::budget::{LodReach, small_range};
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_observer(lamps_reach_far);
+        let (lamp, shell) = {
+            let mut materials = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
+            (
+                materials.add(super::super::weak_points::mark_material()),
+                materials.add(StandardMaterial::default()),
+            )
+        };
+        let w = app.world_mut();
+        let robot = w
+            .spawn(Robot {
+                kind: super::super::RobotKind::Walker,
+                wrecked: false,
+            })
+            .id();
+        let part = w.spawn(ChildOf(robot)).id();
+        let mark = w.spawn((ChildOf(part), MeshMaterial3d(lamp.clone()))).id();
+        let plate = w.spawn((ChildOf(part), MeshMaterial3d(shell))).id();
+        let loose = w.spawn(MeshMaterial3d(lamp.clone())).id();
+        // A mark spawned bare and lit later, as `weak_points` does.
+        let late = w.spawn(ChildOf(part)).id();
+        w.entity_mut(late).insert(MeshMaterial3d(lamp));
+        w.flush();
+        let reach = |e: Entity| app.world().get::<LodReach>(e).map(|r| r.0);
+        assert_eq!(reach(mark), Some(LAMP_REACH));
+        assert_eq!(reach(late), Some(LAMP_REACH));
+        assert_eq!(
+            reach(plate),
+            None,
+            "the shell's small parts keep the budget's"
+        );
+        assert_eq!(reach(loose), None, "only a robot's lamps");
+        // Fully drawn to 60 m, where a mark's size alone had it gone.
+        assert!(LAMP_REACH * 0.8 >= 60.0);
+        assert!(small_range(0.19) < 40.0);
+    }
+
+    /// A pinner's rounds carry a tracer every third, from its first; an
+    /// ordinary walker's carry none.
+    #[test]
+    fn a_pinners_rounds_carry_tracers() {
+        use crate::weapons::ballistics::{Projectile, ShotMods};
+        use extraction_core::ammo::Load;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_observer(suppressing_tracers);
+        let w = app.world_mut();
+        let pinner = w.spawn(super::super::walker::Suppressing).id();
+        let aimer = w.spawn_empty().id();
+        let fire = |w: &mut World, shooter: Entity| {
+            let e = w
+                .spawn(Projectile {
+                    velocity: Vec3::NEG_Z * 300.0,
+                    damage: 14.0,
+                    shooter: Some(shooter),
+                    gun: shooter,
+                    life: 1.0,
+                    mods: ShotMods::default(),
+                    mass_g: 8.0,
+                    seed: 1,
+                    passes: 0,
+                    load: Load::Standard,
+                    origin: Vec3::ZERO,
+                })
+                .id();
+            w.flush();
+            w.get::<Projectile>(e).unwrap().load == Load::Tracer
+        };
+        let pinned: Vec<bool> = (0..9).map(|_| fire(w, pinner)).collect();
+        let aimed: Vec<bool> = (0..9).map(|_| fire(w, aimer)).collect();
+        assert_eq!(
+            pinned,
+            [true, false, false, true, false, false, true, false, false]
+        );
+        assert!(aimed.iter().all(|t| !t), "an aimed burst carries none");
+    }
+
+    /// The sentry's chirp and a drone's lock are one tell, learnt once:
+    /// each lens's glow, over its own tell (2.5 s and 1.5 s), pulses
+    /// faster and swells from the first instant into the same flash as the
+    /// first round goes, and is dark after. (The old chirp faded from its
+    /// brightest; the old lock had no glow on the lens at all.)
+    #[test]
+    fn the_sentry_chirp_and_the_drone_lock_are_one_tell() {
+        use extraction_core::sentry::CHIRP;
+        let red = |c: LinearRgba| c.red;
+        let machines: [(&str, f32, &dyn Fn(f32) -> LinearRgba); 2] = [
+            ("sentry", CHIRP, &|t| {
+                super::super::sentry_look::chirp_halo(t, true)
+            }),
+            ("drone", super::super::drone::LOCK_TIME, &drone_lock_halo),
+        ];
+        let mut flashes = Vec::new();
+        for (who, dur, halo) in machines {
+            let g: Vec<f32> = (0..=(dur * 240.0) as usize)
+                .map(|i| red(halo(i as f32 / 240.0)))
+                .collect();
+            let crests: Vec<f32> = (1..g.len() - 1)
+                .filter(|&i| g[i] > g[i - 1] && g[i] >= g[i + 1] && g[i] > 0.5)
+                .map(|i| i as f32 / 240.0)
+                .collect();
+            let gaps: Vec<f32> = crests.windows(2).map(|w| w[1] - w[0]).collect();
+            assert!(crests.len() >= 4, "{who}: it pulses ({crests:?})");
+            assert!(
+                gaps.last().unwrap() < &(gaps[0] * 0.6),
+                "{who}: faster ({gaps:?})"
+            );
+            assert!(g[0] > 0.5, "{who}: lit the moment it starts");
+            let peak = g.iter().cloned().fold(0.0, f32::max);
+            let at = g.iter().position(|v| *v == peak).unwrap() as f32 / 240.0;
+            assert!(
+                at >= dur - 0.1 - 1.0 / 240.0,
+                "{who}: brightest at the shot"
+            );
+            flashes.push(peak);
+        }
+        assert_eq!(flashes[0], flashes[1], "the same flash");
+        assert_eq!(
+            red(super::super::sentry_look::chirp_halo(CHIRP + 1.0, false)),
+            0.0,
+            "dark after"
+        );
+    }
+
+    /// Each melee machine's lens glows red through the whole of its lead
+    /// to a blow, never out between pulses, and flashes as it lands: the
+    /// crawler's charge, the hound's coil (and its lunge till it bites),
+    /// the heavy's raise (and its slam). At rest, dark. (Before, none of
+    /// them had a glow: a crawler's charge was a sound and a blue swell.)
+    #[test]
+    fn each_melee_tell_shows_for_its_whole_lead() {
+        use super::super::{heavy::RAISE_TIME, hound_mind::CROUCH_TIME, indoor::ZAP_CHARGE};
+        let lit = |l: MeleeLead| melee_halo(l).red;
+        let steps = |dur: f32| (1..=60).map(move |i| dur * i as f32 / 60.0 - 1e-3);
+        for (who, dur, lead) in [
+            (
+                "crawler",
+                ZAP_CHARGE,
+                &(|t| MeleeLead::Crawler { charge: t }) as &dyn Fn(f32) -> MeleeLead,
+            ),
+            ("hound", CROUCH_TIME, &|t| MeleeLead::Hound {
+                crouch: CROUCH_TIME - t,
+                lunging: false,
+            }),
+            ("heavy", RAISE_TIME, &|t| MeleeLead::Heavy {
+                raise: Some(t),
+                slam: false,
+            }),
+        ] {
+            let dim = steps(dur).map(|t| lit(lead(t))).fold(f32::MAX, f32::min);
+            assert!(dim >= 0.25, "{who}: its glow goes out in its lead ({dim})");
+            let end = lit(lead(dur - 0.02));
+            assert!(end >= 3.0, "{who}: it flashes as the blow comes ({end})");
+        }
+        assert!(
+            lit(MeleeLead::Hound {
+                crouch: 0.0,
+                lunging: true
+            }) >= 3.0,
+            "lunging"
+        );
+        assert!(
+            lit(MeleeLead::Heavy {
+                raise: None,
+                slam: true
+            }) >= 3.0,
+            "slamming"
+        );
+        for rest in [
+            MeleeLead::Crawler { charge: 0.0 },
+            MeleeLead::Hound {
+                crouch: 0.0,
+                lunging: false,
+            },
+            MeleeLead::Heavy {
+                raise: None,
+                slam: false,
+            },
+        ] {
+            assert_eq!(lit(rest), 0.0, "{rest:?}: dark at rest");
+        }
     }
 }

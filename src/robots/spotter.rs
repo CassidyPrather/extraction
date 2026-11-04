@@ -681,7 +681,7 @@ pub(crate) mod tests {
     /// fix and calls; the call is a klaxon and a response queued. A
     /// player straight under it is never seen.
     fn stand(at: Vec2, cut_first: bool) -> (Vec<SpotterAct>, Entity, crate::vr_harness::Vr) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {
@@ -753,7 +753,7 @@ pub(crate) mod tests {
     /// salvage beside it.
     #[test]
     fn holed_it_sinks_to_a_wreck() {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {

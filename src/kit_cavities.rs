@@ -1,0 +1,101 @@
+//! The room inside each body slot's piece of the rig (`art/kit/rig.py`),
+//! for logic to fit what's stowed in it (`interact::body`): each cavity's
+//! floor centre and half extents, in its slot's space (origin the slot,
+//! +Y up, -Z out from the chest), inside the piece's walls.
+//! `capture::stowed` holds the rig's models to these numbers, so the art
+//! and the numbers can't drift apart.
+
+use bevy::math::Vec3;
+use extraction_core::inventory::SlotKind;
+
+/// A slot's cavity: the middle of its floor, and its half extents.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cavity {
+    pub floor: Vec3,
+    pub half: Vec3,
+}
+
+impl Cavity {
+    /// The cavity's middle.
+    pub fn centre(&self) -> Vec3 {
+        self.floor + Vec3::Y * self.half.y
+    }
+    /// Its top: the mouth (what's in it may stand out of it, up).
+    pub fn mouth(&self) -> f32 {
+        self.floor.y + 2.0 * self.half.y
+    }
+}
+
+/// A chest pouch: a magazine stands in it, thin side across X; deep
+/// enough for an AK-74 magazine's curve (130 mm front to back), and
+/// taller than deep, so a magazine stands in it (`slot_fit` matches sides
+/// by size).
+pub const POUCH: Cavity = Cavity {
+    floor: Vec3::new(0.0, -0.115, -0.02),
+    half: Vec3::new(0.018, 0.07, 0.067),
+};
+
+/// A hip pocket: rounds, a clip, a cell.
+pub const POCKET: Cavity = Cavity {
+    floor: Vec3::new(0.0, -0.059, -0.0005),
+    half: Vec3::new(0.029, 0.0355, 0.0135),
+};
+
+/// The holster: a pistol hung barrel down, slide forward (-Z), its grip
+/// back and up out of the mouth.
+pub const HOLSTER: Cavity = Cavity {
+    floor: Vec3::new(0.0, -0.152, -0.0465),
+    half: Vec3::new(0.0205, 0.082, 0.0505),
+};
+
+/// The holster's back is cut away above this (slot y), over the trigger
+/// guard as a real one's is: a grip stands out of it there, back (+Z).
+pub const HOLSTER_BACK_MOUTH: f32 = -0.042;
+
+/// The chest mount: a webbing sleeve on the left strap, open top and
+/// bottom. The radio slides down into it, thin side out; a chemlight or a
+/// compass hangs in it (so `floor` is only the sleeve's foot).
+pub const MOUNT: Cavity = Cavity {
+    floor: Vec3::new(0.0, -0.08, -0.015),
+    half: Vec3::new(0.036, 0.055, 0.025),
+};
+
+/// A slot's cavity (`None`: the slings, the vest and the head, which hold
+/// what's made to go there).
+pub fn cavity(slot: SlotKind) -> Option<Cavity> {
+    match slot {
+        SlotKind::Pouch => Some(POUCH),
+        SlotKind::Pocket => Some(POCKET),
+        SlotKind::Holster => Some(HOLSTER),
+        SlotKind::Mount => Some(MOUNT),
+        SlotKind::Sling | SlotKind::Vest | SlotKind::Head => None,
+    }
+}
+
+/// Models whose bounds' middle isn't their origin, among what goes in a
+/// body slot (more than 5 mm off): the middle less the origin, in the
+/// model's own space. Fitting an item by its catalog size
+/// (`ItemDef::size_m`) centres its box; this puts its model there.
+/// Everything else is centred on its origin. `capture::stowed` holds this
+/// to the models.
+pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
+    ("pm_pistol", Vec3::new(0.0, 0.020, -0.039)),
+    // Its curve sweeps forward of its top (docs/craft/guns/ak74).
+    ("ak_mag", Vec3::new(0.0, 0.0, -0.016)),
+    // Its grip is short and set back now (docs/craft/guns/nagant).
+    ("nagant", Vec3::new(0.0, 0.015, -0.060)),
+    ("flare_pistol", Vec3::new(0.0, -0.011, -0.052)),
+    ("ammo_762x25", Vec3::new(0.0, -0.006, -0.001)),
+    ("bolt_bundle", Vec3::new(0.0, -0.009, 0.0)),
+    ("robot_ammo_belt", Vec3::new(0.0, -0.021, -0.002)),
+    ("artifact_adapter", Vec3::new(-0.003, 0.015, 0.0)),
+    ("brass", Vec3::new(0.0, -0.01, 0.0)),
+];
+
+/// An item's model's middle off its origin (zero for most).
+pub fn origin_offset(id: &str) -> Vec3 {
+    ORIGIN_OFFSET
+        .iter()
+        .find(|(k, _)| *k == id)
+        .map_or(Vec3::ZERO, |(_, v)| *v)
+}

@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, centred, cube, item, ring, text, transform, tube_path, wanted
+from _kit import ALONG_X, LIFT, UP, centred, cube, item, ring, text, transform, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -26,18 +26,19 @@ def pillow(p, hx, hy, hz, y, mat, r=0.006):
 def field_dressing():
     s = cube(0.1)
     p = Part("body")
-    # A rubberised packet with a paper label and a red tear-strip. The
-    # label sits in a recess cut for it, flush, not on the rubber.
+    # A pale packet with a red tear-strip and a red cross on top: medical
+    # is the lightest family, red on white (docs/craft/ITEM_READING.md).
+    # The cross sits in a recess cut for it, flush, not on the wrap.
     y = -s / 2 + 0.012
-    pillow(p, s / 2 - 0.001, 0.012, s / 2 - 0.003, y, "Olive", r=0.008)
+    pillow(p, s / 2 - 0.001, 0.012, s / 2 - 0.003, y, "Pale", r=0.008)
     p.box((s - 0.01, 0.003, 0.004), (0.0, y, -s / 2 + 0.003), "Red")
     recess = Part("recess")
-    recess.box((0.026, 0.009, 0.019), (0.0, y + 0.012, 0.0005), "Paper")
+    recess.box((0.024, 0.009, 0.008), (0.0, y + 0.012, 0.0005), "Red")
+    recess.box((0.008, 0.009, 0.024), (0.0, y + 0.012, 0.0005), "Red")
     p.cut(recess)
     label = Part("label")
-    label.box((0.026, 0.0042, 0.019), (0.0, y + 0.0101, 0.0005), "Paper")
-    label.box((0.016, 0.0009, 0.003), (-0.003, y + 0.0124, -0.005), "Red")
-    label.box((0.016, 0.0009, 0.002), (-0.003, y + 0.0124, 0.0), "Red")
+    label.box((0.024, 0.0042, 0.008), (0.0, y + 0.0101, 0.0005), "Red")
+    label.box((0.008, 0.0042, 0.024), (0.0, y + 0.0101, 0.0005), "Red")
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
     return centred([p, label])
 
@@ -67,17 +68,18 @@ def regen_injector():
 
 def cleaning_kit():
     p = Part("body")
-    # A canvas roll with two leather straps, the rod poking out one end,
-    # a brush on it, and a little oiler tucked under the straps.
+    # A dark canvas roll with two leather straps, the rod poking out one
+    # end, a brush on it, and a little oiler tucked under the straps: tools
+    # are dark with bare steel (docs/craft/ITEM_READING.md).
     roll = fillet([(-0.036, -0.022), (0.036, -0.022), (0.036, 0.016), (-0.036, 0.016)],
                   [0.012, 0.012, 0.02, 0.02], 4)
-    p.prism(roll, -0.1, 0.1, "Canvas", axis="z", bevel=0.006, segs=2)
-    p.box((0.07, 0.003, 0.16), (0.0, 0.0175, 0.0), "Canvas", bevel=0.0012, segs=1,
+    p.prism(roll, -0.1, 0.1, "DarkWool", axis="z", bevel=0.006, segs=2)
+    p.box((0.07, 0.003, 0.16), (0.0, 0.0175, 0.0), "DarkWool", bevel=0.0012, segs=1,
           xf=RX(0.02))
     for z in (-0.06, 0.055):
         strap = fillet([(-0.038, -0.024), (0.038, -0.024), (0.038, 0.019), (-0.038, 0.019)],
                        [0.013, 0.013, 0.021, 0.021], 4)
-        p.prism(strap, z - 0.009, z + 0.009, "Bakelite", axis="z")
+        p.prism(strap, z - 0.009, z + 0.009, "Leather", axis="z")
         p.box((0.012, 0.004, 0.014), (0.03, 0.019, z), "Steel", bevel=0.001, segs=1)
     p.cyl(0.0035, 0.08, 0.124, "Steel", segs=8, xf=T(0.018, 0.0, 0.0))
     p.cyl(0.0055, 0.112, 0.125, "Brass", segs=10, xf=T(0.018, 0.0, 0.0))
@@ -118,9 +120,11 @@ def spare_parts():
     lid = fillet([(-0.0265, -0.0205), (0.0265, -0.0205), (0.0265, 0.0205), (-0.0265, 0.0205)],
                  0.0055, 2)
     p.prism(lid, yb + 0.014, yb + 0.02, "Blued", axis="y", bevel=0.0015, segs=1)
-    p.box((0.03, 0.0005, 0.018), (0.0, yb + 0.0203, 0.0), "Paper")
+    # The label on the lid, LIFT thick from its face.
+    p.box((0.03, LIFT, 0.018), (0.0, yb + 0.02 + LIFT / 2, 0.0), "Paper")
     # Coiled spring lying across the lid.
-    ys = yb + 0.0255
+    # On the lid (its end coils stood 0.7 mm off it, 1.5 mm drawn).
+    ys = yb + 0.0247
     for k in range(9):
         z = -0.016 + k * 0.004
         p.lathe([(0.0042, -0.0007), (0.0049, 0.0), (0.0042, 0.0007), (0.0035, 0.0)], "Steel",
@@ -133,7 +137,7 @@ def spare_parts():
               xf=T(0.013 + k * 0.004, yb + 0.0215, 0.01) @ RY(0.3 * k))
     # Binding wire round the lot.
     for x in (-0.018, 0.018):
-        p.box((0.0012, 0.0012, 0.042), (x, yb + 0.0207, 0.0), "Steel")
+        p.box((0.0012, 0.0012, 0.042), (x, yb + 0.0205, 0.0), "Steel")
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
     return centred([p])
 
@@ -224,8 +228,12 @@ def splint():
     for x in (-0.021, 0.021):
         p.box((0.017, 0.011, L), (x, y + 0.0055, 0.0), "Wood", bevel=0.002, segs=1)
     for z in (-0.16, 0.0, 0.16):
-        p.box((0.062, 0.015, 0.026), (0.0, y + 0.0075, z), "Olive", bevel=0.0012, segs=1)
-        p.box((0.014, 0.004, 0.02), (0.0, y + 0.0165, z), "Steel", bevel=0.0008, segs=1)
+        # The strap round both slats, LIFT proud of them all round (its
+        # underside lay in the slats' undersides' plane).
+        p.box((0.062, 0.011 + 2 * LIFT, 0.026), (0.0, y + 0.0055, z), "Olive", bevel=0.0012,
+              segs=1)
+        p.box((0.014, 0.004, 0.02), (0.0, y + 0.011 + LIFT + 0.0015, z), "Steel", bevel=0.0008,
+              segs=1)
     return centred([p])
 
 

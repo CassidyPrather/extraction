@@ -14,7 +14,7 @@ centre, -Z the outer face).
 - `car_wheel` (dims 0.6 x 0.6 x 0.2): a road wheel on its flat tyre, the
   rim rusty, standing on its tread, its axle along Z
 
-Materials: Cream, Red, Rusty, Steel, Blue, Black, Glass, Padding, Rubber, Dark.
+Materials: Cream, Red, Rusty, Steel, CarBlue, Black, Glass, Padding, Rubber, Dark.
 """
 
 import math
@@ -69,7 +69,7 @@ def car_door():
     yt = yb + Hd                      # the belt line
     skin = fillet([(-W / 2, yb), (W / 2, yb), (W / 2, yt), (-W / 2 + 0.05, yt),
                    (-W / 2, yt - 0.06)], [0.04, 0.04, 0.02, 0.02, 0.04], 3)
-    p.prism(skin, -0.06, -0.035, "Blue", axis="z", bevel=0.008, segs=1)
+    p.prism(skin, -0.06, -0.035, "CarBlue", axis="z", bevel=0.008, segs=1)
     # (The body runs into the skin and the trim into the body, so no two
     # layers meet in one plane.)
     p.prism(skin, -0.04, 0.04, "Black", axis="z")
@@ -77,7 +77,7 @@ def car_door():
                     (-W / 2 + 0.06, yt - 0.03)], 0.03, 2), 0.035, 0.06, "Padding", axis="z",
             bevel=0.006, segs=1)
     # A crease along the skin, the handle and lock, rust at the sill.
-    p.box((W - 0.06, 0.012, 0.004), (0.0, yb + 0.33, -0.0615), "Blue", segs=1)
+    p.box((W - 0.06, 0.012, 0.004), (0.0, yb + 0.33, -0.0615), "CarBlue", segs=1)
     p.box((0.12, 0.025, 0.015), (W / 2 - 0.16, yt - 0.08, -0.068), "Steel", bevel=0.004, segs=1)
     p.cyl(0.009, -0.07, -0.06, "Steel", segs=10, xf=T(W / 2 - 0.06, yt - 0.08, 0.0))
     p.box((W - 0.1, 0.05, 0.004), (0.0, yb + 0.03, -0.0615), "Rusty", segs=1)
@@ -94,10 +94,11 @@ def car_door():
         a = math.atan2(y1 - y0, x1 - x0)
         # (Alternate pieces 8 mm thinner, so where they overlap at the
         # corners their faces don't share a plane.)
-        p.box((L + fw, fw, 0.03 - 0.008 * (k % 2)), (0.0, 0.0, 0.0), "Blue", bevel=0.004, segs=1,
+        p.box((L + fw, fw, 0.03 - 0.008 * (k % 2)), (0.0, 0.0, 0.0), "CarBlue", bevel=0.004, segs=1,
               xf=T((x0 + x1) / 2, (y0 + y1) / 2, -0.02) @ RZ(a))
+    # (Their feet down in the belt, where the glass stood.)
     for x, h, lean in ((-0.25, 0.07, 0.2), (-0.05, 0.12, -0.15), (0.2, 0.05, 0.1)):
-        p.prism([(x - 0.03, yt + 0.01), (x + 0.035, yt + 0.01), (x + 0.005 + lean * h, yt + h)],
+        p.prism([(x - 0.03, yt - 0.01), (x + 0.035, yt - 0.01), (x + 0.005 + lean * h, yt + h)],
                 -0.022, -0.018, "Glass", axis="z")
     return [p]
 
@@ -108,13 +109,17 @@ def car_bonnet():
     # dark inner bracing, the hinge brackets torn at one edge, rust
     # blotches eaten in. Its outer face is -Z.
     W, H, D, t = 1.3, 1.0, 0.02, 0.003
-    for y0, y1, mat in ((-0.5, -0.42, "Rusty"), (-0.42, 0.5, "Blue")):
+    for y0, y1, mat in ((-0.5, -0.42, "Rusty"), (-0.42, 0.5, "CarBlue")):
         sheet(p, y0, y1, -W / 2 + 0.02, W / 2 - 0.02, H, D, t, mat, n=max(2, int((y1 - y0) / 0.08)))
-    # The bracing: an X of pressed ribs and a rim behind the skin.
+    # The bracing: an X of pressed ribs and a rim behind the skin, the
+    # X's arms out into the rim's corners, their fronts against the skin
+    # toward its ends (behind it where it bows out, never through it).
     # (The two arms of the X a little apart in depth, so they don't share
     # faces where they cross.)
-    for a, z in ((0.62, 0.025), (-0.62, 0.031)):
-        p.box((1.2, 0.05, 0.02), (0.0, 0.0, 0.0), "Dark", segs=1, xf=T(0.0, 0.0, z) @ RZ(a))
+    # (1.5 mm: half a millimetre fought where they cross, held in hand.)
+    for a, front, d in ((0.62, -0.005, 0.04), (-0.62, -0.0035, 0.045)):
+        p.box((1.45, 0.05, d), (0.0, 0.0, 0.0), "Dark", segs=1,
+              xf=T(0.0, 0.0, front + d / 2) @ RZ(a))
     for y in (-0.44, 0.44):
         p.box((W - 0.1, 0.05, 0.02), (0.0, y, 0.016), "Dark", segs=1)
     for x in (-W / 2 + 0.07, W / 2 - 0.07):
@@ -122,10 +127,10 @@ def car_bonnet():
     # Hinge brackets along the top edge, one torn and bent.
     for x, bend in ((-0.45, 0.0), (0.45, 0.5)):
         p.box((0.04, 0.12, 0.012), (0.0, 0.0, 0.0), "Steel", segs=1,
-              xf=T(x, 0.46, 0.034) @ RX(bend))
+              xf=T(x, 0.46, 0.028) @ RX(bend))
     # Two creases pressed along it.
     for x in (-0.3, 0.3):
-        p.box((0.012, H - 0.12, 0.006), (x, 0.0, bow(0.0, H, D) - t / 2 - 0.001), "Blue", segs=1)
+        p.box((0.012, H - 0.12, 0.006), (x, 0.0, bow(0.0, H, D) - t / 2 - 0.001), "CarBlue", segs=1)
     return [p]
 
 

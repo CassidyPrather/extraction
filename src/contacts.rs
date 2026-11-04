@@ -39,6 +39,7 @@ pub const MAX_SPIN: f32 = 120.0;
 
 impl Plugin for ContactGuardPlugin {
     fn build(&self, app: &mut App) {
+        collider_off_stays_off(app);
         app.add_observer(|add: On<Add, RigidBody>, mut commands: Commands| {
             commands
                 .entity(add.entity)
@@ -83,6 +84,118 @@ fn mend_handles(
         for _ in 0..extra {
             constraints.pop_manifold(&mut contacts.edges, id, b1, b2);
         }
+    }
+}
+
+/// A collider switched off twice stays off. In avian 0.7 inserting
+/// `ColliderDisabled` on something that already has it puts its collider
+/// back in the spatial tree (the replaced value's `Discard` observer adds
+/// it, and the new one's `Add`, which would take it out, never fires), so
+/// it reads as off while rounds, rays and feet still find it: two systems
+/// switching the same thing off (a dead eye's pop and its gone hit volume,
+/// a plate dropped off a dead vent) did exactly that. So a replacing insert
+/// (a `Discard` then an `Insert`, no `Remove` between) is done again from
+/// scratch, off and on, and avian's `Add` takes it out of the tree.
+#[derive(Resource, Default)]
+struct Discarding(bevy::ecs::entity::EntityHashSet);
+
+fn collider_off_stays_off(app: &mut App) {
+    app.init_resource::<Discarding>()
+        .add_observer(
+            |d: On<Discard, ColliderDisabled>, mut s: ResMut<Discarding>| {
+                s.0.insert(d.entity);
+            },
+        )
+        .add_observer(
+            |r: On<Remove, ColliderDisabled>, mut s: ResMut<Discarding>| {
+                s.0.remove(&r.entity);
+            },
+        )
+        .add_observer(
+            |i: On<Insert, ColliderDisabled>, mut s: ResMut<Discarding>, mut commands: Commands| {
+                if s.0.remove(&i.entity) {
+                    commands
+                        .entity(i.entity)
+                        .queue_silenced(|mut e: EntityWorldMut| {
+                            e.remove::<ColliderDisabled>();
+                            e.insert(ColliderDisabled);
+                        });
+                }
+            },
+        );
+}
+
+#[cfg(test)]
+mod collider_off_tests {
+    use super::*;
+
+    fn found(app: &mut App, at: Vec3) -> bool {
+        let world = app.world_mut();
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+        let spatial = state.get(world).unwrap();
+        spatial
+            .cast_ray(
+                at + Vec3::Y * 3.0,
+                Dir3::NEG_Y,
+                5.0,
+                true,
+                &SpatialQueryFilter::default(),
+            )
+            .is_some()
+    }
+
+    /// avian's quirk, mended: a collider switched off twice (twice in one
+    /// frame, or once more next frame) stays out of the spatial tree; on
+    /// again it's found, and off again it's gone.
+    #[test]
+    fn a_collider_switched_off_twice_stays_off() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let at = Vec3::new(0.0, 500.0, 0.0);
+        let e = app
+            .world_mut()
+            .spawn((
+                RigidBody::Static,
+                Collider::cuboid(1.0, 1.0, 1.0),
+                Transform::from_translation(at),
+            ))
+            .id();
+        let settle = |app: &mut App| {
+            for _ in 0..3 {
+                app.update();
+            }
+        };
+        settle(&mut app);
+        assert!(found(&mut app, at));
+        app.world_mut().entity_mut(e).insert(ColliderDisabled);
+        settle(&mut app);
+        assert!(!found(&mut app, at), "off once, it's off");
+        app.world_mut().entity_mut(e).insert(ColliderDisabled);
+        settle(&mut app);
+        assert!(!found(&mut app, at), "off twice, still off");
+        {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            c.entity(e).insert(ColliderDisabled);
+            c.entity(e).try_insert(ColliderDisabled);
+            q.apply(app.world_mut());
+        }
+        settle(&mut app);
+        assert!(!found(&mut app, at), "twice more in a frame, still off");
+        app.world_mut().entity_mut(e).remove::<ColliderDisabled>();
+        settle(&mut app);
+        assert!(found(&mut app, at), "on again, it's found");
+        app.world_mut().entity_mut(e).insert(ColliderDisabled);
+        settle(&mut app);
+        assert!(!found(&mut app, at), "and off again");
     }
 }
 

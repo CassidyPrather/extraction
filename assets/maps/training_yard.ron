@@ -52,6 +52,9 @@
         (prefab: "target", at: (-10.0, -20.0), rot: 0.0),
         (prefab: "house_plank", at: (28.0, 18.0), rot: 270.0),
         (prefab: "shed", at: (24.0, -12.0), rot: 270.0),
+        // Rooks on its roof (`onboarding::ROOKS_AT`): far enough from the
+        // first station that walking leaves them be; run, and they go up.
+        (prefab: "shed", at: (-30.0, 95.0), rot: 90.0),
         (prefab: "log_pile", at: (-12.0, -32.0), rot: 90.0),
     ],
 
@@ -63,14 +66,13 @@
         (kind: ArtifactField, at: (45.0, -45.0), name: "The soft ground"),
         (kind: Poi, at: (-12.0, 30.0), name: "Firing line"),
         (kind: Poi, at: (28.0, 18.0), name: "Practice house"),
-        (kind: Loot(table: "ammo_common"), at: (-9.0, 46.5), name: "Firing line ammo"),
-        (kind: Loot(table: "medical"), at: (5.0, 2.0), name: "Dressing station"),
-        (kind: Loot(table: "food_common"), at: (20.0, -13.0), name: "Shed food"),
 
         (kind: Sign(text: "THE MACHINES\n\nNone in the yard. Out there, little flyers spot you and call the rest; walkers come to look.\n\nShoot the eye, or keep still in cover."), at: (-6.0, -26.0), rot: 0.0, name: "Machines sign"),
     ],
 
     regions: [
-        (name: "Training yard", danger: 0, polygon: [(-100.0, -100.0), (100.0, -100.0), (100.0, 100.0), (-100.0, 100.0)]),
+        // No loot in its buildings, nor lying about: what's here is what
+        // the stations put out, one family at a time.
+        (name: "Training yard", danger: 0, loot: Some(0.0), polygon: [(-100.0, -100.0), (100.0, -100.0), (100.0, 100.0), (-100.0, 100.0)]),
     ],
 )

@@ -78,14 +78,14 @@ killed.
   yard, and nothing came. The yard has no machine talk now
   (`raid::chatter`).
 - **The job card named a place, but not where it is.** "Go up to the Old
-  farm and look round." The Old farm is 190 m north-east of where the
-  truck drops you. It has nothing tall enough to see from the gate, and
+  farm and look round." The Old farm is 100 m north-east of where the
+  truck drops you (190 m before the valley was pulled in). It has nothing tall enough to see from the gate, and
   the yard never shows the map. The card now adds "From the drop:
-  north-east, 190 m. Ringed on your map." (`raid::requests`.)
+  north-east, 100 m. Ringed on your map." (`raid::requests`.)
 - **The truck named a rendezvous the map doesn't.** "Heading for the
   Ranger tower", but the field map labels every rendezvous just "RV".
   The truck now says which way and how far from you: "Copy. The ranger
-  tower, north-west, 480 m. Two minutes." It does so again if you call
+  tower, north-west, 240 m. Two minutes." It does so again if you call
   while it waits. (`raid::lines::way`.)
 
 - **The truck came down on top of a newcomer at the rendezvous.** Told
@@ -228,6 +228,13 @@ farm, a little short of halfway, and watches its tells and the first hit.
 A newcomer met no machine at all on that route in the first-hour runs, so
 the machine is placed by hand; a natural one would come on the second or
 third job. Each run starts from a fresh career that has done the yard.
+
+The hoarder heeds no warning: it carries on picking things up, and out
+in the open after a warning is meant to lose. Its going down is counted
+by design, not as a failure (`run_fights`); the scenario fails only when
+a newcomer who does as the driver says doesn't come through. Every
+encounter is met within a sprint of a roof (the drone's nearest door is
+14 m off, `a_roof_is_in_reach_of_the_first_fights_drone`).
 
 | Machine | Placed | Tells watched |
 | - | - | - |
@@ -394,8 +401,14 @@ across it, to cover", 4 to 25 s ahead.
 Found, and fixed in the game:
 - **Nothing said how a job is paid.** The newcomers rode home and the
   job sat unpaid into the next session, so job 2 never came. Home from
-  the Zone with a job on the card, the driver now says "Home. Now press
-  the card: that's the job paid." (once a career, `firsts::payday`).
+  the Zone with a job on the card, the driver now says so, once a career
+  (`firsts::payday`), as the card stands (`requests::CardCheck`): "Home.
+  Press the card: that's the job paid." when pressing it would pay, else
+  "Home. Press the card once the job's done: it pays it." and the card's
+  own reason ("Not in the stash", "You've not been up to the old farm
+  yet"). It said "that's the job paid" to everyone until a newcomer came
+  home pinned by a drone, the job given up, and the card rightly wouldn't
+  pay.
 - **A drone sees down through trees and round walls.** Robot sight is a
   ray stopped only by solid things, and trees only have trunks. Against
   a drone the only cover is a roof. The drone line goes on: "Under a
@@ -747,3 +760,80 @@ thing at a time." In the headset, the truck showed all of these at once, before 
 - **The cooking table**: Model correctness removes it, and nothing goes through it.
 - **Model problems** (the dressing's size, the magazine's look): Model correctness owns them.
   The mark and the name carry the step meanwhile.
+
+## TRANSCRIPT O1–O3, instance by instance (against main, 30 October)
+
+Each row says what was lost at the time, its status, and what shows it: a test, a bot check or a
+shot. Where minutes were lost, they come from the video's clock.
+
+| Class | Instance (video) | Lost | Status | Shown by |
+| - | - | - | - | - |
+| O1 | The truck's boards a wall of text (0:01:03) | the start | **Fixed**: one step in view; the rest folds till taught | `one_thing_to_read_in_the_truck` (3 panels; 24 without); `yard_truck_before_after.jpg` |
+| O1 | Text z-fighting on the truck boards (0:01:00) | | **Fixed** (Legibility: the cards off the slat) | Legibility's own test |
+| O1 | The sign in front of the crate (0:06:00) | | **Fixed**: the board is on the cab wall, clear of the crate | `yard_truck_before_after.jpg` |
+| O1 | No settings, no menu (0:06:28) | | **Fixed** for settings: SETTINGS is the second step, and the cards fold out. **Open**: a title screen and a menu button (features; not this wave) | `a_skill_is_taught_before_it_is_needed` |
+| O1 | "Let the player have some fun" (1:06:27) | | **In hand**: each station ends on something happening; the next lamp flares; a cut to dress; a trigger that won't | `yard_firstaid_…`, `yard_rangestep_before_after.jpg` |
+| O2 | "Next, the lit lamp" meant leave the truck (0:10:28–0:12:45) | ~2 min | **Fixed**: done boards don't say it; the driver says "off the back of the truck, the lamp on your left"; that lamp flares | `done_in_the_truck_you_are_told_to_get_off_it` |
+| O2 | "Throw a part in": which target? (0:27:40–0:30:04) | ~2.5 min | **Fixed**: "the sparks", six red flags, a ring at its edge; once it's set off, "See it go dark? Spent…" | `the_step_marks_what_it_names`; `yard_snare_before_after.jpg` |
+| O2 | "Take the radio": which one? (0:08:45) | ~10 s | **Fixed**: the radio is ringed in the crate; "the green radio, ringed in the crate" | `the_step_marks_what_it_names` |
+| O2 | "Safety off" without how (0:16:44–0:17:55) | ~1 min | **Fixed**: the board shows the step's how; first you squeeze and it's dead, then "That's the safety. Click the stick…" | the range test; `yard_rangestep_before_after.jpg` |
+| O2 | The wrong gun and ammo, a second gun (0:19:31–0:20:47) | ~1 min | **Fixed**: the table's pistol and its empty magazine are ringed and named; the kit pistol stays holstered | `the_step_marks_what_it_names`; `yard_range_before_after.jpg` |
+| O2 | A brown block on the table (0:19:32) | | **Fixed**: it's the empty magazine, now ringed and named "the ringed mag" | `yard_range_before_after.jpg` |
+| O2 | "Push the button" should come first (0:30:43) | | **Fixed**: the second step, in the truck | `a_skill_is_taught_before_it_is_needed` |
+| O2 | The dressing didn't read as one (0:27:20) | ~20 s | **Fixed** for finding it: ringed, "the white roll". Its look (too small) is Model correctness's (M4) | `the_step_marks_what_it_names` |
+| O3 | Both hands full, no pocket shown (0:09:03) | ~30 s | **Fixed**: holster before the radio, the radio pocketed, the pack with the far box | `a_skill_is_taught_before_it_is_needed`; the kit test |
+
+Open, in order of what they cost: none from O1–O3 that this wave can close. The title screen
+and a menu button are features the designer set aside ("the basics first").
+
+# The first hour on the pulled-in valleys (31 October)
+
+After Map design pulled Marrow Creek in to 388 m and Cinder Works to 472 m,
+each newcomer did the yard, then a first raid. A career's first job is
+always Marrow Creek's, so for Cinder Works the raid is seeded with the first
+job that valley deals a new career (`--job scout`): the card reads "Go up to
+the ash Row and look round ... From the drop: north, 100 m."
+
+| Newcomer | Marrow Creek (main 48c1e298) | Cinder Works (main c9b36623) |
+| - | - | - |
+| cautious | paid | paid |
+| reckless | paid | paid |
+| lost | paid | paid (after the furnace fix) |
+| hoarder | paid | down at 106 s: a drone on the way back, every hit warned |
+| one-handed | paid (after the mag-release fix) | down at 278 s: drones, every hit warned |
+| wanderer | paid; nudged "The old farm's east, 140 m" | paid and nudged ("The ash Row's west, 140 m") when it gets out that far; a drone on the way can cut the walk short, and then nothing's said and it comes home without the place |
+| empty-handed | paid | down at 261 s: drones, every hit warned |
+
+On both maps the first job is the obvious way from the drop, and the
+nudge names a place that's there.
+
+Fixed on the way, all in the newcomer bot:
+- one-handed, the yard's mag-release step: the release held only for its
+  step, and the gun taken off safe before a step that fires;
+- wanderer: the short walk is a share of the way (the new first jobs are
+  ~100 m off); it walks away along a road, but not one that passes the
+  place (Cinder's track runs by Ash Row);
+- lost, on Cinder: it walked into the blast furnace's stoves and stood
+  there twenty minutes. Outdoors, a stretch the machines' walking grid
+  says isn't clear now follows the grid's path (it went round only
+  buildings with doors before);
+- "keep still" waited exactly the bot's 30 s give-up, so a frame past it
+  was a failure;
+- the wanderer goes out past the nudge's distance from where it turned
+  (on Cinder the nearest named place past 1.3 times the way was short of
+  it), and up to the place, not in at its door;
+- under a roof from a drone: a building it got stuck going into isn't
+  tried again (Cinder's shop has a way in on a wall with only a window),
+  and the rest of that plan is dropped.
+
+Open, for others:
+- Cinder: three of seven die on the first job to drones between Ash Row
+  and the gate, each hit after a warning. In a career a player reaches
+  Cinder after Marrow's jobs, so they're less new than this test makes
+  them.
+- Cinder: the newcomer brushes a burner on the straight way to Ash Row at
+  (-50, 151), warned as it's reached (under 10 hp).
+- "the ash Row": `raid::lines::the` lowercases a place's first letter
+  ("the old farm"), wrong for a name like Ash Row.
+- Cinder's shop at (10, 118.5): a way in (`robots::doors::Entrances`) on
+  its south wall, where there's only a window; its door is on the east.

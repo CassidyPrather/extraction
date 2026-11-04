@@ -280,7 +280,10 @@ pub struct Decal {
 #[derive(Resource)]
 pub(crate) struct FxAssets {
     pub(crate) cube: Handle<Mesh>,
+    /// Drops (oil, water): small spheres.
     pub(crate) ball: Handle<Mesh>,
+    /// Dust, smoke, gas: soft puffs (`render::puff`).
+    pub(crate) puff: Handle<Mesh>,
     pub(crate) disc: Handle<Mesh>,
     pub(crate) dust: Handle<StandardMaterial>,
     pub(crate) soil_dust: Handle<StandardMaterial>,
@@ -314,6 +317,7 @@ pub struct ImpactFxPlugin;
 
 impl Plugin for ImpactFxPlugin {
     fn build(&self, app: &mut App) {
+        crate::render::puff::add_to(app);
         app.insert_resource(FxPool {
             bits: Capped::new(BIT_CAP),
             decals: Capped::new(DECAL_CAP),
@@ -326,6 +330,7 @@ impl Plugin for ImpactFxPlugin {
 
 fn fx_assets(
     mut commands: Commands,
+    puffs: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -336,6 +341,17 @@ fn fx_assets(
         unlit: true,
         ..default()
     });
+    // Dust, smoke and gas, unlit (lit and fogged, dust read as a dark
+    // ball), soft (`render::puff`).
+    let mut soft = |r: f32, g: f32, b: f32, a: f32| {
+        materials.add(puffs.material(Color::srgba(r, g, b, a), false))
+    };
+    let (dust, soil_dust, gas, smoke) = (
+        soft(0.6, 0.59, 0.56, 0.32),
+        soft(0.38, 0.35, 0.3, 0.32),
+        soft(0.8, 0.82, 0.8, 0.3),
+        soft(0.72, 0.72, 0.7, 0.22),
+    );
     let mut m = |r: f32, g: f32, b: f32, a: f32, glow: f32, rough: f32, metal: f32| {
         materials.add(StandardMaterial {
             base_color: Color::srgba(r, g, b, a),
@@ -354,10 +370,10 @@ fn fx_assets(
     let assets = FxAssets {
         cube: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
         ball: meshes.add(Sphere::new(0.5).mesh().ico(2).unwrap()),
+        puff: puffs.quad.clone(),
         disc: meshes.add(Circle::new(0.5).mesh().resolution(10)),
-        // Dust is unlit: a lit, fogged sphere reads as a dark ball.
-        dust: m(0.6, 0.59, 0.56, 0.32, 0.001, 1.0, 0.0),
-        soil_dust: m(0.38, 0.35, 0.3, 0.32, 0.001, 1.0, 0.0),
+        dust,
+        soil_dust,
         chip: m(0.45, 0.44, 0.42, 1.0, 0.0, 0.9, 0.0),
         splinter: m(0.78, 0.66, 0.46, 1.0, 0.0, 0.8, 0.0),
         spark: m(1.0, 0.72, 0.3, 1.0, 6.0, 1.0, 0.0),
@@ -371,7 +387,7 @@ fn fx_assets(
         flake: m(0.3, 0.32, 0.3, 1.0, 0.0, 0.5, 0.8),
         fizz: m(0.55, 0.85, 1.0, 1.0, 8.0, 1.0, 0.0),
         oil: m(0.05, 0.04, 0.03, 1.0, 0.0, 0.08, 0.0),
-        gas: m(0.8, 0.82, 0.8, 0.3, 0.001, 1.0, 0.0),
+        gas,
         cone: meshes.add(
             Cone::new(0.5, 1.0)
                 .mesh()
@@ -380,7 +396,7 @@ fn fx_assets(
                 .rotated_by(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         ),
         flash,
-        smoke: m(0.72, 0.72, 0.7, 0.22, 0.001, 1.0, 0.0),
+        smoke,
     };
     commands.insert_resource(assets);
 }
@@ -489,7 +505,7 @@ fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray>
             sparks(3),
             Spray {
                 n: 3,
-                mesh: |a| a.ball.clone(),
+                mesh: |a| a.puff.clone(),
                 mat: |a| a.gas.clone(),
                 size: Vec3::splat(0.1),
                 out: 1.5,
@@ -519,10 +535,13 @@ fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray>
     }
 }
 
+/// How hard an impact's burst of dust leaves the face, m/s (`recipe`).
+const JET_OUT: f32 = 3.0;
+
 fn recipe(kind: ImpactKind) -> Vec<Spray> {
     let puff = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
         n,
-        mesh: |a| a.ball.clone(),
+        mesh: |a| a.puff.clone(),
         mat,
         size: Vec3::splat(0.08),
         out: 0.9,
@@ -534,13 +553,32 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
         wind: 0.7,
         ..SPRAY
     };
+    // The burst: small puffs thrown hard out of the face along its normal,
+    // braked by the air within a few tenths of a second and blooming as
+    // they stop (a ball left hanging didn't read as a hit).
+    let jet = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
+        n,
+        mesh: |a| a.puff.clone(),
+        mat,
+        size: Vec3::splat(0.06),
+        out: JET_OUT,
+        scatter: 0.6,
+        life: 0.7,
+        grow: 3.0,
+        gravity: -0.1,
+        drag: 5.0,
+        wind: 0.5,
+        ..SPRAY
+    };
     match kind {
         ImpactKind::Masonry => vec![
-            puff(|a| a.dust.clone(), 4),
+            jet(|a| a.dust.clone(), 5),
+            puff(|a| a.dust.clone(), 3),
+            // Grit, with its dust.
             Spray {
                 n: 6,
                 size: Vec3::splat(0.022),
-                out: 2.5,
+                out: 2.6,
                 scatter: 1.5,
                 life: 0.7,
                 spin: 20.0,
@@ -583,6 +621,7 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
             ..SPRAY
         }],
         ImpactKind::Soil => vec![
+            jet(|a| a.soil_dust.clone(), 5),
             puff(|a| a.soil_dust.clone(), 3),
             Spray {
                 n: 6,
@@ -616,7 +655,7 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
 fn spall(kind: ImpactKind) -> Vec<Spray> {
     let cone = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
         n,
-        mesh: |a| a.ball.clone(),
+        mesh: |a| a.puff.clone(),
         mat,
         size: Vec3::splat(0.07),
         out: 3.5,
@@ -707,6 +746,7 @@ pub(crate) fn spray_bits(
     n: Vec3,
     glance: Vec3,
 ) {
+    let mesh = (s.mesh)(a);
     for _ in 0..s.n {
         let rand = Vec3::new(
             pool.rng.range(-1.0, 1.0),
@@ -735,7 +775,7 @@ pub(crate) fn spray_bits(
                     spin: rand * s.spin,
                     wind: s.wind,
                 },
-                Mesh3d((s.mesh)(a)),
+                Mesh3d(mesh.clone()),
                 MeshMaterial3d((s.mat)(a)),
                 Transform::from_translation(at)
                     .with_rotation(rot)
@@ -744,6 +784,13 @@ pub(crate) fn spray_bits(
                 NotShadowReceiver,
             ))
             .id();
+        // A puff turns to face the eye.
+        if mesh == a.puff {
+            commands.entity(e).insert((
+                crate::render::puff::SoftPuff,
+                bevy::camera::visibility::NoFrustumCulling,
+            ));
+        }
         if let Some(old) = pool.bits.push(e) {
             commands.entity(old).try_despawn();
         }
@@ -892,6 +939,96 @@ fn age_decals(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A round into masonry or soil throws its dust: a burst of small
+    /// puffs out of the face, faster and smaller than the cloud that
+    /// lingers after, with grit thrown with it (and the far side's spall
+    /// still harder, `spall_is_thrown_on_harder_than_the_entry_splash`).
+    #[test]
+    fn an_impact_throws_its_dust() {
+        for k in [ImpactKind::Masonry, ImpactKind::Soil] {
+            let r = recipe(k);
+            let puffs: Vec<_> = r.iter().filter(|s| s.grow > 0.0).collect();
+            let burst = puffs
+                .iter()
+                .max_by(|a, b| a.out.total_cmp(&b.out))
+                .expect("dust");
+            let cloud = puffs
+                .iter()
+                .max_by(|a, b| a.size.x.total_cmp(&b.size.x))
+                .unwrap();
+            assert!(burst.out >= 3.0, "{k:?}: its dust leaves at {}", burst.out);
+            assert!(burst.size.x < cloud.size.x, "{k:?}: a burst of small puffs");
+            assert!(burst.n >= 5, "{k:?}: a burst, not a puff or two");
+            assert!(
+                r.iter().any(|s| s.grow == 0.0 && s.out >= burst.out * 0.8),
+                "{k:?}: grit thrown with it"
+            );
+        }
+    }
+
+    /// Every spray that spreads (dust, smoke, gas: `grow`) is a soft puff
+    /// (`render::puff`), and only those are: every impact, every exit,
+    /// every robot part, hurt or not. (They were spheres: flat grey discs.)
+    #[test]
+    fn what_spreads_is_a_soft_puff() {
+        use crate::robots::PartRole;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Image>();
+        crate::render::puff::add_to(&mut app);
+        app.add_systems(Startup, fx_assets);
+        app.update();
+        let a = app.world().resource::<FxAssets>();
+        let kinds = [
+            ImpactKind::Masonry,
+            ImpactKind::Wood,
+            ImpactKind::Metal,
+            ImpactKind::Glass,
+            ImpactKind::Soil,
+            ImpactKind::Water,
+            ImpactKind::Robot,
+            ImpactKind::Body,
+        ];
+        let parts = [
+            None,
+            Some(PartRole::Core),
+            Some(PartRole::Sensor),
+            Some(PartRole::Weapon),
+            Some(PartRole::Rotor(0)),
+            Some(PartRole::Leg(0)),
+            Some(PartRole::GasCell(0)),
+            Some(PartRole::Armour(0)),
+        ];
+        let mut all: Vec<(String, Spray)> = Vec::new();
+        for k in kinds {
+            all.extend(recipe(k).into_iter().map(|s| (format!("{k:?}"), s)));
+            all.extend(spall(k).into_iter().map(|s| (format!("{k:?} exit"), s)));
+        }
+        for p in parts {
+            for hurt in [false, true] {
+                all.extend(
+                    robot_recipe(p, hurt)
+                        .into_iter()
+                        .map(|s| (format!("{p:?} hurt {hurt}"), s)),
+                );
+            }
+        }
+        let mut bad = Vec::new();
+        for (what, s) in &all {
+            let soft = (s.mesh)(a) == a.puff;
+            if s.grow > 0.0 && !soft {
+                bad.push(format!("{what}: a spreading spray isn't a soft puff"));
+            }
+            if s.grow == 0.0 && soft {
+                bad.push(format!("{what}: a soft puff that doesn't spread"));
+            }
+        }
+        assert!(all.iter().any(|(_, s)| s.grow > 0.0), "no puffs at all");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
 
     /// Out of the far side, a round throws more, and harder, on along its
     /// line than it splashes back off the face it went in by.

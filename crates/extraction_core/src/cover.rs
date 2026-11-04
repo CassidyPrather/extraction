@@ -298,16 +298,20 @@ mod tests {
 
     #[test]
     fn cover_grows_in_the_open_and_under_trees_but_not_on_roads_or_floors() {
-        let map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        // The rules, on the test field's wide meadows (a tight valley is
+        // mostly its places and their ways).
+        let map = MapDef::from_ron(crate::map::TEST_FIELD).unwrap();
         let hm = Heightmap::build(&map);
         let cover = CoverMap::new(&map, &hm);
         let size = 24.0;
         let mut counts = std::collections::HashMap::new();
         let mut patches = 0;
-        let mut z = -240.0;
-        while z < 240.0 {
-            let mut x = -240.0;
-            while x < 240.0 {
+        // The middle three quarters of the valley, whatever its size.
+        let reach = map.size * 0.375;
+        let mut z = -reach;
+        while z < reach {
+            let mut x = -reach;
+            while x < reach {
                 let a = cover.patch(&hm, [x, z], size);
                 assert_eq!(a, cover.patch(&hm, [x, z], size), "same patch, same plants");
                 for s in &a {

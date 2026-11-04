@@ -18,7 +18,7 @@ import bmesh
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import (ALONG_X, FRONT, ON_TOP, UP, blob, cube, item, panel, ragged, ring, text,
+from _kit import (ALONG_X, FRONT, LIFT, ON_TOP, UP, blob, cube, item, panel, ragged, ring, text,
                   text_round, tube_path, wanted)
 from common import Part, RX, RY, RZ, T, S, fillet
 from mathutils import Vector
@@ -89,24 +89,36 @@ def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12):
 def water_bottle():
     yb = -0.12
     p = Part("body")
-    # A clear plastic bottle two-thirds full, a paper label, a red cap.
-    p.lathe([(0.0, yb), (0.027, yb), (0.032, yb + 0.004), (0.0335, yb + 0.012),
-             (0.0335, 0.035), (0.031, 0.056), (0.022, 0.08), (0.0135, 0.096), (0.0125, 0.1),
-             (0.0125, 0.112), (0.0, 0.112)], "Clear", segs=24, xf=UP)
-    p.lathe([(0.0, yb + 0.002), (0.031, yb + 0.002), (0.032, yb + 0.01), (0.032, 0.03),
-             (0.0, 0.03)], "Glass", segs=20, xf=UP)
-    for y in (-0.09, -0.08, 0.012):
-        ring(p, 0.0335, 0.0009, "Clear", xf=T(0, y, 0) @ UP, segs=24, sides=4)
-    band(p, 0.0335, 0.0338, -0.05, 0.0, "Paper")
-    for y in (-0.047, -0.006):
-        band(p, 0.0337, 0.034, y, y + 0.003, "Red")
-    text_round(p, "ВОДА", 0.013, "Blued", 0.0338, -0.026)
-    text_round(p, "ВОДА", 0.013, "Blued", 0.0338, -0.026, at=math.pi)
-    p.tube(0.0158, 0.0124, 0.098, 0.0995, "Clear", segs=16, xf=UP)
+    # An army canteen: an aluminium flask, its lower half in a khaki
+    # canvas cover, a black screw cap. (Covered to the shoulders it was a
+    # dark olive lump on a dark table: the bare metal is what's seen.) (It was a clear plastic bottle
+    # labelled ВОДА; the item is a canteen: its name, its twist-cap drink,
+    # `capture::scale`.) The cap keeps the old one's place and axis, the
+    # other hand's twist handle (`first_aid::cap_bottles`, 12 mm under
+    # the top).
+    # The canvas at its real weave: the library's is laid a metre to a
+    # repeat, and on a 7 cm flask its cells were 5 mm, a knitted net.
+    p.uv_scale = 5.0
+    p.lathe([(0.0, -0.04), (0.032, -0.04), (0.032, 0.05), (0.0295, 0.068), (0.021, 0.085),
+             (0.0145, 0.093), (0.0125, 0.096), (0.0125, 0.1), (0.0, 0.1)], "Zinc", segs=24,
+            xf=UP)
+    # The cover: canvas over the body, its hem bound, a seam down the
+    # back and a strap tab with its snap at the side.
+    p.lathe([(0.0, yb), (0.028, yb), (0.032, yb + 0.004), (0.0335, yb + 0.012),
+             (0.0335, -0.032), (0.032, -0.03), (0.0, -0.03)], "Canvas", segs=24, xf=UP)
+    # (All inside the item's 0.07 box: the cover 33.5 mm round, the hem,
+    # tab and snap standing to 35.)
+    ring(p, 0.0335, 0.0015, "Olive", xf=T(0, -0.034, 0) @ UP, segs=24, sides=4)
+    p.box((0.003, 0.08, 0.0012), (0.0, -0.076, 0.0337), "Olive")
+    p.box((0.012, 0.04, 0.0016), (0.0, -0.06, 0.0), "Canvas",
+          xf=RY(math.pi / 2) @ T(0, 0, 0.0337))
+    p.cyl(0.0035, 0.0, 0.0006, "Worn", segs=10,
+          xf=RY(math.pi / 2) @ T(0, -0.05, 0.0344))
+    # The cap: knurled black plastic on its thread, under a lip.
     p.lathe([(0.0, 0.1), (0.0145, 0.1), (0.0148, 0.101), (0.0148, 0.1185), (0.0138, 0.12),
-             (0.0, 0.12)], "Red", segs=20, xf=UP)
+             (0.0, 0.12)], "Black", segs=20, xf=UP)
     for k in range(16):
-        p.box((0.0012, 0.015, 0.0012), (0.0, 0.11, 0.0), "Red",
+        p.box((0.0012, 0.015, 0.0012), (0.0, 0.11, 0.0), "Black",
               xf=RY(2 * math.pi * k / 16) @ T(0.0148, 0, 0))
     return [p]
 
@@ -338,10 +350,11 @@ def rice_bag():
         y = yb + 0.06 + 0.0105 * (1.0 - t * t) - 0.0003
         p.sphere(0.0017, (0.0, 0.0, 0.0), "Paper", segs=6, rings=3,
                  xf=T(x, y, z) @ RY(rnd.uniform(0, math.pi)) @ S(2.0, 0.7, 0.85))
-    zf = -0.022 - 0.0003
-    p.box((0.044, 0.026, 0.0005), (0.0, yb + 0.03, zf + 0.0002), "Paper")
-    text(p, "РИС", 0.011, "Red", T(0.0, yb + 0.033, zf) @ FRONT, depth=0.0005)
-    p.box((0.044, 0.0025, 0.0006), (0.0, yb + 0.021, zf), "Red")
+    # The label stands LIFT off the bag; its print LIFT off the label.
+    zl = -0.022 - LIFT
+    p.box((0.044, 0.026, LIFT + 0.0003), (0.0, yb + 0.03, zl + (LIFT + 0.0003) / 2), "Paper")
+    text(p, "РИС", 0.011, "Red", T(0.0, yb + 0.033, zl) @ FRONT, depth=LIFT)
+    p.box((0.044, 0.0025, LIFT), (0.0, yb + 0.021, zl - LIFT / 2), "Red")
     return [p]
 
 
@@ -372,10 +385,11 @@ def sugar_cubes():
           xf=T(0.0, yb + h, d / 2 - wall / 2) @ RX(0.18))
     p.box((w + 0.0004, 0.004, 0.0004), (0.0, 0.016, -0.0008), "Red",
           xf=T(0.0, yb + h, d / 2 - wall / 2) @ RX(0.18))
-    zf = -d / 2 - 0.0002
-    text(p, "САХАР", 0.009, "Red", T(0.0, yb + 0.018, zf) @ FRONT, depth=0.0005)
+    zf = -d / 2
+    text(p, "САХАР", 0.009, "Red", T(0.0, yb + 0.018, zf) @ FRONT, depth=LIFT)
+    # Bands round the box, LIFT off its walls.
     for y in (yb + 0.006, yb + 0.03):
-        p.box((w + 0.0004, 0.0025, d + 0.0004), (0.0, y, 0.0), "Red")
+        p.box((w + 2 * LIFT, 0.0025, d + 2 * LIFT), (0.0, y, 0.0), "Red")
     return [p]
 
 
@@ -472,16 +486,17 @@ def crackers():
     s = cube(0.3)
     yb = -s / 2
     p = Part("body")
-    # A packet of army hard-tack in olive wax paper, torn open at the
-    # front; a biscuit slid out on top.
+    # A packet of army hard-tack in brown kraft paper, torn open at the
+    # front; a biscuit slid out on top. Food is warm (it was olive, and
+    # read as a field dressing: docs/craft/ITEM_READING.md).
     zt = -0.008
     plan = fillet([(-0.0255, zt), (0.0255, zt), (0.0255, 0.0325), (-0.0255, 0.0325)],
                   [0.0025, 0.0025, 0.004, 0.004], 2)
-    p.prism(plan, yb, yb + 0.031, "Olive", axis="y", bevel=0.002, segs=1)
+    p.prism(plan, yb, yb + 0.031, "Straw", axis="y", bevel=0.002, segs=1)
     for y0, y1, sd in ((yb + 0.0302, yb + 0.031, 1), (yb, yb + 0.0008, 2)):
-        ragged(p, 0.05, zt + 0.001, 0.008, y0, y1, "Olive", seed=sd)
+        ragged(p, 0.05, zt + 0.001, 0.008, y0, y1, "Straw", seed=sd)
     for sx in (-1, 1):
-        ragged(p, 0.028, zt + 0.001, 0.007, -0.0004, 0.0004, "Olive", seed=3 + sx,
+        ragged(p, 0.028, zt + 0.001, 0.007, -0.0004, 0.0004, "Straw", seed=3 + sx,
                xf=T(sx * 0.0251, yb + 0.0155, 0.0) @ RZ(math.pi / 2))
     # The stack inside, showing only where it comes out of the paper.
     for k in range(4):

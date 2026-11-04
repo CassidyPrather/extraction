@@ -42,9 +42,19 @@ pub const CHEST_BELOW_EYES: f32 = 0.38;
 const BEND: f32 = 0.45;
 /// Bending over, the hips stay where they are while the head goes forward
 /// and down: the anchor (and the belt on it) may trail the neck by this
-/// much per metre the head has dropped, up to [`HINGE_MOST`].
-const HINGE: f32 = 1.3;
+/// much per metre the head has dropped past [`HINGE_FROM`], up to
+/// [`HINGE_MOST`].
+const HINGE: f32 = 1.8;
 const HINGE_MOST: f32 = 0.45;
+/// A head this little lower than standing isn't bending: walking's bob, a
+/// glance down at the legs. The hips come along under it (the 28 October
+/// playtest: walking round the room, the hips stayed put and the body
+/// looked tilted).
+const HINGE_FROM: f32 = 0.1;
+/// How fast the anchor closes on where it should be, per second: quick
+/// enough to keep up with a walk (at 12 the hips trailed a walking pace by
+/// 7 cm), slow enough to smooth the tracking.
+const FOLLOW: f32 = 30.0;
 
 /// Index of a body socket in the default slot layout (1-9 keys in flat mode).
 #[derive(Component, Clone, Copy, Debug)]
@@ -82,6 +92,18 @@ pub struct InBackpack {
 /// The pose a stowed item was put in, in its bag: where it stays.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StowedPose(pub Transform);
+
+/// Where a thing in a body slot with a pocket, pouch, holster or mount
+/// sits (`slot_fit`): where it's kept (`keep_stowed_poses`), for it
+/// rather than the slot's own seat.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct SlotSeat(pub Transform);
+
+/// Where a thing in a socket belongs: its own seat in a body slot if it
+/// has one (`SlotSeat`), else the socket's.
+pub fn seat_of(own: Option<&SlotSeat>, socket: &Socket) -> Transform {
+    own.map_or(socket.seat, |s| s.0)
+}
 
 /// A loose item slower than this inside an open container has come to
 /// rest in it, m/s.
@@ -162,7 +184,7 @@ fn remember_stowed_poses(
 /// anything is drawn or saved.
 fn keep_stowed_poses(
     mut stowed: Query<(&StowedPose, &mut Transform), With<InBackpack>>,
-    mut pocketed: Query<(&super::InSocket, &mut Transform), Without<InBackpack>>,
+    mut pocketed: Query<(&super::InSocket, Option<&SlotSeat>, &mut Transform), Without<InBackpack>>,
     sockets: Query<&super::Socket>,
 ) {
     for (pose, mut t) in &mut stowed {
@@ -170,13 +192,14 @@ fn keep_stowed_poses(
             *t = pose.0;
         }
     }
-    for (inside, mut t) in &mut pocketed {
+    for (inside, own, mut t) in &mut pocketed {
         let Ok(socket) = sockets.get(inside.socket) else {
             continue;
         };
         // Body slots only: a gun's well and mounts seat their own.
-        if matches!(socket.kind, super::SocketKind::Body(_)) && *t != socket.seat {
-            *t = socket.seat;
+        let seat = seat_of(own, socket);
+        if matches!(socket.kind, super::SocketKind::Body(_)) && *t != seat {
+            *t = seat;
         }
     }
 }
@@ -218,6 +241,7 @@ impl Plugin for BodyPlugin {
             .add_systems(
                 PostUpdate,
                 (
+                    fit_seated,
                     settle_into_containers,
                     remember_stowed_poses,
                     keep_stowed_poses,
@@ -491,7 +515,7 @@ fn lean_with_chest(
 
 /// Where each slot sits on the torso (origin mid-chest), how its occupant
 /// is seated, and its snap radius.
-fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
+pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
     use std::f32::consts::FRAC_PI_2;
     match slot {
         SlotKind::Sling => {
@@ -513,7 +537,9 @@ fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
         SlotKind::Pouch => {
             let k = index.saturating_sub(3) as f32;
             (
-                Vec3::new(-0.14 + k * 0.09, -0.16, -0.13),
+                // Out from the chest panel's face (-0.104) by the pouch's
+                // back: nearer, a magazine went through the panel.
+                Vec3::new(-0.14 + k * 0.09, -0.16, -0.155),
                 Transform::IDENTITY,
                 0.08,
             )
@@ -538,6 +564,124 @@ fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
         SlotKind::Head => (Vec3::new(0.0, 0.43, -0.02), Transform::IDENTITY, 0.2),
     }
 }
+
+/// How much wider than its cavity a thing may sit (cloth gives), metres.
+pub const SLOT_GIVE: f32 = 0.004;
+
+/// How a thing sits in a body slot (its pose in the slot's space), or
+/// `None` if it doesn't fit there. A slot with a pocket, pouch, holster or
+/// mount (`kit_cavities`) stands what's put in it on its floor, turned so
+/// its longest side is up and its thinnest across the cavity's thinnest
+/// (a pistol hangs barrel down as the holster's made for it), centred in
+/// it; it may stand up out of the mouth, but not out through the sides. A
+/// slot without one seats what goes there as it's built to. (With every
+/// thing seated at the slot's origin, a can of stew went 42 mm through
+/// the chest mount and a knife 73 mm out of a mag pouch: `capture::stowed`.)
+pub fn slot_fit(
+    slot: SlotKind,
+    index: usize,
+    def: &extraction_core::items::ItemDef,
+) -> Option<Transform> {
+    let (_, seat, _) = slot_layout(slot, index);
+    let Some(cavity) = crate::kit_cavities::cavity(slot) else {
+        return Some(seat);
+    };
+    let size = Vec3::from(def.size_m());
+    let turn = if slot == SlotKind::Holster {
+        seat.rotation
+    } else {
+        // The thing's sides, shortest to longest, onto the cavity's.
+        let order = |v: Vec3| {
+            let mut i = [0usize, 1, 2];
+            i.sort_by(|a, b| v[*a].total_cmp(&v[*b]));
+            i
+        };
+        let (from, to) = (order(size), order(cavity.half));
+        let mut cols = [Vec3::ZERO; 3];
+        for k in 0..3 {
+            cols[from[k]] = Vec3::AXES[to[k]];
+        }
+        let m = Mat3::from_cols(cols[0], cols[1], cols[2]);
+        // A mirror isn't a turn: flip the shortest side.
+        let m = if m.determinant() < 0.0 {
+            let mut c = cols;
+            c[from[0]] = -c[from[0]];
+            Mat3::from_cols(c[0], c[1], c[2])
+        } else {
+            m
+        };
+        Quat::from_mat3(&m)
+    };
+    let half = (Mat3::from_quat(turn).abs() * size) * 0.5;
+    // Through the sides is out; up out of the mouth isn't (a holster's
+    // grip stands out of it, back as well as up, so only its thickness).
+    let wide = half.x > cavity.half.x + SLOT_GIVE;
+    let deep = slot != SlotKind::Holster && half.z > cavity.half.z + SLOT_GIVE;
+    if wide || deep {
+        return None;
+    }
+    // The open loop of a mount holds it round its middle; the rest stand
+    // it on their floor.
+    let mut middle = if slot == SlotKind::Mount {
+        cavity.centre()
+    } else {
+        cavity.floor + Vec3::Y * half.y
+    };
+    // Standing with its middle out of the mouth, it would tip out (a
+    // crossbow bolt in a mag pouch); a mount's loop holds it round its
+    // middle, whatever its length.
+    if slot != SlotKind::Mount && middle.y > cavity.mouth() {
+        return None;
+    }
+    // A pistol's slide against the holster's front, its grip standing out
+    // of the mouth behind (centred, the slide went out through the front).
+    if slot == SlotKind::Holster {
+        middle.z = cavity.floor.z - cavity.half.z + half.z;
+    }
+    let at = middle - turn * crate::kit_cavities::origin_offset(&def.id);
+    Some(Transform::from_translation(at).with_rotation(turn))
+}
+
+/// Whatever's just been put in a body slot with a pocket, pouch, holster
+/// or mount sits in it as `slot_fit` has it, not at the slot's origin:
+/// however it got there (let go at it, stowed, drawn back, loaded from a
+/// save).
+fn fit_seated(
+    mut commands: Commands,
+    mut seated: Query<(Entity, &super::InSocket, &Item, &mut Transform), Added<super::InSocket>>,
+    slots: Query<(&Socket, &BodySlot)>,
+    catalog: Res<Catalog>,
+) {
+    for (e, on, item, mut t) in &mut seated {
+        let fitted = slots.get(on.socket).ok().and_then(|(socket, slot)| {
+            let SocketKind::Body(kind) = socket.kind else {
+                return None;
+            };
+            crate::kit_cavities::cavity(kind)?;
+            slot_fit(kind, slot.0, catalog.get(item.kind()))
+        });
+        match fitted {
+            Some(seat) => {
+                t.set_if_neq(seat);
+                commands.entity(e).insert(SlotSeat(seat));
+            }
+            None => {
+                commands.entity(e).remove::<SlotSeat>();
+            }
+        }
+    }
+}
+
+/// Where the head turns on the neck (in the head's own frame, below and
+/// behind the eyes): looking down swings the eyes forward round it, and the
+/// body stays where it is. The torso anchor hangs under it and the drawn
+/// spine runs up to it (`rig::stance`), so the two agree.
+pub fn neck_pivot(head: &Transform) -> Vec3 {
+    head.translation + head.rotation * NECK_PIVOT
+}
+
+/// The neck's pivot from the eyes, in the head's frame.
+const NECK_PIVOT: Vec3 = Vec3::new(0.0, -0.1, 0.09);
 
 /// The torso trails the head: always under it, turning when the head has
 /// looked far enough away or the player is walking.
@@ -579,15 +723,15 @@ fn follow_head(
             let y = torso.standing - CHEST_BELOW_EYES - drop + input.lifted;
             // Under the neck (behind and below the eyes), so looking down
             // doesn't swing the belt forward; eased, so it doesn't jitter.
-            let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
+            let neck = neck_pivot(&head);
             // Upright, under the neck; bending over, the hips stay put (up
             // to a point) and the chest leans out over them (`rig::stance`).
-            let bent = ((torso.standing - raw) * HINGE).clamp(0.0, HINGE_MOST);
+            let bent = ((torso.standing - raw - HINGE_FROM) * HINGE).clamp(0.0, HINGE_MOST);
             let under = Vec2::new(neck.x, neck.z);
             let was = Vec2::new(t.translation.x, t.translation.z);
             let at = under + (was - under).clamp_length_max(bent);
             let want = Vec3::new(at.x, y, at.y);
-            let ease = (12.0 * dt).min(1.0);
+            let ease = (FOLLOW * dt).min(1.0);
             t.translation = if t.translation.distance(want) > 0.5 {
                 want
             } else {
@@ -601,10 +745,15 @@ fn follow_head(
 /// How far under the hand a held pack hangs (its middle), metres.
 pub const HANG: f32 = 0.3;
 
+/// How far a held pack's top leans away from you (radians), so its opening
+/// looks up at the eyes.
+const HANG_TILT: f32 = 0.5;
+
 /// Your pack swung off a shoulder and held: it hangs from the hand by its
-/// top strap, upright, its back to you, and while it's in front of you it's
-/// open, what's in it showing, for the other hand to reach in and take;
-/// taken back over the shoulder it closes (and let go there, it's on).
+/// top strap, its opening (the outer face: it's a panel loader) to you and
+/// tipped up toward the eyes, and while it's in front of you it's open,
+/// what's in it showing, for the other hand to reach in and take; taken
+/// back over the shoulder it closes (and let go there, it's on).
 #[allow(clippy::type_complexity)]
 fn hang_held_pack(
     mut packs: Query<(
@@ -633,7 +782,7 @@ fn hang_held_pack(
         };
         let torso = torso.compute_transform();
         let want = Transform::from_translation(hand.world.translation - Vec3::Y * HANG)
-            .with_rotation(torso.rotation * Quat::from_rotation_y(std::f32::consts::PI));
+            .with_rotation(torso.rotation * Quat::from_rotation_x(-HANG_TILT));
         lin.0 = ((want.translation - pos.0) / dt).clamp_length_max(8.0);
         let (axis, mut angle) = (want.rotation * rot.0.inverse()).to_axis_angle();
         if angle > std::f32::consts::PI {
@@ -800,5 +949,35 @@ fn carried_mass(
             }
         }
         body.carried_kg = kg.max(0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn def(id: &str) -> extraction_core::items::ItemDef {
+        let catalog = crate::items::Catalog::load();
+        catalog.get(catalog.kind(id).unwrap()).clone()
+    }
+
+    /// A thing long enough to stand with its middle above a slot's mouth
+    /// would tip out: a crossbow bolt (38 cm) isn't put in a mag pouch.
+    /// What a slot is made for still goes in.
+    #[test]
+    fn nothing_stands_in_a_slot_with_its_middle_out_of_the_mouth() {
+        for id in ["crossbow_bolt", "bolt_bundle"] {
+            assert!(
+                slot_fit(SlotKind::Pouch, 3, &def(id)).is_none(),
+                "{id} stands in a mag pouch"
+            );
+        }
+        assert!(slot_fit(SlotKind::Pouch, 3, &def("ak_mag")).is_some());
+        for id in ["pm_pistol", "nagant", "flare_pistol"] {
+            assert!(
+                slot_fit(SlotKind::Holster, 0, &def(id)).is_some(),
+                "{id} doesn't fit the holster"
+            );
+        }
     }
 }

@@ -5,8 +5,9 @@
 //!
 //! - **The tell.** It grinds along slowly with its amber lamp turning,
 //!   and stops to lay with a chunk and a hiss from its chute. Each laid
-//!   mine blinks red every couple of seconds and sits in a ring of
-//!   turned earth.
+//!   mine sits in a ring of turned earth, dark from afar; within
+//!   `extraction_core::minelayer::WAKE` of you it blinks red every couple
+//!   of seconds.
 //! - **The weakness.** It's slow and blind behind, and the hopper on its
 //!   back is full of mines: hole it and they cook off, taking the crawler
 //!   with them. Seen, it turns tail, and drops a mine behind it as it
@@ -1020,7 +1021,7 @@ mod tests {
     }
 
     fn harness() -> (crate::vr_harness::Vr, Zone) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         (vr, zone)

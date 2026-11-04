@@ -112,3 +112,79 @@ you see most): left the glove before this wave, right after its second
 pass. A padded panel over the back of the hand with dark seams down its
 sides, a moulded pad on each knuckle, leather fingertips. (The block at
 the wrist is the display's housing, on each glove.)
+
+`24_glove_cuff.jpg` (`kit+down`, the default view, the cuff end to the
+eye as when reaching forward): left the third pass's first try, right
+after. The dome meant to close the cuff was scaled about a point back in
+the hand, so it ran in as a funnel and read as a hole; it now closes
+over the arm's end in leather. The third pass also tapers the thumb.
+
+`25_side_opening_pack.jpg` (`--gallery pack`, `pack+side`, flat mode):
+the pack swung off the left shoulder and held in front. Before, it hung
+with its straps to you and opened at the top, the lid thrown back at
+you. Now it's a panel loader: it hangs with its outer face to you,
+tipped up toward the eyes, and opens there. The cavity is lined a shade
+off the canvas, the dressing shows inside, and the front panel (with the
+big pocket on it) folds down from its bottom edge.
+
+`26_hips_upright.jpg` (`--gallery body+down+side`, BODY on): standing
+and looking down, from beside. The hips stay under the neck, and the
+belt, harness and pack sit over the planted feet. Before, the drawn
+spine ran up to a neck that followed the eyes forward when looking down,
+and walking let the hips hang back by up to 19 cm, so the body leaned
+(the 28 October playtest). The jacket isn't drawn here because it lies
+between the eyes and the floor (`render::clear_eyes`).
+
+`27_two_hand_pistol.jpg` (`fp:pm_pistol,1.6,0`, `,90`, `,300`): the PM
+in both hands (28 October playtest, M2: "I can't use both hands on the
+gun"). The left palm is cupped under the grip, drawn on the gun's cup
+point as the right is drawn on the grip, not at its controller a few
+centimetres off (`render::props` test
+`a_palm_cupping_a_pistol_is_drawn_on_its_cup`). From the eye, from the
+left, and from below right. Still rough: the left glove's fingertips
+pass a little into the right hand's at the front of the grip.
+
+`28_support_hands.jpg` (`fp:pm_pistol,1.6,90`, `,0`, `fp:ak74,1.2,300`):
+the supporting hand on the PM and on the AK, before (top) and after
+(bottom). Before, the glove on a support or cup took the gun's own turn,
+which wraps a grip standing up through it. Under the PM's butt that made
+a fist round nothing, back to the gun: sausage fingers and a blob palm,
+cruder-looking than the glove passes though it was the same model. Beside
+the AK's handguard it was the same fist. After, a supporting hand holds
+from below, palm up (`render::props::support_pose`, tested on every gun):
+the PM's butt sits in the palm with the fingers forward under the gun
+hand's, and the AK's handguard lies in the palm with the fingers up its
+far side. The display's housing is now 7 mm thick and only on the
+display's hand, and the cuff's end is dark again.
+
+`29_support_and_handles.jpg` (`fp:ak74,1.2,300,0,60`, `fp:ak74+handle`,
+`fp:mosin+handle`, `fp:pm_pistol+handle`): the AK's handguard from
+below, lying across the supporting palm with the fingers up its far
+side (`support_pose`). Then a hand working each kind of handle, drawn on
+the handle where it has got to (`handle_pose`, tested on every gun):
+overhand, the palm down on it, the fingers forward of a knob so a pull
+back hooks it, the fist along a pistol's slide. Before, a hand on a
+handle was drawn at its controller, turned however the hand happened to
+be, a few centimetres off the knob. (The gallery's fifth `fp` field,
+TILT, tips a gun to show it from below.)
+`30_nagant_grip.jpg` (`fp:nagant,2.2,90,1`; below `fp:nagant,3.0,90,0` and
+`,1`): top, the Nagant's new grip model held at the old grip point (left:
+the fist closes on the air ahead of the grip) and at the new one (right,
+Gunsmith 29287b4: the fist on the grip). Below, the index released (along
+the frame, off the trigger) and pulled: `gun_index_curl` reaches the blade,
+but at 116 mm ahead of the hand (the other guns' 63-89 mm) only with a
+near-straight finger (curl 0.17; theirs 0.35-0.77), its tip hidden behind
+the blade from this side.
+`31_magazine_catch.jpg` (`fp:ak74,2.4,-90` / `fp:ak74+catch,2.4,-90`;
+`fp:pm_pistol,2.8,90,0,25` / `+catch`): left as held, right with the
+magazine release held. The AK's paddle (the model's `mag_catch`, just
+ahead of the guard) is the gun hand's index's: it straightens forward off
+the trigger onto it (`render::props::catch_index_curl`). The PM's heel
+catch is past any finger of the gun hand: the thumb of the palm cupped
+under the butt rises onto it (`catch_thumb`). Let go, each eases back.
+`32_crossbow_redraw.jpg` (`fp:crossbow,1.5,90` and `fp:crossbow+handle,1.5,90`;
+left before, right Gunsmith's ef8141d): the shorter draw a leaf-spring
+prod gives (the string's rest from z -0.33 to -0.22) and the front grip
+110 mm back. Top, the support palm under the new front grip, up into it;
+below, the fist closed on the string at its new rest. Both follow the
+layout (`support_pose`, `handle_pose`): nothing of the hands' changed.

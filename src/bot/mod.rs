@@ -125,6 +125,14 @@ pub enum Task {
     },
     /// Take a gun off the body (sling, holster) into the gun hand.
     DrawGun,
+    /// Ready the gun in the gun hand, by its state once it's there: a
+    /// magazine in if it has none with rounds (the reload chambers one), a
+    /// round up if not, and the safety off if `off_safe`. (Planned before
+    /// the draw from the first gun on the body, it readied the other of two
+    /// pistols and drew an empty one.)
+    Ready {
+        off_safe: bool,
+    },
     /// A press of one of the gun hand's buttons.
     Button(Btn),
     /// Reload with the gun hand alone (`Comfort::one_handed`): the
@@ -227,6 +235,11 @@ pub fn round_about(from: Vec2, to: Vec2, centre: Vec2, r: f32) -> Vec<Vec2> {
         .collect()
 }
 
+/// Hits on a robot that don't touch its core before the aim moves round
+/// it, and before it gives up on that robot (`Task::Shoot`).
+pub const HITS_TO_SHIFT: u32 = 5;
+pub const HITS_NOT_HURTING: u32 = 20;
+
 /// How far a bot reaches for things, metres (horizontal, from the body).
 pub const REACH: f32 = 1.2;
 /// How high over its feet a standing bot's hand gets, arm up: what's higher
@@ -240,7 +253,7 @@ pub const SEATED_HAND_LOW: f32 = 0.35;
 const GRAB_SLACK: f32 = 0.15;
 /// A step to the side round something in the way: how near it needs to
 /// get (and how a step is told from a walk).
-const SIDESTEP: f32 = 1.01;
+pub const SIDESTEP: f32 = 1.01;
 /// How quickly a bot's body swings onto its aim point, per second.
 const AIM_RATE: f32 = 14.0;
 
@@ -285,6 +298,8 @@ pub struct Bot {
     pub elapsed: f32,
     /// Shots fired in the current Fire task.
     pub fired: u32,
+    /// Clearing a stoppage mid-string (`clear_stoppage`).
+    clearing: bool,
     pub look: Vec3,
     pub walk: Option<Vec2>,
     pub aim: bool,
@@ -323,6 +338,10 @@ pub struct Bot {
     reach_low: bool,
     /// The gun it last had in hand: the one to draw back.
     last_gun: Option<Entity>,
+    /// Shooting at a robot: its core's hit points when last they fell, and
+    /// [`Self::robot_hits`] then. Hits that don't touch the core (a part
+    /// shot dead in front of it still stops the rounds) move the aim.
+    core_watch: Option<(Entity, f32, u32)>,
 }
 
 impl Bot {
@@ -331,6 +350,7 @@ impl Bot {
             tasks: tasks.into(),
             elapsed: 0.0,
             fired: 0,
+            clearing: false,
             look: Vec3::NEG_Z,
             walk: None,
             aim: false,
@@ -353,6 +373,7 @@ impl Bot {
             sidesteps: 0,
             reach_low: false,
             last_gun: None,
+            core_watch: None,
         }
     }
 
@@ -384,6 +405,7 @@ impl Bot {
     }
 
     fn next(&mut self) {
+        self.clearing = false;
         self.tasks.pop_front();
         self.restart();
         self.deferred = 0;
@@ -1254,6 +1276,40 @@ fn run_tasks(
                     bot.next();
                 }
             }
+            Task::Ready { off_safe } => {
+                let Some(f) = hand(gun_side)
+                    .and_then(|h| h.holding)
+                    .and_then(|e| guns.get(e).ok())
+                    .map(|g| &g.firearm)
+                else {
+                    bot.next();
+                    continue;
+                };
+                let mut steps = Vec::new();
+                if f.def.magazine_family.is_some()
+                    && f.magazine.as_ref().is_none_or(|m| m.rounds == 0)
+                {
+                    // (Its macro chambers one too: a rack after would throw
+                    // a round away.)
+                    steps.push(Task::Gun(MacroKind::Reload));
+                } else if f.chambers.iter().all(|c| c.is_none()) {
+                    steps.push(Task::Gun(MacroKind::Rack));
+                }
+                if off_safe && f.fire_mode() == extraction_core::firearm::FireMode::Safe {
+                    steps.push(Task::Gun(MacroKind::Mode));
+                }
+                info!(
+                    "bot: ready: magazine {:?}, chambered {}: {steps:?}",
+                    f.magazine.as_ref().map(|m| m.rounds),
+                    f.chambers.iter().any(|c| c.is_some())
+                );
+                bot.next();
+                for t in steps.into_iter().rev() {
+                    bot.tasks.push_front(t);
+                }
+                bot.restart();
+                continue;
+            }
             Task::Gun(kind) => {
                 if !bot.pending {
                     let Some(gun_e) = hand(gun_side).and_then(|h| h.holding) else {
@@ -1273,9 +1329,9 @@ fn run_tasks(
             Task::Fire { at, shots } => {
                 bot.look = at;
                 bot.aim = true;
-                let Some(gun) = hand(gun_side)
+                let Some((gun_e, gun)) = hand(gun_side)
                     .and_then(|h| h.holding)
-                    .and_then(|e| guns.get(e).ok())
+                    .and_then(|e| guns.get(e).ok().map(|g| (e, g)))
                 else {
                     bot.aim = false;
                     bot.next();
@@ -1285,11 +1341,19 @@ fn run_tasks(
                 if bot.elapsed < 0.6 {
                     continue;
                 }
+                if clear_stoppage(&mut bot, &mut mac, gun_e, gun) {
+                    continue;
+                }
                 let auto = gun.firearm.fire_mode() == extraction_core::firearm::FireMode::Auto;
                 let period = if auto { 0.15 } else { 0.35 };
-                let phase = ((bot.elapsed - 0.6) / period) as u32;
-                bot.trigger = (bot.elapsed - 0.6) % period < period * 0.5;
-                if phase >= shots || gun.firearm.live_rounds() == 0 && !bot.trigger {
+                let was = bot.trigger;
+                bot.trigger = bot.fired < shots && (bot.elapsed - 0.6) % period < period * 0.5;
+                if bot.trigger && !was {
+                    bot.fired += 1;
+                }
+                if bot.fired >= shots && !bot.trigger
+                    || gun.firearm.live_rounds() == 0 && !bot.trigger
+                {
                     bot.trigger = false;
                     bot.aim = false;
                     bot.next();
@@ -1369,9 +1433,13 @@ fn run_tasks(
                 };
                 bot.look = rgt.translation();
                 bot.aim = true;
-                let gun = hand(gun_side)
-                    .and_then(|h| h.holding)
-                    .and_then(|e| guns.get(e).ok());
+                let held = hand(gun_side).and_then(|h| h.holding);
+                let gun = held.and_then(|e| guns.get(e).ok());
+                if let (Some(e), Some(g)) = (held, gun)
+                    && clear_stoppage(&mut bot, &mut mac, e, g)
+                {
+                    continue;
+                }
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
                 if bot.elapsed > 0.5 && !empty && bot.fired < shots {
                     let period = 0.3;
@@ -1389,6 +1457,7 @@ fn run_tasks(
             Task::Grab { item, side } => {
                 if hand(side).and_then(|h| h.holding) == Some(item) {
                     bot.walk = None;
+                    bot.sidesteps = 0;
                     bot.next();
                     continue;
                 }
@@ -1409,8 +1478,32 @@ fn run_tasks(
                 let at = gt.translation();
                 bot.look = at;
                 let flat = Vec2::new(at.x, at.z);
-                if pos.distance(flat) > REACH {
+                let d = pos.distance(flat);
+                if d > REACH {
                     bot.walk = Some(flat);
+                    // Up against something between it and the thing (a
+                    // wreck's hull, the drop rolled round the far side): a
+                    // step to the side, as for a walk, and round to it.
+                    if d < bot.progress.0 - 0.3 {
+                        bot.progress = (d, 0.0);
+                    } else {
+                        bot.progress.1 += dt;
+                    }
+                    // (Not underground: a step aside in a cellar is into
+                    // its wall, and the walk slides along it as it is.)
+                    let below = zone.ground(pos.x, pos.y) - root.translation.y > 1.5;
+                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 && !below {
+                        let ahead = (flat - pos).normalize_or(Vec2::X);
+                        let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
+                        let step = pos + ahead.perp() * side * 1.8 + ahead * 0.6;
+                        bot.sidesteps += 1;
+                        bot.tasks.push_front(Task::WalkTo {
+                            to: step,
+                            within: SIDESTEP,
+                        });
+                        bot.restart();
+                        continue;
+                    }
                 } else if at.y - root.translation.y > STAND_REACH {
                     // Over its head, out of any hand's reach: it waits a
                     // little (it may come down), then gives up.
@@ -1571,11 +1664,48 @@ fn run_tasks(
                     .find(|(p, _)| {
                         p.robot == target && p.role == crate::robots::PartRole::Core && p.alive()
                     })
-                    .map(|(_, gt)| gt.translation());
+                    .map(|(p, gt)| (gt.translation(), p.hp));
                 bot.walk = None;
+                // Rounds that hit it and not its core (a part in front of
+                // the core, shot dead, still stops them: Sallow sims, 31
+                // October, 59 of 60 rounds into a crawler's dead gun): round
+                // the core, a hand's breadth at a time; and past
+                // [`HITS_NOT_HURTING`] of them, not another round into it.
+                let mut aside = 0;
+                if let Some((_, hp)) = core {
+                    let w = match bot.core_watch {
+                        Some((t, seen, _)) if t == target && hp >= seen - 0.01 => {
+                            bot.core_watch.unwrap()
+                        }
+                        _ => (target, hp, bot.robot_hits),
+                    };
+                    bot.core_watch = Some(w);
+                    aside = bot.robot_hits.saturating_sub(w.2);
+                    if aside >= HITS_NOT_HURTING {
+                        bot.note(format!(
+                            "FAIL {aside} hits on {target} not reaching its core"
+                        ));
+                        bot.failed += 1;
+                        bot.trigger = false;
+                        bot.aim = false;
+                        // (Kept: another round at it from here is wasted
+                        // too, till its core's hurt some other way.)
+                        bot.next();
+                        continue;
+                    }
+                }
                 // Lead a moving target: by the swing lag and the bullet's
                 // flight.
-                let at = core.unwrap_or(root_at);
+                let at = core.map_or(root_at, |(c, _)| {
+                    let k = aside / HITS_TO_SHIFT;
+                    if k == 0 {
+                        return c;
+                    }
+                    let to = (c - root.translation).normalize_or(Vec3::Z);
+                    let side = Vec3::Y.cross(to).normalize_or(Vec3::X);
+                    let step = [Vec3::Y * 0.2, side * 0.22, -side * 0.22, -Vec3::Y * 0.15];
+                    c + step[(k as usize - 1) % step.len()]
+                });
                 let now = bot.elapsed;
                 let vel = match bot.track {
                     Some((p, t)) if now > t + 1e-3 && now - t < 0.5 => (at - p) / (now - t),
@@ -1585,9 +1715,13 @@ fn run_tasks(
                 let flight = at.distance(root.translation) / 700.0;
                 bot.look = at + vel * (1.0 / AIM_RATE + flight);
                 bot.aim = true;
-                let gun = hand(gun_side)
-                    .and_then(|h| h.holding)
-                    .and_then(|e| guns.get(e).ok());
+                let held = hand(gun_side).and_then(|h| h.holding);
+                let gun = held.and_then(|e| guns.get(e).ok());
+                if let (Some(e), Some(g)) = (held, gun)
+                    && clear_stoppage(&mut bot, &mut mac, e, g)
+                {
+                    continue;
+                }
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
                 // Squeeze only with the body square to the target.
                 let to = bot.look - root.translation;
@@ -1732,4 +1866,131 @@ mod tests {
         }
         assert!(round_about(Vec2::new(5.0, 0.0), Vec2::new(5.0, 6.0), c, 3.0).is_empty());
     }
+
+    /// Underground, a grab that's up against a wall doesn't step aside:
+    /// in a cellar the step is into the next wall, and it stood there
+    /// stepping (Marrow sims, 30 October: four stucks 6 m down in the
+    /// village bunker's dorm). Staged in that dorm, reaching for a thing
+    /// in the room past its wall.
+    #[test]
+    fn underground_a_grab_doesnt_step_aside_into_the_wall() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+        let plan = vr
+            .app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+                 d: Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>| {
+                    crate::sim::indoor::plan_buildings(&b, &d)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == "bunker_marrow")
+            .expect("the bunker");
+        let g = &plan.grid;
+        let cells: Vec<Vec2> = (0..g.n)
+            .flat_map(|j| (0..g.n).map(move |i| (i, j)))
+            .map(|(i, j)| Vec2::from_array(g.centre(i, j)))
+            .filter(|c| g.walkable(c.to_array()))
+            .collect();
+        // In the dorm (x -9..-1, z 28..34), a few metres from a thing
+        // with a wall between.
+        let (a, b) = cells
+            .iter()
+            .filter(|a| (-9.0..-1.0).contains(&a.x) && (28.0..34.0).contains(&a.y))
+            .find_map(|a| {
+                cells
+                    .iter()
+                    .find(|b| {
+                        (2.5..4.5).contains(&a.distance(**b))
+                            && !g.line_clear(a.to_array(), b.to_array())
+                    })
+                    .map(|b| (*a, *b))
+            })
+            .expect("a dorm cell with a wall between it and the next room");
+        let world = |p: Vec2, up: f32| {
+            plan.xf
+                .transform_point(Vec3::new(p.x, plan.floor_at(p) + up, p.y))
+        };
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let item = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(vr.app.world_mut());
+            let mut c = q.get_mut(vr.app.world_mut()).unwrap();
+            let e = crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind("servo").unwrap(),
+                    transform: Transform::from_translation(world(b, 0.3)),
+                    condition: 0.6,
+                },
+            );
+            q.apply(vr.app.world_mut());
+            e
+        };
+        let player = vr.player;
+        let at = world(a, 0.05);
+        vr.app
+            .world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = at;
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        assert!(zone.ground(at.x, at.z) - at.y > 1.5, "not underground");
+        vr.step(30);
+        vr.app
+            .world_mut()
+            .entity_mut(player)
+            .insert(Bot::new(vec![Task::Grab {
+                item,
+                side: Side::Left,
+            }]));
+        vr.step(90 * 8);
+        let bot = vr.app.world().get::<Bot>(player).unwrap();
+        assert_eq!(bot.sidesteps, 0, "stepped aside underground: {:?}", bot.log);
+    }
+}
+
+/// A stoppage in the gun in hand, as a shooter meets it: the trigger off,
+/// the gun's own clearance worked (tap-rack; for a double feed, drop the
+/// magazine, rack, reload: `flat::macro_steps`), then back to the string.
+/// True while it's being cleared; the presses then aren't counted, so a
+/// jam costs time, not the drill (a worn gun's dice, seeded by where it
+/// lay, would otherwise decide whether a scenario passes).
+fn clear_stoppage(bot: &mut Bot, mac: &mut GunMacro, gun_e: Entity, gun: &Gun) -> bool {
+    if bot.clearing {
+        if mac.busy() {
+            bot.trigger = false;
+            return true;
+        }
+        bot.clearing = false;
+        bot.note("cleared a stoppage".into());
+    }
+    let f = &gun.firearm;
+    // A round hanging fire: muzzle on the target, hands off, wait it out
+    // (racking it now would throw a live primer's round out burning).
+    if f.hang.is_some() {
+        bot.trigger = false;
+        return true;
+    }
+    // A dud under the hammer, in a gun a rack clears (a revolver's next
+    // press turns to the next chamber; a break-action's is the next
+    // barrel).
+    use extraction_core::firearm::ActionKind;
+    let rackable = matches!(
+        f.def.action,
+        ActionKind::SemiAuto | ActionKind::BoltAction | ActionKind::Pump
+    );
+    let what = match (f.malfunction, f.struck) {
+        (Some(m), _) => format!("{m:?}, {}", m.remedy()),
+        (None, Some(_)) if rackable => "a dud, tap-rack".to_owned(),
+        _ => return false,
+    };
+    bot.trigger = false;
+    bot.clearing = true;
+    bot.note(format!("stoppage: {what}"));
+    mac.start(gun_e, macro_steps(MacroKind::Rack, gun));
+    true
 }

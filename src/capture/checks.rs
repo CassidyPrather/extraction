@@ -121,7 +121,10 @@ pub fn furniture_fits() -> Vec<Fit> {
         cache
             .entry(name.to_string())
             .or_insert_with(|| {
-                let path = crate::asset_root_path().join(format!("models/props/{name}.glb"));
+                // (`model#node`, a part of one drawn on its own: the box
+                // stands for the whole, its moving parts too.)
+                let file = name.split_once('#').map_or(name, |(m, _)| m);
+                let path = crate::asset_root_path().join(format!("models/props/{file}.glb"));
                 glb::read(&path)
                     .ok()?
                     .bounds_of(|n| !n.name.contains("_lod"))

@@ -570,18 +570,24 @@ mod grab {
                 let gt = w.get::<GlobalTransform>(m).unwrap();
                 gt.translation() - gt.rotation() * Vec3::Y * w.get::<Mag>(m).unwrap().height * 0.5
             };
-            // (A pistol's magazine sits inside its grip, its foot in the
-            // gun hand's palm: it comes out by its release, held out for
-            // the other hand, `the_release_held_hangs_...`.)
+            // A pistol's magazine sits inside its grip, its foot under the
+            // gun hand's palm: a hand closing there cups the pistol (two
+            // hands on it), and the magazine comes out by its release,
+            // held out for the other hand (`the_release_held_hangs_...`).
             let grip = r.vr.point(r.gun, |p| *p == GripRole::Primary);
-            if foot.distance(grip) < 0.08 {
-                continue;
-            }
+            let in_grip = foot.distance(grip) < 0.08;
             r.vr.hand(Side::Left, foot - Vec3::Y * 0.01, Quat::IDENTITY, 0.0, 0.0);
             r.vr.step(2);
             r.vr.grip(Side::Left, 1.0);
             r.vr.step(3);
-            if holding(&mut r, Side::Left) != Some(m) {
+            if in_grip {
+                if r.vr.hand_state(Side::Left).supporting != Some(r.gun) {
+                    bad.push(format!(
+                        "{gun}: a hand under the grip didn't cup it (took {:?})",
+                        holding(&mut r, Side::Left)
+                    ));
+                }
+            } else if holding(&mut r, Side::Left) != Some(m) {
                 bad.push(format!(
                     "{gun}: a pull at the magazine's foot took {:?}",
                     holding(&mut r, Side::Left)
@@ -641,6 +647,25 @@ mod grab {
         r.vr.primary(Side::Right, false);
         r.vr.step(10);
         assert!(r.vr.app.world().get::<InSocket>(m).is_none(), "dropped");
+        // And it's still there, a magazine lying on the ground with its
+        // rounds: dropped as the real gun drops it, never lost.
+        r.vr.step(180);
+        let w = r.vr.app.world();
+        let item = w
+            .get::<crate::items::Item>(m)
+            .expect("the magazine still exists");
+        assert_eq!(item.rounds, 8, "its rounds kept");
+        assert!(w.get::<ChildOf>(m).is_none(), "loose, not in anything");
+        assert_eq!(
+            w.get::<avian3d::prelude::RigidBody>(m),
+            Some(&avian3d::prelude::RigidBody::Dynamic)
+        );
+        let p = w.get::<GlobalTransform>(m).unwrap().translation();
+        let ground = w.resource::<crate::world::Zone>().ground(p.x, p.z);
+        assert!(
+            p.y > ground - crate::items::lost::SKIN && p.y < ground + 0.5,
+            "on the ground: {p:.2}, ground {ground:.2}"
+        );
     }
 
     /// A box held at a magazine's lips (not only its middle) loads it, a

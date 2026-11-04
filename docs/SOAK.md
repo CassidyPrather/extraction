@@ -134,6 +134,30 @@ What was wrong:
   (`settle_into_containers`). A dead raider's bag doesn't take what lands
   on it.
 
+### After the fix (30 October, main d0db1fb9)
+
+- **A move to another valley.** `a_map_change_keeps_what_is_put_away_as_it_lay`
+  drives the truck from Marrow Creek to Kettle Pass. Things tilted in the
+  pack and the crate, and things seated in pouches, all arrive where they
+  were put. On load the crate lifts anything lower than 5 cm onto its shelf,
+  which is on purpose for older saves.
+- **Every census checks what's stowed.** `stowed::audit` reports anything
+  in a pack that its pack doesn't list or that isn't attached to it, a
+  stowed thing whose physics is awake or that has moved, a pack listing
+  something it hasn't got, a pouch that doesn't hold or seat what's in it,
+  and anything fallen out of the world. The soak report prints these as
+  `ASTRAY`. Tests: raid after raid with robots on and posed things in the
+  crate (none astray, each where it was put), and the zone-reset soak.
+- **The long runs.** Two 30-minute runs: Marrow Creek with 4 raids standing
+  about, and Kettle Pass with 5 raids played by the sim's raider. Neither
+  reported anything astray or any leak. (Kettle Pass's knee-actuator debris
+  went 0 -> 18 as walkers broke; the gauge reads it as debris that comes
+  and goes, not a pile-up.)
+- **Same mistake, elsewhere.** Lev set his gifts down with their centre a
+  few centimetres above the ledge or floor, whatever their size. A PPSh,
+  25 cm tall, started 7 cm inside the bed and got thrown across it. Each
+  gift now rests its bottom on its place (`lev::slot` takes the height).
+
 ## A quiet log
 
 `soak::quiet::tests::no_session_logs_a_warning` plays four sessions, each

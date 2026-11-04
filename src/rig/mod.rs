@@ -245,6 +245,24 @@ pub struct Flicks {
     pressed_until: f32,
 }
 
+/// An analog press (a trigger, a grip) is pressed past `PRESS_AT` and let
+/// go below `RELEASE_AT`: apart, so a finger resting on it or a squeeze
+/// wavering as it's held (a controller's noise, a hand's tremor) neither
+/// presses nor lets go. Every analog press in the game reads through
+/// [`pressed`] (`weapons::trigger_tests`, `rig::press_tests`).
+pub const PRESS_AT: f32 = 0.6;
+pub const RELEASE_AT: f32 = 0.35;
+
+/// Whether an analog press is pressed, from its reading (0..1) and
+/// whether it was.
+pub fn pressed(was: bool, value: f32) -> bool {
+    if was {
+        value >= RELEASE_AT
+    } else {
+        value > PRESS_AT
+    }
+}
+
 /// After a stick press is let go, flicks wait this long (s).
 pub const FLICK_AFTER_PRESS: f32 = 0.35;
 /// Past this far, it's a flick; back within [`FLICK_REST`] it's armed.
@@ -341,6 +359,114 @@ mod flick_tests {
         assert_eq!(
             f.step(Vec2::new(0.0, -0.9), false, 1.2, false),
             Some(Flick::Down)
+        );
+    }
+}
+
+#[cfg(test)]
+mod press_tests {
+    use super::*;
+
+    /// Pressed past `PRESS_AT`, held down to `RELEASE_AT`: a reading
+    /// wavering between them changes nothing.
+    #[test]
+    fn a_press_holds_between_its_press_and_release() {
+        let mut down = false;
+        for (v, want) in [
+            (0.5, false),
+            (0.59, false),
+            (0.61, true),
+            (0.4, true),
+            (0.58, true),
+            (0.36, true),
+            (0.3, false),
+            (0.55, false),
+            (0.65, true),
+        ] {
+            down = pressed(down, v);
+            assert_eq!(down, want, "at {v}");
+        }
+    }
+
+    /// No analog press in the game is read against a bare number: a grip
+    /// or trigger compared with one (`trigger > 0.55`) presses and lets go
+    /// on a resting finger's noise (the gun trigger did, firing a pistol
+    /// eight times a second under a finger at rest). They read through
+    /// [`pressed`], or a hand's `grip_down` and `trigger_down`.
+    #[test]
+    fn every_analog_press_reads_through_pressed() {
+        // Not presses: a robot's animation, and the soak's stand-in player
+        // checking its own hands are idle.
+        const NOT_PRESSES: &[&str] = &["robots/anim.rs", "soak/chaos.rs"];
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = vec![root.clone()];
+        let mut bad = Vec::new();
+        while let Some(p) = files.pop() {
+            if p.is_dir() {
+                files.extend(std::fs::read_dir(&p).unwrap().map(|e| e.unwrap().path()));
+                continue;
+            }
+            let rel = p
+                .strip_prefix(&root)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if p.extension().is_none_or(|e| e != "rs")
+                || NOT_PRESSES.contains(&rel.as_str())
+                || rel.ends_with("tests.rs")
+                || rel == "vr_harness.rs"
+            {
+                continue;
+            }
+            let text = std::fs::read_to_string(&p).unwrap();
+            // Skip what `#[cfg(test)]` marks: a line, or a block to its
+            // closing brace.
+            let (mut marked, mut depth) = (false, 0i32);
+            for (n, line) in text.lines().enumerate() {
+                if depth > 0 {
+                    depth += line.matches('{').count() as i32 - line.matches('}').count() as i32;
+                    continue;
+                }
+                if line.trim() == "#[cfg(test)]" {
+                    marked = true;
+                    continue;
+                }
+                if std::mem::take(&mut marked) {
+                    depth = line.matches('{').count() as i32 - line.matches('}').count() as i32;
+                    continue;
+                }
+                for name in ["grip", "trigger"] {
+                    let mut at = 0;
+                    while let Some(i) = line[at..].find(name) {
+                        let start = at + i;
+                        let end = start + name.len();
+                        at = end;
+                        let before = line[..start].chars().next_back();
+                        let after = line[end..].chars().next();
+                        let word = !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_');
+                        if !word {
+                            continue;
+                        }
+                        let rest = line[end..].trim_start();
+                        let rest = rest
+                            .strip_prefix(">=")
+                            .or_else(|| rest.strip_prefix("<="))
+                            .or_else(|| rest.strip_prefix('>'))
+                            .or_else(|| rest.strip_prefix('<'));
+                        if rest.is_some_and(|r| {
+                            r.trim_start().starts_with(|c: char| c.is_ascii_digit())
+                        }) {
+                            bad.push(format!("src/{rel}:{}: {}", n + 1, line.trim()));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "read through rig::pressed:\n{}",
+            bad.join("\n")
         );
     }
 }

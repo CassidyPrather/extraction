@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _kit  # noqa: E402
-from _kit import ALONG_X, UP, Part, RY, RZ, T, Wear, fillet, prop  # noqa: E402
+from _kit import ALONG_X, UP, Part, RY, RZ, T, Wear, fillet, lettering, prop  # noqa: E402
 
 _kit.AO_SKY = True
 
@@ -128,14 +128,17 @@ def kept_bicycle():
     p.box((0.24, 0.06, 0.12), (seat[0] - 0.02, seat[1] + 0.09, 0.0), "Leather",
           bevel=0.02, segs=1)
     rod(seat, (seat[0] - 0.02, seat[1] + 0.06), 0.011, "Zinc")
-    rod(head, (head[0] - 0.03, head[1] + 0.18), 0.012, "Zinc")
+    # The stem up to the bar (it stopped 5 cm short: bar and grips in the
+    # air).
+    rod(head, (head[0] - 0.08, head[1] + 0.2), 0.012, "Zinc")
     p.cyl(0.011, -0.27, 0.27, "Zinc", segs=8, xf=T(head[0] - 0.08, head[1] + 0.2, 0.0))
     for z in (-0.27, 0.27):
         p.cyl(0.016, z - 0.05, z + 0.05, "Rubber", segs=8,
               xf=T(head[0] - 0.08, head[1] + 0.2, 0.0))
-    p.box((0.4, 0.07, 0.012), (-0.22, 0.31, 0.04), "Painted")
-    # The tag hangs from the saddle.
-    tag(p, (seat[0] - 0.02, seat[1] - 0.04, 0.07), "z", 1.0)
+    # The chain guard on the stay (it stood 2.4 cm off it).
+    p.box((0.4, 0.07, 0.012), (-0.22, 0.31, 0.015), "Painted")
+    # The tag on the seat tube (it hung in the air under the saddle).
+    tag(p, (-0.11, 0.6, 0.011), "z", 1.0)
     return [p]
 
 
@@ -161,8 +164,9 @@ def wheelie_bin():
     for z in (-0.26, 0.26):
         p.cyl(0.1, z - 0.03, z + 0.03, "Rubber", segs=14, xf=T(-0.24, 0.1, 0.0))
     p.cyl(0.012, -0.29, 0.29, "Iron", segs=8, xf=T(-0.24, 0.1, 0.0))
-    # A house number, and the tag on the lid.
-    p.box((0.12, 0.08, 0.004), (0.12, 0.75, -0.336), "Cream")
+    # The house's number painted on, and the tag on the lid (a blank
+    # pale plate read as a placeholder).
+    lettering(p, "14", 0.06, "Cream", T(0.12, 0.75, -0.336) @ RY(math.pi))
     p.box((0.22, 0.004, 0.14), (0.05, hi + 0.054, 0.0), "Paper")
     p.box((0.18, 0.004, 0.02), (0.05, hi + 0.058, 0.03), "Black")
     return [p]

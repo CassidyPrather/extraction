@@ -637,12 +637,11 @@ fn init_assets(
     mut images: ResMut<Assets<Image>>,
     server: Res<AssetServer>,
 ) {
-    let leaf: Handle<Image> = server
-        .load_builder()
-        .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
-        .load(crate::render::textures::ktx2(
-            "textures/foliage/birch_leaves/albedo.ktx2",
-        ));
+    // The birch atlas is downloaded (`fetch_assets.py`); without it, the
+    // ivy's drawn leaves.
+    let leaf =
+        crate::render::textures::fetched_srgb(&server, "textures/foliage/birch_leaves/albedo.ktx2")
+            .unwrap_or_else(|| images.add(crate::world::overgrowth::leaf_image()));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
     let (mark, _) = mark_texture(&mut images, Pattern::Plain);
@@ -1822,6 +1821,24 @@ fn dress_items(
                     steel,
                     Transform::from_xyz(0.0, 0.0, 0.018).with_rotation(along),
                 ));
+                // Orange flagging tape knotted round its shank, its ends
+                // trailing: 6 cm of dark steel was gone at 3 m, and it's
+                // the thing you throw and must find again in the grass.
+                let tape = mat(Color::srgb(0.95, 0.36, 0.04), 0.0, 0.9, LinearRgba::BLACK);
+                parts.push((
+                    meshes.add(Cuboid::new(0.013, 0.013, 0.007)),
+                    tape.clone(),
+                    Transform::from_xyz(0.0, 0.0, 0.0),
+                ));
+                for side in [-1.0f32, 1.0] {
+                    parts.push((
+                        meshes.add(Cuboid::new(0.006, 0.0015, 0.04)),
+                        tape.clone(),
+                        Transform::from_xyz(side * 0.006, 0.006, 0.019).with_rotation(
+                            Quat::from_rotation_y(side * 0.35) * Quat::from_rotation_x(-0.25),
+                        ),
+                    ));
+                }
             }
             "detector" | "detector_sweep" | "detector_bear" => {
                 // The Authority's Bear is grey; the survey sets olive.
@@ -1844,6 +1861,15 @@ fn dress_items(
                     olive,
                     Transform::from_xyz(0.0, 0.0, 0.025),
                 ));
+                // The survey sets wear a pale signal-yellow face plate across
+                // the top: olive with knobs, a detector read as the radio.
+                if id != "detector_bear" {
+                    parts.push((
+                        meshes.add(Cuboid::new(0.066, 0.002, 0.104)),
+                        mat(Color::srgb(0.93, 0.8, 0.25), 0.0, 0.6, LinearRgba::BLACK),
+                        Transform::from_xyz(0.0, 0.0205, 0.025),
+                    ));
+                }
                 // A dial and a grille on top, a carrying handle along the
                 // side.
                 // (The Bear's screen takes the dial's place.)

@@ -150,8 +150,9 @@ def robot_gunpod():
             p.box((0.006, 0.014, 0.012), (sx * 0.03, by, z), "Black")
     # Feed chute on the right flank and the belt stub hanging from it.
     p.box((0.024, 0.07, 0.09), (0.096, -0.02, 0.27), "Dark", bevel=0.004, segs=1)
+    # Link on link from the chute's mouth (they hung apart, 2 to 7 mm).
     for k in range(3):
-        y = -0.062 - k * 0.0135
+        y = -0.0595 - k * 0.009
         p.box((0.012, 0.009, 0.034), (0.096, y, 0.27), "Bakelite")
         p.lathe([(0.0, 0.0), (0.0038, 0.0), (0.0038, 0.008), (0.0, 0.014)], "Steel", segs=6,
                 xf=T(0.096, y, 0.253) @ RY(math.pi))

@@ -156,6 +156,36 @@ fn convert(
     })
 }
 
+/// A gun-steel finish (`gunsmith::finish`) on the gun-metal scan `m`, as
+/// the bench builds it.
+pub fn steel(m: &mut StandardMaterial, f: &gunsmith::finish::SteelFinish) {
+    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / f.tile));
+    let scanned = m.base_color_texture.is_some();
+    match f.gain {
+        // On the scan's albedo; without the scan, on its average (0.045).
+        Some([r, g, b]) if scanned => m.base_color = Color::linear_rgb(r, g, b),
+        Some([r, g, b]) => m.base_color = Color::linear_rgb(0.045 * r, 0.045 * g, 0.045 * b),
+        None => {
+            m.base_color_texture = None;
+            let [r, g, b] = f.flat;
+            m.base_color = Color::linear_rgb(r, g, b);
+        }
+    }
+    if f.keep_scan_metal && m.metallic_roughness_texture.is_some() {
+        m.metallic = f.metallic;
+        m.perceptual_roughness = f.roughness;
+    } else {
+        m.metallic_roughness_texture = None;
+        m.metallic = f.metallic;
+        // A multiplier on the scan's 0.31 where kept; flat, as itself.
+        m.perceptual_roughness = if f.keep_scan_metal {
+            (0.31 * f.roughness).min(1.0)
+        } else {
+            f.roughness
+        };
+    }
+}
+
 /// Every material name [`ModelMaterials::get`] knows; any other name renders
 /// a flat grey. `art/common.py` must list the same names (a test checks it,
 /// and that every exported model uses only these).
@@ -163,6 +193,8 @@ fn convert(
 #[rustfmt::skip]
 pub const MATERIAL_NAMES: &[&str] = &[
     "Blued",
+    "Stamped",
+    "Alloy",
     "Wood",
     "Polymer",
     "Shell",
@@ -181,6 +213,10 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Yellow",
     "Orange",
     "Blue",
+    "CarBlue",
+    "RagRed",
+    "RagBlue",
+    "Russet",
     "Leaf",
     "Enamel",
     "Worn",
@@ -206,6 +242,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // World props (art/props).
     "Timber",
     "Rusty",
+    "Bark",
     "Painted",
     "Plaster",
     "Concrete",
@@ -262,7 +299,11 @@ impl ModelMaterials {
             materials.add(m)
         };
         let h = match name {
-            "Blued" => lib.get(Mat::GunMetal, server, materials),
+            // Gun steel: the finishes the gunsmith's crate holds
+            // (`gunsmith::finish`), the bench's too.
+            "Blued" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLUED)),
+            "Stamped" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::STAMPED)),
+            "Alloy" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::ALLOY)),
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
@@ -272,16 +313,14 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.46, 0.46, 0.47);
                 m.metallic = 1.0;
             }),
-            // Phenolic grips: the polymer's relief in a deep red-brown.
+            // Phenolic grips: the polymer's relief in a deep red-brown
+            // (light enough that the checkering reads at arm's length).
             "Bakelite" => derive(Mat::Polymer, &|m| {
                 m.base_color_texture = None;
-                m.base_color = Color::srgb(0.2, 0.075, 0.04);
+                m.base_color = Color::srgb(0.27, 0.105, 0.055);
                 m.metallic = 0.0;
             }),
-            "Black" => derive(Mat::GunMetal, &|m| {
-                m.base_color = Color::srgb(0.45, 0.45, 0.45);
-                m.perceptual_roughness = m.perceptual_roughness.max(0.6);
-            }),
+            "Black" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLACK)),
             "Brass" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.72, 0.52, 0.24),
                 metallic: 1.0,
@@ -304,6 +343,9 @@ impl ModelMaterials {
             // World props (art/props).
             "Timber" => lib.get(Mat::Timber, server, materials),
             "Rusty" => lib.get(Mat::RustyMetal, server, materials),
+            // A felled trunk's bark: the spruce bark scan (a log stack;
+            // `art/props/yards.py` coarsens its tile in the model's UVs).
+            "Bark" => lib.get(Mat::BarkSpruce, server, materials),
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
@@ -361,6 +403,33 @@ impl ModelMaterials {
             "Yellow" => flat(materials, Color::srgb(0.9, 0.74, 0.16), 0.0, 0.55),
             "Orange" => flat(materials, Color::srgb(0.86, 0.38, 0.08), 0.0, 0.6),
             "Blue" => flat(materials, Color::srgb(0.1, 0.24, 0.55), 0.0, 0.5),
+            // A car's paint after years in the weather: the painted-metal
+            // scan's relief and wear, in a blue gone chalky and grey. (The
+            // print blue above, on a whole car, read as a toy at arm's
+            // length: docs/craft/PROP_READING.md.)
+            "CarBlue" => derive(Mat::PaintedMetal, &|m| {
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.21, 0.29, 0.4);
+                m.metallic = 0.25;
+            }),
+            // Rag cloth: the canvas scan's weave, its own colour gone, in a
+            // dye faded by years of floors (a rag rug's stripes). In the
+            // print colours a rug at the door read as a flag
+            // (docs/craft/PROP_READING.md).
+            "RagRed" | "RagBlue" => {
+                let c = if name == "RagRed" {
+                    Color::srgb(0.42, 0.2, 0.16)
+                } else {
+                    Color::srgb(0.22, 0.26, 0.33)
+                };
+                derive(Mat::Canvas, &move |m| {
+                    m.base_color_texture = None;
+                    m.base_color = c;
+                    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+                })
+            }
+            // A fox's fur: russet, not the print red.
+            "Russet" => flat(materials, Color::srgb(0.46, 0.23, 0.11), 0.0, 0.92),
             "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
             // White enamel: mugs, bowls, the kettle, labels' white print, and the
             // houses' stoves and sinks.
@@ -396,7 +465,13 @@ impl ModelMaterials {
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
-            "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
+            // A robot's eye is a signal lamp: fog doesn't wash it out.
+            "Eye" => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.1, 0.02, 0.02),
+                emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+                fog_enabled: false,
+                ..default()
+            }),
             "Strange" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.45, 0.35, 0.7),
                 emissive: LinearRgba::rgb(0.6, 0.35, 1.2),

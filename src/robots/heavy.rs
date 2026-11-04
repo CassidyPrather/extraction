@@ -1696,6 +1696,7 @@ pub(crate) mod tests {
         senses: bool,
     ) -> (App, Entity) {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -1832,6 +1833,50 @@ pub(crate) mod tests {
             .filter(|(p, h)| p.robot == heavy && h.is_none())
             .count();
         assert_eq!(walker_plates, 0);
+    }
+
+    /// A vent shot out behind its plate stays out when the plate comes off:
+    /// a round goes through where it was (taking the plate off opened the
+    /// collider behind it, dead or not, and the physics kept a collider
+    /// switched off twice in its queries: the full lib suite's
+    /// `rounds_pass_through_gone_parts`, on other loot).
+    #[test]
+    fn a_vent_gone_behind_its_plate_stays_gone_when_the_plate_comes_off() {
+        let (mut app, heavy) = world_with_heavy([40.0, 230.0], [40.0, 230.0], false);
+        for _ in 0..60 {
+            app.update();
+        }
+        let (vent, _) = part(&mut app, heavy, Slot::Vent(0)).unwrap();
+        app.world_mut().get_mut::<RobotPart>(vent).unwrap().hp = 0.0;
+        for _ in 0..3 {
+            app.update();
+        }
+        for k in 0..4u8 {
+            let (b, _) = part(&mut app, heavy, Slot::Bolt { plate: 1, bolt: k }).unwrap();
+            hit(&mut app, b, 40.0);
+        }
+        assert!(part(&mut app, heavy, Slot::Plate(1)).is_none());
+        for _ in 0..10 {
+            app.update();
+        }
+        assert!(app.world().get::<ColliderDisabled>(vent).is_some());
+        let t = *app.world().get::<GlobalTransform>(heavy).unwrap();
+        let aim = t.transform_point(vent_at(0));
+        let origin = t.transform_point(vent_at(0) + Vec3::NEG_X * 3.0);
+        let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
+        let spatial = q.get(app.world()).unwrap();
+        let through = spatial.ray_hits(
+            origin,
+            Dir3::new(aim - origin).unwrap(),
+            6.0,
+            16,
+            true,
+            &SpatialQueryFilter::default(),
+        );
+        assert!(
+            through.iter().all(|h| h.entity != vent),
+            "the dead vent still stops a round"
+        );
     }
 
     /// Rounds on the hull and plates do nothing; a covered vent can't be
@@ -2105,7 +2150,7 @@ pub(crate) mod tests {
     #[test]
     fn a_hand_pulls_the_cell() {
         use crate::rig::Side;
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         let catalog = vr.app.world().resource::<Catalog>().clone();
         let at = zone.on_ground(40.0, 230.0);
@@ -2203,7 +2248,7 @@ pub(crate) mod tests {
     #[test]
     fn its_blow_lands_unless_you_move() {
         let run = |dodge: bool| -> (f32, bool) {
-            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
             let zone = vr.app.world().resource::<Zone>().clone();
             let catalog = vr.app.world().resource::<Catalog>().clone();
             let at = zone.on_ground(40.0, 230.0);

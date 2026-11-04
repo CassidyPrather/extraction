@@ -335,6 +335,166 @@ fn knock_drones(
 mod tests {
     use super::*;
 
+    /// How deep a sphere at `c` of radius `r` is into the box at `at`
+    /// with half-extents `half` (axis-aligned), m; 0 if clear.
+    fn into_box(c: Vec3, r: f32, at: Vec3, half: Vec3) -> f32 {
+        let d = (c - at).abs() - half;
+        let outside = d.max(Vec3::ZERO).length();
+        if outside > 0.0 {
+            (r - outside).max(0.0)
+        } else {
+            r - d.max_element()
+        }
+    }
+
+    /// The walkers' sweep, for what flies: drones and menders sent at a
+    /// wall at full speed, along one close in, and over its top. No part
+    /// of them (body, rotors, eye, gun) goes more than a few cm into it.
+    #[test]
+    fn no_part_of_a_flyer_passes_into_a_wall() {
+        // (name, mender?, start off the wall face, where it's sent from
+        // the start)
+        let cases: [(&str, bool, Vec3, Vec3); 5] = [
+            (
+                "drone at it from 25 m, flat out",
+                false,
+                Vec3::new(0.0, 0.0, -25.0),
+                Vec3::new(0.0, 0.0, 40.0),
+            ),
+            (
+                "drone straight at it",
+                false,
+                Vec3::new(0.0, 0.0, -14.0),
+                Vec3::new(0.0, 0.0, 24.0),
+            ),
+            (
+                "drone along it, close",
+                false,
+                Vec3::new(-6.0, 0.0, -0.6),
+                Vec3::new(14.0, 0.0, 0.0),
+            ),
+            (
+                "drone into its top edge",
+                false,
+                Vec3::new(0.0, 2.5, -10.0),
+                Vec3::new(0.0, 0.0, 20.0),
+            ),
+            (
+                "mender straight at it",
+                true,
+                Vec3::new(0.0, 0.0, -14.0),
+                Vec3::new(0.0, 0.0, 24.0),
+            ),
+        ];
+        let mut worst = Vec::new();
+        for (name, mender, start, go) in cases {
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let ground = zone.on_ground(40.0, 230.0);
+            // A wall across +z, 7 m high, its near face at z = 0 (local).
+            let fly = 4.0;
+            let half = Vec3::new(10.0, 3.5, 0.15);
+            let wall = ground + Vec3::new(0.0, half.y - 0.5, half.z);
+            app.world_mut().spawn((
+                RigidBody::Static,
+                Collider::cuboid(2.0 * half.x, 2.0 * half.y, 2.0 * half.z),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(wall),
+            ));
+            // (Flying over the higher of the ground there and at the wall.)
+            let at = ground + start;
+            let at = Vec3::new(
+                at.x,
+                zone.ground(at.x, at.z).max(ground.y) + fly + start.y,
+                at.z,
+            );
+            let goal = at + go;
+            let robot = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let e = if mender {
+                    super::super::mender::spawn_mender(&mut c, at, goal)
+                } else {
+                    let job = super::super::Job {
+                        kind: super::super::JobKind::Survey,
+                        site: at,
+                        duration: 999.0,
+                        exit: at,
+                    };
+                    super::super::drone::spawn_drone(&mut c, at, job)
+                };
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                q.apply(app.world_mut());
+                e
+            };
+            let mut deepest = (0.0f32, String::new());
+            // (How near it came: the sweep proves nothing if it never got
+            // there.)
+            let mut nearest = f32::MAX;
+            let mut fastest = 0.0f32;
+            for tick in 0..(60 * 8) {
+                if let Some(mut m) = app
+                    .world_mut()
+                    .get_mut::<super::super::mender::Mender>(robot)
+                {
+                    m.home = goal;
+                    m.idle = 1.0e3;
+                    m.patient = None;
+                }
+                if let Some(mut d) = app.world_mut().get_mut::<Drone>(robot) {
+                    d.goal = goal;
+                }
+                app.update();
+                if tick < 5 {
+                    continue;
+                }
+                if let Some(v) = app.world().get::<LinearVelocity>(robot) {
+                    fastest = fastest.max(v.0.length());
+                }
+                let mut q = app
+                    .world_mut()
+                    .query::<(&RobotPart, &Collider, &GlobalTransform)>();
+                for (p, c, g) in q.iter(app.world()) {
+                    if p.robot != robot {
+                        continue;
+                    }
+                    // Its middle and its reach: half what it is across at
+                    // its narrowest is the least of it that's solid.
+                    let r = super::super::weak_points::across(c) * 0.5 * g.scale().max_element();
+                    let d = into_box(g.translation(), r, wall, half);
+                    let gap = ((g.translation() - wall).abs() - half)
+                        .max(Vec3::ZERO)
+                        .length()
+                        - r;
+                    nearest = nearest.min(gap);
+                    if d > deepest.0 {
+                        deepest = (d, format!("{:?} at tick {tick}", p.role));
+                    }
+                }
+            }
+            assert!(
+                nearest < 0.3,
+                "{name}: it never came near the wall ({nearest:.2} m)"
+            );
+            worst.push((name, deepest, fastest));
+        }
+        eprintln!("{worst:?}");
+        for (name, (d, part), _) in worst {
+            assert!(d < 0.05, "{name}: its {part} went {d:.2} m into the wall");
+        }
+    }
+
     fn moments(f: [f32; 4]) -> (f32, f32, f32) {
         let mut out = (0.0, 0.0, 0.0);
         for (i, r) in ROTORS.iter().enumerate() {

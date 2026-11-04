@@ -1,0 +1,182 @@
+[
+ {
+  "n": 1,
+  "name": "s01",
+  "s": 0,
+  "kind": "drop",
+  "note": "",
+  "at": [
+   22.0,
+   148.5
+  ],
+  "h": 20.7,
+  "fwd": 49,
+  "side": 132,
+  "side_what": "chimney (59 m)"
+ },
+ {
+  "n": 2,
+  "name": "s02",
+  "s": 40,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   52.3,
+   121.7
+  ],
+  "h": 19.2,
+  "fwd": 49,
+  "side": 120,
+  "side_what": "ranger_tower (45 m)"
+ },
+ {
+  "n": 3,
+  "name": "s03",
+  "s": 53,
+  "kind": "door",
+  "note": "shed",
+  "at": [
+   61.4,
+   113.7
+  ],
+  "h": 18.7,
+  "fwd": 48,
+  "side": 138,
+  "side_what": "the shed's door"
+ },
+ {
+  "n": 4,
+  "name": "s04",
+  "s": 88,
+  "kind": "fork",
+  "note": "Farm lane / Farm track",
+  "at": [
+   87.8,
+   90.0
+  ],
+  "h": 18.3,
+  "fwd": 48,
+  "side": 177,
+  "side_what": "ranger_tower (54 m)"
+ },
+ {
+  "n": 5,
+  "name": "s05",
+  "s": 103,
+  "kind": "job",
+  "note": "the career's first (Old farm)",
+  "at": [
+   99.0,
+   79.8
+  ],
+  "h": 18.2,
+  "fwd": 48,
+  "side": 187,
+  "side_what": "ranger_tower (65 m)"
+ },
+ {
+  "n": 6,
+  "name": "s06",
+  "s": 123,
+  "kind": "door",
+  "note": "barn",
+  "at": [
+   95.1,
+   59.9
+  ],
+  "h": 17.7,
+  "fwd": 349,
+  "side": 260,
+  "side_what": "the barn's door"
+ },
+ {
+  "n": 7,
+  "name": "s07",
+  "s": 160,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   97.9,
+   25.5
+  ],
+  "h": 17.5,
+  "fwd": 27,
+  "side": 342,
+  "side_what": "The Hollow (50 m)"
+ },
+ {
+  "n": 8,
+  "name": "s08",
+  "s": 200,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   116.4,
+   -10.4
+  ],
+  "h": 18.6,
+  "fwd": 27,
+  "side": 289,
+  "side_what": "The Hollow (36 m)"
+ },
+ {
+  "n": 9,
+  "name": "s09",
+  "s": 248,
+  "kind": "crest",
+  "note": "",
+  "at": [
+   121.0,
+   -55.0
+  ],
+  "h": 22.6,
+  "fwd": 325,
+  "side": 28,
+  "side_what": "water_tower (45 m)"
+ },
+ {
+  "n": 10,
+  "name": "s10",
+  "s": 292,
+  "kind": "door",
+  "note": "rail_shed",
+  "at": [
+   98.4,
+   -90.4
+  ],
+  "h": 19.8,
+  "fwd": 41,
+  "side": 355,
+  "side_what": "the rail_shed's door"
+ },
+ {
+  "n": 11,
+  "name": "s11",
+  "s": 320,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   113.5,
+   -113.9
+  ],
+  "h": 21.2,
+  "fwd": 30,
+  "side": 270,
+  "side_what": "Rail yard (19 m)"
+ },
+ {
+  "n": 12,
+  "name": "s12",
+  "s": 343,
+  "kind": "rendezvous",
+  "note": "Rail yard",
+  "at": [
+   125.0,
+   -133.8
+  ],
+  "h": 19.8,
+  "fwd": 30,
+  "side": 236,
+  "side_what": "Rail yard (36 m)"
+ }
+]

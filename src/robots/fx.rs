@@ -26,6 +26,7 @@ pub struct RobotFxPlugin;
 
 impl Plugin for RobotFxPlugin {
     fn build(&self, app: &mut App) {
+        crate::render::puff::add_to(app);
         app.add_systems(
             Update,
             (
@@ -57,8 +58,14 @@ impl Plugin for RobotFxPlugin {
 struct FxAssets {
     spark: Handle<Mesh>,
     spark_mat: Handle<StandardMaterial>,
+    /// Smoke, dust, gas: soft puffs (`render::puff`).
     puff: Handle<Mesh>,
+    /// A hit's flash: a small glowing ball.
+    flash: Handle<Mesh>,
     smoke: Handle<StandardMaterial>,
+    /// Dark smoke (a wreck's, a falling drone's, a dead gun's column),
+    /// unlit as every other puff is (`weapons`' all are): lit, a few far,
+    /// small puffs of it came out as single pure-black pixels.
     soot: Handle<StandardMaterial>,
     /// Blue-white, for a crawler's arcs and crackle.
     arc: Handle<StandardMaterial>,
@@ -89,6 +96,7 @@ struct FxAssets {
 fn assets(
     commands: &mut Commands,
     existing: &Option<Res<FxAssets>>,
+    puffs: &crate::render::puff::PuffAssets,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) -> FxAssets {
@@ -103,19 +111,15 @@ fn assets(
             unlit: true,
             ..default()
         }),
-        puff: meshes.add(Sphere::new(0.5).mesh().ico(2).unwrap()),
-        smoke: materials.add(StandardMaterial {
+        puff: puffs.quad.clone(),
+        flash: meshes.add(Sphere::new(0.5).mesh().ico(2).unwrap()),
+        smoke: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.55, 0.55, 0.55, 0.16),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
             ..default()
-        }),
-        soot: materials.add(StandardMaterial {
-            base_color: Color::srgba(0.16, 0.15, 0.14, 0.2),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 1.0,
-            ..default()
-        }),
+        })),
+        soot: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
         arc: materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
@@ -127,18 +131,18 @@ fn assets(
             emissive: LinearRgba::rgb(0.6, 2.2, 0.8),
             ..default()
         }),
-        dust: materials.add(StandardMaterial {
+        dust: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.42, 0.36, 0.28, 0.32),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
             ..default()
-        }),
-        snow_dust: materials.add(StandardMaterial {
+        })),
+        snow_dust: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.92, 0.95, 1.0, 0.4),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
             ..default()
-        }),
+        })),
         // (Unlit: these show their base colour, bright.)
         embers: materials.add(StandardMaterial {
             base_color: Color::srgb(1.0, 0.42, 0.08),
@@ -156,30 +160,30 @@ fn assets(
             unlit: true,
             ..default()
         }),
-        gas: materials.add(StandardMaterial {
+        gas: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.72, 0.8, 0.25, 0.3),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
             ..default()
-        }),
-        frost: materials.add(StandardMaterial {
+        })),
+        frost: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.7, 0.9, 1.0, 0.45),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
             ..default()
-        }),
-        shimmer: materials.add(StandardMaterial {
+        })),
+        shimmer: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.55, 0.75, 0.85, 0.35),
             alpha_mode: AlphaMode::Add,
             unlit: true,
             ..default()
-        }),
-        still: materials.add(StandardMaterial {
+        })),
+        still: materials.add(puffs.soften(StandardMaterial {
             base_color: Color::srgba(0.12, 0.1, 0.18, 0.35),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 1.0,
             ..default()
-        }),
+        })),
         star: materials.add(StandardMaterial {
             base_color: Color::srgba(1.0, 0.93, 0.75, 0.9),
             alpha_mode: AlphaMode::Add,
@@ -284,21 +288,68 @@ fn burst(
     }
 }
 
+/// How a puff rises: up at `rise` m/s (give or take a fifth), wandering
+/// by `wander`, for `life` seconds (give or take a fifth).
+#[derive(Clone, Copy)]
+struct Rise {
+    rise: f32,
+    wander: f32,
+    life: f32,
+}
+
+/// A wound's puff: a short, loose curl.
+const WISP: Rise = Rise {
+    rise: 0.65,
+    wander: 0.18,
+    life: 3.25,
+};
+
+/// A dead weapon's: a tall dark column, straight up, to read from 60 m
+/// in fog and to walk toward (`DEAD_GUN_SMOKE` a second).
+const COLUMN: Rise = Rise {
+    rise: 1.6,
+    wander: 0.06,
+    life: 5.5,
+};
+
+/// Puffs a second off a weapon that's been shot off (and the robot still
+/// standing): the column's density.
+const DEAD_GUN_SMOKE: f32 = 2.5;
+
+/// How high a puff rising as `r` climbs before it's gone, m (its rise
+/// slows by `drift_puffs`' drag).
+#[cfg(test)]
+fn climbs(r: Rise) -> f32 {
+    r.rise * (1.0 - (-0.3 * r.life).exp()) / 0.3
+}
+
 fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: bool, size: f32) {
-    let max = 2.5 + dice.f() * 1.5;
+    let mat = if dark { &a.soot } else { &a.smoke };
+    puff_rising(commands, a, dice, at, mat.clone(), size, WISP);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn puff_rising(
+    commands: &mut Commands,
+    a: &FxAssets,
+    dice: &mut Dice,
+    at: Vec3,
+    mat: Handle<StandardMaterial>,
+    size: f32,
+    r: Rise,
+) {
+    let max = r.life * (0.8 + dice.f() * 0.4);
     commands.spawn((
         Puff {
-            vel: Vec3::Y * (0.5 + dice.f() * 0.3) + dice.signed() * 0.18,
+            vel: Vec3::Y * r.rise * (0.8 + dice.f() * 0.4) + dice.signed() * r.wander,
             life: max,
             max,
             size,
         },
         Mesh3d(a.puff.clone()),
-        MeshMaterial3d(if dark {
-            a.soot.clone()
-        } else {
-            a.smoke.clone()
-        }),
+        crate::render::puff::SoftPuff,
+        bevy::camera::visibility::NoFrustumCulling,
+        MeshMaterial3d(mat),
         Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
         NotShadowCaster,
     ));
@@ -314,6 +365,7 @@ fn sputter(
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut counts: Local<std::collections::HashMap<Entity, Vec3>>,
@@ -331,7 +383,12 @@ fn sputter(
         if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
         }
-        let tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
+        let mut tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
+        // A gun shot off sends up a column, every robot's alike.
+        let column = dead_gun(part);
+        if column {
+            tell.smoke = DEAD_GUN_SMOKE;
+        }
         if tell.sparks <= 0.0 && tell.smoke <= 0.0 && tell.coolant <= 0.0 {
             continue;
         }
@@ -344,8 +401,9 @@ fn sputter(
         if c.max_element() < 1.0 {
             continue;
         }
-        let a =
-            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let a = a.get_or_insert_with(|| {
+            assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
+        });
         let at = gt.translation();
         if c.x >= 1.0 {
             c.x -= 1.0;
@@ -359,7 +417,20 @@ fn sputter(
             if n_puffs < MAX_PUFFS {
                 // A gas cell's vent is pale; a burning part's is grey.
                 let size = 0.3 * at_range(eye, at).sqrt();
-                puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+                if column {
+                    let size = size * 1.3;
+                    puff_rising(
+                        &mut commands,
+                        a,
+                        &mut dice,
+                        at + Vec3::Y * 0.2,
+                        a.soot.clone(),
+                        size,
+                        COLUMN,
+                    );
+                } else {
+                    puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+                }
                 n_puffs += 1;
             }
         }
@@ -371,6 +442,11 @@ fn sputter(
             }
         }
     }
+}
+
+/// Whether `part` is a weapon that's been shot off.
+fn dead_gun(part: &RobotPart) -> bool {
+    part.role == PartRole::Weapon && !part.alive()
 }
 
 /// Coolant spattering from a wound: a couple of pale-green drops, out and
@@ -436,6 +512,7 @@ fn smoulder(
     mut embers: Query<(&mut PointLight, &mut Transform), With<Ember>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
@@ -471,7 +548,7 @@ fn smoulder(
         }
         if s.next <= 0.0 && n_puffs < MAX_PUFFS {
             let a = a.get_or_insert_with(|| {
-                assets(&mut commands, &existing, &mut meshes, &mut materials)
+                assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
             });
             let at = gt.translation() + Vec3::Y * 0.25 + dice.signed() * 0.1;
             puff(&mut commands, a, &mut dice, at, true, 0.3 + 0.3 * k);
@@ -552,6 +629,7 @@ fn charge_emitters(
     mut glows: Query<(Entity, &mut Charging, &mut PointLight, &GlobalTransform)>,
     sparks: Query<(), With<Spark>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
@@ -597,7 +675,7 @@ fn charge_emitters(
         light.intensity = 30_000.0 * k * k * flick;
         if ch.next <= 0.0 && n < MAX_SPARKS {
             let a = a.get_or_insert_with(|| {
-                assets(&mut commands, &existing, &mut meshes, &mut materials)
+                assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
             });
             for _ in 0..2 {
                 let vel = dice.signed().normalize_or(Vec3::Y) * (1.0 + dice.f() * 2.0);
@@ -631,6 +709,7 @@ fn zap_arcs(
     mut zaps: MessageReader<super::indoor::CrawlerZap>,
     mut arcs: Query<(Entity, &mut Arc)>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
@@ -638,7 +717,7 @@ fn zap_arcs(
 ) {
     const SEGMENTS: usize = 10;
     for z in zaps.read() {
-        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
         let span = z.to - z.from;
         let len = span.length();
         if len < 0.05 {
@@ -703,6 +782,7 @@ fn wreck_trails(
     falling: Query<(Entity, &GlobalTransform), With<super::wreck::Spiral>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut next: Local<std::collections::HashMap<Entity, f32>>,
@@ -719,7 +799,7 @@ fn wreck_trails(
             continue;
         }
         *t = 0.05;
-        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
         puff(&mut commands, &a, &mut dice, gt.translation(), true, 0.35);
         n += 1;
     }
@@ -733,13 +813,14 @@ fn wreck_impacts(
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut dice: Local<Dice>,
 ) {
     let (mut ns, mut np) = (sparks.iter().len(), puffs.iter().len());
     for imp in impacts.read() {
-        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
         if ns < MAX_SPARKS {
             burst(&mut commands, &a, &mut dice, imp.at, Vec3::Y, 10, 5.0);
             ns += 10;
@@ -763,6 +844,7 @@ fn drag_sparks(
     walkers: Query<(&super::walker::Walker, &super::walker::LegPoses)>,
     sparks: Query<(), With<Spark>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut dice: Local<Dice>,
@@ -784,7 +866,7 @@ fn drag_sparks(
                 continue;
             }
             let foot = poses.0[i][2];
-            let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+            let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
             let back = -w.velocity.normalize_or_zero();
             burst(
                 &mut commands,
@@ -807,6 +889,7 @@ fn eye_out(
     mut deaths: MessageReader<super::PartDestroyed>,
     sparks: Query<(), With<Spark>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut dice: Local<Dice>,
@@ -816,7 +899,7 @@ fn eye_out(
         if d.role != PartRole::Sensor || n >= MAX_SPARKS {
             continue;
         }
-        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
         burst(&mut commands, &a, &mut dice, d.at, Vec3::Y, 10, 3.5);
         n += 10;
     }
@@ -829,6 +912,7 @@ fn cell_arcs(
     mut arcs: MessageReader<super::salvage::Arced>,
     sparks: Query<(), With<Spark>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut dice: Local<Dice>,
@@ -838,7 +922,7 @@ fn cell_arcs(
         if n >= MAX_SPARKS {
             continue;
         }
-        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
         for _ in 0..12 {
             let vel = (Vec3::Y + dice.signed()).normalize_or(Vec3::Y) * (1.5 + 2.5 * dice.f());
             commands.spawn((
@@ -867,6 +951,7 @@ fn hazard_bursts(
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
@@ -886,8 +971,9 @@ fn hazard_bursts(
             .get(s.robot)
             .map(|(g, gait)| (g.translation(), gait.map_or(1.0, |g| g.size)))
             .unwrap_or((s.at, 1.0));
-        let a =
-            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let a = a.get_or_insert_with(|| {
+            assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
+        });
         let range = at_range(eye, at);
         if let Some((bits, n)) = m.bits {
             let (mat, speed, up, life) = match bits {
@@ -941,6 +1027,8 @@ fn hazard_bursts(
                         size: 0.35 * HAZARD_CLOUD * size * range.sqrt(),
                     },
                     Mesh3d(a.puff.clone()),
+                    crate::render::puff::SoftPuff,
+                    bevy::camera::visibility::NoFrustumCulling,
                     MeshMaterial3d(mat.clone()),
                     Transform::from_translation(at + dir * 0.3 * size).with_scale(Vec3::splat(0.0)),
                     NotShadowCaster,
@@ -998,6 +1086,7 @@ fn strike_flashes(
     mut struck: MessageReader<super::damage::RobotStruck>,
     sparks: Query<(), With<Spark>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
@@ -1009,8 +1098,9 @@ fn strike_flashes(
     let mut a = None;
     for s in struck.read() {
         let look = strike_look(s.strike);
-        let a =
-            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let a = a.get_or_insert_with(|| {
+            assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
+        });
         let n = s.normal.normalize_or(-s.dir);
         let range = at_range(eye, s.at);
         if look.flare > 0.0 {
@@ -1025,7 +1115,7 @@ fn strike_flashes(
                     max,
                     size: look.flare * range,
                 },
-                Mesh3d(a.puff.clone()),
+                Mesh3d(a.flash.clone()),
                 MeshMaterial3d(if s.strike == Strike::Telling {
                     a.star.clone()
                 } else {
@@ -1116,6 +1206,7 @@ fn scuff_dust(
     zone: Option<Res<crate::world::Zone>>,
     snow: Option<Res<crate::world::snow::Snow>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut dice: Local<Dice>,
@@ -1150,7 +1241,7 @@ fn scuff_dust(
                 continue;
             }
             let a = a.get_or_insert_with(|| {
-                assets(&mut commands, &existing, &mut meshes, &mut materials)
+                assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
             });
             let snowy = snow.as_ref().is_some_and(|s| s.lies(foot.y) > 0.3);
             let back = -w.velocity.normalize_or_zero();
@@ -1163,6 +1254,8 @@ fn scuff_dust(
                     size: 0.22 * g.size,
                 },
                 Mesh3d(a.puff.clone()),
+                crate::render::puff::SoftPuff,
+                bevy::camera::visibility::NoFrustumCulling,
                 MeshMaterial3d(if snowy {
                     a.snow_dust.clone()
                 } else {
@@ -1269,6 +1362,7 @@ fn splash_steps(
     levels: Option<Res<crate::world::underground::Levels>>,
     sparks: Query<(), With<Spark>>,
     existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut dice: Local<Dice>,
@@ -1295,8 +1389,9 @@ fn splash_steps(
         if !splashes(step.at.y, water, puddle) {
             continue;
         }
-        let a =
-            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let a = a.get_or_insert_with(|| {
+            assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
+        });
         let at = Vec3::new(
             step.at.x,
             water.unwrap_or(step.at.y).max(step.at.y),
@@ -1359,5 +1454,40 @@ mod splash_tests {
         assert!(!splashes(10.0, None, 0.1), "damp ground");
         assert!(!splashes(10.0, Some(6.0), 0.0), "over the water");
         assert!(!splashes(10.0, None, 0.0), "dry");
+    }
+}
+
+#[cfg(test)]
+mod column_tests {
+    use super::*;
+
+    /// A gun shot off sends up a dark column that climbs well past a
+    /// wound's curl (and a muzzle's smoke, which `weapons::muzzle` drags
+    /// to a stop within a metre): tall enough to show over a walker, and
+    /// over low trees, from 60 m. A gun still on sends up none.
+    #[test]
+    fn a_dead_guns_column_stands_over_a_wound() {
+        let (wound, column) = (climbs(WISP), climbs(COLUMN));
+        assert!(
+            column > 2.5 * wound,
+            "{column:.1} m over a wound's {wound:.1}"
+        );
+        assert!(column >= 4.0, "{column:.1} m: it has to clear the walker");
+        assert!(COLUMN.wander < WISP.wander, "a column, not a curl");
+        let part = |role: PartRole, hp: f32| RobotPart {
+            robot: Entity::PLACEHOLDER,
+            role,
+            hp,
+            max_hp: 40.0,
+        };
+        assert!(dead_gun(&part(PartRole::Weapon, 0.0)));
+        assert!(
+            !dead_gun(&part(PartRole::Weapon, 5.0)),
+            "a gun still on: no column"
+        );
+        // Every robot's gun alike: the rule reads the part, not the kind.
+        assert!(!dead_gun(&part(PartRole::Core, 0.0)));
+        // Within the shared cap: a column's steady state.
+        assert!(DEAD_GUN_SMOKE * COLUMN.life * 1.2 < MAX_PUFFS as f32 / 3.0);
     }
 }

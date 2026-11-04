@@ -33,34 +33,34 @@ pub const PLACES: &[Place] = &[
     by(
         "marrow_creek",
         "tape_practice",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         0.45,
     ),
     by(
         "marrow_creek",
         "cassette_player",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         -0.5,
     ),
     // The south gate booth: the soldier's mix and his player.
-    by("marrow_creek", "tape_duty", [47.50, 284.40], 153.4, 0.3),
+    by("marrow_creek", "tape_duty", [29.50, 162.90], 153.4, 0.3),
     by(
         "marrow_creek",
         "cassette_player",
-        [47.50, 284.40],
+        [29.50, 162.90],
         153.4,
         -0.35,
     ),
     // The Kettle chapel, by the sexton's note.
-    by("kettle_pass", "tape_hymns", [-7.70, 155.40], 356.8, 0.3),
+    by("kettle_pass", "tape_hymns", [-7.10, 128.80], 356.8, 0.3),
     // The hunting lodge, by Fiala's book.
-    by("kettle_pass", "tape_lodge", [205.30, -204.45], 331.4, 0.3),
+    by("kettle_pass", "tape_lodge", [149.40, -151.60], 331.4, 0.3),
     by(
         "kettle_pass",
         "record_augustin",
-        [205.30, -204.45],
+        [149.40, -151.60],
         331.4,
         -0.35,
     ),
@@ -68,7 +68,7 @@ pub const PLACES: &[Place] = &[
     by(
         "cinder_works",
         "tape_birthday",
-        [-109.20, 173.30],
+        [-72.20, 118.90],
         205.2,
         0.3,
     ),
@@ -105,7 +105,7 @@ pub const FIXTURES: &[Fixture] = &[
     Fixture {
         map: "marrow_creek",
         what: Standing::Piano,
-        at: [-18.21, 19.08, 95.00],
+        at: [-20.41, 18.96, 63.50],
         rot: 90.0,
     },
     // Fiala's gramophone, on the lodge floor against the windowless log
@@ -113,14 +113,14 @@ pub const FIXTURES: &[Fixture] = &[
     Fixture {
         map: "kettle_pass",
         what: Standing::Gramophone,
-        at: [201.81, 36.63, -206.00],
+        at: [145.90, 34.00, -153.20],
         rot: 90.0,
     },
     // The sexton's harmonium, by the altar against the east wall.
     Fixture {
         map: "kettle_pass",
         what: Standing::Harmonium,
-        at: [-11.00, 12.65, 156.52],
+        at: [-10.40, 16.25, 129.90],
         rot: 0.0,
     },
     // Old Sallow's drowned church, open to the sky: an organ in the silt
@@ -222,19 +222,31 @@ pub fn reach(def: &extraction_core::items::ItemDef) -> f32 {
     0.5 * s[0].hypot(s[2])
 }
 
+/// Laid from a career's first raid, whatever loot's `from_raid` says: a
+/// story beat, not a find among finds. Hana's tape by her letter (Story:
+/// Lev's drive home, "That's Anna playing", hangs on it); the player to
+/// hear it on waits for the tables, as the rest do.
+pub const FROM_THE_START: &[&str] = &["tape_practice"];
+
 /// Lays this valley's tapes and players: part of the zone's loot roll
 /// (`items::loot::roll_zone_loot`), so a zone restored from a save keeps
 /// what it had instead of getting another set, and a new cycle lays them
 /// again as it re-rolls the loot. A player laid here comes with a cell,
-/// part run down: it was someone's.
+/// part run down: it was someone's. `arrived` says whether a kind is out
+/// yet on this raid of a career (the loot's `from_raid`): a tape laid
+/// before the tables have tapes waits for them, as a scene's things do.
 pub fn lay_tapes(
     commands: &mut Commands,
     zone: &crate::world::Zone,
     catalog: &crate::items::Catalog,
     map: &str,
+    arrived: &dyn Fn(&str) -> bool,
 ) {
     let mut taken = Vec::new();
-    for p in PLACES.iter().filter(|p| p.map == map) {
+    for p in PLACES
+        .iter()
+        .filter(|p| p.map == map && (arrived(p.item) || FROM_THE_START.contains(&p.item)))
+    {
         let Some(kind) = catalog.kind(p.item) else {
             warn!("no item {}", p.item);
             continue;

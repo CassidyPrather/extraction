@@ -15,11 +15,11 @@ use crate::save::SavedItem;
 /// (x, z) (the game finds the building there).
 pub const SAFEHOUSES: [(&str, [f32; 2]); 3] = [
     // The Logging camp's south cabin: the west side's halfway house.
-    ("marrow_creek", [-145.0, 190.0]),
+    ("marrow_creek", [-70.8, 113.5]),
     // The Charcoal hut, the climb's last stop before the rendezvous.
-    ("kettle_pass", [119.0, -138.0]),
+    ("kettle_pass", [89.2, -103.5]),
     // Woodward's cabin, in the Cinder wood.
-    ("cinder_works", [-75.0, -159.0]),
+    ("cinder_works", [-51.9, -111.2]),
 ];
 
 /// A valley's safehouse, if it has one.

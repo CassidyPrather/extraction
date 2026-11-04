@@ -58,6 +58,8 @@ EJECT_TRAVEL = 0.042
 # right: with the cylinder at rest that's chamber 5.
 GATE_OFFSET = 5
 GATE_CH = GATE_OFFSET
+TRIG_PIN = (0.0, 0.032, -0.032)
+GRIP_SCREW = (0.0, -0.0025, 0.040)
 
 
 def chamber_xy(k, a0=math.pi / 2):
@@ -69,14 +71,20 @@ def chamber_xy(k, a0=math.pi / 2):
 frame = Part("frame")
 # Side profile (z, y): the solid frame round the cylinder window, the top
 # strap, the recoil shield behind, down into the grip frame and guard.
+# (Laid out against a side photograph scaled to the published 235 mm,
+# `docs/craft/guns/nagant/README.md`: the lower frame was 18 mm deep, the
+# guard and trigger 20 mm back and low, the grip a long pole hanging under
+# the hammer where the real one sits back and rakes.)
 fprof = [
     (-0.071, BORE + 0.0085), (0.006, BORE + 0.0085),       # top strap
     (0.012, BORE + 0.002), (0.012, 0.044),                 # recoil shield's back
-    (0.004, 0.034), (0.009, 0.006),                        # backstrap under the hammer
-    (0.0, 0.004), (-0.033, 0.004),                         # bottom, over the guard
-    (-0.046, 0.03), (-0.071, 0.034),                       # front of the frame under the barrel
+    (0.032, 0.037), (0.038, 0.031),                        # the tang back onto the grip
+    (0.014, 0.014), (-0.006, 0.014),                       # down to the grip's front
+    (-0.025, 0.026), (-0.062, 0.031),                      # bottom, over the guard
+    (-0.071, 0.034),                                       # front of the frame under the barrel
 ]
-fprof = fillet(fprof, [0.003, 0.004, 0.003, 0.004, 0.008, 0.006, 0.006, 0.008, 0.012, 0.004], 6)
+fprof = fillet(fprof, [0.003, 0.004, 0.003, 0.004, 0.006, 0.004, 0.004, 0.006, 0.008, 0.004,
+                       0.004], 6)
 frame.prism(fprof, -0.0112, 0.0112, "Blued", axis="x", bevel=0.0012, segs=1)
 fc = Part("cut")
 # The cylinder window, through.
@@ -90,7 +98,7 @@ LEFT = T(-0.0112 + 0.0006, 0, 0) @ RY(-math.pi / 2)
 text(fc, "ГА 2347", 0.0034, "Blued", LEFT @ T(0.022, 0.038, 0.0), depth=0.0012)
 text(fc, "1932", 0.0034, "Blued", LEFT @ T(0.022, 0.031, 0.0), depth=0.0012)
 # The side plate's outline on the right, a fine line cut round it.
-plate = fillet([(-0.04, 0.012), (0.004, 0.012), (0.006, 0.04), (-0.03, 0.04)], 0.004, 3)
+plate = fillet([(-0.03, 0.031), (0.006, 0.024), (0.008, 0.04), (-0.026, 0.04)], 0.004, 3)
 fc.sweep(plate + plate[:1], section_rect(0.0024, 0.0007), "Blued", xf=T(0.0112, 0, 0))
 # The sighting groove down the top strap to the rear notch.
 fc.box((0.0018, 0.0024, 0.066), (0, BORE + 0.0085, -0.033), "Blued")
@@ -98,20 +106,20 @@ fc.box((0.0018, 0.0024, 0.066), (0, BORE + 0.0085, -0.033), "Blued")
 # heads through both panels.
 screw = [(0.0, -0.0123), (0.0012, -0.0122), (0.0021, -0.0119), (0.0025, -0.0114),
          (0.0025, -0.0106), (0.0, -0.0106)]
-for (z, y), a in zip(((-0.012, 0.02), (0.002, 0.03), (-0.03, 0.016)), (0.3, 1.2, -0.5)):
+for (z, y), a in zip(((-0.012, 0.033), (0.004, 0.03), (-0.032, 0.034)), (0.3, 1.2, -0.5)):
     frame.lathe(screw, "Steel", segs=16, xf=T(0, y, z) @ RY(math.pi / 2))
     fc.box((0.0014, 0.0007, 0.006), (-0.0124, y, z), "Steel", xf=RX(a, about=(0, y, z)))
 for sx in (-1, 1):
     frame.lathe([(0.0, 0.0148), (0.0016, 0.0147), (0.0027, 0.0142), (0.003, 0.0136),
                  (0.003, 0.013), (0.0, 0.013)], "Steel", segs=18,
-                xf=T(0, -0.003, 0.007) @ RY(sx * math.pi / 2))
-    fc.box((0.0014, 0.0007, 0.007), (sx * 0.0149, -0.003, 0.007), "Steel",
-           xf=RX(0.9, about=(0, -0.003, 0.007)))
+                xf=T(0, GRIP_SCREW[1], GRIP_SCREW[2]) @ RY(sx * math.pi / 2))
+    fc.box((0.0014, 0.0007, 0.007), (sx * 0.0149, GRIP_SCREW[1], GRIP_SCREW[2]), "Steel",
+           xf=RX(0.9, about=(0, GRIP_SCREW[1], GRIP_SCREW[2])))
 frame.cut(fc)
 # The trigger's pin, through the frame.
 for sx in (-1, 1):
     frame.cyl(0.0017, 0.0, 0.0007, "Steel", segs=12, chamfer=0.0003,
-              xf=T(sx * 0.0111, 0.012, -0.02) @ RY(sx * math.pi / 2))
+              xf=T(sx * 0.0111, TRIG_PIN[1], TRIG_PIN[2]) @ RY(sx * math.pi / 2))
 
 static = Part("static_frame")
 # Barrel: octagonal at the breech, round forward, screwed into the frame.
@@ -123,19 +131,25 @@ static.lathe([(0.0039, MUZZLE + 0.003), (0.0045, MUZZLE + 0.001), (0.0068, MUZZL
               (0.0, -0.09)], "Blued", segs=40, xf=T(0, BORE, 0))
 # The front sight blade near the muzzle; the rear notch in the top strap.
 static.prism(fillet([(MUZZLE + 0.006, BORE + 0.006), (MUZZLE + 0.016, BORE + 0.006),
-                     (MUZZLE + 0.014, BORE + 0.0135), (MUZZLE + 0.0075, BORE + 0.0135)],
+                     (MUZZLE + 0.014, BORE + 0.0095), (MUZZLE + 0.0075, BORE + 0.0095)],
                     0.0008, 1), -0.0012, 0.0012, "Blued", axis="x", bevel=0.0003, segs=1)
 # The blade's base, a saddle on the barrel.
 static.prism(fillet([(MUZZLE + 0.004, BORE + 0.0062), (MUZZLE + 0.019, BORE + 0.0062),
                      (MUZZLE + 0.017, BORE + 0.0088), (MUZZLE + 0.006, BORE + 0.0088)],
                     0.0007, 2), -0.0026, 0.0026, "Blued", axis="x", bevel=0.0005, segs=2)
-# The rear sight: a hump on the top strap with a U notch.
+# The rear sight: a hump on the top strap, its U notch cut through it
+# (drawn in its outline, the caps were filled across the notch and the eye
+# saw no notch: `capture::sightline`). Its floor 0.4 mm under the eye line.
 rs = [(-0.0047, BORE + 0.0078), (0.0047, BORE + 0.0078), (0.0047, BORE + 0.0102),
-      (0.0038, BORE + 0.0116), (0.0017, BORE + 0.0116), (0.0015, BORE + 0.0098),
-      (0.0, BORE + 0.0091), (-0.0015, BORE + 0.0098), (-0.0017, BORE + 0.0116),
-      (-0.0038, BORE + 0.0116), (-0.0047, BORE + 0.0102)]
-static.prism(fillet(rs, [0, 0, 0.0006, 0.0006, 0.0003, 0.0006, 0.0, 0.0006, 0.0003, 0.0006,
-                         0.0006], 3), 0.0, 0.0062, "Blued", axis="z", bevel=0.0003, segs=2)
+      (0.0038, BORE + 0.0116), (-0.0038, BORE + 0.0116), (-0.0047, BORE + 0.0102)]
+rsight = Part("rear_sight")
+rsight.prism(fillet(rs, [0, 0, 0.0006, 0.0006, 0.0006, 0.0006], 3), 0.0, 0.0062, "Blued",
+             axis="z", bevel=0.0003, segs=2)
+rsc = Part("cut")
+rsc.prism(fillet([(-0.0015, BORE + 0.0091), (0.0015, BORE + 0.0091), (0.0015, BORE + 0.013),
+                  (-0.0015, BORE + 0.013)], [0.0006, 0.0006, 0.0, 0.0], 3),
+          -0.001, 0.0072, "Blued", axis="z")
+rsight.cut(rsc)
 # The ejector rod's housing under the barrel, a tube on a lug, and the
 # cylinder axis pin's head at the front of the frame.
 static.tube(0.0042, 0.0028, -0.165, -0.075, "Blued", segs=24, xf=T(0, CYL_Y - 0.004, 0),
@@ -147,19 +161,23 @@ static.lathe([(0.0, -0.0735), (0.0028, -0.0735), (0.0036, -0.0728), (0.0036, -0.
               (0.0040, -0.0708), (0.0040, -0.0618), (0.0036, -0.0612), (0.0, -0.0612)],
              "Steel", segs=24, xf=T(0, CYL_Y, 0))
 # Trigger guard.
-guard = catmull([(-0.033, 0.004), (-0.038, -0.006), (-0.034, -0.017), (-0.02, -0.021),
-                 (-0.006, -0.017), (0.0, -0.008), (0.003, 0.002)], 8, closed=False)
+# Big and round, well forward of the grip.
+guard = catmull([(-0.062, 0.031), (-0.064, 0.016), (-0.058, 0.003), (-0.043, -0.004),
+                 (-0.026, -0.003), (-0.013, 0.004), (-0.006, 0.014)], 8, closed=False)
 static.sweep(guard, section_rect(0.0065, 0.003, 0.001, 3), "Blued")
 
-# Grip: smooth walnut panels on a bird's-head frame, the lanyard ring at
-# the butt.
-grip_prof = catmull([(0.0005, 0.006), (-0.008, -0.03), (-0.008, -0.06), (0.003, -0.08),
-                     (0.02, -0.084), (0.031, -0.075), (0.031, -0.05), (0.022, -0.012),
-                     (0.016, 0.006)], samples=4)
+# Grip: walnut panels on a bird's-head frame, the lanyard ring at the butt.
+# Short, and set back behind the hammer: a long reach forward to the trigger.
+# The heel is rounded at least as much as the bevel, or the bevel folds.
+grip_prof = catmull([(0.012, 0.016), (0.017, 0.004), (0.022, -0.013), (0.0248, -0.029),
+                     (0.026, -0.040), (0.036, -0.043), (0.052, -0.042), (0.0565, -0.0385),
+                     (0.0573, -0.030),
+                     (0.0567, -0.017), (0.053, 0.001), (0.046, 0.017), (0.037, 0.030),
+                     (0.030, 0.034), (0.020, 0.026)], samples=4)
 
 
 def grip_w(z, y):
-    swell = 0.0012 * math.exp(-((y + 0.04) / 0.03) ** 2)
+    swell = 0.0012 * math.exp(-((y + 0.015) / 0.03) ** 2)
     return (-0.0135 - swell, 0.0135 + swell)
 
 
@@ -181,19 +199,16 @@ def grip_x(z, y):
     return grip_w(z, y)[1]
 
 
-grip_check.checkering(gc, grip_x, None, None, (-0.006, 0.026, -0.07, -0.012), pitch=0.0022,
+grip_check.checkering(gc, grip_x, None, None, (0.018, 0.054, -0.038, 0.012), pitch=0.0022,
                       depth=0.0005, mat="Wood")
 grip.cut(gc)
-# The grip's frame strap down the back, the butt cap, and the lanyard ring.
-static.prism(fillet([(0.016, 0.006), (0.031, -0.05), (0.031, -0.075), (0.02, -0.0845),
-                     (0.019, -0.081), (0.027, -0.074), (0.027, -0.052), (0.013, 0.006)],
-                    [0.002, 0.006, 0.006, 0.003, 0.0, 0.004, 0.006, 0.002], 3),
-             -0.004, 0.004, "Blued", axis="x")
-static.sweep([(0.024 + 0.0055 * math.cos(a), -0.088 + 0.0055 * math.sin(a))
+# The lanyard ring at the butt.
+BUTT_Z, BUTT_Y = 0.046, -0.0425
+static.sweep([(BUTT_Z + 0.0055 * math.cos(a), BUTT_Y - 0.006 + 0.0055 * math.sin(a))
               for a in [2 * math.pi * i / 24 for i in range(24)]],
              section_rect(0.0018, 0.0018, 0.0006, 3), "Steel", closed=True)
-static.box((0.004, 0.006, 0.004), (0, -0.0835, 0.024), "Steel", bevel=0.001, segs=3)
-static.cyl(0.0012, -0.0028, 0.0028, "Steel", segs=10, xf=T(0, -0.0825, 0.024) @ RY(math.pi / 2))
+static.box((0.004, 0.006, 0.004), (0, BUTT_Y + 0.0005, BUTT_Z), "Steel", bevel=0.001, segs=3)
+static.cyl(0.0012, -0.0028, 0.0028, "Steel", segs=10, xf=T(0, BUTT_Y + 0.0015, BUTT_Z) @ RY(math.pi / 2))
 
 # --- Cylinder (turns about its axis) --------------------------------------------------
 cyl = Part("cylinder", origin=(0.0, CYL_Y, 0.0))
@@ -269,18 +284,20 @@ for i in range(4):
 head += [(0.0055, -0.166), (0.0, -0.165)]
 rod.lathe(head, "Steel", segs=24, xf=T(0, ROD_Y, 0))
 
-trig = Part("trigger", origin=(0.0, 0.006, -0.02))
-trig.sweep(catmull([(-0.022, 0.004), (-0.026, -0.004), (-0.025, -0.012), (-0.021, -0.016)], 6,
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=TRIG_PIN)
+# (Its face at about -0.038 at mid-height, the photograph's.)
+trig.sweep(catmull([(-0.034, 0.028), (-0.038, 0.018), (-0.037, 0.009), (-0.032, 0.004)], 6,
                    closed=False), section_rect(0.0045, 0.003, 0.0011, 3), "Blued")
 
-join("static_frame", frame, static, grip, grip_check, worn={})
+join("static_frame", frame, static, rsight, grip, grip_check, worn={})
 for p in [cyl, hammer, gate, rod, trig]:
     make(p, worn={})
 for p in rounds:
     make(p)
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, BORE + 0.012, 0.012))
+empty("pt_sight", (0.0, BORE + 0.0095, 0.012))
 empty("pt_load_port", (0.016, gy, -0.012))
 
 report()

@@ -137,15 +137,20 @@ impl Plugin for GadgetsPlugin {
 /// Where each gun takes a scope (or rail) and an adapter, gun space.
 fn gun_mount_points(id: &str, muzzle: Vec3) -> Vec<(Mount, Transform)> {
     let mut v = Vec::new();
+    // A dovetail's height puts a scope's optical axis where every scope
+    // that fits clears the receiver and its rear sight by a millimetre:
+    // their bells 20.5 mm under the axis, their brackets' bases 24.5 mm
+    // (the same on each, so one height seats them all). `capture::seated`
+    // holds each scope against each gun.
     match id {
-        "ak74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.12))),
+        "ak74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.1305, -0.12))),
         "mosin" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.112, -0.1))),
         // Over the receiver cover, clear of the rear sight.
-        "sks" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.1, -0.08))),
+        "sks" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.109, -0.08))),
         // The RPK's is the AK's; the SVD's scope sits over the bore off
         // the rail on its left; the TOZ-8's receiver has a dovetail.
-        "rpk74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.12))),
-        "svd" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.1))),
+        "rpk74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.133, -0.12))),
+        "svd" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.13, -0.1))),
         "toz8" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.085, -0.11))),
         _ => {}
     }
@@ -203,9 +208,14 @@ fn gun_mounts(
     }
 }
 
-/// A cell (its length along Y) turned to lie along a light (along Z).
-const CELL_ALONG: Quat = Quat::from_xyzw(
-    std::f32::consts::FRAC_1_SQRT_2,
+/// A cell lying along a light (along Z): as its model lies. The cell's
+/// model lies along Z, on its side, as a cell rests on a shelf (it stood
+/// on end, and read as a magazine from across a room:
+/// `docs/craft/ITEM_READING.md`).
+const CELL_ALONG: Quat = Quat::IDENTITY;
+/// A cell standing in an upright bay (along Y).
+const CELL_UPRIGHT: Quat = Quat::from_xyzw(
+    -std::f32::consts::FRAC_1_SQRT_2,
     0.0,
     0.0,
     std::f32::consts::FRAC_1_SQRT_2,
@@ -239,7 +249,7 @@ fn item_mounts(
                 "flashlight" => (0.02, CELL_ALONG),
                 "weapon_light" => (0.008, CELL_ALONG),
                 "laser_module" => (0.0025, CELL_ALONG),
-                _ => (0.02, Quat::IDENTITY),
+                _ => (0.02, CELL_UPRIGHT),
             };
             spawn_mount(
                 &mut commands,
@@ -740,6 +750,7 @@ mod tests {
 
     fn app() -> App {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };

@@ -24,6 +24,7 @@ impl Plugin for TreesPlugin {
             MaterialPlugin::<TreeSwayMaterial>::default(),
             super::impostors::ImpostorPlugin,
         ))
+        .init_resource::<NearStreamed>()
         .add_systems(Update, blow_trees)
         .add_systems(
             PostUpdate,
@@ -171,10 +172,26 @@ fn spawn_forests(
             reflectance: 0.2,
             ..default()
         });
+        // A spruce's core wears its needles (opaque: the atlas's clear
+        // texels carry the needles' colour), shaded by its vertex colours.
         let core = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.55, 0.6, 0.55),
+            base_color: if textured {
+                NEEDLE_TINT
+            } else {
+                Color::srgb(0.28, 0.31, 0.19)
+            },
+            base_color_texture: textured.then(|| {
+                server
+                    .load_builder()
+                    .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
+                        s.is_srgb = true;
+                    })
+                    .load(crate::render::textures::ktx2(
+                        "textures/foliage/spruce_branch/albedo.ktx2",
+                    ))
+            }),
             perceptual_roughness: 0.9,
-            reflectance: 0.15,
+            reflectance: 0.1,
             // One-sided: standing in a spruce (only the trunk stops you),
             // its core seen from inside was most of the view, black.
             ..default()
@@ -202,11 +219,7 @@ fn spawn_forests(
         };
         let (needles, leaves) = if textured {
             (
-                Some(card(
-                    "spruce_branch",
-                    Color::srgb(0.85, 0.88, 0.82),
-                    &mut materials,
-                )),
+                Some(card("spruce_branch", NEEDLE_TINT, &mut materials)),
                 Some(card(
                     "birch_leaves",
                     Color::srgb(0.62, 0.66, 0.55),
@@ -249,7 +262,9 @@ fn spawn_forests(
                     TreeSpecies::Birch => leaves.clone(),
                     _ => needles.clone(),
                 };
-                let crown = m.crown.as_ref().map(|c| meshes.add(c.clone()));
+                // Only a spruce's core (and its impostor's picture of it)
+                // wears this: the far LOD has its own.
+                let crown = m.crown.as_ref().map(|c| meshes.add(core_of(c)));
                 let bounds = m.cards.as_ref().and_then(mesh_bounds);
                 // The live near cards move in the wind; the impostor's
                 // camera photographs the still ones.
@@ -469,8 +484,9 @@ fn spawn_forests(
         chunk_count += 1;
     }
     // Impostors are only ever far, and their near cut is the shader's, per
-    // tree: merged over 3x3 chunks they are a ninth of the draws (they
-    // were two thirds of the forest's).
+    // tree: merged over `IMPOSTOR_BLOCK` chunks a side they are a few
+    // dozen draws a valley (a chunk each, they were two thirds of the
+    // forest's).
     for ((_, key), b) in impostors {
         if b.is_empty() {
             continue;
@@ -496,8 +512,13 @@ fn spawn_forests(
 
 /// Chunk size for merged forest meshes, metres.
 pub const CHUNK: f32 = 48.0;
-/// Impostors merge over this many chunks a side.
-const IMPOSTOR_BLOCK: i32 = 3;
+/// Impostors merge over this many chunks a side (288 m). An impostor is a
+/// quad a tree, cut near and dithered with the cards per tree in its
+/// shader, so a block's size changes no picture: only how much of it the
+/// fog's range keeps past the fog (in a storm, +0.05 layers at most).
+/// Over 3x3 chunks a forested view drew 50-150 more (Kettle Pass's aerial
+/// 1786 > 1632 both eyes).
+const IMPOSTOR_BLOCK: i32 = 6;
 /// A chunk (by its centre) switches to the coarse LOD this far away.
 const FAR_LOD: f32 = 130.0;
 /// Without the foliage textures (`scripts/fetch_assets.py` not run) there
@@ -629,7 +650,9 @@ const CARD_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::
 const TRUNK_SHADOWS: crate::render::budget::ShadowReach = crate::render::budget::ShadowReach(60.0);
 
 /// The spruce's dark core, scaled inside its cards.
-const CORE_SCALE: Vec3 = Vec3::new(0.62, 0.96, 0.62);
+/// Narrow enough that its whorls' tips stay inside the cards (at 0.62
+/// they showed past them as black teeth).
+const CORE_SCALE: Vec3 = Vec3::new(0.55, 0.96, 0.55);
 
 /// The card material's tint is baked into the picture: the impostor's own
 /// is white.
@@ -640,6 +663,35 @@ fn tint_to_white(_tint: Color) -> Color {
 /// Bounds of a mesh's positions (local).
 fn triangles(m: &Mesh) -> usize {
     m.indices().map_or(0, |i| i.len() / 3)
+}
+
+/// The spruce cards' tint, over the needle atlas.
+const NEEDLE_TINT: Color = Color::srgb(0.85, 0.88, 0.82);
+
+/// How dark a near spruce's core is under its needles, on average: it
+/// wears the needles' own texture and tint, shaded by this. With the far
+/// crown's colours (0.025 linear green) it drew black cones through the
+/// cards in a settled close view: Marrow's m05, the tester's "ugly as
+/// sin". Lit (it takes no shadow, `NotShadowReceiver`) but untextured,
+/// it read as a smooth faceted solid; at 0.75 it stood out lighter than
+/// its cards, which do take the sun's shadow.
+const CORE_SHADE: f32 = 0.55;
+
+/// The crown as a near spruce's core: its vertex colours turned to a
+/// grey shade (the crown's own light and dark, its hue left to the
+/// needles), `CORE_SHADE` on average.
+fn core_of(crown: &Mesh) -> Mesh {
+    let mut m = crown.clone();
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x4(c)) =
+        m.attribute_mut(Mesh::ATTRIBUTE_COLOR)
+    {
+        let mean = c.iter().map(|v| v[1]).sum::<f32>() / c.len().max(1) as f32;
+        for v in c.iter_mut() {
+            let shade = (v[1] / mean.max(1e-6) * CORE_SHADE).min(1.0);
+            *v = [shade, shade, shade, 1.0];
+        }
+    }
+    m
 }
 
 /// One coarse blob filling a crown's bounds, in its mean vertex colour.
@@ -727,17 +779,47 @@ struct ForestAssets(TreeAssets);
 #[derive(Resource)]
 pub struct ForestBuilt;
 
+/// Where the near detail was last streamed round: the eyes then.
+#[derive(Resource, Default)]
+pub struct NearStreamed(Vec<Vec3>);
+
 /// Whether the forest is done arriving: built, and every impostor's
-/// picture taken (each a capture rig until its readback comes in).
+/// picture taken (each a capture rig until its readback comes in). For a
+/// shot, also its near trees' cards streamed in round where every eye is
+/// now ([`ForestSettled::near_streamed`]): a lookbook view shot before
+/// them had the spruces' dark cores and no needles.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct ForestSettled<'w, 's> {
     built: Option<Res<'w, ForestBuilt>>,
     captures: Query<'w, 's, (), With<super::impostors::Capture>>,
+    streamed: Option<Res<'w, NearStreamed>>,
+    cams: Query<
+        'w,
+        's,
+        (
+            &'static GlobalTransform,
+            Option<&'static bevy::camera::RenderTarget>,
+        ),
+        crate::render::EyeCamera,
+    >,
 }
 
 impl ForestSettled<'_, '_> {
     pub fn settled(&self) -> bool {
         self.built.is_some() && self.captures.is_empty()
+    }
+
+    /// The near detail streamed round every eye where it is (no eye, or
+    /// no streaming at all: no near detail to wait for).
+    pub fn near_streamed(&self) -> bool {
+        let Some(streamed) = &self.streamed else {
+            return true;
+        };
+        let at = &streamed.0;
+        crate::render::eyes(&self.cams).all(|g| {
+            let e = g.translation();
+            at.iter().any(|a| a.xz().distance(e.xz()) < 1.0)
+        })
     }
 }
 
@@ -761,6 +843,7 @@ fn stream_near_detail(
     time: Res<Time<Real>>,
     mut timer: Local<f32>,
     mut looked: Local<Vec<Vec3>>,
+    mut streamed: ResMut<NearStreamed>,
 ) {
     let (Some(grid), Some(assets)) = (grid, assets) else {
         return;
@@ -833,6 +916,10 @@ fn stream_near_detail(
                                             Transform::from_scale(CORE_SCALE),
                                             fade.clone(),
                                             CARD_SHADOWS,
+                                            // Inside its own cards' shadow it
+                                            // was ambient only: black cones
+                                            // through the needles (m05).
+                                            bevy::light::NotShadowReceiver,
                                             ChildOf(*e),
                                         ))
                                         .id(),
@@ -845,6 +932,7 @@ fn stream_near_detail(
             }
         }
     }
+    streamed.0 = eyes;
 }
 
 /// Near trees' foliage cards: standard PBR whose crowns lean with the
@@ -908,6 +996,14 @@ impl bevy::pbr::MaterialExtension for TreeSway {
 
     fn fragment_shader() -> bevy::shader::ShaderRef {
         "shaders/tree_sway.wgsl".into()
+    }
+
+    fn prepass_vertex_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/tree_sway.wgsl")
+    }
+
+    fn prepass_fragment_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/tree_sway.wgsl")
     }
 
     fn specialize(
@@ -1004,9 +1100,14 @@ struct TreeAssets {
 /// test at `cutoff`, next launch; `EXTRACTION_A2C=1` / `=0` overrides.
 /// If the headset measures more than 0.5 ms an eye for it in the spruce
 /// view, hard leaves become the default (`docs/PLAYTEST.md`).
+/// With the depth prepass (`EXTRACTION_PREPASS=1`) it's always the test:
+/// the prepass draws depth only, with no colour for coverage to come from,
+/// so a coverage-cut leaf wrote its whole card into the depth and hid
+/// what was behind its gaps.
 pub fn foliage_alpha(cutoff: f32) -> AlphaMode {
     static SOFT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let soft = *SOFT.get_or_init(|| match std::env::var("EXTRACTION_A2C").as_deref() {
+        _ if crate::render::prepass::on() => false,
         Ok("1") => true,
         Ok("0") => false,
         _ => crate::rig::comfort::soft_leaves_at_launch(),
@@ -1051,6 +1152,8 @@ const SPRIGS: [[f32; 4]; 4] = [
     [0.183, 0.041, 0.444, 0.326],
     [0.646, 0.034, 0.944, 0.375],
 ];
+/// The sprig a spruce's core is drawn from.
+const CORE_SPRIG: [f32; 4] = SPRIGS[0];
 /// The hanging birch branch, stem at the top.
 const BIRCH_LEAVES: [f32; 4] = [0.21, 0.0, 0.81, 1.0];
 /// Every atlas rect a card is cut from (each has an outline in
@@ -1349,15 +1452,24 @@ fn build_tree(
                     continue;
                 }
                 let base = crown.pos.len() as u32;
-                let top = crown.vertex(
+                // UVs for the near core, which wears the needles: the
+                // apex at a sprig's stem, the tips along its far edge,
+                // there and back point by point so it isn't stretched
+                // round the whole skirt. (The far LOD draws no texture.)
+                let [u0, v0, u1, v1] = CORE_SPRIG;
+                let top = crown.vertex_uv(
                     Vec3::new(0.0, y + r * 0.55 + 0.3, 0.0),
                     Vec3::Y,
                     lin(0.10, 0.14, 0.10),
+                    [(u0 + u1) * 0.5, v1],
                 );
                 let mut n = 0u32;
                 for (p, nrm, c, long) in points {
                     if !crown.coarse || long {
-                        crown.vertex(p, nrm, c);
+                        // Points about a metre apart round a low skirt: a
+                        // sprig each, about life size.
+                        let across = (n % 2) as f32;
+                        crown.vertex_uv(p, nrm, c, [u0 + (u1 - u0) * across, v0]);
                         n += 1;
                     }
                 }
@@ -1396,15 +1508,24 @@ fn build_tree(
                         centre,
                         false,
                     );
-                    cards.card(
-                        base + Vec3::Y * 0.05,
-                        along * 0.85,
-                        Vec3::Y,
-                        len * 0.6,
-                        SPRIGS[2 + crng.below(2)],
-                        centre,
-                        false,
-                    );
+                    // An upright fin on every other plate: the drooping
+                    // plates carry the skirt's outline, the textured core
+                    // its density, and a fin on each was a quarter of a
+                    // dense spruce view's fragments for little to see
+                    // (m05_spruce over its overdraw budget). The draw is
+                    // taken either way, so each variant keeps its shape.
+                    let fin = SPRIGS[2 + crng.below(2)];
+                    if i % 2 == 0 {
+                        cards.card(
+                            base + Vec3::Y * 0.05,
+                            along * 0.85,
+                            Vec3::Y,
+                            len * 0.6,
+                            fin,
+                            centre,
+                            false,
+                        );
+                    }
                 }
             }
         }
@@ -1843,7 +1964,9 @@ mod after_a_jump {
         let _counting = counted();
         let mut app = client_threads("marrow_creek", "clearing", None);
         settle(&mut app);
-        // A stand of trees 250-400 m from the camera.
+        // The farthest stand of trees from the camera, whatever the
+        // valley's size: a jump well past what streams in round it (Marrow,
+        // pulled in, is 388 m across).
         let (from, target) = {
             let w = app.world_mut();
             let cam = w
@@ -1859,8 +1982,13 @@ mod after_a_jump {
                 .map(|k| &grid.cells[k])
                 .filter(|trees| trees.len() >= 6)
                 .map(|trees| trees[0].2)
-                .find(|p| (250.0..400.0).contains(&p.distance(cam)))
-                .expect("a stand of trees 250-400 m off");
+                .max_by(|a, b| a.distance(cam).total_cmp(&b.distance(cam)))
+                .expect("a stand of trees");
+            assert!(
+                p.distance(cam) > 150.0,
+                "a stand far off: {:.0} m",
+                p.distance(cam)
+            );
             (cam, p)
         };
         let zone = app.world().resource::<crate::world::Zone>().clone();
@@ -1942,5 +2070,103 @@ mod after_a_jump {
             "{} near trunk meshes drawn later than the jump's frame",
             missing.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod near_stream_tests {
+    use super::*;
+
+    fn streamed(app: &mut App) -> bool {
+        let mut s = bevy::ecs::system::SystemState::<ForestSettled>::new(app.world_mut());
+        s.get(app.world()).unwrap().near_streamed()
+    }
+
+    /// A shot waits for the near trees' cards round where the eye is now:
+    /// streamed round the last place, a jump to the next view isn't yet.
+    #[test]
+    fn a_shot_waits_for_the_near_cards_where_the_eye_is() {
+        let mut app = App::new();
+        app.add_plugins(TransformPlugin);
+        let eye = app
+            .world_mut()
+            .spawn((Camera3d::default(), Transform::from_xyz(10.0, 2.0, 10.0)))
+            .id();
+        app.update();
+        assert!(
+            streamed(&mut app),
+            "no streaming at all: nothing to wait for"
+        );
+        app.world_mut()
+            .insert_resource(NearStreamed(vec![Vec3::new(10.0, 2.0, 10.0)]));
+        assert!(streamed(&mut app), "streamed where the eye is");
+        app.world_mut()
+            .get_mut::<Transform>(eye)
+            .unwrap()
+            .translation = Vec3::new(60.0, 2.0, 10.0);
+        app.update();
+        assert!(
+            !streamed(&mut app),
+            "the next view: not until it's streamed there"
+        );
+        app.world_mut()
+            .insert_resource(NearStreamed(vec![Vec3::new(60.0, 2.0, 10.0)]));
+        assert!(streamed(&mut app));
+    }
+}
+
+#[cfg(test)]
+mod core_tests {
+    use super::*;
+
+    fn colours(m: &Mesh) -> Vec<[f32; 4]> {
+        match m.attribute(Mesh::ATTRIBUTE_COLOR) {
+            Some(bevy::mesh::VertexAttributeValues::Float32x4(c)) => c.clone(),
+            _ => panic!("a crown without vertex colours"),
+        }
+    }
+
+    /// A near spruce's core draws as its needles, shaded: every UV inside
+    /// the sprig it wears (not the atlas's corner, where it was, nor the
+    /// bark strip), its colours a grey shade a little over half the
+    /// needles' (not the far crown's 0.025 green, black cones through the
+    /// cards in a settled close view). The far crown is left as it was.
+    #[test]
+    fn a_near_spruce_core_draws_as_shaded_needles() {
+        let [u0, v0, u1, v1] = CORE_SPRIG;
+        for v in 0..VARIANTS {
+            let t = build_tree(
+                TreeSpecies::Spruce,
+                1000 + v as u64 * 17,
+                true,
+                false,
+                false,
+            );
+            let crown = t.crown.expect("a spruce has a crown");
+            let before = colours(&crown);
+            let core = core_of(&crown);
+            let Some(bevy::mesh::VertexAttributeValues::Float32x2(uv)) =
+                core.attribute(Mesh::ATTRIBUTE_UV_0)
+            else {
+                panic!("variant {v}: a core without UVs");
+            };
+            for [u, w] in uv {
+                assert!(
+                    (u0..=u1).contains(u) && (v0..=v1).contains(w),
+                    "variant {v}: UV ({u:.3}, {w:.3}) off its sprig"
+                );
+            }
+            let c = colours(&core);
+            let mean = c.iter().map(|x| x[1]).sum::<f32>() / c.len() as f32;
+            assert!(
+                (0.5..=0.6).contains(&mean),
+                "variant {v}: the core shades its needles by {mean:.3}"
+            );
+            assert!(
+                c.iter().all(|x| x[0] == x[1] && x[1] == x[2]),
+                "variant {v}: a grey shade, the hue the needles'"
+            );
+            assert_eq!(colours(&crown), before, "the far crown untouched");
+        }
     }
 }

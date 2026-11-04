@@ -67,6 +67,11 @@ pub enum First {
     /// (`robots::search::ComingBack`): a moving shape behind low cover is
     /// glimpsed, and each glimpse moves its guess; a still one isn't.
     ComingToLook,
+    /// A broken walker noticed you (`robots::broken`): its gun's dead, its
+    /// eye isn't. The first machine you can win against.
+    BrokenNoticed,
+    /// A broken walker shoved you: it can still hurt, close in.
+    Shoved,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -117,6 +122,8 @@ pub const ALL: &[First] = &[
     First::Hush,
     First::Payday,
     First::ComingToLook,
+    First::BrokenNoticed,
+    First::Shoved,
 ];
 
 impl First {
@@ -144,6 +151,8 @@ impl First {
                 | First::Sentry
                 | First::Hush
                 | First::ComingToLook
+                | First::BrokenNoticed
+                | First::Shoved
         )
     }
 
@@ -204,9 +213,19 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
-            First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
+            // As the card stands (`payday`): pressed now, it pays, or
+            // not yet, and the card's own reason why. (Home pinned by a
+            // drone, the job given up, "that's the job paid" was said, and
+            // the card wouldn't pay it.)
+            First::Payday => &[PAYDAY_NOT_YET, "{verdict}"],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
+            }
+            First::BrokenNoticed => {
+                &["Truck: \"That one's lost its gun. Its eye's still good: shoot that.\""]
+            }
+            First::Shoved => {
+                &["Truck: \"It can still shove. Keep your distance, aim for the eye.\""]
             }
         }
     }
@@ -312,13 +331,18 @@ fn meet(
         // Danger now: said at once, ahead of anything waiting (a walker's
         // aim came the same moment as "heard", and five seconds behind it
         // was after the shot).
-        for l in f.lines().iter().rev() {
-            queue.lines.push_front(fill(l));
+        for l in f.lines().iter().rev().map(|l| fill(l)) {
+            if !l.is_empty() {
+                queue.lines.push_front(l);
+            }
         }
         let since = SPACING - queue.quiet;
         queue.quiet = queue.quiet.min((URGENT_SPACING - since).max(0.0));
     } else {
-        queue.lines.extend(f.lines().iter().map(|l| fill(l)));
+        // (A line filled to nothing isn't said.)
+        queue
+            .lines
+            .extend(f.lines().iter().map(|l| fill(l)).filter(|l| !l.is_empty()));
     }
     out.write(FirstMet(f));
     true
@@ -373,6 +397,8 @@ fn robots_heard(
     mut lost: MessageReader<crate::robots::search::LostYou>,
     mut back: MessageReader<crate::robots::search::ComingBack>,
     minds: Query<&Awareness>,
+    broken: Query<(), With<crate::robots::broken::Broken>>,
+    mut shoves: MessageReader<crate::robots::broken::Shoved>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     mut m: Meet,
 ) {
@@ -380,6 +406,9 @@ fn robots_heard(
         return;
     };
     let about_me = |robot: Entity| minds.get(robot).is_ok_and(|a| a.target == Some(me));
+    if shoves.read().any(|s| s.player == me) {
+        m.meet(First::Shoved);
+    }
     let looked: Vec<Entity> = looking.read().map(|e| e.robot).collect();
     // One that was shooting at you, coming to look (or back past you).
     if back.read().any(|b| b.about == me) {
@@ -389,7 +418,16 @@ fn robots_heard(
         .into_iter()
         .chain(noticed.read().map(|e| e.robot))
         .collect();
-    if robots.into_iter().any(about_me) {
+    // A broken walker's is its own line (shoot its eye), not "go still":
+    // it's the one to take on.
+    let (wrecks, others): (Vec<Entity>, Vec<Entity>) = robots
+        .into_iter()
+        .filter(|r| about_me(*r))
+        .partition(|r| broken.contains(*r));
+    if !wrecks.is_empty() {
+        m.meet(First::BrokenNoticed);
+    }
+    if !others.is_empty() {
         m.meet(First::Heard);
     }
     for ev in lost.read() {
@@ -619,6 +657,17 @@ pub fn fill(line: &str, in_crate: usize, fell: usize) -> String {
             format!("{n} things")
         }
     };
+    // (Said of what's so: none fell, or none's in the crate, is its own
+    // line, not "0 things".)
+    if fell == 0 && line.contains("{n} things") {
+        return "Truck: \"You'd nothing on you to lose.\"".into();
+    }
+    if in_crate == 0 && line.contains("{s} things") {
+        return line.replace(
+            "Crate's as you left it: {s} things.",
+            "Crate's empty, as you left it.",
+        );
+    }
     line.replace("{s} things", &things(in_crate))
         .replace("{n} things", &things(fell))
 }
@@ -732,24 +781,57 @@ fn spare_radio(
     }
 }
 
+/// Home, the card as it stands paying the job if pressed now.
+pub const PAYDAY_PAID: &str = "Truck: \"Home. Press the card: that's the job paid.\"";
+/// ...not yet (the card's reason follows: in the pack, not the stash; or
+/// not done).
+pub const PAYDAY_NOT_YET: &str = "Truck: \"Home. Press the card once the job's done: it pays it.\"";
+
 /// Home from the Zone with a job on the card: nothing pays it but
 /// pressing the card (the first newcomers took the truck home, and the
 /// job sat unpaid into the next session).
 fn payday(
     raid: Res<Raid>,
     progression: Option<Res<crate::progression::Progression>>,
+    opts: Res<crate::launch::LaunchOptions>,
+    check: crate::raid::requests::CardCheck,
     mut was_out: Local<bool>,
     mut m: Meet,
 ) {
     let home = raid.phase == Phase::AtBase;
     let back = *was_out && home;
     *was_out = matches!(raid.phase, Phase::Extracting { .. });
-    if back
-        && !m.met(First::Payday)
-        && progression.is_some_and(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
-    {
-        m.meet(First::Payday);
+    let Some(p) = progression.filter(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
+    else {
+        return;
+    };
+    if !back || m.met(First::Payday) {
+        return;
     }
+    // What the card would say, pressed now: it pays; or not yet, and its
+    // own reason (each names the stash, so "in your pack" and "not done"
+    // read apart). Nothing to pay this raid at all, or no stash: not now
+    // (said on a later homecoming).
+    use crate::progression::lines;
+    let verdict = check.verdict(&p.0, &raid, &opts);
+    if let Err(why) = &verdict
+        && (why.is_empty()
+            || [
+                lines::NO_JOB,
+                lines::NOT_AT_BASE,
+                lines::ONE_A_RAID,
+                lines::IN_THE_YARD,
+            ]
+            .contains(&why.as_str()))
+    {
+        return;
+    }
+    m.meet_filled(First::Payday, &|l| match (&verdict, l) {
+        (Ok(_), PAYDAY_NOT_YET) => PAYDAY_PAID.into(),
+        (Ok(_), _) => String::new(),
+        (Err(why), "{verdict}") => why.clone(),
+        (Err(_), l) => l.into(),
+    });
 }
 
 fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
@@ -936,13 +1018,19 @@ mod tests {
                 app.update();
             }
         }
-        let line = First::Payday.lines()[0];
+        // The job's not done (the career's own, or the letter, not in the
+        // stash): not yet, and the card's own reason after it (never
+        // "that's the job paid").
         let spoken = &app.world().resource::<Spoken>().0;
         assert_eq!(
-            spoken.iter().filter(|s| *s == line).count(),
+            spoken.iter().filter(|s| *s == PAYDAY_NOT_YET).count(),
             1,
             "{spoken:?}"
         );
+        assert!(!spoken.iter().any(|s| s == PAYDAY_PAID), "{spoken:?}");
+        let at = spoken.iter().position(|s| s == PAYDAY_NOT_YET).unwrap();
+        let why = spoken.get(at + 1).cloned().unwrap_or_default();
+        assert!(why.starts_with("Driver:"), "after it: {why:?} ({spoken:?})");
     }
 
     /// The moments that come from a message, met twice over through the

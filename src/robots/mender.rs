@@ -130,6 +130,13 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
                 phase: (at.x * 0.37 + at.z * 0.11).fract() * 6.28,
                 looted: false,
                 lock: 0.0,
+                locks_unhit: 0,
+                engaged_at: -1.0,
+                last_engaged: -1.0,
+                broke_off_until: 0.0,
+                quiet: 0.0,
+                warning_left: 0,
+                last_shot: f32::NEG_INFINITY,
             },
             Mender {
                 patient: None,
@@ -538,7 +545,7 @@ mod tests {
     use super::*;
 
     fn world() -> (crate::vr_harness::Vr, Zone) {
-        let vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         (vr, zone)
     }

@@ -287,6 +287,7 @@ mod tests {
     #[test]
     fn the_drone_spots_a_robot_and_comes_home() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };

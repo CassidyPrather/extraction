@@ -83,76 +83,70 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn press_card(
-    mut commands: Commands,
-    mut events: MessageReader<InteractEvent>,
-    cards: Query<(), With<RequestCard>>,
-    mut requests: ResMut<Requests>,
-    mut progression: ResMut<Progression>,
-    mut raid: ResMut<Raid>,
-    (stashes, mut bags, mut sockets): (
-        Query<Entity, With<Stash>>,
-        Query<&mut Backpack>,
-        Query<(
+/// What the request card checks when pressed, read-only: whether pressing it
+/// now would pay the job, and what the driver says if not
+/// ([`CardCheck::verdict`]). `press_card` acts on it; the onboarding's
+/// Payday line asks it first ([`CardCheck::would_pay`]), so "that's the job
+/// paid" is only said when it would be.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct CardCheck<'w, 's> {
+    stashes: Query<'w, 's, Entity, With<Stash>>,
+    bags: Query<'w, 's, &'static Backpack>,
+    sockets: Query<
+        'w,
+        's,
+        (
             Entity,
-            &mut crate::interact::Socket,
-            &crate::interact::SocketOwner,
-        )>,
-    ),
-    items: Query<&Item>,
-    catalog: Res<Catalog>,
-    loot: Option<Res<Loot>>,
-    spots: Option<Res<crate::world::buildings::BuildingLoot>>,
-    zone: Res<Zone>,
-    opts: Res<crate::launch::LaunchOptions>,
-    mut done: MessageWriter<crate::progression::JobDone>,
-    (logbook, mind, canaries): (
-        Res<crate::raid::logbook::Logbook>,
-        Option<Res<crate::robots::memory::ZoneMind>>,
-        Query<&crate::world::workings::Canary>,
-    ),
-) {
-    for ev in events.read() {
-        let InteractEvent::Pressed { item, .. } = ev else {
-            continue;
-        };
-        if !cards.contains(*item) {
-            continue;
-        }
-        let Some(job) = progression.0.job.clone() else {
-            raid.say(lines::NO_JOB);
-            continue;
+            &'static crate::interact::Socket,
+            &'static crate::interact::SocketOwner,
+        ),
+    >,
+    items: Query<'w, 's, &'static Item>,
+    catalog: Res<'w, Catalog>,
+    logbook: Res<'w, crate::raid::logbook::Logbook>,
+    canaries: Query<'w, 's, &'static crate::world::workings::Canary>,
+}
+
+impl CardCheck<'_, '_> {
+    /// Pressing the card now: what it would take from the stash (the bag or
+    /// socket holding it, the item), or the driver's line why not (empty:
+    /// nothing to say).
+    pub fn verdict(
+        &self,
+        progress: &extraction_core::progression::Progress,
+        raid: &Raid,
+        opts: &crate::launch::LaunchOptions,
+    ) -> Result<Vec<(Entity, Entity)>, String> {
+        let Some(job) = progress.job.clone() else {
+            return Err((lines::NO_JOB).into());
         };
         if raid.phase != Phase::AtBase {
-            raid.say(lines::NOT_AT_BASE);
-            continue;
+            return Err((lines::NOT_AT_BASE).into());
         }
-        if progression.0.last_raid == Some(raid.raids) {
-            raid.say(lines::ONE_A_RAID);
-            continue;
+        if progress.last_raid == Some(raid.raids) {
+            return Err((lines::ONE_A_RAID).into());
         }
         if opts.map == crate::camp::TRAINING_YARD {
-            raid.say(lines::IN_THE_YARD);
-            continue;
+            return Err((lines::IN_THE_YARD).into());
         }
-        let Some(stash) = stashes.iter().next() else {
-            continue;
+        let Some(stash) = self.stashes.iter().next() else {
+            return Err(String::new());
         };
         // What's in the stash, and in a bag or a mount of something in it (a
         // stone sealed in its lead case counts): (the bag or socket that
         // holds it, the item).
         // (`whole`: only those in the condition the fetch takes.)
         let in_stash_as = |id: &str, n: u32, whole: bool| -> Vec<(Entity, Entity)> {
-            let Ok(top) = bags.get(stash) else {
+            let Ok(top) = self.bags.get(stash) else {
                 return Vec::new();
             };
             let in_bags = top
                 .contents
                 .iter()
-                .filter_map(|b| bags.get(*b).ok().map(|bag| (*b, bag)))
+                .filter_map(|b| self.bags.get(*b).ok().map(|bag| (*b, bag)))
                 .flat_map(|(b, bag)| bag.contents.iter().map(move |e| (b, *e)));
-            let mounted = sockets
+            let mounted = self
+                .sockets
                 .iter()
                 .filter(|(_, _, owner)| top.contents.contains(&owner.0))
                 .filter_map(|(s, socket, _)| socket.occupant.map(|e| (s, e)));
@@ -162,8 +156,8 @@ fn press_card(
                 .chain(in_bags)
                 .chain(mounted)
                 .filter(|(_, e)| {
-                    items.get(*e).is_ok_and(|i| {
-                        let of = &catalog.get(i.kind()).id;
+                    self.items.get(*e).is_ok_and(|i| {
+                        let of = &self.catalog.get(i.kind()).id;
                         extraction_core::progression::fetch_takes(id, of)
                             && (!whole
                                 || i.0.condition
@@ -180,52 +174,46 @@ fn press_card(
                 if (have.len() as u32) < *n {
                     // There are some, but shot through.
                     if in_stash_as(id, *n, false).len() > have.len() {
-                        raid.say(lines::FETCH_WORN);
-                        continue;
+                        return Err((lines::FETCH_WORN).into());
                     }
-                    raid.say(lines::fetch_short(
+                    return Err((lines::fetch_short(
                         have.len(),
                         *n,
-                        &crate::progression::want_name(&catalog, id),
-                    ));
-                    continue;
+                        &crate::progression::want_name(&self.catalog, id),
+                    ))
+                    .into());
                 }
                 have
             }
             Job::Recover { overnight, .. } => {
                 let have = in_stash(RECOVER_ITEM, 1);
                 if have.is_empty() {
-                    raid.say(lines::NO_RECORDER);
-                    continue;
+                    return Err((lines::NO_RECORDER).into());
                 }
                 // An expedition counts when the raid it came home on had a
                 // night out in it.
-                if *overnight && !logbook.last.as_ref().is_some_and(|e| e.nights > 0) {
-                    raid.say(lines::EXPEDITION_NO_NIGHT);
-                    continue;
+                if *overnight && !self.logbook.last.as_ref().is_some_and(|e| e.nights > 0) {
+                    return Err((lines::EXPEDITION_NO_NIGHT).into());
                 }
                 have
             }
             Job::Letter => {
                 let have = in_stash(LETTER_ITEM, 1);
                 if have.is_empty() {
-                    raid.say(lines::NO_LETTER);
-                    continue;
+                    return Err((lines::NO_LETTER).into());
                 }
                 have
             }
             Job::Ledger => {
                 let have = in_stash(LEDGER_ITEM, 1);
                 if have.is_empty() {
-                    raid.say(lines::NO_LEDGER);
-                    continue;
+                    return Err((lines::NO_LEDGER).into());
                 }
                 have
             }
             Job::Scout { place, seen, .. } => {
                 if !seen {
-                    raid.say(lines::scout_not_seen(place));
-                    continue;
+                    return Err((lines::scout_not_seen(place)).into());
                 }
                 Vec::new()
             }
@@ -236,36 +224,96 @@ fn press_card(
                 let have: Vec<_> = all
                     .iter()
                     .copied()
-                    .filter(|(_, e)| canaries.get(*e).map_or(true, |c| c.life > 0.0))
+                    .filter(|(_, e)| self.canaries.get(*e).map_or(true, |c| c.life > 0.0))
                     .take(1)
                     .collect();
                 if have.is_empty() && !all.is_empty() {
-                    raid.say(lines::BROUGHT_DEAD);
-                    continue;
+                    return Err((lines::BROUGHT_DEAD).into());
                 }
                 if have.is_empty() {
-                    raid.say(lines::not_brought(&crate::progression::want_name(
-                        &catalog, id,
-                    )));
-                    continue;
+                    return Err((lines::not_brought(&crate::progression::want_name(
+                        &self.catalog,
+                        id,
+                    )))
+                    .into());
                 }
                 have
             }
             Job::Plant { place, planted, .. } => {
                 if !planted {
-                    raid.say(lines::not_planted(place));
-                    continue;
+                    return Err((lines::not_planted(place)).into());
                 }
                 Vec::new()
             }
             Job::Photograph { taken, .. } => {
                 if !taken {
-                    raid.say(lines::NO_PHOTO);
-                    continue;
+                    return Err((lines::NO_PHOTO).into());
                 }
                 Vec::new()
             }
         };
+        Ok(handed)
+    }
+
+    /// Whether pressing the card now would pay the job.
+    pub fn would_pay(
+        &self,
+        progress: &extraction_core::progression::Progress,
+        raid: &Raid,
+        opts: &crate::launch::LaunchOptions,
+    ) -> bool {
+        self.verdict(progress, raid, opts).is_ok()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn press_card(
+    mut commands: Commands,
+    mut events: MessageReader<InteractEvent>,
+    cards: Query<(), With<RequestCard>>,
+    mut requests: ResMut<Requests>,
+    mut progression: ResMut<Progression>,
+    mut raid: ResMut<Raid>,
+    mut check: ParamSet<(
+        CardCheck,
+        (
+            Query<&mut Backpack>,
+            Query<(
+                Entity,
+                &mut crate::interact::Socket,
+                &crate::interact::SocketOwner,
+            )>,
+        ),
+    )>,
+    catalog: Res<Catalog>,
+    loot: Option<Res<Loot>>,
+    spots: Option<Res<crate::world::buildings::BuildingLoot>>,
+    zone: Res<Zone>,
+    opts: Res<crate::launch::LaunchOptions>,
+    mut done: MessageWriter<crate::progression::JobDone>,
+    mind: Option<Res<crate::robots::memory::ZoneMind>>,
+) {
+    for ev in events.read() {
+        let InteractEvent::Pressed { item, .. } = ev else {
+            continue;
+        };
+        if !cards.contains(*item) {
+            continue;
+        }
+        let handed = match check.p0().verdict(&progression.0, &raid, &opts) {
+            Ok(h) => h,
+            Err(line) => {
+                if !line.is_empty() {
+                    raid.say(line);
+                }
+                continue;
+            }
+        };
+        // (A verdict means a job on the card.)
+        let Some(job) = progression.0.job.clone() else {
+            continue;
+        };
+        let (mut bags, mut sockets) = check.p1();
         for (holder, e) in handed {
             if let Ok(mut b) = bags.get_mut(holder) {
                 b.contents.retain(|x| *x != e);
@@ -356,7 +404,7 @@ fn place_cache(
         _ => 3,
     };
     let drops: Vec<_> = (0..piles * order.rolls)
-        .flat_map(|_| loot.0.roll(order.table, catalog, rng))
+        .flat_map(|_| loot.roll(order.table, catalog, rng))
         .collect();
     for (i, drop) in drops.into_iter().enumerate() {
         let off = Vec3::new(
@@ -438,13 +486,12 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
     };
     let into = if below.is_some() { "down in" } else { "in" };
     // Not "in the pump house by the Pump house".
-    match landmark.filter(|m| place != format!("the {}", m.name.to_lowercase())) {
+    let the = crate::raid::lines::the;
+    match landmark.filter(|m| place.to_lowercase() != the(&m.name).to_lowercase()) {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };
-            // Not "out past the The Hollow".
-            let name = m.name.strip_prefix("The ").unwrap_or(&m.name);
-            format!("{into} {place} {rel} the {name}.")
+            format!("{into} {place} {rel} {}.", the(&m.name))
         }
         None => format!("{into} {place}."),
     }
@@ -783,6 +830,93 @@ pub(crate) mod tests {
             .job
             .clone()
             .expect("a job on the card")
+    }
+
+    /// `CardCheck::would_pay` says what pressing the card does, every time:
+    /// the onboarding's Payday line asks it before saying "that's the job
+    /// paid".
+    #[test]
+    fn would_pay_is_what_pressing_does() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = app();
+        let would = |app: &mut App| {
+            app.world_mut()
+                .run_system_once(
+                    |c: CardCheck,
+                     p: Res<Progression>,
+                     r: Res<Raid>,
+                     o: Res<crate::launch::LaunchOptions>| {
+                        c.would_pay(&p.0, &r, &o)
+                    },
+                )
+                .unwrap()
+        };
+        let done = |app: &App| app.world().resource::<Progression>().0.done;
+        let check = |app: &mut App, why: &str| {
+            let said = would(app);
+            let before = done(app);
+            press_card(app);
+            let paid = done(app) > before;
+            assert_eq!(said, paid, "{why}: would_pay {said}, pressing paid {paid}");
+        };
+        // A canary, dead then alive (the same as the canary test).
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Bring {
+            map: "kettle_pass".into(),
+            place: "Miners' Row".into(),
+            item: "canary".into(),
+            at: [-56.2, 123.6],
+        });
+        stash(&mut app, "canary", 1);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let bird = app
+            .world_mut()
+            .query::<(Entity, &Item)>()
+            .iter(app.world())
+            .find(|(_, i)| catalog.get(i.kind()).id == "canary")
+            .map(|(e, _)| e)
+            .unwrap();
+        app.world_mut()
+            .entity_mut(bird)
+            .insert(crate::world::workings::Canary {
+                alarm: 0.0,
+                life: 0.0,
+            });
+        app.update();
+        check(&mut app, "a dead canary");
+        app.world_mut()
+            .entity_mut(bird)
+            .insert(crate::world::workings::Canary {
+                alarm: 0.0,
+                life: 0.5,
+            });
+        app.update();
+        check(&mut app, "a live canary");
+        // One a raid: the next press, the same raid, doesn't pay.
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Scout {
+            map: "marrow_creek".into(),
+            place: "Old farm".into(),
+            at: [0.0, 0.0],
+            seen: true,
+        });
+        check(&mut app, "a second job, the same raid");
+        // A raid later: a scout not yet seen, then seen.
+        app.world_mut().resource_mut::<Raid>().raids += 1;
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Scout {
+            map: "marrow_creek".into(),
+            place: "Old farm".into(),
+            at: [0.0, 0.0],
+            seen: false,
+        });
+        check(&mut app, "a scout not seen");
+        if let Some(Job::Scout { seen, .. }) =
+            &mut app.world_mut().resource_mut::<Progression>().0.job
+        {
+            *seen = true;
+        }
+        check(&mut app, "a scout seen");
+        // Out, it never pays.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        check(&mut app, "out of the truck");
     }
 
     /// A canary brought home dead doesn't do; alive, it does.

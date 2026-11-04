@@ -170,6 +170,10 @@ impl bevy::pbr::MaterialExtension for Sway {
     fn vertex_shader() -> bevy::shader::ShaderRef {
         "shaders/sway.wgsl".into()
     }
+
+    fn prepass_vertex_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/sway.wgsl")
+    }
 }
 
 /// The wind as the weather has it (still in thick fog, hard in a
@@ -436,6 +440,7 @@ fn stream_cover(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<SwayMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     server: Res<AssetServer>,
     time: Res<Time>,
     mut timer: Local<f32>,
@@ -445,14 +450,11 @@ fn stream_cover(
         return;
     };
     let Some(mut assets) = assets else {
-        let fern_tex: Handle<Image> = server
-            .load_builder()
-            .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
-                s.is_srgb = true;
-            })
-            .load(crate::render::textures::ktx2(
-                "textures/foliage/fern/albedo.ktx2",
-            ));
+        // The fern atlas is downloaded (`fetch_assets.py`); without it, the
+        // ivy's drawn leaves, so the fronds are leafy, never bare cards.
+        let fern_tex =
+            crate::render::textures::fetched_srgb(&server, "textures/foliage/fern/albedo.ktx2")
+                .unwrap_or_else(|| images.add(super::overgrowth::leaf_image()));
         commands.insert_resource(CoverAssets {
             cover: std::sync::Arc::new(CoverMap::new(&zone.map, &zone.hm)),
             building: Default::default(),
