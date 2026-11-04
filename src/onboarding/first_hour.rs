@@ -867,6 +867,22 @@ pub(super) fn direct_raid(
     // means keeps doing as told.
     let firsts: Vec<First> = met.read().map(|m| m.0).collect();
     let on_me = |r: Entity| minds.get(r).is_ok_and(|a| a.target == Some(player));
+    // Under a roof from a drone: the wait held while any drone still has it
+    // (a flat 20 s, and it came out to be found again, every 25 s for ten
+    // minutes, till the truck had gone), for two minutes at most.
+    if state.roof_try.is_some_and(|(_, _, t)| now - t < 120.0)
+        && matches!(bot.tasks.front(), Some(Task::Wait(_)))
+        && view.entrances.as_deref().is_some_and(|en| {
+            en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
+                .is_some()
+        })
+        && world
+            .robots
+            .iter()
+            .any(|(e, r, _)| r.kind == crate::robots::RobotKind::Drone && !r.wrecked && on_me(e))
+    {
+        bot.elapsed = bot.elapsed.min(1.0);
+    }
     let mut again: Vec<First> = vec![];
     if tells.locks.read().any(|ev| on_me(ev.drone)) {
         again.push(First::DroneLock);
