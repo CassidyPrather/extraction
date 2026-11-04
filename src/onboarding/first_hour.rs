@@ -563,6 +563,10 @@ pub(super) struct Newcomer {
     fought_at: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
+    /// When a drone locked on to it again, lately (`PINNED_AFTER`).
+    relocks: Vec<f32>,
+    /// Pinned by one: it calls from where it is, not the gate.
+    pinned: bool,
     /// Racked at the driver's "one up the spout".
     racked: bool,
     /// The broken walker wrecked (job 2's first fight, won).
@@ -799,18 +803,146 @@ pub(super) fn direct_raid(
     // stays on).
     let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
     let has_gun = guns().any(|(_, by, p)| by == player && !p);
-    if !state.racked && has_gun && state.heard.iter().any(|l| l == super::hints::ONE_UP) {
+    // (What it's told is by the gun it holds: a round up, a magazine in
+    // first, load up from the crate, or no rounds at all.)
+    use super::hints::{IN_PACK, LOAD_UP, MAG_IN, NO_ROUNDS, ONE_UP};
+    let told = |l: &str, heard: &[String]| heard.iter().any(|h| h == l);
+    let no_rounds = told(NO_ROUNDS, &state.heard);
+    let load_up = told(LOAD_UP, &state.heard);
+    let in_pack = told(IN_PACK, &state.heard);
+    let ready_told = told(ONE_UP, &state.heard) || told(MAG_IN, &state.heard) || load_up || in_pack;
+    if !state.racked && has_gun && ready_told {
         state.racked = true;
-        if !one_up(guns(), player) {
-            state.note(now, Kind::Learned, "one up the spout, as the driver said");
+        // "Load up from the crate": the loaded magazines in it, first (and
+        // then readied: two cut-ins, the later went first, and it readied
+        // before it loaded).
+        let mut first = Vec::new();
+        if load_up {
+            let loaded: Vec<Entity> = view
+                .stash
+                .iter()
+                .flat_map(|b| b.contents.iter().copied())
+                .filter(|e| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && world.items.get(*e).is_ok_and(|(_, it, ..)| it.rounds > 0)
+                })
+                .collect();
+            state.note(
+                now,
+                Kind::Learned,
+                format!(
+                    "empty, as the driver said: {} loaded from the crate",
+                    loaded.len()
+                ),
+            );
+            let none = loaded.is_empty();
+            for e in loaded {
+                first.push(Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                });
+                first.push(Task::Stow(Side::Right));
+            }
+            // None loaded there, only rounds: its own magazine out of the
+            // gun, filled from a box of them, into a pouch (the reload
+            // after puts it in).
+            if none {
+                let wells: Vec<Entity> = guns()
+                    .filter(|(_, by, packed)| *by == player && !packed)
+                    .filter_map(|(g, ..)| g.magwell)
+                    .collect();
+                let mag = world
+                    .items
+                    .iter()
+                    .find(|(_, _, _, _, sock, _)| sock.is_some_and(|s| wells.contains(&s.socket)));
+                let cartridge = mag
+                    .and_then(|(_, it, ..)| world.catalog.get(it.kind()).magazine.clone())
+                    .map(|m| m.cartridge);
+                let rounds = view
+                    .stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter().copied())
+                    .find(|e| {
+                        world.items.get(*e).is_ok_and(|(_, it, ..)| {
+                            it.rounds > 0
+                                && world.catalog.get(it.kind()).cartridge.is_some()
+                                && world.catalog.get(it.kind()).cartridge == cartridge
+                        })
+                    });
+                if let (Some((m, ..)), Some(r)) = (mag, rounds) {
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        "loaded its magazine from the crate's rounds",
+                    );
+                    first.extend([
+                        Task::Stow(Side::Left),
+                        Task::Stow(Side::Right),
+                        Task::Grab {
+                            item: m,
+                            side: Side::Left,
+                        },
+                        Task::Grab {
+                            item: r,
+                            side: Side::Right,
+                        },
+                        Task::Combine,
+                        Task::Stow(Side::Right),
+                        Task::Stow(Side::Left),
+                    ]);
+                }
+            }
+        }
+        // "Your loaded one's in your pack: swap them": the loaded one out
+        // of the pack into the holster, the empty one into the pack.
+        let loaded = world
+            .packed_guns
+            .iter()
+            .find(|(_, g, by)| {
+                by.0 == player && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
+            })
+            .map(|(e, ..)| e);
+        if let Some(e) = loaded.filter(|_| in_pack) {
+            state.note(
+                now,
+                Kind::Learned,
+                "swapped in the loaded one from the pack",
+            );
             super::second_hour::cut_in(
                 &mut bot,
                 vec![
+                    Task::Stow(Side::Left),
                     Task::DrawGun,
-                    Task::Gun(crate::weapons::flat::MacroKind::Rack),
+                    Task::ToggleBackpack,
+                    Task::Wait(0.6),
+                    Task::GrabFromHere {
+                        item: e,
+                        side: Side::Left,
+                    },
+                    Task::ToggleBackpack,
+                    Task::Wait(0.5),
+                    // (A body slot first: the holster, free with the empty
+                    // one out; then the empty one finds it full, and goes
+                    // in the pack.)
+                    Task::Stow(Side::Left),
+                    Task::Stow(Side::Right),
+                    Task::DrawGun,
+                    Task::Ready { off_safe: false },
                     Task::Stow(Side::Right),
                 ],
             );
+        } else if !one_up(guns(), player) {
+            state.note(now, Kind::Learned, "one up the spout, as the driver said");
+            // Readied by the one drawn (a magazine in if it has none with
+            // rounds, then a round up), the safety left on.
+            first.extend([
+                Task::DrawGun,
+                Task::Ready { off_safe: false },
+                Task::Stow(Side::Right),
+            ]);
+        }
+        if !first.is_empty() {
+            super::second_hour::cut_in(&mut bot, first);
         }
     }
     // The first machine to have it: a round up by then, or not.
@@ -818,8 +950,48 @@ pub(super) fn direct_raid(
         state.noticed = true;
         if one_up(guns(), player) {
             state.note(now, Kind::Learned, "noticed, with a round up");
+        } else if no_rounds {
+            // Nothing anywhere to load, and told so: not unready by its own
+            // doing.
+            state.note(
+                now,
+                Kind::Learned,
+                "noticed, with no rounds to load (the driver said)",
+            );
         } else {
-            state.note(now, Kind::Unready, "noticed, with nothing chambered");
+            // What it had to load: the gun's magazine, and the full ones on
+            // it (out of them after a fight, a reload had nothing in it).
+            let in_gun = guns()
+                .find(|(_, by, p)| *by == player && !p)
+                .map(|(g, ..)| g.firearm.magazine.as_ref().map_or(0, |m| m.rounds));
+            let spares = world
+                .items
+                .iter()
+                .filter(|(e, it, ..)| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && it.rounds > 0
+                        && carried(&world, &view, player, world.id(*e).unwrap_or("")).contains(e)
+                })
+                .count();
+            let every: Vec<String> = guns()
+                .filter(|(_, by, _)| *by == player)
+                .map(|(g, _, packed)| {
+                    format!(
+                        "{}{}",
+                        g.firearm.magazine.as_ref().map_or(0, |m| m.rounds),
+                        if packed { " packed" } else { "" }
+                    )
+                })
+                .collect();
+            info!("first hour: unready: every gun on it, rounds in its magazine: {every:?}");
+            state.note(
+                now,
+                Kind::Unready,
+                format!(
+                    "noticed, with nothing chambered (in the gun's magazine {}, loaded spares on it {spares})",
+                    in_gun.map_or("none".to_string(), |r| r.to_string())
+                ),
+            );
         }
     }
     if !again.is_empty() {
@@ -884,10 +1056,7 @@ pub(super) fn direct_raid(
                     Kind::Learned,
                     "a broken walker: took it on, as the driver said",
                 );
-                take_it_on(
-                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
-                    player,
-                )
+                take_it_on()
             }
             // "Keep your distance": back off it, and at it again.
             First::Shoved if !p.lost => {
@@ -897,20 +1066,30 @@ pub(super) fn direct_raid(
                     to: here + away * 4.0,
                     within: 1.0,
                 }];
-                t.extend(take_it_on(
-                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
-                    player,
-                ));
+                t.extend(take_it_on());
                 t
             }
             // "Run across it, to cover", "Break its line", "Down, out of
             // its sweep": for it, as told.
             // "Down, out of its sweep": low, and away from it (a sentry
             // doesn't come after you).
+            // Those who'd listen go under the nearest roof, by the way
+            // round, as the driver teaches (a roof keeps out a drone's
+            // burst and a sentry's sweep alike): out in the open after a
+            // warning, a burst every 2 s wore them down. No roof near:
+            // low across its line.
             First::Sentry if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
-                state.low_until = now + 25.0;
-                run_for_cover(&world.zone, here, from, 1.0)
+                match under_a_roof(&world, &plans, here, &state.no_roof) {
+                    Some((tasks, b)) => {
+                        state.roof_try = Some((b, bot.failed, now));
+                        tasks
+                    }
+                    None => {
+                        state.low_until = now + 25.0;
+                        run_for_cover(&world.zone, here, from, 1.0)
+                    }
+                }
             }
             First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
@@ -918,10 +1097,51 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
-                let roof = overhead
-                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here, &state.no_roof))
+                // At the truck's tail, boarding: on, as the driver says
+                // ("Don't stop. Sprint across it"), not back to a roof with
+                // the truck there. Anywhere short of it, a roof still
+                // (pinned and running on in the open, three newcomers were
+                // shot down in under two minutes; under roofs, two got
+                // home).
+                let going_home = matches!(state.leg, Leg::Board)
+                    && world
+                        .trucks
+                        .iter()
+                        .any(|t| t.translation().xz().distance(here) < 15.0);
+                // Pinned: a drone that keeps finding it however often it
+                // goes under a roof (re-locked every 23 s for 20 minutes at
+                // the post office, worn down and killed, three raids). A
+                // person gives the job up: home from here, after this one
+                // in cover.
+                if overhead {
+                    state.relocks.retain(|t| now - t < PINNED_FOR);
+                    state.relocks.push(now);
+                    if state.relocks.len() >= PINNED_AFTER
+                        && !matches!(state.leg, Leg::Rendezvous | Leg::Board | Leg::Done)
+                        && !state.pinned
+                    {
+                        // (Already on its way to the gate to call, as the
+                        // card said: from here instead; it never got out of
+                        // the post office's door.)
+                        state.pinned = true;
+                        state.note(now, Kind::Learned, "pinned by a drone: home from here");
+                        state.relocks.clear();
+                        state.leg = Leg::Call;
+                    }
+                }
+                // On its way home from it (pinned, or the truck waiting):
+                // on, at a run, as the driver says ("Don't stop. Sprint
+                // across it"). Under a roof at every re-lock, the truck came
+                // to the gate and pulled out again while it hid, and the
+                // drone wore it down for eight minutes more.
+                let roof = (overhead && !going_home)
+                    .then(|| under_a_roof(&world, &plans, here, &state.no_roof))
                     .flatten();
                 match roof {
+                    _ if overhead && going_home => {
+                        state.note(now, Kind::Learned, "a drone on it, homeward: ran on");
+                        vec![]
+                    }
                     Some((tasks, b)) => {
                         state.roof_try = Some((b, bot.failed, now));
                         tasks
@@ -1070,8 +1290,7 @@ pub(super) fn direct_raid(
     {
         state.fought_at = now;
         state.note(now, Kind::Learned, "a machine in range: took it on");
-        let guns = world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
-        super::second_hour::cut_in(&mut bot, take_it_on(guns, player));
+        super::second_hour::cut_in(&mut bot, take_it_on());
         return;
     }
     // The truck's there: whatever the walk, to it now.
@@ -1386,7 +1605,7 @@ pub(super) fn direct_raid(
                         Kind::Confused,
                         format!("wandered off from {name}, and nothing said which way it was"),
                     );
-                    tasks.extend(way_out(&world, &view, here).0);
+                    tasks.extend(way_out(&world, &view, &plans, here).0);
                     state.leg = Leg::Call;
                     let idle = bot.tasks.pop_back();
                     bot.tasks.extend(tasks);
@@ -1522,13 +1741,13 @@ pub(super) fn direct_raid(
                 }
                 Ok(None) => {
                     state.note(now, Kind::Learned, errand_done(&errand, &world));
-                    tasks.extend(way_out(&world, &view, here).0);
+                    tasks.extend(way_out(&world, &view, &plans, here).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
                 Err(why) => {
                     state.note(now, Kind::Stuck, why);
-                    tasks.extend(way_out(&world, &view, here).0);
+                    tasks.extend(way_out(&world, &view, &plans, here).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
@@ -1571,6 +1790,7 @@ pub(super) fn direct_raid(
                 .map(|m| Vec2::from(m.at));
             if state.card.contains("from the gate")
                 && !state.at_gate
+                && !state.pinned
                 && raid.phase == Phase::Out
                 && let Some(drop) = drop
             {
@@ -1757,7 +1977,10 @@ pub(super) fn direct_raid(
             } else if state.done_home.is_none() {
                 state.done_home = Some(done);
                 // Told to, by the driver, or read on the card.
-                let told = state.heard.iter().any(|l| l.contains("press the card"));
+                let told = state
+                    .heard
+                    .iter()
+                    .any(|l| l.to_lowercase().contains("press the card"));
                 let read = view
                     .card
                     .iter()
@@ -1774,6 +1997,14 @@ pub(super) fn direct_raid(
                 state.note(now, Kind::Learned, "pressed the card: the job paid");
                 state.leg = Leg::Handed;
                 state.tries = 0;
+            } else if state.tries >= 3 && state.pinned {
+                // Given up for the drone: not done, and the card says so.
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "home, the job given up: unpaid, as it should be",
+                );
+                state.leg = Leg::Done;
             } else if state.tries >= 3 {
                 state.note(now, Kind::Stuck, "home, and the card won't take the job");
                 state.leg = Leg::Done;
@@ -1849,6 +2080,20 @@ pub(super) fn direct_raid(
                 report(&mut bot, p, &state.moments);
             }
             return;
+        }
+    }
+    // Indoors, with a walk out of the building planned: out by its plan
+    // first, its doors opened (sheltered from a drone, the newcomer was in
+    // a house when the truck came; the walk to it went straight at the
+    // wall, and it stood there half an hour).
+    if let (Some(en), Some(Task::WalkTo { to, .. })) = (view.entrances.as_deref(), tasks.first()) {
+        let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
+        if let Some(b) = inside(here)
+            && inside(*to) != Some(b)
+        {
+            let (mut out, _) = way_out(&world, &view, &plans, here);
+            out.append(&mut tasks);
+            tasks = out;
         }
     }
     if !tasks.is_empty() {
@@ -1957,16 +2202,18 @@ pub(super) struct Tells<'w, 's> {
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
-/// Something above you: in under a roof, through the nearest door, if one's
-/// within a sprint (trees hide nobody from overhead: only their trunks stop
-/// a look).
+/// Something above you, or a sentry's sweep on you: in under a roof,
+/// through the nearest door, if one's within a sprint (trees hide nobody
+/// from overhead: only their trunks stop a look; a roof is all a drone
+/// can't see through). To the door by the routed way (`walk`): straight at
+/// it went into the garden fence in front of it.
 fn under_a_roof(
-    entrances: Option<&crate::robots::doors::Entrances>,
+    world: &World2,
     plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
     skip: &[Entity],
 ) -> Option<(Vec<Task>, Entity)> {
-    let entrances = entrances?;
+    let entrances = &*world.entrances;
     let d = entrances
         .doors
         .iter()
@@ -1995,9 +2242,14 @@ fn under_a_roof(
         Some(pl) => {
             let from = pl.to_local(Vec3::new(inside.x, d.mid.y, inside.y)).xz();
             let to = pl.to_local(Vec3::new(p.x, d.mid.y, p.y)).xz();
-            pl.path(from, to)
-                .and_then(|path| path.last().copied())
-                .is_some_and(|end| end.distance(to) < 0.4)
+            // ...and walked to straight from just in (it's one walk: a way
+            // round the shop's shelf on the plan left the newcomer against
+            // the shelf, the drone at the door).
+            pl.grid.line_clear(from.to_array(), to.to_array())
+                && pl
+                    .path(from, to)
+                    .and_then(|path| path.last().copied())
+                    .is_some_and(|end| end.distance(to) < 0.4)
         }
         None => entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building),
     };
@@ -2014,11 +2266,16 @@ fn under_a_roof(
         .map(|s| inside + s)
         .find(|p| standable(*p))
         .unwrap_or(inside);
-    let tasks = vec![
-        Task::WalkTo {
-            to: d.mid.xz() + out * 1.3,
+    let door_out = d.mid.xz() + out * 1.3;
+    let mut tasks = walk(world, here, door_out);
+    match tasks.last_mut() {
+        Some(Task::WalkTo { within, .. }) => *within = 0.6,
+        _ => tasks.push(Task::WalkTo {
+            to: door_out,
             within: 0.6,
-        },
+        }),
+    }
+    tasks.extend([
         Task::OpenDoor(d.door),
         Task::WalkTo {
             to: inside,
@@ -2029,16 +2286,19 @@ fn under_a_roof(
             within: 0.6,
         },
         Task::Wait(20.0),
-        // And out the way it came in, not through a wall.
+        // And out the way it came in, not through a wall, the door opened
+        // again (swung to while it waited, the newcomer stood against it
+        // inside for the rest of the raid).
         Task::WalkTo {
             to: inside,
             within: 0.6,
         },
+        Task::OpenDoor(d.door),
         Task::WalkTo {
             to: d.mid.xz() + out * 1.5,
             within: 0.8,
         },
-    ];
+    ]);
     Some((tasks, d.building))
 }
 
@@ -2369,6 +2629,11 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
     best
 }
 
+/// This many drone locks within `PINNED_FOR` (s), cover taken each time:
+/// pinned, and home.
+const PINNED_AFTER: usize = 3;
+const PINNED_FOR: f32 = 120.0;
+
 /// A round in flight is this long at most (s): a shot this recent may be
 /// the one that hit, and warns of nothing.
 const SHOT_LEAD: f32 = 0.6;
@@ -2383,47 +2648,26 @@ fn shot_warns(shots: &[f32], now: f32, window: f32) -> bool {
         .any(|t| now - t >= SHOT_LEAD && now - t < window)
 }
 
-/// What readies `f` to fire: a reload when it has no magazine or none
-/// left in it, a rack when nothing's chambered, the selector when it's on
-/// safe.
-fn readying(f: &extraction_core::firearm::Firearm) -> Vec<Task> {
-    use crate::weapons::flat::MacroKind;
-    use extraction_core::firearm::FireMode;
-    let mut tasks = Vec::new();
-    if f.def.magazine_family.is_some() && f.magazine.as_ref().is_none_or(|m| m.rounds == 0) {
-        tasks.push(Task::Gun(MacroKind::Reload));
-    }
-    if f.chambers.iter().all(|c| c.is_none()) {
-        tasks.push(Task::Gun(MacroKind::Rack));
-    }
-    if f.fire_mode() == FireMode::Safe {
-        tasks.push(Task::Gun(MacroKind::Mode));
-    }
-    tasks
+/// A fight, for the reckless one: the gun out, readied by the one in hand
+/// (`Task::Ready`: the PM comes out of the crate on safe, and with two on
+/// it, the one drawn may not be the one first found), and fired.
+fn take_it_on() -> Vec<Task> {
+    vec![
+        Task::DrawGun,
+        Task::Ready { off_safe: true },
+        Task::Engage { shots: 12 },
+    ]
 }
 
-/// A fight, for the reckless one: the gun out, readied (`readying`, from
-/// the one on `player`'s body, not in the pack), and fired. The PM comes
-/// out of the crate on safe; pulling the trigger on that does nothing.
-fn take_it_on<'a>(
-    mut guns: impl Iterator<Item = (&'a crate::weapons::Gun, Entity, bool)>,
-    player: Entity,
-) -> Vec<Task> {
-    let mut tasks = vec![Task::DrawGun];
-    if let Some((g, _, _)) = guns.find(|(_, by, packed)| *by == player && !packed) {
-        tasks.extend(readying(&g.firearm));
-    }
-    tasks.push(Task::Engage { shots: 12 });
-    tasks
-}
-
-/// Whether the gun on `player`'s body has a round up.
+/// Whether a gun on `player`'s body has a round up (any: a rifle picked
+/// up on the job, empty, beside the racked pistol, read as unready).
 fn one_up<'a>(
     mut guns: impl Iterator<Item = (&'a crate::weapons::Gun, Entity, bool)>,
     player: Entity,
 ) -> bool {
-    guns.find(|(_, by, packed)| *by == player && !packed)
-        .is_some_and(|(g, _, _)| g.firearm.chambers.iter().any(|c| c.is_some()))
+    guns.any(|(g, by, packed)| {
+        by == player && !packed && g.firearm.chambers.iter().any(|c| c.is_some())
+    })
 }
 
 /// `legs`, round the buildings in the way.
@@ -2522,11 +2766,50 @@ fn name_of(world: &World2, id: &str) -> String {
 }
 
 /// Indoors at `here`: out by the nearest door, and where that leaves it.
-fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
+/// Through the rooms by the building's plan, where it has one (straight at
+/// the door from behind the post office's counter, the newcomer pressed
+/// against the counter for the rest of the raid, the watch in its pack).
+fn way_out(
+    world: &World2,
+    view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    here: Vec2,
+) -> (Vec<Task>, Vec2) {
     let Some(en) = view.entrances.as_deref() else {
         return (vec![], here);
     };
     let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
+    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3)) {
+        let from = plan.to_local(at).xz();
+        let way = plan
+            .doors
+            .iter()
+            .filter_map(|d| d.outside)
+            .filter_map(|o| Some((o, plan.path(from, o)?)))
+            .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)));
+        if let Some((o, path)) = way {
+            let mut t = Vec::new();
+            for stop in indoor_stops(plan, from, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
+                        within: 0.4,
+                    }),
+                }
+            }
+            if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+                *within = 0.6;
+            }
+            return (t, plan.world2(o));
+        }
+    }
     let Some(b) = en.building_at(at) else {
         return (vec![], here);
     };
@@ -2560,6 +2843,18 @@ fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
         ],
         outside,
     )
+}
+
+/// How far a walk along `path` from `from` goes (m).
+fn path_len(from: Vec2, path: &[Vec2]) -> f32 {
+    let mut at = from;
+    path.iter()
+        .map(|p| {
+            let d = at.distance(*p);
+            at = *p;
+            d
+        })
+        .sum()
 }
 
 /// A place a newcomer walks to on the way through a building
@@ -2623,7 +2918,7 @@ fn way_to(
     here: Vec2,
     p: Vec3,
 ) -> Vec<Task> {
-    let (mut t, here) = way_out(world, view, here);
+    let (mut t, here) = way_out(world, view, plans, here);
     if let Some(plan) = plans.iter().find(|pl| pl.contains(p, 0.3)) {
         let goal = plan.to_local(p).xz();
         let entry = plan
@@ -2883,12 +3178,7 @@ pub(super) fn first_fight(
     mut tells: Tells,
     mut bots: Query<(Entity, &mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
-    entrances: Option<Res<crate::robots::doors::Entrances>>,
-    guns: Query<(
-        &crate::weapons::Gun,
-        &crate::anomaly::artifacts::CarriedBy,
-        Has<crate::interact::body::InBackpack>,
-    )>,
+    world: World2,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -3020,7 +3310,7 @@ pub(super) fn first_fight(
     let Some(what) = first_tell.filter(|_| !fight.reacted) else {
         return;
     };
-    let Ok((player, mut bot, root, _)) = bots.single_mut() else {
+    let Ok((_, mut bot, root, _)) = bots.single_mut() else {
         return;
     };
     fight.reacted = true;
@@ -3031,8 +3321,17 @@ pub(super) fn first_fight(
     // The broken walker is the one the driver says to take on (bar the
     // lost one).
     let broken = kind == "broken" && !p.lost;
+    // A drone or a sentry: under the nearest roof, by the way round, for
+    // all who'd listen (the lost one too: it's told, and does as told).
+    let roofed = matches!(kind, "drone" | "sentry") && !p.reckless && !p.hoards && !hush;
+    let roof = roofed
+        .then(|| under_a_roof(&world, &[], here, &[]))
+        .flatten();
     let answer: Vec<Task> = if (p.reckless || broken) && !hush {
-        take_it_on(guns.iter().map(|(g, by, p)| (g, by.0, p)), player)
+        take_it_on()
+    } else if let Some((tasks, _)) = roof {
+        fight.flee_until = now + 12.0;
+        tasks
     } else if p.lost {
         // Off, anywhere.
         vec![Task::WalkTo {
@@ -3049,14 +3348,9 @@ pub(super) fn first_fight(
             within: 1.5,
         }]
     } else {
-        // For cover, as the driver says, upright and fast: under a roof
-        // from a drone.
+        // For cover, as the driver says, upright and fast (no roof near).
         fight.flee_until = now + 12.0;
-        (kind == "drone")
-            .then(|| under_a_roof(entrances.as_deref(), &[], here, &[]))
-            .flatten()
-            .map(|(t, _)| t)
-            .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
+        run_for_cover(&zone, here, from, 0.0)
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);
@@ -3066,6 +3360,31 @@ pub(super) fn first_fight(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// To the truck's steps from all round it (and from against its side,
+    /// where the newcomer stood at the ranger tower), no leg goes through
+    /// its body.
+    #[test]
+    fn the_way_to_the_steps_goes_round_the_truck() {
+        let (centre, half) = super::super::second_hour::TRUCK_BOX;
+        let mut from: Vec<Vec2> = (0..24)
+            .map(|k| Vec2::from_angle(k as f32 / 24.0 * std::f32::consts::TAU) * 9.0)
+            .collect();
+        for z in [-4.0, -2.0, 0.0, 1.5] {
+            from.extend([Vec2::new(2.2, z), Vec2::new(-2.2, z)]);
+        }
+        for here in from {
+            let mut at = here;
+            for p in super::super::second_hour::round_the_truck(here) {
+                assert!(
+                    segment_hits_box(at - centre, p - centre, half).is_none(),
+                    "from {here}: {at} -> {p} goes through the truck"
+                );
+                at = p;
+            }
+            assert_eq!(at, Vec2::new(0.0, 4.0), "from {here}");
+        }
+    }
 
     /// One of every kind of job there is (the match in `errand` makes a new
     /// kind fail to build until it has a way).
@@ -3185,8 +3504,8 @@ mod indoor_tests {
     /// Indoors, each straight walk between a newcomer's stops stays on the
     /// building plan's open cells (furniture and its clearance kept out):
     /// from the door nearest each loot spot in every building on Marrow, to
-    /// the spot. (The post office's table and chair were walked through,
-    /// and climbed.)
+    /// the spot, and back out. (The post office's table and chair were
+    /// walked through, and climbed.)
     #[test]
     fn indoor_walks_go_round_the_furniture() {
         let opts = crate::launch::LaunchOptions {
@@ -3224,33 +3543,41 @@ mod indoor_tests {
                 let Some(path) = plan.path(o, goal) else {
                     continue;
                 };
-                walks += 1;
-                let mut from = Some(o);
-                for stop in indoor_stops(plan, o, &path) {
-                    match stop {
-                        Stop::Door(_, before) => {
-                            if let Some(f) = from {
-                                if !plan.grid.line_clear(f.to_array(), before.to_array()) {
-                                    cut.push(format!("{} {f} -> {before}", plan.name));
+                // In to the spot, and back out from it (straight at the
+                // door from behind the post office's counter, the newcomer
+                // pressed against the counter).
+                // (From where it stood to take it: the spot's on a shelf.)
+                let back = plan.path(goal, o).unwrap_or_default();
+                let stood = back.first().copied().unwrap_or(goal);
+                for (start, path) in [(o, path), (stood, back)] {
+                    walks += 1;
+                    let mut from = Some(start);
+                    for stop in indoor_stops(plan, start, &path) {
+                        match stop {
+                            Stop::Door(_, before) => {
+                                if let Some(f) = from {
+                                    if !plan.grid.line_clear(f.to_array(), before.to_array()) {
+                                        cut.push(format!("{} {f} -> {before}", plan.name));
+                                    }
                                 }
+                                // Through the door: its leaf is in the way till
+                                // it's open.
+                                from = None;
                             }
-                            // Through the door: its leaf is in the way till
-                            // it's open.
-                            from = None;
-                        }
-                        Stop::At(p) => {
-                            if let Some(f) = from {
-                                if !plan.grid.line_clear(f.to_array(), p.to_array()) {
-                                    cut.push(format!("{} {f} -> {p}", plan.name));
+                            Stop::At(p) => {
+                                if let Some(f) = from {
+                                    if !plan.grid.line_clear(f.to_array(), p.to_array()) {
+                                        cut.push(format!("{} {f} -> {p}", plan.name));
+                                    }
                                 }
+                                from = Some(p);
                             }
-                            from = Some(p);
                         }
                     }
                 }
             }
         }
-        assert!(walks > 50, "only {walks} indoor walks tried");
+        assert!(walks > 100, "only {walks} indoor walks tried");
         assert!(
             cut.is_empty(),
             "{} of {walks} indoor walks cut through furniture:\n{}",

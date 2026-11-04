@@ -115,3 +115,26 @@ palm from 74 mm to 60. With it, `weapons::signature`'s gauge found the
 Nagant's kick too like the PM's (1.3 apart), and at y 0.008 too like the
 IZh-43's (2.7). So the height stays at 0 until weapon feel gives the
 Nagant a kick of its own at the higher hold.
+
+### Third pass: the heel
+
+The build now fails a bevelled outline whose corner is tighter than its
+bevel, since the bevel folds over itself there. The grip's heel, at the
+butt's back corner, was one. It's now rounded over about 4 mm instead of 1,
+and the butt's length and depth are unchanged.
+
+### Fourth pass: the hold's height
+
+Weapon feel gave the Nagant a kick of its own (items.ron: a straight shove,
+less climb), so `grip` rose to (0, 0.014, 0.027), the web up under the
+hammer. The bore's lever over the palm is 60 mm.
+
+### Fifth pass: the grip point along the bore
+
+Hands measured the reach from the grip point, not the backstrap. The PM's
+grip point sits 29 mm ahead of its backstrap at palm height; the Nagant's
+sat 20.5 mm ahead of its own. So the Nagant carried 9 mm of extra reach
+the real gun doesn't have. `grip` moved to (0, 0.014, 0.018), 29 mm ahead
+of the backstrap and 5 mm inside the grip's front. The trigger is now 17 mm
+further from the grip point than the PM's, the photograph's difference
+(85.5 mm backstrap to trigger here, 68 on the PM).

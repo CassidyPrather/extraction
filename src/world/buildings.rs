@@ -1578,8 +1578,11 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 52] = [
+pub const PREFABS: [&str; 55] = [
     "house_plank",
+    "house_plank_b",
+    "house_plank_c",
+    "post_office",
     "farmhouse",
     "house_brick",
     "cabin_log",
@@ -1951,7 +1954,10 @@ pub fn house_layout(plan: HousePlan, w: f32, d: f32) -> HouseLayout {
         HousePlan::PlankB => HouseLayout {
             table: (flip(common.table.0), 0.0),
             shelf: (flip(common.shelf.0), -FRAC_PI_2),
-            counter: (flip(common.counter.0), -FRAC_PI_2),
+            // 10 cm forward: mirrored, its end lay in the +X window's
+            // jamb's plane (10 cm back, it hid the kitchen shelf's
+            // bottom board).
+            counter: (flip(common.counter.0) - Vec3::Z * 0.1, -FRAC_PI_2),
             kitchen_shelf: flip(common.kitchen_shelf),
             stove: (flip(common.stove.0), 0.0),
             bed: flip(common.bed),
@@ -5912,6 +5918,13 @@ pub fn swing_doors(
         // its doorway, and stood open across half of it: Kettle's mine,
         // pulled-in map, raiders jammed against it for ten minutes, Robot
         // minds' sims, 1 November.)
+        // TODO: find what moves them and take this pin out. Two of Kettle
+        // mine's doors (seed 10: the refuge -> raise_foot one and the one
+        // before it) creep about 1.4 mm/s off their hinges from the raid's
+        // start, at zero linear and angular velocity, held by nothing, no
+        // one near; one stops 0.46 m off, at its doorway's middle. Not the
+        // rotation write here, nor lockdown or underground code.
+        // `sim::indoor::tests::every_door_stays_on_its_hinge` catches it.
         if t.translation != leaf.0.hinge {
             t.translation = leaf.0.hinge;
         }

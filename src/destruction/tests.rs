@@ -106,6 +106,7 @@ fn shoot(app: &mut App, from: Vec3, to: Vec3, speed: f32, mass_g: f32, damage: f
             seed: 7,
             passes: 0,
             load: Default::default(),
+            origin: from,
         },
         Transform::from_translation(from),
     ));

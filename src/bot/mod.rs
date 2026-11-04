@@ -125,6 +125,14 @@ pub enum Task {
     },
     /// Take a gun off the body (sling, holster) into the gun hand.
     DrawGun,
+    /// Ready the gun in the gun hand, by its state once it's there: a
+    /// magazine in if it has none with rounds (the reload chambers one), a
+    /// round up if not, and the safety off if `off_safe`. (Planned before
+    /// the draw from the first gun on the body, it readied the other of two
+    /// pistols and drew an empty one.)
+    Ready {
+        off_safe: bool,
+    },
     /// A press of one of the gun hand's buttons.
     Button(Btn),
     /// Reload with the gun hand alone (`Comfort::one_handed`): the
@@ -1267,6 +1275,40 @@ fn run_tasks(
                 if !mac.busy() {
                     bot.next();
                 }
+            }
+            Task::Ready { off_safe } => {
+                let Some(f) = hand(gun_side)
+                    .and_then(|h| h.holding)
+                    .and_then(|e| guns.get(e).ok())
+                    .map(|g| &g.firearm)
+                else {
+                    bot.next();
+                    continue;
+                };
+                let mut steps = Vec::new();
+                if f.def.magazine_family.is_some()
+                    && f.magazine.as_ref().is_none_or(|m| m.rounds == 0)
+                {
+                    // (Its macro chambers one too: a rack after would throw
+                    // a round away.)
+                    steps.push(Task::Gun(MacroKind::Reload));
+                } else if f.chambers.iter().all(|c| c.is_none()) {
+                    steps.push(Task::Gun(MacroKind::Rack));
+                }
+                if off_safe && f.fire_mode() == extraction_core::firearm::FireMode::Safe {
+                    steps.push(Task::Gun(MacroKind::Mode));
+                }
+                info!(
+                    "bot: ready: magazine {:?}, chambered {}: {steps:?}",
+                    f.magazine.as_ref().map(|m| m.rounds),
+                    f.chambers.iter().any(|c| c.is_some())
+                );
+                bot.next();
+                for t in steps.into_iter().rev() {
+                    bot.tasks.push_front(t);
+                }
+                bot.restart();
+                continue;
             }
             Task::Gun(kind) => {
                 if !bot.pending {

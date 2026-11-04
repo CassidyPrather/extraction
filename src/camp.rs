@@ -591,7 +591,11 @@ fn camp_text(
     zone: Res<Zone>,
     state: Res<CampState>,
     time: Res<Time>,
+    stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
 ) {
+    // What's in the crate, as it is (the card said the kit was there
+    // whatever the crate held).
+    let kit = stash.iter().any(|b| !b.contents.is_empty());
     let confirming = time.elapsed_secs() < state.confirm_until;
     for (c, mut text) in &mut cards {
         let t = match c {
@@ -610,8 +614,12 @@ fn camp_text(
                 if raid.recalled {
                     t += "The machines went home.\nThe valleys are quiet.\n\n";
                 }
-                t +=
-                    "Your kit is in the crate in the truck.\n\nWalk out through the gate to start.";
+                t += if kit {
+                    "Your kit is in the crate in the truck."
+                } else {
+                    "The crate in the truck is empty."
+                };
+                t += "\n\nWalk out through the gate to start.";
                 t
             }
             CampCard::Training => "TRAINING YARD".into(),

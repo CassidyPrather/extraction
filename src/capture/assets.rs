@@ -13,6 +13,10 @@
 
 use std::path::Path;
 
+/// The `assets/textures/` folders `scripts/fetch_assets.py` makes (all
+/// gitignored), each the name of the argument that makes it.
+pub const FETCHED: [&str; 4] = ["terrain", "materials", "foliage", "sky"];
+
 /// Every generated file the manifest promises that isn't on disk, as a
 /// path under `assets/textures/`, with its group (the `fetch_assets.py`
 /// argument that makes it). Empty without a manifest (a packaged build).
@@ -63,7 +67,19 @@ pub fn ready_for(opts: &crate::launch::LaunchOptions) -> Result<(), String> {
     {
         return Ok(());
     }
-    let root = crate::asset_root_path();
+    fetched(
+        &crate::asset_root_path(),
+        "this shot would show flat fallback colours",
+    )
+}
+
+/// Err naming what's missing under `root` (an `assets/` folder) and the
+/// command that makes it, when the manifest promises textures that aren't
+/// there; `why` says what that would spoil. The capture check, and the
+/// render budgets' (`render::overdraw::measure`): without them a valley
+/// draws no sky and flat cards, and reads 12M fragments a stereo frame
+/// low, so a budget passes where it should fail.
+pub fn fetched(root: &Path, why: &str) -> Result<(), String> {
     let gone = missing(
         &root.join("textures"),
         &root.join("../scripts/assets_manifest.json"),
@@ -80,9 +96,9 @@ pub fn ready_for(opts: &crate::launch::LaunchOptions) -> Result<(), String> {
     groups.dedup();
     let list: Vec<&str> = gone.iter().take(12).map(|(f, _)| f.as_str()).collect();
     Err(format!(
-        "{} generated texture(s) missing, so this shot would show flat fallback colours: {}{}. \
+        "{} generated texture(s) missing, so {why}: {}{}. \
          Make them with `python3 scripts/fetch_assets.py {}` (or set \
-         EXTRACTION_ALLOW_FALLBACK=1 to shoot the fallback on purpose).",
+         EXTRACTION_ALLOW_FALLBACK=1 to go ahead with the fallback on purpose).",
         gone.len(),
         list.join(", "),
         if gone.len() > list.len() { ", ..." } else { "" },

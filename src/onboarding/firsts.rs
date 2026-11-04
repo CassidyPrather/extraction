@@ -213,7 +213,10 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
-            First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
+            // (True whether the job's done or not: home pinned by a drone,
+            // the job given up, "that's the job paid" was said, and the
+            // card wouldn't pay it.)
+            First::Payday => &["Truck: \"Home. Press the card: if the job's done, that pays it.\""],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
@@ -648,6 +651,17 @@ pub fn fill(line: &str, in_crate: usize, fell: usize) -> String {
             format!("{n} things")
         }
     };
+    // (Said of what's so: none fell, or none's in the crate, is its own
+    // line, not "0 things".)
+    if fell == 0 && line.contains("{n} things") {
+        return "Truck: \"You'd nothing on you to lose.\"".into();
+    }
+    if in_crate == 0 && line.contains("{s} things") {
+        return line.replace(
+            "Crate's as you left it: {s} things.",
+            "Crate's empty, as you left it.",
+        );
+    }
     line.replace("{s} things", &things(in_crate))
         .replace("{n} things", &things(fell))
 }

@@ -2281,6 +2281,90 @@ fn armed_walker_at(app: &mut App, zone: &Zone, post: Vec3) -> Entity {
     w
 }
 
+/// Every round a walker fires comes at least 1.5 s after its aim tell
+/// (the fairness floor, whatever `AIM_TIME` is tuned to): the first, and every one after you've been out of its sight a
+/// while; back in view it settles its turret again before it fires. (At
+/// 0.7 s the cautious newcomer, keeping still behind cover as the driver
+/// said, was found and shot five times without a beat: Robot minds'
+/// fairness runs, 1 November.)
+#[test]
+fn every_walker_round_comes_a_full_aim_after_its_tell() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Tells {
+        aims: Vec<f32>,
+        rounds: Vec<f32>,
+    }
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Tells>().add_systems(
+        FixedPostUpdate,
+        |mut a: MessageReader<super::walker::WalkerAim>,
+         mut s: MessageReader<Shot>,
+         time: Res<Time>,
+         mut t: ResMut<Tells>| {
+            let now = time.elapsed_secs();
+            t.aims.extend(a.read().map(|_| now));
+            t.rounds
+                .extend(s.read().filter(|s| s.shooter.is_some()).map(|_| now));
+        },
+    );
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let me = zone.on_ground(100.0, 200.0);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    // In its view 10 s, out of it 4 s, four times over; picked out
+    // afresh each time it's back (the fight goes on).
+    for round in 0..4 {
+        put(&mut app, player, me);
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(me);
+            a.suspicion = 1.0;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+        for _ in 0..90 * 10 {
+            put(&mut app, player, me);
+            let mut h = app
+                .world_mut()
+                .get_mut::<crate::health::Health>(player)
+                .unwrap();
+            h.hp = h.max;
+            h.down = false;
+            app.update();
+        }
+        if round < 3 {
+            for _ in 0..90 * 4 {
+                put(&mut app, player, zone.on_ground(100.0, 400.0));
+                app.update();
+            }
+        }
+    }
+    let t = app.world().resource::<Tells>();
+    assert!(
+        t.rounds.len() >= 4,
+        "it hardly fired: {:?} (tells {:?})",
+        t.rounds,
+        t.aims
+    );
+    assert!(
+        t.aims.len() >= 4,
+        "it didn't aim afresh each time: {:?}",
+        t.aims
+    );
+    // The floor itself, not `AIM_TIME`: tuning it under 1.5 s fails here.
+    const TELL_LEAD: f32 = 1.5;
+    let soon: Vec<String> = t
+        .rounds
+        .iter()
+        .filter_map(|r| match t.aims.iter().rev().find(|a| *a <= r) {
+            Some(a) if r - a >= TELL_LEAD - 0.02 => None,
+            Some(a) => Some(format!("round at {r:.2}, {:.2} s after its tell", r - a)),
+            None => Some(format!("round at {r:.2}, no tell before it")),
+        })
+        .collect();
+    assert!(soon.is_empty(), "rounds too soon after the tell: {soon:?}");
+}
+
 /// A walker that's just picked a fight looks before it shoots: its first
 /// round comes no sooner than SIGHT_BEAT + AIM_TIME after it starts.
 #[test]

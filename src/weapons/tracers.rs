@@ -111,9 +111,11 @@ fn light_tracers(
         let streak = commands
             .spawn((
                 Name::new("Tracer"),
+                // From the muzzle: by the frame it's first seen it has
+                // flown a fixed step or two.
                 Streak {
                     round: e,
-                    origin: t.translation,
+                    origin: p.origin,
                     at: t.translation,
                     velocity: p.velocity,
                     fading: None,
@@ -180,6 +182,7 @@ fn draw_tracers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
 
     /// Lit a little past the muzzle, out by 800 m; the streak ends at the
     /// round, never reaches back past where it lit, and stays a visible
@@ -201,6 +204,49 @@ mod tests {
         let head = far.translation + far.forward() * (far.scale.z * 0.5);
         assert!(head.distance(Vec3::new(0.0, 0.0, -400.0)) < 1e-2, "{head}");
         assert!(far.scale.x > near.scale.x && far.scale.x >= 0.5, "{far:?}");
+    }
+
+    /// A tracer counts its lighting from the muzzle, however far it has
+    /// flown before the frame first sees it: rounds fly in fixed steps, so
+    /// a 450 m/s round can be 14 m out by then, and one that lands inside
+    /// 22 m was never lit (Robot bodies' walker tracers at 11 m).
+    #[test]
+    fn a_tracer_lights_from_the_muzzle_not_where_it_was_first_seen() {
+        let mut world = World::new();
+        world.insert_resource(TracerAssets {
+            mesh: Handle::default(),
+            glow: Handle::default(),
+        });
+        world.init_resource::<TracerPool>();
+        let muzzle = Vec3::new(1.0, 1.5, 2.0);
+        let v = Vec3::new(0.0, 0.0, -450.0);
+        let seen = muzzle + v * (2.0 / 64.0);
+        world.spawn((
+            Projectile {
+                velocity: v,
+                damage: 30.0,
+                shooter: None,
+                gun: Entity::PLACEHOLDER,
+                life: 3.0,
+                mods: Default::default(),
+                mass_g: 3.4,
+                seed: 1,
+                passes: 0,
+                load: Load::Tracer,
+                origin: muzzle,
+            },
+            Transform::from_translation(seen),
+        ));
+        world.run_system_once(light_tracers).unwrap();
+        let streak = world.query::<&Streak>().single(&world).unwrap();
+        assert!(
+            streak.origin.distance(muzzle) < 1e-4,
+            "lit from {} not the muzzle {muzzle} (the round was seen at {seen})",
+            streak.origin
+        );
+        // So a round landing 11 m out has been lit for 3 m of it.
+        let at_11 = streak_pose(streak.origin, muzzle + v.normalize() * 11.0, v, Vec3::ZERO);
+        assert!(at_11.scale.z > 0.0, "a hit at 11 m shows its tracer");
     }
 
     /// A drum of tracers never holds more than the cap; the oldest go.
