@@ -438,6 +438,16 @@ pub const OUTCROP_OFF: f32 = 3.0;
 /// The first this many metres of a way home leave its place (its door, its
 /// yard) and aren't judged for room.
 pub const PASS_FROM: f32 = 10.0;
+/// A routed way (a main route, a first job's walk, a way home) keeps this
+/// far, metres, from the lip of a fall...
+pub const EDGE_NEAR: f32 = 3.0;
+/// ...that drops more than this (m: a landing hurts from about 3.3 m,
+/// `health::SAFE_LANDING`), with nothing standing between.
+pub const EDGE_DROP: f32 = 3.5;
+/// A face this steep (degrees) is a fall, not a slope you slide down.
+pub const EDGE_STEEP: f32 = 55.0;
+/// One finding every this many metres along a way, metres.
+pub const EDGE_SPACING: f32 = 20.0;
 pub const FIGURE_TALL: f32 = 1.75;
 pub const WAIT_HEIGHT: f32 = 1.2;
 /// How far off a shelter's wall its lee is, metres.
@@ -1206,6 +1216,79 @@ pub(crate) fn walk_height(hm: &Heightmap, p: P2) -> f32 {
         }
     }
     hm.height(p)
+}
+
+/// Where a way passes an unwalled drop: each point of `way` (a routed walk
+/// sampled every [`STEP`]) that has, within [`EDGE_NEAR`] of it, the lip
+/// of a fall over [`EDGE_DROP`] (ground falling steeper than
+/// [`EDGE_STEEP`] all the way down) with no solid thing between. Water at
+/// the foot catches you; a bridge deck has its rails. The lip, the point
+/// and the fall, worst first along the way, a hit every [`EDGE_SPACING`].
+pub(crate) fn unwalled_edges(hm: &Heightmap, solids: &[Solid], way: &[P2]) -> Vec<(P2, P2, f32)> {
+    const DIRS: usize = 16;
+    const DS: f32 = 0.5;
+    let steep = EDGE_STEEP.to_radians().tan() * DS;
+    let mut hits: Vec<(P2, P2, f32)> = Vec::new();
+    let mut last: Option<P2> = None;
+    for &p in way {
+        if last.is_some_and(|q| dist(q, p) < EDGE_SPACING) {
+            continue;
+        }
+        let h0 = walk_height(hm, p);
+        if (h0 - hm.height(p)).abs() > 0.5 {
+            continue; // on a bridge deck
+        }
+        let mut worst: Option<(P2, f32)> = None;
+        for k in 0..DIRS {
+            let a = k as f32 / DIRS as f32 * std::f32::consts::TAU;
+            let dir = [a.cos(), a.sin()];
+            let at = |d: f32| [p[0] + dir[0] * d, p[1] + dir[1] * d];
+            // The lip: the first steep step within reach.
+            let mut d = 0.0;
+            let mut lip = None;
+            while d < EDGE_NEAR {
+                if hm.height(at(d)) - hm.height(at(d + DS)) > steep {
+                    lip = Some(d);
+                    break;
+                }
+                d += DS;
+            }
+            let Some(lip) = lip else { continue };
+            // Down the face while it stays steep.
+            let mut foot = lip + DS;
+            while foot < lip + EDGE_DROP * 2.0
+                && hm.height(at(foot)) - hm.height(at(foot + DS)) > steep * 0.5
+            {
+                foot += DS;
+            }
+            let fall = hm.height(at(lip)) - hm.height(at(foot));
+            if fall < EDGE_DROP {
+                continue;
+            }
+            if hm
+                .water_level(at(foot))
+                .is_some_and(|w| w > hm.height(at(foot)) + 1.0)
+            {
+                continue;
+            }
+            // Something solid between the way and the lip.
+            let n = ((lip + DS) / 0.25).ceil() as usize;
+            let walled = solids
+                .iter()
+                .any(|s| (0..=n).any(|i| s.rect.sdf(at(i as f32 * 0.25)) < 0.0));
+            if walled {
+                continue;
+            }
+            if worst.is_none_or(|(_, f)| fall > f) {
+                worst = Some((at(lip), fall));
+            }
+        }
+        if let Some((lip, fall)) = worst {
+            hits.push((lip, p, fall));
+            last = Some(p);
+        }
+    }
+    hits
 }
 
 /// Whether a point is inside the quarantine fence (the playable valley),
@@ -3667,6 +3750,64 @@ mod tests {
             let _ = std::fs::write(format!("{dir}/{name}_routes.json"), r.routes_json());
         }
         r
+    }
+
+    /// Prints every unwalled edge beside the valleys' ways (`MAP_ID` for
+    /// one): the main routes, the first jobs' walks there and home, and
+    /// each place's way to its nearest rendezvous.
+    #[test]
+    #[ignore]
+    fn probe_edges() {
+        let only = std::env::var("MAP_ID").ok();
+        for (id, text) in crate::map::VALLEYS {
+            if only.as_deref().is_some_and(|o| o != *id as &str) {
+                continue;
+            }
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let comfy = crate::map_nav::zone_grid(&map, &hm, COMFORT_SLOPE);
+            let solids = solids(&map);
+            let r = lint(&map, &hm);
+            let rvs: Vec<P2> = map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| m.at)
+                .collect();
+            let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+            let nearest = |at: P2| {
+                *rvs.iter()
+                    .min_by(|a, b| dist(**a, at).total_cmp(&dist(**b, at)))
+                    .unwrap()
+            };
+            let mut ways: Vec<(String, Vec<P2>)> = r
+                .routes
+                .iter()
+                .map(|rt| (format!("route to {}", rt.to), rt.points.clone()))
+                .collect();
+            for (what, at) in first_jobs(&map, id) {
+                for (leg, a, b) in [("there", ins, at), ("home", at, nearest(at))] {
+                    if let Some(p) = comfy.path(a, b) {
+                        ways.push((format!("first job {what} {leg}"), resample(&p)));
+                    }
+                }
+            }
+            for m in map.markers_of(&MarkerKind::Poi) {
+                if let Some(p) = comfy.path(m.at, nearest(m.at)) {
+                    ways.push((format!("{} home", m.name), resample(&p)));
+                }
+            }
+            for (name, way) in &ways {
+                for (lip, p, fall) in unwalled_edges(&hm, &solids, way) {
+                    println!(
+                        "{id}: {name}: {fall:.1} m fall, lip ({:.1}, {:.1}) {:.1} m off ({:.1}, {:.1})",
+                        lip[0],
+                        lip[1],
+                        dist(lip, p),
+                        p[0],
+                        p[1]
+                    );
+                }
+            }
+        }
     }
 
     /// Every valley on [`crate::map::VALLEYS`] lints clean: a new valley is
