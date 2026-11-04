@@ -8,8 +8,8 @@
 //! A heavy (it arrives, slams, is wrecked and scorched), a sentry (it
 //! stands, chirps; its searchlight with `--hour night`), a spotter (it
 //! goes up, calls), a minelayer (it arrives, a mine laid in its ring of
-//! turned earth), a mender (it arrives, welds) and a plough (it stands,
-//! then ploughs: its plume, its lane and its bank).
+//! turned earth), a mender (it arrives, welds), and the valley's plough
+//! where there is one (set ploughing: its plume, its lane and its bank).
 
 use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
@@ -39,7 +39,6 @@ struct Out {
     sentry: Option<Entity>,
     spotter: Option<Entity>,
     mender: Option<Entity>,
-    plough: Option<Entity>,
 }
 
 /// The `i`th of these first uses: sets it off and names it for the log,
@@ -49,9 +48,9 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
     world.init_resource::<Out>();
     let out = |world: &World| {
         let o = world.resource::<Out>();
-        (o.heavy, o.sentry, o.spotter, o.mender, o.plough)
+        (o.heavy, o.sentry, o.spotter, o.mender)
     };
-    let (heavy, sentry, spotter, mender, plough) = out(world);
+    let (heavy, sentry, spotter, mender) = out(world);
     let name = match i {
         0 => {
             let at = view.ground(&zone, 22.0, -6.0);
@@ -184,21 +183,21 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
             "a mender welds"
         }
         11 => {
-            // Across the view, standing in its shed (no snow to clear).
-            let a = view.ground(&zone, 26.0, -20.0);
-            let b = view.ground(&zone, 26.0, 20.0);
-            let e = with_commands(world, |c| {
-                super::plough::spawn_plough(c, &zone, vec![[a.x, a.z], [b.x, b.z]])
-            });
-            world.resource_mut::<Out>().plough = Some(e);
-            "a plough arrives"
-        }
-        12 => {
-            if let Some(mut p) = plough.and_then(|e| world.get_mut::<super::plough::Plough>(e)) {
+            // The valley's own plough (it's out from the start where snow
+            // lies, its look warmed with the valley): set ploughing, its
+            // first bank thrown up now, mid-raid.
+            let mut q = world.query::<&mut super::plough::Plough>();
+            let mut any = false;
+            for mut p in q.iter_mut(world) {
                 p.needs_snow = false;
-                p.run.leg = extraction_core::plough::Leg::Up(0.0);
+                p.jammed = 0.0;
+                any = true;
             }
-            "a plough ploughs"
+            if any {
+                "a plough ploughs"
+            } else {
+                "a plough ploughs (none in this valley)"
+            }
         }
         _ => return None,
     };
