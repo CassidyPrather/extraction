@@ -299,6 +299,9 @@ impl Seat {
 /// How far the glove may slide to find a hold, metres, and the step.
 const SLIDE: f32 = 0.035;
 const SLIDE_STEP: f32 = 0.0175;
+/// Turned, the glove may slide further: a thing end-on to the palm lies
+/// off to one side of the turned fist.
+const TURNED_SLIDE: f32 = 0.0525;
 /// How far along its facing the palm may move onto (or off) a thing.
 const PRESS: f32 = 0.12;
 /// A finger that meets nothing as it closes: a relaxed fist.
@@ -394,7 +397,7 @@ fn open_gap(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> f32 {
 /// touches, the thing is held ([`Grasp::fault`]); failing all, the one
 /// with most fingers on it.
 pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
-    let (mut best, held) = seat_as(side, half, item);
+    let (mut best, held) = seat_as(side, half, item, SLIDE);
     if held {
         return best;
     }
@@ -412,7 +415,7 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
     for turn in turns.into_iter().take(TURNS) {
         let inside = Transform::from_translation(turn.inverse() * item.translation)
             .with_rotation(turn.inverse() * item.rotation);
-        let (s, held) = seat_as(side, half, inside);
+        let (s, held) = seat_as(side, half, inside, TURNED_SLIDE);
         let s = Seat {
             shift: turn * s.shift,
             turn,
@@ -430,7 +433,7 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
 }
 
 /// How many turns of the glove `seat` tries before it gives up.
-const TURNS: usize = 8;
+const TURNS: usize = 24;
 
 /// A hold that isn't one, ranked: fingers and thumb on it.
 fn score(g: &Grasp) -> usize {
@@ -455,12 +458,12 @@ fn square_turns() -> impl Iterator<Item = Quat> {
 }
 
 /// `seat` with the glove as the hand is turned, and whether it holds.
-fn seat_as(side: Side, half: Vec3, item: Transform) -> (Seat, bool) {
+fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) {
     let to_box = item.compute_affine().inverse();
     let n = palm_normal(side);
     let u = n.any_orthonormal_vector();
     let w = n.cross(u);
-    let reach = (SLIDE / SLIDE_STEP).round() as i32;
+    let reach = (slide / SLIDE_STEP).round() as i32;
     let mut spots: Vec<(i32, i32)> = (-reach..=reach)
         .flat_map(|a| (-reach..=reach).map(move |b| (a, b)))
         .collect();
