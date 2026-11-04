@@ -666,10 +666,11 @@ mod tests {
     use super::*;
     use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog, ItemDef};
 
-    /// Kinds a hand holds free, one-handed: not guns (their grips), not
-    /// knives (a grip of their own), not what's carried in both arms.
+    /// Kinds a hand holds free: not guns (their grips), not knives (a grip
+    /// of their own). What's carried in both arms is too: each hand holds
+    /// its end as one hand holds a thing.
     fn held_free(def: &ItemDef) -> bool {
-        def.firearm.is_none() && def.melee.is_none() && !crate::interact::carry::is_bulky(def)
+        def.firearm.is_none() && def.melee.is_none()
     }
 
     /// The kinds the first raid can drop (`from_raid` 0 on some table).
