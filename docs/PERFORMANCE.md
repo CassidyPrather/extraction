@@ -381,6 +381,19 @@ degrees gave 61.7M, short of that, so the cap is 10:
 | a firefight's wounds, 6-15 m | 64 | 30.8M | 16 |
 | standing in a hazard's cloud | 64 | 56.4M | 23 |
 
+### m05, the spruce view, after the sky
+
+With the sky counted where nothing opaque hides it
+(`overdraw::add_sky`), m05_spruce was the one view over: 10.16 layers
+of 10 one eye, 65.7M of 64.8M both. A spruce now draws its upright fin
+card on every other plate, not every plate (`trees::build_tree`). The
+drooping plates carry the skirt's outline, and the textured core its
+density. That's a quarter fewer cards a near spruce. m05: 8.37 layers,
+54.2M (-18%); m06 3.67, m08 3.12.
+
+Before and after, settled (`docs/shots/performance/spruce_fins_*`):
+0.8-4% of pixels change, and the stand reads as dense as before.
+
 ### Items at rest, asleep
 
 Tried and left (2026-11-01): merging resting items per material in 8 m
@@ -1399,3 +1412,35 @@ The hitch ceilings were once multiples of the busy moment's median, so
 they tightened by half when it halved. They are now in reference
 units: an event's worst frame is held to the frame budget's 160, and a
 load's frames to 530.
+
+## What's next (paused 2 November)
+
+Where Performance stopped, in order:
+
+1. **The headset A/B** (`docs/PLAYTEST.md` 4h): the near fill, the sky's
+   light and room adaptation, each on and off at the Marrow village, the
+   spruce at m05 and the pump hall, with `--hold-rate 0`. A switch that
+   costs 0.5 ms or more at its spot, or that alone takes the 1% figure
+   over 11.1 ms, goes off.
+   - One lavapipe oddity to settle there: the village outdoors, with the
+     near fill on, always ran in lavapipe's slow wall-time mode (about
+     8.5 s against 6.8 s a frame). No timed pass moved, and `shadows=0`
+     put both runs in the slow mode, so the GPU work doesn't explain it.
+2. **A fresh baseline on main**: the walk, yard, valley and puff stereo
+   gauges (`cargo test --lib -- --include-ignored gauge_`), after the m05
+   trim (54.2M), `add_sky` and the 10° puff cap. Re-read the stereo
+   budget's margins from it.
+3. **The 28 October CPU side** (above): Marrow's main thread at 12.1 ms
+   against 11.3, and the render world at 10–16 ms. Both grow with mesh
+   entities.
+4. **Open for others:**
+   - `perf::gauge_items_fall_asleep` (Hands): items near the insertion
+     that never sleep, from a one-step contact loss.
+   - Robot minds' and Gunsmith's sessions: run
+     `scripts/fetch_assets.py` first. Tier 1 now fails without the
+     downloads (`docs/TESTING.md`).
+
+Gate notes: `cargo test -j1 --workspace`, since the lib and lib-test
+builds at once run out of memory here. The near-fill A/B scripts are not
+kept; `scripts/bench.sh` with a views file of two or three views is the
+pattern.

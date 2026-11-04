@@ -1177,6 +1177,7 @@ mod tests {
             seed: 0,
             passes: 0,
             load: Default::default(),
+            origin: Vec3::ZERO,
         }
     }
 

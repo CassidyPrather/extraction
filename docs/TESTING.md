@@ -1,5 +1,8 @@
 # Testing: the tiers
 
+A new session or machine: run `python3 scripts/fetch_assets.py` first.
+Tier 1 fails without the downloaded textures (below).
+
 Four tiers, fastest first. Run the first two before you push; the
 Verifier runs the rest on every main push (`docs/HEALTH.md`).
 
@@ -15,7 +18,11 @@ Verifier runs the rest on every main push (`docs/HEALTH.md`).
 The render and stereo budgets need the fetched textures
 (`python3 scripts/fetch_assets.py`, `docs/ASSETS.md`). A fresh checkout
 has none: it draws no sky, so the stereo budgets read about 12M fragments
-low and pass where they should fail.
+low and pass where they should fail. So every fragment budget
+(`render::overdraw::measure`) fails on one, naming the missing files and
+the command; `EXTRACTION_ALLOW_FALLBACK=1` measures it anyway. The
+suite's own `cargo test` builds the lib and its tests at once, each
+4-8 GB: where that runs out of memory, `cargo test -j1 --workspace`.
 
 Run the suite and sims apart, never at once, and never rebuild a binary
 sims are running from: the container runs out of memory.

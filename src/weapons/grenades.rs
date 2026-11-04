@@ -251,6 +251,7 @@ fn burn_fuses(
                     load: Default::default(),
                     seed: rng.next_u64(),
                     passes: 0,
+                    origin: at + dir * 0.04,
                 },
                 Transform::from_translation(at + dir * 0.04),
             ));
