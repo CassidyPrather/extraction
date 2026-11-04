@@ -250,9 +250,9 @@ mod tests {
     fn the_code_reads_back_exactly() {
         // As the shader unpacks it.
         let c = code(CLASS_FADES, 0.85, 1.0, 0.37);
-        let code = -c - 1.0;
-        let class = (code / 1_000_000.0).floor();
-        let mut r = code - class * 1_000_000.0;
+        let n = -c - 1.0;
+        let class = (n / 1_000_000.0).floor();
+        let mut r = n - class * 1_000_000.0;
         let worn = (r / 10_000.0).floor();
         r -= worn * 10_000.0;
         let late = (r / 100.0).floor();
