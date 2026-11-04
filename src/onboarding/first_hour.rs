@@ -758,7 +758,8 @@ pub(super) fn direct_raid(
     // A cautious newcomer creeps once it's out.
     // Running for it, as told: upright and fast.
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
-    let creep = (p.reads || state.low_until > now)
+    let low = fight.as_ref().is_some_and(|f| f.low_until > now);
+    let creep = (p.reads || state.low_until > now || low)
         && !fleeing
         && !matches!(
             state.leg,
@@ -2218,6 +2219,8 @@ pub struct Fight {
     seeded: bool,
     /// Running for cover until then.
     pub flee_until: f32,
+    /// Low and still until then (a hound loses someone low and still).
+    pub low_until: f32,
     pub tells: Vec<(f32, String)>,
     last_any: Option<f32>,
     pub first_hit: Option<f32>,
@@ -3390,8 +3393,17 @@ pub(super) fn first_fight(
     let roof = roofed
         .then(|| under_a_roof(&world, &[], here, &[]))
         .flatten();
+    // A hound coiling: "Low behind it, and keep still" (a hound loses
+    // someone low and still, even close by), not upright for cover, which
+    // it runs down. For all who'd listen.
+    let hound = kind == "hound" && !p.reckless && !p.hoards && !hush;
     let answer: Vec<Task> = if (p.reckless || broken) && !hush {
         take_it_on()
+    } else if hound {
+        fight.low_until = now + 30.0;
+        fight.flee_until = 0.0;
+        // (Under the bot's 30 s give-up.)
+        vec![Task::Wait(29.0)]
     } else if let Some((tasks, _)) = roof {
         fight.flee_until = now + 12.0;
         tasks
