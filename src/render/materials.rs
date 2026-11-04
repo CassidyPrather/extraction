@@ -58,6 +58,14 @@ pub enum Mat {
     Sodden,
     /// Old snow lying on a roof or a sill (`decay::snow_load`).
     Snow,
+    /// The mouth of a dark opening (a culvert, a tunnel, a shaft): no
+    /// light comes back out of it. Unlit and near black, reflecting
+    /// nothing, so it can't come up to the tone of the wall round it
+    /// the way a dark lit surface does. The fog still falls on it, as on
+    /// everything (a hole that kept black through the murk would cut
+    /// through it at 200 m): only the air in front lightens it, so it
+    /// stays darker than the lit stone beside it at any distance.
+    Void,
 }
 
 impl Mat {
@@ -168,6 +176,7 @@ impl Mat {
             ),
             Mat::Silt => (Some("concrete_wet"), 4.0, Color::srgb(0.33, 0.3, 0.25), 0.9),
             Mat::Snow => (None, 1.0, Color::srgb(0.8, 0.83, 0.87), 0.85),
+            Mat::Void => (None, 1.0, Color::srgb(0.012, 0.012, 0.012), 1.0),
             Mat::Sodden => (
                 Some("weathered_planks"),
                 2.0,
@@ -209,6 +218,10 @@ impl MaterialLibrary {
         if mat == Mat::Glass {
             m.alpha_mode = AlphaMode::Blend;
             m.reflectance = 0.8;
+        }
+        if mat == Mat::Void {
+            m.unlit = true;
+            m.reflectance = 0.0;
         }
         if textured {
             let d = dir.unwrap();
@@ -339,4 +352,36 @@ pub fn gable_prism(width: f32, height: f32, depth: f32) -> Mesh {
     .with_inserted_indices(Indices::U32(idx));
     let _ = mesh.generate_tangents();
     mesh
+}
+
+#[cfg(test)]
+mod void_tests {
+    use super::*;
+
+    /// A dark opening's mouth: unlit, near black, reflecting nothing, and
+    /// fogged like everything else.
+    #[test]
+    fn a_dark_opening_is_unlit_black_and_still_fogged() {
+        let (dir, _, colour, _) = Mat::Void.info();
+        assert!(dir.is_none(), "no texture to light up");
+        let c = colour.to_linear();
+        assert!(c.red.max(c.green).max(c.blue) < 0.002, "{c:?}");
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Image>();
+        let server = app.world().resource::<AssetServer>().clone();
+        let mut lib = MaterialLibrary::default();
+        let h = app
+            .world_mut()
+            .resource_scope(|_, mut mats: Mut<Assets<StandardMaterial>>| {
+                lib.get(Mat::Void, &server, &mut mats)
+            });
+        let mats = app.world().resource::<Assets<StandardMaterial>>();
+        let m = mats.get(&h).unwrap();
+        assert!(m.unlit);
+        assert_eq!(m.reflectance, 0.0);
+        assert!(m.fog_enabled, "the fog falls on it as on the wall");
+        assert_eq!(m.alpha_mode, AlphaMode::Opaque);
+    }
 }
