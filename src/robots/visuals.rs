@@ -53,7 +53,7 @@ impl Plugin for RobotVisualsPlugin {
                     lock_flares,
                     scorch,
                     dress_debris,
-                    (alert_eyes, stalk_eyes).chain(),
+                    alert_eyes,
                     shell_by_light,
                     super::weathering::weather_meshes,
                     part_plants,
@@ -62,7 +62,7 @@ impl Plugin for RobotVisualsPlugin {
             )
             // (After every Update has had its say on where each is in its
             // lead.)
-            .add_systems(PostUpdate, melee_tells);
+            .add_systems(PostUpdate, (melee_tells, stalk_eyes));
     }
 }
 
