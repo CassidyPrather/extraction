@@ -250,6 +250,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Wool",
     "Ticking",
     "Zinc",
+    "Aluminium",
     "GreyGreen",
     "Straw",
     "Brick",
@@ -344,7 +345,14 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.22, 0.25, 0.12);
                 m.metallic = 0.3;
             }),
-            "Canvas" => lib.get(Mat::Canvas, server, materials),
+            // The canvas scan's weave at a real cloth's: laid a metre to a
+            // repeat, its cells were 5 mm, and on the rig's pouches at the
+            // belt, a sack or a canteen's cover, cloth in reach read as a
+            // knitted net (docs/craft/ITEM_READING.md). Four repeats a
+            // metre, as the rag cloth's.
+            "Canvas" => derive(Mat::Canvas, &|m| {
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+            }),
             "Planks" => lib.get(Mat::Planks, server, materials),
             "Boards" => lib.get(Mat::WoodFloor, server, materials),
             "Iron" => lib.get(Mat::DarkMetal, server, materials),
@@ -373,6 +381,10 @@ impl ModelMaterials {
             // Instrument paint: the grey-green of survey and signals kit.
             "GreyGreen" => flat(materials, Color::srgb(0.36, 0.4, 0.34), 0.0, 0.6),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
+            // An army flask's aluminium: oxidised matte, not a mirror
+            // (as Zinc, a canteen in a dim room reflected the dark and
+            // read black; docs/craft/ITEM_READING.md).
+            "Aluminium" => flat(materials, Color::srgb(0.66, 0.67, 0.68), 0.5, 0.62),
             "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
             // Animals: a rook's black with a sheen, its bare grey bill.
             "Feather" => flat(materials, Color::srgb(0.035, 0.035, 0.042), 0.0, 0.45),

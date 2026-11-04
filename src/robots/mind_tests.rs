@@ -5482,3 +5482,173 @@ fn a_hot_zones_guards_see_their_own_ground() {
     assert!(sees(None), "uncapped, it sees you at 30 m");
     assert!(!sees(Some(20.0)), "capped at 20 m, it doesn't");
 }
+
+/// Hurt taken by `player` this frame and the next (a round lands a frame on).
+fn hp(app: &App, player: Entity) -> f32 {
+    app.world().get::<crate::health::Health>(player).unwrap().hp
+}
+
+/// A crawler's spark gun warns as long as a walker's aim: its first zap
+/// comes no sooner than [`super::walker::AIM_TIME`] after it starts to
+/// charge, and that after it first sees you. (It was 0.5 s, under anyone's
+/// reaction time: first fights, the crawler.)
+#[test]
+fn a_crawlers_charge_warns_as_long_as_a_walkers_aim() {
+    let (mut app, player, zone) = app(None);
+    let centre = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, zone.on_ground(centre.x, centre.z - 12.0));
+    let crawler = crawler_at(&mut app, &zone, site(centre, |_| false), vec![centre]);
+    let mut charges = app
+        .world()
+        .resource::<Messages<super::indoor::CrawlerCharge>>()
+        .get_cursor();
+    let hp0 = hp(&app, player);
+    let (mut seen, mut charge, mut hit) = (None, None, None);
+    for f in 0..90 * 6 {
+        let t = f as f32 / 90.0;
+        app.update();
+        if app
+            .world()
+            .get::<Awareness>(crawler)
+            .unwrap()
+            .can_see_target
+        {
+            seen.get_or_insert(t);
+        }
+        let msgs = app
+            .world()
+            .resource::<Messages<super::indoor::CrawlerCharge>>();
+        if charges.read(msgs).next().is_some() {
+            charge.get_or_insert(t);
+        }
+        if hp(&app, player) < hp0 - 0.5 {
+            hit.get_or_insert(t);
+            break;
+        }
+    }
+    let (Some(seen), Some(charge), Some(hit)) = (seen, charge, hit) else {
+        panic!("it saw you, charged and zapped: {seen:?} {charge:?} {hit:?}");
+    };
+    let warned = super::walker::AIM_TIME - 0.05;
+    assert!(
+        hit - charge >= warned && hit - seen >= warned,
+        "zapped {:.2} s after its charge, {:.2} s after it saw you",
+        hit - charge,
+        hit - seen
+    );
+}
+
+/// "Low behind it, and keep still. It only finds what moves.": a hound
+/// that has bitten you loses you when you get low and keep still, even
+/// close; it doesn't bite you to death where you lie (first fights: the
+/// one-handed newcomer did as the driver said and was bitten six times).
+#[test]
+fn a_hound_loses_you_low_and_still() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let mut queue = CommandQueue::default();
+    let at = zone.on_ground(me.x + 3.0, me.z);
+    let hound = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    // It has you, and you're standing.
+    let mut bites = 0;
+    let mut last = hp(&app, player);
+    for _ in 0..90 * 8 {
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(hound).unwrap();
+            if a.target.is_none() {
+                a.target = Some(player);
+                a.last_known = Some(me);
+                a.suspicion = 1.0;
+            }
+        }
+        app.update();
+        let now = hp(&app, player);
+        if now < last - 0.5 {
+            bites += 1;
+            break;
+        }
+        last = now;
+    }
+    assert_eq!(bites, 1, "it came for you standing");
+    // Low, and still, as the driver says: crouched as the stick crouches
+    // you (the desk rig's and the bot's crouched eye, 1.05 m), not a squat.
+    app.world_mut()
+        .get_mut::<RigInput>(player)
+        .unwrap()
+        .head
+        .translation
+        .y = 1.05;
+    let mut later = 0;
+    let mut last = hp(&app, player);
+    for _ in 0..90 * 20 {
+        app.update();
+        let mut h = app
+            .world_mut()
+            .get_mut::<crate::health::Health>(player)
+            .unwrap();
+        h.bleeding = 0.0;
+        let now = h.hp;
+        if now < last - 0.5 {
+            later += 1;
+        }
+        last = now;
+    }
+    // (One more may be in the air: a lunge already sprung.)
+    assert!(later <= 1, "bitten {later} times more, low and still");
+}
+
+/// Home is home: a machine with you in its sights lets you go when the
+/// truck pulls out, and nothing comes for you at base (first fights: the
+/// hoarder got home, was paid, and a heavy that had followed it slammed it
+/// dead by the truck).
+#[test]
+fn nothing_comes_for_you_at_base() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(me.x, me.z - 10.0));
+    for _ in 0..90 * 3 {
+        app.update();
+    }
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::Extracting { left: 4.0 };
+    app.update();
+    app.update();
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::AtBase;
+    let hp0 = hp(&app, player);
+    for _ in 0..90 * 10 {
+        app.update();
+        let a = app.world().get::<Awareness>(w).unwrap();
+        assert!(
+            a.target != Some(player) || !a.can_see_target,
+            "at base, it has you: {a:?}"
+        );
+    }
+    assert!(
+        !matches!(app.world().get::<Brain>(w).unwrap(), Brain::Engage),
+        "it let you go"
+    );
+    assert!(hp(&app, player) >= hp0, "hurt at base");
+}

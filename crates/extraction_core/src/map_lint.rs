@@ -430,6 +430,14 @@ pub const RV_OPEN: f32 = 24.0;
 pub const RV_MEET: f32 = 20.0;
 /// ...and at most this much longer.
 pub const RV_DETOUR: f32 = 1.5;
+/// A way home keeps this much room from any solid thing beside it (m: a
+/// body is 0.56 across, and a walker's turn)...
+pub const PASS_CLEAR: f32 = 1.0;
+/// ...and an outcrop set by hand stands at least this far off it.
+pub const OUTCROP_OFF: f32 = 3.0;
+/// The first this many metres of a way home leave its place (its door, its
+/// yard) and aren't judged for room.
+pub const PASS_FROM: f32 = 10.0;
 pub const FIGURE_TALL: f32 = 1.75;
 pub const WAIT_HEIGHT: f32 = 1.2;
 /// How far off a shelter's wall its lee is, metres.
@@ -2119,6 +2127,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     || tree_b.count_within(p, DASH, STAND) >= STAND
             };
             let under_trees = |p: P2| tree_b.count_within(p, 4.0, 2) >= 2;
+            // What can crowd a way home: solid things you don't go into.
+            let props: Vec<&Solid> = solids
+                .iter()
+                // (Rolling stock you walk along, as beside a train.)
+                .filter(|s| {
+                    !s.kiosk()
+                        && !ENTERABLE.contains(&crate::map::prefab_shell(&s.prefab))
+                        && !matches!(s.prefab.as_str(), "boxcar" | "funicular_car")
+                })
+                .collect();
             let homes: Vec<P2> = map
                 .markers_of(&MarkerKind::Rendezvous)
                 .map(|m| m.at)
@@ -2281,6 +2299,48 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                             ),
                             at,
                         );
+                    }
+                    // Cover stands beside the way home, never on it: past where
+                    // it leaves its place, the way as routed keeps a body's room
+                    // from every solid thing that isn't a building you go into.
+                    // (The scattered rocks are the nav's; outcrops set by hand
+                    // keep OUTCROP_OFF, below.)
+                    let crowd = pts
+                        .iter()
+                        .filter(|p| dist(**p, pts[0]) > PASS_FROM)
+                        .find_map(|p| {
+                            props
+                                .iter()
+                                .find(|s| (0.0..PASS_CLEAR).contains(&s.rect.sdf(*p)))
+                                .map(|s| (s.prefab.clone(), *p))
+                        });
+                    if let Some((what, at)) = crowd {
+                        find(
+                            &mut r,
+                            Rule::Overlap,
+                            format!(
+                                "the way home to {} from {name} squeezes past a {what} (under {PASS_CLEAR} m)",
+                                m.name
+                            ),
+                            at,
+                        );
+                    }
+                    for o in &map.outcrops {
+                        let (d, _, _) = geom::polyline_closest(pts, o.at);
+                        if d - o.radius < OUTCROP_OFF {
+                            find(
+                                &mut r,
+                                Rule::Overlap,
+                                format!(
+                                    "the outcrop at ({:.0}, {:.0}) is {:.1} m off the way home to {} from {name}",
+                                    o.at[0],
+                                    o.at[1],
+                                    d - o.radius,
+                                    m.name
+                                ),
+                                o.at,
+                            );
+                        }
                     }
                 }
             }

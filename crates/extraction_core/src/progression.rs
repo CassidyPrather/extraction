@@ -821,12 +821,18 @@ impl Progress {
         self.tier >= NIGHTS_FROM
     }
 
-    /// A fetch still unmet after [`FETCH_PATIENCE`] raids: the driver
-    /// wants something else (some parts may just not be turning up).
+    /// A rolled job still not done after [`FETCH_PATIENCE`] raids: the
+    /// driver wants something else (some parts may just not be turning up;
+    /// a place may be past you yet: first_jobs, five raids on one step and
+    /// nothing else to want).
     pub fn fetch_gone_stale(&self, raids: u32) -> bool {
-        // (A contract's fetch waits: the contract would be lost with it.)
+        // (A contract's step waits: the contract would be lost with it, and
+        // it has its place on the ladder.)
         self.contract.is_none()
-            && matches!(self.job, Some(Job::Fetch { .. }))
+            && matches!(
+                self.job,
+                Some(Job::Fetch { .. } | Job::Scout { .. } | Job::Recover { .. })
+            )
             && raids >= self.job_raid + FETCH_PATIENCE
     }
 

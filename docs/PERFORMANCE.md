@@ -1030,6 +1030,30 @@ to BC7 (below, "Textures"). The valleys' budget is 2 GiB
 At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
 GB. Under half the ceiling either way: nothing to stream or cut yet.
 
+**4 November, on main b175290f** (the report now names each valley's
+five biggest things of any kind):
+
+| valley | total | textures | meshes | shadows | eye targets |
+|---|---|---|---|---|---|
+| Marrow Creek | 1545 MB | 209 | 236 | 16 | 1084 |
+| Kettle Pass | 1660 MB | 200 | 361 | 16 | 1084 |
+| Cinder Works | 1588 MB | 189 | 299 | 16 | 1084 |
+| Sallow Reservoir | 1627 MB | 187 | 340 | 16 | 1084 |
+| Rime Fell | 1709 MB | 177 | 432 | 16 | 1084 |
+
+Every valley's five biggest are the same: the eye targets (1084 MB), the
+sun's shadow maps (16 MB), then the three terrain maps (9.3 MB each). The
+meshes are hundreds of small ones, none in the top five. Every valley is
+under the 2 GiB budget and well under the 4.5 GB ceiling, so there's
+nothing to cut.
+
+MSAA and memory: at 2980² the two eyes' targets take 64 bytes a pixel
+at 4x MSAA (1084 MB), 40 at 2x (678 MB) and 28 without MSAA (474 MB).
+Memory isn't what MSAA costs here: 4x fits with 2.8 GB to spare under the
+ceiling. Its cost is GPU bandwidth (−25% to −46% frame time with it off
+on lavapipe, "What costs what"), and the SMOOTHING card (`--msaa 2|0`)
+already trades it. No change.
+
 ## Small things' shadows
 
 At the gates half the sun's shadow-pass meshes were smaller than 10 cm
