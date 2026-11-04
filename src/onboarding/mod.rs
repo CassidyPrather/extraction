@@ -2398,6 +2398,50 @@ pub mod bot;
 
 #[cfg(test)]
 mod tests {
+    /// No station's post is in the truck: the ones in it hang their boards
+    /// on its walls (a post stood on the settings board's spot came up
+    /// through the canopy), and every yard post stands clear of where the
+    /// truck parks.
+    #[test]
+    fn no_station_post_goes_through_the_truck() {
+        for i in 0..super::STATIONS.len() {
+            assert_eq!(
+                super::visuals::stands(i),
+                !super::in_truck(i),
+                "station {}",
+                i + 1
+            );
+        }
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: super::TRAINING_YARD.into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>();
+        let truck = crate::raid::truck::base_pose(zone);
+        let (centre, half) = super::second_hour::TRUCK_BOX;
+        let inv = truck.compute_affine().inverse();
+        for (i, st) in super::STATIONS.iter().enumerate() {
+            if !super::visuals::stands(i) {
+                continue;
+            }
+            let l = inv
+                .transform_point3(Vec3::new(st.at[0], 0.0, st.at[1]))
+                .xz()
+                - centre;
+            assert!(
+                l.x.abs() > half.x + 1.0 || l.y.abs() > half.y + 1.0,
+                "{}'s post at {:?} stands in the truck ({l})",
+                st.title,
+                st.at
+            );
+        }
+    }
+
     /// Every station in scripts/onboarding_shots.sh is one the yard has,
     /// by name (by number they drifted onto blank boards as stations came
     /// and went).
