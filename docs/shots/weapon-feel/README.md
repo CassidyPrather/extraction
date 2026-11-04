@@ -69,7 +69,10 @@ extraction --screenshot OUT/pm.png --frames 999999 --camera 0,0,30,0,-15 \
 ```
 
 The reels are `pm_cycle_before.mp4` (the code before the three fixes
-below, with the reel itself) and `pm_cycle_after.mp4`.
+below, with the reel itself), `pm_cycle_after.mp4`, and the two side
+by side in `pm_cycle_before_after.mp4`. `pm_smoke_before_after.jpg` is
+the second shot's smoke 0.1 s and 0.23 s on: before (left), a dense
+ball; after, a haze thinning as it goes.
 
 | Beat | In the game (measured) | A real PM | What you get in the headset |
 | - | - | - | - |
