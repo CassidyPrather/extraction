@@ -47,6 +47,7 @@ pub mod minelayer;
 pub mod minelayer_look;
 pub mod network;
 pub mod plough;
+pub mod plough_bank;
 pub mod plough_look;
 pub mod pylon;
 pub mod recall;
