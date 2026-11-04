@@ -64,9 +64,9 @@ here (weapon feel owns them).
 
 ## What's still wrong, worst first
 
-1. **No side view to measure against.** The stock's drop, the forend's
-   depth and length, and the action's outline are unchecked. The IZh-43's
-   forend is a slim checkered splinter, and the model's looks deeper.
+1. **The stock's drop and comb** are still unmeasured. The side view
+   below covers the action and forend, but its butt is a different
+   pattern from the model's.
 2. **No engraving** on the action's sides: the IZh-43's scrolls.
 3. **No markings**: the maker's mark and the gauge on the barrels and
    action.
@@ -82,3 +82,37 @@ here (weapon feel owns them).
 - **`src/capture/scale.rs`** and **`assets/data/items.ron`**: the labels
   now say IZh-43, not TOZ-34; the stock is 249 mm; the gun's box is
   1.16 m.
+
+### Second pass: the action's bar and the forend
+
+The arm's-length pass (`docs/craft/arm_length`) put the IZh-43 in the
+game at 30 cm. Behind the barrels, the model's action ended at the
+breech. Under the chambers was a dark gap, with the lumps and a bare
+forend iron hanging below, then a deep forend swelling under the hand.
+
+**Reference.** A dealer's full right side view of a 20 in IZh-43
+(Collectors Firearms; copyrighted, measured only, not in the repo),
+scaled by its 508 mm barrels, breech to muzzle (0.179 mm a pixel):
+
+| | Real | Before | After |
+| - | - | - | - |
+| The action's bar, ahead of the breech | 69 mm, under the chambers | none: the action ends at the breech | 68 mm |
+| Hinge | at the bar's front | 6.5 mm ahead of the breech | 60 mm ahead (z -0.176) |
+| Forend, from the action to its tip | 211 mm, flush with the action | 218 mm, behind 48 mm of bare iron | 210 mm, flush |
+| Forend's bottom under the rib's top: at the action, mid, tip | 50, 41, 30 mm | 61, 69, 66 mm, swelling | 50, 41, 30 mm |
+
+**What changed:**
+- **`art/guns/toz_double.py`**:
+  - **The action**: its bar runs forward under the chambers to a knuckle
+    round the hinge.
+  - **The barrels' lumps** hook the pin at the bar's front.
+  - **The forend iron** is inside the wood.
+  - **The forend** is a tapering splinter flush with the bar, with no
+    swell. Its checkering is in the rear half, as in the photograph.
+- **`src/weapons/layout.rs`** (`toz()`): the hinge is at (0, 0.010,
+  -0.176). Support and grab are at (0, 0.011, -0.30), on the forend's
+  underside (the old point was 16 mm below the new forend). The blockout
+  has the bar.
+- **`crates/gunsmith/src/spec.rs`**: the hinge.
+
+Proportion 2 → 3 and Silhouette 2 → 3: the total is 21 of 30.
