@@ -1115,7 +1115,14 @@ fn reel(
     }
     if what == "stalk" && frame > WARMUP {
         let (_, hounds, _, _, brains) = &mut melee;
-        if let Some(Ok((_, mut i))) = state.others.first().map(|e| brains.get_mut(*e)) {
+        if let Some(Ok((mut b, mut i))) = state.others.first().map(|e| brains.get_mut(*e)) {
+            // (Held at its stalk: its mind would move it on.)
+            if !matches!(*b, Brain::Investigate { .. }) {
+                *b = Brain::Investigate {
+                    at: eye + flat * 12.0,
+                    left: 1.0e6,
+                };
+            }
             i.low = true;
         }
         if let Some(Ok(mut h)) = state.others.get(1).map(|e| hounds.get_mut(*e)) {

@@ -1570,10 +1570,10 @@ pub fn attacks() -> Vec<(&'static str, f32, fn(f32) -> LinearRgba)> {
                 lunging: false,
             })
         }),
-        ("heavy slam", heavy::RAISE_TIME, |t| {
+        ("heavy slam", heavy::RAISE_TIME + heavy::SLAM_TIME, |t| {
             melee_halo(MeleeLead::Heavy {
-                raise: Some(t),
-                slam: false,
+                raise: (t < heavy::RAISE_TIME).then_some(t),
+                slam: t >= heavy::RAISE_TIME,
             })
         }),
         ("grappler harpoon", grappler::WINDUP, |t| {
@@ -1587,6 +1587,40 @@ pub fn attacks() -> Vec<(&'static str, f32, fn(f32) -> LinearRgba)> {
         }),
     ]
 }
+
+/// An attack that harms you leads by at least this (s): the gunners' bar,
+/// a walker's full aim, the one figure Robot minds' constants use too
+/// (`indoor::ZAP_CHARGE`, `hound::COIL_TIME`).
+pub const MIN_LEAD: f32 = super::walker::AIM_TIME;
+
+/// Attacks in [`attacks`] that lead by less than [`MIN_LEAD`] and why
+/// that's fair: neither harms you as a blow does.
+pub const SHORT_LEADS: &[(&str, &str)] = &[
+    (
+        "grappler harpoon",
+        "a grab, not harm: the line slows and drags you, and its harpoon \
+         flies at you after its wind-up, seen",
+    ),
+    (
+        "sorter throw",
+        "a thrown tote you see in flight after its wind-up, from up to 14 m \
+         (`sorter::THROW_RANGE`): its flight is the rest of its lead",
+    ),
+];
+
+/// Attacks under [`MIN_LEAD`] today with the change that brings them to
+/// it on its way; each comes off this list as it lands (the test fails
+/// while one that's met the bar is still on it).
+pub const PENDING_LEADS: &[(&str, &str)] = &[
+    (
+        "crawler zap",
+        "Robot minds' 9055dbd4: indoor::ZAP_CHARGE = walker::AIM_TIME",
+    ),
+    (
+        "heavy slam",
+        "Heavy's RAISE_TIME 1.3 s: its raise and slam 1.52 s",
+    ),
+];
 
 /// The machines' attacks that aren't a lead to a blow, and why each is fair
 /// without one.
@@ -2215,7 +2249,8 @@ fn stalk_eyes(
         }
     }
     for (e, eye, mut t, slit) in &mut eyes {
-        let Ok(part) = parts.get(eye.part) else {
+        // (Its eye, not its glowing seams.)
+        let Ok(part) = parts.get(eye.part).filter(|p| p.role == PartRole::Sensor) else {
             continue;
         };
         match (stalking(part.robot), slit) {
@@ -3030,9 +3065,17 @@ mod signal_lamp_tests {
     #[test]
     fn every_attack_tells_on_the_body() {
         let mut fails = Vec::new();
+        let short = |who: &str| SHORT_LEADS.iter().any(|(w, _)| *w == who);
+        let pending = |who: &str| PENDING_LEADS.iter().any(|(w, _)| *w == who);
         for (who, lead, at) in attacks() {
             if lead < super::super::MIN_TELL {
                 fails.push(format!("{who}: a {lead} s lead"));
+            }
+            if lead < MIN_LEAD && !short(who) && !pending(who) {
+                fails.push(format!("{who}: leads by {lead} s, under {MIN_LEAD} s"));
+            }
+            if lead >= MIN_LEAD && pending(who) {
+                fails.push(format!("{who}: meets the bar now: off PENDING_LEADS"));
             }
             let dim = (1..=80)
                 .map(|i| at(lead * i as f32 / 80.0 - 1e-3).red)
