@@ -83,3 +83,12 @@ scored here (weapon feel owns them).
 4. **No bolt face** to see through the ejection port with the action back.
 5. ~~The docstring's "560 mm barrel"~~: corrected to the 610 mm its
    geometry has.
+
+### Arm's-length pass: the ejection port
+
+In the game at 30 cm (`docs/craft/arm_length`), the right side of the
+receiver read as a slab with a short window. The port was 60 mm long, and
+a fired 70 mm (2¾ in) hull can't pass through that. It's now 78 mm, from
+the barrel's breech back, as on pump guns of this pattern. The bolt is
+lengthened to fill it when closed; fully open, its tail runs on inside
+the stock.
