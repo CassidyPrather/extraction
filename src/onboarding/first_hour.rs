@@ -318,16 +318,40 @@ fn run_fights(chain: &Chain) -> AppExit {
                 cmd.args(["--hour", "night"]);
             }
             println!("first fight: {} meets the {e}", p.name);
-            if !cmd.status().is_ok_and(|s| s.success()) {
-                if p.hoards {
+            // (Its output passed on as it was, and read for the warning.)
+            let out = cmd.output();
+            let (ok, said) = match &out {
+                Ok(o) => {
+                    use std::io::Write;
+                    let _ = std::io::stdout().write_all(&o.stdout);
+                    let _ = std::io::stderr().write_all(&o.stderr);
+                    let text = String::from_utf8_lossy(&o.stdout).to_string()
+                        + &String::from_utf8_lossy(&o.stderr);
+                    (o.status.success(), text)
+                }
+                Err(_) => (false, String::new()),
+            };
+            // The reckless one against a drone: it takes it on in the open,
+            // and in the open after a warning is meant to lose. By design
+            // only if the warning played (its lock-on chirp) and a roof was
+            // in reach (`a_roof_is_in_reach_of_the_first_fights_drone`).
+            let reckless_drone =
+                p.reckless && *e == "drone" && said.contains("tell: a drone's lock-on");
+            if !ok {
+                if p.hoards || reckless_drone {
                     // By design: it carries on as if nothing were there,
                     // the driver's warnings and all, and out in the open
                     // after a warning is meant to lose (Robot minds'
                     // fairness rules). Its going down is the game being
                     // fair, not a failure of what it was told.
                     println!(
-                        "first fight: {}/{e} didn't come through, by design (it heeds no warning)",
-                        p.name
+                        "first fight: {}/{e} didn't come through, by design ({})",
+                        p.name,
+                        if p.hoards {
+                            "it heeds no warning"
+                        } else {
+                            "it took the drone on in the open, warned, with a roof in reach"
+                        }
                     );
                     by_design.push(format!("{}/{e}", p.name));
                 } else {
@@ -337,7 +361,7 @@ fn run_fights(chain: &Chain) -> AppExit {
         }
     }
     if !by_design.is_empty() {
-        println!("first fight: down by design (heeding nothing): {by_design:?}");
+        println!("first fight: down by design: {by_design:?}");
     }
     if failed.is_empty() {
         println!("first fight: every newcomer who heeds the driver came through");
