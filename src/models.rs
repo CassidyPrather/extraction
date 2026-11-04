@@ -284,6 +284,15 @@ pub struct ModelMaterials {
 }
 
 impl ModelMaterials {
+    /// The name a shared model material was made from, if it's one of
+    /// these (`weapons::weather` asks, to know steel from wood).
+    pub fn name_of(&self, id: AssetId<StandardMaterial>) -> Option<&str> {
+        self.cache
+            .iter()
+            .find(|(_, h)| h.id() == id)
+            .map(|(n, _)| n.as_str())
+    }
+
     pub fn get(
         &mut self,
         name: &str,
