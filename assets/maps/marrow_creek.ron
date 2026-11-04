@@ -108,7 +108,7 @@
         // it, so its posts and blocks stand on one level.
         (
             name: "Gate apron", kind: Asphalt, width: 14.0, shoulder: 3.0, smoothing: 8.0,
-            points: [(22.0, 167.5), (22.0, 156.5)],
+            points: [(22.0, 167.5), (22.0, 159.5)],
         ),
         // Farm lane east off the district road.
         (
