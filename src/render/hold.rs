@@ -764,23 +764,25 @@ mod tests {
         let catalog = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
         let first = first_raid(&catalog);
         assert!(first.len() > 8, "first raid's loot: {first:?}");
-        let mut bad = Vec::new();
-        let mut checked = 0;
-        let mut kinds = 0;
-        for (_, def) in catalog.iter() {
-            if !held_free(def) {
-                continue;
-            }
-            kinds += 1;
-            let half = Vec3::from(def.size_m()) * 0.5;
-            let mut worst: Option<String> = None;
-            let mut failed = 0;
-            let mut tries = 0;
+        // The holds depend on a kind's box alone: each box once (rounds,
+        // tapes and records share theirs), the boxes across threads.
+        let defs: Vec<&ItemDef> = catalog
+            .iter()
+            .map(|(_, d)| d)
+            .filter(|d| held_free(d))
+            .collect();
+        let kinds = defs.len();
+        let key = |d: &ItemDef| d.size_m().map(f32::to_bits);
+        let mut boxes: Vec<[u32; 3]> = defs.iter().map(|d| key(d)).collect();
+        boxes.sort();
+        boxes.dedup();
+        let holds = |b: &[u32; 3]| {
+            let half = Vec3::from(b.map(f32::from_bits)) * 0.5;
+            let (mut failed, mut tries, mut worst) = (0, 0, None);
             for side in [Side::Right, Side::Left] {
                 for turn in turns() {
                     for item in takes(side, half, turn) {
                         tries += 1;
-                        checked += 1;
                         if let Some(why) = glove_on(side, half, item).fault() {
                             failed += 1;
                             worst.get_or_insert(why);
@@ -788,6 +790,26 @@ mod tests {
                     }
                 }
             }
+            (failed, tries, worst)
+        };
+        let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+        let per = boxes.len().div_ceil(threads);
+        let results: std::collections::HashMap<[u32; 3], (usize, usize, Option<String>)> =
+            std::thread::scope(|s| {
+                let jobs: Vec<_> = boxes
+                    .chunks(per.max(1))
+                    .map(|chunk| {
+                        s.spawn(move || chunk.iter().map(|b| (*b, holds(b))).collect::<Vec<_>>())
+                    })
+                    .collect();
+                jobs.into_iter()
+                    .flat_map(|j| j.join().expect("a hold thread"))
+                    .collect()
+            });
+        let checked: usize = defs.iter().map(|d| results[&key(d)].1).sum();
+        let mut bad = Vec::new();
+        for def in defs {
+            let (failed, tries, worst) = results[&key(def)].clone();
             let known = STILL_FAILING.iter().any(|(id, _)| *id == def.id);
             match worst {
                 Some(why) if !known => {
