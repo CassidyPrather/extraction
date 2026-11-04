@@ -151,7 +151,9 @@ fn read_assets_once() {
     static READ: std::sync::OnceLock<()> = std::sync::OnceLock::new();
     READ.get_or_init(|| {
         fn read(dir: &std::path::Path, buf: &mut [u8]) {
-            let Ok(entries) = std::fs::read_dir(dir) else { return };
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
             for e in entries.flatten() {
                 let p = e.path();
                 if p.is_dir() {
@@ -164,7 +166,10 @@ fn read_assets_once() {
         }
         let t = Instant::now();
         read(std::path::Path::new("assets"), &mut vec![0; 1 << 20]);
-        println!("assets read ahead of the clock in {:.2} s", t.elapsed().as_secs_f64());
+        println!(
+            "assets read ahead of the clock in {:.2} s",
+            t.elapsed().as_secs_f64()
+        );
     });
 }
 
