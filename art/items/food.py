@@ -89,24 +89,36 @@ def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12):
 def water_bottle():
     yb = -0.12
     p = Part("body")
-    # A clear plastic bottle two-thirds full, a paper label, a red cap.
-    p.lathe([(0.0, yb), (0.027, yb), (0.032, yb + 0.004), (0.0335, yb + 0.012),
-             (0.0335, 0.035), (0.031, 0.056), (0.022, 0.08), (0.0135, 0.096), (0.0125, 0.1),
-             (0.0125, 0.112), (0.0, 0.112)], "Clear", segs=24, xf=UP)
-    p.lathe([(0.0, yb + 0.002), (0.031, yb + 0.002), (0.032, yb + 0.01), (0.032, 0.03),
-             (0.0, 0.03)], "Glass", segs=20, xf=UP)
-    for y in (-0.09, -0.08, 0.012):
-        ring(p, 0.0335, 0.0009, "Clear", xf=T(0, y, 0) @ UP, segs=24, sides=4)
-    band(p, 0.0335, 0.0338, -0.05, 0.0, "Paper")
-    for y in (-0.047, -0.006):
-        band(p, 0.0337, 0.034, y, y + 0.003, "Red")
-    text_round(p, "ВОДА", 0.013, "Blued", 0.0338, -0.026)
-    text_round(p, "ВОДА", 0.013, "Blued", 0.0338, -0.026, at=math.pi)
-    p.tube(0.0158, 0.0124, 0.098, 0.0995, "Clear", segs=16, xf=UP)
+    # An army canteen: an aluminium flask, its lower half in a khaki
+    # canvas cover, a black screw cap. (Covered to the shoulders it was a
+    # dark olive lump on a dark table: the bare metal is what's seen.) (It was a clear plastic bottle
+    # labelled ВОДА; the item is a canteen: its name, its twist-cap drink,
+    # `capture::scale`.) The cap keeps the old one's place and axis, the
+    # other hand's twist handle (`first_aid::cap_bottles`, 12 mm under
+    # the top).
+    # The canvas at its real weave: the library's is laid a metre to a
+    # repeat, and on a 7 cm flask its cells were 5 mm, a knitted net.
+    p.uv_scale = 5.0
+    p.lathe([(0.0, -0.04), (0.032, -0.04), (0.032, 0.05), (0.0295, 0.068), (0.021, 0.085),
+             (0.0145, 0.093), (0.0125, 0.096), (0.0125, 0.1), (0.0, 0.1)], "Zinc", segs=24,
+            xf=UP)
+    # The cover: canvas over the body, its hem bound, a seam down the
+    # back and a strap tab with its snap at the side.
+    p.lathe([(0.0, yb), (0.028, yb), (0.032, yb + 0.004), (0.0335, yb + 0.012),
+             (0.0335, -0.032), (0.032, -0.03), (0.0, -0.03)], "Canvas", segs=24, xf=UP)
+    # (All inside the item's 0.07 box: the cover 33.5 mm round, the hem,
+    # tab and snap standing to 35.)
+    ring(p, 0.0335, 0.0015, "Olive", xf=T(0, -0.034, 0) @ UP, segs=24, sides=4)
+    p.box((0.003, 0.08, 0.0012), (0.0, -0.076, 0.0337), "Olive")
+    p.box((0.012, 0.04, 0.0016), (0.0, -0.06, 0.0), "Canvas",
+          xf=RY(math.pi / 2) @ T(0, 0, 0.0337))
+    p.cyl(0.0035, 0.0, 0.0006, "Worn", segs=10,
+          xf=RY(math.pi / 2) @ T(0, -0.05, 0.0344))
+    # The cap: knurled black plastic on its thread, under a lip.
     p.lathe([(0.0, 0.1), (0.0145, 0.1), (0.0148, 0.101), (0.0148, 0.1185), (0.0138, 0.12),
-             (0.0, 0.12)], "Red", segs=20, xf=UP)
+             (0.0, 0.12)], "Black", segs=20, xf=UP)
     for k in range(16):
-        p.box((0.0012, 0.015, 0.0012), (0.0, 0.11, 0.0), "Red",
+        p.box((0.0012, 0.015, 0.0012), (0.0, 0.11, 0.0), "Black",
               xf=RY(2 * math.pi * k / 16) @ T(0.0148, 0, 0))
     return [p]
 

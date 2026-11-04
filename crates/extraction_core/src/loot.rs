@@ -137,6 +137,13 @@ impl LootTables {
         out
     }
 
+    /// The first raid on which any table can drop item `id` (`None`: no
+    /// table drops it). Every other source of a kind waits for this too,
+    /// so a family arrives the same raid everywhere.
+    pub fn arrives(&self, id: &str) -> Option<u32> {
+        self.names().filter_map(|t| self.first_raid(t, id)).min()
+    }
+
     /// The first raid on which `root` (rolled in no valley) can drop item
     /// `id`, if it ever can: for checks that what a job wants turns up in
     /// time.
@@ -248,6 +255,41 @@ pub fn valley_key(map_name: &str) -> String {
 }
 
 pub const BUILTIN_LOOT: &str = include_str!("../../../assets/data/loot.ron");
+
+/// The idea a kind is to someone new: a gun, its rounds and its
+/// magazines are one ("the 5.45"), food is one, anything else is itself.
+/// What [`MAX_NEW_IDEAS`] counts.
+/// A gun's own part (`stock_mosin`) is its gun's idea.
+pub fn idea(def: &crate::items::ItemDef, catalog: &ItemCatalog) -> String {
+    use crate::items::Category;
+    // A gun's own part (its stock, its bolt) is the gun's.
+    if def.firearm.is_none()
+        && let Some((_, gun)) = catalog
+            .iter()
+            .find(|(_, g)| g.firearm.is_some() && def.id.ends_with(&format!("_{}", g.id)))
+    {
+        return idea(gun, catalog);
+    }
+    let rounds = def
+        .firearm
+        .as_ref()
+        .map(|f| f.cartridge.clone())
+        .or_else(|| def.magazine.as_ref().map(|m| m.cartridge.clone()))
+        .or_else(|| def.cartridge.clone());
+    match (def.category, rounds) {
+        (Category::Firearm | Category::Ammo | Category::Magazine, Some(c)) => format!("rounds {c}"),
+        (Category::Food, _) => "food".into(),
+        // A tape is a tape, a record a record, whatever's on it.
+        _ if def.id.starts_with("tape_") => "tape".into(),
+        _ if def.id.starts_with("record_") => "record".into(),
+        _ => def.id.clone(),
+    }
+}
+
+/// The most new ideas ([`idea`]) a raid of a career brings after the
+/// first (the first is the starter set): the designer's "too many item
+/// types at once", measured. A raid-0 house has its own cap (tests).
+pub const MAX_NEW_IDEAS: usize = 12;
 
 #[cfg(test)]
 mod tests {
@@ -380,5 +422,102 @@ mod tests {
             "{seen:?}"
         );
         assert_eq!(valley_key("Kettle Pass"), "kettle_pass");
+    }
+
+    /// Guns in a new career's crate (`persist::fresh_save`): they're
+    /// out from raid 0 whatever the tables say.
+    const KIT_GUNS: &[&str] = &["pm_pistol"];
+
+    /// The first raid a gun is to be had, from loot or the kit.
+    fn gun_arrives(loot: &LootTables, id: &str) -> Option<u32> {
+        if KIT_GUNS.contains(&id) {
+            return Some(0);
+        }
+        loot.arrives(id)
+    }
+
+    /// No rounds, clip, magazine or part turns up before a gun that takes them
+    /// (Marrow, raid 3: seven calibres and three clips, a raid before any
+    /// gun; the designer's "too many item types at once").
+    #[test]
+    fn no_ammunition_comes_before_its_gun() {
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        let mut early = Vec::new();
+        for (_, def) in cat.iter() {
+            let guns: Vec<&str> = if let Some(m) = &def.magazine {
+                cat.iter()
+                    .filter(|(_, g)| {
+                        g.firearm.as_ref().is_some_and(|f| {
+                            g.id == m.fits || f.magazine_family.as_deref() == Some(m.fits.as_str())
+                        })
+                    })
+                    .map(|(_, g)| g.id.as_str())
+                    .collect()
+            } else if let Some((_, gun)) = cat.iter().find(|(_, g)| {
+                g.firearm.is_some()
+                    && def.firearm.is_none()
+                    && def.id.ends_with(&format!("_{}", g.id))
+            }) {
+                // A gun's own part (its stock, its bolt).
+                vec![gun.id.as_str()]
+            } else if let Some(c) = &def.cartridge {
+                cat.iter()
+                    .filter(|(_, g)| g.firearm.as_ref().is_some_and(|f| &f.cartridge == c))
+                    .map(|(_, g)| g.id.as_str())
+                    .collect()
+            } else {
+                continue;
+            };
+            // Rounds no gun of the player's fires (the robots' belts).
+            if guns.is_empty() {
+                continue;
+            }
+            let Some(at) = loot.arrives(&def.id) else {
+                continue;
+            };
+            let gun = guns.iter().filter_map(|g| gun_arrives(&loot, g)).min();
+            if gun.is_none_or(|g| g > at) {
+                early.push(format!(
+                    "{} on raid {at}, its gun on {gun:?} ({guns:?})",
+                    def.id
+                ));
+            }
+        }
+        assert!(early.is_empty(), "{early:#?}");
+    }
+
+    /// After the starter set, each raid of a career brings at most
+    /// `MAX_NEW_IDEAS` new ideas from the tables, a gun family or the
+    /// kitchen's food counting as one.
+    #[test]
+    fn each_raid_brings_a_few_new_ideas() {
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        let mut first: std::collections::BTreeMap<String, u32> = Default::default();
+        for (_, def) in cat.iter() {
+            let at = if KIT_GUNS.contains(&def.id.as_str()) {
+                Some(0)
+            } else {
+                loot.arrives(&def.id)
+            };
+            if let Some(at) = at {
+                let e = first.entry(idea(def, &cat)).or_insert(at);
+                *e = (*e).min(at);
+            }
+        }
+        let last = first.values().copied().max().unwrap_or(0);
+        let mut over = Vec::new();
+        for raid in 1..=last {
+            let new: Vec<&String> = first
+                .iter()
+                .filter(|(_, r)| **r == raid)
+                .map(|(i, _)| i)
+                .collect();
+            if new.len() > MAX_NEW_IDEAS {
+                over.push(format!("raid {raid}: {} new: {new:?}", new.len()));
+            }
+        }
+        assert!(over.is_empty(), "{over:#?}");
     }
 }
