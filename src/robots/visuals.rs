@@ -1496,6 +1496,13 @@ pub enum MeleeLead {
     Hound { crouch: f32, lunging: bool },
     /// A heavy `raise` seconds into raising its arm, or `slam`ming it.
     Heavy { raise: Option<f32>, slam: bool },
+    /// A walker's turret `aim` seconds into settling on you (and its fire
+    /// through a wall: `walker::BLIND_TELL` is its aim).
+    Walker { aim: f32 },
+    /// A grappler `windup` seconds into rearing back for a throw.
+    Grappler { windup: f32 },
+    /// The Sorter `windup` seconds from its throw, or `swing`ing.
+    Sorter { windup: f32, swing: bool },
 }
 
 /// The glow round a melee machine's lens: the sentry's and the drone's
@@ -1519,60 +1526,161 @@ pub fn melee_halo(lead: MeleeLead) -> LinearRgba {
                 tell_halo(tell_gain(t.min(dur), dur, true))
             })
         }
+        MeleeLead::Walker { aim } => {
+            let dur = super::walker::AIM_TIME;
+            tell_halo(tell_gain(aim, dur, aim > 0.0 && aim < dur))
+        }
+        MeleeLead::Grappler { windup } => {
+            let dur = super::grappler::WINDUP;
+            tell_halo(tell_gain(windup.min(dur), dur, windup > 0.0))
+        }
+        MeleeLead::Sorter { swing: true, .. } => flash,
+        MeleeLead::Sorter { windup, .. } => {
+            let dur = super::sorter::WINDUP;
+            tell_halo(tell_gain(dur - windup, dur, windup > 0.0))
+        }
     }
 }
+
+/// Every attack a machine can hurt you with, and its lead from its tell to
+/// the harm: the one table. Each must show on the body for all of its
+/// lead (the lens's glow, [`melee_halo`]) and give at least
+/// [`super::MIN_TELL`] to read it (`every_attack_tells_on_the_body`). A new
+/// attack joins it, or [`UNTOLD`] with why it's fair.
+pub fn attacks() -> Vec<(&'static str, f32, fn(f32) -> LinearRgba)> {
+    use super::{drone, grappler, heavy, hound_mind, indoor, sorter, walker};
+    use extraction_core::sentry::CHIRP;
+    vec![
+        ("sentry chirp", CHIRP, |t| {
+            super::sentry_look::chirp_halo(t, true)
+        }),
+        ("drone lock", drone::LOCK_TIME, drone_lock_halo),
+        ("walker aim", walker::AIM_TIME, |t| {
+            melee_halo(MeleeLead::Walker { aim: t })
+        }),
+        ("walker through a wall", walker::BLIND_TELL, |t| {
+            melee_halo(MeleeLead::Walker { aim: t })
+        }),
+        ("crawler zap", indoor::ZAP_CHARGE, |t| {
+            melee_halo(MeleeLead::Crawler { charge: t })
+        }),
+        ("hound lunge", hound_mind::CROUCH_TIME, |t| {
+            melee_halo(MeleeLead::Hound {
+                crouch: hound_mind::CROUCH_TIME - t,
+                lunging: false,
+            })
+        }),
+        ("heavy slam", heavy::RAISE_TIME, |t| {
+            melee_halo(MeleeLead::Heavy {
+                raise: Some(t),
+                slam: false,
+            })
+        }),
+        ("grappler harpoon", grappler::WINDUP, |t| {
+            melee_halo(MeleeLead::Grappler { windup: t })
+        }),
+        ("sorter throw", sorter::WINDUP, |t| {
+            melee_halo(MeleeLead::Sorter {
+                windup: sorter::WINDUP - t,
+                swing: false,
+            })
+        }),
+    ]
+}
+
+/// The machines' attacks that aren't a lead to a blow, and why each is fair
+/// without one.
+pub const UNTOLD: &[(&str, &str)] = &[
+    (
+        "plough auger",
+        "no lead: its lane is the danger, and it's told seconds ahead by its \
+         horn, its turning beacon and its plume (`plough`)",
+    ),
+    (
+        "minelayer mine",
+        "a 0.35 s fuse, but the mine is the tell: it lies in a ring of turned \
+         earth and blinks red within 6 m (`minelayer`)",
+    ),
+];
 
 /// A melee machine's lens glow (on its sensor part): its material.
 #[derive(Component)]
 struct MeleeLens(Handle<StandardMaterial>);
 
-/// Every melee machine's lens burns its tell through its lead
-/// ([`melee_halo`]): the glow hung on its eye the first time it's needed.
+/// Every machine's lens burns its tell through its lead ([`melee_halo`],
+/// the brightest of its leads: a crawler is a walker too), the glow hung on
+/// its eye the first time it's needed.
 #[allow(clippy::type_complexity)]
 fn melee_tells(
     mut commands: Commands,
-    crawlers: Query<(&super::indoor::Crawler, &Children)>,
-    hounds: Query<(&super::hound_mind::HoundMind, &Children)>,
-    heavies: Query<(&super::heavy::Arm, &Children)>,
+    attackers: Query<
+        (
+            &Children,
+            Option<&super::walker::Walker>,
+            Option<&super::indoor::Crawler>,
+            Option<&super::hound_mind::HoundMind>,
+            Option<&super::heavy::Arm>,
+            Option<&super::grappler::Grappler>,
+            Option<&super::sorter::Sorter>,
+        ),
+        With<Robot>,
+    >,
+    kids: Query<&Children>,
     parts: Query<(&RobotPart, Option<&MeleeLens>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use super::heavy::ArmState;
-    let leads = crawlers
-        .iter()
-        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.17))
-        .chain(hounds.iter().map(|(h, k)| {
-            (
-                MeleeLead::Hound {
-                    crouch: h.crouch,
-                    lunging: h.lunge > 0.0 && !h.bit,
-                },
-                k,
-                0.14,
-            )
-        }))
-        .chain(heavies.iter().map(|(a, k)| {
-            (
-                MeleeLead::Heavy {
-                    raise: (a.state == ArmState::Raise).then_some(a.t),
-                    slam: a.state == ArmState::Slam,
-                },
-                k,
-                0.22,
-            )
-        }));
-    for (lead, kids, r) in leads {
-        let Some((eye, lens)) = kids
-            .iter()
-            .filter_map(|c| parts.get(c).ok().map(|(p, l)| (c, p, l)))
-            .find(|(_, p, _)| p.role == PartRole::Sensor)
-            .map(|(c, _, l)| (c, l))
-        else {
+    for (children, walker, crawler, hound, arm, grappler, sorter) in &attackers {
+        let mut leads = Vec::new();
+        if let Some(w) = walker {
+            leads.push(MeleeLead::Walker { aim: w.aim });
+        }
+        if let Some(c) = crawler {
+            leads.push(MeleeLead::Crawler { charge: c.charge });
+        }
+        if let Some(h) = hound {
+            leads.push(MeleeLead::Hound {
+                crouch: h.crouch,
+                lunging: h.lunge > 0.0 && !h.bit,
+            });
+        }
+        if let Some(a) = arm {
+            leads.push(MeleeLead::Heavy {
+                raise: (a.state == ArmState::Raise).then_some(a.t),
+                slam: a.state == ArmState::Slam,
+            });
+        }
+        if let Some(g) = grappler {
+            leads.push(MeleeLead::Grappler { windup: g.windup });
+        }
+        if let Some(s) = sorter {
+            leads.push(MeleeLead::Sorter {
+                windup: s.windup,
+                swing: matches!(s.task, super::sorter::Task::Throw { stage: 4, .. }),
+            });
+        }
+        let want = leads
+            .into_iter()
+            .map(melee_halo)
+            .fold(LinearRgba::BLACK, |a, b| if b.red > a.red { b } else { a });
+        // Its eye: a sensor part among its children (or theirs: the
+        // Sorter's head hangs off its carriage).
+        let eye = std::iter::once(children)
+            .chain(children.iter().filter_map(|c| kids.get(c).ok()))
+            .flat_map(|cs| cs.iter())
+            .find(|c| parts.get(*c).is_ok_and(|(p, _)| p.role == PartRole::Sensor));
+        let Some(eye) = eye else {
             continue;
         };
-        let want = melee_halo(lead);
-        match lens {
+        let r = match (crawler, hound, arm, sorter) {
+            (Some(_), ..) => 0.17,
+            (_, Some(_), ..) => 0.14,
+            (_, _, Some(_), _) => 0.22,
+            (.., Some(_)) => 0.25,
+            _ => 0.18,
+        };
+        match parts.get(eye).ok().and_then(|(_, l)| l) {
             Some(MeleeLens(h)) => {
                 if let Some(mut m) = materials.get_mut(h) {
                     if m.emissive != want {
@@ -2851,6 +2959,48 @@ mod signal_lamp_tests {
             },
         ] {
             assert_eq!(lit(rest), 0.0, "{rest:?}: dark at rest");
+        }
+    }
+
+    /// The tell rule, over every machine: each attack in the one table
+    /// ([`attacks`]) shows on its body (its lens's glow) for the whole of
+    /// its lead, never out between pulses, flashes as the harm comes, and
+    /// gives at least `MIN_TELL` to read; an attack that has no lead is in
+    /// [`UNTOLD`] with why it's fair. (Before, the walker's aim, the
+    /// grappler's wind-up and the Sorter's showed no glow on the body:
+    /// a light thrown on the ground, a pose.)
+    #[test]
+    fn every_attack_tells_on_the_body() {
+        let mut fails = Vec::new();
+        for (who, lead, at) in attacks() {
+            if lead < super::super::MIN_TELL {
+                fails.push(format!("{who}: a {lead} s lead"));
+            }
+            let dim = (1..=80)
+                .map(|i| at(lead * i as f32 / 80.0 - 1e-3).red)
+                .fold(f32::MAX, f32::min);
+            if dim < 0.25 {
+                fails.push(format!("{who}: its glow goes out in its lead ({dim})"));
+            }
+            let end = at(lead - 0.02).red;
+            if end < 3.0 {
+                fails.push(format!("{who}: no flash as it comes ({end})"));
+            }
+        }
+        assert!(fails.is_empty(), "{fails:#?}");
+        for (who, why) in UNTOLD {
+            assert!(why.len() > 20, "{who}: say why it's fair");
+        }
+        // And at rest, every one is dark.
+        for rest in [
+            MeleeLead::Walker { aim: 0.0 },
+            MeleeLead::Grappler { windup: 0.0 },
+            MeleeLead::Sorter {
+                windup: 0.0,
+                swing: false,
+            },
+        ] {
+            assert_eq!(melee_halo(rest).red, 0.0, "{rest:?}");
         }
     }
 }
