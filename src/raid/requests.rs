@@ -443,7 +443,7 @@ fn place_cache(
             0.08 + 0.06 * i as f32,
             (i as f32 * 1.7).cos() * 0.2,
         );
-        spawn_item(
+        crate::items::loot::spawn_found(
             commands,
             catalog,
             SpawnItem {
