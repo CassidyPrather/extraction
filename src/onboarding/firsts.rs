@@ -758,7 +758,7 @@ pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the 
 /// convoy took the lot): the driver's own, a magazine and a box of its
 /// rounds, off the ledge. (Gone out unarmed after a lost kit, the hoarder
 /// died two minutes in, four raids running.)
-pub const SPARE_GUN: &str = "Truck: \"No gun? Take my spare off the ledge. Don't lose it.\"";
+pub const SPARE_GUN: &str = "Truck: \"No gun on you. Here, my spare. Don't lose this one.\"";
 
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
@@ -841,7 +841,8 @@ fn spare_radio(
                 || gt.translation().distance(truck.translation()) < 3.0)
     });
     if !armed && opts.map != crate::camp::TRAINING_YARD {
-        for (id, condition) in [("pm_pistol", 0.8), ("pm_mag", 1.0), ("ammo_9x18", 1.0)] {
+        // (Worn as the kit's are.)
+        for (id, condition) in [("pm_pistol", 0.75), ("pm_mag", 0.75), ("ammo_9x18", 1.0)] {
             handover.write(crate::raid::lev::HandOver {
                 id: id.into(),
                 condition,
