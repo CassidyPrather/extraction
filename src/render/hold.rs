@@ -534,12 +534,16 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
     // Turned, round the thing's nearest point to the hand (beside the
     // palm's facing): a rod end-on to the palm, turned, lies off past the
     // fist's end.
+    let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
     let centre = if slide > SLIDE {
-        let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
         near - n * near.dot(n)
     } else {
         Vec3::ZERO
     };
+    // The press runs either side of the thing's nearest point along the
+    // palm's facing (a broad side met aslant, or turned flat, can lie
+    // further off than the press reaches from the hand).
+    let along = near.dot(n);
     let reach = (slide / SLIDE_STEP).round() as i32;
     let mut spots: Vec<(i32, i32)> = (-reach..=reach)
         .flat_map(|a| (-reach..=reach).map(move |b| (a, b)))
@@ -550,7 +554,7 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
         let side_shift = centre + (u * a as f32 + w * b as f32) * SLIDE_STEP;
         // The open hand onto it: the furthest along the palm's facing it
         // can go without sinking in (from standing off, in towards it).
-        let gap = |s: f32| open_gap(side, half, &to_box, side_shift + n * s);
+        let gap = |s: f32| open_gap(side, half, &to_box, side_shift + n * (along + s));
         // In from standing off to its first touch (straight through, a
         // small thing would be passed by).
         let mut prev = -PRESS;
@@ -579,7 +583,7 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
                 hi = m;
             }
         }
-        let shift = side_shift + n * lo;
+        let shift = side_shift + n * (along + lo);
         let mut curl = [0.0; 5];
         let mut open = true;
         for (f, c) in curl.iter_mut().enumerate().take(4) {
