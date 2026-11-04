@@ -690,6 +690,9 @@ pub(super) struct RaidView<'w, 's> {
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     hatch: Res<'w, crate::raid::lev::Handovers>,
+    /// What the driver's firsts said, filled (for the report: a line's
+    /// template quoted "{s} things" where "Crate's empty" was said).
+    spoken: Option<Res<'w, super::firsts::Filled>>,
     buildings: Query<
         'w,
         's,
@@ -2260,6 +2263,19 @@ pub(super) fn direct_raid(
                         (None, _) => {}
                     }
                     state.moments.sort_by(|a, b| a.0.total_cmp(&b.0));
+                }
+                // A moment noted as its line's template ("{s} things")
+                // quotes what was said instead.
+                if let Some(filled) = view.spoken.as_ref() {
+                    for m in state.moments.iter_mut() {
+                        if let Some((t, said)) = filled
+                            .0
+                            .iter()
+                            .find(|(t, said)| said != t && !said.is_empty() && m.2.ends_with(*t))
+                        {
+                            m.2 = format!("{}{said}", &m.2[..m.2.len() - t.len()]);
+                        }
+                    }
                 }
                 report(&mut bot, p, &state.moments);
             }

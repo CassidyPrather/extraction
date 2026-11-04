@@ -262,6 +262,12 @@ pub struct FirstMet(pub First);
 #[derive(Resource, Default, Debug, Clone)]
 pub struct Spoken(pub Vec<String>, pub Vec<f32>);
 
+/// Each first's line as it was filled: (its template, what's said), for
+/// the bots' report (which noted the template, "{s} things", where
+/// "Crate's empty" was said).
+#[derive(Resource, Default, Debug, Clone)]
+pub struct Filled(pub Vec<(&'static str, String)>);
+
 /// Other systems' moments: write this when one happens (each is said once
 /// a career, like the rest). E.g. `MeetFirst(First::NotePinned)` when a
 /// note is read.
@@ -292,6 +298,7 @@ impl Plugin for FirstsPlugin {
         app.init_resource::<Firsts>()
             .init_resource::<Queue>()
             .init_resource::<Spoken>()
+            .init_resource::<Filled>()
             .add_message::<FirstMet>()
             .add_message::<MeetFirst>()
             .add_systems(
@@ -334,10 +341,14 @@ fn meet(
     firsts: &mut Firsts,
     queue: &mut Queue,
     out: &mut MessageWriter<FirstMet>,
+    filled: &mut Filled,
     fill: &dyn Fn(&str) -> String,
 ) -> bool {
     if !firsts.0.insert(f.key()) {
         return false;
+    }
+    for l in f.lines() {
+        filled.0.push((l, fill(l)));
     }
     info!("first time: {f:?}");
     if f.urgent() {
@@ -366,17 +377,30 @@ struct Meet<'w> {
     firsts: ResMut<'w, Firsts>,
     queue: ResMut<'w, Queue>,
     out: MessageWriter<'w, FirstMet>,
+    filled: ResMut<'w, Filled>,
 }
 
 impl Meet<'_> {
     fn meet(&mut self, f: First) -> bool {
-        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, &|l| {
-            l.to_string()
-        })
+        meet(
+            f,
+            &mut self.firsts,
+            &mut self.queue,
+            &mut self.out,
+            &mut self.filled,
+            &|l| l.to_string(),
+        )
     }
 
     fn meet_filled(&mut self, f: First, fill: &dyn Fn(&str) -> String) -> bool {
-        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, fill)
+        meet(
+            f,
+            &mut self.firsts,
+            &mut self.queue,
+            &mut self.out,
+            &mut self.filled,
+            fill,
+        )
     }
 
     fn met(&self, f: First) -> bool {
@@ -730,6 +754,11 @@ fn convoy(
 /// the driver passes his through the hatch, or there'd be no calling him
 /// on the next raid.
 pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
+/// Home with no gun on you, in the crate or on the ledge (a fall, and the
+/// convoy took the lot): the driver's own, a magazine and a box of its
+/// rounds, off the ledge. (Gone out unarmed after a lost kit, the hoarder
+/// died two minutes in, four raids running.)
+pub const SPARE_GUN: &str = "Truck: \"No gun? Take my spare off the ledge. Don't lose it.\"";
 
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
@@ -752,6 +781,7 @@ fn spare_radio(
     )>,
     catalog: Res<crate::items::Catalog>,
     progression: Option<Res<crate::progression::Progression>>,
+    opts: Res<crate::launch::LaunchOptions>,
     stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
     trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
     locals: Query<Entity, With<LocalPlayer>>,
@@ -802,6 +832,22 @@ fn spare_radio(
             condition: 0.8,
         });
         queue.lines.push_back(SPARE_RADIO.into());
+    }
+    // No gun anywhere of yours (in the yard, the kit is the yard's own).
+    let armed = items.iter().any(|(e, it, by, gt)| {
+        catalog.get(it.kind()).firearm.is_some()
+            && (by.is_some_and(|b| b.0 == me)
+                || in_crate(e)
+                || gt.translation().distance(truck.translation()) < 3.0)
+    });
+    if !armed && opts.map != crate::camp::TRAINING_YARD {
+        for (id, condition) in [("pm_pistol", 0.8), ("pm_mag", 1.0), ("ammo_9x18", 1.0)] {
+            handover.write(crate::raid::lev::HandOver {
+                id: id.into(),
+                condition,
+            });
+        }
+        queue.lines.push_back(SPARE_GUN.into());
     }
     if let Some(id) = wanted.filter(|id| !have(id)) {
         let name = catalog
@@ -957,6 +1003,45 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Home with no gun anywhere (the convoy took the kit, the crate's
+    /// empty): the driver's spare, a magazine and rounds come through the
+    /// hatch, and he says so; armed, he doesn't. (Unarmed after a lost kit,
+    /// the hoarder went out and died two minutes in, raid after raid.)
+    #[test]
+    fn no_gun_home_gets_the_spare() {
+        let mut app = app();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let guns: Vec<Entity> = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item)>()
+            .iter(app.world())
+            .filter(|(_, i)| catalog.get(i.kind()).firearm.is_some())
+            .map(|(e, _)| e)
+            .collect();
+        for g in guns {
+            app.world_mut().despawn(g);
+        }
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+        let spoken = &app.world().resource::<Spoken>().0;
+        assert_eq!(
+            spoken.iter().filter(|l| *l == SPARE_GUN).count(),
+            1,
+            "{spoken:?}"
+        );
+        let pistols = app
+            .world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| catalog.get(i.kind()).id == "pm_pistol")
+            .count();
+        assert!(pistols >= 1, "no pistol came through the hatch");
     }
 
     /// Home with no radio anywhere (it went with the rest at a fall): the
