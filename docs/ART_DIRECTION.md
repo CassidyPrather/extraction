@@ -1,5 +1,18 @@
 # Art direction
 
+> **Where visual design stopped (2 November 2026, paused).** On main
+> as of 7a28e6a0:
+> - analytic sky environment light (`render/sky_light.rs`);
+> - rooms lit for the first jobs (`ROOM_ADAPT`, `render/grade.rs`);
+> - held items and gloves readable in dim rooms (`render/held_light.rs`, checked with `scripts/held_check.py`);
+> - no rain under any roof (`world/rain.rs`).
+>
+> **What's next:**
+> - The headset check, owned by the coordinator and Performance:
+>   - the village with `EXTRACTION_NEAR_FILL=0` and `=1`, to confirm the software renderer's wall-time mode isn't real (code review found no per-frame work);
+>   - whether rooms by day read too bright or flat. `ROOM_ADAPT` (1.3) is the lever: see "Rooms by day" below.
+> - After that, the next coordinator brief.
+
 The look the visual changes are held to. `DESIGN.md` says what the game
 is; this says what it should look like, and why. Check every visual
 change against it, with before and after shots from the lookbook
