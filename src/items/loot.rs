@@ -557,7 +557,7 @@ fn spawn_dev_cache(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
