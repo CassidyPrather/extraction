@@ -2414,7 +2414,43 @@ fn round_buildings(world: &World2, from: Vec2, to: Vec2) -> Vec<Vec2> {
                 (s.xf, s.half)
             }),
     );
+    // (Not one the walk starts or ends in: down a site's stair, the way in
+    // is through its door.)
+    let within = |(xf, half): &(Transform, Vec2), p: Vec2| {
+        let l = xf
+            .compute_affine()
+            .inverse()
+            .transform_point3(Vec3::new(p.x, 0.0, p.y));
+        l.x.abs() < half.x + ROUND && l.z.abs() < half.y + ROUND
+    };
+    boxes.extend(
+        kiosk_boxes(&world.zone)
+            .into_iter()
+            .filter(|k| !within(k, from) && !within(k, to)),
+    );
     round_boxes(&boxes, from, to)
+}
+
+/// Every underground site's kiosks on the surface, as boxes (the sites
+/// aren't buildings: the walk home past the pumping station went through
+/// its kiosk's wall, and stood there while a drone shot it).
+fn kiosk_boxes(zone: &crate::world::Zone) -> Vec<(Transform, Vec2)> {
+    use extraction_core::underground as ug;
+    let mut out = Vec::new();
+    for site in ug::placed(&zone.map) {
+        let Some(r) = ug::raster(&site.id) else {
+            continue;
+        };
+        for portal in &r.portals {
+            let w = |x: f32, z: f32| Vec2::from(site.to_world(portal.to_site([x, z])));
+            let c = w(0.0, 0.0);
+            let fwd = (w(0.0, 1.0) - c).normalize_or(Vec2::Y);
+            let xf = Transform::from_xyz(c.x, 0.0, c.y)
+                .with_rotation(Quat::from_rotation_y(fwd.x.atan2(fwd.y)));
+            out.push((xf, Vec2::new(ug::KIOSK[0], ug::KIOSK[1])));
+        }
+    }
+    out
 }
 
 /// The quarantine fence's runs as boxes (`structures::fence_runs`): the
@@ -3716,7 +3752,7 @@ mod indoor_tests {
         app.update();
         let w = app.world_mut();
         let mut q = w.query::<(&crate::world::buildings::Building, &Transform)>();
-        let boxes: Vec<(Transform, Vec2)> = q
+        let mut boxes: Vec<(Transform, Vec2)> = q
             .iter(w)
             .filter(|(b, _)| solid(&b.prefab))
             .map(|(b, xf)| {
@@ -3725,6 +3761,11 @@ mod indoor_tests {
             })
             .collect();
         assert!(boxes.len() > 20, "only {} solids on Marrow", boxes.len());
+        // ...and the underground sites' kiosks (the pumping station's, on
+        // the walk home to the ranger tower).
+        let kiosks = super::kiosk_boxes(w.resource::<crate::world::Zone>());
+        assert!(!kiosks.is_empty(), "Marrow has a site's kiosk");
+        boxes.extend(kiosks);
         let mut through = Vec::new();
         for (xf, half) in &boxes {
             let c = xf.translation.xz();
