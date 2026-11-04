@@ -489,6 +489,12 @@ pub const STROKE_RATE: f32 = 3.0;
 pub const STROKE_DRAG: f32 = 3.0;
 pub const FIRM_PULL: f32 = 0.35;
 pub const SHORT_STIFF: f32 = 0.3;
+/// A crossbow's leaf prod wants 50 kg or more at the string: drawn by hand
+/// it's always this stiff (as stiff as a cold bolt), so the string follows
+/// a firm, steady pull and not a flick. (Not a foot in the stirrup: feet
+/// aren't tracked, and bending to the floor in a headset is a fall waiting
+/// to happen.)
+pub const DRAW_WEIGHT: f32 = 0.8;
 
 /// Where a hand-worked part goes this tick, from `now` toward `want`
 /// (travel, 0..1, over `travel_m` metres), as stiff as the action is and as
@@ -614,8 +620,15 @@ fn work_handles(
         let side = rig.get(hand_e).ok().map(|r| r.side);
         let events = match h.kind {
             HandleKind::String => {
-                let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
-                gun.firearm.set_bolt_travel(travel)
+                let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                let was = gun.firearm.bolt_travel;
+                let stiff = gun.firearm.action_drag().max(DRAW_WEIGHT);
+                let to = drag(was, want, stiff, pull, dt, h.travel);
+                if to != want {
+                    // The hand slides on the string from where it got to.
+                    taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));
+                }
+                gun.firearm.set_bolt_travel(to)
             }
             HandleKind::Slide | HandleKind::ChargingHandle => {
                 if d.z > 0.003 {
