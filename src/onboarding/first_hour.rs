@@ -3287,10 +3287,21 @@ pub(super) fn first_fight(
             // The melee machines, on their rounds off the way as the walker
             // is: they close to strike, so how near they are when you first
             // know is the fight.
+            // As the director sends one: a response team to where the
+            // newcomer was heard, on its short job, so having lost them it
+            // searches, gives up and goes home through the Gate (a hound
+            // is never on a watch post).
             "hound" => {
                 let p = at + side * 20.0;
                 let site = zone.on_ground(p.x, p.y);
-                crate::robots::hound::spawn_hound(&mut commands, &zone, site, job(site));
+                let to = zone.on_ground(at.x, at.y);
+                let response = crate::robots::Job {
+                    kind: crate::robots::JobKind::Response,
+                    site: to,
+                    duration: 40.0,
+                    exit: crate::robots::director::gate(&zone),
+                };
+                crate::robots::hound::spawn_hound(&mut commands, &zone, site, response);
                 p
             }
             "heavy" => {
