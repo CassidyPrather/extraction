@@ -62,7 +62,7 @@ impl Plugin for RobotVisualsPlugin {
             )
             // (After every Update has had its say on where each is in its
             // lead.)
-            .add_systems(PostUpdate, melee_tells);
+            .add_systems(PostUpdate, (melee_tells, stalk_eyes));
     }
 }
 
@@ -1496,6 +1496,13 @@ pub enum MeleeLead {
     Hound { crouch: f32, lunging: bool },
     /// A heavy `raise` seconds into raising its arm, or `slam`ming it.
     Heavy { raise: Option<f32>, slam: bool },
+    /// A walker's turret `aim` seconds into settling on you (and its fire
+    /// through a wall: `walker::BLIND_TELL` is its aim).
+    Walker { aim: f32 },
+    /// A grappler `windup` seconds into rearing back for a throw.
+    Grappler { windup: f32 },
+    /// The Sorter `windup` seconds from its throw, or `swing`ing.
+    Sorter { windup: f32, swing: bool },
 }
 
 /// The glow round a melee machine's lens: the sentry's and the drone's
@@ -1519,60 +1526,190 @@ pub fn melee_halo(lead: MeleeLead) -> LinearRgba {
                 tell_halo(tell_gain(t.min(dur), dur, true))
             })
         }
+        MeleeLead::Walker { aim } => {
+            let dur = super::walker::AIM_TIME;
+            tell_halo(tell_gain(aim, dur, aim > 0.0 && aim < dur))
+        }
+        MeleeLead::Grappler { windup } => {
+            let dur = super::grappler::WINDUP;
+            tell_halo(tell_gain(windup.min(dur), dur, windup > 0.0))
+        }
+        MeleeLead::Sorter { swing: true, .. } => flash,
+        MeleeLead::Sorter { windup, .. } => {
+            let dur = super::sorter::WINDUP;
+            tell_halo(tell_gain(dur - windup, dur, windup > 0.0))
+        }
     }
 }
+
+/// Every attack a machine can hurt you with, and its lead from its tell to
+/// the harm: the one table. Each must show on the body for all of its
+/// lead (the lens's glow, [`melee_halo`]) and give at least
+/// [`super::MIN_TELL`] to read it (`every_attack_tells_on_the_body`). A new
+/// attack joins it, or [`UNTOLD`] with why it's fair.
+pub fn attacks() -> Vec<(&'static str, f32, fn(f32) -> LinearRgba)> {
+    use super::{drone, grappler, heavy, hound_mind, indoor, sorter, walker};
+    use extraction_core::sentry::CHIRP;
+    vec![
+        ("sentry chirp", CHIRP, |t| {
+            super::sentry_look::chirp_halo(t, true)
+        }),
+        ("drone lock", drone::LOCK_TIME, drone_lock_halo),
+        ("walker aim", walker::AIM_TIME, |t| {
+            melee_halo(MeleeLead::Walker { aim: t })
+        }),
+        ("walker through a wall", walker::BLIND_TELL, |t| {
+            melee_halo(MeleeLead::Walker { aim: t })
+        }),
+        ("crawler zap", indoor::ZAP_CHARGE, |t| {
+            melee_halo(MeleeLead::Crawler { charge: t })
+        }),
+        ("hound lunge", hound_mind::CROUCH_TIME, |t| {
+            melee_halo(MeleeLead::Hound {
+                crouch: hound_mind::CROUCH_TIME - t,
+                lunging: false,
+            })
+        }),
+        ("heavy slam", heavy::RAISE_TIME + heavy::SLAM_TIME, |t| {
+            melee_halo(MeleeLead::Heavy {
+                raise: (t < heavy::RAISE_TIME).then_some(t),
+                slam: t >= heavy::RAISE_TIME,
+            })
+        }),
+        ("grappler harpoon", grappler::WINDUP, |t| {
+            melee_halo(MeleeLead::Grappler { windup: t })
+        }),
+        ("sorter throw", sorter::WINDUP, |t| {
+            melee_halo(MeleeLead::Sorter {
+                windup: sorter::WINDUP - t,
+                swing: false,
+            })
+        }),
+    ]
+}
+
+/// An attack that harms you leads by at least this (s): the gunners' bar,
+/// a walker's full aim, the one figure Robot minds' constants use too
+/// (`indoor::ZAP_CHARGE`, `hound::COIL_TIME`).
+pub const MIN_LEAD: f32 = super::walker::AIM_TIME;
+
+/// Attacks in [`attacks`] that lead by less than [`MIN_LEAD`] and why
+/// that's fair: neither harms you as a blow does.
+pub const SHORT_LEADS: &[(&str, &str)] = &[
+    (
+        "grappler harpoon",
+        "a grab, not harm: the harpoon writes no Shot or Hurt, its line \
+         slows and drags you (`Tethered`)",
+    ),
+    (
+        "sorter throw",
+        "no harm: a thrown tote writes no Shot or Hurt (Robot minds checked, \
+         4 November); if a tote ever does damage, it goes pending till \
+         `sorter::WINDUP` rises",
+    ),
+];
+
+/// Attacks under [`MIN_LEAD`] today with the change that brings them to
+/// it on its way; each comes off this list as it lands (the test fails
+/// while one that's met the bar is still on it).
+pub const PENDING_LEADS: &[(&str, &str)] = &[(
+    "heavy slam",
+    "Heavy's RAISE_TIME 1.3 s: its raise and slam 1.52 s",
+)];
+
+/// The machines' attacks that aren't a lead to a blow, and why each is fair
+/// without one.
+pub const UNTOLD: &[(&str, &str)] = &[
+    (
+        "plough auger",
+        "no lead: its lane is the danger, and it's told seconds ahead by its \
+         horn, its turning beacon and its plume (`plough`)",
+    ),
+    (
+        "minelayer mine",
+        "a 0.35 s fuse, but the mine is the tell: it lies in a ring of turned \
+         earth and blinks red within 6 m (`minelayer`)",
+    ),
+];
 
 /// A melee machine's lens glow (on its sensor part): its material.
 #[derive(Component)]
 struct MeleeLens(Handle<StandardMaterial>);
 
-/// Every melee machine's lens burns its tell through its lead
-/// ([`melee_halo`]): the glow hung on its eye the first time it's needed.
+/// Every machine's lens burns its tell through its lead ([`melee_halo`],
+/// the brightest of its leads: a crawler is a walker too), the glow hung on
+/// its eye the first time it's needed.
 #[allow(clippy::type_complexity)]
 fn melee_tells(
     mut commands: Commands,
-    crawlers: Query<(&super::indoor::Crawler, &Children)>,
-    hounds: Query<(&super::hound_mind::HoundMind, &Children)>,
-    heavies: Query<(&super::heavy::Arm, &Children)>,
+    attackers: Query<
+        (
+            &Children,
+            Option<&super::walker::Walker>,
+            Option<&super::indoor::Crawler>,
+            Option<&super::hound_mind::HoundMind>,
+            Option<&super::heavy::Arm>,
+            Option<&super::grappler::Grappler>,
+            Option<&super::sorter::Sorter>,
+        ),
+        With<Robot>,
+    >,
+    kids: Query<&Children>,
     parts: Query<(&RobotPart, Option<&MeleeLens>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use super::heavy::ArmState;
-    let leads = crawlers
-        .iter()
-        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.17))
-        .chain(hounds.iter().map(|(h, k)| {
-            (
-                MeleeLead::Hound {
-                    crouch: h.crouch,
-                    lunging: h.lunge > 0.0 && !h.bit,
-                },
-                k,
-                0.14,
-            )
-        }))
-        .chain(heavies.iter().map(|(a, k)| {
-            (
-                MeleeLead::Heavy {
-                    raise: (a.state == ArmState::Raise).then_some(a.t),
-                    slam: a.state == ArmState::Slam,
-                },
-                k,
-                0.22,
-            )
-        }));
-    for (lead, kids, r) in leads {
-        let Some((eye, lens)) = kids
-            .iter()
-            .filter_map(|c| parts.get(c).ok().map(|(p, l)| (c, p, l)))
-            .find(|(_, p, _)| p.role == PartRole::Sensor)
-            .map(|(c, _, l)| (c, l))
-        else {
+    for (children, walker, crawler, hound, arm, grappler, sorter) in &attackers {
+        let mut leads = Vec::new();
+        if let Some(w) = walker {
+            leads.push(MeleeLead::Walker { aim: w.aim });
+        }
+        if let Some(c) = crawler {
+            leads.push(MeleeLead::Crawler { charge: c.charge });
+        }
+        if let Some(h) = hound {
+            leads.push(MeleeLead::Hound {
+                crouch: h.crouch,
+                lunging: h.lunge > 0.0 && !h.bit,
+            });
+        }
+        if let Some(a) = arm {
+            leads.push(MeleeLead::Heavy {
+                raise: (a.state == ArmState::Raise).then_some(a.t),
+                slam: a.state == ArmState::Slam,
+            });
+        }
+        if let Some(g) = grappler {
+            leads.push(MeleeLead::Grappler { windup: g.windup });
+        }
+        if let Some(s) = sorter {
+            leads.push(MeleeLead::Sorter {
+                windup: s.windup,
+                swing: matches!(s.task, super::sorter::Task::Throw { stage: 4, .. }),
+            });
+        }
+        let want = leads
+            .into_iter()
+            .map(melee_halo)
+            .fold(LinearRgba::BLACK, |a, b| if b.red > a.red { b } else { a });
+        // Its eye: a sensor part among its children (or theirs: the
+        // Sorter's head hangs off its carriage).
+        let eye = std::iter::once(children)
+            .chain(children.iter().filter_map(|c| kids.get(c).ok()))
+            .flat_map(|cs| cs.iter())
+            .find(|c| parts.get(*c).is_ok_and(|(p, _)| p.role == PartRole::Sensor));
+        let Some(eye) = eye else {
             continue;
         };
-        let want = melee_halo(lead);
-        match lens {
+        let r = match (crawler, hound, arm, sorter) {
+            (Some(_), ..) => 0.17,
+            (_, Some(_), ..) => 0.2,
+            (_, _, Some(_), _) => 0.22,
+            (.., Some(_)) => 0.25,
+            _ => 0.18,
+        };
+        match parts.get(eye).ok().and_then(|(_, l)| l) {
             Some(MeleeLens(h)) => {
                 if let Some(mut m) = materials.get_mut(h) {
                     if m.emissive != want {
@@ -2065,6 +2202,69 @@ pub const DAZZLED_GUTTER: f32 = 0.85;
 /// A robot's own eye material, so its eye can say how alert it is.
 #[derive(Component)]
 struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
+
+/// A hound stalking you (Investigate, going low: `hound_mind`'s stalk)
+/// keeps its eye down to this much of what it would burn...
+pub const STALK_DIM: f32 = 0.15;
+/// ...and narrowed to this much of its height: a low, slitted ember,
+/// unlike its dull red at rest and nothing like the red pulse of a tell.
+pub const STALK_SLIT: f32 = 0.4;
+
+/// A stalking hound's eye, from the glow its mood would give it.
+pub fn stalk_eye(c: LinearRgba) -> LinearRgba {
+    c * STALK_DIM
+}
+
+/// An eye narrowed while its hound stalks: its height before.
+#[derive(Component)]
+struct Slit(f32);
+
+/// A stalking hound's eye dims and narrows (after `alert_eyes` has set its
+/// mood); back as it was once it's out of the stalk.
+#[allow(clippy::type_complexity)]
+fn stalk_eyes(
+    mut commands: Commands,
+    hounds: Query<(&AlertEye, &super::Brain, Option<&super::Intent>), With<super::hound::Hound>>,
+    mut eyes: Query<(Entity, &Eye, &mut Transform, Option<&Slit>)>,
+    parts: Query<&RobotPart>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let stalking = |robot: Entity| {
+        hounds.get(robot).is_ok_and(|(_, b, i)| {
+            matches!(b, super::Brain::Investigate { .. }) && i.is_some_and(|i| i.low)
+        })
+    };
+    for (own, ..) in hounds.iter().filter(|(_, b, i)| {
+        matches!(b, super::Brain::Investigate { .. }) && i.is_some_and(|i| i.low)
+    }) {
+        for h in [&own.0, &own.1] {
+            if let Some(mut m) = materials.get_mut(h) {
+                m.emissive = stalk_eye(m.emissive);
+            }
+        }
+    }
+    for (e, eye, mut t, slit) in &mut eyes {
+        // (Its eye, not its glowing seams.)
+        let Some(part) = parts
+            .get(eye.part)
+            .ok()
+            .filter(|p| p.role == PartRole::Sensor)
+        else {
+            continue;
+        };
+        match (stalking(part.robot), slit) {
+            (true, None) => {
+                commands.entity(e).insert(Slit(t.scale.y));
+                t.scale.y *= STALK_SLIT;
+            }
+            (false, Some(Slit(y))) => {
+                t.scale.y = *y;
+                commands.entity(e).remove::<Slit>();
+            }
+            _ => {}
+        }
+    }
+}
 
 /// Eyes say what the robot knows: a dull red at work, brighter as its
 /// suspicion rises, and hot (toward orange-white) while it can make you
@@ -2852,5 +3052,87 @@ mod signal_lamp_tests {
         ] {
             assert_eq!(lit(rest), 0.0, "{rest:?}: dark at rest");
         }
+    }
+
+    /// The tell rule, over every machine: each attack in the one table
+    /// ([`attacks`]) shows on its body (its lens's glow) for the whole of
+    /// its lead, never out between pulses, flashes as the harm comes, and
+    /// gives at least `MIN_TELL` to read; an attack that has no lead is in
+    /// [`UNTOLD`] with why it's fair. (Before, the walker's aim, the
+    /// grappler's wind-up and the Sorter's showed no glow on the body:
+    /// a light thrown on the ground, a pose.)
+    #[test]
+    fn every_attack_tells_on_the_body() {
+        let mut fails = Vec::new();
+        let short = |who: &str| SHORT_LEADS.iter().any(|(w, _)| *w == who);
+        let pending = |who: &str| PENDING_LEADS.iter().any(|(w, _)| *w == who);
+        for (who, lead, at) in attacks() {
+            if lead < super::super::MIN_TELL {
+                fails.push(format!("{who}: a {lead} s lead"));
+            }
+            if lead < MIN_LEAD && !short(who) && !pending(who) {
+                fails.push(format!("{who}: leads by {lead} s, under {MIN_LEAD} s"));
+            }
+            if lead >= MIN_LEAD && pending(who) {
+                fails.push(format!("{who}: meets the bar now: off PENDING_LEADS"));
+            }
+            let dim = (1..=80)
+                .map(|i| at(lead * i as f32 / 80.0 - 1e-3).red)
+                .fold(f32::MAX, f32::min);
+            if dim < 0.25 {
+                fails.push(format!("{who}: its glow goes out in its lead ({dim})"));
+            }
+            let end = at(lead - 0.02).red;
+            if end < 3.0 {
+                fails.push(format!("{who}: no flash as it comes ({end})"));
+            }
+        }
+        assert!(fails.is_empty(), "{fails:#?}");
+        for (who, why) in UNTOLD {
+            assert!(why.len() > 20, "{who}: say why it's fair");
+        }
+        // And at rest, every one is dark.
+        for rest in [
+            MeleeLead::Walker { aim: 0.0 },
+            MeleeLead::Grappler { windup: 0.0 },
+            MeleeLead::Sorter {
+                windup: 0.0,
+                swing: false,
+            },
+        ] {
+            assert_eq!(melee_halo(rest).red, 0.0, "{rest:?}");
+        }
+    }
+
+    /// A stalking hound's eye reads as neither at rest nor a tell: its
+    /// mood's red (suspicious, it would burn brighter than at rest) dims
+    /// to well under a resting eye, and narrows, while a tell burns well
+    /// over a resting eye with its glow. The eye is a lamp (fogless, drawn
+    /// far): what it reads as at 5 m it reads as at 10-15 m in fog.
+    #[test]
+    fn a_stalking_hounds_eye_is_neither_rest_nor_a_tell() {
+        use crate::render::tells::eye_colour;
+        let red = |c: [f32; 3]| c[0];
+        let rest = red(eye_colour(0.0, 0.0));
+        // Stalking: it's heard you (suspicious), it doesn't see you.
+        let stalk = stalk_eye(LinearRgba::rgb(
+            eye_colour(0.6, 0.0)[0],
+            eye_colour(0.6, 0.0)[1],
+            eye_colour(0.6, 0.0)[2],
+        ))
+        .red;
+        // A tell: it sees you, and its lens's glow at the floor of its pulse.
+        let tell = red(eye_colour(1.0, 1.0))
+            + melee_halo(MeleeLead::Hound {
+                crouch: 0.3,
+                lunging: false,
+            })
+            .red;
+        assert!(rest / stalk >= 2.5, "stalk {stalk} against rest {rest}");
+        assert!(tell / rest >= 2.0, "tell {tell} against rest {rest}");
+        assert!(STALK_SLIT <= 0.5, "and narrowed");
+        let mut assets = Assets::<StandardMaterial>::default();
+        let eye = mats(&mut assets).eye;
+        assert!(!assets.get(&eye).unwrap().fog_enabled);
     }
 }
