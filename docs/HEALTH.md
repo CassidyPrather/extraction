@@ -83,7 +83,7 @@ As of 8d5c110.
 | test / run | class | owner | status |
 | - | - | - | - |
 | The broken walker never placed on job 2 in one app session: `Director` is made at Startup and `broken_placed` set on its first tick (job 1) | real bug; `second_hour` shows no `broken walker placed` line | Robot minds | fix and fail-first test coming |
-| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | is it disk or CPU? the split is running | Verifier, then Performance | open |
+| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | disk: the first run after a container restart took 28.0 s, waiting on arrivals; with the page cache evicted it took 5.4-5.9 s, like warm. The gauge now reads assets/ before its clock (31fa901b + 8c226125, on claude/polish-verifier), and after a fresh eviction the load was 5.41 s of 7.1 | Verifier, Performance | fix pushed, to merge |
 | Sim: Sallow seed 6 dies to a fall at (50.9, 163.8) while travelling (79 hp in a second) | | Map design / coordinator | reported |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
