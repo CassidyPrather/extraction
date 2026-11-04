@@ -545,7 +545,17 @@ mod tests {
         let loot = app.world().resource::<Loot>().0.clone();
         let mut early = Vec::new();
         for r in 0..6 {
-            for id in rolled_on(&mut app, r).keys() {
+            let rolled = rolled_on(&mut app, r);
+            // Hana's tape is there from the first, by her letter.
+            assert!(
+                rolled.contains_key("tape_practice"),
+                "raid {r}: no tape_practice"
+            );
+            for id in rolled.keys() {
+                // A laid story beat (Radio's, by Story's ask).
+                if crate::radio::places::FROM_THE_START.contains(&id.as_str()) {
+                    continue;
+                }
                 if !arrived(&loot, Some(r), id) {
                     early.push(format!("{id} on raid {r}, out from {:?}", loot.arrives(id)));
                 }

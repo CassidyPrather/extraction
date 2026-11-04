@@ -222,6 +222,12 @@ pub fn reach(def: &extraction_core::items::ItemDef) -> f32 {
     0.5 * s[0].hypot(s[2])
 }
 
+/// Laid from a career's first raid, whatever loot's `from_raid` says: a
+/// story beat, not a find among finds. Hana's tape by her letter (Story:
+/// Lev's drive home, "That's Anna playing", hangs on it); the player to
+/// hear it on waits for the tables, as the rest do.
+pub const FROM_THE_START: &[&str] = &["tape_practice"];
+
 /// Lays this valley's tapes and players: part of the zone's loot roll
 /// (`items::loot::roll_zone_loot`), so a zone restored from a save keeps
 /// what it had instead of getting another set, and a new cycle lays them
@@ -237,7 +243,10 @@ pub fn lay_tapes(
     arrived: &dyn Fn(&str) -> bool,
 ) {
     let mut taken = Vec::new();
-    for p in PLACES.iter().filter(|p| p.map == map && arrived(p.item)) {
+    for p in PLACES
+        .iter()
+        .filter(|p| p.map == map && (arrived(p.item) || FROM_THE_START.contains(&p.item)))
+    {
         let Some(kind) = catalog.kind(p.item) else {
             warn!("no item {}", p.item);
             continue;
