@@ -450,18 +450,37 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
     if held {
         return best;
     }
-    // Turned to the nearest ways a hand could hold its box (each side of
-    // it square to the palm and the fist), nearest first.
-    let mut turns: Vec<Quat> = square_turns()
+    // Turned: first the palm laid flat on a side (the least tilt that
+    // does it: a hand come at a broad side aslant met it with its
+    // fingertips), then to the nearest ways a hand could hold its box
+    // (each side of it square to the palm and the fist); nearest first
+    // within each.
+    let n = palm_normal(side);
+    let by_angle = |a: &Quat, b: &Quat| {
+        a.angle_between(Quat::IDENTITY)
+            .total_cmp(&b.angle_between(Quat::IDENTITY))
+    };
+    let mut flat: Vec<Quat> = [
+        Vec3::X,
+        Vec3::NEG_X,
+        Vec3::Y,
+        Vec3::NEG_Y,
+        Vec3::Z,
+        Vec3::NEG_Z,
+    ]
+    .map(|f| Quat::from_rotation_arc(n, item.rotation * -f))
+    .into_iter()
+    .filter(|t| t.angle_between(Quat::IDENTITY) > 0.05)
+    .collect();
+    flat.sort_by(by_angle);
+    let mut square: Vec<Quat> = square_turns()
         .map(|m| item.rotation * m.inverse())
         .filter(|t| t.angle_between(Quat::IDENTITY) > 0.05)
         .collect();
-    turns.sort_by(|a, b| {
-        a.angle_between(Quat::IDENTITY)
-            .total_cmp(&b.angle_between(Quat::IDENTITY))
-    });
+    square.sort_by(by_angle);
+    let turns: Vec<Quat> = flat.into_iter().take(3).chain(square).collect();
     let mut best_score = score(&grasp(side, half, item, &best));
-    for turn in turns.into_iter().take(TURNS) {
+    for turn in turns.into_iter().take(TURNS + 3) {
         let inside = Transform::from_translation(turn.inverse() * item.translation)
             .with_rotation(turn.inverse() * item.rotation);
         let (s, held) = seat_as(side, half, inside, TURNED_SLIDE);
