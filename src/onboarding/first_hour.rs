@@ -575,6 +575,8 @@ pub(super) struct Newcomer {
     walking_off_until: f32,
     /// When it first raised its arm at it.
     heavy_since: f32,
+    /// Took what the driver put on the ledge, woken in the truck.
+    took_ledge: bool,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -2255,6 +2257,15 @@ pub(super) fn direct_raid(
             }
         }
         Leg::Done => {
+            // Woken in the truck after a fall: first what the driver put on
+            // the ledge (the spare radio, the spare pistol; left there, the
+            // newcomer went back out with no radio to call the truck with).
+            if raid.phase == Phase::AtBase && !state.took_ledge {
+                state.took_ledge = true;
+                state.leg = Leg::Handed;
+                state.tries = 0;
+                return;
+            }
             if !state.reported {
                 state.reported = true;
                 // The fight, if there was one: each tell, and the first hit
