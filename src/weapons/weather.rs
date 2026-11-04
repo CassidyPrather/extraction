@@ -824,6 +824,22 @@ pub fn fog_lenses(
 mod tests {
     use super::*;
 
+    /// Steel rusts, aluminium wears bare, wood and the rest fade: by the
+    /// model material's name, the lacquered and anodised ones included
+    /// (their metallic is 0, as wood's is).
+    #[test]
+    fn each_finish_ages_as_its_material() {
+        for n in ["Steel", "Blued", "Stamped", "Black", "Iron", "Dark"] {
+            assert_eq!(ages(Some(n), 0.0), Ages::Rusts, "{n}");
+        }
+        assert_eq!(ages(Some("Alloy"), 0.0), Ages::Bares);
+        for n in ["Wood", "Bakelite", "Polymer", "Rubber"] {
+            assert_eq!(ages(Some(n), 0.0), Ages::Fades, "{n}");
+        }
+        assert_eq!(ages(None, 0.9), Ages::Rusts);
+        assert_eq!(ages(None, 0.0), Ages::Fades);
+    }
+
     /// Rust shows from condition 0.8, is plain where the action starts to
     /// drag (0.6, weapon feel's line), and is through near failure (0.35).
     #[test]
