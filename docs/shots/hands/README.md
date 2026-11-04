@@ -188,11 +188,15 @@ prod gives (the string's rest from z -0.33 to -0.22) and the front grip
 110 mm back. Top, the support palm under the new front grip, up into it;
 below, the fist closed on the string at its new rest. Both follow the
 layout (`support_pose`, `handle_pose`): nothing of the hands' changed.
-`33_held_free.jpg` (`fp:<item>,2.2` for the first raid's starter loot,
-in the left hand, Marrow Creek's grey daylight; each pair before, after):
+`33_held_free.jpg` (`fp:<item>,2.2` and `fp:<item>+palm,2.2` for the
+first raid's starter loot, in the left hand, Marrow Creek's grey daylight;
+each before, after, and after on the upturned palm):
 before, a thing held free sat wherever the hand took it, and the glove
 curled by its smallest size: the fingers closed through a tin or round
 the air beside a magazine. After, the glove is seated on it
 (`render::hold::seat`): the palm on it, each finger closed until it
 touches, the thumb laid on a side. The gallery takes each thing as a
-hand picks it up (`render::hold::taken`: its thinnest side to the palm).
+hand picks it up (`render::hold::taken`: its thinnest side to the palm). Small
+things (a power cell, a bolt) lie on a hand still nearly open, the
+fingers touching at their roots rather than closed round them: held, by
+the rule, but the next thing to better.
