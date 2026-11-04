@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 63a83d1 | 2026-11-04 (gate 169, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Kettle 8, Marrow 7, Rime 7, Sallow 6); stucks 41 (all of the +2 in Marrow; every other valley's stucks identical run for run); Marrow seed 2 now dies to a Walker at (-88.0, -24.7) while travelling; Kettle seed 6 now extracts; Sallow seed 6's fall unchanged; stowing unchanged (1978 carried, 0 drops, kit 40/40, 1 stow stuck); 13/13 contract scenarios; second_hour passes (it never reaches job 2, so no walker line either way); `--check-buildings` 42 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1367 lib, 322 + 47 core, 0 FAILED | first_contact passes on its first run; gauges all within budget |
 | 8d5c110 | 2026-11-04 (release check, after the pause) | 40/40 exit 0, no timeouts, 36 extracted; stucks 39; Sallow seed 6 dies to a fall at (50.9, 163.8) from 79 hp; stowing unchanged; 13/13 contract scenarios; second_hour passes, no broken walker placed (the Director looks once per app, on job 1); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1356 lib, 319 + 47 core, 0 FAILED | first_contact cold run over on Marrow (10.07 > 9.8 s, 273 frames), passes alone; gauges 18/18 |
 | c55626a | 2026-11-01 20:30 (release check) | 40/40 exit 0, no timeouts, 35 extracted; stucks 27; stowing unchanged; 13/13 contract scenarios; second_hour 0/40 (Onboarding's fix in gate 150), no broken-walker line (never reaches job 2); `--check-buildings` 0 flagged; sim_guards pass | 1 FAILED: gauge_puffs_hold_the_stereo_budget (the sky now counted; 10° cap in gate 150) | gauges 14/19: Marrow m05_spruce ×4 (the sky now counted, 79f500f6; to re-baseline), first_contact 1-4% over (this container's disk; runs first from the next check) |
 | d2be4d5 | 2026-11-01 14:30 (gates 135-138, release check) | 40/40 exit 0, no timeouts, 34 extracted; stucks 34 (47); stowing unchanged (all carried out, 0 room drops, kit 40/40); 13/13 contract scenarios; second_hour 0/40 (no gun, a door at x -12.2 out of reach; first run, no baseline); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1310 lib, 315 + 47 core, 0 FAILED | gauges 18/19: gauge_items_fall_asleep (known; 41e780da) |
@@ -78,12 +79,13 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 8d5c110.
+As of 63a83d1.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| The broken walker never placed on job 2 in one app session: `Director` is made at Startup and `broken_placed` set on its first tick (job 1) | real bug; `second_hour` shows no `broken walker placed` line | Robot minds | fix and fail-first test coming |
-| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | disk: the first run after a container restart took 28.0 s, waiting on arrivals; with the page cache evicted it took 5.4-5.9 s, like warm. The gauge now reads assets/ before its clock (31fa901b + 8c226125, on claude/polish-verifier), and after a fresh eviction the load was 5.41 s of 7.1 | Verifier, Performance | fix pushed, to merge |
+| The broken walker never placed on job 2 in one app session: `Director` is made at Startup and `broken_placed` set on its first tick (job 1) | real bug; `second_hour` shows no `broken walker placed` line | Robot minds | fixed in 9bfdd9df (`the_second_job_meets_it_in_the_same_session`), not yet on a tested main; second_hour stays on job 1, so the check will grep `first_jobs_cautious` instead |
+| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | disk: the first run after a container restart took 28.0 s, waiting on arrivals; with the page cache evicted it took 5.4-5.9 s, like warm. The gauge now reads assets/ before its clock (31fa901b + 8c226125 + 2fb17060, on main from 8e76ed67), and after a fresh eviction the load was 5.41 s of 7.1 | Verifier, Performance | merged; close once a tested main carries it |
+| Sim: Marrow seed 2 dies to a Walker at (-88.0, -24.7) while travelling (new in 63a83d1; extracted at 8d5c110). Replay: `SIM_NO_JOB=1 extraction --sim-run smoke --map marrow_creek --seed 2 --headless` | | Robot minds | reported |
 | Sim: Sallow seed 6 dies to a fall at (50.9, 163.8) while travelling (79 hp in a second) | | Map design / coordinator | reported |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
