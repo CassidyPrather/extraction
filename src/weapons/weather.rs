@@ -621,7 +621,9 @@ pub fn weather_looks(
 }
 
 /// `--gallery <gun>+grime+wet` and `scopeview:<scope>+fog` (dev): the
-/// things shown as filthy, soaked or fogged, held so.
+/// things shown as filthy, soaked or fogged, held so. `+foul` (fouled
+/// through), `+worn` (condition 0.45) and `+failing` (0.08) show a gun's
+/// condition the same way.
 pub fn gallery_weather(
     opts: Res<crate::launch::LaunchOptions>,
     mut things: Query<(&mut Weathering, Option<&mut Gun>)>,
@@ -635,7 +637,12 @@ pub fn gallery_weather(
         first.contains("+wet"),
         first.contains("+fog"),
     );
-    if !(grime || wet || fog) {
+    let (foul, worn, failing) = (
+        first.contains("+foul"),
+        first.contains("+worn"),
+        first.contains("+failing"),
+    );
+    if !(grime || wet || fog || foul || worn || failing) {
         return;
     }
     for (mut w, gun) in &mut things {
@@ -645,8 +652,19 @@ pub fn gallery_weather(
         if fog {
             w.fog = 1.0;
         }
-        if let (true, Some(mut g)) = (grime, gun) {
-            g.firearm.grime = 1.0;
+        if let Some(mut g) = gun {
+            if grime {
+                g.firearm.grime = 1.0;
+            }
+            if foul {
+                g.firearm.fouling = 1.0;
+            }
+            if worn {
+                g.firearm.condition = 0.45;
+            }
+            if failing {
+                g.firearm.condition = 0.08;
+            }
         }
     }
 }
