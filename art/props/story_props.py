@@ -51,7 +51,7 @@ def cork_board():
     reset()
     W, H = 1.2, 0.7
     b = Part("cork_board")
-    b.box((W, H, 0.02), (0.0, 0.0, 0.0), "Leather", segs=1)
+    b.box((W, H, 0.02), (0.0, 0.0, 0.0), "Cork", segs=1)
     # The frame: four timber rails round the cork, their backs at z -0.008
     # behind the cork's back, their fronts 12 mm proud of its face.
     F, z0, z1 = 0.035, -0.012, 0.022
