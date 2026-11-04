@@ -306,7 +306,7 @@
         // The observatory on its summit.
         (prefab: "observatory", at: (-208.0, -210.0), rot: 55.0, tag: "observatory"),
         // The col track's refuge, halfway over the white: a roof in the snow.
-        (prefab: "shed", at: (-15.9, -88.9), rot: 149.0, tag: "track_refuge"),
+        (prefab: "shed", at: (2.4, -83.3), rot: 246.0, tag: "track_refuge"),
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
