@@ -2492,6 +2492,22 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             let legs: Vec<(P2, P2)> = std::iter::once((ins, at))
                 .chain(home.iter().take(2).map(|rv| (at, *rv)))
                 .collect();
+            // How far a first raid walks: there, and home from there to the
+            // nearest rendezvous by the way (not as the crow flies).
+            let walk = |a: P2, b: P2| {
+                comfy
+                    .path(a, b)
+                    .map(|p| p.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>())
+            };
+            let home_walk = home
+                .iter()
+                .filter_map(|rv| walk(at, *rv))
+                .fold(f32::INFINITY, f32::min);
+            r.measures.push(format!(
+                "first job {what}: there {:.0} m, home {:.0} m",
+                walk(ins, at).unwrap_or(f32::NAN),
+                home_walk
+            ));
             // (Home or there, the walk.)
             let mut walks: Vec<(bool, Vec<P2>)> = Vec::new();
             for (n, (from, to)) in legs.into_iter().enumerate() {

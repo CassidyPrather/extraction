@@ -192,3 +192,19 @@ At (236.0, -46.0), 45.7 m; looking 65 deg along the way, and 21 deg to Gauge hou
 - A corridor under the dam (s05 to s08, 120 to 240 m): the route runs along the dam's foot between its wall and a bank. The dam should be the valley's awe; here it's a wall you walk beside, and the reservoir is never seen.
 - A reveal with nothing in it (s09): on the dam top the water should open out; the frame looks along the road at the filter house instead.
 - The rest is calm and plain: the shore road to the Gauge house is fine, if long.
+
+## Fixes
+
+Before on the left, after on the right.
+
+### 1. The valve house's arrival (s04)
+
+The scour key lies on the valve house's floor, so the job's point stays in it; the arrival is now framed 20 m out as you come up the road (scripts/walk_stops.py): the valve house with the dam's wall behind it in the mist, not a door at arm's length. The door already faced the way in.
+
+![before](s04_ahead.jpg) ![after](fixes/job_ahead_after.jpg)
+
+### 2. The dam (s05 to s09): asked of Models
+
+On the crest the reservoir's bed lies to the north, but the parapet stands at eye height along the road, so topping the dam shows a wall. The fix is the dam's build: a parapet low enough to see over, or a viewing bay by the spillway's head (asked of Models, with the face's foot: buttresses or the scours' staining, so the face is a thing to look up at).
+
+![before](s09_ahead.jpg) ![after](s09_side.jpg)
