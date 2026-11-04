@@ -12,7 +12,7 @@ DATA=$(mktemp -d)
 trap 'rm -rf "$DATA"' EXIT
 # name  x,y,z,yaw,pitch  (y = 0: standing on the ground there)
 SHOTS=(
-  "1_truck_bed -0.3,15.77,95.4,180,-14"
+  "1_truck_bed -0.3,16.3,95.4,180,-14"
   "1b_off_the_steps -0.6,0,94.3,345,-6"
   "2_getting_about -3.5,0,91.5,0,-6"
   "3_put_it_away 3.3,0,89.6,0,-6"
