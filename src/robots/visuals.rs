@@ -1598,13 +1598,14 @@ pub const MIN_LEAD: f32 = super::walker::AIM_TIME;
 pub const SHORT_LEADS: &[(&str, &str)] = &[
     (
         "grappler harpoon",
-        "a grab, not harm: the line slows and drags you, and its harpoon \
-         flies at you after its wind-up, seen",
+        "a grab, not harm: the harpoon writes no Shot or Hurt, its line \
+         slows and drags you (`Tethered`)",
     ),
     (
         "sorter throw",
-        "a thrown tote you see in flight after its wind-up, from up to 14 m \
-         (`sorter::THROW_RANGE`): its flight is the rest of its lead",
+        "no harm: a thrown tote writes no Shot or Hurt (Robot minds checked, \
+         4 November); if a tote ever does damage, it goes pending till \
+         `sorter::WINDUP` rises",
     ),
 ];
 
@@ -2250,7 +2251,11 @@ fn stalk_eyes(
     }
     for (e, eye, mut t, slit) in &mut eyes {
         // (Its eye, not its glowing seams.)
-        let Ok(part) = parts.get(eye.part).filter(|p| p.role == PartRole::Sensor) else {
+        let Some(part) = parts
+            .get(eye.part)
+            .ok()
+            .filter(|p| p.role == PartRole::Sensor)
+        else {
             continue;
         };
         match (stalking(part.robot), slit) {
