@@ -213,10 +213,11 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
-            // (True whether the job's done or not: home pinned by a drone,
-            // the job given up, "that's the job paid" was said, and the
-            // card wouldn't pay it.)
-            First::Payday => &["Truck: \"Home. Press the card: if the job's done, that pays it.\""],
+            // As the card stands (`payday`): pressed now, it pays, or
+            // not yet, and the card's own reason why. (Home pinned by a
+            // drone, the job given up, "that's the job paid" was said, and
+            // the card wouldn't pay it.)
+            First::Payday => &[PAYDAY_NOT_YET, "{verdict}"],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
@@ -330,13 +331,18 @@ fn meet(
         // Danger now: said at once, ahead of anything waiting (a walker's
         // aim came the same moment as "heard", and five seconds behind it
         // was after the shot).
-        for l in f.lines().iter().rev() {
-            queue.lines.push_front(fill(l));
+        for l in f.lines().iter().rev().map(|l| fill(l)) {
+            if !l.is_empty() {
+                queue.lines.push_front(l);
+            }
         }
         let since = SPACING - queue.quiet;
         queue.quiet = queue.quiet.min((URGENT_SPACING - since).max(0.0));
     } else {
-        queue.lines.extend(f.lines().iter().map(|l| fill(l)));
+        // (A line filled to nothing isn't said.)
+        queue
+            .lines
+            .extend(f.lines().iter().map(|l| fill(l)).filter(|l| !l.is_empty()));
     }
     out.write(FirstMet(f));
     true
@@ -775,24 +781,57 @@ fn spare_radio(
     }
 }
 
+/// Home, the card as it stands paying the job if pressed now.
+pub const PAYDAY_PAID: &str = "Truck: \"Home. Press the card: that's the job paid.\"";
+/// ...not yet (the card's reason follows: in the pack, not the stash; or
+/// not done).
+pub const PAYDAY_NOT_YET: &str = "Truck: \"Home. Press the card once the job's done: it pays it.\"";
+
 /// Home from the Zone with a job on the card: nothing pays it but
 /// pressing the card (the first newcomers took the truck home, and the
 /// job sat unpaid into the next session).
 fn payday(
     raid: Res<Raid>,
     progression: Option<Res<crate::progression::Progression>>,
+    opts: Res<crate::launch::LaunchOptions>,
+    check: crate::raid::requests::CardCheck,
     mut was_out: Local<bool>,
     mut m: Meet,
 ) {
     let home = raid.phase == Phase::AtBase;
     let back = *was_out && home;
     *was_out = matches!(raid.phase, Phase::Extracting { .. });
-    if back
-        && !m.met(First::Payday)
-        && progression.is_some_and(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
-    {
-        m.meet(First::Payday);
+    let Some(p) = progression.filter(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
+    else {
+        return;
+    };
+    if !back || m.met(First::Payday) {
+        return;
     }
+    // What the card would say, pressed now: it pays; or not yet, and its
+    // own reason (each names the stash, so "in your pack" and "not done"
+    // read apart). Nothing to pay this raid at all, or no stash: not now
+    // (said on a later homecoming).
+    use crate::progression::lines;
+    let verdict = check.verdict(&p.0, &raid, &opts);
+    if let Err(why) = &verdict
+        && (why.is_empty()
+            || [
+                lines::NO_JOB,
+                lines::NOT_AT_BASE,
+                lines::ONE_A_RAID,
+                lines::IN_THE_YARD,
+            ]
+            .contains(&why.as_str()))
+    {
+        return;
+    }
+    m.meet_filled(First::Payday, &|l| match (&verdict, l) {
+        (Ok(_), PAYDAY_NOT_YET) => PAYDAY_PAID.into(),
+        (Ok(_), _) => String::new(),
+        (Err(why), "{verdict}") => why.clone(),
+        (Err(_), l) => l.into(),
+    });
 }
 
 fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
@@ -979,13 +1018,19 @@ mod tests {
                 app.update();
             }
         }
-        let line = First::Payday.lines()[0];
+        // The job's not done (the career's own, or the letter, not in the
+        // stash): not yet, and the card's own reason after it (never
+        // "that's the job paid").
         let spoken = &app.world().resource::<Spoken>().0;
         assert_eq!(
-            spoken.iter().filter(|s| *s == line).count(),
+            spoken.iter().filter(|s| *s == PAYDAY_NOT_YET).count(),
             1,
             "{spoken:?}"
         );
+        assert!(!spoken.iter().any(|s| s == PAYDAY_PAID), "{spoken:?}");
+        let at = spoken.iter().position(|s| s == PAYDAY_NOT_YET).unwrap();
+        let why = spoken.get(at + 1).cloned().unwrap_or_default();
+        assert!(why.starts_with("Driver:"), "after it: {why:?} ({spoken:?})");
     }
 
     /// The moments that come from a message, met twice over through the
