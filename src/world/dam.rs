@@ -34,6 +34,14 @@ const FACE_H: f32 = 22.0;
 const BACK_H: f32 = 21.0;
 /// A parapet's height over the crest and its thickness.
 const PARAPET: (f32, f32) = (1.1, 0.5);
+/// The viewing bay in the upstream parapet (`dam_back`'s x): opposite the
+/// face stair's head (x 88 to 100 in Sallow), where the first job's route
+/// comes onto the crest. The crest road runs nine metres back from the
+/// parapet, and over a parapet that far off the drained bed 21 m below is
+/// hidden for its first 300 m: a newcomer topping the dam saw a wall.
+/// Here the parapet gives way to a rail, and from the rail the bed, the
+/// old river and the tower lie open below.
+pub const VIEW_BAY: f32 = 91.5;
 /// The draw-off tower: its plan (square), wall thickness, the bridge
 /// floor over its foot (the crest), its height, and how far its bridge
 /// runs to the crest's edge.
@@ -51,8 +59,8 @@ pub fn geo(id: &str) -> Option<Geo> {
     match id {
         "dam_face" => face(&mut b, 265.0, true),
         "dam_face_end" => face(&mut b, 25.0, false),
-        "dam_back" => back(&mut b, 245.0, Some(-22.5)),
-        "dam_back_end" => back(&mut b, 35.0, None),
+        "dam_back" => back(&mut b, 245.0, &[(-22.5, 1.2, false), (VIEW_BAY, 3.0, true)]),
+        "dam_back_end" => back(&mut b, 35.0, &[]),
         "draw_off_tower" => tower(&mut b),
         "stock_buses" => buses(&mut b),
         "stock_bicycles" => bicycles(&mut b),
@@ -283,7 +291,9 @@ fn stair_wall(b: &mut Builder) {
 /// old top water line stained where the water stood (`Boulder`), a
 /// parapet along the crest's edge, open where the tower's bridge comes
 /// in at `gap` (x).
-fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
+/// `gaps`: where the parapet breaks, (x, half width, railed): the tower
+/// bridge's way through, or a viewing bay with a rail across it.
+fn back(b: &mut Builder, len: f32, gaps: &[(f32, f32, bool)]) {
     let hl = len * 0.5;
     let line = BACK_H - 2.2;
     b.bx(
@@ -304,10 +314,18 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
     );
     let (ph, pt) = PARAPET;
     let pz = -1.5 + pt * 0.5;
-    let mut runs = vec![(-hl, hl)];
-    if let Some(g) = gap {
-        runs = vec![(-hl, g - 1.2), (g + 1.2, hl)];
+    let mut runs = vec![];
+    let mut from = -hl;
+    let mut sorted = gaps.to_vec();
+    sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
+    for &(g, half, railed) in &sorted {
+        runs.push((from, g - half));
+        from = g + half;
+        if railed {
+            rail(b, g - half, g + half, BACK_H, -1.5 + 0.05);
+        }
     }
+    runs.push((from, hl));
     for (a, c) in runs {
         b.bx(
             Vec3::new(c - a, ph, pt),
@@ -318,6 +336,28 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
             Vec3::new(c - a + 0.1, 0.12, pt + 0.2),
             Vec3::new((a + c) * 0.5, BACK_H + ph + 0.06, pz),
             Mat::Boulder,
+        );
+    }
+}
+
+/// A steel rail along the crest's edge from x `a` to `c` at z `z`, on the
+/// crest at height `y`: posts, a top rail at a hand's height and a mid
+/// rail, open to look through and down.
+fn rail(b: &mut Builder, a: f32, c: f32, y: f32, z: f32) {
+    let n = ((c - a) / 1.5).ceil().max(1.0) as usize;
+    for k in 0..=n {
+        let x = a + (c - a) * k as f32 / n as f32;
+        b.bx(
+            Vec3::new(0.06, 1.05, 0.06),
+            Vec3::new(x, y + 0.525, z),
+            Mat::DarkMetal,
+        );
+    }
+    for h in [1.0, 0.5] {
+        b.bx(
+            Vec3::new(c - a, 0.05, 0.05),
+            Vec3::new((a + c) * 0.5, y + h, z),
+            Mat::DarkMetal,
         );
     }
 }
