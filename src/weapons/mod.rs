@@ -15,6 +15,7 @@ pub mod armoury;
 pub mod ballistics;
 pub mod carry;
 pub mod crossbow;
+pub mod cycle;
 pub mod faults;
 pub mod feel;
 pub mod flares;
@@ -259,7 +260,11 @@ impl Plugin for WeaponsPlugin {
                 weather::WeatherPlugin,
                 report::ReportPlugin,
             ))
-            .add_plugins((gunsmith::GunsmithPlugin, legibility::LegibilityPlugin))
+            .add_plugins((
+                gunsmith::GunsmithPlugin,
+                legibility::LegibilityPlugin,
+                cycle::CyclePlugin,
+            ))
             .init_resource::<reload::MagApproach>()
             .add_systems(
                 FixedUpdate,
