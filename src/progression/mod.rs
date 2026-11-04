@@ -970,7 +970,7 @@ fn tailgate(
 }
 
 /// The job's place, by name: "Old farm", "house by the well".
-fn job_place(job: &Job) -> String {
+pub(crate) fn job_place(job: &Job) -> String {
     match job {
         Job::Scout { place, .. } | Job::Bring { place, .. } | Job::Plant { place, .. } => {
             place.clone()
