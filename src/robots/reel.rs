@@ -29,9 +29,8 @@
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `chirp` (a sentry 7 m off, facing you, chirping: its lens through the
 //! chirp, frame by frame), `lock` (a drone hovering 8 m off, its lock on
-//! you set off by the reel: its lens through the lock), `pin` (a walker pinning down a spot 25 m off to
-//! its right where you dropped from sight: its gun held there, its
-//! tracers), `zap` (a crawler charging and
+//! you set off by the reel: its lens through the lock), `pin` (a walker pinning down a spot 7 m to its
+//! right where you dropped from sight: its gun held there, its tracers), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -716,14 +715,10 @@ fn reel(
         }
     }
     // `pin`: a walker pinning you down (`walker::Suppressing`) where you
-    // dropped from sight, 25 m off to its right (a flanking range: its
-    // rounds fly long enough for their tracers to light): its gun held on
-    // the spot, its rounds on its suppressing cadence
-    // (`walker::SUPPRESS_EVERY`).
-    let spot = zone.on_ground(
-        (eye + flat * 30.0 + right * 12.0).x,
-        (eye + flat * 30.0 + right * 12.0).z,
-    );
+    // dropped from sight, 7 m to its right: its gun held on the spot, its
+    // rounds on its suppressing cadence (`walker::SUPPRESS_EVERY`), every
+    // third a tracer, lit from the muzzle.
+    let spot = eye + flat * 8.0 + right * 7.0;
     if what == "pin" && frame == 6 {
         if let Ok(mut a) = awares.get_mut(subject) {
             a.last_known = Some(spot);
