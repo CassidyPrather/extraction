@@ -971,10 +971,12 @@ fn moving_valley_brings_a_job_here() {
         app.update();
         app.update();
         let job = progress(&app).job;
-        // A job for here: in this valley, or one with no valley (a fetch).
-        let here = job
-            .as_ref()
-            .is_some_and(|j| j.map().is_none_or(|m| m == "marrow_creek"));
+        // A look round this valley's gentle place, to show it.
+        let gentle = extraction_core::progression::first_job(
+            "marrow_creek",
+            &crate::progression::valleys()[0].1,
+        );
+        let here = job.is_some() && job == gentle;
         assert_eq!(here, moves, "{case}: {job:?}");
         let said = app
             .world()

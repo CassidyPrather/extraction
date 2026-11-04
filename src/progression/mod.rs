@@ -486,8 +486,14 @@ fn offer_job(
         && raid.phase == Phase::AtBase
         && moved_off(&progression.0, &opts.map)
     {
-        progression.0.job = None;
         progression.0.swaps += 1;
+        // Its first job here shows the valley: a look round its gentle
+        // place, as a career's first job does (else whatever rolls).
+        progression.0.job = valleys()
+            .iter()
+            .find(|(id, _)| *id == opts.map)
+            .and_then(|(id, map)| extraction_core::progression::first_job(id, map));
+        progression.0.job_raid = raid.raids;
         raid.say(lines::job_here(&valley_name(&opts.map)));
     }
     if progression.0.job.is_some() {
