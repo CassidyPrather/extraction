@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 8d5c110 | 2026-11-04 (release check, after the pause) | 40/40 exit 0, no timeouts, 36 extracted; stucks 39; Sallow seed 6 dies to a fall at (50.9, 163.8) from 79 hp; stowing unchanged; 13/13 contract scenarios; second_hour passes, no broken walker placed (the Director looks once per app, on job 1); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1356 lib, 319 + 47 core, 0 FAILED | first_contact cold run over on Marrow (10.07 > 9.8 s, 273 frames), passes alone; gauges 18/18 |
 | c55626a | 2026-11-01 20:30 (release check) | 40/40 exit 0, no timeouts, 35 extracted; stucks 27; stowing unchanged; 13/13 contract scenarios; second_hour 0/40 (Onboarding's fix in gate 150), no broken-walker line (never reaches job 2); `--check-buildings` 0 flagged; sim_guards pass | 1 FAILED: gauge_puffs_hold_the_stereo_budget (the sky now counted; 10° cap in gate 150) | gauges 14/19: Marrow m05_spruce ×4 (the sky now counted, 79f500f6; to re-baseline), first_contact 1-4% over (this container's disk; runs first from the next check) |
 | d2be4d5 | 2026-11-01 14:30 (gates 135-138, release check) | 40/40 exit 0, no timeouts, 34 extracted; stucks 34 (47); stowing unchanged (all carried out, 0 room drops, kit 40/40); 13/13 contract scenarios; second_hour 0/40 (no gun, a door at x -12.2 out of reach; first run, no baseline); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1310 lib, 315 + 47 core, 0 FAILED | gauges 18/19: gauge_items_fall_asleep (known; 41e780da) |
 | 50d1900 | 2026-11-01 08:00 (gate 129, release check) | 40/40 exit 0, no timeouts, 35 extracted (Cinder 8/8, Marrow 8/8, Rime 7/8, Kettle 6/8, Sallow 6/8); stucks 47; stowing: all taken carried out, 0 room drops, kit 40/40, 2 stuck while stowing; 13/13 scenarios; `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1294 lib, 315 + 47 core, 0 FAILED | gauges 19/19 |
@@ -77,12 +78,13 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of c55626a.
+As of 8d5c110.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `--scenario second_hour` (Marrow): 0 passed, 40 failed: no gun in hand, WalkTo to a door at (-12.2, 33-48) out of reach, a Grab timed out, moments PackFull and Underground missing | first run (no baseline) | Onboarding | routed |
-| `gauge_puffs_hold_the_stereo_budget` (67.2M > 64.8M in a hazard's cloud) and Marrow m05_spruce ×4 (overdraw 10.88, 70.4M): the gauges count the sky since 79f500f6 | re-baseline; the 10° puff cap | Performance, Weapon feel | gate 150 |
+| The broken walker never placed on job 2 in one app session: `Director` is made at Startup and `broken_placed` set on its first tick (job 1) | real bug; `second_hour` shows no `broken walker placed` line | Robot minds | fix and fail-first test coming |
+| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | is it disk or CPU? the split is running | Verifier, then Performance | open |
+| Sim: Sallow seed 6 dies to a fall at (50.9, 163.8) while travelling (79 hp in a second) | | Map design / coordinator | reported |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
@@ -90,6 +92,7 @@ As of c55626a.
 
 | test / run | fixed in | by |
 | - | - | - |
+| the puff gauge and Marrow m05_spruce (the sky counted), `second_hour` (0/40 → passes) | 8d5c110 | Performance, Weapon feel, Onboarding |
 | `contract_scour_key` (outside-doors-only Entrances, a44221f5); part_rest's test race; the cellars_cinder probe flag; first_contact's Kettle/Rime load | 50d1900 / 90afc8b | Models, Performance, Capture |
 | Kettle's stucks (69 on cc4d02c, 11 on be68fdf) and seed 1's surface stucks; Sallow's early hound deaths (the raider's ammo) | 4a7eaed / be68fdf | Robot minds |
 | Rime seed 1's plough death | 4a7eaed (c080fbc3) | Robot minds |
