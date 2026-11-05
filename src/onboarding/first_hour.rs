@@ -337,6 +337,16 @@ fn run_fights(chain: &Chain) -> AppExit {
             // in reach (`a_roof_is_in_reach_of_the_first_fights_drone`).
             let reckless_drone =
                 p.reckless && *e == "drone" && said.contains("tell: a drone's lock-on");
+            // ...and it does take it on: armed, locked on, it shoots back
+            // (twelve raids after a lost kit, none did, and all went down).
+            if reckless_drone && !said.contains("shot back at it") {
+                println!(
+                    "first fight: {}/{e}: locked on, armed, and it never shot back",
+                    p.name
+                );
+                failed.push(format!("{}/{e}", p.name));
+                continue;
+            }
             if !ok {
                 if p.hoards || reckless_drone {
                     // By design: it carries on as if nothing were there,
@@ -1227,6 +1237,13 @@ pub(super) fn direct_raid(
                 First::Sentry | First::DroneLock | First::Aimed | First::Heavy
             )
         });
+    // A gun to hand (in a hand, or on the body), for the reckless to shoot
+    // back with.
+    let armed_now = world.items.iter().any(|(_, it, _, held, sock, _)| {
+        world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
+            && (held.is_some_and(|h| h.player == player)
+                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
+    });
     let moments = firsts
         .into_iter()
         .map(|f| (f, true))
@@ -1297,6 +1314,16 @@ pub(super) fn direct_raid(
                         run_for_cover(&world.zone, here, from, 1.0)
                     }
                 }
+            }
+            // Reckless, armed, with a drone locked on or a walker's gun on
+            // it: shoots back, there and then (it waited for its next "a
+            // machine in range" look, half a minute and more, and a drone
+            // has you down in thirty seconds: twelve raids running, not a
+            // round fired).
+            First::DroneLock | First::Aimed if p.reckless && armed_now => {
+                state.fought_at = now;
+                state.note(now, Kind::Learned, "shot back at it");
+                take_it_on()
             }
             First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
