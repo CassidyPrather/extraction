@@ -2002,6 +2002,23 @@ fn treat_for_gallery(
     left.tracked = true;
 }
 
+/// The subjects whose gallery poses the body: the kit on it, wounds
+/// treated on it, climbing, the body itself.
+const BODY_SUBJECTS: [&str; 4] = ["kit", "treat", "climb", "body"];
+/// The pose words (`pose_body_for_gallery`).
+const BODY_POSES: [&str; 6] = ["stoop", "behind", "above", "down", "side", "crouch"];
+
+/// A `--gallery` spec's words (split at `+`, `,` and `:`) as a test for
+/// one, if it's a gallery of the body: its subject one of
+/// [`BODY_SUBJECTS`], or a pose alone (`--gallery above`). Another
+/// gallery's words (a machine's `down`) are none of its business.
+fn body_pose_words(spec: &str) -> Option<impl Fn(&str) -> bool + '_> {
+    let mut words = spec.split(['+', ',', ':']);
+    let subject = words.next().unwrap_or("");
+    (BODY_SUBJECTS.contains(&subject) || BODY_POSES.contains(&subject))
+        .then(|| move |w: &str| spec.split(['+', ',', ':']).any(|t| t == w))
+}
+
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment
 /// standing, the head drops 0.35 m and comes 0.25 m forward, looking down,
 /// as you bend to your belt (the torso keeps its standing height until the
@@ -2028,21 +2045,23 @@ fn pose_body_for_gallery(
     let Some(spec) = opts.gallery.as_deref() else {
         return;
     };
+    // Only a gallery of the body: its words whole, its subject the body's
+    // (a machine's own `down` or `side`, `--gallery heavy:down`, once took
+    // the camera with the body's head as it fell through the ground).
+    let Some(has) = body_pose_words(spec) else {
+        return;
+    };
     // A gallery of the body (or of wounds on it) draws it, whatever the
     // setting (off by default).
     if let Some(mut c) = comfort
-        && (spec.contains("body") || spec.contains("treat"))
+        && (has("body") || has("treat"))
         && !c.body
     {
         c.body = true;
     }
-    let (stoop, behind, above) = (
-        spec.contains("stoop"),
-        spec.contains("behind"),
-        spec.contains("above"),
-    );
-    let (down, side) = (spec.contains("down"), spec.contains("side"));
-    let crouch = spec.contains("crouch");
+    let (stoop, behind, above) = (has("stoop"), has("behind"), has("above"));
+    let (down, side) = (has("down"), has("side"));
+    let crouch = has("crouch");
     if !stoop && !behind && !above && !down && !side && !crouch {
         return;
     }
@@ -2107,6 +2126,38 @@ fn pose_body_for_gallery(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The body's gallery poses the body for its own specs, by whole
+    /// word; a machine's gallery words (`heavy:down`, `sentry:down`) are
+    /// left alone.
+    #[test]
+    fn only_a_body_gallery_poses_the_body() {
+        for spec in [
+            "kit+stoop",
+            "kit+down",
+            "treat,down",
+            "treat+down+wrist",
+            "body+down+side",
+            "climb+behind",
+            "above",
+        ] {
+            assert!(body_pose_words(spec).is_some(), "{spec}");
+        }
+        let has = body_pose_words("treat,down").unwrap();
+        assert!(has("down") && has("treat") && !has("side"));
+        for spec in [
+            "heavy:down,160,12",
+            "heavy:down+open",
+            "sentry:down",
+            "plough:after",
+            "ak74",
+            "robots:walker,drone",
+        ] {
+            assert!(body_pose_words(spec).is_none(), "{spec}");
+        }
+        // Whole words: `downpour` isn't `down`.
+        assert!(!body_pose_words("kit+downpour").unwrap()("down"));
+    }
 
     /// A shot is never taken in the frames just after everything's in,
     /// however few `--frames` asked for (a gun close-up shot 5 frames
