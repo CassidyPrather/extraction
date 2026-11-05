@@ -85,16 +85,33 @@ fn piece_top(p: &crate::world::buildings::Piece) -> Vec3 {
     p.at.translation + p.at.rotation * Vec3::Y * up
 }
 
-/// The pieces whose tops are a prefab's highest, level within `TIED`.
+/// How far apart level tops may be and still count as one top (m): a
+/// cage's corner posts or a mast's legs, not a dam's two end turrets.
+const ONE_TOP: f32 = 10.0;
+
+/// The pieces whose tops are a prefab's highest, level within `TIED`, and
+/// of those the ones that make one top: within `ONE_TOP` of the one
+/// nearest the prefab's middle.
 fn highest(geo: &crate::world::buildings::Geo) -> Vec<&crate::world::buildings::Piece> {
     let peak = geo
         .pieces
         .iter()
         .map(|p| piece_top(p).y)
         .fold(f32::MIN, f32::max);
-    geo.pieces
+    let tied: Vec<_> = geo
+        .pieces
         .iter()
         .filter(|p| piece_top(p).y >= peak - TIED)
+        .collect();
+    let Some(seed) = tied
+        .iter()
+        .map(|p| piece_top(p).xz())
+        .min_by(|a, b| a.length().total_cmp(&b.length()))
+    else {
+        return tied;
+    };
+    tied.into_iter()
+        .filter(|p| (piece_top(p).xz() - seed).length() <= ONE_TOP)
         .collect()
 }
 
@@ -105,6 +122,37 @@ pub fn top_of(id: &str) -> Option<Vec3> {
     let geo = prefab(id)?;
     let tops: Vec<Vec3> = highest(&geo).into_iter().map(piece_top).collect();
     (!tops.is_empty()).then(|| tops.iter().copied().sum::<Vec3>() / tops.len() as f32)
+}
+
+/// Whether some piece of a prefab, solid or dressing, has its top just
+/// under `t` (within 0.6 m), there to carry a lamp.
+fn carried(geo: &crate::world::buildings::Geo, t: Vec3) -> bool {
+    geo.pieces.iter().any(|q| {
+        let l = q.at.compute_affine().inverse().transform_point3(t);
+        let (inside, top) = match q.shape {
+            Shape::Box(s) => (l.x.abs() <= s.x * 0.5 && l.z.abs() <= s.z * 0.5, s.y * 0.5),
+            Shape::Prism(s) => (l.x.abs() <= s.x * 0.5 && l.z.abs() <= s.z * 0.5, s.y),
+            Shape::Cylinder(r, h) => (l.xz().length() <= r, h * 0.5),
+        };
+        let y = (q.at.translation + q.at.rotation * Vec3::Y * top).y;
+        inside && y <= t.y + 0.01 && y >= t.y - 0.6
+    })
+}
+
+/// The bars a lamp sits on where nothing of its building is under the
+/// middle of its top (an open cage, a mast's legs): one from the lamp out
+/// to each of the top's pieces, in the prefab's frame.
+pub fn lamp_seat(id: &str) -> Vec<(Vec3, Vec3)> {
+    let (Some(geo), Some(t)) = (prefab(id), top_of(id)) else {
+        return Vec::new();
+    };
+    if carried(&geo, t) {
+        return Vec::new();
+    }
+    highest(&geo)
+        .into_iter()
+        .map(|p| (t, piece_top(p)))
+        .collect()
 }
 
 /// How far a landmark's lamp stands up off its top, on a pole: half the
@@ -243,6 +291,31 @@ fn light_landmarks(
                 MeshMaterial3d(mat),
                 Transform::from_translation(top + Vec3::Y * lift * 0.5),
             ));
+        }
+        // Bars to sit on, where its top is an open frame.
+        let seat = lamp_seat(&b.prefab);
+        if !seat.is_empty() {
+            let mat = pole_mat
+                .get_or_insert_with(|| {
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.08, 0.08, 0.08),
+                        perceptual_roughness: 0.7,
+                        metallic: 0.6,
+                        ..default()
+                    })
+                })
+                .clone();
+            for (from, to) in seat {
+                let run = (to - from).xz();
+                let bar = meshes.add(Cuboid::new(0.08, 0.08, run.length() + 0.1));
+                commands.entity(e).with_child((
+                    Name::new("Landmark lamp seat"),
+                    Mesh3d(bar),
+                    MeshMaterial3d(mat.clone()),
+                    Transform::from_translation((from + to) * 0.5 - Vec3::Y * 0.04)
+                        .with_rotation(Quat::from_rotation_y(run.x.atan2(run.y))),
+                ));
+            }
         }
         commands.entity(e).with_children(|c| {
             c.spawn((
@@ -453,6 +526,46 @@ mod tests {
             }
         }
         assert!(!seen.is_empty());
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every landmark's lamp stands on its building: inside the prefab's
+    /// footprint, and on something, solid or dressing, whose top is just
+    /// under it there, or on its seat's bars (no lamp in the air over an
+    /// open frame, none on one post of several).
+    #[test]
+    fn every_landmark_lamp_stands_on_its_building() {
+        let mut bad = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for (_, text) in extraction_core::map::VALLEYS {
+            let map = extraction_core::map::MapDef::from_ron(text).unwrap();
+            for p in &map.placements {
+                let [w, h, d] = prefab_footprint(&p.prefab);
+                if h < LANDMARK_HEIGHT || LIT.contains(&p.prefab.as_str()) {
+                    continue;
+                }
+                if !seen.insert(p.prefab.clone()) {
+                    continue;
+                }
+                let (Some(t), Some(geo)) = (top_of(&p.prefab), prefab(&p.prefab)) else {
+                    continue;
+                };
+                if t.x.abs() > w * 0.5 + 0.1 || t.z.abs() > d * 0.5 + 0.1 {
+                    bad.push(format!(
+                        "{}: lamp at ({:.1}, {:.1}) outside its {w} x {d} footprint",
+                        p.prefab, t.x, t.z
+                    ));
+                }
+                let under = carried(&geo, t) || !lamp_seat(&p.prefab).is_empty();
+                if !under {
+                    bad.push(format!(
+                        "{}: nothing under its lamp at ({:.1}, {:.1}, {:.1})",
+                        p.prefab, t.x, t.y, t.z
+                    ));
+                }
+            }
+        }
+        assert!(seen.len() > 5, "only {} landmark prefabs", seen.len());
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }
