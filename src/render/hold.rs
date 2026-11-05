@@ -772,7 +772,8 @@ mod tests {
     /// The world's own loose things are held as the table's are: every
     /// map loaded, each thing a hand can carry (a free grab point, a body
     /// that moves, not an item of the table, which the test above holds,
-    /// nor one only pressed) is held every way by the rule, or listed. A
+    /// nor one only pressed) or take up to read is held every way by the
+    /// rule, or listed. A
     /// thing whose collider isn't a box gets no seat: that fails too.
     #[test]
     fn every_world_thing_carried_free_is_held_by_the_glove() {
@@ -795,13 +796,17 @@ mod tests {
                 Option<&RigidBody>,
                 Has<crate::items::Item>,
                 Has<crate::raid::truck::Pressable>,
+                Has<crate::interact::read::Readable>,
             )>();
-            for (e, g, name, collider, body, item, pressed) in q.iter(world) {
+            for (e, g, name, collider, body, item, pressed, read) in q.iter(world) {
                 let free = g
                     .points
                     .iter()
                     .any(|p| p.role == crate::interact::GripRole::Free);
-                if !free || item || pressed || !body.is_some_and(|b| b.is_dynamic()) {
+                // Carried, or taken up to read (a note, the logbook, a
+                // card: pressable too, in flat mode).
+                let carried = !item && !pressed && body.is_some_and(|b| b.is_dynamic());
+                if !free || !(carried || read) {
                     continue;
                 }
                 let name = name.map_or_else(|| format!("unnamed {e}"), |n| n.to_string());
