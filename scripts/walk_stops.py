@@ -74,7 +74,7 @@ for st in sorted(stops, key=lambda x: prio[x["kind"]]):
 merged.sort(key=lambda x: x["s"])
 # views
 notable = [(p["name"], tuple(p["at"])) for p in d["places"]] + [(r["name"], tuple(r["at"])) for r in d["rvs"]]
-LAND = ("chimney", "steeple", "chapel", "water_tower", "radio_mast", "ranger_tower", "headframe", "survey_tower", "blast_furnace", "church_ruin", "observatory")
+LAND = ("chimney", "steeple", "chapel", "water_tower", "radio_mast", "ranger_tower", "headframe", "survey_tower", "blast_furnace", "church_ruin", "observatory", "dam_face")
 notable += [(p["prefab"], tuple(p["at"])) for p in d["placements"] if p["prefab"] in LAND]
 lines, out = [], []
 for n, st in enumerate(merged, 1):

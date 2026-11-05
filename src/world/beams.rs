@@ -161,6 +161,31 @@ fn add_beams(
     }
 }
 
+/// A beam with no light, at `at`, for the warm-up shelf
+/// (`render::warmup`) to build its pipeline before any spotlight is lit.
+pub(crate) fn decoy(world: &mut World, at: Vec3) -> Entity {
+    let mesh = world.resource_mut::<Assets<Mesh>>().add(cone());
+    let material = world
+        .resource_mut::<Assets<BeamMaterial>>()
+        .add(BeamMaterial {
+            params: BeamParams {
+                color: Vec4::new(1.0, 1.0, 1.0, 1.0),
+                air: Vec4::new(0.25, 0.0, 0.5, REACH),
+                axis: Vec4::NEG_Z,
+            },
+        });
+    world
+        .spawn((
+            Name::new("Warm-up beam"),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(at) * beam_transform(0.5, REACH),
+            NotShadowCaster,
+            NotShadowReceiver,
+        ))
+        .id()
+}
+
 /// The lit air's radiance for a light this strong (the torch's 250 klm
 /// gives 1: the shader's scale).
 fn radiance(lumens: f32) -> f32 {

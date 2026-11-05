@@ -201,7 +201,16 @@ fn rod_bores(
             };
             if !ev.is_empty() {
                 let name = catalog.get(gun_item.kind()).id.clone();
-                super::emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
+                super::emit(
+                    e,
+                    &name,
+                    &mut gun,
+                    gt,
+                    ev,
+                    &mut out,
+                    &mut ejected,
+                    super::CASE_THROW,
+                );
             }
         }
     }

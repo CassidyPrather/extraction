@@ -203,8 +203,15 @@ The scour key lies on the valve house's floor, so the job's point stays in it; t
 
 ![before](s04_ahead.jpg) ![after](fixes/job_ahead_after.jpg)
 
-### 2. The dam (s05 to s09): asked of Models
+### 2. The dam's top (s09): a viewing bay
 
-On the crest the reservoir's bed lies to the north, but the parapet stands at eye height along the road, so topping the dam shows a wall. The fix is the dam's build: a parapet low enough to see over, or a viewing bay by the spillway's head (asked of Models, with the face's foot: buttresses or the scours' staining, so the face is a thing to look up at).
+On the crest the parapet stood at eye height along the road, so topping the dam showed a wall. Models opened a 6 m railed bay in the upstream parapet at x 91-97, straight across from the face stair's landing: from it, looking north, the ground falls away over the bed (in the reference weather, into mist). The crest stop's view is the bay's (s09_bay in walk.stills). The face's foot (buttresses, staining) was tried and dropped: from the route the face stair hides it, and at 40 m it's fog.
 
-![before](s09_ahead.jpg) ![after](s09_side.jpg)
+![before](s09_ahead.jpg) ![after](fixes/s09_bay_after.jpg)
+
+### 3. The dam's face, whole, before you're under it (s04, s05)
+
+The face was there; the walk didn't look at it. Coming up to the valve house, 20 m out, the face runs the whole frame to the north-west, stepping down with the stair's walls: the reveal before the corridor (s04's side view, now the face: scripts/walk_stops.py counts dam_face as a landmark). Past the valve house, at the face's foot looking along it, it towers: the threshold into the walk beside it. No scenery moved.
+
+![before](s04_side.jpg) ![after](fixes/face_from_the_approach.jpg)
+![before](s05_ahead.jpg) ![after](fixes/face_threshold.jpg)

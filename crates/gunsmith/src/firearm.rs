@@ -1689,12 +1689,18 @@ impl Firearm {
     /// [`Self::strip_clip`] from a clip of `n` rounds loaded as `loads`
     /// (which lose the rounds that went in).
     pub fn strip_clip_of(&mut self, n: u32, loads: &mut Loads) -> u32 {
+        self.strip_clip_up_to(n, u32::MAX, loads)
+    }
+
+    /// As [`Self::strip_clip_of`], but no more than `most` rounds: a
+    /// thumb pressing a clip's rounds down one after another.
+    pub fn strip_clip_up_to(&mut self, n: u32, most: u32, loads: &mut Loads) -> u32 {
         let clip_fed = self.def.action == ActionKind::BoltAction || self.fixed_feed();
         if !clip_fed || self.bolt_travel < EJECT_AT {
             return 0;
         }
         let room = self.def.internal_capacity - self.internal_rounds;
-        let moved = room.min(n);
+        let moved = room.min(n).min(most);
         loads.move_to(n, &mut self.internal_loads, self.internal_rounds, moved);
         self.internal_rounds += moved;
         moved

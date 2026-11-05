@@ -97,6 +97,12 @@
     ],
 
     roads: [
+        // Breadcrumbs: a worn path off the way into the trees to the tag
+        // office's desk (a scene 19 m off with nothing to say it's there).
+        (
+            name: "Tag path", kind: Path, width: 1.4, shoulder: 0.8, smoothing: 4.0,
+            points: [(-114.1, -65.1), (-110.0, -72.0), (-106.4, -78.6)],
+        ),
         // The old district road: south gate, through the farm turn-off,
         // into the village, over the bridge, north to the bus depot.
         (
