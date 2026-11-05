@@ -1416,13 +1416,38 @@ mod tests {
                 .chain(shelf.weathered.values().flatten().map(|(h, _)| h.id()))
                 .collect();
             let w = app.world_mut();
-            for (mesh, name) in w
-                .query_filtered::<(&Mesh3d, Option<&Name>), With<ShelfMark>>()
-                .iter(w)
-            {
-                if !twins.contains(&mesh.0.id()) {
-                    real.insert(format!("{name:?} {:?}", mesh.0.id()));
+            let mut q = w.query_filtered::<(Entity, &Mesh3d), With<ShelfMark>>();
+            let entries: Vec<(Entity, Handle<Mesh>)> =
+                q.iter(w).map(|(e, m)| (e, m.0.clone())).collect();
+            for (e, mesh) in entries {
+                if twins.contains(&mesh.id()) {
+                    continue;
                 }
+                // Which mesh: its shape, size and path, and what it wears.
+                let what = w.resource::<Assets<Mesh>>().get(&mesh).map_or(
+                    "(gone to the render world)".to_string(),
+                    |m| {
+                        format!(
+                            "{:?}, {} vertices, attributes readable: {}",
+                            m.primitive_topology(),
+                            m.count_vertices(),
+                            m.try_attributes().is_ok()
+                        )
+                    },
+                );
+                let path = w
+                    .resource::<AssetServer>()
+                    .get_path(mesh.id())
+                    .map(|p| p.to_string());
+                let wears = w
+                    .inspect_entity(e)
+                    .map(|c| {
+                        c.filter(|i| i.name().to_string().contains("MeshMaterial3d"))
+                            .map(|i| i.name().to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                real.insert(format!("{:?} {what}, {path:?}, {wears:?}", mesh.id()));
             }
         }
         assert!(
