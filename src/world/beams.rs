@@ -74,13 +74,6 @@ impl Material for BeamMaterial {
 #[derive(Component)]
 struct Beam(Handle<BeamMaterial>);
 
-/// How far a light's beam goes before it lands on something (m), `REACH`
-/// when it finds nothing: on the light. What it lands on is what lights
-/// the eye back (`render::grade::torch_light`): a wall in your face, not
-/// the ground 10 m off.
-#[derive(Component, Clone, Copy, Debug, PartialEq)]
-pub struct Throw(pub f32);
-
 /// How much the air shows a beam, for the weather: dust on a dry night,
 /// mist, fog's droplets, rain's streaks.
 pub fn air(c: &Conditions) -> (f32, f32) {
@@ -156,7 +149,7 @@ fn add_beams(
                 axis: Vec4::NEG_Z,
             },
         });
-        commands.entity(e).insert(Throw(REACH)).with_child((
+        commands.entity(e).with_child((
             Name::new("Torch beam"),
             Beam(material.clone()),
             Mesh3d(mesh),
@@ -181,12 +174,12 @@ fn beam_transform(tan: f32, length: f32) -> Transform {
 
 /// Each beam stops where its light lands: one ray down it a frame.
 fn throw_beams(
-    mut lights: Query<(&GlobalTransform, &Children, Option<&mut Throw>), With<SpotLight>>,
+    lights: Query<(&GlobalTransform, &Children), With<SpotLight>>,
     mut beams: Query<(&Beam, &mut Transform)>,
     mut materials: ResMut<Assets<BeamMaterial>>,
     spatial: SpatialQuery,
 ) {
-    for (gt, children, mut throw) in &mut lights {
+    for (gt, children) in &lights {
         for c in children.iter() {
             let Ok((beam, mut xf)) = beams.get_mut(c) else {
                 continue;
@@ -201,11 +194,6 @@ fn throw_beams(
                 .max(0.8);
             // Settle, don't snap: a ray grazing an edge flickers.
             let len = xf.scale.z + (hit - xf.scale.z) * 0.5;
-            if let Some(t) = throw.as_deref_mut() {
-                if (t.0 - len).abs() > 0.05 {
-                    t.0 = len;
-                }
-            }
             let Some(m) = materials.get(&beam.0) else {
                 continue;
             };
