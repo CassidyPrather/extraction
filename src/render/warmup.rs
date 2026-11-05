@@ -855,9 +855,9 @@ fn record_layouts(
         let Some(mesh) = meshes.get(id) else {
             continue;
         };
-        let Some(l) = layout_of(mesh) else {
-            continue;
-        };
+        // (One whose layout can't be read counts as its own: recorded
+        // all the same, so `shelve` doesn't wait on it.)
+        let l = layout_of(mesh).unwrap_or_else(|| hash_of(id));
         shelf.layouts.insert(id, l);
         if !shelf.twins.contains_key(&l) {
             if let Some(twin) = point_twin(mesh) {
@@ -1094,6 +1094,7 @@ fn shelve<M: Material>(
         ),
     >,
     materials: Res<Assets<M>>,
+    meshes: Res<Assets<Mesh>>,
 ) where
     M::Data: std::hash::Hash,
 {
@@ -1105,12 +1106,16 @@ fn shelve<M: Material>(
         let Some(m) = materials.get(&mat.0) else {
             continue;
         };
-        // A mesh whose layout wasn't seen counts as its own.
-        let layout = shelf
-            .layouts
-            .get(&mesh.0.id())
-            .copied()
-            .unwrap_or_else(|| hash_of(mesh.0.id()));
+        // A mesh whose layout can't be read (its data gone to the render
+        // world) counts as its own, and is shelved as itself. One whose
+        // layout isn't recorded yet (`record_layouts`, made this frame)
+        // waits a frame for its twin: shelved as itself, a 147-vertex
+        // generated mesh stood on the shelf drawing.
+        let layout = match shelf.layouts.get(&mesh.0.id()) {
+            Some(l) => *l,
+            None if meshes.contains(mesh.0.id()) => continue,
+            None => hash_of(mesh.0.id()),
+        };
         let key = hash_of((
             ty,
             m.bind_group_data(),
@@ -1405,23 +1410,49 @@ mod tests {
             app.update();
             most = most.max(shelved(&mut app));
             saw_decoys = saw_decoys.max(decoys(&mut app));
-            // Every entry wears a twin (a mesh that draws nothing).
-            let twins: std::collections::HashSet<AssetId<Mesh>> = app
-                .world()
-                .resource::<Shelf>()
+            // Every entry wears a twin (a mesh that draws nothing): its
+            // layout's, the cube's, or a robot mesh's weathered one.
+            let shelf = app.world().resource::<Shelf>();
+            let twins: std::collections::HashSet<AssetId<Mesh>> = shelf
                 .twins
                 .values()
                 .map(|h| h.id())
-                .chain(app.world().resource::<Shelf>().cube.iter().map(|h| h.id()))
+                .chain(shelf.cube.iter().map(|h| h.id()))
+                .chain(shelf.weathered.values().flatten().map(|(h, _)| h.id()))
                 .collect();
             let w = app.world_mut();
-            for (mesh, name) in w
-                .query_filtered::<(&Mesh3d, Option<&Name>), With<ShelfMark>>()
-                .iter(w)
-            {
-                if !twins.contains(&mesh.0.id()) {
-                    real.insert(format!("{name:?} {:?}", mesh.0.id()));
+            let mut q = w.query_filtered::<(Entity, &Mesh3d), With<ShelfMark>>();
+            let entries: Vec<(Entity, Handle<Mesh>)> =
+                q.iter(w).map(|(e, m)| (e, m.0.clone())).collect();
+            for (e, mesh) in entries {
+                if twins.contains(&mesh.id()) {
+                    continue;
                 }
+                // Which mesh: its shape, size and path, and what it wears.
+                let what = w.resource::<Assets<Mesh>>().get(&mesh).map_or(
+                    "(gone to the render world)".to_string(),
+                    |m| {
+                        format!(
+                            "{:?}, {} vertices, attributes readable: {}",
+                            m.primitive_topology(),
+                            m.count_vertices(),
+                            m.try_attributes().is_ok()
+                        )
+                    },
+                );
+                let path = w
+                    .resource::<AssetServer>()
+                    .get_path(mesh.id())
+                    .map(|p| p.to_string());
+                let wears = w
+                    .inspect_entity(e)
+                    .map(|c| {
+                        c.filter(|i| i.name().to_string().contains("MeshMaterial3d"))
+                            .map(|i| i.name().to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                real.insert(format!("{:?} {what}, {path:?}, {wears:?}", mesh.id()));
             }
         }
         assert!(
