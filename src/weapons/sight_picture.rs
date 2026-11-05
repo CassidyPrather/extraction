@@ -28,24 +28,39 @@ mod tests {
             let eye = layout.sight.translation;
             let end = layout.muzzle.z - 0.05;
             let front = first_hit(&tris, eye - Vec3::Y * 0.0003, end).unwrap_or(f32::NAN);
-            // Post and notch widths 1 mm under the line.
-            let mut post = (f32::MAX, f32::MIN);
-            let mut notch = (f32::MIN, f32::MAX);
-            for i in -100..=100 {
-                let x = i as f32 * 0.0002;
-                let o = Vec3::new(eye.x + x, eye.y - 0.001, eye.z);
-                if let Some(z) = first_hit(&tris, o, end) {
-                    if (z - front).abs() < 0.015 {
-                        post = (post.0.min(x), post.1.max(x));
-                    } else if z > front + 0.015 {
-                        if x < 0.0 {
-                            notch.0 = notch.0.max(x)
-                        } else {
-                            notch.1 = notch.1.min(x)
-                        }
-                    }
+            // The post's width 1.5 mm under its top, from just behind it;
+            // the notch's 0.5 mm under the line, from the eye.
+            let run = |y: f32, from: f32, hit: &dyn Fn(f32) -> bool| {
+                let mut on = Vec::new();
+                for i in -150..=150 {
+                    let x = i as f32 * 0.0001;
+                    let o = Vec3::new(eye.x + x, y, from);
+                    on.push(first_hit(&tris, o, end).is_some_and(|z| hit(z)));
                 }
-            }
+                on
+            };
+            let span = |on: &[bool], want: bool| {
+                // The contiguous run of `want` nearest the middle.
+                let mid = 150usize;
+                let c = (0..=150)
+                    .flat_map(|d| [mid - d, mid + d])
+                    .find(|&i| on[i] == want);
+                c.map_or(0.0, |c| {
+                    let mut a = c;
+                    while a > 0 && on[a - 1] == want {
+                        a -= 1
+                    }
+                    let mut b = c;
+                    while b < on.len() - 1 && on[b + 1] == want {
+                        b += 1
+                    }
+                    (b - a + 1) as f32 * 0.0001
+                })
+            };
+            let post_on = run(eye.y - 0.0015, front + 0.02, &|z| (z - front).abs() < 0.015);
+            let rear_on = run(eye.y - 0.0005, eye.z, &|z| z > front + 0.03);
+            let post = (0.0, span(&post_on, true));
+            let notch = (0.0, span(&rear_on, false));
             let (lo, hi) = layout.bounds();
             let butt_z = hi.z;
             let comb = tris
