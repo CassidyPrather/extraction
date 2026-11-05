@@ -1070,7 +1070,9 @@ fn first_person_hands(
             // the glove seated on it (`render::hold`).
             "read" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
-                let hand = rest(Side::Right);
+                // Brought in front of the face to read, not at rest.
+                let mut hand = rest(Side::Right);
+                hand.translation = eye + (flat * 0.4 + right * 0.03 - Vec3::Y * 0.3) / zoom;
                 let size = Vec2::new(0.3, 0.26);
                 let card = crate::interact::read::held_up(hand.translation, eye, size);
                 // The real card: its text drawn by `render::screen` on its
