@@ -41,6 +41,7 @@ use crate::robots::walker::Nav;
 use crate::robots::{Awareness, Brain, Job, JobKind, Robot};
 use crate::weapons::flat::MacroKind;
 use crate::weapons::{Gun, Mag};
+use crate::world::bridges::{Deck, decks};
 use crate::world::buildings::{Building, BuildingLoot, DoorLeaf};
 use crate::world::{Layer, Zone};
 use extraction_core::progression::Job as CardJob;
@@ -792,7 +793,11 @@ pub struct Scene<'w, 's> {
     herds: Query<'w, 's, &'static crate::wildlife::herd::Herd>,
     perches: Option<Res<'w, crate::wildlife::perches::Perches>>,
     /// Every robot, standing or wrecked ([`Scene::wreck_at`]).
-    robot_state: Query<'w, 's, &'static Robot>,
+    robot_state: Query<'w, 's, (&'static Robot, &'static GlobalTransform)>,
+    /// The ground's collider, left out of a ray for what's underfoot.
+    terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
+    /// Where anything is (what a stuck raider was walking up to press).
+    placed: Query<'w, 's, &'static GlobalTransform>,
 }
 
 impl Scene<'_, '_> {
@@ -806,8 +811,45 @@ impl Scene<'_, '_> {
             .xf
             .transform_point(Vec3::new(local.x, plan.floor_at(local), local.y))
             .y;
+        self.wreck_at_feet(p, feet)
+    }
+
+    /// As [`Scene::wreck_at`], out of doors: on what's underfoot there
+    /// (a bridge's deck over a beck's bed, or the ground).
+    fn wreck_out_at(&self, p: Vec2) -> bool {
+        let ground = self.zone.ground(p.x, p.y);
+        let from = Vec3::new(p.x, ground + 4.0, p.y);
+        let feet = self
+            .spatial
+            .cast_ray(
+                from,
+                Dir3::NEG_Y,
+                6.0,
+                true,
+                &SpatialQueryFilter::from_mask([Layer::World])
+                    .with_excluded_entities(self.terrain.iter()),
+            )
+            .map_or(ground, |hit| (from.y - hit.distance).max(ground));
+        self.wreck_at_feet(p, feet)
+    }
+
+    /// Where a thing is, on the ground plane.
+    fn items_at(&self, e: Entity) -> Option<Vec2> {
+        self.placed.get(e).ok().map(|g| g.translation().xz())
+    }
+
+    /// Where wrecked robots lie (their bodies' roots).
+    fn wrecks(&self) -> Vec<Vec2> {
+        self.robot_state
+            .iter()
+            .filter(|(r, _)| r.wrecked)
+            .map(|(_, g)| g.translation().xz())
+            .collect()
+    }
+
+    fn wreck_at_feet(&self, p: Vec2, feet: f32) -> bool {
         let filter = SpatialQueryFilter::from_mask([Layer::Robot]);
-        let wrecked = |e: Entity| self.robot_state.get(e).is_ok_and(|r| r.wrecked);
+        let wrecked = |e: Entity| self.robot_state.get(e).is_ok_and(|r| r.0.wrecked);
         let is_wreck = |e: Entity| {
             wrecked(e)
                 || self
@@ -983,6 +1025,29 @@ impl Scene<'_, '_> {
             .is_none()
     }
 
+    /// Nothing solid between a body at `from` (its feet) and something
+    /// lying at `to`, at the knee and the hip, short of the thing itself
+    /// (and the floor it lies on).
+    fn walk_clear(&self, from: Vec3, to: Vec3) -> bool {
+        [0.4, 0.9].iter().all(|h| {
+            let a = from + Vec3::Y * *h;
+            let b = to + Vec3::Y * 0.25;
+            let d = b - a;
+            let Ok(dir) = Dir3::new(d) else {
+                return true;
+            };
+            self.spatial
+                .cast_ray(
+                    a,
+                    dir,
+                    (d.length() - 0.3).max(0.0),
+                    true,
+                    &SpatialQueryFilter::from_mask(Layer::World),
+                )
+                .is_none()
+        })
+    }
+
     fn ray_clear(&self, from: Vec3, to: Vec3) -> bool {
         let d = to - from;
         let len = d.length();
@@ -1149,9 +1214,26 @@ pub fn think(
                         (Some(Task::WalkTo { within, .. }), Some(Task::WalkTo { to, .. }))
                             if *within == crate::bot::SIDESTEP => scene.in_the_way(pos, *to),
                         (Some(Task::WalkTo { to, .. }), _) => scene.in_the_way(pos, *to),
+                        // Walking up to press something (the truck's bell).
+                        (Some(Task::Press(e)), _) => scene
+                            .items_at(*e)
+                            .map(|at| scene.in_the_way(pos, at))
+                            .unwrap_or_default(),
                         _ => String::new(),
                     }}),
                 );
+                if r.debug
+                    && let Some(Task::Grab { item, .. }) = bot.tasks.front()
+                    && let Ok((_, it, gt, ..)) = scene.items.get(*item)
+                {
+                    let at = gt.translation();
+                    log.event(
+                        "stuck_item",
+                        json!({"item": scene.catalog.get(it.kind()).id,
+                        "ix": round(at.x, 2), "iy": round(at.y, 2), "iz": round(at.z, 2),
+                        "by": scene.in_the_way(pos, at.xz())}),
+                    );
+                }
                 // Stuck again and again in one place: the waypoint it's
                 // making for can't be reached from here, whatever the grid
                 // says. Block it in its own grid so the next plan goes round.
@@ -1185,8 +1267,8 @@ pub fn think(
                     }
                 }
                 open_heat_here(r, pos, &mut log);
-                let a = r.rng.range(0.0, std::f32::consts::TAU);
-                let side = here + Vec2::new(a.cos(), a.sin()) * step;
+                let start = r.rng.range(0.0, std::f32::consts::TAU);
+                let side = sidestep(&r.plans, &r.grid, &scene, pos, step, start);
                 // Give up on what it was reaching for; sidestep; replan.
                 if let Act::Take(_, item) = r.act {
                     r.skip.insert(item);
@@ -1334,6 +1416,116 @@ pub fn think(
         }
         r.interrupted = false;
     }
+}
+
+/// How many directions a stuck raider tries for a sidestep.
+const SIDESTEP_TRIES: usize = 16;
+
+/// Where a stuck raider steps aside to, about `step` off: somewhere a body
+/// stands and walks straight to, on its plan's floor indoors (down a site
+/// too) and the Zone's walking grid out of doors. A random point that far
+/// off lands in the rock round a small room, and one stuck made five
+/// (Rime seed 4, 5 November, a 5 x 4 m assay store; Fifth valley's
+/// trace). Nearer if nowhere that far will do; the nearest floor if
+/// nowhere near will.
+fn sidestep(
+    plans: &[BuildingPlan],
+    grid: &NavGrid,
+    scene: &Scene,
+    pos: Vec3,
+    step: f32,
+    start: f32,
+) -> Vec2 {
+    // On a bridge: along its deck, never off it.
+    if let Some(deck) = decks(&scene.zone)
+        .into_iter()
+        .find(|d| d.holds(pos.xz(), 0.5))
+    {
+        return deck_sidestep(&deck, scene, pos, step, start);
+    }
+    sidestep_open(plans, grid, scene, pos, step, start)
+}
+
+/// How far onto its abutments past a deck's ends a sidestep may land (m).
+const DECK_RUN_OFF: f32 = 1.5;
+
+/// A sidestep along a bridge's deck: up or down it, as far as it goes
+/// (and onto the ground past its ends), wherever a body walks straight
+/// to; the deck's middle line beside it if nowhere will do. (Kettle seed
+/// 2, 5 November: on the beck's 1.6 m footbridge, under a drone's fire,
+/// three sidesteps found no floor of the Zone's 2 m grid beside it, and
+/// the raider stood till it died.)
+fn deck_sidestep(deck: &Deck, scene: &Scene, pos: Vec3, step: f32, start: f32) -> Vec2 {
+    let axis = (deck.b - deck.a).normalize_or(Vec2::X);
+    let len = deck.a.distance(deck.b);
+    let t0 = deck.along(pos.xz());
+    let first = if start.cos() >= 0.0 { 1.0 } else { -1.0 };
+    for far in [step, step * 0.5, step * 0.25] {
+        for sign in [first, -first] {
+            let t = (t0 + sign * far).clamp(-DECK_RUN_OFF, len + DECK_RUN_OFF);
+            if (t - t0).abs() < 0.3 {
+                continue;
+            }
+            let q = deck.a + axis * t;
+            if scene.walk_clear(pos, Vec3::new(q.x, pos.y, q.y)) {
+                return q;
+            }
+        }
+    }
+    deck.a + axis * t0.clamp(0.0, len)
+}
+
+/// [`sidestep`] off a bridge: on its plan's floor indoors, the Zone's grid
+/// out of doors.
+fn sidestep_open(
+    plans: &[BuildingPlan],
+    grid: &NavGrid,
+    scene: &Scene,
+    pos: Vec3,
+    step: f32,
+    start: f32,
+) -> Vec2 {
+    let here = pos.xz();
+    let plan = plans
+        .iter()
+        .position(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
+    let floor = |q: Vec2| match plan {
+        Some(b) => {
+            let p = &plans[b];
+            p.grid
+                .walkable(p.to_local(Vec3::new(q.x, pos.y, q.y)).xz().to_array())
+        }
+        None => grid.walkable(q.to_array()),
+    };
+    for far in [step, step * 0.5, step * 0.25] {
+        for k in 0..SIDESTEP_TRIES {
+            let a = start + k as f32 * std::f32::consts::TAU / SIDESTEP_TRIES as f32;
+            let q = here + Vec2::new(a.cos(), a.sin()) * far;
+            // On its floor there (the ground out of doors).
+            let y = match plan {
+                Some(b) => {
+                    let p = &plans[b];
+                    let l = p.to_local(Vec3::new(q.x, pos.y, q.y)).xz();
+                    p.xf.transform_point(Vec3::new(l.x, p.floor_at(l), l.y)).y
+                }
+                None => scene.zone.ground(q.x, q.y),
+            };
+            let to = Vec3::new(q.x, y, q.y);
+            if floor(q) && scene.walk_clear(pos, to) {
+                return q;
+            }
+        }
+    }
+    let nearest = match plan {
+        Some(b) => {
+            let p = &plans[b];
+            p.grid
+                .nearest_walkable(p.to_local(pos).xz().to_array())
+                .map(|c| p.world2(Vec2::from_array(c)))
+        }
+        None => grid.nearest_walkable(here.to_array()).map(Vec2::from_array),
+    };
+    nearest.unwrap_or(here + Vec2::new(start.cos(), start.sin()) * step)
 }
 
 /// In heat its plan shuts (a fight took it in, or it's stuck by it):
@@ -2565,6 +2757,80 @@ fn seg_dist(a: Vec2, b: Vec2, p: Vec2) -> f32 {
     (a + ab * t).distance(p)
 }
 
+/// How near a wreck's root a walk is looked along for its body (m): a
+/// walker's legs lie a couple of metres out.
+const WRECK_NEAR: f32 = 4.0;
+
+/// As [`travel`], round any wrecked robot lying on the way: the Zone's
+/// grid knows nothing of one, so the walk is looked along near each wreck
+/// at a body's height, and where it meets one the ground there is shut in
+/// a copy of the grid and the walk found again in that (Kettle seed 1, 5
+/// November: to the RV over the beck's footbridge, a walker wrecked on
+/// its end, ten stucks). With no way round, the walk as it was: no worse
+/// than before. A wreck by the walk's end is left on it: that's where it's
+/// going.
+fn travel_clear(
+    grid: &NavGrid,
+    scene: &Scene,
+    from: Vec2,
+    to: Vec2,
+    within: f32,
+) -> Option<Vec<Task>> {
+    let first = travel(grid, from, to, within)?;
+    let end = to;
+    let wrecks = scene.wrecks();
+    if wrecks.is_empty() {
+        return Some(first);
+    }
+    let mut shut: Option<NavGrid> = None;
+    let mut route = first.clone();
+    for _ in 0..WRECK_SHUTS {
+        let mut last = from;
+        let mut hit = None;
+        'legs: for t in &route {
+            let Task::WalkTo { to, .. } = t else {
+                continue;
+            };
+            let len = last.distance(*to);
+            let mut d = 0.3;
+            while d < len {
+                let p = last.lerp(*to, d / len);
+                // (Not by where it's going: a wreck it's off to salvage, a
+                // drone come down by the truck it's boarding; walked round,
+                // it arrived elsewhere: Sallow seed 8's minelayer, its and
+                // Rime seed 4's truck, the bell out of reach.)
+                if p.distance(end) > WRECK_NEAR
+                    && wrecks.iter().any(|w| w.distance(p) < WRECK_NEAR)
+                    && scene.wreck_out_at(p)
+                {
+                    hit = Some(p);
+                    break 'legs;
+                }
+                d += 0.25;
+            }
+            last = *to;
+        }
+        let Some(p) = hit else {
+            return Some(route);
+        };
+        let g = shut.get_or_insert_with(|| grid.clone());
+        // (A cell at least: the Zone's grid is 2 m a cell, and a smaller
+        // circle shuts none.)
+        g.block(
+            Obstacle::Circle {
+                at: p.to_array(),
+                radius: 0.6f32.max(grid.cell),
+            },
+            super::indoor::SITE_CLEARANCE,
+        );
+        match travel(g, from, to, within) {
+            Some(again) => route = again,
+            None => return Some(first),
+        }
+    }
+    Some(route)
+}
+
 /// A walk along the Zone grid, as WalkTo tasks of at most 20 m each.
 fn travel(grid: &NavGrid, from: Vec2, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let path = grid.path(from.to_array(), to.to_array())?;
@@ -3097,6 +3363,16 @@ fn raid_step(
                 match pick_item(me, r, scene, s, pos) {
                     Some(item) => {
                         r.act = Act::Take(s, item);
+                        if r.debug
+                            && let Ok((_, it, gt, ..)) = scene.items.get(item)
+                        {
+                            let at = gt.translation();
+                            log.event(
+                                "pick",
+                                json!({"item": scene.catalog.get(it.kind()).id, "site": r.sites[s].name,
+                                "ix": round(at.x, 2), "iy": round(at.y, 2), "iz": round(at.z, 2)}),
+                            );
+                        }
                         if let Some(t) = take_item(r, scene, s, item, pos) {
                             let power = t.iter().any(|t| {
                                 matches!(t, Task::Press(e) if scene.power_switches.contains(*e))
@@ -3972,7 +4248,7 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
         SiteKind::Anomaly => 1.5,
         _ => 2.0,
     };
-    travel(&r.grid, pos.xz(), to, within)
+    travel_clear(&r.grid, scene, pos.xz(), to, within)
 }
 
 fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
@@ -4400,7 +4676,7 @@ fn extract_step(
                 .min_by_key(|t| t.len())
                 .unwrap_or_else(|| vec![Task::Wait(1.0)]);
         }
-        return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
+        return travel_clear(&r.grid, scene, here, goal, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
                 to: goal,
                 within: 2.0,
@@ -4415,7 +4691,24 @@ fn extract_step(
                 .find(|(_, p)| matches!(p, Pressable::BellPull))
                 .map(|(e, _)| e);
             r.act = Act::Board;
-            board_tasks(p, bell)
+            // Behind the truck as it stands: it parks off its pose when
+            // someone's on it (`rv_pose_clear`: pulled on past them, short
+            // of them or alongside), and the raider waiting at the RV is.
+            // Walked by the pose, the bed's line ran beside the truck
+            // (Rime seed 4, 5 November: six board stucks at its side, the
+            // bell out of reach, a drone's burst).
+            let truck = scene
+                .trucks
+                .iter()
+                .map(|(_, g)| g.compute_transform())
+                .min_by(|a, b| {
+                    a.translation
+                        .xz()
+                        .distance(here)
+                        .total_cmp(&b.translation.xz().distance(here))
+                })
+                .unwrap_or(pose);
+            board_tasks(|z| truck.transform_point(Vec3::new(0.0, 0.0, z)).xz(), bell)
         }
         _ => vec![Task::Wait(2.0)],
     }
@@ -4516,7 +4809,10 @@ fn maintain(
         .def
         .magazine_family
         .clone()?;
-    // Its own empties, lying where they fell.
+    // Its own empties, lying where they fell: in sight along the floor, as
+    // the grab walks straight there (not one lying in the next room
+    // through the rock: Rime seed 4, 5 November, an ammo crate's mag past
+    // an adit's wall, six stucks; Fifth valley's trace).
     let dropped = scene.items.iter().find(|(e, it, gt, h, s, b)| {
         h.is_none()
             && s.is_none()
@@ -4525,6 +4821,7 @@ fn maintain(
             && gt.translation().distance(pos) < 10.0
             && scene.mags.get(*e).is_ok_and(|(_, m)| m.family == family)
             && it.rounds < 5
+            && scene.walk_clear(pos, gt.translation())
     });
     if let Some((e, ..)) = dropped {
         r.skip.insert(e);
@@ -4606,6 +4903,15 @@ pub fn board_tasks(p: impl Fn(f32) -> Vec2, bell: Option<Entity>) -> Vec<Task> {
         },
     ];
     if let Some(bell) = bell {
+        // Up the bed to stand by the bell (at the front, 0.7 m to the
+        // side: 0.86 m from here, in reach) before pressing it, a walk of
+        // its own: not Press's own straight walk, which from wherever the
+        // raider ended up went nowhere (Rime seed 4, 5 November: four
+        // stucks on the truck, a drone's burst).
+        t.push(Task::WalkTo {
+            to: p(-1.2),
+            within: 0.3,
+        });
         t.push(Task::Press(bell));
     }
     t.push(Task::Wait(1.0));
@@ -5000,6 +5306,345 @@ mod run_tests {
             near >= 0.6,
             "{}: the route passes {near:.2} m from the wreck's middle",
             plan.name
+        );
+    }
+
+    /// On every bridge in every valley, a stuck raider's sidestep keeps to
+    /// the deck (or runs off its ends onto the ground), never off its side:
+    /// the Zone's 2 m grid can't hold a 1.6 m footbridge, and off the deck
+    /// was the beck (Kettle seed 2, 5 November: three stucks on the beck's
+    /// footbridge under a drone's fire, then dead). From a quarter, half
+    /// and three quarters along each deck, at 3 m and 8 m. The grid's own
+    /// sidestep goes off a deck somewhere, or the test proves nothing.
+    #[test]
+    fn a_sidestep_on_a_bridge_keeps_to_its_deck() {
+        let mut bad = Vec::new();
+        let (mut tried, mut open_off) = (0, 0);
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let grid = app.world().resource::<Nav>().0.as_ref().clone();
+            let map2 = map.clone();
+            let (b, t, o) = app
+                .world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let (mut bad, mut tried, mut open_off) = (Vec::new(), 0, 0);
+                    for (i, d) in decks(&scene.zone).iter().enumerate() {
+                        for f in [0.25, 0.5, 0.75] {
+                            let at = d.a.lerp(d.b, f);
+                            let ground = scene.zone.ground(at.x, at.y);
+                            // On the deck: its own surface underfoot.
+                            let feet = scene
+                                .spatial
+                                .cast_ray(
+                                    Vec3::new(at.x, ground + 6.0, at.y),
+                                    Dir3::NEG_Y,
+                                    8.0,
+                                    true,
+                                    &SpatialQueryFilter::from_mask([Layer::World])
+                                        .with_excluded_entities(scene.terrain.iter()),
+                                )
+                                .map_or(ground, |h| ground + 6.0 - h.distance);
+                            let pos = Vec3::new(at.x, feet, at.y);
+                            for step in [3.0, 8.0] {
+                                for k in 0..4 {
+                                    let start = k as f32 * 1.57 + 0.3;
+                                    tried += 1;
+                                    let q = sidestep(&[], &grid, &scene, pos, step, start);
+                                    if !d.holds(q, 0.05) && !d.holds(q, DECK_RUN_OFF + 0.05) {
+                                        bad.push(format!("{map2} deck {i}: from {at:.1?}, {step} m: to {q:.1?}"));
+                                    } else if !d.holds(q, 0.05) {
+                                        // Past an end: along the axis, not off the side.
+                                        let ab = d.b - d.a;
+                                        let len = ab.length();
+                                        let along = (q - d.a).dot(ab) / len;
+                                        if along > 0.0 && along < len {
+                                            bad.push(format!(
+                                                "{map2} deck {i}: from {at:.1?}, {step} m: off its side to {q:.1?}"
+                                            ));
+                                        }
+                                    }
+                                    let o = sidestep_open(&[], &grid, &scene, pos, step, start);
+                                    if !d.holds(o, 0.05) {
+                                        let ab = d.b - d.a;
+                                        let along = (o - d.a).dot(ab) / ab.length();
+                                        if along > 0.0 && along < ab.length() {
+                                            open_off += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (bad, tried, open_off)
+                })
+                .unwrap();
+            bad.extend(b);
+            tried += t;
+            open_off += o;
+        }
+        assert!(tried >= 48, "only {tried} sidesteps on bridges tried");
+        assert!(
+            open_off > 0,
+            "the grid's sidestep never left a deck: the test proves nothing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} sidesteps off a deck (the grid's own went off {open_off}):\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
+    /// A stuck raider's sidestep lands on floor it walks straight to, in
+    /// every building and site on every map, from places on its floor, at
+    /// both a stuck's 3 m and a pocket's 8 m (Rime seed 4, 5 November: in
+    /// a 5 x 4 m assay store the random point landed in the rock, one stuck
+    /// made five). The old random point misses somewhere, or the test
+    /// proves nothing.
+    #[test]
+    fn a_stuck_raiders_sidestep_lands_on_its_floor() {
+        let mut bad = Vec::new();
+        let (mut tried, mut old_missed) = (0, 0);
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            let grid = app.world().resource::<Nav>().0.as_ref().clone();
+            let map2 = map.clone();
+            let (b, t, o) = app
+                .world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let (mut bad, mut tried, mut old) = (Vec::new(), 0, 0);
+                    for plan in &plans {
+                        let g = &plan.grid;
+                        // A few places on its floor, indoors, spread out.
+                        let cells: Vec<Vec2> = (0..g.n * g.n)
+                            .filter(|k| g.cost[*k] != extraction_core::nav::BLOCKED)
+                            .map(|k| Vec2::from_array(g.centre(k % g.n, k / g.n)))
+                            .filter(|c| plan.indoors(*c))
+                            .collect();
+                        for c in cells.iter().step_by((cells.len() / 4).max(1)).take(4) {
+                            let pos = plan
+                                .xf
+                                .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                            if !plan.in_grid(pos) {
+                                continue;
+                            }
+                            let solo = std::slice::from_ref(plan);
+                            for step in [3.0, 8.0] {
+                                for k in 0..4 {
+                                    let start = k as f32 * 1.57 + 0.3;
+                                    tried += 1;
+                                    let q = sidestep(solo, &grid, &scene, pos, step, start);
+                                    let l = plan.to_local(Vec3::new(q.x, pos.y, q.y)).xz();
+                                    let floor_y = plan
+                                        .xf
+                                        .transform_point(Vec3::new(l.x, plan.floor_at(l), l.y))
+                                        .y;
+                                    if !g.walkable(l.to_array())
+                                        || !scene.walk_clear(pos, Vec3::new(q.x, floor_y, q.y))
+                                    {
+                                        bad.push(format!(
+                                            "{map2} {} at {:.0?}: from {c:.2?}, {step} m: to {l:.2?}",
+                                            plan.name, plan.xf.translation
+                                        ));
+                                    }
+                                    // The old step: straight out, as far.
+                                    let naive = pos.xz() + Vec2::new(start.cos(), start.sin()) * step;
+                                    let nl = plan.to_local(Vec3::new(naive.x, pos.y, naive.y)).xz();
+                                    if !g.walkable(nl.to_array()) {
+                                        old += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (bad, tried, old)
+                })
+                .unwrap();
+            bad.extend(b);
+            tried += t;
+            old_missed += o;
+        }
+        assert!(tried >= 200, "only {tried} sidesteps tried");
+        assert!(
+            old_missed > 0,
+            "the old random step never missed: the test proves nothing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} sidesteps off the floor (the old step missed {old_missed}):\n{}",
+            bad.len(),
+            bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
+        );
+    }
+
+    /// An empty lying past a wall isn't walked at: the grab goes straight
+    /// for it (Rime seed 4, 5 November: a mag in the next room through an
+    /// adit's rock, six stucks). One in the open is.
+    #[test]
+    fn an_empty_past_a_wall_is_left() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "training_yard".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let feet = zone.on_ground(0.0, 30.0);
+        let mag = zone.on_ground(3.0, 30.0) + Vec3::Y * 0.02;
+        let clear = |app: &mut App| {
+            app.world_mut()
+                .run_system_once(move |scene: Scene| scene.walk_clear(feet, mag))
+                .unwrap()
+        };
+        assert!(clear(&mut app), "nothing between them, and not clear");
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(0.3, 3.0, 4.0),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_translation(zone.on_ground(1.5, 30.0) + Vec3::Y * 1.5),
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(!clear(&mut app), "a wall between them, and clear");
+    }
+
+    /// A walk over open ground goes round a wrecked robot lying on its
+    /// line, not into it: the Zone's grid knows nothing of a wreck (Kettle
+    /// seed 1, 5 November: a walker wrecked on the end of the beck's
+    /// footbridge, ten stucks on the way to the RV). A robot still standing
+    /// there is left on the walk: it moves.
+    #[test]
+    fn a_walk_goes_round_a_wreck_in_the_open() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "training_yard".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let grid = app.world().resource::<Nav>().0.as_ref().clone();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        // Open ground, and a straight walk across it.
+        let (from, to) = (Vec2::new(-12.0, 30.0), Vec2::new(12.0, 30.0));
+        let route = travel(&grid, from, to, 1.0).expect("a walk across the open");
+        // Halfway along the walk: where the wreck goes.
+        let pts: Vec<Vec2> = std::iter::once(from)
+            .chain(route.iter().filter_map(|t| match t {
+                Task::WalkTo { to, .. } => Some(*to),
+                _ => None,
+            }))
+            .collect();
+        let total: f32 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
+        let mut left = total / 2.0;
+        let mut at = from;
+        for w in pts.windows(2) {
+            let d = w[0].distance(w[1]);
+            if left <= d {
+                at = w[0].lerp(w[1], left / d.max(1e-6));
+                break;
+            }
+            left -= d;
+        }
+        let near = |route: &[Task]| {
+            let mut last = from;
+            let mut near = f32::MAX;
+            for t in route {
+                if let Task::WalkTo { to, .. } = t {
+                    near = near.min(seg_dist(last, *to, at));
+                    last = *to;
+                }
+            }
+            near
+        };
+        assert!(
+            near(&route) < 0.5,
+            "the walk crosses the spot: {:.2} m off",
+            near(&route)
+        );
+        let ground = zone.ground(at.x, at.y);
+        let wreck = |app: &mut App, wrecked: bool| {
+            app.world_mut()
+                .spawn((
+                    Robot {
+                        kind: crate::robots::RobotKind::Walker,
+                        wrecked,
+                    },
+                    Transform::from_xyz(at.x, ground, at.y),
+                ))
+                .with_children(|c| {
+                    c.spawn((
+                        Name::new("Walker body"),
+                        Transform::from_xyz(0.0, 0.6, 0.0),
+                        RigidBody::Static,
+                        Collider::cuboid(1.2, 1.2, 1.2),
+                        CollisionLayers::new(
+                            Layer::Robot,
+                            [Layer::World, Layer::Player, Layer::Robot],
+                        ),
+                    ));
+                })
+                .id()
+        };
+        let walked = |app: &mut App| {
+            let grid = grid.clone();
+            app.world_mut()
+                .run_system_once(move |scene: Scene| {
+                    travel_clear(&grid, &scene, from, to, 1.0).unwrap_or_default()
+                })
+                .unwrap()
+        };
+        let standing = wreck(&mut app, false);
+        for _ in 0..3 {
+            app.update();
+        }
+        let route = walked(&mut app);
+        assert!(
+            near(&route) < 0.5,
+            "a standing robot moved the walk: {:.2} m off",
+            near(&route)
+        );
+        app.world_mut().entity_mut(standing).despawn();
+        wreck(&mut app, true);
+        for _ in 0..3 {
+            app.update();
+        }
+        let route = walked(&mut app);
+        assert!(!route.is_empty(), "no walk at all");
+        assert!(
+            near(&route) >= 0.9,
+            "the walk passes {:.2} m from the wreck's middle",
+            near(&route)
         );
     }
 

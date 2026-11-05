@@ -459,6 +459,11 @@
         (at: (231.0, 56.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
+        // to go still by while it comes (map_lint::WAIT_NEAR).
+        (prefab: "log_pile", at: (242.7, -54.9), rot: 214.0, tag: "wait_gauge_house"),
+        (prefab: "log_pile", at: (-198.1, -264.6), rot: 322.0, tag: "wait_sallow_head"),
+        (prefab: "log_pile", at: (22.6, -266.4), rot: 97.0, tag: "wait_inflow_bridge"),
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The Authority's telemetry mast on the west abutment: the gauges' readings went out by radio.

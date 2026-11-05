@@ -21,8 +21,8 @@ pub const SPRINT_SPEED: f32 = 4.6;
 pub const CROUCH_SPEED: f32 = 1.3;
 const GRAVITY: f32 = 9.81;
 const JUMP_SPEED: f32 = 3.6;
-const CAPSULE_RADIUS: f32 = 0.28;
-const CAPSULE_HEIGHT: f32 = 1.75;
+pub(crate) const CAPSULE_RADIUS: f32 = 0.28;
+pub(crate) const CAPSULE_HEIGHT: f32 = 1.75;
 /// The lowest the body goes: crouched as low as a kneel.
 const MIN_HEIGHT: f32 = 0.9;
 const STEP_HEIGHT: f32 = 0.4;
@@ -218,8 +218,10 @@ pub fn move_bodies(
     zone: Res<Zone>,
     levels: Option<Res<crate::world::underground::Levels>>,
     mut steps: MessageWriter<Footstep>,
+    opts: Option<Res<crate::launch::LaunchOptions>>,
 ) {
     let dt = time.delta_secs();
+    let tooling = opts.is_some_and(|o| o.tooling());
     let config = MoveAndSlideConfig::default();
     for (entity, input, mut body, mut root, children, climbing) in &mut bodies {
         let own: Vec<Entity> = children.iter().filter(|c| colliders.contains(*c)).collect();
@@ -475,6 +477,33 @@ pub fn move_bodies(
             body.grounded = true;
             body.airborne = 0.0;
         }
+        // Off the map in a tooling run (where a screenshot's or gallery's
+        // camera can stand; in a raid the fence keeps you in, and a test
+        // stands you where it likes) there's no terrain collider:
+        // with nothing at all under you, the ground's height holds you. A
+        // body stood there fell for ever, taking a camera that followed
+        // its head under the ground with it. (A test field's own floor out
+        // there is something under you: that holds you as it did.)
+        let feet = root.translation + under;
+        if tooling && !body.grounded && !zone.on_heightmap(feet.x, feet.z) {
+            let surface = zone.ground(feet.x, feet.z);
+            let nothing_under = move_and_slide
+                .spatial_query
+                .cast_ray(
+                    feet + Vec3::Y * 0.5,
+                    Dir3::NEG_Y,
+                    OFF_MAP_PROBE,
+                    true,
+                    &filter,
+                )
+                .is_none();
+            if nothing_under && feet.y < surface + 0.01 {
+                root.translation.y = surface - under.y;
+                body.velocity.y = body.velocity.y.max(0.0);
+                body.grounded = true;
+                body.airborne = 0.0;
+            }
+        }
 
         if swimming {
             // Strokes: the water's own sound, slower than steps.
@@ -511,6 +540,10 @@ pub const UNDER_SKIN: f32 = 0.05;
 /// terrain by more than [`UNDER_SKIN`], not down an underground site (on
 /// its stairs or in its rooms) nor over a stairwell's opened ground. Not
 /// finite: the ground at the origin's.
+/// How far down (m) a body off the map looks for something under it
+/// before the ground's height holds it.
+const OFF_MAP_PROBE: f32 = 200.0;
+
 pub fn under_the_ground(zone: &Zone, feet: Vec3) -> Option<f32> {
     if !feet.is_finite() {
         return Some(zone.ground(0.0, 0.0));

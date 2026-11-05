@@ -589,6 +589,11 @@ mod tests {
     /// on Bevy's task pools, which are the process's: beside the rest of
     /// the gauge tier, other valleys' loads queue ahead of them, and a
     /// fixed count of frames found 16 of 17 guns resting, or none.
+    ///
+    /// Every gun lying loose, too, come to rest: a gun still settling has
+    /// no merge building yet, and under the gauge batch's load the merges
+    /// all done found one of 17 not yet resting (twice in three batches, 5
+    /// November). Up to the cap, after which the census says which.
     fn settled(app: &mut App) {
         super::super::budget::tests::settle(app);
         for frame in 0..6000 {
@@ -596,10 +601,29 @@ mod tests {
             let w = app.world_mut();
             let building = w.query_filtered::<(), With<Building>>().iter(w).count();
             if frame >= SETTLE as usize * 3 + 60 && building == 0 {
-                return;
+                let (guns, resting, on_player, hidden) = census(app);
+                if resting == guns - on_player - hidden {
+                    return;
+                }
             }
         }
-        panic!("guns' merges still building after 6000 frames");
+        let w = app.world_mut();
+        if w.query_filtered::<(), With<Building>>().iter(w).count() > 0 {
+            panic!("guns' merges still building after 6000 frames");
+        }
+        // Lying loose and never at rest: which, and where.
+        let mut q = w.query_filtered::<(
+            Entity,
+            &GlobalTransform,
+            Option<&avian3d::prelude::LinearVelocity>,
+        ), (With<crate::weapons::Gun>, Without<AtRest>)>();
+        for (e, g, v) in q.iter(w) {
+            println!(
+                "not at rest: {e:?} at {:.2?}, moving {:.3} m/s",
+                g.translation(),
+                v.map_or(0.0, |v| v.0.length())
+            );
+        }
     }
 
     /// Guns lying in a valley rest; the drawn meshes under a resting gun

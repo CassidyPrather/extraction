@@ -90,6 +90,45 @@ pub struct MapDef {
     /// What the valley sounds like.
     #[serde(default)]
     pub sounds: SoundsDef,
+    /// Signs that someone's home, seen from far off: a lit window, a
+    /// smoking chimney (`world::cues`). Dressing on buildings already
+    /// placed, not structures: nothing stands, blocks or is linted.
+    #[serde(default)]
+    pub cues: Vec<Cue>,
+}
+
+/// A sign of life on a placed building (`MapDef::cues`), found by the
+/// building nearest `at`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Cue {
+    /// The window nearest `at`, of the building there, glows warm. `light`:
+    /// a small lamp inside lights the room too (it costs a light; most
+    /// windows want only the glow). `always`: lit by day as well as from
+    /// dusk to dawn.
+    LitWindow {
+        at: P2,
+        #[serde(default)]
+        light: bool,
+        #[serde(default)]
+        always: bool,
+    },
+    /// A thin plume from the chimney of the building nearest `at`: its
+    /// stack if it has one, else a stovepipe up through its roof over the
+    /// stove. With `y` (m above the ground at `at`), the plume rises from
+    /// there instead, and no pipe is added: a camp's fire, a pipe in a wall.
+    Smoke {
+        at: P2,
+        #[serde(default)]
+        y: Option<f32>,
+    },
+}
+
+impl Cue {
+    pub fn at(&self) -> P2 {
+        match self {
+            Cue::LitWindow { at, .. } | Cue::Smoke { at, .. } => *at,
+        }
+    }
 }
 
 /// A valley's ambience: sound set ids from `assets/audio/sounds.json`.

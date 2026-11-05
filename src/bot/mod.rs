@@ -690,7 +690,14 @@ fn one_hand(
 #[derive(bevy::ecs::system::SystemParam)]
 struct TaskExtras<'w, 's> {
     placed: Query<'w, 's, (&'static GlobalTransform, Option<&'static Held>)>,
-    doors: Query<'w, 's, &'static crate::world::buildings::Door>,
+    doors: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Door,
+            &'static crate::world::buildings::DoorLeaf,
+        ),
+    >,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
     socketed: Query<'w, 's, (Entity, &'static InSocket, &'static GlobalTransform)>,
@@ -1616,12 +1623,33 @@ fn run_tasks(
                 }
             }
             Task::OpenDoor(door) => {
-                let (Ok(d), Ok((gt, _))) = (ext.doors.get(door), ext.placed.get(door)) else {
+                let (Ok((d, leaf)), Ok((gt, _))) = (ext.doors.get(door), ext.placed.get(door))
+                else {
                     bot.next();
                     continue;
                 };
                 bot.walk = None;
                 bot.look = gt.translation() + Vec3::Y * 1.0;
+                // Stood in its swing, it stops against you (`swing_doors`):
+                // out of its way, past its end from the hinge, as anyone
+                // steps back from a door coming at them.
+                let l = gt.affine().inverse().transform_point3(Vec3::new(
+                    pos.x,
+                    root.translation.y,
+                    pos.y,
+                ));
+                let r = crate::player::CAPSULE_RADIUS + 0.15;
+                let in_its_way = d.open
+                    && d.angle < 0.85
+                    && l.x > -r
+                    && l.x < leaf.0.width + r
+                    && l.z < r
+                    && l.z > -(leaf.0.width + r);
+                if in_its_way {
+                    let hinge = gt.translation().xz();
+                    let out = (pos - hinge).normalize_or(Vec2::X);
+                    bot.walk = Some(hinge + out * (leaf.0.width + 0.7));
+                }
                 if d.open {
                     // Wait for it to swing most of the way, then let go of
                     // it (held, it comes along).

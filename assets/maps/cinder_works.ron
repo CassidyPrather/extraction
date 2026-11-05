@@ -262,6 +262,11 @@
     ],
 
     placements: [
+        // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
+        // to go still by while it comes (map_lint::WAIT_NEAR).
+        (prefab: "log_pile", at: (-111.9, -129.6), rot: 317.0, tag: "wait_fire_lookout"),
+        (prefab: "log_pile", at: (60.7, -180.6), rot: 17.0, tag: "wait_north_sidings"),
+        (prefab: "log_pile", at: (183.2, -1.3), rot: 182.0, tag: "wait_works_yard"),
         (prefab: "log_pile", at: (-147.0, -17.0), rot: 60.0),
         (prefab: "log_pile", at: (-72.0, 71.0), rot: 130.0),
         (prefab: "log_pile", at: (-173.0, -15.0), rot: 15.0),

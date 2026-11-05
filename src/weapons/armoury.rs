@@ -259,20 +259,23 @@ mod vr_tests {
             (gt.up().as_vec3(), gt.back().as_vec3())
         };
         let travel = gun_mut(&mut r).layout.handle.as_ref().unwrap().travel;
+        // The hand takes the bolt where it is: shut, or open (back and
+        // lifted).
         let work = |r: &mut Range, open: bool| {
-            r.vr.hand(Side::Left, handle, Quat::IDENTITY, 0.0, 0.0);
+            let at = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+            r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
             r.vr.step(30);
             r.vr.trigger(Side::Left, 1.0);
             r.vr.step(2);
             assert!(r.vr.hand_state(Side::Left).handle.is_some(), "on the bolt");
-            let lifted = handle + up * 0.045;
-            let drawn = lifted + back * travel * 1.15;
             if open {
-                glide_side(r, Side::Left, handle, lifted, 15);
+                let lifted = at + up * 0.045;
+                let drawn = lifted + back * travel * 1.15;
+                glide_side(r, Side::Left, at, lifted, 15);
                 glide_side(r, Side::Left, lifted, drawn, 15);
             } else {
-                glide_side(r, Side::Left, handle, handle - back * travel * 1.1, 15);
-                let home = handle - back * travel * 1.1;
+                let home = at - back * travel * 1.1;
+                glide_side(r, Side::Left, at, home, 15);
                 glide_side(r, Side::Left, home, home - up * 0.05, 15);
             }
             let_go(r);
