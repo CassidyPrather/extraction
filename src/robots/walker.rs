@@ -1249,11 +1249,31 @@ pub fn keep_clear(goal: Option<Vec3>, pos: Vec3, size: f32, feet: &[Vec3]) -> Op
         }
     }
     let ahead = (g - pos).with_y(0.0);
-    let blocked = feet.iter().any(|p| {
-        let to = (*p - pos).with_y(0.0);
+    let in_way = feet.iter().find(|p| {
+        let to = (**p - pos).with_y(0.0);
         to.length() < clear + 0.3 && ahead.dot(to) > 0.0
     });
-    (!blocked).then_some(g)
+    match in_way {
+        None => Some(g),
+        // On its way past them (home, say): round them, on its goal's
+        // side. A hound going home stopped for good by a newcomer keeping
+        // low and still, who waited for it to go (first_fight_hound at
+        // night, one-handed).
+        Some(p) if ahead.length() > (*p - pos).with_y(0.0).length() + clear => {
+            // Square to them from where it stands, so no step of the way
+            // round comes any nearer.
+            let to = (*p - pos).with_y(0.0);
+            let across = Vec3::new(-to.z, 0.0, to.x).normalize_or(Vec3::X);
+            let side = if across.dot(ahead) >= 0.0 {
+                across
+            } else {
+                -across
+            };
+            Some(Vec3::new(pos.x, p.y, pos.z) + side * (clear + 0.6))
+        }
+        // Coming for them: it stops short.
+        Some(_) => None,
+    }
 }
 pub const SHORT_PATH: f32 = 12.0;
 
@@ -1590,6 +1610,39 @@ fn walker_guns(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A walker on its way past someone crouched in its way (a hound going
+    /// home past the newcomer keeping low and still, as the driver says)
+    /// goes round them. It stopped there for good, the newcomer waiting
+    /// for it to go, till the Surge took them (first_fight_hound at night,
+    /// one-handed). One coming for them still stops short.
+    #[test]
+    fn a_walker_goes_round_someone_crouched_in_its_way() {
+        let pos = Vec3::ZERO;
+        let size = 1.0;
+        let clear = super::super::broken::clear_of_you(size);
+        let you = Vec3::new(0.0, 0.0, clear + 0.15);
+        // The nearest it comes to you on its way to `g`.
+        let nearest = |g: Vec3| {
+            let d = (g - pos).with_y(0.0);
+            let t = ((you - pos).with_y(0.0).dot(d) / d.length_squared().max(1e-6)).clamp(0.0, 1.0);
+            (pos + d * t - you).with_y(0.0).length()
+        };
+        // Past you, 40 m on.
+        let past = keep_clear(Some(Vec3::new(0.0, 0.0, 40.0)), pos, size, &[you]);
+        let Some(step) = past else {
+            panic!("stopped for good, its way out through you");
+        };
+        assert!(
+            nearest(step) >= clear,
+            "on its way round it comes {:.2} m from you",
+            nearest(step)
+        );
+        // To you: it stops short, off you.
+        if let Some(g) = keep_clear(Some(you), pos, size, &[you]) {
+            assert!(nearest(g) >= clear - 0.01, "it walked onto you: {g:?}");
+        }
+    }
 
     /// On every map, every rendezvous can be walked to from the insertion
     /// (the bots path on this grid too: a missing bridge is a valley
