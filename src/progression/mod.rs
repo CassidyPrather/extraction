@@ -883,10 +883,18 @@ fn restate_after_fall(
     opts: Res<LaunchOptions>,
     zone: Res<Zone>,
     mind: Option<Res<crate::robots::memory::ZoneMind>>,
+    logbook: Res<crate::raid::logbook::Logbook>,
     // The falls counted so far, and one not yet answered.
     mut seen: Local<Option<(u32, bool)>>,
 ) {
-    let (deaths, owed) = seen.get_or_insert((raid.deaths, false));
+    // A session opening on a raid lost (it ended at the fall, or you quit
+    // after it): that fall is answered too, here at camp (first_jobs: each
+    // raid its own session, so the driver never said what was waiting).
+    let lost_last = logbook
+        .written
+        .as_ref()
+        .is_some_and(|w| w.contains(": LOST"));
+    let (deaths, owed) = seen.get_or_insert((raid.deaths, lost_last && raid.raids > 0));
     if raid.deaths > *deaths {
         *deaths = raid.deaths;
         *owed = true;
