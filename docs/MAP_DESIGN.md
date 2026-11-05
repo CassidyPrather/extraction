@@ -516,6 +516,16 @@ fine on a monitor makes people sick or tired in a headset.
   than 16° over any 10 m (`ROUTE_GRADE`, `GRADE_RUN`), bridge decks
   counted at the deck. The body controller climbs far steeper; that's
   for scrambling on purpose, not for the way home.
+- **Edges**: no way a raid walks (a main route, a first job's walk there
+  or home, a place's way to its nearest rendezvous) comes within 3 m
+  (`EDGE_NEAR`) of the lip of a fall over 4.2 m (`EDGE_DROP`, where a
+  landing starts to cost more than 10 hp) down a face of 60° or more
+  (`EDGE_STEEP`) with nothing standing between. Water at the foot
+  catches you, a bridge deck has its rails, and a wall a prefab builds
+  out past its footprint counts (`map::prefab_walls`: the dam's face
+  stair). A raider fighting on Sallow's face stair walked off it before
+  its walls stood over the walk; `the_edge_rule_sees_the_dam_stair`
+  keeps the rule seeing it.
 - **Roads**: asphalt and gravel no steeper than 14% over 10 m (a steep
   mountain road), tracks and
   footpaths 22%, rail beds 6% (a mine line's grade) (`ROAD_GRADE`, `TRACK_GRADE`, `RAIL_GRADE`),
@@ -859,7 +869,8 @@ casters); trees are instanced with impostors, rocks have LODs.
   point of interest (`VIEW_MAX`, `VIEW_RANGE`), an underground site's
   exit kiosks among them. A village is a dozen buildings, not forty.
   Light props (`VIEW_LIGHT`: the garden fence, nine boxes a run, no roof;
-  a car wreck, one body and its dozen small parts) aren't counted; the
+  a car wreck, one body and its dozen small parts; a log pile; a snow
+  pole) aren't counted; the
   measure prints how many are in the worst view on their own (12 in
   Marrow's, 7 in Kettle's, 3 in Cinder's).
 - Spread groups out so no view takes in two big ones at once.

@@ -81,7 +81,13 @@ fn vertex(v: Vertex) -> VertexOutput {
     let to_cam = normalize(cam - centre);
     let side = normalize(cross(axis, to_cam));
     let width = select(0.006, rain.wind.w, rain.wind.w > 0.0);
-    let pos = centre + side * (v.uv.x - 0.5) * width + axis * v.uv.y * rain.params.z;
+    // At least a pixel and a half across, wherever it is: a 6 mm streak a
+    // few metres off is under a pixel, and drew as a dashed line, crawling
+    // (Marrow's first road in the headset eye's view). Widened, it's as
+    // much fainter, so it carries the same light.
+    let pixel = length(cam - centre) * 2.0 / (view.clip_from_view[1][1] * view.viewport.w);
+    let drawn = max(width, 1.5 * pixel);
+    let pos = centre + side * (v.uv.x - 0.5) * drawn + axis * v.uv.y * rain.params.z;
     var out: VertexOutput;
     out.clip_position = position_world_to_clip(pos);
     out.uv = v.uv;
@@ -91,7 +97,7 @@ fn vertex(v: Vertex) -> VertexOutput {
     // (Ash fades further out: a flake drifting past the eye was a big
     // pale blot in the headset.)
     let near = select(smoothstep(0.4, 1.5, length(p)), smoothstep(1.0, 3.0, length(p)), rain.wind.y > 0.5);
-    out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * near;
+    out.fade = (1.0 - smoothstep(0.6, 1.0, d)) * near * (width / drawn);
     // Thin the field out with intensity: drop a fraction of streaks.
     let keep = fract(sin(dot(v.position.xz, vec2<f32>(12.9898, 78.233))) * 43758.5453);
     if (keep > rain.params.x || sheltered(centre)) {

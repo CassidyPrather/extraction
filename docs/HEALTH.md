@@ -24,6 +24,12 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 63a83d1 | 2026-11-04 (gate 169, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Kettle 8, Marrow 7, Rime 7, Sallow 6); stucks 41 (all of the +2 in Marrow; every other valley's stucks identical run for run); Marrow seed 2 now dies to a Walker at (-88.0, -24.7) while travelling; Kettle seed 6 now extracts; Sallow seed 6's fall unchanged; stowing unchanged (1978 carried, 0 drops, kit 40/40, 1 stow stuck); 13/13 contract scenarios; second_hour passes (it never reaches job 2, so no walker line either way); `--check-buildings` 42 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1367 lib, 322 + 47 core, 0 FAILED | first_contact passes on its first run; gauges all within budget |
+| 8d5c110 | 2026-11-04 (release check, after the pause) | 40/40 exit 0, no timeouts, 36 extracted; stucks 39; Sallow seed 6 dies to a fall at (50.9, 163.8) from 79 hp; stowing unchanged; 13/13 contract scenarios; second_hour passes, no broken walker placed (the Director looks once per app, on job 1); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1356 lib, 319 + 47 core, 0 FAILED | first_contact cold run over on Marrow (10.07 > 9.8 s, 273 frames), passes alone; gauges 18/18 |
+| c55626a | 2026-11-01 20:30 (release check) | 40/40 exit 0, no timeouts, 35 extracted; stucks 27; stowing unchanged; 13/13 contract scenarios; second_hour 0/40 (Onboarding's fix in gate 150), no broken-walker line (never reaches job 2); `--check-buildings` 0 flagged; sim_guards pass | 1 FAILED: gauge_puffs_hold_the_stereo_budget (the sky now counted; 10° cap in gate 150) | gauges 14/19: Marrow m05_spruce ×4 (the sky now counted, 79f500f6; to re-baseline), first_contact 1-4% over (this container's disk; runs first from the next check) |
+| d2be4d5 | 2026-11-01 14:30 (gates 135-138, release check) | 40/40 exit 0, no timeouts, 34 extracted; stucks 34 (47); stowing unchanged (all carried out, 0 room drops, kit 40/40); 13/13 contract scenarios; second_hour 0/40 (no gun, a door at x -12.2 out of reach; first run, no baseline); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1310 lib, 315 + 47 core, 0 FAILED | gauges 18/19: gauge_items_fall_asleep (known; 41e780da) |
+| 50d1900 | 2026-11-01 08:00 (gate 129, release check) | 40/40 exit 0, no timeouts, 35 extracted (Cinder 8/8, Marrow 8/8, Rime 7/8, Kettle 6/8, Sallow 6/8); stucks 47; stowing: all taken carried out, 0 room drops, kit 40/40, 2 stuck while stowing; 13/13 scenarios; `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1294 lib, 315 + 47 core, 0 FAILED | gauges 19/19 |
+| 90afc8b | 2026-11-01 01:30 (gate 119, release check) | 40/40 exit 0, no timeouts, 36 extracted (Marrow 8/8, Sallow 8/8, Kettle 7/8, Rime 7/8, Cinder 5/8); stucks 40 (145); stowing: all taken carried out, 0 room drops, kit 40/40, 3 stuck while stowing; 12/13 scenarios (contract_scour_key: PickUp of the key times out, also on bc66f9a); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1285 lib, 357 core, 0 FAILED | gauges 19/19 |
 | 15eadf3 | 2026-10-31 20:30 (gate 112, release check) | 40/40 exit 0, no timeouts, 37 extracted (Kettle 8/8, Marrow 8/8, Cinder 7/8, Rime 7/8, Sallow 7/8); stucks 145 (Kettle seed 4: 25 at the (-95, 30) pocket); 13/13 scenarios; `--check-buildings` 1 flagged (the cellars false positive); sim_guards pass | fast-profile workspace suite: 1 FAILED (part_rest a_part_gone_leaves_no_ghost, a test race fixed in 0735b5e8); 1268 lib, 356 core | gauges 19/19 in 2779 s |
 | c9b3662 | 2026-10-31 15:00 (gate 105, release check) | 40/40 exit 0, no timeouts, 33 extracted (Cinder 8/8, Marrow 7/8, Rime 7/8, Kettle 6/8, Sallow 5/8); stucks 124 (Kettle seed 6 at the underground pocket (-95, 30)); 13/13 scenarios; `--check-buildings` 42 checked, 1 flagged (cellars_cinder at night, behind the shed and dark), 4 skipped | fast-profile workspace suite: 1254 lib, 354 core, 0 FAILED (63 min, a slow container) | gauges 18/19: first_contact Kettle 10.43 > 7.5 s, Rime 10.34 > 9.0 s |
 | be68fdf | 2026-10-31 09:30 (gate 101) | Kettle and Sallow seeds 1-8: 16/16 exit 0, no timeouts; Kettle 7/8 (stucks 37 → 11), Sallow 6/8 (the hound deaths gone) | fast-profile workspace suite: 1247 lib, 354 core, 0 FAILED | gauges 19/19 in 1941 s |
@@ -73,13 +79,14 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 15eadf3 (gate 112).
+As of 63a83d1.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::part_rest::tests::a_part_gone_leaves_no_ghost` (15eadf3): the merge on the async pool, the test waiting fixed frames | a test race | Performance | fixed in 0735b5e8 (gate 116) |
-| `--check-buildings`: cellars_cinder in Cinder's night landmark (1.3%; 41% in line of sight, behind the shed, dark) | probe false positive | Capture | reported |
-| Sim: Kettle's underground take pocket at (-80..-95, 25-30) (seed 6: 25 stucks); all recover | | Robot minds / Underground | open |
+| The broken walker never placed on job 2 in one app session: `Director` is made at Startup and `broken_placed` set on its first tick (job 1) | real bug; `second_hour` shows no `broken walker placed` line | Robot minds | fixed in 9bfdd9df (`the_second_job_meets_it_in_the_same_session`), not yet on a tested main; second_hour stays on job 1, so the check will grep `first_jobs_cautious` instead |
+| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | disk: the first run after a container restart took 28.0 s, waiting on arrivals; with the page cache evicted it took 5.4-5.9 s, like warm. The gauge now reads assets/ before its clock (31fa901b + 8c226125 + 2fb17060, on main from 8e76ed67), and after a fresh eviction the load was 5.41 s of 7.1 | Verifier, Performance | merged; close once a tested main carries it |
+| Sim: Marrow seed 2 dies to a Walker at (-88.0, -24.7) while travelling (new in 63a83d1; extracted at 8d5c110). Replay: `SIM_NO_JOB=1 extraction --sim-run smoke --map marrow_creek --seed 2 --headless` | | Robot minds | reported |
+| Sim: Sallow seed 6 dies to a fall at (50.9, 163.8) while travelling (79 hp in a second) | | Map design / coordinator | reported |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
@@ -87,6 +94,8 @@ As of 15eadf3 (gate 112).
 
 | test / run | fixed in | by |
 | - | - | - |
+| the puff gauge and Marrow m05_spruce (the sky counted), `second_hour` (0/40 → passes) | 8d5c110 | Performance, Weapon feel, Onboarding |
+| `contract_scour_key` (outside-doors-only Entrances, a44221f5); part_rest's test race; the cellars_cinder probe flag; first_contact's Kettle/Rime load | 50d1900 / 90afc8b | Models, Performance, Capture |
 | Kettle's stucks (69 on cc4d02c, 11 on be68fdf) and seed 1's surface stucks; Sallow's early hound deaths (the raider's ammo) | 4a7eaed / be68fdf | Robot minds |
 | Rime seed 1's plough death | 4a7eaed (c080fbc3) | Robot minds |
 | the Marrow five after the warp (m05_spruce overdraw and fragments, trees after_a_jump); Marrow's stucks and 2/8 extracts | 2ea48de (b619140e) | Map design |
@@ -127,6 +136,13 @@ As of 15eadf3 (gate 112).
   `heavy()`, so one that queues behind the long gauges looks slow
   (gun_rest: 440 s in the tier, 9 s alone). The tier's wall time is
   about the sum of the heavy gauges' own times.
+- first_contact runs first in the release check (before the gauges churn
+  the page cache) and again alone if over: on a container hours into its
+  day, loads take about twice Performance's units with a fast CPU reference.
+- Release checks run `--scenario second_hour` (a short career: job 2) from
+  d2be4d5, and grep it for `broken walker placed at (` once e335fbc9 lands.
+- Release checks report stowing from smoke (`stow_report.py`: taken, carried
+  out, dropped for room, kit, stuck while stowing) from gate 119.
 - Release checks run `scripts/sim_guards.sh` after smoke from gate 112.
 - The release check is restartable (`final_r.sh <sha>` in the Verifier's
   scratchpad): each step leaves a marker and smoke resumes run by run.

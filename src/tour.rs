@@ -74,6 +74,7 @@ pub(crate) fn has_inside(prefab: &str) -> bool {
             | "quarantine_gate"
             | "footbridge"
             | "funicular_car"
+            | "snow_pole"
     )
 }
 

@@ -5538,6 +5538,70 @@ fn a_crawlers_charge_warns_as_long_as_a_walkers_aim() {
     );
 }
 
+/// A hound's coil leads its bite by the bar every attack meets
+/// (`visuals::MIN_LEAD`): from its crouch to the first hurt, time to get
+/// low or get a shot off (it was 0.6 s, the bite in before anyone could
+/// move: first fights, the hound).
+#[test]
+fn a_hounds_coil_leads_its_bite() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let mut queue = CommandQueue::default();
+    let at = zone.on_ground(me.x + 3.5, me.z);
+    let hound = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    let mut coils = app
+        .world()
+        .resource::<Messages<super::hound::HoundCrouch>>()
+        .get_cursor();
+    let hp0 = hp(&app, player);
+    let (mut coil, mut hit) = (None, None);
+    for f in 0..90 * 10 {
+        let t = f as f32 / 90.0;
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(hound).unwrap();
+            if a.target.is_none() {
+                a.target = Some(player);
+                a.last_known = Some(me);
+                a.suspicion = 1.0;
+            }
+        }
+        app.update();
+        let msgs = app
+            .world()
+            .resource::<Messages<super::hound::HoundCrouch>>();
+        if coils.read(msgs).next().is_some() {
+            coil.get_or_insert(t);
+        }
+        if hp(&app, player) < hp0 - 0.5 {
+            hit = Some(t);
+            break;
+        }
+    }
+    let (Some(coil), Some(hit)) = (coil, hit) else {
+        panic!("it coiled and bit: {coil:?} {hit:?}");
+    };
+    assert!(
+        hit - coil >= super::visuals::MIN_LEAD - 0.05,
+        "bitten {:.2} s after its coil",
+        hit - coil
+    );
+}
+
 /// "Low behind it, and keep still. It only finds what moves.": a hound
 /// that has bitten you loses you when you get low and keep still, even
 /// close; it doesn't bite you to death where you lie (first fights: the
@@ -5585,13 +5649,14 @@ fn a_hound_loses_you_low_and_still() {
         last = now;
     }
     assert_eq!(bites, 1, "it came for you standing");
-    // Low, and still, as the driver says.
+    // Low, and still, as the driver says: crouched as the stick crouches
+    // you (the desk rig's and the bot's crouched eye, 1.05 m), not a squat.
     app.world_mut()
         .get_mut::<RigInput>(player)
         .unwrap()
         .head
         .translation
-        .y = 0.9;
+        .y = 1.05;
     let mut later = 0;
     let mut last = hp(&app, player);
     for _ in 0..90 * 20 {

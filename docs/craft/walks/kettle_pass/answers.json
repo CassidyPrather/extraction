@@ -1,0 +1,173 @@
+{
+ "title": "Kettle Pass: the first job's walk",
+ "intro": [
+  "The career's first job in Kettle (scout the Logging camp, 75 m from the truck), then on to the nearest way out from there, the Hunting lodge: 652 m in all, in the valley's reference weather (drizzle and the cloud cap). Walked by the procedure in `docs/craft/WALK_REVIEW.md`; shots from `walk.stills`, stops from `stops.json`."
+ ],
+ "stops": {
+  "s01": {
+   "beat": "threshold",
+   "vista": "A gravel lane into misted pines, a bench by the verge, the radio mast's lamp on the right.",
+   "discover": "Side: a shed and the mast's lattice through the trees.",
+   "for": "The drop: a lane that says go in."
+  },
+  "s02": {
+   "beat": "approach",
+   "vista": "The sawmill's open shed ahead across grass, a chimney stack behind it.",
+   "discover": "Side: pines and the mast; nothing to step off for.",
+   "for": "The job's first sight, 35 m before it: it works."
+  },
+  "s03": {
+   "beat": "reveal",
+   "vista": "Under the sawmill's roof: a log on the saw bed, a cabin across the ford beyond.",
+   "discover": "Side: stacked logs by the camp road.",
+   "for": "The camp revealed at the fork; you want to look round."
+  },
+  "s04": {
+   "beat": "arrival",
+   "vista": "The saw shed's long frame, a plank stack, the cabin across the meadow.",
+   "discover": "Side: the saw blade under its roof.",
+   "for": "'You're there': the job's place is plainly a logging camp."
+  },
+  "s05": {
+   "beat": "calm",
+   "vista": "Back along the lane past the bench, a lit lamp and roofs in the mist.",
+   "discover": "Side: a cabin among the pines.",
+   "for": "Leaving the job: the way home starts back past the drop."
+  },
+  "s06": {
+   "beat": "calm",
+   "vista": "The lane on through grass, a house and a lorry on the left.",
+   "discover": "Side: the camp's shelter and the mast again.",
+   "for": "Walking; the lorry and house are something to look at."
+  },
+  "s07": {
+   "beat": "discovery",
+   "vista": "A road bending past a wrecked car, the chapel's steeple lamp on the skyline.",
+   "discover": "Side: the gatekeeper's cottage and a blue car in the grass.",
+   "for": "The chapel, a landmark to steer by; the cottage worth a look."
+  },
+  "s08": {
+   "beat": "threshold",
+   "vista": "Across a bridge with rails, roofs and lamps beyond in the mist.",
+   "discover": "Side: the bridge rails, the far bank.",
+   "for": "A crossing: the valley's middle ahead."
+  },
+  "s09": {
+   "beat": "calm",
+   "vista": "A grass bank and a tree fill the frame's right; houses and lamps far left.",
+   "discover": "Side: the chapel and its lit doorway across the field.",
+   "for": "The chapel side view is the moment; ahead is a bank."
+  },
+  "s10": {
+   "beat": "nothing",
+   "vista": "A road bending round a grass bank, a boulder on the rise. No subject.",
+   "discover": "Side: a plank house's porch and door across the road.",
+   "for": "The house is the stop; the way ahead is a road and a bank."
+  },
+  "s11": {
+   "beat": "choice",
+   "vista": "The pass road climbing among boulders, a lorry far off.",
+   "discover": "Side: Miners' Row's houses and a tall spruce.",
+   "for": "Two ways (the pass, the quarry), the Row shown off to the side."
+  },
+  "s12": {
+   "beat": "calm",
+   "vista": "The road up onto the moor, a lorry parked by it, the headframe's lamp far right.",
+   "discover": "Side: the headframe over the mine yard.",
+   "for": "Climbing onto the moor with the mine in sight."
+  },
+  "s13": {
+   "beat": "approach",
+   "vista": "A flatbed lorry close on the left of the road, the pass beyond.",
+   "discover": "Side: the headframe again.",
+   "for": "The lorry is a thing to pass; the headframe holds the eye."
+  },
+  "s14": {
+   "beat": "nothing",
+   "vista": "Open moor, big boulders either side of the road, a brick shed far right.",
+   "discover": "Side: boulders and the moor.",
+   "for": "A breath on the moor; the boulders read as cover, not as a place."
+  },
+  "s15": {
+   "beat": "choice",
+   "vista": "The lodge track forks off, a hut on the rise, a woodpile by the way.",
+   "discover": "Side: the switchback hut far off, lamps on the skyline.",
+   "for": "A fork with something down each way."
+  },
+  "s16": {
+   "beat": "nothing",
+   "vista": "The track over the moor toward a hut on the skyline, a boulder near.",
+   "discover": "Side: the moor and the road behind.",
+   "for": "Third moor stop in a row: a dead stretch from 440 m to 520 m."
+  },
+  "s17": {
+   "beat": "discovery",
+   "vista": "A log cabin by the track, pines, the radio mast's lattice far right.",
+   "discover": "Side: the mast and its hut on the hill.",
+   "for": "The cabin breaks the moor; the walk has a place again."
+  },
+  "s18": {
+   "beat": "calm",
+   "vista": "The track on past a woodpile and a cross, huts in the hollow ahead.",
+   "discover": "Side: the cabin's wall, close (its door is round the corner).",
+   "for": "The hollow's huts pull you on."
+  },
+  "s19": {
+   "beat": "approach",
+   "vista": "The track down to the huts, the charcoal hut's stove on the right.",
+   "discover": "Side: the charcoal hut and its stove.",
+   "for": "Coming into the hunting ground."
+  },
+  "s20": {
+   "beat": "approach",
+   "vista": "Two cabins either side of the track, the lodge's red roof between.",
+   "discover": "Side: the track back up, the mast.",
+   "for": "The lodge in sight: home's near."
+  },
+  "s21": {
+   "beat": "relief",
+   "vista": "The green beacon and the lookout tower over the meadow, a hut beside them.",
+   "discover": "Side: a cabin's corner, close.",
+   "for": "The beacon: the way out, plainly."
+  },
+  "s22": {
+   "beat": "relief",
+   "vista": "The beacon, the tower and the lodge's shed together.",
+   "discover": "Side: the lodge cabins and a boulder to wait behind.",
+   "for": "Relief, with cover in reach."
+  },
+  "s23": {
+   "beat": "relief",
+   "vista": "The lookout tower over the meadow and the pines.",
+   "discover": "Side: the lodge's two cabins.",
+   "for": "Arrived; the cabins say people waited here."
+  }
+ },
+ "notes": [
+  "A strong start: the sawmill shed is in sight 35 m out and the job reads as what it's called.",
+  "The way home is long (577 m from the job) and goes back past the drop first; a newcomer walks the whole valley on their first raid.",
+  "Dead stretch (s14 to s16, 440 to 520 m): the moor past the mine road, boulders and road, three stops with no place in them. The cabin at s17 is the first since the Row.",
+  "A road and a bank (s10): the plank house is the stop, but ahead the way is a bend round a bank.",
+  "The cabin door stops' side views (s18, s21) look at a wall: the picker's choice, not the map's; the doors are round the corner."
+ ],
+ "fixes": [
+  {
+   "title": "1. A place on the moor (s14 to s16)",
+   "what": "Three stops of road, boulders and moor between the mine road and the lodge. A roadmen's hut now stands back off the pass road at 470 m, its woodpile beside it: from s15 it's a roof on the moor to make for, and something to look into on the way home.",
+   "pairs": [
+    [
+     "s14_ahead.jpg",
+     "fixes/s14_ahead_after.jpg"
+    ],
+    [
+     "s15_ahead.jpg",
+     "fixes/s15_ahead_after.jpg"
+    ],
+    [
+     "s16_ahead.jpg",
+     "fixes/s16_ahead_after.jpg"
+    ]
+   ]
+  }
+ ]
+}

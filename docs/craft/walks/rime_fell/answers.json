@@ -1,0 +1,234 @@
+{
+ "title": "Rime Fell: the first job's walk",
+ "intro": [
+  "The career's first job in Rime (plant the survey kit at the observatory, up_the_fell), then on to the nearest way out, the saddle: 936 m in all, in the valley's reference weather (snow above the line). Walked by the procedure in `docs/craft/WALK_REVIEW.md`; shots from `walk.stills`, stops from `stops.json`."
+ ],
+ "stops": {
+  "s01": {
+   "beat": "threshold",
+   "vista": "Wet moor, a boulder, roofs and the water tower's lamp in the mist.",
+   "discover": "Side: houses on the rise, the tower.",
+   "for": "The drop: a village up ahead."
+  },
+  "s02": {
+   "beat": "approach",
+   "vista": "A house with shutters close on the right, longer roofs on the rise.",
+   "discover": "Side: the house's front and the station's long roof.",
+   "for": "Walking into the lower village."
+  },
+  "s03": {
+   "beat": "choice",
+   "vista": "The valley station's long roof on the rise, the lorry road and the lane parting.",
+   "discover": "Side: the station's end, the water tower beyond.",
+   "for": "Two ways shown, the station the one to take."
+  },
+  "s04": {
+   "beat": "reveal",
+   "vista": "The valley station square on the rise, its veranda and windows.",
+   "discover": "Side: pines and the fell.",
+   "for": "The funicular's foot: where you're going is up."
+  },
+  "s05": {
+   "beat": "climb",
+   "vista": "The funicular's rails and steps straight up the fell, a chimney on the skyline.",
+   "discover": "Side: the valley station below, its lamp.",
+   "for": "The climb begins, with the line drawn for you."
+  },
+  "s06": {
+   "beat": "climb",
+   "vista": "Up the rails, a car stopped halfway, buildings on the top.",
+   "discover": "Side: the station behind, tiny.",
+   "for": "A long climb with a goal at the top."
+  },
+  "s07": {
+   "beat": "climb",
+   "vista": "The rails onto the snow line, the top station's roofs, the chimney.",
+   "discover": "Side: the chimney with its lamp.",
+   "for": "Snow begins: the valley changes under you."
+  },
+  "s08": {
+   "beat": "climb",
+   "vista": "The rails through a snow cutting to the top station.",
+   "discover": "Side: a snow bank, the chimney over it.",
+   "for": "Nearly up; the cutting frames the top."
+  },
+  "s09": {
+   "beat": "reveal",
+   "vista": "Coldharbour: the chimney, a hut, rocks in the snow, roofs beyond.",
+   "discover": "Side: the top station, its steps and lamp.",
+   "for": "Topping out: a village on the fell."
+  },
+  "s10": {
+   "beat": "discovery",
+   "vista": "A brick house's corner close, others across the snow.",
+   "discover": "Side: its door and steps.",
+   "for": "Coldharbour's first house; go in."
+  },
+  "s11": {
+   "beat": "calm",
+   "vista": "A trodden way over the snow, a boulder, nothing else.",
+   "discover": "Side: the chimney and Coldharbour's houses.",
+   "for": "Leaving the village: the side view has it all, ahead is white."
+  },
+  "s12": {
+   "beat": "nothing",
+   "vista": "White slope, a fence far off. No subject.",
+   "discover": "Side: the chimney and the houses behind.",
+   "for": "A fork with nothing down either way."
+  },
+  "s13": {
+   "beat": "nothing",
+   "vista": "White slope, a lamp on a hut on the skyline.",
+   "discover": "Side: the village again, a woodpile.",
+   "for": "The hut's lamp is all there is."
+  },
+  "s14": {
+   "beat": "nothing",
+   "vista": "White, a woodpile and the snow survey hut's lamp.",
+   "discover": "Side: the survey hut, black on the snow.",
+   "for": "The hut is a stop; the way on is white."
+  },
+  "s15": {
+   "beat": "nothing",
+   "vista": "White, the survey hut on its stilts far ahead.",
+   "discover": "Side: the survey hut behind, the chimney.",
+   "for": "Fourth white stop running."
+  },
+  "s16": {
+   "beat": "nothing",
+   "vista": "White slope, a few rocks.",
+   "discover": "Side: the avalanche watch tower and its lamp.",
+   "for": "A fork in a white field."
+  },
+  "s17": {
+   "beat": "nothing",
+   "vista": "White, rocks, a green lamp faint on the skyline.",
+   "discover": "Side: the avalanche watch.",
+   "for": "The beacon of the col, far: the only lead."
+  },
+  "s18": {
+   "beat": "nothing",
+   "vista": "White, scattered rocks. No subject.",
+   "discover": "Side: a hut and rocks toward the col.",
+   "for": "Dead: 200 m of white since Coldharbour."
+  },
+  "s19": {
+   "beat": "discovery",
+   "vista": "A big boulder close, a fence line, an animal crossing the snow.",
+   "discover": "Side: a boulder, the col's hut and tower.",
+   "for": "Something alive at last; the fence leads on."
+  },
+  "s20": {
+   "beat": "approach",
+   "vista": "The fence line, rocks, a hut and the col's green lamp.",
+   "discover": "Side: the col's tower far off.",
+   "for": "The col's beacon in sight; the way home is plain."
+  },
+  "s21": {
+   "beat": "choice",
+   "vista": "A hut and the beacon by the fence, a boulder near.",
+   "discover": "Side: white and rocks.",
+   "for": "The miners' path and the saddle track part here."
+  },
+  "s22": {
+   "beat": "calm",
+   "vista": "The beacon and the fence, rocks.",
+   "discover": "Side: the hut's door and steps.",
+   "for": "Past the col toward the saddle."
+  },
+  "s23": {
+   "beat": "nothing",
+   "vista": "White, rocks, the fence.",
+   "discover": "Side: the beacon's pole, close.",
+   "for": "The observatory path leaves into white."
+  },
+  "s24": {
+   "beat": "calm",
+   "vista": "A boulder, a hut far off, the observatory's lamp.",
+   "discover": "Side: the saddle's beacon by its hut.",
+   "for": "The job's lamp on the skyline: the goal, at last."
+  },
+  "s25": {
+   "beat": "approach",
+   "vista": "The observatory's block and mast on the rise, boulders.",
+   "discover": "Side: the saddle's beacon.",
+   "for": "The job revealed, uphill."
+  },
+  "s26": {
+   "beat": "reveal",
+   "vista": "The observatory square on the crest, its mast and windows.",
+   "discover": "Side: the saddle's beacon below.",
+   "for": "A good reveal: the job stands on the fell's top."
+  },
+  "s27": {
+   "beat": "nothing",
+   "vista": "Arriving, you face a dark wall a metre off, its door to the right.",
+   "discover": "Side: the same wall.",
+   "for": "'You're there' as a wall in your face: the job's point is on the building's corner."
+  },
+  "s28": {
+   "beat": "calm",
+   "vista": "White, the fence and the saddle's beacon far off.",
+   "discover": "Side: the observatory behind, its mast.",
+   "for": "Turning for home."
+  },
+  "s29": {
+   "beat": "approach",
+   "vista": "The fence line to the beacon and its hut.",
+   "discover": "Side: the observatory's lamp behind.",
+   "for": "Home in sight."
+  },
+  "s30": {
+   "beat": "relief",
+   "vista": "The green beacon close, the hut by the fence.",
+   "discover": "Side: boulders to wait behind.",
+   "for": "The way out."
+  },
+  "s31": {
+   "beat": "relief",
+   "vista": "The saddle's hut and its door.",
+   "discover": "Side: rocks in the snow.",
+   "for": "Arrived."
+  }
+ },
+ "notes": [
+  "A great first third: the station, the funicular climb into the snow and Coldharbour at the top.",
+  "Dead stretch (s11 to s18, 360 to 560 m): 200 m of white slope after Coldharbour, the forks with nothing down them; a hut lamp now and then is all. The longest dead stretch of any valley.",
+  "A wall in your face (s27): the observatory's job point stands on its corner; the reveal from the crest (s26) is the job's real frame.",
+  "The way to the job is long (812 m): a newcomer's first Rime job is the walk."
+ ],
+ "fixes": [
+  {
+   "title": "1. The observatory's arrival (s27)",
+   "what": "The job's point is the building (the kit is planted inside), so it stays; what changed is how you meet it. The observatory turned so its door faces the way up from the saddle (rot 160 to 55), and a job in a building is now framed 20 m out as you come up to it (scripts/walk_stops.py), not at its wall. You arrive facing the observatory square on the summit, its door ahead.",
+   "pairs": [
+    [
+     "s27_ahead.jpg",
+     "fixes/job_ahead_after.jpg"
+    ]
+   ]
+  },
+  {
+   "title": "2. Waymarks over the white (s11 to s18)",
+   "what": "After Coldharbour, 200 m of snow with nothing to steer by. The col track now has a signpost at Coldharbour's fork (the col and the observatory; refuge halfway), cairns beside the track, a refuge hut halfway, and a second signpost at the col fork. They help, but at this range they're specks: the stretch wants a line of snow poles, one every 20 m, which is a new prefab (asked of Models).",
+   "pairs": [
+    [
+     "s11_ahead.jpg",
+     "fixes/s11_ahead_after.jpg"
+    ],
+    [
+     "s13_ahead.jpg",
+     "fixes/s13_ahead_after.jpg"
+    ],
+    [
+     "s14_ahead.jpg",
+     "fixes/s14_ahead_after.jpg"
+    ],
+    [
+     "s15_ahead.jpg",
+     "fixes/s15_ahead_after.jpg"
+    ]
+   ]
+  }
+ ]
+}

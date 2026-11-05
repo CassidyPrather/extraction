@@ -34,6 +34,22 @@
     ),
     (
         map: "marrow_creek",
+        name: "Farm crate",
+        // A newcomer's first find, where job 1 says to look round: one tin
+        // of crackers on a crate at the Old farm point's fork, straight
+        // ahead coming down the farm track (Onboarding: food, the plainest
+        // "you found something"; Map design: 2.85 m clear of both roads).
+        at: (90.5, 90.2),
+        rot: 237.0,
+        pieces: [
+            Crate(at: (0.0, 0.0), size: 0.8),
+        ],
+        items: [
+            (id: "crackers", at: (0.0, 0.8, 0.0), rot: 20.0),
+        ],
+    ),
+    (
+        map: "marrow_creek",
         name: "Path marker",
         // Where the ranger's path leaves the footbridge: the pump keeper's
         // word for the quiet way.
@@ -417,7 +433,7 @@
         name: "At the fence",
         // After the recall: by the south gate where the soldiers turned bus
         // four back, his flask and a note on a crate.
-        at: (15.0, 168.5),
+        at: (12.0, 169.0),
         rot: 180.0,
         after: Some(Recalled),
         pieces: [

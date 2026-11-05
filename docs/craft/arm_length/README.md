@@ -123,14 +123,16 @@ All five read as themselves at 1 m from both sides and hold up at 30 cm:
 Their finishes part in the yard and the mill, and no seam is open. So
 there's no geometry fix in this pass. Two notes:
 
-1. **The PPSh drum's "71".** A 9 mm enamel "71" is on the drum's right
-   face (`art/mags/ppsh_drum.py`; it came in by a merge, not from me).
-   Real drums carry a small stamped serial, not their capacity in paint.
-   If it's there for legibility, it can stay; otherwise it should go.
-   That's for the magazine's owner and Legibility to call, so I haven't
-   touched it.
+1. **The PPSh drum's "71".** A 9 mm enamel "71" sat on the drum's right
+   face. Real drums carry a small stamped serial, not their capacity in
+   paint, and the game's AK and RPK magazines carry their real index
+   marks. Per the coordinator, it's replaced by a 3.5 mm stamped serial
+   on the cover inside the round window, "ЛА 4217"
+   (`art/mags/ppsh_drum.py`).
 
-   ![](ppsh_drum_71.jpg)
+   | Before | After |
+   | - | - |
+   | ![](ppsh_drum_71.jpg) | ![](ppsh_drum_stamped.jpg) |
 
 2. **The SKS's trigger guard** reads as a thin strip from the side (a
    9.5 × 3 mm section, seen edge on). That's how a stamped guard looks
