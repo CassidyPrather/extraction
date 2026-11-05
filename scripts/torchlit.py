@@ -141,14 +141,36 @@ def measure(shot_path, empty, px_per_deg):
     }
 
 
-def analyse(root):
-    meta = json.load(open(os.path.join(root, "torchlit.json")))
+def resolve(root):
+    t = os.path.join(root, "torchlit")
+    return t if os.path.isdir(t) else root
+
+
+def load(roots):
+    """One capture's report from several runs' (a floor a run): the
+    floors each, and where each floor's shots are."""
+    meta, where = None, {}
+    for r in roots:
+        r = resolve(r)
+        m = json.load(open(os.path.join(r, "torchlit.json")))
+        if meta is None:
+            meta = dict(m)
+            meta["floors"] = []
+        for f in m["floors"]:
+            if f not in where:
+                where[f] = r
+                meta["floors"].append(f)
+    meta["where"] = where
+    return meta
+
+
+def analyse(meta):
     ppd = meta["px_per_deg"]
     items = [i for i in meta["items"] if not i.get("failed")]
     out = {}
     for floor in meta["floors"]:
         for eye in [e["name"] for e in meta["eyes"]]:
-            d = os.path.join(root, floor, eye)
+            d = os.path.join(meta["where"][floor], floor, eye)
             empty_p = os.path.join(d, "_empty.png")
             if not os.path.exists(empty_p):
                 continue
@@ -208,27 +230,29 @@ def twins(out, n=20):
     return pairs[:n]
 
 
-def sheet(root, ids, out_path, compare=None, meta=None):
+def sheet(meta, ids, out_path, compare=None):
     floors = meta["floors"]
     eyes = [e["name"] for e in meta["eyes"]]
     cell = 150
     cols = [(f, e) for f in floors for e in eyes]
-    roots = [root] + ([compare] if compare else [])
-    w = 170 + cell * len(cols) * len(roots)
+    metas = [meta] + ([compare] if compare else [])
+    w = 170 + cell * len(cols) * len(metas)
     h = 22 + cell * len(ids)
     img = Image.new("RGB", (w, h), (0, 0, 0))
     d = ImageDraw.Draw(img)
     for c, (f, e) in enumerate(cols):
-        for r_i, r in enumerate(roots):
-            x = 170 + (c * len(roots) + r_i) * cell
+        for r_i, _ in enumerate(metas):
+            x = 170 + (c * len(metas) + r_i) * cell
             label = f"{f} {e}" + (" before" if compare and r_i == 0 else " after" if compare else "")
             d.text((x + 3, 4), label, fill=(255, 255, 255))
     for r, i in enumerate(ids):
         y = 22 + r * cell
         d.text((4, y + 4), i, fill=(255, 255, 255))
         for c, (f, e) in enumerate(cols):
-            for r_i, rt in enumerate(roots):
-                p = os.path.join(rt, f, e, i + ".png")
+            for r_i, m in enumerate(metas):
+                if f not in m["where"]:
+                    continue
+                p = os.path.join(m["where"][f], f, e, i + ".png")
                 if not os.path.exists(p):
                     continue
                 im = Image.open(p).convert("RGB")
@@ -238,22 +262,22 @@ def sheet(root, ids, out_path, compare=None, meta=None):
                 k = 0.5 if e == "arm" else 0.22
                 box = (int(W * (0.5 - k / 2)), int(H * (0.5 - k / 2)), int(W * (0.5 + k / 2)), int(H * (0.5 + k / 2)))
                 im = im.crop(box).resize((cell - 2, cell - 2))
-                x = 170 + (c * len(roots) + r_i) * cell
+                x = 170 + (c * len(metas) + r_i) * cell
                 img.paste(im, (x, y))
     img.save(out_path, quality=88)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("root")
+    ap.add_argument("roots", nargs="+", help="capture dirs (a floor each, or all floors)")
     ap.add_argument("--json")
     ap.add_argument("--sheet")
     ap.add_argument("--worst", type=int, default=20)
-    ap.add_argument("--compare")
+    ap.add_argument("--compare", nargs="+")
     ap.add_argument("--ids")
     a = ap.parse_args()
-    root = os.path.join(a.root, "torchlit") if os.path.isdir(os.path.join(a.root, "torchlit")) else a.root
-    meta, out = analyse(root)
+    meta = load(a.roots)
+    meta, out = analyse(meta)
     scored = []
     bad_shots = []
     for k, e in out.items():
@@ -289,7 +313,7 @@ def main():
         json.dump({"items": out, "twins": tw, "flagged": flagged}, open(a.json, "w"), indent=1)
     if a.sheet:
         ids = a.ids.split(",") if a.ids else [k for _, k, _ in scored[: a.worst]]
-        sheet(root, ids, a.sheet, compare=(os.path.join(a.compare, "torchlit") if a.compare and os.path.isdir(os.path.join(a.compare, "torchlit")) else a.compare), meta=meta)
+        sheet(meta, ids, a.sheet, compare=load(a.compare) if a.compare else None)
         print("sheet:", a.sheet)
 
 
