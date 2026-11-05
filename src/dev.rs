@@ -1031,15 +1031,26 @@ fn first_person_hands(
                 let size = Vec2::new(0.3, 0.26);
                 let at = hand.translation + Vec3::Y * (size.y * 0.5 + 0.03) / zoom;
                 let card = Transform::from_translation(at).looking_to(-(eye - at), Vec3::Y);
-                commands.spawn((
-                    Mesh3d(meshes.add(Cuboid::new(size.x, size.y, 0.004))),
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        base_color: Color::srgb(0.86, 0.83, 0.74),
-                        perceptual_roughness: 0.9,
-                        ..default()
-                    })),
-                    view(card),
-                ));
+                // (Its mesh and paper added once spawned: the glove holds
+                // the asset stores.)
+                commands
+                    .spawn(view(card))
+                    .queue(move |mut e: EntityWorldMut| {
+                        let (mesh, paper) = e.world_scope(|w| {
+                            let mesh = w
+                                .resource_mut::<Assets<Mesh>>()
+                                .add(Cuboid::new(size.x, size.y, 0.004));
+                            let paper = w.resource_mut::<Assets<StandardMaterial>>().add(
+                                StandardMaterial {
+                                    base_color: Color::srgb(0.86, 0.83, 0.74),
+                                    perceptual_roughness: 0.9,
+                                    ..default()
+                                },
+                            );
+                            (mesh, paper)
+                        });
+                        e.insert((Mesh3d(mesh), MeshMaterial3d(paper)));
+                    });
                 let rel = Transform::from_matrix(
                     (hand.compute_affine().inverse() * card.compute_affine()).into(),
                 );
