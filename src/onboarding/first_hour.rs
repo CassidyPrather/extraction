@@ -283,6 +283,14 @@ fn passthrough() -> Vec<String> {
 fn run_fights(chain: &Chain) -> AppExit {
     let exe = std::env::current_exe().expect("own executable");
     let pass = passthrough();
+    // Marrow's, unless another valley's asked for (`--map`): each valley's
+    // first fight, on the way to the job its card names.
+    let map = pass
+        .iter()
+        .position(|a| a == "--map")
+        .and_then(|i| pass.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| "marrow_creek".to_string());
     let (mut failed, mut by_design) = (Vec::new(), Vec::new());
     for e in &chain.encounters {
         for p in &chain.personas {
@@ -303,14 +311,7 @@ fn run_fights(chain: &Chain) -> AppExit {
                     "--encounter",
                     e,
                 ])
-                .args([
-                    "--data-dir",
-                    &dir_s,
-                    "--save",
-                    &save,
-                    "--map",
-                    "marrow_creek",
-                ]);
+                .args(["--data-dir", &dir_s, "--save", &save, "--map", &map]);
             if p.one_handed {
                 cmd.arg("--one-handed");
             }
@@ -3442,7 +3443,9 @@ fn errand_done(errand: &Errand, world: &World2) -> String {
 
 /// Where along the way to the first job the machine is met: the drop to
 /// the Old farm, a little short of halfway.
-fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
+/// In a valley with no Old farm, on the way to the place the job card
+/// names (`card`), so the machine is on the newcomer's way.
+fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) {
     let drop = zone
         .map
         .markers
@@ -3454,7 +3457,9 @@ fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
         .markers
         .iter()
         .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
-        .map_or(drop + Vec2::new(100.0, -100.0), |m| Vec2::from(m.at));
+        .map(|m| Vec2::from(m.at))
+        .or(card)
+        .unwrap_or(drop + Vec2::new(100.0, -100.0));
     let at = drop.lerp(farm, 0.45);
     (at, (farm - drop).normalize_or(Vec2::NEG_Y))
 }
@@ -3471,6 +3476,7 @@ pub(super) fn first_fight(
     health: Query<&crate::health::Health, With<LocalPlayer>>,
     world: World2,
     time: Res<Time>,
+    cards: Query<&ScreenText, With<RequestCard>>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
         return;
@@ -3482,7 +3488,11 @@ pub(super) fn first_fight(
     // Put it there once the newcomer's out.
     if !fight.seeded && raid.phase == Phase::Out {
         fight.seeded = true;
-        let (at, ahead) = on_the_way(&zone);
+        let card = cards
+            .iter()
+            .find_map(|c| place_on_card(&c.text, &zone))
+            .map(|(_, at)| at);
+        let (at, ahead) = on_the_way_to(&zone, card);
         let side = ahead.perp();
         let job = |site: Vec3| crate::robots::Job {
             kind: crate::robots::JobKind::Watch,
@@ -3579,7 +3589,11 @@ pub(super) fn first_fight(
             }
             _ => at,
         };
-        info!("first fight: a {kind} at {placed:.0} for the {}", p.name);
+        info!(
+            "first fight: a {kind} at {placed:.0} for the {}, on the way to {}",
+            p.name,
+            card.map_or("the Old farm or a guess".to_string(), |c| format!("{c:.0}"))
+        );
         fight.machine = Some((kind.to_string(), placed));
     }
     // The tells, as they come.
@@ -3962,7 +3976,7 @@ mod indoor_tests {
         let w = app.world();
         let zone = w.resource::<crate::world::Zone>();
         let en = w.resource::<crate::robots::doors::Entrances>();
-        let (at, _) = super::on_the_way(zone);
+        let (at, _) = super::on_the_way_to(zone, None);
         let mut ds: Vec<(f32, Vec2)> = en
             .doors
             .iter()
