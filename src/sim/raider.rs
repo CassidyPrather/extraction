@@ -1242,8 +1242,8 @@ pub fn think(
                     }
                 }
                 open_heat_here(r, pos, &mut log);
-                let a = r.rng.range(0.0, std::f32::consts::TAU);
-                let side = here + Vec2::new(a.cos(), a.sin()) * step;
+                let start = r.rng.range(0.0, std::f32::consts::TAU);
+                let side = sidestep(&r.plans, &r.grid, &scene, pos, step, start);
                 // Give up on what it was reaching for; sidestep; replan.
                 if let Act::Take(_, item) = r.act {
                     r.skip.insert(item);
@@ -1391,6 +1391,67 @@ pub fn think(
         }
         r.interrupted = false;
     }
+}
+
+/// How many directions a stuck raider tries for a sidestep.
+const SIDESTEP_TRIES: usize = 16;
+
+/// Where a stuck raider steps aside to, about `step` off: somewhere a body
+/// stands and walks straight to, on its plan's floor indoors (down a site
+/// too) and the Zone's walking grid out of doors. A random point that far
+/// off lands in the rock round a small room, and one stuck made five
+/// (Rime seed 4, 5 November, a 5 x 4 m assay store; Fifth valley's
+/// trace). Nearer if nowhere that far will do; the nearest floor if
+/// nowhere near will.
+fn sidestep(
+    plans: &[BuildingPlan],
+    grid: &NavGrid,
+    scene: &Scene,
+    pos: Vec3,
+    step: f32,
+    start: f32,
+) -> Vec2 {
+    let here = pos.xz();
+    let plan = plans
+        .iter()
+        .position(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
+    let floor = |q: Vec2| match plan {
+        Some(b) => {
+            let p = &plans[b];
+            p.grid
+                .walkable(p.to_local(Vec3::new(q.x, pos.y, q.y)).xz().to_array())
+        }
+        None => grid.walkable(q.to_array()),
+    };
+    for far in [step, step * 0.5, step * 0.25] {
+        for k in 0..SIDESTEP_TRIES {
+            let a = start + k as f32 * std::f32::consts::TAU / SIDESTEP_TRIES as f32;
+            let q = here + Vec2::new(a.cos(), a.sin()) * far;
+            // On its floor there (the ground out of doors).
+            let y = match plan {
+                Some(b) => {
+                    let p = &plans[b];
+                    let l = p.to_local(Vec3::new(q.x, pos.y, q.y)).xz();
+                    p.xf.transform_point(Vec3::new(l.x, p.floor_at(l), l.y)).y
+                }
+                None => scene.zone.ground(q.x, q.y),
+            };
+            let to = Vec3::new(q.x, y, q.y);
+            if floor(q) && scene.walk_clear(pos, to) {
+                return q;
+            }
+        }
+    }
+    let nearest = match plan {
+        Some(b) => {
+            let p = &plans[b];
+            p.grid
+                .nearest_walkable(p.to_local(pos).xz().to_array())
+                .map(|c| p.world2(Vec2::from_array(c)))
+        }
+        None => grid.nearest_walkable(here.to_array()).map(Vec2::from_array),
+    };
+    nearest.unwrap_or(here + Vec2::new(start.cos(), start.sin()) * step)
 }
 
 /// In heat its plan shuts (a fight took it in, or it's stuck by it):
@@ -5126,6 +5187,105 @@ mod run_tests {
             near >= 0.6,
             "{}: the route passes {near:.2} m from the wreck's middle",
             plan.name
+        );
+    }
+
+    /// A stuck raider's sidestep lands on floor it walks straight to, in
+    /// every building and site on every map, from places on its floor, at
+    /// both a stuck's 3 m and a pocket's 8 m (Rime seed 4, 5 November: in
+    /// a 5 x 4 m assay store the random point landed in the rock, one stuck
+    /// made five). The old random point misses somewhere, or the test
+    /// proves nothing.
+    #[test]
+    fn a_stuck_raiders_sidestep_lands_on_its_floor() {
+        let mut bad = Vec::new();
+        let (mut tried, mut old_missed) = (0, 0);
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            let grid = app.world().resource::<Nav>().0.as_ref().clone();
+            let map2 = map.clone();
+            let (b, t, o) = app
+                .world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let (mut bad, mut tried, mut old) = (Vec::new(), 0, 0);
+                    for plan in &plans {
+                        let g = &plan.grid;
+                        // A few places on its floor, indoors, spread out.
+                        let cells: Vec<Vec2> = (0..g.n * g.n)
+                            .filter(|k| g.cost[*k] != extraction_core::nav::BLOCKED)
+                            .map(|k| Vec2::from_array(g.centre(k % g.n, k / g.n)))
+                            .filter(|c| plan.indoors(*c))
+                            .collect();
+                        for c in cells.iter().step_by((cells.len() / 4).max(1)).take(4) {
+                            let pos = plan
+                                .xf
+                                .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                            if !plan.in_grid(pos) {
+                                continue;
+                            }
+                            let solo = std::slice::from_ref(plan);
+                            for step in [3.0, 8.0] {
+                                for k in 0..4 {
+                                    let start = k as f32 * 1.57 + 0.3;
+                                    tried += 1;
+                                    let q = sidestep(solo, &grid, &scene, pos, step, start);
+                                    let l = plan.to_local(Vec3::new(q.x, pos.y, q.y)).xz();
+                                    let floor_y = plan
+                                        .xf
+                                        .transform_point(Vec3::new(l.x, plan.floor_at(l), l.y))
+                                        .y;
+                                    if !g.walkable(l.to_array())
+                                        || !scene.walk_clear(pos, Vec3::new(q.x, floor_y, q.y))
+                                    {
+                                        bad.push(format!(
+                                            "{map2} {} at {:.0?}: from {c:.2?}, {step} m: to {l:.2?}",
+                                            plan.name, plan.xf.translation
+                                        ));
+                                    }
+                                    // The old step: straight out, as far.
+                                    let naive = pos.xz() + Vec2::new(start.cos(), start.sin()) * step;
+                                    let nl = plan.to_local(Vec3::new(naive.x, pos.y, naive.y)).xz();
+                                    if !g.walkable(nl.to_array()) {
+                                        old += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (bad, tried, old)
+                })
+                .unwrap();
+            bad.extend(b);
+            tried += t;
+            old_missed += o;
+        }
+        assert!(tried >= 200, "only {tried} sidesteps tried");
+        assert!(
+            old_missed > 0,
+            "the old random step never missed: the test proves nothing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} sidesteps off the floor (the old step missed {old_missed}):\n{}",
+            bad.len(),
+            bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
         );
     }
 
