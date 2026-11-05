@@ -932,6 +932,18 @@ fn spare_radio(
                 condition,
             },
         );
+        // His magazine comes loaded, as the driver's gifts do (empty, with a
+        // box beside it, the newcomer went out with an empty pistol and
+        // was shot down by a drone, firing nothing, raid after raid). The
+        // box is to fill it again.
+        if let Some(cap) = catalog.get(kind).magazine.as_ref().map(|m| m.capacity) {
+            commands.entity(e).queue(move |mut it: EntityWorldMut| {
+                if let Some(mut item) = it.get_mut::<crate::items::Item>() {
+                    item.rounds = cap;
+                    item.loads.fit(cap);
+                }
+            });
+        }
         // Side by side along the crate's shelf.
         let x = bag.half.x * 0.8 * ((i as f32 + 0.5) / n.max(1.0) * 2.0 - 1.0);
         crate::interact::body::stow_in_backpack(
@@ -1271,6 +1283,19 @@ mod tests {
                 "no {id} in the kit crate: {in_crate:?}"
             );
         }
+        // And the magazine full: a gun that fires (empty, beside a box, it
+        // went out with nothing to shoot).
+        let mags: Vec<u32> = app
+            .world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| catalog.get(i.kind()).id == "pm_mag")
+            .map(|i| i.rounds)
+            .collect();
+        assert!(
+            mags.iter().any(|r| *r == 8),
+            "the spare magazine isn't full: {mags:?}"
+        );
     }
 
     /// Home with no radio anywhere (it went with the rest at a fall): the
