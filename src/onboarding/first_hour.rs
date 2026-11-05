@@ -1343,12 +1343,17 @@ pub(super) fn direct_raid(
                 // the truck there. Anywhere short of it, a roof still
                 // (pinned and running on in the open, three newcomers were
                 // shot down in under two minutes; under roofs, two got
-                // home).
+                // home). Its bed is the roof nearest: the truck waiting
+                // within a short run, on into it (at 21 m from the truck
+                // back at the gate, the one-handed newcomer went under the
+                // gate's shelter instead, waited out in the open beside it,
+                // and two drones shot it down 15 m behind the bed).
                 let going_home = matches!(state.leg, Leg::Board)
+                    && matches!(raid.phase, Phase::TruckWaiting { .. })
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < 15.0);
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN);
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
@@ -2783,6 +2788,9 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
     };
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
+
+/// The truck waiting within this, a run for its bed beats any roof (m).
+const BED_RUN: f32 = 40.0;
 
 /// Clear of walls round a building's box, m: a body (0.28) and a stride.
 const ROUND: f32 = 2.0;
