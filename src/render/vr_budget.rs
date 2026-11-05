@@ -184,7 +184,10 @@ fn holds_views_with(
 ) -> (Vec<String>, Vec<Row>) {
     // Counts: draws, shadow draws, fragments.
     let _counting = super::budget::tests::counted();
-    let mut app = super::budget::tests::client_threads(map, weather, None);
+    // A storm on its flash frames, its dearest (the sun's cascades on for
+    // the strike, at any hour), as the one-eye gauges measure it.
+    let mut app =
+        super::budget::tests::client_flash(map, weather, None, weather == "storm", None);
     if let Some(h) = hour {
         app.world_mut().resource_mut::<crate::LaunchOptions>().hour = Some(h.into());
     }
@@ -361,8 +364,8 @@ fn holds_views_with(
     (over, rows)
 }
 
-/// What the meshes one eye draws without a named ancestor are: their
-/// roots' components (the game's own, not Bevy's), most drawn first.
+/// What the meshes one eye draws without a named ancestor are, by mesh
+/// (its file, or its vertices) and material, most drawn first.
 fn unnamed(app: &mut App, eye: Entity) -> String {
     let w = app.world_mut();
     let seen: Vec<Entity> = w
@@ -387,27 +390,33 @@ fn unnamed(app: &mut App, eye: Entity) -> String {
         if named {
             continue;
         }
-        let mut kinds: Vec<String> = w
-            .inspect_entity(at)
-            .map(|c| c.map(|i| i.name().to_string()).collect::<Vec<String>>())
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|n| n.starts_with("extraction"))
-            .map(|n| n.rsplit("::").next().unwrap_or("").to_string())
-            .collect();
-        kinds.sort();
-        kinds.truncate(4);
-        let key = if kinds.is_empty() {
-            // Bevy's own only: say what it wears.
-            let m = w
-                .get::<MeshMaterial3d<StandardMaterial>>(e)
-                .and_then(|m| w.resource::<Assets<StandardMaterial>>().get(&m.0))
-                .map(|m| format!("{:?}", m.alpha_mode))
-                .unwrap_or_else(|| "another material".into());
-            format!("bare ({m})")
-        } else {
-            kinds.join("+")
-        };
+        // (Component names need Bevy's debug feature: say what it is by
+        // its mesh, where it came from or its size, and what it wears.)
+        let mesh = w.get::<Mesh3d>(e).map(|m| m.0.clone());
+        let from = mesh
+            .as_ref()
+            .and_then(|m| w.resource::<AssetServer>().get_path(m.id()))
+            .map(|p| p.to_string());
+        let size = mesh
+            .as_ref()
+            .and_then(|m| w.resource::<Assets<Mesh>>().get(m))
+            .map_or(0, |m| m.count_vertices());
+        let wears = w
+            .get::<MeshMaterial3d<StandardMaterial>>(e)
+            .and_then(|m| w.resource::<Assets<StandardMaterial>>().get(&m.0))
+            .map(|m| {
+                let c = m.base_color.to_srgba();
+                format!(
+                    "{:?} #{:02x}{:02x}{:02x}{}",
+                    m.alpha_mode,
+                    (c.red * 255.0) as u8,
+                    (c.green * 255.0) as u8,
+                    (c.blue * 255.0) as u8,
+                    if m.emissive != LinearRgba::BLACK { " lit" } else { "" }
+                )
+            })
+            .unwrap_or_else(|| "another material".into());
+        let key = format!("{} {wears}", from.unwrap_or_else(|| format!("{size}v")));
         *by.entry(key).or_default() += 1;
     }
     let mut v: Vec<_> = by.into_iter().collect();

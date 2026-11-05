@@ -1130,7 +1130,7 @@ pub(crate) mod tests {
 
     /// `client_with`, with a storm's strike held lit (every frame a flash
     /// frame: the sun's cascades on, the bolt drawn).
-    fn client_flash(
+    pub(crate) fn client_flash(
         map: &str,
         weather: &str,
         snow: Option<f32>,
