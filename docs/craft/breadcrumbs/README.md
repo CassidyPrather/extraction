@@ -33,13 +33,26 @@ Five needed a cue, each the smallest that fits the place
 (`fixes_before_after.jpg`, the same frame before and after):
 
 - **Kettle, the cairn**: moved 8 m east to the ridge's lip, where its
-  figures stand on the skyline from the way below.
+  figures stand on the skyline from the way below; and its stones (an
+  outcrop, radius 2) beside them, because the figures alone were a speck
+  in grey weather. A pole was tried first: at 9 cm it never read.
 - **Kettle, the shot-firer's store**: its magazine hut, the cache behind
   it.
-- **Kettle, the farm workshop**: its woodpile, the cache by it (a light
-  prop: the farm's view was at its building limit).
+- **Kettle, the farm workshop**: the farm's lorry by it, broadside to the
+  track (a light prop: the farm's view was at its building limit). A
+  woodpile was tried first: a low smudge at 25 m in rain.
 - **Marrow, the tag office desk**: a worn path off the way into the
   trees to it.
-- **Sallow, the stock pallet**: a lorry left in the depot yard by it. At
-  56 m it barely reads; the yard itself (its buses and shed) is the cue
-  you go by.
+- **Sallow, the stock pallet**: nothing added. A lorry was tried and
+  never read at 56 m; the yard itself, its rail shed's silhouette, is the
+  cue you go by.
+
+## Reading, not just in view (the follow-up)
+
+The gauge's first pass counted a cue in the frame. It now asks that it
+read: a shape's size (the square root of its height times its narrowest
+breadth) at least 4 deg in the eye against the ground, 2.3 deg on the
+skyline (`READ_ANGLE`, `SKYLINE_ANGLE`). That flagged exactly the three
+weak ones above, and the pole. `kettle_follow_up.jpg`: the farm workshop
+before, with the woodpile, with the lorry; the cairn before, with the
+pole, with its stones.

@@ -169,3 +169,46 @@ Before and after, the walker and the drone 5 m off on the training yard in fog, 
 ![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)
 
 > **Reel spot.** Most recipes above put the camera at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
+
+## Feet that hold the ground
+
+`robots::feet_gauge` walks every legged machine (walker, crawler, hound and heavy; the grappler and the collector are walkers in body) over each valley's hard ground. One headless app runs per valley, with all four kinds on every route at once. The routes are:
+- the three steepest walkable slopes, at `map_nav::MAX_SLOPE`, 32°;
+- four doors, over the step and 1 m in;
+- three ruins' rubble;
+- two points on each water's bank;
+- Sallow's dam: the Crest road and the Face stair.
+
+Open ground is walked the way the nav paths it, round the boulders. `every_legged_machine_holds_every_valleys_ground` holds three limits, in metres at a walker's size:
+- **Slide:** a planted foot's drawn position moves under `SLIDE` (0.05) over a stance. Slipping on ice is meant (`anim::slip_feet`) and is left out.
+- **Touchdown:** a foot comes down within `TOUCH` (0.08) of the fixed world's surface, neither over it nor in it.
+- **Ride:** the body stays within `RIDE` (0.6) of what holds it up, its planted feet and the ground under it, and within `RIDE_USUALLY` (0.3) for all but 0.2% of its ticks.
+
+`FEET_MAP=name` gauges one valley; `--nocapture` prints each valley's worst cases and where they happen; `reel:feetat,N,EVERY,KIND,X1,Z1,X2,Z2` films one.
+
+Worst cases per valley, before and after (the same gauge):
+
+| Valley | Sink before | Sink after | Ride before (high / low) | Ride after (high / low) | Body past 0.3, before → after |
+|---|---|---|---|---|---|
+| Marrow Creek | 0.13 | 0.06 | 0.78 / 0.33 | 0.48 / 0.35 | 0.15% → 0.08% |
+| Kettle Pass | 1.50 | 0.05 | 0.78 / 0.43 | 0.55 / 0.28 | 0.73% → 0.04% |
+| Cinder Works | 1.52 | 0.05 | 0.85 / 0.37 | 0.56 / 0.28 | 0.32% → 0.04% |
+| Sallow Reservoir | 1.57 | 0.07 | 0.80 / 1.13 | 0.54 / 0.27 | 0.30% → 0.01% |
+| Rime Fell | 2.77 | 0.02 | 0.72 / 0.75 | 0.40 / 0.26 | 0.59% → 0.01% |
+
+Slide was under 0.01 everywhere, before and after, and nothing floated.
+
+The causes, each fixed in `anim` for every legged machine:
+
+1. **Feet a body's height inside a hill.** `footing` decided "underground" by comparing the probe to the terrain at the foot's target. Up a 32° slope a stride's target is higher than the body, a hound's most of all, so the foot was dropped a body's height into the hill (1.5–2.8). Now "underground" is the body's own state: below the terrain where it stands, in an underground site. Above ground, the probe starts at least `PROBE_OVER` over the terrain at the target.
+2. **Feet and bodies on a porch roof.** The body's and the feet's probes started at the body. At a door, a heavy's body is up at the porch roof, so the probe found the roof and the heavy climbed onto it (2.5 m over its feet). Both probes now start `BODY_PROBE` over the feet's middle.
+3. **A body sunk in a raised floor.** With three legs stepping up onto a floor, the body rode on where they had left from, at the step below, and was eased up too slowly. Now a foot in the air counts where it has got to, and the body rises at `RISE_RATE`.
+4. **A body off its legs.** Mid-gallop, with three feet in the air, their targets up a slope lifted the body. A rear foot planted up the hill behind held it there. The body now rides in a band over what it stands on: the ground under it, or its lowest planted foot over a drop. It's carried with the ground as it goes, and brought back into the band at `RIDE_CATCH`, a drop off a ledge rather than a one-tick pop.
+5. **Rocks and the terrain's own collider.** A probe that started inside a rock or a sill took the terrain under it, so a crawler on a boulder sat inside it. It now looks again from over the rock. The terrain's collider triangles stand off the heightmap's smooth ground by up to 9 cm on a steep slope, so feet probes leave that collider out and take the higher of what they hit and `zone.ground`.
+
+What's left: the ride's worst is 0.4–0.56, the body coming down off a raised doorway's 1.15 m drop at `RIDE_CATCH`. Touchdowns are within 4 cm in real metres.
+
+![close up, before and after](feet_hold_the_ground_close_before_after.jpg)
+![wide, before and after](feet_hold_the_ground_before_after.jpg)
+
+Each valley's worst route is filmed, hound walking, fog at 11:00, before beside after. On Kettle's and Sallow's 32° slopes the hound's downhill feet reached into the hillside; now they come down on it.
