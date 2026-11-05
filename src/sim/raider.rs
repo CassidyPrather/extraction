@@ -2635,15 +2635,17 @@ const WRECK_SHUTS: usize = 8;
 /// A robot's wreck lying across a building's floor is nothing its plan
 /// knows of: the take's route to `goal`
 /// (building-local) is walked in the plan's mind first, at a body's
-/// height, and wherever it meets a wreck the ground there is shut in this
-/// raider's plan, and the route found again round it (Marrow seed 7, 4
+/// height, and wherever it meets a wreck the ground there is shut in a
+/// copy of the plan, and the route found again round it in that (Marrow seed 7, 4
 /// November: through a Sorter it had just wrecked across the depot's
 /// aisle, two stucks). A robot still on its feet is no part of the
 /// floor: it moves, and is fought, not walked round.
-fn shut_wrecks(plan: &mut BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) {
+fn wrecks_shut(plan: &BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) -> Option<BuildingPlan> {
+    let mut shut: Option<BuildingPlan> = None;
     for _ in 0..WRECK_SHUTS {
-        let Some(route) = indoor_through_held(plan, pos, goal, 0.3) else {
-            return;
+        let now = shut.as_ref().unwrap_or(plan);
+        let Some(route) = indoor_through_held(now, pos, goal, 0.3) else {
+            return shut;
         };
         let mut from = pos.xz();
         let mut hit = None;
@@ -2655,7 +2657,7 @@ fn shut_wrecks(plan: &mut BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) {
             let mut d = 0.3;
             while d < len {
                 let p = from.lerp(*to, d / len);
-                if scene.wreck_at(plan, p) {
+                if scene.wreck_at(now, p) {
                     hit = Some(p);
                     break 'legs;
                 }
@@ -2664,10 +2666,10 @@ fn shut_wrecks(plan: &mut BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) {
             from = *to;
         }
         let Some(p) = hit else {
-            return;
+            return shut;
         };
         let local = plan.to_local(Vec3::new(p.x, pos.y, p.y)).xz();
-        plan.grid.block(
+        shut.get_or_insert_with(|| plan.clone()).grid.block(
             Obstacle::Circle {
                 at: local.to_array(),
                 radius: 0.4,
@@ -2675,6 +2677,7 @@ fn shut_wrecks(plan: &mut BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) {
             super::indoor::SITE_CLEARANCE,
         );
     }
+    shut
 }
 
 /// As [`indoor`], through doors held shut on power: for a route that
@@ -4054,8 +4057,11 @@ fn take_item(
                 return None;
             }
             let goal = r.plans[b].to_local(at).xz();
-            shut_wrecks(&mut r.plans[b], scene, pos, goal);
-            let plan = &r.plans[b];
+            // (The wreck shut in a copy for this take's route only: a
+            // gallery a wreck half fills is shut for good otherwise, every
+            // walk out after planned round it into the walls; Rime seed 8.)
+            let shut = wrecks_shut(&r.plans[b], scene, pos, goal);
+            let plan = shut.as_ref().unwrap_or(&r.plans[b]);
             // A contract's thing to bring, somewhere the route can't stand
             // (behind a counter): as near as there's floor, and reach.
             let wanted = matches!(
@@ -4949,10 +4955,11 @@ mod run_tests {
                 .id()
         };
         let routed = |app: &mut App| {
-            let mut plan = plan.clone();
+            let plan = plan.clone();
             app.world_mut()
                 .run_system_once(move |scene: Scene| {
-                    shut_wrecks(&mut plan, &scene, from, goal);
+                    let plan =
+                        wrecks_shut(&plan, &scene, from, goal).unwrap_or_else(|| plan.clone());
                     let route = indoor_through_held(&plan, from, goal, 0.3).unwrap_or_default();
                     // (No route at all is no way round it.)
                     if route.is_empty() {
