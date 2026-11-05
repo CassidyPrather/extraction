@@ -158,6 +158,14 @@ impl Plugin for EverythingPlugin {
                     info!("everything: out at frame {at}");
                     bring_everything_out_world(world);
                 }
+                // Brought out worn: fouled too, a frame on (the guns' state
+                // is theirs by then), so every look a gun can wear shows.
+                if *frame == at + 1 && std::env::var_os("EXTRACTION_EVERYTHING_CONDITION").is_some()
+                {
+                    for mut g in world.query::<&mut crate::weapons::Gun>().iter_mut(world) {
+                        g.firearm.fouling = 1.0;
+                    }
+                }
             });
         }
     }
