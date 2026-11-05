@@ -4140,14 +4140,19 @@ mod tests {
                 .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
                 .single(app.world())
                 .unwrap();
-            let me = app.world().get::<GlobalTransform>(p).unwrap().translation();
-            let fwd = app
-                .world()
-                .get::<GlobalTransform>(p)
-                .unwrap()
-                .forward()
-                .as_vec3();
-            let fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+            // Out of the truck (in it, every round hit its wall): in the
+            // open inside the south gate, the drone to the north.
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let me = zone.on_ground(22.0, 140.0) + Vec3::Y * 0.05;
+            let fwd = Vec3::NEG_Z;
+            {
+                let mut t = app.world_mut().get_mut::<Transform>(p).unwrap();
+                t.translation = me;
+                t.rotation = Quat::IDENTITY;
+            }
+            for _ in 0..10 {
+                app.update();
+            }
             let gun = drop(&mut app, "pm_pistol", me + Vec3::new(0.3, 0.9, 0.0), None);
             let mag = drop(&mut app, "pm_mag", me + Vec3::new(-0.3, 0.9, 0.0), Some(8));
             let at = me + fwd * d + Vec3::Y * 6.0;
