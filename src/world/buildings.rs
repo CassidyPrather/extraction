@@ -2046,7 +2046,9 @@ pub fn house_layout(plan: HousePlan, w: f32, d: f32) -> HouseLayout {
             room_floor: flip(common.room_floor),
         },
         HousePlan::PlankC => HouseLayout {
-            table: (Vec3::new(x * 0.3, f, -z * 0.1), 0.4),
+            // Out in the front room: by the partition, its chair stood in
+            // the right-hand doorway (`every_inner_doorway_is_walked_through`).
+            table: (Vec3::new(x * 0.3, f, -z * 0.35), 0.4),
             shelf: (Vec3::new(-x + 0.3, f, -z * 0.7), -FRAC_PI_2),
             room_floor: Vec3::new(-x * 0.3, f + 0.03, -z * 0.5),
             ..common
