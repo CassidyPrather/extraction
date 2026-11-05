@@ -2693,7 +2693,8 @@ const WRECK_NEAR: f32 = 4.0;
 /// a copy of the grid and the walk found again in that (Kettle seed 1, 5
 /// November: to the RV over the beck's footbridge, a walker wrecked on
 /// its end, ten stucks). With no way round, the walk as it was: no worse
-/// than before.
+/// than before. A wreck by the walk's end is left on it: that's where it's
+/// going.
 fn travel_clear(
     grid: &NavGrid,
     scene: &Scene,
@@ -2702,6 +2703,7 @@ fn travel_clear(
     within: f32,
 ) -> Option<Vec<Task>> {
     let first = travel(grid, from, to, within)?;
+    let end = to;
     let wrecks = scene.wrecks();
     if wrecks.is_empty() {
         return Some(first);
@@ -2719,7 +2721,14 @@ fn travel_clear(
             let mut d = 0.3;
             while d < len {
                 let p = last.lerp(*to, d / len);
-                if wrecks.iter().any(|w| w.distance(p) < WRECK_NEAR) && scene.wreck_out_at(p) {
+                // (Not by where it's going: a wreck it's off to salvage, a
+                // drone come down by the truck it's boarding; walked round,
+                // it arrived elsewhere: Sallow seed 8's minelayer, its and
+                // Rime seed 4's truck, the bell out of reach.)
+                if p.distance(end) > WRECK_NEAR
+                    && wrecks.iter().any(|w| w.distance(p) < WRECK_NEAR)
+                    && scene.wreck_out_at(p)
+                {
                     hit = Some(p);
                     break 'legs;
                 }
