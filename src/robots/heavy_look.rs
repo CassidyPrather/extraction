@@ -794,7 +794,7 @@ mod tests {
             app.update();
         }
         // Meshes of the heavy's the eye draws (its own and its limbs').
-        let drawn = |app: &mut App| -> usize {
+        let drawn = |app: &mut App| -> Vec<Entity> {
             // (What the eye itself draws: other cameras see other LODs.)
             let w = app.world_mut();
             let mut q = w.query_filtered::<
@@ -821,9 +821,26 @@ mod tests {
                     }
                     false
                 })
-                .count()
+                .collect()
         };
-        let whole = drawn(&mut app);
+        // What an entity is, for a failure: its nearest name, and its
+        // parent's when it's a bolt's.
+        let what = |app: &App, e: Entity| -> String {
+            let w = app.world();
+            let mut at = e;
+            for _ in 0..8 {
+                if let Some(n) = w.get::<Name>(at) {
+                    return n.as_str().to_string();
+                }
+                match w.get::<ChildOf>(at) {
+                    Some(p) => at = p.parent(),
+                    None => break,
+                }
+            }
+            "(unnamed)".into()
+        };
+        let before = drawn(&mut app);
+        let whole = before.len();
         let (merged, holders) = {
             let b = app
                 .world()
@@ -868,12 +885,27 @@ mod tests {
             app.update();
         }
         assert!(app.world().get::<BoltsMerged>(robot).is_none());
-        let after = drawn(&mut app);
+        let now = drawn(&mut app);
+        let after = now.len();
+        let gone: Vec<String> = before
+            .iter()
+            .filter(|e| !now.contains(e))
+            .map(|e| what(&app, *e))
+            .collect();
+        let came: Vec<String> = now
+            .iter()
+            .filter(|e| !before.contains(e))
+            .map(|e| what(&app, *e))
+            .collect();
         // The merged two gone, the other eleven bolts' own back (two a
         // bolt, steel and its warning paint: 24 of a heavy's 89 with all
         // on). Each is culled on its own, so one may be out of view.
         let singles = seen_of(&mut app, &holders);
-        assert_eq!(after, whole - 2 + singles, "{whole} then {after}");
+        assert_eq!(
+            after,
+            whole - 2 + singles,
+            "{whole} then {after}, {singles} single bolt meshes; gone {gone:?}, came {came:?}"
+        );
         assert!(singles >= (bolts - 2) * 2, "{singles} single bolt meshes drawn");
     }
 
