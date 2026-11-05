@@ -262,11 +262,12 @@ fn scour_outlet(b: &mut Builder, c: f32) {
         Vec3::new(c, (lintel.0 + lintel.1) * 0.5, out + 0.07),
         Mat::Boulder,
     );
-    // The culvert's dark, and its grille.
+    // The culvert's dark (unlit: only the fog in front of it), and its
+    // grille.
     b.deco(
         Vec3::new(w, h + 0.5, 0.05),
         Vec3::new(c, (h + 0.5) * 0.5, inn + 0.03),
-        Mat::Charred,
+        Mat::Void,
     );
     let bars = 11;
     for k in 0..bars {
