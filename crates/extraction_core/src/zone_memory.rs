@@ -35,6 +35,10 @@ pub const MAX_SEARCHED: usize = 40;
 pub const SAME_PLACE: f32 = 15.0;
 /// A rendezvous used this much (a raid's worth) is a favourite.
 pub const HABIT: f32 = 1.0;
+/// Where you went down, within this (m): the machines won there, so the
+/// raid doesn't add to what they know of it, and what they knew fades a
+/// raid's worth more ([`RaidTrace::lost`]).
+pub const LOST_REACH: f32 = 90.0;
 
 /// A place remembered, and how strongly.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -75,6 +79,8 @@ pub struct RaidTrace {
     pub looted: Vec<[f32; 2]>,
     /// Where walkers searched for you.
     pub searched: Vec<[f32; 2]>,
+    /// Where you went down, if you did: the machines won there.
+    pub lost: Option<[f32; 2]>,
 }
 
 /// The grid cell `(x, z)` lies in.
@@ -106,6 +112,7 @@ impl RaidTrace {
             && self.kills.is_empty()
             && self.looted.is_empty()
             && self.searched.is_empty()
+            && self.lost.is_none()
     }
 }
 
@@ -139,6 +146,16 @@ fn fade<T>(v: &mut Vec<T>, w: impl Fn(&mut T) -> &mut f32) {
     v.retain_mut(|x| *w(x) >= FORGET);
 }
 
+/// [`fade`], only for what `near` picks.
+fn fade_where<T>(v: &mut Vec<T>, near: impl Fn(&T) -> bool, w: impl Fn(&mut T) -> &mut f32) {
+    for x in v.iter_mut() {
+        if near(x) {
+            *w(x) *= DECAY;
+        }
+    }
+    v.retain_mut(|x| *w(x) >= FORGET);
+}
+
 impl ZoneMemory {
     /// A raid's end: what it remembered fades, and this raid goes in.
     pub fn fold(&mut self, trace: &RaidTrace) {
@@ -148,7 +165,16 @@ impl ZoneMemory {
         fade(&mut self.kills, |s| &mut s.weight);
         fade(&mut self.looted, |s| &mut s.weight);
         fade(&mut self.searched, |s| &mut s.weight);
-        for c in &trace.cells {
+        // Down there: they won, and ease off it. A newcomer stuck on one
+        // step who keeps going down at the same place isn't met sooner
+        // each time (a drone on them 110 s in, raid after raid).
+        let near_loss = |at: [f32; 2]| trace.lost.is_some_and(|l| dist(l, at) < LOST_REACH);
+        if trace.lost.is_some() {
+            fade_where(&mut self.heat, |h| near_loss(centre(h.0)), |h| &mut h.1);
+            fade_where(&mut self.kills, |s| near_loss(s.at), |s| &mut s.weight);
+            fade_where(&mut self.searched, |s| near_loss(s.at), |s| &mut s.weight);
+        }
+        for c in trace.cells.iter().filter(|c| !near_loss(centre(**c))) {
             match self.heat.iter_mut().find(|h| h.0 == *c) {
                 Some(h) => h.1 = (h.1 + 1.0).min(HEAT_MAX),
                 None => self.heat.push((*c, 1.0)),
@@ -157,13 +183,13 @@ impl ZoneMemory {
         if let Some(rv) = trace.rv {
             remember(&mut self.rvs, rv, "", 1.0, HEAT_MAX);
         }
-        for (at, kind) in &trace.kills {
+        for (at, kind) in trace.kills.iter().filter(|(at, _)| !near_loss(*at)) {
             remember(&mut self.kills, *at, kind, 1.0, HEAT_MAX);
         }
         for at in &trace.looted {
             remember(&mut self.looted, *at, "", 1.0, HEAT_MAX);
         }
-        for at in &trace.searched {
+        for at in trace.searched.iter().filter(|at| !near_loss(**at)) {
             remember(&mut self.searched, *at, "", 1.0, 1.0);
         }
         keep_strongest(&mut self.heat, MAX_CELLS, |h| h.1);
@@ -325,6 +351,38 @@ mod tests {
         let mut m = m;
         m.fold(&RaidTrace::default());
         assert!(m.is_blank());
+    }
+
+    /// A newcomer stuck on one step goes down at the same place raid after
+    /// raid: the machines won there, so they ease off it rather than know
+    /// it ever better (the reckless one at Hajek's weir cottage, Kettle,
+    /// raids 12-20: a drone on them about 110 s in, every time). One who
+    /// keeps getting out the same way is known there as before.
+    #[test]
+    fn a_place_you_keep_losing_at_eases() {
+        let cottage = (400.0, 400.0);
+        let way = [(250.0, 250.0), (320.0, 330.0), cottage];
+        let mut lost = ZoneMemory::default();
+        let mut won = ZoneMemory::default();
+        let mut worst = 0.0f32;
+        for n in 0..9 {
+            let mut t = raid(&way, None);
+            t.lost = Some([cottage.0, cottage.1]);
+            lost.fold(&t);
+            if n >= 2 {
+                worst = worst.max(lost.corridor(cottage.0, cottage.1));
+            }
+            won.fold(&raid(&way, Some([0.0, 0.0])));
+        }
+        assert!(
+            worst < 0.6,
+            "lost there raid after raid, known there at {worst:.2} (a habit is 0.6)"
+        );
+        assert!(
+            won.corridor(cottage.0, cottage.1) >= 0.99,
+            "got out that way every raid, known there at only {:.2}",
+            won.corridor(cottage.0, cottage.1)
+        );
     }
 
     /// The same way three raids running is a habit; then a change of
