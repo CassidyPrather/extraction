@@ -240,9 +240,13 @@ fn count_raids(
     // Back from a raid with a fetch the Zone isn't giving up: something
     // else instead (rolled by `offer_job`).
     if home && progression.0.fetch_gone_stale(raid.raids) {
-        if let Some(Job::Fetch { item, .. }) = progression.0.job.take() {
-            let name = want_name(&catalog, &item);
-            raid.say(lines::fetch_swapped(&name));
+        match progression.0.job.take() {
+            Some(Job::Fetch { item, .. }) => {
+                let name = want_name(&catalog, &item);
+                raid.say(lines::fetch_swapped(&name));
+            }
+            Some(job) => raid.say(lines::job_swapped(&job_place(&job))),
+            None => {}
         }
         progression.0.swaps += 1;
     }
@@ -414,6 +418,7 @@ fn job_done(
     mut raid: ResMut<Raid>,
     mut save: MessageWriter<crate::persist::SaveNow>,
     mut handover: MessageWriter<crate::raid::lev::HandOver>,
+    mut loaded: MessageWriter<crate::raid::lev::HandOverLoaded>,
     catalog: Res<Catalog>,
 ) {
     for _ in done.read() {
@@ -426,14 +431,28 @@ fn job_done(
             // He passes them back through the cab's hatch (`raid::lev`).
             let mut gave = false;
             for (id, n, condition) in gifts(*u) {
-                if catalog.kind(id).is_none() {
+                let Some(kind) = catalog.kind(id) else {
                     continue;
-                }
+                };
+                // Its magazines and clips come filled: a gift fires at once
+                // (stripping a box into clips is a later thing to learn).
+                let full = catalog.get(kind).magazine.as_ref().map(|m| m.capacity);
                 for _ in 0..*n {
-                    handover.write(crate::raid::lev::HandOver {
-                        id: id.to_string(),
-                        condition: *condition,
-                    });
+                    match full {
+                        Some(rounds) => {
+                            loaded.write(crate::raid::lev::HandOverLoaded {
+                                id: id.to_string(),
+                                condition: *condition,
+                                rounds,
+                            });
+                        }
+                        None => {
+                            handover.write(crate::raid::lev::HandOver {
+                                id: id.to_string(),
+                                condition: *condition,
+                            });
+                        }
+                    }
                     gave = true;
                 }
             }
@@ -451,6 +470,16 @@ fn job_done(
     }
 }
 
+/// Whether the job on the card is a rolled scout not yet done in a valley
+/// other than `map`, the one the truck's in: one the driver swaps for a
+/// job here. A contract's step and a far job keep their valley (they're
+/// meant to send you there); a fetch goes anywhere.
+pub fn moved_off(p: &Progress, map: &str) -> bool {
+    p.contract.is_none()
+        && !p.tier_def().far
+        && matches!(&p.job, Some(Job::Scout { map: m, seen: false, .. }) if m != map)
+}
+
 /// There's always a job on the card.
 fn offer_job(
     opts: Res<LaunchOptions>,
@@ -463,6 +492,25 @@ fn offer_job(
 ) {
     if progression.0.quiet != epilogue.done {
         progression.0.quiet = epilogue.done;
+    }
+    // A career moved to another valley with a rolled scout still to do in
+    // the last: a job here instead (the second-valley runs: the card said
+    // "In Marrow Creek: ..." in Kettle, and there was nothing to do).
+    if opts.map != crate::camp::TRAINING_YARD
+        && opts.sim_run.is_none()
+        && raid.phase == Phase::AtBase
+        && moved_off(&progression.0, &opts.map)
+    {
+        progression.0.swaps += 1;
+        // Its first job here shows the valley: a look round its gentle
+        // place, as a career's first job does (else whatever rolls).
+        progression.0.job = valleys()
+            .iter()
+            .find(|(id, _)| *id == opts.map)
+            .and_then(|(id, map)| extraction_core::progression::first_job(id, map));
+        progression.0.job_raid = raid.raids;
+        progression.0.lost_on_job = 0;
+        raid.say(lines::job_here(&valley_name(&opts.map)));
     }
     if progression.0.job.is_some() {
         return;
@@ -533,6 +581,7 @@ fn offer_job(
     info!("job {}: {job:?}", progression.0.done + 1);
     progression.0.job = Some(job);
     progression.0.job_raid = raid.raids;
+    progression.0.lost_on_job = 0;
 }
 
 /// A Recover job in this valley with no recorder anywhere (not yet put
@@ -829,10 +878,11 @@ fn nudge(
 /// done: the driver says it's still waiting, and where (from the drop, as
 /// the card has it, in this valley; or which valley).
 fn restate_after_fall(
-    progression: Res<Progression>,
+    mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
     opts: Res<LaunchOptions>,
     zone: Res<Zone>,
+    mind: Option<Res<crate::robots::memory::ZoneMind>>,
     // The falls counted so far, and one not yet answered.
     mut seen: Local<Option<(u32, bool)>>,
 ) {
@@ -840,6 +890,10 @@ fn restate_after_fall(
     if raid.deaths > *deaths {
         *deaths = raid.deaths;
         *owed = true;
+        // Lost on this job, one more raid running.
+        if progression.0.job.is_some() {
+            progression.0.lost_on_job += 1;
+        }
     }
     if !*owed || raid.phase != Phase::AtBase {
         return;
@@ -858,7 +912,22 @@ fn restate_after_fall(
             .marker(&extraction_core::map::MarkerKind::Insertion)
             .map_or([0.0, 0.0], |m| m.at);
         let way = crate::raid::lines::way(drop, mark);
-        raid.say(lines::job_waiting(&place, Some(&way)));
+        // A contract's step lost raid after raid on the way the machines
+        // know: another way in to it (the step stays: its place on the
+        // ladder).
+        let another = (progression.0.contract.is_some()
+            && progression.0.lost_on_job >= extraction_core::progression::ANOTHER_WAY_AFTER)
+            .then_some(())
+            .and(mind.as_ref())
+            .and_then(|m| {
+                extraction_core::progression::another_way(&zone.map, &m.memory, drop, mark)
+            });
+        match another {
+            Some((via, at)) => {
+                raid.say(lines::another_way(&via, &crate::raid::lines::way(drop, at)))
+            }
+            None => raid.say(lines::job_waiting(&place, Some(&way))),
+        }
     } else {
         raid.say(lines::job_waiting(&place, Some(&valley_name(map))));
     }
@@ -966,7 +1035,7 @@ fn tailgate(
 }
 
 /// The job's place, by name: "Old farm", "house by the well".
-fn job_place(job: &Job) -> String {
+pub(crate) fn job_place(job: &Job) -> String {
     match job {
         Job::Scout { place, .. } | Job::Bring { place, .. } | Job::Plant { place, .. } => {
             place.clone()

@@ -357,3 +357,22 @@ At (-115.0, -264.0), 136.9 m; looking 79 deg along the way, and 168 deg to The b
 - Dead stretch (s11 to s18, 360 to 560 m): 200 m of white slope after Coldharbour, the forks with nothing down them; a hut lamp now and then is all. The longest dead stretch of any valley.
 - A wall in your face (s27): the observatory's job point stands on its corner; the reveal from the crest (s26) is the job's real frame.
 - The way to the job is long (812 m): a newcomer's first Rime job is the walk.
+
+## Fixes
+
+Before on the left, after on the right.
+
+### 1. The observatory's arrival (s27)
+
+The job's point is the building (the kit is planted inside), so it stays; what changed is how you meet it. The observatory turned so its door faces the way up from the saddle (rot 160 to 55), and a job in a building is now framed 20 m out as you come up to it (scripts/walk_stops.py), not at its wall. You arrive facing the observatory square on the summit, its door ahead.
+
+![before](s27_ahead.jpg) ![after](fixes/job_ahead_after.jpg)
+
+### 2. Waymarks over the white (s11 to s18)
+
+After Coldharbour, 200 m of snow with nothing to steer by. The col track now has a signpost at Coldharbour's fork (the col and the observatory; refuge halfway), cairns beside the track, a refuge hut halfway, and a second signpost at the col fork. They help, but at this range they're specks: the stretch wants a line of snow poles, one every 20 m, which is a new prefab (asked of Models).
+
+![before](s11_ahead.jpg) ![after](fixes/s11_ahead_after.jpg)
+![before](s13_ahead.jpg) ![after](fixes/s13_ahead_after.jpg)
+![before](s14_ahead.jpg) ![after](fixes/s14_ahead_after.jpg)
+![before](s15_ahead.jpg) ![after](fixes/s15_ahead_after.jpg)

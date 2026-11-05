@@ -43,6 +43,7 @@ SCALE = {
     "climbing_kit": 2.2, "zipline_kit": 2.0, "wristwatch": 1.7, "chess_piece": 2.6,
     "old_photo": 1.2, "key_marrow": 1.12, "key_kettle": 1.12, "key_cinder": 1.12,
     "spare_parts": 2.1, "gun_oil": 1.85, "multitool": 1.15, "powder": 1.2,
+    "camera": 1.25, "hajek_tin": 1.25,
 }
 
 

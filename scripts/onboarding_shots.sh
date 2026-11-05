@@ -10,30 +10,32 @@ OUT=docs/shots/onboarding
 mkdir -p "$OUT"
 DATA=$(mktemp -d)
 trap 'rm -rf "$DATA"' EXIT
-# name  x,y,z,yaw,pitch  (y = 0: standing on the ground there)
+# name  station  x,y,z,yaw,pitch  (y = 0: standing on the ground there).
+# The station by its title (onboarding::STATIONS, any case, spaces as
+# underscores), not its number: stations come and go, and by number the
+# shots drifted onto blank boards.
 SHOTS=(
-  "1_truck_bed -0.3,15.77,95.4,180,-14"
-  "1b_off_the_steps -0.6,0,94.3,345,-6"
-  "2_getting_about -3.5,0,91.5,0,-6"
-  "3_put_it_away 3.3,0,89.6,0,-6"
-  "4_out_of_reach -3.4,0,86.8,345,4"
-  "4b_the_pen -6.3,0,82.2,355,-14"
-  "4c_the_beam 0.3,0,82.5,0,0"
-  "5_range_post -4.3,0,49.4,315,-6"
-  "5b_range_table -13.5,0,45.0,0,-14"
-  "6_the_house 4.2,0,27,90,-6"
-  "7_first_aid 2,0,8,90,-6"
-  "8_the_shimmer 2,0,-30,90,-6"
-  "8b_the_shimmer_beyond 3.5,0,-31.5,60,-12"
-  "8c_the_stone 9.2,0,-36,90,-28"
-  "9_buttons -1.2,0,-50,270,-8"
-  "10_going_home 4,0,-61.6,0,-6"
+  "truck_bed your_kit -0.3,16.3,95.4,180,-14"
+  "settings settings -0.3,16.3,95.4,180,-14"
+  "off_the_steps getting_about -0.6,0,94.3,345,-6"
+  "getting_about getting_about -3.5,0,91.5,0,-6"
+  "out_of_reach out_of_reach -3.4,0,86.8,345,4"
+  "the_pen out_of_reach -6.3,0,82.2,355,-14"
+  "the_beam out_of_reach 0.3,0,82.5,0,0"
+  "range_post the_range -4.3,0,49.4,315,-6"
+  "range_table run_it_dry -13.5,0,45.0,0,-14"
+  "the_house the_house 4.2,0,27,90,-6"
+  "first_aid first_aid 2,0,8,90,-6"
+  "the_shimmer the_shimmer 2,0,-30,90,-6"
+  "the_shimmer_beyond the_shimmer 3.5,0,-31.5,60,-12"
+  "the_stone the_shimmer 9.2,0,-36,90,-28"
+  "going_home going_home 4,0,-61.6,0,-6"
 )
 for s in "${SHOTS[@]}"; do
-  name=${s%% *}; cam=${s#* }
+  read -r name station cam <<<"$s"
   if [ $# -gt 0 ] && [[ ! " $* " =~ " $name " ]]; then continue; fi
   # That station's lamp lit, the ones before it done.
-  EXTRACTION_YARD_AT=${name%%[_b]*} scripts/shot.sh "$OUT/$name.png" "$cam" 40 \
+  EXTRACTION_YARD_AT=$station scripts/shot.sh "$OUT/$name.png" "$cam" 40 \
     --map training_yard --data-dir "$DATA" --no-robots --weather clearing
   # Kept as JPEG: a dozen PNGs are 20 MB in the repository.
   ffmpeg -loglevel error -y -i "$OUT/$name.png" -q:v 3 "$OUT/$name.jpg" && rm "$OUT/$name.png"

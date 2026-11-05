@@ -188,3 +188,34 @@ prod gives (the string's rest from z -0.33 to -0.22) and the front grip
 110 mm back. Top, the support palm under the new front grip, up into it;
 below, the fist closed on the string at its new rest. Both follow the
 layout (`support_pose`, `handle_pose`): nothing of the hands' changed.
+`33_held_free.jpg` (`fp:<item>,2.2` and `fp:<item>+palm,2.2` for the
+first raid's starter loot, in the left hand, Marrow Creek's grey daylight;
+each before, after, and after on the upturned palm):
+before, a thing held free sat wherever the hand took it, and the glove
+curled by its smallest size: the fingers closed through a tin or round
+the air beside a magazine. After, the glove is seated on it
+(`render::hold::seat`): the palm on it, each finger closed until it
+touches, the thumb laid on a side. The gallery takes each thing as a
+hand picks it up (`render::hold::taken`: its thinnest side to the palm). Small
+things (a power cell, a bolt) lay on a hand still nearly open: see 34.
+`34_small_gripped.jpg` (`fp:<item>+palm,2.2` and `fp:<item>,2.2`; left
+the seat of 33, middle and right now): a small thing (`render::hold::small`:
+a closed hand goes round it) must be gripped, the thumb against a finger
+and the fingers on it curled at least `GRIPPED` on average, or it isn't
+held: the fingers close round the power cell, the bolt, the box of
+rounds, the magazine and the matches rather than lying flat under them.
+`35_first_hour_eye.jpg` (the yard by day, as one headset eye sees it:
+`EXTRACTION_FOV=100`, `--size 1000x1000`, `--camera 0,0,40,0,-25`,
+`--gallery fp:read`, `fp:pm_mag`, `fp:field_dressing`, `fp:radio`,
+`fp:radio+palm`): the first hour's hands. Top left, before: the job
+card held up to read stood on the glove's fingertips like a tray, and
+was a blank grey slab (the gallery drew a box of its own, not the card:
+the game's card always had its text, to the eye, as the world sweep now
+checks for every thing taken up to read). Top middle, after: the real
+card, its first job's text drawn on its face to the eye, held before the
+face as a reader does, pinched by its bottom edge between thumb and
+fingers (a thin flat thing is now held only pinched by an edge,
+`render::hold::thin`). The crate's magazine, the dressing and the radio read right at
+the eye. (`fp:read`, new, holds the job card up as `interact::read`
+does; the `fp` gallery now stands a 0-height camera's eye 1.7 m up, as
+the camera does: it had set the hands out round the feet.)

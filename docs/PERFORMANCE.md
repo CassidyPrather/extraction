@@ -1030,6 +1030,30 @@ to BC7 (below, "Textures"). The valleys' budget is 2 GiB
 At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
 GB. Under half the ceiling either way: nothing to stream or cut yet.
 
+**4 November, on main b175290f** (the report now names each valley's
+five biggest things of any kind):
+
+| valley | total | textures | meshes | shadows | eye targets |
+|---|---|---|---|---|---|
+| Marrow Creek | 1545 MB | 209 | 236 | 16 | 1084 |
+| Kettle Pass | 1660 MB | 200 | 361 | 16 | 1084 |
+| Cinder Works | 1588 MB | 189 | 299 | 16 | 1084 |
+| Sallow Reservoir | 1627 MB | 187 | 340 | 16 | 1084 |
+| Rime Fell | 1709 MB | 177 | 432 | 16 | 1084 |
+
+Every valley's five biggest are the same: the eye targets (1084 MB), the
+sun's shadow maps (16 MB), then the three terrain maps (9.3 MB each). The
+meshes are hundreds of small ones, none in the top five. Every valley is
+under the 2 GiB budget and well under the 4.5 GB ceiling, so there's
+nothing to cut.
+
+MSAA and memory: at 2980² the two eyes' targets take 64 bytes a pixel
+at 4x MSAA (1084 MB), 40 at 2x (678 MB) and 28 without MSAA (474 MB).
+Memory isn't what MSAA costs here: 4x fits with 2.8 GB to spare under the
+ceiling. Its cost is GPU bandwidth (−25% to −46% frame time with it off
+on lavapipe, "What costs what"), and the SMOOTHING card (`--msaa 2|0`)
+already trades it. No change.
+
 ## Small things' shadows
 
 At the gates half the sun's shadow-pass meshes were smaller than 10 cm
@@ -1451,6 +1475,67 @@ their rebuild after damage. Not pursued.
 
 Lavapipe makes bind-group creation dearer than a real driver does, so
 read the shares here, not the milliseconds.
+
+### First-sight pipelines, per valley (5 November)
+
+A pipeline built the first time something is drawn is a hitch in the
+headset. `scripts/pipelines.sh` is the gauge, on lavapipe under Xvfb, per
+valley:
+
+1. The game loads and the warm-up shelf runs its 900 frames.
+2. At frame 950 everything a raid can bring out comes out in front of the
+   camera (`EXTRACTION_EVERYTHING`: every robot kind, every item).
+3. From frame 1000 the effects go off, 90 frames apart
+   (`EXTRACTION_FIRSTS`): a shot, impacts on every surface, a robot struck,
+   a grenade, each bloom, a walker wrecked, a sentry placed, every robot's
+   tell, then the next cycle at night in a storm with snow.
+
+Any pipeline queued from frame 950 on fails the valley, except the
+screenshot's that ends the run. So does a run that dies before its
+effects are through. With `EXTRACTION_PIPELINES=1` the log names each
+pipeline's vertex layout and what was first drawn (or had its material
+swapped or its key changed) after the shelf, so a failure traces to its
+source.
+
+| valley | before | after |
+|---|---|---|
+| Marrow Creek | 2 (4 with the fights and the next cycle) | 0 |
+| Kettle Pass | 0 | 0 |
+| Cinder Works | 1 | 0 |
+| Sallow Reservoir | (not measured) | 0 |
+| Rime Fell | (not measured) | 0 (2 on the way) |
+
+What was built at first sight, and the fix:
+
+- **The lamps' beams** (`beam.wgsl`), when a cycle turned to night in the
+  same session: spotlights are lit only at night. The shelf now holds a
+  beam decoy (`world::beams::decoy`).
+- **Shadows of materials first worn mid-raid** (a gun part or an item
+  brought out, which casts): the shelf warmed unworn materials
+  unshadowed only. Now casting and not, ranged and not. That also covers
+  an additive halo with a visibility range (Rime).
+- **Effects made mid-raid with a key nothing at load had** (additive, on
+  the standard layout): the shelf now holds one plain StandardMaterial
+  for each alpha mode in each cull mode.
+- **The minelayer's laid mine** (blend on a vertex-coloured mesh): Heavy
+  seeds it at load (`robots::minelayer_look`, c2ee2232). The plough's
+  bank is seeded the same way.
+- Robot primitives are shelved weathered as well (vertex colours from
+  `robots::weathering`). Marrow had them warmed already through another
+  match, but other valleys might not.
+
+The shelf grew from about 95 kinds (1,900 entries) to about 156
+(3,200).
+
+**Limits.**
+- The gauge can't run the headset's own path: its eyes draw into the
+  runtime's swapchain format, and Monado isn't cleared to run here. One
+  raid with `EXTRACTION_PIPELINES=1` in the headset (`docs/PLAYTEST.md`
+  4h) is the check: a `pipeline queued` line after `load: warm-up shelf
+  done` is a hitch.
+- A crawler can't be spawned outside an underground site in the gauge.
+  Its lens glow has the drone lock halo's and the sentry halo's key,
+  both measured.
 
 ## What's next (paused 2 November)
 

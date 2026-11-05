@@ -57,6 +57,10 @@
         Channel(points: [(80.0, -330.0), (60.0, -250.0), (20.0, -170.0), (-10.0, -100.0), (-30.0, -40.0),
                          (-10.0, 30.0), (-35.0, 75.0)],
                 width: 26.0, depth: 1.0),
+        // The scours' channel, from their outlets in the dam's foot down
+        // to the river (and the second outlet's run into it).
+        Channel(points: [(-67.0, 152.0), (-62.0, 168.0), (-50.0, 186.0), (-30.0, 200.0), (-12.0, 206.0)], width: 7.0, depth: 1.2),
+        Channel(points: [(-50.6, 152.0), (-53.0, 162.0), (-61.0, 172.0)], width: 6.0, depth: 1.0),
         // Downstream of the dam, the river's own bed.
         Channel(points: [(12.0, 184.0), (-10.0, 205.0), (-25.0, 250.0), (-40.0, 340.0)], width: 12.0, depth: 1.2),
 
@@ -301,6 +305,15 @@
     ],
 
     water: [
+        // What the scours let out: the reservoir, still leaving.
+        (
+            name: "The scours", width: 4.5, depth: 0.4,
+            points: [(-67.0, 152.5), (-62.0, 168.0), (-50.0, 186.0), (-30.0, 200.0), (-12.0, 206.0)],
+        ),
+        (
+            name: "The second scour", width: 3.5, depth: 0.35,
+            points: [(-50.6, 152.5), (-53.0, 162.0), (-61.0, 172.0)],
+        ),
         // The compensation flow below the dam.
         (
             name: "The river", width: 5.0, depth: 0.5,
@@ -446,6 +459,11 @@
         (at: (231.0, 56.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
+        // to go still by while it comes (map_lint::WAIT_NEAR).
+        (prefab: "log_pile", at: (242.7, -54.9), rot: 214.0, tag: "wait_gauge_house"),
+        (prefab: "log_pile", at: (-198.1, -264.6), rot: 322.0, tag: "wait_sallow_head"),
+        (prefab: "log_pile", at: (22.6, -266.4), rot: 97.0, tag: "wait_inflow_bridge"),
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The Authority's telemetry mast on the west abutment: the gauges' readings went out by radio.

@@ -134,6 +134,8 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
                 engaged_at: -1.0,
                 last_engaged: -1.0,
                 broke_off_until: 0.0,
+                fought: None,
+                gave_up_until: 0.0,
                 quiet: 0.0,
                 warning_left: 0,
                 last_shot: f32::NEG_INFINITY,

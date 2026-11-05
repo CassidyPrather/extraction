@@ -105,6 +105,9 @@ pub fn vent_at(v: usize) -> Vec3 {
     Vec3::new(side * (HULL_HALF.x - 0.01), 0.0, 0.05)
 }
 
+/// Seconds a wrecked heavy takes to go over and come to rest.
+pub const FALL_TIME: f32 = 1.6;
+
 /// The heavy's own state, beside the walker body it walks on.
 #[derive(Component, Debug)]
 pub struct Heavy {
@@ -202,7 +205,9 @@ pub enum ArmState {
 }
 
 /// How long each arm state takes.
-pub const RAISE_TIME: f32 = 1.2;
+/// (Raise to harm at least 1.5 s, the bar every attack's tell meets: the
+/// arm's rise is the warning, the slam follows.)
+pub const RAISE_TIME: f32 = 1.3;
 pub const SLAM_TIME: f32 = 0.22;
 pub const RECOVER_TIME: f32 = 0.9;
 pub const REACH_TIME: f32 = 0.9;
@@ -307,12 +312,52 @@ impl Plugin for HeavyPlugin {
 
 /// The parts a heavy is built from, in robot space at size 1:
 /// (slot, role, collider, where, starts disabled).
+/// The hull, solid but for the recess its cell sits in at the back:
+/// a box in front of the cell, and round the cell's opening a frame,
+/// so with the hatch off the cell is there to see and take hold of
+/// (local to the hull's part, at [`HULL_AT`]).
+pub fn hull_collider() -> Collider {
+    let (h, c) = (HULL_HALF, CELL_AT - HULL_AT);
+    let (cell_lo, cell_hi) = (c - CELL_HALF, c + CELL_HALF);
+    let front = cell_lo.z;
+    let slab = (h.z - front) * 0.5;
+    let at_z = front + slab;
+    let block = |lo: Vec3, hi: Vec3| {
+        let half = (hi - lo) * 0.5;
+        (
+            Vec3::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5, at_z),
+            Quat::IDENTITY,
+            Collider::cuboid(half.x * 2.0, half.y * 2.0, half.z * 2.0),
+        )
+    };
+    let (z0, z1) = (at_z - slab, at_z + slab);
+    Collider::compound(vec![
+        // In front of the cell, the hull's whole depth.
+        (
+            Vec3::new(0.0, 0.0, (front - h.z) * 0.5),
+            Quat::IDENTITY,
+            Collider::cuboid(h.x * 2.0, h.y * 2.0, front + h.z),
+        ),
+        // Round the cell's opening: either side of it, above, below.
+        block(Vec3::new(-h.x, -h.y, z0), Vec3::new(cell_lo.x, h.y, z1)),
+        block(Vec3::new(cell_hi.x, -h.y, z0), Vec3::new(h.x, h.y, z1)),
+        block(
+            Vec3::new(cell_lo.x, cell_hi.y, z0),
+            Vec3::new(cell_hi.x, h.y, z1),
+        ),
+        block(
+            Vec3::new(cell_lo.x, -h.y, z0),
+            Vec3::new(cell_hi.x, cell_lo.y, z1),
+        ),
+    ])
+}
+
 fn parts() -> Vec<(Slot, PartRole, Collider, Transform, bool)> {
     let mut v = vec![
         (
             Slot::Hull,
             PartRole::Armour(100),
-            Collider::cuboid(HULL_HALF.x * 2.0, HULL_HALF.y * 2.0, HULL_HALF.z * 2.0),
+            hull_collider(),
             Transform::from_translation(HULL_AT),
             false,
         ),
@@ -1433,11 +1478,12 @@ fn fell_heavy(
             // Seeded by the machine (where it was spawned), not by its
             // entity: it lies the same whatever else is in the world.
             let seed = (minds.get(e).map_or(0, |m| m.0) % 10_007) as f32;
-            // Forward onto its face or over on a side: seeded, so no two
-            // lie the same.
+            // Forward onto its face (its front is -Z: a turn about -X tips
+            // it that way, its back and hatch up where a hand can get at
+            // them) and over on a side: seeded, so no two lie the same.
             // (Well over: a wreck, not something parked.)
             h.lean = Vec3::new(
-                0.3 + 0.08 * seed.sin(),
+                -(0.3 + 0.08 * seed.sin()),
                 0.0,
                 0.22 * (seed * 1.7).cos().signum(),
             ) + Vec3::new(0.0, 0.0, 0.06 * (seed * 2.3).sin());
@@ -1504,7 +1550,7 @@ fn fell_heavy(
         }
         // The lean comes on as it sinks (the gait rebuilds its rotation
         // each tick; this goes on top).
-        let k = smooth(h.down_for / 1.6);
+        let k = smooth(h.down_for / FALL_TIME);
         t.rotation = Quat::from_scaled_axis(t.rotation * (h.lean * k)) * t.rotation;
     }
 }

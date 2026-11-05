@@ -63,6 +63,10 @@ struct FxAssets {
     /// A hit's flash: a small glowing ball.
     flash: Handle<Mesh>,
     smoke: Handle<StandardMaterial>,
+    /// Smoke as it thins, spreading (`weapons::impacts::Thins`): step 0
+    /// is [`Self::smoke`]. Soot keeps its density: a dead gun's column has
+    /// to read from range.
+    smoke_thin: [Handle<StandardMaterial>; crate::weapons::impacts::THIN_STEPS],
     /// Dark smoke (a wreck's, a falling drone's, a dead gun's column),
     /// unlit as every other puff is (`weapons`' all are): lit, a few far,
     /// small puffs of it came out as single pure-black pixels.
@@ -103,6 +107,19 @@ fn assets(
     if let Some(a) = existing {
         return (*a).clone();
     }
+    let smoke_thin = std::array::from_fn(|i| {
+        materials.add(puffs.soften(StandardMaterial {
+            base_color: Color::srgba(
+                0.55,
+                0.55,
+                0.55,
+                0.16 * crate::weapons::impacts::THIN_RATIO.powi(i as i32),
+            ),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            ..default()
+        }))
+    });
     let a = FxAssets {
         spark: meshes.add(Cuboid::new(0.012, 1.0, 0.012)),
         spark_mat: materials.add(StandardMaterial {
@@ -113,12 +130,8 @@ fn assets(
         }),
         puff: puffs.quad.clone(),
         flash: meshes.add(Sphere::new(0.5).mesh().ico(2).unwrap()),
-        smoke: materials.add(puffs.soften(StandardMaterial {
-            base_color: Color::srgba(0.55, 0.55, 0.55, 0.16),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        smoke: smoke_thin[0].clone(),
+        smoke_thin,
         soot: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
         arc: materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.9, 1.0),
@@ -591,13 +604,26 @@ fn fly_sparks(
     }
 }
 
+/// How wide a rising puff has spread by `age` (0..1 through its life),
+/// against how it left: it swells until its last 30%, then shrinks away
+/// without thickening again.
+fn smoke_spread(age: f32) -> f32 {
+    (0.4 + 2.2 * age.clamp(0.0, 0.7)) / 0.4
+}
+
 fn drift_puffs(
     mut commands: Commands,
-    mut puffs: Query<(Entity, &mut Puff, &mut Transform)>,
+    mut puffs: Query<(
+        Entity,
+        &mut Puff,
+        &mut Transform,
+        &mut MeshMaterial3d<StandardMaterial>,
+    )>,
     time: Res<Time>,
+    assets: Option<Res<FxAssets>>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut p, mut t) in &mut puffs {
+    for (e, mut p, mut t, mut m) in &mut puffs {
         p.life -= dt;
         if p.life <= 0.0 {
             commands.entity(e).despawn();
@@ -609,6 +635,15 @@ fn drift_puffs(
         // Swells as it rises; thins away at the end.
         let fade = (p.life / (p.max * 0.3)).min(1.0);
         t.scale = Vec3::splat(p.size * (0.4 + 2.2 * age) * fade.sqrt());
+        // Pale smoke thins as it spreads; soot and the rest keep theirs.
+        if let Some(a) = &assets
+            && a.smoke_thin.contains(&m.0)
+        {
+            let step = crate::weapons::impacts::thin_step(smoke_spread(age));
+            if m.0 != a.smoke_thin[step] {
+                m.0 = a.smoke_thin[step].clone();
+            }
+        }
     }
 }
 
@@ -1489,5 +1524,25 @@ mod column_tests {
         assert!(!dead_gun(&part(PartRole::Core, 0.0)));
         // Within the shared cap: a column's steady state.
         assert!(DEAD_GUN_SMOKE * COLUMN.life * 1.2 < MAX_PUFFS as f32 / 3.0);
+    }
+}
+
+#[cfg(test)]
+mod thin_tests {
+    use super::*;
+    use crate::weapons::impacts::{THIN_STEPS, thin_step};
+
+    /// A machine's pale smoke thins as it rises and spreads, step by step
+    /// to the thinnest, and never thickens again as it shrinks away.
+    #[test]
+    fn a_machines_smoke_thins_as_it_spreads() {
+        let mut last = 0;
+        for i in 0..=100 {
+            let step = thin_step(smoke_spread(i as f32 / 100.0));
+            assert!(step >= last && step < THIN_STEPS, "at {i}%: step {step}");
+            last = step;
+        }
+        assert_eq!(last, THIN_STEPS - 1, "thinned to the last step");
+        assert_eq!(thin_step(smoke_spread(0.0)), 0, "as thick as it left");
     }
 }

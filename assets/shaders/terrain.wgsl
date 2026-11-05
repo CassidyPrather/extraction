@@ -415,6 +415,27 @@ fn fragment(
             if (i == 1u) {
                 l.albedo = l.albedo * 1.4;
             }
+            // The meadow under the tufts is rough sward, not a lawn: the
+            // texture is a mown field, and from standing height its 3 m
+            // tile read as one smooth carpet between the tufts (the
+            // training yard, a newcomer's first sight). Tussocks about a
+            // metre across, their hollows shaded and greener, their crowns
+            // pale with dead thatch; it carries on past where the tufts
+            // fade out, so the far field keeps the near one's grain.
+            if (i == 0u) {
+                let tq = wp.xz + vec2<f32>(23.0, 5.0);
+                let tuss = vnoise(tq * 1.7) * 0.55 + vnoise(tq * 3.6) * 0.45;
+                // The small grain dies out before it would crawl: by the
+                // time a 0.15 m spot is under a few pixels.
+                let px = length(fwidth(wp.xz));
+                let grain = (vnoise(tq * 7.3) - 0.5) * (1.0 - smoothstep(0.02, 0.06, px));
+                let t = tuss + grain * 0.35;
+                let crown = smoothstep(0.38, 0.58, t);
+                let hollow = mix(vec3<f32>(0.7, 0.75, 0.62), vec3<f32>(1.0), crown);
+                let thatch = mix(vec3<f32>(1.0), vec3<f32>(1.18, 1.1, 0.84), smoothstep(0.6, 0.8, t));
+                l.albedo = l.albedo * hollow * thatch;
+                l.ao = l.ao * mix(0.85, 1.0, crown);
+            }
         }
         // Height-aware blending: each layer covers the ones below it where
         // its own height wins.

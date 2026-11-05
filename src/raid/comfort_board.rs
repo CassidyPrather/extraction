@@ -55,35 +55,42 @@ impl Plugin for ComfortBoardPlugin {
     }
 }
 
+/// The comfort cards on the left canvas wall: (card, height over the
+/// bed's floor, z), truck space. In columns: above 1.9 m the canvas slopes
+/// into the canopy.
+pub const CARDS: &[(ComfortCard, f32, f32)] = &[
+    (ComfortCard::Turning, 1.62, -1.25),
+    (ComfortCard::Vignette, 1.44, -1.25),
+    (ComfortCard::Sound, 1.80, -1.25),
+    (ComfortCard::Sharpness, 1.62, -0.85),
+    (ComfortCard::FingerGrab, 1.44, -0.85),
+    (ComfortCard::Climb, 1.80, -0.85),
+    // A third column, nearer the tailgate: how you play.
+    (ComfortCard::Handed, 1.80, -0.50),
+    (ComfortCard::Seated, 1.62, -0.50),
+    (ComfortCard::OneHanded, 1.44, -0.50),
+    // And by the tailgate, the wrist's warning.
+    (ComfortCard::MachineTick, 1.80, -0.15),
+    // Under it, whether you see your body.
+    (ComfortCard::Body, 1.62, -0.15),
+    // And under that, how smooth the edges are (a frame-rate knob).
+    (ComfortCard::Smoothing, 1.44, -0.15),
+    // And under that, the eyes' size following the GPU's time.
+    (ComfortCard::HoldRate, 1.26, -0.15),
+    // And under that, the gun's steadying.
+    (ComfortCard::SteadyAim, 1.08, -0.15),
+    // Past the stash's end, a fifth column: the row that was over
+    // the stash, where the rack's brace (once fitted) hid it. Under the
+    // driver's note (1.47 m and up, z 0.12 to 0.48), over the second
+    // rack's shelf.
+    (ComfortCard::Captions, 1.26, 0.20),
+    (ComfortCard::Binaural, 1.08, 0.20),
+    (ComfortCard::Score, 0.90, 0.20),
+];
+
 fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     for truck in &trucks {
-        // In columns: above 1.9 m the canvas slopes into the canopy.
-        for (card, y, z) in [
-            (ComfortCard::Turning, 1.62, -1.25),
-            (ComfortCard::Vignette, 1.44, -1.25),
-            (ComfortCard::Sound, 1.80, -1.25),
-            (ComfortCard::Sharpness, 1.62, -0.85),
-            (ComfortCard::FingerGrab, 1.44, -0.85),
-            (ComfortCard::Climb, 1.80, -0.85),
-            // A row under them, over the stash.
-            (ComfortCard::Binaural, 1.26, -1.25),
-            (ComfortCard::Score, 1.26, -0.85),
-            // A third column, nearer the tailgate: how you play.
-            (ComfortCard::Handed, 1.80, -0.50),
-            (ComfortCard::Seated, 1.62, -0.50),
-            (ComfortCard::OneHanded, 1.44, -0.50),
-            (ComfortCard::Captions, 1.26, -0.50),
-            // And by the tailgate, the wrist's warning.
-            (ComfortCard::MachineTick, 1.80, -0.15),
-            // Under it, whether you see your body.
-            (ComfortCard::Body, 1.62, -0.15),
-            // And under that, how smooth the edges are (a frame-rate knob).
-            (ComfortCard::Smoothing, 1.44, -0.15),
-            // And under that, the eyes' size following the GPU's time.
-            (ComfortCard::HoldRate, 1.26, -0.15),
-            // And under that, the gun's steadying.
-            (ComfortCard::SteadyAim, 1.08, -0.15),
-        ] {
+        for &(card, y, z) in CARDS {
             commands.spawn((
                 Name::new("Comfort card"),
                 card,
@@ -200,6 +207,46 @@ fn follow_sound(comfort: Option<Res<Comfort>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// No fitting stands in front of a card on the left wall: the stash
+    /// rack's brace, once fitted, half hid the row over the stash (cards
+    /// at 1.26 m), awkward to read and press. Each fitting by the wall as
+    /// its footprint on the wall (`art/props/truck_kit.py`): height over
+    /// the bed's floor and z, truck space.
+    #[test]
+    fn no_fitting_covers_a_card_on_the_wall() {
+        use crate::progression::prop_at;
+        use extraction_core::progression::Upgrade;
+        let floor = crate::raid::truck::FLOOR;
+        // The rack: posts on the crate's rim, its top 0.62 over the
+        // origin, 0.605 either way along the crate; its wall side 0.12 m
+        // off the wall. The second rack: a shelf 1.0 along z, 0.1 thick.
+        let rack = prop_at(Upgrade::StashRack);
+        let rack2 = prop_at(Upgrade::StashRack2);
+        let fittings = [
+            (
+                "stash rack",
+                0.0,
+                rack.y - floor + 0.62,
+                rack.z - 0.605,
+                rack.z + 0.605,
+            ),
+            (
+                "second rack",
+                rack2.y - floor - 0.05,
+                rack2.y - floor + 0.05,
+                rack2.z - 0.5,
+                rack2.z + 0.5,
+            ),
+        ];
+        let (hw, hh) = (0.13, 0.07);
+        for &(card, y, z) in CARDS {
+            for (name, y0, y1, z0, z1) in fittings {
+                let clear = y - hh >= y1 || y + hh <= y0 || z - hw >= z1 || z + hw <= z0;
+                assert!(clear, "the {name} covers {card:?} at ({y}, {z})");
+            }
+        }
+    }
 
     /// Nothing written on the truck's walls overlaps anything else there:
     /// each card and sign is read, and pressed, on its own.

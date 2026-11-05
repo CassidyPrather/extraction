@@ -62,7 +62,10 @@ impl Plugin for RobotVisualsPlugin {
             )
             // (After every Update has had its say on where each is in its
             // lead.)
-            .add_systems(PostUpdate, melee_tells);
+            .add_systems(
+                PostUpdate,
+                ((melee_tells, tells_over_moods).chain(), stalk_eyes),
+            );
     }
 }
 
@@ -1496,6 +1499,13 @@ pub enum MeleeLead {
     Hound { crouch: f32, lunging: bool },
     /// A heavy `raise` seconds into raising its arm, or `slam`ming it.
     Heavy { raise: Option<f32>, slam: bool },
+    /// A walker's turret `aim` seconds into settling on you (and its fire
+    /// through a wall: `walker::BLIND_TELL` is its aim).
+    Walker { aim: f32 },
+    /// A grappler `windup` seconds into rearing back for a throw.
+    Grappler { windup: f32 },
+    /// The Sorter `windup` seconds from its throw, or `swing`ing.
+    Sorter { windup: f32, swing: bool },
 }
 
 /// The glow round a melee machine's lens: the sentry's and the drone's
@@ -1519,60 +1529,552 @@ pub fn melee_halo(lead: MeleeLead) -> LinearRgba {
                 tell_halo(tell_gain(t.min(dur), dur, true))
             })
         }
+        MeleeLead::Walker { aim } => {
+            let dur = super::walker::AIM_TIME;
+            tell_halo(tell_gain(aim, dur, aim > 0.0 && aim < dur))
+        }
+        MeleeLead::Grappler { windup } => {
+            let dur = super::grappler::WINDUP;
+            tell_halo(tell_gain(windup.min(dur), dur, windup > 0.0))
+        }
+        MeleeLead::Sorter { swing: true, .. } => flash,
+        MeleeLead::Sorter { windup, .. } => {
+            let dur = super::sorter::WINDUP;
+            tell_halo(tell_gain(dur - windup, dur, windup > 0.0))
+        }
     }
+}
+
+/// Every attack a machine can hurt you with, and its lead from its tell to
+/// the harm: the one table. Each must show on the body for all of its
+/// lead (the lens's glow, [`melee_halo`]) and give at least
+/// [`super::MIN_TELL`] to read it (`every_attack_tells_on_the_body`). A new
+/// attack joins it, or [`UNTOLD`] with why it's fair.
+pub fn attacks() -> Vec<(&'static str, f32, fn(f32) -> LinearRgba)> {
+    use super::{drone, grappler, heavy, hound_mind, indoor, sorter, walker};
+    use extraction_core::sentry::CHIRP;
+    vec![
+        ("sentry chirp", CHIRP, |t| {
+            super::sentry_look::chirp_halo(t, true)
+        }),
+        ("drone lock", drone::LOCK_TIME, drone_lock_halo),
+        ("walker aim", walker::AIM_TIME, |t| {
+            melee_halo(MeleeLead::Walker { aim: t })
+        }),
+        ("walker through a wall", walker::BLIND_TELL, |t| {
+            melee_halo(MeleeLead::Walker { aim: t })
+        }),
+        ("crawler zap", indoor::ZAP_CHARGE, |t| {
+            melee_halo(MeleeLead::Crawler { charge: t })
+        }),
+        ("hound lunge", hound_mind::CROUCH_TIME, |t| {
+            melee_halo(MeleeLead::Hound {
+                crouch: hound_mind::CROUCH_TIME - t,
+                lunging: false,
+            })
+        }),
+        ("heavy slam", heavy::RAISE_TIME + heavy::SLAM_TIME, |t| {
+            melee_halo(MeleeLead::Heavy {
+                raise: (t < heavy::RAISE_TIME).then_some(t),
+                slam: t >= heavy::RAISE_TIME,
+            })
+        }),
+        ("grappler harpoon", grappler::WINDUP, |t| {
+            melee_halo(MeleeLead::Grappler { windup: t })
+        }),
+        ("sorter throw", sorter::WINDUP, |t| {
+            melee_halo(MeleeLead::Sorter {
+                windup: sorter::WINDUP - t,
+                swing: false,
+            })
+        }),
+    ]
+}
+
+/// An attack that harms you leads by at least this (s): the gunners' bar,
+/// a walker's full aim, the one figure Robot minds' constants use too
+/// (`indoor::ZAP_CHARGE`, `hound::COIL_TIME`).
+pub const MIN_LEAD: f32 = super::walker::AIM_TIME;
+
+/// Attacks in [`attacks`] that lead by less than [`MIN_LEAD`] and why
+/// that's fair: neither harms you as a blow does.
+pub const SHORT_LEADS: &[(&str, &str)] = &[
+    (
+        "grappler harpoon",
+        "a grab, not harm: the harpoon writes no Shot or Hurt, its line \
+         slows and drags you (`Tethered`)",
+    ),
+    (
+        "sorter throw",
+        "no harm: a thrown tote writes no Shot or Hurt (Robot minds checked, \
+         4 November); if a tote ever does damage, it goes pending till \
+         `sorter::WINDUP` rises",
+    ),
+];
+
+/// Attacks under [`MIN_LEAD`] today with the change that brings them to
+/// it on its way; each comes off this list as it lands (the test fails
+/// while one that's met the bar is still on it).
+pub const PENDING_LEADS: &[(&str, &str)] = &[];
+
+/// The machines' attacks that aren't a lead to a blow, and why each is fair
+/// without one.
+pub const UNTOLD: &[(&str, &str)] = &[
+    (
+        "plough auger",
+        "no lead: its lane is the danger, and it's told seconds ahead by its \
+         horn, its turning beacon and its plume (`plough`)",
+    ),
+    (
+        "minelayer mine",
+        "a 0.35 s fuse, but the mine is the tell: it lies in a ring of turned \
+         earth and blinks red within 6 m (`minelayer`)",
+    ),
+];
+
+/// The glow a tell hangs on a machine's lens (radius, m): a walker's or a
+/// grappler's...
+pub const LENS: f32 = 0.18;
+/// ...a crawler's...
+pub const LENS_CRAWLER: f32 = 0.17;
+/// ...a hound's...
+pub const LENS_HOUND: f32 = 0.2;
+/// ...the heavy's...
+pub const LENS_HEAVY: f32 = 0.22;
+/// ...and the sorter's.
+pub const LENS_SORTER: f32 = 0.25;
+
+/// What a machine shows of one state of what it knows of you (for
+/// [`awareness`]).
+#[derive(Clone, Copy, Debug)]
+pub struct Shows {
+    /// Its suspicion, 0..1 (`Awareness::suspicion`)...
+    pub suspicion: f32,
+    /// ...and whether it can see you (exposure 1 if so): between them its
+    /// eye's rhythm (`render::tells::eye_pulse`) and its glow's brightness
+    /// (`eye_glow`).
+    pub sees: bool,
+    /// How much of its eye and glow burn (1; a stalking hound's slitted
+    /// ember, `STALK_DIM`).
+    pub lit: f32,
+    /// A tell's glow round its lens (radius, m; 0 none).
+    pub halo: f32,
+    /// How far its body is down from standing (m: a crouch).
+    pub low: f32,
+    /// How fast it goes (m/s).
+    pub pace: f32,
+}
+
+impl Shows {
+    /// Unaware: about its work, steady.
+    pub const AT_WORK: Shows = Shows {
+        suspicion: 0.0,
+        sees: false,
+        lit: 1.0,
+        halo: 0.0,
+        low: 0.0,
+        pace: 0.0,
+    };
+    /// Suspicious, searching: it heard or half saw something.
+    pub const SEARCHING: Shows = Shows {
+        suspicion: 0.5,
+        ..Shows::AT_WORK
+    };
+    /// Hunting: it has you.
+    pub const HUNTING: Shows = Shows {
+        suspicion: 1.0,
+        sees: true,
+        ..Shows::AT_WORK
+    };
+    /// Its tell before it hurts: hunting, its lens's glow burning.
+    pub const fn telling(halo: f32) -> Shows {
+        Shows {
+            halo,
+            ..Shows::HUNTING
+        }
+    }
+    /// Its eye's rhythm (Hz; 0 steady).
+    pub fn hz(&self) -> f32 {
+        use crate::render::tells::{EYE_SEES_HZ, EYE_SUSPECTS_HZ};
+        if self.sees {
+            EYE_SEES_HZ
+        } else if self.suspicion > 0.25 {
+            EYE_SUSPECTS_HZ
+        } else {
+            0.0
+        }
+    }
+    /// How bright its eye's glow is in `light` (an additive emissive).
+    pub fn glow(&self, light: f32) -> f32 {
+        eye_glow(self.suspicion, self.x(), light, 1.0).red * self.lit
+    }
+    /// How well it sees you (exposure).
+    fn x(&self) -> f32 {
+        if self.sees { 1.0 } else { 0.0 }
+    }
+}
+
+/// One machine's states, as you meet it.
+#[derive(Clone, Debug)]
+pub struct Awake {
+    pub machine: &'static str,
+    /// The range you meet it at (m).
+    pub range: f32,
+    /// Its eye's lit size (width, height; m).
+    pub eye: (f32, f32),
+    /// Its eye's glow (radius, m; 0 none).
+    pub glow: f32,
+    /// Whether its glows (its eye's, a tell's) hold their size past
+    /// [`GLOW_HOLDS_AT`] (`HeldSize`).
+    pub held: bool,
+    /// Its eye's halo after dark (radius, m; 0 none: `world::halos`).
+    pub night_halo: f32,
+    /// Its body across (m): what a crouch or a run shows over.
+    pub body: f32,
+    /// The states a player needs to tell apart, in the order they come.
+    pub states: Vec<(&'static str, Shows)>,
+}
+
+/// The light and weather you meet them in: fog by day, drizzle at dusk,
+/// fog at night (`world::weather`'s own). The eye, its glow and a tell's
+/// are lamps the fog can't touch; the body's shape fades into the fog
+/// and the dark; after dark the eye has its halo (`world::halos`).
+pub fn aware_weathers() -> [(&'static str, crate::world::weather::Conditions); 3] {
+    use crate::world::weather::{Conditions, Hour, WeatherKind};
+    [
+        (
+            "fog, day",
+            Conditions::compose(WeatherKind::PeaSouper, Hour::Day, 0),
+        ),
+        (
+            "drizzle, dusk",
+            Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 0),
+        ),
+        (
+            "fog, night",
+            Conditions::compose(WeatherKind::PeaSouper, Hour::Night, 0),
+        ),
+    ]
+}
+/// Two states read apart when this many pixels (headset, at its render
+/// scale) differ between them: a 4 x 4 patch.
+pub const READS_PX: f32 = 16.0;
+/// An eye's glow by day too faint to read a rhythm by (an additive
+/// emissive, `eye_glow`).
+pub const GLOW_SEEN: f32 = 0.25;
+
+/// Every machine that hunts you, the states of what it knows of you it
+/// shows, at the range you meet it at in fog. `every_machines_awareness_
+/// reads_at_its_range` holds each pair of a machine's states to
+/// [`READS_PX`] apart ([`aware_px`]). Sizes are the models' (the eye's
+/// lit primitive, at the machine's size).
+pub fn awareness() -> Vec<Awake> {
+    use super::{heavy, hound, hound_mind, indoor};
+    let walker = |machine, range, size: f32, tell| Awake {
+        machine,
+        range,
+        eye: (0.284 * size, 0.072 * size),
+        glow: EYE_GLOW * size,
+        held: true,
+        night_halo: 1.2 * size,
+        body: 0.8 * size,
+        states: vec![
+            ("at work", Shows::AT_WORK),
+            ("searching", Shows::SEARCHING),
+            ("hunting", Shows::HUNTING),
+            ("its tell", Shows::telling(tell)),
+        ],
+    };
+    let hs = hound::HOUND_SIZE;
+    let run = super::anim::Gait::hound(hs).top_speed();
+    let low = super::anim::LOW * hs;
+    vec![
+        walker("walker", 30.0, 1.0, LENS),
+        walker("crawler", 8.0, indoor::CRAWLER_SIZE, LENS_CRAWLER),
+        walker("grappler", 14.0, 1.0, LENS),
+        Awake {
+            machine: "hound",
+            range: 12.0,
+            // (Its head's visor: a sliver, 3.5 px here.)
+            eye: (0.13 * hs, 0.012 * hs),
+            glow: EYE_GLOW * hs,
+            held: true,
+            night_halo: 1.2 * hs,
+            body: 0.6 * hs,
+            states: vec![
+                (
+                    "nosing about",
+                    Shows {
+                        pace: hound_mind::NOSE_PACE * run,
+                        ..Shows::AT_WORK
+                    },
+                ),
+                (
+                    "heading for a sound",
+                    Shows {
+                        pace: run,
+                        ..Shows::SEARCHING
+                    },
+                ),
+                (
+                    "stalking",
+                    Shows {
+                        lit: STALK_DIM,
+                        low,
+                        pace: hound_mind::STALK_PACE * run,
+                        ..Shows::SEARCHING
+                    },
+                ),
+                (
+                    "hunting",
+                    Shows {
+                        pace: run,
+                        ..Shows::HUNTING
+                    },
+                ),
+                (
+                    "coiled",
+                    Shows {
+                        low,
+                        ..Shows::telling(LENS_HOUND)
+                    },
+                ),
+            ],
+        },
+        Awake {
+            machine: "drone",
+            range: 40.0,
+            eye: (0.052, 0.051),
+            glow: DRONE_EYE_GLOW,
+            held: true,
+            night_halo: 0.6,
+            body: 0.5,
+            states: vec![
+                ("on patrol", Shows::AT_WORK),
+                ("searching", Shows::SEARCHING),
+                ("hunting", Shows::HUNTING),
+                ("its lock", Shows::telling(LOCK_HALO)),
+            ],
+        },
+        Awake {
+            machine: "heavy",
+            range: 15.0,
+            eye: (0.186 * heavy::SIZE, 0.052 * heavy::SIZE),
+            glow: 0.0,
+            held: true,
+            night_halo: 0.0,
+            body: 1.6,
+            states: vec![
+                ("at work", Shows::AT_WORK),
+                ("searching", Shows::SEARCHING),
+                ("hunting", Shows::HUNTING),
+                ("its raise", Shows::telling(LENS_HEAVY)),
+            ],
+        },
+        Awake {
+            machine: "sentry",
+            range: 25.0,
+            eye: (0.06, 0.06),
+            glow: super::sentry_look::HALO,
+            held: false,
+            night_halo: 0.0,
+            body: 0.5,
+            states: vec![
+                ("sweeping", Shows::AT_WORK),
+                ("looking", Shows::SEARCHING),
+                ("has you", Shows::HUNTING),
+                ("its chirp", Shows::telling(super::sentry_look::HALO)),
+            ],
+        },
+    ]
+}
+
+/// The machines that don't hunt you, or say what they know another way,
+/// and why each is fair without a row in [`awareness`].
+pub const AWARE_ELSEWHERE: &[(&str, &str)] = &[
+    (
+        "spotter",
+        "its lamp is its awareness: a blink that quickens as it watches you \
+         and turns red on a fix, then its call's flash (`spotter_look`)",
+    ),
+    (
+        "minelayer",
+        "doesn't hunt: seeing you, it turns tail and runs (`minelayer`); its \
+         mines are the danger, and they're told (`UNTOLD`)",
+    ),
+    (
+        "sorter",
+        "met at a few metres under its gantry, where the whole carriage \
+         swinging to a sound or at you is the read, and its windup is told \
+         (`attacks`)",
+    ),
+    (
+        "plough",
+        "blind to you: it keeps its lane, and its horn and beacon tell it",
+    ),
+    ("mender", "blind to you: it mends, and flees nothing"),
+];
+
+/// How many pixels differ between two of a machine's states at its range
+/// in `c`'s light and weather (a headset's, at its render scale). Its
+/// lamp: its eye, or its glow where that's bright enough to see pulse
+/// (after dark only near: the halo takes over from 15 m), its rhythm and
+/// size; while a tell burns, the tell's glow in its place
+/// (`tells_over_moods`), with its own quickening rhythm (`tell_gain`).
+/// After dark its halo, steady, brighter as it knows more, the tell's
+/// while one burns. And, through the fog and the dark, its body's crouch
+/// and pace (a second's travel).
+pub fn aware_px(m: &Awake, a: &Shows, b: &Shows, c: &crate::world::weather::Conditions) -> f32 {
+    use std::f32::consts::PI;
+    let deg = crate::render::legibility::eye_px_per_deg();
+    let px_m = |r: f32| deg * (1.0 / r).atan().to_degrees();
+    let px = px_m(m.range);
+    let held = if m.held {
+        px_m(m.range.min(GLOW_HOLDS_AT))
+    } else {
+        px
+    };
+    // How dark it is (`alert_eyes`' night: 1 by 0.25 of a day's light).
+    let dark = if crate::world::halos::halos_show(c) {
+        (1.0 - c.light / 0.25).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let fog = (-3.0 * m.range / c.visibility).exp();
+    // (A body's shape in the dark: a quarter of the day's light is enough.)
+    let shape = fog * (c.light / 0.25).min(1.0);
+    let eye = m.eye.0 * m.eye.1 * px * px;
+    // After dark a glow that hands over to a halo fades out from 15 m to
+    // 25 (`alert_eyes`' near), as the dark comes.
+    let near = if m.night_halo > 0.0 {
+        1.0 - dark * (1.0 - (1.0 - (m.range - 15.0) / 10.0).clamp(0.0, 1.0))
+    } else {
+        1.0
+    };
+    let glow = PI * (m.glow * held).powi(2) * near;
+    // (Rhythm in Hz; a tell's is its own, -1.)
+    let lamp = |s: &Shows| {
+        if s.halo > 0.0 {
+            (-1.0, PI * (s.halo * held).powi(2))
+        } else {
+            let g = if s.glow(c.light) >= GLOW_SEEN {
+                glow
+            } else {
+                0.0
+            };
+            (s.hz(), eye.max(g) * s.lit)
+        }
+    };
+    let ((ra, la), (rb, lb)) = (lamp(a), lamp(b));
+    // A steady lamp against a pulsing one: all the pulsing one's pixels;
+    // two rhythms: where both burn. Or the lamp grown or shrunk.
+    let rhythm = if ra == rb {
+        0.0
+    } else if ra == 0.0 {
+        lb
+    } else if rb == 0.0 {
+        la
+    } else {
+        la.min(lb)
+    };
+    let mut d = rhythm.max((la - lb).abs());
+    // After dark, the halo: its rhythm, the eye's or a tell's
+    // (`alert_eyes`), over all of it, through the fog. (Brighter alone
+    // doesn't count: through the tone map a searching walker's halo at
+    // 30 m is a red 4 levels over one at work's.)
+    // (Against a dusk sky it hardly shows: counted as the dark comes.)
+    if m.night_halo > 0.0 {
+        let area = PI * (m.night_halo * px).powi(2) * fog * dark;
+        let beat = |s: &Shows| if s.halo > 0.0 { -1.0 } else { s.hz() };
+        if beat(a) != beat(b) {
+            d = d.max(area);
+        }
+    }
+    d += eye * (a.lit - b.lit).abs();
+    let body = m.body * px;
+    d += (a.low - b.low).abs() * px * body * shape;
+    d += (a.pace - b.pace).abs() * px * body * shape;
+    d
 }
 
 /// A melee machine's lens glow (on its sensor part): its material.
 #[derive(Component)]
 struct MeleeLens(Handle<StandardMaterial>);
 
-/// Every melee machine's lens burns its tell through its lead
-/// ([`melee_halo`]): the glow hung on its eye the first time it's needed.
+/// Every machine's lens burns its tell through its lead ([`melee_halo`],
+/// the brightest of its leads: a crawler is a walker too), the glow hung on
+/// its eye the first time it's needed.
 #[allow(clippy::type_complexity)]
 fn melee_tells(
     mut commands: Commands,
-    crawlers: Query<(&super::indoor::Crawler, &Children)>,
-    hounds: Query<(&super::hound_mind::HoundMind, &Children)>,
-    heavies: Query<(&super::heavy::Arm, &Children)>,
+    attackers: Query<
+        (
+            &Children,
+            Option<&super::walker::Walker>,
+            Option<&super::indoor::Crawler>,
+            Option<&super::hound_mind::HoundMind>,
+            Option<&super::heavy::Arm>,
+            Option<&super::grappler::Grappler>,
+            Option<&super::sorter::Sorter>,
+        ),
+        With<Robot>,
+    >,
+    kids: Query<&Children>,
     parts: Query<(&RobotPart, Option<&MeleeLens>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use super::heavy::ArmState;
-    let leads = crawlers
-        .iter()
-        .map(|(c, k)| (MeleeLead::Crawler { charge: c.charge }, k, 0.17))
-        .chain(hounds.iter().map(|(h, k)| {
-            (
-                MeleeLead::Hound {
-                    crouch: h.crouch,
-                    lunging: h.lunge > 0.0 && !h.bit,
-                },
-                k,
-                0.14,
-            )
-        }))
-        .chain(heavies.iter().map(|(a, k)| {
-            (
-                MeleeLead::Heavy {
-                    raise: (a.state == ArmState::Raise).then_some(a.t),
-                    slam: a.state == ArmState::Slam,
-                },
-                k,
-                0.22,
-            )
-        }));
-    for (lead, kids, r) in leads {
-        let Some((eye, lens)) = kids
-            .iter()
-            .filter_map(|c| parts.get(c).ok().map(|(p, l)| (c, p, l)))
-            .find(|(_, p, _)| p.role == PartRole::Sensor)
-            .map(|(c, _, l)| (c, l))
-        else {
+    for (children, walker, crawler, hound, arm, grappler, sorter) in &attackers {
+        let mut leads = Vec::new();
+        if let Some(w) = walker {
+            leads.push(MeleeLead::Walker { aim: w.aim });
+        }
+        if let Some(c) = crawler {
+            leads.push(MeleeLead::Crawler { charge: c.charge });
+        }
+        if let Some(h) = hound {
+            leads.push(MeleeLead::Hound {
+                crouch: h.crouch,
+                lunging: h.lunge > 0.0 && !h.bit,
+            });
+        }
+        if let Some(a) = arm {
+            leads.push(MeleeLead::Heavy {
+                raise: (a.state == ArmState::Raise).then_some(a.t),
+                slam: a.state == ArmState::Slam,
+            });
+        }
+        if let Some(g) = grappler {
+            leads.push(MeleeLead::Grappler { windup: g.windup });
+        }
+        if let Some(s) = sorter {
+            leads.push(MeleeLead::Sorter {
+                windup: s.windup,
+                swing: matches!(s.task, super::sorter::Task::Throw { stage: 4, .. }),
+            });
+        }
+        let want = leads
+            .into_iter()
+            .map(melee_halo)
+            .fold(LinearRgba::BLACK, |a, b| if b.red > a.red { b } else { a });
+        // Its eye: a sensor part among its children (or theirs: the
+        // Sorter's head hangs off its carriage).
+        let eye = std::iter::once(children)
+            .chain(children.iter().filter_map(|c| kids.get(c).ok()))
+            .flat_map(|cs| cs.iter())
+            .find(|c| parts.get(*c).is_ok_and(|(p, _)| p.role == PartRole::Sensor));
+        let Some(eye) = eye else {
             continue;
         };
-        let want = melee_halo(lead);
-        match lens {
+        let r = match (crawler, hound, arm, sorter) {
+            (Some(_), ..) => LENS_CRAWLER,
+            (_, Some(_), ..) => LENS_HOUND,
+            (_, _, Some(_), _) => LENS_HEAVY,
+            (.., Some(_)) => LENS_SORTER,
+            _ => LENS,
+        };
+        match parts.get(eye).ok().and_then(|(_, l)| l) {
             Some(MeleeLens(h)) => {
                 if let Some(mut m) = materials.get_mut(h) {
                     if m.emissive != want {
@@ -1599,6 +2101,7 @@ fn melee_tells(
                     // its mark's ring (a sensor part looks along -Z).
                     Transform::from_xyz(0.0, 0.0, -r),
                     NotShadowCaster,
+                    HeldSize,
                     ChildOf(eye),
                 ));
             }
@@ -1607,9 +2110,41 @@ fn melee_tells(
     }
 }
 
+/// While a machine's tell burns (a lens's lead, a drone's lock) its
+/// mood's glow gives way to it: at range the two are one patch of light,
+/// and a hunting machine's hot glow would hide the red quickening of the
+/// tell in it.
+fn tells_over_moods(
+    robots: Query<&AlertEye>,
+    lenses: Query<(&RobotPart, &MeleeLens)>,
+    locks: Query<&LockHalo>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let lit = |h: &Handle<StandardMaterial>| {
+        materials
+            .get(h)
+            .is_some_and(|m| m.emissive != LinearRgba::BLACK)
+    };
+    let telling: Vec<Entity> = lenses
+        .iter()
+        .filter(|(_, l)| lit(&l.0))
+        .map(|(p, _)| p.robot)
+        .chain(locks.iter().map(|l| l.robot))
+        .collect();
+    for robot in telling {
+        if let Ok(own) = robots.get(robot) {
+            if let Some(mut m) = materials.get_mut(&own.1) {
+                m.emissive = LinearRgba::BLACK;
+            }
+        }
+    }
+}
+
 /// The glow round a drone's lens while it locks on, gone with the lock.
 #[derive(Component)]
 struct LockHalo {
+    /// Its drone.
+    robot: Entity,
     left: f32,
     mat: Handle<StandardMaterial>,
 }
@@ -1658,6 +2193,7 @@ fn lock_flares(
             });
             commands.spawn((
                 LockHalo {
+                    robot: l.drone,
                     left: super::drone::LOCK_TIME,
                     mat: mat.clone(),
                 },
@@ -1665,6 +2201,7 @@ fn lock_flares(
                 MeshMaterial3d(mat),
                 Transform::IDENTITY,
                 NotShadowCaster,
+                HeldSize,
                 ChildOf(lens),
             ));
         }
@@ -2066,13 +2603,137 @@ pub const DAZZLED_GUTTER: f32 = 0.85;
 #[derive(Component)]
 struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
 
+/// The soft glow round a walker's eye (m), what its mood reads by when
+/// the eye itself is a sliver...
+pub const EYE_GLOW: f32 = 0.15;
+/// ...and round a drone's.
+pub const DRONE_EYE_GLOW: f32 = 0.08;
+/// Past this (m) the glow holds the size it looks here, as a signal lamp
+/// does: a drone's 6 cm eye is two pixels at 40 m, too few to pulse, but
+/// its glow still the size it is at 15 (`awareness`).
+pub const GLOW_HOLDS_AT: f32 = 15.0;
+
+/// A tell's lens glow, carried in its machine's halo after dark, this
+/// much brighter (a hunting mood's halo is 4.4; a tell's glow 0.3 at its
+/// floor to 3.6 at its flash, `tell_halo`).
+pub const TELL_IN_HALO: f32 = 3.0;
+
+/// A glow on a robot that holds the size it looks at [`GLOW_HOLDS_AT`]
+/// past it (`alert_eyes` sizes them): its eye's, and a tell's on its
+/// lens, so the tell is never lost inside the mood at range.
+#[derive(Component)]
+struct HeldSize;
+
+/// A robot's eye glow's colour (an additive emissive) for its suspicion
+/// `a` and how well it can see you `x`, in `light` (0 night, 1 day), at a
+/// point `pulse` of its rhythm (`render::tells::eye_pulse`): what you
+/// read a machine's mood by from further off than its eye. Faint at work,
+/// brighter and hotter as it knows you're there.
+pub fn eye_glow(a: f32, x: f32, light: f32, pulse: f32) -> LinearRgba {
+    let dark = (1.2 - light).clamp(0.3, 1.0);
+    let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
+    let alpha = (0.03 + 0.12 * night + 0.12 * a + 0.2 * x) * dark * pulse;
+    LinearRgba::rgb(1.0, 0.08 + 0.3 * x, 0.03 + 0.08 * x) * alpha * 14.0
+}
+
+/// How a machine whose eye is its own colour (the heavy's, the sentry's)
+/// shows what it knows of you: a factor on that eye's glow, brighter as it
+/// suspects and sees, and the walker family's rhythm (steady at work, a
+/// slow pulse suspecting, a fast one seeing you), so every machine's eye
+/// says the same things the same way. `t` is the time (s; offset it per
+/// robot so a pack doesn't blink as one).
+pub fn eye_mood(aware: &super::Awareness, t: f32) -> f32 {
+    use crate::render::tells::{eye_colour, eye_pulse};
+    let (a, x) = mood(aware);
+    eye_colour(a, x)[0] / eye_colour(0.0, 0.0)[0] * eye_pulse(a, aware.can_see_target, t)
+}
+
+/// A robot's suspicion and how well it sees you, each 0..1.
+fn mood(aware: &super::Awareness) -> (f32, f32) {
+    let a = aware.suspicion.clamp(0.0, 1.0);
+    let x = if aware.can_see_target {
+        aware.exposure.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (a, x)
+}
+
+/// A hound stalking you (Investigate, going low: `hound_mind`'s stalk)
+/// keeps its eye down to this much of what it would burn...
+pub const STALK_DIM: f32 = 0.15;
+/// ...and narrowed to this much of its height: a low, slitted ember,
+/// unlike its dull red at rest and nothing like the red pulse of a tell.
+pub const STALK_SLIT: f32 = 0.4;
+
+/// A stalking hound's eye, from the glow its mood would give it.
+pub fn stalk_eye(c: LinearRgba) -> LinearRgba {
+    c * STALK_DIM
+}
+
+/// An eye narrowed while its hound stalks: its height before.
+#[derive(Component)]
+struct Slit(f32);
+
+/// A stalking hound's eye dims and narrows (after `alert_eyes` has set its
+/// mood); back as it was once it's out of the stalk.
+#[allow(clippy::type_complexity)]
+fn stalk_eyes(
+    mut commands: Commands,
+    hounds: Query<(&AlertEye, &super::Brain, Option<&super::Intent>), With<super::hound::Hound>>,
+    mut eyes: Query<(Entity, &Eye, &mut Transform, Option<&Slit>)>,
+    parts: Query<&RobotPart>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let stalking = |robot: Entity| {
+        hounds.get(robot).is_ok_and(|(_, b, i)| {
+            matches!(b, super::Brain::Investigate { .. }) && i.is_some_and(|i| i.low)
+        })
+    };
+    for (own, ..) in hounds.iter().filter(|(_, b, i)| {
+        matches!(b, super::Brain::Investigate { .. }) && i.is_some_and(|i| i.low)
+    }) {
+        for h in [&own.0, &own.1] {
+            if let Some(mut m) = materials.get_mut(h) {
+                m.emissive = stalk_eye(m.emissive);
+            }
+        }
+    }
+    for (e, eye, mut t, slit) in &mut eyes {
+        // (Its eye, not its glowing seams.)
+        let Some(part) = parts
+            .get(eye.part)
+            .ok()
+            .filter(|p| p.role == PartRole::Sensor)
+        else {
+            continue;
+        };
+        match (stalking(part.robot), slit) {
+            (true, None) => {
+                commands.entity(e).insert(Slit(t.scale.y));
+                t.scale.y *= STALK_SLIT;
+            }
+            (false, Some(Slit(y))) => {
+                t.scale.y = *y;
+                commands.entity(e).remove::<Slit>();
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Eyes say what the robot knows: a dull red at work, brighter as its
 /// suspicion rises, and hot (toward orange-white) while it can make you
 /// out. In the dark or fog that change is the first thing you see.
 fn alert_eyes(
     mut commands: Commands,
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
-    mut halos: Query<(&Eye, &mut crate::world::halos::Halo)>,
+    (mut halos, mut glows, lenses, locks): (
+        Query<(&Eye, &mut crate::world::halos::Halo)>,
+        Query<(&mut Transform, &GlobalTransform), With<HeldSize>>,
+        Query<(&RobotPart, &MeleeLens)>,
+        Query<&LockHalo>,
+    ),
     gaits: Query<&super::anim::Gait>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     places: Query<&GlobalTransform, With<Robot>>,
@@ -2141,15 +2802,16 @@ fn alert_eyes(
                     ..default()
                 });
                 let r = if kind == Some(RobotKind::Drone) {
-                    0.08
+                    DRONE_EYE_GLOW
                 } else {
-                    0.15
+                    EYE_GLOW
                 };
                 commands.spawn((
                     Mesh3d(meshes.add(Sphere::new(r).mesh().ico(2).unwrap())),
                     MeshMaterial3d(glow.clone()),
                     Transform::from_xyz(0.0, 0.0, -0.03),
                     NotShadowCaster,
+                    HeldSize,
                     ChildOf(eye.part),
                 ));
                 commands
@@ -2168,10 +2830,31 @@ fn alert_eyes(
         ));
     }
     let eye_at = cameras.iter().next().map(|g| g.translation());
+    // Whose tell burns (a lens's lead, a drone's lock), in what glow: after
+    // dark its halo carries it (below), as its glow gives way to it by day
+    // (`tells_over_moods`).
+    let mut tells: std::collections::HashMap<Entity, LinearRgba> = Default::default();
+    let glowing = |h: &Handle<StandardMaterial>| {
+        materials
+            .get(h)
+            .map(|m| m.emissive)
+            .filter(|e| *e != LinearRgba::BLACK)
+    };
+    for (p, l) in &lenses {
+        if let Some(e) = glowing(&l.0) {
+            tells.insert(p.robot, e);
+        }
+    }
+    for l in &locks {
+        if let Some(e) = glowing(&l.mat) {
+            tells.insert(l.robot, e);
+        }
+    }
+    let halos_on = conditions
+        .as_deref()
+        .is_some_and(crate::world::halos::halos_show);
     let mut moods: std::collections::HashMap<Entity, (LinearRgba, f32)> = Default::default();
     let light = conditions.map_or(1.0, |c| c.light);
-    // The glow tells more the darker it is.
-    let dark = (1.2 - light).clamp(0.3, 1.0);
     // After dark the eye's core dims to what it reads as by day: the
     // night's open exposure would clip it to white otherwise and its red
     // would be lost; the halo carries it at range.
@@ -2213,12 +2896,7 @@ fn alert_eyes(
         } else {
             1.0
         } * guttering(bad, now, robot.index_u32());
-        let a = aware.suspicion.clamp(0.0, 1.0);
-        let x = if aware.can_see_target {
-            aware.exposure.clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        let (a, x) = mood(aware);
         // Its colour and, for eyes that can't tell red from orange (or a
         // look from far off), its rhythm (`render::tells`); brighter after
         // dark.
@@ -2234,14 +2912,23 @@ fn alert_eyes(
                 mat.emissive = want;
             }
         }
-        // Near, the sphere is the eye's glow; from 15 m the halo takes over.
+        // Near, the sphere is the eye's glow; after dark, from 15 m, the
+        // halo takes over. By day there's no halo: the glow carries the
+        // eye's rhythm out to where the eye's too small to (held to its
+        // size at `GLOW_HOLDS_AT`, below).
+        // (At dusk the halos are on but a dusk sky outshines them: the glow
+        // hands over only as the dark comes, `night`.)
         let near = match (eye_at, places.get(robot)) {
-            (Some(c), Ok(gt)) => {
-                (1.0 - (c.distance(gt.translation()) - 15.0) / 10.0).clamp(0.0, 1.0)
+            (Some(c), Ok(gt)) if halos_on => {
+                let fade = (1.0 - (c.distance(gt.translation()) - 15.0) / 10.0).clamp(0.0, 1.0);
+                1.0 - night * (1.0 - fade)
             }
             _ => 1.0,
         };
-        let k = (1.2 + 1.2 * a + 1.6 * x) * stutter.min(1.0);
+        // (Its halo after dark pulses with the eye: past 25 m it's all of
+        // the eye there is, and a brighter halo alone barely reads, a red
+        // a few levels up through the tone map.)
+        let k = (1.2 + 1.2 * a + 1.6 * x) * stutter.min(1.0) * pulse;
         moods.insert(
             robot,
             (
@@ -2249,11 +2936,19 @@ fn alert_eyes(
                 if stutter < 1.0 { 0.0 } else { 1.0 },
             ),
         );
-        let alpha = (0.03 + 0.12 * night + 0.12 * a + 0.2 * x) * dark * stutter.min(1.0) * near;
-        let tint = LinearRgba::rgb(1.0, 0.08 + 0.3 * x, 0.03 + 0.08 * x) * alpha * 14.0;
+        let tint = eye_glow(a, x, light, pulse) * stutter.min(1.0) * near;
         if let Some(mut g) = materials.get_mut(&own.1) {
             if g.emissive != tint {
                 g.emissive = tint;
+            }
+        }
+    }
+    // Past `GLOW_HOLDS_AT` an eye's glow holds the size it looks there.
+    if let Some(c) = eye_at {
+        for (mut t, gt) in &mut glows {
+            let k = (c.distance(gt.translation()) / GLOW_HOLDS_AT).max(1.0);
+            if (t.scale.x - k).abs() > 0.01 * k {
+                t.scale = Vec3::splat(k);
             }
         }
     }
@@ -2271,6 +2966,10 @@ fn alert_eyes(
                 } else {
                     1.2 * gaits.get(part.robot).map_or(1.0, |g| g.size)
                 };
+                // Its tell, while one burns: a hunting halo's steady glare
+                // would swallow the tell's red quickening, the halo the
+                // size of the whole machine at range.
+                let color = tells.get(&part.robot).map_or(color, |t| *t * TELL_IN_HALO);
                 crate::world::halos::Halo { color, radius }
             }
             // Dead (or stuttering off): dark.
@@ -2748,6 +3447,48 @@ mod signal_lamp_tests {
         assert!(aimed.iter().all(|t| !t), "an aimed burst carries none");
     }
 
+    /// Every machine that hunts you shows, at the range you meet it in fog,
+    /// each state of what it knows of you apart from every other: at work,
+    /// searching, hunting you, its tell ([`awareness`], [`aware_px`]). A
+    /// state whose eye is a sliver (the hound's visor, 3.5 px at 12 m; a
+    /// drone's, 1 px at 40) needs a second cue: its glow, its crouch, its
+    /// pace. (Before: past 25 m a walker's and a drone's glow went out and
+    /// a drone searching and a drone hunting were the same 1 px; the
+    /// heavy's eye and the sentry's lens burned the same whatever they
+    /// knew.)
+    #[test]
+    fn every_machines_awareness_reads_at_its_range() {
+        let mut table = String::new();
+        let mut bad = Vec::new();
+        for (w, c) in aware_weathers() {
+            for m in awareness() {
+                assert!(
+                    !AWARE_ELSEWHERE.iter().any(|(n, _)| *n == m.machine),
+                    "{}: in the table and excused from it",
+                    m.machine
+                );
+                for (i, (na, a)) in m.states.iter().enumerate() {
+                    for (nb, b) in &m.states[i + 1..] {
+                        let px = aware_px(&m, a, b, &c);
+                        table += &format!(
+                            "{w:14} {:9} {:>3} m  {:>20} / {:<20} {:>7.1} px\n",
+                            m.machine, m.range, na, nb, px
+                        );
+                        if px < READS_PX {
+                            bad.push(format!("{w}, {}: {na} / {nb} {px:.1} px", m.machine));
+                        }
+                    }
+                }
+            }
+        }
+        println!("{table}");
+        assert!(
+            bad.is_empty(),
+            "states that don't read apart (< {READS_PX} px):\n{}",
+            bad.join("\n")
+        );
+    }
+
     /// The sentry's chirp and a drone's lock are one tell, learnt once:
     /// each lens's glow, over its own tell (2.5 s and 1.5 s), pulses
     /// faster and swells from the first instant into the same flash as the
@@ -2852,5 +3593,87 @@ mod signal_lamp_tests {
         ] {
             assert_eq!(lit(rest), 0.0, "{rest:?}: dark at rest");
         }
+    }
+
+    /// The tell rule, over every machine: each attack in the one table
+    /// ([`attacks`]) shows on its body (its lens's glow) for the whole of
+    /// its lead, never out between pulses, flashes as the harm comes, and
+    /// gives at least `MIN_TELL` to read; an attack that has no lead is in
+    /// [`UNTOLD`] with why it's fair. (Before, the walker's aim, the
+    /// grappler's wind-up and the Sorter's showed no glow on the body:
+    /// a light thrown on the ground, a pose.)
+    #[test]
+    fn every_attack_tells_on_the_body() {
+        let mut fails = Vec::new();
+        let short = |who: &str| SHORT_LEADS.iter().any(|(w, _)| *w == who);
+        let pending = |who: &str| PENDING_LEADS.iter().any(|(w, _)| *w == who);
+        for (who, lead, at) in attacks() {
+            if lead < super::super::MIN_TELL {
+                fails.push(format!("{who}: a {lead} s lead"));
+            }
+            if lead < MIN_LEAD && !short(who) && !pending(who) {
+                fails.push(format!("{who}: leads by {lead} s, under {MIN_LEAD} s"));
+            }
+            if lead >= MIN_LEAD && pending(who) {
+                fails.push(format!("{who}: meets the bar now: off PENDING_LEADS"));
+            }
+            let dim = (1..=80)
+                .map(|i| at(lead * i as f32 / 80.0 - 1e-3).red)
+                .fold(f32::MAX, f32::min);
+            if dim < 0.25 {
+                fails.push(format!("{who}: its glow goes out in its lead ({dim})"));
+            }
+            let end = at(lead - 0.02).red;
+            if end < 3.0 {
+                fails.push(format!("{who}: no flash as it comes ({end})"));
+            }
+        }
+        assert!(fails.is_empty(), "{fails:#?}");
+        for (who, why) in UNTOLD {
+            assert!(why.len() > 20, "{who}: say why it's fair");
+        }
+        // And at rest, every one is dark.
+        for rest in [
+            MeleeLead::Walker { aim: 0.0 },
+            MeleeLead::Grappler { windup: 0.0 },
+            MeleeLead::Sorter {
+                windup: 0.0,
+                swing: false,
+            },
+        ] {
+            assert_eq!(melee_halo(rest).red, 0.0, "{rest:?}");
+        }
+    }
+
+    /// A stalking hound's eye reads as neither at rest nor a tell: its
+    /// mood's red (suspicious, it would burn brighter than at rest) dims
+    /// to well under a resting eye, and narrows, while a tell burns well
+    /// over a resting eye with its glow. The eye is a lamp (fogless, drawn
+    /// far): what it reads as at 5 m it reads as at 10-15 m in fog.
+    #[test]
+    fn a_stalking_hounds_eye_is_neither_rest_nor_a_tell() {
+        use crate::render::tells::eye_colour;
+        let red = |c: [f32; 3]| c[0];
+        let rest = red(eye_colour(0.0, 0.0));
+        // Stalking: it's heard you (suspicious), it doesn't see you.
+        let stalk = stalk_eye(LinearRgba::rgb(
+            eye_colour(0.6, 0.0)[0],
+            eye_colour(0.6, 0.0)[1],
+            eye_colour(0.6, 0.0)[2],
+        ))
+        .red;
+        // A tell: it sees you, and its lens's glow at the floor of its pulse.
+        let tell = red(eye_colour(1.0, 1.0))
+            + melee_halo(MeleeLead::Hound {
+                crouch: 0.3,
+                lunging: false,
+            })
+            .red;
+        assert!(rest / stalk >= 2.5, "stalk {stalk} against rest {rest}");
+        assert!(tell / rest >= 2.0, "tell {tell} against rest {rest}");
+        assert!(STALK_SLIT <= 0.5, "and narrowed");
+        let mut assets = Assets::<StandardMaterial>::default();
+        let eye = mats(&mut assets).eye;
+        assert!(!assets.get(&eye).unwrap().fog_enabled);
     }
 }

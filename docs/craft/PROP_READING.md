@@ -222,3 +222,59 @@ block's cream on its pale concrete nearly vanished. Now
 (the game's `Black` is a grey). In game the block's face reads grey; the
 line-up's window light blows it out. Marrow's gate block wears ivy over
 its face.
+
+### Walk-review requests from Map design (4 November)
+
+**Sallow's dam: a viewing bay.** The crest road runs nine metres back
+from the upstream parapet; over a 1.1 m parapet that far off, the
+drained bed 21 m below stays hidden for its first 300 m, and a newcomer
+topping the dam on the first job saw a dark wall. Lowering the parapet
+along its length would not have opened the view from the road (the
+payoff is at the edge), so opposite the face stair's head (world x 88
+to 100) the parapet gives way for six metres to a steel rail: from the
+road it reads as a break that asks to be walked to, and from the rail
+the bed, the old river and the tower lie open below. Main left, the bay
+right: from the road, along the crest, at the rail.
+![dam viewing bay, before and after](../shots/props/dam_viewing_bay_before_after.jpg)
+
+**Rime's col track: snow poles.** `snow_pole`, a 9 cm pole 2.5 m out of
+the snow, its top half banded red and white, for a line over open snow
+(Map design places them). Three placed for the picture, 20 m apart on
+the col track: the near one's bands read at once, and the line carries
+up the slope as dark banded sticks where the cairns were specks.
+![snow poles on the col track](../shots/props/snow_poles_col_track.jpg)
+
+### The truck, at 30 cm to 1 m (4 November)
+
+The place a player sees most. The training yard's truck with a career
+that has every fitting (the stash rack, the vice, the aerial, the
+medicine cabinet, the wall shelf), from standing in the bed: along the
+bed to the cab wall, the kit crate, the bench, the cork board, the front
+wall, the hatch, the shelf. By day (11:00), at dusk (20:00) and at night
+(23:00), left to right:
+![the truck bed, day, dusk and night](../shots/props/truck_bed_day_dusk_night.jpg)
+
+- **The bed reads, and reads the same at every hour.** The canopy's
+  lanterns light it; day, dusk and night differ only through the
+  tailgate. The crate's kit is laid out and each piece is its own (the
+  radio, the dressing's red cross, the map case, the rounds); the bell
+  pull's red handle, the extinguisher, the medicine cabinet and its
+  cross, the stencil НЕ БОЛЕЕ 16 ЧЕЛ on the bench side read at a glance.
+- **Fixed: two vices.** The bench was built with a blue vise on its
+  front corner, and the driver's fitting (`BenchVice`, "a vice on the
+  bench: more recipes") put a green one beside it: a newcomer saw a vice
+  before buying one, and two after. The bench has none of its own now
+  (`art/vehicles/bench.py`, and its blockout); the vice is the fitting.
+- **Fixed: the cork board was a blank brown slab.** Empty (it shows
+  only what you've read), in glove leather it said nothing about being
+  a board to pin things on. Its cork is `Cork` now, a rock scan's grain
+  laid fine and tinted tan: it reads as cork with nothing on it.
+  ![bench and board, before and after](../shots/props/truck_bench_board_before_after.jpg)
+- **Flagged, not changed: the SETTINGS card behind the stash rack.**
+  The card hangs on the left wall over the crate, and once the rack is
+  fitted the rack's brace crosses in front of it: half hidden and hard
+  to press. The card is onboarding's (`onboarding::mod`, "SETTINGS").
+- **The hatch to the cab** is a small olive panel: closed, the cab isn't
+  seen from the bed at all. That is the design (the driver opens it to
+  talk); nothing muddy.
+

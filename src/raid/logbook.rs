@@ -285,8 +285,22 @@ fn card_text(
             "{} raids, {} home, {} lost",
             raid.raids, raid.extractions, raid.deaths
         );
+        // Lost, and the job still out there: what's waiting (reckless,
+        // first_jobs: three raids lost of eight, and the card said only
+        // what the convoy took).
+        let waiting = match (&book.written, &progression.0.job) {
+            (Some(e), Some(job)) if e.contains(": LOST") => {
+                let place = crate::progression::job_place(job);
+                if place.is_empty() {
+                    "\nThe job's still on the card.".to_owned()
+                } else {
+                    format!("\nStill on the card: {}.", crate::raid::lines::the(&place))
+                }
+            }
+            _ => String::new(),
+        };
         match &book.written {
-            Some(e) => format!("LOGBOOK\n{e}\n\n{record}\n(press: career)"),
+            Some(e) => format!("LOGBOOK\n{e}{waiting}\n\n{record}\n(press: career)"),
             None => format!("LOGBOOK\n\n{record}\n(press: career)"),
         }
     };
@@ -404,5 +418,42 @@ mod tests {
                 .is_none(),
             "mended at home"
         );
+    }
+
+    /// A raid lost, and the job still out there: the logbook says what's
+    /// waiting, not only what the convoy took (reckless, first_jobs: three
+    /// raids of eight lost, and nothing on the card to go back for).
+    #[test]
+    fn a_raid_lost_says_whats_still_on_the_card() {
+        let mut app = crate::raid::requests::tests::app();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .job = Some(extraction_core::progression::Job::Plant {
+            map: "marrow_creek".into(),
+            place: "Radio mast".into(),
+            item: "relay_box".into(),
+            at: [-54.0, -78.8],
+            planted: false,
+        });
+        let text = |app: &mut App| {
+            app.update();
+            app.update();
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&ScreenText, With<LogbookCard>>();
+            q.single(app.world()).unwrap().text.replace('\n', " ")
+        };
+        app.world_mut().resource_mut::<Logbook>().written =
+            Some("RAID 3: LOST, 2 MIN Wrecked nothing The convoy took 16 things".into());
+        let lost = text(&mut app);
+        assert!(
+            lost.contains("Still on the card: the radio mast."),
+            "{lost}"
+        );
+        app.world_mut().resource_mut::<Logbook>().written =
+            Some("RAID 3: HOME, 2 MIN Wrecked nothing Brought home 16 things".into());
+        let home = text(&mut app);
+        assert!(!home.contains("Still on the card"), "{home}");
     }
 }

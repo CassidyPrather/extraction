@@ -270,3 +270,15 @@ At (176.1, -169.2), 33.5 m; looking 47 deg along the way, and 218 deg to Hunting
 - Dead stretch (s14 to s16, 440 to 520 m): the moor past the mine road, boulders and road, three stops with no place in them. The cabin at s17 is the first since the Row.
 - A road and a bank (s10): the plank house is the stop, but ahead the way is a bend round a bank.
 - The cabin door stops' side views (s18, s21) look at a wall: the picker's choice, not the map's; the doors are round the corner.
+
+## Fixes
+
+Before on the left, after on the right.
+
+### 1. A place on the moor (s14 to s16)
+
+Three stops of road, boulders and moor between the mine road and the lodge. A roadmen's hut now stands back off the pass road at 470 m, its woodpile beside it: from s15 it's a roof on the moor to make for, and something to look into on the way home.
+
+![before](s14_ahead.jpg) ![after](fixes/s14_ahead_after.jpg)
+![before](s15_ahead.jpg) ![after](fixes/s15_ahead_after.jpg)
+![before](s16_ahead.jpg) ![after](fixes/s16_ahead_after.jpg)

@@ -5913,13 +5913,15 @@ pub fn swing_doors(
         Option<&super::underground::PowerLocked>,
         Has<super::hinge::Swinging>,
         Option<&super::hinge::Resting>,
+        &GlobalTransform,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
+    bodies: Query<&GlobalTransform, With<crate::player::Body>>,
 ) {
     for ev in events.read() {
         if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
-            if let Ok((_, mut d, _, _, wedged, locked, held, _)) = doors.get_mut(*item) {
+            if let Ok((_, mut d, _, _, wedged, locked, held, _, _)) = doors.get_mut(*item) {
                 if held {
                     // A hand's taking hold of it (`hinge::take_hold`).
                 } else if wedged {
@@ -5934,7 +5936,7 @@ pub fn swing_doors(
             }
         }
     }
-    for (e, mut d, mut t, leaf, _, _, held, resting) in &mut doors {
+    for (e, mut d, mut t, leaf, _, _, held, resting, gt) in &mut doors {
         // A leaf turns about its hinge and never leaves it. (Kinematic, it
         // crept off it a millimetre or so a second, round to the middle of
         // its doorway, and stood open across half of it: Kettle's mine,
@@ -5961,9 +5963,51 @@ pub fn swing_doors(
             commands.entity(e).remove::<super::hinge::Resting>();
         }
         let target = if d.open { 1.0 } else { 0.0 };
-        d.angle += (target - d.angle).clamp(-time.delta_secs() * 1.6, time.delta_secs() * 1.6);
+        let next =
+            d.angle + (target - d.angle).clamp(-time.delta_secs() * 1.6, time.delta_secs() * 1.6);
+        // Someone in its way: it stops against them, as a door does against
+        // a foot, and goes on once they're clear. (Driven through, it shoved
+        // a standing body up to 1.6 m: in a headset, the world moving you.
+        // Verifier's probe, 5 November.) Never further into anyone: one it
+        // already touches, it may swing away from, not on into.
+        let r = crate::player::CAPSULE_RADIUS;
+        // Bodies in the frame its hinge is in (a door in a building that's
+        // a child of another, as Kettle's are: its hinge isn't the world's).
+        let frame = (gt.affine() * t.compute_affine().inverse()).inverse();
+        let blocked = next != d.angle
+            && bodies.iter().any(|b| {
+                let feet = frame.transform_point3(b.translation());
+                let gap = leaf_gap(&leaf.0, next, feet);
+                gap < r && gap < leaf_gap(&leaf.0, d.angle, feet)
+            });
+        if blocked {
+            continue;
+        }
+        d.angle = next;
         t.rotation = Quat::from_rotation_y(leaf.0.yaw + d.angle * 1.75);
     }
+}
+
+/// Whether a door's leaf, swung `angle` (`Door::angle`, 0 shut to 1 open),
+/// meets an upright body standing at `feet` of radius `r`: the leaf from
+/// its hinge along its width, as thick as its board, as high as it stands.
+pub fn leaf_meets(d: &DoorDef, angle: f32, feet: Vec3, r: f32) -> bool {
+    leaf_gap(d, angle, feet) < r
+}
+
+/// How far an upright body's axis at `feet` is from a door's leaf swung
+/// `angle`, across the floor (its board's face, not its middle): infinite
+/// where they're at different heights.
+pub fn leaf_gap(d: &DoorDef, angle: f32, feet: Vec3) -> f32 {
+    // (Its board is 5 cm, a hair's margin past it.)
+    const HALF_THICK: f32 = 0.025 + 0.01;
+    if feet.y > d.hinge.y + d.height || feet.y + crate::player::CAPSULE_HEIGHT < d.hinge.y {
+        return f32::INFINITY;
+    }
+    let rot = Quat::from_rotation_y(d.yaw + angle * 1.75);
+    let l = rot.inverse() * (feet - d.hinge);
+    let along = l.x.clamp(0.0, d.width);
+    Vec2::new((l.x - along).abs(), (l.z.abs() - HALF_THICK).max(0.0)).length()
 }
 
 /// A building waiting for its props' models before it builds its meshes
@@ -6887,6 +6931,38 @@ pub fn dress_buildings(
 
 #[cfg(test)]
 mod tests {
+    /// A door's leaf meets a body in its swing, and not one beside it, past
+    /// its end, or behind its hinge.
+    #[test]
+    fn a_leaf_meets_a_body_in_its_swing() {
+        use super::*;
+        let d = DoorDef {
+            hinge: Vec3::ZERO,
+            width: 0.9,
+            height: 2.0,
+            yaw: 0.0,
+            mat: Mat::Planks,
+        };
+        let r = 0.28;
+        // Shut, along +X: someone 0.6 along it and a step off it isn't met;
+        // swung round to them, they are.
+        let at = |a: f32, along: f32| Quat::from_rotation_y(a * 1.75) * Vec3::new(along, 0.0, 0.0);
+        let feet = at(0.45, 0.6);
+        assert!(!leaf_meets(&d, 0.0, feet, r));
+        assert!(leaf_meets(&d, 0.45, feet, r));
+        assert!(!leaf_meets(&d, 1.0, feet, r));
+        // Past its free end, and up on the floor above: not met.
+        assert!(!leaf_meets(&d, 0.45, at(0.45, 1.3), r));
+        assert!(!leaf_meets(&d, 0.45, feet + Vec3::Y * 3.0, r));
+        // Against it already, shut: opening (its free edge turns from +X
+        // toward -Z) goes nearer one on the -Z side, and away from one on +Z.
+        let (ahead, behind) = (Vec3::new(0.6, 0.0, -0.2), Vec3::new(0.6, 0.0, 0.2));
+        assert!(leaf_meets(&d, 0.0, ahead, r) && leaf_meets(&d, 0.0, behind, r));
+        assert!(leaf_gap(&d, 0.02, ahead) < leaf_gap(&d, 0.0, ahead));
+        assert!(leaf_gap(&d, 0.02, behind) > leaf_gap(&d, 0.0, behind));
+        // Just behind the hinge, within a body's width: met.
+        assert!(leaf_meets(&d, 0.0, Vec3::new(-0.2, 0.0, 0.0), r));
+    }
 
     /// A table's loot keeps clear of the note on it (the pump station's
     /// log, read at its table, with the tools there too).

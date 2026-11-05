@@ -377,6 +377,17 @@ mod xr {
         }
     }
 
+    /// The eye layer's flags: none. It's the only layer the game submits
+    /// and it's opaque, so blending it by its alpha (`bevy_mod_openxr`'s
+    /// default, BLEND_TEXTURE_SOURCE_ALPHA) blends it against nothing,
+    /// toward black: the soft leaves' alpha-to-coverage edges keep alpha
+    /// down to about 0.52, and the headset drew them up to half darker than
+    /// the desktop (Visual design, docs/ART_DIRECTION.md "Alpha in the eye
+    /// images"). A layer meant to show through (passthrough, an overlay)
+    /// would be a second layer with its own flags.
+    pub(super) const EYE_LAYER_FLAGS: openxr::CompositionLayerFlags =
+        openxr::CompositionLayerFlags::EMPTY;
+
     /// `bevy_mod_openxr`'s projection layer, but each view's image rect is
     /// the part the eyes rendered this frame (`EyeRect`).
     pub struct RectLayer;
@@ -416,7 +427,7 @@ mod xr {
             };
             Some(Box::new(
                 CompositionLayerProjection::new()
-                    .layer_flags(openxr::CompositionLayerFlags::BLEND_TEXTURE_SOURCE_ALPHA)
+                    .layer_flags(EYE_LAYER_FLAGS)
                     .space(stage)
                     .views(&[view(0), view(1)]),
             ))
@@ -508,6 +519,22 @@ pub(crate) fn follows_busy_moments(
 
 #[cfg(test)]
 mod tests {
+    /// The eye layer is opaque to the compositor: no blending by its
+    /// alpha, which darkened the soft leaves' edges in the headset.
+    #[cfg(feature = "xr")]
+    #[test]
+    fn the_eye_layer_is_not_blended_by_its_alpha() {
+        let flags = super::xr::EYE_LAYER_FLAGS;
+        assert!(
+            !flags.contains(openxr::CompositionLayerFlags::BLEND_TEXTURE_SOURCE_ALPHA),
+            "the eye layer blends by its alpha: {flags:?}"
+        );
+        assert!(
+            !flags.contains(openxr::CompositionLayerFlags::UNPREMULTIPLIED_ALPHA),
+            "the eye layer reads its alpha: {flags:?}"
+        );
+    }
+
     use super::*;
 
     const PERIOD: f64 = 1000.0 / 90.0;

@@ -98,6 +98,7 @@ pub(crate) fn muzzle_fx(
             gravity: -0.2,
             drag: 2.5,
             wind: 1.0,
+            thins: true,
             ..SPRAY
         };
         spray_bits(&mut commands, pool, &a, &smoke, at, fwd, Vec3::ZERO);
@@ -130,6 +131,7 @@ pub(crate) fn muzzle_fx(
             gravity: -0.4,
             drag: 2.0,
             wind: 0.6,
+            thins: true,
             ..SPRAY
         };
         spray_bits(&mut commands, pool, &a, &wisp, at, Vec3::Y, Vec3::ZERO);
@@ -142,6 +144,36 @@ pub(crate) fn muzzle_fx(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Smoke spreads, it doesn't multiply: through its life a muzzle puff
+    /// covers no more than it did leaving (its opacity times its area),
+    /// and by the time it's grown it's thinned.
+    #[test]
+    fn muzzle_smoke_thins_as_it_spreads() {
+        use crate::weapons::impacts::{
+            SMOKE_ALPHA, THIN_RATIO, THIN_STEPS, puff_scale, spread_by, thin_step,
+        };
+        for grow in [2.5, 3.5] {
+            let mut last = 0;
+            for i in 0..=100 {
+                let k = i as f32 / 100.0;
+                let scale = puff_scale(grow, k);
+                let step = thin_step(spread_by(grow, k));
+                assert!(
+                    step < THIN_STEPS && step >= last,
+                    "{grow} at {k}: step {step}"
+                );
+                last = step;
+                let alpha = SMOKE_ALPHA * THIN_RATIO.powi(step as i32);
+                let cover = alpha * scale.max(1.0).powi(2);
+                assert!(
+                    cover <= SMOKE_ALPHA * 1.0001,
+                    "grow {grow}, {k:.2} through: {scale:.2}x as wide at {alpha:.3} covers {cover:.3}"
+                );
+            }
+            assert!(last >= 2, "grown {grow}: thinned to step {last}");
+        }
+    }
 
     /// A burst heats the barrel past smoking; deliberate fire never does.
     #[test]

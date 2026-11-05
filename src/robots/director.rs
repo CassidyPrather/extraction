@@ -145,7 +145,12 @@ impl Plugin for DirectorPlugin {
             .add_systems(Startup, init_director)
             .add_systems(
                 FixedUpdate,
-                (hear_reports, night_visits, run_director)
+                (
+                    hear_reports,
+                    night_visits,
+                    look_again_each_raid,
+                    run_director,
+                )
                     .chain()
                     .after(super::perceive),
             );
@@ -296,6 +301,28 @@ pub fn survey_places(zone: &Zone, first_job_at: Option<Vec2>) -> Vec<[f32; 2]> {
                 .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
         })
         .collect()
+}
+
+/// Each raid's start (stepping out of the truck) is a fresh look for the
+/// second job's broken walker, unless one is still out. The director lives
+/// as long as the game does, and its first look comes on whatever job the
+/// game opened on: in one session that was job 1, which found nowhere, and
+/// job 2 never looked again (the Verifier's second_hour, 4 November).
+fn look_again_each_raid(
+    raid: Option<Res<crate::raid::Raid>>,
+    mut last: Local<Option<crate::raid::Phase>>,
+    mut director: ResMut<Director>,
+    brokens: Query<&Robot, With<super::broken::Broken>>,
+) {
+    let Some(raid) = raid else {
+        return;
+    };
+    let before = last.replace(raid.phase.clone());
+    let stepped_out =
+        matches!(before, Some(crate::raid::Phase::AtBase)) && raid.phase == crate::raid::Phase::Out;
+    if stepped_out && brokens.iter().all(|r| r.wrecked) {
+        director.broken_placed = false;
+    }
 }
 
 fn run_director(

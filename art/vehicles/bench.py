@@ -124,27 +124,9 @@ for sz in (-1, 1):
             [(0.005 * math.cos(a), 0.005 * math.sin(a)) for a in
              [2 * math.pi * i / 6 for i in range(6)]], "Steel", xf=T(0.08, 0, 0))
 
-# --- Bench vise on the front corner (aisle side, -Z end) -------------------
-VX, VZ = -HX + 0.075, -HZ + 0.1
-vy = TOP
-# Base and swivel plate.
-b.cyl(0.055, vy, vy + 0.012, "Blue", segs=20, xf=T(VX, 0, VZ) @ UP, chamfer=0.003)
-# Body: the fixed jaw block and the slide.
-b.box((0.085, 0.06, 0.13), (VX, vy + 0.042, VZ + 0.01), "Blue", bevel=0.008, segs=2)
-b.box((0.09, 0.075, 0.04), (VX, vy + 0.058, VZ - 0.05), "Blue", bevel=0.008, segs=2)
-# Moving jaw, out toward the aisle end, its slide bar.
-b.box((0.09, 0.075, 0.04), (VX, vy + 0.058, VZ - 0.115), "Blue", bevel=0.008, segs=2)
-b.box((0.05, 0.035, 0.08), (VX, vy + 0.045, VZ - 0.075), "Iron", bevel=0.004, segs=1)
-# Hardened jaw plates with cross-hatched faces.
-for z in (VZ - 0.072, VZ - 0.093):
-    b.box((0.092, 0.03, 0.006), (VX, vy + 0.08, z), "Iron", bevel=0.001, segs=1)
-# Screw and T-handle with its ball ends.
-b.cyl(0.009, VZ - 0.2, VZ - 0.13, "Steel", segs=12, xf=T(VX, vy + 0.035, 0.0))
-b.cyl(0.006, -0.08, 0.08, "Steel", segs=10, xf=T(VX, vy + 0.035, VZ - 0.19) @ ALONG_X)
-for sx in (-1, 1):
-    b.sphere(0.011, (VX + sx * 0.082, vy + 0.035, VZ - 0.19), "Steel", segs=12, rings=6)
-# Anvil face on the back of the fixed jaw.
-b.box((0.06, 0.012, 0.05), (VX, vy + 0.078, VZ + 0.045), "Iron", bevel=0.002, segs=1)
+# (No vise of its own: the vice is a fitting the driver puts on the bench,
+# `progression::Upgrade::BenchVice`. Built in as well, the bench had a vice
+# before it was bought and two after; docs/craft/PROP_READING.md.)
 
 # --- Tool rack at the back, under the display --------------------------------
 RX_ = HX - 0.015

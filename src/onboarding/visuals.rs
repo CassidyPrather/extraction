@@ -96,6 +96,12 @@ fn lamp_mats(materials: &mut Assets<StandardMaterial>) -> LampMats {
     }
 }
 
+/// Whether station `i` stands on a post in the yard (else its board hangs
+/// in the truck).
+pub(super) fn stands(i: usize) -> bool {
+    !super::in_truck(i)
+}
+
 fn dress_posts(
     mut commands: Commands,
     posts: Query<(Entity, &StationPost), Added<StationPost>>,
@@ -136,22 +142,27 @@ fn dress_posts(
             ));
         };
         // The lantern's height above the board's middle.
-        let (board, lamp_at) = if post.index == 0 {
-            // In the truck: a board hung on two cords from the canopy, the
-            // lantern hanging beside it.
+        let (board, lamp_at) = if !stands(post.index) {
+            // In the truck: a board hung on the cab wall (on two cords from
+            // the canopy) or on the canvas wall, the lantern beside it; no
+            // post (a yard post's 2.6 m of timber, stood on the settings
+            // board's spot on the canvas wall, came up through the canopy).
+            let sign = if post.index == 0 { TRUCK_SIGN } else { SIGN };
             part(
                 Some(Mat::Planks),
-                Vec3::new(TRUCK_SIGN.x + 0.05, TRUCK_SIGN.y + 0.05, 0.025),
+                Vec3::new(sign.x + 0.05, sign.y + 0.05, 0.025),
                 Transform::default(),
             );
-            for x in [-0.3, 0.3] {
-                part(
-                    Some(Mat::DarkMetal),
-                    Vec3::new(0.008, 0.36, 0.008),
-                    Transform::from_xyz(x, TRUCK_SIGN.y * 0.5 + 0.18, 0.0),
-                );
+            if post.index == 0 {
+                for x in [-0.3, 0.3] {
+                    part(
+                        Some(Mat::DarkMetal),
+                        Vec3::new(0.008, 0.36, 0.008),
+                        Transform::from_xyz(x, sign.y * 0.5 + 0.18, 0.0),
+                    );
+                }
             }
-            (Vec3::ZERO, Vec3::new(TRUCK_SIGN.x * 0.5 + 0.12, 0.05, 0.05))
+            (Vec3::ZERO, Vec3::new(sign.x * 0.5 + 0.12, 0.05, 0.05))
         } else {
             let h = LAMP_Y + 0.1;
             part(

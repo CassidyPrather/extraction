@@ -93,6 +93,14 @@ pub const WAITING: &[&str] = &[
     "Truck: \"{rv}, {b}. I hear them.\"",
 ];
 
+/// Waiting at `{rv}`, `{t}` left (`LAST_CALL`): said before every
+/// departure without you, over the radio, wherever you are (the five
+/// minutes said on arrival was all a newcomer heard before \"Can't stay\").
+pub const LAST_CALL: &[&str] = &[
+    "Truck: \"{t} left at {rv}. Then I go.\"",
+    "Truck: \"{rv}. {t} more, then I'm gone.\"",
+];
+
 pub const GAVE_UP: &[&str] = &[
     "Truck: \"Can't stay. Call me again when you're close.\"",
     "Truck: \"Pulling out. Call when you're close.\"",
@@ -109,6 +117,9 @@ pub const SHEDS_ON_THE_WAY: &str = "\nSheds on the way: in, if anything chirps."
 
 /// The first job's way home, from the gate, on the house.
 pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
+/// The second gentle job's short run: free too, and what comes next (the
+/// SHORT_RUN lines say a can's burnt, and none is: Onboarding).
+pub const GENTLE_SHORT_RUN: &str = "Truck: \"This one's on me too. Next time it's a can. Get in.\"";
 
 pub const NO_FUEL: &str = "Truck: \"No fuel in the stores for the short run. Head for an RV.\"";
 
@@ -212,6 +223,46 @@ pub const CARGO_FOOD: &[&str] = &[
 ];
 /// This much food and he says so.
 pub const FOOD_PLENTY: usize = 5;
+
+/// Off the truck in a valley you've never raided: what's different there,
+/// the one thing (Story's wording). He's stood by you at the camp, so it's
+/// "Driver:". Not Marrow when it's the career's first raid: the first job
+/// leads there (`first_arrival`).
+pub const FIRST_ARRIVAL: &[(&str, &str)] = &[
+    (
+        "marrow_creek",
+        "Driver: \"Marrow. Stay in the trees. Keep out of the Hollow.\"",
+    ),
+    (
+        "kettle_pass",
+        "Driver: \"Kettle. Cloud on the tops. You'll hear them before you see them.\"",
+    ),
+    (
+        "cinder_works",
+        "Driver: \"Cinder. That dead wood hides nothing. Go brick to brick.\"",
+    ),
+    (
+        "sallow_reservoir",
+        "Driver: \"Sallow. Dam first. Stair's quick. Up top, they all see you.\"",
+    ),
+    (
+        "rime_fell",
+        "Driver: \"Rime. Nothing grows up there. They're above you, looking down.\"",
+    ),
+];
+
+/// The line on stepping off in `map` for the first time (`raids_here`
+/// counts this raid), if it has one: not on the career's first raid in
+/// Marrow (`raids_all`), where the first job's lines lead.
+pub fn first_arrival(map: &str, raids_here: u32, raids_all: u32) -> Option<&'static str> {
+    if raids_here != 1 || (map == "marrow_creek" && raids_all <= 1) {
+        return None;
+    }
+    FIRST_ARRIVAL
+        .iter()
+        .find(|(m, _)| *m == map)
+        .map(|(_, l)| *l)
+}
 
 /// Home from a valley for the first time: what he knows of it from
 /// before, when he drove there (he's never been past the fence since).
@@ -537,7 +588,7 @@ mod tests {
         crate::raid::epilogue::STACKS_SHUT,
         crate::raid::epilogue::RELEASED,
     ];
-    const TRUCK_ONES: &[&str] = &[NO_FUEL, FIRST_SHORT_RUN];
+    const TRUCK_ONES: &[&str] = &[NO_FUEL, FIRST_SHORT_RUN, GENTLE_SHORT_RUN];
 
     /// Every pool of lines said over the radio or the wrist.
     fn every_pool() -> Vec<&'static [&'static str]> {
@@ -577,6 +628,7 @@ mod tests {
             ON_THE_WAY,
             ARRIVED,
             WAITING,
+            LAST_CALL,
             GAVE_UP,
             SHORT_RUN,
             PULLING_OUT,
@@ -653,6 +705,7 @@ mod tests {
         }
         lines.extend(COMING_HOME.iter().map(|(_, l)| l.to_string()));
         lines.extend(FIRST_HOME_FROM.iter().map(|(_, l)| l.to_string()));
+        lines.extend(FIRST_ARRIVAL.iter().map(|(_, l)| l.to_string()));
         for line in &lines {
             let wrapped = wrap(line, 26, 3);
             assert_eq!(
@@ -706,6 +759,21 @@ mod tests {
                 "{hi}"
             );
         }
+    }
+
+    /// Off the truck in a valley the first time, he says what's different
+    /// there; every valley has one. Not the second time, and not on the
+    /// career's first raid in Marrow (the first job leads), but in Marrow
+    /// from elsewhere.
+    #[test]
+    fn first_into_a_valley_he_says_what_is_different() {
+        for (map, _) in extraction_core::map::VALLEYS {
+            let line = first_arrival(map, 1, 3).unwrap_or_else(|| panic!("{map}"));
+            assert!(FIRST_ARRIVAL.contains(&(map, line)), "{map}: {line}");
+            assert_eq!(first_arrival(map, 2, 3), None, "{map}");
+        }
+        assert_eq!(first_arrival("marrow_creek", 1, 1), None);
+        assert_eq!(first_arrival("training_yard", 1, 3), None);
     }
 
     /// Home from a valley the first time, he says his piece about it,

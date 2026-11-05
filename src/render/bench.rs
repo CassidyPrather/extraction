@@ -159,13 +159,7 @@ fn bench_blockout(
         &wood,
         e,
     );
-    // A vise on the front corner.
-    part(
-        Vec3::new(0.12, 0.09, 0.16),
-        Vec3::new(-s.x * 0.5 + 0.08, top + 0.045, -s.z * 0.5 + 0.1),
-        &steel,
-        e,
-    );
+    // (No vise: the vice is a fitting, `progression::Upgrade::BenchVice`.)
     // The tray: a shallow sheet-steel box (floor and lips).
     if let Some(tray) = bench.tray {
         let (hx, hz) = (0.27, 0.43);

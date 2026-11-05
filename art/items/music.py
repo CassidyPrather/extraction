@@ -246,10 +246,13 @@ def cassette_player():
 CW, CH, CT = 0.1004, 0.0638, 0.012
 
 
-def cassette():
-    """Built standing up: long axis X, open edge at -Y, side A on +Z."""
+def cassette(shell="Rotor", base_a="Cream", band_a="Red", title=None):
+    """Built standing up: long axis X, open edge at -Y, side A on +Z. Each
+    tape found is its own: its shell, side A's label and band, and its
+    title in block letters where the blank's ruled lines are (six tapes
+    out of one blank were six twins on a shelf)."""
     s = Part("shell")
-    s.prism(fillet(rect(-CW / 2, CW / 2, -CH / 2, CH / 2), 0.0025, 2), -CT / 2, CT / 2, "Rotor",
+    s.prism(fillet(rect(-CW / 2, CW / 2, -CH / 2, CH / 2), 0.0025, 2), -CT / 2, CT / 2, shell,
             axis="z", bevel=0.0006, segs=1)
     lab = (-0.046, 0.046, -0.012, 0.028)        # the label's area on each face
     win = (-0.0115, 0.0115, -0.0025, 0.0095)    # the window
@@ -287,7 +290,7 @@ def cassette():
     tape.box((0.08, 0.0004, 0.0038), (0.0, -CH / 2 + 0.0015, 0.0), "Bakelite")
 
     # Labels: a plug in each pocket, its face 0.2 mm under the shell's.
-    def label(name, base, band, letter):
+    def label(name, base, band, letter, title=None):
         L = Part(name)
         t1 = CT / 2 - 0.0002
         panel(L, "z", lab[0], lab[1], lab[2], lab[3], t1 - 0.0034, t1, base,
@@ -301,13 +304,17 @@ def cassette():
         L.cut(holes)
         ink = Part("ink")
         text(ink, letter, 0.0065, "Black", T(-0.039, 0.017, t1 - 0.0004), depth=0.001)
-        for y in (0.0135, 0.0185):
-            ink.box((0.064, 0.0005, 0.001), (0.006, y, t1), "Blue")
+        if title:
+            text(ink, title, 0.0075, "Black", T(-0.03, 0.0125, t1 - 0.0004), depth=0.001,
+                 align="left")
+        else:
+            for y in (0.0135, 0.0185):
+                ink.box((0.064, 0.0005, 0.001), (0.006, y, t1), "Blue")
         text(ink, "МК-60", 0.0028, "Black", T(0.034, -0.0056, t1 - 0.0004), depth=0.001)
         L.cut(ink, paint=True)
         return L
 
-    la = label("label_a", "Cream", "Red", "A")
+    la = label("label_a", base_a, band_a, "A", title)
     lb = label("label_b", "Paper", "Blue", "В")
     # Side B: the same label turned over onto -Z (about Y, so the open
     # edge stays at -Y).
@@ -379,10 +386,14 @@ if __name__ == "__main__":
         write("cassette", cassette())
     # Each tape you find is a cassette (the game's item ids,
     # extraction_core::music::tapes).
-    for tid in ("tape_practice", "tape_hymns", "tape_lodge", "tape_duty", "tape_birthday",
-                "tape_bells"):
+    for tid, look in (("tape_practice", ("Rotor", "Paper", "Red", "ANNA")),
+                      ("tape_hymns", ("Rotor", "Yellow", "Leaf", "HYMNS")),
+                      ("tape_lodge", ("Cream", "Blue", "Cream", "LODGE")),
+                      ("tape_duty", ("Black", "Orange", "Black", "DUTY 2")),
+                      ("tape_birthday", ("Brick", "Pale", "RagRed", "PIANO")),
+                      ("tape_bells", ("Rotor", "Olive", "Cream", "BELLS"))):
         if wanted(tid):
-            write(tid, cassette())
+            write(tid, cassette(*look))
     if wanted("record"):
         write("record", record())
     # The records you find: one label colour each.

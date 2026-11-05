@@ -25,7 +25,11 @@ pub const FOV: f32 = 120.0;
 /// ...and hears this much better than a walker hears 1.2. It sees
 /// movement: keep still and it makes out this share of you (a walker 0.55).
 pub const HEARING: f32 = 2.5;
-pub const STILL: f32 = 0.2;
+/// (0.135: crouched as the stick crouches you, 1.17 m, and still, it
+/// makes out 0.09 of you, under `senses::SEEN`, even close; standing
+/// still, it still finds you within about 8 m. At 0.2 a crouched newcomer
+/// doing as the driver says was bitten to death: first fights, the hound.)
+pub const STILL: f32 = 0.135;
 /// Its run, as an `Intent::pace` (its gait lopes at 1; `anim::Shape`).
 pub const RUN: f32 = 2.25;
 /// Running to a sound, it drops to a stalk within this of it (m)...

@@ -76,8 +76,13 @@ for i in range(n):
     cut.box((0.01, WIN_R1 - WIN_R0, seg), (0.0, 0.0, 0.0), "Blued",
             xf=T(HW, CY + rr * math.sin(a), rr * math.cos(a)) @ RX(-(a + math.pi / 2)))
 body.cut(cut)
-text(body, "71", 0.009, "Enamel", T(HW + 0.0003, CY - 0.018, 0.018) @ RY(math.pi / 2),
-     depth=0.0004)
+# A serial stamped into the cover inside the window, as the real drums carry,
+# not their capacity in paint (the AK's and RPK's magazines carry their
+# real index marks, 6Л23 and 6Л18).
+stamp = Part("cut")
+text(stamp, "ЛА 4217", 0.0035, "Stamped", T(HW - 0.0004, CY - 0.024, 0.0) @ RY(math.pi / 2),
+     depth=0.0008)
+body.cut(stamp, paint=True)
 
 # The rounds seen in the window, lying across the drum, their heads out.
 rounds = []

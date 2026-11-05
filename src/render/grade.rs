@@ -183,7 +183,7 @@ pub const ROOM_ADAPT: f32 = 1.3;
 
 /// [`ROOM_ADAPT`], or none with `EXTRACTION_ROOM_ADAPT=0` (the A/B for
 /// shots and the headset: the rooms as they were).
-fn room_adapt() -> f32 {
+pub(crate) fn room_adapt() -> f32 {
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("EXTRACTION_ROOM_ADAPT").is_none_or(|v| v != "0")) {

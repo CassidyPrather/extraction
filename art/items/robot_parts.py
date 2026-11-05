@@ -19,6 +19,9 @@ assets/models/items/<id>.glb (item space: see _kit.py), centred on its box.
                          upper arm's back, its glow strips and warning band
 - `pylon_relay_coil`     a relay pylon's coil: copper wound on a dark core
                          between white end caps, glowing insulators
+- `robot_plate`          a walker's hull plate pried off (robots/armour.rs):
+                         a curved piece of white shell, its dark rim, torn
+                         bolt tabs and a scorch
 
 Robot bodies drops these from a robot's parts still alive when it dies
 (robots/wreck.rs). Materials: Shell, Dark, Glow, Eye, Warn, Steel, Copper,
@@ -180,12 +183,62 @@ def sorter_servo_pack():
     return centred([p])
 
 
+def robot_plate():
+    """A walker's hull plate, pried off: a curved section of its white
+    shell (the hull's own curve, gently), the dark backing rim round its
+    underside, a torn bolt tab at each corner where the crowbar levered it
+    off, and a scorch where it was hit. (It was the item fallback's plain
+    box: the one piece of salvage that didn't say what it was.)"""
+    p = Part("body")
+    R, t, n = 0.9, 0.008, 6
+    W, D = 0.3, 0.28
+    half = math.asin((W / 2) / R)
+    segs = []
+    for k in range(n):
+        a = -half + 2 * half * (k + 0.5) / n
+        segs.append((a, (R * math.sin(a), R * math.cos(a) - R, 0.0)))
+    # The shell: one curved piece, its section an arc t thick, run along Z.
+    m = 16
+    top = [((R + t / 2) * math.sin(-half + 2 * half * k / m),
+            (R + t / 2) * math.cos(-half + 2 * half * k / m) - R) for k in range(m + 1)]
+    bot = [((R - t / 2) * math.sin(-half + 2 * half * k / m),
+            (R - t / 2) * math.cos(-half + 2 * half * k / m) - R) for k in range(m, -1, -1)]
+    p.prism(top + bot, -D / 2, D / 2, "Shell", axis="z", bevel=0.002, segs=1)
+    # The backing rim: a dark flange under the long edges and the ends.
+    for a, c in segs:
+        for sz in (-1, 1):
+            cc = (c[0] - math.sin(a) * 0.009, c[1] - math.cos(a) * 0.009, sz * (D / 2 - 0.012))
+            p.box((W / n + 0.001, 0.01, 0.024), cc, "Dark", segs=1,
+                  xf=T(*cc) @ RZ(-a) @ T(*(-v for v in cc)))
+    for sx in (-1, 1):
+        a, c = segs[0 if sx < 0 else -1]
+        cc = (c[0] + sx * 0.012 - math.sin(a) * 0.009, c[1] - math.cos(a) * 0.009, 0.0)
+        p.box((0.018, 0.01, D - 0.048), cc, "Dark", segs=1,
+              xf=T(*cc) @ RZ(-a) @ T(*(-v for v in cc)))
+    # A torn tab at each corner, bent up where the bolt pulled through.
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            a, c = segs[0 if sx < 0 else -1]
+            cc = (c[0] + sx * 0.004, c[1] - math.cos(a) * 0.004, sz * (D / 2 + 0.006))
+            p.box((0.03, 0.004, 0.022), cc, "Steel", segs=1,
+                  xf=T(*cc) @ RZ(-a) @ RX(sz * 0.35) @ T(*(-v for v in cc)))
+    # The scorch, lying on the shell's middle where a round hit it.
+    a, c = segs[n // 2]
+    top = (c[0] + math.sin(a) * (t / 2 + 0.0012), c[1] + math.cos(a) * (t / 2 + 0.0012), 0.03)
+    p.cyl(0.045, -0.0003, 0.0003, "Char", segs=14,
+          xf=T(*top) @ RZ(-a) @ RX(-math.pi / 2) @ RZ(0.4) @ T(0, 0, 0))
+    p.cyl(0.012, -0.0004, 0.0004, "Dark", segs=10,
+          xf=T(top[0] + 0.004, top[1] + 0.0002, 0.025) @ RZ(-a) @ RX(-math.pi / 2))
+    return centred([p])
+
+
 if __name__ == "__main__":
     for item_id, build in (("drone_rotor_motor", drone_rotor_motor),
                            ("walker_leg_actuator", walker_leg_actuator),
                            ("crawler_capacitor", crawler_capacitor),
                            ("dirigible_gas_valve", dirigible_gas_valve),
                            ("pylon_relay_coil", pylon_relay_coil),
-                           ("sorter_servo_pack", sorter_servo_pack)):
+                           ("sorter_servo_pack", sorter_servo_pack),
+                           ("robot_plate", robot_plate)):
         if wanted(item_id):
             item(item_id, build)

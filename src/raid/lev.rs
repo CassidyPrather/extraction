@@ -24,6 +24,7 @@ pub struct LevPlugin;
 impl Plugin for LevPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HandOver>()
+            .add_message::<HandOverLoaded>()
             .init_resource::<Handovers>()
             .add_systems(Update, (fit_hatch, hand_over, homecoming).chain());
     }
@@ -34,6 +35,16 @@ impl Plugin for LevPlugin {
 pub struct HandOver {
     pub id: String,
     pub condition: f32,
+}
+
+/// The same, a magazine or clip already filled: a gift that fires at once
+/// (the driver's SKS came with its clips empty, and nothing by raid 9 had
+/// shown how to strip a box into them).
+#[derive(Message, Clone, Debug)]
+pub struct HandOverLoaded {
+    pub id: String,
+    pub condition: f32,
+    pub rounds: u32,
 }
 
 /// The hatch in the bed's front wall, truck space: its centre (on the
@@ -80,7 +91,7 @@ enum Stage {
 /// What he's still to hand over, and where he is with it.
 #[derive(Resource, Default)]
 pub struct Handovers {
-    queue: VecDeque<HandOver>,
+    queue: VecDeque<(HandOver, Option<u32>)>,
     stage: Stage,
     t: f32,
     /// The item in his hand.
@@ -165,6 +176,7 @@ fn fit_hatch(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
 fn hand_over(
     mut commands: Commands,
     mut asked: MessageReader<HandOver>,
+    mut loaded: MessageReader<HandOverLoaded>,
     mut state: ResMut<Handovers>,
     time: Res<Time>,
     catalog: Res<Catalog>,
@@ -173,7 +185,16 @@ fn hand_over(
     mut hands: Query<(&mut Transform, &mut Visibility), With<LevHand>>,
     mut items: Query<&mut Transform, (With<Item>, Without<LevHand>)>,
 ) {
-    state.queue.extend(asked.read().cloned());
+    state.queue.extend(asked.read().cloned().map(|h| (h, None)));
+    state.queue.extend(loaded.read().map(|h| {
+        (
+            HandOver {
+                id: h.id.clone(),
+                condition: h.condition,
+            },
+            Some(h.rounds),
+        )
+    }));
     let Ok(truck) = trucks.single() else {
         return;
     };
@@ -199,7 +220,7 @@ fn hand_over(
         Stage::Reaching => {
             // The thing is in his hand from the start of the reach.
             if s.item.is_none()
-                && let Some(next) = s.queue.pop_front()
+                && let Some((next, rounds)) = s.queue.pop_front()
             {
                 if let Some(kind) = catalog.kind(&next.id) {
                     let def = catalog.get(kind);
@@ -219,6 +240,15 @@ fn hand_over(
                     commands
                         .entity(e)
                         .insert((RigidBodyDisabled, ColliderDisabled));
+                    if let Some(n) = rounds {
+                        let n = def.magazine.as_ref().map_or(n, |m| n.min(m.capacity));
+                        commands.entity(e).queue(move |mut it: EntityWorldMut| {
+                            if let Some(mut item) = it.get_mut::<Item>() {
+                                item.rounds = n;
+                                item.loads.fit(n);
+                            }
+                        });
+                    }
                     s.item = Some(e);
                     s.handed.push((next.id.clone(), e));
                 } else {
@@ -329,7 +359,23 @@ fn homecoming(
     opts: Res<crate::launch::LaunchOptions>,
     progression: Option<Res<crate::progression::Progression>>,
     mut heard_anna: Local<bool>,
+    mut set_off_from: Local<Option<u32>>,
 ) {
+    // Off the truck in a valley you've never raided, he says what's
+    // different there: once the raid's been counted (`count_raids`, in
+    // whichever order it runs), against the count at the camp.
+    if let Some(p) = &progression {
+        let here = p.0.raids_in(&opts.map);
+        if raid.phase == Phase::AtBase {
+            *set_off_from = Some(here);
+        } else if set_off_from.is_some_and(|n| here > n) {
+            *set_off_from = None;
+            let all = p.0.raids_by_map.iter().map(|(_, n)| n).sum();
+            if let Some(line) = super::lines::first_arrival(&opts.map, here, all) {
+                raid.say(line);
+            }
+        }
+    }
     let before = was.replace(raid.phase.clone());
     let home = matches!(before, Some(Phase::Extracting { .. })) && raid.phase == Phase::AtBase;
     if !home {

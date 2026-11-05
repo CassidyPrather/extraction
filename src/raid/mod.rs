@@ -47,6 +47,12 @@ pub const SURGE_LAST: f32 = 60.0;
 pub const TRUCK_TRANSIT: f32 = 120.0;
 /// Seconds the truck waits at a rendezvous before giving up.
 pub const TRUCK_WAIT: f32 = 300.0;
+/// The last call before the truck goes without you (s left of its wait).
+pub const LAST_CALL: f32 = 60.0;
+const _: () = assert!(
+    LAST_CALL < TRUCK_WAIT,
+    "every wait has room for its last call"
+);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Phase {
@@ -270,7 +276,12 @@ fn radio_calls(
     // A career's first job comes home from the gate it went out by, free:
     // the way back is the way it came, not across the valley to a
     // rendezvous (`docs/FIRST_HOUR.md`).
-    let first_job = progression.is_some_and(|p| p.0.done == 0);
+    // (And the second: a newcomer's gentle jobs all come home the way they
+    // went, or job 2 in Kettle was 75 m there and 506 m home with no fuel
+    // in the crate: Map design's lint.)
+    let done = progression.as_ref().map(|p| p.0.done);
+    let first_job = done == Some(0);
+    let free = done.is_some_and(extraction_core::progression::free_short_run);
     for call in calls.read() {
         match raid.phase {
             Phase::Out => {
@@ -285,7 +296,7 @@ fn radio_calls(
                     .markers_of(&MarkerKind::ShortExfil)
                     .any(|m| extraction_core::geom::dist(m.at, here) < 40.0);
                 if at_short {
-                    let mut paid = first_job;
+                    let mut paid = free;
                     for mut stash in &mut stashes {
                         let can = stash.contents.iter().copied().find(|e| {
                             items
@@ -303,6 +314,8 @@ fn radio_calls(
                         let n = raid.clock as u32;
                         raid.say(if first_job {
                             lines::FIRST_SHORT_RUN
+                        } else if free {
+                            lines::GENTLE_SHORT_RUN
                         } else {
                             lines::pick(lines::SHORT_RUN, n)
                         });
@@ -418,8 +431,20 @@ pub(crate) fn tick_raid(
                 raid.phase = Phase::TruckCalled { rv, eta };
             }
         }
-        Phase::TruckWaiting { rv, left } => {
-            let left = left - dt;
+        Phase::TruckWaiting { rv, left: was } => {
+            let left = was - dt;
+            // A minute to go: said before every departure without you, by
+            // radio, wherever you are.
+            if was > LAST_CALL && left <= LAST_CALL {
+                let name = rendezvous(&zone)
+                    .get(rv)
+                    .map_or_else(|| "gate".to_string(), |r| r.0.clone());
+                let n = raid.clock as u32;
+                raid.say(lines::fill_time(
+                    &lines::fill(lines::pick(lines::LAST_CALL, n), &name, 0.0, ""),
+                    LAST_CALL,
+                ));
+            }
             // Someone in the back: it doesn't leave them, it takes them
             // (as the bell would).
             let in_bed = aboard.iter().any(|(p, input)| {
@@ -642,19 +667,97 @@ pub(crate) fn drop_everything(world: &mut World) {
 mod tests {
     use super::*;
 
+    /// No truck goes without you unwarned: a minute before it does, it says
+    /// so over the radio (the five minutes said on arrival was all a
+    /// newcomer stuck on the way heard before "Can't stay"). At a
+    /// rendezvous and at the gate.
     #[test]
-    fn the_short_exfil_burns_a_can_of_fuel() {
-        assert!(short_exfil_burns_the_can(1), "the can was burnt");
+    fn the_truck_never_goes_without_its_last_call() {
+        for rv in [0, SHORT_EXFIL] {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(100),
+            ));
+            app.finish();
+            app.cleanup();
+            app.update();
+            // Out in the valley, nowhere near the truck's bed.
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let far = app.world().resource::<Zone>().on_ground(120.0, -60.0);
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = far;
+            app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+                rv,
+                left: LAST_CALL + 3.0,
+            };
+            let mut called = false;
+            let mut gone = false;
+            for _ in 0..(10 * 80) {
+                app.update();
+                let raid = app.world().resource::<Raid>();
+                called |= raid.log.iter().any(|(l, _)| {
+                    lines::LAST_CALL.iter().any(|p| {
+                        let tail = p.rsplit(". ").next().unwrap_or(p).trim_end_matches('"');
+                        l.contains(tail)
+                    })
+                });
+                if raid.phase == Phase::Out {
+                    gone = true;
+                    break;
+                }
+            }
+            assert!(gone, "rv {rv}: the truck never went");
+            assert!(called, "rv {rv}: it went without its last call");
+        }
     }
 
     #[test]
-    fn the_first_jobs_short_run_is_on_the_house() {
-        assert!(!short_exfil_burns_the_can(0), "the can was kept");
+    fn the_short_exfil_burns_a_can_of_fuel() {
+        let past = extraction_core::contracts::GENTLE_JOBS;
+        let (burnt, said) = short_exfil_burns_the_can(past);
+        assert!(burnt, "the can was burnt");
+        assert!(
+            said.iter().any(|l| lines::SHORT_RUN.contains(&l.as_str())),
+            "{said:?}"
+        );
+    }
+
+    /// The gentle jobs both come home free by the gate (job 2 in Kettle
+    /// was 75 m there and 506 m home to a rendezvous: Map design's lint).
+    #[test]
+    fn the_gentle_jobs_short_run_is_on_the_house() {
+        for done in 0..extraction_core::contracts::GENTLE_JOBS {
+            let (burnt, said) = short_exfil_burns_the_can(done);
+            assert!(!burnt, "job {}: the can was kept", done + 1);
+            // Said as it is: free, and no can claimed (Onboarding).
+            let line = if done == 0 {
+                lines::FIRST_SHORT_RUN
+            } else {
+                lines::GENTLE_SHORT_RUN
+            };
+            assert!(said.iter().any(|l| l == line), "job {}: {said:?}", done + 1);
+            assert!(
+                !said.iter().any(|l| lines::SHORT_RUN.contains(&l.as_str())),
+                "job {}: a can claimed",
+                done + 1
+            );
+        }
     }
 
     /// Calls the truck to the short exfil with a can in the stash, `done` jobs
-    /// into the career; true when the can went.
-    fn short_exfil_burns_the_can(done: u32) -> bool {
+    /// into the career; true when the can went, and what was said.
+    fn short_exfil_burns_the_can(done: u32) -> (bool, Vec<String>) {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -718,7 +821,14 @@ mod tests {
                 ..
             }
         ));
-        app.world().get_entity(can).is_err()
+        let said = app
+            .world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .map(|(l, _)| l.clone())
+            .collect();
+        (app.world().get_entity(can).is_err(), said)
     }
 
     /// The truck says how long it'll be, and that's how long it is: called

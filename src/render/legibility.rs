@@ -419,6 +419,12 @@ pub const ART: &[ArtText] = &[
     // A cassette player's nameplate and keys, a tape's A/B, a 78's label
     // (Radio & music): read in the hand.
     art("items/music.py", Need::Incidental, 0.35, "held in the hand"),
+    art(
+        "items/story_items.py",
+        Need::Incidental,
+        0.35,
+        "the job's thing in the hand",
+    ),
     // The piano's and harmonium's names on their name rails: standing at
     // the keys.
     art(

@@ -306,6 +306,63 @@ mod tests {
         }
     }
 
+    /// Job 1 then job 2 in one game session, no restart: the second job
+    /// still meets the broken walker. (The director's first look came on
+    /// job 1, found nowhere, and it never looked again: the Verifier's
+    /// second_hour, 4 November.)
+    #[test]
+    fn the_second_job_meets_it_in_the_same_session() {
+        use crate::raid::{Phase, Raid};
+        let mut app = app(marrow(true));
+        let zone = app.world().resource::<Zone>().clone();
+        let job = jobs(&zone)[0].clone();
+        let brokens = |app: &mut App| {
+            app.world_mut()
+                .run_system_once(|q: Query<(), With<Broken>>| q.iter().count())
+                .unwrap()
+        };
+        // Job 1: out, a raid, home.
+        app.insert_resource(crate::progression::Progression(Progress {
+            done: 0,
+            job: Some(job.clone()),
+            ..Default::default()
+        }));
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..90 * 3 {
+            app.update();
+        }
+        assert_eq!(brokens(&mut app), 0, "none on the first job");
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..10 {
+            app.update();
+        }
+        // Paid; job 2 on the card; out again.
+        app.insert_resource(crate::progression::Progression(Progress {
+            done: 1,
+            job: Some(job),
+            ..Default::default()
+        }));
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..90 * 3 {
+            app.update();
+        }
+        assert_eq!(
+            brokens(&mut app),
+            1,
+            "the second job's raid set out its broken walker"
+        );
+        // And only the one, raid after raid on the same job.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..10 {
+            app.update();
+        }
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..90 * 2 {
+            app.update();
+        }
+        assert_eq!(brokens(&mut app), 1, "one while it stands");
+    }
+
     /// On the second job the director sets it out first, and sends nothing
     /// else out while it stands (nothing armed comes to the newcomer's
     /// first fight, nor answers its shots); it's nearer the drop than any

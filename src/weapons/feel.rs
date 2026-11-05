@@ -336,7 +336,27 @@ pub struct Handling {
     pub buzz: f32,
     /// The action's moments heard since, for `handle_guns` to send.
     pub sounds: Vec<FireEvent>,
+    /// How heavy the last shot was ([`heft`]), fading: a heavy round's
+    /// shove takes the hold longer to settle.
+    pub heft: f32,
 }
+
+/// A shot's heft, 0..1: nothing up to a recoil of [`HEFT_FROM`] (every
+/// pistol, the 5.45s, the .22), all of it at [`HEFT_FULL`] (a
+/// twelve-gauge). A heavy round's energy is felt as a shove and a slower
+/// recovery, not as more rise.
+pub fn heft(impulse: f32) -> f32 {
+    ((impulse - HEFT_FROM) / (HEFT_FULL - HEFT_FROM)).clamp(0.0, 1.0)
+}
+pub const HEFT_FROM: f32 = 2.5;
+pub const HEFT_FULL: f32 = 5.0;
+/// At full heft: the hold's spring this much softer (it settles in about
+/// 1.7 times as long: a twelve-gauge's 0.24 s to a pistol's 0.14), and the
+/// shove this much longer.
+pub const HEFT_SLOW: f32 = 0.7;
+pub const HEFT_PUSH: f32 = 1.6;
+/// Seconds a shot's heft takes to fade.
+pub const HEFT_FADE: f32 = 0.5;
 
 /// A share of a shot's kick that lands later: in `at` seconds, these
 /// rates, felt as `buzz` in the hand.
@@ -370,6 +390,10 @@ pub enum Cycling {
     Carrier(f32),
     /// An open bolt: it slams home and fires, then runs back.
     OpenBolt(f32),
+    /// A carrier that runs back and stays there: on its stop on an empty
+    /// magazine, or on a case stuck in the port. No slam home: what tells
+    /// you you're empty (or jammed) is that it doesn't come back.
+    Held(f32),
 }
 
 impl Shot {
@@ -396,6 +420,11 @@ pub fn shot_of(gun: &Gun, shouldered: bool) -> Shot {
         shove: def.kick.shove.max(0.0),
         action: match def.action {
             ActionKind::SemiAuto if def.open_bolt => Cycling::OpenBolt(cycle),
+            ActionKind::SemiAuto
+                if gun.firearm.locked_back || gun.firearm.malfunction.is_some() =>
+            {
+                Cycling::Held(cycle)
+            }
             ActionKind::SemiAuto => Cycling::Carrier(cycle),
             _ => Cycling::None,
         },
@@ -412,9 +441,15 @@ impl Handling {
     pub fn shot(&mut self, impulse: f32, gun_mass: f32, yaw: f32, shot: Shot) {
         let v = impulse / self.hold.mass(gun_mass).max(0.1);
         let walk = shot.walk + (1.0 - shot.walk.abs()) * yaw;
-        let up = KICK_RISE * v * shot.climb;
+        // A heavy round softens the hold's spring for a moment: its rise
+        // comes in at the same height (the softer spring would lift it
+        // further), its shove further back.
+        let h = heft(impulse);
+        self.heft = self.heft.max(h);
+        let soft = 1.0 + HEFT_SLOW * h;
+        let up = KICK_RISE * v * shot.climb / soft;
         let rise = Vec2::new(up, up * KICK_YAW * walk);
-        let push = KICK_BACK * v * shot.push;
+        let push = KICK_BACK * v * shot.push * (1.0 + HEFT_PUSH * h) / soft;
         let lead = match shot.action {
             Cycling::OpenBolt(_) => {
                 // The bolt's mass slams forward first: a dip, then the shot.
@@ -443,7 +478,9 @@ impl Handling {
                 });
             }
         }
-        if let Cycling::Carrier(cycle) | Cycling::OpenBolt(cycle) = shot.action {
+        if let Cycling::Carrier(cycle) | Cycling::OpenBolt(cycle) | Cycling::Held(cycle) =
+            shot.action
+        {
             self.beats.push(Beat {
                 at: lead + cycle * CARRIER_BACK_AT,
                 rise: rise * CARRIER_BACK,
@@ -480,7 +517,8 @@ impl Handling {
 
     /// Integrates the spring for `dt` seconds.
     pub fn settle(&mut self, dt: f32) {
-        let w = self.hold.recover();
+        let w = self.hold.recover() / (1.0 + HEFT_SLOW * self.heft);
+        self.heft = (self.heft - dt / HEFT_FADE).max(0.0);
         let c = 2.0 * self.hold.damping() * w;
         // Semi-implicit Euler in small steps: stable for these stiffnesses.
         let n = (dt / 0.004).ceil().max(1.0) as usize;
@@ -1019,6 +1057,81 @@ mod one_hand_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A shot through a held gun's spring: its peak rise (rad) and push
+    /// (m), and the seconds to settle back within 15% of the rise's peak.
+    fn kick(impulse: f32, mass: f32, hold: Hold) -> (f32, f32, f32) {
+        let mut h = Handling {
+            hold,
+            ..Default::default()
+        };
+        h.shot(impulse, mass, 0.0, Shot::PLAIN);
+        let (mut rise, mut push, mut back) = (0.0f32, 0.0f32, None);
+        for i in 1..=180 {
+            h.settle(1.0 / 90.0);
+            rise = rise.max(h.rise.x);
+            push = push.max(h.push);
+            if back.is_none() && h.rise.x < rise * 0.15 && h.rise.x < rise {
+                back = Some(i as f32 / 90.0);
+            }
+        }
+        (rise, push, back.unwrap_or(2.0))
+    }
+
+    /// A heavy round's energy reads as a shove and a slower settle, not as
+    /// more rise; a light one's kick is as it was. For every gun, a
+    /// heavier load pushes no less and settles no faster; across the guns,
+    /// the settle follows the round's impulse; and a twelve-gauge's peak
+    /// rise is what the same gun speed gave before.
+    #[test]
+    fn a_heavy_rounds_kick_is_a_shove_and_a_slow_settle() {
+        let catalog = crate::items::Catalog::load();
+        let two = Hold {
+            hands: 2,
+            ..Default::default()
+        };
+        let mut settles = Vec::new();
+        for (_, def) in catalog.iter() {
+            let Some(f) = &def.firearm else {
+                continue;
+            };
+            let (r, m) = (f.recoil, def.mass);
+            let mut last = (0.0f32, 0.0f32);
+            for k in [0.5, 1.0, 1.5] {
+                let (_, push, back) = kick(r * k, m, two);
+                assert!(
+                    push >= last.0 - 1e-5 && back >= last.1 - 1e-5,
+                    "{} at {:.2}: push {push:.4} settle {back:.3} after {last:?}",
+                    def.id,
+                    r * k
+                );
+                last = (push, back);
+            }
+            if r <= 2.2 {
+                assert_eq!(heft(r), 0.0, "{}: a light round is as it was", def.id);
+            }
+            settles.push((r, kick(r, m, two).2, def.id.clone()));
+        }
+        settles.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for w in settles.windows(2) {
+            assert!(w[1].1 >= w[0].1 - 1e-5, "settle by impulse: {w:?}");
+        }
+        // The same gun speed (a two-handed hold adds 1.5 kg), light and
+        // heavy: the rise's peak the same within 15%, the push longer, the
+        // settle slower, a twelve-gauge's in 0.2 to 0.3 s.
+        let (light_rise, light_push, light_back) = kick(2.5, 0.85, two);
+        let (heavy_rise, heavy_push, heavy_back) = kick(5.0, 3.2, two);
+        let ratio = heavy_rise / light_rise;
+        assert!((0.85..1.15).contains(&ratio), "rise ratio {ratio:.2}");
+        assert!(
+            heavy_push > light_push * 1.8,
+            "push {light_push:.4} to {heavy_push:.4}"
+        );
+        assert!(
+            (0.2..0.3).contains(&heavy_back) && heavy_back > light_back,
+            "settles in {light_back:.3} s light, {heavy_back:.3} s heavy"
+        );
+    }
 
     /// Peak muzzle rise of one shot, radians.
     fn peak(hold: Hold, impulse: f32, mass: f32) -> f32 {
@@ -2181,6 +2294,31 @@ pub(crate) mod vr_tests {
         assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 5);
     }
 
+    /// A clip's rounds go down one after another as the thumb pushes it:
+    /// part way, some of them; home, all ten. (A full clip stripped on the
+    /// one tick it seated.)
+    #[test]
+    fn a_clip_strips_a_round_at_a_time() {
+        let mut r = hold("sks", false, false);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.internal_rounds = 0;
+            g.firearm.set_bolt_travel(1.0);
+            g.firearm.locked_back = true;
+        }
+        take(&mut r, "sks_clip", 10);
+        let (port, up) = load_port(&mut r);
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, port + up * 0.05, 15);
+        glide(&mut r, port + up * 0.05, port + up * 0.03, 8);
+        r.vr.step(2);
+        let part = gun_mut(&mut r).firearm.internal_rounds;
+        assert!((1..10).contains(&part), "part way down: {part} in");
+        glide(&mut r, port + up * 0.03, port + up * 0.015, 8);
+        r.vr.step(2);
+        assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 10, "home");
+    }
+
     /// The double: thumb the lever to break it, bring a shell to each
     /// barrel, thumb it shut: two in.
     #[test]
@@ -2323,6 +2461,69 @@ pub(crate) mod vr_tests {
             }
             r.vr.step(2);
         }
+    }
+
+    /// What a gun said, in order.
+    #[derive(Resource, Default)]
+    struct Said(Vec<FireEvent>);
+
+    /// The shot that empties a gun whose slide or carrier holds open on
+    /// empty (the PM, SKS, SVD) runs it back and leaves it there: nothing
+    /// slams home, heard or felt, so you know you're empty. A shot with
+    /// rounds left slams home as ever.
+    #[test]
+    fn the_shot_that_empties_it_leaves_the_slide_back_and_nothing_slams_home() {
+        let mut bad = Vec::new();
+        for id in ["pm_pistol", "sks", "svd"] {
+            for rounds in [1u32, 2] {
+                let long = id != "pm_pistol";
+                let mut r = hold(id, long, long);
+                r.vr.app.init_resource::<Said>().add_systems(
+                    Update,
+                    |mut ev: MessageReader<GunEvent>, mut said: ResMut<Said>| {
+                        said.0.extend(ev.read().map(|e| e.event.clone()));
+                    },
+                );
+                {
+                    let mut g = gun_mut(&mut r);
+                    let f = &mut g.firearm;
+                    match f.def.magazine_family.clone() {
+                        Some(family) => {
+                            let _ = f.insert_magazine(Magazine {
+                                family,
+                                capacity: rounds,
+                                rounds,
+                                ..Default::default()
+                            });
+                        }
+                        None => f.internal_rounds = rounds,
+                    }
+                    f.set_bolt_travel(1.0);
+                    f.release_bolt();
+                    while f.fire_mode() != FireMode::Semi {
+                        f.cycle_mode();
+                    }
+                    f.condition = 1.0;
+                    f.fouling = 0.0;
+                }
+                r.vr.step(2);
+                r.vr.app.world_mut().resource_mut::<Said>().0.clear();
+                assert_eq!(fire(&mut r, 1, true).len(), 1, "{id}: a shot");
+                r.vr.step(60);
+                let said = r.vr.app.world().resource::<Said>().0.clone();
+                let home = said.contains(&FireEvent::CarrierHome);
+                let locked = gun_mut(&mut r).firearm.locked_back;
+                // One round chambered and `rounds - 1` in the feed.
+                let empty = rounds == 1;
+                if locked != empty || home == empty {
+                    bad.push(format!(
+                        "{id}, {} left: locked back {locked}, slammed home {home} ({said:?})",
+                        rounds - 1
+                    ));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// The Nagant by hand: A swings the gate open; a round to the gate

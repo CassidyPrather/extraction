@@ -845,11 +845,6 @@ mod tests {
 
     /// Faults waiting on their owners, by text in their line.
     const KNOWN: &[&str] = &[
-        // Marrow's road climbs 0.2 m per metre through its gate: the +X
-        // post, on the road's cells, stands 26 mm over its downhill side
-        // (`terrain::level_posts` moves a road's cells 5 cm at most). An
-        // easier grade through the gate would put it down (Map design).
-        "marrow_creek quarantine_gate: gate_post",
         // By design: a tub's wheel flanges hang inside the rails, 3 cm
         // below the treads on the rails' heads, so its lowest points are
         // over the floor between them.

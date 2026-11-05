@@ -56,8 +56,12 @@ pub struct Drone {
     /// and when it last was in it (a search between is the same fight)...
     pub engaged_at: f32,
     pub last_engaged: f32,
-    /// ...and, broken off, till when it leaves fighting alone.
+    /// ...and, broken off, till when it leaves fighting alone...
     pub broke_off_until: f32,
+    /// ...and whom it fought last, and till when it leaves them be
+    /// ([`GIVE_UP_FOR`]).
+    pub fought: Option<Entity>,
+    pub gave_up_until: f32,
     /// Seconds locked on without a shot (its gun swung off you, a pause):
     /// past [`RETELL`] it locks on afresh, chirp and all, before it fires
     /// again (`lose_a_quiet_lock`).
@@ -122,8 +126,17 @@ pub fn lose_a_quiet_lock(d: &mut Drone, dt: f32) -> bool {
 pub const RELOCKS: u8 = 3;
 pub const FIGHT_FOR: f32 = 60.0;
 pub const BROKEN_OFF: f32 = 60.0;
-/// Out of a fight this long (s), the next one's a new one.
+/// Out of a fight this long (s), the next one's a new one; with the same
+/// one, it's the same fight however long they hid between (someone who
+/// ducked under a roof after each lock was a fresh fight every time, never
+/// worn out: first_jobs_cautious raid 4).
 pub const FIGHT_GAP: f32 = 20.0;
+/// ...up to this long out of it (s); later than that, back again, it's a
+/// new fight even with the same one.
+pub const FIGHT_MEMORY: f32 = 120.0;
+/// Broken off a fight, it leaves that one be this long (s): its job, not
+/// them, though it sees them (giving up means it).
+pub const GIVE_UP_FOR: f32 = 300.0;
 
 /// A drone settling its gun on someone, before the first burst: the chirp
 /// that tells you to get behind something. It holds still while it does
@@ -206,6 +219,8 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 engaged_at: -1.0,
                 last_engaged: -1.0,
                 broke_off_until: 0.0,
+                fought: None,
+                gave_up_until: 0.0,
                 quiet: 0.0,
                 warning_left: 0,
                 last_shot: f32::NEG_INFINITY,
@@ -416,20 +431,27 @@ fn drone_brain(
         // Alarm overrides the job.
         let leaving = matches!(*brain, Brain::Leave { .. });
         // Broken off a fight it wasn't winning: its job, not you, a while.
-        if now >= d.broke_off_until {
+        let given_up = aware.target.is_some() && aware.target == d.fought && now < d.gave_up_until;
+        if now >= d.broke_off_until && !given_up {
             search::react(&mut brain, aware, ENGAGE_AT);
             search::lost_sight(&mut brain, aware, PATIENCE, pos);
         }
         if matches!(*brain, Brain::Engage) {
-            // (Lost you and looking: the same fight, back at it.)
-            if d.engaged_at < 0.0 || now - d.last_engaged > FIGHT_GAP {
+            // (Lost you and looking, or you hid a while: the same fight
+            // with the same one, back at it.)
+            let same = aware.target.is_some()
+                && aware.target == d.fought
+                && now - d.last_engaged < FIGHT_MEMORY;
+            if d.engaged_at < 0.0 || (!same && now - d.last_engaged > FIGHT_GAP) {
                 d.engaged_at = now;
                 d.locks_unhit = 0;
             }
+            d.fought = aware.target.or(d.fought);
             d.last_engaged = now;
             let worn = d.locks_unhit >= RELOCKS && d.lock == 0.0 && d.burst_left == 0;
             if worn || now - d.engaged_at > FIGHT_FOR {
                 d.broke_off_until = now + BROKEN_OFF;
+                d.gave_up_until = now + GIVE_UP_FOR;
                 d.engaged_at = -1.0;
                 // Back from its job it starts from nothing: a fresh lock,
                 // chirp and all, before its first round (`RETELL`).
@@ -524,8 +546,18 @@ fn drone_brain(
                     Vec3::new(h.x, zone.ground(h.x, h.z) + DOORWAY_ALTITUDE, h.z)
                 });
                 if let Some(h) = descending.filter(|h| h.distance(pos) > 1.5) {
-                    if let Brain::Search { left, .. } = &mut *brain {
-                        *left -= dt;
+                    // Its time runs out here too: one held off a doorway
+                    // (an eave over it) hung there for twenty minutes.
+                    let out = match &mut *brain {
+                        Brain::Search { left, .. } => {
+                            *left -= dt;
+                            *left <= 0.0
+                        }
+                        _ => false,
+                    };
+                    if out {
+                        search::give_up(&mut brain, &mut job);
+                        continue;
                     }
                     // Over it first, then down (not low across the yard).
                     let over = Vec2::new(h.x - pos.x, h.z - pos.z).length() < 4.0;
@@ -848,6 +880,8 @@ mod tests {
             engaged_at: -1.0,
             last_engaged: -1.0,
             broke_off_until: 0.0,
+            fought: None,
+            gave_up_until: 0.0,
         };
         let dt = 1.0 / 90.0;
         // Bursts: the gap between them, then a shot (which resets `quiet`).
@@ -1168,6 +1202,37 @@ mod tests {
         assert!(
             !matches!(app.world().get::<Brain>(drone), Some(Brain::Engage)),
             "still fighting"
+        );
+    }
+
+    /// Giving up means it: someone who ducks under cover after each lock
+    /// and comes out again 22 s later (past [`FIGHT_GAP`]) isn't a fresh
+    /// fight each time, locked over and over. It locks on at most
+    /// [`RELOCKS`] times, breaks off, and leaves them be for
+    /// [`GIVE_UP_FOR`] (first_jobs_cautious raid 4: re-locked 20 times in
+    /// 12 minutes under a roof and out, till it missed the truck).
+    #[test]
+    fn a_drone_that_gives_up_on_you_means_it() {
+        let (mut app, player, _drone, at) = drone_on_you();
+        let mut hidden_until = 0.0f32;
+        let mut seen_locks = 0;
+        for i in 0..90 * 60 * 5 {
+            let t = app.world().resource::<Time>().elapsed_secs();
+            let locks = app.world().resource::<Fight>().locks.len();
+            if locks > seen_locks {
+                // Under cover the moment it locks, out again 22 s on.
+                seen_locks = locks;
+                hidden_until = t + 22.0;
+            }
+            step(&mut app, player, at, t >= hidden_until, i);
+        }
+        let f = app.world().resource::<Fight>();
+        assert!(f.shots.is_empty(), "it fired: {:?}", f.shots);
+        assert!(
+            f.locks.len() <= RELOCKS as usize,
+            "locked on {} times in 5 minutes: {:?}",
+            f.locks.len(),
+            f.locks
         );
     }
 

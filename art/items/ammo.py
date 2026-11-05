@@ -51,6 +51,7 @@ TIPS = {
     "ap": [(TIP, "Black")],                         # 7N22: black
     "api": [(TIP + BAND, "Red"), (TIP, "Black")],    # BZ, B-32: black over red
     "tracer": [(TIP, "Leaf")],                       # 7T3, T-45, T-46: green
+    "sub": [(TIP + BAND, "Leaf"), (TIP, "Black")],   # 7U1, 7.62 US: black over green
 }
 
 
@@ -460,6 +461,16 @@ TYPED = {
     "ammo_762r_ap": lambda: ammo_762r("B-32", "Black"),
     "ammo_762r_tracer": lambda: ammo_762r("T-46", "Leaf"),
     "ammo_12ga_slug": lambda: ammo_12ga("Blue", "ПУЛЯ"),
+    # Subsonic: black over green tips, a blue band on the box (the tracer
+    # box's is green, the AP's black).
+    "round_545_us": typed_round(C545, "sub", 14),
+    "round_762x39_us": typed_round(C762X39, "sub", 14),
+    "ammo_545_us": lambda: ammo_545("7U1", lambda k: "sub", "Blue"),
+    "ammo_762x39_us": lambda: ammo_762x39("7.62 US", "sub", "Blue"),
+    # Surplus: old lots, dated where the calibre was, the band gone to rust
+    # or tar.
+    "ammo_545_surplus": lambda: ammo_545("1979", stripe="Rusty"),
+    "ammo_762r_surplus": lambda: ammo_762r("1943", "Char"),
 }
 
 

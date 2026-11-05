@@ -100,6 +100,36 @@ pub struct Collapse {
     seed: u32,
 }
 
+/// The hips a walker's wreck gives its servo packs up at (`salvage`):
+/// the side whose two legs came through soundest (hips round the orb in
+/// turn, so a side is two in a row), both of them alive; else the two
+/// soundest anywhere. That side comes down rolled up and bare
+/// ([`collapse`]): belly down, a walker's hips are under it, and from
+/// standing you couldn't see that its servos come off (Models' wreck
+/// pass, 4 November).
+pub fn servo_hips(legs: [f32; 4]) -> Vec<usize> {
+    let side = (0..4)
+        .map(|i| (i, (i + 1) % 4))
+        .filter(|(a, b)| legs[*a] > 0.0 && legs[*b] > 0.0)
+        .max_by(|x, y| (legs[x.0] + legs[x.1]).total_cmp(&(legs[y.0] + legs[y.1])));
+    if let Some((a, b)) = side {
+        return vec![a, b];
+    }
+    let mut sound: Vec<usize> = (0..4).filter(|i| legs[*i] > 0.0).collect();
+    sound.sort_by(|a, b| legs[*b].total_cmp(&legs[*a]));
+    sound.truncate(super::salvage::MOST_SERVOS);
+    sound
+}
+
+/// How fast a walker's wreck rolls its servo side up as it drops (rad/s
+/// about the level axis along that side).
+pub const ROLL_UP: f32 = 3.5;
+
+/// A drone that hits goes up this fast (m/s)...
+pub const DRONE_HOP: f32 = 2.6;
+/// ...turning over this fast (rad/s), onto its back.
+pub const DRONE_FLIP: f32 = 9.0;
+
 /// A drone going down: what lift its rotors still give spins it round as
 /// it falls, trailing smoke, until it hits the ground.
 #[derive(Component, Debug)]
@@ -121,6 +151,7 @@ impl Plugin for WreckPlugin {
                     ledger_strays,
                     break_up,
                     collapse,
+                    roll_to_rest,
                     spiral,
                     settle,
                     tidy_joints,
@@ -575,15 +606,26 @@ fn collapse(
         &mut Collapse,
         &Transform,
         Option<&super::anim::Gait>,
+        Option<&WreckLegs>,
+        &mut AngularVelocity,
     )>,
     mut impacts: MessageWriter<WreckImpact>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut c, t, gait) in &mut falling {
+    for (e, mut c, t, gait, legs, mut spin) in &mut falling {
         let before = c.t;
         c.t += dt;
         let crossed = |at: f32| before < at && c.t >= at;
+        let servos = legs.map(|l| servo_hips(l.0)).unwrap_or_default();
+        if crossed(0.05) && servos.len() == 2 {
+            // Roll its servo side up as it drops: the level axis along
+            // that side, turning the side's hips up and out.
+            let shape = gait.map_or(super::anim::Shape::Orb, |g| g.shape);
+            let side = t.rotation * (shape.hip(servos[0]) + shape.hip(servos[1]));
+            let out = Vec3::new(side.x, 0.0, side.z).normalize_or(Vec3::X);
+            spin.0 += out.cross(Vec3::Y) * ROLL_UP;
+        }
         if crossed(0.45) {
             impacts.write(WreckImpact {
                 at: t.translation,
@@ -599,10 +641,20 @@ fn collapse(
             }
         }
         if crossed(0.8) {
-            // Two more tear away (the seed picks which), so no two wrecks
-            // lie the same.
-            for k in [c.seed % 4, (c.seed / 4 + 1 + c.seed % 4) % 4] {
-                if let Some((joint, _, _)) = c.hips[k as usize] {
+            // The rolled-up side's legs tear away, baring its hips' servos
+            // (the rest stay on under it, propping it on its side); without
+            // one, two more go as the seed picks, so no two wrecks lie the
+            // same.
+            let tear: Vec<usize> = if servos.len() == 2 {
+                servos.clone()
+            } else {
+                vec![
+                    (c.seed % 4) as usize,
+                    ((c.seed / 4 + 1 + c.seed % 4) % 4) as usize,
+                ]
+            };
+            for k in tear {
+                if let Some((joint, _, _)) = c.hips[k] {
                     commands.entity(joint).try_despawn();
                 }
             }
@@ -649,6 +701,12 @@ fn spiral(
             impacts.write(WreckImpact { at: pos, size: 0.5 });
             let seed = seed.map_or(0, |s| s.low());
             let up = t.rotation * Vec3::Y;
+            // It hits on a rotor arm and goes over onto its back: belly
+            // up, its plate (under the belly, `armour`) to the sky, where
+            // you can see it and get a crowbar to it.
+            let tip = Vec3::new(up.x, 0.0, up.z).normalize_or(t.rotation * Vec3::X);
+            *forces.linear_velocity_mut() = v * 0.3 + Vec3::Y * DRONE_HOP;
+            *forces.angular_velocity_mut() = tip.cross(Vec3::Y) * -DRONE_FLIP;
             let mut ids = vec![spawn_piece(
                 &mut commands,
                 (
@@ -703,6 +761,107 @@ fn spiral(
         let tilt = up.angle_between(Vec3::Y);
         let axis = Vec3::Y.cross(up).normalize_or(t.rotation * Vec3::X);
         forces.apply_torque(axis * (0.45 - tilt) * 2.5);
+    }
+}
+
+/// The side a wreck comes to rest on (in its own space): of every way
+/// out of it, the one furthest from all that comes off it (`dirs`), so
+/// nothing you'd take is under it.
+pub fn bare_side(dirs: &[Vec3]) -> Vec3 {
+    // (A spiral of directions round the sphere, evenly spread.)
+    let n = 256;
+    (0..n)
+        .map(|i| {
+            let y = 1.0 - 2.0 * (i as f32 + 0.5) / n as f32;
+            let r = (1.0 - y * y).sqrt();
+            let a = i as f32 * 2.399_963;
+            Vec3::new(r * a.cos(), y, r * a.sin())
+        })
+        .min_by(|a, b| {
+            let near = |d: &Vec3| dirs.iter().map(|p| d.dot(*p)).fold(-1.0f32, f32::max);
+            near(a).total_cmp(&near(b))
+        })
+        .unwrap_or(Vec3::NEG_Y)
+}
+
+/// What comes off a walker's wreck, as ways out of its orb: its plates,
+/// its cell, its gun pod on top, and the servo packs at the hips its legs
+/// came through on (`salvage`).
+pub fn walker_salvage_dirs(legs: [f32; 4]) -> Vec<Vec3> {
+    let mut dirs: Vec<Vec3> = (0..super::armour::WALKER_PLATES.len())
+        .map(super::armour::walker_plate_dir)
+        .collect();
+    dirs.push(super::salvage::CELL_AT.normalize());
+    dirs.push(Vec3::Y);
+    for i in servo_hips(legs) {
+        dirs.push(super::anim::Shape::Orb.hip(i).normalize());
+    }
+    dirs
+}
+
+/// A wreck's bare side within this of straight down (rad) is let come to
+/// rest.
+pub const REST_WITHIN: f32 = 0.2;
+/// How hard it's rolled there (N·m a radian short, at a walker's size)...
+const ROLL_TORQUE: f32 = 260.0;
+/// ...a drone's.
+const DRONE_ROLL_TORQUE: f32 = 40.0;
+/// How hard its rolling is braked (N·m a rad/s), a walker's and a drone's.
+const ROLL_BRAKE: f32 = 70.0;
+const DRONE_ROLL_BRAKE: f32 = 6.0;
+/// A wreck is rolled only this long into settling (s): a walker pinned
+/// in a corner stays as it lies.
+const ROLL_FOR: f32 = 4.0;
+
+/// A wreck rocks over as it settles onto its bare side ([`bare_side`]):
+/// a walker onto the side with nothing on it, its servo hips up; a drone
+/// onto its back, its belly plate up. As it falls it lies how it lands;
+/// this is the last of its rolling, so you can see from standing what
+/// comes off it (Models' wreck pass, 4 November: belly down, a walker's
+/// hips were under it).
+#[allow(clippy::type_complexity)]
+fn roll_to_rest(
+    mut wrecks: Query<
+        (
+            &Robot,
+            &Transform,
+            &Settling,
+            Option<&WreckLegs>,
+            Option<&super::anim::Gait>,
+            Has<Drone>,
+            Forces,
+        ),
+        With<Broken>,
+    >,
+) {
+    for (robot, t, s, legs, gait, drone, mut forces) in &mut wrecks {
+        if !robot.wrecked || s.age > ROLL_FOR {
+            continue;
+        }
+        // (A crawler's and a hound's bodies are a walker's, smaller.)
+        let bare = if drone {
+            Vec3::Y
+        } else if let Some(legs) = legs {
+            bare_side(&walker_salvage_dirs(legs.0))
+        } else {
+            continue;
+        };
+        let (k, brake) = if drone {
+            (DRONE_ROLL_TORQUE, DRONE_ROLL_BRAKE)
+        } else {
+            let s5 = gait.map_or(1.0, |g| g.size).powi(5);
+            (ROLL_TORQUE * s5, ROLL_BRAKE * s5)
+        };
+        let n = t.rotation * bare;
+        let off = n.angle_between(Vec3::NEG_Y);
+        // Braked as it rolls, so it comes round to it and stops, not over.
+        let w = forces.angular_velocity();
+        if off <= REST_WITHIN {
+            forces.apply_torque(-w * brake);
+            continue;
+        }
+        let axis = n.cross(Vec3::NEG_Y).normalize_or(t.rotation * Vec3::X);
+        forces.apply_torque(axis * k * off.min(1.0) - w * brake);
     }
 }
 

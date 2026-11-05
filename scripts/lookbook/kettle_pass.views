@@ -1,6 +1,6 @@
 # Kettle Pass lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m; ~h over the ground; =y as given, underground too).
 k01_gate        93.3,0,190.6,345.0,-1     # from the insertion, up the valley
-k02_row         -2.6,0,141.7,0.0,-3         # Miners' Row
+k02_row         -11.0,0,150.0,0.0,-3        # Miners' Row, the church past the log pile (at -2.6,141.7 the eye was inside the pile: black)
 k03_road        30.0,0,0.0,0.0,4           # up toward the pass
 k04_beck        -84.4,0,46.1,240.0,-6     # Kettle Beck
 k05_quarry      104.6,0,15.2,28.0,-6       # into the quarry (5 m west of the spruce clump since the forest reshuffled)
