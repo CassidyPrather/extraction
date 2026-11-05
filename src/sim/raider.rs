@@ -2718,7 +2718,9 @@ fn indoor_path(
     let a = if plan.grid.walkable(here.to_array()) {
         here
     } else {
-        near_walkable_same_side(plan, here).unwrap_or(here)
+        // (Out to 3 m: a front's strip the plan shuts, by a porch's
+        // steps, can be that deep.)
+        near_walkable_same_side_within(plan, here, 3.0).unwrap_or(here)
     };
     let path = if through_held {
         plan.path_through_held(a, goal)?
@@ -2814,11 +2816,16 @@ fn indoor_path(
 /// Wedged in a corner, the nearest walkable cell can be through the wall:
 /// the nearest one on the same side of the footprint's edge instead.
 fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
+    near_walkable_same_side_within(plan, from, 1.5)
+}
+
+/// As [`near_walkable_same_side`], looking up to `metres` off.
+fn near_walkable_same_side_within(plan: &BuildingPlan, from: Vec2, metres: f32) -> Option<Vec2> {
     let g = &plan.grid;
     let within = |p: Vec2, pad: f32| p.x.abs() < plan.half.x + pad && p.y.abs() < plan.half.y + pad;
     let inside = within(from, 0.0);
     let (ci, cj) = g.cell_of(from.to_array())?;
-    let r = (1.5 / g.cell).ceil() as i64;
+    let r = (metres / g.cell).ceil() as i64;
     let mut best: Option<(f32, Vec2)> = None;
     for dj in -r..=r {
         for di in -r..=r {
@@ -5058,21 +5065,18 @@ mod run_tests {
                         };
                         let next = plan.to_local(Vec3::new(to.x, from.y, to.y)).xz();
                         // Into the footprint from outside it, with no
-                        // doorway on the way, over cells the plan has shut
-                        // (a wall; not an open bay), past the start's own.
-                        let len = last.distance(next);
-                        // (A wall, the body's clearance round it, is 0.2 m
-                        // of shut cells in a row at least; a line clipping
-                        // a cell's corner crosses a few centimetres.)
-                        let mut run = 0.0f32;
-                        let mut walled = false;
-                        let mut d = 0.4;
-                        while d < len {
-                            let shut = !g.walkable(last.lerp(next, d / len).to_array());
-                            run = if shut { run + 0.05 } else { 0.0 };
-                            walled |= run >= 0.2;
+                        // doorway on the way, over a wall: where it crosses
+                        // the footprint's edge the plan has shut the cells
+                        // (a doorway's and an open bay's are floor).
+                        let len = last.distance(next).max(1e-3);
+                        let mut d = 0.0;
+                        while d < len && !inside(last.lerp(next, d / len), 0.0) {
                             d += 0.05;
                         }
+                        let walled = [-0.1, 0.0, 0.1].iter().all(|o| {
+                            let q = last.lerp(next, ((d + o) / len).clamp(0.0, 1.0));
+                            !g.walkable(q.to_array())
+                        });
                         if !inside(last, 0.0)
                             && inside(next, 0.3)
                             && plan.doors_on(last, next).is_empty()
