@@ -249,6 +249,39 @@ for you.
   copses, walls, log piles, rock fields, the next house. A bend in a road
   is cover from the far end of it.
 
+## Breadcrumbs
+
+Every reward off the ways a raid walks is cued from them
+(`map_breadcrumbs`, held by `every_reward_is_cued_from_the_walked_ways`).
+The rewards: caches (loot markers), notes, terminals, the valley's key,
+offerings, artifact fields, the places jobs send you, staged scenes
+(`assets/data/scenes.ron`). The walked ways: the main routes, the first
+jobs' walks there and home, each place's way home
+(`map_lint::routed_ways`). A reward within 12 m of one (`ON_PATH`) is on
+it. Anything further needs one of:
+
+- **a silhouette**: its building, or one within 12 m of it
+  (`CONTAINER`), 1.5 m tall or more, in sight within 90 m;
+- **its own shape**: an artifact field's sparks (judged 3 m up, within
+  50 m), an offering's figures (1.8 m, within 60 m); a reward within
+  30 m of a seen artifact field is found by going to the field;
+- **a lamp**: a landmark's, within 30 m of it, seen within 250 m;
+- **a trail**: a road or path within 8 m of it that leaves a walked way;
+- **a sign**: within 60 m of it, read from a walked way.
+
+Sight is over the ground and past buildings, not through woods or fog:
+look at the frames from the route before trusting the gauge
+(`probe_breadcrumbs` prints every reward's cue, the uncued worst first).
+Smoke and sound are the game's, not the map's, and aren't counted.
+
+Fix an uncued reward with the smallest cue that fits its story, never a
+signpost where a fence or a shape would do: a cache in the open gets the
+thing its name says (the shot-firer's store a magazine hut, the farm
+workshop its woodpile, the depot's stock pallet a lorry left in the
+yard); a thing on a ridge is moved to the lip, where it stands on the
+skyline (Kettle's cairn); a thing in the trees gets a worn path off the
+way (Marrow's tag office desk).
+
 ## Points of interest, density and pacing
 
 A point of interest (a `Poi` marker) is somewhere worth the walk: a
