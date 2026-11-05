@@ -59,6 +59,37 @@ mod tests {
             };
             let post_on = run(eye.y - 0.0015, front + 0.02, &|z| (z - front).abs() < 0.015);
             let rear_on = run(eye.y - 0.0005, eye.z, &|z| z > front + 0.03);
+            // The rear sight's top beside the notch: the highest thing
+            // between the eye and the front sight, within 1.2 cm of the line.
+            let rear_top = tris
+                .iter()
+                .flatten()
+                .filter(|p| {
+                    p.z < eye.z + 0.01
+                        && p.z > front + 0.03
+                        && (p.x - eye.x).abs() < 0.012
+                        && p.y < eye.y + 0.01
+                })
+                .map(|p| p.y)
+                .fold(f32::MIN, f32::max);
+            let rear_at = tris
+                .iter()
+                .flatten()
+                .filter(|p| {
+                    p.z < eye.z + 0.01
+                        && p.z > front + 0.03
+                        && (p.x - eye.x).abs() < 0.012
+                        && (p.y - rear_top).abs() < 0.0005
+                })
+                .map(|p| p.z)
+                .fold(f32::MIN, f32::max);
+            println!(
+                "{:12} rear top {:+5.1} mm over the line at z {:.3}; rear-to-front {:4.0} mm",
+                def.id,
+                (rear_top - eye.y) * 1000.0,
+                rear_at,
+                (rear_at - front) * 1000.0
+            );
             let post = (0.0, span(&post_on, true));
             let notch = (0.0, span(&rear_on, false));
             let (lo, hi) = layout.bounds();
