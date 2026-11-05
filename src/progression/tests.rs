@@ -936,3 +936,54 @@ fn a_gift_comes_with_its_family_out() {
     }
     assert!(early.is_empty(), "{early:#?}");
 }
+
+/// A career in another valley than its rolled scout gets a job here: the
+/// second-valley runs found the card saying "In Marrow Creek: ..." while
+/// the truck was in Kettle, and nothing to do there. A contract's step, a
+/// scout already seen, and a fetch stay as they are.
+#[test]
+fn moving_valley_brings_a_job_here() {
+    let elsewhere = || Job::Scout {
+        map: "kettle_pass".into(),
+        place: "Hunting lodge".into(),
+        at: [0.0, 0.0],
+        seen: false,
+    };
+    for (case, contract, seen, moves) in [
+        ("a rolled scout", false, false, true),
+        ("a contract's step", true, false, false),
+        ("a scout already seen", false, true, false),
+    ] {
+        let mut app = crate::raid::requests::tests::app();
+        {
+            let mut p = app.world_mut().resource_mut::<Progression>();
+            p.0.done = 1;
+            let mut job = elsewhere();
+            if let Job::Scout { seen: s, .. } = &mut job {
+                *s = seen;
+            }
+            p.0.job = Some(job);
+            p.0.contract = contract.then(|| extraction_core::contracts::Active {
+                id: "post_counter".into(),
+                step: 0,
+            });
+        }
+        app.update();
+        app.update();
+        let job = progress(&app).job;
+        // A look round this valley's gentle place, to show it.
+        let gentle = extraction_core::progression::first_job(
+            "marrow_creek",
+            &crate::progression::valleys()[0].1,
+        );
+        let here = job.is_some() && job == gentle;
+        assert_eq!(here, moves, "{case}: {job:?}");
+        let said = app
+            .world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .any(|(l, _)| l.contains("Something here for you"));
+        assert_eq!(said, moves, "{case}: said");
+    }
+}

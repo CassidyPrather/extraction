@@ -130,3 +130,40 @@ The reels show the two weakest rows, and the walker at 30 m. Each strip runs lef
 ![walker at 30 m](awareness_walker_30m_before_after.png)
 
 Before, the four drones differ only in a pixel of eye, and the four heavies' eyes are the same. After, the drones read faint red, red pulse, orange-white, then the larger red lock. The heavy's eye is steady, then pulsing, then bright. The walkers read faint, red, hot, then the tell's red.
+
+### At dusk and at night
+
+The table runs in three lights from `world::weather`'s own conditions (`aware_weathers`): fog by day, drizzle at dusk, fog at night. After dark the eye has its halo (`world::halos`), the glow hands over to the halo as the dark comes, and a body's crouch or pace fades with the light.
+
+The reels showed three faults, each fixed in `alert_eyes`:
+
+- **Brightness alone didn't read after dark.** The night halo was steady. A searching walker's halo at 30 m was 4 levels of red over one at work's (58 against 62), and nothing pulsed. The halo now carries the eye's rhythm. The model credits only rhythm, not brightness steps.
+- **A tell was lost in the night halo.** A telling walker or drone kept the hunting halo's orange glare, with only a small red sphere inside it. The halo now carries the tell's own red quickening while one burns (`TELL_IN_HALO`).
+- **At dusk the glow handed over to a halo a dusk sky outshines.** The halos switch on at a light of 0.5, but at dusk (0.36) they barely show, so walkers at 30 m were their 15 px eyes alone. The glow now fades into the halo only as the dark comes (`night`).
+
+The weakest rows after dark are the heavy (113 px: its eye, no halo) and the sentry (132 px: its lens glow), the same as by day. Each strip runs at work, searching, hunting, then its tell, before beside after:
+
+![walker, dusk](awareness_walker_dusk_before_after.png)
+![walker, night](awareness_walker_night_before_after.png)
+![drone, dusk](awareness_drone_dusk_before_after.png)
+![drone, night](awareness_drone_night_before_after.png)
+
+## A wreck's salvage where you can see it and get at it
+
+`vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached` kills each machine that wrecks on open ground and lets it come to rest: the walker and the drone on five seeds each, the crawler, the hound and the heavy. It then checks every part a hand takes off: what's seated, its bolts and cables, its plates, and the heavy's seats. Each part has to pass two checks:
+
+- **Seen:** it is in sight from eyes 1.65 m up, standing 1.5 m off on some side.
+- **Reached:** it is within `stance::ARM` of a shoulder somewhere between 0.55 m (crouched, leaning in) and 1.45 m (standing). The arm's line has to be clear, from a spot where your body fits beside the wreck.
+
+What it found, and what changed:
+
+- **Walker:** it fell belly down, with its hip servo packs 0.16 m up under the orb (Models' wreck pass). As it settles, a walker's wreck now rocks over onto its bare side (`wreck::bare_side`, `roll_to_rest`), the side furthest from everything that comes off it. The servo packs are on the soundest side's two hips (`wreck::servo_hips`), and those two legs tear away as it lands, so the hips are bare. The other legs stay on under it and prop it.
+- **Drone:** it came down on its belly plate. It now goes over onto its back on impact.
+- **Heavy:** salvage gave it a walker's power cell, sealed inside its hull at 2.38 m, because the heavy is a walker too. `fit_salvage` now skips heavies; their seats are their own.
+
+Two of the heavy's rows are still pending, and they're Heavy's to fix: its back plates sit 1.9–2 m up on a wreck that stays on its legs, and its cell seat is inside its hull.
+
+Before and after, the walker and the drone 5 m off on the training yard in fog, after they've come to rest:
+
+![walker wreck](wreck_rests_on_bare_side_walker_before_after.png)
+![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)

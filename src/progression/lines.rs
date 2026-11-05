@@ -192,6 +192,11 @@ pub fn gift(u: Upgrade) -> &'static str {
     }
 }
 
+/// The truck's in another valley than the job: one here instead.
+pub fn job_here(valley: &str) -> String {
+    format!("Driver: \"{valley}, then. Something here for you.\"")
+}
+
 /// A scout or a recover he's given up waiting for.
 pub fn job_swapped(place: &str) -> String {
     format!("Driver: \"Forget {}. New job on the card.\"", the(place))
@@ -448,6 +453,7 @@ mod tests {
             GIFT_SMG.into(),
             fetch_swapped(name),
             job_swapped(place),
+            job_here("Kettle Pass"),
             scout_noticed(place),
             job_this_way(place, "north-west, 1480 m", true),
             job_waiting(place, Some("north-west, 1480 m")),
