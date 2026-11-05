@@ -27,6 +27,8 @@ const IPD: f32 = 0.064;
 /// overdraw cap.
 pub(super) struct Stereo {
     pub draws: usize,
+    /// Main-pass triangles, both eyes.
+    pub tris: usize,
     pub shadow_draws: usize,
     /// Millions of fragments a frame, both eyes.
     pub fragments_m: f32,
@@ -43,6 +45,7 @@ pub(super) fn budget() -> Stereo {
     let px = eye_px();
     Stereo {
         draws: BUDGET.draws * 2,
+        tris: BUDGET.tris * 2,
         shadow_draws: BUDGET.shadow_draws * 2,
         fragments_m: 2.0 * px * px * BUDGET.overdraw_mean / 1e6,
     }
@@ -155,6 +158,7 @@ impl Row {
     fn load(&self, b: &Stereo) -> f32 {
         [
             self.draws as f32 / b.draws as f32,
+            self.tris as f32 / b.tris as f32,
             self.shadow_draws as f32 / b.shadow_draws as f32,
             self.fragments_m / b.fragments_m,
             self.lights as f32 / LIGHTS as f32,
@@ -261,27 +265,34 @@ fn holds_views_with(
         // Near its budget: what it's spent on (one eye; the other's the
         // same), to know what to cut.
         let near = |n: usize, of: usize| n as f32 > of as f32 * 0.75;
-        if near(draws, b.draws) || near(shadow_draws, b.shadow_draws) {
-            let top = |by: &[(String, usize, usize)]| {
-                let mut most = by.to_vec();
-                most.sort_by(|a, b| b.1.cmp(&a.1));
-                most.iter()
-                    .take(
-                        std::env::var("WALK_TOP")
-                            .ok()
-                            .and_then(|v| v.parse().ok())
-                            .unwrap_or(6),
-                    )
-                    .map(|(w, c, _)| format!("{w} {c}"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
+        let top = |by: &[(String, usize, usize)]| {
+            let mut most = by.to_vec();
+            most.sort_by(|a, b| b.1.cmp(&a.1));
+            most.iter()
+                .take(
+                    std::env::var("WALK_TOP")
+                        .ok()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(6),
+                )
+                .map(|(w, c, t)| format!("{w} {c} ({}k tris)", t / 1000))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        if near(draws, b.draws)
+            || near(l.tris + r.tris, b.tris)
+            || near(shadow_draws, b.shadow_draws)
+        {
             println!("    drawn: {}", top(&l.by));
             println!("    shadow: {}", top(&l.shadow_by));
         }
         let mut o = Vec::new();
         if draws > b.draws {
             o.push(format!("draws {draws} > {}", b.draws));
+        }
+        let tris = l.tris + r.tris;
+        if tris > b.tris {
+            o.push(format!("{}k triangles > {}k", tris / 1000, b.tris / 1000));
         }
         if shadow_draws > b.shadow_draws {
             o.push(format!("shadow draws {shadow_draws} > {}", b.shadow_draws));
@@ -311,12 +322,17 @@ fn holds_views_with(
             o.push(format!("{lights} lights reach it > {LIGHTS}"));
         }
         if !o.is_empty() {
-            over.push(format!("{name}: {}", o.join(", ")));
+            // What's in it, one eye (the other's the same).
+            over.push(format!(
+                "{name}: {}; drawn: {}",
+                o.join(", "),
+                top(&l.by)
+            ));
         }
         rows.push(Row {
             name: name.to_string(),
             draws,
-            tris: l.tris + r.tris,
+            tris,
             shadow_draws,
             fragments_m,
             lights,
