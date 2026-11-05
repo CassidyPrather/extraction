@@ -136,7 +136,8 @@ impl Loading {
     }
 }
 
-/// Every file under `assets/` read once per process, before any load is
+/// Every file under the asset root (`crate::asset_root_path`; its dot
+/// directories aside) read once per process, before any load is
 /// timed, so the clock measures the game's load (decode, upload, spawn) and
 /// not the disk. The Verifier's first run after a container restart loaded
 /// Marrow Creek in 28.0 s against 8.1 (372 frames, each 40-90 ms: waiting on
@@ -157,7 +158,10 @@ fn read_assets_once() {
             for e in entries.flatten() {
                 let p = e.path();
                 if p.is_dir() {
-                    read(&p, buf);
+                    // `.cache/`: fetch_assets.py's downloads, never loaded.
+                    if !e.file_name().to_string_lossy().starts_with('.') {
+                        read(&p, buf);
+                    }
                 } else if let Ok(mut f) = std::fs::File::open(&p) {
                     use std::io::Read;
                     while f.read(buf).is_ok_and(|n| n > 0) {}
@@ -165,7 +169,7 @@ fn read_assets_once() {
             }
         }
         let t = Instant::now();
-        read(std::path::Path::new("assets"), &mut vec![0; 1 << 20]);
+        read(&crate::asset_root_path(), &mut vec![0; 1 << 20]);
         println!(
             "assets read ahead of the clock in {:.2} s",
             t.elapsed().as_secs_f64()

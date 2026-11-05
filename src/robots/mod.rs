@@ -610,7 +610,7 @@ fn wreck_loot(
         }
         for (i, drop) in drops.into_iter().enumerate() {
             let a = i as f32 * 2.1;
-            crate::items::spawn_item(
+            crate::items::loot::spawn_found(
                 &mut commands,
                 &catalog,
                 crate::items::SpawnItem {

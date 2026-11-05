@@ -251,6 +251,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Ticking",
     "Zinc",
     "Aluminium",
+    "Cork",
     "GreyGreen",
     "Straw",
     "Brick",
@@ -283,6 +284,15 @@ pub struct ModelMaterials {
 }
 
 impl ModelMaterials {
+    /// The name a shared model material was made from, if it's one of
+    /// these (`weapons::weather` asks, to know steel from wood).
+    pub fn name_of(&self, id: AssetId<StandardMaterial>) -> Option<&str> {
+        self.cache
+            .iter()
+            .find(|(_, h)| h.id() == id)
+            .map(|(n, _)| n.as_str())
+    }
+
     pub fn get(
         &mut self,
         name: &str,
@@ -376,6 +386,15 @@ impl ModelMaterials {
             // (as Zinc, a canteen in a dim room reflected the dark and
             // read black; docs/craft/ITEM_READING.md).
             "Aluminium" => flat(materials, Color::srgb(0.66, 0.67, 0.68), 0.5, 0.62),
+            // A cork board's cork: the rock scan's grain laid fine and
+            // tinted tan, so it reads as cork with nothing pinned on it
+            // (in glove leather it was a blank brown slab: the truck's
+            // board, docs/craft/PROP_READING.md).
+            "Cork" => derive(Mat::Boulder, &|m| {
+                m.base_color = Color::srgb(0.98, 0.74, 0.5);
+                m.perceptual_roughness = 0.95;
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(6.0));
+            }),
             "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
             // Animals: a rook's black with a sheen, its bare grey bill.
             "Feather" => flat(materials, Color::srgb(0.035, 0.035, 0.042), 0.0, 0.45),

@@ -101,6 +101,9 @@ MATERIALS = {
     # than galvanised zinc and less a mirror (as Zinc, in a dim room it
     # reflected the dark and read black).
     "Aluminium": ((0.66, 0.67, 0.68), 0.5, 0.62, None),
+    # A cork board's cork: tan, granular (the game lays a rock scan's
+    # grain on it, fine; as glove leather it read as a blank brown slab).
+    "Cork": ((0.66, 0.5, 0.32), 0.0, 0.95, None),
     "GreyGreen": ((0.36, 0.4, 0.34), 0.0, 0.6, None),
     "Straw": ((0.58, 0.5, 0.3), 0.0, 0.95, None),
     "Brick": ((0.45, 0.25, 0.2), 0.0, 0.85, None),

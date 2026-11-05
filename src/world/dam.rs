@@ -143,6 +143,9 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
     }
     if turrets {
         stair_wall(b);
+        for x in SCOUR_OUTLETS {
+            scour_outlet(b, x - DAM_FACE_AT.0);
+        }
         // A turret at each end over the parapet: what you see of the dam
         // from the truck, either side of the valley.
         for x in [-hl + 3.0, hl - 3.0] {
@@ -212,14 +215,115 @@ fn stair_height(x: f32) -> f32 {
     h0 + (h1 - h0) * ((x - x0) / (x1 - x0)).clamp(0.0, 1.0)
 }
 
-/// The face stair's walls, in the long downstream face's space: masonry
-/// thick enough to hold the bank's whole fall to the grass, its top a
-/// metre over the steps or the landing (a parapet to lean a rifle on, and
-/// what stops you stepping off 20 m of embankment), in panels of about 4 m
-/// stepping up with the stair.
-fn stair_wall(b: &mut Builder) {
-    let (fx, fz, fy) = DAM_FACE_AT;
-    let ly = STAIR_WALL_FOOT - fy;
+/// The scour outlets' map x, at the foot of the long downstream face west
+/// of the face stair: where the reservoir went, still running, in the
+/// face between its pilasters. The way up the stair turns at them.
+pub const SCOUR_OUTLETS: [f32; 2] = [-67.0, -50.6];
+
+/// A scour outlet at local x `c` in the foot of the long downstream face:
+/// a dressed stone surround proud of the face, the dark of the culvert
+/// behind a grille gone to rust, and its worn sill running out to its
+/// channel (the map's water).
+fn scour_outlet(b: &mut Builder, c: f32) {
+    // The face's foot is at local z 2 (the lowest course stands 4 out,
+    // the one above it 3.4).
+    const NEXT_COURSE: f32 = 1.4;
+    let (inn, out) = (2.0, 3.2);
+    let mid = (inn + out) * 0.5;
+    let (w, h) = (6.0, 7.0);
+    let jamb = 1.4;
+    for side in [-1.0f32, 1.0] {
+        b.bx(
+            Vec3::new(jamb, h + 0.5, out - inn),
+            Vec3::new(c + side * (w + jamb) * 0.5, (h + 0.5) * 0.5, mid),
+            Mat::DressedStone,
+        );
+    }
+    let lintel = (h + 0.5, h + 1.7);
+    b.bx(
+        Vec3::new(w + jamb * 2.0, lintel.1 - lintel.0, out - inn),
+        Vec3::new(c, (lintel.0 + lintel.1) * 0.5, mid),
+        Mat::DressedStone,
+    );
+    // Its top weathered back as every set-back's is, and on past the
+    // foot course's front to the next course's face: stopped at the foot
+    // course it left a notch 10 m up to stand in.
+    weathering(
+        b,
+        c,
+        w + jamb * 2.0,
+        out,
+        NEXT_COURSE,
+        lintel.1,
+        Mat::DressedStone,
+    );
+    b.deco(
+        Vec3::new(0.9, 1.5, 0.15),
+        Vec3::new(c, (lintel.0 + lintel.1) * 0.5, out + 0.07),
+        Mat::Boulder,
+    );
+    // The culvert's dark, and its grille.
+    b.deco(
+        Vec3::new(w, h + 0.5, 0.05),
+        Vec3::new(c, (h + 0.5) * 0.5, inn + 0.03),
+        Mat::Charred,
+    );
+    let bars = 11;
+    for k in 0..bars {
+        let x = c - w * 0.5 + 0.2 + (w - 0.4) * k as f32 / (bars - 1) as f32;
+        // One bar bent out and gone at its foot.
+        let (y0, y1) = if k == 6 {
+            (1.6, h + 0.4)
+        } else {
+            (0.0, h + 0.4)
+        };
+        b.deco(
+            Vec3::new(0.08, y1 - y0, 0.08),
+            Vec3::new(x, (y0 + y1) * 0.5, inn + 0.35),
+            Mat::RustyMetal,
+        );
+    }
+    for y in [1.8, 4.6] {
+        b.deco(
+            Vec3::new(w, 0.1, 0.1),
+            Vec3::new(c, y, inn + 0.35),
+            Mat::RustyMetal,
+        );
+    }
+    // The sill the water's worn smooth (the channel takes it on from the
+    // footprint's edge), and the wet stain it leaves down the face.
+    b.deco(
+        Vec3::new(w, 0.3, 1.4),
+        Vec3::new(c, -0.05, inn + 0.7),
+        Mat::Sodden,
+    );
+    b.deco(
+        Vec3::new(w + jamb * 2.0 + 0.6, 3.0, 0.03),
+        Vec3::new(c, lintel.1 + 1.5, inn + 0.01),
+        Mat::Sodden,
+    );
+}
+
+/// The run of one of the stair's terraces (m), and how far the ground
+/// blends up into the next one past its end (the map's `blend`).
+const TERRACE_RUN: f32 = 8.0;
+const TERRACE_BLEND: f32 = 2.5;
+
+/// The highest the stair's ground comes by map x: the terrace x is on, at
+/// the height the linear rise reaches at that terrace's east end (the map
+/// sets each terrace there), blended up toward the next past it.
+/// `stair_height` alone runs up to a terrace's height under its west end.
+fn stair_ground_max(x: f32) -> f32 {
+    let x0 = STAIR_RUN.0;
+    let steps = ((x + TERRACE_BLEND - x0) / TERRACE_RUN).ceil();
+    stair_height(x0 + steps * TERRACE_RUN)
+}
+
+/// The stair walls' panels, map x and z of the centre, size in plan, and
+/// the coping's height: about 4 m long, each a metre over the highest the
+/// stair's ground comes beside it.
+fn stair_wall_panels() -> Vec<(f32, f32, f32, f32, f32)> {
+    let mut out = Vec::new();
     for (x0, x1, z0, z1) in STAIR_WALLS {
         let along_x = x1 - x0 > z1 - z0;
         let len = if along_x { x1 - x0 } else { z1 - z0 };
@@ -245,19 +349,33 @@ fn stair_wall(b: &mut Builder) {
                     x1,
                 )
             };
-            let top = stair_height(high) + 1.0 - STAIR_WALL_FOOT;
-            let (lx, lz) = (cx - fx, cz - fz);
-            b.bx(
-                Vec3::new(sx, top, sz),
-                Vec3::new(lx, ly + top * 0.5, lz),
-                Mat::DressedStone,
-            );
-            b.deco(
-                Vec3::new(sx + 0.06, 0.1, sz + 0.1),
-                Vec3::new(lx, ly + top + 0.05, lz),
-                Mat::Boulder,
-            );
+            out.push((cx, cz, sx, sz, stair_ground_max(high) + 1.0));
         }
+    }
+    out
+}
+
+/// The face stair's walls, in the long downstream face's space: masonry
+/// thick enough to hold the bank's whole fall to the grass, its top a
+/// metre over the steps or the landing (a parapet to lean a rifle on, and
+/// what stops you stepping off 20 m of embankment), in panels of about 4 m
+/// stepping up with the stair.
+fn stair_wall(b: &mut Builder) {
+    let (fx, fz, fy) = DAM_FACE_AT;
+    let ly = STAIR_WALL_FOOT - fy;
+    for (cx, cz, sx, sz, coping) in stair_wall_panels() {
+        let top = coping - STAIR_WALL_FOOT;
+        let (lx, lz) = (cx - fx, cz - fz);
+        b.bx(
+            Vec3::new(sx, top, sz),
+            Vec3::new(lx, ly + top * 0.5, lz),
+            Mat::DressedStone,
+        );
+        b.deco(
+            Vec3::new(sx + 0.06, 0.1, sz + 0.1),
+            Vec3::new(lx, ly + top + 0.05, lz),
+            Mat::Boulder,
+        );
     }
 }
 
@@ -850,6 +968,114 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every stair wall panel stands a parapet over the ground beside it,
+    /// the real ground and not the stair's model of it: sampled along each
+    /// panel on the stair's side (a wall flush with the walk let a raider
+    /// step off 15 m of bank).
+    #[test]
+    fn the_stair_walls_stand_over_the_walk() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        let hm = extraction_core::terrain::Heightmap::build(&map);
+        let mut low = Vec::new();
+        for (cx, cz, sx, sz, coping) in stair_wall_panels() {
+            for f in 0..=8 {
+                let t = f as f32 / 8.0 - 0.5;
+                // The walk side: north of the outer wall, west of the
+                // landing's east wall.
+                let at = if sx > sz {
+                    [cx + sx * t, cz - sz * 0.5 - 0.6]
+                } else {
+                    [cx - sx * 0.5 - 0.6, cz + sz * t]
+                };
+                let ground = hm.height(at);
+                if coping < ground + 0.9 {
+                    low.push(format!(
+                        "({:.1}, {:.1}): coping {coping:.2}, ground {ground:.2}",
+                        at[0], at[1]
+                    ));
+                }
+            }
+        }
+        assert!(
+            low.is_empty(),
+            "stair wall under a parapet's height:\n{}",
+            low.join("\n")
+        );
+    }
+
+    /// The upstream parapet is a parapet the whole way along the crest, the
+    /// viewing bay's rail included: at every x but the tower bridge's way
+    /// through, something solid on the parapet's line tops the crest's
+    /// ground beside it by 0.9 m, with no gap under it a body goes through.
+    #[test]
+    fn the_crest_edge_stands_over_the_crest() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        let hm = extraction_core::terrain::Heightmap::build(&map);
+        // A body's least size (m): no gap in the guard as big.
+        const BODY: f32 = 0.5;
+        let mut bad = Vec::new();
+        for (id, len, open) in [
+            ("dam_back", 245.0f32, Some(-22.5f32)),
+            ("dam_back_end", 35.0, None),
+        ] {
+            let g = geo(id).unwrap();
+            for p in map.placements.iter().filter(|p| p.prefab == id) {
+                assert!(
+                    p.rot.abs() < 0.01,
+                    "{id} turned: the test's frame is its own"
+                );
+                let y0 = p.y;
+                let z = -1.45;
+                let mut x = -len * 0.5 + 0.5;
+                while x < len * 0.5 - 0.5 {
+                    if open.is_some_and(|o| (x - o).abs() < 1.4) {
+                        x += 0.25;
+                        continue;
+                    }
+                    // Solid spans up the parapet's line at x, over the crest.
+                    let mut spans: Vec<(f32, f32)> = g
+                        .pieces
+                        .iter()
+                        .filter(|q| q.collide)
+                        .filter_map(|q| {
+                            let Shape::Box(s) = q.shape else { return None };
+                            let c = q.at.translation;
+                            let inside =
+                                (x - c.x).abs() <= s.x * 0.5 && (z - c.z).abs() <= s.z * 0.5;
+                            let (lo, hi) = (c.y - s.y * 0.5, c.y + s.y * 0.5);
+                            (inside && hi > BACK_H + 0.01).then_some((lo.max(BACK_H), hi))
+                        })
+                        .collect();
+                    spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+                    let (mut reach, mut gap) = (BACK_H, 0.0f32);
+                    for (lo, hi) in spans {
+                        gap = gap.max(lo - reach);
+                        reach = reach.max(hi);
+                    }
+                    let at = [p.at[0] + x, p.at[1] + z + 1.0];
+                    // You stand on the dam's own top there, or the ground
+                    // banked against it, whichever's higher.
+                    let ground = hm.height(at).max(y0 + BACK_H);
+                    if y0 + reach < ground + 0.9 || gap >= BODY {
+                        bad.push(format!(
+                            "{id} x {:.2}: guard top {:.2}, gap {gap:.2}, crest {ground:.2}",
+                            at[0],
+                            y0 + reach
+                        ));
+                    }
+                    x += 0.25;
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "the crest's edge unguarded:\n{}",
+            bad.join("\n")
+        );
     }
 
     /// Nothing on the dam's downstream faces is a ledge: every top a body

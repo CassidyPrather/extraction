@@ -93,6 +93,14 @@ pub const WAITING: &[&str] = &[
     "Truck: \"{rv}, {b}. I hear them.\"",
 ];
 
+/// Waiting at `{rv}`, `{t}` left (`LAST_CALL`): said before every
+/// departure without you, over the radio, wherever you are (the five
+/// minutes said on arrival was all a newcomer heard before \"Can't stay\").
+pub const LAST_CALL: &[&str] = &[
+    "Truck: \"{t} left at {rv}. Then I go.\"",
+    "Truck: \"{rv}. {t} more, then I'm gone.\"",
+];
+
 pub const GAVE_UP: &[&str] = &[
     "Truck: \"Can't stay. Call me again when you're close.\"",
     "Truck: \"Pulling out. Call when you're close.\"",
@@ -109,6 +117,9 @@ pub const SHEDS_ON_THE_WAY: &str = "\nSheds on the way: in, if anything chirps."
 
 /// The first job's way home, from the gate, on the house.
 pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
+/// The second gentle job's short run: free too, and what comes next (the
+/// SHORT_RUN lines say a can's burnt, and none is: Onboarding).
+pub const GENTLE_SHORT_RUN: &str = "Truck: \"This one's on me too. Next time it's a can. Get in.\"";
 
 pub const NO_FUEL: &str = "Truck: \"No fuel in the stores for the short run. Head for an RV.\"";
 
@@ -537,7 +548,7 @@ mod tests {
         crate::raid::epilogue::STACKS_SHUT,
         crate::raid::epilogue::RELEASED,
     ];
-    const TRUCK_ONES: &[&str] = &[NO_FUEL, FIRST_SHORT_RUN];
+    const TRUCK_ONES: &[&str] = &[NO_FUEL, FIRST_SHORT_RUN, GENTLE_SHORT_RUN];
 
     /// Every pool of lines said over the radio or the wrist.
     fn every_pool() -> Vec<&'static [&'static str]> {
@@ -577,6 +588,7 @@ mod tests {
             ON_THE_WAY,
             ARRIVED,
             WAITING,
+            LAST_CALL,
             GAVE_UP,
             SHORT_RUN,
             PULLING_OUT,

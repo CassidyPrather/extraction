@@ -16,7 +16,10 @@
 >   gate blocks' ivy kept off their lettering; below).
 > - ~~The truck crate's later kinds at reading distance~~: done 4
 >   November (the magazine on its side; the rounds out from under the map).
-> - The walk props past the first jobs (Kettle's, Rime's, Sallow's).
+> - ~~The walk props past the first jobs~~: Map design's walk reviews
+>   cover them and send model requests (Sallow's viewing bay, Rime's snow
+>   poles); the first-job interiors in Kettle, Rime and Sallow are done
+>   here (4 November, below).
 > - ~~The first raid's loot in Marrow's first-job houses, in game
 >   light~~: done 4 November (below, "The first raid's houses").
 > - Cinder's Ash Row at raid 0 (the room cameras I had predate the map's
@@ -369,4 +372,57 @@ on the table were near-black bottles: their aluminium was `Zinc`,
 0.9 metallic, a mirror of the dark room. They are `Aluminium` now, an
 army flask's oxidised matte (lighter, half as metallic, rougher):
 ![canteen, zinc and aluminium](../shots/items/canteen_aluminium_before_after.jpg)
+
+### The first jobs in Kettle, Rime and Sallow at raid 0 (4 November)
+
+The same rig as Marrow's and Ash Row's (raid 0 from a fresh save,
+drizzle, 11:00, 1.2 m from each loot spot), in the buildings of each
+valley's first job: Kettle's Gatekeeper's cottage and its shed, Rime's
+funicular valley station, Sallow's valve house. Main carries
+Progression's placement rule now.
+![first jobs, Kettle, Rime and Sallow](../shots/items/raid0_first_jobs_kettle_rime_sallow.jpg)
+
+- **The placement rule holds outside Marrow.** Kettle's cottage keeps
+  its food, canteens and tea on the table and the counter; the shed's
+  bolt and power cell lie on the 1.25 shelf, the gun oil (Small) on the
+  0.80 one; Rime's station has a power cell on its table, Sallow's valve
+  house its kit on the table by the terminal and on the bench. No small
+  thing on a low shaded shelf.
+- **The models read.** The canteen in aluminium is a light flask on the
+  counter, the tea tin and crackers their own, the terminal's green
+  screen the brightest thing in the valve house. Nothing to fix.
+- Still true everywhere: the 9x18 box, the bolt and a power cell are a
+  few pixels at 1.2 m, true to size; the rule puts them where they are
+  seen, which is the whole of it.
+
+### Artifacts up close (4 November)
+
+The Zone's most valuable finds, each lying 0.55 m off on the training
+yard's road, fog at 11:00 (`--gallery art_<id>,30,0.55`). Left to right,
+top to bottom: featherstone, hearth, glass eye; aegis, lodestone,
+hushstone; stormglass, shard, rimestone:
+![all nine](../shots/items/artifacts_all_before.jpg)
+
+- **Read, and look valuable:** the hearth (black with glowing cracks),
+  the aegis (a copper tangle), the shard (a blade of not-quite-glass),
+  the featherstone (a dark pebble ringed in lilac), the glass eye (a
+  marble with a highlight).
+- **The hushstone** is what it says, a matte grey pebble: the one
+  artifact you could take for a stone, by design.
+- **Fixed (`anomaly/visuals.rs`, with Anomalies' go-ahead):**
+  - *Stormglass and rimestone were twins*: two pale blue balls the same
+    size. The stormglass is a clear bead with a dark cloud and a spark in
+    it; the rimestone is pale stone furred with short white frost.
+  - *The lodestone was a smooth violet ball*, not "a fist of dark iron".
+    It is knobbled iron now, rough and barely metallic, with iron
+    filings standing off its poles, their bright tips catching the light.
+  - Each look inside its item's box; the bristles are one merged mesh per
+    kind, built once and shared (fields hold several stones). Lessons:
+    a lump's normals must be taken before its non-uniform scale (baked
+    after, the lodestone went flat black); half-metal dark iron in fog
+    renders black too.
+  Before (top), after at 0.55 m (middle) and at 3 m (bottom):
+  ![lodestone, stormglass, rimestone](../shots/items/artifacts_before_after.jpg)
+- **At 3 m every artifact is a speck**, before as after: small things on
+  stony ground. Their fields' light is what finds them.
 

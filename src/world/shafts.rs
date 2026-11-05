@@ -100,6 +100,14 @@ pub fn strength(c: &Conditions) -> f32 {
     through * c.hour.sun()
 }
 
+/// A window's shaft is seen from inside, with eyes opened for the room
+/// by `grade::ROOM_ADAPT` stops: the shafts were set before the rooms
+/// were, and since then a window in drizzle drew a white puff under it,
+/// like steam. They keep their look by taking back what the room adds.
+pub fn window_share() -> f32 {
+    (-crate::render::grade::room_adapt()).exp2()
+}
+
 /// Whether the trees get shafts: only with the sun low enough to come in
 /// under the canopy.
 pub fn forest_shafts(c: &Conditions) -> bool {
@@ -266,6 +274,8 @@ fn forest_gaps(zone: &Zone) -> Vec<Vec3> {
 struct Built {
     key: Option<(Hour, WeatherKind, usize)>,
     material: Option<Handle<ShaftMaterial>>,
+    /// The windows' own: seen with a room's eyes (see [`window_share`]).
+    windows: Option<Handle<ShaftMaterial>>,
     gaps: Option<Vec<Vec3>>,
 }
 
@@ -296,23 +306,27 @@ fn build_shafts(
         color: Vec4::new(sun.red, sun.green, sun.blue, 200.0 * strength),
         sun: light.extend(REACH),
     };
-    let material = match &built.material {
+    let mut made = |slot: &mut Option<Handle<ShaftMaterial>>, params: ShaftParams| match slot {
         Some(h) => {
-            if let Some(mut m) = materials.get_mut(h) {
+            if let Some(mut m) = materials.get_mut(&*h) {
                 m.params = params;
             }
             h.clone()
         }
         None => {
             let h = materials.add(ShaftMaterial { params });
-            built.material = Some(h.clone());
+            *slot = Some(h.clone());
             h
         }
     };
+    let material = made(&mut built.material, params);
+    let mut in_rooms = params;
+    in_rooms.color.w *= window_share();
+    let windows = made(&mut built.windows, in_rooms);
     if strength <= 0.0 {
         return;
     }
-    let mut spawn = |mesh: Mesh| {
+    let mut spawn = |mesh: Mesh, material: &Handle<ShaftMaterial>| {
         let (mesh, aabb, at) = crate::render::centred(&mut meshes, mesh);
         commands.spawn((
             Name::new("Light shafts"),
@@ -368,7 +382,7 @@ fn build_shafts(
             );
         }
         if let Some(mesh) = cards.build() {
-            spawn(mesh);
+            spawn(mesh, &windows);
         }
     }
     // The forest at dawn and dusk.
@@ -388,7 +402,7 @@ fn build_shafts(
         }
         for (_, c) in chunks {
             if let Some(mesh) = c.build() {
-                spawn(mesh);
+                spawn(mesh, &material);
             }
         }
     }
@@ -397,6 +411,17 @@ fn build_shafts(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A window's shaft takes back the stops a room adds: drizzle's comes
+    /// out at about a fifth of a clear sun's, as it was set (no white puff
+    /// under the glass).
+    #[test]
+    fn a_window_shaft_takes_back_what_the_room_adds() {
+        let share = window_share();
+        let want = (-crate::render::grade::ROOM_ADAPT).exp2();
+        assert!((share - want).abs() < 1e-6, "{share} against {want}");
+        assert!((0.3..0.5).contains(&share), "{share}");
+    }
 
     #[test]
     fn shafts_need_a_sun_through_the_cloud() {

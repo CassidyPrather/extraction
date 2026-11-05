@@ -1,7 +1,7 @@
 # Hands and body: where I stopped
 
-Resumed 4 November. Branch `claude/polish-hands`, main 8d5c1105 merged
-(0cf59cff). Shots of the work are in `docs/shots/hands/` (its README
+Resumed 4 November. Branch `claude/polish-hands`, main 3a1602ef merged
+(e880868a). Shots of the work are in `docs/shots/hands/` (its README
 lists them).
 
 ## Landed this round
@@ -25,6 +25,24 @@ lists them).
 - Gunsmith's crossbow is on main; the hands follow it by rule
   (`docs/shots/hands/32_crossbow_redraw.jpg`).
 - `perf::gauge_items_fall_asleep` green on main: 0 items awake on every map.
+- Things held free (food, tools, valuables, ammo, loose magazines) are held
+  by the glove, not a fist wherever the hand took them (`render::hold`):
+  the open hand pressed onto the thing's box, each finger closed to a
+  touch, the thumb aimed onto it (raised to lie on a flat side), the
+  glove turned only where the hand's turn can't close on it. Held by
+  `every_free_held_kind_is_held_by_the_glove` over every such kind in the
+  table, 240 ways each (sink at most 4 mm, thumb and two fingers within
+  3 mm, palm on it or thumb against a finger; a small thing gripped, the
+  fingers closed round it); `STILL_FAILING` lists what isn't yet and can
+  only shrink (empty: the vest's last hold went with the press centred on
+  its nearest point). `docs/shots/hands/33_held_free.jpg` is the first
+  raid's loot before and after, `34_small_gripped.jpg` the small things.
+  Bulky things too: the hand that took one and the one steadying its far
+  end are both seated (`both_hands_on_a_bulky_thing_hold_it`); the far
+  hand's seat is worked out afresh as it drifts. Seats are worked out off
+  the frame (one took 58 ms) and the glove blends onto each over 0.15 s
+  (`a_glove_settles_onto_its_seat_without_a_pop`: it had jumped 42 mm,
+  22 degrees in a frame).
 
 ## What's next
 
@@ -39,6 +57,8 @@ lists them).
 ## Working here
 
 - Gate: `cargo fmt --all --check`, `cargo test --profile fast`,
+  `cargo build --profile fast` (the test run doesn't relink the binary the
+  scenarios run),
   `cargo test -p extraction_core`, the 41 scenarios
   (`--headless --scenario all`) and the 13 contracts; build with
   `CARGO_INCREMENTAL=0` (the incremental caches fill the disk).

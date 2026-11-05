@@ -717,6 +717,9 @@ struct TaskExtras<'w, 's> {
     >,
     cuts: MessageWriter<'w, crate::destruction::hooks::Cut>,
     counters: Option<Res<'w, Counters>>,
+    /// Shots that went off (a pull that doesn't, a dud or a hang-fire's
+    /// wait, isn't one).
+    shots: MessageReader<'w, 's, crate::weapons::GunEvent>,
 }
 
 /// Counts any system can bump for a scenario's [`Expect::Counter`].
@@ -767,6 +770,12 @@ fn run_tasks(
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     let dt = time.delta_secs();
+    let shots_out: Vec<Entity> = ext
+        .shots
+        .read()
+        .filter(|e| matches!(e.event, extraction_core::firearm::Event::Fired { .. }))
+        .map(|e| e.gun)
+        .collect();
     // The gun hand, and the other: a left-handed bot plays mirrored.
     let mirror = comfort.as_ref().is_some_and(|c| c.left_handed);
     let gun_side = Side::Right.mirrored(mirror);
@@ -1337,6 +1346,10 @@ fn run_tasks(
                     bot.next();
                     continue;
                 };
+                // Shots out, not pulls: a dud doesn't count, and nor does
+                // a hang-fire until it goes. (Counted first: the shot that
+                // jams it is a shot, though the jam's cleared next.)
+                bot.fired += shots_out.iter().filter(|g| **g == gun_e).count() as u32;
                 // Settle the aim, then pulse the trigger.
                 if bot.elapsed < 0.6 {
                     continue;
@@ -1344,16 +1357,37 @@ fn run_tasks(
                 if clear_stoppage(&mut bot, &mut mac, gun_e, gun) {
                     continue;
                 }
-                let auto = gun.firearm.fire_mode() == extraction_core::firearm::FireMode::Auto;
-                let period = if auto { 0.15 } else { 0.35 };
-                let was = bot.trigger;
-                bot.trigger = bot.fired < shots && (bot.elapsed - 0.6) % period < period * 0.5;
-                if bot.trigger && !was {
-                    bot.fired += 1;
+                if mac.busy() {
+                    bot.trigger = false;
+                    continue;
                 }
-                if bot.fired >= shots && !bot.trigger
-                    || gun.firearm.live_rounds() == 0 && !bot.trigger
+                let f = &gun.firearm;
+                // A double with both hammers down on a dud: break it (the
+                // hammers cock as it opens), close it, and go again.
+                if bot.fired < shots
+                    && f.def.action == extraction_core::firearm::ActionKind::BreakAction
+                    && f.live_rounds() > 0
+                    && f.hang.is_none()
+                    && f.hammers_cocked.iter().all(|h| !h)
+                    && !bot.trigger
                 {
+                    bot.note("a dud: break it, close it, again".into());
+                    mac.start(
+                        gun_e,
+                        vec![
+                            (0.1, crate::weapons::flat::Step::Break(true)),
+                            (0.3, crate::weapons::flat::Step::Break(false)),
+                        ],
+                    );
+                    continue;
+                }
+                let auto = f.fire_mode() == extraction_core::firearm::FireMode::Auto;
+                let period = if auto { 0.15 } else { 0.35 };
+                bot.trigger = bot.fired < shots && (bot.elapsed - 0.6) % period < period * 0.5;
+                // A gun that won't go however it's worked runs the drill
+                // out of time, and its expectations say so.
+                let spent = bot.elapsed > 0.6 + period * (3.0 * shots as f32 + 8.0);
+                if (bot.fired >= shots || f.live_rounds() == 0 || spent) && !bot.trigger {
                     bot.trigger = false;
                     bot.aim = false;
                     bot.next();

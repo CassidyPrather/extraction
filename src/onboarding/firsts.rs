@@ -72,6 +72,9 @@ pub enum First {
     BrokenNoticed,
     /// A broken walker shoved you: it can still hurt, close in.
     Shoved,
+    /// A heavy's arm rising at you: slow, and it sees well, so hiding
+    /// doesn't lose it; walking away does.
+    Heavy,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -124,6 +127,7 @@ pub const ALL: &[First] = &[
     First::ComingToLook,
     First::BrokenNoticed,
     First::Shoved,
+    First::Heavy,
 ];
 
 impl First {
@@ -153,6 +157,7 @@ impl First {
                 | First::ComingToLook
                 | First::BrokenNoticed
                 | First::Shoved
+                | First::Heavy
         )
     }
 
@@ -227,6 +232,13 @@ impl First {
             First::Shoved => {
                 &["Truck: \"It can still shove. Keep your distance, aim for the eye.\""]
             }
+            // (It sees well, and it's slow: low and still is a walker's
+            // answer, and two went down to its blows that way.)
+            // (And keep going: it hunts on, slow, and 15 m off it caught
+            // up again at the job.)
+            First::Heavy => {
+                &["Truck: \"Big one, and slow. Walk away, and keep going. Don't hide.\""]
+            }
         }
     }
 }
@@ -248,7 +260,14 @@ pub struct FirstMet(pub First);
 
 /// Everything these said, and when (for the bot run's report and tests).
 #[derive(Resource, Default, Debug, Clone)]
-pub struct Spoken(pub Vec<String>, pub Vec<f32>);
+/// (Its third: each first's line as it was filled, (its template, what's
+/// said), for the bots' report, which noted the template, "{s} things",
+/// where "Crate's empty" was said.)
+pub struct Spoken(
+    pub Vec<String>,
+    pub Vec<f32>,
+    pub Vec<(&'static str, String)>,
+);
 
 /// Other systems' moments: write this when one happens (each is said once
 /// a career, like the rest). E.g. `MeetFirst(First::NotePinned)` when a
@@ -260,6 +279,11 @@ pub struct MeetFirst(pub First);
 #[derive(Resource, Default)]
 struct Queue {
     lines: VecDeque<String>,
+    /// Each first's lines as filled, till the speaker passes them on to
+    /// `Spoken` (kept here, not in a resource of their own: one more on
+    /// every first's system reordered the schedule, and a physics soak
+    /// test fell through the world's edge).
+    filled: Vec<(&'static str, String)>,
     quiet: f32,
 }
 
@@ -289,6 +313,7 @@ impl Plugin for FirstsPlugin {
                         jams,
                         robots_heard,
                         drone_locks,
+                        heavy_raised,
                         machines_on_you,
                         lamed,
                         pack_full,
@@ -325,6 +350,9 @@ fn meet(
 ) -> bool {
     if !firsts.0.insert(f.key()) {
         return false;
+    }
+    for l in f.lines() {
+        queue.filled.push((l, fill(l)));
     }
     info!("first time: {f:?}");
     if f.urgent() {
@@ -464,6 +492,25 @@ fn machines_on_you(
     }
     if hushed {
         m.meet(First::Hush);
+    }
+}
+
+/// A heavy raising its arm at you, close.
+fn heavy_raised(
+    mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
+    minds: Query<&Awareness>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut m: Meet,
+) {
+    let Some(me) = locals.iter().next() else {
+        return;
+    };
+    for ev in events.read() {
+        if ev.what == crate::robots::heavy::HeavyAct::Raise
+            && minds.get(ev.heavy).is_ok_and(|a| a.target == Some(me))
+        {
+            m.meet(First::Heavy);
+        }
     }
 }
 
@@ -698,6 +745,11 @@ fn convoy(
 /// the driver passes his through the hatch, or there'd be no calling him
 /// on the next raid.
 pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
+/// Home with no gun on you, in the crate or on the ledge (a fall, and the
+/// convoy took the lot): the driver's own, a magazine and a box of its
+/// rounds, off the ledge. (Gone out unarmed after a lost kit, the hoarder
+/// died two minutes in, four raids running.)
+pub const SPARE_GUN: &str = "Truck: \"No gun on you. Here, my spare. Don't lose this one.\"";
 
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
@@ -720,6 +772,7 @@ fn spare_radio(
     )>,
     catalog: Res<crate::items::Catalog>,
     progression: Option<Res<crate::progression::Progression>>,
+    opts: Res<crate::launch::LaunchOptions>,
     stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
     trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
     locals: Query<Entity, With<LocalPlayer>>,
@@ -770,6 +823,23 @@ fn spare_radio(
             condition: 0.8,
         });
         queue.lines.push_back(SPARE_RADIO.into());
+    }
+    // No gun anywhere of yours (in the yard, the kit is the yard's own).
+    let armed = items.iter().any(|(e, it, by, gt)| {
+        catalog.get(it.kind()).firearm.is_some()
+            && (by.is_some_and(|b| b.0 == me)
+                || in_crate(e)
+                || gt.translation().distance(truck.translation()) < 3.0)
+    });
+    if !armed && opts.map != crate::camp::TRAINING_YARD {
+        // (Worn as the kit's are.)
+        for (id, condition) in [("pm_pistol", 0.75), ("pm_mag", 0.75), ("ammo_9x18", 1.0)] {
+            handover.write(crate::raid::lev::HandOver {
+                id: id.into(),
+                condition,
+            });
+        }
+        queue.lines.push_back(SPARE_GUN.into());
     }
     if let Some(id) = wanted.filter(|id| !have(id)) {
         let name = catalog
@@ -847,6 +917,8 @@ fn speak(
     mut spoken: ResMut<Spoken>,
     time: Res<Time>,
 ) {
+    let filled: Vec<_> = queue.filled.drain(..).collect();
+    spoken.2.extend(filled);
     queue.quiet -= time.delta_secs();
     if queue.quiet > 0.0 {
         return;
@@ -925,6 +997,45 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Home with no gun anywhere (the convoy took the kit, the crate's
+    /// empty): the driver's spare, a magazine and rounds come through the
+    /// hatch, and he says so; armed, he doesn't. (Unarmed after a lost kit,
+    /// the hoarder went out and died two minutes in, raid after raid.)
+    #[test]
+    fn no_gun_home_gets_the_spare() {
+        let mut app = app();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let guns: Vec<Entity> = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item)>()
+            .iter(app.world())
+            .filter(|(_, i)| catalog.get(i.kind()).firearm.is_some())
+            .map(|(e, _)| e)
+            .collect();
+        for g in guns {
+            app.world_mut().despawn(g);
+        }
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+        let spoken = &app.world().resource::<Spoken>().0;
+        assert_eq!(
+            spoken.iter().filter(|l| *l == SPARE_GUN).count(),
+            1,
+            "{spoken:?}"
+        );
+        let pistols = app
+            .world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| catalog.get(i.kind()).id == "pm_pistol")
+            .count();
+        assert!(pistols >= 1, "no pistol came through the hatch");
     }
 
     /// Home with no radio anywhere (it went with the rest at a fall): the
