@@ -329,7 +329,23 @@ fn homecoming(
     opts: Res<crate::launch::LaunchOptions>,
     progression: Option<Res<crate::progression::Progression>>,
     mut heard_anna: Local<bool>,
+    mut set_off_from: Local<Option<u32>>,
 ) {
+    // Off the truck in a valley you've never raided, he says what's
+    // different there: once the raid's been counted (`count_raids`, in
+    // whichever order it runs), against the count at the camp.
+    if let Some(p) = &progression {
+        let here = p.0.raids_in(&opts.map);
+        if raid.phase == Phase::AtBase {
+            *set_off_from = Some(here);
+        } else if set_off_from.is_some_and(|n| here > n) {
+            *set_off_from = None;
+            let all = p.0.raids_by_map.iter().map(|(_, n)| n).sum();
+            if let Some(line) = super::lines::first_arrival(&opts.map, here, all) {
+                raid.say(line);
+            }
+        }
+    }
     let before = was.replace(raid.phase.clone());
     let home = matches!(before, Some(Phase::Extracting { .. })) && raid.phase == Phase::AtBase;
     if !home {
