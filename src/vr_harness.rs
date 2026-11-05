@@ -7787,6 +7787,84 @@ mod door_hinge {
     use crate::world::buildings::{Door, DoorLeaf};
     use crate::world::hinge::{MOST, Motion, Moving, PER_UNIT, Swinging};
 
+    /// Every door pressed open with someone standing in its swing (0.6 of
+    /// the way along the leaf, 45 degrees round): it stops against them,
+    /// and they aren't moved more than a couple of centimetres; stepped
+    /// clear, it opens the rest of the way. (Driven through, a leaf shoved
+    /// a standing body 0.3-1.6 m: in a headset, the world moving you, and
+    /// off a doorstep. Verifier's probe, 5 November.)
+    #[test]
+    fn a_door_stops_against_someone_in_its_swing_in_every_valley() {
+        use crate::robots::doors::Wedged;
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let mut vr = Vr::new(&map);
+            vr.step(5);
+            let doors: Vec<(Entity, crate::world::buildings::DoorDef)> = {
+                let mut q = vr.app.world_mut().query_filtered::<(Entity, &DoorLeaf), (
+                    Without<Wedged>,
+                    Without<crate::world::underground::PowerLocked>,
+                )>();
+                q.iter(vr.app.world()).map(|(e, l)| (e, l.0)).collect()
+            };
+            for (door, leaf) in doors {
+                {
+                    let mut e = vr.app.world_mut().entity_mut(door);
+                    e.remove::<crate::world::hinge::Resting>();
+                    let mut d = e.get_mut::<Door>().unwrap();
+                    d.open = false;
+                    d.angle = 0.0;
+                }
+                let swung = Quat::from_rotation_y(leaf.yaw + std::f32::consts::FRAC_PI_4);
+                let spot = leaf.hinge + swung * Vec3::new(leaf.width * 0.6, 0.0, 0.0);
+                vr.stand(spot, 0.0);
+                vr.step(30);
+                // Where a body can stand still (not in a wall, or on a
+                // step it slides off).
+                let before = vr.feet();
+                vr.step(10);
+                if vr.feet().distance(before) > 0.01 {
+                    continue;
+                }
+                checked += 1;
+                vr.app.world_mut().get_mut::<Door>(door).unwrap().open = true;
+                vr.step(80);
+                let moved = vr.feet().xz().distance(before.xz());
+                if moved > 0.03 {
+                    bad.push(format!(
+                        "{map}: door {door} at {:.1}: moved {moved:.2} m",
+                        leaf.hinge
+                    ));
+                    continue;
+                }
+                // Clear of it (well up out of its way): it opens the rest of
+                // the way.
+                vr.stand(spot + Vec3::Y * 30.0, 0.0);
+                vr.step(60);
+                let angle = vr.app.world().get::<Door>(door).unwrap().angle;
+                if angle < 0.99 {
+                    bad.push(format!(
+                        "{map}: door {door} at {:.1}: stopped at {angle:.2} with no one there",
+                        leaf.hinge
+                    ));
+                }
+                vr.app.world_mut().get_mut::<Door>(door).unwrap().open = false;
+                vr.step(60);
+            }
+        }
+        assert!(
+            checked > 20,
+            "only {checked} doors with somewhere to stand in their swing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {checked}:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
     /// One door, gripped `along` its width at chest height, carried
     /// through `arc` radians round its hinge over a second: the leaf's
     /// angle each tick.
