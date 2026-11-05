@@ -387,7 +387,7 @@ mod tests {
             .next()
             .unwrap();
         app.world_mut().get_mut::<Truck>(truck).unwrap().at_base = true;
-        let mut board = |app: &mut App, by: Transform| {
+        let board = |app: &mut App, by: Transform| {
             *app.world_mut().get_mut::<Transform>(truck).unwrap() = off;
             let behind = by.transform_point(Vec3::new(0.0, 0.0, 7.0));
             let ground = zone.ground(behind.x, behind.z);
