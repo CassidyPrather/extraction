@@ -824,10 +824,36 @@ mod tests {
                 .count()
         };
         let whole = drawn(&mut app);
-        assert!(
-            app.world().get::<BoltsMerged>(robot).is_some(),
-            "its bolts aren't merged"
-        );
+        let (merged, holders) = {
+            let b = app
+                .world()
+                .get::<BoltsMerged>(robot)
+                .expect("its bolts aren't merged");
+            (b.merged.clone(), b.holders.clone())
+        };
+        // What the eye draws of a set of entities' meshes (theirs or
+        // their children's).
+        let seen_of = |app: &mut App, of: &[Entity]| -> usize {
+            let w = app.world_mut();
+            let mut q = w.query_filtered::<
+                &bevy::camera::visibility::VisibleEntities,
+                With<crate::render::FreeCamera>,
+            >();
+            let shown = q
+                .single(w)
+                .unwrap()
+                .get(std::any::TypeId::of::<Mesh3d>())
+                .to_vec();
+            shown
+                .into_iter()
+                .filter(|e| {
+                    of.contains(e) || w.get::<ChildOf>(*e).is_some_and(|p| of.contains(&p.parent()))
+                })
+                .count()
+        };
+        // Its first LOD's two, steel and warning paint; no bolt's own.
+        assert_eq!(seen_of(&mut app, &merged), 2);
+        assert_eq!(seen_of(&mut app, &holders), 0);
         let bolts = extraction_core::heavy::PLATES * extraction_core::heavy::BOLTS_PER_PLATE;
         // One shot out.
         let w = app.world_mut();
@@ -843,10 +869,12 @@ mod tests {
         }
         assert!(app.world().get::<BoltsMerged>(robot).is_none());
         let after = drawn(&mut app);
-        // The merged two gone, the other eleven bolts' two each back: with
-        // every bolt on, it drew 22 fewer (two a bolt, steel and its
-        // warning paint, were 24 of a heavy's 89).
-        assert_eq!(after, whole - 2 + (bolts - 1) * 2, "{whole} then {after}");
+        // The merged two gone, the other eleven bolts' own back (two a
+        // bolt, steel and its warning paint: 24 of a heavy's 89 with all
+        // on). Each is culled on its own, so one may be out of view.
+        let singles = seen_of(&mut app, &holders);
+        assert_eq!(after, whole - 2 + singles, "{whole} then {after}");
+        assert!(singles >= (bolts - 2) * 2, "{singles} single bolt meshes drawn");
     }
 
     /// A footfall is felt on the house scale: never a kick (that's shots
