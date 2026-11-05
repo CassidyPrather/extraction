@@ -93,7 +93,7 @@ const PIPE_PROUD: f32 = 0.7;
 pub const PUFFS: usize = 24;
 pub const LIFE: f32 = 18.0;
 /// Its thickest (a puff's heart, just clear of the pipe).
-const SMOKE_ALPHA: f32 = 0.45;
+const SMOKE_ALPHA: f32 = 0.5;
 /// Wood smoke: a little under an overcast sky's grey, a hair cool, so it
 /// reads against the sky and not off it, and the fog takes it with the
 /// house (Visual design: whiter, it was steam off a kettle).
