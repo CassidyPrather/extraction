@@ -1628,6 +1628,36 @@ counted 71.7M fragments, over 64.8M. Of its 8.3 layers of ground cover,
 nearly all were ferns (alpha-tested) outside, behind the wall. It now
 counts 12.8M (raw 71.2M). Opaque grass blades behind a wall still count.
 
+**Every fragment gauge, re-baselined on the merged tree (5 November).**
+These are the worst view of each, as shaded with the raw count beside
+it. The budgets are unchanged: 64.8M both eyes, and 10 layers mean for
+one eye.
+
+| gauge | worst view | shaded | raw |
+| - | - | - | - |
+| worst views (night, storm, fight) | Marrow m05_spruce | 42.0M | 58.6M |
+| every valley's lookbook | Marrow m05_spruce | 39.6M | 54.2M |
+| the walks | Sallow s04_ahead | 33.4M | 36.9M |
+| the yard's stations | st06_ahead | 10.9M | 12.4M |
+| puffs: wreck, cloud, firefight | standing in a hazard's cloud | 44.4M | (bare view 15.0M) |
+| one eye, per valley | Marrow | 6.15 layers | 8.37 layers |
+
+The other valleys' one-eye worst views, shaded then raw: Kettle 4.31 and
+6.22, Sallow 3.53 and 3.83, Rime 2.87 and 3.09, Cinder 2.20 and 2.44.
+Everything passes. Where a view's raw count passes far over its shaded
+one, alpha-tested cards stand behind something opaque: Marrow's pines
+(9.1M and 24.6M) and the Switchback hut.
+
+Found on the way, by the gauge tier run whole:
+- **The warm-up shelf showed a real mesh.** `shelve` could meet a mesh
+  made that frame before `record_layouts` had it, and shelved the mesh
+  itself (147 vertices, generated). It now waits a frame for the
+  layout.
+- **The gun-rest census missed a declined gun.** A gun not worth merging
+  (a draw or two already) was declined in a `Local`, so the census read
+  it as one that never rests. It's marked now (`gun_rest::RestDeclined`),
+  and all 17 rest.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
