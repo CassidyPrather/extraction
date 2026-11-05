@@ -30,7 +30,7 @@ pub const FRONT: f32 = 0.12;
 
 /// Where a ray from `o` along -Z first meets a triangle (its z), if before
 /// `z_end`.
-fn first_hit(tris: &[[Vec3; 3]], o: Vec3, z_end: f32) -> Option<f32> {
+pub(crate) fn first_hit(tris: &[[Vec3; 3]], o: Vec3, z_end: f32) -> Option<f32> {
     let d = Vec3::NEG_Z;
     let mut best: Option<f32> = None;
     for t in tris {
