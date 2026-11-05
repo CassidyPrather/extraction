@@ -320,6 +320,10 @@
         // The road-menders' hut on the switchbacks.
         (prefab: "mast_hut", at: (-30.0, -95.5), rot: 80.0),
         (prefab: "log_pile", at: (-36.0, -105.5), rot: 10.0),
+        // A log pile by the lodge track's bend out of the charcoal burners'
+        // clearing: the way home to the hunting lodge ran 20 m there with
+        // nothing a dash off.
+        (prefab: "log_pile", at: (120.0, -108.6), rot: 224.0),
         // The charcoal burners' hut on the lodge track.
         (prefab: "cabin_log", at: (89.2, -103.5), rot: 40.0),
 
