@@ -42,6 +42,18 @@ pub struct Reading {
     home: Transform,
 }
 
+impl Reading {
+    /// Being read in `side`'s hand, its home where it is (for tests).
+    #[cfg(test)]
+    pub(crate) fn new(player: Entity, side: Side) -> Self {
+        Self {
+            player,
+            side,
+            home: Transform::IDENTITY,
+        }
+    }
+}
+
 /// Whether a grab on this readable takes it up to read (rather than
 /// pressing it): always in VR; in flat mode only if it isn't a control.
 pub fn reads(driver: RigDriver, pressable: bool) -> bool {

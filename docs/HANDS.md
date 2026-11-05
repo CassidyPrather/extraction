@@ -43,6 +43,12 @@ lists them).
   the frame (one took 58 ms) and the glove blends onto each over 0.15 s
   (`a_glove_settles_onto_its_seat_without_a_pop`: it had jumped 42 mm,
   22 degrees in a frame).
+  The world's own things too (`every_world_thing_carried_free_is_held_by_the_glove`,
+  every map loaded: the backpack, notes, the logbook, cards; 35 found,
+  all held), and a note taken up to read is held by the glove reading it
+  (`a_note_held_up_to_read_is_held_by_the_glove`: before, a fist hung
+  under it at the controller). Story pickups are table items, under the
+  class test.
 
 ## What's next
 
