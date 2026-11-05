@@ -2641,15 +2641,20 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
         .map
         .placements
         .iter()
-        .map(|b| Vec2::from(b.at))
-        .filter(|b| b.distance(here) < 60.0)
-        .filter(|b| {
+        .map(|b| {
+            // Past its far side, however big it is (6 m past the pump
+            // station's middle was inside it).
+            let f = extraction_core::map::prefab_footprint(&b.prefab);
+            (Vec2::from(b.at), (0.5 * f[0].hypot(f[2]) + 2.0).max(6.0))
+        })
+        .filter(|(b, _)| b.distance(here) < 60.0)
+        .filter(|(b, _)| {
             leave <= 0.0
                 || (b.distance(here) > leave && (*b - here).normalize_or_zero().dot(away) > 0.8)
         })
-        .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+        .min_by(|(a, _), (b, _)| a.distance(here).total_cmp(&b.distance(here)));
     let to = match cover {
-        Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
+        Some((b, past)) => b + (b - from).normalize_or(Vec2::Y) * past,
         None if leave > 0.0 => here + away * 30.0,
         None => here + away.perp() * 25.0,
     };
@@ -3876,11 +3881,15 @@ fn routed(world: &World2, here: Vec2, answer: Vec<Task>) -> Vec<Task> {
             .building_at(Vec3::new(p.x, world.zone.on_ground(p.x, p.y).y + 0.5, p.y))
             .is_some()
     };
+    let boxes = walk_boxes(world);
     let mut at = here;
     let mut out = Vec::with_capacity(answer.len());
     for t in answer {
         match t {
             Task::WalkTo { to, within } if !indoors(at) && !indoors(to) => {
+                // Somewhere a body can stand: out of a solid it fell in (a
+                // run for cover 6 m past a water tower's middle, inside it).
+                let to = clear_of(&boxes, to);
                 let mut legs = walk(world, at, to);
                 match legs.last_mut() {
                     Some(Task::WalkTo { within: w, .. }) => *w = within,
@@ -4309,8 +4318,23 @@ mod indoor_tests {
                         let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
                         let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
                         if segment_hits_box(a, b, *half).is_some() {
+                            let near: Vec<String> = boxes
+                                .iter()
+                                .filter(|(x, h)| x.translation.xz().distance(p) < 30.0 + h.length())
+                                .map(|(x, h)| {
+                                    let l = x
+                                        .compute_affine()
+                                        .inverse()
+                                        .transform_point3(Vec3::new(p.x, 0.0, p.y))
+                                        .xz();
+                                    format!(
+                                        "{:.1} half {h:.1} end local {l:.1}",
+                                        x.translation.xz()
+                                    )
+                                })
+                                .collect();
                             crossed.push(format!(
-                                "from {here} (away from {from}): {at} -> {p} through the box at {}",
+                                "from {here} (away from {from}): {at} -> {p} through the box at {} (half {half:.1}); near the end: {near:?}",
                                 xf.translation.xz()
                             ));
                         }
