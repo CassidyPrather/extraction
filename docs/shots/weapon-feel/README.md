@@ -142,7 +142,10 @@ hand-worked mechanisms table above, where a flick racks a slide.
   `broken`: the broken walker beside a healthy one in Models' fog line-up
   at 15 m (top) and 30 m (bottom), before (left), after (right); the
   column reads the same. `wreck`: `reel:wreck,16,5` at 14:00, frames 6
-  and 12; the wreck's pale smoke is a fainter haze higher up.
+  and 12; the wreck's pale smoke is a fainter haze higher up. (At the
+  reel's default camera the wreck lies off Marrow's edge and falls through
+  by frame 12, before and after alike; `--map training_yard --camera
+  0,0,36,0,-14` keeps it on the ground.)
 - `safety_*`, `jam_*`, `eyebox_*`, and the rest: earlier waves.
 
 ## Where I stopped (2 November, paused for usage)
