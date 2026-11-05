@@ -949,7 +949,16 @@ fn first_person_hands(
     for mut v in &mut players {
         *v = Visibility::Hidden;
     }
-    let eye = Vec3::new(cam.x, cam.y.max(zone.ground(cam.x, cam.z) + 0.3), cam.z);
+    // Where the camera stands its eye (`render`'s camera override): a
+    // height of 0 or less is standing there, 1.7 m up. (Taken as given,
+    // the hands were set out round the feet, under the view.)
+    let ground = zone.ground(cam.x, cam.z);
+    let eye_y = if cam.y <= 0.0 {
+        ground + crate::render::EYE_OVER_FEET
+    } else {
+        cam.y.max(ground + 0.3)
+    };
+    let eye = Vec3::new(cam.x, eye_y, cam.z);
     let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
     let fwd = rot * Vec3::NEG_Z;
     let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
