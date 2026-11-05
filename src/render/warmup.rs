@@ -629,6 +629,11 @@ struct Shelf {
     /// colours to every robot mesh as it first appears, a layout the model
     /// as loaded doesn't have): its point twin and that layout.
     weathered: std::collections::HashMap<AssetId<Mesh>, Option<(Handle<Mesh>, u64)>>,
+    /// Every alpha mode in every cull mode, as plain `StandardMaterial`s:
+    /// shelved unworn, they warm the keys an effect made mid-raid on the
+    /// standard layout can have (a glow made at a robot's first tell, an
+    /// anomaly's flash), which no material at load had.
+    catalogue: Vec<Handle<StandardMaterial>>,
     shelved: usize,
     /// What was shelved, by material type.
     by_type: std::collections::BTreeMap<String, usize>,
@@ -658,6 +663,7 @@ impl Default for Shelf {
             cube: None,
             twins: default(),
             weathered: default(),
+            catalogue: Vec::new(),
             shelved: 0,
             by_type: default(),
             decoys: Vec::new(),
@@ -1262,6 +1268,26 @@ fn shelve_unworn(
     };
     let layout = layout_of(&Mesh::from(Cuboid::new(1.0, 1.0, 1.0))).unwrap_or_default();
     let ty = std::any::type_name::<StandardMaterial>();
+    if shelf.catalogue.is_empty() {
+        use bevy::render::render_resource::Face;
+        for alpha_mode in [
+            AlphaMode::Opaque,
+            AlphaMode::Mask(0.5),
+            AlphaMode::Blend,
+            AlphaMode::Premultiplied,
+            AlphaMode::Add,
+        ] {
+            for cull_mode in [Some(Face::Back), None, Some(Face::Front)] {
+                let h = materials.add(StandardMaterial {
+                    alpha_mode,
+                    cull_mode,
+                    double_sided: cull_mode.is_none(),
+                    ..default()
+                });
+                shelf.catalogue.push(h);
+            }
+        }
+    }
     let ids: Vec<AssetId<StandardMaterial>> = materials.ids().collect();
     for id in ids {
         let Some(m) = materials.get(id) else {
@@ -1275,19 +1301,20 @@ fn shelve_unworn(
         let Some(handle) = materials.get_strong_handle(id) else {
             continue;
         };
-        // Casting a shadow and not: a material first worn mid-raid by
-        // something that casts (a gun part, an item brought out) built its
-        // shadow pipeline at first sight when only the unshadowed one was
-        // warmed here.
-        for casts in [false, true] {
-            let key = hash_of((ty, data, alpha.clone(), bias, layout, false, !casts));
+        // Casting a shadow and not, faded by a visibility range and not: a
+        // material first worn mid-raid by something that casts (a gun part,
+        // an item brought out) or that fades with distance (a robot's lamp
+        // halo) built that variant at first sight when only the plain one
+        // was warmed here.
+        for (ranged, casts) in [(false, false), (false, true), (true, false), (true, true)] {
+            let key = hash_of((ty, data, alpha.clone(), bias, layout, ranged, !casts));
             if !shelf.seen.insert(key) {
                 continue;
             }
             if shelf.kinds.insert(key) {
                 *shelf.by_type.entry("unworn".into()).or_default() += 1;
             }
-            if let Some(e) = shelf.put(&mut commands, cube.clone(), false, casts) {
+            if let Some(e) = shelf.put(&mut commands, cube.clone(), ranged, casts) {
                 commands
                     .entity(e)
                     .insert((MeshMaterial3d(handle.clone()), ShelfMark));
