@@ -1022,6 +1022,36 @@ fn first_person_hands(
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.0; 5]);
                 glove(&mut commands, Side::Right, rest(Side::Right), [0.0; 5]);
             }
+            // The job card taken up to read, as `interact::read` holds it:
+            // its bottom edge 30 mm over the right hand, facing the eye,
+            // the glove seated on it (`render::hold`).
+            "read" => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+                let hand = rest(Side::Right);
+                let size = Vec2::new(0.3, 0.26);
+                let at = hand.translation + Vec3::Y * (size.y * 0.5 + 0.03) / zoom;
+                let card = Transform::from_translation(at).looking_to(-(eye - at), Vec3::Y);
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(size.x, size.y, 0.004))),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.86, 0.83, 0.74),
+                        perceptual_roughness: 0.9,
+                        ..default()
+                    })),
+                    view(card),
+                ));
+                let rel = Transform::from_matrix(
+                    (hand.compute_affine().inverse() * card.compute_affine()).into(),
+                );
+                let half = Vec3::new(size.x, size.y, 0.01) * 0.5;
+                let seat = crate::render::hold::seat(Side::Right, half, rel);
+                let h = glove(&mut commands, Side::Right, hand * seat.glove(), seat.curl);
+                commands.entity(h).queue(move |mut e: EntityWorldMut| {
+                    if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                        v.thumb = Some(seat.thumb);
+                    }
+                });
+            }
             "point" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
                 let mut at = rest(Side::Right);
