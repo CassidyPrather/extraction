@@ -72,6 +72,8 @@ fn feetat_follow(
     bodies: Query<&GlobalTransform, With<Walker>>,
     mut cams: Query<&mut Transform, With<crate::render::FreeCamera>>,
     mut frame: Local<u32>,
+    mut heading: Local<Vec3>,
+    mut downhill: Local<f32>,
 ) {
     let (Some(spec), Some(zone)) = (&opts.gallery, zone) else {
         return;
@@ -96,16 +98,37 @@ fn feetat_follow(
         "feetat frame {} body {:.2} {:.2} {:.2}",
         *frame, at.x, at.y, at.z
     );
-    let along = Vec2::new(a[2] - a[0], a[3] - a[1]).normalize_or(Vec2::X);
-    let side = Vec3::new(-along.y, 0.0, along.x);
+    // Square to the way it faces (smoothed, so a stride's sway doesn't
+    // swing the camera).
+    let along = Vec3::new(a[2] - a[0], 0.0, a[3] - a[1]).normalize_or(Vec3::X);
+    let fwd = body.forward().with_y(0.0).normalize_or(along);
+    let fwd = if fwd.dot(along) < 0.0 { -fwd } else { fwd };
+    *heading = if *heading == Vec3::ZERO {
+        fwd
+    } else {
+        heading.lerp(fwd, 0.08).normalize_or(fwd)
+    };
+    let side = Vec3::new(-heading.z, 0.0, heading.x);
     let ground = zone.ground(at.x, at.z);
+    // On its downhill side (chosen once), so no hill stands between.
+    // (Judged square to the route at its middle, before it has a heading.)
+    if *downhill == 0.0 {
+        let mid = Vec3::new(a[0] + a[2], 0.0, a[1] + a[3]) * 0.5;
+        let across = Vec3::new(-along.z, 0.0, along.x) * dist;
+        let g = |s: f32| zone.ground(mid.x + across.x * s, mid.z + across.z * s);
+        let lower = if g(1.0) <= g(-1.0) { 1.0 } else { -1.0 };
+        *downhill = lower * across.dot(side).signum();
+    }
+    let side = side * *downhill;
     let c = Vec3::new(at.x, 0.0, at.z) + side * dist;
+    // Eye at HEIGHT over the ground under the machine, so a slope's line
+    // runs through its feet; looking level, between feet and body.
     let eye = Vec3::new(
         c.x,
-        (ground + height).max(zone.ground(c.x, c.z) + 0.15),
+        (ground + height).max(zone.ground(c.x, c.z) + 0.05),
         c.z,
     );
-    let look = Vec3::new(at.x, ground + height, at.z);
+    let look = Vec3::new(at.x, eye.y + (at.y - ground) * 0.25, at.z);
     for mut t in &mut cams {
         *t = Transform::from_translation(eye).looking_at(look, Vec3::Y);
     }
