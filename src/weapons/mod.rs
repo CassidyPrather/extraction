@@ -266,6 +266,7 @@ impl Plugin for WeaponsPlugin {
                 cycle::CyclePlugin,
             ))
             .init_resource::<reload::MagApproach>()
+            .add_systems(Update, stage_duds)
             .add_systems(
                 FixedUpdate,
                 (
@@ -503,6 +504,15 @@ pub const SHORT_STIFF: f32 = 0.3;
 /// to happen.)
 pub const DRAW_WEIGHT: f32 = 0.8;
 
+/// A slide's or charging handle's recoil spring: a hand drifting back
+/// slower than this (m/s) slides on it (a brisk rack, or a steady one,
+/// beats it), and it's felt compressing, harder the further back
+/// ([`SPRING_FELT`]).
+pub const SPRING_PULL: f32 = 0.05;
+/// The spring felt in the hand as it compresses: this amplitude at rest,
+/// to this at the end of the travel.
+pub const SPRING_FELT: (f32, f32) = (0.06, 0.22);
+
 /// Where a hand-worked part goes this tick, from `now` toward `want`
 /// (travel, 0..1, over `travel_m` metres), as stiff as the action is and as
 /// hard as the hand pulls (m/s along the stroke).
@@ -644,10 +654,25 @@ fn work_handles(
                 let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                 let was = gun.firearm.bolt_travel;
                 let stiff = gun.firearm.action_drag();
-                let to = drag(was, want, stiff, pull, dt, h.travel);
+                // Drifting back against the spring, the hand slides on it.
+                let to = if want > was && pull < SPRING_PULL {
+                    was
+                } else {
+                    drag(was, want, stiff, pull, dt, h.travel)
+                };
                 if to != want {
                     // The hand slides on the handle from where it got to.
                     taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));
+                }
+                // (A stiff action's grind is felt instead.)
+                if to > was && stiff < 0.1 {
+                    spring_felt(
+                        &mut haptics,
+                        side,
+                        to,
+                        now_s,
+                        strokes.entry(gun_e).or_default(),
+                    );
                 }
                 grind(
                     &mut haptics,
@@ -726,6 +751,49 @@ fn work_handles(
         let name = catalog.get(item.kind()).id.clone();
         emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
+}
+
+/// A scenario's setup (`Task::Setup`): the next pull of every held gun
+/// strikes a dud (`shotgun_dud_drill`: the bot breaks the double, closes
+/// it and goes again, as a player would).
+pub const DUD_NEXT: &str = "a dud next";
+
+fn stage_duds(
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    mut guns: Query<&mut Gun, With<Held>>,
+) {
+    for s in setups.read() {
+        if s.name == DUD_NEXT {
+            for mut g in &mut guns {
+                g.firearm.dud_next = true;
+            }
+        }
+    }
+}
+
+/// The spring compressing under the hand working a slide or charging
+/// handle: a tick about every 40 ms while it comes back, harder the
+/// further back it is.
+fn spring_felt(
+    haptics: &mut MessageWriter<crate::rig::haptics::Haptic>,
+    side: Option<crate::rig::Side>,
+    travel: f32,
+    now: f32,
+    stroke: &mut (f32, f32),
+) {
+    let Some(side) = side else {
+        return;
+    };
+    if now - stroke.1 < 0.04 {
+        return;
+    }
+    stroke.1 = now;
+    let (rest, full) = SPRING_FELT;
+    haptics.write(crate::rig::haptics::Haptic {
+        side,
+        amplitude: rest + (full - rest) * travel.clamp(0.0, 1.0),
+        seconds: 0.012,
+    });
 }
 
 /// A stiff action ground under a hand (for Audio): about every 60 ms while

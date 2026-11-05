@@ -374,6 +374,10 @@ fn gallery(
             .replace("+grime", "")
             .replace("+wet", "")
             .replace("+fog", "")
+            // `+foul`, `+worn`, `+failing`: shown in that condition (`weapons::weather`).
+            .replace("+foul", "")
+            .replace("+worn", "")
+            .replace("+failing", "")
             // `+present`: the mag release held (`present_for_gallery`).
             .replace("+present", "");
         let first = first.as_str();

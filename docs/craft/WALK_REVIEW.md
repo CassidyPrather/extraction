@@ -143,5 +143,12 @@ The coming-home walks live in `docs/craft/walks/home/`.
   metres wide. A piece on the bank's slope vanishes into it, and one on
   the narrow way shuts the second way in. Look at the ground (the lint's
   `probe_grid`) before choosing the spot.
+- A job whose point is a building (a bring, a plant: the thing lies on
+  its floor) can't move its point out of it. Meet it instead: the stop
+  picker frames such an arrival 20 m out as you come up to it, and if
+  you'd meet a blank wall, turn the building so its door faces the way in.
+- Waymarks over open snow have to be read from 40 m: a signpost or a
+  cairn there is a speck. A line of snow poles, one every 20 m, is what
+  carries a newcomer over the white.
 - A walk's fixes move its route: a job or rendezvous moved, the arrival
   stop moves with it. Show the new arrival beside the old, and say so.
