@@ -636,6 +636,8 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// When it last readied its gun with a machine on it (`threatened`).
+    readied_at: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -1247,6 +1249,8 @@ pub(super) fn direct_raid(
             && (held.is_some_and(|h| h.player == player)
                 || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
     });
+    // A machine on it: noticed, aimed at, locked on, its sweep, shot at.
+    let threatened = in_its_sights || noticed_now || fired_on;
     let moments = firsts
         .into_iter()
         .map(|f| (f, true))
@@ -1480,6 +1484,47 @@ pub(super) fn direct_raid(
                 reroute_after(&mut bot, n, left_at, &world, &view);
             }
         }
+    }
+    // Armed, with a machine on it, and nothing up the spout: it readies the
+    // gun, a loaded magazine in from those on it (Ready). (Three of the
+    // careful newcomer's losses: dead with an empty magazine in the gun and
+    // a loaded one on it, never a round fired.) The hoarder carries on as
+    // it does.
+    let loadable = guns().any(|(g, by, packed)| {
+        by == player && !packed && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
+    }) || world.items.iter().any(|(e, it, ..)| {
+        world.id(e).is_some_and(|id| id.ends_with("_mag"))
+            && it.rounds > 0
+            && carried(&world, &view, player, world.id(e).unwrap_or("")).contains(&e)
+    });
+    if threatened
+        && armed_now
+        && !p.hoards
+        && loadable
+        && !one_up(guns(), player)
+        && now - state.readied_at > 10.0
+    {
+        state.readied_at = now;
+        state.note(now, Kind::Learned, "a machine on it: readied the gun");
+        super::second_hour::cut_in(
+            &mut bot,
+            vec![Task::DrawGun, Task::Ready { off_safe: false }],
+        );
+    }
+    // Shot at from close by, armed: it shoots back, whoever it is (stood at
+    // a door taking a walker's rounds at two metres, the careful newcomer
+    // went down without a shot, raid after raid).
+    if fired_on
+        && armed_now
+        && !p.hoards
+        && now - state.fought_at > 8.0
+        && world
+            .nearest_robot(here)
+            .is_some_and(|r| r.distance(here) < 10.0)
+    {
+        state.fought_at = now;
+        state.note(now, Kind::Learned, "shot at from close by: shot back");
+        super::second_hour::cut_in(&mut bot, take_it_on());
     }
 
     // Hurt: warned, or not.
