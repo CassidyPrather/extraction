@@ -70,7 +70,7 @@ fn bones(side: Side, finger: usize, c: f32) -> impl Iterator<Item = Bone> {
 }
 
 /// The thumb's way (its first bone's, on the unrolled glove) curled `c`.
-fn thumb_way(side: Side, c: f32) -> Vec3 {
+pub(crate) fn thumb_way(side: Side, c: f32) -> Vec3 {
     joint_rotation_spread(side, 4, 0, c, 0.0) * Vec3::NEG_Z
 }
 
@@ -636,7 +636,7 @@ pub fn taken(side: Side, half: Vec3) -> Transform {
 }
 
 /// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).
-const THUMB_BEND: f32 = 0.9;
+pub(crate) const THUMB_BEND: f32 = 0.9;
 /// How far the thumb may be raised toward the palm's plane to lie on a
 /// flat side, or lowered to reach round a narrow one (added to its way's
 /// height on the unrolled glove), nearest its own way first.
@@ -666,10 +666,11 @@ mod tests {
     use super::*;
     use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog, ItemDef};
 
-    /// Kinds a hand holds free, one-handed: not guns (their grips), not
-    /// knives (a grip of their own), not what's carried in both arms.
+    /// Kinds a hand holds free: not guns (their grips), not knives (a grip
+    /// of their own). What's carried in both arms is too: each hand holds
+    /// its end as one hand holds a thing.
     fn held_free(def: &ItemDef) -> bool {
-        def.firearm.is_none() && def.melee.is_none() && !crate::interact::carry::is_bulky(def)
+        def.firearm.is_none() && def.melee.is_none()
     }
 
     /// The kinds the first raid can drop (`from_raid` 0 on some table).
@@ -745,6 +746,105 @@ mod tests {
         out
     }
 
+    /// Every take of a box of half-size `half` in either hand: how many
+    /// fail the rule, of how many, and the first fault.
+    fn box_holds(half: Vec3) -> (usize, usize, Option<String>) {
+        let (mut failed, mut tries, mut worst) = (0, 0, None);
+        for side in [Side::Right, Side::Left] {
+            for turn in turns() {
+                for item in takes(side, half, turn) {
+                    tries += 1;
+                    if let Some(why) = glove_on(side, half, item).fault() {
+                        failed += 1;
+                        worst.get_or_insert(why);
+                    }
+                }
+            }
+        }
+        (failed, tries, worst)
+    }
+
+    /// Things in the world a hand can take up that aren't in the item
+    /// table (cards, crates, panels, parts), known not to be held every
+    /// way yet, and why: this list only shrinks (as `STILL_FAILING`).
+    const WORLD_STILL_FAILING: &[(&str, &str)] = &[];
+
+    /// The world's own loose things are held as the table's are: every
+    /// map loaded, each thing a hand can carry (a free grab point, a body
+    /// that moves, not an item of the table, which the test above holds,
+    /// nor one only pressed) or take up to read is held every way by the
+    /// rule, or listed. A
+    /// thing whose collider isn't a box gets no seat: that fails too.
+    #[test]
+    fn every_world_thing_carried_free_is_held_by_the_glove() {
+        use avian3d::prelude::{Collider, RigidBody};
+        let maps = extraction_core::map::VALLEYS
+            .iter()
+            .map(|v| v.0)
+            .chain([crate::camp::TRAINING_YARD]);
+        let mut found: std::collections::BTreeMap<String, Option<Vec3>> = Default::default();
+        for map in maps {
+            let _counting = crate::render::budget::tests::counted();
+            let mut app = crate::render::budget::tests::client_threads(map, "clearing", None);
+            crate::render::budget::tests::settle(&mut app);
+            let world = app.world_mut();
+            let mut q = world.query::<(
+                Entity,
+                &crate::interact::Grabbable,
+                Option<&Name>,
+                Option<&Collider>,
+                Option<&RigidBody>,
+                Has<crate::items::Item>,
+                Has<crate::raid::truck::Pressable>,
+                Has<crate::interact::read::Readable>,
+            )>();
+            for (e, g, name, collider, body, item, pressed, read) in q.iter(world) {
+                let free = g
+                    .points
+                    .iter()
+                    .any(|p| p.role == crate::interact::GripRole::Free);
+                // Carried, or taken up to read (a note, the logbook, a
+                // card: pressable too, in flat mode).
+                let carried = !item && !pressed && body.is_some_and(|b| b.is_dynamic());
+                if !free || !(carried || read) {
+                    continue;
+                }
+                let name = name.map_or_else(|| format!("unnamed {e}"), |n| n.to_string());
+                let half = collider
+                    .and_then(|c| c.shape_scaled().as_cuboid())
+                    .map(|c| Vec3::new(c.half_extents.x, c.half_extents.y, c.half_extents.z));
+                found.entry(format!("{name} ({map})")).or_insert(half);
+            }
+        }
+        println!("{} world things carried free:", found.len());
+        let mut bad = Vec::new();
+        for (name, half) in &found {
+            let thing = name.split(" (").next().unwrap_or(name);
+            let known = WORLD_STILL_FAILING.iter().any(|(id, _)| *id == thing);
+            let fault = match half {
+                None => Some("its collider isn't a box: no seat".to_owned()),
+                Some(half) => {
+                    let (failed, tries, worst) = box_holds(*half);
+                    worst.map(|w| format!("{failed} of {tries} holds fail, e.g. {w}"))
+                }
+            };
+            println!("  {name}: {}", fault.as_deref().unwrap_or("held"));
+            match fault {
+                Some(why) if !known => bad.push(format!("{name}: {why}")),
+                None if known => bad.push(format!(
+                    "{name}: held every way now: take it off WORLD_STILL_FAILING"
+                )),
+                _ => {}
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "{} world things not held:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
     /// How the glove holds a box: seated on it.
     fn glove_on(side: Side, half: Vec3, item: Transform) -> Grasp {
         grasp(side, half, item, &seat(side, half, item))
@@ -776,22 +876,7 @@ mod tests {
         let mut boxes: Vec<[u32; 3]> = defs.iter().map(|d| key(d)).collect();
         boxes.sort();
         boxes.dedup();
-        let holds = |b: &[u32; 3]| {
-            let half = Vec3::from(b.map(f32::from_bits)) * 0.5;
-            let (mut failed, mut tries, mut worst) = (0, 0, None);
-            for side in [Side::Right, Side::Left] {
-                for turn in turns() {
-                    for item in takes(side, half, turn) {
-                        tries += 1;
-                        if let Some(why) = glove_on(side, half, item).fault() {
-                            failed += 1;
-                            worst.get_or_insert(why);
-                        }
-                    }
-                }
-            }
-            (failed, tries, worst)
-        };
+        let holds = |b: &[u32; 3]| box_holds(Vec3::from(b.map(f32::from_bits)) * 0.5);
         let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
         let per = boxes.len().div_ceil(threads);
         let results: std::collections::HashMap<[u32; 3], (usize, usize, Option<String>)> =

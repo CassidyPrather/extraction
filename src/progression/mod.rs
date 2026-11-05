@@ -418,6 +418,7 @@ fn job_done(
     mut raid: ResMut<Raid>,
     mut save: MessageWriter<crate::persist::SaveNow>,
     mut handover: MessageWriter<crate::raid::lev::HandOver>,
+    mut loaded: MessageWriter<crate::raid::lev::HandOverLoaded>,
     catalog: Res<Catalog>,
 ) {
     for _ in done.read() {
@@ -430,14 +431,28 @@ fn job_done(
             // He passes them back through the cab's hatch (`raid::lev`).
             let mut gave = false;
             for (id, n, condition) in gifts(*u) {
-                if catalog.kind(id).is_none() {
+                let Some(kind) = catalog.kind(id) else {
                     continue;
-                }
+                };
+                // Its magazines and clips come filled: a gift fires at once
+                // (stripping a box into clips is a later thing to learn).
+                let full = catalog.get(kind).magazine.as_ref().map(|m| m.capacity);
                 for _ in 0..*n {
-                    handover.write(crate::raid::lev::HandOver {
-                        id: id.to_string(),
-                        condition: *condition,
-                    });
+                    match full {
+                        Some(rounds) => {
+                            loaded.write(crate::raid::lev::HandOverLoaded {
+                                id: id.to_string(),
+                                condition: *condition,
+                                rounds,
+                            });
+                        }
+                        None => {
+                            handover.write(crate::raid::lev::HandOver {
+                                id: id.to_string(),
+                                condition: *condition,
+                            });
+                        }
+                    }
                     gave = true;
                 }
             }

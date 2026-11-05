@@ -27,8 +27,82 @@ pub struct MinelayerLookPlugin;
 
 impl Plugin for MinelayerLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress, blink_mines, turn_lamps));
+        app.init_resource::<MineLooks>()
+            .add_systems(Update, (seed_mines, dress, blink_mines, turn_lamps));
     }
+}
+
+/// A mine's own look: its ring of turned earth (a flat disc where there's
+/// no ground to drape it on) and its LED, and their materials. Made at
+/// start, not with the first mine, for [`seed_mines`].
+#[derive(Resource)]
+struct MineLooks {
+    earth: Handle<Mesh>,
+    earth_mat: Handle<StandardMaterial>,
+    led: Handle<Mesh>,
+    led_mat: Handle<StandardMaterial>,
+}
+
+impl FromWorld for MineLooks {
+    fn from_world(world: &mut World) -> Self {
+        let (earth, led) = {
+            let mut meshes = world.resource_mut::<Assets<Mesh>>();
+            (meshes.add(Circle::new(0.5)), meshes.add(Sphere::new(0.012)))
+        };
+        let mut materials = world.resource_mut::<Assets<StandardMaterial>>();
+        MineLooks {
+            earth,
+            // Turned earth, a little lighter than dark soil; the ring's
+            // own vertex colours fade it out at its rim.
+            earth_mat: materials.add(StandardMaterial {
+                base_color: Color::srgb(0.42, 0.34, 0.26),
+                perceptual_roughness: 1.0,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
+            led,
+            led_mat: materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: LinearRgba::rgb(30.0, 0.5, 0.3),
+                unlit: true,
+                ..default()
+            }),
+        }
+    }
+}
+
+/// A mine's ring and LED, hidden, from the start: the minelayer comes out
+/// mid-raid, and its first mine's ring (its own layout, blended) and LED
+/// (lit only when someone's near) built their pipelines on the frame
+/// they were first drawn. Worn from the start, the warm-up shelf
+/// (`render::warmup`) builds them while the player is in the truck.
+fn seed_mines(
+    mut commands: Commands,
+    looks: Res<MineLooks>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut done: Local<bool>,
+) {
+    if *done {
+        return;
+    }
+    *done = true;
+    let under = Transform::from_xyz(0.0, -500.0, 0.0);
+    commands.spawn((
+        Name::new("Mine ring seed"),
+        Mesh3d(meshes.add(earth_ring(|_, _| -500.0, Vec3::new(0.0, -500.0, 0.0)))),
+        MeshMaterial3d(looks.earth_mat.clone()),
+        Transform::IDENTITY,
+        Visibility::Hidden,
+        NotShadowCaster,
+    ));
+    commands.spawn((
+        Name::new("Mine LED seed"),
+        Mesh3d(looks.led.clone()),
+        MeshMaterial3d(looks.led_mat.clone()),
+        under,
+        Visibility::Hidden,
+        NotShadowCaster,
+    ));
 }
 
 #[derive(Component)]
@@ -58,14 +132,7 @@ fn dress(
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut extras: Local<
-        Option<(
-            Handle<Mesh>,
-            Handle<StandardMaterial>,
-            Handle<Mesh>,
-            Handle<StandardMaterial>,
-        )>,
-    >,
+    looks: Res<MineLooks>,
 ) {
     if layers.is_empty() && mines.is_empty() {
         return;
@@ -87,28 +154,12 @@ fn dress(
             return;
         }
     };
-    let (earth, earth_mat, led, led_mat) = extras
-        .get_or_insert_with(|| {
-            (
-                meshes.add(Circle::new(0.5)),
-                // Turned earth, a little lighter than dark soil; the ring's
-                // own vertex colours fade it out at its rim.
-                materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.42, 0.34, 0.26),
-                    perceptual_roughness: 1.0,
-                    alpha_mode: AlphaMode::Blend,
-                    ..default()
-                }),
-                meshes.add(Sphere::new(0.012)),
-                materials.add(StandardMaterial {
-                    base_color: Color::BLACK,
-                    emissive: LinearRgba::rgb(30.0, 0.5, 0.3),
-                    unlit: true,
-                    ..default()
-                }),
-            )
-        })
-        .clone();
+    let (earth, earth_mat, led, led_mat) = (
+        looks.earth.clone(),
+        looks.earth_mat.clone(),
+        looks.led.clone(),
+        looks.led_mat.clone(),
+    );
     let mut hang = |commands: &mut Commands,
                     materials: &mut Assets<StandardMaterial>,
                     parent: Entity,
