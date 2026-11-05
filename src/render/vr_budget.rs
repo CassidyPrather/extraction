@@ -134,9 +134,59 @@ fn holds_views(
     weather: &str,
     views: impl FnOnce(&crate::world::Zone) -> Vec<crate::tour::View>,
 ) -> Vec<String> {
+    holds_views_with(map, weather, None, false, views).0
+}
+
+/// A view's load, both eyes: its name, draws, triangles, shadow draws,
+/// fragments (millions), the lights reaching it, and what's over budget.
+#[derive(Clone, Debug)]
+struct Row {
+    name: String,
+    draws: usize,
+    tris: usize,
+    shadow_draws: usize,
+    fragments_m: f32,
+    lights: usize,
+    over: Vec<String>,
+}
+
+impl Row {
+    /// The view's worst share of any budget (1.0: at it).
+    fn load(&self, b: &Stereo) -> f32 {
+        [
+            self.draws as f32 / b.draws as f32,
+            self.shadow_draws as f32 / b.shadow_draws as f32,
+            self.fragments_m / b.fragments_m,
+            self.lights as f32 / LIGHTS as f32,
+        ]
+        .into_iter()
+        .fold(0.0, f32::max)
+    }
+}
+
+/// Lights reaching a view at once (point and spot lights whose range
+/// comes within the view's 60 m): each lights every fragment of its
+/// clusters, both eyes.
+const LIGHTS: usize = 48;
+
+/// `holds_views` at an `hour` (night, dusk) and with a fight in front of
+/// each view (`fight_at`): the lines over budget and every view's row.
+fn holds_views_with(
+    map: &str,
+    weather: &str,
+    hour: Option<&str>,
+    fight: bool,
+    views: impl FnOnce(&crate::world::Zone) -> Vec<crate::tour::View>,
+) -> (Vec<String>, Vec<Row>) {
     // Counts: draws, shadow draws, fragments.
     let _counting = super::budget::tests::counted();
     let mut app = super::budget::tests::client_threads(map, weather, None);
+    if let Some(h) = hour {
+        app.world_mut().resource_mut::<crate::LaunchOptions>().hour = Some(h.into());
+    }
+    if fight {
+        crate::render::puff::add_to(&mut app);
+    }
     // (The flat camera comes a few frames in.)
     for _ in 0..300 {
         app.update();
@@ -151,7 +201,15 @@ fn holds_views(
     let b = budget();
     let px = eye_px();
     let mut over = Vec::new();
+    let mut rows = Vec::new();
     for v in views {
+        let fighters = if fight {
+            let eye = Vec3::from_array(v.at);
+            let fwd = Vec3::from_array(v.look) - eye;
+            fight_at(&mut app, eye, fwd)
+        } else {
+            Vec::new()
+        };
         {
             let w = app.world_mut();
             let mut q =
@@ -248,11 +306,90 @@ fn holds_views(
                 "{views_drawing} views drawing the world, not the two eyes"
             ));
         }
+        let lights = lights_reaching(&mut app, Vec3::from_array(v.at));
+        if fight && lights > LIGHTS {
+            o.push(format!("{lights} lights reach it > {LIGHTS}"));
+        }
         if !o.is_empty() {
             over.push(format!("{name}: {}", o.join(", ")));
         }
+        rows.push(Row {
+            name: name.to_string(),
+            draws,
+            tris: l.tris + r.tris,
+            shadow_draws,
+            fragments_m,
+            lights,
+            over: o,
+        });
+        for e in fighters {
+            if let Ok(e) = app.world_mut().get_entity_mut(e) {
+                e.despawn();
+            }
+        }
     }
-    over
+    (over, rows)
+}
+
+/// Point and spot lights whose reach comes within 60 m of `eye`.
+fn lights_reaching(app: &mut App, eye: Vec3) -> usize {
+    let w = app.world_mut();
+    let mut n = 0;
+    let mut points = w.query::<(&GlobalTransform, &PointLight)>();
+    for (g, l) in points.iter(w) {
+        if g.translation().distance(eye) < l.range + 60.0 {
+            n += 1;
+        }
+    }
+    let mut spots = w.query::<(&GlobalTransform, &SpotLight)>();
+    for (g, l) in spots.iter(w) {
+        if g.translation().distance(eye) < l.range + 60.0 {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// A fight in front of the eye: a drone overhead, a walker, a hound and a
+/// heavy 8-14 m out (their lamps, halos and tells), and the firefight's
+/// smoke off their wounds (`puffs::scenes`). Settled before the view is
+/// measured; what it spawned, to despawn after.
+fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
+    use crate::robots::{Job, JobKind};
+    let fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+    let side = fwd.cross(Vec3::Y);
+    let w = app.world_mut();
+    let zone = w.resource::<crate::world::Zone>().clone();
+    let catalog = crate::items::Catalog(w.resource::<crate::items::Catalog>().0.clone());
+    let on = |d: f32, s: f32| {
+        let p = eye + fwd * d + side * s;
+        zone.on_ground(p.x, p.z)
+    };
+    let site = on(10.0, 0.0);
+    let job = || Job {
+        kind: JobKind::Watch,
+        site,
+        duration: 600.0,
+        exit: site + Vec3::X * 200.0,
+    };
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    let mut out = {
+        let mut c = Commands::new(&mut queue, w);
+        vec![
+            crate::robots::drone::spawn_drone(&mut c, on(12.0, 2.0) + Vec3::Y * 6.0, job()),
+            crate::robots::walker::spawn_walker(&mut c, &zone, on(10.0, -4.0), job()),
+            crate::robots::hound::spawn_hound(&mut c, &zone, on(8.0, 3.0), job()),
+            crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, on(14.0, 0.0), job()),
+        ]
+    };
+    queue.apply(w);
+    if let Some((_, _, _, smoke)) = puffs::scenes(eye, fwd).into_iter().nth(2) {
+        out.extend(puffs::spawn(app, &smoke));
+    }
+    for _ in 0..30 {
+        app.update();
+    }
+    out
 }
 
 /// Where Map design's walk reviews live: a valley's `walk.stills`, its
@@ -336,6 +473,112 @@ fn station_views(zone: &crate::world::Zone) -> Vec<crate::tour::View> {
         two(format!("st{i:02}"), eye(stand.x, stand.z), st.rot + 180.0);
     }
     out
+}
+
+/// A valley's places, where a raid gathers: each rendezvous, short exfil,
+/// point of interest (the dam, a landmark's vista), work site and the
+/// insertion, from eye height, four ways round.
+fn place_views(zone: &crate::world::Zone) -> Vec<crate::tour::View> {
+    use extraction_core::map::MarkerKind;
+    let mut out = Vec::new();
+    for (n, m) in zone.map.markers.iter().enumerate() {
+        let kind = match m.kind {
+            MarkerKind::Rendezvous => "rendezvous",
+            MarkerKind::ShortExfil => "exfil",
+            MarkerKind::Poi => "poi",
+            MarkerKind::WorkSite => "job",
+            MarkerKind::Insertion => "insertion",
+            _ => continue,
+        };
+        let label: String = if m.name.is_empty() {
+            format!("{n}")
+        } else {
+            m.name
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '_'
+                    }
+                })
+                .collect()
+        };
+        let (x, z) = (m.at[0], m.at[1]);
+        let eye = Vec3::new(x, zone.ground(x, z) + 1.7, z);
+        for (i, turn) in [0.0f32, 90.0, 180.0, 270.0].into_iter().enumerate() {
+            // Marker convention: 0 faces +Z, 90 faces -X.
+            let r = (m.rot + turn).to_radians();
+            let dir = Vec3::new(-r.sin(), 0.0, r.cos());
+            out.push(crate::tour::View {
+                file: format!("{kind}_{label}_{i}.png"),
+                what: format!("{kind} {}", m.name),
+                at: eye.to_array(),
+                look: (eye + dir * 10.0).to_array(),
+            });
+        }
+    }
+    out
+}
+
+/// The heaviest a raid gets to look at, every valley, both eyes: its
+/// places (`place_views`), the walk's stops and the lookbook's views, at
+/// night in a storm (downpour, lightning) with a fight in front of each
+/// (`fight_at`). Fails a view over the stereo budget or reached by more
+/// than `LIGHTS` lights, and prints each valley's five heaviest with what
+/// they hold.
+#[test]
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_worst_views_hold_the_stereo_budget() {
+    let b = budget();
+    let mut over = Vec::new();
+    let only = std::env::var("WORST_MAP").ok();
+    for (map, _) in extraction_core::map::VALLEYS {
+        if only.as_deref().is_some_and(|o| o != map.as_ref() as &str) {
+            continue;
+        }
+        let walk = walks_dir().join(map).join("walk.stills");
+        let look = crate::asset_root_path()
+            .join("..")
+            .join(format!("scripts/lookbook/{map}.views"));
+        let (o, mut rows) = holds_views_with(map, "storm", Some("night"), true, |zone| {
+            let mut v = place_views(zone);
+            for f in [&walk, &look] {
+                if f.exists() {
+                    v.extend(crate::tour::scripted_views(zone, f));
+                }
+            }
+            v
+        });
+        rows.sort_by(|a, c| c.load(&b).total_cmp(&a.load(&b)));
+        println!(
+            "{map}: {} views; the five heaviest at night, in a storm, in a fight:",
+            rows.len()
+        );
+        for r in rows.iter().take(5) {
+            println!(
+                "    {:4.0}%  {}: draws {}, {}k triangles, shadow draws {}, {:.1}M fragments, {} lights{}",
+                r.load(&b) * 100.0,
+                r.name,
+                r.draws,
+                r.tris / 1000,
+                r.shadow_draws,
+                r.fragments_m,
+                r.lights,
+                if r.over.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (over: {})", r.over.join(", "))
+                }
+            );
+        }
+        over.extend(o.into_iter().map(|l| format!("{map} {l}")));
+    }
+    assert!(
+        over.is_empty(),
+        "views over the stereo budget at night, in a storm, in a fight:\n{}",
+        over.join("\n")
+    );
 }
 
 /// The yard's stations through both eyes, in its weather: within the
