@@ -215,6 +215,7 @@ pub struct Cycle {
     pub spares: Vec<Entity>,
     mag: Option<Entity>,
     holster: bool,
+    ready: bool,
     /// Which gun's cycle.
     pub id: String,
     stovepipe: bool,
@@ -238,10 +239,51 @@ impl Cycle {
     }
 }
 
+/// The guns with a kick reel (`cycle:kick_<id>`).
+pub const KICKED: &[&str] = &["pm_pistol", "toz_double", "mosin"];
+
+/// Shots in a kick reel: two where the gun fires again without a hand
+/// working it (a self-loader, a double's second barrel), one from a bolt.
+pub fn kick_shots(gun: &str) -> usize {
+    if gun == "mosin" { 1 } else { 2 }
+}
+
+/// A kick reel: the gun, loaded, taken up and aimed (a pistol at arm's
+/// length, a long gun at the cheek), and its shots 0.8 s apart.
+fn kick(pistol: bool, shots: usize) -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.extend([
+        Beat("aim"),
+        MoveGun(To::Aim(if pistol { 0.45 } else { 0.12 }), 36),
+        Move(
+            Side::Left,
+            To::Grab(GripRole::Support, Vec3::ZERO),
+            Quat::IDENTITY,
+            20,
+        ),
+        Grip(Side::Left, 1.0),
+        Wait(30),
+        Beat("fire"),
+    ]);
+    for _ in 0..shots {
+        s.extend([
+            Trigger(Side::Right, 1.0),
+            Wait(8),
+            Trigger(Side::Right, 0.0),
+            Wait(64),
+        ]);
+    }
+    s.extend([Beat("end"), Wait(30)]);
+    s
+}
+
 /// The guns with a scripted cycle.
 pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133"];
 
 fn script_for(id: &str) -> Vec<Act> {
+    if let Some(gun) = id.strip_prefix("kick_") {
+        return kick(gun == "pm_pistol", kick_shots(gun));
+    }
     match id {
         "toz8" => toz8(),
         "toz_double" => izh43(),
@@ -258,33 +300,52 @@ struct Kit {
     mag: Option<(&'static str, u32)>,
     holster: bool,
     spares: Vec<(&'static str, u32)>,
+    /// Loaded and cocked from the start (a kick reel's).
+    ready: bool,
 }
 
 fn kit(id: &str) -> Kit {
+    if let Some(gun) = id.strip_prefix("kick_") {
+        return Kit {
+            gun: KICKED
+                .iter()
+                .copied()
+                .find(|g| *g == gun)
+                .unwrap_or("pm_pistol"),
+            mag: (gun == "pm_pistol").then_some(("pm_mag", 4)),
+            holster: false,
+            spares: Vec::new(),
+            ready: true,
+        };
+    }
     match id {
         "mp133" => Kit {
             gun: "mp133",
             mag: None,
             holster: false,
             spares: vec![("shell_12ga", 1), ("shell_12ga", 1)],
+            ready: false,
         },
         "toz_double" => Kit {
             gun: "toz_double",
             mag: None,
             holster: false,
             spares: vec![("shell_12ga", 1), ("shell_12ga", 1)],
+            ready: false,
         },
         "toz8" => Kit {
             gun: "toz8",
             mag: None,
             holster: false,
             spares: vec![("round_22lr", 1), ("round_22lr", 1)],
+            ready: false,
         },
         _ => Kit {
             gun: "pm_pistol",
             mag: Some(("pm_mag", 3)),
             holster: true,
             spares: vec![("pm_mag", 8)],
+            ready: false,
         },
     }
 }
@@ -542,6 +603,7 @@ fn set_up(world: &mut World, c: &mut Cycle, who: Entity) {
     }
     c.gun = Some(gun);
     c.holster = k.holster;
+    c.ready = k.ready;
     c.since = 0;
 }
 
@@ -675,6 +737,15 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
         g.firearm.condition = 1.0;
         while g.firearm.fire_mode() != FireMode::Semi {
             g.firearm.cycle_mode();
+        }
+        if c.ready {
+            // Loaded and cocked: every chamber, and the magazine behind.
+            let f = &mut g.firearm;
+            f.chambers
+                .iter_mut()
+                .for_each(|r| *r = Some(extraction_core::firearm::Round::Live));
+            f.hammers_cocked.iter_mut().for_each(|h| *h = true);
+            f.internal_rounds = f.def.internal_capacity.min(4);
         }
         return;
     }
@@ -822,6 +893,8 @@ fn film(
     loaded: Option<Res<crate::render::timeline::Loaded>>,
     mut frame: Local<u32>,
     mut shot: Local<u32>,
+    mut cameras: Query<&mut Transform, With<crate::render::FreeCamera>>,
+    players: Query<&Transform, (With<LocalPlayer>, Without<crate::render::FreeCamera>)>,
 ) {
     let (Some(spec), Some(out)) = (&opts.gallery, &opts.screenshot) else {
         return;
@@ -831,6 +904,9 @@ fn film(
     };
     let mut args = rest.split(',');
     let what = args.next().unwrap_or("pm").to_owned();
+    // `,side`: filmed from beside the shooter, where a shove shows.
+    let side = rest.split(',').any(|a| a == "side");
+    let mut args = args.filter(|a| *a != "side");
     let every: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(3).max(1);
     *frame += 1;
     if *frame == 1 {
@@ -852,6 +928,13 @@ fn film(
             commands.insert_resource(Cycle::of(id));
         }
         return;
+    }
+    // From beside: a metre and a half to the right, at the eye's height,
+    // looking across at the gun.
+    if side && let (Ok(root), Ok(mut cam)) = (players.single(), cameras.single_mut()) {
+        let at = root.transform_point(Vec3::new(1.4, 1.45, -0.3));
+        let look = root.transform_point(Vec3::new(0.0, 1.5, -0.35));
+        *cam = Transform::from_translation(at).looking_at(look, Vec3::Y);
     }
     let Some(cycle) = cycle else {
         return;
@@ -1055,6 +1138,25 @@ mod tests {
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
         assert_eq!(fired(c), 2, "{}", c.report());
+    }
+
+    /// Each kick reel's gun fires both its shots: the IZh-43's second
+    /// barrel lands after the first's settle (0.2-0.25 s), well inside
+    /// the reel's 0.8 s between them.
+    #[test]
+    fn the_kick_reels_fire_both_shots() {
+        for gun in KICKED {
+            let vr = run(&format!("kick_{gun}"));
+            let c = vr.app.world().resource::<Cycle>();
+            assert!(c.done, "{gun}: the script ran out");
+            assert_eq!(fired(c), kick_shots(gun), "{gun}: {}", c.report());
+            for s in c.shots() {
+                assert!(
+                    s.back_s.is_some_and(|b| b < 0.5),
+                    "{gun}: settled before the next shot: {s:?}"
+                );
+            }
+        }
     }
 
     #[test]
