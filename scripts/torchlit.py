@@ -2,21 +2,21 @@
 """Reads a `--torchlit` capture (`src/capture/torchlit.rs`) and says how
 each item stands off its floor by torchlight.
 
-Each item's pixels are where its shot differs from its empty floor's (the
-torch is at the eye, so its shadow hides behind it). From them:
+Each item's pixels are where its mask shot (the room hidden) differs from
+the floor's void shot. From them, in its own shot:
 
-- body: how far its colour is from the floor's it covers (the same pixels
-  in the empty shot), as CIE76 delta E between their mean Lab colours:
-  under about 10 it's the floor's colour, 20 or more stands off it;
-- rim: the same across its outline only (a light rim on a dark thing
-  reads even when its body matches the floor);
+- body: how far its pixels' colours are from the floor's round it (a band
+  a few pixels out), as CIE76 delta E, the median of its pixels: under
+  about 10 it's the floor's colour, 20 or more stands off it;
+- rim: its outline's pixels against the floor just outside, the upper
+  quartile (a light rim on a dark thing reads even when its body matches
+  the floor, and need only run round part of it);
 - contrast: |item - floor| / the brighter, in linear luminance (lightness
   alone, for the record);
 - size: the side of a square of its pixels, in degrees at the eye;
 - colour: its mean hue and chroma (CIE Lab a*, b*), its lightness L*.
 
-A frame whose floor, outside the item, differs from its empty floor's is
-flagged as a bad shot (rendered wrong) and left out.
+A shot whose mask is empty is flagged as bad and left out.
 
 Twins are items that are near one another in size, outline (the aspect of
 its pixels' spread) and colour, seen from 2 m on wood, and aren't the
@@ -81,6 +81,18 @@ def lab_px(rgb):
     return np.array([(116 * fy - 16).mean(), (500 * (fx - fy)).mean(), (200 * (fy - fz)).mean()])
 
 
+def lab_each(rgb, ref):
+    """Each pixel's CIE76 delta E from the Lab colour `ref`."""
+    l = lin(rgb.astype(np.float32))
+    x = (0.4124 * l[:, 0] + 0.3576 * l[:, 1] + 0.1805 * l[:, 2]) / 0.9505
+    y = 0.2126 * l[:, 0] + 0.7152 * l[:, 1] + 0.0722 * l[:, 2]
+    z = (0.0193 * l[:, 0] + 0.1192 * l[:, 1] + 0.9505 * l[:, 2]) / 1.089
+    f = lambda t: np.where(t > 0.008856, np.cbrt(t), 7.787 * t + 16 / 116)
+    fx, fy, fz = f(x), f(y), f(z)
+    lab = np.stack([116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)], axis=1)
+    return np.linalg.norm(lab - ref, axis=1)
+
+
 def delta_e(a, b):
     return float(np.linalg.norm(a - b))
 
@@ -103,30 +115,46 @@ def dilate(m):
     return d
 
 
-def measure(shot_path, empty, px_per_deg):
+def grow(m, k):
+    for _ in range(k):
+        m = dilate(m)
+    return m
+
+
+def measure(shot_path, mask_path, void, px_per_deg):
+    """An item's pixels from its mask shot (the room hidden) against the
+    void; its colour against the floor round it in its own shot (the eyes
+    adapt to what's near, so another shot's floor isn't its floor)."""
     shot = np.asarray(Image.open(shot_path).convert("RGB")).astype(np.int16)
-    diff = np.abs(shot - empty).max(axis=2)
-    raw = diff > DIFF
-    # Opened: lone noisy pixels out, the item's body kept.
+    alone = np.asarray(Image.open(mask_path).convert("RGB")).astype(np.int16)
+    raw = np.abs(alone - void).max(axis=2) > DIFF
     mask = dilate(erode(raw))
     n = int(mask.sum())
-    outside = raw & ~dilate(dilate(dilate(mask)))
-    bad = outside.mean() > BAD_OUTSIDE or n == 0
     if n == 0:
         return {"bad": True, "px": 0}
-    li = lum(shot[mask]).mean()
-    lf = lum(empty[mask]).mean()
+    # The floor round it: a band a few pixels out (past its antialiased
+    # edge), and its rim: a band just inside.
+    ring = grow(mask, 6) & ~grow(mask, 2)
+    rim_in = mask & ~erode(erode(mask))
+    rim_out = grow(mask, 3) & ~grow(mask, 1)
+    if ring.sum() == 0 or rim_out.sum() == 0:
+        return {"bad": True, "px": n}
+    item, floor = shot[mask], shot[ring]
+    li, lf = lum(item).mean(), lum(floor).mean()
     contrast = abs(li - lf) / max(li, lf, 1e-6)
-    body = delta_e(lab_px(shot[mask]), lab_px(empty[mask]))
-    rim = mask & ~erode(erode(mask))
-    edge = delta_e(lab_px(shot[rim]), lab_px(empty[rim])) if rim.sum() > 0 else body
+    # Each of its pixels against the floor's mean colour: the body is the
+    # median (what most of it shows), the rim the upper quartile of its
+    # outline (a bright edge need only run round part of it to read).
+    floor_lab = lab_px(floor)
+    body = float(np.median(lab_each(item, floor_lab)))
+    edge = float(np.percentile(lab_each(shot[rim_in], lab_px(shot[rim_out])), 75)) if rim_in.sum() else body
     ys, xs = np.nonzero(mask)
     cov = np.cov(np.vstack([xs, ys])) if n > 2 else np.eye(2)
     ev = np.sort(np.linalg.eigvalsh(cov))
     aspect = math.sqrt(max(ev[1], 1e-6) / max(ev[0], 1e-6))
-    L, a, b = lab(shot[mask].mean(axis=0))
+    L, a, b = lab_px(item)
     return {
-        "bad": bool(bad),
+        "bad": False,
         "px": n,
         "deg": math.sqrt(n) / px_per_deg,
         "contrast": float(contrast),
@@ -171,15 +199,16 @@ def analyse(meta):
     for floor in meta["floors"]:
         for eye in [e["name"] for e in meta["eyes"]]:
             d = os.path.join(meta["where"][floor], floor, eye)
-            empty_p = os.path.join(d, "_empty.png")
-            if not os.path.exists(empty_p):
+            void_p = os.path.join(d, "_void.png")
+            if not os.path.exists(void_p):
                 continue
-            empty = np.asarray(Image.open(empty_p).convert("RGB")).astype(np.int16)
+            void = np.asarray(Image.open(void_p).convert("RGB")).astype(np.int16)
             for it in items:
                 p = os.path.join(d, it["id"] + ".png")
-                if not os.path.exists(p):
+                mp = os.path.join(d, it["id"] + "_mask.png")
+                if not (os.path.exists(p) and os.path.exists(mp)):
                     continue
-                m = measure(p, empty, ppd)
+                m = measure(p, mp, void, ppd)
                 out.setdefault(it["id"], {"item": it, "views": {}})["views"][f"{floor}/{eye}"] = m
     return meta, out
 

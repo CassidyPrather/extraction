@@ -8,8 +8,10 @@
 //! (`render::legibility::eye_px_per_deg`), so an item covers as many
 //! pixels as it would in the eye.
 //!
-//! Shots go to `<capture-out>/torchlit/<floor>/<eye>/<item>.png` (and
-//! `_empty.png`), with `torchlit.json` listing the items.
+//! Shots go to `<capture-out>/torchlit/<floor>/<eye>/<item>.png`, each
+//! with its `_mask.png` (the room hidden, the item alone: its pixels), and
+//! the floor's `_empty.png` and `_void.png`; `torchlit.json` lists the
+//! items.
 //! `scripts/torchlit.py` takes each item from its empty floor and measures
 //! how it stands off it: the readability report and the contact sheets.
 //! `--torchlit-only a,b` shoots only the items whose ids contain one of
@@ -108,6 +110,9 @@ struct Torchlit {
     room: Vec<Entity>,
     root: Option<Entity>,
     torch: Option<Entity>,
+    /// 0: the shot; 1: its mask (the room hidden).
+    pass: u8,
+    hidden: bool,
     records: Vec<Record>,
     started: Option<std::time::Instant>,
 }
@@ -379,10 +384,26 @@ fn torchlit(
             }
             let (floor, _) = FLOORS[st.floors[st.floor]];
             let (eye, _, _) = EYES[st.eye];
-            let name = if st.i < 0 {
+            // The mask: the room hidden, the item alone against nothing,
+            // for telling its pixels from the floor's (the eyes adapt as
+            // an item comes near, so the empty floor isn't the item's).
+            if st.pass == 1 && !st.hidden {
+                for e in &st.room {
+                    commands.entity(*e).insert(Visibility::Hidden);
+                }
+                st.hidden = true;
+                st.frames = 0;
+                return;
+            }
+            let base = if st.i < 0 {
                 "_empty".to_string()
             } else {
                 st.items[st.i as usize].0.clone()
+            };
+            let name = match (st.pass, st.i < 0) {
+                (0, _) => base,
+                (_, true) => "_void".to_string(),
+                _ => format!("{base}_mask"),
             };
             let file = out.join(floor).join(eye).join(format!("{name}.png"));
             if let Some(dir) = file.parent() {
@@ -393,7 +414,14 @@ fn torchlit(
             commands.spawn(Screenshot::primary_window()).observe(
                 move |shot: On<ScreenshotCaptured>, mut st: ResMut<Torchlit>| {
                     save(shot);
-                    st.stage = Stage::Next;
+                    if st.pass == 0 {
+                        st.pass = 1;
+                        st.frames = 0;
+                        st.stage = Stage::Shoot;
+                    } else {
+                        st.pass = 0;
+                        st.stage = Stage::Next;
+                    }
                 },
             );
         }
@@ -401,6 +429,12 @@ fn torchlit(
         Stage::Next => {
             if let Some(root) = st.root.take() {
                 commands.entity(root).despawn();
+            }
+            if st.hidden {
+                for e in &st.room {
+                    commands.entity(*e).insert(Visibility::Inherited);
+                }
+                st.hidden = false;
             }
             st.i += 1;
             if st.i as usize >= st.items.len() {
