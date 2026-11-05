@@ -278,7 +278,7 @@ fn kick(pistol: bool, shots: usize) -> Vec<Act> {
 }
 
 /// The guns with a scripted cycle.
-pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133"];
+pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133", "sks"];
 
 fn script_for(id: &str) -> Vec<Act> {
     if let Some(gun) = id.strip_prefix("kick_") {
@@ -288,6 +288,7 @@ fn script_for(id: &str) -> Vec<Act> {
         "toz8" => toz8(),
         "toz_double" => izh43(),
         "mp133" => mp133(),
+        "sks" => sks(),
         _ => script(),
     }
 }
@@ -319,6 +320,13 @@ fn kit(id: &str) -> Kit {
         };
     }
     match id {
+        "sks" => Kit {
+            gun: "sks",
+            mag: None,
+            holster: false,
+            spares: vec![("sks_clip", 10)],
+            ready: false,
+        },
         "mp133" => Kit {
             gun: "mp133",
             mag: None,
@@ -441,6 +449,56 @@ fn pump() -> Vec<Act> {
         Move(Side::Left, To::Forend(-0.05), Quat::IDENTITY, 10),
         Wait(8),
     ]
+}
+
+/// A stripper clip from beside the rest into the guide, and pushed down:
+/// its rounds strip into the magazine. The empty clip let go of.
+fn strip_in(spare: usize) -> Vec<Act> {
+    vec![
+        Move(Side::Left, To::Spare(spare), Quat::IDENTITY, 30),
+        Grip(Side::Left, 1.0),
+        Wait(4),
+        LiftSpare(spare),
+        Move(Side::Left, To::Port(0.05), Quat::IDENTITY, 30),
+        Move(Side::Left, To::Port(0.015), Quat::IDENTITY, 10),
+        Wait(6),
+        Grip(Side::Left, 0.0),
+        Move(Side::Left, To::Port(0.15), Quat::IDENTITY, 12),
+    ]
+}
+
+/// The SKS: a self-loading carbine with a fixed ten-round magazine, fed
+/// by stripper clip. Taken up, the charging handle racked (on an empty
+/// magazine it holds open), a clip stripped in, the handle tugged off its
+/// stop and let go (it runs home on a round); aimed, two shots.
+fn sks() -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.push(Beat("open"));
+    s.extend([
+        Move(Side::Left, To::Slide(0.0), Quat::IDENTITY, 24),
+        Trigger(Side::Left, 1.0),
+        Wait(3),
+        Move(Side::Left, To::Slide(1.15), Quat::IDENTITY, 14),
+        Trigger(Side::Left, 0.0),
+        Wait(8),
+    ]);
+    s.push(Beat("clip in"));
+    s.extend(strip_in(0));
+    s.push(Beat("let it go"));
+    s.extend([
+        Move(Side::Left, To::Slide(1.0), Quat::IDENTITY, 20),
+        Trigger(Side::Left, 1.0),
+        Wait(3),
+        Move(Side::Left, To::Slide(1.12), Quat::IDENTITY, 5),
+        Trigger(Side::Left, 0.0),
+        Wait(10),
+    ]);
+    s.extend(aim_long());
+    s.push(Beat("fire"));
+    s.extend(SHOT);
+    s.extend(SHOT);
+    s.extend([Beat("end"), Wait(45)]);
+    s
 }
 
 /// The MP-133: a pump twelve-gauge. Taken up, two shells thumbed into the
@@ -737,6 +795,9 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
         g.firearm.condition = 1.0;
         while g.firearm.fire_mode() != FireMode::Semi {
             g.firearm.cycle_mode();
+        }
+        if !c.ready {
+            g.firearm.internal_rounds = 0;
         }
         if c.ready {
             // Loaded and cocked: every chamber, and the magazine behind.
@@ -1157,6 +1218,17 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The SKS by hand: racked (it holds open on its empty magazine), a
+    /// clip of ten stripped in, the bolt let go onto a round, two shots.
+    #[test]
+    fn the_sks_cycle_runs_by_hand() {
+        let vr = run("sks");
+        let c = vr.app.world().resource::<Cycle>();
+        println!("{}", c.report());
+        assert!(c.done, "the script ran out");
+        assert_eq!(fired(c), 2, "{}", c.report());
     }
 
     #[test]
