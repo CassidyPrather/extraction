@@ -43,6 +43,7 @@ pub mod terrain;
 pub mod trees;
 pub mod underground;
 pub mod water;
+pub mod way_lamps;
 pub mod weather;
 pub mod workings;
 

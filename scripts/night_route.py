@@ -17,7 +17,8 @@ Each stop is a line of WALKS.jsonl, from `night-walks`. Two cases:
   against the sky isn't scored (every treeline breaks the skyline): judge
   that off the sheet.
 
-LOST is a stop where you can't tell which way the way goes.
+LOST is a stop where you can't tell which way the way goes. A stop
+within `AT_RV` of the rendezvous reads either way: you're at its beacon.
 Prints one line a stop, then the LOST stretches (runs of LOST stops), and
 with --sheet tiles the worst stops' frames, the way ahead marked.
 
@@ -36,6 +37,8 @@ FOV = 75.0
 STANDS_OUT = 0.12
 # Where night-walks samples the way ahead (m): night_walks.rs's AHEAD.
 AHEAD_M = [6.0, 9.0, 12.0, 16.0, 20.0, 25.0, 30.0, 40.0]
+# This near the rendezvous (m), you're at its beacon.
+AT_RV = 25.0
 # Below this the frame is black there: nothing to read either way.
 FLOOR = 4.0
 # Torch: the points inside the pool (m ahead), and how many must stand out.
@@ -138,6 +141,10 @@ def main(argv):
             print(f"MISSING {s['name']}")
             continue
         im = Image.open(f).convert("RGB")
+        if s.get("to_rv", 1e9) <= AT_RV:
+            print(f"READ  {s['name']}  {s['walk']}  stop {s['stop']}: at the rendezvous ({s['to_rv']:.0f} m)")
+            results.append((s, True, 1.0, 0.0, [], f))
+            continue
         if case == "dark":
             lit = score_dark(s, im)
             ok = len(lit) > 0

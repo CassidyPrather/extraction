@@ -459,6 +459,11 @@
         (at: (231.0, 56.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // Yard lamps where a first job's way home can't be told after
+        // dark without a torch (scripts/night_route.sh, the dark case).
+        (prefab: "way_lamp", at: (2.9, 168.3), rot: 0.0),  // by the valve house, the way west to the stair
+        (prefab: "way_lamp", at: (26.0, 156.3), rot: 0.0),  // on the face stair, by the outer wall
+
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
         (prefab: "log_pile", at: (242.7, -54.9), rot: 214.0, tag: "wait_gauge_house"),

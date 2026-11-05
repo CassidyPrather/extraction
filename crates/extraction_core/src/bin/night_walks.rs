@@ -113,7 +113,7 @@ fn main() {
                 near_r.push(fmt(ground([q[0] - side[0] * NEAR, q[1] - side[1] * NEAR])));
             }
             println!(
-                "{{\"walk\":\"{what}>{rv}\",\"stop\":{stop},\"name\":\"{name}\",\"eye\":{},\"yaw\":{yaw:.1},\"pitch\":{:.1},\"still\":\"{name} {:.1},{:.2},{:.1},{yaw:.1},{:.1}\",\"ahead\":[{}],\"left\":[{}],\"right\":[{}],\"near_left\":[{}],\"near_right\":[{}]}}",
+                "{{\"walk\":\"{what}>{rv}\",\"stop\":{stop},\"name\":\"{name}\",\"eye\":{},\"yaw\":{yaw:.1},\"pitch\":{:.1},\"still\":\"{name} {:.1},{:.2},{:.1},{yaw:.1},{:.1}\",\"ahead\":[{}],\"left\":[{}],\"right\":[{}],\"near_left\":[{}],\"near_right\":[{}],\"to_rv\":{:.1}}}",
                 fmt(eye),
                 -LOOK_DOWN,
                 eye[0],
@@ -124,7 +124,8 @@ fn main() {
                 lefts.join(","),
                 rights.join(","),
                 near_l.join(","),
-                near_r.join(",")
+                near_r.join(","),
+                dist(p, *to)
             );
             stop += 1;
             s += STEP;
