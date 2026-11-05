@@ -189,7 +189,19 @@ pub struct Grasp {
     pub curl: [f32; 5],
     /// Small enough to close the hand round ([`small`]).
     pub small: bool,
+    /// Thin and flat ([`thin`]): held by an edge, not laid on the hand.
+    pub thin: bool,
 }
+
+/// A thin flat thing (a card, a letter, a record): no thicker than
+/// [`THIN`]. Held, it's pinched by an edge, the thumb on one face and a
+/// finger on the other; laid flat on the hand, a card held up to read
+/// stood on the fingertips like a tray (the 100-degree eye, 5 November).
+pub fn thin(half: Vec3) -> bool {
+    half.min_element() * 2.0 <= THIN
+}
+
+pub const THIN: f32 = 0.012;
 
 /// Something a closed hand goes round: its middle size no more than
 /// [`SMALL_ACROSS`], its longest no more than [`SMALL_LONG`] (a power
@@ -263,6 +275,9 @@ impl Grasp {
                 self.gap[5] * 1000.0
             ));
         }
+        if self.thin && !self.pinched() {
+            return Some("laid on the hand, not pinched by an edge".to_owned());
+        }
         if self.small && !self.gripped() {
             return Some(format!(
                 "on an open hand, not gripped (fingers curled {:.2} {:.2} {:.2} {:.2}, {})",
@@ -319,6 +334,7 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
         face,
         curl: seat.curl,
         small: small(half),
+        thin: thin(half),
     }
 }
 
