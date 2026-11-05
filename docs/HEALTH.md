@@ -80,18 +80,12 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of a974f23.
+As of a974f23, with the Verifier's fixes since (on main or in gate 194) and a Marrow smoke on main a5b7aeb7.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::gun_rest::tests::gauge_guns_lying_about_rest`: 16 of 17 guns resting under the gauge batch's load (Visual design 2 in 3, this check once); passes alone | settles by frame count, not state | Verifier (from the coordinator) | next: settle until every gun rests, with a cap, naming any that doesn't |
 | `first_jobs_cautious` on Marrow: the bot times out on WalkTo (-80.7, 8.71) after the Surge (2049 s), never home | | Onboarding | reported |
-| Sim: take routes through a robot's wreck indoors (Marrow seeds 2 and 7, depot_marrow) | raider routing | Verifier | fixed in 04a443f4 (on main after a974f23); to confirm on the next check |
-| Sim: outdoor routes through a wreck (Kettle seed 1 at a bridge end, Walker wreck, 10 stucks on 04a443f4) | raider routing | Verifier | next |
-| Sim: Marrow seed 1, two take stucks at house_plank's door (the leaf shoving the raider aside) | door handling | Onboarding | fixed in 200068c2 (gate 185); to confirm |
-| Door leaf pushes a standing player 0.32-1.58 m (probe, 5 of 6 doors in Marrow and Kettle) | VR comfort | Onboarding | fixed in 200068c2 (gate 185) |
-| Sim: Sallow, to_rv waypoint (237.12, -35.65) inside gauge_hut's shed (seed 2 one stuck, seed 5 three) | raider routing | Verifier (from Fourth valley) | queued |
-| Sim: Rime seed 4, 6 take stucks in adit_rime at (151.8, -61.6) | raider routing | Verifier | to look at |
+| Sim: Kettle seed 2 dies to a Drone on the beck's footbridge (a fight it loses there; 1 stuck since the bridge sidestep, 3 before) | combat | Robot minds / none | watching |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
@@ -99,6 +93,7 @@ As of a974f23.
 
 | test / run | fixed in | by |
 | - | - | - |
+| Raider routing: take routes through wrecks indoors (04a443f4) and out of doors, the wreck at the walk's end left on it (e75a5656..935b442f); a wall from just outside (378c8033..f0056e7b); empties through rock (8107aa5b, Rime seed 4's adit); sidesteps onto floor (a08fa083) and along a bridge's deck (8cee2b9b, shared `world::bridges::Deck` 89fde86c); boarding from the truck as it stands (83eb0f50); the truck never parked into a building (4e3aad60, lint `every_truck_stop_is_clear_of_buildings`); the gun-rest gauge's settle (74befaf3); Marrow seed 1's door (Onboarding's 200068c2: 0 stucks on a5b7aeb7); the door leaf shoving a player (200068c2); the Sallow shed waypoint (doesn't reproduce on a974f23 or after) | 192 / 194 | Verifier, Onboarding |
 | The broken walker on job 2 in one session (Robot minds, 9bfdd9df: `first_jobs_cautious` places it at (50.9, 133.5)); first_contact's cold run (the asset read-ahead, 8e76ed67); Marrow seed 2's bridge (Map design); Sallow seed 6's fall (the dam fix, 626243b3) | a974f23 | Robot minds, Verifier, Performance, Map design |
 | the puff gauge and Marrow m05_spruce (the sky counted), `second_hour` (0/40 → passes) | 8d5c110 | Performance, Weapon feel, Onboarding |
 | `contract_scour_key` (outside-doors-only Entrances, a44221f5); part_rest's test race; the cellars_cinder probe flag; first_contact's Kettle/Rime load | 50d1900 / 90afc8b | Models, Performance, Capture |
