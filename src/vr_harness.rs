@@ -7283,9 +7283,12 @@ mod wreck_reach {
         for _ in 0..30 {
             vr.step(30);
             let w = vr.app.world();
-            if w.get::<crate::robots::Salvaged>(e).is_some()
-                && (kind == "heavy" || w.get::<crate::robots::salvage::Fitted>(e).is_some())
-            {
+            // (The heavy's done going over `FALL_TIME` after it's down.)
+            let settled = match w.get::<crate::robots::heavy::Heavy>(e) {
+                Some(h) => h.down_for > crate::robots::heavy::FALL_TIME + 1.5,
+                None => w.get::<crate::robots::salvage::Fitted>(e).is_some(),
+            };
+            if w.get::<crate::robots::Salvaged>(e).is_some() && settled {
                 break;
             }
         }
