@@ -167,3 +167,5 @@ Before and after, the walker and the drone 5 m off on the training yard in fog, 
 
 ![walker wreck](wreck_rests_on_bare_side_walker_before_after.png)
 ![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)
+
+> **Reel spot.** Most recipes above put the camera at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
