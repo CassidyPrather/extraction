@@ -159,28 +159,43 @@ fn wake_parts(
     mut vis: Query<&mut Visibility>,
 ) {
     let mut woken: HashSet<Entity> = HashSet::new();
+    // Why each was woken (for `EXTRACTION_PART_REST_LOG`).
+    let mut why: Vec<(Entity, &'static str)> = Vec::new();
     let part_of = |e: Entity, cells: &Cells| cells.leaf_part.get(&e).copied();
-    for e in moved.iter().chain(reshaped.iter()).chain(regrown.iter()) {
-        if let Some(p) = part_of(e, &cells) {
-            woken.insert(p);
+    for (q, reason) in [
+        (moved.iter().collect::<Vec<_>>(), "moved"),
+        (reshaped.iter().collect(), "reshaped"),
+        (regrown.iter().collect(), "children changed"),
+    ] {
+        for e in q {
+            if let Some(p) = part_of(e, &cells) {
+                woken.insert(p);
+                why.push((p, reason));
+            }
         }
     }
     for e in gone.read() {
         if let Some(p) = part_of(e, &cells) {
             woken.insert(p);
+            why.push((p, "unparented"));
         }
     }
-    woken.extend(hit.iter().filter(|e| cells.part_cell.contains_key(e)));
-    woken.extend(
-        prised
-            .iter()
-            .filter(|(e, p)| p.held > 0.0 && cells.part_cell.contains_key(e))
-            .map(|(e, _)| e),
-    );
+    for e in hit.iter().filter(|e| cells.part_cell.contains_key(e)) {
+        woken.insert(e);
+        why.push((e, "hit"));
+    }
+    for (e, _) in prised
+        .iter()
+        .filter(|(e, p)| p.held > 0.0 && cells.part_cell.contains_key(e))
+    {
+        woken.insert(e);
+        why.push((e, "prised"));
+    }
     // Gone: broken, stripped, despawned.
     let undrawn: Vec<Entity> = undrawn.read().chain(unhung.read()).collect();
     for e in &undrawn {
         woken.insert(*e);
+        why.push((*e, "gone"));
     }
     // Hands and held things: the parts in the cells round each.
     for g in &near {
@@ -199,36 +214,39 @@ fn wake_parts(
                         let reach = NEAR + size.unwrap_or(Vec3::ONE).max_element() * 0.5;
                         if pg.translation().distance_squared(at) < reach * reach {
                             woken.insert(*part);
+                            why.push((*part, "near a hand"));
                         }
                     }
                 }
             }
         }
     }
-    // (`EXTRACTION_PART_REST_LOG=1`: each part woken in a merged cell,
-    // and why, to find what keeps a cell awake.)
+    // (`EXTRACTION_PART_REST_LOG=1`: what woke parts, by reason, every
+    // 300 frames: to find what keeps a cell awake.)
     static LOG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    let log = *LOG.get_or_init(|| std::env::var_os("EXTRACTION_PART_REST_LOG").is_some());
-    for part in woken {
-        if log {
-            let merged = cells
-                .part_cell
-                .get(&part)
-                .and_then(|k| cells.cells.get(k))
-                .is_some_and(|c| c.rest.is_some());
-            if merged {
-                let why = if undrawn.contains(&part) {
-                    "gone"
-                } else if hit.contains(part) {
-                    "hit"
-                } else if prised.contains(part) {
-                    "prised"
-                } else {
-                    "moved, reshaped or near a hand"
-                };
-                info!("part_rest: woke {part:?} ({why})");
+    if *LOG.get_or_init(|| std::env::var_os("EXTRACTION_PART_REST_LOG").is_some()) {
+        static TALLY: std::sync::Mutex<(u32, Vec<(String, u32)>)> =
+            std::sync::Mutex::new((0, Vec::new()));
+        let mut t = TALLY.lock().unwrap();
+        for (_, reason) in &why {
+            match t.1.iter_mut().find(|(r, _)| r == reason) {
+                Some((_, n)) => *n += 1,
+                None => t.1.push((reason.to_string(), 1)),
             }
         }
+        t.0 += 1;
+        if t.0 % 300 == 0 {
+            let cells_merged = cells.cells.values().filter(|c| c.rest.is_some()).count();
+            info!(
+                "part_rest: {} of {} cells merged; wakes in 300 frames: {:?}",
+                cells_merged,
+                cells.cells.len(),
+                t.1
+            );
+            t.1.clear();
+        }
+    }
+    for part in woken {
         cells.wake(part, &mut vis, &mut commands);
     }
     // Parts gone for good leave their cells.
