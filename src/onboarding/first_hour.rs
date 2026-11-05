@@ -597,6 +597,8 @@ pub(super) struct Newcomer {
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
+    /// The walk last looked at as it came up (`unvetted`): once each.
+    vetted: Option<Vec2>,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1525,6 +1527,31 @@ pub(super) fn direct_raid(
         if line.contains("timed out on WalkTo") {
             while matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) && bot.tasks.len() > 1 {
                 bot.tasks.pop_front();
+            }
+            bot.restart();
+        }
+    }
+    // A walk about to be made that `walk` didn't plan: a long straight one,
+    // or one through the fence, goes by `walk` (once each). (Walked off from
+    // a heavy out through the south gate, it went on with the way it had
+    // planned from inside, at the wire; and a 90 m stretch along the fence
+    // timed out at a walk.)
+    if let Some(&Task::WalkTo { to, within }) = bot.tasks.front()
+        && state.vetted != Some(to)
+        && {
+            // (Looked at once, as it comes up.)
+            state.vetted = Some(to);
+            unvetted(&world, here, to)
+        }
+    {
+        let mut legs = walk(&world, here, to);
+        if let Some(Task::WalkTo { within: w, .. }) = legs.last_mut() {
+            *w = within;
+        }
+        if !legs.is_empty() {
+            bot.tasks.pop_front();
+            for t in legs.into_iter().rev() {
+                bot.tasks.push_front(t);
             }
             bot.restart();
         }
@@ -2652,6 +2679,28 @@ fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
     let mut t = walk(world, here, here + away * 15.0);
     t.push(Task::Wait(2.0));
     t
+}
+
+/// A straight walk `walk` wouldn't make: longer than its legs go, or
+/// through the quarantine fence (out of doors only: a step in a building
+/// is its plan's).
+fn unvetted(world: &World2, here: Vec2, to: Vec2) -> bool {
+    let indoors = |p: Vec2| {
+        world
+            .entrances
+            .building_at(Vec3::new(p.x, world.zone.on_ground(p.x, p.y).y + 0.5, p.y))
+            .is_some()
+    };
+    if indoors(here) || indoors(to) {
+        return false;
+    }
+    here.distance(to) > 20.0
+        || fence_boxes(&world.zone).iter().any(|(xf, half)| {
+            let inv = xf.compute_affine().inverse();
+            let a = inv.transform_point3(Vec3::new(here.x, 0.0, here.y)).xz();
+            let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
+            segment_hits_box(a, b, *half).is_some()
+        })
 }
 
 /// Into cover from a machine at `from`: round the far side of the nearest
