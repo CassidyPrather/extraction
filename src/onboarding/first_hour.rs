@@ -542,6 +542,13 @@ pub(super) fn errand(job: &Job) -> Errand {
     }
 }
 
+/// The errand, in the valley the job is in: a job pencilled in another
+/// valley isn't gone after here (a Marrow job's place, walked to inside
+/// Cinder, stood the newcomer in a corner of the works).
+pub(super) fn errand_here(job: &Job, map: &str) -> Option<Errand> {
+    job.map().is_none_or(|m| m == map).then(|| errand(job))
+}
+
 #[derive(Default)]
 pub(super) struct Newcomer {
     leg: Leg,
@@ -575,6 +582,8 @@ pub(super) struct Newcomer {
     walking_off_until: f32,
     /// When it first raised its arm at it.
     heavy_since: f32,
+    /// Took what the driver put on the ledge, woken in the truck.
+    took_ledge: bool,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -690,6 +699,9 @@ pub(super) struct RaidView<'w, 's> {
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     hatch: Res<'w, crate::raid::lev::Handovers>,
+    /// What the driver's firsts said, filled (for the report: a line's
+    /// template quoted "{s} things" where "Crate's empty" was said).
+    spoken: Option<Res<'w, super::firsts::Spoken>>,
     buildings: Query<
         'w,
         's,
@@ -864,6 +876,22 @@ pub(super) fn direct_raid(
     // means keeps doing as told.
     let firsts: Vec<First> = met.read().map(|m| m.0).collect();
     let on_me = |r: Entity| minds.get(r).is_ok_and(|a| a.target == Some(player));
+    // Under a roof from a drone: the wait held while any drone still has it
+    // (a flat 20 s, and it came out to be found again, every 25 s for ten
+    // minutes, till the truck had gone), for two minutes at most.
+    if state.roof_try.is_some_and(|(_, _, t)| now - t < 120.0)
+        && matches!(bot.tasks.front(), Some(Task::Wait(_)))
+        && view.entrances.as_deref().is_some_and(|en| {
+            en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
+                .is_some()
+        })
+        && world
+            .robots
+            .iter()
+            .any(|(e, r, _)| r.kind == crate::robots::RobotKind::Drone && !r.wrecked && on_me(e))
+    {
+        bot.elapsed = bot.elapsed.min(1.0);
+    }
     let mut again: Vec<First> = vec![];
     if tells.locks.read().any(|ev| on_me(ev.drone)) {
         again.push(First::DroneLock);
@@ -1546,7 +1574,7 @@ pub(super) fn direct_raid(
                 .progression
                 .as_ref()
                 .and_then(|p| p.0.job.as_ref())
-                .and_then(|j| match errand(j) {
+                .and_then(|j| match errand_here(j, &opts.map)? {
                     Errand::Leave { item, .. } => Some(item),
                     Errand::Photo(_) => Some("camera".to_owned()),
                     _ => None,
@@ -1566,7 +1594,7 @@ pub(super) fn direct_raid(
                 .progression
                 .as_ref()
                 .and_then(|p| p.0.job.as_ref())
-                .map(errand);
+                .and_then(|j| errand_here(j, &opts.map));
             // Off the ledge under the hatch, what the driver passes through:
             // his spare radio (the last one went with the rest at a fall),
             // and what the job takes out (a thing to leave, the camera).
@@ -2236,6 +2264,15 @@ pub(super) fn direct_raid(
             }
         }
         Leg::Done => {
+            // Woken in the truck after a fall: first what the driver put on
+            // the ledge (the spare radio, the spare pistol; left there, the
+            // newcomer went back out with no radio to call the truck with).
+            if raid.phase == Phase::AtBase && !state.took_ledge {
+                state.took_ledge = true;
+                state.leg = Leg::Handed;
+                state.tries = 0;
+                return;
+            }
             if !state.reported {
                 state.reported = true;
                 // The fight, if there was one: each tell, and the first hit
@@ -2260,6 +2297,19 @@ pub(super) fn direct_raid(
                         (None, _) => {}
                     }
                     state.moments.sort_by(|a, b| a.0.total_cmp(&b.0));
+                }
+                // A moment noted as its line's template ("{s} things")
+                // quotes what was said instead.
+                if let Some(filled) = view.spoken.as_ref() {
+                    for m in state.moments.iter_mut() {
+                        if let Some((t, said)) = filled
+                            .2
+                            .iter()
+                            .find(|(t, said)| said != t && !said.is_empty() && m.2.ends_with(*t))
+                        {
+                            m.2 = format!("{}{said}", &m.2[..m.2.len() - t.len()]);
+                        }
+                    }
                 }
                 report(&mut bot, p, &state.moments);
             }
@@ -3715,6 +3765,25 @@ mod tests {
                 taken: false,
             },
         ]
+    }
+
+    /// A job in another valley isn't gone after here: its place is that
+    /// valley's (a Marrow job's place, walked to inside Cinder, stuck the
+    /// newcomer in a corner of the works). One with no valley goes anywhere.
+    #[test]
+    fn a_job_in_another_valley_isnt_gone_after_here() {
+        for job in one_of_each() {
+            assert_eq!(
+                errand_here(&job, "marrow_creek"),
+                Some(errand(&job)),
+                "{job:?}"
+            );
+            assert_eq!(
+                errand_here(&job, "cinder_works").is_some(),
+                job.map().is_none(),
+                "{job:?}"
+            );
+        }
     }
 
     /// Every kind of job has a way for the newcomer to do it, and the card

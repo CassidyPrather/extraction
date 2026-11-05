@@ -541,6 +541,26 @@ fn gallery(
                 commands.insert_resource(BrokenWalkers(broken, 0));
                 commands.insert_resource(DeadLineUp(dead, 0));
             }
+            s if s.starts_with("items:") => {
+                // A row of items lying side by side on the ground DIST
+                // ahead (1.2 m), for a contact sheet of every kind:
+                // `items:tea_tin+matches+bolt`. Each rests on its box's
+                // floor, turned TURN; SHIFT spaces them (0.3 m).
+                let ids: Vec<&str> = s["items:".len()..].split('+').collect();
+                let right = Vec3::new(-flat.z, 0.0, flat.x);
+                let gap = if shift > 0.0 { shift } else { 0.3 };
+                let d = dist.unwrap_or(1.2);
+                for (i, id) in ids.iter().enumerate() {
+                    let Some(kind) = catalog.kind(id) else {
+                        continue;
+                    };
+                    let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * d + right * off;
+                    let half = catalog.get(kind).size_m()[1] * 0.5;
+                    let at = zone.on_ground(at.x, at.z) + Vec3::Y * (half + 0.002);
+                    spawn_static(&mut commands, id, at);
+                }
+            }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
                 // the camera, looking where the camera looks.
