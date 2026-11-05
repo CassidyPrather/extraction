@@ -215,6 +215,7 @@ pub struct Cycle {
     pub spares: Vec<Entity>,
     mag: Option<Entity>,
     holster: bool,
+    ready: bool,
     /// Which gun's cycle.
     pub id: String,
     stovepipe: bool,
@@ -238,14 +239,56 @@ impl Cycle {
     }
 }
 
+/// The guns with a kick reel (`cycle:kick_<id>`).
+pub const KICKED: &[&str] = &["pm_pistol", "toz_double", "mosin"];
+
+/// Shots in a kick reel: two where the gun fires again without a hand
+/// working it (a self-loader, a double's second barrel), one from a bolt.
+pub fn kick_shots(gun: &str) -> usize {
+    if gun == "mosin" { 1 } else { 2 }
+}
+
+/// A kick reel: the gun, loaded, taken up and aimed (a pistol at arm's
+/// length, a long gun at the cheek), and its shots 0.8 s apart.
+fn kick(pistol: bool, shots: usize) -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.extend([
+        Beat("aim"),
+        MoveGun(To::Aim(if pistol { 0.45 } else { 0.12 }), 36),
+        Move(
+            Side::Left,
+            To::Grab(GripRole::Support, Vec3::ZERO),
+            Quat::IDENTITY,
+            20,
+        ),
+        Grip(Side::Left, 1.0),
+        Wait(30),
+        Beat("fire"),
+    ]);
+    for _ in 0..shots {
+        s.extend([
+            Trigger(Side::Right, 1.0),
+            Wait(8),
+            Trigger(Side::Right, 0.0),
+            Wait(64),
+        ]);
+    }
+    s.extend([Beat("end"), Wait(30)]);
+    s
+}
+
 /// The guns with a scripted cycle.
-pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133"];
+pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133", "sks"];
 
 fn script_for(id: &str) -> Vec<Act> {
+    if let Some(gun) = id.strip_prefix("kick_") {
+        return kick(gun == "pm_pistol", kick_shots(gun));
+    }
     match id {
         "toz8" => toz8(),
         "toz_double" => izh43(),
         "mp133" => mp133(),
+        "sks" => sks(),
         _ => script(),
     }
 }
@@ -258,33 +301,59 @@ struct Kit {
     mag: Option<(&'static str, u32)>,
     holster: bool,
     spares: Vec<(&'static str, u32)>,
+    /// Loaded and cocked from the start (a kick reel's).
+    ready: bool,
 }
 
 fn kit(id: &str) -> Kit {
+    if let Some(gun) = id.strip_prefix("kick_") {
+        return Kit {
+            gun: KICKED
+                .iter()
+                .copied()
+                .find(|g| *g == gun)
+                .unwrap_or("pm_pistol"),
+            mag: (gun == "pm_pistol").then_some(("pm_mag", 4)),
+            holster: false,
+            spares: Vec::new(),
+            ready: true,
+        };
+    }
     match id {
+        "sks" => Kit {
+            gun: "sks",
+            mag: None,
+            holster: false,
+            spares: vec![("sks_clip", 10)],
+            ready: false,
+        },
         "mp133" => Kit {
             gun: "mp133",
             mag: None,
             holster: false,
             spares: vec![("shell_12ga", 1), ("shell_12ga", 1)],
+            ready: false,
         },
         "toz_double" => Kit {
             gun: "toz_double",
             mag: None,
             holster: false,
             spares: vec![("shell_12ga", 1), ("shell_12ga", 1)],
+            ready: false,
         },
         "toz8" => Kit {
             gun: "toz8",
             mag: None,
             holster: false,
             spares: vec![("round_22lr", 1), ("round_22lr", 1)],
+            ready: false,
         },
         _ => Kit {
             gun: "pm_pistol",
             mag: Some(("pm_mag", 3)),
             holster: true,
             spares: vec![("pm_mag", 8)],
+            ready: false,
         },
     }
 }
@@ -380,6 +449,56 @@ fn pump() -> Vec<Act> {
         Move(Side::Left, To::Forend(-0.05), Quat::IDENTITY, 10),
         Wait(8),
     ]
+}
+
+/// A stripper clip from beside the rest into the guide, and pushed down:
+/// its rounds strip into the magazine. The empty clip let go of.
+fn strip_in(spare: usize) -> Vec<Act> {
+    vec![
+        Move(Side::Left, To::Spare(spare), Quat::IDENTITY, 30),
+        Grip(Side::Left, 1.0),
+        Wait(4),
+        LiftSpare(spare),
+        Move(Side::Left, To::Port(0.05), Quat::IDENTITY, 30),
+        Move(Side::Left, To::Port(0.015), Quat::IDENTITY, 10),
+        Wait(6),
+        Grip(Side::Left, 0.0),
+        Move(Side::Left, To::Port(0.15), Quat::IDENTITY, 12),
+    ]
+}
+
+/// The SKS: a self-loading carbine with a fixed ten-round magazine, fed
+/// by stripper clip. Taken up, the charging handle racked (on an empty
+/// magazine it holds open), a clip stripped in, the handle tugged off its
+/// stop and let go (it runs home on a round); aimed, two shots.
+fn sks() -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.push(Beat("open"));
+    s.extend([
+        Move(Side::Left, To::Slide(0.0), Quat::IDENTITY, 24),
+        Trigger(Side::Left, 1.0),
+        Wait(3),
+        Move(Side::Left, To::Slide(1.15), Quat::IDENTITY, 14),
+        Trigger(Side::Left, 0.0),
+        Wait(8),
+    ]);
+    s.push(Beat("clip in"));
+    s.extend(strip_in(0));
+    s.push(Beat("let it go"));
+    s.extend([
+        Move(Side::Left, To::Slide(1.0), Quat::IDENTITY, 20),
+        Trigger(Side::Left, 1.0),
+        Wait(3),
+        Move(Side::Left, To::Slide(1.12), Quat::IDENTITY, 5),
+        Trigger(Side::Left, 0.0),
+        Wait(10),
+    ]);
+    s.extend(aim_long());
+    s.push(Beat("fire"));
+    s.extend(SHOT);
+    s.extend(SHOT);
+    s.extend([Beat("end"), Wait(45)]);
+    s
 }
 
 /// The MP-133: a pump twelve-gauge. Taken up, two shells thumbed into the
@@ -542,6 +661,7 @@ fn set_up(world: &mut World, c: &mut Cycle, who: Entity) {
     }
     c.gun = Some(gun);
     c.holster = k.holster;
+    c.ready = k.ready;
     c.since = 0;
 }
 
@@ -675,6 +795,18 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
         g.firearm.condition = 1.0;
         while g.firearm.fire_mode() != FireMode::Semi {
             g.firearm.cycle_mode();
+        }
+        if !c.ready {
+            g.firearm.internal_rounds = 0;
+        }
+        if c.ready {
+            // Loaded and cocked: every chamber, and the magazine behind.
+            let f = &mut g.firearm;
+            f.chambers
+                .iter_mut()
+                .for_each(|r| *r = Some(extraction_core::firearm::Round::Live));
+            f.hammers_cocked.iter_mut().for_each(|h| *h = true);
+            f.internal_rounds = f.def.internal_capacity.min(4);
         }
         return;
     }
@@ -822,6 +954,8 @@ fn film(
     loaded: Option<Res<crate::render::timeline::Loaded>>,
     mut frame: Local<u32>,
     mut shot: Local<u32>,
+    mut cameras: Query<&mut Transform, With<crate::render::FreeCamera>>,
+    players: Query<&Transform, (With<LocalPlayer>, Without<crate::render::FreeCamera>)>,
 ) {
     let (Some(spec), Some(out)) = (&opts.gallery, &opts.screenshot) else {
         return;
@@ -831,6 +965,9 @@ fn film(
     };
     let mut args = rest.split(',');
     let what = args.next().unwrap_or("pm").to_owned();
+    // `,side`: filmed from beside the shooter, where a shove shows.
+    let side = rest.split(',').any(|a| a == "side");
+    let mut args = args.filter(|a| *a != "side");
     let every: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(3).max(1);
     *frame += 1;
     if *frame == 1 {
@@ -853,10 +990,21 @@ fn film(
         }
         return;
     }
+    // From beside: 70 cm to the gun's right, level with it, looking
+    // straight across (where a shove along the bore shows).
+    if side && let (Ok(root), Ok(mut cam)) = (players.single(), cameras.single_mut()) {
+        let at = root.transform_point(Vec3::new(0.75, 1.55, -0.5));
+        let look = root.transform_point(Vec3::new(0.0, 1.55, -0.5));
+        *cam = Transform::from_translation(at).looking_at(look, Vec3::Y);
+    }
     let Some(cycle) = cycle else {
         return;
     };
     if cycle.frame < 4 || (cycle.frame % every != 0 && !cycle.done) {
+        return;
+    }
+    // A kick reel is filmed from its first shot.
+    if cycle.id.starts_with("kick_") && !matches!(cycle.beat, "fire" | "end") {
         return;
     }
     let stem = out
@@ -1051,6 +1199,36 @@ mod tests {
     #[test]
     fn the_mp133_cycle_runs_by_hand() {
         let vr = run("mp133");
+        let c = vr.app.world().resource::<Cycle>();
+        println!("{}", c.report());
+        assert!(c.done, "the script ran out");
+        assert_eq!(fired(c), 2, "{}", c.report());
+    }
+
+    /// Each kick reel's gun fires both its shots: the IZh-43's second
+    /// barrel lands after the first's settle (0.2-0.25 s), well inside
+    /// the reel's 0.8 s between them.
+    #[test]
+    fn the_kick_reels_fire_both_shots() {
+        for gun in KICKED {
+            let vr = run(&format!("kick_{gun}"));
+            let c = vr.app.world().resource::<Cycle>();
+            assert!(c.done, "{gun}: the script ran out");
+            assert_eq!(fired(c), kick_shots(gun), "{gun}: {}", c.report());
+            for s in c.shots() {
+                assert!(
+                    s.back_s.is_some_and(|b| b < 0.5),
+                    "{gun}: settled before the next shot: {s:?}"
+                );
+            }
+        }
+    }
+
+    /// The SKS by hand: racked (it holds open on its empty magazine), a
+    /// clip of ten stripped in, the bolt let go onto a round, two shots.
+    #[test]
+    fn the_sks_cycle_runs_by_hand() {
+        let vr = run("sks");
         let c = vr.app.world().resource::<Cycle>();
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
