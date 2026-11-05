@@ -795,6 +795,8 @@ pub struct Scene<'w, 's> {
     robot_state: Query<'w, 's, (&'static Robot, &'static GlobalTransform)>,
     /// The ground's collider, left out of a ray for what's underfoot.
     terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
+    /// Where anything is (what a stuck raider was walking up to press).
+    placed: Query<'w, 's, &'static GlobalTransform>,
 }
 
 impl Scene<'_, '_> {
@@ -828,6 +830,11 @@ impl Scene<'_, '_> {
             )
             .map_or(ground, |hit| (from.y - hit.distance).max(ground));
         self.wreck_at_feet(p, feet)
+    }
+
+    /// Where a thing is, on the ground plane.
+    fn items_at(&self, e: Entity) -> Option<Vec2> {
+        self.placed.get(e).ok().map(|g| g.translation().xz())
     }
 
     /// Where wrecked robots lie (their bodies' roots).
@@ -1206,6 +1213,11 @@ pub fn think(
                         (Some(Task::WalkTo { within, .. }), Some(Task::WalkTo { to, .. }))
                             if *within == crate::bot::SIDESTEP => scene.in_the_way(pos, *to),
                         (Some(Task::WalkTo { to, .. }), _) => scene.in_the_way(pos, *to),
+                        // Walking up to press something (the truck's bell).
+                        (Some(Task::Press(e)), _) => scene
+                            .items_at(*e)
+                            .map(|at| scene.in_the_way(pos, at))
+                            .unwrap_or_default(),
                         _ => String::new(),
                     }}),
                 );
