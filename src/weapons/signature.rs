@@ -179,6 +179,11 @@ fn ready(r: &mut Range) {
     for c in f.chambers.iter_mut() {
         *c = Some(Round::Live);
     }
+    // A self-loader's fixed magazine (the SKS's) full behind it: the shot
+    // recorded is a shot, not the one that empties it and holds it open.
+    if f.def.action == extraction_core::firearm::ActionKind::SemiAuto {
+        f.internal_rounds = f.internal_rounds.max(5);
+    }
     for h in f.hammers_cocked.iter_mut() {
         *h = true;
     }

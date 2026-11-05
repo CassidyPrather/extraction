@@ -381,9 +381,17 @@ fn pose_limbs(
 
 /// The vents and the strips down its back glow cyan cold and run to
 /// orange as it heats (flaring while it stalls); a lost vent goes dark; its eye goes out when it's blinded;
-/// everything goes out when it falls.
+/// everything goes out when it falls. Its eye says what it knows of you
+/// as every machine's does (`visuals::eye_mood`).
 fn light_heavies(
-    heavies: Query<(&Heavy, &Robot, &Lights, &Children)>,
+    heavies: Query<(
+        Entity,
+        &Heavy,
+        &Robot,
+        &Lights,
+        &Children,
+        Option<&super::Awareness>,
+    )>,
     parts: Query<(&HeavyPart, &RobotPart)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
@@ -391,7 +399,7 @@ fn light_heavies(
     let cold = LinearRgba::rgb(0.2 * 6.0, 0.8 * 6.0, 1.0 * 6.0);
     let hot = LinearRgba::rgb(8.0, 1.4, 0.12);
     let dark = LinearRgba::BLACK;
-    for (h, robot, lights, children) in &heavies {
+    for (e, h, robot, lights, children, aware) in &heavies {
         let mut vent_alive = [true; 2];
         let mut eye_alive = true;
         for c in children.iter() {
@@ -437,7 +445,9 @@ fn light_heavies(
             let want = if robot.wrecked || !eye_alive {
                 dark
             } else {
+                let t = time.elapsed_secs() + e.index_u32() as f32 * 0.37;
                 LinearRgba::rgb(9.0, 1.2, 0.6)
+                    * aware.map_or(1.0, |a| super::visuals::eye_mood(a, t))
             };
             if m.emissive != want {
                 m.emissive = want;

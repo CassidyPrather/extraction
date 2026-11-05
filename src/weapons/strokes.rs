@@ -212,3 +212,78 @@ fn every_hand_worked_mechanism_completes_as_its_kind_should() {
     assert_eq!(guns, 12, "every gun with a handle");
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
+
+/// What the left hand felt.
+#[derive(Resource, Default)]
+struct Felt(Vec<f32>);
+
+/// A slide's recoil spring: a hand drifting back slides on it, a steady
+/// rack beats it, and the hand feels it compress, harder the further it
+/// comes back.
+#[test]
+fn a_slide_has_a_spring_a_rack_beats() {
+    for id in ["pm_pistol", "ak74"] {
+        // Drifting back over 3 s: it doesn't follow.
+        let mut r = hold(id, false, false);
+        let at = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+        let travel = gun_mut(&mut r).layout.handle.as_ref().unwrap().travel;
+        let back =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(r.gun)
+                .unwrap()
+                .back()
+                .as_vec3();
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(4);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(2);
+        let ticks = ((travel * 1.15 / 0.02) * 90.0) as u32;
+        let mut most = 0.0f32;
+        for i in 1..=ticks {
+            r.vr.move_hand(
+                Side::Left,
+                at + back * travel * 1.15 * i as f32 / ticks as f32,
+            );
+            r.vr.step(1);
+            most = most.max(gun_mut(&mut r).firearm.bolt_travel);
+        }
+        assert!(
+            most < 0.2,
+            "{id}: drifted back at 2 cm/s, it came {most:.2}"
+        );
+        // A steady rack: it comes, and it's felt coming, harder as it goes.
+        let mut r = hold(id, false, false);
+        r.vr.app.init_resource::<Felt>().add_systems(
+            Update,
+            |mut ev: MessageReader<crate::rig::haptics::Haptic>, mut felt: ResMut<Felt>| {
+                felt.0.extend(
+                    ev.read()
+                        .filter(|h| h.side == Side::Left && (h.seconds - 0.012).abs() < 1e-4)
+                        .map(|h| h.amplitude),
+                );
+            },
+        );
+        let (most, _, _) = {
+            let at = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+            r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+            r.vr.step(4);
+            r.vr.trigger(Side::Left, 1.0);
+            r.vr.step(2);
+            let mut most = 0.0f32;
+            for i in 1..=30 {
+                r.vr.move_hand(Side::Left, at + back * travel * 1.15 * i as f32 / 30.0);
+                r.vr.step(1);
+                most = most.max(gun_mut(&mut r).firearm.bolt_travel);
+            }
+            (most, 0, 0)
+        };
+        assert!(most >= 0.95, "{id}: a steady rack came {most:.2}");
+        let felt = r.vr.app.world().resource::<Felt>().0.clone();
+        assert!(felt.len() >= 3, "{id}: felt {felt:?}");
+        assert!(
+            felt.last().unwrap() > felt.first().unwrap(),
+            "{id}: harder as it comes: {felt:?}"
+        );
+    }
+}

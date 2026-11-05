@@ -15,7 +15,9 @@
 //! (`search`), patiently. Indoors is no refuge: it goes to the door, tears
 //! it off, and reaches in; it can't get in itself, and it tears at the
 //! walls ([`super::heavy::HeavyTear`]). It gives up when it can't find you
-//! and walks home; or when its hunt is over.
+//! and walks home; or when its hunt is over; or when you walk away and
+//! keep out of its reach ([`LET_GO_RANGE`], [`LET_GO_AFTER`]): it's slow,
+//! and walking off is meant to work.
 
 use bevy::prelude::*;
 use extraction_core::heavy::{self as rules, Call, CallBook, CallInput};
@@ -35,6 +37,14 @@ pub const PATIENCE: f32 = 12.0;
 pub const HUNT_TIME: f32 = 300.0;
 /// Its pace hunting (against its walk).
 pub const HUNT_PACE: f32 = 1.3;
+/// Walk away and keep out of reach and it lets you go: more than this far
+/// off (m), the gap held or opening for this long (s), it gives up and goes
+/// back to its work; and for [`LET_GO_FOR`] it leaves you be unless you
+/// come back within [`LET_GO_NEAR`].
+pub const LET_GO_RANGE: f32 = 10.0;
+pub const LET_GO_AFTER: f32 = 8.0;
+pub const LET_GO_FOR: f32 = 30.0;
+pub const LET_GO_NEAR: f32 = 6.0;
 /// Between blows, s (after the arm's back at rest).
 pub const STRIKE_GAP: f32 = 1.2;
 /// A door: it stands this far out from the doorway (it's wide).
@@ -53,6 +63,12 @@ pub struct HeavyMind {
     pub strike_gap: f32,
     /// Seconds before it tears at a wall again.
     pub tear_gap: f32,
+    /// Seconds the one it's after has kept out of reach and walked on, and
+    /// the gap last tick.
+    pub out_of_reach: f32,
+    pub last_gap: f32,
+    /// Seconds it'll leave someone be after letting them go.
+    pub let_go: f32,
 }
 
 impl Default for HeavyMind {
@@ -61,6 +77,9 @@ impl Default for HeavyMind {
             hunt: HUNT_TIME,
             strike_gap: 0.0,
             tear_gap: 0.0,
+            out_of_reach: 0.0,
+            last_gap: 0.0,
+            let_go: 0.0,
         }
     }
 }
@@ -167,7 +186,14 @@ fn heavy_brain(
                 *brain = Brain::Leave { to: job.exit };
             }
         }
-        if !matches!(*brain, Brain::Leave { .. }) {
+        mind.let_go = (mind.let_go - dt).max(0.0);
+        // Let go of: it leaves you be unless you come back up close.
+        let near = aware
+            .target
+            .filter(|_| aware.can_see_target)
+            .and_then(|p| targets.get(p).ok())
+            .is_some_and(|g| flat(pos, g.translation()) < LET_GO_NEAR);
+        if !matches!(*brain, Brain::Leave { .. }) && (mind.let_go <= 0.0 || near) {
             search::react(&mut brain, aware, ENGAGE_AT);
             search::lost_sight(&mut brain, aware, PATIENCE, pos);
         }
@@ -232,6 +258,20 @@ fn heavy_brain(
                     .map(|g| g.translation());
                 match (seen, aware.last_known) {
                     (Some(tp), _) => {
+                        // Walked away and kept out of reach: it lets you go.
+                        let gap = flat(pos, tp);
+                        if gap > LET_GO_RANGE && gap >= mind.last_gap - 0.02 {
+                            mind.out_of_reach += dt;
+                        } else {
+                            mind.out_of_reach = 0.0;
+                        }
+                        mind.last_gap = gap;
+                        if mind.out_of_reach >= LET_GO_AFTER {
+                            mind.out_of_reach = 0.0;
+                            mind.let_go = LET_GO_FOR;
+                            search::give_up(&mut brain, &mut job);
+                            continue;
+                        }
                         intent.pace = HUNT_PACE;
                         intent.look = Some(tp);
                         indoors = Some(tp);
@@ -560,6 +600,69 @@ fn stage_scenario(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// It has you; you walk away and keep walking. It lets you go and goes
+    /// back to its work, and doesn't take you up again from afar.
+    #[test]
+    fn walk_away_and_it_lets_you_go() {
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let home = zone.on_ground(40.0, 230.0);
+        let mut at = Vec2::new(40.0, 218.0);
+        vr.stand(zone.on_ground(at.x, at.y), 0.0);
+        let heavy = {
+            let mut c = vr.app.world_mut().commands();
+            let e = super::super::heavy::spawn_heavy(
+                &mut c,
+                &zone,
+                &catalog,
+                home,
+                Job {
+                    kind: JobKind::Watch,
+                    site: home,
+                    duration: 999.0,
+                    exit: home,
+                },
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        let engaged = |vr: &crate::vr_harness::Vr| {
+            matches!(vr.app.world().get::<Brain>(heavy), Some(Brain::Engage))
+        };
+        // It sees you and comes for you.
+        let mut came = false;
+        for _ in 0..(90 * 20) {
+            vr.step(1);
+            if engaged(&vr) {
+                came = true;
+                break;
+            }
+        }
+        assert!(came, "it came for you");
+        // You walk away, a brisk walk, and keep walking.
+        let mut let_go_at = None;
+        for k in 0..(90 * 40) {
+            at.y -= 2.0 / 90.0;
+            vr.stand(zone.on_ground(at.x, at.y), 0.0);
+            vr.step(1);
+            if engaged(&vr) {
+                let_go_at = None;
+            } else {
+                let_go_at.get_or_insert(k);
+            }
+        }
+        let k = let_go_at.expect("it let you go");
+        assert!(
+            k < 90 * 30,
+            "within half a minute: {:.0} s",
+            k as f32 / 90.0
+        );
+        // Standing off at a distance now: it leaves you be.
+        vr.step(90 * 10);
+        assert!(!engaged(&vr), "it doesn't take you up again from afar");
+    }
 
     #[test]
     fn a_key_near_the_gate_is_a_threat() {
