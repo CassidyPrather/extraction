@@ -831,16 +831,34 @@ fn quit_and_reload(
     let mut found = Vec::new();
     let (x, y) = (items_held(&before), items_held(&after));
     if x != y {
-        let mut lost: Vec<String> = x.iter().filter(|k| !y.contains(k)).cloned().collect();
-        let mut more: Vec<String> = y.iter().filter(|k| !x.contains(k)).cloned().collect();
-        lost.dedup();
-        more.dedup();
+        // By count: an item doubled is the same key twice.
+        let count = |v: &[String]| {
+            let mut m: HashMap<String, usize> = HashMap::new();
+            for k in v {
+                *m.entry(k.clone()).or_default() += 1;
+            }
+            m
+        };
+        let (cx, cy) = (count(&x), count(&y));
+        let mut keys: Vec<&String> = cx.keys().chain(cy.keys()).collect();
+        keys.sort();
+        keys.dedup();
+        let lines: Vec<String> = keys
+            .into_iter()
+            .filter(|k| cx.get(*k) != cy.get(*k))
+            .map(|k| {
+                format!(
+                    "{} -> {}  {k}",
+                    cx.get(k).unwrap_or(&0),
+                    cy.get(k).unwrap_or(&0)
+                )
+            })
+            .collect();
         found.push(format!(
-            "{when}: items changed ({} before, {} after)\n    gone or changed: {}\n    new or changed: {}",
+            "{when}: items changed ({} before, {} after)\n      {}",
             x.len(),
             y.len(),
-            lost.join("\n      "),
-            more.join("\n      ")
+            lines.join("\n      ")
         ));
     }
     let (c, d) = (career_held(&before), career_held(&after));
