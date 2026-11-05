@@ -202,6 +202,20 @@ A good map makes the crossing a decision.
   the rail yard, the lodge's woodshed), 10-13 m off, on the side away
   from the rendezvous beacon (`map_landmarks::beacon_at`: 7 m off the
   truck's side), clear of the truck (`TRUCK_ROOM`) and its tailgate.
+- **And every rendezvous has somewhere to go still right by the truck**:
+  a roof's door or low cover (`LOW_COVER`: a log pile, a car wreck)
+  within 5 m of the truck's body (`WAIT_NEAR`). Low cover may stand
+  nearer than a building (`TRUCK_ROOM`, 8 m): 2.5 m off the truck's body
+  (`LOW_COVER_ROOM`), out of the strip behind it you climb in from and
+  line up in, and 2 m off its beacon. Crouched behind it you're still
+  past `raid::truck::PARK_CLEAR` (5 m from the truck's middle), so the
+  truck pulls up on its mark. In 6 of 6 raids a bot waiting in the open
+  by Kettle's hunting lodge was found there: carried attention buys a
+  response team to wherever you stand (`anomaly::spend_attention`),
+  so a still wait needs cover, not distance. Every valley's is a log
+  pile, one per rendezvous (`tag: "wait_<rendezvous>"`), each placed at
+  the nearest spot that keeps off roads, doors, the ways home and the
+  slope; `map_lint::wait_cover` gives what each waits by.
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.
@@ -234,6 +248,39 @@ for you.
 - Cover comes in clumps, with a gap you choose to cross between them:
   copses, walls, log piles, rock fields, the next house. A bend in a road
   is cover from the far end of it.
+
+## Breadcrumbs
+
+Every reward off the ways a raid walks is cued from them
+(`map_breadcrumbs`, held by `every_reward_is_cued_from_the_walked_ways`).
+The rewards: caches (loot markers), notes, terminals, the valley's key,
+offerings, artifact fields, the places jobs send you, staged scenes
+(`assets/data/scenes.ron`). The walked ways: the main routes, the first
+jobs' walks there and home, each place's way home
+(`map_lint::routed_ways`). A reward within 12 m of one (`ON_PATH`) is on
+it. Anything further needs one of:
+
+- **a silhouette**: its building, or one within 12 m of it
+  (`CONTAINER`), 1.5 m tall or more, in sight within 90 m;
+- **its own shape**: an artifact field's sparks (judged 3 m up, within
+  50 m), an offering's figures (1.8 m, within 60 m); a reward within
+  30 m of a seen artifact field is found by going to the field;
+- **a lamp**: a landmark's, within 30 m of it, seen within 250 m;
+- **a trail**: a road or path within 8 m of it that leaves a walked way;
+- **a sign**: within 60 m of it, read from a walked way.
+
+Sight is over the ground and past buildings, not through woods or fog:
+look at the frames from the route before trusting the gauge
+(`probe_breadcrumbs` prints every reward's cue, the uncued worst first).
+Smoke and sound are the game's, not the map's, and aren't counted.
+
+Fix an uncued reward with the smallest cue that fits its story, never a
+signpost where a fence or a shape would do: a cache in the open gets the
+thing its name says (the shot-firer's store a magazine hut, the farm
+workshop its woodpile, the depot's stock pallet a lorry left in the
+yard); a thing on a ridge is moved to the lip, where it stands on the
+skyline (Kettle's cairn); a thing in the trees gets a worn path off the
+way (Marrow's tag office desk).
 
 ## Points of interest, density and pacing
 
@@ -516,6 +563,14 @@ fine on a monitor makes people sick or tired in a headset.
   than 16° over any 10 m (`ROUTE_GRADE`, `GRADE_RUN`), bridge decks
   counted at the deck. The body controller climbs far steeper; that's
   for scrambling on purpose, not for the way home.
+- **The gentle jobs come home short**: a career's first two jobs in a
+  first valley (`contracts::GENTLE_JOBS`; job 2 any scout place it can
+  roll, `progression::gentle_job_places`) walk home, to the nearest
+  rendezvous or by the gate while that run is free
+  (`progression::free_short_run`), no more than twice the walk there
+  (`GENTLE_HOME`). Kettle's job 2 was 75 m out and 506 m home; with the
+  gate free it's 1.0x. `kettles_gentle_jobs_need_the_free_run_home` keeps
+  the gate rule pinned.
 - **Edges**: no way a raid walks (a main route, a first job's walk there
   or home, a place's way to its nearest rendezvous) comes within 3 m
   (`EDGE_NEAR`) of the lip of a fall over 4.2 m (`EDGE_DROP`, where a
