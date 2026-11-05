@@ -1819,6 +1819,37 @@ pub fn prefab(id: &str) -> Option<Geo> {
     Some(b.finish())
 }
 
+/// A house's inner doorways' width (m), through the partition from its
+/// front room to its back rooms. At 0.9 m the indoor grid's 0.25 m cells
+/// and a body's clearance left it open or shut by where the cells fell
+/// (a bot hid in Kettle's mine office and couldn't leave its front room);
+/// 1.0 m keeps a clear column open wherever they fall
+/// (`sim::indoor`'s `every_inner_doorway_is_walked_through`).
+pub const INNER_DOOR: f32 = 1.0;
+
+/// The houses built by [`house`] and their sizes (width, depth): where
+/// their inner doorways are, for the walk test.
+pub fn house_size(id: &str) -> Option<(f32, f32)> {
+    match id {
+        "house_plank" | "house_plank_b" | "house_plank_c" => Some((8.0, 7.0)),
+        "farmhouse" | "house_brick" | "post_office" => Some((10.0, 8.0)),
+        _ => None,
+    }
+}
+
+/// A house's inner doorways' middles, house-local (x, z): the partition
+/// at `d/2 - 0.42 d`, the doorways a quarter and three quarters across.
+pub fn inner_doorways(id: &str) -> Vec<Vec2> {
+    let Some((w, d)) = house_size(id) else {
+        return Vec::new();
+    };
+    let pz = d * 0.5 - d * 0.42;
+    [0.25, 0.75]
+        .iter()
+        .map(|k| Vec2::new(-w * 0.5 + w * k, pz))
+        .collect()
+}
+
 fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, plan: HousePlan) {
     let f = 0.5;
     let h = 2.7;
@@ -1847,7 +1878,10 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, plan: HousePlan)
         h,
         0.1,
         Mat::Plaster,
-        &[gap(w * 0.25, 0.9, 2.05), gap(w * 0.75, 0.9, 2.05)],
+        &[
+            gap(w * 0.25, INNER_DOOR, 2.05),
+            gap(w * 0.75, INNER_DOOR, 2.05),
+        ],
     );
     b.wall(
         Vec2::new(0.0, pz),
@@ -2095,8 +2129,8 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
         0.1,
         Mat::Plaster,
         &[
-            gap(w * 0.25 - end, 0.9, 2.05),
-            gap(w * 0.75 - end, 0.9, 2.05),
+            gap(w * 0.25 - end, INNER_DOOR, 2.05),
+            gap(w * 0.75 - end, INNER_DOOR, 2.05),
         ],
     );
     b.wall(
