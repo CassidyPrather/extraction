@@ -767,23 +767,25 @@ fn convoy(
 }
 
 /// The spare: home with no radio (it went with the rest when you fell),
-/// the driver passes his through the hatch, or there'd be no calling him
-/// on the next raid.
-pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
+/// the driver's goes in the kit crate, or there'd be no calling him on the
+/// next raid.
+pub const SPARE_RADIO: &str = "Truck: \"No radio on you. My spare's in the crate.\"";
 /// Home with no gun on you, in the crate or on the ledge (a fall, and the
 /// convoy took the lot): the driver's own, a magazine and a box of its
-/// rounds, off the ledge. (Gone out unarmed after a lost kit, the hoarder
-/// died two minutes in, four raids running.)
+/// rounds, in the kit crate. (Gone out unarmed after a lost kit, the
+/// hoarder died two minutes in, four raids running; handed through the
+/// hatch, they came after a quick newcomer had left the truck.)
 pub const SPARE_GUN: &str = "Truck: \"No gun on you. Here, my spare. Don't lose this one.\"";
 
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
 pub fn spare_for(name: &str) -> String {
-    format!("Truck: \"Lost the {name}? Here's another, off the ledge.\"")
+    format!("Truck: \"Lost the {name}? There's another in the crate.\"")
 }
 
-/// Seconds at the truck before the driver notices what's missing.
-const SPARE_AFTER: f32 = 2.0;
+/// Seconds at the truck before the driver's spares are in the crate (what
+/// you have is loaded by then: a career's save, a homecoming's hand-off).
+const SPARE_AFTER: f32 = 0.5;
 
 #[allow(clippy::too_many_arguments)]
 fn spare_radio(
@@ -798,11 +800,14 @@ fn spare_radio(
     catalog: Res<crate::items::Catalog>,
     progression: Option<Res<crate::progression::Progression>>,
     opts: Res<crate::launch::LaunchOptions>,
-    stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
+    mut stash: Query<
+        (Entity, &mut crate::interact::body::Backpack),
+        With<crate::raid::truck::Stash>,
+    >,
     trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
     locals: Query<Entity, With<LocalPlayer>>,
     hatch: Res<crate::raid::lev::Handovers>,
-    mut handover: MessageWriter<crate::raid::lev::HandOver>,
+    mut commands: Commands,
     mut queue: ResMut<Queue>,
     mut home_for: Local<f32>,
     mut handed: Local<bool>,
@@ -821,7 +826,7 @@ fn spare_radio(
         return;
     };
     *handed = true;
-    let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
+    let in_crate = |e: Entity| stash.iter().any(|(_, b)| b.contents.contains(&e));
     // On you, in the crate, or lying in the truck (on the ledge already).
     let have = |id: &str| {
         items.iter().any(|(e, it, by, gt)| {
@@ -842,11 +847,11 @@ fn spare_radio(
         Some(Job::Photograph { taken: false, .. }) => Some("camera".into()),
         _ => None,
     };
+    // Into the kit crate, where the kit's loaded from before a raid (on
+    // the ledge, the newcomer was out of the truck before it came).
+    let mut give: Vec<(String, f32)> = vec![];
     if !have("radio") {
-        handover.write(crate::raid::lev::HandOver {
-            id: "radio".into(),
-            condition: 0.8,
-        });
+        give.push(("radio".into(), 0.8));
         queue.lines.push_back(SPARE_RADIO.into());
     }
     // No gun anywhere of yours (in the yard, the kit is the yard's own).
@@ -859,10 +864,7 @@ fn spare_radio(
     if !armed && opts.map != crate::camp::TRAINING_YARD {
         // (Worn as the kit's are.)
         for (id, condition) in [("pm_pistol", 0.75), ("pm_mag", 0.75), ("ammo_9x18", 1.0)] {
-            handover.write(crate::raid::lev::HandOver {
-                id: id.into(),
-                condition,
-            });
+            give.push((id.into(), condition));
         }
         queue.lines.push_back(SPARE_GUN.into());
     }
@@ -871,8 +873,36 @@ fn spare_radio(
             .kind(&id)
             .map(|k| catalog.get(k).name.to_lowercase())
             .unwrap_or_else(|| id.replace('_', " "));
-        handover.write(crate::raid::lev::HandOver { id, condition: 1.0 });
+        give.push((id, 1.0));
         queue.lines.push_back(spare_for(&name));
+    }
+    let Some((crate_e, mut bag)) = stash.iter_mut().next() else {
+        return;
+    };
+    let n = give.len() as f32;
+    for (i, (id, condition)) in give.into_iter().enumerate() {
+        let Some(kind) = catalog.kind(&id) else {
+            warn!("the driver has no {id} to spare");
+            continue;
+        };
+        let e = crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::default(),
+                condition,
+            },
+        );
+        // Side by side along the crate's shelf.
+        let x = bag.half.x * 0.8 * ((i as f32 + 0.5) / n.max(1.0) * 2.0 - 1.0);
+        crate::interact::body::stow_in_backpack(
+            &mut commands,
+            e,
+            crate_e,
+            &mut bag,
+            Vec3::new(x, 0.05, 0.0),
+        );
     }
 }
 
@@ -1056,8 +1086,8 @@ mod tests {
     }
 
     /// Home with no gun anywhere (the convoy took the kit, the crate's
-    /// empty): the driver's spare, a magazine and rounds come through the
-    /// hatch, and he says so; armed, he doesn't. (Unarmed after a lost kit,
+    /// empty): the driver's spare, a magazine and rounds are in the kit
+    /// crate for the next raid's loadout, and he says so; armed, he doesn't. (Unarmed after a lost kit,
     /// the hoarder went out and died two minutes in, raid after raid.)
     #[test]
     fn no_gun_home_gets_the_spare() {
@@ -1085,13 +1115,27 @@ mod tests {
             1,
             "{spoken:?}"
         );
-        let pistols = app
-            .world_mut()
-            .query::<&crate::items::Item>()
-            .iter(app.world())
-            .filter(|i| catalog.get(i.kind()).id == "pm_pistol")
-            .count();
-        assert!(pistols >= 1, "no pistol came through the hatch");
+        // In the crate, all three: the next raid's loadout has a gun.
+        let in_crate: Vec<String> = {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>();
+            let contents: Vec<Entity> = q
+                .iter(app.world())
+                .flat_map(|b| b.contents.clone())
+                .collect();
+            contents
+                .into_iter()
+                .filter_map(|e| app.world().get::<crate::items::Item>(e))
+                .map(|i| catalog.get(i.kind()).id.clone())
+                .collect()
+        };
+        for id in ["pm_pistol", "pm_mag", "ammo_9x18"] {
+            assert!(
+                in_crate.iter().any(|c| c == id),
+                "no {id} in the kit crate: {in_crate:?}"
+            );
+        }
     }
 
     /// Home with no radio anywhere (it went with the rest at a fall): the

@@ -584,6 +584,9 @@ pub(super) struct Newcomer {
     heavy_since: f32,
     /// Took what the driver put on the ledge, woken in the truck.
     took_ledge: bool,
+    /// No gun of its own at the kit: the driver's spare pistol, magazine
+    /// and rounds to take, from the crate or the ledge.
+    spare_gun: bool,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1667,7 +1670,10 @@ pub(super) fn direct_raid(
                             .is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player))
                         || view.stash.iter().any(|b| b.contents.contains(&e)))
             });
-            if takes && !armed && opts.map != crate::camp::TRAINING_YARD {
+            // (Kept till it's all taken: once the spare's in the crate, it's
+            // "armed" by the crate, and its rounds still to take.)
+            state.spare_gun |= !armed;
+            if takes && state.spare_gun && opts.map != crate::camp::TRAINING_YARD {
                 need.extend(["pm_pistol", "pm_mag", "ammo_9x18"].map(String::from));
             }
             match &state.errand {
@@ -1682,23 +1688,34 @@ pub(super) fn direct_raid(
                 _ => {}
             }
             let mut missing = vec![];
+            // (Taken already, a moment ago.)
+            need.retain(|id| carried(&world, &view, player, id).is_empty());
             for id in need {
+                // On the ledge, or in the kit crate (the driver's spares go
+                // there), and not already being taken from it.
+                let taking = |e: Entity| {
+                    tasks
+                        .iter()
+                        .any(|t| matches!(t, Task::Grab { item, .. } if *item == e))
+                };
                 let on_ledge = world.items.iter().find(|(e, it, gt, held, sock, bag)| {
+                    let crated = view.stash.iter().any(|b| b.contents.contains(e));
                     held.is_none()
                         && sock.is_none()
-                        && bag.is_none()
                         && world.catalog.get(it.kind()).id == id
-                        && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 4.0
-                        && !view.stash.iter().any(|b| b.contents.contains(e))
+                        && !taking(*e)
+                        && (crated
+                            || (bag.is_none()
+                                && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 4.0))
                 });
                 match on_ledge {
                     Some((e, ..)) => {
-                        if state.heard.iter().any(|l| l.contains("off the ledge")) {
-                            state.note(
-                                now,
-                                Kind::Learned,
-                                format!("{id} off the ledge, as the driver said"),
-                            );
+                        if state
+                            .heard
+                            .iter()
+                            .any(|l| l.contains("off the ledge") || l.contains("in the crate"))
+                        {
+                            state.note(now, Kind::Learned, format!("{id}, as the driver said"));
                         }
                         tasks.push(Task::Grab {
                             item: e,
@@ -1727,6 +1744,7 @@ pub(super) fn direct_raid(
                 );
             }
             state.tries = 0;
+            state.spare_gun = false;
             state.leg = Leg::Card;
         }
         Leg::Card => {
