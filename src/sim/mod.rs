@@ -341,6 +341,91 @@ mod tests {
         }
     }
 
+    /// A truck parked off its rendezvous's pose (someone stood on it:
+    /// `rv_pose_clear` pulls on past, or short, or alongside) is boarded
+    /// where it stands: the bed's line taken from the truck, not from the
+    /// pose, which runs beside it (Rime seed 4, 5 November: six board
+    /// stucks at the truck's side). Walked by the pose, the bot misses the
+    /// bed.
+    #[test]
+    fn a_bot_boards_a_truck_parked_off_its_pose() {
+        use crate::bot::Bot;
+        use crate::raid::truck::{Truck, rv_pose, rv_pose_clear};
+        use crate::rig::LocalPlayer;
+        use bevy::math::Vec3Swizzles;
+        let opts = LaunchOptions {
+            robots: false,
+            map: "rime_fell".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>().clone();
+        let rv = zone
+            .map
+            .markers_of(&MarkerKind::Rendezvous)
+            .position(|m| m.name == "Tip road")
+            .unwrap_or(0);
+        let pose = rv_pose(&zone, rv);
+        let off = rv_pose_clear(&zone, rv, &[pose.translation]);
+        assert!(
+            off.translation.xz().distance(pose.translation.xz()) > 1.0,
+            "the truck parked on its pose with someone on it"
+        );
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let truck = app
+            .world_mut()
+            .query_filtered::<Entity, With<Truck>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().get_mut::<Truck>(truck).unwrap().at_base = true;
+        let board = |app: &mut App, by: Transform| {
+            *app.world_mut().get_mut::<Transform>(truck).unwrap() = off;
+            let behind = by.transform_point(Vec3::new(0.0, 0.0, 7.0));
+            let ground = zone.ground(behind.x, behind.z);
+            app.world_mut()
+                .entity_mut(player)
+                .remove::<Bot>()
+                .get_mut::<Transform>()
+                .unwrap()
+                .translation = Vec3::new(behind.x, ground + 0.05, behind.z);
+            app.update();
+            let p = |z: f32| by.transform_point(Vec3::new(0.0, 0.0, z)).xz();
+            app.world_mut()
+                .entity_mut(player)
+                .insert(Bot::new(super::raider::board_tasks(p, None)));
+            for _ in 0..90 * 20 {
+                app.update();
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    break;
+                }
+            }
+            let at = app.world().get::<Transform>(player).unwrap().translation;
+            let gt = *app.world().get::<GlobalTransform>(truck).unwrap();
+            app.world()
+                .get::<Truck>(truck)
+                .unwrap()
+                .in_bed(&gt, at + Vec3::Y * 0.1)
+        };
+        assert!(
+            !board(&mut app, pose),
+            "walked by the pose, the bot found the bed anyway: the test proves nothing"
+        );
+        let stands = *app.world().get::<GlobalTransform>(truck).unwrap();
+        assert!(
+            board(&mut app, stands.compute_transform()),
+            "walked by the truck as it stands, the bot isn't in its bed"
+        );
+    }
+
     /// What a raider does at the end of a raid, at every rendezvous of
     /// every valley: from where it lines up behind the waiting truck
     /// (`raider::extract_step`), up into the bed and pull the bell, and the

@@ -795,6 +795,8 @@ pub struct Scene<'w, 's> {
     robot_state: Query<'w, 's, (&'static Robot, &'static GlobalTransform)>,
     /// The ground's collider, left out of a ray for what's underfoot.
     terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
+    /// Where anything is (what a stuck raider was walking up to press).
+    placed: Query<'w, 's, &'static GlobalTransform>,
 }
 
 impl Scene<'_, '_> {
@@ -828,6 +830,11 @@ impl Scene<'_, '_> {
             )
             .map_or(ground, |hit| (from.y - hit.distance).max(ground));
         self.wreck_at_feet(p, feet)
+    }
+
+    /// Where a thing is, on the ground plane.
+    fn items_at(&self, e: Entity) -> Option<Vec2> {
+        self.placed.get(e).ok().map(|g| g.translation().xz())
     }
 
     /// Where wrecked robots lie (their bodies' roots).
@@ -1206,6 +1213,11 @@ pub fn think(
                         (Some(Task::WalkTo { within, .. }), Some(Task::WalkTo { to, .. }))
                             if *within == crate::bot::SIDESTEP => scene.in_the_way(pos, *to),
                         (Some(Task::WalkTo { to, .. }), _) => scene.in_the_way(pos, *to),
+                        // Walking up to press something (the truck's bell).
+                        (Some(Task::Press(e)), _) => scene
+                            .items_at(*e)
+                            .map(|at| scene.in_the_way(pos, at))
+                            .unwrap_or_default(),
                         _ => String::new(),
                     }}),
                 );
@@ -4629,7 +4641,24 @@ fn extract_step(
                 .find(|(_, p)| matches!(p, Pressable::BellPull))
                 .map(|(e, _)| e);
             r.act = Act::Board;
-            board_tasks(p, bell)
+            // Behind the truck as it stands: it parks off its pose when
+            // someone's on it (`rv_pose_clear`: pulled on past them, short
+            // of them or alongside), and the raider waiting at the RV is.
+            // Walked by the pose, the bed's line ran beside the truck
+            // (Rime seed 4, 5 November: six board stucks at its side, the
+            // bell out of reach, a drone's burst).
+            let truck = scene
+                .trucks
+                .iter()
+                .map(|(_, g)| g.compute_transform())
+                .min_by(|a, b| {
+                    a.translation
+                        .xz()
+                        .distance(here)
+                        .total_cmp(&b.translation.xz().distance(here))
+                })
+                .unwrap_or(pose);
+            board_tasks(|z| truck.transform_point(Vec3::new(0.0, 0.0, z)).xz(), bell)
         }
         _ => vec![Task::Wait(2.0)],
     }
@@ -4824,6 +4853,15 @@ pub fn board_tasks(p: impl Fn(f32) -> Vec2, bell: Option<Entity>) -> Vec<Task> {
         },
     ];
     if let Some(bell) = bell {
+        // Up the bed to stand by the bell (at the front, 0.7 m to the
+        // side: 0.86 m from here, in reach) before pressing it, a walk of
+        // its own: not Press's own straight walk, which from wherever the
+        // raider ended up went nowhere (Rime seed 4, 5 November: four
+        // stucks on the truck, a drone's burst).
+        t.push(Task::WalkTo {
+            to: p(-1.2),
+            within: 0.3,
+        });
         t.push(Task::Press(bell));
     }
     t.push(Task::Wait(1.0));
