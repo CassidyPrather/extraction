@@ -32,5 +32,9 @@ name = "anomaly-views"
 path = "src/bin/anomaly_views.rs"
 
 [[bin]]
+name = "night-walks"
+path = "src/bin/night_walks.rs"
+
+[[bin]]
 name = "unity-export"
 path = "src/bin/unity_export.rs"
