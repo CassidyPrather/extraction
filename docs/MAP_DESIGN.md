@@ -317,7 +317,7 @@ breadcrumbs gauge doesn't count either yet.
 smoking: day, drizzle, dusk and night, from 50 m north and 150 m east
 (insets twice up)](shots/cues/kettle_farm_sheet.jpg)
 
-A lit window carries a halo outside its glass after dark (a lamp's,
+At most 24 lamp-lit windows light any one view (`cues::MAX_LAMPS`, Performance's share of the 48-light budget within 60 m); past that a window keeps its glow and halo but loses its lamp, map order deciding. A lit window carries a halo outside its glass after dark (a lamp's,
 `halos`, out to 320 m), which is what reads at 150 m.
 
 ## Points of interest, density and pacing
