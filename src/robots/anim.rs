@@ -146,7 +146,10 @@ pub struct Gait {
     /// share): it labours, lower, its strides long and heavy.
     pub hamper: f32,
     /// How low it hangs for missing legs, metres (smoothed).
-    sag: f32,
+    pub(crate) sag: f32,
+    /// The ground under the body last tick, to carry it with the ground
+    /// as it goes (none: not yet).
+    under_was: Option<f32>,
     /// Each swing's length in seconds, set at lift-off.
     dur: [f32; LEGS],
     /// Whether a swing has had its mid-flight retarget.
@@ -191,7 +194,7 @@ pub struct Gait {
     /// Getting up: seconds left, feet first, then the body rises on them.
     pub rising: f32,
     /// How far each planted foot has slid on ice since it came down.
-    slid: [f32; LEGS],
+    pub(crate) slid: [f32; LEGS],
 }
 
 /// Ice: steeper than this (rise over run) a planted foot creeps downhill
@@ -259,6 +262,7 @@ impl Default for Gait {
             limp: 0.0,
             hamper: 0.0,
             sag: 0.0,
+            under_was: None,
             dur: [0.3; LEGS],
             retargeted: [false; LEGS],
             dangle: [Vec3::ZERO; LEGS],
@@ -543,7 +547,19 @@ pub fn step_walker_walled(
     let trigger = (0.3 + 0.16 * fast) * s;
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
-    let probe_y = next.y;
+    // Feet are probed for from over their own middle (`BODY_PROBE`), not
+    // from the body: at a door a heavy's body is up at the porch roof, and
+    // a foot probed for from there came down on it.
+    let (feet_sum, feet_n) = w
+        .feet
+        .iter()
+        .filter(|f| f.alive)
+        .fold((0.0, 0.0), |(a, n), f| (a + f.planted.y, n + 1.0));
+    let probe_y = if feet_n > 0.0 {
+        next.y.min(feet_sum / feet_n + BODY_PROBE * s)
+    } else {
+        next.y
+    };
     // Crouched, it spreads its feet: lower and wider, like a spider.
     let spread = s * (1.0 + 0.18 * g.crouch);
     let shape = g.shape;
@@ -675,15 +691,34 @@ pub fn step_walker_walled(
         }
     }
 
-    // Height: over the feet it stands on, sagging for what's missing.
+    // Height: over the feet it stands on, sagging for what's missing. A
+    // foot in the air counts where it's got to on its way, not where it
+    // left: three legs stepping up onto a raised floor held the body down
+    // at the step below, in the floor (`feet_gauge`, 5 November).
     let (mut sum, mut n) = (Vec3::ZERO, 0.0f32);
+    // (Its lowest planted foot: what it stands on at the least.)
+    let mut lowest = f32::MAX;
     for f in w.feet.iter().filter(|f| f.alive) {
-        let p = if f.t < 1.0 { f.from } else { f.planted };
+        let p = if f.t < 1.0 {
+            f.from.lerp(f.to, f.t)
+        } else {
+            lowest = lowest.min(f.planted.y);
+            f.planted
+        };
         sum += p;
         n += 1.0;
     }
     let centroid = if n > 0.0 { sum / n } else { next };
-    let under = ground(Vec3::new(next.x, probe_y, next.z));
+    // What's under the body, probed from a little over its feet, not from
+    // the body: at a door a heavy's body is up at the porch roof, and a
+    // probe from there found the roof and lifted it onto it (`feet_gauge`,
+    // 5 November: 2.5 m over its feet).
+    let under_from = if n > 0.0 {
+        probe_y.min(centroid.y + BODY_PROBE * s)
+    } else {
+        probe_y
+    };
+    let under = ground(Vec3::new(next.x, under_from, next.z));
     let target_sag = s * if drive.down && !drive.stunned {
         g.shape.height() - 0.4
     } else if drive.stunned {
@@ -703,9 +738,54 @@ pub fn step_walker_walled(
     let rest_y = if drive.down && !drive.stunned {
         under + g.shape.height() * s
     } else {
-        centroid.y.max(under - 0.2 * s) + g.shape.height() * s
+        // Never more than `RIDE_OVER` above what it stands on: the ground
+        // under it (a step's tread, a floor, the hill) or, over a drop, its
+        // lowest planted foot (all four on a floor inside a doorway, the
+        // porch's edge under it). With three feet in the air, mid gallop or
+        // a step-through, their targets up a slope lifted it off its legs,
+        // and a rear foot planted up the hill behind held it up there
+        // (`feet_gauge`, 5 November).
+        let stands = if lowest < f32::MAX {
+            under.max(lowest)
+        } else {
+            under
+        };
+        let top = stands + RIDE_OVER * s;
+        centroid.y.max(under - 0.2 * s).min(top) + g.shape.height() * s
     } - g.sag;
-    next.y += (rest_y - next.y) * (6.0 * dt).min(1.0);
+    // Up onto a step quicker than down off one: lagging a rise, the body
+    // sank into a raised floor its feet were already on.
+    // Carried with the ground under it as it goes (a hill's rise or fall
+    // at a run is metres a second: followed, it lagged half a metre behind
+    // its feet down a 32-degree slope), only the rest eased.
+    if let Some(was) = g.under_was.filter(|_| !drive.down) {
+        let ground_moved = under - was;
+        // (Not across a step or a sill: that's eased, not jumped.)
+        if ground_moved.abs() < 0.15 * s {
+            next.y += ground_moved;
+        }
+    }
+    g.under_was = Some(under);
+    let follow = if rest_y > next.y { RISE_RATE } else { 6.0 };
+    next.y += (rest_y - next.y) * (follow * dt).min(1.0);
+    // And held to it: never more than `RIDE_OVER` over its height above
+    // the ground under it, nor `RIDE_UNDER` into it (eased, a gallop's lift
+    // or a fall off a sill still left it floating or sunk for a moment).
+    if !drive.down {
+        let h = g.shape.height() * s - g.sag;
+        let stands = if lowest < f32::MAX {
+            under.max(lowest)
+        } else {
+            under
+        };
+        let held = next
+            .y
+            .clamp(under + h - RIDE_UNDER * s, stands + h + RIDE_OVER * s);
+        // (Brought there quickly, not in one tick: stepping off a rubble
+        // block, the ground under it fell 0.4 m and it popped down with it.)
+        let most = RIDE_CATCH * s * dt;
+        next.y += (held - next.y).clamp(-most, most);
+    }
 
     // The bob: a spring kicked down by landings, lifted through swings.
     let swing = w
@@ -922,34 +1002,73 @@ pub fn body_out(
 }
 
 /// The walkable surface under `p` (probed from `p`, about hip height):
-/// steps, floors and kerbs by a ray down (`ray(from, reach)` gives the
-/// distance to what it hits), else the terrain. Below the terrain (an
-/// underground site) only the ray counts: the floor is down there, not
-/// up on the heightfield; with nothing under it, it stays level.
+/// steps, floors, kerbs and rocks by a ray down (`ray(from, reach)` gives
+/// the distance to what it hits), else the terrain. Underground (the body
+/// is below the terrain where it stands, in an underground site) only the
+/// ray counts: the floor is down there, not up on the heightfield; with
+/// nothing under it, it stays level.
+///
+/// Above ground the probe starts at least [`PROBE_OVER`] over the
+/// terrain at `p`: up a steep slope a stride's target can be higher than
+/// the body (a hound's, most), and a probe from under the hillside found
+/// nothing and took it for a floor below ground: the foot came down a
+/// body's height inside the hill (`feet_gauge`, 5 November: 1.6-2.1 m in
+/// every valley's steepest slopes).
 pub fn footing(
     p: Vec3,
     terrain: f32,
     size: f32,
-    ray: impl FnOnce(Vec3, f32) -> Option<f32>,
+    underground: bool,
+    mut ray: impl FnMut(Vec3, f32) -> Option<f32>,
 ) -> f32 {
-    let underground = p.y < terrain - 0.1;
-    if p.y > terrain + 0.25 || underground {
-        let reach = if underground {
-            (UPPER + LOWER) * size * 1.6
-        } else {
-            p.y - terrain + 0.3
-        };
-        // Started inside something (a wall): not a footing.
+    if underground {
+        let reach = (UPPER + LOWER) * size * 1.6;
         if let Some(d) = ray(p, reach).filter(|d| *d > 0.02) {
             return p.y - d;
         }
+        return p.y - BODY_HEIGHT * size;
     }
-    if underground {
-        p.y - BODY_HEIGHT * size
-    } else {
-        terrain
+    let from = p.with_y(p.y.max(terrain + PROBE_OVER * size));
+    match ray(from, from.y - terrain + 0.3) {
+        Some(d) if d > 0.02 => (from.y - d).max(terrain),
+        // Started inside something (a rock it's on, a sill): its top is
+        // over the probe, so look again from over it, once (from inside,
+        // the terrain under it was taken, and a crawler on a boulder sat
+        // in it: `feet_gauge`, 5 November).
+        Some(_) => {
+            let over = from + Vec3::Y * PROBE_OVER * size * 2.0;
+            match ray(over, over.y - terrain + 0.3) {
+                Some(d) if d > 0.02 => (over.y - d).max(terrain),
+                _ => terrain,
+            }
+        }
+        None => terrain,
     }
 }
+
+/// How far over the ground under it a body may ride, past its height (m,
+/// at a walker's size).
+pub const RIDE_OVER: f32 = 0.2;
+
+/// How far into its height over the ground under it a body may dip (m, at
+/// a walker's size; its bob, a landing's kick).
+pub const RIDE_UNDER: f32 = 0.25;
+
+/// How fast a body is brought back into its ride (m/s, at a walker's
+/// size): a drop off a ledge, not a jump.
+pub const RIDE_CATCH: f32 = 4.0;
+
+/// How fast the body rises to its rest height (/s; it settles at 6).
+pub const RISE_RATE: f32 = 14.0;
+
+/// The body's own probe for what's under it starts this far over its
+/// feet's middle (m, at a walker's size): over a step it might stand on,
+/// under a roof it might stand under.
+pub const BODY_PROBE: f32 = 0.9;
+
+/// A foot's probe starts at least this far over the terrain (m, at a
+/// walker's size): over a step or a rock it could come down on.
+pub const PROBE_OVER: f32 = 0.6;
 
 /// A failing leg's foot, held off the ground (m, at a walker's size) and
 /// drawn in toward its hip (a share of the way).
@@ -1004,6 +1123,7 @@ pub(crate) fn walk(
     mut steps: MessageWriter<WalkerStep>,
     snow: Option<Res<crate::world::snow::Snow>>,
     bodies: Query<(Option<&RigidBody>, Option<&ColliderOf>)>,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
 ) {
     let dt = time.delta_secs();
     // What a walker's body stops at: what's built (static), not a door
@@ -1020,7 +1140,11 @@ pub(crate) fn walk(
     };
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
-    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
+    // (Not the terrain's own collider: its triangles stand off the height
+    // map's smooth ground, that everything else stands on, by up to 9 cm
+    // up a 32-degree slope. The terrain is `zone.ground`.)
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item])
+        .with_excluded_entities(terrain.iter());
     for (
         entity,
         mut w,
@@ -1073,12 +1197,21 @@ pub(crate) fn walk(
             low: intent.low,
         };
         let size = g.size;
+        // Underground: in an underground site, below the terrain where it
+        // stands (not a stride's target up a hill above it).
+        let underground = t.translation.y < zone.ground(t.translation.x, t.translation.z) - 0.1;
         let mut ground = |p: Vec3| {
-            footing(p, zone.ground(p.x, p.z), size, |from, reach| {
-                spatial
-                    .cast_ray(from, Dir3::NEG_Y, reach, true, &filter)
-                    .map(|hit| hit.distance)
-            })
+            footing(
+                p,
+                zone.ground(p.x, p.z),
+                size,
+                underground,
+                |from, reach| {
+                    spatial
+                        .cast_ray(from, Dir3::NEG_Y, reach, true, &filter)
+                        .map(|hit| hit.distance)
+                },
+            )
         };
         let (by, yaw) = (entity, w.yaw);
         let mut landed = |at: Vec3| {
@@ -2590,16 +2723,24 @@ mod tests {
         let terrain = 20.0;
         // A floor 6 m under the terrain, the probe 1.1 m above it.
         let p = Vec3::new(0.0, 15.1, 0.0);
-        assert!((footing(p, terrain, 1.0, |_, _| Some(1.1)) - 14.0).abs() < 1e-4);
+        assert!((footing(p, terrain, 1.0, true, |_, _| Some(1.1)) - 14.0).abs() < 1e-4);
         // Nothing under it: stay level rather than jump to the surface.
-        let h = footing(p, terrain, 1.0, |_, _| None);
+        let h = footing(p, terrain, 1.0, true, |_, _| None);
         assert!(h < terrain - 1.0, "{h}");
         // On the surface, a kerb is found; nothing found is the terrain.
         let q = Vec3::new(0.0, 21.2, 0.0);
-        assert!((footing(q, terrain, 1.0, |_, _| Some(1.0)) - 20.2).abs() < 1e-4);
-        assert_eq!(footing(q, terrain, 1.0, |_, _| None), terrain);
+        assert!((footing(q, terrain, 1.0, false, |_, _| Some(1.0)) - 20.2).abs() < 1e-4);
+        assert_eq!(footing(q, terrain, 1.0, false, |_, _| None), terrain);
         // A ray that starts inside a wall isn't a footing.
-        assert_eq!(footing(q, terrain, 1.0, |_, _| Some(0.0)), terrain);
+        assert_eq!(footing(q, terrain, 1.0, false, |_, _| Some(0.0)), terrain);
+        // Up a steep slope, a stride's target over the probe (the body is
+        // above the terrain where it stands, not at the foot's): the
+        // hillside, not a floor a body's height inside it.
+        let up = Vec3::new(0.0, 19.4, 0.0);
+        assert_eq!(footing(up, terrain, 1.0, false, |_, _| None), terrain);
+        // ...and a rock on it is found, probed from over the hill.
+        let rock = footing(up, terrain, 1.0, false, |from, _| Some(from.y - 20.3));
+        assert!((rock - 20.3).abs() < 1e-4, "{rock}");
     }
 
     /// Kept low, it crouches: the orb sinks toward `LOW` lower and its feet
