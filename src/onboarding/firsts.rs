@@ -1203,6 +1203,12 @@ mod tests {
         };
         queue.apply(app.world_mut());
         crate::persist::put_in_bag(app.world_mut(), find, pack, Vec3::ZERO);
+        // The pack on your back (in the app it starts off you): what's in it
+        // is on you.
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .carried = true;
         app.update();
         stand(&mut app, tail);
         wait(&mut app);
