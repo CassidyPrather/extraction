@@ -2072,14 +2072,19 @@ mod tests {
         );
     }
 
-    /// A body stood off the map (where a screenshot's or gallery's camera
-    /// stands) stays on the ground's height: there's no collider out there,
+    /// In a tooling run, a body stood off the map (where a screenshot's or
+    /// gallery's camera stands) stays on the ground's height: there's no collider out there,
     /// and it fell for ever, taking a camera that followed its head with
     /// it (a gallery shot 3.7 km under the ground, blank).
     #[test]
     fn a_body_off_the_map_stays_on_the_ground() {
         use crate::player::Body;
         let mut vr = Vr::new("training_yard");
+        // A tooling run (a screenshot): where a camera stands off the map.
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::launch::LaunchOptions>()
+            .screenshot = Some("off_the_map.png".into());
         let zone = vr.app.world().resource::<crate::world::Zone>().clone();
         let edge = zone.map.size * 0.5;
         let (x, z) = (edge + 25.0, edge + 25.0);
