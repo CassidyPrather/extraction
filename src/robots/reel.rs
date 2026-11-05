@@ -60,6 +60,10 @@ impl Plugin for ReelPlugin {
     }
 }
 
+/// `feetat`'s disc under a foot in stance: which foot.
+#[derive(Component)]
+struct StanceMark(usize);
+
 /// `reel:feetat,…,X2,Z2,DIST,HEIGHT[,door]`: the camera keeps beside the machine,
 /// DIST m off its route's line and HEIGHT m over the ground under it,
 /// looking at it level, so its feet and the ground line read in
@@ -77,8 +81,11 @@ fn feetat_follow(
     )>,
     spatial: avian3d::prelude::SpatialQuery,
     mut commands: Commands,
-    mut marks: Local<Vec<Entity>>,
-    mut placed: Query<(&mut Transform, &mut Visibility), Without<crate::render::FreeCamera>>,
+    mut made: Local<bool>,
+    mut marks: Query<
+        (&StanceMark, &mut Transform, &mut Visibility),
+        Without<crate::render::FreeCamera>,
+    >,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     mut cams: Query<&mut Transform, With<crate::render::FreeCamera>>,
     mut frame: Local<u32>,
@@ -124,34 +131,34 @@ fn feetat_follow(
     // down reads as down from low beside a slope (where its toe can sit
     // above the slope's far line in the picture). The same before and
     // after a change: it marks what the gait says, not what it draws.
-    if marks.is_empty() {
+    if !*made {
+        *made = true;
         let mesh = meshes.add(Cylinder::new(0.12 * gait.size, 0.03));
         let mat = materials.add(StandardMaterial {
             base_color: Color::srgb(0.2, 1.0, 0.35),
             unlit: true,
             ..default()
         });
-        for _ in 0..w.feet.len() {
-            let e = commands
-                .spawn((
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(mat.clone()),
-                    Transform::default(),
-                    Visibility::Hidden,
-                ))
-                .id();
-            marks.push(e);
+        for i in 0..w.feet.len() {
+            commands.spawn((
+                StanceMark(i),
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                Transform::default(),
+                Visibility::Hidden,
+            ));
         }
     }
-    for ((f, l), e) in w.feet.iter().zip(legs.0.iter()).zip(marks.iter()) {
-        if let Ok((mut t, mut v)) = placed.get_mut(*e) {
-            t.translation = Vec3::new(l[2].x, surface(l[2]) + 0.015, l[2].z);
-            *v = if f.t >= 1.0 {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-        }
+    for (mark, mut t, mut v) in &mut marks {
+        let (Some(f), Some(l)) = (w.feet.get(mark.0), legs.0.get(mark.0)) else {
+            continue;
+        };
+        t.translation = Vec3::new(l[2].x, surface(l[2]) + 0.015, l[2].z);
+        *v = if f.t >= 1.0 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
     }
     let feet: Vec<String> = w
         .feet
