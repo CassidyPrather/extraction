@@ -251,6 +251,10 @@
         (at: (4.0, -176.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // The moor's roadmen's hut, a place on the pass road between the mine
+        // road and the lodge (walk review: 120 m of moor with no place in it).
+        (prefab: "shed", at: (44.2, -53.2), rot: 130.0, tag: "roadmen_hut"),
+        (prefab: "log_pile", at: (49.0, -59.0), rot: 40.0),
         (prefab: "log_pile", at: (-2.0, 74.0), rot: 38.0),
         (prefab: "log_pile", at: (79.0, -60.0), rot: 40.0),
         (prefab: "log_pile", at: (64.0, -86.0), rot: 40.0),

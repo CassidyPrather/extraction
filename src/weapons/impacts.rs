@@ -81,6 +81,9 @@ pub fn kind_of(m: Mat) -> ImpactKind {
         | Mat::Asphalt
         | Mat::Boulder
         | Mat::DressedStone
+        // A dark opening's mouth sits a hand inside a culvert or tunnel:
+        // a round meets the masonry behind it.
+        | Mat::Void
         | Mat::Polymer => ImpactKind::Masonry,
     }
 }
@@ -99,7 +102,7 @@ pub fn stuff_of(m: Mat) -> extraction_core::firearm_terminal::Stuff {
         }
         Mat::Plaster | Mat::SootPlaster => Stuff::Plaster,
         Mat::Brick | Mat::SootBrick => Stuff::Brick,
-        Mat::Concrete => Stuff::Concrete,
+        Mat::Concrete | Mat::Void => Stuff::Concrete,
         Mat::Asphalt | Mat::Boulder | Mat::DressedStone => Stuff::Rock,
         Mat::RustyMetal | Mat::PaintedMetal | Mat::Corrugated => Stuff::Sheet,
         Mat::DarkMetal | Mat::GunMetal | Mat::RobotShell => Stuff::Plate,

@@ -38,6 +38,7 @@ pub const NAMES: &[&str] = &[
     "revolver_drill",
     "smg_drill",
     "shotgun_drill",
+    "shotgun_dud_drill",
     "pump_drill",
     "marksman_drill",
     "smallbore_drill",
@@ -341,6 +342,26 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Stow(Side::Left),
             Gun(MacroKind::Reload),
             Expect(super::Expect::GunRounds(2, 2)),
+            Fire { at: t0, shots: 2 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Expect(super::Expect::Hits(6)),
+        ],
+        "shotgun_dud_drill" => vec![
+            Log(s("shotgun dud drill: load two, a dud first, fire both out")),
+            PickUp {
+                id: s("toz_double"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("ammo_12ga"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(2, 2)),
+            // The first barrel's primer won't go: the second fires, and
+            // the dud wants breaking, closing and striking again.
+            Setup(crate::weapons::DUD_NEXT),
             Fire { at: t0, shots: 2 },
             Expect(super::Expect::GunRounds(0, 0)),
             Expect(super::Expect::Hits(6)),
