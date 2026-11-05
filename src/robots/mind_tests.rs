@@ -719,6 +719,68 @@ fn a_searching_drone_looks_in_at_a_doorway() {
     assert!(best < 2.5, "hung low outside the doorway ({best:.1} m off)");
 }
 
+/// A drone that can't get down to a doorway on its round (held above it,
+/// by an eave say) still gives its search up when the time runs out. One
+/// hung 4 m over a house's door for twenty minutes, and re-locked on the
+/// newcomer hiding inside each time they looked out (first_jobs_cautious).
+#[test]
+fn a_drone_held_off_a_doorway_still_ends_its_search() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let door = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .first()
+        .expect("a door");
+    let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
+    let held = Vec3::new(
+        hover.x,
+        zone.ground(hover.x, hover.z) + super::drone::DOORWAY_ALTITUDE + 4.0,
+        hover.z,
+    );
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            held,
+            Job {
+                kind: JobKind::Survey,
+                site: held,
+                duration: 999.0,
+                exit: held,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Search {
+        at: door.mid + door.out * 6.0,
+        left: 10.0,
+        spots: vec![door.mid + door.out * 1.8],
+        dwell: 0.0,
+    };
+    let mut searching = 0.0;
+    for _ in 0..90 * 30 {
+        app.world_mut()
+            .get_mut::<Transform>(drone)
+            .unwrap()
+            .translation = held;
+        app.update();
+        if matches!(
+            app.world().get::<Brain>(drone).unwrap(),
+            Brain::Search { .. }
+        ) {
+            searching += 1.0 / 90.0;
+        }
+    }
+    assert!(
+        searching < 12.0,
+        "still searching {searching:.0} s into a 10 s search, held off the doorway"
+    );
+}
+
 /// A crawler's wreck doesn't wall off a corridor: once it's wrecked,
 /// players walk past it (the sims found bots stuck behind one).
 #[test]
@@ -3277,6 +3339,29 @@ fn a_fresh_career_is_unaffected_by_memory() {
             .iter(app.world())
             .count(),
         0
+    );
+}
+
+/// A raid that ends down is remembered as a loss where you went down: the
+/// place isn't known any better for it (`zone_memory::RaidTrace::lost`;
+/// a newcomer stuck on one step met a drone 110 s in, raid after raid).
+#[test]
+fn a_raid_lost_somewhere_doesnt_teach_them_the_place() {
+    let (mut app, player, zone) = app(None);
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    for _ in 0..100 {
+        app.update();
+    }
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::Down { left: 6.0 };
+    app.update();
+    let m = &app.world().resource::<super::memory::ZoneMind>().memory;
+    assert_eq!(m.raids, 1, "the raid went in");
+    assert_eq!(
+        m.corridor(100.0, 200.0),
+        0.0,
+        "went down there, and it's known for it: {:?}",
+        m.heat
     );
 }
 

@@ -112,6 +112,15 @@ fn take_up(
     }
 }
 
+/// Where a panel `size` across held up to read sits, its hand at `hand` and
+/// the eyes at `eye` (world): its bottom edge in the hand, its face (+Z,
+/// where `render::screen` draws its text) to the eyes, its top up.
+pub fn held_up(hand: Vec3, eye: Vec3, size: Vec2) -> Transform {
+    let at = hand + Vec3::Y * (size.y * 0.5 + HELD_ABOVE);
+    let to_eye = (eye - at).normalize_or(Vec3::Z);
+    Transform::from_translation(at).looking_to(-to_eye, Vec3::Y)
+}
+
 /// Keeps each panel being read in its hand, turned to face the eyes.
 fn hold_up(
     mut panels: Query<(&Reading, &ScreenText, &mut Transform, Option<&ChildOf>)>,
@@ -134,10 +143,7 @@ fn hold_up(
         else {
             continue;
         };
-        let at = hand.translation + Vec3::Y * (screen.size.y * 0.5 + HELD_ABOVE);
-        let to_eye = (eye - at).normalize_or(Vec3::Z);
-        // Its face (+Z) to the eyes, its top up.
-        let world = Transform::from_translation(at).looking_to(-to_eye, Vec3::Y);
+        let world = held_up(hand.translation, eye, screen.size);
         let local = match parent.and_then(|p| parents.get(p.parent()).ok()) {
             Some(pg) => Transform::from_matrix(pg.to_matrix().inverse() * world.to_matrix()),
             None => world,

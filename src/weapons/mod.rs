@@ -267,6 +267,7 @@ impl Plugin for WeaponsPlugin {
             ))
             .init_resource::<reload::MagApproach>()
             .add_systems(Update, stage_duds)
+            .add_systems(FixedUpdate, follow_handles.before(InteractSystems::Grab))
             .add_systems(
                 FixedUpdate,
                 (
@@ -531,7 +532,13 @@ pub fn drag(now: f32, want: f32, stiff: f32, pull: f32, dt: f32, travel_m: f32) 
 fn work_handles(
     hands: Query<(Entity, &Hand)>,
     rig: Query<&RigHand>,
-    mut guns: Query<(Entity, &mut Gun, &GlobalTransform, &Item)>,
+    mut guns: Query<(
+        Entity,
+        &mut Gun,
+        &GlobalTransform,
+        &Item,
+        Option<&feel::Handling>,
+    )>,
     catalog: Res<Catalog>,
     time: Res<Time>,
     mut out: MessageWriter<GunEvent>,
@@ -562,7 +569,7 @@ fn work_handles(
         let Some(gun_e) = hand.supporting else {
             continue;
         };
-        let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
+        let Ok((e, mut gun, gt, item, _)) = guns.get_mut(gun_e) else {
             continue;
         };
         let Some(h) = gun
@@ -573,11 +580,24 @@ fn work_handles(
         else {
             continue;
         };
-        let z = gt
-            .affine()
-            .inverse()
-            .transform_point3(hand.world.translation)
-            .z;
+        // Where the forend hand is along the bore from the hand on the
+        // grip: a pump stroke is the one hand moving on the other. Read
+        // against the gun, a shot's shove (the gun going back in both
+        // hands) worked half a stroke.
+        let bore = gt.rotation() * Vec3::Z;
+        let grip_hand = hands
+            .iter()
+            .find(|(_, other)| other.holding == Some(gun_e))
+            .map(|(_, other)| other.world.translation);
+        let z = match grip_hand {
+            Some(at) => (hand.world.translation - at).dot(bore),
+            None => {
+                gt.affine()
+                    .inverse()
+                    .transform_point3(hand.world.translation)
+                    .z
+            }
+        };
         let travel = gun.firearm.bolt_travel;
         let (_, start, z0) = *pumping.entry(hand_e).or_insert((gun_e, travel, z));
         let want = start + (z - z0) / h.travel.max(1e-3);
@@ -604,7 +624,16 @@ fn work_handles(
             pumping.insert(hand_e, (gun_e, now, z));
         }
         let name = catalog.get(item.kind()).id.clone();
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            hand_throw(pull),
+        );
     }
     taken.retain(|h, (g, ..)| {
         hands
@@ -616,7 +645,7 @@ fn work_handles(
         let Some((gun_e, 0)) = hand.handle else {
             continue;
         };
-        let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
+        let Ok((e, mut gun, gt, item, kick)) = guns.get_mut(gun_e) else {
             continue;
         };
         let (_, start, start_lift) = *taken.entry(hand_e).or_insert((
@@ -630,7 +659,8 @@ fn work_handles(
         let local = gt
             .affine()
             .inverse()
-            .transform_point3(hand.world.translation);
+            .transform_point3(hand.world.translation)
+            + Vec3::Z * kick.map_or(0.0, |k| k.push);
         let d = local - hand.handle_origin;
         // How hard the hand pulls along the stroke, and which hand.
         let pull = hand.velocity.dot(gt.rotation() * Vec3::Z);
@@ -697,7 +727,7 @@ fn work_handles(
                     ev.extend(gun.firearm.free_bolt());
                 }
                 if gun.firearm.bolt_travel < 0.05 {
-                    let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
+                    let lift = (start_lift + d.y / HANDLE_RISE).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
                 }
                 if gun.firearm.handle_lift >= 0.95 {
@@ -749,9 +779,49 @@ fn work_handles(
             }
         };
         let name = catalog.get(item.kind()).id.clone();
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            hand_throw(pull),
+        );
     }
 }
+
+/// A handle's grab point is where the handle is: an open bolt, a slide
+/// or charging handle held back, a drawn string. Left at the handle's
+/// rest, a hand reaching for an open Mosin bolt (9 cm back and lifted)
+/// closed on nothing.
+fn follow_handles(mut guns: Query<(&Gun, &mut Grabbable), Changed<Gun>>) {
+    for (gun, mut grab) in &mut guns {
+        let Some(h) = &gun.layout.handle else {
+            continue;
+        };
+        if matches!(h.kind, HandleKind::Pump | HandleKind::BreakBarrels) {
+            continue;
+        }
+        let at = handle_at(h, gun.firearm.bolt_travel, gun.firearm.handle_lift);
+        for p in grab.points.iter_mut() {
+            if p.role == GripRole::Handle(0) && p.local.translation != at {
+                p.local.translation = at;
+            }
+        }
+    }
+}
+
+/// Where a handle is (gun space), back `travel` of its stroke and lifted
+/// `lift` of its turn.
+pub fn handle_at(h: &layout::HandleLayout, travel: f32, lift: f32) -> Vec3 {
+    h.grab + Vec3::Z * h.travel * travel + Vec3::Y * HANDLE_RISE * lift
+}
+
+/// How far a turn-bolt's handle rises as it's lifted, m (as the hand
+/// lifts it: `work_handles`).
+pub const HANDLE_RISE: f32 = 0.035;
 
 /// A scenario's setup (`Task::Setup`): the next pull of every held gun
 /// strikes a dud (`shotgun_dud_drill`: the bot breaks the double, closes
@@ -880,7 +950,16 @@ fn tap_magazines(
         if tapped {
             let events = gun.firearm.tap_magazine();
             let name = catalog.get(item.kind()).id.clone();
-            emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+            emit(
+                e,
+                &name,
+                &mut gun,
+                gt,
+                events,
+                &mut out,
+                &mut ejected,
+                CASE_THROW,
+            );
         }
     }
 }
@@ -982,7 +1061,16 @@ fn feed_by_hand(
                 boxes.insert(hand_e, now);
             }
         }
-        emit(gun_e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            gun_e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            CASE_THROW,
+        );
     }
 }
 
@@ -1092,7 +1180,16 @@ fn buttons(
                 events.extend(gun.firearm.cycle_mode());
             }
         }
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            CASE_THROW,
+        );
         // A hand that let go of the handle this tick: spring return.
         let _ = &mut hands;
     }
@@ -1248,11 +1345,35 @@ fn triggers(
                 });
             }
         }
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            CASE_THROW,
+        );
     }
 }
 
 /// Turns mechanism events into gun events and ejections.
+/// How fast a case leaves the port when the gun throws it (m/s).
+pub const CASE_THROW: f32 = 2.6;
+
+/// How fast a case leaves when a hand works the action: as briskly as the
+/// hand drew it back. Eased back, a bolt drops its case by the gun; snapped
+/// back, it flicks it clear.
+pub fn hand_throw(pull: f32) -> f32 {
+    (pull.abs() * HAND_THROW).clamp(0.3, 4.0)
+}
+
+/// A case's speed per unit of the hand's (an extractor and ejector add
+/// the bolt's last snap to the hand's own).
+pub const HAND_THROW: f32 = 2.2;
+
+#[allow(clippy::too_many_arguments)]
 fn emit(
     gun_e: Entity,
     name: &str,
@@ -1261,6 +1382,7 @@ fn emit(
     events: Vec<FireEvent>,
     out: &mut MessageWriter<GunEvent>,
     ejected: &mut MessageWriter<Ejection>,
+    throw: f32,
 ) {
     for ev in events {
         if let FireEvent::Ejected(round) = ev {
@@ -1275,7 +1397,7 @@ fn emit(
                 cartridge: gun.firearm.def.cartridge.clone(),
                 load,
                 at: gt.transform_point(gun.layout.port),
-                velocity: dir * 2.6,
+                velocity: dir * throw,
             });
         }
         out.write(GunEvent {
@@ -1511,7 +1633,16 @@ pub fn handle_released(
             if let Ok((e, mut gun, gt, item)) = guns.get_mut(g) {
                 let ev = release_handle(&mut gun);
                 let name = catalog.get(item.kind()).id.clone();
-                emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
+                emit(
+                    e,
+                    &name,
+                    &mut gun,
+                    gt,
+                    ev,
+                    &mut out,
+                    &mut ejected,
+                    CASE_THROW,
+                );
             }
         }
     }

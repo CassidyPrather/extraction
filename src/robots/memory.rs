@@ -249,7 +249,14 @@ fn raid_turns(
     let ended = before.as_ref().is_some_and(out)
         && matches!(now, Phase::Extracting { .. } | Phase::Down { .. });
     if ended {
-        let trace = std::mem::take(&mut mind.trace);
+        let mut trace = std::mem::take(&mut mind.trace);
+        // Down: where, so the machines ease off it (`RaidTrace::lost`).
+        if matches!(now, Phase::Down { .. }) {
+            trace.lost = players.iter().next().map(|(_, g)| {
+                let p = g.translation();
+                [p.x, p.z]
+            });
+        }
         mind.memory.fold(&trace);
     }
     // Picked up on your usual way: the radio says so, once a raid.
