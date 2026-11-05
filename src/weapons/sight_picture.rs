@@ -5,6 +5,15 @@ mod tests {
     use crate::capture::sightline::{NO_SIGHTS, first_hit};
     use bevy::prelude::*;
 
+    fn rear_on_probe(tris: &[[Vec3; 3]], eye: Vec3, end: f32, front: f32) -> Vec<bool> {
+        (-150..=150)
+            .map(|i| {
+                let o = Vec3::new(eye.x + i as f32 * 0.0001, eye.y - 0.0005, eye.z + 0.05);
+                first_hit(tris, o, end).is_some_and(|z| z > front + 0.03)
+            })
+            .collect()
+    }
+
     #[test]
     fn probe_sight_geometry() {
         let catalog = crate::items::Catalog::load();
@@ -111,6 +120,29 @@ mod tests {
                     if row == 0 { " <- line" } else { "" }
                 );
             }
+            // Tops, scanning down 0.05 mm at a time: the rear sight's beside
+            // the notch (or at the middle, with no notch), and the post's.
+            let top = |x: f32, from: f32, want: &dyn Fn(f32) -> bool| {
+                (0..300).find_map(|k| {
+                    let y = eye.y + 0.006 - k as f32 * 0.00005;
+                    let o = Vec3::new(eye.x + x, y, from);
+                    first_hit(&tris, o, end)
+                        .filter(|z| want(*z))
+                        .map(|z| (y, z))
+                })
+            };
+            let half = span(&rear_on_probe(&tris, eye, end, front), false) * 0.5;
+            let side = |sgn: f32| top(sgn * (half + 0.001), eye.z + 0.05, &|z| z > front + 0.03);
+            let mid = top(0.0, eye.z + 0.05, &|z| z > front + 0.03);
+            let post_top = top(0.0, front + 0.02, &|z| (z - front).abs() < 0.015);
+            println!(
+                "{:12} TOPS shoulders L {:?} R {:?} middle {:?} post {:?} (y mm over line, z)",
+                def.id,
+                side(-1.0).map(|(y, z)| ((y - eye.y) * 1000.0, z)),
+                side(1.0).map(|(y, z)| ((y - eye.y) * 1000.0, z)),
+                mid.map(|(y, z)| ((y - eye.y) * 1000.0, z)),
+                post_top.map(|(y, z)| ((y - eye.y) * 1000.0, z)),
+            );
             let post = (0.0, span(&post_on, true));
             let notch = (0.0, span(&rear_on, false));
             let (lo, hi) = layout.bounds();
