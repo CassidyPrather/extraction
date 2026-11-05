@@ -7803,6 +7803,10 @@ mod door_hinge {
         for map in crate::test_maps() {
             let mut vr = Vr::new(&map);
             vr.step(5);
+            // Where it stood to start: clear of every door (stood up out of
+            // the way instead, the fall killed it, and it came round at the
+            // spawn mid-way through the next door).
+            let clear = vr.feet();
             let doors: Vec<(Entity, crate::world::buildings::DoorDef)> = {
                 let mut q = vr.app.world_mut().query_filtered::<(Entity, &DoorLeaf), (
                     Without<Wedged>,
@@ -7850,16 +7854,15 @@ mod door_hinge {
                     } else if away && angle < 0.99 {
                         bad.push(format!("{at}: held at {angle:.2}, swinging away from them"));
                     } else {
-                        // Clear of it (well up out of its way): it opens the
-                        // rest of the way.
-                        vr.stand(spot + Vec3::Y * 30.0, 0.0);
+                        // Clear of it: it opens the rest of the way.
+                        vr.stand(clear, 0.0);
                         vr.step(60);
                         let angle = vr.app.world().get::<Door>(door).unwrap().angle;
                         if angle < 0.99 {
                             bad.push(format!("{at}: stopped at {angle:.2} with no one there"));
                         }
                     }
-                    vr.stand(spot + Vec3::Y * 30.0, 0.0);
+                    vr.stand(clear, 0.0);
                     vr.app.world_mut().get_mut::<Door>(door).unwrap().open = false;
                     vr.step(60);
                 }

@@ -1230,7 +1230,14 @@ pub(super) fn direct_raid(
         .chain(again.into_iter().map(|f| (f, false)));
     for (f, first) in moments {
         if first {
-            state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
+            // As said, filled ("Crate's as you left it: 4 things."), where
+            // the speaker has it yet.
+            let said = view
+                .spoken
+                .as_ref()
+                .and_then(|s| s.2.iter().rev().find(|(t, _)| *t == f.lines()[0]))
+                .map_or(f.lines()[0].to_string(), |(_, l)| l.clone());
+            state.note(now, Kind::Learned, format!("{f:?}: {said}"));
         } else {
             state.note(
                 now,
@@ -1644,6 +1651,24 @@ pub(super) fn direct_raid(
             };
             if takes && carried(&world, &view, player, "radio").is_empty() && !in_crate("radio") {
                 need.push("radio".to_owned());
+            }
+            // No gun of its own anywhere (lost with the rest at a fall): the
+            // driver's spare pistol, its magazine and rounds, once he's
+            // looked round (off before then, every raid, it went out
+            // unarmed and was shot down two minutes in: Progression's
+            // careers, raids 6-20).
+            let armed = world.items.iter().any(|(e, it, _, held, sock, bag)| {
+                world.catalog.get(it.kind()).firearm.is_some()
+                    && (held.is_some_and(|h| h.player == player)
+                        || sock.is_some_and(|s| {
+                            world.owners.get(s.socket).is_ok_and(|o| o.0 == player)
+                        })
+                        || bag
+                            .is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player))
+                        || view.stash.iter().any(|b| b.contents.contains(&e)))
+            });
+            if takes && !armed && opts.map != crate::camp::TRAINING_YARD {
+                need.extend(["pm_pistol", "pm_mag", "ammo_9x18"].map(String::from));
             }
             match &state.errand {
                 Some(Errand::Leave { item, .. })
