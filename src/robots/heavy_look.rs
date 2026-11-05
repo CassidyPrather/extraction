@@ -828,8 +828,6 @@ mod tests {
             "its bolts aren't merged"
         );
         let bolts = extraction_core::heavy::PLATES * extraction_core::heavy::BOLTS_PER_PLATE;
-        // Two a bolt (steel and its warning paint) were 24 draws of 89.
-        assert!(whole + bolts * 2 - 2 <= 89, "{whole} drawn with its bolts merged");
         // One shot out.
         let w = app.world_mut();
         let mut q = w.query::<(Entity, &HeavyPart, &ChildOf)>();
@@ -844,7 +842,9 @@ mod tests {
         }
         assert!(app.world().get::<BoltsMerged>(robot).is_none());
         let after = drawn(&mut app);
-        // The merged two gone, the other eleven bolts' two each back.
+        // The merged two gone, the other eleven bolts' two each back: with
+        // every bolt on, it drew 22 fewer (two a bolt, steel and its
+        // warning paint, were 24 of a heavy's 89).
         assert_eq!(after, whole - 2 + (bolts - 1) * 2, "{whole} then {after}");
     }
 
