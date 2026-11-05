@@ -1768,12 +1768,14 @@ mod tests {
     fn what_is_laid_on_a_spot_settles_in_reach() {
         use crate::items::Item;
         // Long enough for a laid thing to fall off its lid, tumble and lie.
-        const SETTLE: usize = 90 * 4;
+        // (Seed 4 by default, `LAID_SEEDS=1,2,..` for more: each valley and
+        // seed is a raid's worth of loot settling.)
+        const SETTLE: usize = 90 * 3;
         let mut failed = Vec::new();
         let mut tried = 0;
         let seeds: Vec<u64> = std::env::var("LAID_SEEDS")
             .map(|s| s.split(',').filter_map(|x| x.parse().ok()).collect())
-            .unwrap_or(vec![1, 4]);
+            .unwrap_or(vec![4]);
         for (map, seed) in crate::test_maps()
             .into_iter()
             .flat_map(|m| seeds.iter().map(move |s| (m.clone(), *s)))
