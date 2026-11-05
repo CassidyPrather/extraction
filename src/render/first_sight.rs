@@ -142,7 +142,8 @@ fn bring_out_at(w: &mut World) -> Vec3 {
 
 /// `EXTRACTION_EVERYTHING=<frame>`: at that frame, bring everything out
 /// (`bring_everything_out`) in front of the camera, for
-/// `EXTRACTION_PIPELINES=1` to show what still builds at first sight.
+/// `EXTRACTION_PIPELINES=1` to show what still builds at first sight
+/// (`EXTRACTION_EVERYTHING_CONDITION` for the items worn).
 pub struct EverythingPlugin;
 
 impl Plugin for EverythingPlugin {
@@ -186,6 +187,13 @@ pub(crate) fn bring_everything_out_world(world: &mut World) {
         duration: 600.0,
         exit: site + Vec3::X * 200.0,
     };
+    // `EXTRACTION_EVERYTHING_CONDITION=<0..1>`: the items come out worn
+    // (a gun's wear shows only below new), for the pipelines gauge to see
+    // what a worn thing draws with.
+    let condition = std::env::var("EXTRACTION_EVERYTHING_CONDITION")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .map_or(1.0, |c| c.clamp(0.0, 1.0));
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let mut c = Commands::new(&mut queue, world);
@@ -212,7 +220,7 @@ pub(crate) fn bring_everything_out_world(world: &mut World) {
                 crate::items::SpawnItem {
                     kind,
                     transform: Transform::from_translation(ground(x, z) + Vec3::Y * 0.3),
-                    condition: 1.0,
+                    condition,
                 },
             );
         }
