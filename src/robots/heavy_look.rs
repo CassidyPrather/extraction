@@ -786,8 +786,9 @@ mod tests {
         {
             let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
             let mut t = q.single_mut(w).unwrap();
-            *t = Transform::from_translation(at + Vec3::new(0.0, 1.7, 8.0))
-                .looking_at(at + Vec3::Y, Vec3::Y);
+            *t = Transform::from_translation(at + Vec3::new(0.0, 2.5, 14.0))
+                .looking_at(at + Vec3::Y * 1.5, Vec3::Y);
+            // (14 m: all of it in view, every bolt; inside its first LOD.)
         }
         for _ in 0..60 {
             app.update();
