@@ -338,6 +338,16 @@ fn run_fights(chain: &Chain) -> AppExit {
             // in reach (`a_roof_is_in_reach_of_the_first_fights_drone`).
             let reckless_drone =
                 p.reckless && *e == "drone" && said.contains("tell: a drone's lock-on");
+            // ...and it does take it on: armed, locked on, it shoots back
+            // (twelve raids after a lost kit, none did, and all went down).
+            if reckless_drone && !said.contains("shot back at it") {
+                println!(
+                    "first fight: {}/{e}: locked on, armed, and it never shot back",
+                    p.name
+                );
+                failed.push(format!("{}/{e}", p.name));
+                continue;
+            }
             if !ok {
                 if p.hoards || reckless_drone {
                     // By design: it carries on as if nothing were there,
@@ -588,6 +598,8 @@ pub(super) struct Newcomer {
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
+    /// The walk last looked at as it came up (`unvetted`): once each.
+    vetted: Option<Vec2>,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1228,6 +1240,13 @@ pub(super) fn direct_raid(
                 First::Sentry | First::DroneLock | First::Aimed | First::Heavy
             )
         });
+    // A gun to hand (in a hand, or on the body), for the reckless to shoot
+    // back with.
+    let armed_now = world.items.iter().any(|(_, it, _, held, sock, _)| {
+        world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
+            && (held.is_some_and(|h| h.player == player)
+                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
+    });
     let moments = firsts
         .into_iter()
         .map(|f| (f, true))
@@ -1298,6 +1317,16 @@ pub(super) fn direct_raid(
                         run_for_cover(&world.zone, here, from, 1.0)
                     }
                 }
+            }
+            // Reckless, armed, with a drone locked on or a walker's gun on
+            // it: shoots back, there and then (it waited for its next "a
+            // machine in range" look, half a minute and more, and a drone
+            // has you down in thirty seconds: twelve raids running, not a
+            // round fired).
+            First::DroneLock | First::Aimed if p.reckless && armed_now => {
+                state.fought_at = now;
+                state.note(now, Kind::Learned, "shot back at it");
+                take_it_on()
             }
             First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
@@ -1502,6 +1531,28 @@ pub(super) fn direct_raid(
             }
             bot.restart();
         }
+    }
+    // A walk about to be made that `walk` didn't plan: a long straight one,
+    // or one through the fence, isn't made (once each). (Walked off from
+    // a heavy out through the south gate, it went on with the way it had
+    // planned from inside, at the wire; and a 90 m stretch along the fence
+    // timed out at a walk.)
+    // As a timeout does it (above), only before the 30 s at the wire: the
+    // rest of that walk dropped, and what's next planned from here. (Put
+    // through `walk` to the same old waypoint instead, it went back the
+    // way it had been going, past the sentry, and round again.)
+    if let Some(&Task::WalkTo { to, .. }) = bot.tasks.front()
+        && state.vetted != Some(to)
+        && {
+            // (Looked at once, as it comes up.)
+            state.vetted = Some(to);
+            unvetted(&world, here, to)
+        }
+    {
+        while matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) && bot.tasks.len() > 1 {
+            bot.tasks.pop_front();
+        }
+        bot.restart();
     }
     // A first raid that runs on past half an hour has lost its way.
     if now > 1800.0 && state.leg != Leg::Done {
@@ -2623,9 +2674,41 @@ fn under_a_roof(
 /// off, and a breath to look back.
 fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
     let away = (here - from).normalize_or(Vec2::Y);
-    let mut t = walk(world, here, here + away * 15.0);
+    // Away, or turned along whatever's ahead (the fence, the map's edge):
+    // the first that stays inside the fence. (Straight away every 15 m, the
+    // lost newcomer went out through the south gate to the map's edge, and
+    // the heavy had it in the corner.)
+    let inside = world.zone.map.half() - world.zone.map.fence_inset.max(0.0) - 5.0;
+    let to = [0.0f32, 45.0, -45.0, 90.0, -90.0]
+        .into_iter()
+        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * 15.0)
+        .find(|p| p.x.abs() < inside && p.y.abs() < inside)
+        .unwrap_or(here + away * 15.0);
+    let mut t = walk(world, here, to);
     t.push(Task::Wait(2.0));
     t
+}
+
+/// A straight walk `walk` wouldn't make: longer than its legs go, or
+/// through the quarantine fence (out of doors only: a step in a building
+/// is its plan's).
+fn unvetted(world: &World2, here: Vec2, to: Vec2) -> bool {
+    let indoors = |p: Vec2| {
+        world
+            .entrances
+            .building_at(Vec3::new(p.x, world.zone.on_ground(p.x, p.y).y + 0.5, p.y))
+            .is_some()
+    };
+    if indoors(here) || indoors(to) {
+        return false;
+    }
+    here.distance(to) > 20.0
+        || fence_boxes(&world.zone).iter().any(|(xf, half)| {
+            let inv = xf.compute_affine().inverse();
+            let a = inv.transform_point3(Vec3::new(here.x, 0.0, here.y)).xz();
+            let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
+            segment_hits_box(a, b, *half).is_some()
+        })
 }
 
 /// Into cover from a machine at `from`: round the far side of the nearest

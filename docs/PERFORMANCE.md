@@ -1476,6 +1476,67 @@ their rebuild after damage. Not pursued.
 Lavapipe makes bind-group creation dearer than a real driver does, so
 read the shares here, not the milliseconds.
 
+### First-sight pipelines, per valley (5 November)
+
+A pipeline built the first time something is drawn is a hitch in the
+headset. `scripts/pipelines.sh` is the gauge, on lavapipe under Xvfb, per
+valley:
+
+1. The game loads and the warm-up shelf runs its 900 frames.
+2. At frame 950 everything a raid can bring out comes out in front of the
+   camera (`EXTRACTION_EVERYTHING`: every robot kind, every item).
+3. From frame 1000 the effects go off, 90 frames apart
+   (`EXTRACTION_FIRSTS`): a shot, impacts on every surface, a robot struck,
+   a grenade, each bloom, a walker wrecked, a sentry placed, every robot's
+   tell, then the next cycle at night in a storm with snow.
+
+Any pipeline queued from frame 950 on fails the valley, except the
+screenshot's that ends the run. So does a run that dies before its
+effects are through. With `EXTRACTION_PIPELINES=1` the log names each
+pipeline's vertex layout and what was first drawn (or had its material
+swapped or its key changed) after the shelf, so a failure traces to its
+source.
+
+| valley | before | after |
+|---|---|---|
+| Marrow Creek | 2 (4 with the fights and the next cycle) | 0 |
+| Kettle Pass | 0 | 0 |
+| Cinder Works | 1 | 0 |
+| Sallow Reservoir | (not measured) | 0 |
+| Rime Fell | (not measured) | 0 (2 on the way) |
+
+What was built at first sight, and the fix:
+
+- **The lamps' beams** (`beam.wgsl`), when a cycle turned to night in the
+  same session: spotlights are lit only at night. The shelf now holds a
+  beam decoy (`world::beams::decoy`).
+- **Shadows of materials first worn mid-raid** (a gun part or an item
+  brought out, which casts): the shelf warmed unworn materials
+  unshadowed only. Now casting and not, ranged and not. That also covers
+  an additive halo with a visibility range (Rime).
+- **Effects made mid-raid with a key nothing at load had** (additive, on
+  the standard layout): the shelf now holds one plain StandardMaterial
+  for each alpha mode in each cull mode.
+- **The minelayer's laid mine** (blend on a vertex-coloured mesh): Heavy
+  seeds it at load (`robots::minelayer_look`, c2ee2232). The plough's
+  bank is seeded the same way.
+- Robot primitives are shelved weathered as well (vertex colours from
+  `robots::weathering`). Marrow had them warmed already through another
+  match, but other valleys might not.
+
+The shelf grew from about 95 kinds (1,900 entries) to about 156
+(3,200).
+
+**Limits.**
+- The gauge can't run the headset's own path: its eyes draw into the
+  runtime's swapchain format, and Monado isn't cleared to run here. One
+  raid with `EXTRACTION_PIPELINES=1` in the headset (`docs/PLAYTEST.md`
+  4h) is the check: a `pipeline queued` line after `load: warm-up shelf
+  done` is a hitch.
+- A crawler can't be spawned outside an underground site in the gauge.
+  Its lens glow has the drone lock halo's and the sentry halo's key,
+  both measured.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:

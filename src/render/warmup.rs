@@ -19,7 +19,9 @@
 //! - `EXTRACTION_FIRSTS=<frame>` sets off the raid's effects one by one
 //!   in front of the camera from that frame on (a shot, impacts on every
 //!   surface, a robot struck, a grenade, the Surge's blooms, a walker
-//!   wrecked), each logged as it goes, for the log above to time.
+//!   wrecked, every robot's tell, then the next cycle at night in a storm
+//!   with snow), each logged as it goes, for the log above to time
+//!   (`scripts/pipelines.sh`).
 //!
 //! See docs/PERFORMANCE.md, "Hitches".
 
@@ -69,6 +71,7 @@ impl Plugin for WarmupPlugin {
                 );
         }
         if std::env::var_os("EXTRACTION_PIPELINES").is_some() {
+            app.add_systems(Last, (log_first_drawn, log_key_changes));
             if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
                 use bevy::render::{Render, RenderSystems};
                 render.add_systems(Render, watch_pipelines.in_set(RenderSystems::Cleanup));
@@ -80,6 +83,130 @@ impl Plugin for WarmupPlugin {
         {
             app.insert_resource(Firsts { from, ..default() })
                 .add_systems(Update, firsts);
+        }
+    }
+}
+
+/// With `EXTRACTION_PIPELINES=1`, once the shelf is done: each mesh that
+/// appears, by name (or its parent's), its material and its vertex
+/// layout, so a pipeline queued at first sight (the line just after) can
+/// be traced to what needed it. Only one line per distinct kind.
+#[allow(clippy::type_complexity)]
+fn log_first_drawn(
+    shelf: Option<Res<Shelf>>,
+    added: Query<
+        (
+            Entity,
+            &Mesh3d,
+            Option<&Name>,
+            Option<&ChildOf>,
+            Option<&MeshMaterial3d<StandardMaterial>>,
+            Has<bevy::light::NotShadowCaster>,
+            Ref<Mesh3d>,
+        ),
+        Or<(Added<Mesh3d>, Changed<MeshMaterial3d<StandardMaterial>>)>,
+    >,
+    names: Query<&Name>,
+    meshes: Res<Assets<Mesh>>,
+    materials: Res<Assets<StandardMaterial>>,
+    mut seen: Local<std::collections::HashSet<String>>,
+) {
+    if shelf.is_none_or(|s| s.frame <= s.warm_for) {
+        return;
+    }
+    for (e, mesh, name, parent, mat, no_shadow, fresh) in &added {
+        // A material swapped on a mesh already drawn (a fade, a wreck's
+        // scorch) is a new key for it as much as a new mesh is.
+        let how = if fresh.is_added() {
+            "first drawn"
+        } else {
+            "material swapped"
+        };
+        let who = name
+            .map(|n| n.to_string())
+            .or_else(|| {
+                parent
+                    .and_then(|p| names.get(p.parent()).ok())
+                    .map(|n| format!("{n}>"))
+            })
+            .unwrap_or_else(|| format!("{e}"));
+        // (A mesh whose data went to the GPU and was dropped here has
+        // none to read: `attributes` panics on it.)
+        let layout = meshes
+            .get(&mesh.0)
+            .and_then(|m| m.try_attributes().ok())
+            .map_or("(on the GPU only)".to_string(), |a| {
+                a.map(|(a, _)| a.name.trim_start_matches("Vertex_").to_string())
+                    .collect::<Vec<_>>()
+                    .join("+")
+            });
+        let what = mat
+            .and_then(|m| materials.get(&m.0))
+            .map_or("another material".to_string(), |m| {
+                format!("{:?}{}", m.alpha_mode, if m.unlit { " unlit" } else { "" })
+            });
+        let kind = format!(
+            "{what} on {layout}{}",
+            if no_shadow { "" } else { ", casts" }
+        );
+        let short: String = who.split(['(', ' ']).next().unwrap_or("").into();
+        if seen.insert(format!("{how}|{short}|{kind}")) {
+            info!("{how} after the shelf: {who}: {kind}");
+        }
+    }
+}
+
+/// With `EXTRACTION_PIPELINES=1`, once the shelf is done: a material
+/// changed in place so its pipeline key changed (its alpha mode, depth
+/// bias, a texture added), named by what wears it. Neither a new mesh nor
+/// a swapped material, so `log_first_drawn` can't see it.
+fn log_key_changes(
+    shelf: Option<Res<Shelf>>,
+    mut events: MessageReader<AssetEvent<StandardMaterial>>,
+    materials: Res<Assets<StandardMaterial>>,
+    worn: Query<(
+        &MeshMaterial3d<StandardMaterial>,
+        Option<&Name>,
+        Option<&ChildOf>,
+    )>,
+    names: Query<&Name>,
+    mut keys: Local<std::collections::HashMap<AssetId<StandardMaterial>, u64>>,
+) {
+    let key = |m: &StandardMaterial| {
+        hash_of((
+            m.bind_group_data(),
+            format!("{:?}", m.alpha_mode()),
+            m.depth_bias().to_bits(),
+        ))
+    };
+    let done = shelf.is_some_and(|s| s.frame > s.warm_for);
+    for ev in events.read() {
+        let (AssetEvent::Modified { id } | AssetEvent::Added { id }) = ev else {
+            continue;
+        };
+        let Some(m) = materials.get(*id) else {
+            continue;
+        };
+        let k = key(m);
+        let before = keys.insert(*id, k);
+        if done && before.is_some_and(|b| b != k) {
+            let who: Vec<String> = worn
+                .iter()
+                .filter(|(w, ..)| w.0.id() == *id)
+                .take(3)
+                .map(|(_, n, p)| {
+                    n.map(|n| n.to_string())
+                        .or_else(|| {
+                            p.and_then(|p| names.get(p.parent()).ok())
+                                .map(|n| format!("{n}>"))
+                        })
+                        .unwrap_or_else(|| "?".into())
+                })
+                .collect();
+            info!(
+                "material key changed after the shelf: now {:?}, depth bias {}, worn by {:?}",
+                m.alpha_mode, m.depth_bias, who
+            );
         }
     }
 }
@@ -104,18 +231,39 @@ fn watch_pipelines(cache: Res<bevy::render::render_resource::PipelineCache>, mut
                 let shader = |h: &Handle<bevy::shader::Shader>| {
                     h.path().map_or("?".to_string(), |p| p.to_string())
                 };
+                // A depth-only pipeline (a shadow's, a prepass's) has no
+                // fragment stage: its vertex defs name the layout.
                 let mut defs: Vec<String> = d
                     .fragment
                     .as_ref()
-                    .map(|f| f.shader_defs.iter().map(|s| format!("{s:?}")).collect())
-                    .unwrap_or_default();
+                    .map_or(&d.vertex.shader_defs, |f| &f.shader_defs)
+                    .iter()
+                    .map(|s| format!("{s:?}"))
+                    .collect();
                 defs.sort();
+                // The vertex layout too (stride and formats): the same
+                // shader defs serve meshes of different layouts, and each
+                // is a pipeline of its own.
+                let buffers: Vec<String> = d
+                    .vertex
+                    .buffers
+                    .iter()
+                    .map(|b| {
+                        let f: Vec<String> = b
+                            .attributes
+                            .iter()
+                            .map(|a| format!("{:?}", a.format))
+                            .collect();
+                        format!("{}B {}", b.array_stride, f.join("+"))
+                    })
+                    .collect();
                 format!(
-                    "{} | {} | {}",
+                    "{} | {} | [{}] | {}",
                     d.label.as_deref().unwrap_or("-"),
                     d.fragment
                         .as_ref()
                         .map_or(shader(&d.vertex.shader), |f| shader(&f.shader)),
+                    buffers.join("; "),
                     defs.join(" ")
                 )
             }
@@ -163,12 +311,20 @@ fn firsts(world: &mut World) {
         f.frame += 1;
         (f.frame, f.from)
     };
-    let Some(cam) = world
+    // The flat free camera, or in a headset an eye (never an image
+    // camera's), so the headset's own pipelines are the ones measured.
+    let free = world
         .query_filtered::<&GlobalTransform, With<super::FreeCamera>>()
         .iter(world)
         .next()
-        .map(|g| g.compute_transform())
-    else {
+        .map(|g| g.compute_transform());
+    let Some(cam) = free.or_else(|| {
+        world
+            .query_filtered::<&GlobalTransform, super::EyeCamera>()
+            .iter(world)
+            .next()
+            .map(|g| g.compute_transform())
+    }) else {
         return;
     };
     let Some(zone) = world.get_resource::<crate::world::Zone>().cloned() else {
@@ -318,14 +474,108 @@ fn firsts(world: &mut World) {
             }
             "a walker wrecked".into()
         }
+        s if s == 5 + kinds.len() as u32 => {
+            // A sentry in view (they're placed, not brought out): its
+            // chirp's halo is the next step's.
+            let zone = world.resource::<crate::world::Zone>().clone();
+            let at = ahead(9.0) + flat.cross(Vec3::Y) * 4.0;
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let mut c = Commands::new(&mut queue, world);
+            let face = (-flat).z.atan2(-flat.x).to_degrees();
+            crate::robots::sentry::spawn_sentry(&mut c, &zone, at.xz(), face, 90.0, at.xz());
+            queue.apply(world);
+            "a sentry placed".into()
+        }
+        s if s == 6 + kinds.len() as u32 => {
+            robots_tell(world);
+            "every robot's tell".into()
+        }
+        s if s == 7 + kinds.len() as u32 => {
+            // The next cycle, as after the Surge in the same session (a
+            // valley change relaunches, a new cycle doesn't): at night, in
+            // a storm, snowing, all of which the shelf at load hadn't seen.
+            {
+                let mut o = world.resource_mut::<crate::launch::LaunchOptions>();
+                o.hour = Some("night".into());
+                o.weather = Some("storm".into());
+                o.snow = Some(1.0);
+            }
+            world.resource_mut::<crate::raid::Raid>().cycle += 1;
+            "the next cycle: night, a storm, snow".into()
+        }
         _ => {
-            if step == 5 + kinds.len() as u32 {
+            if step == 8 + kinds.len() as u32 {
                 info!("first use: done at frame {frame}");
             }
             return;
         }
     };
     info!("first use: {name} at frame {frame}");
+}
+
+/// Every robot near enough to be drawn goes into its tell, as in a
+/// fight's first second: a drone's lock and a walker's aim and a sorter's
+/// windup (their lens flares), a sentry's chirp, and the melee machines'
+/// leads (a crawler charging, a hound coiled, a heavy's arm raised), whose
+/// lens glows are made the first time they're needed.
+fn robots_tell(world: &mut World) {
+    use crate::robots::{drone, heavy, hound_mind, indoor, sentry, sorter, walker};
+    let at = |world: &World, e: Entity| {
+        world
+            .get::<GlobalTransform>(e)
+            .map_or(Vec3::ZERO, |g| g.translation())
+    };
+    let of = |world: &mut World, f: fn(&mut World) -> Vec<Entity>| f(world);
+    let drones = of(world, |w| {
+        w.query_filtered::<Entity, With<drone::Drone>>()
+            .iter(w)
+            .collect()
+    });
+    for d in drones {
+        let a = at(world, d);
+        world.write_message(drone::DroneLock { drone: d, at: a });
+    }
+    let walkers = of(world, |w| {
+        w.query_filtered::<Entity, With<walker::Walker>>()
+            .iter(w)
+            .collect()
+    });
+    for e in walkers {
+        let a = at(world, e);
+        world.write_message(walker::WalkerAim { walker: e, at: a });
+    }
+    let sorters = of(world, |w| {
+        w.query_filtered::<Entity, With<sorter::Sorter>>()
+            .iter(w)
+            .collect()
+    });
+    for e in sorters {
+        let a = at(world, e);
+        world.write_message(sorter::SorterWindup { sorter: e, at: a });
+    }
+    let sentries = of(world, |w| {
+        w.query_filtered::<Entity, With<sentry::Sentry>>()
+            .iter(w)
+            .collect()
+    });
+    for e in sentries {
+        let a = at(world, e);
+        world.write_message(sentry::SentryEvent {
+            sentry: e,
+            at: a,
+            what: sentry::SentryAct::Chirp,
+        });
+    }
+    for mut c in world.query::<&mut indoor::Crawler>().iter_mut(world) {
+        c.charge = indoor::ZAP_CHARGE * 0.5;
+    }
+    for mut h in world.query::<&mut hound_mind::HoundMind>().iter_mut(world) {
+        h.crouch = hound_mind::CROUCH_TIME * 0.5;
+    }
+    for mut a in world.query::<&mut heavy::Arm>().iter_mut(world) {
+        a.state = heavy::ArmState::Raise;
+        a.t = 0.0;
+    }
 }
 
 /// An anomaly opening in the Surge, as `anomaly::surge::surge_blooms`
@@ -375,6 +625,15 @@ struct Shelf {
     cube: Option<Handle<Mesh>>,
     /// For each layout, a mesh of it that draws nothing: see [`point_twin`].
     twins: std::collections::HashMap<u64, Handle<Mesh>>,
+    /// A robot primitive's weathered twin (`robots::weathering` adds vertex
+    /// colours to every robot mesh as it first appears, a layout the model
+    /// as loaded doesn't have): its point twin and that layout.
+    weathered: std::collections::HashMap<AssetId<Mesh>, Option<(Handle<Mesh>, u64)>>,
+    /// Every alpha mode in every cull mode, as plain `StandardMaterial`s:
+    /// shelved unworn, they warm the keys an effect made mid-raid on the
+    /// standard layout can have (a glow made at a robot's first tell, an
+    /// anomaly's flash), which no material at load had.
+    catalogue: Vec<Handle<StandardMaterial>>,
     shelved: usize,
     /// What was shelved, by material type.
     by_type: std::collections::BTreeMap<String, usize>,
@@ -403,6 +662,8 @@ impl Default for Shelf {
             layouts: default(),
             cube: None,
             twins: default(),
+            weathered: default(),
+            catalogue: Vec::new(),
             shelved: 0,
             by_type: default(),
             decoys: Vec::new(),
@@ -773,13 +1034,17 @@ fn shelve_start(
     // second restock and go.
     if now == 1 {
         commands.queue(|world: &mut World| {
-            let decoys: Vec<Entity> = extraction_core::anomaly::AnomalyKind::ALL
+            let mut decoys: Vec<Entity> = extraction_core::anomaly::AnomalyKind::ALL
                 .into_iter()
                 .map(|kind| {
                     let (lo, hi) = kind.radius_range();
                     crate::anomaly::spawn_anomaly(world, kind, DECOYS_AT, (lo + hi) * 0.5, None)
                 })
                 .collect();
+            // A light's beam: spotlights (lamps at night, a torch) may not
+            // be lit yet, and a cycle turned to night in the same session
+            // built the beam's pipeline at first sight.
+            decoys.push(crate::world::beams::decoy(world, DECOYS_AT));
             world.resource_mut::<Shelf>().decoys = decoys;
         });
     }
@@ -808,7 +1073,10 @@ fn shelve_start(
 }
 
 /// One entry for every distinct (material key, mesh layout, range,
-/// shadow) among the things in the world wearing an `M`.
+/// shadow) among the things in the world wearing an `M`. Hidden ones
+/// count: not yet seen is what the shelf is for, and the machines' seeds
+/// (a plough's bank, a minelayer's mine and its lamp) are hidden things
+/// worn only so they're shelved here. Don't filter on visibility.
 #[allow(clippy::type_complexity)]
 fn shelve<M: Material>(
     mut shelf: ResMut<Shelf>,
@@ -887,6 +1155,7 @@ fn shelve_models(
     mut model_mats: ResMut<crate::models::ModelMaterials>,
     mut lib: ResMut<super::materials::MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
 ) {
     if !shelf.stocking {
         return;
@@ -905,6 +1174,9 @@ fn shelve_models(
         let Some(gltf) = gltfs.get(handle) else {
             continue;
         };
+        let robot = server
+            .get_path(handle)
+            .is_some_and(|p| p.path().starts_with("models/robots"));
         let nodes = crate::models::model_nodes(gltf, &gnodes, &gmeshes);
         let mut prims = Vec::new();
         walk(&nodes, &mut prims);
@@ -923,31 +1195,54 @@ fn shelve_models(
                 .get(&prim.mesh.id())
                 .copied()
                 .unwrap_or_else(|| hash_of(prim.mesh.id()));
-            for ranged in [true, false] {
-                let key = hash_of((
-                    ty,
-                    m.bind_group_data(),
-                    format!("{:?}", m.alpha_mode()),
-                    m.depth_bias().to_bits(),
-                    layout,
-                    ranged,
-                    false,
-                ));
-                if !shelf.seen.insert(key) {
-                    continue;
-                }
-                if shelf.kinds.insert(key) {
-                    *shelf.by_type.entry("model".into()).or_default() += 1;
-                }
-                let shown = shelf
+            let as_loaded = (
+                shelf
                     .twins
                     .get(&layout)
                     .cloned()
-                    .unwrap_or(prim.mesh.clone());
-                if let Some(e) = shelf.put(&mut commands, shown, ranged, true) {
-                    commands
-                        .entity(e)
-                        .insert((MeshMaterial3d(mat.clone()), ShelfMark));
+                    .unwrap_or(prim.mesh.clone()),
+                layout,
+            );
+            // A robot's mesh as it's drawn: weathered, with vertex colours.
+            let weathered = if robot {
+                let id = prim.mesh.id();
+                if !shelf.weathered.contains_key(&id) {
+                    let built = meshes.get(id).and_then(|m| {
+                        let mut w = m.clone();
+                        let n = w.count_vertices();
+                        w.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[1.0f32; 4]; n]);
+                        let l = layout_of(&w)?;
+                        Some((point_twin(&w).unwrap_or(w), l))
+                    });
+                    let made = built.map(|(twin, l)| (meshes.add(twin), l));
+                    shelf.weathered.insert(id, made);
+                }
+                shelf.weathered.get(&id).cloned().flatten()
+            } else {
+                None
+            };
+            for (shown, layout) in std::iter::once(as_loaded).chain(weathered) {
+                for ranged in [true, false] {
+                    let key = hash_of((
+                        ty,
+                        m.bind_group_data(),
+                        format!("{:?}", m.alpha_mode()),
+                        m.depth_bias().to_bits(),
+                        layout,
+                        ranged,
+                        false,
+                    ));
+                    if !shelf.seen.insert(key) {
+                        continue;
+                    }
+                    if shelf.kinds.insert(key) {
+                        *shelf.by_type.entry("model".into()).or_default() += 1;
+                    }
+                    if let Some(e) = shelf.put(&mut commands, shown.clone(), ranged, true) {
+                        commands
+                            .entity(e)
+                            .insert((MeshMaterial3d(mat.clone()), ShelfMark));
+                    }
                 }
             }
         }
@@ -973,33 +1268,57 @@ fn shelve_unworn(
     };
     let layout = layout_of(&Mesh::from(Cuboid::new(1.0, 1.0, 1.0))).unwrap_or_default();
     let ty = std::any::type_name::<StandardMaterial>();
+    if shelf.catalogue.is_empty() {
+        use bevy::render::render_resource::Face;
+        for alpha_mode in [
+            AlphaMode::Opaque,
+            AlphaMode::Mask(0.5),
+            AlphaMode::Blend,
+            AlphaMode::Premultiplied,
+            AlphaMode::Add,
+        ] {
+            for cull_mode in [Some(Face::Back), None, Some(Face::Front)] {
+                let h = materials.add(StandardMaterial {
+                    alpha_mode,
+                    cull_mode,
+                    double_sided: cull_mode.is_none(),
+                    ..default()
+                });
+                shelf.catalogue.push(h);
+            }
+        }
+    }
     let ids: Vec<AssetId<StandardMaterial>> = materials.ids().collect();
     for id in ids {
         let Some(m) = materials.get(id) else {
             continue;
         };
-        let key = hash_of((
-            ty,
+        let (data, alpha, bias) = (
             m.bind_group_data(),
             format!("{:?}", m.alpha_mode()),
             m.depth_bias().to_bits(),
-            layout,
-            false,
-            true,
-        ));
-        if !shelf.seen.insert(key) {
-            continue;
-        }
+        );
         let Some(handle) = materials.get_strong_handle(id) else {
             continue;
         };
-        if shelf.kinds.insert(key) {
-            *shelf.by_type.entry("unworn".into()).or_default() += 1;
-        }
-        if let Some(e) = shelf.put(&mut commands, cube.clone(), false, false) {
-            commands
-                .entity(e)
-                .insert((MeshMaterial3d(handle), ShelfMark));
+        // Casting a shadow and not, faded by a visibility range and not: a
+        // material first worn mid-raid by something that casts (a gun part,
+        // an item brought out) or that fades with distance (a robot's lamp
+        // halo) built that variant at first sight when only the plain one
+        // was warmed here.
+        for (ranged, casts) in [(false, false), (false, true), (true, false), (true, true)] {
+            let key = hash_of((ty, data, alpha.clone(), bias, layout, ranged, !casts));
+            if !shelf.seen.insert(key) {
+                continue;
+            }
+            if shelf.kinds.insert(key) {
+                *shelf.by_type.entry("unworn".into()).or_default() += 1;
+            }
+            if let Some(e) = shelf.put(&mut commands, cube.clone(), ranged, casts) {
+                commands
+                    .entity(e)
+                    .insert((MeshMaterial3d(handle.clone()), ShelfMark));
+            }
         }
     }
 }

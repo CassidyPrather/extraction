@@ -126,9 +126,10 @@ fn preload_models(server: Res<AssetServer>, mut models: ResMut<crate::models::Mo
     info!("preload: {n} models asked for at start (render::first_sight)");
 }
 
-/// Where things come out: before the flat camera, or the headset's eye.
+/// Where things come out: before the flat camera, or the headset's eye
+/// (never an image camera's: an impostor rig's or a scope's).
 fn bring_out_at(w: &mut World) -> Vec3 {
-    let mut q = w.query_filtered::<&GlobalTransform, With<Camera3d>>();
+    let mut q = w.query_filtered::<&GlobalTransform, super::EyeCamera>();
     let eye = q
         .iter(w)
         .map(|g| (g.translation(), g.forward().as_vec3()))
@@ -141,7 +142,8 @@ fn bring_out_at(w: &mut World) -> Vec3 {
 
 /// `EXTRACTION_EVERYTHING=<frame>`: at that frame, bring everything out
 /// (`bring_everything_out`) in front of the camera, for
-/// `EXTRACTION_PIPELINES=1` to show what still builds at first sight.
+/// `EXTRACTION_PIPELINES=1` to show what still builds at first sight
+/// (`EXTRACTION_EVERYTHING_CONDITION` for the items worn).
 pub struct EverythingPlugin;
 
 impl Plugin for EverythingPlugin {
@@ -155,6 +157,14 @@ impl Plugin for EverythingPlugin {
                 if *frame == at {
                     info!("everything: out at frame {at}");
                     bring_everything_out_world(world);
+                }
+                // Brought out worn: fouled too, a frame on (the guns' state
+                // is theirs by then), so every look a gun can wear shows.
+                if *frame == at + 1 && std::env::var_os("EXTRACTION_EVERYTHING_CONDITION").is_some()
+                {
+                    for mut g in world.query::<&mut crate::weapons::Gun>().iter_mut(world) {
+                        g.firearm.fouling = 1.0;
+                    }
                 }
             });
         }
@@ -185,6 +195,13 @@ pub(crate) fn bring_everything_out_world(world: &mut World) {
         duration: 600.0,
         exit: site + Vec3::X * 200.0,
     };
+    // `EXTRACTION_EVERYTHING_CONDITION=<0..1>`: the items come out worn
+    // (a gun's wear shows only below new), for the pipelines gauge to see
+    // what a worn thing draws with.
+    let condition = std::env::var("EXTRACTION_EVERYTHING_CONDITION")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .map_or(1.0, |c| c.clamp(0.0, 1.0));
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let mut c = Commands::new(&mut queue, world);
@@ -211,7 +228,7 @@ pub(crate) fn bring_everything_out_world(world: &mut World) {
                 crate::items::SpawnItem {
                     kind,
                     transform: Transform::from_translation(ground(x, z) + Vec3::Y * 0.3),
-                    condition: 1.0,
+                    condition,
                 },
             );
         }

@@ -287,3 +287,141 @@ fn a_slide_has_a_spring_a_rack_beats() {
         );
     }
 }
+
+/// A hand closes on a handle where it is: an open bolt (back and lifted),
+/// a slide or charging handle held back, on every gun with one. Left at
+/// the handle's rest, a hand reaching for an open Mosin bolt closed on
+/// nothing.
+#[test]
+fn a_hand_takes_a_handle_where_it_is() {
+    let mut bad = Vec::new();
+    for id in [
+        "pm_pistol",
+        "ak74",
+        "mosin",
+        "sks",
+        "ppsh",
+        "svd",
+        "toz8",
+        "rpk74",
+    ] {
+        let mut r = hold(id, false, false);
+        let h = gun_mut(&mut r).layout.handle.clone().unwrap();
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.handle_lift = 1.0;
+            g.firearm.bolt_travel = 1.0;
+            g.firearm.locked_back = true;
+        }
+        r.vr.step(2);
+        let lift = if h.kind == HandleKind::TurnBolt {
+            1.0
+        } else {
+            0.0
+        };
+        let at = {
+            let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            gt.transform_point(crate::weapons::handle_at(&h, 1.0, lift))
+        };
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(3);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(3);
+        if r.vr.hand_state(Side::Left).handle.is_none() {
+            bad.push(format!(
+                "{id} ({:?}): open, its handle wasn't taken",
+                h.kind
+            ));
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+/// Cases thrown, how fast.
+#[derive(Resource, Default)]
+struct Thrown(Vec<f32>);
+
+/// A hand-worked bolt throws its case as briskly as the hand drew it:
+/// eased back, the case drops by the gun; snapped back, it flicks clear.
+/// (Every case left at the same 2.6 m/s however the bolt was worked.)
+#[test]
+fn a_case_leaves_as_briskly_as_the_hand_drew_the_bolt() {
+    let mut speeds = Vec::new();
+    for ticks in [60usize, 8] {
+        let mut r = hold("mosin", false, false);
+        r.vr.app.init_resource::<Thrown>().add_systems(
+            Update,
+            |mut ev: MessageReader<crate::weapons::Ejection>, mut t: ResMut<Thrown>| {
+                t.0.extend(ev.read().map(|e| e.velocity.length()));
+            },
+        );
+        gun_mut(&mut r).firearm.chambers[0] = Some(Round::Spent);
+        let (back, up) = {
+            let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            (gt.back().as_vec3(), gt.up().as_vec3())
+        };
+        let travel = gun_mut(&mut r).layout.handle.as_ref().unwrap().travel;
+        let at = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(4);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(2);
+        let lifted = at + up * 0.045;
+        glide_side(&mut r, Side::Left, at, lifted, 8);
+        glide_side(
+            &mut r,
+            Side::Left,
+            lifted,
+            lifted + back * travel * 1.1,
+            ticks,
+        );
+        r.vr.step(3);
+        let t = r.vr.app.world().resource::<Thrown>().0.clone();
+        assert_eq!(t.len(), 1, "over {ticks} ticks: one case out ({t:?})");
+        speeds.push(t[0]);
+    }
+    let [eased, snapped] = speeds[..] else {
+        unreachable!()
+    };
+    assert!(eased < 0.8, "eased back: thrown at {eased:.2} m/s");
+    assert!(snapped > 2.0, "snapped back: thrown at {snapped:.2} m/s");
+}
+
+/// A shot with the hand still on the forend never works the pump: the
+/// hand rides the gun, and a twelve-gauge's shove is the gun and hand
+/// going back together. (Read against the shoved gun, a 24 mm shove was a
+/// quarter of a stroke.)
+#[test]
+fn a_shot_never_works_the_pump() {
+    let mut r = hold("mp133", true, false);
+    assert_eq!(
+        r.vr.hand_state(Side::Left).supporting,
+        Some(r.gun),
+        "on the forend"
+    );
+    {
+        let mut g = gun_mut(&mut r);
+        let f = &mut g.firearm;
+        f.condition = 1.0;
+        f.internal_rounds = 3;
+        f.chambers[0] = Some(Round::Live);
+        f.hammers_cocked[0] = true;
+        while f.fire_mode() != extraction_core::firearm::FireMode::Semi {
+            f.cycle_mode();
+        }
+    }
+    let mut most = 0.0f32;
+    r.vr.trigger(Side::Right, 1.0);
+    for _ in 0..60 {
+        r.vr.step(1);
+        most = most.max(gun_mut(&mut r).firearm.bolt_travel);
+    }
+    r.vr.trigger(Side::Right, 0.0);
+    r.vr.step(2);
+    let f = &gun_mut(&mut r).firearm;
+    assert_eq!(f.chambers[0], Some(Round::Spent), "fired");
+    assert!(
+        most < 0.05,
+        "the forend came {most:.2} of its stroke under the shot"
+    );
+}

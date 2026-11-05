@@ -249,6 +249,104 @@ for you.
   copses, walls, log piles, rock fields, the next house. A bend in a road
   is cover from the far end of it.
 
+## Breadcrumbs
+
+Every reward off the ways a raid walks is cued from them
+(`map_breadcrumbs`, held by `every_reward_is_cued_from_the_walked_ways`).
+The rewards: caches (loot markers), notes, terminals, the valley's key,
+offerings, artifact fields, the places jobs send you, staged scenes
+(`assets/data/scenes.ron`). The walked ways: the main routes, the first
+jobs' walks there and home, each place's way home
+(`map_lint::routed_ways`). A reward within 12 m of one (`ON_PATH`) is on
+it. Anything further needs one of:
+
+- **a silhouette**: its building, or one within 12 m of it
+  (`CONTAINER`, or 25 m for a structure 15 m long: a yard), 1.5 m tall
+  or more, or a hand-set outcrop, in sight within 90 m and big enough in
+  the eye to read: its size (the square root of its height times its
+  narrowest breadth) at least 4 deg against the ground, 2.3 deg on the
+  skyline (`READ_ANGLE`, `SKYLINE_ANGLE`; a pole is a line, never a cue);
+- **its own shape**: an artifact field's sparks (judged 3 m up, within
+  50 m), an offering's figures (1.8 m, within 60 m); a reward within
+  30 m of a seen artifact field is found by going to the field;
+- **a lamp**: a landmark's, within 30 m of it, seen within 250 m;
+- **a trail**: a road or path within 8 m of it that leaves a walked way;
+- **a sign**: within 60 m of it, read from a walked way.
+
+Sight is over the ground and past buildings, not through woods or fog:
+look at the frames from the route before trusting the gauge
+(`probe_breadcrumbs` prints every reward's cue, the uncued worst first).
+Smoke and sound are the game's, not the map's, and aren't counted.
+
+Fix an uncued reward with the smallest cue that fits its story, never a
+signpost where a fence or a shape would do: a cache in the open gets the
+thing its name says (the shot-firer's store a magazine hut, the farm
+workshop the farm's lorry broadside to the track); a thing on a ridge is
+moved to the lip, with a mass beside it on the skyline (Kettle's cairn
+and its stones); a thing in the trees gets a worn path off the
+way (Marrow's tag office desk).
+
+### Lit windows and smoke
+
+Someone's home: a map's `cues` list dresses buildings it already places
+(`world::cues`). Each cue finds the building whose placement is nearest
+its `at`, within 20 m (`cues::REACH`), and nothing else: it stands no
+structure, blocks no way and isn't a footprint to the lint.
+
+```ron
+cues: [
+    // The window nearest `at` glows warm from dusk to dawn. `light: true`
+    // puts a small lamp in the room (a light: most windows want only the
+    // glow); `always: true` lights it by day too.
+    LitWindow(at: (-140.5, 143.5), light: true),
+    LitWindow(at: (-134.5, 143.5)),
+    // A thin plume, bent by the wind, from the building's stack (the
+    // pump stations') or else a stovepipe added up through its roof over
+    // the stove. `y: Some(2.0)` instead rises from 2 m over the ground at
+    // `at`, with no pipe (a camp's fire).
+    Smoke(at: (-137.5, 147.5)),
+],
+```
+
+Put a window's `at` against the wall, by the window you mean: the
+nearest window to it is lit (`every_cue_finds_its_building` fails one
+more than 4 m from it). A window glows only where it's glazed or open: a
+ruin's is open, and lights up too. The plume reads at 150 m by day and in
+drizzle, a pale curl against the trees and sky. After dark it fades with
+the light, and the lit window takes over. `EXTRACTION_CUES` tries cues without
+editing the map (`window:X,Z[,light][,always];smoke:X,Z[,Y]`). The
+breadcrumbs gauge doesn't count either yet.
+
+![Kettle's farmhouse with two lit front windows, one east and its stove
+smoking: day, drizzle, dusk and night, from 50 m north and 150 m east
+(insets twice up)](shots/cues/kettle_farm_sheet.jpg)
+
+The smoke's grey is Visual design's: a little under an overcast sky's, so
+it reads against the sky and the fog takes it with the house, not steam
+off a kettle (before, top; after, below):
+
+![The plume before and after its retune](shots/cues/smoke_before_after.jpg)
+
+At most 24 lamp-lit windows light any one view (`cues::MAX_LAMPS`, Performance's share of the 48-light budget within 60 m); past that a window keeps its glow and halo but loses its lamp, map order deciding. A lit window carries a halo outside its glass after dark (a lamp's,
+`halos`, out to 320 m), which is what reads at 150 m.
+
+### Snow-pole lines
+
+A track over open snow is marked by a line of poles, each in sight of the
+last (`art/props/rime.py`'s red-and-white tops). Rather than placing each,
+give its line:
+
+```ron
+pole_lines: [
+    // A pole at each end and evenly between, no more than `every` m apart
+    // along its bends (20 by default). Tagged `rime_dead_1`, `_2`, ...
+    (points: [(12.0, -40.0), (30.0, -95.0), (18.0, -160.0)], every: 20.0, tag: "rime_dead"),
+],
+```
+
+The poles are read in as `snow_pole` placements (`MapDef::place_pole_lines`),
+so the lint, the colliders and the art take them as hand-placed ones.
+
 ## Points of interest, density and pacing
 
 A point of interest (a `Poi` marker) is somewhere worth the walk: a
