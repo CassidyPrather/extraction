@@ -504,6 +504,19 @@ mod puffs {
             })
             .collect();
         out.push(("a firefight's wounds 6-15 m ahead", eye, look, fight));
+        // A chimney smoking (`world::cues`) 6 m ahead and 3 m up, a storm
+        // blowing its plume back over the eye: every puff of its loop.
+        let top = eye + fwd * 6.0 + Vec3::Y * 1.3;
+        let gale = -fwd * 2.5;
+        let plume: Vec<(Vec3, f32)> = (0..crate::world::cues::PUFFS)
+            .map(|i| {
+                let age =
+                    crate::world::cues::LIFE * (i as f32 + 0.5) / crate::world::cues::PUFFS as f32;
+                let (off, scale, _) = crate::world::cues::puff_at(age, i as f32, gale);
+                (top + off, scale)
+            })
+            .collect();
+        out.push(("a chimney's plume blown over the eye", eye, top, plume));
         out
     }
 
@@ -545,7 +558,8 @@ mod puffs {
 /// 27.0M, and the cloud at 12 degrees 67.2M. The budget stands; the cloud
 /// keeps at least 5% under it, so the cap is 10 degrees (11 gave 61.7M):
 /// the wreck 32.2M, the firefight 30.8M, the cloud 56.4M
-/// (`docs/PERFORMANCE.md`).
+/// (`docs/PERFORMANCE.md`). A chimney's plume (`world::cues`) blown back
+/// over the eye, 2026-11-05: 24.9M bare, 26.0M with it.
 #[test]
 fn gauge_puffs_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();

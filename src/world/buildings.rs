@@ -72,6 +72,8 @@ pub struct Sill {
     pub at: Vec3,
     /// The window's width.
     pub len: f32,
+    /// The opening's height, from its foot (`at`, less the board) to its head.
+    pub height: f32,
     /// The wall's turn: its local +X along the wall, +Z into the room.
     pub rot: Quat,
     /// Its ledge, from the frame's room face to the board's edge, as
@@ -133,6 +135,9 @@ pub struct Geo {
     /// Its shell's windows' sills, front (-Z) wall first and on round
     /// as `Builder::shell` builds the walls.
     pub sills: Vec<Sill>,
+    /// The open tops of its chimney stacks, where smoke comes out
+    /// (`world::cues`). A stove's pipe isn't one: it stops under the roof.
+    pub flues: Vec<Vec3>,
 }
 
 /// What a breakable thing is.
@@ -300,7 +305,7 @@ impl Builder {
     /// wall's centre line): 4 cm out past the wall's outer face; in a
     /// shell, whose walls' +Z is the room, [`SILL_IN`] into the room (a
     /// ledge things stand on, kept in `Geo::sills`), elsewhere 4 cm.
-    fn sill(&mut self, at: Vec3, width: f32, rot: Quat, thick: f32, mat: Mat) {
+    fn sill(&mut self, at: Vec3, width: f32, height: f32, rot: Quat, thick: f32, mat: Mat) {
         let out = thick * 0.5 + 0.04;
         let edge = thick * 0.5 + if self.exterior { SILL_IN } else { 0.04 };
         self.piece(
@@ -314,6 +319,7 @@ impl Builder {
             self.geo.sills.push(Sill {
                 at: at + Vec3::Y * 0.025,
                 len: width,
+                height,
                 rot,
                 back: SASH_FRAME,
                 inner: thick * 0.5,
@@ -486,7 +492,14 @@ impl Builder {
                             false,
                         );
                     }
-                    self.sill(mid + Vec3::Y * o.bottom, o.width, rot, thick, frame);
+                    self.sill(
+                        mid + Vec3::Y * o.bottom,
+                        o.width,
+                        o.top - o.bottom,
+                        rot,
+                        thick,
+                        frame,
+                    );
                 }
                 OpeningKind::Window => {
                     let from = self.geo.pieces.len();
@@ -559,7 +572,14 @@ impl Builder {
                             });
                         }
                     }
-                    self.sill(mid + Vec3::Y * o.bottom, o.width, rot, thick, frame);
+                    self.sill(
+                        mid + Vec3::Y * o.bottom,
+                        o.width,
+                        o.top - o.bottom,
+                        rot,
+                        thick,
+                        frame,
+                    );
                 }
                 OpeningKind::Door => {
                     // Jambs standing a little proud of the wall either
@@ -3304,6 +3324,7 @@ fn pump_station(b: &mut Builder) {
         Vec3::new(sx, top - 0.1, sz),
         Mat::Brick,
     );
+    b.geo.flues.push(Vec3::new(sx, top, sz));
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
         b.piece(
