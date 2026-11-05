@@ -794,13 +794,17 @@ mod tests {
         }
         // Meshes of the heavy's the eye draws (its own and its limbs').
         let drawn = |app: &mut App| -> usize {
+            // (What the eye itself draws: other cameras see other LODs.)
             let w = app.world_mut();
-            let mut q = w.query::<(Entity, &ViewVisibility)>();
+            let mut q = w.query_filtered::<
+                &bevy::camera::visibility::VisibleEntities,
+                With<crate::render::FreeCamera>,
+            >();
             let shown: Vec<Entity> = q
-                .iter(w)
-                .filter(|(e, v)| v.get() && w.get::<Mesh3d>(*e).is_some())
-                .map(|(e, _)| e)
-                .collect();
+                .single(w)
+                .unwrap()
+                .get(std::any::TypeId::of::<Mesh3d>())
+                .to_vec();
             shown
                 .into_iter()
                 .filter(|e| {
