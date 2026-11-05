@@ -3,7 +3,8 @@
 //! way a newcomer keeps to easy ground (the lint's walks home), a stop
 //! every `STEP` metres. One JSON line a stop: where the eye is and where
 //! it looks, as a `.stills` line takes it, and the ground the way runs
-//! over ahead of it with the ground either side, for
+//! over ahead of it with the ground either side (4 m off, and 2 m off for
+//! inside a torch's pool), for
 //! `scripts/night_route.py` to find in the frame.
 //!
 //!   night-walks <map>
@@ -23,6 +24,9 @@ const LOOK_DOWN: f32 = 6.0;
 /// either side of it the ground beside the way is.
 const AHEAD: [f32; 8] = [6.0, 9.0, 12.0, 16.0, 20.0, 25.0, 30.0, 40.0];
 const BESIDE: f32 = 4.0;
+/// Close beside the way (m): inside a torch's pool, where a worn track or
+/// an edge (a wall, a kerb, a fence) tells it from what's next to it.
+const NEAR: f32 = 2.0;
 
 /// The point `s` metres along a polyline, and the way it runs there.
 fn along(path: &[P2], s: f32) -> Option<(P2, P2)> {
@@ -90,6 +94,7 @@ fn main() {
             // A file name: the walk's number and the stop's.
             let name = format!("w{walk:02}_{stop:02}");
             let (mut ahead, mut lefts, mut rights) = (Vec::new(), Vec::new(), Vec::new());
+            let (mut near_l, mut near_r) = (Vec::new(), Vec::new());
             for a in AHEAD {
                 let Some((q, d)) = along(&path, s + a) else {
                     break;
@@ -104,9 +109,11 @@ fn main() {
                     q[0] - side[0] * BESIDE,
                     q[1] - side[1] * BESIDE,
                 ])));
+                near_l.push(fmt(ground([q[0] + side[0] * NEAR, q[1] + side[1] * NEAR])));
+                near_r.push(fmt(ground([q[0] - side[0] * NEAR, q[1] - side[1] * NEAR])));
             }
             println!(
-                "{{\"walk\":\"{what}>{rv}\",\"stop\":{stop},\"name\":\"{name}\",\"eye\":{},\"yaw\":{yaw:.1},\"pitch\":{:.1},\"still\":\"{name} {:.1},{:.2},{:.1},{yaw:.1},{:.1}\",\"ahead\":[{}],\"left\":[{}],\"right\":[{}]}}",
+                "{{\"walk\":\"{what}>{rv}\",\"stop\":{stop},\"name\":\"{name}\",\"eye\":{},\"yaw\":{yaw:.1},\"pitch\":{:.1},\"still\":\"{name} {:.1},{:.2},{:.1},{yaw:.1},{:.1}\",\"ahead\":[{}],\"left\":[{}],\"right\":[{}],\"near_left\":[{}],\"near_right\":[{}]}}",
                 fmt(eye),
                 -LOOK_DOWN,
                 eye[0],
@@ -115,7 +122,9 @@ fn main() {
                 -LOOK_DOWN,
                 ahead.join(","),
                 lefts.join(","),
-                rights.join(",")
+                rights.join(","),
+                near_l.join(","),
+                near_r.join(",")
             );
             stop += 1;
             s += STEP;

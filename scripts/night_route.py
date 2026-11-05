@@ -2,14 +2,22 @@
 """Can the way home be read at night? Scores the frames
 `scripts/night_route.sh` shoots along each first job's way home.
 
-    scripts/night_route.py WALKS.jsonl FRAMES_DIR [--sheet OUT.png] [--worst N]
+    scripts/night_route.py WALKS.jsonl FRAMES_DIR --case torch|dark [--sheet OUT.png] [--worst N]
 
-For each stop (a line of WALKS.jsonl, from `night-walks`), finds in its
-frame the ground the way runs over 6 to 40 m ahead and the ground 4 m
-either side of it, and asks whether the way stands out from what's beside
-it: |way - beside| over beside's brightness, at each point in the frame.
-A stop is READ when at least `ENOUGH` of its points stand out by
-`STANDS_OUT`; LOST when not (you can't tell which way the way goes).
+Each stop is a line of WALKS.jsonl, from `night-walks`. Two cases:
+
+- torch (shot with the hand torch): inside its pool, 6 to 16 m ahead, does
+  the way stand out from the ground 2 m either side of it (worn track, or
+  an edge: a wall, a kerb, a fence)? |way - beside| over beside's
+  brightness, at each point; READ when `TORCH_POINTS` of them stand out by
+  `STANDS_OUT`.
+- dark (no torch, a newcomer's raid): is something lit within `CONE`
+  degrees of the way ahead, a lamp, a beacon, a window? Lit is coloured
+  and bright (`LIT`, `COLOURED`), which leaves out the stars. What stands
+  against the sky isn't scored (every treeline breaks the skyline): judge
+  that off the sheet.
+
+LOST is a stop where you can't tell which way the way goes.
 Prints one line a stop, then the LOST stretches (runs of LOST stops), and
 with --sheet tiles the worst stops' frames, the way ahead marked.
 
@@ -24,12 +32,20 @@ from PIL import Image, ImageDraw
 
 # The stills camera's vertical field of view (capture::cinematic::STILL_FOV).
 FOV = 75.0
-# How much the way must stand out from beside it, and at how many of its
-# points in frame, for a stop to read.
+# How much the way must stand out from beside it, for a point to.
 STANDS_OUT = 0.12
-ENOUGH = 0.4
+# Where night-walks samples the way ahead (m): night_walks.rs's AHEAD.
+AHEAD_M = [6.0, 9.0, 12.0, 16.0, 20.0, 25.0, 30.0, 40.0]
 # Below this the frame is black there: nothing to read either way.
 FLOOR = 4.0
+# Torch: the points inside the pool (m ahead), and how many must stand out.
+POOL = (5.0, 17.0)
+TORCH_POINTS = 2
+# Dark: how far either side of the way ahead a light counts (degrees), and
+# what's lit: this bright (0-255) and this coloured ((max-min)/max).
+CONE = 30.0
+LIT = 40
+COLOURED = 0.35
 
 
 def project(eye, yaw, pitch, p, w, h):
@@ -61,10 +77,30 @@ def lum(im, at):
     return vals[len(vals) // 2]
 
 
+def score_dark(stop, im):
+    """The lit pixels within CONE of the way ahead (the frame's middle,
+    the camera looking along the way), as (brightness, x, y)."""
+    w, h = im.size
+    fy = (h / 2) / math.tan(math.radians(FOV) / 2)
+    half = fy * math.tan(math.radians(CONE))
+    x0, x1 = int(max(0, w / 2 - half)), int(min(w, w / 2 + half))
+    px = im.load()
+    lit = []
+    for y in range(0, h, 2):
+        for x in range(x0, x1, 2):
+            r, g, b = px[x, y][:3]
+            m = max(r, g, b)
+            if m >= LIT and (m - min(r, g, b)) / m >= COLOURED:
+                lit.append((m, x, y))
+    return lit
+
+
 def score(stop, im):
     w, h = im.size
     out = []
-    for a, l, r in zip(stop["ahead"], stop["left"], stop["right"]):
+    for i, (a, l, r) in enumerate(zip(stop["ahead"], stop["near_left"], stop["near_right"])):
+        if not POOL[0] <= AHEAD_M[i] <= POOL[1]:
+            continue
         pa = project(stop["eye"], stop["yaw"], stop["pitch"], a, w, h)
         pl = project(stop["eye"], stop["yaw"], stop["pitch"], l, w, h)
         pr = project(stop["eye"], stop["yaw"], stop["pitch"], r, w, h)
@@ -82,11 +118,13 @@ def score(stop, im):
 
 
 def main(argv):
-    sheet, worst_n, rest = None, 12, []
+    sheet, worst_n, case, rest = None, 12, "torch", []
     it = iter(argv)
     for a in it:
         if a == "--sheet":
             sheet = next(it)
+        elif a == "--case":
+            case = next(it)
         elif a == "--worst":
             worst_n = int(next(it))
         else:
@@ -100,16 +138,27 @@ def main(argv):
             print(f"MISSING {s['name']}")
             continue
         im = Image.open(f).convert("RGB")
-        pts = score(s, im)
-        read = sum(1 for c, _ in pts if c >= STANDS_OUT)
-        share = read / len(pts) if pts else 0.0
-        ok = len(pts) >= 3 and share >= ENOUGH
-        med = sorted(c for c, _ in pts)[len(pts) // 2] if pts else 0.0
+        if case == "dark":
+            lit = score_dark(s, im)
+            ok = len(lit) > 0
+            share = 1.0 if ok else 0.0
+            med = max((m for m, _, _ in lit), default=0)
+            pts = [(1.0, (x, y)) for _, x, y in lit[:40]]
+            print(
+                f"{'READ' if ok else 'LOST'}  {s['name']}  {s['walk']}  stop {s['stop']}: "
+                f"{len(lit)} lit points within {CONE:.0f} deg (brightest {med})  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
+            )
+        else:
+            pts = score(s, im)
+            read = sum(1 for c, _ in pts if c >= STANDS_OUT)
+            ok = read >= TORCH_POINTS
+            share = read / len(pts) if pts else 0.0
+            med = sorted(c for c, _ in pts)[len(pts) // 2] if pts else 0.0
+            print(
+                f"{'READ' if ok else 'LOST'}  {s['name']}  {s['walk']}  stop {s['stop']}: "
+                f"{read}/{len(pts)} points in the pool stand out (median {med:.2f})  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
+            )
         results.append((s, ok, share, med, pts, f))
-        print(
-            f"{'READ' if ok else 'LOST'}  {s['name']}  {s['walk']}  stop {s['stop']}: "
-            f"{read}/{len(pts)} points stand out (median {med:.2f})  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
-        )
     lost = [r for r in results if not r[1]]
     # Stretches: runs of LOST stops along one walk.
     runs, cur = [], []
