@@ -71,7 +71,7 @@ impl Plugin for WarmupPlugin {
                 );
         }
         if std::env::var_os("EXTRACTION_PIPELINES").is_some() {
-            app.add_systems(Last, log_first_drawn);
+            app.add_systems(Last, (log_first_drawn, log_key_changes));
             if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
                 use bevy::render::{Render, RenderSystems};
                 render.add_systems(Render, watch_pipelines.in_set(RenderSystems::Cleanup));
@@ -152,6 +152,61 @@ fn log_first_drawn(
         let short: String = who.split(['(', ' ']).next().unwrap_or("").into();
         if seen.insert(format!("{how}|{short}|{kind}")) {
             info!("{how} after the shelf: {who}: {kind}");
+        }
+    }
+}
+
+/// With `EXTRACTION_PIPELINES=1`, once the shelf is done: a material
+/// changed in place so its pipeline key changed (its alpha mode, depth
+/// bias, a texture added), named by what wears it. Neither a new mesh nor
+/// a swapped material, so `log_first_drawn` can't see it.
+fn log_key_changes(
+    shelf: Option<Res<Shelf>>,
+    mut events: MessageReader<AssetEvent<StandardMaterial>>,
+    materials: Res<Assets<StandardMaterial>>,
+    worn: Query<(
+        &MeshMaterial3d<StandardMaterial>,
+        Option<&Name>,
+        Option<&ChildOf>,
+    )>,
+    names: Query<&Name>,
+    mut keys: Local<std::collections::HashMap<AssetId<StandardMaterial>, u64>>,
+) {
+    let key = |m: &StandardMaterial| {
+        hash_of((
+            m.bind_group_data(),
+            format!("{:?}", m.alpha_mode()),
+            m.depth_bias().to_bits(),
+        ))
+    };
+    let done = shelf.is_some_and(|s| s.frame > s.warm_for);
+    for ev in events.read() {
+        let (AssetEvent::Modified { id } | AssetEvent::Added { id }) = ev else {
+            continue;
+        };
+        let Some(m) = materials.get(*id) else {
+            continue;
+        };
+        let k = key(m);
+        let before = keys.insert(*id, k);
+        if done && before.is_some_and(|b| b != k) {
+            let who: Vec<String> = worn
+                .iter()
+                .filter(|(w, ..)| w.0.id() == *id)
+                .take(3)
+                .map(|(_, n, p)| {
+                    n.map(|n| n.to_string())
+                        .or_else(|| {
+                            p.and_then(|p| names.get(p.parent()).ok())
+                                .map(|n| format!("{n}>"))
+                        })
+                        .unwrap_or_else(|| "?".into())
+                })
+                .collect();
+            info!(
+                "material key changed after the shelf: now {:?}, depth bias {}, worn by {:?}",
+                m.alpha_mode, m.depth_bias, who
+            );
         }
     }
 }
