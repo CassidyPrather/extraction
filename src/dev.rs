@@ -1531,7 +1531,11 @@ fn climb_for_gallery(
 ) {
     use crate::interact::hand_climb::{HandHold, Hold};
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "climb")) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "climb"))
+    {
         return;
     }
     let Some((_, root, mut input, children)) = players.iter_mut().next() else {
@@ -1608,7 +1612,11 @@ fn fight_for_gallery(
     mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
 ) {
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "fight")) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "fight"))
+    {
         return;
     }
     let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
@@ -1963,7 +1971,11 @@ fn treat_for_gallery(
 ) {
     use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "treat")) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "treat"))
+    {
         return;
     }
     let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
@@ -2019,7 +2031,11 @@ fn treat_for_gallery(
         }
     }
     let left = input.hand_mut(Side::Left);
-    left.pose = if opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "wrist")) {
+    left.pose = if opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "wrist"))
+    {
         // Across the chest, fingers to the right, the back of the wrist
         // (its screen) turned up to the eye.
         Transform::from_xyz(-0.08, 1.2, -0.32).with_rotation(
@@ -2174,15 +2190,17 @@ mod gallery_word_tests {
         assert!(gallery_word("body+down+side,0,1", "side"));
         assert!(gallery_word("pm_pistol+present", "present"));
         assert!(!gallery_word("climbing_kit,0,1.2", "climb"));
-        assert!(!gallery_word("ak74,0,0.3,side", "side"), "words after the comma are numbers");
+        assert!(
+            !gallery_word("ak74,0,0.3,side", "side"),
+            "words after the comma are numbers"
+        );
         let modes = [
             "carry", "drag", "pack", "climb", "fight", "treat", "wrist", "present", "body",
             "stoop", "behind", "above", "down", "side", "crouch",
         ];
-        let items = extraction_core::items::ItemCatalog::from_ron(
-            extraction_core::items::BUILTIN_CATALOG,
-        )
-        .expect("items");
+        let items =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .expect("items");
         for (_, def) in items.iter() {
             for m in modes {
                 assert!(
