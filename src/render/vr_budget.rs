@@ -265,6 +265,7 @@ fn holds_views_with(
         // Near its budget: what it's spent on (one eye; the other's the
         // same), to know what to cut.
         let near = |n: usize, of: usize| n as f32 > of as f32 * 0.75;
+        let near_f = |f: f32| f > b.fragments_m * 0.75;
         let top = |by: &[(String, usize, usize)]| {
             let mut most = by.to_vec();
             most.sort_by(|a, b| b.1.cmp(&a.1));
@@ -285,6 +286,19 @@ fn holds_views_with(
         {
             println!("    drawn: {}", top(&l.by));
             println!("    shadow: {}", top(&l.shadow_by));
+        }
+        let layers = od_l
+            .by
+            .iter()
+            .take(6)
+            .map(|(w, n)| format!("{w} {n:.2}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        if near_f(fragments_m) {
+            println!("    layers: {layers}");
+        }
+        if near(draws, b.draws) || near(l.tris + r.tris, b.tris) {
+            println!("    unnamed: {}", unnamed(&mut app, eyes.0));
         }
         let mut o = Vec::new();
         if draws > b.draws {
@@ -324,7 +338,7 @@ fn holds_views_with(
         if !o.is_empty() {
             // What's in it, one eye (the other's the same).
             over.push(format!(
-                "{name}: {}; drawn: {}",
+                "{name}: {}; drawn: {}; layers: {layers}",
                 o.join(", "),
                 top(&l.by)
             ));
@@ -345,6 +359,64 @@ fn holds_views_with(
         }
     }
     (over, rows)
+}
+
+/// What the meshes one eye draws without a named ancestor are: their
+/// roots' components (the game's own, not Bevy's), most drawn first.
+fn unnamed(app: &mut App, eye: Entity) -> String {
+    let w = app.world_mut();
+    let seen: Vec<Entity> = w
+        .entity(eye)
+        .get::<VisibleEntities>()
+        .map(|v| v.get(std::any::TypeId::of::<Mesh3d>()).to_vec())
+        .unwrap_or_default();
+    let mut by: std::collections::HashMap<String, usize> = Default::default();
+    for e in seen {
+        let mut at = e;
+        let mut named = false;
+        for _ in 0..32 {
+            if w.get::<Name>(at).is_some() {
+                named = true;
+                break;
+            }
+            match w.get::<ChildOf>(at) {
+                Some(p) => at = p.parent(),
+                None => break,
+            }
+        }
+        if named {
+            continue;
+        }
+        let mut kinds: Vec<String> = w
+            .inspect_entity(at)
+            .map(|c| c.map(|i| i.name().to_string()).collect::<Vec<String>>())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|n| n.starts_with("extraction"))
+            .map(|n| n.rsplit("::").next().unwrap_or("").to_string())
+            .collect();
+        kinds.sort();
+        kinds.truncate(4);
+        let key = if kinds.is_empty() {
+            // Bevy's own only: say what it wears.
+            let m = w
+                .get::<MeshMaterial3d<StandardMaterial>>(e)
+                .and_then(|m| w.resource::<Assets<StandardMaterial>>().get(&m.0))
+                .map(|m| format!("{:?}", m.alpha_mode))
+                .unwrap_or_else(|| "another material".into());
+            format!("bare ({m})")
+        } else {
+            kinds.join("+")
+        };
+        *by.entry(key).or_default() += 1;
+    }
+    let mut v: Vec<_> = by.into_iter().collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1));
+    v.iter()
+        .take(6)
+        .map(|(k, n)| format!("{k} {n}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Point and spot lights whose reach comes within 60 m of `eye`.
@@ -563,6 +635,10 @@ fn gauge_worst_views_hold_the_stereo_budget() {
                 if f.exists() {
                     v.extend(crate::tour::scripted_views(zone, f));
                 }
+            }
+            // `WORST_VIEWS=hut,quarry`: only views whose file names say so.
+            if let Ok(only) = std::env::var("WORST_VIEWS") {
+                v.retain(|v| only.split(',').any(|o| v.file.contains(o)));
             }
             v
         });
