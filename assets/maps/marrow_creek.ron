@@ -286,6 +286,11 @@
         (at: (117.5, -40.0), radius: 1.6, stones: 3),
     ],
     placements: [
+        // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
+        // to go still by while it comes (map_lint::WAIT_NEAR).
+        (prefab: "log_pile", at: (4.7, -143.8), rot: 95.0, tag: "wait_bus_depot"),
+        (prefab: "log_pile", at: (-108.2, -41.3), rot: 25.0, tag: "wait_ranger_tower"),
+        (prefab: "log_pile", at: (119.2, -133.3), rot: 134.0, tag: "wait_rail_yard"),
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The machines' smelter stack behind the Gate: what they take, they melt.

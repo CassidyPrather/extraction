@@ -1730,7 +1730,15 @@ fn pose_hands(
     guns: Query<&crate::weapons::Gun>,
     supports: Query<&crate::interact::Supported>,
     parts: Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
-    boxes: Query<&avian3d::prelude::Collider>,
+    (boxes, reading): (
+        Query<&avian3d::prelude::Collider>,
+        Query<(
+            Entity,
+            &crate::interact::read::Reading,
+            &GlobalTransform,
+            &avian3d::prelude::Collider,
+        )>,
+    ),
     gun_at: Query<
         &Transform,
         (
@@ -1826,6 +1834,30 @@ fn pose_hands(
                 (pose.compute_affine().inverse() * igt.compute_affine()).into(),
             );
             if let Some((seat, at, glove)) = seat_on(&mut v, item, half, rel, false, dt) {
+                pose = igt
+                    .mul_transform(Transform::from_matrix(at.compute_affine().inverse().into()))
+                    .mul_transform(glove);
+                seated = Some(seat);
+                on_support = true;
+            }
+        } else if let Some((panel, at_panel, cuboid)) = reading
+            .iter()
+            .find(|(_, r, ..)| r.player == parent.parent() && r.side == v.side)
+            .and_then(|(e, _, g, c)| c.shape_scaled().as_cuboid().map(|b| (e, g, b)))
+        {
+            // A note, the logbook, a card taken up to read: held up before
+            // the eyes, its bottom edge in the hand (`interact::read`). The
+            // hand was drawn where the controller is, a fist under it; now
+            // it's seated on it, the panel turning to the eyes as the head
+            // moves.
+            keep_seat = true;
+            let he = cuboid.half_extents;
+            let half = Vec3::new(he.x, he.y, he.z);
+            let igt = at_panel.compute_transform();
+            let rel = Transform::from_matrix(
+                (pose.compute_affine().inverse() * igt.compute_affine()).into(),
+            );
+            if let Some((seat, at, glove)) = seat_on(&mut v, panel, half, rel, false, dt) {
                 pose = igt
                     .mul_transform(Transform::from_matrix(at.compute_affine().inverse().into()))
                     .mul_transform(glove);
@@ -3508,6 +3540,47 @@ mod glove_tests {
             let g = super::super::hold::grasp(side, size * 0.5, in_glove, &drawn);
             assert!(g.fault().is_none(), "{side:?} hand: {:?}", g.fault());
         }
+    }
+
+    /// A note taken up to read is held: the glove of the hand reading it
+    /// is drawn closed on it (`render::hold`'s rule, on the glove as
+    /// drawn), not a fist below it where the controller is.
+    #[test]
+    fn a_note_held_up_to_read_is_held_by_the_glove() {
+        let (mut app, player, hands, gloves) = seat_app();
+        // The hand before the face; the note held up as `interact::read`
+        // holds it: its bottom edge 30 mm over the hand, facing the eyes.
+        let hand_at = Transform::from_xyz(0.1, 1.3, -0.35);
+        *app.world_mut().get_mut::<Transform>(hands[0]).unwrap() = hand_at;
+        let size = Vec2::new(0.15, 0.21);
+        let at = hand_at.translation + Vec3::Y * (size.y * 0.5 + 0.03);
+        let note_at = Transform::from_translation(at)
+            .looking_to(-(Vec3::new(0.0, 1.6, 0.0) - at).normalize(), Vec3::Y);
+        app.world_mut().spawn((
+            crate::interact::read::readable(size),
+            crate::interact::read::Reading::new(player, Side::Right),
+            note_at,
+            GlobalTransform::from(note_at),
+        ));
+        until_seated(&mut app, &gloves[..1], |_| {});
+        let v = app.world().get::<HandVisual>(gloves[0]).unwrap();
+        let at = *app.world().get::<Transform>(gloves[0]).unwrap();
+        let in_glove = Transform::from_matrix(
+            (at.compute_affine().inverse() * note_at.compute_affine()).into(),
+        );
+        let drawn = super::super::hold::Seat {
+            shift: Vec3::ZERO,
+            turn: Quat::IDENTITY,
+            curl: v.curl,
+            thumb: v.thumb.expect("a thumb laid on the note"),
+        };
+        let g = super::super::hold::grasp(
+            Side::Right,
+            Vec3::new(size.x, size.y, 0.01) * 0.5,
+            in_glove,
+            &drawn,
+        );
+        assert!(g.fault().is_none(), "reading hand: {:?}", g.fault());
     }
 
     /// Tracked fingers drive a free glove, curl and spread; a held gun

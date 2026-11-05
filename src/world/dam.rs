@@ -221,7 +221,7 @@ fn stair_height(x: f32) -> f32 {
 pub const SCOUR_OUTLETS: [f32; 2] = [-67.0, -50.6];
 
 /// A scour outlet at local x `c` in the foot of the long downstream face:
-/// a dressed stone surround proud of the face, the dark of the culvert
+/// a pale concrete surround proud of the face, the dark of the culvert
 /// behind a grille gone to rust, and its worn sill running out to its
 /// channel (the map's water).
 fn scour_outlet(b: &mut Builder, c: f32) {
@@ -232,18 +232,22 @@ fn scour_outlet(b: &mut Builder, c: f32) {
     let mid = (inn + out) * 0.5;
     let (w, h) = (6.0, 7.0);
     let jamb = 1.4;
+    // The surround in pale concrete, a later repair to the dressed face:
+    // what frames the dark, so the eye has an edge to read it against
+    // through the bed's ground fog (which lifts the hole nearly to the wet
+    // stone's own dark).
     for side in [-1.0f32, 1.0] {
         b.bx(
             Vec3::new(jamb, h + 0.5, out - inn),
             Vec3::new(c + side * (w + jamb) * 0.5, (h + 0.5) * 0.5, mid),
-            Mat::DressedStone,
+            Mat::Concrete,
         );
     }
     let lintel = (h + 0.5, h + 1.7);
     b.bx(
         Vec3::new(w + jamb * 2.0, lintel.1 - lintel.0, out - inn),
         Vec3::new(c, (lintel.0 + lintel.1) * 0.5, mid),
-        Mat::DressedStone,
+        Mat::Concrete,
     );
     // Its top weathered back as every set-back's is, and on past the
     // foot course's front to the next course's face: stopped at the foot
@@ -255,18 +259,19 @@ fn scour_outlet(b: &mut Builder, c: f32) {
         out,
         NEXT_COURSE,
         lintel.1,
-        Mat::DressedStone,
+        Mat::Concrete,
     );
     b.deco(
         Vec3::new(0.9, 1.5, 0.15),
         Vec3::new(c, (lintel.0 + lintel.1) * 0.5, out + 0.07),
         Mat::Boulder,
     );
-    // The culvert's dark, and its grille.
+    // The culvert's dark (unlit: only the fog in front of it), and its
+    // grille.
     b.deco(
         Vec3::new(w, h + 0.5, 0.05),
         Vec3::new(c, (h + 0.5) * 0.5, inn + 0.03),
-        Mat::Charred,
+        Mat::Void,
     );
     let bars = 11;
     for k in 0..bars {

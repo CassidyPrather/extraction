@@ -21,8 +21,8 @@ pub const SPRINT_SPEED: f32 = 4.6;
 pub const CROUCH_SPEED: f32 = 1.3;
 const GRAVITY: f32 = 9.81;
 const JUMP_SPEED: f32 = 3.6;
-const CAPSULE_RADIUS: f32 = 0.28;
-const CAPSULE_HEIGHT: f32 = 1.75;
+pub(crate) const CAPSULE_RADIUS: f32 = 0.28;
+pub(crate) const CAPSULE_HEIGHT: f32 = 1.75;
 /// The lowest the body goes: crouched as low as a kneel.
 const MIN_HEIGHT: f32 = 0.9;
 const STEP_HEIGHT: f32 = 0.4;
