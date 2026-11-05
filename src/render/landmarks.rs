@@ -50,7 +50,17 @@ pub(crate) struct Lamp(pub extraction_core::map_landmarks::Character);
 
 /// Every lamp lit or dark by its character on the game's clock; with the
 /// clock stopped (a frozen capture), lit.
-fn flash_lamps(time: Res<Time<Virtual>>, mut lamps: Query<(&Lamp, &mut Visibility)>) {
+/// A lamp put out on purpose (the lamp gauge's shot without it): its
+/// flashing leaves it be. The clock stopped lights every lamp, and lit the
+/// beacons the gauge had hidden: their "without" shot was as bright as
+/// their "with", and every beacon view came out n/a.
+#[derive(Component)]
+pub struct Doused;
+
+fn flash_lamps(
+    time: Res<Time<Virtual>>,
+    mut lamps: Query<(&Lamp, &mut Visibility), Without<Doused>>,
+) {
     let t = time.elapsed_secs();
     for (lamp, mut v) in &mut lamps {
         let want = if time.is_paused() || lamp.0.lit_at(t) {
@@ -527,6 +537,27 @@ mod tests {
                 "the lamp still on a post at {t:?}"
             );
         }
+    }
+
+    /// A doused lamp stays out, even with the clock stopped (which lights
+    /// every other): the lamp gauge's shot without a flashing beacon.
+    #[test]
+    fn a_doused_lamp_stays_out() {
+        use extraction_core::map_landmarks::MASTS;
+        let mut app = App::new();
+        let mut time = Time::<Virtual>::default();
+        time.pause();
+        app.insert_resource(time);
+        app.add_systems(Update, flash_lamps);
+        let lamp = app
+            .world_mut()
+            .spawn((Lamp(MASTS[0]), Visibility::Hidden, Doused))
+            .id();
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(lamp).unwrap(),
+            Visibility::Hidden
+        );
     }
 
     /// With the clock stopped every lamp shows, whatever its phase: the

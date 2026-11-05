@@ -554,11 +554,18 @@ fn shoot(
     // The last view's landmark back; this one's shown for the first shot,
     // hidden for the second.
     if state.phase == 0 {
-        if let Some(mut v) = state.hidden.take().and_then(|e| vis.get_mut(e).ok()) {
-            *v = Visibility::Inherited;
+        if let Some(e) = state.hidden.take() {
+            if let Ok(mut v) = vis.get_mut(e) {
+                *v = Visibility::Inherited;
+            }
+            commands.entity(e).remove::<super::landmarks::Doused>();
         }
     } else {
         state.hidden = view.entity;
+        // A flashing lamp (a beacon) would light itself again.
+        if let Some(e) = view.entity {
+            commands.entity(e).insert(super::landmarks::Doused);
+        }
     }
     if let Some(mut v) = view.entity.and_then(|e| vis.get_mut(e).ok()) {
         let want = if state.phase == 0 {
