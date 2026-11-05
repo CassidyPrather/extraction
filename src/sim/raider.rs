@@ -791,9 +791,6 @@ pub struct Scene<'w, 's> {
     flocks: Query<'w, 's, &'static crate::wildlife::flock::Flock>,
     herds: Query<'w, 's, &'static crate::wildlife::herd::Herd>,
     perches: Option<Res<'w, crate::wildlife::perches::Perches>>,
-    /// The ground's collider, left out of [`Scene::body_fits`]'s query
-    /// (the heightmap answers for it, far cheaper).
-    terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
     /// Every robot, standing or wrecked ([`Scene::wreck_at`]).
     robot_state: Query<'w, 's, &'static Robot>,
 }
@@ -828,32 +825,6 @@ impl Scene<'_, '_> {
                 |e| {
                     any |= is_wreck(e);
                     !any
-                },
-            );
-            any
-        })
-    }
-
-    /// Whether a body has room to stand at a building-local point of
-    /// `plan`, on its floor there: nothing solid at the shin, the hip or
-    /// the head, the world's things and robots' alike (a wreck or the
-    /// debris of a fight lies where the plan has floor).
-    fn body_fits(&self, plan: &BuildingPlan, p: Vec2) -> bool {
-        let terrain = self.terrain.iter().next();
-        let mut filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Robot]);
-        if let Some(t) = terrain {
-            filter = filter.with_excluded_entities([t]);
-        }
-        body_fits_with(plan, &self.zone, p, |at, radius| {
-            let mut any = false;
-            self.spatial.shape_intersections_callback(
-                &Collider::sphere(radius),
-                at,
-                Quat::IDENTITY,
-                &filter,
-                |_| {
-                    any = true;
-                    false
                 },
             );
             any
@@ -2706,52 +2677,6 @@ fn shut_wrecks(plan: &mut BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) {
     }
 }
 
-/// Whether a raider stopping for something at `to` near the cell `goal`
-/// (both building-local) finds room to stand within arm's reach of it:
-/// anywhere within its stop's slack of the cell, out to the reach, where
-/// `fits` has a body fit. The one test of a take's stand, for the raider
-/// as it chooses (with the robots and their wrecks in it) and for the
-/// tests over every loot spot (`every_thing_in_a_building_is_taken_from_where_it_stops`).
-pub(crate) fn room_to_reach(goal: Vec2, to: Vec2, fits: impl Fn(Vec2) -> bool) -> bool {
-    let within = stand_within(goal, to, 0.3);
-    (0..=8).any(|r| {
-        let r = within * r as f32 / 8.0;
-        (0..16).any(|k| {
-            let p = goal + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 16.0) * r;
-            p.distance(to) <= crate::bot::REACH && fits(p)
-        })
-    })
-}
-
-/// Whether a body fits at a building-local point of `plan`, on its floor
-/// there (or on the ground where that's higher: a scene staged on a slope
-/// stands on the slope; not down a site, the ground over it): `solid`
-/// says whether a sphere at a world point touches anything, the terrain
-/// aside, which the heightmap answers.
-pub(crate) fn body_fits_with(
-    plan: &BuildingPlan,
-    zone: &Zone,
-    p: Vec2,
-    solid: impl Fn(Vec3, f32) -> bool,
-) -> bool {
-    const RADIUS: f32 = 0.26;
-    let on = plan
-        .xf
-        .transform_point(Vec3::new(p.x, plan.floor_at(p), p.y));
-    let under = plan.levels.is_some();
-    let feet = if under {
-        on.y
-    } else {
-        on.y.max(zone.ground(on.x, on.z))
-    };
-    [0.35, 0.95, 1.5].iter().all(|h| {
-        let at = Vec3::new(on.x, feet + h, on.z);
-        let in_ground =
-            !under && zone.ground_solid_at(at.x, at.z) && at.y - RADIUS < zone.ground(at.x, at.z);
-        !in_ground && !solid(at, RADIUS)
-    })
-}
-
 /// As [`indoor`], through doors held shut on power: for a route that
 /// throws their switches first.
 fn indoor_through_held(
@@ -4130,20 +4055,6 @@ fn take_item(
                     if scene.items.get(item).is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == *id)
             );
             let route = match indoor_through_held(plan, pos, goal, 0.3) {
-                // Nowhere to stand in reach of it as things lie now (a
-                // wreck on it, the debris of a fight round it): passed,
-                // not walked into for a stuck (Marrow seed 7, 4
-                // November: a Sorter's wreck over a cellar's loot; seed
-                // 1, debris by a plank house's wall).
-                Some(_)
-                    if !wanted
-                        && reach_cell(plan, plan.to_local(pos).xz(), goal).is_some_and(
-                            |stop| !room_to_reach(stop, goal, |p| scene.body_fits(plan, p)),
-                        ) =>
-                {
-                    r.pass_why = Some("no room to stand in reach".into());
-                    return None;
-                }
                 Some(route) => route,
                 None if wanted => {
                     let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
@@ -5187,83 +5098,6 @@ mod run_tests {
         );
     }
 
-    /// A wreck over a loot spot leaves nowhere to stand in reach of it, as
-    /// the raider sees it choosing what to take: it passes the thing
-    /// rather than walk into the wreck for a stuck (Marrow seed 7, 4
-    /// November: a Sorter's wreck over a cellar's loot, two stucks). The
-    /// same spot with nothing on it has room.
-    #[test]
-    fn a_wreck_over_the_loot_leaves_no_room_to_take_it() {
-        let opts = crate::launch::LaunchOptions {
-            robots: false,
-            map: "marrow_creek".into(),
-            ..Default::default()
-        };
-        let mut app = crate::headless_app(opts, false);
-        app.finish();
-        app.cleanup();
-        for _ in 0..3 {
-            app.update();
-        }
-        let plans: Vec<BuildingPlan> = app
-            .world_mut()
-            .run_system_once(
-                |b: Query<(Entity, &Building, &Transform)>,
-                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
-            )
-            .unwrap();
-        let spots: Vec<Vec3> = app
-            .world()
-            .resource::<BuildingLoot>()
-            .0
-            .iter()
-            .map(|s| s.at)
-            .collect();
-        let room = |app: &mut App, plan: BuildingPlan, at: Vec3| {
-            app.world_mut()
-                .run_system_once(move |scene: Scene| {
-                    let to = plan.to_local(at).xz();
-                    reach_cell(&plan, plan.entries[0], to)
-                        .is_some_and(|stop| room_to_reach(stop, to, |p| scene.body_fits(&plan, p)))
-                })
-                .unwrap()
-        };
-        // A spot on the ground floor of a plain building, with room.
-        let (plan, at) = spots
-            .iter()
-            .find_map(|at| {
-                let plan = plans.iter().find(|p| {
-                    p.levels.is_none()
-                        && p.name.starts_with("house_")
-                        && !p.entries.is_empty()
-                        && p.contains(*at, 0.0)
-                        && p.reachable_height(*at)
-                })?;
-                Some((plan.clone(), *at))
-            })
-            .expect("a house's loot spot");
-        assert!(
-            room(&mut app, plan.clone(), at),
-            "{} {at:?}: no room with nothing on it",
-            plan.name
-        );
-        // A wreck's bulk on it, two metres across: a robot's body.
-        app.world_mut().spawn((
-            Transform::from_translation(at),
-            RigidBody::Static,
-            Collider::cuboid(2.0, 2.0, 2.0),
-            CollisionLayers::new(Layer::Robot, [Layer::World, Layer::Player, Layer::Robot]),
-        ));
-        for _ in 0..3 {
-            app.update();
-        }
-        assert!(
-            !room(&mut app, plan.clone(), at),
-            "{} {at:?}: a wreck on it and still room to take it",
-            plan.name
-        );
-    }
-
     /// Buildings with loot nobody can stand in arm's reach of (furniture or
     /// walls crowd every floor cell near it). Empty: the blast furnace and
     /// the mill race were on it (31 October), their plans' floors at the
@@ -5344,17 +5178,22 @@ mod run_tests {
                                 continue;
                             };
                             n += 1;
-                            // The world's things only: no robot's wreck
-                            // lies anywhere yet.
-                            let stands = room_to_reach(goal, to, |p| {
-                                body_fits_with(plan, &zone, p, |w, radius| {
-                                    let mut f = SpatialQueryFilter::from_mask([Layer::World]);
-                                    if let Some(t) = terrain {
-                                        f = f.with_excluded_entities([t]);
-                                    }
-                                    !spatial
-                                        .shape_intersections(&Collider::sphere(radius), w, Quat::IDENTITY, &f)
-                                        .is_empty()
+                            let within = stand_within(goal, to, 0.3);
+                            // On the floor, or the ground where it's higher (a
+                            // scene staged on a slope stands on the slope).
+                            let fits = |p: Vec2| {
+                                let on = plan.xf.transform_point(Vec3::new(p.x, plan.floor_at(p), p.y));
+                                let feet = on.y.max(zone.ground(on.x, on.z));
+                                [0.35, 0.95, 1.5].iter().all(|h| {
+                                    let w = Vec3::new(on.x, feet + h, on.z);
+                                    !crate::world::sphere_in_world(&spatial, &zone, terrain, w, 0.26)
+                                })
+                            };
+                            let stands = (0..=8).any(|r| {
+                                let r = within * r as f32 / 8.0;
+                                (0..16).any(|k| {
+                                    let p = goal + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 16.0) * r;
+                                    p.distance(to) <= crate::bot::REACH && fits(p)
                                 })
                             });
                             if !stands {
