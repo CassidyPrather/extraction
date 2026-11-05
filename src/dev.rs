@@ -321,6 +321,20 @@ fn break_line_up(
     }
 }
 
+/// The gallery's modes (`climb`, `body+side`, `pm_pistol+present`, ...)
+/// are words of its subject (before the first comma), split at `+` and
+/// `:`, matched whole: a substring took `climbing_kit` for the climbing
+/// wall (a slab across the view), `side_rail` for the side-on body view
+/// (the camera level), a `*_repack` for the pack carry and `wristwatch`
+/// for the wrist pose.
+pub fn gallery_word(spec: &str, word: &str) -> bool {
+    spec.split(',')
+        .next()
+        .unwrap_or("")
+        .split(['+', ':'])
+        .any(|w| w == word)
+}
+
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
 /// `--camera` to look at, held still. SUBJECT is a gun id (shown from its
 /// right side with its magazine seated), a magazine id, `guns` (all four
@@ -1359,9 +1373,9 @@ fn carry_for_gallery(
         return;
     };
     let (carry, drag, pack) = (
-        spec.contains("carry"),
-        spec.contains("drag"),
-        spec.contains("pack"),
+        gallery_word(spec, "carry"),
+        gallery_word(spec, "drag"),
+        gallery_word(spec, "pack"),
     );
     if !carry && !drag && !pack {
         return;
@@ -1517,7 +1531,7 @@ fn climb_for_gallery(
 ) {
     use crate::interact::hand_climb::{HandHold, Hold};
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
+    if !opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "climb")) {
         return;
     }
     let Some((_, root, mut input, children)) = players.iter_mut().next() else {
@@ -1594,7 +1608,7 @@ fn fight_for_gallery(
     mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
 ) {
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| s.contains("fight")) {
+    if !opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "fight")) {
         return;
     }
     let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
@@ -1762,7 +1776,7 @@ fn present_for_gallery(
     if !opts
         .gallery
         .as_deref()
-        .is_some_and(|g| g.contains("+present"))
+        .is_some_and(|g| gallery_word(g, "present"))
     {
         return;
     }
@@ -1949,7 +1963,7 @@ fn treat_for_gallery(
 ) {
     use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+    if !opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "treat")) {
         return;
     }
     let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
@@ -2005,7 +2019,7 @@ fn treat_for_gallery(
         }
     }
     let left = input.hand_mut(Side::Left);
-    left.pose = if opts.gallery.as_deref().is_some_and(|s| s.contains("wrist")) {
+    left.pose = if opts.gallery.as_deref().is_some_and(|s| gallery_word(s, "wrist")) {
         // Across the chest, fingers to the right, the back of the wrist
         // (its screen) turned up to the eye.
         Transform::from_xyz(-0.08, 1.2, -0.32).with_rotation(
@@ -2051,18 +2065,18 @@ fn pose_body_for_gallery(
     // A gallery of the body (or of wounds on it) draws it, whatever the
     // setting (off by default).
     if let Some(mut c) = comfort
-        && (spec.contains("body") || spec.contains("treat"))
+        && (gallery_word(spec, "body") || gallery_word(spec, "treat"))
         && !c.body
     {
         c.body = true;
     }
     let (stoop, behind, above) = (
-        spec.contains("stoop"),
-        spec.contains("behind"),
-        spec.contains("above"),
+        gallery_word(spec, "stoop"),
+        gallery_word(spec, "behind"),
+        gallery_word(spec, "above"),
     );
-    let (down, side) = (spec.contains("down"), spec.contains("side"));
-    let crouch = spec.contains("crouch");
+    let (down, side) = (gallery_word(spec, "down"), gallery_word(spec, "side"));
+    let crouch = gallery_word(spec, "crouch");
     if !stoop && !behind && !above && !down && !side && !crouch {
         return;
     }
@@ -2145,5 +2159,38 @@ mod tests {
         s.reset();
         assert!(!s.tick(true));
         assert!(SHOT_SETTLE >= 10, "9 frames after was the first good shot");
+    }
+}
+
+#[cfg(test)]
+mod gallery_word_tests {
+    use super::gallery_word;
+
+    /// A mode is a whole word of the subject; no item's id turns one on.
+    #[test]
+    fn no_item_turns_a_gallery_mode_on() {
+        assert!(gallery_word("climb", "climb"));
+        assert!(gallery_word("climb+behind", "behind"));
+        assert!(gallery_word("body+down+side,0,1", "side"));
+        assert!(gallery_word("pm_pistol+present", "present"));
+        assert!(!gallery_word("climbing_kit,0,1.2", "climb"));
+        assert!(!gallery_word("ak74,0,0.3,side", "side"), "words after the comma are numbers");
+        let modes = [
+            "carry", "drag", "pack", "climb", "fight", "treat", "wrist", "present", "body",
+            "stoop", "behind", "above", "down", "side", "crouch",
+        ];
+        let items = extraction_core::items::ItemCatalog::from_ron(
+            extraction_core::items::BUILTIN_CATALOG,
+        )
+        .expect("items");
+        for (_, def) in items.iter() {
+            for m in modes {
+                assert!(
+                    !gallery_word(&format!("{},0,1.2", def.id), m),
+                    "{} turns on the gallery's {m}",
+                    def.id
+                );
+            }
+        }
     }
 }
