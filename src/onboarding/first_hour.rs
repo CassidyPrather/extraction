@@ -4065,6 +4065,139 @@ mod tests {
         assert_eq!(round_sentries(&[], a, b, 3), vec![b]);
     }
 
+    /// The bot's PM against a drone held still, slightly above it, at 10,
+    /// 20 and 33 m: hits out of eight. A measurement (the coordinator's
+    /// question: seven rounds a raid at a locked-on drone, none hit), not
+    /// a gate: `cargo test ... the_bots_pm_at_a_still_drone -- --ignored
+    /// --nocapture`.
+    #[test]
+    #[ignore]
+    fn the_bots_pm_at_a_still_drone() {
+        use avian3d::prelude::{AngularVelocity, LinearVelocity};
+        let drop = |app: &mut App, id: &str, at: Vec3, rounds: Option<u32>| {
+            let catalog = app.world().resource::<crate::items::Catalog>().clone();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind(id).unwrap(),
+                        transform: Transform::from_translation(at),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            if let Some(n) = rounds {
+                let mut i = app.world_mut().get_mut::<crate::items::Item>(e).unwrap();
+                i.rounds = n;
+                i.loads.fit(n);
+            }
+            e
+        };
+        for d in [10.0f32, 20.0, 33.0] {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..10 {
+                app.update();
+            }
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+            let p = app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .single(app.world())
+                .unwrap();
+            let me = app.world().get::<GlobalTransform>(p).unwrap().translation();
+            let fwd = app
+                .world()
+                .get::<GlobalTransform>(p)
+                .unwrap()
+                .forward()
+                .as_vec3();
+            let fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+            let gun = drop(&mut app, "pm_pistol", me + Vec3::new(0.3, 0.9, 0.0), None);
+            let mag = drop(&mut app, "pm_mag", me + Vec3::new(-0.3, 0.9, 0.0), Some(8));
+            let at = me + fwd * d + Vec3::Y * 6.0;
+            let drone = {
+                let zone = app.world().resource::<crate::world::Zone>().clone();
+                let mut queue = bevy::ecs::world::CommandQueue::default();
+                let e = {
+                    let mut c = Commands::new(&mut queue, app.world());
+                    let site = zone.on_ground(at.x, at.z);
+                    crate::robots::drone::spawn_drone(
+                        &mut c,
+                        at,
+                        crate::robots::Job {
+                            kind: crate::robots::JobKind::Watch,
+                            site,
+                            duration: f32::INFINITY,
+                            exit: site,
+                        },
+                    )
+                };
+                queue.apply(app.world_mut());
+                e
+            };
+            app.update();
+            app.world_mut()
+                .entity_mut(p)
+                .insert(crate::bot::Bot::new(vec![
+                    crate::bot::Task::Grab {
+                        item: mag,
+                        side: crate::rig::Side::Left,
+                    },
+                    crate::bot::Task::Stow(crate::rig::Side::Left),
+                    crate::bot::Task::Grab {
+                        item: gun,
+                        side: crate::rig::Side::Right,
+                    },
+                    crate::bot::Task::Ready { off_safe: true },
+                    crate::bot::Task::Engage { shots: 8 },
+                ]));
+            for _ in 0..90 * 25 {
+                if let Ok(mut e) = app.world_mut().get_entity_mut(drone) {
+                    if let Some(mut t) = e.get_mut::<Transform>() {
+                        t.translation = at;
+                        t.rotation = Quat::IDENTITY;
+                    }
+                    if let Some(mut v) = e.get_mut::<LinearVelocity>() {
+                        v.0 = Vec3::ZERO;
+                    }
+                    if let Some(mut v) = e.get_mut::<AngularVelocity>() {
+                        v.0 = Vec3::ZERO;
+                    }
+                    if let Some(mut dr) = e.get_mut::<crate::robots::drone::Drone>() {
+                        dr.gun_cooldown = 99.0;
+                    }
+                }
+                app.update();
+                if app.world().get::<crate::bot::Bot>(p).unwrap().done() {
+                    break;
+                }
+            }
+            let bot = app.world().get::<crate::bot::Bot>(p).unwrap();
+            println!(
+                "AIM {d} m (slant {:.1} m): fired {}, hits {}, robot hits {}, log {:?}",
+                me.distance(at),
+                bot.fired,
+                bot.hits,
+                bot.robot_hits,
+                bot.log
+                    .iter()
+                    .filter(|l| l.contains("FAIL"))
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
     /// A job in another valley isn't gone after here: its place is that
     /// valley's (a Marrow job's place, walked to inside Cinder, stuck the
     /// newcomer in a corner of the works). One with no valley goes anywhere.
