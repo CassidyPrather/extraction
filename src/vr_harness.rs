@@ -7821,8 +7821,12 @@ mod door_hinge {
                         d.open = false;
                         d.angle = 0.0;
                     }
-                    let round = Quat::from_rotation_y(leaf.yaw + deg.to_radians());
-                    let spot = leaf.hinge + round * Vec3::new(leaf.width * 0.6, 0.0, 0.0);
+                    vr.step(2);
+                    // In the world's frame (some doors' hinges are in a
+                    // parent building's).
+                    let gt = *vr.app.world().get::<GlobalTransform>(door).unwrap();
+                    let round = gt.rotation() * Quat::from_rotation_y(deg.to_radians());
+                    let spot = gt.translation() + round * Vec3::new(leaf.width * 0.6, 0.0, 0.0);
                     vr.stand(spot, 0.0);
                     vr.step(30);
                     // Where a body can stand still (not in a wall, or on a
@@ -7837,7 +7841,10 @@ mod door_hinge {
                     vr.step(80);
                     let moved = vr.feet().xz().distance(before.xz());
                     let angle = vr.app.world().get::<Door>(door).unwrap().angle;
-                    let at = format!("{map}: door {door} at {:.1}, body {deg} deg", leaf.hinge);
+                    let at = format!(
+                        "{map}: door {door} at {:.1}, body {deg} deg",
+                        gt.translation()
+                    );
                     if moved > 0.03 {
                         bad.push(format!("{at}: moved {moved:.2} m"));
                     } else if away && angle < 0.99 {

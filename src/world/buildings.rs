@@ -5913,6 +5913,7 @@ pub fn swing_doors(
         Option<&super::underground::PowerLocked>,
         Has<super::hinge::Swinging>,
         Option<&super::hinge::Resting>,
+        &GlobalTransform,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
@@ -5920,7 +5921,7 @@ pub fn swing_doors(
 ) {
     for ev in events.read() {
         if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
-            if let Ok((_, mut d, _, _, wedged, locked, held, _)) = doors.get_mut(*item) {
+            if let Ok((_, mut d, _, _, wedged, locked, held, _, _)) = doors.get_mut(*item) {
                 if held {
                     // A hand's taking hold of it (`hinge::take_hold`).
                 } else if wedged {
@@ -5935,7 +5936,7 @@ pub fn swing_doors(
             }
         }
     }
-    for (e, mut d, mut t, leaf, _, _, held, resting) in &mut doors {
+    for (e, mut d, mut t, leaf, _, _, held, resting, gt) in &mut doors {
         // A leaf turns about its hinge and never leaves it. (Kinematic, it
         // crept off it a millimetre or so a second, round to the middle of
         // its doorway, and stood open across half of it: Kettle's mine,
@@ -5970,9 +5971,12 @@ pub fn swing_doors(
         // Verifier's probe, 5 November.) Never further into anyone: one it
         // already touches, it may swing away from, not on into.
         let r = crate::player::CAPSULE_RADIUS;
+        // Bodies in the frame its hinge is in (a door in a building that's
+        // a child of another, as Kettle's are: its hinge isn't the world's).
+        let frame = (gt.affine() * t.compute_affine().inverse()).inverse();
         let blocked = next != d.angle
             && bodies.iter().any(|b| {
-                let feet = b.translation();
+                let feet = frame.transform_point3(b.translation());
                 let gap = leaf_gap(&leaf.0, next, feet);
                 gap < r && gap < leaf_gap(&leaf.0, d.angle, feet)
             });
