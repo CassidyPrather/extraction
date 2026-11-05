@@ -159,7 +159,7 @@
         ),
         // The mill steps: up the terraces past each level's side door.
         (
-            name: "Mill steps", kind: Path, width: 2.0, shoulder: 1.5, smoothing: 100.0,
+            name: "Mill steps", kind: Path, width: 2.0, shoulder: 6.0, smoothing: 100.0,
             points: [(100.0, 66.0), (104.0, 16.0), (104.0, -34.0)],
         ),
         // To the compressor house's door.
@@ -175,7 +175,7 @@
         ),
         // The mine track up the upper slopes to the col.
         (
-            name: "Col track", kind: Dirt, width: 4.0, smoothing: 40.0,
+            name: "Col track", kind: Dirt, width: 4.0, shoulder: 6.0, smoothing: 32.0,
             points: [(0.0, 20.0), (10.0, -40.0), (-10.0, -90.0), (20.0, -150.0), (5.0, -200.0), (40.0, -240.0), (70.0, -262.0)],
         ),
         // Along under the summit to the observatory's saddle.
@@ -230,7 +230,7 @@
     outcrops: [
         // Cairns on the col track (walk review: waymarks over the white).
         (at: (-3.8, -96.1), radius: 0.7, stones: 5),
-        (at: (-51.9, -242.0), radius: 0.7, stones: 5),
+        (at: (-53.0, -240.9), radius: 0.7, stones: 5),
         // On the way up to the saddle.
         (at: (-109.0, -187.0), radius: 1.8, stones: 4),
     ],
@@ -334,7 +334,7 @@
         // path: the first job's way doesn't stop where the col's does (walk
         // review, 5 Nov: the poles went on to the col and left the way to the
         // job white from the fork to the saddle).
-        (prefab: "snow_pole", at: (-6.9, -207.8), rot: 0.0),
+        (prefab: "snow_pole", at: (-8.6, -206.8), rot: 0.0),
         (prefab: "snow_pole", at: (-20.6, -220.5), rot: 0.0),
         (prefab: "snow_pole", at: (-35.8, -233.6), rot: 0.0),
         (prefab: "snow_pole", at: (-59.5, -248.3), rot: 0.0),
