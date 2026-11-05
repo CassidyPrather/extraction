@@ -283,6 +283,7 @@ mod tests {
             ("render/body.rs", 1, "a knee"),
             ("render/landmarks.rs", 1, "a lamp"),
             ("render/rv_beacons.rs", 1, "a lamp"),
+            ("render/way_lamps.rs", 1, "a yard lamp's bulb"),
             ("render/wounds.rs", 1, "a wound's patch, on the skin"),
             (
                 "robots/fx.rs",
