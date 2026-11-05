@@ -1212,28 +1212,31 @@ fn shelve_unworn(
         let Some(m) = materials.get(id) else {
             continue;
         };
-        let key = hash_of((
-            ty,
+        let (data, alpha, bias) = (
             m.bind_group_data(),
             format!("{:?}", m.alpha_mode()),
             m.depth_bias().to_bits(),
-            layout,
-            false,
-            true,
-        ));
-        if !shelf.seen.insert(key) {
-            continue;
-        }
+        );
         let Some(handle) = materials.get_strong_handle(id) else {
             continue;
         };
-        if shelf.kinds.insert(key) {
-            *shelf.by_type.entry("unworn".into()).or_default() += 1;
-        }
-        if let Some(e) = shelf.put(&mut commands, cube.clone(), false, false) {
-            commands
-                .entity(e)
-                .insert((MeshMaterial3d(handle), ShelfMark));
+        // Casting a shadow and not: a material first worn mid-raid by
+        // something that casts (a gun part, an item brought out) built its
+        // shadow pipeline at first sight when only the unshadowed one was
+        // warmed here.
+        for casts in [false, true] {
+            let key = hash_of((ty, data, alpha.clone(), bias, layout, false, !casts));
+            if !shelf.seen.insert(key) {
+                continue;
+            }
+            if shelf.kinds.insert(key) {
+                *shelf.by_type.entry("unworn".into()).or_default() += 1;
+            }
+            if let Some(e) = shelf.put(&mut commands, cube.clone(), false, casts) {
+                commands
+                    .entity(e)
+                    .insert((MeshMaterial3d(handle.clone()), ShelfMark));
+            }
         }
     }
 }
