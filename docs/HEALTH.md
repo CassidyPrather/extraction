@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| a974f23 | 2026-11-05 (after gate 175, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Sallow 8, Kettle 7, Marrow 7, Rime 7); stucks 52 (63a83d1: 41): Marrow seed 2 has 21, all depot_marrow takes beside a Sorter wreck (the wreck class, fixed in 04a443f4, on main after this sha), its bridge stucks gone; Rime seed 4 6 in adit_rime; Rime seed 8 0 (was 7); deaths: Marrow seed 2 (Walker, to_rv), Kettle seed 6 and Rime seed 1 (Drone); Sallow seed 6's fall gone (the dam fix); stowing: 2105 carried, 0 drops, kit 40/40, 1 stow stuck; 13/13 contract scenarios; second_hour passes; `first_jobs_cautious` places the broken walker for job 2 (Robot minds' fix holds) but fails: stuck on WalkTo (-80.7, 8.71) after the Surge at 2049 s; `--check-buildings` 38 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1419 lib, 324 + 47 core, 0 FAILED | first_contact passes on its first run; gauges: `gauge_guns_lying_about_rest` fails under batch load (16 of 17 guns resting) |
 | 63a83d1 | 2026-11-04 (gate 169, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Kettle 8, Marrow 7, Rime 7, Sallow 6); stucks 41 (all of the +2 in Marrow; every other valley's stucks identical run for run); Marrow seed 2 now dies to a Walker at (-88.0, -24.7) while travelling; Kettle seed 6 now extracts; Sallow seed 6's fall unchanged; stowing unchanged (1978 carried, 0 drops, kit 40/40, 1 stow stuck); 13/13 contract scenarios; second_hour passes (it never reaches job 2, so no walker line either way); `--check-buildings` 42 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1367 lib, 322 + 47 core, 0 FAILED | first_contact passes on its first run; gauges all within budget |
 | 8d5c110 | 2026-11-04 (release check, after the pause) | 40/40 exit 0, no timeouts, 36 extracted; stucks 39; Sallow seed 6 dies to a fall at (50.9, 163.8) from 79 hp; stowing unchanged; 13/13 contract scenarios; second_hour passes, no broken walker placed (the Director looks once per app, on job 1); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1356 lib, 319 + 47 core, 0 FAILED | first_contact cold run over on Marrow (10.07 > 9.8 s, 273 frames), passes alone; gauges 18/18 |
 | c55626a | 2026-11-01 20:30 (release check) | 40/40 exit 0, no timeouts, 35 extracted; stucks 27; stowing unchanged; 13/13 contract scenarios; second_hour 0/40 (Onboarding's fix in gate 150), no broken-walker line (never reaches job 2); `--check-buildings` 0 flagged; sim_guards pass | 1 FAILED: gauge_puffs_hold_the_stereo_budget (the sky now counted; 10° cap in gate 150) | gauges 14/19: Marrow m05_spruce ×4 (the sky now counted, 79f500f6; to re-baseline), first_contact 1-4% over (this container's disk; runs first from the next check) |
@@ -79,14 +80,18 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 63a83d1.
+As of a974f23.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| The broken walker never placed on job 2 in one app session: `Director` is made at Startup and `broken_placed` set on its first tick (job 1) | real bug; `second_hour` shows no `broken walker placed` line | Robot minds | fixed in 9bfdd9df (`the_second_job_meets_it_in_the_same_session`), not yet on a tested main; second_hour stays on job 1, so the check will grep `first_jobs_cautious` instead |
-| `first_contact`'s first, cold run: Marrow 10.07 s over 9.8, 273 frames (passes warm) | disk: the first run after a container restart took 28.0 s, waiting on arrivals; with the page cache evicted it took 5.4-5.9 s, like warm. The gauge now reads assets/ before its clock (31fa901b + 8c226125 + 2fb17060, on main from 8e76ed67), and after a fresh eviction the load was 5.41 s of 7.1 | Verifier, Performance | merged; close once a tested main carries it |
-| Sim: Marrow seed 2 dies to a Walker at (-88.0, -24.7) while travelling (new in 63a83d1; extracted at 8d5c110). Replay: `SIM_NO_JOB=1 extraction --sim-run smoke --map marrow_creek --seed 2 --headless` | | Robot minds | reported |
-| Sim: Sallow seed 6 dies to a fall at (50.9, 163.8) while travelling (79 hp in a second) | | Map design / coordinator | reported |
+| `render::gun_rest::tests::gauge_guns_lying_about_rest`: 16 of 17 guns resting under the gauge batch's load (Visual design 2 in 3, this check once); passes alone | settles by frame count, not state | Verifier (from the coordinator) | next: settle until every gun rests, with a cap, naming any that doesn't |
+| `first_jobs_cautious` on Marrow: the bot times out on WalkTo (-80.7, 8.71) after the Surge (2049 s), never home | | Onboarding | reported |
+| Sim: take routes through a robot's wreck indoors (Marrow seeds 2 and 7, depot_marrow) | raider routing | Verifier | fixed in 04a443f4 (on main after a974f23); to confirm on the next check |
+| Sim: outdoor routes through a wreck (Kettle seed 1 at a bridge end, Walker wreck, 10 stucks on 04a443f4) | raider routing | Verifier | next |
+| Sim: Marrow seed 1, two take stucks at house_plank's door (the leaf shoving the raider aside) | door handling | Onboarding | fixed in 200068c2 (gate 185); to confirm |
+| Door leaf pushes a standing player 0.32-1.58 m (probe, 5 of 6 doors in Marrow and Kettle) | VR comfort | Onboarding | fixed in 200068c2 (gate 185) |
+| Sim: Sallow, to_rv waypoint (237.12, -35.65) inside gauge_hut's shed (seed 2 one stuck, seed 5 three) | raider routing | Verifier (from Fourth valley) | queued |
+| Sim: Rime seed 4, 6 take stucks in adit_rime at (151.8, -61.6) | raider routing | Verifier | to look at |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
@@ -94,6 +99,7 @@ As of 63a83d1.
 
 | test / run | fixed in | by |
 | - | - | - |
+| The broken walker on job 2 in one session (Robot minds, 9bfdd9df: `first_jobs_cautious` places it at (50.9, 133.5)); first_contact's cold run (the asset read-ahead, 8e76ed67); Marrow seed 2's bridge (Map design); Sallow seed 6's fall (the dam fix, 626243b3) | a974f23 | Robot minds, Verifier, Performance, Map design |
 | the puff gauge and Marrow m05_spruce (the sky counted), `second_hour` (0/40 → passes) | 8d5c110 | Performance, Weapon feel, Onboarding |
 | `contract_scour_key` (outside-doors-only Entrances, a44221f5); part_rest's test race; the cellars_cinder probe flag; first_contact's Kettle/Rime load | 50d1900 / 90afc8b | Models, Performance, Capture |
 | Kettle's stucks (69 on cc4d02c, 11 on be68fdf) and seed 1's surface stucks; Sallow's early hound deaths (the raider's ammo) | 4a7eaed / be68fdf | Robot minds |

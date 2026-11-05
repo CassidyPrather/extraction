@@ -719,6 +719,68 @@ fn a_searching_drone_looks_in_at_a_doorway() {
     assert!(best < 2.5, "hung low outside the doorway ({best:.1} m off)");
 }
 
+/// A drone that can't get down to a doorway on its round (held above it,
+/// by an eave say) still gives its search up when the time runs out. One
+/// hung 4 m over a house's door for twenty minutes, and re-locked on the
+/// newcomer hiding inside each time they looked out (first_jobs_cautious).
+#[test]
+fn a_drone_held_off_a_doorway_still_ends_its_search() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let door = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .first()
+        .expect("a door");
+    let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
+    let held = Vec3::new(
+        hover.x,
+        zone.ground(hover.x, hover.z) + super::drone::DOORWAY_ALTITUDE + 4.0,
+        hover.z,
+    );
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            held,
+            Job {
+                kind: JobKind::Survey,
+                site: held,
+                duration: 999.0,
+                exit: held,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Search {
+        at: door.mid + door.out * 6.0,
+        left: 10.0,
+        spots: vec![door.mid + door.out * 1.8],
+        dwell: 0.0,
+    };
+    let mut searching = 0.0;
+    for _ in 0..90 * 30 {
+        app.world_mut()
+            .get_mut::<Transform>(drone)
+            .unwrap()
+            .translation = held;
+        app.update();
+        if matches!(
+            app.world().get::<Brain>(drone).unwrap(),
+            Brain::Search { .. }
+        ) {
+            searching += 1.0 / 90.0;
+        }
+    }
+    assert!(
+        searching < 12.0,
+        "still searching {searching:.0} s into a 10 s search, held off the doorway"
+    );
+}
+
 /// A crawler's wreck doesn't wall off a corridor: once it's wrecked,
 /// players walk past it (the sims found bots stuck behind one).
 #[test]
@@ -5535,6 +5597,70 @@ fn a_crawlers_charge_warns_as_long_as_a_walkers_aim() {
         "zapped {:.2} s after its charge, {:.2} s after it saw you",
         hit - charge,
         hit - seen
+    );
+}
+
+/// A hound's coil leads its bite by the bar every attack meets
+/// (`visuals::MIN_LEAD`): from its crouch to the first hurt, time to get
+/// low or get a shot off (it was 0.6 s, the bite in before anyone could
+/// move: first fights, the hound).
+#[test]
+fn a_hounds_coil_leads_its_bite() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let mut queue = CommandQueue::default();
+    let at = zone.on_ground(me.x + 3.5, me.z);
+    let hound = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    let mut coils = app
+        .world()
+        .resource::<Messages<super::hound::HoundCrouch>>()
+        .get_cursor();
+    let hp0 = hp(&app, player);
+    let (mut coil, mut hit) = (None, None);
+    for f in 0..90 * 10 {
+        let t = f as f32 / 90.0;
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(hound).unwrap();
+            if a.target.is_none() {
+                a.target = Some(player);
+                a.last_known = Some(me);
+                a.suspicion = 1.0;
+            }
+        }
+        app.update();
+        let msgs = app
+            .world()
+            .resource::<Messages<super::hound::HoundCrouch>>();
+        if coils.read(msgs).next().is_some() {
+            coil.get_or_insert(t);
+        }
+        if hp(&app, player) < hp0 - 0.5 {
+            hit = Some(t);
+            break;
+        }
+    }
+    let (Some(coil), Some(hit)) = (coil, hit) else {
+        panic!("it coiled and bit: {coil:?} {hit:?}");
+    };
+    assert!(
+        hit - coil >= super::visuals::MIN_LEAD - 0.05,
+        "bitten {:.2} s after its coil",
+        hit - coil
     );
 }
 

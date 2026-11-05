@@ -1695,7 +1695,7 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 9] = [
+pub(crate) const OWN_LOOKS: [&str; 9] = [
     "bolt",
     "detector",
     "art_lodestone",
@@ -1779,6 +1779,77 @@ fn shard_mesh() -> Mesh {
     .with_inserted_indices(Indices::U32(idx))
 }
 
+/// A lump: a unit sphere pushed in and out by `k` (its radius at each
+/// direction), its normals taken there, then scaled to `size` (as a
+/// transform scales it: normals and all).
+fn lump(size: Vec3, subdiv: u32, k: impl Fn(Vec3) -> f32) -> Mesh {
+    let mut m = Sphere::new(1.0).mesh().ico(subdiv).unwrap();
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+        m.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    {
+        for v in p.iter_mut() {
+            let q = Vec3::from_array(*v);
+            *v = (q * k(q)).to_array();
+        }
+    }
+    m.compute_smooth_normals();
+    m.transformed_by(Transform::from_scale(size))
+}
+
+/// Bristles standing off a lump (`lump`'s `size` and `k`): `n` thin boxes
+/// `len` long and `thick` across, one mesh, their roots on the surface;
+/// spread from the top down to `y_low` (1 the top, -1 the bottom) and,
+/// with `poles`, gathered toward the top and bottom.
+fn bristles(
+    size: Vec3,
+    k: impl Fn(Vec3) -> f32,
+    n: usize,
+    len: f32,
+    thick: f32,
+    y_low: f32,
+    poles: bool,
+) -> Mesh {
+    let one: Mesh = Cuboid::new(thick, len, thick).into();
+    let mut out: Option<Mesh> = None;
+    for i in 0..n {
+        let t = (i as f32 + 0.5) / n as f32;
+        let mut y = 1.0 - (1.0 - y_low) * t;
+        if poles {
+            y = y.signum() * y.abs().powf(0.55);
+        }
+        let r = (1.0 - y * y).max(0.0).sqrt();
+        let a = i as f32 * 2.399_963;
+        let d = Vec3::new(r * a.cos(), y, r * a.sin());
+        let root = d * k(d) * size;
+        let out_n = (d / size).normalize();
+        let tr = Transform::from_translation(root + out_n * (len * 0.5 - thick)).with_rotation(
+            Quat::from_rotation_arc(Vec3::Y, out_n) * Quat::from_rotation_y(i as f32),
+        );
+        let b = one.clone().transformed_by(tr);
+        match out.as_mut() {
+            Some(m) => {
+                let _ = m.merge(&b);
+            }
+            None => out = Some(b),
+        }
+    }
+    out.unwrap_or_else(|| Cuboid::new(0.0, 0.0, 0.0).into())
+}
+
+/// The lodestone's knobbles, the rimestone's lumps, the stormglass's
+/// cloud: a unit direction's radius.
+fn knob_lode(q: Vec3) -> f32 {
+    1.0 + 0.1 * (q.x * 7.0 + q.y * 3.0).sin() * (q.z * 5.0).cos()
+        + 0.05 * (q.y * 13.0 + q.x * 4.0).sin()
+        + 0.03 * (q.z * 19.0).sin()
+}
+fn knob_rime(q: Vec3) -> f32 {
+    1.0 + 0.08 * (q.x * 9.0).sin() * (q.z * 7.0 + q.y * 5.0).cos()
+}
+fn knob_cloud(q: Vec3) -> f32 {
+    1.0 + 0.22 * (q.x * 6.0 + q.z * 4.0).sin() * (q.y * 5.0).cos()
+}
+
 #[allow(clippy::type_complexity)]
 fn dress_items(
     mut commands: Commands,
@@ -1786,6 +1857,9 @@ fn dress_items(
     catalog: Res<Catalog>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    // The three stones' meshes, built once and shared by every stone of
+    // the kind (fields hold several, and the Surge grows more).
+    mut stones: Local<std::collections::HashMap<&'static str, Vec<Handle<Mesh>>>>,
 ) {
     for (e, item) in &added {
         let id = catalog.get(item.kind()).id.as_str();
@@ -1944,31 +2018,31 @@ fn dress_items(
                 }
             }
             "art_lodestone" => {
-                let iron = mat(
-                    Color::srgb(0.16, 0.15, 0.17),
-                    0.9,
-                    0.5,
-                    LinearRgba::rgb(0.004, 0.0, 0.01),
+                // A fist of dark iron, knobbled like slag, iron filings
+                // bristling off its poles where its pull stands them up,
+                // their bright tips catching the light from a few metres.
+                // (It was a smooth violet sphere at 1 m: its glow on dark
+                // steel.) Inside its box (0.06 x 0.05 x 0.055).
+                const SIZE: Vec3 = Vec3::new(0.02, 0.0165, 0.0185);
+                let m = stones.entry("art_lodestone").or_insert_with(|| {
+                    vec![
+                        meshes.add(lump(SIZE, 2, knob_lode)),
+                        meshes.add(bristles(SIZE, knob_lode, 28, 0.0062, 0.0017, -1.0, true)),
+                    ]
+                });
+                let (body, filings) = (m[0].clone(), m[1].clone());
+                // Weathered iron, rough and barely metallic: as polished
+                // steel (even half metal) it took the dark ground's colour
+                // and read as a black blob with no shape.
+                let iron = mat(Color::srgb(0.4, 0.38, 0.35), 0.15, 0.72, LinearRgba::BLACK);
+                let steel = mat(
+                    Color::srgb(0.85, 0.86, 0.88),
+                    1.0,
+                    0.22,
+                    LinearRgba::rgb(0.02, 0.02, 0.022),
                 );
-                let mut m = Sphere::new(1.0).mesh().ico(2).unwrap();
-                // Knobbled, like a lump of slag.
-                if let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
-                    m.attribute_mut(Mesh::ATTRIBUTE_POSITION)
-                {
-                    for v in p.iter_mut() {
-                        let q = Vec3::from_array(*v);
-                        let k = 1.0
-                            + 0.12 * (q.x * 7.0 + q.y * 3.0).sin() * (q.z * 5.0).cos()
-                            + 0.06 * (q.y * 13.0).sin();
-                        *v = (q * k).to_array();
-                    }
-                }
-                m.compute_smooth_normals();
-                parts.push((
-                    meshes.add(m),
-                    iron,
-                    Transform::from_scale(Vec3::new(0.028, 0.023, 0.026)),
-                ));
+                parts.push((body, iron, Transform::IDENTITY));
+                parts.push((filings, steel, Transform::IDENTITY));
             }
             "art_shard" => {
                 let glass = materials.add(StandardMaterial {
@@ -1992,45 +2066,64 @@ fn dress_items(
                 ));
             }
             "art_rimestone" => {
-                // A pale knuckle of stone, furred white with frost: rough,
-                // a little lumpy, the faintest cold glow.
-                let rime = mat(
-                    Color::srgb(0.86, 0.92, 0.98),
+                // A pale knuckle of grey stone, furred with frost: short
+                // white needles of hoar over its upper two thirds, the
+                // faintest cold glow in them. (As one pale lump it was the
+                // stormglass's twin on the ground.) Inside its box (0.045
+                // x 0.04 x 0.04): it rides in packs and cases.
+                const SIZE: Vec3 = Vec3::new(0.0165, 0.014, 0.0155);
+                let m = stones.entry("art_rimestone").or_insert_with(|| {
+                    vec![
+                        meshes.add(lump(SIZE, 2, knob_rime)),
+                        meshes.add(bristles(SIZE, knob_rime, 48, 0.0036, 0.0019, -0.3, false)),
+                    ]
+                });
+                let (body, frost) = (m[0].clone(), m[1].clone());
+                let stone = mat(Color::srgb(0.7, 0.72, 0.74), 0.0, 0.9, LinearRgba::BLACK);
+                let hoar = mat(
+                    Color::srgb(0.93, 0.97, 1.0),
                     0.0,
-                    0.85,
-                    LinearRgba::rgb(0.01, 0.03, 0.06),
+                    0.6,
+                    LinearRgba::rgb(0.03, 0.07, 0.12),
                 );
-                let mut m = Sphere::new(1.0).mesh().ico(2).unwrap();
-                if let Some(bevy::mesh::VertexAttributeValues::Float32x3(ps)) =
-                    m.attribute_mut(Mesh::ATTRIBUTE_POSITION)
-                {
-                    for v in ps.iter_mut() {
-                        let q = Vec3::from_array(*v);
-                        let k = 1.0 + 0.1 * (q.x * 9.0).sin() * (q.z * 7.0 + q.y * 5.0).cos();
-                        *v = (q * k).to_array();
-                    }
-                }
-                m.compute_smooth_normals();
-                parts.push((
-                    meshes.add(m),
-                    rime,
-                    Transform::from_scale(Vec3::new(0.022, 0.019, 0.02)),
-                ));
+                parts.push((body, stone, Transform::IDENTITY));
+                parts.push((frost, hoar, Transform::IDENTITY));
             }
             "art_stormglass" => {
-                // A clouded bead: milky glass with a cold light in it.
+                // A clouded bead: clear cold glass, and in it a knot of
+                // dark cloud with a spark of light at its heart. (Milky all
+                // through it was the rimestone's twin on the ground.)
                 let glass = materials.add(StandardMaterial {
-                    base_color: Color::srgba(0.82, 0.86, 0.92, 0.85),
-                    perceptual_roughness: 0.25,
-                    emissive: LinearRgba::rgb(0.05, 0.08, 0.14),
+                    base_color: Color::srgba(0.8, 0.86, 0.95, 0.35),
+                    perceptual_roughness: 0.08,
+                    reflectance: 0.6,
+                    emissive: LinearRgba::rgb(0.02, 0.03, 0.06),
                     alpha_mode: AlphaMode::Blend,
                     ..default()
                 });
-                parts.push((
-                    meshes.add(Sphere::new(0.02).mesh().ico(3).unwrap()),
-                    glass,
-                    Transform::IDENTITY,
-                ));
+                let cloud = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.18, 0.2, 0.26),
+                    perceptual_roughness: 0.95,
+                    emissive: LinearRgba::rgb(0.01, 0.015, 0.03),
+                    ..default()
+                });
+                let spark = materials.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    emissive: LinearRgba::rgb(4.0, 5.5, 8.0),
+                    unlit: true,
+                    ..default()
+                });
+                let m = stones.entry("art_stormglass").or_insert_with(|| {
+                    vec![
+                        meshes.add(lump(Vec3::new(0.012, 0.009, 0.011), 2, knob_cloud)),
+                        meshes.add(Sphere::new(0.003).mesh().ico(1).unwrap()),
+                        meshes.add(Sphere::new(0.02).mesh().ico(3).unwrap()),
+                    ]
+                });
+                let (core, dot, bead) = (m[0].clone(), m[1].clone(), m[2].clone());
+                parts.push((core, cloud, Transform::IDENTITY));
+                parts.push((dot, spark, Transform::from_xyz(0.001, 0.001, 0.0)));
+                parts.push((bead, glass, Transform::IDENTITY));
             }
             _ => continue,
         }

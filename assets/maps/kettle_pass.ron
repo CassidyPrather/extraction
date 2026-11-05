@@ -251,6 +251,15 @@
         (at: (4.0, -176.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
+        // to go still by while it comes (map_lint::WAIT_NEAR).
+        (prefab: "log_pile", at: (1.3, -198.8), rot: 93.0, tag: "wait_the_pass"),
+        (prefab: "log_pile", at: (-159.3, -23.5), rot: 276.0, tag: "wait_mine_yard"),
+        (prefab: "log_pile", at: (173.6, -177.6), rot: 136.0, tag: "wait_hunting_lodge"),
+        // The moor's roadmen's hut, a place on the pass road between the mine
+        // road and the lodge (walk review: 120 m of moor with no place in it).
+        (prefab: "shed", at: (44.2, -53.2), rot: 130.0, tag: "roadmen_hut"),
+        (prefab: "log_pile", at: (49.0, -59.0), rot: 40.0),
         (prefab: "log_pile", at: (-2.0, 74.0), rot: 38.0),
         (prefab: "log_pile", at: (79.0, -60.0), rot: 40.0),
         (prefab: "log_pile", at: (64.0, -86.0), rot: 40.0),
@@ -311,6 +320,10 @@
         // The road-menders' hut on the switchbacks.
         (prefab: "mast_hut", at: (-30.0, -95.5), rot: 80.0),
         (prefab: "log_pile", at: (-36.0, -105.5), rot: 10.0),
+        // A log pile by the lodge track's bend out of the charcoal burners'
+        // clearing: the way home to the hunting lodge ran 20 m there with
+        // nothing a dash off.
+        (prefab: "log_pile", at: (120.0, -108.6), rot: 224.0),
         // The charcoal burners' hut on the lodge track.
         (prefab: "cabin_log", at: (89.2, -103.5), rot: 40.0),
 

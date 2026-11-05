@@ -7222,6 +7222,8 @@ mod wreck_reach {
     /// A sight line or a reach that meets the wreck this near the part
     /// has got to it (the part's in its hull, or sits on it).
     const AT_PART: f32 = 0.15;
+    /// How near a point (m) a part of its wreck is the part it sits in.
+    const UNDER: f32 = 0.12;
     /// A shoulder's lowest (crouched and leaning in) and highest
     /// (standing) over the ground, m.
     const SHOULDER: (f32, f32) = (0.55, 1.45);
@@ -7283,9 +7285,12 @@ mod wreck_reach {
         for _ in 0..30 {
             vr.step(30);
             let w = vr.app.world();
-            if w.get::<crate::robots::Salvaged>(e).is_some()
-                && (kind == "heavy" || w.get::<crate::robots::salvage::Fitted>(e).is_some())
-            {
+            // (The heavy's done going over `FALL_TIME` after it's down.)
+            let settled = match w.get::<crate::robots::heavy::Heavy>(e) {
+                Some(h) => h.down_for > crate::robots::heavy::FALL_TIME + 1.5,
+                None => w.get::<crate::robots::salvage::Fitted>(e).is_some(),
+            };
+            if w.get::<crate::robots::Salvaged>(e).is_some() && settled {
                 break;
             }
         }
@@ -7351,10 +7356,15 @@ mod wreck_reach {
                 own: [Some(e), item].into_iter().flatten().collect(),
             });
         }
+        // (A heavy's Armour-role parts are its hull, bolts and vents, which
+        // no hand takes off; its plates are its seats, below.)
+        let is_heavy = world.get::<crate::robots::heavy::Heavy>(w).is_some();
         let plates: Vec<Entity> = world
             .query_filtered::<(Entity, &RobotPart), With<crate::robots::salvage::HealthAtDeath>>()
             .iter(world)
-            .filter(|(_, p)| p.robot == w && matches!(p.role, PartRole::Armour(_)) && p.alive())
+            .filter(|(_, p)| {
+                !is_heavy && p.robot == w && matches!(p.role, PartRole::Armour(_)) && p.alive()
+            })
             .map(|(e, _)| e)
             .collect();
         for p in plates {
@@ -7374,13 +7384,55 @@ mod wreck_reach {
             .filter(|(_, s, _)| s.robot == w)
             .map(|(e, s, k)| (e, k.occupant, format!("{:?}", s.slot)))
             .collect();
+        // The cell's behind its hatch: got at once the hatch is off (its
+        // seat, the plate in it, the plate's part and bolts), the order a
+        // heavy is taken apart in.
+        let mut hatch: Vec<Entity> = heavy
+            .iter()
+            .filter(|(_, _, slot)| slot == "Plate(0)")
+            .flat_map(|(seat, item, _)| [Some(*seat), *item])
+            .flatten()
+            .collect();
+        hatch.extend(
+            world
+                .query::<(Entity, &RobotPart, &crate::robots::heavy::HeavyPart)>()
+                .iter(world)
+                .filter(|(_, p, h)| {
+                    p.robot == w
+                        && matches!(
+                            h.0,
+                            extraction_core::heavy::Slot::Plate(0)
+                                | extraction_core::heavy::Slot::Bolt { plate: 0, .. }
+                        )
+                })
+                .map(|(e, ..)| e),
+        );
         for (seat, item, slot) in heavy {
             if let Some(item) = item {
+                let mut own = vec![item, seat];
+                if slot == "Cell" {
+                    own.extend(&hatch);
+                }
                 out.push(Point {
                     what: format!("the heavy's {slot}"),
                     at: at(world, item),
-                    own: vec![item, seat],
+                    own,
                 });
+            }
+        }
+        // A seated thing isn't hidden by the part it sits in: the wreck's
+        // parts right at a point are its own.
+        let parts: Vec<(Entity, Vec3)> = world
+            .query::<(Entity, &RobotPart, &GlobalTransform)>()
+            .iter(world)
+            .filter(|(_, p, _)| p.robot == w)
+            .map(|(e, _, g)| (e, g.translation()))
+            .collect();
+        for p in &mut out {
+            for (e, at) in &parts {
+                if at.distance(p.at) < UNDER && !p.own.contains(e) {
+                    p.own.push(*e);
+                }
             }
         }
         out
@@ -7402,18 +7454,7 @@ mod wreck_reach {
 
     /// What's still out of sight or reach, and whose it is to fix: each
     /// kind and part, and why. The test fails on one that now passes.
-    const PENDING: &[(&str, &str, &str)] = &[
-        (
-            "heavy",
-            "a plate",
-            "Heavy's: its wreck stays up on its legs, its back plates 1.9-2 m up",
-        ),
-        (
-            "heavy",
-            "the heavy's Cell",
-            "Heavy's: its cell seat is inside its hull",
-        ),
-    ];
+    const PENDING: &[(&str, &str, &str)] = &[];
 
     /// Every machine that wrecks leaves what can be taken off it where you
     /// can see it from standing 1.5 m off, from one side or another, and
@@ -7454,21 +7495,21 @@ mod wreck_reach {
                 .translation();
             let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(vr.app.world_mut());
             let spatial = q.get(vr.app.world()).unwrap();
-            let ring = |r: f32| {
-                (0..16).map(move |k| {
-                    let a = k as f32 / 16.0 * std::f32::consts::TAU;
+            let ring = |r: f32, n: usize| {
+                (0..n).map(move |k| {
+                    let a = k as f32 / n as f32 * std::f32::consts::TAU;
                     Vec3::new(c.x + r * a.cos(), 0.0, c.z + r * a.sin())
                 })
             };
-            let heads: Vec<Vec3> = ring(LOOK_FROM)
+            let heads: Vec<Vec3> = ring(LOOK_FROM, 16)
                 .map(|p| zone.on_ground(p.x, p.z) + Vec3::Y * EYES)
                 .collect();
             // Where you can stand: your body meets none of the wreck.
             let body = Collider::capsule(BODY, 1.1);
             let solid = SpatialQueryFilter::from_mask([Layer::Robot]);
-            let spots: Vec<Vec3> = (0..14)
-                .map(|k| 0.4 + 0.2 * k as f32)
-                .flat_map(ring)
+            let spots: Vec<Vec3> = (0..27)
+                .map(|k| 0.4 + 0.1 * k as f32)
+                .flat_map(|r| ring(r, 32))
                 .map(|p| zone.on_ground(p.x, p.z))
                 .filter(|f| {
                     spatial
@@ -8126,6 +8167,99 @@ mod door_hinge {
     use super::*;
     use crate::world::buildings::{Door, DoorLeaf};
     use crate::world::hinge::{MOST, Motion, Moving, PER_UNIT, Swinging};
+
+    /// Every door pressed open with someone 0.6 of the way along its leaf:
+    /// in its swing (45 degrees round), already against it shut (10), or
+    /// against it on the side it swings away from (-10). However they
+    /// started, they aren't moved more than a few centimetres: it stops
+    /// against them (or, swinging away, opens); stepped clear, it opens the
+    /// rest of the way. (Driven through, a leaf shoved
+    /// a standing body 0.3-1.6 m: in a headset, the world moving you, and
+    /// off a doorstep. Verifier's probe, 5 November.)
+    #[test]
+    fn a_door_stops_against_someone_in_its_swing_in_every_valley() {
+        use crate::robots::doors::Wedged;
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let mut vr = Vr::new(&map);
+            vr.step(5);
+            // Where it stood to start: clear of every door (stood up out of
+            // the way instead, the fall killed it, and it came round at the
+            // spawn mid-way through the next door).
+            let clear = vr.feet();
+            let doors: Vec<(Entity, crate::world::buildings::DoorDef)> = {
+                let mut q = vr.app.world_mut().query_filtered::<(Entity, &DoorLeaf), (
+                    Without<Wedged>,
+                    Without<crate::world::underground::PowerLocked>,
+                )>();
+                q.iter(vr.app.world()).map(|(e, l)| (e, l.0)).collect()
+            };
+            for (door, leaf) in doors {
+                // In its swing; already against it, shut; and on the side it
+                // swings away from, against it (which it leaves, opening).
+                for (deg, away) in [(45.0f32, false), (10.0, false), (-10.0, true)] {
+                    {
+                        let mut e = vr.app.world_mut().entity_mut(door);
+                        e.remove::<crate::world::hinge::Resting>();
+                        let mut d = e.get_mut::<Door>().unwrap();
+                        d.open = false;
+                        d.angle = 0.0;
+                    }
+                    vr.step(2);
+                    // In the world's frame (some doors' hinges are in a
+                    // parent building's).
+                    let gt = *vr.app.world().get::<GlobalTransform>(door).unwrap();
+                    let round = gt.rotation() * Quat::from_rotation_y(deg.to_radians());
+                    let spot = gt.translation() + round * Vec3::new(leaf.width * 0.6, 0.0, 0.0);
+                    vr.stand(spot, 0.0);
+                    vr.step(30);
+                    // Where a body can stand still (not in a wall, or on a
+                    // step it slides off).
+                    let before = vr.feet();
+                    vr.step(10);
+                    if vr.feet().distance(before) > 0.01 {
+                        continue;
+                    }
+                    checked += 1;
+                    vr.app.world_mut().get_mut::<Door>(door).unwrap().open = true;
+                    vr.step(80);
+                    let moved = vr.feet().xz().distance(before.xz());
+                    let angle = vr.app.world().get::<Door>(door).unwrap().angle;
+                    let at = format!(
+                        "{map}: door {door} at {:.1}, body {deg} deg",
+                        gt.translation()
+                    );
+                    if moved > 0.03 {
+                        bad.push(format!("{at}: moved {moved:.2} m"));
+                    } else if away && angle < 0.99 {
+                        bad.push(format!("{at}: held at {angle:.2}, swinging away from them"));
+                    } else {
+                        // Clear of it: it opens the rest of the way.
+                        vr.stand(clear, 0.0);
+                        vr.step(60);
+                        let angle = vr.app.world().get::<Door>(door).unwrap().angle;
+                        if angle < 0.99 {
+                            bad.push(format!("{at}: stopped at {angle:.2} with no one there"));
+                        }
+                    }
+                    vr.stand(clear, 0.0);
+                    vr.app.world_mut().get_mut::<Door>(door).unwrap().open = false;
+                    vr.step(60);
+                }
+            }
+        }
+        assert!(
+            checked > 20,
+            "only {checked} doors with somewhere to stand in their swing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {checked}:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
 
     /// One door, gripped `along` its width at chest height, carried
     /// through `arc` radians round its hinge over a second: the leaf's

@@ -204,3 +204,14 @@ a closed hand goes round it) must be gripped, the thumb against a finger
 and the fingers on it curled at least `GRIPPED` on average, or it isn't
 held: the fingers close round the power cell, the bolt, the box of
 rounds, the magazine and the matches rather than lying flat under them.
+`35_first_hour_eye.jpg` (the yard by day, as one headset eye sees it:
+`EXTRACTION_FOV=100`, `--size 1000x1000`, `--camera 0,0,40,0,-25`,
+`--gallery fp:read`, `fp:pm_mag`, `fp:field_dressing`, `fp:radio`,
+`fp:radio+palm`): the first hour's hands. The job card held up to read
+stood on the glove's fingertips like a tray (top left); a thin flat
+thing is now held only pinched by an edge (`render::hold::thin`), and
+the glove takes the card's bottom edge between thumb and fingers (top
+middle). The crate's magazine, the dressing and the radio read right at
+the eye. (`fp:read`, new, holds the job card up as `interact::read`
+does; the `fp` gallery now stands a 0-height camera's eye 1.7 m up, as
+the camera does: it had set the hands out round the feet.)

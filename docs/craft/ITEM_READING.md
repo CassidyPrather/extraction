@@ -395,3 +395,73 @@ Progression's placement rule now.
   few pixels at 1.2 m, true to size; the rule puts them where they are
   seen, which is the whole of it.
 
+### Artifacts up close (4 November)
+
+The Zone's most valuable finds, each lying 0.55 m off on the training
+yard's road, fog at 11:00 (`--gallery art_<id>,30,0.55`). Left to right,
+top to bottom: featherstone, hearth, glass eye; aegis, lodestone,
+hushstone; stormglass, shard, rimestone:
+![all nine](../shots/items/artifacts_all_before.jpg)
+
+- **Read, and look valuable:** the hearth (black with glowing cracks),
+  the aegis (a copper tangle), the shard (a blade of not-quite-glass),
+  the featherstone (a dark pebble ringed in lilac), the glass eye (a
+  marble with a highlight).
+- **The hushstone** is what it says, a matte grey pebble: the one
+  artifact you could take for a stone, by design.
+- **Fixed (`anomaly/visuals.rs`, with Anomalies' go-ahead):**
+  - *Stormglass and rimestone were twins*: two pale blue balls the same
+    size. The stormglass is a clear bead with a dark cloud and a spark in
+    it; the rimestone is pale stone furred with short white frost.
+  - *The lodestone was a smooth violet ball*, not "a fist of dark iron".
+    It is knobbled iron now, rough and barely metallic, with iron
+    filings standing off its poles, their bright tips catching the light.
+  - Each look inside its item's box; the bristles are one merged mesh per
+    kind, built once and shared (fields hold several stones). Lessons:
+    a lump's normals must be taken before its non-uniform scale (baked
+    after, the lodestone went flat black); half-metal dark iron in fog
+    renders black too.
+  Before (top), after at 0.55 m (middle) and at 3 m (bottom):
+  ![lodestone, stormglass, rimestone](../shots/items/artifacts_before_after.jpg)
+- **At 3 m every artifact is a speck**, before as after: small things on
+  stony ground. Their fields' light is what finds them.
+
+### Every kind, and no placeholder (5 November)
+
+**No item falls back to the placeholder.** The walker's plate was the
+item placeholder's plain slab (`ROBOT_READING`), so a test now walks the
+whole table: `models::tests::no_item_falls_back_to_the_placeholder`. A
+firearm loads from `models/guns`, a magazine from `models/mags`, the
+anomaly items are drawn by `anomaly::visuals` (`OWN_LOOKS`); every other
+kind must have `models/items/<id>.glb`. It found 19 more slabs, now
+modelled: the first-hour and contract things (the Zorki camera, Lev's
+relay box, Holm's watch, Hajek's tin, the scour key, the pump log, the
+deputy's lamp, the charging manifest, the intake ledger, Hana's letter,
+in `art/items/story_items.py`), three pieces of kit (the spanner, the
+work boots, the can suppressor) and six ammo lots (the subsonic rounds
+and boxes, black over green tips and a blue band; the surplus lots, dated
+and banded rust or tar).
+
+**Every kind at 1.2 m**, rows of eight sorted by the first raid a kind
+can appear on (from `loot.ron`; "-" for kinds no table rolls: kit, the
+jobs' things, the cooked and the crafted, guns and their parts). Blender
+line-ups (`art/lineup.py`, 1.2 m): the in-game rows (`--gallery
+items:a+b+c`) were taken too, but the training yard's stations walk into
+some frames and a cloak generator blacked one out, so the near-twin hunt
+is done on the line-ups:
+![every kind 1](../shots/items/every_kind_0.jpg)
+![every kind 2](../shots/items/every_kind_1.jpg)
+![every kind 3](../shots/items/every_kind_2.jpg)
+
+- **Fixed: six cassettes were one cassette.** The tapes you find (for
+  Anna, the harvest hymns, the lodge dance, the duty mix, our piano, the
+  Sallow bells) were all the blank: grey shell, cream label, red band.
+  Each has its own shell, label and band now and its title in block
+  letters (`art/items/music.py`):
+  ![tapes, before and after](../shots/items/tapes_before_after.png)
+- **Near-twins left as they are:** a calibre's boxes (5.45 ball, AP,
+  tracer, T-4, subsonic, surplus; the 54R's) share the packet and differ
+  by band and tip colour, as real lots do; the depot keys differ by their
+  stripe (yellow, red, cream) and their scorch and ash; the loose rounds
+  are brass specks at 1.2 m by nature.
+

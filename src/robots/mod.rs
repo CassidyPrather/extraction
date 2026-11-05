@@ -25,6 +25,7 @@ pub mod drone;
 mod drone_drill;
 #[cfg(test)]
 mod feet_gauge;
+pub mod firsts;
 pub mod flee;
 pub mod flight;
 pub mod fx;

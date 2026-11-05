@@ -192,3 +192,26 @@ At (236.0, -46.0), 45.7 m; looking 65 deg along the way, and 21 deg to Gauge hou
 - A corridor under the dam (s05 to s08, 120 to 240 m): the route runs along the dam's foot between its wall and a bank. The dam should be the valley's awe; here it's a wall you walk beside, and the reservoir is never seen.
 - A reveal with nothing in it (s09): on the dam top the water should open out; the frame looks along the road at the filter house instead.
 - The rest is calm and plain: the shore road to the Gauge house is fine, if long.
+
+## Fixes
+
+Before on the left, after on the right.
+
+### 1. The valve house's arrival (s04)
+
+The scour key lies on the valve house's floor, so the job's point stays in it; the arrival is now framed 20 m out as you come up the road (scripts/walk_stops.py): the valve house with the dam's wall behind it in the mist, not a door at arm's length. The door already faced the way in.
+
+![before](s04_ahead.jpg) ![after](fixes/job_ahead_after.jpg)
+
+### 2. The dam's top (s09): a viewing bay
+
+On the crest the parapet stood at eye height along the road, so topping the dam showed a wall. Models opened a 6 m railed bay in the upstream parapet at x 91-97, straight across from the face stair's landing: from it, looking north, the ground falls away over the bed (in the reference weather, into mist). The crest stop's view is the bay's (s09_bay in walk.stills). The face's foot (buttresses, staining) was tried and dropped: from the route the face stair hides it, and at 40 m it's fog.
+
+![before](s09_ahead.jpg) ![after](fixes/s09_bay_after.jpg)
+
+### 3. The dam's face, whole, before you're under it (s04, s05)
+
+The face was there; the walk didn't look at it. Coming up to the valve house, 20 m out, the face runs the whole frame to the north-west, stepping down with the stair's walls: the reveal before the corridor (s04's side view, now the face: scripts/walk_stops.py counts dam_face as a landmark). Past the valve house, at the face's foot looking along it, it towers: the threshold into the walk beside it. No scenery moved.
+
+![before](s04_side.jpg) ![after](fixes/face_from_the_approach.jpg)
+![before](s05_ahead.jpg) ![after](fixes/face_threshold.jpg)

@@ -37,6 +37,18 @@ lists them).
   only shrink (empty: the vest's last hold went with the press centred on
   its nearest point). `docs/shots/hands/33_held_free.jpg` is the first
   raid's loot before and after, `34_small_gripped.jpg` the small things.
+  Bulky things too: the hand that took one and the one steadying its far
+  end are both seated (`both_hands_on_a_bulky_thing_hold_it`); the far
+  hand's seat is worked out afresh as it drifts. Seats are worked out off
+  the frame (one took 58 ms) and the glove blends onto each over 0.15 s
+  (`a_glove_settles_onto_its_seat_without_a_pop`: it had jumped 42 mm,
+  22 degrees in a frame).
+  The world's own things too (`every_world_thing_carried_free_is_held_by_the_glove`,
+  every map loaded: the backpack, notes, the logbook, cards; 35 found,
+  all held), and a note taken up to read is held by the glove reading it
+  (`a_note_held_up_to_read_is_held_by_the_glove`: before, a fist hung
+  under it at the controller). Story pickups are table items, under the
+  class test.
 
 ## What's next
 

@@ -690,7 +690,14 @@ fn one_hand(
 #[derive(bevy::ecs::system::SystemParam)]
 struct TaskExtras<'w, 's> {
     placed: Query<'w, 's, (&'static GlobalTransform, Option<&'static Held>)>,
-    doors: Query<'w, 's, &'static crate::world::buildings::Door>,
+    doors: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Door,
+            &'static crate::world::buildings::DoorLeaf,
+        ),
+    >,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
     socketed: Query<'w, 's, (Entity, &'static InSocket, &'static GlobalTransform)>,
@@ -717,6 +724,9 @@ struct TaskExtras<'w, 's> {
     >,
     cuts: MessageWriter<'w, crate::destruction::hooks::Cut>,
     counters: Option<Res<'w, Counters>>,
+    /// Shots that went off (a pull that doesn't, a dud or a hang-fire's
+    /// wait, isn't one).
+    shots: MessageReader<'w, 's, crate::weapons::GunEvent>,
 }
 
 /// Counts any system can bump for a scenario's [`Expect::Counter`].
@@ -767,6 +777,12 @@ fn run_tasks(
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     let dt = time.delta_secs();
+    let shots_out: Vec<Entity> = ext
+        .shots
+        .read()
+        .filter(|e| matches!(e.event, extraction_core::firearm::Event::Fired { .. }))
+        .map(|e| e.gun)
+        .collect();
     // The gun hand, and the other: a left-handed bot plays mirrored.
     let mirror = comfort.as_ref().is_some_and(|c| c.left_handed);
     let gun_side = Side::Right.mirrored(mirror);
@@ -1337,6 +1353,10 @@ fn run_tasks(
                     bot.next();
                     continue;
                 };
+                // Shots out, not pulls: a dud doesn't count, and nor does
+                // a hang-fire until it goes. (Counted first: the shot that
+                // jams it is a shot, though the jam's cleared next.)
+                bot.fired += shots_out.iter().filter(|g| **g == gun_e).count() as u32;
                 // Settle the aim, then pulse the trigger.
                 if bot.elapsed < 0.6 {
                     continue;
@@ -1344,16 +1364,37 @@ fn run_tasks(
                 if clear_stoppage(&mut bot, &mut mac, gun_e, gun) {
                     continue;
                 }
-                let auto = gun.firearm.fire_mode() == extraction_core::firearm::FireMode::Auto;
-                let period = if auto { 0.15 } else { 0.35 };
-                let was = bot.trigger;
-                bot.trigger = bot.fired < shots && (bot.elapsed - 0.6) % period < period * 0.5;
-                if bot.trigger && !was {
-                    bot.fired += 1;
+                if mac.busy() {
+                    bot.trigger = false;
+                    continue;
                 }
-                if bot.fired >= shots && !bot.trigger
-                    || gun.firearm.live_rounds() == 0 && !bot.trigger
+                let f = &gun.firearm;
+                // A double with both hammers down on a dud: break it (the
+                // hammers cock as it opens), close it, and go again.
+                if bot.fired < shots
+                    && f.def.action == extraction_core::firearm::ActionKind::BreakAction
+                    && f.live_rounds() > 0
+                    && f.hang.is_none()
+                    && f.hammers_cocked.iter().all(|h| !h)
+                    && !bot.trigger
                 {
+                    bot.note("a dud: break it, close it, again".into());
+                    mac.start(
+                        gun_e,
+                        vec![
+                            (0.1, crate::weapons::flat::Step::Break(true)),
+                            (0.3, crate::weapons::flat::Step::Break(false)),
+                        ],
+                    );
+                    continue;
+                }
+                let auto = f.fire_mode() == extraction_core::firearm::FireMode::Auto;
+                let period = if auto { 0.15 } else { 0.35 };
+                bot.trigger = bot.fired < shots && (bot.elapsed - 0.6) % period < period * 0.5;
+                // A gun that won't go however it's worked runs the drill
+                // out of time, and its expectations say so.
+                let spent = bot.elapsed > 0.6 + period * (3.0 * shots as f32 + 8.0);
+                if (bot.fired >= shots || f.live_rounds() == 0 || spent) && !bot.trigger {
                     bot.trigger = false;
                     bot.aim = false;
                     bot.next();
@@ -1582,12 +1623,33 @@ fn run_tasks(
                 }
             }
             Task::OpenDoor(door) => {
-                let (Ok(d), Ok((gt, _))) = (ext.doors.get(door), ext.placed.get(door)) else {
+                let (Ok((d, leaf)), Ok((gt, _))) = (ext.doors.get(door), ext.placed.get(door))
+                else {
                     bot.next();
                     continue;
                 };
                 bot.walk = None;
                 bot.look = gt.translation() + Vec3::Y * 1.0;
+                // Stood in its swing, it stops against you (`swing_doors`):
+                // out of its way, past its end from the hinge, as anyone
+                // steps back from a door coming at them.
+                let l = gt.affine().inverse().transform_point3(Vec3::new(
+                    pos.x,
+                    root.translation.y,
+                    pos.y,
+                ));
+                let r = crate::player::CAPSULE_RADIUS + 0.15;
+                let in_its_way = d.open
+                    && d.angle < 0.85
+                    && l.x > -r
+                    && l.x < leaf.0.width + r
+                    && l.z < r
+                    && l.z > -(leaf.0.width + r);
+                if in_its_way {
+                    let hinge = gt.translation().xz();
+                    let out = (pos - hinge).normalize_or(Vec2::X);
+                    bot.walk = Some(hinge + out * (leaf.0.width + 0.7));
+                }
                 if d.open {
                     // Wait for it to swing most of the way, then let go of
                     // it (held, it comes along).
