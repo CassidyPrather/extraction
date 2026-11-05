@@ -990,17 +990,21 @@ fn film(
         }
         return;
     }
-    // From beside: a metre and a half to the right, at the eye's height,
-    // looking across at the gun.
+    // From beside: 70 cm to the gun's right, level with it, looking
+    // straight across (where a shove along the bore shows).
     if side && let (Ok(root), Ok(mut cam)) = (players.single(), cameras.single_mut()) {
-        let at = root.transform_point(Vec3::new(1.4, 1.45, -0.3));
-        let look = root.transform_point(Vec3::new(0.0, 1.5, -0.35));
+        let at = root.transform_point(Vec3::new(0.75, 1.55, -0.5));
+        let look = root.transform_point(Vec3::new(0.0, 1.55, -0.5));
         *cam = Transform::from_translation(at).looking_at(look, Vec3::Y);
     }
     let Some(cycle) = cycle else {
         return;
     };
     if cycle.frame < 4 || (cycle.frame % every != 0 && !cycle.done) {
+        return;
+    }
+    // A kick reel is filmed from its first shot.
+    if cycle.id.starts_with("kick_") && !matches!(cycle.beat, "fire" | "end") {
         return;
     }
     let stem = out
