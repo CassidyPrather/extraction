@@ -44,8 +44,22 @@ pub const FARTHEST: f32 = 320.0;
 /// raycast calls clear can run through spruce.
 const BEARINGS: usize = 6;
 
-/// How far off `--wayfind-lamps` shoots each landmark's lamp (m).
+/// How far off `--wayfind-lamps` shoots each landmark's lamp (m), in a
+/// standard valley: a pulled-in one takes them at its
+/// `map_lint::valley_scale` ([`lamp_distances`]).
 pub const LAMP_AT: [f32; 3] = [50.0, 150.0, 300.0];
+
+/// [`LAMP_AT`] in this valley: the same walking, not the same metres. In
+/// a pulled-in valley (Marrow, about 388 m across) 300 m off a lamp was
+/// outside the fence on all but a bearing or two, and those in the
+/// trees: the far side of the valley is the intent, about 200 m there.
+/// The near view keeps its 50 m (a lamp up close isn't the valley's
+/// span). Each view's label stays the standard distance, its own
+/// `distance` the real one.
+pub fn lamp_distances(map: &extraction_core::map::MapDef) -> [(f32, f32); 3] {
+    let k = extraction_core::map_lint::valley_scale(map);
+    LAMP_AT.map(|d| (d, if d > 50.0 { d * k } else { d }))
+}
 
 pub struct WayfindShotsPlugin;
 
@@ -297,7 +311,7 @@ fn plan_lamps(
     let filter = avian3d::prelude::SpatialQueryFilter::default();
     let mut v = Vec::new();
     for (e, lamp, tint) in found {
-        for d in LAMP_AT {
+        for (label, d) in lamp_distances(&zone.map) {
             let bearings = (0..32).map(|i| {
                 let a = i as f32 * std::f32::consts::TAU / 32.0;
                 Vec3::new(a.cos(), 0.0, a.sin())
@@ -344,7 +358,7 @@ fn plan_lamps(
             for eye in eyes {
                 let i = v.len();
                 v.push(View {
-                    from: format!("{d:.0} m"),
+                    from: format!("{label:.0} m"),
                     landmark: format!("lamp {e}"),
                     distance: eye.distance(lamp),
                     eye: eye.to_array(),
@@ -607,4 +621,27 @@ fn shoot(
             }
         },
     );
+}
+
+#[cfg(test)]
+mod lamp_distance_tests {
+    use super::*;
+
+    /// A standard valley (Sallow) keeps 50, 150 and 300 m; Marrow, pulled in, its
+    /// far side: 300 m at its valley scale, and its near view at 50.
+    #[test]
+    fn a_pulled_in_valley_checks_its_lamps_from_its_own_far_side() {
+        use extraction_core::map::MapDef;
+        let sallow = MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
+        assert_eq!(lamp_distances(&sallow).map(|(_, d)| d), LAMP_AT);
+        let marrow = MapDef::from_ron(extraction_core::map::MARROW_CREEK).unwrap();
+        let k = extraction_core::map_lint::valley_scale(&marrow);
+        assert!(k < 0.9, "Marrow is pulled in: {k}");
+        let d = lamp_distances(&marrow);
+        assert_eq!(d[0], (50.0, 50.0));
+        assert!(
+            (d[2].1 - 300.0 * k).abs() < 1e-3 && d[2].0 == 300.0,
+            "{d:?}"
+        );
+    }
 }
