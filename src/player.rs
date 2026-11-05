@@ -515,13 +515,24 @@ pub fn under_the_ground(zone: &Zone, feet: Vec3) -> Option<f32> {
     if !feet.is_finite() {
         return Some(zone.ground(0.0, 0.0));
     }
+    // Down a stairwell's opened cell, you go down. Off the map (a tooling
+    // run's camera stands there; in a raid the fence keeps you in) there's
+    // no collider, but the ground's height still holds you: a body stood
+    // there fell for ever.
     if crate::world::underground::floor_under(zone, feet).is_some()
-        || !zone.ground_solid_at(feet.x, feet.z)
+        || (zone.on_heightmap(feet.x, feet.z) && !zone.ground_solid_at(feet.x, feet.z))
     {
         return None;
     }
     let surface = zone.ground(feet.x, feet.z);
-    (feet.y < surface - UNDER_SKIN).then_some(surface)
+    // On the map the collider holds you and this only catches a body
+    // pushed under it; off it nothing does, so it's what you stand on.
+    let skin = if zone.on_heightmap(feet.x, feet.z) {
+        -UNDER_SKIN
+    } else {
+        0.01
+    };
+    (feet.y < surface + skin).then_some(surface)
 }
 
 /// What gets shot is as tall as the body is ([`Body::height`]): duck behind

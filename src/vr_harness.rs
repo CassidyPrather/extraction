@@ -2072,6 +2072,31 @@ mod tests {
         );
     }
 
+    /// A body stood off the map (where a screenshot's or gallery's camera
+    /// stands) stays on the ground's height: there's no collider out there,
+    /// and it fell for ever, taking a camera that followed its head with
+    /// it (a gallery shot 3.7 km under the ground, blank).
+    #[test]
+    fn a_body_off_the_map_stays_on_the_ground() {
+        use crate::player::Body;
+        let mut vr = Vr::new("training_yard");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let edge = zone.map.size * 0.5;
+        let (x, z) = (edge + 25.0, edge + 25.0);
+        assert!(!zone.on_heightmap(x, z), "off the map");
+        let feet = on_ground(&vr, x, z);
+        vr.stand(feet, 0.0);
+        vr.step(180);
+        let r = vr.root().translation;
+        let ground = on_ground(&vr, r.x, r.z).y;
+        assert!(
+            (r.y - ground).abs() < 0.3,
+            "the feet at {:.2}, the ground {ground:.2}",
+            r.y
+        );
+        assert!(vr.app.world().get::<Body>(vr.player).unwrap().grounded);
+    }
+
     /// A crouched body leant on by something kinematic (a broken walker
     /// limping up: Robot minds' first_fight_broken) is pushed out up or
     /// sideways, never down through the ground: the terrain's heightfield

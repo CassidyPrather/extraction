@@ -106,6 +106,14 @@ impl Zone {
 
     /// Whether the ground's collider is there at x/z: inside the map, and
     /// not a cell opened over an underground stairwell.
+    /// Whether x/z is on the heightmap (and so on its collider, but where
+    /// a cell's opened): off it the terrain drawn is scenery.
+    pub fn on_heightmap(&self, x: f32, z: f32) -> bool {
+        let hm = &self.hm;
+        let (fi, fj) = ((x - hm.origin) / hm.cell, (z - hm.origin) / hm.cell);
+        fi >= 0.0 && fj >= 0.0 && (fi as usize) + 1 < hm.n && (fj as usize) + 1 < hm.n
+    }
+
     pub fn ground_solid_at(&self, x: f32, z: f32) -> bool {
         let hm = &self.hm;
         let (fi, fj) = ((x - hm.origin) / hm.cell, (z - hm.origin) / hm.cell);
