@@ -1405,14 +1405,15 @@ mod tests {
             app.update();
             most = most.max(shelved(&mut app));
             saw_decoys = saw_decoys.max(decoys(&mut app));
-            // Every entry wears a twin (a mesh that draws nothing).
-            let twins: std::collections::HashSet<AssetId<Mesh>> = app
-                .world()
-                .resource::<Shelf>()
+            // Every entry wears a twin (a mesh that draws nothing): its
+            // layout's, the cube's, or a robot mesh's weathered one.
+            let shelf = app.world().resource::<Shelf>();
+            let twins: std::collections::HashSet<AssetId<Mesh>> = shelf
                 .twins
                 .values()
                 .map(|h| h.id())
-                .chain(app.world().resource::<Shelf>().cube.iter().map(|h| h.id()))
+                .chain(shelf.cube.iter().map(|h| h.id()))
+                .chain(shelf.weathered.values().flatten().map(|(h, _)| h.id()))
                 .collect();
             let w = app.world_mut();
             for (mesh, name) in w
