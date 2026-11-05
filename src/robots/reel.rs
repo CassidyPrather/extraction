@@ -56,7 +56,58 @@ struct EyeLevel(u8);
 
 impl Plugin for ReelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, reel);
+        app.add_systems(Update, (reel, feetat_follow));
+    }
+}
+
+/// `reel:feetat,…,X2,Z2,DIST,HEIGHT`: the camera keeps beside the machine,
+/// DIST m off its route's line and HEIGHT m over the ground under it,
+/// looking at it level, so its feet and the ground line read in
+/// silhouette. Each frame's body position is logged, so a shot can be
+/// matched to the gauge's worst point (and the same frame shot before
+/// and after a change).
+fn feetat_follow(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<Zone>>,
+    bodies: Query<&GlobalTransform, With<Walker>>,
+    mut cams: Query<&mut Transform, With<crate::render::FreeCamera>>,
+    mut frame: Local<u32>,
+) {
+    let (Some(spec), Some(zone)) = (&opts.gallery, zone) else {
+        return;
+    };
+    let Some(spec) = spec.strip_prefix("reel:feetat,") else {
+        return;
+    };
+    *frame += 1;
+    let a: Vec<f32> = spec
+        .split(',')
+        .skip(3)
+        .map(|v| v.parse().unwrap_or(0.0))
+        .collect();
+    let (Some(&dist), Some(&height)) = (a.get(4), a.get(5)) else {
+        return;
+    };
+    let Some(body) = bodies.iter().next() else {
+        return;
+    };
+    let at = body.translation();
+    info!(
+        "feetat frame {} body {:.2} {:.2} {:.2}",
+        *frame, at.x, at.y, at.z
+    );
+    let along = Vec2::new(a[2] - a[0], a[3] - a[1]).normalize_or(Vec2::X);
+    let side = Vec3::new(-along.y, 0.0, along.x);
+    let ground = zone.ground(at.x, at.z);
+    let c = Vec3::new(at.x, 0.0, at.z) + side * dist;
+    let eye = Vec3::new(
+        c.x,
+        (ground + height).max(zone.ground(c.x, c.z) + 0.15),
+        c.z,
+    );
+    let look = Vec3::new(at.x, ground + height, at.z);
+    for mut t in &mut cams {
+        *t = Transform::from_translation(eye).looking_at(look, Vec3::Y);
     }
 }
 
