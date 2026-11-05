@@ -1695,7 +1695,7 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 9] = [
+pub(crate) const OWN_LOOKS: [&str; 9] = [
     "bolt",
     "detector",
     "art_lodestone",
@@ -2034,8 +2034,13 @@ fn dress_items(
                 // Weathered iron, rough and barely metallic: as polished
                 // steel (even half metal) it took the dark ground's colour
                 // and read as a black blob with no shape.
-                let iron = mat(Color::srgb(0.3, 0.28, 0.26), 0.15, 0.72, LinearRgba::BLACK);
-                let steel = mat(Color::srgb(0.62, 0.63, 0.66), 1.0, 0.28, LinearRgba::BLACK);
+                let iron = mat(Color::srgb(0.4, 0.38, 0.35), 0.15, 0.72, LinearRgba::BLACK);
+                let steel = mat(
+                    Color::srgb(0.85, 0.86, 0.88),
+                    1.0,
+                    0.22,
+                    LinearRgba::rgb(0.02, 0.02, 0.022),
+                );
                 parts.push((body, iron, Transform::IDENTITY));
                 parts.push((filings, steel, Transform::IDENTITY));
             }
@@ -2104,14 +2109,14 @@ fn dress_items(
                 });
                 let spark = materials.add(StandardMaterial {
                     base_color: Color::BLACK,
-                    emissive: LinearRgba::rgb(1.6, 2.2, 3.2),
+                    emissive: LinearRgba::rgb(4.0, 5.5, 8.0),
                     unlit: true,
                     ..default()
                 });
                 let m = stones.entry("art_stormglass").or_insert_with(|| {
                     vec![
                         meshes.add(lump(Vec3::new(0.012, 0.009, 0.011), 2, knob_cloud)),
-                        meshes.add(Sphere::new(0.0022).mesh().ico(1).unwrap()),
+                        meshes.add(Sphere::new(0.003).mesh().ico(1).unwrap()),
                         meshes.add(Sphere::new(0.02).mesh().ico(3).unwrap()),
                     ]
                 });
