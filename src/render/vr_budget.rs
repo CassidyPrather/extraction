@@ -259,10 +259,13 @@ fn holds_views_with(
         let draws = l.draws + r.draws;
         let shadow_draws = l.shadow_draws + r.shadow_draws;
         let fragments_m = (od_l.mean + od_r.mean) * px * px / 1e6;
+        // Every layer, depth off: beside the shaded count, so overdraw
+        // behind walls can't hide.
+        let raw_m = (od_l.raw_mean + od_r.raw_mean) * px * px / 1e6;
         let name = v.file.trim_end_matches(".png");
         println!(
             "{map} {name}: draws {} + {} = {draws}, shadow draws {} + {} = {shadow_draws}, \
-             {fragments_m:.1}M fragments at {px:.0}² an eye (overdraw {:.2} / {:.2}); {views_drawing} views drawing",
+             {fragments_m:.1}M fragments (raw {raw_m:.1}M) at {px:.0}² an eye (overdraw {:.2} / {:.2}); {views_drawing} views drawing",
             l.draws, r.draws, l.shadow_draws, r.shadow_draws, od_l.mean, od_r.mean
         );
         // Near its budget: what it's spent on (one eye; the other's the
