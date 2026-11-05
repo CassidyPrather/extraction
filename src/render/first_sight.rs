@@ -126,9 +126,10 @@ fn preload_models(server: Res<AssetServer>, mut models: ResMut<crate::models::Mo
     info!("preload: {n} models asked for at start (render::first_sight)");
 }
 
-/// Where things come out: before the flat camera, or the headset's eye.
+/// Where things come out: before the flat camera, or the headset's eye
+/// (never an image camera's: an impostor rig's or a scope's).
 fn bring_out_at(w: &mut World) -> Vec3 {
-    let mut q = w.query_filtered::<&GlobalTransform, With<Camera3d>>();
+    let mut q = w.query_filtered::<&GlobalTransform, super::EyeCamera>();
     let eye = q
         .iter(w)
         .map(|g| (g.translation(), g.forward().as_vec3()))

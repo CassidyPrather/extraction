@@ -18,7 +18,7 @@ OUT="${OUT:-target/pipelines}"
 SIZE="${SIZE:-256x256}"
 OUT_AT=950    # everything out: after the shelf's 900 frames
 FIRSTS_AT=1000
-FRAMES=2300   # the effects' run, 90 frames apart, and time to queue
+FRAMES="${FRAMES:-2700}"  # the effects (90 frames apart), the tells, the next cycle, and time to queue
 MAPS=("$@")
 [ ${#MAPS[@]} -eq 0 ] && MAPS=(marrow_creek kettle_pass cinder_works sallow_reservoir rime_fell)
 # Built by the tool, not the game: the screenshot that ends the run.
@@ -41,9 +41,15 @@ for MAP in "${MAPS[@]}"; do
             if (f + 0 >= from) { sub(/.*at frame /, ""); print } }' \
         | grep -v -E "$ALLOW")
     n=$(printf '%s' "$late" | grep -c . || true)
+    # A run that died before its effects were through measured nothing.
+    if ! grep -q 'first use: done' "$OUT/$MAP.log"; then
+        echo "$MAP: the run didn't finish its effects (see $OUT/$MAP.log)"
+        fail=1
+        continue
+    fi
     shelved=$(sed 's/\x1b\[[0-9;]*m//g' "$OUT/$MAP.log" | grep -o 'warm-up: [0-9]* kinds of thing shelved ([0-9]* entries)' | head -1)
     echo "$MAP: $n pipelines built at first sight ($shelved)"
-    [ -n "$late" ] && printf '    %s\n' "$late" | cut -c1-220
+    [ -n "$late" ] && printf '%s\n' "$late" | sed 's/^/    /' | cut -c1-400
     [ "$n" -eq 0 ] || fail=1
 done
 exit $fail
