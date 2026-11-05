@@ -987,3 +987,60 @@ fn moving_valley_brings_a_job_here() {
         assert_eq!(said, moves, "{case}: said");
     }
 }
+
+/// Every gun the driver gives can fire its first shot from what he hands
+/// over with it: a clip or magazine that fits it, filled (his SKS came
+/// with empty clips and a box, and nothing by raid 9 had shown how to
+/// strip a box into them: the gift couldn't be used).
+#[test]
+fn every_gift_gun_fires_from_its_gift() {
+    let mut app = crate::raid::requests::tests::app();
+    let catalog = app.world().resource::<Catalog>().clone();
+    for _ in 0..TIERS[0].jobs + TIERS[1].jobs + TIERS[2].jobs {
+        app.world_mut().write_message(JobDone);
+        app.update();
+    }
+    for _ in 0..6000 {
+        app.update();
+        if !app.world().resource::<crate::raid::lev::Handovers>().busy() {
+            break;
+        }
+    }
+    let handed: Vec<Entity> = app
+        .world()
+        .resource::<crate::raid::lev::Handovers>()
+        .handed
+        .iter()
+        .map(|(_, e)| *e)
+        .collect();
+    let items: Vec<(String, u32)> = handed
+        .iter()
+        .filter_map(|e| app.world().get::<Item>(*e))
+        .map(|i| (catalog.get(i.kind()).id.clone(), i.0.rounds))
+        .collect();
+    for u in [Upgrade::BenchVice, Upgrade::Aerial] {
+        for (gun, ..) in gifts(u) {
+            let Some(f) = catalog
+                .kind(gun)
+                .and_then(|k| catalog.get(k).firearm.clone())
+            else {
+                continue;
+            };
+            let fires = items.iter().any(|(id, rounds)| {
+                *rounds > 0
+                    && catalog
+                        .kind(id)
+                        .and_then(|k| catalog.get(k).magazine.clone())
+                        .is_some_and(|m| {
+                            (m.fits == *gun
+                                || f.magazine_family.as_deref() == Some(m.fits.as_str()))
+                                && m.cartridge == f.cartridge
+                        })
+            });
+            assert!(
+                fires,
+                "{u:?}: {gun} has nothing filled to fire from: {items:?}"
+            );
+        }
+    }
+}

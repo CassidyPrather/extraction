@@ -968,6 +968,10 @@ mod tests {
             "HandOver",
             "Lev's item through the hatch lands in your hand (heard)",
         ),
+        (
+            "HandOverLoaded",
+            "as HandOver, a filled magazine: lands in your hand (heard)",
+        ),
         ("Haptic", "felt, not heard"),
         ("HapticShape", "felt, not heard"),
         ("HeavyTear", "the heavy's tear is heard by its arm (Tore)"),
