@@ -189,7 +189,19 @@ pub struct Grasp {
     pub curl: [f32; 5],
     /// Small enough to close the hand round ([`small`]).
     pub small: bool,
+    /// Thin and flat ([`thin`]): held by an edge, not laid on the hand.
+    pub thin: bool,
 }
+
+/// A thin flat thing (a card, a letter, a record): no thicker than
+/// [`THIN`]. Held, it's pinched by an edge, the thumb on one face and a
+/// finger on the other; laid flat on the hand, a card held up to read
+/// stood on the fingertips like a tray (the 100-degree eye, 5 November).
+pub fn thin(half: Vec3) -> bool {
+    half.min_element() * 2.0 <= THIN
+}
+
+pub const THIN: f32 = 0.012;
 
 /// Something a closed hand goes round: its middle size no more than
 /// [`SMALL_ACROSS`], its longest no more than [`SMALL_LONG`] (a power
@@ -263,6 +275,9 @@ impl Grasp {
                 self.gap[5] * 1000.0
             ));
         }
+        if self.thin && !self.pinched() {
+            return Some("laid on the hand, not pinched by an edge".to_owned());
+        }
         if self.small && !self.gripped() {
             return Some(format!(
                 "on an open hand, not gripped (fingers curled {:.2} {:.2} {:.2} {:.2}, {})",
@@ -319,6 +334,7 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
         face,
         curl: seat.curl,
         small: small(half),
+        thin: thin(half),
     }
 }
 
@@ -446,7 +462,7 @@ fn open_gap(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> f32 {
 /// touches, the thing is held ([`Grasp::fault`]); failing all, the one
 /// with most fingers on it.
 pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
-    let (mut best, held) = seat_as(side, half, item, SLIDE);
+    let (mut best, held) = seat_as(side, half, item, SLIDE, false);
     if held {
         return best;
     }
@@ -480,10 +496,16 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
     square.sort_by(by_angle);
     let turns: Vec<Quat> = flat.into_iter().take(3).chain(square).collect();
     let mut best_score = score(&grasp(side, half, item, &best));
-    for turn in turns.into_iter().take(TURNS + 3) {
+    // A thin thing is tried at its nearest edge too, each turn.
+    let rims: &[bool] = if thin(half) { &[false, true] } else { &[false] };
+    for (turn, rim) in turns
+        .into_iter()
+        .take(TURNS + 3)
+        .flat_map(|t| rims.iter().map(move |r| (t, *r)))
+    {
         let inside = Transform::from_translation(turn.inverse() * item.translation)
             .with_rotation(turn.inverse() * item.rotation);
-        let (s, held) = seat_as(side, half, inside, TURNED_SLIDE);
+        let (s, held) = seat_as(side, half, inside, TURNED_SLIDE, rim);
         let s = Seat {
             shift: turn * s.shift,
             turn,
@@ -526,7 +548,7 @@ fn square_turns() -> impl Iterator<Item = Quat> {
 }
 
 /// `seat` with the glove as the hand is turned, and whether it holds.
-fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) {
+fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32, rim: bool) -> (Seat, bool) {
     let to_box = item.compute_affine().inverse();
     let n = palm_normal(side);
     let u = n.any_orthonormal_vector();
@@ -534,7 +556,25 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
     // Turned, round the thing's nearest point to the hand (beside the
     // palm's facing): a rod end-on to the palm, turned, lies off past the
     // fist's end.
-    let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
+    let mut near_in_box = to_box.transform_point3(Vec3::ZERO).clamp(-half, half);
+    if rim {
+        // To the nearest edge of its broad faces: a card, a letter, a map
+        // taken by the middle has its edges out of the hand's reach.
+        let t = if half.x <= half.y && half.x <= half.z {
+            0
+        } else if half.y <= half.z {
+            1
+        } else {
+            2
+        };
+        let (a, b) = ((t + 1) % 3, (t + 2) % 3);
+        if half[a] - near_in_box[a].abs() <= half[b] - near_in_box[b].abs() {
+            near_in_box[a] = half[a] * near_in_box[a].signum();
+        } else {
+            near_in_box[b] = half[b] * near_in_box[b].signum();
+        }
+    }
+    let near = item.transform_point(near_in_box);
     let centre = if slide > SLIDE {
         near - n * near.dot(n)
     } else {
