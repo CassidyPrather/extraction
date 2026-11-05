@@ -237,7 +237,8 @@ fn wake_parts(
         t.0 += 1;
         if t.0 % 300 == 0 {
             let cells_merged = cells.cells.values().filter(|c| c.rest.is_some()).count();
-            info!(
+            // (Printed: a gauge has no log.)
+            eprintln!(
                 "part_rest: {} of {} cells merged; wakes in 300 frames: {:?}",
                 cells_merged,
                 cells.cells.len(),
