@@ -4104,6 +4104,31 @@ mod tests {
                 ..Default::default()
             };
             let mut app = crate::headless_app(opts, false);
+            #[derive(Resource, Default)]
+            struct Struck(Vec<(String, Vec3)>);
+            fn struck(
+                mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+                names: Query<&Name>,
+                parents: Query<&ChildOf>,
+                mut out: ResMut<Struck>,
+            ) {
+                for h in hits.read() {
+                    let mut e = h.entity;
+                    let mut name = format!("{e:?}");
+                    for _ in 0..4 {
+                        if let Ok(n) = names.get(e) {
+                            name = n.to_string();
+                            break;
+                        }
+                        match parents.get(e) {
+                            Ok(c) => e = c.parent(),
+                            Err(_) => break,
+                        }
+                    }
+                    out.0.push((name, h.point));
+                }
+            }
+            app.init_resource::<Struck>().add_systems(Update, struck);
             app.finish();
             app.cleanup();
             for _ in 0..10 {
@@ -4183,6 +4208,16 @@ mod tests {
                     break;
                 }
             }
+            let eye = me + Vec3::Y * 1.6;
+            println!(
+                "AIM {d} m: drone at {at:.1}, eye {eye:.1}; struck {:?}",
+                app.world()
+                    .resource::<Struck>()
+                    .0
+                    .iter()
+                    .map(|(n, p)| format!("{n} @ {p:.1}"))
+                    .collect::<Vec<_>>()
+            );
             let bot = app.world().get::<crate::bot::Bot>(p).unwrap();
             println!(
                 "AIM {d} m (slant {:.1} m): fired {}, hits {}, robot hits {}, log {:?}",
