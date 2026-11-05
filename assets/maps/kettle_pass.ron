@@ -253,8 +253,12 @@
     placements: [
         // Breadcrumbs: the shot-firer's store: a magazine hut by the mine, its cache behind it.
         (prefab: "shed", at: (-135.1, -75.4), rot: 12.0),
-        // Breadcrumbs: the farm workshop's woodpile, its cache by it.
-        (prefab: "log_pile", at: (-154.3, 164.1), rot: 116.0),
+        // Breadcrumbs: the farm's lorry by the workshop, broadside to the
+        // track, its cache by it (a woodpile there didn't read in rain).
+        (prefab: "wreck_lorry", at: (-154.3, 164.1), rot: 116.0),
+        // And a pole on the cairn: on the ridge's lip it reads from the way
+        // below in grey weather, where its figures alone were a speck.
+        (prefab: "snow_pole", at: (-91.0, -176.0), rot: 0.0),
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
         (prefab: "log_pile", at: (1.3, -198.8), rot: 93.0, tag: "wait_the_pass"),
