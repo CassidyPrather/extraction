@@ -644,7 +644,9 @@ fn gauge_worst_views_hold_the_stereo_budget() {
         let look = crate::asset_root_path()
             .join("..")
             .join(format!("scripts/lookbook/{map}.views"));
-        let (o, mut rows) = holds_views_with(map, "storm", Some("night"), true, |zone| {
+        // `WORST_NO_FIGHT=1`: the views without the fight, to tell its cost.
+        let fight = std::env::var_os("WORST_NO_FIGHT").is_none();
+        let (o, mut rows) = holds_views_with(map, "storm", Some("night"), fight, |zone| {
             let mut v = place_views(zone);
             for f in [&walk, &look] {
                 if f.exists() {

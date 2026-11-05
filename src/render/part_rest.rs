@@ -1,7 +1,7 @@
 //! Breakable parts nobody is near are drawn merged, a cell at a time.
 //!
 //! A building's shutters, boards and crates, a wreck's panels, a window's
-//! sash leaves and a counter's drawers are each drawn on their own
+//! sash leaves, a counter's drawers and its doors are each drawn on their own
 //! (`destruction::wood::Drawn`), so a crowbar can lever one off. Marrow
 //! Creek's gate view drew about 250 of them an eye. Parts rarely change,
 //! so once every part in a 16 m cell has stood unchanged for a while,
@@ -30,6 +30,7 @@ use bevy::tasks::Task;
 use std::collections::{HashMap, HashSet};
 
 use crate::destruction::wood::{Drawn, Timber};
+use crate::world::buildings::DoorLeaf;
 
 pub struct PartRestPlugin;
 
@@ -142,12 +143,13 @@ impl Cells {
 fn wake_parts(
     mut commands: Commands,
     mut cells: ResMut<Cells>,
-    parts: Query<(Entity, &GlobalTransform, &Drawn)>,
+    parts: Query<(Entity, &GlobalTransform, Option<&Drawn>, Option<&DoorLeaf>)>,
     moved: Query<Entity, Changed<GlobalTransform>>,
     reshaped: Query<Entity, Changed<Mesh3d>>,
     regrown: Query<Entity, Changed<Children>>,
     mut gone: RemovedComponents<ChildOf>,
     mut undrawn: RemovedComponents<Drawn>,
+    mut unhung: RemovedComponents<DoorLeaf>,
     hit: Query<Entity, Changed<Timber>>,
     prised: Query<
         (Entity, &crate::destruction::hooks::Pryable),
@@ -176,7 +178,7 @@ fn wake_parts(
             .map(|(e, _)| e),
     );
     // Gone: broken, stripped, despawned.
-    let undrawn: Vec<Entity> = undrawn.read().collect();
+    let undrawn: Vec<Entity> = undrawn.read().chain(unhung.read()).collect();
     for e in &undrawn {
         woken.insert(*e);
     }
@@ -190,8 +192,11 @@ fn wake_parts(
                     continue;
                 };
                 for part in cell.quiet.keys() {
-                    if let Ok((_, pg, d)) = parts.get(*part) {
-                        let reach = NEAR + d.size.max_element() * 0.5;
+                    if let Ok((_, pg, d, door)) = parts.get(*part) {
+                        let size = d.map(|d| d.size).or(door.map(|l| {
+                            Vec3::new(l.0.width, l.0.height, 0.05)
+                        }));
+                        let reach = NEAR + size.unwrap_or(Vec3::ONE).max_element() * 0.5;
                         if pg.translation().distance_squared(at) < reach * reach {
                             woken.insert(*part);
                         }
@@ -200,7 +205,30 @@ fn wake_parts(
             }
         }
     }
+    // (`EXTRACTION_PART_REST_LOG=1`: each part woken in a merged cell,
+    // and why, to find what keeps a cell awake.)
+    static LOG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let log = *LOG.get_or_init(|| std::env::var_os("EXTRACTION_PART_REST_LOG").is_some());
     for part in woken {
+        if log {
+            let merged = cells
+                .part_cell
+                .get(&part)
+                .and_then(|k| cells.cells.get(k))
+                .is_some_and(|c| c.rest.is_some());
+            if merged {
+                let why = if undrawn.contains(&part) {
+                    "gone"
+                } else if hit.contains(part) {
+                    "hit"
+                } else if prised.contains(part) {
+                    "prised"
+                } else {
+                    "moved, reshaped or near a hand"
+                };
+                info!("part_rest: woke {part:?} ({why})");
+            }
+        }
         cells.wake(part, &mut vis, &mut commands);
     }
     // Parts gone for good leave their cells.
@@ -242,7 +270,15 @@ fn leaves_of(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn rest_cells(
     mut cells: ResMut<Cells>,
-    parts: Query<(Entity, &GlobalTransform), With<Drawn>>,
+    // Breakable parts, and doors (which swing, and are pressed, as parts
+    // are) but not a powered one (its lamp's colour is its state).
+    parts: Query<
+        (Entity, &GlobalTransform),
+        (
+            Or<(With<Drawn>, With<DoorLeaf>)>,
+            Without<crate::world::underground::PowerLocked>,
+        ),
+    >,
     children: Query<&Children>,
     meshes: Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: Query<(), With<crate::destruction::visuals::WindowGlass>>,
@@ -622,6 +658,44 @@ mod tests {
                 .unwrap()
                 .rotate_y(0.3);
         });
+    }
+
+    /// A building's doors rest with its cell's other parts (four leaves of
+    /// door drawn as one), and one swinging open wakes the cell.
+    #[test]
+    fn doors_rest_with_their_cell_and_wake_when_one_swings() {
+        let mut app = app();
+        let doors: Vec<(Entity, Entity)> = (0..4)
+            .map(|i| {
+                let (p, leaf) = part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0));
+                // A door, not a breakable part: its leaf, as `spawn_door`.
+                let w = app.world_mut();
+                w.entity_mut(p).remove::<(Drawn, Timber, Pryable)>().insert(DoorLeaf(
+                    crate::world::buildings::DoorDef {
+                        hinge: Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0),
+                        width: 0.9,
+                        height: 2.0,
+                        yaw: 0.0,
+                        mat: crate::render::materials::Mat::Planks,
+                    },
+                ));
+                (p, leaf)
+            })
+            .collect();
+        rest(&mut app);
+        assert_eq!(resting(&mut app), 1, "four doors of one material: one mesh");
+        for (_, leaf) in &doors {
+            assert!(!shown(&app, *leaf), "a resting door's own mesh is hidden");
+        }
+        app.world_mut()
+            .get_mut::<Transform>(doors[2].0)
+            .unwrap()
+            .rotate_y(0.3);
+        app.update();
+        assert_eq!(resting(&mut app), 0, "a door swung: merged meshes left");
+        for (_, leaf) in &doors {
+            assert!(shown(&app, *leaf), "a door left hidden");
+        }
     }
 
     /// A pane breaking under a resting leaf: its mesh is swapped.
