@@ -275,7 +275,11 @@ pub fn adapt_eyes(
     eyes: Query<(&GlobalTransform, &Camera), (With<Camera3d>, Without<super::OffscreenCamera>)>,
     mut grades: Query<&mut ColorGrading>,
     lamps: Query<(&PointLight, &GlobalTransform)>,
-    spots: Query<(&SpotLight, &GlobalTransform)>,
+    spots: Query<(
+        &SpotLight,
+        &GlobalTransform,
+        Option<&crate::world::beams::Throw>,
+    )>,
     below: Option<Res<Below>>,
     mut adapt: ResMut<Adaptation>,
     time: Res<Time>,
@@ -302,7 +306,15 @@ pub fn adapt_eyes(
     // don't open as far, and the dark past its pool is darker for it.
     // A torch in your hand lights what's in front of you: the walls it
     // finds light your eyes back (a share of its own light, near).
-    let at_eye = eye.map_or(0.0, |p| lamp_light(p, &lamps) + torch_light(p, &spots));
+    let at_eye = eye.map_or(0.0, |p| {
+        lamp_light(p, &lamps)
+            + torch_light(
+                p,
+                spots
+                    .iter()
+                    .map(|(l, g, t)| (l, g, t.map_or(TORCH_WALLS, |t| t.0))),
+            )
+    });
     adapt.lamps += (at_eye - adapt.lamps) * (1.0 - (-dt / LAMP_EASE).exp());
     let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) * (1.0 - below)
         + adapt.lamps;
@@ -349,23 +361,30 @@ pub fn room_reach(shell: &crate::robots::doors::Shell, eye: Vec3) -> f32 {
 /// The farthest a room is taken to reach (m).
 pub const ROOM_MAX: f32 = 40.0;
 
+/// Where a held torch's light lands when nothing says (m): a wall a
+/// couple of metres off.
+pub const TORCH_WALLS: f32 = 2.0;
+
 /// The light a held torch throws back at the eye, against a day's: a
 /// share of its light, if it's within arm's reach (a spot light carried
-/// by someone). The walls it finds are what you see by.
+/// by someone). What it lands on (`world::beams::Throw`, m) is what you
+/// see by: a wall in your face lights your eyes back, the ground 10 m
+/// off hardly does, so on a night out in the open they stay open and
+/// the pool reads further.
 pub fn torch_light<'a>(
     p: Vec3,
-    spots: impl IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform)>,
+    spots: impl IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform, f32)>,
 ) -> f32 {
     let mut lux = 0.0;
-    for (l, gt) in spots {
+    for (l, gt, throw) in spots {
         if l.intensity <= 0.0 || gt.translation().distance_squared(p) > 1.5 * 1.5 {
             continue;
         }
-        // The walls it lights, a couple of metres off: its lumens into
-        // its cone (2 pi (1 - cos angle) steradians) over 4 m^2, and the
-        // share of what you see that they fill.
-        let cone = std::f32::consts::TAU * (1.0 - l.outer_angle.cos()).max(0.05);
-        lux += l.intensity / cone / 4.0 * 0.3;
+        // Its light as the renderer draws it (a spot is a point light's
+        // candela, cut to its cone) on what it lands on, and the share of
+        // what you see that fills.
+        let d = throw.max(0.5);
+        lux += l.intensity / (4.0 * std::f32::consts::PI) / (d * d) * 0.3;
     }
     (lux / DAY_LUX).min(0.2)
 }
@@ -827,18 +846,35 @@ mod tests {
         assert_eq!(Adaptation::target_below(0.0, 0.0), ADAPT_MAX);
         // A torch in hand lights the eye (off the walls it finds); one
         // across the room doesn't.
-        let torch = SpotLight {
-            intensity: 1000.0,
-            outer_angle: 0.4,
-            ..default()
-        };
+        let torch = crate::gadgets::visuals::torch_beam();
         let near = GlobalTransform::from_translation(Vec3::new(0.3, -0.3, -0.3));
         let far = GlobalTransform::from_translation(Vec3::new(8.0, 0.0, 0.0));
-        let lit = torch_light(Vec3::ZERO, [(&torch, &near)]);
+        let lit = torch_light(Vec3::ZERO, [(&torch, &near, TORCH_WALLS)]);
         assert!(lit > 0.02 && lit <= 0.2, "{lit}");
-        assert_eq!(torch_light(Vec3::ZERO, [(&torch, &far)]), 0.0);
+        assert_eq!(torch_light(Vec3::ZERO, [(&torch, &far, TORCH_WALLS)]), 0.0);
         // It keeps the eyes about half a stop from opening all the way.
         assert!(Adaptation::target(lit) < Adaptation::target(0.0) - 0.4);
+    }
+
+    #[test]
+    fn a_torch_on_the_open_ground_leaves_the_eyes_open() {
+        // At night in a downpour (the sky's 0.01): a wall in your face
+        // closes the eyes; the beam on the ground ahead (a pool 8 m off)
+        // costs under a stop; into open air (nothing in reach) next to
+        // nothing. (It cost 1.6 stops wherever it pointed: the walls were
+        // always 2 m off.)
+        let torch = crate::gadgets::visuals::torch_beam();
+        let held = GlobalTransform::from_translation(Vec3::new(0.15, -0.1, 0.0));
+        let at = |d: f32| {
+            let lit = torch_light(Vec3::ZERO, [(&torch, &held, d)]);
+            Adaptation::target(0.01 + lit)
+        };
+        let open = Adaptation::target(0.01);
+        assert!(at(1.0) < open - 1.5, "a wall: {}", at(1.0));
+        assert!(at(8.0) > open - 1.0, "the ground: {}", at(8.0));
+        assert!(at(crate::world::beams::REACH) > open - 0.3, "open air");
+        // Nearer is never more open.
+        assert!(at(2.0) <= at(4.0) && at(4.0) <= at(8.0));
     }
 
     #[test]
