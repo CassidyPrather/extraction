@@ -313,6 +313,13 @@ the light, and the lit window takes over. `EXTRACTION_CUES` tries cues without
 editing the map (`window:X,Z[,light][,always];smoke:X,Z[,Y]`). The
 breadcrumbs gauge doesn't count either yet.
 
+![Kettle's farmhouse with two lit front windows, one east and its stove
+smoking: day, drizzle, dusk and night, from 50 m north and 150 m east
+(insets twice up)](shots/cues/kettle_farm_sheet.jpg)
+
+A lit window carries a halo outside its glass after dark (a lamp's,
+`halos`, out to 320 m), which is what reads at 150 m.
+
 ## Points of interest, density and pacing
 
 A point of interest (a `Poi` marker) is somewhere worth the walk: a

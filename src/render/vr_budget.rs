@@ -558,7 +558,8 @@ mod puffs {
 /// 27.0M, and the cloud at 12 degrees 67.2M. The budget stands; the cloud
 /// keeps at least 5% under it, so the cap is 10 degrees (11 gave 61.7M):
 /// the wreck 32.2M, the firefight 30.8M, the cloud 56.4M
-/// (`docs/PERFORMANCE.md`).
+/// (`docs/PERFORMANCE.md`). A chimney's plume (`world::cues`) blown back
+/// over the eye, 2026-11-05: 24.9M bare, 26.0M with it.
 #[test]
 fn gauge_puffs_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();

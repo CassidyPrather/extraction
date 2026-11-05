@@ -52,6 +52,10 @@ const GLOW: LinearRgba = LinearRgba::rgb(2.6, 1.25, 0.42);
 /// How far into the room from the wall's centre line the glow stands
 /// (m): behind the glass and the sash's bars, which stand dark against it.
 const GLOW_IN: f32 = 0.06;
+/// Its halo outside after dark (linear; a lantern's core is 1), and how
+/// far off that shows (m): a window read across a valley at night.
+const HALO: LinearRgba = LinearRgba::rgb(1.2, 0.68, 0.26);
+const HALO_REACH: f32 = 320.0;
 /// A window's lamp: a small one, well into the room.
 const LAMP_LUMENS: f32 = 5_000.0;
 const LAMP_RANGE: f32 = 6.0;
@@ -364,6 +368,19 @@ fn place_cues(
                     vis,
                     NotShadowCaster,
                     NotShadowReceiver,
+                ));
+                // The glow in the damp air outside it, as a lamp's: what
+                // carries it across a valley (`halos`, only after dark).
+                // Outside the glass, so the wall hides it from the room.
+                e.with_child((
+                    Name::new("Window halo"),
+                    super::halos::Halo {
+                        color: HALO,
+                        radius: (w.min(h) * 0.9).clamp(0.4, 1.0),
+                    },
+                    super::halos::HaloReach(HALO_REACH),
+                    Transform::from_xyz(0.0, 0.0, 0.35),
+                    Visibility::Inherited,
                 ));
                 if light {
                     // Well into the room and up by the ceiling, a lamp on
