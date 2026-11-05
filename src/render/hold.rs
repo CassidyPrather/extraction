@@ -70,7 +70,7 @@ fn bones(side: Side, finger: usize, c: f32) -> impl Iterator<Item = Bone> {
 }
 
 /// The thumb's way (its first bone's, on the unrolled glove) curled `c`.
-fn thumb_way(side: Side, c: f32) -> Vec3 {
+pub(crate) fn thumb_way(side: Side, c: f32) -> Vec3 {
     joint_rotation_spread(side, 4, 0, c, 0.0) * Vec3::NEG_Z
 }
 
@@ -636,7 +636,7 @@ pub fn taken(side: Side, half: Vec3) -> Transform {
 }
 
 /// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).
-const THUMB_BEND: f32 = 0.9;
+pub(crate) const THUMB_BEND: f32 = 0.9;
 /// How far the thumb may be raised toward the palm's plane to lie on a
 /// flat side, or lowered to reach round a narrow one (added to its way's
 /// height on the unrolled glove), nearest its own way first.
@@ -666,10 +666,11 @@ mod tests {
     use super::*;
     use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog, ItemDef};
 
-    /// Kinds a hand holds free, one-handed: not guns (their grips), not
-    /// knives (a grip of their own), not what's carried in both arms.
+    /// Kinds a hand holds free: not guns (their grips), not knives (a grip
+    /// of their own). What's carried in both arms is too: each hand holds
+    /// its end as one hand holds a thing.
     fn held_free(def: &ItemDef) -> bool {
-        def.firearm.is_none() && def.melee.is_none() && !crate::interact::carry::is_bulky(def)
+        def.firearm.is_none() && def.melee.is_none()
     }
 
     /// The kinds the first raid can drop (`from_raid` 0 on some table).
