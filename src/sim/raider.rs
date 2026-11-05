@@ -4619,7 +4619,24 @@ fn extract_step(
                 .find(|(_, p)| matches!(p, Pressable::BellPull))
                 .map(|(e, _)| e);
             r.act = Act::Board;
-            board_tasks(p, bell)
+            // Behind the truck as it stands: it parks off its pose when
+            // someone's on it (`rv_pose_clear`: pulled on past them, short
+            // of them or alongside), and the raider waiting at the RV is.
+            // Walked by the pose, the bed's line ran beside the truck
+            // (Rime seed 4, 5 November: six board stucks at its side, the
+            // bell out of reach, a drone's burst).
+            let truck = scene
+                .trucks
+                .iter()
+                .map(|(_, g)| g.compute_transform())
+                .min_by(|a, b| {
+                    a.translation
+                        .xz()
+                        .distance(here)
+                        .total_cmp(&b.translation.xz().distance(here))
+                })
+                .unwrap_or(pose);
+            board_tasks(|z| truck.transform_point(Vec3::new(0.0, 0.0, z)).xz(), bell)
         }
         _ => vec![Task::Wait(2.0)],
     }
