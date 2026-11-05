@@ -1120,3 +1120,36 @@ fn a_step_lost_twice_running_gets_another_way() {
     // The step stays.
     assert!(matches!(progress(&app).job, Some(Job::Plant { .. })));
 }
+
+/// A session that opens on a lost raid answers that fall at camp, as one
+/// lost in the session would: what's still waiting, or another way in
+/// (first_jobs: each raid its own session, so nothing was ever said).
+#[test]
+fn a_session_opening_on_a_lost_raid_says_whats_waiting() {
+    let mut app = crate::raid::requests::tests::app();
+    {
+        let mut p = app.world_mut().resource_mut::<Progression>();
+        p.0.job = Some(Job::Scout {
+            map: "marrow_creek".into(),
+            place: "Radio mast".into(),
+            at: [-54.0, -78.8],
+            seen: false,
+        });
+    }
+    // As a new session would open: the last raid written up lost, and the
+    // fall already counted.
+    app.world_mut()
+        .resource_mut::<crate::raid::logbook::Logbook>()
+        .written = Some("RAID 4: LOST, 2 MIN\nWrecked nothing\nThe convoy took 1 things".into());
+    app.world_mut().resource_mut::<Raid>().raids = 4;
+    app.world_mut().resource_mut::<Raid>().deaths = 2;
+    app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+    for _ in 0..3 {
+        app.update();
+    }
+    let log = &app.world().resource::<Raid>().log;
+    assert!(
+        log.iter().any(|(l, _)| l.contains("still waiting")),
+        "{log:?}"
+    );
+}
