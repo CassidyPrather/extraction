@@ -974,7 +974,7 @@ mod tests {
                 .add_message::<FirstMet>();
             let mut st: SystemState<Meet> = SystemState::new(app.world_mut());
             {
-                let mut m = st.get_mut(app.world_mut());
+                let mut m = st.get_mut(app.world_mut()).unwrap();
                 for f in order {
                     m.meet(f);
                 }
