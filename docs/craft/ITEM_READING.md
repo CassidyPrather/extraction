@@ -426,3 +426,42 @@ hushstone; stormglass, shard, rimestone:
 - **At 3 m every artifact is a speck**, before as after: small things on
   stony ground. Their fields' light is what finds them.
 
+### Every kind, and no placeholder (5 November)
+
+**No item falls back to the placeholder.** The walker's plate was the
+item placeholder's plain slab (`ROBOT_READING`), so a test now walks the
+whole table: `models::tests::no_item_falls_back_to_the_placeholder`. A
+firearm loads from `models/guns`, a magazine from `models/mags`, the
+anomaly items are drawn by `anomaly::visuals` (`OWN_LOOKS`); every other
+kind must have `models/items/<id>.glb`. It found 19 more slabs, now
+modelled: the first-hour and contract things (the Zorki camera, Lev's
+relay box, Holm's watch, Hajek's tin, the scour key, the pump log, the
+deputy's lamp, the charging manifest, the intake ledger, Hana's letter,
+in `art/items/story_items.py`), three pieces of kit (the spanner, the
+work boots, the can suppressor) and six ammo lots (the subsonic rounds
+and boxes, black over green tips and a blue band; the surplus lots, dated
+and banded rust or tar).
+
+**Every kind at 1.2 m**, rows of eight sorted by the first raid a kind
+can appear on (from `loot.ron`; "-" for kinds no table rolls: kit, the
+jobs' things, the cooked and the crafted, guns and their parts). Blender
+line-ups (`art/lineup.py`, 1.2 m): the in-game rows (`--gallery
+items:a+b+c`) were taken too, but the training yard's stations walk into
+some frames and a cloak generator blacked one out, so the near-twin hunt
+is done on the line-ups:
+![every kind 1](../shots/items/every_kind_0.jpg)
+![every kind 2](../shots/items/every_kind_1.jpg)
+![every kind 3](../shots/items/every_kind_2.jpg)
+
+- **Fixed: six cassettes were one cassette.** The tapes you find (for
+  Anna, the harvest hymns, the lodge dance, the duty mix, our piano, the
+  Sallow bells) were all the blank: grey shell, cream label, red band.
+  Each has its own shell, label and band now and its title in block
+  letters (`art/items/music.py`):
+  ![tapes, before and after](../shots/items/tapes_before_after.png)
+- **Near-twins left as they are:** a calibre's boxes (5.45 ball, AP,
+  tracer, T-4, subsonic, surplus; the 54R's) share the packet and differ
+  by band and tip colour, as real lots do; the depot keys differ by their
+  stripe (yellow, red, cream) and their scorch and ash; the loose rounds
+  are brass specks at 1.2 m by nature.
+
