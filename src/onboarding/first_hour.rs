@@ -1434,6 +1434,7 @@ pub(super) fn direct_raid(
             _ => vec![],
         };
         if !answer.is_empty() {
+            let answer = routed(&world, here, answer);
             // Where the answer leaves it: the way on from there, round the
             // sentry's sight, not back across it.
             let n = answer.len();
@@ -3856,8 +3857,46 @@ pub(super) fn first_fight(
         run_for_cover(&zone, here, from, 0.0)
     };
     if !answer.is_empty() {
+        let answer = routed(&world, here, answer);
         super::second_hour::cut_in(&mut bot, answer);
     }
+}
+
+/// An answer's walks out of doors on the way, as any walk is (`walk`):
+/// round the fence, through its gaps, round buildings and solids. Straight,
+/// they went at whatever was there: for cover, away, back out of a hush,
+/// a step back, every one a line (a newcomer by the south gate ran for
+/// cover through the quarantine fence, and stood at the wire). A walk in
+/// or out of a building (a roof's door, its corner) is the building's, as
+/// it was planned.
+fn routed(world: &World2, here: Vec2, answer: Vec<Task>) -> Vec<Task> {
+    let indoors = |p: Vec2| {
+        world
+            .entrances
+            .building_at(Vec3::new(p.x, world.zone.on_ground(p.x, p.y).y + 0.5, p.y))
+            .is_some()
+    };
+    let mut at = here;
+    let mut out = Vec::with_capacity(answer.len());
+    for t in answer {
+        match t {
+            Task::WalkTo { to, within } if !indoors(at) && !indoors(to) => {
+                let mut legs = walk(world, at, to);
+                match legs.last_mut() {
+                    Some(Task::WalkTo { within: w, .. }) => *w = within,
+                    _ => legs.push(Task::WalkTo { to, within }),
+                }
+                out.extend(legs);
+                at = to;
+            }
+            Task::WalkTo { to, within } => {
+                out.push(Task::WalkTo { to, within });
+                at = to;
+            }
+            t => out.push(t),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -4226,6 +4265,63 @@ mod indoor_tests {
     /// The walk on from against the pumping station's wall, where both
     /// newcomers stood: no stretch of it goes through a building (its
     /// machines'-grid detour went straight through the pump house).
+    /// An answer's walk for cover goes round what's in the way, as any walk:
+    /// from just outside the south fence and just in, from the stalls the
+    /// first fights and jobs stood at (a run for cover, straight, went into
+    /// the quarantine fence, and the newcomer stood at the wire).
+    #[test]
+    fn an_answers_run_for_cover_goes_round_the_fence() {
+        let opts = crate::launch::LaunchOptions {
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut st: bevy::ecs::system::SystemState<super::World2> =
+            bevy::ecs::system::SystemState::new(w);
+        let world = st.get(w).unwrap();
+        let boxes = super::walk_boxes(&world);
+        let mut crossed = vec![];
+        for (here, from) in [
+            (Vec2::new(34.1, 157.0), Vec2::new(67.0, 138.0)),
+            (Vec2::new(34.1, 155.0), Vec2::new(67.0, 138.0)),
+            (Vec2::new(30.0, 158.0), Vec2::new(10.0, 120.0)),
+            (Vec2::new(9.7, 150.0), Vec2::new(40.0, 120.0)),
+            (Vec2::new(-6.3, 150.0), Vec2::new(-20.0, 120.0)),
+            (Vec2::new(-87.8, -35.1), Vec2::new(-60.0, -20.0)),
+            (Vec2::new(-90.9, 80.3), Vec2::new(-70.0, 60.0)),
+            (Vec2::new(-80.7, 8.7), Vec2::new(-60.0, 20.0)),
+        ] {
+            for leave in [0.0, 1.0] {
+                let answer = super::run_for_cover(&world.zone, here, from, leave);
+                let mut at = here;
+                for t in super::routed(&world, here, answer) {
+                    let crate::bot::Task::WalkTo { to: p, .. } = t else {
+                        continue;
+                    };
+                    for (xf, half) in &boxes {
+                        let inv = xf.compute_affine().inverse();
+                        let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                        let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                        if segment_hits_box(a, b, *half).is_some() {
+                            crossed.push(format!(
+                                "from {here} (away from {from}): {at} -> {p} through the box at {}",
+                                xf.translation.xz()
+                            ));
+                        }
+                    }
+                    at = p;
+                }
+            }
+        }
+        assert!(crossed.is_empty(), "{}", crossed.join("\n"));
+    }
+
     #[test]
     fn the_walk_from_the_pump_house_wall_goes_round_it() {
         let opts = crate::launch::LaunchOptions {
