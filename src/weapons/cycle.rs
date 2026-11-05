@@ -241,12 +241,13 @@ impl Cycle {
 }
 
 /// The guns with a scripted cycle.
-pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double"];
+pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133"];
 
 fn script_for(id: &str) -> Vec<Act> {
     match id {
         "toz8" => toz8(),
         "toz_double" => izh43(),
+        "mp133" => mp133(),
         _ => script(),
     }
 }
@@ -263,6 +264,12 @@ struct Kit {
 
 fn kit(id: &str) -> Kit {
     match id {
+        "mp133" => Kit {
+            gun: "mp133",
+            mag: None,
+            holster: false,
+            spares: vec![("shell_12ga", 1), ("shell_12ga", 1)],
+        },
         "toz_double" => Kit {
             gun: "toz_double",
             mag: None,
@@ -365,6 +372,49 @@ fn thumb_in(spare: usize) -> Vec<Act> {
         Grip(Side::Left, 0.0),
         Wait(10),
     ]
+}
+
+/// The left hand on the forend: back to its stop and home again, briskly.
+fn pump() -> Vec<Act> {
+    vec![
+        Move(Side::Left, To::Forend(1.2), Quat::IDENTITY, 10),
+        Wait(2),
+        Move(Side::Left, To::Forend(-0.05), Quat::IDENTITY, 10),
+        Wait(8),
+    ]
+}
+
+/// The MP-133: a pump twelve-gauge. Taken up, two shells thumbed into the
+/// tube, the left hand onto the forend and a pump to chamber one; aimed,
+/// fired, pumped (the hull out), fired, pumped.
+fn mp133() -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.push(Beat("load the tube"));
+    s.extend(thumb_in(0));
+    s.extend(thumb_in(1));
+    s.push(Beat("pump one up"));
+    s.extend([
+        Move(
+            Side::Left,
+            To::Grab(GripRole::Support, Vec3::ZERO),
+            Quat::IDENTITY,
+            24,
+        ),
+        Grip(Side::Left, 1.0),
+        Wait(10),
+    ]);
+    s.extend(pump());
+    s.extend(aim_long());
+    s.push(Beat("fire"));
+    s.extend(SHOT);
+    s.push(Beat("pump"));
+    s.extend(pump());
+    s.push(Beat("fire again"));
+    s.extend(SHOT);
+    s.push(Beat("pump again"));
+    s.extend(pump());
+    s.extend([Wait(40), Beat("end"), Wait(45)]);
+    s
 }
 
 /// The top lever pushed over (A) and let go: the action breaks open, or
@@ -1000,6 +1050,17 @@ mod tests {
             .flat_map(|t| t.thrown.clone())
             .collect();
         assert_eq!(thrown.len(), 2, "two empties out: {}", c.report());
+    }
+
+    /// The MP-133 by hand: two shells into the tube, one pumped up, fired,
+    /// pumped (its hull out at the hand's speed), fired, pumped.
+    #[test]
+    fn the_mp133_cycle_runs_by_hand() {
+        let vr = run("mp133");
+        let c = vr.app.world().resource::<Cycle>();
+        println!("{}", c.report());
+        assert!(c.done, "the script ran out");
+        assert_eq!(fired(c), 2, "{}", c.report());
     }
 
     #[test]
