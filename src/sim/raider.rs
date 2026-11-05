@@ -2715,7 +2715,9 @@ fn indoor_path(
     // start from the nearest on this side of it, and walk there first
     // (Marrow seed 1, 4 November: from beside a plank house's porch the
     // route went straight at the loot through its front wall).
-    let a = if plan.grid.walkable(here.to_array()) {
+    // (Not down a site: there every cell is inside, and the nearest floor
+    // 3 m off can be a gallery behind the rock; Rime seed 8, adit_rime.)
+    let a = if plan.grid.walkable(here.to_array()) || plan.levels.is_some() {
         here
     } else {
         // (Out to 3 m: a front's strip the plan shuts, by a porch's
