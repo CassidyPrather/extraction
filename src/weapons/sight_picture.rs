@@ -90,6 +90,27 @@ mod tests {
                 rear_at,
                 (rear_at - front) * 1000.0
             );
+            // The sights as the eye sees them (orthographic, down the bore):
+            // R rear, F front, . sky; rows 0.5 mm, columns 0.5 mm.
+            for row in (-12..=8).rev() {
+                let y = eye.y + row as f32 * 0.0005;
+                let line: String = (-30..=30)
+                    .map(|i| {
+                        let o = Vec3::new(eye.x + i as f32 * 0.0005, y, eye.z + 0.05);
+                        match first_hit(&tris, o, end) {
+                            Some(z) if z > front + 0.03 => 'R',
+                            Some(_) => 'F',
+                            None => '.',
+                        }
+                    })
+                    .collect();
+                println!(
+                    "{:12} {:+5.1} {line}{}",
+                    def.id,
+                    row as f32 * 0.5,
+                    if row == 0 { " <- line" } else { "" }
+                );
+            }
             let post = (0.0, span(&post_on, true));
             let notch = (0.0, span(&rear_on, false));
             let (lo, hi) = layout.bounds();
