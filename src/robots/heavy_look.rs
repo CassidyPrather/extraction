@@ -31,6 +31,7 @@ impl Plugin for HeavyLookPlugin {
             Update,
             (
                 dress_heavies,
+                unmerge_bolts.after(dress_heavies),
                 pose_limbs,
                 light_heavies,
                 gallery,
@@ -39,6 +40,46 @@ impl Plugin for HeavyLookPlugin {
             ),
         );
     }
+}
+
+/// A heavy's bolts drawn as one mesh a material (`merged`, the robot's
+/// children) while it has every one: twelve bolts were 24 of a heavy's 89
+/// draws up close, and four heavies work most quarries. Each bolt's own
+/// meshes hang hidden under `holders` and come back the moment one goes
+/// (`unmerge_bolts`).
+#[derive(Component)]
+struct BoltsMerged {
+    merged: Vec<Entity>,
+    holders: Vec<Entity>,
+}
+
+/// Every bolt of every plate, as `hang` puts them (robot space): at its
+/// part, turned as its plate.
+fn bolt_places() -> Vec<Transform> {
+    let mut out = Vec::new();
+    for i in 0..extraction_core::heavy::PLATES {
+        let rot = super::heavy::plate_transform(i).rotation;
+        for k in 0..extraction_core::heavy::BOLTS_PER_PLATE {
+            out.push(
+                Transform::from_translation(super::heavy::bolt_at(i, k))
+                    * Transform::from_rotation(rot),
+            );
+        }
+    }
+    out
+}
+
+/// One mesh of `src` at every place.
+fn merged_at(src: &Mesh, places: &[Transform]) -> Option<Mesh> {
+    let mut out: Option<Mesh> = None;
+    for t in places {
+        let m = src.clone().transformed_by(*t);
+        match &mut out {
+            Some(o) => o.merge(&m).ok()?,
+            None => out = Some(m),
+        }
+    }
+    out
 }
 
 /// A heavy not yet dressed (its model loading).
@@ -154,6 +195,9 @@ fn dress_heavies(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    // The bolts merged, built once: (LOD, material, mesh).
+    mut bolts_merged: Local<Option<Vec<(usize, Option<String>, Handle<Mesh>)>>>,
 ) {
     for e in &new {
         commands.entity(e).insert(Undressed);
@@ -176,6 +220,22 @@ fn dress_heavies(
             return;
         }
     };
+    if bolts_merged.is_none() {
+        let places = bolt_places();
+        let mut built = Vec::new();
+        for lod in 0..3 {
+            let Some(node) = ModelNode::find(&model, &lod_name("bolt", lod)) else {
+                continue;
+            };
+            for p in &node.primitives {
+                let Some(m) = meshes.get(&p.mesh).and_then(|m| merged_at(m, &places)) else {
+                    continue;
+                };
+                built.push((lod, p.material.clone(), meshes.add(m)));
+            }
+        }
+        *bolts_merged = Some(built);
+    }
     let glow = model_mats.get("Glow", &mut lib, &server, &mut materials);
     let eye = model_mats.get("Eye", &mut lib, &server, &mut materials);
     for (robot, children) in &waiting {
@@ -222,14 +282,16 @@ fn dress_heavies(
                         parent: Entity,
                         name: &str,
                         at: Transform,
-                        lit: Option<Lit>| {
+                        lit: Option<Lit>,
+                        vis: Visibility|
+         -> Vec<Entity> {
+            let mut holders = Vec::new();
             for lod in 0..3 {
                 let Some(node) = ModelNode::find(&model, &lod_name(name, lod)) else {
                     continue;
                 };
-                let holder = commands
-                    .spawn((at, Visibility::default(), ChildOf(parent)))
-                    .id();
+                let holder = commands.spawn((at, vis, ChildOf(parent))).id();
+                holders.push(holder);
                 for p in &node.primitives {
                     let mut l = lit;
                     let m = mat(p.material.as_deref(), &mut l);
@@ -262,9 +324,24 @@ fn dress_heavies(
                     }
                 }
             }
+            holders
         };
         // The hull and brow on the body (the model's origin is the robot's).
-        hang(&mut commands, robot, "hull", Transform::IDENTITY, None);
+        // Every bolt on: they're drawn merged (`BoltsMerged`).
+        let bolts_on = children
+            .iter()
+            .filter(|c| {
+                parts
+                    .get(*c)
+                    .is_ok_and(|(p, _, _)| matches!(p.0, Slot::Bolt { .. }))
+            })
+            .count();
+        let merge = bolts_on
+            == extraction_core::heavy::PLATES * extraction_core::heavy::BOLTS_PER_PLATE
+            && bolts_merged.as_ref().is_some_and(|b| !b.is_empty());
+        let mut bolt_holders = Vec::new();
+        let on = Visibility::default();
+        hang(&mut commands, robot, "hull", Transform::IDENTITY, None, on);
         for c in children.iter() {
             let Ok((part, piece, pt)) = parts.get(c) else {
                 continue;
@@ -272,7 +349,9 @@ fn dress_heavies(
             // A part's mesh, its offset taken out (the part sits there).
             let local = |node: Vec3| Transform::from_translation(node - pt.translation);
             match (part.0, piece) {
-                (Slot::Eye, _) => hang(&mut commands, c, "eye", local(pt.translation), None),
+                (Slot::Eye, _) => {
+                    hang(&mut commands, c, "eye", local(pt.translation), None, on);
+                }
                 (Slot::Vent(v), _) => {
                     // The right's modelled; the left is it turned round.
                     let turn = if v == 0 {
@@ -280,20 +359,22 @@ fn dress_heavies(
                     } else {
                         Transform::IDENTITY
                     };
-                    hang(&mut commands, c, "vent", turn, Some(Lit::Vent(v as usize)));
+                    hang(&mut commands, c, "vent", turn, Some(Lit::Vent(v as usize)), on);
                 }
                 (Slot::Bolt { plate, .. }, _) => {
                     let rot = super::heavy::plate_transform(plate as usize).rotation;
-                    hang(
+                    let vis = if merge { Visibility::Hidden } else { on };
+                    bolt_holders.extend(hang(
                         &mut commands,
                         c,
                         "bolt",
                         Transform::from_rotation(rot),
                         None,
-                    );
+                        vis,
+                    ));
                 }
                 (Slot::Knee(_), Some(LegPiece::Knee(_))) => {
-                    hang(&mut commands, c, "knee", Transform::IDENTITY, None);
+                    hang(&mut commands, c, "knee", Transform::IDENTITY, None, on);
                 }
                 _ => {}
             }
@@ -317,9 +398,55 @@ fn dress_heavies(
                     Visibility::default(),
                 ))
                 .id();
-            hang(&mut commands, limb, name, Transform::IDENTITY, None);
+            hang(&mut commands, limb, name, Transform::IDENTITY, None, on);
+        }
+        if merge {
+            let mut merged = Vec::new();
+            for (lod, m, mesh) in bolts_merged.iter().flatten() {
+                let mut l = None;
+                let material = mat(m.as_deref(), &mut l);
+                let mut ec = commands.spawn((
+                    Name::new("Heavy bolts"),
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material),
+                    ChildOf(robot),
+                ));
+                if let Some(r) = lod_range(*lod) {
+                    ec.insert(r);
+                }
+                merged.push(ec.id());
+            }
+            commands.entity(robot).insert(BoltsMerged {
+                merged,
+                holders: bolt_holders,
+            });
         }
         commands.entity(robot).insert(lights);
+    }
+}
+
+/// A heavy's bolts back on their own once one has gone (shot out, or
+/// with its plate): the merged meshes go, the rest show.
+fn unmerge_bolts(
+    mut commands: Commands,
+    heavies: Query<(Entity, &BoltsMerged)>,
+    there: Query<(), With<Visibility>>,
+) {
+    for (robot, b) in &heavies {
+        if b.holders.iter().all(|h| there.contains(*h)) {
+            continue;
+        }
+        for e in &b.merged {
+            if let Ok(mut e) = commands.get_entity(*e) {
+                e.despawn();
+            }
+        }
+        for h in &b.holders {
+            if there.contains(*h) {
+                commands.entity(*h).insert(Visibility::Inherited);
+            }
+        }
+        commands.entity(robot).remove::<BoltsMerged>();
     }
 }
 
@@ -619,6 +746,103 @@ fn felt_footfalls(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A heavy with every bolt draws them as one mesh a material, not
+    /// two a bolt; once one's shot out, the rest are drawn on their own
+    /// again and the merged ones go.
+    #[test]
+    fn a_heavys_bolts_draw_merged_until_one_goes() {
+        use crate::robots::{Job, JobKind};
+        let _counting = crate::render::budget::tests::counted();
+        let mut app = crate::render::budget::tests::client_threads(
+            crate::camp::TRAINING_YARD,
+            "drizzle",
+            None,
+        );
+        for _ in 0..120 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let zone = w.resource::<crate::world::Zone>().clone();
+        let catalog = crate::items::Catalog(w.resource::<crate::items::Catalog>().0.clone());
+        let eye = {
+            let mut q = w.query_filtered::<&GlobalTransform, With<crate::render::FreeCamera>>();
+            q.single(w).unwrap().translation()
+        };
+        let fwd = Vec3::new(0.0, 0.0, -1.0);
+        let at = zone.on_ground(eye.x + fwd.x * 8.0, eye.z + fwd.z * 8.0);
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let robot = {
+            let mut c = Commands::new(&mut queue, w);
+            let job = Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 600.0,
+                exit: at,
+            };
+            super::super::heavy::spawn_heavy(&mut c, &zone, &catalog, at, job)
+        };
+        queue.apply(w);
+        {
+            let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
+            let mut t = q.single_mut(w).unwrap();
+            *t = Transform::from_translation(at + Vec3::new(0.0, 1.7, 8.0))
+                .looking_at(at + Vec3::Y, Vec3::Y);
+        }
+        for _ in 0..60 {
+            app.update();
+        }
+        // Meshes of the heavy's the eye draws (its own and its limbs').
+        let drawn = |app: &mut App| -> usize {
+            let w = app.world_mut();
+            let mut q = w.query::<(Entity, &ViewVisibility)>();
+            let shown: Vec<Entity> = q
+                .iter(w)
+                .filter(|(e, v)| v.get() && w.get::<Mesh3d>(*e).is_some())
+                .map(|(e, _)| e)
+                .collect();
+            shown
+                .into_iter()
+                .filter(|e| {
+                    let mut at = *e;
+                    for _ in 0..8 {
+                        if at == robot || w.get::<Limb>(at).is_some_and(|l| l.robot == robot) {
+                            return true;
+                        }
+                        match w.get::<ChildOf>(at) {
+                            Some(p) => at = p.parent(),
+                            None => return false,
+                        }
+                    }
+                    false
+                })
+                .count()
+        };
+        let whole = drawn(&mut app);
+        assert!(
+            app.world().get::<BoltsMerged>(robot).is_some(),
+            "its bolts aren't merged"
+        );
+        let bolts = extraction_core::heavy::PLATES * extraction_core::heavy::BOLTS_PER_PLATE;
+        // Two a bolt (steel and its warning paint) were 24 draws of 89.
+        assert!(whole + bolts * 2 - 2 <= 89, "{whole} drawn with its bolts merged");
+        // One shot out.
+        let w = app.world_mut();
+        let mut q = w.query::<(Entity, &HeavyPart, &ChildOf)>();
+        let bolt = q
+            .iter(w)
+            .find(|(_, p, c)| c.parent() == robot && matches!(p.0, Slot::Bolt { .. }))
+            .map(|(e, _, _)| e)
+            .unwrap();
+        w.entity_mut(bolt).despawn();
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(app.world().get::<BoltsMerged>(robot).is_none());
+        let after = drawn(&mut app);
+        // The merged two gone, the other eleven bolts' two each back.
+        assert_eq!(after, whole - 2 + (bolts - 1) * 2, "{whole} then {after}");
+    }
 
     /// A footfall is felt on the house scale: never a kick (that's shots
     /// and hits), a knock close by, a tick at the edge, nothing past it.

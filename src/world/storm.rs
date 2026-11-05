@@ -100,6 +100,37 @@ pub fn strike_strength(distance: f32) -> f32 {
 const FLASH_LUX: f32 = 7000.0;
 const FLASH_AMBIENT: f32 = 1400.0;
 
+/// How far a flash's shadows reach, metres. A strike lights the valley
+/// for a few frames with the sun's cascades on, at any hour: out to the
+/// weather's 90 m that was a whole frame's shadow passes (2042 shadow
+/// draws, both eyes, at Cinder Works' first walk stop at night, of 1800),
+/// for shadows that flicker past too fast to read far off. Near ones carry
+/// the flash.
+pub const FLASH_SHADOWS: f32 = 30.0;
+
+/// The sun's cascades for a flash's frames (`flash` true), and back to
+/// what they were once it's over; `saved` holds the weather's meanwhile.
+fn flash_cascades(
+    cascades: &mut bevy::light::CascadeShadowConfig,
+    saved: &mut Option<bevy::light::CascadeShadowConfig>,
+    flash: bool,
+) {
+    if flash {
+        if saved.is_none() {
+            *saved = Some(cascades.clone());
+            *cascades = bevy::light::CascadeShadowConfigBuilder {
+                num_cascades: cascades.bounds.len().max(1),
+                first_cascade_far_bound: 8.0,
+                maximum_distance: FLASH_SHADOWS,
+                ..default()
+            }
+            .build();
+        }
+    } else if let Some(before) = saved.take() {
+        *cascades = before;
+    }
+}
+
 /// For screenshots: `EXTRACTION_STORM_FLASH=1` holds a near strike's
 /// light at its peak.
 fn held_flash() -> bool {
@@ -123,6 +154,8 @@ struct StormState {
     /// The sun's own way and shadows, while a flash has them.
     sun_before: Option<(Quat, bool)>,
     sun_wrote: Quat,
+    /// The sun's cascades, while a flash has its shorter ones.
+    cascades_before: Option<bevy::light::CascadeShadowConfig>,
 }
 
 /// A value a flash added to: what it wrote, and how much of that was it.
@@ -175,7 +208,14 @@ fn lightning(
     opts: Res<crate::launch::LaunchOptions>,
     time: Res<Time>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
-    mut suns: Query<(&mut DirectionalLight, &mut Transform), With<Sun>>,
+    mut suns: Query<
+        (
+            &mut DirectionalLight,
+            &mut Transform,
+            &mut bevy::light::CascadeShadowConfig,
+        ),
+        With<Sun>,
+    >,
     mut ambient: ResMut<GlobalAmbientLight>,
     mut clear: ResMut<ClearColor>,
     mut fogs: Query<(Entity, &mut DistanceFog)>,
@@ -256,9 +296,17 @@ fn lightning(
     let toward = st.toward;
 
     // The light: the sun's swung round to come from the bolt.
-    let Ok((mut sun, mut xf)) = suns.single_mut() else {
+    let Ok((mut sun, mut xf, mut cascades)) = suns.single_mut() else {
         return;
     };
+    {
+        let st = &mut *st;
+        let flash = k > 0.01;
+        // (Only written when it changes: a write re-lays the cascades.)
+        if flash != st.cascades_before.is_some() {
+            flash_cascades(&mut cascades, &mut st.cascades_before, flash);
+        }
+    }
     st.sun_lux.apply(&mut sun.illuminance, FLASH_LUX * k);
     if k > 0.01 {
         if st.sun_before.is_none() {
@@ -700,6 +748,28 @@ mod tests {
         );
         let m = bolt_mesh(&main, &fork);
         assert_eq!(m.count_vertices(), 4 * (main.len() - 1 + fork.len() - 1));
+    }
+
+    #[test]
+    fn a_flash_shadows_only_near_and_gives_the_cascades_back() {
+        let weather = bevy::light::CascadeShadowConfigBuilder {
+            num_cascades: 2,
+            first_cascade_far_bound: 15.0,
+            maximum_distance: 90.0,
+            ..default()
+        }
+        .build();
+        let mut c = weather.clone();
+        let mut saved = None;
+        flash_cascades(&mut c, &mut saved, true);
+        assert_eq!(c.bounds.len(), 2);
+        assert!(*c.bounds.last().unwrap() <= FLASH_SHADOWS + 1e-3, "{:?}", c.bounds);
+        // Held over several frames, it stays as it is.
+        flash_cascades(&mut c, &mut saved, true);
+        assert!(*c.bounds.last().unwrap() <= FLASH_SHADOWS + 1e-3);
+        flash_cascades(&mut c, &mut saved, false);
+        assert_eq!(c.bounds, weather.bounds);
+        assert!(saved.is_none());
     }
 
     #[test]
