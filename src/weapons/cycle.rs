@@ -241,11 +241,12 @@ impl Cycle {
 }
 
 /// The guns with a scripted cycle.
-pub const GUNS: &[&str] = &["pm_pistol", "toz8"];
+pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double"];
 
 fn script_for(id: &str) -> Vec<Act> {
     match id {
         "toz8" => toz8(),
+        "toz_double" => izh43(),
         _ => script(),
     }
 }
@@ -262,6 +263,12 @@ struct Kit {
 
 fn kit(id: &str) -> Kit {
     match id {
+        "toz_double" => Kit {
+            gun: "toz_double",
+            mag: None,
+            holster: false,
+            spares: vec![("shell_12ga", 1), ("shell_12ga", 1)],
+        },
         "toz8" => Kit {
             gun: "toz8",
             mag: None,
@@ -358,6 +365,34 @@ fn thumb_in(spare: usize) -> Vec<Act> {
         Grip(Side::Left, 0.0),
         Wait(10),
     ]
+}
+
+/// The top lever pushed over (A) and let go: the action breaks open, or
+/// snaps shut.
+fn top_lever() -> Vec<Act> {
+    vec![Release(true), Wait(6), Release(false), Wait(12)]
+}
+
+/// The IZh-43: a side-by-side twelve-gauge with ejectors. Taken up, broken
+/// open, two shells thumbed in, snapped shut; aimed, both barrels fired;
+/// broken open again, the ejectors throwing both empties.
+fn izh43() -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.push(Beat("break open"));
+    s.extend(top_lever());
+    s.push(Beat("load two"));
+    s.extend(thumb_in(0));
+    s.extend(thumb_in(1));
+    s.push(Beat("snap shut"));
+    s.extend(top_lever());
+    s.extend(aim_long());
+    s.push(Beat("fire both"));
+    s.extend(SHOT);
+    s.extend(SHOT);
+    s.push(Beat("break open again"));
+    s.extend(top_lever());
+    s.extend([Wait(60), Beat("end"), Wait(45)]);
+    s
 }
 
 /// The TOZ-8: a single-shot .22 turn-bolt. Taken up, the bolt opened, a
@@ -947,6 +982,24 @@ mod tests {
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
         assert_eq!(fired(c), 2, "{}", c.report());
+    }
+
+    /// The IZh-43 by hand: broken open, two shells in, shut; both barrels
+    /// fired; broken open, the two empties thrown out by the ejectors.
+    #[test]
+    fn the_izh43_cycle_runs_by_hand() {
+        let vr = run("toz_double");
+        let c = vr.app.world().resource::<Cycle>();
+        println!("{}", c.report());
+        assert!(c.done, "the script ran out");
+        assert_eq!(fired(c), 2, "{}", c.report());
+        let thrown: Vec<(Vec3, Vec3)> = c
+            .ticks
+            .iter()
+            .filter(|t| t.beat == "break open again")
+            .flat_map(|t| t.thrown.clone())
+            .collect();
+        assert_eq!(thrown.len(), 2, "two empties out: {}", c.report());
     }
 
     #[test]
