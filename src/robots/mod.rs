@@ -23,6 +23,7 @@ pub mod doors;
 pub mod drone;
 #[cfg(test)]
 mod drone_drill;
+pub mod firsts;
 pub mod flee;
 pub mod flight;
 pub mod fx;
@@ -47,6 +48,7 @@ pub mod minelayer;
 pub mod minelayer_look;
 pub mod network;
 pub mod plough;
+pub mod plough_bank;
 pub mod plough_look;
 pub mod pylon;
 pub mod recall;
@@ -608,7 +610,7 @@ fn wreck_loot(
         }
         for (i, drop) in drops.into_iter().enumerate() {
             let a = i as f32 * 2.1;
-            crate::items::spawn_item(
+            crate::items::loot::spawn_found(
                 &mut commands,
                 &catalog,
                 crate::items::SpawnItem {

@@ -1564,7 +1564,7 @@ impl World2<'_, '_> {
                 if let Some(p) = waiting_at
                     && truck.translation().xz().distance(p) > RV_NEAR
                 {
-                    let mut t = self.legs(here, p);
+                    let mut t = super::first_hour::walk(self, here, p);
                     t.push(Task::Wait(2.0));
                     return t;
                 }
@@ -1586,7 +1586,10 @@ impl World2<'_, '_> {
                 let mut t = Vec::new();
                 let mut from = here;
                 for p in round_the_truck(mine.xz()).into_iter().map(|p| at(p.x, p.y)) {
-                    t.extend(self.legs(from, p));
+                    // (By the routed way: straight at the truck from the
+                    // gate's field went into the house beside it, and the
+                    // newcomer stood ten metres off as a drone shot it.)
+                    t.extend(super::first_hour::walk(self, from, p));
                     from = p;
                 }
                 // Square on to the ramp first (0.9 wide, off the tail to

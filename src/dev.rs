@@ -19,6 +19,7 @@ impl Plugin for DevPlugin {
                     gallery,
                     turn_line_up.after(gallery),
                     break_line_up.after(gallery),
+                    kill_line_up.after(gallery),
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
@@ -261,6 +262,26 @@ fn turn_line_up(
     }
 }
 
+/// `<robot>!dead` in a line-up: wrecked a few frames in, once it has its
+/// parts, as a kill wrecks it.
+#[derive(Resource)]
+struct DeadLineUp(Vec<Entity>, u32);
+
+fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::robots::Robot>) {
+    let Some(mut dead) = dead else {
+        return;
+    };
+    dead.1 += 1;
+    if dead.1 != 4 {
+        return;
+    }
+    for e in &dead.0 {
+        if let Ok(mut r) = robots.get_mut(*e) {
+            r.wrecked = true;
+        }
+    }
+}
+
 /// `walker!broken` in a line-up: the job-2 walker, its gun dead and one
 /// leg failing (5%), as `robots::reel` breaks a walker. Broken a few frames
 /// in, so it has its parts, and left a second for the smoke and limp.
@@ -298,6 +319,20 @@ fn break_line_up(
             _ => {}
         }
     }
+}
+
+/// The gallery's modes (`climb`, `body+side`, `pm_pistol+present`, ...)
+/// are words of its subject (before the first comma), split at `+` and
+/// `:`, matched whole: a substring took `climbing_kit` for the climbing
+/// wall (a slab across the view), `side_rail` for the side-on body view
+/// (the camera level), a `*_repack` for the pack carry and `wristwatch`
+/// for the wrist pose.
+pub fn gallery_word(spec: &str, word: &str) -> bool {
+    spec.split(',')
+        .next()
+        .unwrap_or("")
+        .split(['+', ':'])
+        .any(|w| w == word)
 }
 
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
@@ -353,6 +388,10 @@ fn gallery(
             .replace("+grime", "")
             .replace("+wet", "")
             .replace("+fog", "")
+            // `+foul`, `+worn`, `+failing`: shown in that condition (`weapons::weather`).
+            .replace("+foul", "")
+            .replace("+worn", "")
+            .replace("+failing", "")
             // `+present`: the mag release held (`present_for_gallery`).
             .replace("+present", "");
         let first = first.as_str();
@@ -439,6 +478,7 @@ fn gallery(
                 let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
+                let mut dead = Vec::new();
                 let d = dist.unwrap_or(30.0);
                 let right = Vec3::new(-flat.z, 0.0, flat.x);
                 let gap = (d * 0.16).max(3.5);
@@ -446,10 +486,16 @@ fn gallery(
                 // you), then turned YAW.
                 let face_cam = flat.x.atan2(flat.z) + turn.to_radians();
                 for (i, id) in ids.iter().enumerate() {
+                    // `heavy!dead`: wrecked once it stands, its salvage
+                    // seated on it (`robots::salvage`), to read the wreck.
+                    let (id, wreck): (&str, bool) = match id.strip_suffix("!dead") {
+                        Some(base) => (base, true),
+                        None => (id, false),
+                    };
                     let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
                     let at = eye + flat * d + right * off;
                     let at = zone.on_ground(at.x, at.z);
-                    let e = match *id {
+                    let e = match id {
                         "walker" | "walker!broken" => {
                             crate::robots::walker::spawn_walker(&mut commands, &zone, at, job(at))
                         }
@@ -490,15 +536,44 @@ fn gallery(
                     };
                     // Turned once it stands where its spawn put it (its
                     // own height over the ground).
-                    if *id != "sentry" {
+                    if wreck {
+                        // Not held in place: a wreck falls where it dies.
+                        commands.entity(e).insert(
+                            Transform::from_translation(at).with_rotation(Quat::from_rotation_y(
+                                face_cam + std::f32::consts::PI,
+                            )),
+                        );
+                        dead.push(e);
+                    } else if id != "sentry" {
                         line_up.push((e, face_cam, None));
                     }
-                    if *id == "walker!broken" {
+                    if id == "walker!broken" {
                         broken.push(e);
                     }
                 }
                 commands.insert_resource(LineUp(line_up));
                 commands.insert_resource(BrokenWalkers(broken, 0));
+                commands.insert_resource(DeadLineUp(dead, 0));
+            }
+            s if s.starts_with("items:") => {
+                // A row of items lying side by side on the ground DIST
+                // ahead (1.2 m), for a contact sheet of every kind:
+                // `items:tea_tin+matches+bolt`. Each rests on its box's
+                // floor, turned TURN; SHIFT spaces them (0.3 m).
+                let ids: Vec<&str> = s["items:".len()..].split('+').collect();
+                let right = Vec3::new(-flat.z, 0.0, flat.x);
+                let gap = if shift > 0.0 { shift } else { 0.3 };
+                let d = dist.unwrap_or(1.2);
+                for (i, id) in ids.iter().enumerate() {
+                    let Some(kind) = catalog.kind(id) else {
+                        continue;
+                    };
+                    let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * d + right * off;
+                    let half = catalog.get(kind).size_m()[1] * 0.5;
+                    let at = zone.on_ground(at.x, at.z) + Vec3::Y * (half + 0.002);
+                    spawn_static(&mut commands, id, at);
+                }
             }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
@@ -897,11 +972,27 @@ fn first_person_hands(
         Some(w) => (w, true),
         None => (what, false),
     };
+    // `fp:<item>+palm`: a thing held free shown on the upturned palm, the
+    // fingers curled up onto it (from above, the back of the hand hid
+    // them).
+    let (what, palm_up) = match what.strip_suffix("+palm") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
     *stage += 1;
     for mut v in &mut players {
         *v = Visibility::Hidden;
     }
-    let eye = Vec3::new(cam.x, cam.y.max(zone.ground(cam.x, cam.z) + 0.3), cam.z);
+    // Where the camera stands its eye (`render`'s camera override): a
+    // height of 0 or less is standing there, 1.7 m up. (Taken as given,
+    // the hands were set out round the feet, under the view.)
+    let ground = zone.ground(cam.x, cam.z);
+    let eye_y = if cam.y <= 0.0 {
+        ground + crate::render::EYE_OVER_FEET
+    } else {
+        cam.y.max(ground + 0.3)
+    };
+    let eye = Vec3::new(cam.x, eye_y, cam.z);
     let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
     let fwd = rot * Vec3::NEG_Z;
     let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
@@ -973,6 +1064,45 @@ fn first_person_hands(
             "open" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.0; 5]);
                 glove(&mut commands, Side::Right, rest(Side::Right), [0.0; 5]);
+            }
+            // The job card taken up to read, as `interact::read` holds it:
+            // its bottom edge 30 mm over the right hand, facing the eye,
+            // the glove seated on it (`render::hold`).
+            "read" => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+                // Brought in front of the face to read, not at rest.
+                let mut hand = rest(Side::Right);
+                hand.translation = eye + (flat * 0.4 + right * 0.03 - Vec3::Y * 0.3) / zoom;
+                let size = Vec2::new(0.3, 0.26);
+                let card = crate::interact::read::held_up(hand.translation, eye, size);
+                // The real card: its text drawn by `render::screen` on its
+                // face (a blank box here read as a grey slab at the eye).
+                let text = "ODD JOBS - JOB 1 OF 3\n\"Go up to the old farm and look \
+                    round. Tell me what's changed.\"\nFrom the drop: north-east, 190 m. \
+                    Ringed on your map. Call me from the gate after.";
+                let style = crate::raid::bench::ScreenStyle::Card;
+                commands.spawn((
+                    Name::new("Request card"),
+                    crate::render::legibility::TextSource::Request,
+                    crate::raid::bench::ScreenText {
+                        text: crate::render::screen::wrap_to_fit(text, size, style),
+                        size,
+                        style,
+                    },
+                    view(card),
+                    Visibility::default(),
+                ));
+                let rel = Transform::from_matrix(
+                    (hand.compute_affine().inverse() * card.compute_affine()).into(),
+                );
+                let half = Vec3::new(size.x, size.y, 0.01) * 0.5;
+                let seat = crate::render::hold::seat(Side::Right, half, rel);
+                let h = glove(&mut commands, Side::Right, hand * seat.glove(), seat.curl);
+                commands.entity(h).queue(move |mut e: EntityWorldMut| {
+                    if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                        v.thumb = Some(seat.thumb);
+                    }
+                });
             }
             "point" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
@@ -1107,22 +1237,25 @@ fn first_person_hands(
             }
         }
     } else {
-        // Upright in the left fist (round the hand's origin, as a grip is),
-        // the right open.
-        let thinnest = catalog.kind(what).map_or(0.04, |k| {
-            let def = catalog.get(k);
-            def.dims.map_or((def.bulk / 1000.0).cbrt(), |d| {
-                d.into_iter().fold(f32::MAX, f32::min)
-            })
+        // In the left hand as a hand takes it (`render::hold::taken`), the
+        // glove seated on it as the game seats it; the right open.
+        let half = catalog.kind(what).map_or(Vec3::splat(0.02), |k| {
+            Vec3::from(catalog.get(k).size_m()) * 0.5
         });
-        let hand = rest(Side::Left);
-        commands.entity(item).insert(view(hand));
-        glove(
-            &mut commands,
-            Side::Left,
-            hand,
-            hold_curl(None, 0.0, thinnest),
-        );
+        let mut hand = rest(Side::Left);
+        if palm_up {
+            let palm = hand.rotation * crate::render::hold::palm_normal(Side::Left);
+            hand.rotation = Quat::from_rotation_arc(palm, Vec3::Y) * hand.rotation;
+        }
+        let in_hand = crate::render::hold::taken(Side::Left, half);
+        let seat = crate::render::hold::seat(Side::Left, half, in_hand);
+        commands.entity(item).insert(view(hand * in_hand));
+        let h = glove(&mut commands, Side::Left, hand * seat.glove(), seat.curl);
+        commands.entity(h).queue(move |mut e: EntityWorldMut| {
+            if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                v.thumb = Some(seat.thumb);
+            }
+        });
         glove(&mut commands, Side::Right, rest(Side::Right), [0.15; 5]);
     }
 }
@@ -1288,9 +1421,9 @@ fn carry_for_gallery(
         return;
     };
     let (carry, drag, pack) = (
-        spec.contains("carry"),
-        spec.contains("drag"),
-        spec.contains("pack"),
+        gallery_word(spec, "carry"),
+        gallery_word(spec, "drag"),
+        gallery_word(spec, "pack"),
     );
     if !carry && !drag && !pack {
         return;
@@ -1446,7 +1579,11 @@ fn climb_for_gallery(
 ) {
     use crate::interact::hand_climb::{HandHold, Hold};
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "climb"))
+    {
         return;
     }
     let Some((_, root, mut input, children)) = players.iter_mut().next() else {
@@ -1523,7 +1660,11 @@ fn fight_for_gallery(
     mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
 ) {
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| s.contains("fight")) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "fight"))
+    {
         return;
     }
     let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
@@ -1691,7 +1832,7 @@ fn present_for_gallery(
     if !opts
         .gallery
         .as_deref()
-        .is_some_and(|g| g.contains("+present"))
+        .is_some_and(|g| gallery_word(g, "present"))
     {
         return;
     }
@@ -1878,7 +2019,11 @@ fn treat_for_gallery(
 ) {
     use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
     use crate::rig::Side;
-    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "treat"))
+    {
         return;
     }
     let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
@@ -1934,7 +2079,11 @@ fn treat_for_gallery(
         }
     }
     let left = input.hand_mut(Side::Left);
-    left.pose = if opts.gallery.as_deref().is_some_and(|s| s.contains("wrist")) {
+    left.pose = if opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| gallery_word(s, "wrist"))
+    {
         // Across the chest, fingers to the right, the back of the wrist
         // (its screen) turned up to the eye.
         Transform::from_xyz(-0.08, 1.2, -0.32).with_rotation(
@@ -1980,18 +2129,18 @@ fn pose_body_for_gallery(
     // A gallery of the body (or of wounds on it) draws it, whatever the
     // setting (off by default).
     if let Some(mut c) = comfort
-        && (spec.contains("body") || spec.contains("treat"))
+        && (gallery_word(spec, "body") || gallery_word(spec, "treat"))
         && !c.body
     {
         c.body = true;
     }
     let (stoop, behind, above) = (
-        spec.contains("stoop"),
-        spec.contains("behind"),
-        spec.contains("above"),
+        gallery_word(spec, "stoop"),
+        gallery_word(spec, "behind"),
+        gallery_word(spec, "above"),
     );
-    let (down, side) = (spec.contains("down"), spec.contains("side"));
-    let crouch = spec.contains("crouch");
+    let (down, side) = (gallery_word(spec, "down"), gallery_word(spec, "side"));
+    let crouch = gallery_word(spec, "crouch");
     if !stoop && !behind && !above && !down && !side && !crouch {
         return;
     }
@@ -2074,5 +2223,40 @@ mod tests {
         s.reset();
         assert!(!s.tick(true));
         assert!(SHOT_SETTLE >= 10, "9 frames after was the first good shot");
+    }
+}
+
+#[cfg(test)]
+mod gallery_word_tests {
+    use super::gallery_word;
+
+    /// A mode is a whole word of the subject; no item's id turns one on.
+    #[test]
+    fn no_item_turns_a_gallery_mode_on() {
+        assert!(gallery_word("climb", "climb"));
+        assert!(gallery_word("climb+behind", "behind"));
+        assert!(gallery_word("body+down+side,0,1", "side"));
+        assert!(gallery_word("pm_pistol+present", "present"));
+        assert!(!gallery_word("climbing_kit,0,1.2", "climb"));
+        assert!(
+            !gallery_word("ak74,0,0.3,side", "side"),
+            "words after the comma are numbers"
+        );
+        let modes = [
+            "carry", "drag", "pack", "climb", "fight", "treat", "wrist", "present", "body",
+            "stoop", "behind", "above", "down", "side", "crouch",
+        ];
+        let items =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .expect("items");
+        for (_, def) in items.iter() {
+            for m in modes {
+                assert!(
+                    !gallery_word(&format!("{},0,1.2", def.id), m),
+                    "{} turns on the gallery's {m}",
+                    def.id
+                );
+            }
+        }
     }
 }

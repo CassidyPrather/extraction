@@ -74,14 +74,22 @@ for st in sorted(stops, key=lambda x: prio[x["kind"]]):
 merged.sort(key=lambda x: x["s"])
 # views
 notable = [(p["name"], tuple(p["at"])) for p in d["places"]] + [(r["name"], tuple(r["at"])) for r in d["rvs"]]
-LAND = ("chimney", "steeple", "chapel", "water_tower", "radio_mast", "ranger_tower", "headframe", "survey_tower", "blast_furnace", "church_ruin", "observatory")
+LAND = ("chimney", "steeple", "chapel", "water_tower", "radio_mast", "ranger_tower", "headframe", "survey_tower", "blast_furnace", "church_ruin", "observatory", "dam_face")
 notable += [(p["prefab"], tuple(p["at"])) for p in d["placements"] if p["prefab"] in LAND]
 lines, out = [], []
 for n, st in enumerate(merged, 1):
     k = at(st["s"]); p = pts[k]
+    # A job in a building (a bring or plant: its point is the building)
+    # ends at its wall; you arrive as you come up to it, 20 m out,
+    # looking at it.
+    inside = st["kind"] == "job" and any(math.dist(pl["at"], p[:2]) < 10 for pl in d["placements"])
+    if inside:
+        k = at(max(0.0, st["s"] - 20)); p, goal = pts[k], p
     # An arrival (the job, the rendezvous) faces the way you came in; any
     # other stop, the way on.
-    if st["kind"] in ("job", "rendezvous"):
+    if inside:
+        fwd = yaw_to(p, goal)
+    elif st["kind"] in ("job", "rendezvous"):
         fwd = yaw_to(pts[at(max(0.0, st["s"] - 15))], p)
     else:
         ahead = pts[at(min(total, st["s"] + 15))]

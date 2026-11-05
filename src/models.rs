@@ -250,6 +250,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Wool",
     "Ticking",
     "Zinc",
+    "Aluminium",
+    "Cork",
     "GreyGreen",
     "Straw",
     "Brick",
@@ -282,6 +284,15 @@ pub struct ModelMaterials {
 }
 
 impl ModelMaterials {
+    /// The name a shared model material was made from, if it's one of
+    /// these (`weapons::weather` asks, to know steel from wood).
+    pub fn name_of(&self, id: AssetId<StandardMaterial>) -> Option<&str> {
+        self.cache
+            .iter()
+            .find(|(_, h)| h.id() == id)
+            .map(|(n, _)| n.as_str())
+    }
+
     pub fn get(
         &mut self,
         name: &str,
@@ -371,6 +382,19 @@ impl ModelMaterials {
             // Instrument paint: the grey-green of survey and signals kit.
             "GreyGreen" => flat(materials, Color::srgb(0.36, 0.4, 0.34), 0.0, 0.6),
             "Zinc" => flat(materials, Color::srgb(0.5, 0.52, 0.53), 0.9, 0.45),
+            // An army flask's aluminium: oxidised matte, not a mirror
+            // (as Zinc, a canteen in a dim room reflected the dark and
+            // read black; docs/craft/ITEM_READING.md).
+            "Aluminium" => flat(materials, Color::srgb(0.66, 0.67, 0.68), 0.5, 0.62),
+            // A cork board's cork: the rock scan's grain laid fine and
+            // tinted tan, so it reads as cork with nothing pinned on it
+            // (in glove leather it was a blank brown slab: the truck's
+            // board, docs/craft/PROP_READING.md).
+            "Cork" => derive(Mat::Boulder, &|m| {
+                m.base_color = Color::srgb(0.98, 0.74, 0.5);
+                m.perceptual_roughness = 0.95;
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(6.0));
+            }),
             "Straw" => flat(materials, Color::srgb(0.5, 0.42, 0.24), 0.0, 0.95),
             // Animals: a rook's black with a sheen, its bare grey bill.
             "Feather" => flat(materials, Color::srgb(0.035, 0.035, 0.042), 0.0, 0.45),
@@ -736,6 +760,37 @@ mod tests {
             }
         }
         (lo.x <= hi.x).then_some((lo, hi))
+    }
+
+    /// Every kind of item looks like itself: none falls back to the item
+    /// placeholder, a plain slab in its category's colour (the walker's
+    /// armour plate did, pried off a wreck: the one piece of salvage that
+    /// didn't say what it was). A gun is built from its layout
+    /// (`weapons`, `models/guns/`), a magazine loads from `models/mags/`,
+    /// the anomaly items are drawn by `anomaly::visuals` (`OWN_LOOKS`);
+    /// every other kind has `models/items/<id>.glb`.
+    #[test]
+    fn no_item_falls_back_to_the_placeholder() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models");
+        let mut bare = Vec::new();
+        for (_, def) in cat.iter() {
+            let path = match def.category {
+                Category::Firearm => root.join("guns").join(format!("{}.glb", def.id)),
+                Category::Magazine => root.join("mags").join(format!("{}.glb", def.id)),
+                _ if crate::anomaly::visuals::OWN_LOOKS.contains(&def.id.as_str()) => continue,
+                _ => root.join("items").join(format!("{}.glb", def.id)),
+            };
+            if !path.exists() {
+                bare.push(def.id.clone());
+            }
+        }
+        assert!(
+            bare.is_empty(),
+            "{} kinds would be the placeholder slab: {bare:?}",
+            bare.len()
+        );
     }
 
     /// Every item model fits the box its collider is (`dims`, or a cube of

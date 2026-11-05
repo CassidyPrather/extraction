@@ -1,14 +1,26 @@
 # Progression
 
-> **Where it stands (4 November).** `CardCheck` (`would_pay`, `verdict`)
-> and Onboarding's Payday line are on main. `first_jobs_cautious` on
-> main 8d5c1105 shows the career behaving as it should. There are two
-> gentle jobs before the first contract, and job 2 goes somewhere other
-> than job 1. Every pay or no-pay matches the card, and the mast relay
-> was given up unpaid after a drone pin. The stalls left are the bot's
-> WalkTo timeouts: at the logging camp, and around the post office and
-> the south-west. Those are with Onboarding. One of them comes back here
-> only if a job turns out to be placed somewhere unreachable.
+> **Where it stands (5 November).** These are on main:
+> - **Item introduction.** Every loot source waits for its family's raid.
+>   Guns arrive one family a raid (PM; TOZ-8 at 3; IZh-43 at 4; MP-133 and
+>   the flare pistol at 5; SKS at 6, with the driver's gift; Mosin at 7;
+>   AK at 8; then later). At most 12 new ideas come in a raid. A first
+>   raid's small things sit in sight, and there's a first find on job 1.
+>   Found guns come dirty for their wear.
+> - **What there is to want.** Every card says what the tier comes to.
+>   A not-done job says which way. A stuck rolled scout gives way. A lost
+>   raid says what's still on the card.
+> - **Valleys and the way home.** The gentle jobs come home free by the
+>   gate. Moving valley brings a look round that valley's gentle place.
+>
+> The gift guns come loaded (357d03b7).
+>
+> **What's next:**
+> - Re-run the hoarder career and reckless raids 10-20 once Onboarding's
+>   spare gun goes into the kit crate. Today it reaches the ledge after
+>   the bot has left, so a lost kit spirals.
+> - Then the loot side past raid 3, and the endgame's first hint, which
+>   no run has reached yet.
 
 Why go on raid 10, or raid 30? The game already has raids, the truck as
 home, a no-currency economy (loot feeds the bench, the kitchen and the

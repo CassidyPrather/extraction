@@ -48,6 +48,8 @@ software renderer is.
 | `sentry_chirp_reel_before_after.png` | `reel:chirp,30,3` (a sentry 7 m off facing you, its 2.5 s chirp set off on the reel's first frame; a frame every 0.1 s), camera `40,0,262,0,-2`, fog, crop 595,85 100x95; main (top two rows), after (bottom two). Before, the lens looks the same in every frame: at 7 m it's a few pixels already at full red, so the old flare, a brightness, couldn't be seen (its red glow 48-53 px every frame). After, a glow round the lens (`sentry_look::HALO`, fogless, so drawn as far as the sentry) pulses with `chirp_gain`: 50 to 1500 px, quicker and brighter through the chirp, brightest at frames 24-25 as the warning burst goes, and out at 26. (At 10 frames a second the late pulses, up to 8 a second, alias; the plot shows them.) Frame 0 of the after run caught the sentry half dressed, before its chirp | — |
 | `drone_lock_reel_before_after.png` | `reel:lock,20,3` (a drone hovering 8 m off, its lock on you set off by the reel; a frame every 0.1 s over its 1.5 s lock), camera `40,0,262,0,-2`, fog, crop 605,270 80x50 at 2x; main (top), after (bottom). Before, a lock showed only as a red point light under it. After, its lens glows as the sentry's does through a chirp: the same curve (`visuals::tell_gain`, `tell_halo`), over `drone::LOCK_TIME`, flashing as the burst goes. A player learns "pulsing red lens: about to fire" once, on either machine (`the_sentry_chirp_and_the_drone_lock_are_one_tell`) | — |
 | `melee_tells_reel_before_after.png` | `reel:melee,24,2` (a crawler, left, a hound and a heavy, right, facing you about 6-8 m off; each run through its lead to a blow from the reel's first frame; a frame every 1/15 s), camera `40,0,262,0,-2`, fog, crop 340,150 560x340; main (top), after (bottom); frames 0, 5, 10, 17, 22. After, each lens glows with the sentry's and the drone's tell (`visuals::melee_halo`, the one curve: `tell_gain` / `tell_halo`, never out between pulses) through its own lead, flashing as the blow comes: the crawler through its charge (`indoor::ZAP_CHARGE`), the hound through its coil (`hound_mind::CROUCH_TIME`) and on through its lunge till it bites, the heavy through its raise (`heavy::RAISE_TIME`) and its slam; dark after (frame 22). Before, none: the crawler's was a sound and a blue swell, the hound's a crouch, the heavy's an arm. `each_melee_tell_shows_for_its_whole_lead` | — |
+| `hound_stalk_12m_before_after.png` | `reel:stalk,10,6` frame 4: three hounds 12 m off in fog facing you, at rest (left), stalking (middle: Investigate, going low) and coiled to lunge (right); camera `40,0,262,0,-2`, crop 300,330 700x120 at 2x; main (top), after (bottom). After, the stalker's eye is a low, dull slit (`visuals::STALK_DIM`, `STALK_SLIT`): before, a stalking hound's eye burned brighter than at rest (its mood: suspicious). The coiled one carries the red tell. At 12 m a hound's eye is three pixels: the stalk reads as a darker eye, subtly; the tell plainly. `a_stalking_hounds_eye_is_neither_rest_nor_a_tell` holds the numbers (rest at least 2.5x the stalk, a tell at least 2x rest) | — |
+| `aim_tells_before_after.png` | `reel:aim,24,2` (a walker settling its aim, left, and a grappler winding up, right, 8 m off), frame 4, crop 420,320 380x110 at 3x; main (left), after (right). After, the walker's lens glows through its aim (`walker::AIM_TIME`) and the grappler's through its wind-up (`grappler::WINDUP`): the one tell, now on every machine's body (`visuals::attacks`, `every_attack_tells_on_the_body`) | — |
 | `pin_turret_before_after.png` | `reel:pin` frame 12 (a walker pinning the spot where you dropped from sight, `walker::Suppressing`), crop 160,300 240x160 at 2x; main (left), after (right). Before, its gun swung back to face ahead while its rounds still went to the spot; after, it holds on the spot (`a_pinners_gun_holds_on_where_you_went_down`) | — |
 | `pin_tracer_before_after.png` | `reel:pin,28,1` frame 26, on main 8d5c1105 (Weapon feel's tracers lit from the muzzle), the spot 7 m to its right, camera `40,0,262,0,-2`, fog, crop 160,260 840x200; main (top), after (bottom). The pinner's fourth round, a tracer (every third, from its first: `a_pinners_rounds_carry_tracers`), streaks out past the spot; before, no streak and the gun facing ahead. An aimed burst carries none: a stream of streaks onto one place reads as "keeping your head down" | — |
 | `weak_points_15m_before.png` / `weak_points_15m_after.png` | `reel:strikes,1,1` at 14:00, 15 m (crop), main and after: four whole walkers. Before, the knees are 12 cm grey joints and the eye an 8 cm band. After, every weak point (`weak_points::is_weak`: what one pistol round tells on) wears the one shoot-here orange: a ball at each knee, a ring round the eye and the turret. Each is at least 0.24 m across (0.92 deg at 15 m) | — |
@@ -94,3 +96,76 @@ Not weak, by design: a walker's core (four rounds), every plate, a drone's body,
 The walker is kinematic, so nothing physical stopped a foot planted in a wall. Its path is Robot minds' (`walker::keep_off_walls` keeps its centre 1.3 m off buildings). The body now guards its own feet: each step's target is cast for from the body at hip height against `Layer::World`, and a foot aimed through a wall comes down 0.14 m short of it (`anim::wall_clear`, `step_walker_walled`). A slope rising under the ray isn't a wall, and rubble (`Layer::Debris`) is still stood on. `anim::tests::feet_never_land_in_a_wall` walks a walker along a wall 0.5 m off its middle. With the guard switched off, a foot came down 0.18 m inside it; with it, none does.
 
 No shot: a wall tall enough to matter hides the far feet from any camera that shows the walker, and a cut-away view isn't something the reel can stage yet. `reel:wall` stages the walk for a look in the game.
+
+## Awareness reads at range in fog
+
+Each machine that hunts you has four states a player needs to tell apart: at work, searching, hunting you, and its tell. They must read apart at the range you meet the machine, in a pea-souper by day. `visuals::awareness` is the table: one row per machine, with its range, its eye's lit size and its glow, and what each state shows. `aware_px` counts the pixels that differ between two states at the headset's render scale. The eye and glows are lamps the fog can't touch; a crouch or a pace is fogged. `every_machines_awareness_reads_at_its_range` holds every pair of a machine's states to `READS_PX` (16 px) apart. The machines left out are in `AWARE_ELSEWHERE`, each with its reason:
+
+- The spotter's lamp is its own awareness cue.
+- The minelayer flees instead of hunting.
+- The sorter is met at a few metres.
+- The plough and the mender are blind to you.
+
+| Machine | Range | Weakest pair | px |
+|---|---|---|---|
+| drone | 40 m | searching / hunting | 59 |
+| heavy | 15 m | searching / hunting | 113 |
+| sentry | 25 m | any | 132 |
+| hound | 12 m | heading for a sound / hunting | 157 |
+| walker | 30 m | any but tell | 206 |
+| grappler | 14 m | searching / hunting | 236 |
+| crawler | 8 m | searching / hunting | 259 |
+
+What was wrong, and what changed:
+
+- **Eye glow, beyond 25 m.** The glow faded out past 25 m even by day, when no halo takes over. That left the eye alone, and a drone's eye is 1 px at 40 m, so a searching drone and a hunting one were the same pixel. Now the glow carries the eye's rhythm by day. Past `GLOW_HOLDS_AT` (15 m) it holds the size it looks there (`HeldSize`).
+- **Tell glows.** A tell's glow holds its size the same way. While a tell burns, the mood glow gives way to it (`tells_over_moods`). Otherwise a hunting machine's hot glow hid the red quickening of its aim or lock.
+- **Heavy and sentry.** The heavy's eye and the sentry's lens burned the same whatever they knew. They now use the walker family's mood through `visuals::eye_mood`: steady at work, a slow pulse while searching, a fast one seeing you. The sentry's lens glow carries this between chirps (`eye_glow`).
+- **The hound's stalk.** Its eye is a 3.5 px sliver at 12 m. Its second cue is its body: the stalk crouches (`anim::LOW`) and slows to `STALK_PACE`. These are 800 px or more against every other state.
+
+The reels show the two weakest rows, and the walker at 30 m. Each strip runs left to right: at work, searching, hunting, its tell. It shows five frames 1/6 s apart, before beside after, in fog at 11:00 (`reel:awaredrone`, `reel:awareheavy`, `reel:awarewalker`):
+
+![drone at 40 m](awareness_drone_40m_before_after.png)
+![heavy at 15 m](awareness_heavy_15m_before_after.png)
+![walker at 30 m](awareness_walker_30m_before_after.png)
+
+Before, the four drones differ only in a pixel of eye, and the four heavies' eyes are the same. After, the drones read faint red, red pulse, orange-white, then the larger red lock. The heavy's eye is steady, then pulsing, then bright. The walkers read faint, red, hot, then the tell's red.
+
+### At dusk and at night
+
+The table runs in three lights from `world::weather`'s own conditions (`aware_weathers`): fog by day, drizzle at dusk, fog at night. After dark the eye has its halo (`world::halos`), the glow hands over to the halo as the dark comes, and a body's crouch or pace fades with the light.
+
+The reels showed three faults, each fixed in `alert_eyes`:
+
+- **Brightness alone didn't read after dark.** The night halo was steady. A searching walker's halo at 30 m was 4 levels of red over one at work's (58 against 62), and nothing pulsed. The halo now carries the eye's rhythm. The model credits only rhythm, not brightness steps.
+- **A tell was lost in the night halo.** A telling walker or drone kept the hunting halo's orange glare, with only a small red sphere inside it. The halo now carries the tell's own red quickening while one burns (`TELL_IN_HALO`).
+- **At dusk the glow handed over to a halo a dusk sky outshines.** The halos switch on at a light of 0.5, but at dusk (0.36) they barely show, so walkers at 30 m were their 15 px eyes alone. The glow now fades into the halo only as the dark comes (`night`).
+
+The weakest rows after dark are the heavy (113 px: its eye, no halo) and the sentry (132 px: its lens glow), the same as by day. Each strip runs at work, searching, hunting, then its tell, before beside after:
+
+![walker, dusk](awareness_walker_dusk_before_after.png)
+![walker, night](awareness_walker_night_before_after.png)
+![drone, dusk](awareness_drone_dusk_before_after.png)
+![drone, night](awareness_drone_night_before_after.png)
+
+## A wreck's salvage where you can see it and get at it
+
+`vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached` kills each machine that wrecks on open ground and lets it come to rest: the walker and the drone on five seeds each, the crawler, the hound and the heavy. It then checks every part a hand takes off: what's seated, its bolts and cables, its plates, and the heavy's seats. Each part has to pass two checks:
+
+- **Seen:** it is in sight from eyes 1.65 m up, standing 1.5 m off on some side.
+- **Reached:** it is within `stance::ARM` of a shoulder somewhere between 0.55 m (crouched, leaning in) and 1.45 m (standing). The arm's line has to be clear, from a spot where your body fits beside the wreck.
+
+What it found, and what changed:
+
+- **Walker:** it fell belly down, with its hip servo packs 0.16 m up under the orb (Models' wreck pass). As it settles, a walker's wreck now rocks over onto its bare side (`wreck::bare_side`, `roll_to_rest`), the side furthest from everything that comes off it. The servo packs are on the soundest side's two hips (`wreck::servo_hips`), and those two legs tear away as it lands, so the hips are bare. The other legs stay on under it and prop it.
+- **Drone:** it came down on its belly plate. It now goes over onto its back on impact.
+- **Heavy:** salvage gave it a walker's power cell, sealed inside its hull at 2.38 m, because the heavy is a walker too. `fit_salvage` now skips heavies; their seats are their own.
+
+Two of the heavy's rows are still pending, and they're Heavy's to fix: its back plates sit 1.9–2 m up on a wreck that stays on its legs, and its cell seat is inside its hull.
+
+Before and after, the walker and the drone 5 m off on the training yard in fog, after they've come to rest:
+
+![walker wreck](wreck_rests_on_bare_side_walker_before_after.png)
+![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)
+
+> **Reel spot.** Most recipes above put the camera at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.

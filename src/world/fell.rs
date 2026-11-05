@@ -21,12 +21,13 @@ use super::buildings::{
 use crate::render::materials::Mat;
 
 /// Every prefab built here.
-pub const PREFABS: [&str; 5] = [
+pub const PREFABS: [&str; 6] = [
     "ore_mill",
     "observatory",
     "funicular_lower",
     "funicular_upper",
     "funicular_car",
+    "snow_pole",
 ];
 
 pub fn geo(id: &str) -> Option<Geo> {
@@ -37,9 +38,23 @@ pub fn geo(id: &str) -> Option<Geo> {
         "funicular_lower" => lower_station(&mut b),
         "funicular_upper" => upper_station(&mut b),
         "funicular_car" => car(&mut b),
+        "snow_pole" => snow_pole(&mut b),
         _ => return None,
     }
     Some(b.finish())
+}
+
+/// A snow pole: one of a line marking a track over open snow (Rime's col
+/// track), red and white at the top to be seen against the white from
+/// the last pole (`art/props/rime.py`). Only its pole is solid, 9 cm.
+fn snow_pole(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.bx(
+        Vec3::new(0.09, 2.5, 0.09),
+        Vec3::new(0.0, 1.25, 0.0),
+        Mat::Timber,
+    );
+    b.dress_structure(from, vec![("snow_pole", Transform::IDENTITY)]);
 }
 
 // ---- Shared pieces ------------------------------------------------------------

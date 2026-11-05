@@ -12,7 +12,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use super::heavy_look::{lod_name, lod_range};
-use super::plough::{AUGER, BANK_STEP, BankPiece, HATCH, Lanes, Plough, PloughCell, PloughHatch};
+use super::plough::{AUGER, BANK_STEP, HATCH, Lanes, Plough, PloughCell, PloughHatch};
 use super::{PartRole, RobotPart};
 use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes};
 use crate::render::materials::MaterialLibrary;
@@ -36,6 +36,7 @@ pub struct PloughLookPlugin;
 impl Plugin for PloughLookPlugin {
     fn build(&self, app: &mut App) {
         crate::render::puff::add_to(app);
+        super::plough_bank::add_to(app);
         app.add_systems(Update, (dress, run_parts, gallery, spray, fly_snow));
     }
 }
@@ -55,7 +56,6 @@ struct Moving {
 fn dress(
     mut commands: Commands,
     ploughs: Query<(Entity, &Children), (With<Plough>, Without<Dressed>)>,
-    banks: Query<(Entity, &Transform), (With<BankPiece>, Without<Dressed>)>,
     parts: Query<&RobotPart>,
     hatches: Query<(), With<PloughHatch>>,
     cells: Query<(), With<PloughCell>>,
@@ -68,7 +68,7 @@ fn dress(
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if ploughs.is_empty() && banks.is_empty() {
+    if ploughs.is_empty() {
         return;
     }
     let Some(h) = models.request(MODEL, &server) else {
@@ -80,9 +80,6 @@ fn dress(
         ModelState::Failed => {
             warn!("plough model failed to load");
             for (e, _) in &ploughs {
-                commands.entity(e).insert(Dressed);
-            }
-            for (e, _) in &banks {
                 commands.entity(e).insert(Dressed);
             }
             return;
@@ -245,40 +242,6 @@ fn dress(
         ));
         let _ = HATCH;
     }
-    for (e, bt) in &banks {
-        hang(
-            &mut commands,
-            &mut materials,
-            e,
-            "bank",
-            bank_shape(bt.translation),
-            2,
-        );
-        commands.entity(e).insert(Dressed);
-    }
-}
-
-/// Each section of bank its own shape, from where it lies: longer than
-/// its step so it runs into its neighbours, higher or lower, wider or
-/// narrower, turned a little off the road, so the bank reads as one
-/// thrown heap and not a row of the same piece.
-fn bank_shape(at: Vec3) -> Transform {
-    let mut h = (at.x * 100.0).round() as i64 as u64
-        ^ ((at.z * 100.0).round() as i64 as u64).rotate_left(21);
-    let mut next = || {
-        h = h
-            .wrapping_mul(0x5851_f42d_4c95_7f2d)
-            .wrapping_add(0x1405_7b7e_f767_814f);
-        ((h >> 40) as f32) / (1u64 << 24) as f32
-    };
-    let (len, high, wide, turn, sink) = (next(), next(), next(), next(), next());
-    Transform::from_xyz(0.0, -0.05 - 0.15 * sink, 0.0)
-        .with_rotation(Quat::from_rotation_y((turn - 0.5) * 0.18))
-        .with_scale(Vec3::new(
-            0.8 + 0.45 * wide,
-            0.65 + 0.55 * high,
-            1.3 + 0.3 * len,
-        ))
 }
 
 /// The auger turns and the beacon sweeps while it runs; the plume while
@@ -350,7 +313,7 @@ fn gallery(
     if let Some((e, at)) = *held {
         if let Ok(mut p) = ploughs.get_mut(e) {
             p.run.leg = rules::Leg::Up(at);
-            p.banked = at;
+            p.banked.insert(super::plough::bank_slot(at));
         }
     }
     if *stage != 3 {
@@ -392,7 +355,7 @@ fn gallery(
     commands.queue(move |w: &mut World| {
         if let Some(mut p) = w.get_mut::<Plough>(e) {
             p.run.leg = rules::Leg::Up(start.max(0.0));
-            p.banked = start.max(0.0);
+            p.banked.insert(super::plough::bank_slot(start.max(0.0)));
             p.needs_snow = false;
             // Stopped for the picture (its plume and auger still going).
             p.jammed = 0.0;
@@ -403,29 +366,24 @@ fn gallery(
     if after {
         // What it left: the lane and the bank from where it came to here,
         // and the tin under it.
-        let mut s = (here - 40.0).max(0.0);
-        while s < start {
-            let (p, d) = rules::along(&points, s);
-            let g = zone.on_ground(p[0], p[1]);
-            let right = Vec3::new(-d[1], 0.0, d[0]);
-            let lo = |v: Vec3| {
-                let q = g + v * rules::BANK_OUT;
-                zone.ground(q.x, q.z)
-            };
-            let side = right * rules::bank_side(lo(-right), lo(right));
-            let b = g + side * rules::BANK_OUT;
-            let rot = Quat::from_rotation_y(
-                -extraction_core::sentry::bearing([0.0, 0.0], d).to_radians(),
-            );
+        let from = super::plough::bank_slot((here - 40.0).max(0.0));
+        let to = super::plough::bank_slot(start.max(0.0));
+        let mut laid = Vec::new();
+        for slot in from..to {
+            let s = slot as f32 * BANK_STEP;
+            let (p, _) = rules::along(&points, s);
             let (next, _) = rules::along(&points, s + BANK_STEP);
             lanes.clear(Vec2::new(p[0], p[1]), Vec2::new(next[0], next[1]), now);
-            commands.spawn((
-                BankPiece,
-                Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(rot),
-                Visibility::default(),
-            ));
-            s += BANK_STEP;
+            if let Some(piece) = super::plough::bank_piece(&zone, &points, slot) {
+                commands.spawn((piece, super::plough::OfPlough(e)));
+            }
+            laid.push(slot);
         }
+        commands.queue(move |w: &mut World| {
+            if let Some(mut p) = w.get_mut::<Plough>(e) {
+                p.banked.extend(laid);
+            }
+        });
     } else if let Some(kind) = catalog.kind("canned_stew") {
         crate::items::spawn_item(
             &mut commands,

@@ -727,6 +727,16 @@ which runs beside the game's. Note both figures. If the 1% figure is over
 11.1 ms, the renderer alone can't keep 90 Hz there; tell us. It decides
 whether we change Bevy's shadow code.
 
+**One raid with the pipeline log on** (any valley, about 10 minutes): set
+`EXTRACTION_PIPELINES=1` the same way and play a raid as usual, a fight
+included. The log then has a line for every render pipeline the GPU
+builds: `pipeline queued #N at frame F: ...`. Builds are meant to happen
+before the line `load: warm-up shelf done`. Any `pipeline queued` line
+after it is a build mid-raid, where something drew for the first time.
+In the headset that's a hitch. Send the log; the line names what was
+built. Our own gauge (`scripts/pipelines.sh`) can't run the headset's
+path, so this run is the only check of it.
+
 **What the numbers mean.** For each switch, take the mean of the three
 `gpu:` totals with it on and with it off.
 

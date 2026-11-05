@@ -16,7 +16,10 @@
 >   gate blocks' ivy kept off their lettering; below).
 > - ~~The truck crate's later kinds at reading distance~~: done 4
 >   November (the magazine on its side; the rounds out from under the map).
-> - The walk props past the first jobs (Kettle's, Rime's, Sallow's).
+> - ~~The walk props past the first jobs~~: Map design's walk reviews
+>   cover them and send model requests (Sallow's viewing bay, Rime's snow
+>   poles); the first-job interiors in Kettle, Rime and Sallow are done
+>   here (4 November, below).
 > - ~~The first raid's loot in Marrow's first-job houses, in game
 >   light~~: done 4 November (below, "The first raid's houses").
 > - Cinder's Ash Row at raid 0 (the room cameras I had predate the map's
@@ -350,4 +353,115 @@ Face-on from 2 m, standing, in drizzle at 11:00.
   the ivy keeps off them; the rest of the gate grows as before
   (`ivy_keeps_off_lettering`). Kettle above, Cinder below:
   ![gate blocks, before and after](../shots/props/gate_block_ivy_before_after.jpg)
+
+### The farmhouse with Progression's placement rule (4 November)
+
+Progression's rule (claude/polish-progression, d525af94): on a
+career's first two raids a Tiny or Small kind rolled at a spot out of
+0.75–1.6 m moves to one in reach in the same building; a Tiny one
+needs a flat top or the 1.25 shelf (the 0.80 shelf sits under a board,
+shaded and seen edge-on). The same cameras at raid 0, main left, the
+rule right (the roll differs; where each kind lands is the point):
+![farmhouse, before and after the rule](../shots/items/raid0_farmhouse_placement_before_after.jpg)
+The kitchen worktop now carries a matchbox and a dressing, lit; the
+low shelf holds Small kinds (crackers, a dressing) only:
+![the tops, close](../shots/items/raid0_farmhouse_placement_tops.jpg)
+
+**Fixed: the canteen read black indoors.** From the door, two canteens
+on the table were near-black bottles: their aluminium was `Zinc`,
+0.9 metallic, a mirror of the dark room. They are `Aluminium` now, an
+army flask's oxidised matte (lighter, half as metallic, rougher):
+![canteen, zinc and aluminium](../shots/items/canteen_aluminium_before_after.jpg)
+
+### The first jobs in Kettle, Rime and Sallow at raid 0 (4 November)
+
+The same rig as Marrow's and Ash Row's (raid 0 from a fresh save,
+drizzle, 11:00, 1.2 m from each loot spot), in the buildings of each
+valley's first job: Kettle's Gatekeeper's cottage and its shed, Rime's
+funicular valley station, Sallow's valve house. Main carries
+Progression's placement rule now.
+![first jobs, Kettle, Rime and Sallow](../shots/items/raid0_first_jobs_kettle_rime_sallow.jpg)
+
+- **The placement rule holds outside Marrow.** Kettle's cottage keeps
+  its food, canteens and tea on the table and the counter; the shed's
+  bolt and power cell lie on the 1.25 shelf, the gun oil (Small) on the
+  0.80 one; Rime's station has a power cell on its table, Sallow's valve
+  house its kit on the table by the terminal and on the bench. No small
+  thing on a low shaded shelf.
+- **The models read.** The canteen in aluminium is a light flask on the
+  counter, the tea tin and crackers their own, the terminal's green
+  screen the brightest thing in the valve house. Nothing to fix.
+- Still true everywhere: the 9x18 box, the bolt and a power cell are a
+  few pixels at 1.2 m, true to size; the rule puts them where they are
+  seen, which is the whole of it.
+
+### Artifacts up close (4 November)
+
+The Zone's most valuable finds, each lying 0.55 m off on the training
+yard's road, fog at 11:00 (`--gallery art_<id>,30,0.55`). Left to right,
+top to bottom: featherstone, hearth, glass eye; aegis, lodestone,
+hushstone; stormglass, shard, rimestone:
+![all nine](../shots/items/artifacts_all_before.jpg)
+
+- **Read, and look valuable:** the hearth (black with glowing cracks),
+  the aegis (a copper tangle), the shard (a blade of not-quite-glass),
+  the featherstone (a dark pebble ringed in lilac), the glass eye (a
+  marble with a highlight).
+- **The hushstone** is what it says, a matte grey pebble: the one
+  artifact you could take for a stone, by design.
+- **Fixed (`anomaly/visuals.rs`, with Anomalies' go-ahead):**
+  - *Stormglass and rimestone were twins*: two pale blue balls the same
+    size. The stormglass is a clear bead with a dark cloud and a spark in
+    it; the rimestone is pale stone furred with short white frost.
+  - *The lodestone was a smooth violet ball*, not "a fist of dark iron".
+    It is knobbled iron now, rough and barely metallic, with iron
+    filings standing off its poles, their bright tips catching the light.
+  - Each look inside its item's box; the bristles are one merged mesh per
+    kind, built once and shared (fields hold several stones). Lessons:
+    a lump's normals must be taken before its non-uniform scale (baked
+    after, the lodestone went flat black); half-metal dark iron in fog
+    renders black too.
+  Before (top), after at 0.55 m (middle) and at 3 m (bottom):
+  ![lodestone, stormglass, rimestone](../shots/items/artifacts_before_after.jpg)
+- **At 3 m every artifact is a speck**, before as after: small things on
+  stony ground. Their fields' light is what finds them.
+
+### Every kind, and no placeholder (5 November)
+
+**No item falls back to the placeholder.** The walker's plate was the
+item placeholder's plain slab (`ROBOT_READING`), so a test now walks the
+whole table: `models::tests::no_item_falls_back_to_the_placeholder`. A
+firearm loads from `models/guns`, a magazine from `models/mags`, the
+anomaly items are drawn by `anomaly::visuals` (`OWN_LOOKS`); every other
+kind must have `models/items/<id>.glb`. It found 19 more slabs, now
+modelled: the first-hour and contract things (the Zorki camera, Lev's
+relay box, Holm's watch, Hajek's tin, the scour key, the pump log, the
+deputy's lamp, the charging manifest, the intake ledger, Hana's letter,
+in `art/items/story_items.py`), three pieces of kit (the spanner, the
+work boots, the can suppressor) and six ammo lots (the subsonic rounds
+and boxes, black over green tips and a blue band; the surplus lots, dated
+and banded rust or tar).
+
+**Every kind at 1.2 m**, rows of eight sorted by the first raid a kind
+can appear on (from `loot.ron`; "-" for kinds no table rolls: kit, the
+jobs' things, the cooked and the crafted, guns and their parts). Blender
+line-ups (`art/lineup.py`, 1.2 m): the in-game rows (`--gallery
+items:a+b+c`) were taken too, but the training yard's stations walk into
+some frames and a cloak generator blacked one out, so the near-twin hunt
+is done on the line-ups:
+![every kind 1](../shots/items/every_kind_0.jpg)
+![every kind 2](../shots/items/every_kind_1.jpg)
+![every kind 3](../shots/items/every_kind_2.jpg)
+
+- **Fixed: six cassettes were one cassette.** The tapes you find (for
+  Anna, the harvest hymns, the lodge dance, the duty mix, our piano, the
+  Sallow bells) were all the blank: grey shell, cream label, red band.
+  Each has its own shell, label and band now and its title in block
+  letters (`art/items/music.py`):
+  ![tapes, before and after](../shots/items/tapes_before_after.png)
+- **Near-twins left as they are:** a calibre's boxes (5.45 ball, AP,
+  tracer, T-4, subsonic, surplus; the 54R's) share the packet and differ
+  by band and tip colour, as real lots do; the depot keys differ by their
+  stripe (yellow, red, cream) and their scorch and ash; the loose rounds
+  are brass specks at 1.2 m by nature.
 

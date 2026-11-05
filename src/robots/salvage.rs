@@ -160,7 +160,7 @@ pub struct Arced {
 }
 
 /// Where a walker's cell sits in its orb (local, before its size).
-const CELL_AT: Vec3 = Vec3::new(0.0, 0.3, 0.12);
+pub const CELL_AT: Vec3 = Vec3::new(0.0, 0.3, 0.12);
 
 /// Seats an item on a wreck (held back from hands until it's freed).
 fn seat(
@@ -277,6 +277,7 @@ fn fit_salvage(
             Option<&ServoAt>,
             Has<super::indoor::Crawler>,
             Has<super::hound::Hound>,
+            Has<super::heavy::Heavy>,
         ),
         (
             With<super::wreck::Broken>,
@@ -294,7 +295,7 @@ fn fit_salvage(
     let Some(catalog) = catalog else {
         return;
     };
-    for (e, robot, children, gait, legs, servo, crawler, hound) in &wrecks {
+    for (e, robot, children, gait, legs, servo, crawler, hound, heavy) in &wrecks {
         commands.entity(e).insert(Fitted);
         // Its plates, for prying off (`armour::shed_plates`).
         for c in children.iter() {
@@ -344,7 +345,9 @@ fn fit_salvage(
                 );
             }
         }
-        if robot.kind != RobotKind::Walker || crawler || hound {
+        // (The heavy is a walker too, but its salvage is its own seats,
+        // `heavy`: a walker's cell fitted in it was sealed in its hull.)
+        if robot.kind != RobotKind::Walker || crawler || hound || heavy {
             continue;
         }
         let size = gait.map_or(1.0, |g| g.size);
@@ -371,15 +374,10 @@ fn fit_salvage(
         }
         // The servo packs at the soundest hips, bolted on.
         let shape = gait.map_or(super::anim::Shape::Orb, |g| g.shape);
-        let mut sound: Vec<(usize, f32)> = legs
-            .map(|l| l.0)
-            .unwrap_or_default()
-            .into_iter()
-            .enumerate()
-            .filter(|(_, h)| *h > 0.0)
-            .collect();
-        sound.sort_by(|a, b| b.1.total_cmp(&a.1));
-        for (i, health) in sound.into_iter().take(MOST_SERVOS) {
+        // (The side its wreck rolled up: `wreck::servo_hips`.)
+        let legs = legs.map(|l| l.0).unwrap_or_default();
+        for i in super::wreck::servo_hips(legs) {
+            let health = legs[i];
             let hip = shape.hip(i) * size;
             let out = Vec3::new(hip.x, 0.0, hip.z).normalize_or(Vec3::X);
             // Facing out of the hip, the bolts round it.
