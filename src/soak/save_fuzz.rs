@@ -766,7 +766,8 @@ fn moments_now(world: &mut World) -> Vec<Moment> {
             .iter(world)
             .any(|(t, g)| t.in_bed(g, p + Vec3::Y * 0.1))
     });
-    if in_bed {
+    // (Not at base, where every game starts in the bed.)
+    if in_bed && phase != Phase::AtBase {
         now.push(Moment::InTheBed);
     }
     now
@@ -896,31 +897,39 @@ fn soak_quit_anywhere_in_every_valley() {
         .map_or(QUIT_SEEDS.to_vec(), |s| vec![s]);
     let mut findings = Vec::new();
     let mut covered = std::collections::HashSet::new();
+    // A fresh raid for each moment, run up to it, quit and loaded once,
+    // then played on: the smoke raider kits up from the truck's stash, and
+    // on a raid resumed with its kit at its feet it never takes it up again.
     for map in &maps {
         for &seed in &seeds {
-            let path = profile(&format!("quit-{map}-{seed}"));
-            let mut a = raid_on(&path, map, seed);
-            let mut done = std::collections::HashSet::new();
-            let mut frame = 0usize;
-            while frame < 90 * 60 * 14 && done.len() < MOMENTS.len() {
-                a.update();
-                frame += 1;
-                for m in moments_now(a.world_mut()) {
-                    if done.insert(m) {
-                        let when = format!("{map} seed {seed}, {m:?} at frame {frame}");
-                        println!("quit: {when}");
-                        let (b, f) = quit_and_reload(&mut a, &path, map, seed, &when);
-                        a = b;
-                        covered.insert(m);
-                        findings.extend(f);
+            for m in MOMENTS {
+                let path = profile(&format!("quit-{map}-{seed}-{m:?}"));
+                let mut a = raid_on(&path, map, seed);
+                let mut frame = 0usize;
+                let mut hit = false;
+                while frame < 90 * 60 * 14 {
+                    a.update();
+                    frame += 1;
+                    if moments_now(a.world_mut()).contains(&m) {
+                        hit = true;
+                        break;
+                    }
+                    if a.world().resource::<Raid>().phase == Phase::AtBase && frame > 90 * 60 {
                         break;
                     }
                 }
-                if a.world().resource::<Raid>().phase == Phase::AtBase && frame > 90 * 60 {
-                    break;
+                if !hit {
+                    println!("{map} seed {seed}: never {m:?} ({frame} frames)");
+                    continue;
                 }
+                let when = format!("{map} seed {seed}, {m:?} at frame {frame}");
+                println!("quit: {when}");
+                let (mut b, f) = quit_and_reload(&mut a, &path, map, seed, &when);
+                covered.insert(m);
+                findings.extend(f);
+                // And the game goes on from there, every item in one place.
+                frames(&mut b, 300, &format!("{when}, played on"));
             }
-            println!("{map} seed {seed}: quit at {:?} over {frame} frames", done);
         }
     }
     let missed: Vec<&Moment> = MOMENTS.iter().filter(|m| !covered.contains(*m)).collect();
