@@ -83,7 +83,7 @@ reads, and in the hand, where it matters, the gun is at 30 cm.
 | SPSh-44 | grey: reads at 30 cm | grip greys: reads | rust-brown, grip pale: reads | reads | ![](sheet_flare_pistol.jpg) |
 | Mosin | receiver and barrel grey: reads at 30 cm | dull: reads | rust along the receiver and bands: reads | reads | ![](sheet_mosin.jpg) |
 | SKS | grey: reads at 30 cm | dull: reads | rust: reads | reads | ![](sheet_sks.jpg) |
-| AK-74 | the lacquered receiver greys; plum polymer unchanged: reads | dull: reads | receiver rust-brown; polymer faded: reads | reads | ![](sheet_ak74.jpg) |
+| AK-74 | the lacquered receiver greys; plum polymer unchanged: reads | dull: reads | receiver rust-brown; polymer faded: reads | browner and rougher than worn: reads | ![](sheet_ak74.jpg) |
 
 ## Patterned wear
 
@@ -108,6 +108,9 @@ are ones only glass reads, and none of them is in a pipeline key, so
 no new pipelines.
 
 ![Clean, fouled, worn, near failure: the PM at 30 cm](pm_patterned.jpg)
+
+The PM and AK-74 sheets above are shot with it (the AK's soot gathers at
+its port). The other six sheets are from before it.
 
 ## Still open
 
