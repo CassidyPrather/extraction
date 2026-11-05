@@ -2647,10 +2647,12 @@ fn travel_clear(
             return Some(route);
         };
         let g = shut.get_or_insert_with(|| grid.clone());
+        // (A cell at least: the Zone's grid is 2 m a cell, and a smaller
+        // circle shuts none.)
         g.block(
             Obstacle::Circle {
                 at: p.to_array(),
-                radius: 0.6,
+                radius: 0.6f32.max(grid.cell),
             },
             super::indoor::SITE_CLEARANCE,
         );
@@ -5120,8 +5122,25 @@ mod run_tests {
         let zone = app.world().resource::<crate::world::Zone>().clone();
         // Open ground, and a straight walk across it.
         let (from, to) = (Vec2::new(-12.0, 30.0), Vec2::new(12.0, 30.0));
-        let at = Vec2::new(0.0, 30.0);
         let route = travel(&grid, from, to, 1.0).expect("a walk across the open");
+        // Halfway along the walk: where the wreck goes.
+        let pts: Vec<Vec2> = std::iter::once(from)
+            .chain(route.iter().filter_map(|t| match t {
+                Task::WalkTo { to, .. } => Some(*to),
+                _ => None,
+            }))
+            .collect();
+        let total: f32 = pts.windows(2).map(|w| w[0].distance(w[1])).sum();
+        let mut left = total / 2.0;
+        let mut at = from;
+        for w in pts.windows(2) {
+            let d = w[0].distance(w[1]);
+            if left <= d {
+                at = w[0].lerp(w[1], left / d.max(1e-6));
+                break;
+            }
+            left -= d;
+        }
         let near = |route: &[Task]| {
             let mut last = from;
             let mut near = f32::MAX;
