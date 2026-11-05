@@ -58,6 +58,7 @@ pub mod vr_budget;
 pub mod vram;
 pub mod warmup;
 pub mod water_material;
+pub mod way_lamps;
 pub mod wayfind_shots;
 pub mod wear;
 pub mod world_props;
@@ -125,6 +126,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
         .add_plugins(rv_beacons::RvBeaconsPlugin)
+        .add_plugins(way_lamps::WayLampsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
