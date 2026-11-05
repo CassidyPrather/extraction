@@ -28,7 +28,10 @@ impl Plugin for HalosPlugin {
         app.add_plugins(MaterialPlugin::<HaloMaterial>::default())
             .add_systems(
                 Update,
-                (add_halos, size_halos, add_glows, glows, halo_air).chain(),
+                (
+                    add_halos, size_halos, add_glows, glows, hold_angle, halo_air,
+                )
+                    .chain(),
             );
     }
 }
@@ -86,6 +89,15 @@ pub struct Halo {
 /// landmark's lamp read from across the valley. Put it on with the Halo.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct HaloReach(pub f32);
+
+/// The least a `Halo` spans from the eye (its sphere's half-angle,
+/// radians): past where its own radius would, it grows with distance to
+/// hold it. A lamp's glare is an angle in the eye, not a size in the
+/// world; a halo a metre across was a pin-prick at 150 m (Sallow's
+/// rendezvous beacons, the way home: "easy to miss"). Its core keeps its
+/// cap's brightness and hue; only its spread holds.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HaloAngle(pub f32);
 
 /// The sphere drawing a `Halo`, and its own material.
 #[derive(Component)]
@@ -281,6 +293,39 @@ fn glows(
     }
 }
 
+/// A `Halo` with a `HaloAngle` grows with the nearest eye's distance to
+/// hold its angle, and never under its own radius.
+fn hold_angle(
+    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
+    lamps: Query<(&Halo, &HaloAngle, &GlowSphere, &GlobalTransform)>,
+    mut spheres: Query<&mut Transform, With<HaloSphere>>,
+) {
+    let eyes: Vec<Vec3> = crate::render::eyes(&cams)
+        .map(|g| g.translation())
+        .collect();
+    if eyes.is_empty() {
+        return;
+    }
+    for (halo, angle, sphere, at) in &lamps {
+        let d = eyes
+            .iter()
+            .map(|e| e.distance(at.translation()))
+            .fold(f32::INFINITY, f32::min);
+        let r = held_radius(halo.radius, angle.0, d);
+        if let Ok(mut xf) = spheres.get_mut(sphere.0) {
+            if (xf.scale.x - r).abs() > 1e-3 * r.max(1.0) {
+                xf.scale = Vec3::splat(r);
+            }
+        }
+    }
+}
+
+/// A halo's radius `d` from the eye, holding `angle` (half, radians) and
+/// never under its own `radius`.
+pub fn held_radius(radius: f32, angle: f32, d: f32) -> f32 {
+    radius.max(d * angle.tan())
+}
+
 /// A lamp that brightens or dims takes its halo with it (a pylon's work
 /// light, a flare); off, the halo's gone.
 fn size_halos(
@@ -325,6 +370,20 @@ fn halo_air(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A halo holding its angle is its own size near and grows with the
+    /// distance past that: the same angle at 150 m and at 300 m.
+    #[test]
+    fn a_held_halo_keeps_its_angle_far_off() {
+        let a = 0.026;
+        assert_eq!(held_radius(1.0, a, 10.0), 1.0);
+        let (r150, r300) = (held_radius(1.0, a, 150.0), held_radius(1.0, a, 300.0));
+        assert!(
+            r150 > 3.0 && (r300 / r150 - 2.0).abs() < 1e-4,
+            "{r150} {r300}"
+        );
+        assert!(((r150 / 150.0).atan() - a).abs() < 1e-4);
+    }
 
     #[test]
     fn brighter_lamps_have_wider_halos() {
