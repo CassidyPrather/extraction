@@ -21,13 +21,17 @@ use crate::terrain::Heightmap;
 
 /// A reward this near a walked way is on it: nothing need lead you there.
 pub const ON_PATH: f32 = 12.0;
-/// A structure this tall reads as a silhouette...
-pub const SILHOUETTE_HEIGHT: f32 = 2.5;
+/// A structure this tall reads as a silhouette (a ruin's walls, a shed)...
+pub const SILHOUETTE_HEIGHT: f32 = 1.5;
 /// ...from this far off (m): a roof, a wall, a tower over the grass.
 pub const SILHOUETTE_SIGHT: f32 = 90.0;
 /// A structure this near a reward stands for it: its building, or the one
 /// it's beside.
-pub const CONTAINER: f32 = 8.0;
+pub const CONTAINER: f32 = 12.0;
+/// An offering's figures (a ring of standing shapes, `anomaly::offering`)
+/// read from this far, over the ground, at this height.
+pub const OFFERING_SIGHT: f32 = 60.0;
+pub const OFFERING_HEIGHT: f32 = 1.8;
 /// A road or path within this of a reward leads to it...
 pub const TRAIL_NEAR: f32 = 8.0;
 /// ...if it leaves a walked way (passes this near one).
@@ -38,8 +42,14 @@ pub const LAMP_SIGHT: f32 = 250.0;
 /// A sign this near a reward points at it, read from this near a way.
 pub const SIGN_NEAR: f32 = 60.0;
 pub const SIGN_READ: f32 = 12.0;
-/// An anomaly shows (its shimmer, its sound) from this far.
+/// An anomaly or an artifact field shows (its sparks, its shimmer, its
+/// sound) from this far: the stills from the routes see them.
 pub const ANOMALY_SIGHT: f32 = 50.0;
+/// An artifact field's sparks rise this high over it (m): seen over the
+/// lip of the pit it lies in.
+pub const SPARKS: f32 = 3.0;
+/// A reward this near an artifact field is found by going to the field.
+pub const BY_THE_FIELD: f32 = 30.0;
 /// The walked ways are judged every this many metres.
 const STEP: f32 = 4.0;
 
@@ -63,6 +73,12 @@ pub struct SceneAt {
     pub map: String,
     pub name: String,
     pub at: (f32, f32),
+}
+
+/// The staged scenes' places (`assets/data/scenes.ron`).
+pub fn scenes() -> Vec<SceneAt> {
+    ron::from_str(include_str!("../../../assets/data/scenes.ron"))
+        .expect("scenes.ron parses as a list of (map, name, at)")
 }
 
 /// Every reward in `map`, with `scenes` (the staged scenes of this map),
@@ -124,6 +140,35 @@ pub fn crumbs(
         .collect()
 }
 
+/// Whether a walker at `from` sees something `height` tall at `to`: over
+/// the ground (`map_lint::sees`) and past every building taller than the
+/// line there, but the thing's own container (within `CONTAINER` of `to`).
+fn seen(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> bool {
+    if !sees(hm, from, to, height) {
+        return false;
+    }
+    let d = dist(from, to);
+    let n = (d / 1.0).ceil() as usize;
+    let eye = hm.height(from) + 1.7;
+    let top = hm.height(to) + height;
+    let mid = crate::geom::lerp(from, to, 0.5);
+    solids
+        .iter()
+        .filter(|s| {
+            s.rect.sdf(mid) <= d * 0.5
+                && s.rect.sdf(to) > CONTAINER
+                && prefab_footprint(&s.prefab)[1] >= SILHOUETTE_HEIGHT
+        })
+        .all(|s| {
+            let h = prefab_footprint(&s.prefab)[1];
+            (1..n).all(|i| {
+                let t = i as f32 / n as f32;
+                let p = crate::geom::lerp(from, to, t);
+                s.rect.sdf(p) > 0.0 || hm.height(p) + h < eye + (top - eye) * t
+            })
+        })
+}
+
 /// The nearest cue to `at` met from the walked ways: what it is and how
 /// far from the way.
 fn cue_for(
@@ -149,7 +194,7 @@ fn cue_for(
         }
         for w in walked {
             let d = dist(*w, s.rect.at);
-            if d <= SILHOUETTE_SIGHT && sees(hm, *w, s.rect.at, h) {
+            if d <= SILHOUETTE_SIGHT && seen(hm, solids, *w, s.rect.at, h) {
                 take(format!("the {}'s silhouette", s.prefab), d);
             }
         }
@@ -195,6 +240,36 @@ fn cue_for(
             take(format!("the sign \"{}\"", m.name), dist(m.at, at));
         }
     }
+    // An artifact field's own sparks; an offering's own figures.
+    if kind == "artifacts" {
+        for w in walked {
+            let d = dist(*w, at);
+            if d <= ANOMALY_SIGHT && seen(hm, solids, *w, at, SPARKS) {
+                take("its sparks".to_string(), d);
+            }
+        }
+    }
+    if kind == "offering" {
+        for w in walked {
+            let d = dist(*w, at);
+            if d <= OFFERING_SIGHT && seen(hm, solids, *w, at, OFFERING_HEIGHT) {
+                take("its figures".to_string(), d);
+            }
+        }
+    }
+    // An artifact field nearby, seen: you go to the field and find it.
+    if kind != "artifacts" {
+        for f in map.markers.iter().filter(|m| {
+            matches!(m.kind, MarkerKind::ArtifactField) && dist(m.at, at) <= BY_THE_FIELD
+        }) {
+            for w in walked {
+                let d = dist(*w, f.at);
+                if d <= ANOMALY_SIGHT && seen(hm, solids, *w, f.at, SPARKS) {
+                    take(format!("the sparks of {}", f.name), d);
+                }
+            }
+        }
+    }
     // The anomaly an artifact field lies in.
     if kind == "artifacts" {
         for m in &map.markers {
@@ -220,8 +295,43 @@ mod tests {
     use super::*;
 
     fn scenes() -> Vec<SceneAt> {
-        let text = include_str!("../../../assets/data/scenes.ron");
-        ron::from_str(text).expect("scenes.ron parses as a list of (map, name, at)")
+        super::scenes()
+    }
+
+    /// Every reward in every valley is cued from the ways a raid walks
+    /// (`docs/MAP_DESIGN.md`, "Breadcrumbs").
+    #[test]
+    fn every_reward_is_cued_from_the_walked_ways() {
+        let scenes = scenes();
+        let bad: Vec<String> = std::thread::scope(|s| {
+            let jobs: Vec<_> = crate::map::VALLEYS
+                .iter()
+                .map(|(id, text)| {
+                    let scenes = &scenes;
+                    s.spawn(move || {
+                        let map = MapDef::from_ron(text).unwrap();
+                        let hm = Heightmap::build(&map);
+                        let comfy =
+                            crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+                        let r = crate::map_lint::lint(&map, &hm);
+                        let here: Vec<SceneAt> =
+                            scenes.iter().filter(|s| s.map == *id).cloned().collect();
+                        crumbs(&map, &hm, &comfy, &r.routes, &here)
+                            .into_iter()
+                            .filter(|c| c.cue.is_none())
+                            .map(|c| {
+                                format!(
+                                    "{id}: {} \"{}\" at ({:.0}, {:.0}), {:.0} m off the ways, nothing cues it",
+                                    c.kind, c.name, c.at[0], c.at[1], c.off
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            jobs.into_iter().flat_map(|j| j.join().unwrap()).collect()
+        });
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Prints every valley's rewards and their cues, the uncued worst
