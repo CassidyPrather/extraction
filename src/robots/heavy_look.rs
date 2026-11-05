@@ -880,6 +880,24 @@ mod tests {
             .find(|(_, p, c)| c.parent() == robot && matches!(p.0, Slot::Bolt { .. }))
             .map(|(e, _, _)| e)
             .unwrap();
+        // What the eye drew of the bolt itself (not its hidden meshes):
+        // it goes with it.
+        let lost = before
+            .iter()
+            .filter(|e| {
+                let mut at = **e;
+                for _ in 0..8 {
+                    if at == bolt {
+                        return true;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => at = p.parent(),
+                        None => return false,
+                    }
+                }
+                false
+            })
+            .count();
         w.entity_mut(bolt).despawn();
         for _ in 0..3 {
             app.update();
@@ -897,14 +915,16 @@ mod tests {
             .filter(|e| !before.contains(e))
             .map(|e| what(&app, *e))
             .collect();
-        // The merged two gone, the other eleven bolts' own back (two a
-        // bolt, steel and its warning paint: 24 of a heavy's 89 with all
-        // on). Each is culled on its own, so one may be out of view.
+        // The merged two gone (and what the eye drew of the shot bolt
+        // itself), the other eleven bolts' own back: two a bolt, steel and
+        // its warning paint, 24 of a heavy's 89 with all on. Each is culled
+        // on its own, so one may be out of view.
         let singles = seen_of(&mut app, &holders);
         assert_eq!(
             after,
-            whole - 2 + singles,
-            "{whole} then {after}, {singles} single bolt meshes; gone {gone:?}, came {came:?}"
+            whole - 2 - lost + singles,
+            "{whole} then {after}, {singles} single bolt meshes, {lost} of the shot bolt's; \
+             gone {gone:?}, came {came:?}"
         );
         assert!(singles >= (bolts - 2) * 2, "{singles} single bolt meshes drawn");
     }
