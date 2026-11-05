@@ -519,17 +519,74 @@ fn sting(
 /// darkened and dulled by grime, and glossed by the wet.
 #[derive(Component)]
 pub struct WeatheredLook {
-    shown: (u8, u8, u8),
-    mats: Vec<(Handle<StandardMaterial>, Color, f32)>,
+    shown: (u8, u8, u8, u8),
+    /// Each mesh, its own copy of its material, and the copy's original
+    /// colour and roughness.
+    mats: Vec<(Entity, Handle<StandardMaterial>, Color, f32, f32, Ages)>,
 }
 
-/// Rust's colour, and how far a worn-out gun's finish goes toward it (the
+/// Rust's colour, and how far a worn-out gun's metal goes toward it (the
 /// bluing worn through and the steel gone to rust): a gun's condition read
-/// at a glance.
+/// at a glance. Only the metal rusts; wood, Bakelite and polymer fade and
+/// scuff instead ([`SCUFF_COLOUR`]).
 const RUST_COLOUR: Vec3 = Vec3::new(0.32, 0.15, 0.07);
-const RUST_TINT: f32 = 0.45;
+const RUST_TINT: f32 = 0.6;
 /// Above this condition it shows no wear.
 const WEAR_FROM: f32 = 0.8;
+/// Where the action starts to drag in the hand (`firearm::DRY_FROM`, jams
+/// about 1 in 40): by here the rust is plain, so the eye warns before the
+/// hand does.
+const PLAIN_RUST_AT: f32 = 0.6;
+/// How far rusted it shows at [`PLAIN_RUST_AT`], of the most.
+const PLAIN_RUST: f32 = 0.6;
+/// Near failure (`firearm`: about +6% jams and 3x the spread): rusted
+/// through.
+const RUSTED_AT: f32 = 0.35;
+/// Worn wood, Bakelite and polymer: faded and scuffed pale.
+const SCUFF_COLOUR: Vec3 = Vec3::new(0.42, 0.38, 0.33);
+/// Anodising worn through to the aluminium under it.
+const BARE_ALLOY: Vec3 = Vec3::new(0.45, 0.46, 0.47);
+const SCUFF_TINT: f32 = 0.35;
+/// Powder fouling: a dull grey film of burnt powder on the metal (not the
+/// wood), flatter and greyer as it builds. On near-black bluing a darker
+/// soot didn't show; the grey film does. Grime ([`GRIME_COLOUR`]) is the
+/// weather's brown on all of it, the grip too.
+const SOOT_COLOUR: Vec3 = Vec3::new(0.15, 0.15, 0.145);
+const SOOT_TINT: f32 = 0.6;
+
+/// How a finish ages: steel rusts; aluminium wears through to bare grey;
+/// wood, Bakelite, polymer and rubber fade. Steel and aluminium take the
+/// powder's film; the rest doesn't.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Ages {
+    Rusts,
+    Bares,
+    Fades,
+}
+
+/// How a model material ages, by its name (`models::ModelMaterials`), or,
+/// for one made elsewhere, by its metallic.
+pub fn ages(name: Option<&str>, metallic: f32) -> Ages {
+    match name {
+        Some("Steel" | "Blued" | "Stamped" | "Black" | "Iron" | "Dark") => Ages::Rusts,
+        Some("Alloy") => Ages::Bares,
+        Some(_) => Ages::Fades,
+        None if metallic > 0.5 => Ages::Rusts,
+        None => Ages::Fades,
+    }
+}
+
+/// How rusted a gun shows at `condition`, 0 to 1: nothing above
+/// [`WEAR_FROM`], plain by [`PLAIN_RUST_AT`], through by [`RUSTED_AT`].
+pub fn rust_shown(condition: f32) -> f32 {
+    if condition >= PLAIN_RUST_AT {
+        ((WEAR_FROM - condition) / (WEAR_FROM - PLAIN_RUST_AT)).clamp(0.0, 1.0) * PLAIN_RUST
+    } else {
+        PLAIN_RUST
+            + (1.0 - PLAIN_RUST)
+                * ((PLAIN_RUST_AT - condition) / (PLAIN_RUST_AT - RUSTED_AT)).clamp(0.0, 1.0)
+    }
+}
 
 /// The grime's colour, and how far it darkens toward it at the worst.
 const GRIME_COLOUR: Vec3 = Vec3::new(0.16, 0.13, 0.1);
@@ -552,22 +609,25 @@ pub fn weather_looks(
         )>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    model_mats: Option<Res<crate::models::ModelMaterials>>,
 ) {
     for (e, gun, w, look) in &mut guns {
         let grime = gun.firearm.grime.clamp(0.0, 1.0);
         let wet = w.wet.clamp(0.0, 1.0);
-        let worn = ((WEAR_FROM - gun.firearm.condition) / WEAR_FROM).clamp(0.0, 1.0);
+        let worn = rust_shown(gun.firearm.condition);
+        let soot = gun.firearm.fouling.clamp(0.0, 1.0);
         let shown = (
             (grime * 20.0) as u8,
             (wet * 20.0) as u8,
             (worn * 20.0) as u8,
+            (soot * 20.0) as u8,
         );
         match look {
             None => {
-                if shown == (0, 0, 0) {
-                    continue;
-                }
-                // Its own copies of its materials, to weather.
+                // Its own copies of its materials, to weather: made for every
+                // gun from the start (clean too), so that a hand taking it
+                // marks *these* (`render::held_light`), and its look still
+                // changes in the hand (cleaned at the bench, wiped, worn).
                 let mut mats = Vec::new();
                 let mut stack: Vec<Entity> = children
                     .get(e)
@@ -581,9 +641,14 @@ pub fn weather_looks(
                         && let Some(orig) = materials.get(&m.0).cloned()
                     {
                         let (base, rough) = (orig.base_color, orig.perceptual_roughness);
+                        let metallic = orig.metallic;
+                        let how = ages(
+                            model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
+                            metallic,
+                        );
                         let own = materials.add(orig);
                         commands.entity(c).insert(MeshMaterial3d(own.clone()));
-                        mats.push((own, base, rough));
+                        mats.push((c, own, base, rough, metallic, how));
                     }
                     if let Ok(cs) = children.get(c) {
                         stack.extend(cs.iter());
@@ -593,7 +658,7 @@ pub fn weather_looks(
                     continue;
                 }
                 commands.entity(e).insert(WeatheredLook {
-                    shown: (u8::MAX, u8::MAX, u8::MAX),
+                    shown: (u8::MAX, u8::MAX, u8::MAX, u8::MAX),
                     mats,
                 });
             }
@@ -602,18 +667,39 @@ pub fn weather_looks(
                     continue;
                 }
                 look.shown = shown;
-                for (h, base, rough) in &look.mats {
-                    let Some(mut m) = materials.get_mut(h) else {
-                        continue;
-                    };
+                for (mesh, h, base, rough, metallic, how) in &look.mats {
                     let b = base.to_linear();
-                    let c = Vec3::new(b.red, b.green, b.blue)
-                        .lerp(RUST_COLOUR, RUST_TINT * worn)
+                    let own = Vec3::new(b.red, b.green, b.blue);
+                    // Metal rusts and takes the soot; the rest fades.
+                    let (aged, sooted) = match how {
+                        Ages::Rusts => (own.lerp(RUST_COLOUR, RUST_TINT * worn), soot),
+                        Ages::Bares => (own.lerp(BARE_ALLOY, SCUFF_TINT * worn), soot),
+                        Ages::Fades => (own.lerp(SCUFF_COLOUR, SCUFF_TINT * worn), 0.0),
+                    };
+                    let c = aged
+                        .lerp(SOOT_COLOUR, SOOT_TINT * sooted)
                         .lerp(GRIME_COLOUR, GRIME_TINT * grime)
                         * (1.0 - 0.15 * wet);
-                    m.base_color = Color::LinearRgba(LinearRgba::new(c.x, c.y, c.z, b.alpha));
-                    m.perceptual_roughness =
-                        (rough + 0.35 * grime + 0.3 * worn - 0.55 * wet).clamp(0.08, 1.0);
+                    let colour = Color::LinearRgba(LinearRgba::new(c.x, c.y, c.z, b.alpha));
+                    // A film of burnt powder or dirt is no metal: it takes the
+                    // steel's sheen (on bluing, near black, the sheen is most
+                    // of what shows, so a tint alone didn't read).
+                    let sheen = (metallic * (1.0 - 0.75 * sooted - 0.5 * grime)).max(0.0);
+                    let roughness = (rough + 0.35 * grime + 0.3 * worn + 0.35 * sooted
+                        - 0.55 * wet)
+                        .clamp(0.08, 1.0);
+                    // Its own copy, and the copy it shows if that's another:
+                    // a held gun wears a marked copy of its own (made from it,
+                    // so its alone), which would keep the look it had when
+                    // taken.
+                    let shown_h = meshes.get(*mesh).ok().map(|m| m.0.clone());
+                    for handle in std::iter::once(h.clone()).chain(shown_h.filter(|s| s != h)) {
+                        if let Some(mut m) = materials.get_mut(&handle) {
+                            m.base_color = colour;
+                            m.perceptual_roughness = roughness;
+                            m.metallic = sheen;
+                        }
+                    }
                 }
             }
         }
@@ -621,7 +707,9 @@ pub fn weather_looks(
 }
 
 /// `--gallery <gun>+grime+wet` and `scopeview:<scope>+fog` (dev): the
-/// things shown as filthy, soaked or fogged, held so.
+/// things shown as filthy, soaked or fogged, held so. `+foul` (fouled
+/// through), `+worn` (condition 0.45) and `+failing` (0.08) show a gun's
+/// condition the same way.
 pub fn gallery_weather(
     opts: Res<crate::launch::LaunchOptions>,
     mut things: Query<(&mut Weathering, Option<&mut Gun>)>,
@@ -635,7 +723,12 @@ pub fn gallery_weather(
         first.contains("+wet"),
         first.contains("+fog"),
     );
-    if !(grime || wet || fog) {
+    let (foul, worn, failing) = (
+        first.contains("+foul"),
+        first.contains("+worn"),
+        first.contains("+failing"),
+    );
+    if !(grime || wet || fog || foul || worn || failing) {
         return;
     }
     for (mut w, gun) in &mut things {
@@ -645,8 +738,19 @@ pub fn gallery_weather(
         if fog {
             w.fog = 1.0;
         }
-        if let (true, Some(mut g)) = (grime, gun) {
-            g.firearm.grime = 1.0;
+        if let Some(mut g) = gun {
+            if grime {
+                g.firearm.grime = 1.0;
+            }
+            if foul {
+                g.firearm.fouling = 1.0;
+            }
+            if worn {
+                g.firearm.condition = 0.45;
+            }
+            if failing {
+                g.firearm.condition = 0.08;
+            }
         }
     }
 }
@@ -719,6 +823,39 @@ pub fn fog_lenses(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Steel rusts, aluminium wears bare, wood and the rest fade: by the
+    /// model material's name, the lacquered and anodised ones included
+    /// (their metallic is 0, as wood's is).
+    #[test]
+    fn each_finish_ages_as_its_material() {
+        for n in ["Steel", "Blued", "Stamped", "Black", "Iron", "Dark"] {
+            assert_eq!(ages(Some(n), 0.0), Ages::Rusts, "{n}");
+        }
+        assert_eq!(ages(Some("Alloy"), 0.0), Ages::Bares);
+        for n in ["Wood", "Bakelite", "Polymer", "Rubber"] {
+            assert_eq!(ages(Some(n), 0.0), Ages::Fades, "{n}");
+        }
+        assert_eq!(ages(None, 0.9), Ages::Rusts);
+        assert_eq!(ages(None, 0.0), Ages::Fades);
+    }
+
+    /// Rust shows from condition 0.8, is plain where the action starts to
+    /// drag (0.6, weapon feel's line), and is through near failure (0.35).
+    #[test]
+    fn rust_shows_before_the_hand_feels_it() {
+        assert_eq!(rust_shown(1.0), 0.0);
+        assert_eq!(rust_shown(WEAR_FROM), 0.0);
+        assert!((rust_shown(PLAIN_RUST_AT) - PLAIN_RUST).abs() < 1e-6);
+        assert!((rust_shown(RUSTED_AT) - 1.0).abs() < 1e-6);
+        assert_eq!(rust_shown(0.0), 1.0);
+        let mut last = 0.0;
+        for i in 0..=100 {
+            let r = rust_shown(1.0 - i as f32 / 100.0);
+            assert!(r >= last, "rust never goes back as a gun wears");
+            last = r;
+        }
+    }
     use crate::interact::GripRole;
     use crate::rig::Side;
     use crate::vr_harness::Vr;

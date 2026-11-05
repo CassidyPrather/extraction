@@ -347,7 +347,7 @@ fn cargo(
                     queue.push(drop);
                 }
                 for (i, drop) in queue.into_iter().enumerate() {
-                    let item = crate::items::spawn_item(
+                    let item = crate::items::loot::spawn_found(
                         &mut commands,
                         &catalog,
                         crate::items::SpawnItem {

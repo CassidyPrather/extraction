@@ -70,7 +70,7 @@ fn bones(side: Side, finger: usize, c: f32) -> impl Iterator<Item = Bone> {
 }
 
 /// The thumb's way (its first bone's, on the unrolled glove) curled `c`.
-fn thumb_way(side: Side, c: f32) -> Vec3 {
+pub(crate) fn thumb_way(side: Side, c: f32) -> Vec3 {
     joint_rotation_spread(side, 4, 0, c, 0.0) * Vec3::NEG_Z
 }
 
@@ -185,7 +185,26 @@ pub const PARTS: [&str; 6] = ["index", "middle", "ring", "little", "thumb", "pal
 pub struct Grasp {
     pub gap: [f32; 6],
     pub face: [Vec3; 6],
+    /// Each finger's curl (index..little, the thumb's).
+    pub curl: [f32; 5],
+    /// Small enough to close the hand round ([`small`]).
+    pub small: bool,
 }
+
+/// Something a closed hand goes round: its middle size no more than
+/// [`SMALL_ACROSS`], its longest no more than [`SMALL_LONG`] (a power
+/// cell, a bolt, a box of rounds, a pistol's magazine).
+pub fn small(half: Vec3) -> bool {
+    let mut d = [half.x, half.y, half.z].map(|h| h * 2.0);
+    d.sort_by(f32::total_cmp);
+    d[1] <= SMALL_ACROSS && d[2] <= SMALL_LONG
+}
+
+pub const SMALL_ACROSS: f32 = 0.046;
+pub const SMALL_LONG: f32 = 0.1;
+/// The least mean curl of the fingers on a small thing for it to be
+/// gripped, not lying on an open hand (0 open, 1 a fist).
+pub const GRIPPED: f32 = 0.45;
 
 impl Grasp {
     /// How deep the deepest part sinks in.
@@ -207,8 +226,19 @@ impl Grasp {
         self.touches(4) && (0..4).any(|f| self.touches(f) && self.face[f].dot(self.face[4]) < -0.1)
     }
 
-    /// Why it isn't held, if it isn't: sunk in, fingers off it, or a fist
-    /// beside it (neither the palm on it nor the thumb against a finger).
+    /// The fingers on it closed round it: the thumb against a finger, the
+    /// fingers on it curled at least [`GRIPPED`] on average.
+    pub fn gripped(&self) -> bool {
+        let on: Vec<f32> = (0..4)
+            .filter(|&f| self.touches(f))
+            .map(|f| self.curl[f])
+            .collect();
+        self.pinched() && !on.is_empty() && on.iter().sum::<f32>() / on.len() as f32 >= GRIPPED
+    }
+
+    /// Why it isn't held, if it isn't: sunk in, fingers off it, a fist
+    /// beside it (neither the palm on it nor the thumb against a finger),
+    /// or, a small thing, lying on an open hand rather than gripped.
     pub fn fault(&self) -> Option<String> {
         if self.sink() > SINK {
             let part = (0..6)
@@ -231,6 +261,20 @@ impl Grasp {
             return Some(format!(
                 "a fist beside it (palm {:.0} mm off, no pinch)",
                 self.gap[5] * 1000.0
+            ));
+        }
+        if self.small && !self.gripped() {
+            return Some(format!(
+                "on an open hand, not gripped (fingers curled {:.2} {:.2} {:.2} {:.2}, {})",
+                self.curl[0],
+                self.curl[1],
+                self.curl[2],
+                self.curl[3],
+                if self.pinched() {
+                    "the thumb against them"
+                } else {
+                    "no thumb against them"
+                }
             ));
         }
         None
@@ -270,7 +314,12 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
             face[5] = normal(q, half);
         }
     }
-    Grasp { gap, face }
+    Grasp {
+        gap,
+        face,
+        curl: seat.curl,
+        small: small(half),
+    }
 }
 
 /// Where a glove holding a thing free is drawn and how it closes: moved
@@ -401,18 +450,37 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
     if held {
         return best;
     }
-    // Turned to the nearest ways a hand could hold its box (each side of
-    // it square to the palm and the fist), nearest first.
-    let mut turns: Vec<Quat> = square_turns()
+    // Turned: first the palm laid flat on a side (the least tilt that
+    // does it: a hand come at a broad side aslant met it with its
+    // fingertips), then to the nearest ways a hand could hold its box
+    // (each side of it square to the palm and the fist); nearest first
+    // within each.
+    let n = palm_normal(side);
+    let by_angle = |a: &Quat, b: &Quat| {
+        a.angle_between(Quat::IDENTITY)
+            .total_cmp(&b.angle_between(Quat::IDENTITY))
+    };
+    let mut flat: Vec<Quat> = [
+        Vec3::X,
+        Vec3::NEG_X,
+        Vec3::Y,
+        Vec3::NEG_Y,
+        Vec3::Z,
+        Vec3::NEG_Z,
+    ]
+    .map(|f| Quat::from_rotation_arc(n, item.rotation * -f))
+    .into_iter()
+    .filter(|t| t.angle_between(Quat::IDENTITY) > 0.05)
+    .collect();
+    flat.sort_by(by_angle);
+    let mut square: Vec<Quat> = square_turns()
         .map(|m| item.rotation * m.inverse())
         .filter(|t| t.angle_between(Quat::IDENTITY) > 0.05)
         .collect();
-    turns.sort_by(|a, b| {
-        a.angle_between(Quat::IDENTITY)
-            .total_cmp(&b.angle_between(Quat::IDENTITY))
-    });
+    square.sort_by(by_angle);
+    let turns: Vec<Quat> = flat.into_iter().take(3).chain(square).collect();
     let mut best_score = score(&grasp(side, half, item, &best));
-    for turn in turns.into_iter().take(TURNS) {
+    for turn in turns.into_iter().take(TURNS + 3) {
         let inside = Transform::from_translation(turn.inverse() * item.translation)
             .with_rotation(turn.inverse() * item.rotation);
         let (s, held) = seat_as(side, half, inside, TURNED_SLIDE);
@@ -466,12 +534,16 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
     // Turned, round the thing's nearest point to the hand (beside the
     // palm's facing): a rod end-on to the palm, turned, lies off past the
     // fist's end.
+    let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
     let centre = if slide > SLIDE {
-        let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
         near - n * near.dot(n)
     } else {
         Vec3::ZERO
     };
+    // The press runs either side of the thing's nearest point along the
+    // palm's facing (a broad side met aslant, or turned flat, can lie
+    // further off than the press reaches from the hand).
+    let along = near.dot(n);
     let reach = (slide / SLIDE_STEP).round() as i32;
     let mut spots: Vec<(i32, i32)> = (-reach..=reach)
         .flat_map(|a| (-reach..=reach).map(move |b| (a, b)))
@@ -482,7 +554,7 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
         let side_shift = centre + (u * a as f32 + w * b as f32) * SLIDE_STEP;
         // The open hand onto it: the furthest along the palm's facing it
         // can go without sinking in (from standing off, in towards it).
-        let gap = |s: f32| open_gap(side, half, &to_box, side_shift + n * s);
+        let gap = |s: f32| open_gap(side, half, &to_box, side_shift + n * (along + s));
         // In from standing off to its first touch (straight through, a
         // small thing would be passed by).
         let mut prev = -PRESS;
@@ -511,7 +583,7 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
                 hi = m;
             }
         }
-        let shift = side_shift + n * lo;
+        let shift = side_shift + n * (along + lo);
         let mut curl = [0.0; 5];
         let mut open = true;
         for (f, c) in curl.iter_mut().enumerate().take(4) {
@@ -564,7 +636,7 @@ pub fn taken(side: Side, half: Vec3) -> Transform {
 }
 
 /// The thumb's last joint's bend, curled right in (`props::THUMB_BEND`).
-const THUMB_BEND: f32 = 0.9;
+pub(crate) const THUMB_BEND: f32 = 0.9;
 /// How far the thumb may be raised toward the palm's plane to lie on a
 /// flat side, or lowered to reach round a narrow one (added to its way's
 /// height on the unrolled glove), nearest its own way first.
@@ -594,10 +666,11 @@ mod tests {
     use super::*;
     use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog, ItemDef};
 
-    /// Kinds a hand holds free, one-handed: not guns (their grips), not
-    /// knives (a grip of their own), not what's carried in both arms.
+    /// Kinds a hand holds free: not guns (their grips), not knives (a grip
+    /// of their own). What's carried in both arms is too: each hand holds
+    /// its end as one hand holds a thing.
     fn held_free(def: &ItemDef) -> bool {
-        def.firearm.is_none() && def.melee.is_none() && !crate::interact::carry::is_bulky(def)
+        def.firearm.is_none() && def.melee.is_none()
     }
 
     /// The kinds the first raid can drop (`from_raid` 0 on some table).
@@ -681,10 +754,7 @@ mod tests {
     /// Kinds known not to be held every way yet, and why: this list only
     /// shrinks. A kind off it that fails, or one on it that now passes,
     /// fails the test (take it off).
-    const STILL_FAILING: &[(&str, &str)] = &[(
-        "vest",
-        "1 hold of 240: taken by a face 39 x 46 cm, the palm stops 7 mm off its padding",
-    )];
+    const STILL_FAILING: &[(&str, &str)] = &[];
 
     /// Every kind a hand holds free is held: taken every way, in either
     /// hand, the glove sinks no more than `SINK` into its box, the thumb
@@ -695,23 +765,25 @@ mod tests {
         let catalog = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
         let first = first_raid(&catalog);
         assert!(first.len() > 8, "first raid's loot: {first:?}");
-        let mut bad = Vec::new();
-        let mut checked = 0;
-        let mut kinds = 0;
-        for (_, def) in catalog.iter() {
-            if !held_free(def) {
-                continue;
-            }
-            kinds += 1;
-            let half = Vec3::from(def.size_m()) * 0.5;
-            let mut worst: Option<String> = None;
-            let mut failed = 0;
-            let mut tries = 0;
+        // The holds depend on a kind's box alone: each box once (rounds,
+        // tapes and records share theirs), the boxes across threads.
+        let defs: Vec<&ItemDef> = catalog
+            .iter()
+            .map(|(_, d)| d)
+            .filter(|d| held_free(d))
+            .collect();
+        let kinds = defs.len();
+        let key = |d: &ItemDef| d.size_m().map(f32::to_bits);
+        let mut boxes: Vec<[u32; 3]> = defs.iter().map(|d| key(d)).collect();
+        boxes.sort();
+        boxes.dedup();
+        let holds = |b: &[u32; 3]| {
+            let half = Vec3::from(b.map(f32::from_bits)) * 0.5;
+            let (mut failed, mut tries, mut worst) = (0, 0, None);
             for side in [Side::Right, Side::Left] {
                 for turn in turns() {
                     for item in takes(side, half, turn) {
                         tries += 1;
-                        checked += 1;
                         if let Some(why) = glove_on(side, half, item).fault() {
                             failed += 1;
                             worst.get_or_insert(why);
@@ -719,6 +791,26 @@ mod tests {
                     }
                 }
             }
+            (failed, tries, worst)
+        };
+        let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+        let per = boxes.len().div_ceil(threads);
+        let results: std::collections::HashMap<[u32; 3], (usize, usize, Option<String>)> =
+            std::thread::scope(|s| {
+                let jobs: Vec<_> = boxes
+                    .chunks(per.max(1))
+                    .map(|chunk| {
+                        s.spawn(move || chunk.iter().map(|b| (*b, holds(b))).collect::<Vec<_>>())
+                    })
+                    .collect();
+                jobs.into_iter()
+                    .flat_map(|j| j.join().expect("a hold thread"))
+                    .collect()
+            });
+        let checked: usize = defs.iter().map(|d| results[&key(d)].1).sum();
+        let mut bad = Vec::new();
+        for def in defs {
+            let (failed, tries, worst) = results[&key(def)].clone();
             let known = STILL_FAILING.iter().any(|(id, _)| *id == def.id);
             match worst {
                 Some(why) if !known => {

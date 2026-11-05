@@ -104,6 +104,12 @@
             points: [(22.0, 207.3), (22.0, 148.5), (17.0, 118.0), (6.0, 80.0), (-2.2, 48.5), (2.8, 8.5), (8.6, -21.8), (2.8, -60.5), (3.8, -67.1), (13.8, -107.0), (13.8, -198.4)],
             bridges: [(at: (8.6, -20.2), length: 28.0)],
         ),
+        // The gate's apron: the road widened to the gate's width through
+        // it, so its posts and blocks stand on one level.
+        (
+            name: "Gate apron", kind: Asphalt, width: 14.0, shoulder: 3.0, smoothing: 8.0,
+            points: [(22.0, 167.5), (22.0, 159.5)],
+        ),
         // Farm lane east off the district road.
         (
             name: "Farm lane", kind: Dirt, width: 4.0,

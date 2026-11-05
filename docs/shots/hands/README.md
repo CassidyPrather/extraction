@@ -197,6 +197,10 @@ the air beside a magazine. After, the glove is seated on it
 (`render::hold::seat`): the palm on it, each finger closed until it
 touches, the thumb laid on a side. The gallery takes each thing as a
 hand picks it up (`render::hold::taken`: its thinnest side to the palm). Small
-things (a power cell, a bolt) lie on a hand still nearly open, the
-fingers touching at their roots rather than closed round them: held, by
-the rule, but the next thing to better.
+things (a power cell, a bolt) lay on a hand still nearly open: see 34.
+`34_small_gripped.jpg` (`fp:<item>+palm,2.2` and `fp:<item>,2.2`; left
+the seat of 33, middle and right now): a small thing (`render::hold::small`:
+a closed hand goes round it) must be gripped, the thumb against a finger
+and the fingers on it curled at least `GRIPPED` on average, or it isn't
+held: the fingers close round the power cell, the bolt, the box of
+rounds, the magazine and the matches rather than lying flat under them.

@@ -370,6 +370,10 @@ pub enum Cycling {
     Carrier(f32),
     /// An open bolt: it slams home and fires, then runs back.
     OpenBolt(f32),
+    /// A carrier that runs back and stays there: on its stop on an empty
+    /// magazine, or on a case stuck in the port. No slam home: what tells
+    /// you you're empty (or jammed) is that it doesn't come back.
+    Held(f32),
 }
 
 impl Shot {
@@ -396,6 +400,11 @@ pub fn shot_of(gun: &Gun, shouldered: bool) -> Shot {
         shove: def.kick.shove.max(0.0),
         action: match def.action {
             ActionKind::SemiAuto if def.open_bolt => Cycling::OpenBolt(cycle),
+            ActionKind::SemiAuto
+                if gun.firearm.locked_back || gun.firearm.malfunction.is_some() =>
+            {
+                Cycling::Held(cycle)
+            }
             ActionKind::SemiAuto => Cycling::Carrier(cycle),
             _ => Cycling::None,
         },
@@ -443,7 +452,9 @@ impl Handling {
                 });
             }
         }
-        if let Cycling::Carrier(cycle) | Cycling::OpenBolt(cycle) = shot.action {
+        if let Cycling::Carrier(cycle) | Cycling::OpenBolt(cycle) | Cycling::Held(cycle) =
+            shot.action
+        {
             self.beats.push(Beat {
                 at: lead + cycle * CARRIER_BACK_AT,
                 rise: rise * CARRIER_BACK,
@@ -2323,6 +2334,69 @@ pub(crate) mod vr_tests {
             }
             r.vr.step(2);
         }
+    }
+
+    /// What a gun said, in order.
+    #[derive(Resource, Default)]
+    struct Said(Vec<FireEvent>);
+
+    /// The shot that empties a gun whose slide or carrier holds open on
+    /// empty (the PM, SKS, SVD) runs it back and leaves it there: nothing
+    /// slams home, heard or felt, so you know you're empty. A shot with
+    /// rounds left slams home as ever.
+    #[test]
+    fn the_shot_that_empties_it_leaves_the_slide_back_and_nothing_slams_home() {
+        let mut bad = Vec::new();
+        for id in ["pm_pistol", "sks", "svd"] {
+            for rounds in [1u32, 2] {
+                let long = id != "pm_pistol";
+                let mut r = hold(id, long, long);
+                r.vr.app.init_resource::<Said>().add_systems(
+                    Update,
+                    |mut ev: MessageReader<GunEvent>, mut said: ResMut<Said>| {
+                        said.0.extend(ev.read().map(|e| e.event.clone()));
+                    },
+                );
+                {
+                    let mut g = gun_mut(&mut r);
+                    let f = &mut g.firearm;
+                    match f.def.magazine_family.clone() {
+                        Some(family) => {
+                            let _ = f.insert_magazine(Magazine {
+                                family,
+                                capacity: rounds,
+                                rounds,
+                                ..Default::default()
+                            });
+                        }
+                        None => f.internal_rounds = rounds,
+                    }
+                    f.set_bolt_travel(1.0);
+                    f.release_bolt();
+                    while f.fire_mode() != FireMode::Semi {
+                        f.cycle_mode();
+                    }
+                    f.condition = 1.0;
+                    f.fouling = 0.0;
+                }
+                r.vr.step(2);
+                r.vr.app.world_mut().resource_mut::<Said>().0.clear();
+                assert_eq!(fire(&mut r, 1, true).len(), 1, "{id}: a shot");
+                r.vr.step(60);
+                let said = r.vr.app.world().resource::<Said>().0.clone();
+                let home = said.contains(&FireEvent::CarrierHome);
+                let locked = gun_mut(&mut r).firearm.locked_back;
+                // One round chambered and `rounds - 1` in the feed.
+                let empty = rounds == 1;
+                if locked != empty || home == empty {
+                    bad.push(format!(
+                        "{id}, {} left: locked back {locked}, slammed home {home} ({said:?})",
+                        rounds - 1
+                    ));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// The Nagant by hand: A swings the gate open; a round to the gate

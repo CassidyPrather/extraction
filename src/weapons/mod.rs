@@ -15,6 +15,7 @@ pub mod armoury;
 pub mod ballistics;
 pub mod carry;
 pub mod crossbow;
+pub mod cycle;
 pub mod faults;
 pub mod feel;
 pub mod flares;
@@ -259,8 +260,13 @@ impl Plugin for WeaponsPlugin {
                 weather::WeatherPlugin,
                 report::ReportPlugin,
             ))
-            .add_plugins((gunsmith::GunsmithPlugin, legibility::LegibilityPlugin))
+            .add_plugins((
+                gunsmith::GunsmithPlugin,
+                legibility::LegibilityPlugin,
+                cycle::CyclePlugin,
+            ))
             .init_resource::<reload::MagApproach>()
+            .add_systems(Update, stage_duds)
             .add_systems(
                 FixedUpdate,
                 (
@@ -498,6 +504,15 @@ pub const SHORT_STIFF: f32 = 0.3;
 /// to happen.)
 pub const DRAW_WEIGHT: f32 = 0.8;
 
+/// A slide's or charging handle's recoil spring: a hand drifting back
+/// slower than this (m/s) slides on it (a brisk rack, or a steady one,
+/// beats it), and it's felt compressing, harder the further back
+/// ([`SPRING_FELT`]).
+pub const SPRING_PULL: f32 = 0.05;
+/// The spring felt in the hand as it compresses: this amplitude at rest,
+/// to this at the end of the travel.
+pub const SPRING_FELT: (f32, f32) = (0.06, 0.22);
+
 /// Where a hand-worked part goes this tick, from `now` toward `want`
 /// (travel, 0..1, over `travel_m` metres), as stiff as the action is and as
 /// hard as the hand pulls (m/s along the stroke).
@@ -639,10 +654,25 @@ fn work_handles(
                 let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                 let was = gun.firearm.bolt_travel;
                 let stiff = gun.firearm.action_drag();
-                let to = drag(was, want, stiff, pull, dt, h.travel);
+                // Drifting back against the spring, the hand slides on it.
+                let to = if want > was && pull < SPRING_PULL {
+                    was
+                } else {
+                    drag(was, want, stiff, pull, dt, h.travel)
+                };
                 if to != want {
                     // The hand slides on the handle from where it got to.
                     taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));
+                }
+                // (A stiff action's grind is felt instead.)
+                if to > was && stiff < 0.1 {
+                    spring_felt(
+                        &mut haptics,
+                        side,
+                        to,
+                        now_s,
+                        strokes.entry(gun_e).or_default(),
+                    );
                 }
                 grind(
                     &mut haptics,
@@ -721,6 +751,49 @@ fn work_handles(
         let name = catalog.get(item.kind()).id.clone();
         emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
+}
+
+/// A scenario's setup (`Task::Setup`): the next pull of every held gun
+/// strikes a dud (`shotgun_dud_drill`: the bot breaks the double, closes
+/// it and goes again, as a player would).
+pub const DUD_NEXT: &str = "a dud next";
+
+fn stage_duds(
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    mut guns: Query<&mut Gun, With<Held>>,
+) {
+    for s in setups.read() {
+        if s.name == DUD_NEXT {
+            for mut g in &mut guns {
+                g.firearm.dud_next = true;
+            }
+        }
+    }
+}
+
+/// The spring compressing under the hand working a slide or charging
+/// handle: a tick about every 40 ms while it comes back, harder the
+/// further back it is.
+fn spring_felt(
+    haptics: &mut MessageWriter<crate::rig::haptics::Haptic>,
+    side: Option<crate::rig::Side>,
+    travel: f32,
+    now: f32,
+    stroke: &mut (f32, f32),
+) {
+    let Some(side) = side else {
+        return;
+    };
+    if now - stroke.1 < 0.04 {
+        return;
+    }
+    stroke.1 = now;
+    let (rest, full) = SPRING_FELT;
+    haptics.write(crate::rig::haptics::Haptic {
+        side,
+        amplitude: rest + (full - rest) * travel.clamp(0.0, 1.0),
+        seconds: 0.012,
+    });
 }
 
 /// A stiff action ground under a hand (for Audio): about every 60 ms while
@@ -1264,6 +1337,33 @@ fn age_casings(mut commands: Commands, mut casings: Query<(Entity, &mut Casing)>
     }
 }
 
+/// How far a thrown case's direction strays from the port's line (rad).
+pub const CASE_CONE: f32 = 0.2;
+/// And its speed, as a share either way.
+pub const CASE_SPEED_SPREAD: f32 = 0.18;
+
+/// A repeatable -1..1 for throw `k`, draw `i`.
+fn unit(k: u32, i: u32) -> f32 {
+    let mut x = k.wrapping_mul(0x9E37_79B9) ^ i.wrapping_mul(0x85EB_CA6B);
+    x ^= x >> 15;
+    x = x.wrapping_mul(0xC2B2_AE35);
+    x ^= x >> 13;
+    (x >> 8) as f32 / 8_388_608.0 - 1.0
+}
+
+/// A case's throw `v`, strayed as throw `k` strays.
+fn scatter(v: Vec3, k: u32) -> Vec3 {
+    let speed = v.length();
+    if speed < 1e-3 {
+        return v;
+    }
+    let d = v / speed;
+    let a = d.any_orthonormal_vector();
+    let b = d.cross(a);
+    let d = (d + (a * unit(k, 1) + b * unit(k, 2)) * CASE_CONE).normalize();
+    d * speed * (1.0 + CASE_SPEED_SPREAD * unit(k, 3))
+}
+
 /// Spawns what came out of the port: a brass case, or a live round you can
 /// pick back up.
 pub fn spawn_ejections(
@@ -1271,9 +1371,18 @@ pub fn spawn_ejections(
     mut ejections: MessageReader<Ejection>,
     catalog: Res<Catalog>,
     mut pool: Local<std::collections::VecDeque<Entity>>,
+    mut thrown: Local<u32>,
 ) {
     for ej in ejections.read() {
-        let spin = Vec3::new(ej.velocity.z, 0.0, -ej.velocity.x) * 8.0;
+        // No two leave the port alike: the extractor's bite, the slide's
+        // speed and the case's own wobble scatter them.
+        *thrown = thrown.wrapping_add(1);
+        let velocity = scatter(ej.velocity, *thrown);
+        let spin = Vec3::new(velocity.z, 0.0, -velocity.x) * 8.0 * (1.0 + 0.5 * unit(*thrown, 4));
+        let ej = &Ejection {
+            velocity,
+            ..ej.clone()
+        };
         match ej.round {
             Round::Spent => {
                 let (r, len) = feel::case_size(&ej.cartridge);
@@ -1606,6 +1715,33 @@ mod trigger_tests {
 #[cfg(test)]
 mod casing_tests {
     use super::*;
+
+    /// Eight cases thrown the same way leave the port each its own way, as
+    /// real brass does (the same arc every time reads as a machine), and
+    /// none strays far from the port's line.
+    #[test]
+    fn no_two_cases_fly_alike() {
+        let v = Vec3::new(2.2, 1.3, 0.4);
+        let throws: Vec<Vec3> = (1..=8).map(|k| scatter(v, k)).collect();
+        let mut widest = 0.0f32;
+        for (i, a) in throws.iter().enumerate() {
+            assert!(
+                a.angle_between(v) < CASE_CONE * 1.5,
+                "{a} strays {:.1} deg",
+                a.angle_between(v).to_degrees()
+            );
+            let k = a.length() / v.length();
+            assert!((k - 1.0).abs() <= CASE_SPEED_SPREAD + 1e-4, "{k}");
+            for b in &throws[i + 1..] {
+                widest = widest.max(a.angle_between(*b));
+            }
+        }
+        assert!(widest.to_degrees() > 10.0, "{:.1} deg", widest.to_degrees());
+        let speeds: Vec<f32> = throws.iter().map(|t| t.length()).collect();
+        let span = speeds.iter().fold(0.0f32, |m, s| m.max(*s))
+            - speeds.iter().fold(f32::MAX, |m, s| m.min(*s));
+        assert!(span > 0.3, "speeds {speeds:?}");
+    }
 
     /// Brass thrown from a gun tumbles down and clinks once on landing
     /// (then a quieter bounce or two), on the floor it hit; however many

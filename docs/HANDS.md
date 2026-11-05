@@ -32,14 +32,20 @@ lists them).
   glove turned only where the hand's turn can't close on it. Held by
   `every_free_held_kind_is_held_by_the_glove` over every such kind in the
   table, 240 ways each (sink at most 4 mm, thumb and two fingers within
-  3 mm, palm on it or thumb against a finger); `STILL_FAILING` lists what
-  isn't yet (the vest, 1 hold of 240) and can only shrink.
-  `docs/shots/hands/33_held_free.jpg` is the first raid's loot before and
-  after.
+  3 mm, palm on it or thumb against a finger; a small thing gripped, the
+  fingers closed round it); `STILL_FAILING` lists what isn't yet and can
+  only shrink (empty: the vest's last hold went with the press centred on
+  its nearest point). `docs/shots/hands/33_held_free.jpg` is the first
+  raid's loot before and after, `34_small_gripped.jpg` the small things.
+  Bulky things too: the hand that took one and the one steadying its far
+  end are both seated (`both_hands_on_a_bulky_thing_hold_it`); the far
+  hand's seat is worked out afresh as it drifts. Seats are worked out off
+  the frame (one took 58 ms) and the glove blends onto each over 0.15 s
+  (`a_glove_settles_onto_its_seat_without_a_pop`: it had jumped 42 mm,
+  22 degrees in a frame).
 
 ## What's next
 
-- The vest's last hold (`render::hold::tests::STILL_FAILING`).
 - Help Gunsmith with the SPSh-44's trigger reach if asked: it came in at
   curl 0.83 (cramped, 60 mm); the grip point 29 mm ahead of the backstrap
   should bring it near the PM's 76 mm, or a measured ceiling if the real
