@@ -20,7 +20,7 @@
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
 
-use super::{CasingLanded, Ejection, FireEvent, Gun, GunEvent, Mag, feel::Handling};
+use super::{CasingLanded, Ejection, FireEvent, Gun, GunEvent, feel::Handling};
 use crate::interact::{Grabbable, GripRole, Hand, Socket, SocketKind, SocketOwner};
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::rig::{LocalPlayer, RigHand, RigInput, Side};
@@ -80,8 +80,6 @@ enum Act {
     Lift(Side),
     /// A spare let go of its rest where it lies.
     LiftSpare(usize),
-    /// The gun hand's stick clicked (the selector).
-    Stick,
 }
 
 use Act::*;
@@ -753,10 +751,6 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
                     .entity_mut(e)
                     .insert(avian3d::prelude::RigidBody::Dynamic);
             }
-        }
-        Stick => {
-            input(world, who, |h| h.stick_click = c.since < 3);
-            next = c.since + 1 >= 6;
         }
     }
     if c.stovepipe

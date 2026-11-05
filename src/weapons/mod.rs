@@ -532,7 +532,13 @@ pub fn drag(now: f32, want: f32, stiff: f32, pull: f32, dt: f32, travel_m: f32) 
 fn work_handles(
     hands: Query<(Entity, &Hand)>,
     rig: Query<&RigHand>,
-    mut guns: Query<(Entity, &mut Gun, &GlobalTransform, &Item)>,
+    mut guns: Query<(
+        Entity,
+        &mut Gun,
+        &GlobalTransform,
+        &Item,
+        Option<&feel::Handling>,
+    )>,
     catalog: Res<Catalog>,
     time: Res<Time>,
     mut out: MessageWriter<GunEvent>,
@@ -563,7 +569,7 @@ fn work_handles(
         let Some(gun_e) = hand.supporting else {
             continue;
         };
-        let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
+        let Ok((e, mut gun, gt, item, _)) = guns.get_mut(gun_e) else {
             continue;
         };
         let Some(h) = gun
@@ -574,11 +580,24 @@ fn work_handles(
         else {
             continue;
         };
-        let z = gt
-            .affine()
-            .inverse()
-            .transform_point3(hand.world.translation)
-            .z;
+        // Where the forend hand is along the bore from the hand on the
+        // grip: a pump stroke is the one hand moving on the other. Read
+        // against the gun, a shot's shove (the gun going back in both
+        // hands) worked half a stroke.
+        let bore = gt.rotation() * Vec3::Z;
+        let grip_hand = hands
+            .iter()
+            .find(|(_, other)| other.holding == Some(gun_e))
+            .map(|(_, other)| other.world.translation);
+        let z = match grip_hand {
+            Some(at) => (hand.world.translation - at).dot(bore),
+            None => {
+                gt.affine()
+                    .inverse()
+                    .transform_point3(hand.world.translation)
+                    .z
+            }
+        };
         let travel = gun.firearm.bolt_travel;
         let (_, start, z0) = *pumping.entry(hand_e).or_insert((gun_e, travel, z));
         let want = start + (z - z0) / h.travel.max(1e-3);
@@ -626,7 +645,7 @@ fn work_handles(
         let Some((gun_e, 0)) = hand.handle else {
             continue;
         };
-        let Ok((e, mut gun, gt, item)) = guns.get_mut(gun_e) else {
+        let Ok((e, mut gun, gt, item, kick)) = guns.get_mut(gun_e) else {
             continue;
         };
         let (_, start, start_lift) = *taken.entry(hand_e).or_insert((
@@ -640,7 +659,8 @@ fn work_handles(
         let local = gt
             .affine()
             .inverse()
-            .transform_point3(hand.world.translation);
+            .transform_point3(hand.world.translation)
+            + Vec3::Z * kick.map_or(0.0, |k| k.push);
         let d = local - hand.handle_origin;
         // How hard the hand pulls along the stroke, and which hand.
         let pull = hand.velocity.dot(gt.rotation() * Vec3::Z);

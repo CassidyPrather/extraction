@@ -386,3 +386,42 @@ fn a_case_leaves_as_briskly_as_the_hand_drew_the_bolt() {
     assert!(eased < 0.8, "eased back: thrown at {eased:.2} m/s");
     assert!(snapped > 2.0, "snapped back: thrown at {snapped:.2} m/s");
 }
+
+/// A shot with the hand still on the forend never works the pump: the
+/// hand rides the gun, and a twelve-gauge's shove is the gun and hand
+/// going back together. (Read against the shoved gun, a 24 mm shove was a
+/// quarter of a stroke.)
+#[test]
+fn a_shot_never_works_the_pump() {
+    let mut r = hold("mp133", true, false);
+    assert_eq!(
+        r.vr.hand_state(Side::Left).supporting,
+        Some(r.gun),
+        "on the forend"
+    );
+    {
+        let mut g = gun_mut(&mut r);
+        let f = &mut g.firearm;
+        f.condition = 1.0;
+        f.internal_rounds = 3;
+        f.chambers[0] = Some(Round::Live);
+        f.hammers_cocked[0] = true;
+        while f.fire_mode() != extraction_core::firearm::FireMode::Semi {
+            f.cycle_mode();
+        }
+    }
+    let mut most = 0.0f32;
+    r.vr.trigger(Side::Right, 1.0);
+    for _ in 0..60 {
+        r.vr.step(1);
+        most = most.max(gun_mut(&mut r).firearm.bolt_travel);
+    }
+    r.vr.trigger(Side::Right, 0.0);
+    r.vr.step(2);
+    let f = &gun_mut(&mut r).firearm;
+    assert_eq!(f.chambers[0], Some(Round::Spent), "fired");
+    assert!(
+        most < 0.05,
+        "the forend came {most:.2} of its stroke under the shot"
+    );
+}
