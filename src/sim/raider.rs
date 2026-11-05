@@ -792,7 +792,9 @@ pub struct Scene<'w, 's> {
     herds: Query<'w, 's, &'static crate::wildlife::herd::Herd>,
     perches: Option<Res<'w, crate::wildlife::perches::Perches>>,
     /// Every robot, standing or wrecked ([`Scene::wreck_at`]).
-    robot_state: Query<'w, 's, &'static Robot>,
+    robot_state: Query<'w, 's, (&'static Robot, &'static GlobalTransform)>,
+    /// The ground's collider, left out of a ray for what's underfoot.
+    terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
 }
 
 impl Scene<'_, '_> {
@@ -806,8 +808,40 @@ impl Scene<'_, '_> {
             .xf
             .transform_point(Vec3::new(local.x, plan.floor_at(local), local.y))
             .y;
+        self.wreck_at_feet(p, feet)
+    }
+
+    /// As [`Scene::wreck_at`], out of doors: on what's underfoot there
+    /// (a bridge's deck over a beck's bed, or the ground).
+    fn wreck_out_at(&self, p: Vec2) -> bool {
+        let ground = self.zone.ground(p.x, p.y);
+        let from = Vec3::new(p.x, ground + 4.0, p.y);
+        let feet = self
+            .spatial
+            .cast_ray(
+                from,
+                Dir3::NEG_Y,
+                6.0,
+                true,
+                &SpatialQueryFilter::from_mask([Layer::World])
+                    .with_excluded_entities(self.terrain.iter()),
+            )
+            .map_or(ground, |hit| (from.y - hit.distance).max(ground));
+        self.wreck_at_feet(p, feet)
+    }
+
+    /// Where wrecked robots lie (their bodies' roots).
+    fn wrecks(&self) -> Vec<Vec2> {
+        self.robot_state
+            .iter()
+            .filter(|(r, _)| r.wrecked)
+            .map(|(_, g)| g.translation().xz())
+            .collect()
+    }
+
+    fn wreck_at_feet(&self, p: Vec2, feet: f32) -> bool {
         let filter = SpatialQueryFilter::from_mask([Layer::Robot]);
-        let wrecked = |e: Entity| self.robot_state.get(e).is_ok_and(|r| r.wrecked);
+        let wrecked = |e: Entity| self.robot_state.get(e).is_ok_and(|r| r.0.wrecked);
         let is_wreck = |e: Entity| {
             wrecked(e)
                 || self
@@ -2565,6 +2599,69 @@ fn seg_dist(a: Vec2, b: Vec2, p: Vec2) -> f32 {
     (a + ab * t).distance(p)
 }
 
+/// How near a wreck's root a walk is looked along for its body (m): a
+/// walker's legs lie a couple of metres out.
+const WRECK_NEAR: f32 = 4.0;
+
+/// As [`travel`], round any wrecked robot lying on the way: the Zone's
+/// grid knows nothing of one, so the walk is looked along near each wreck
+/// at a body's height, and where it meets one the ground there is shut in
+/// a copy of the grid and the walk found again in that (Kettle seed 1, 5
+/// November: to the RV over the beck's footbridge, a walker wrecked on
+/// its end, ten stucks). With no way round, the walk as it was: no worse
+/// than before.
+fn travel_clear(
+    grid: &NavGrid,
+    scene: &Scene,
+    from: Vec2,
+    to: Vec2,
+    within: f32,
+) -> Option<Vec<Task>> {
+    let first = travel(grid, from, to, within)?;
+    let wrecks = scene.wrecks();
+    if wrecks.is_empty() {
+        return Some(first);
+    }
+    let mut shut: Option<NavGrid> = None;
+    let mut route = first.clone();
+    for _ in 0..WRECK_SHUTS {
+        let mut last = from;
+        let mut hit = None;
+        'legs: for t in &route {
+            let Task::WalkTo { to, .. } = t else {
+                continue;
+            };
+            let len = last.distance(*to);
+            let mut d = 0.3;
+            while d < len {
+                let p = last.lerp(*to, d / len);
+                if wrecks.iter().any(|w| w.distance(p) < WRECK_NEAR) && scene.wreck_out_at(p) {
+                    hit = Some(p);
+                    break 'legs;
+                }
+                d += 0.25;
+            }
+            last = *to;
+        }
+        let Some(p) = hit else {
+            return Some(route);
+        };
+        let g = shut.get_or_insert_with(|| grid.clone());
+        g.block(
+            Obstacle::Circle {
+                at: p.to_array(),
+                radius: 0.6,
+            },
+            super::indoor::SITE_CLEARANCE,
+        );
+        match travel(g, from, to, within) {
+            Some(again) => route = again,
+            None => return Some(first),
+        }
+    }
+    Some(route)
+}
+
 /// A walk along the Zone grid, as WalkTo tasks of at most 20 m each.
 fn travel(grid: &NavGrid, from: Vec2, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let path = grid.path(from.to_array(), to.to_array())?;
@@ -3972,7 +4069,7 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
         SiteKind::Anomaly => 1.5,
         _ => 2.0,
     };
-    travel(&r.grid, pos.xz(), to, within)
+    travel_clear(&r.grid, scene, pos.xz(), to, within)
 }
 
 fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
@@ -4400,7 +4497,7 @@ fn extract_step(
                 .min_by_key(|t| t.len())
                 .unwrap_or_else(|| vec![Task::Wait(1.0)]);
         }
-        return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
+        return travel_clear(&r.grid, scene, here, goal, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
                 to: goal,
                 within: 2.0,
@@ -5000,6 +5097,100 @@ mod run_tests {
             near >= 0.6,
             "{}: the route passes {near:.2} m from the wreck's middle",
             plan.name
+        );
+    }
+
+    /// A walk over open ground goes round a wrecked robot lying on its
+    /// line, not into it: the Zone's grid knows nothing of a wreck (Kettle
+    /// seed 1, 5 November: a walker wrecked on the end of the beck's
+    /// footbridge, ten stucks on the way to the RV). A robot still standing
+    /// there is left on the walk: it moves.
+    #[test]
+    fn a_walk_goes_round_a_wreck_in_the_open() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "training_yard".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let grid = app.world().resource::<Nav>().0.as_ref().clone();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        // Open ground, and a straight walk across it.
+        let (from, to) = (Vec2::new(-12.0, 30.0), Vec2::new(12.0, 30.0));
+        let at = Vec2::new(0.0, 30.0);
+        let route = travel(&grid, from, to, 1.0).expect("a walk across the open");
+        let near = |route: &[Task]| {
+            let mut last = from;
+            let mut near = f32::MAX;
+            for t in route {
+                if let Task::WalkTo { to, .. } = t {
+                    near = near.min(seg_dist(last, *to, at));
+                    last = *to;
+                }
+            }
+            near
+        };
+        assert!(
+            near(&route) < 0.5,
+            "the walk crosses the spot: {:.2} m off",
+            near(&route)
+        );
+        let ground = zone.ground(at.x, at.y);
+        let wreck = |app: &mut App, wrecked: bool| {
+            app.world_mut()
+                .spawn((
+                    Robot {
+                        kind: crate::robots::RobotKind::Walker,
+                        wrecked,
+                    },
+                    Transform::from_xyz(at.x, ground, at.y),
+                ))
+                .with_children(|c| {
+                    c.spawn((
+                        Name::new("Walker body"),
+                        Transform::from_xyz(0.0, 0.6, 0.0),
+                        RigidBody::Static,
+                        Collider::cuboid(1.2, 1.2, 1.2),
+                        CollisionLayers::new(
+                            Layer::Robot,
+                            [Layer::World, Layer::Player, Layer::Robot],
+                        ),
+                    ));
+                })
+                .id()
+        };
+        let walked = |app: &mut App| {
+            let grid = grid.clone();
+            app.world_mut()
+                .run_system_once(move |scene: Scene| {
+                    travel_clear(&grid, &scene, from, to, 1.0).unwrap_or_default()
+                })
+                .unwrap()
+        };
+        let standing = wreck(&mut app, false);
+        for _ in 0..3 {
+            app.update();
+        }
+        let route = walked(&mut app);
+        assert!(
+            near(&route) < 0.5,
+            "a standing robot moved the walk: {:.2} m off",
+            near(&route)
+        );
+        app.world_mut().entity_mut(standing).despawn();
+        wreck(&mut app, true);
+        for _ in 0..3 {
+            app.update();
+        }
+        let route = walked(&mut app);
+        assert!(!route.is_empty(), "no walk at all");
+        assert!(
+            near(&route) >= 0.9,
+            "the walk passes {:.2} m from the wreck's middle",
+            near(&route)
         );
     }
 
