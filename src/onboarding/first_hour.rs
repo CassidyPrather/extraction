@@ -3911,9 +3911,16 @@ mod tests {
             );
             at = *p;
         }
-        assert_eq!(
-            round_sentries(&[s], a, s + Vec2::X * 10.0, 3),
-            vec![s + Vec2::X * 10.0]
+        // To somewhere in its sight: round to its edge, then in. From in
+        // it: straight out first.
+        let inside = s + Vec2::new(-30.0, 10.0);
+        let to_it = round_sentries(&[s], a, inside, 3);
+        assert_eq!(to_it.last(), Some(&inside));
+        assert!(to_it.len() >= 2, "{to_it:?}");
+        let from_it = round_sentries(&[s], inside, b, 3);
+        assert!(
+            (from_it[0].distance(s) - SENTRY_BERTH).abs() < 0.1,
+            "{from_it:?}"
         );
         assert_eq!(round_sentries(&[], a, b, 3), vec![b]);
     }
