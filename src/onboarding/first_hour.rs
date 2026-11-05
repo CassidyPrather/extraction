@@ -3245,16 +3245,72 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     // each out of any it lands in (bar the end), and each stretch round any
     // in its way (from by the pump house, a waypoint past it was walked to
     // straight through it, and two newcomers stood at its wall).
+    let decks: Vec<(crate::world::bridges::Deck, [Vec2; 2])> =
+        crate::world::bridges::decks(&world.zone)
+            .into_iter()
+            .map(|d| {
+                let [ga, gb] = d.ground_ends(&world.zone);
+                (d, [ga.xz(), gb.xz()])
+            })
+            .collect();
     let mut t = vec![];
     let mut at = from;
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
-        for q in round_boxes(&boxes, at, r) {
-            t.extend(world.legs(at, q));
-            at = q;
+        for d in round_decks(&decks, at, r) {
+            for q in round_boxes(&boxes, at, d) {
+                t.extend(world.legs(at, q));
+                at = q;
+            }
         }
     }
     t
+}
+
+/// `a`..`b` by a bridge's ends where it meets its deck (`world::bridges`):
+/// onto a deck by the end that's nearer, off it by the end nearer where
+/// it's going, and over or under one by its ends. The points after `a`, to
+/// `b`. (Along the ravine under Marrow's footbridge by the ranger tower,
+/// a walk to a point on the deck stood at the bank below it, a metre and a
+/// half down, three times in one raid.)
+fn round_decks(decks: &[(crate::world::bridges::Deck, [Vec2; 2])], a: Vec2, b: Vec2) -> Vec<Vec2> {
+    // (On it: within its width. Its footprint: a body's width more.)
+    const ON: f32 = 0.2;
+    const NEAR: f32 = 0.6;
+    let nearer = |ends: &[Vec2; 2], p: Vec2| {
+        if ends[0].distance(p) <= ends[1].distance(p) {
+            ends[0]
+        } else {
+            ends[1]
+        }
+    };
+    for (d, ends) in decks {
+        let (on_a, on_b) = (d.holds(a, ON), d.holds(b, ON));
+        if on_a && on_b {
+            continue;
+        }
+        let mut pts = vec![];
+        if on_b {
+            // Up onto it at the end nearer the start.
+            pts.push(nearer(ends, a));
+        } else if on_a {
+            // Off it at the end nearer where it's going.
+            pts.push(nearer(ends, b));
+        } else if d.crosses(a, b, NEAR).is_some() {
+            // Over or under it: by its ends.
+            let (ea, eb) = (nearer(ends, a), nearer(ends, b));
+            pts.push(ea);
+            if eb != ea {
+                pts.push(eb);
+            }
+        } else {
+            continue;
+        }
+        pts.retain(|p| p.distance(a) > 0.5 && p.distance(b) > 0.5);
+        pts.push(b);
+        return pts;
+    }
+    vec![b]
 }
 
 /// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
@@ -4323,6 +4379,59 @@ mod indoor_tests {
     /// The walk on from against the pumping station's wall, where both
     /// newcomers stood: no stretch of it goes through a building (its
     /// machines'-grid detour went straight through the pump house).
+    /// To a point on Marrow's footbridge by the ranger tower from the
+    /// ravine under it, the walk goes up by one of the deck's ends, not at
+    /// the bank below it (it stood there, a metre and a half down, three
+    /// times in a raid).
+    #[test]
+    fn a_walk_onto_a_footbridge_goes_up_by_its_end() {
+        let opts = crate::launch::LaunchOptions {
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut st: bevy::ecs::system::SystemState<super::World2> =
+            bevy::ecs::system::SystemState::new(w);
+        let world = st.get(w).unwrap();
+        let on = Vec2::new(-87.76, -35.05);
+        let deck = crate::world::bridges::decks(&world.zone)
+            .into_iter()
+            .find(|d| d.holds(on, 0.2))
+            .expect("the footbridge by the ranger tower");
+        let ends = deck.ground_ends(&world.zone).map(|e| e.xz());
+        for from in [Vec2::new(-88.7, -21.0), Vec2::new(-87.9, -33.1)] {
+            let pts: Vec<Vec2> = super::walk(&world, from, on)
+                .into_iter()
+                .filter_map(|t| match t {
+                    crate::bot::Task::WalkTo { to, .. } => Some(to),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                pts.iter()
+                    .any(|p| ends.iter().any(|e| e.distance(*p) < 1.0)),
+                "from {from}: {pts:?} never by an end {ends:?}"
+            );
+            // Nowhere off the deck below it, short of the end.
+            let mut at = from;
+            for p in &pts {
+                if deck.holds(*p, 0.2) {
+                    assert!(
+                        deck.holds(at, 0.2) || ends.iter().any(|e| e.distance(at) < 1.0),
+                        "from {from}: up onto the deck at {p} from {at}, not by an end"
+                    );
+                }
+                at = *p;
+            }
+        }
+    }
+
     #[test]
     fn the_walk_from_the_pump_house_wall_goes_round_it() {
         let opts = crate::launch::LaunchOptions {
