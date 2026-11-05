@@ -2676,7 +2676,17 @@ fn under_a_roof(
 /// off, and a breath to look back.
 fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
     let away = (here - from).normalize_or(Vec2::Y);
-    let mut t = walk(world, here, here + away * 15.0);
+    // Away, or turned along whatever's ahead (the fence, the map's edge):
+    // the first that stays inside the fence. (Straight away every 15 m, the
+    // lost newcomer went out through the south gate to the map's edge, and
+    // the heavy had it in the corner.)
+    let inside = world.zone.map.half() - world.zone.map.fence_inset.max(0.0) - 5.0;
+    let to = [0.0f32, 45.0, -45.0, 90.0, -90.0]
+        .into_iter()
+        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * 15.0)
+        .find(|p| p.x.abs() < inside && p.y.abs() < inside)
+        .unwrap_or(here + away * 15.0);
+    let mut t = walk(world, here, to);
     t.push(Task::Wait(2.0));
     t
 }
