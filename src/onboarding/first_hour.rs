@@ -1424,19 +1424,18 @@ pub(super) fn direct_raid(
             _ => vec![],
         };
         if !answer.is_empty() {
-            // Where the answer leaves it: the way on from there, round the
-            // sentry's sight, not back across it.
+            // Any answer that walks it somewhere: the way on planned again
+            // from where it's left, round a sentry's sight and through the
+            // fence's gap (from under the south gate's booth roof, outside
+            // the fence, the walk it had been on went on at the wire, as
+            // planned from inside).
             let n = answer.len();
-            let left_at = answer
-                .iter()
-                .rev()
-                .find_map(|t| match t {
-                    Task::WalkTo { to, .. } => Some(*to),
-                    _ => None,
-                })
-                .unwrap_or(here);
+            let left_at = answer.iter().rev().find_map(|t| match t {
+                Task::WalkTo { to, .. } => Some(*to),
+                _ => None,
+            });
             super::second_hour::cut_in(&mut bot, answer);
-            if f == First::Sentry {
+            if let Some(left_at) = left_at {
                 reroute_after(&mut bot, n, left_at, &world, &view);
             }
         }
