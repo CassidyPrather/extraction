@@ -336,3 +336,53 @@ fn a_hand_takes_a_handle_where_it_is() {
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
+
+/// Cases thrown, how fast.
+#[derive(Resource, Default)]
+struct Thrown(Vec<f32>);
+
+/// A hand-worked bolt throws its case as briskly as the hand drew it:
+/// eased back, the case drops by the gun; snapped back, it flicks clear.
+/// (Every case left at the same 2.6 m/s however the bolt was worked.)
+#[test]
+fn a_case_leaves_as_briskly_as_the_hand_drew_the_bolt() {
+    let mut speeds = Vec::new();
+    for ticks in [60usize, 8] {
+        let mut r = hold("mosin", false, false);
+        r.vr.app.init_resource::<Thrown>().add_systems(
+            Update,
+            |mut ev: MessageReader<crate::weapons::Ejection>, mut t: ResMut<Thrown>| {
+                t.0.extend(ev.read().map(|e| e.velocity.length()));
+            },
+        );
+        gun_mut(&mut r).firearm.chambers[0] = Some(Round::Spent);
+        let (back, up) = {
+            let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            (gt.back().as_vec3(), gt.up().as_vec3())
+        };
+        let travel = gun_mut(&mut r).layout.handle.as_ref().unwrap().travel;
+        let at = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(4);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(2);
+        let lifted = at + up * 0.045;
+        glide_side(&mut r, Side::Left, at, lifted, 8);
+        glide_side(
+            &mut r,
+            Side::Left,
+            lifted,
+            lifted + back * travel * 1.1,
+            ticks,
+        );
+        r.vr.step(3);
+        let t = r.vr.app.world().resource::<Thrown>().0.clone();
+        assert_eq!(t.len(), 1, "over {ticks} ticks: one case out ({t:?})");
+        speeds.push(t[0]);
+    }
+    let [eased, snapped] = speeds[..] else {
+        unreachable!()
+    };
+    assert!(eased < 0.8, "eased back: thrown at {eased:.2} m/s");
+    assert!(snapped > 2.0, "snapped back: thrown at {snapped:.2} m/s");
+}

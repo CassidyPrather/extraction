@@ -605,7 +605,16 @@ fn work_handles(
             pumping.insert(hand_e, (gun_e, now, z));
         }
         let name = catalog.get(item.kind()).id.clone();
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            hand_throw(pull),
+        );
     }
     taken.retain(|h, (g, ..)| {
         hands
@@ -750,7 +759,16 @@ fn work_handles(
             }
         };
         let name = catalog.get(item.kind()).id.clone();
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            hand_throw(pull),
+        );
     }
 }
 
@@ -912,7 +930,16 @@ fn tap_magazines(
         if tapped {
             let events = gun.firearm.tap_magazine();
             let name = catalog.get(item.kind()).id.clone();
-            emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+            emit(
+                e,
+                &name,
+                &mut gun,
+                gt,
+                events,
+                &mut out,
+                &mut ejected,
+                CASE_THROW,
+            );
         }
     }
 }
@@ -1014,7 +1041,16 @@ fn feed_by_hand(
                 boxes.insert(hand_e, now);
             }
         }
-        emit(gun_e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            gun_e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            CASE_THROW,
+        );
     }
 }
 
@@ -1124,7 +1160,16 @@ fn buttons(
                 events.extend(gun.firearm.cycle_mode());
             }
         }
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            CASE_THROW,
+        );
         // A hand that let go of the handle this tick: spring return.
         let _ = &mut hands;
     }
@@ -1280,11 +1325,35 @@ fn triggers(
                 });
             }
         }
-        emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            events,
+            &mut out,
+            &mut ejected,
+            CASE_THROW,
+        );
     }
 }
 
 /// Turns mechanism events into gun events and ejections.
+/// How fast a case leaves the port when the gun throws it (m/s).
+pub const CASE_THROW: f32 = 2.6;
+
+/// How fast a case leaves when a hand works the action: as briskly as the
+/// hand drew it back. Eased back, a bolt drops its case by the gun; snapped
+/// back, it flicks it clear.
+pub fn hand_throw(pull: f32) -> f32 {
+    (pull.abs() * HAND_THROW).clamp(0.3, 4.0)
+}
+
+/// A case's speed per unit of the hand's (an extractor and ejector add
+/// the bolt's last snap to the hand's own).
+pub const HAND_THROW: f32 = 2.2;
+
+#[allow(clippy::too_many_arguments)]
 fn emit(
     gun_e: Entity,
     name: &str,
@@ -1293,6 +1362,7 @@ fn emit(
     events: Vec<FireEvent>,
     out: &mut MessageWriter<GunEvent>,
     ejected: &mut MessageWriter<Ejection>,
+    throw: f32,
 ) {
     for ev in events {
         if let FireEvent::Ejected(round) = ev {
@@ -1307,7 +1377,7 @@ fn emit(
                 cartridge: gun.firearm.def.cartridge.clone(),
                 load,
                 at: gt.transform_point(gun.layout.port),
-                velocity: dir * 2.6,
+                velocity: dir * throw,
             });
         }
         out.write(GunEvent {
@@ -1543,7 +1613,16 @@ pub fn handle_released(
             if let Ok((e, mut gun, gt, item)) = guns.get_mut(g) {
                 let ev = release_handle(&mut gun);
                 let name = catalog.get(item.kind()).id.clone();
-                emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
+                emit(
+                    e,
+                    &name,
+                    &mut gun,
+                    gt,
+                    ev,
+                    &mut out,
+                    &mut ejected,
+                    CASE_THROW,
+                );
             }
         }
     }
