@@ -95,6 +95,67 @@ pub struct MapDef {
     /// placed, not structures: nothing stands, blocks or is linted.
     #[serde(default)]
     pub cues: Vec<Cue>,
+    /// Lines of snow poles marking a track over open snow, each a pole at
+    /// every `every` m along its points (`PoleLine`). Read in, they become
+    /// `snow_pole` placements like any other: the lint, the colliders and
+    /// the art take them as placed by hand.
+    #[serde(default)]
+    pub pole_lines: Vec<PoleLine>,
+}
+
+/// A line of snow poles (`MapDef::pole_lines`): one at its first point,
+/// then every `every` m along the polyline, and one at its last.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PoleLine {
+    pub points: Vec<P2>,
+    #[serde(default = "default_pole_every")]
+    pub every: f32,
+    /// Its poles' tags, numbered from 1 (`"col_3"`), for the walk review
+    /// and scripting; none if empty.
+    #[serde(default)]
+    pub tag: String,
+}
+
+fn default_pole_every() -> f32 {
+    20.0
+}
+
+impl PoleLine {
+    /// Where its poles stand: one at each end and evenly between, no
+    /// more than `every` m apart along it (at least 2 m).
+    pub fn poles(&self) -> Vec<P2> {
+        let every = self.every.max(2.0);
+        let lens: Vec<f32> = self
+            .points
+            .windows(2)
+            .map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]))
+            .collect();
+        let total: f32 = lens.iter().sum();
+        let Some(&first) = self.points.first() else {
+            return Vec::new();
+        };
+        if total <= 0.0 {
+            return vec![first];
+        }
+        let n = (total / every).ceil() as usize;
+        let gap = total / n as f32;
+        (0..=n)
+            .map(|k| {
+                let mut d = gap * k as f32;
+                for (w, len) in self.points.windows(2).zip(&lens) {
+                    if d <= *len || std::ptr::eq(len, lens.last().unwrap()) {
+                        let t = (d / len.max(1e-6)).min(1.0);
+                        return [
+                            w[0][0] + (w[1][0] - w[0][0]) * t,
+                            w[0][1] + (w[1][1] - w[0][1]) * t,
+                        ];
+                    }
+                    d -= len;
+                }
+                first
+            })
+            .collect()
+    }
 }
 
 /// A sign of life on a placed building (`MapDef::cues`), found by the
@@ -1094,7 +1155,30 @@ pub fn prefab_wants_pad(id: &str) -> bool {
 
 impl MapDef {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        ron::from_str(text).map_err(|e| e.to_string())
+        let mut map: Self = ron::from_str(text).map_err(|e| e.to_string())?;
+        map.place_pole_lines();
+        Ok(map)
+    }
+
+    /// Each pole line's poles as `snow_pole` placements (once: the lines
+    /// are emptied).
+    pub fn place_pole_lines(&mut self) {
+        for line in std::mem::take(&mut self.pole_lines) {
+            for (i, at) in line.poles().into_iter().enumerate() {
+                self.placements.push(Placement {
+                    prefab: "snow_pole".into(),
+                    at,
+                    rot: 0.0,
+                    y: 0.0,
+                    absolute: false,
+                    tag: if line.tag.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{}_{}", line.tag, i + 1)
+                    },
+                });
+            }
+        }
     }
 
     pub fn half(&self) -> f32 {
@@ -1184,6 +1268,35 @@ pub const VALLEYS: [(&str, &str); 5] = [
 
 #[cfg(test)]
 mod tests {
+    /// A line of poles: one at each end, 20 m apart along its bends, and
+    /// read in as `snow_pole` placements.
+    #[test]
+    fn a_pole_line_is_poles_every_twenty_metres() {
+        let line = PoleLine {
+            points: vec![[0.0, 0.0], [50.0, 0.0], [50.0, 35.0]],
+            every: 20.0,
+            tag: "col".into(),
+        };
+        let p = line.poles();
+        let gaps: Vec<f32> = p
+            .windows(2)
+            .map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]))
+            .collect();
+        assert_eq!(p.first(), Some(&[0.0, 0.0]));
+        assert_eq!(p.last(), Some(&[50.0, 35.0]));
+        // 85 m of line: five gaps of 17 m along it (a chord across the
+        // bend a little less).
+        assert_eq!(p.len(), 6, "{p:?}");
+        assert!(gaps.iter().all(|g| *g > 12.0 && *g <= 17.01), "{gaps:?}");
+        let text = r#"(name: "t", size: 100.0, pole_lines: [(points: [(0.0, 0.0), (0.0, 41.0)], tag: "col")])"#;
+        let map = MapDef::from_ron(text).unwrap();
+        assert!(map.pole_lines.is_empty());
+        let tags: Vec<&str> = map.placements.iter().map(|p| p.tag.as_str()).collect();
+        // 41 m: three gaps of 13.7 m, four poles.
+        assert_eq!(tags, ["col_1", "col_2", "col_3", "col_4"]);
+        assert!(map.placements.iter().all(|p| p.prefab == "snow_pole"));
+    }
+
     use super::*;
     use crate::terrain::Heightmap;
 
