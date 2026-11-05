@@ -26,11 +26,18 @@ use crate::world::{Layer, Zone};
 /// The most a planted foot may slide over one stance (m, at a walker's
 /// size).
 pub const SLIDE: f32 = 0.05;
-/// How near the surface a foot comes down (m, at a walker's size).
-pub const TOUCH: f32 = 0.05;
-/// The most the body may ride off the height its feet hold it at (m, at a
-/// walker's size): its bob, sag and sway are well inside it.
-pub const RIDE: f32 = 0.3;
+/// How near the surface a foot comes down (m, at a walker's size: 5 cm
+/// on a crawler).
+pub const TOUCH: f32 = 0.08;
+/// The most the body may ride off what holds it up, its planted feet and
+/// the ground under it (m, at a walker's size): its bob, sag and sway are
+/// inside [`RIDE_USUALLY`]; coming down off a raised doorway it's brought
+/// back at `anim::RIDE_CATCH`, a drop, not a jump, and is out to this.
+pub const RIDE: f32 = 0.6;
+/// What the body rides inside all but [`RIDE_RARELY`] of the time.
+pub const RIDE_USUALLY: f32 = 0.3;
+/// The share of its ticks a body may be past [`RIDE_USUALLY`].
+pub const RIDE_RARELY: f32 = 0.002;
 
 /// The valleys.
 pub const VALLEYS: [&str; 5] = [
@@ -108,7 +115,9 @@ pub fn routes(
         }
         doors.push(e.mid);
         let out_dir = Vec3::new(e.out.x, 0.0, e.out.z).normalize_or(Vec3::X);
-        let (a, m, b) = (e.mid + out_dir * 4.0, e.mid, e.mid - out_dir * 3.0);
+        // Over its step and 1 m in (a shed is 2 m deep: a route on to
+        // 3 m walked out through its back wall).
+        let (a, m, b) = (e.mid + out_dir * 4.0, e.mid, e.mid - out_dir * 1.0);
         out.push(Route {
             what: format!("door at ({:.0}, {:.0})", e.mid.x, e.mid.z),
             pts: vec![
@@ -162,6 +171,18 @@ pub fn routes(
                 ],
             });
         }
+    }
+    // (Over open ground a machine goes the way its paths take it, round
+    // what the nav keeps it off, boulders and trunks: a straight line walked
+    // it up a 2 m rock no path would. A door's threshold it takes as it is.)
+    for r in out.iter_mut().filter(|r| !r.what.starts_with("door")) {
+        let mut pts: Vec<Vec3> = vec![r.pts[0]];
+        for w in r.pts.windows(2) {
+            if let Some(p) = nav.path([w[0].x, w[0].z], [w[1].x, w[1].z]) {
+                pts.extend(p.iter().skip(1).map(|q| on(zone, q[0], q[1])));
+            }
+        }
+        r.pts = pts;
     }
     // Along the dam.
     for r in zone
@@ -220,6 +241,9 @@ impl Worst {
 /// feet (each m at a walker's size).
 #[derive(Clone, Debug, Default)]
 pub struct Report {
+    /// Ticks a body rode past [`RIDE`], of all machines' ticks.
+    pub ride_over: usize,
+    pub ticks: usize,
     pub slide: Worst,
     pub float: Worst,
     pub sink: Worst,
@@ -232,7 +256,9 @@ pub struct Report {
 /// (the world, rubble, things), else the terrain.
 fn surface(spatial: &SpatialQuery, zone: &Zone, p: Vec3) -> f32 {
     let terrain = zone.ground(p.x, p.z);
-    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
+    // (Not loose things: kicked about by sixty feet, one moved under a
+    // foot between its probe and its landing reads as the foot in it.)
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris]);
     // (From just over the foot: from higher it started inside a bridge's
     // railing or a trunk beside it, and found nothing.)
     let from = p + Vec3::Y * 0.06;
@@ -240,6 +266,24 @@ fn surface(spatial: &SpatialQuery, zone: &Zone, p: Vec3) -> f32 {
         .cast_ray(from, Dir3::NEG_Y, 1.5, true, &filter)
         .filter(|h| h.distance > 0.02)
         .map(|h| from.y - h.distance)
+        .map_or(terrain, |y| y.max(terrain))
+}
+
+/// The ground under a body at `p`: the first thing down from it (the
+/// world, rubble, things; not robots), else the terrain.
+fn ground_under(spatial: &SpatialQuery, zone: &Zone, p: Vec3) -> f32 {
+    let terrain = zone.ground(p.x, p.z);
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
+    spatial
+        .cast_ray(
+            p,
+            Dir3::NEG_Y,
+            (p.y - terrain).max(0.0) + 0.5,
+            true,
+            &filter,
+        )
+        .filter(|h| h.distance > 0.02)
+        .map(|h| p.y - h.distance)
         .map_or(terrain, |y| y.max(terrain))
 }
 
@@ -365,11 +409,33 @@ pub fn gauge(map: &str, secs: f32) -> (Report, Vec<Route>) {
                     (was, slid, f.t, icy)
                 };
             }
+            if let Ok(tr) = std::env::var("FEET_TRACE") {
+                if tr == format!("{kind}:{route}") {
+                    let fs: Vec<String> = w
+                        .feet
+                        .iter()
+                        .map(|f| {
+                            format!(
+                                "t{:.2} p{:.2} fr{:.2} to{:.2}",
+                                f.t, f.planted.y, f.from.y, f.to.y
+                            )
+                        })
+                        .collect();
+                    eprintln!(
+                        "TRACE {tick} body {:.3} terrain {:.3} | {}",
+                        t.translation.y,
+                        zone.ground(t.translation.x, t.translation.z),
+                        fs.join(" | ")
+                    );
+                }
+            }
             if !feet_y.is_empty() && tick > 90 {
                 // What holds it: its planted feet and the ground under it (a
                 // step, a slope it's over); its height over them, between
                 // the lowest and the highest.
-                let under = surface(&sq, &zone, t.translation - Vec3::Y * g.shape.height() * s);
+                // (Probed from the body: from under it, over a rock, it
+                // started inside the rock and found the terrain.)
+                let under = ground_under(&sq, &zone, t.translation);
                 let lo = feet_y.iter().copied().fold(under, f32::min);
                 let hi = feet_y.iter().copied().fold(under, f32::max);
                 let h = g.shape.height() * s;
@@ -392,6 +458,10 @@ pub fn gauge(map: &str, secs: f32) -> (Report, Vec<Route>) {
                         g.down(),
                     )
                 };
+                report.ticks += 1;
+                if over.max(under) / s > RIDE_USUALLY {
+                    report.ride_over += 1;
+                }
                 report
                     .high
                     .see_why(over / s, kind, route, t.translation, why);
@@ -422,7 +492,19 @@ mod tests {
             .filter(|m| only.as_deref().is_none_or(|o| o == *m))
         {
             let (r, rs) = gauge(map, 14.0);
-            println!("{map}: {} ways", rs.len());
+            let rarely = r.ride_over as f32 / r.ticks.max(1) as f32;
+            println!(
+                "{map}: {} ways; a body past {RIDE_USUALLY} for {:.2}% of its ticks",
+                rs.len(),
+                100.0 * rarely
+            );
+            if rarely > RIDE_RARELY {
+                bad.push(format!(
+                    "{map}: a body past {RIDE_USUALLY} for {:.2}% of its ticks (limit {:.1}%)",
+                    100.0 * rarely,
+                    100.0 * RIDE_RARELY
+                ));
+            }
             for rt in &rs {
                 let pts: Vec<String> = rt
                     .pts

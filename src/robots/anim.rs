@@ -147,6 +147,9 @@ pub struct Gait {
     pub hamper: f32,
     /// How low it hangs for missing legs, metres (smoothed).
     pub(crate) sag: f32,
+    /// The ground under the body last tick, to carry it with the ground
+    /// as it goes (none: not yet).
+    under_was: Option<f32>,
     /// Each swing's length in seconds, set at lift-off.
     dur: [f32; LEGS],
     /// Whether a swing has had its mid-flight retarget.
@@ -259,6 +262,7 @@ impl Default for Gait {
             limp: 0.0,
             hamper: 0.0,
             sag: 0.0,
+            under_was: None,
             dur: [0.3; LEGS],
             retargeted: [false; LEGS],
             dangle: [Vec3::ZERO; LEGS],
@@ -692,10 +696,13 @@ pub fn step_walker_walled(
     // left: three legs stepping up onto a raised floor held the body down
     // at the step below, in the floor (`feet_gauge`, 5 November).
     let (mut sum, mut n) = (Vec3::ZERO, 0.0f32);
+    // (Its lowest planted foot: what it stands on at the least.)
+    let mut lowest = f32::MAX;
     for f in w.feet.iter().filter(|f| f.alive) {
         let p = if f.t < 1.0 {
             f.from.lerp(f.to, f.t)
         } else {
+            lowest = lowest.min(f.planted.y);
             f.planted
         };
         sum += p;
@@ -731,12 +738,54 @@ pub fn step_walker_walled(
     let rest_y = if drive.down && !drive.stunned {
         under + g.shape.height() * s
     } else {
-        centroid.y.max(under - 0.2 * s) + g.shape.height() * s
+        // Never more than `RIDE_OVER` above what it stands on: the ground
+        // under it (a step's tread, a floor, the hill) or, over a drop, its
+        // lowest planted foot (all four on a floor inside a doorway, the
+        // porch's edge under it). With three feet in the air, mid gallop or
+        // a step-through, their targets up a slope lifted it off its legs,
+        // and a rear foot planted up the hill behind held it up there
+        // (`feet_gauge`, 5 November).
+        let stands = if lowest < f32::MAX {
+            under.max(lowest)
+        } else {
+            under
+        };
+        let top = stands + RIDE_OVER * s;
+        centroid.y.max(under - 0.2 * s).min(top) + g.shape.height() * s
     } - g.sag;
     // Up onto a step quicker than down off one: lagging a rise, the body
     // sank into a raised floor its feet were already on.
+    // Carried with the ground under it as it goes (a hill's rise or fall
+    // at a run is metres a second: followed, it lagged half a metre behind
+    // its feet down a 32-degree slope), only the rest eased.
+    if let Some(was) = g.under_was.filter(|_| !drive.down) {
+        let ground_moved = under - was;
+        // (Not across a step or a sill: that's eased, not jumped.)
+        if ground_moved.abs() < 0.15 * s {
+            next.y += ground_moved;
+        }
+    }
+    g.under_was = Some(under);
     let follow = if rest_y > next.y { RISE_RATE } else { 6.0 };
     next.y += (rest_y - next.y) * (follow * dt).min(1.0);
+    // And held to it: never more than `RIDE_OVER` over its height above
+    // the ground under it, nor `RIDE_UNDER` into it (eased, a gallop's lift
+    // or a fall off a sill still left it floating or sunk for a moment).
+    if !drive.down {
+        let h = g.shape.height() * s - g.sag;
+        let stands = if lowest < f32::MAX {
+            under.max(lowest)
+        } else {
+            under
+        };
+        let held = next
+            .y
+            .clamp(under + h - RIDE_UNDER * s, stands + h + RIDE_OVER * s);
+        // (Brought there quickly, not in one tick: stepping off a rubble
+        // block, the ground under it fell 0.4 m and it popped down with it.)
+        let most = RIDE_CATCH * s * dt;
+        next.y += (held - next.y).clamp(-most, most);
+    }
 
     // The bob: a spring kicked down by landings, lifted through swings.
     let swing = w
@@ -970,7 +1019,7 @@ pub fn footing(
     terrain: f32,
     size: f32,
     underground: bool,
-    ray: impl FnOnce(Vec3, f32) -> Option<f32>,
+    mut ray: impl FnMut(Vec3, f32) -> Option<f32>,
 ) -> f32 {
     if underground {
         let reach = (UPPER + LOWER) * size * 1.6;
@@ -980,12 +1029,34 @@ pub fn footing(
         return p.y - BODY_HEIGHT * size;
     }
     let from = p.with_y(p.y.max(terrain + PROBE_OVER * size));
-    // Started inside something (a wall): not a footing.
-    match ray(from, from.y - terrain + 0.3).filter(|d| *d > 0.02) {
-        Some(d) => from.y - d,
+    match ray(from, from.y - terrain + 0.3) {
+        Some(d) if d > 0.02 => (from.y - d).max(terrain),
+        // Started inside something (a rock it's on, a sill): its top is
+        // over the probe, so look again from over it, once (from inside,
+        // the terrain under it was taken, and a crawler on a boulder sat
+        // in it: `feet_gauge`, 5 November).
+        Some(_) => {
+            let over = from + Vec3::Y * PROBE_OVER * size * 2.0;
+            match ray(over, over.y - terrain + 0.3) {
+                Some(d) if d > 0.02 => (over.y - d).max(terrain),
+                _ => terrain,
+            }
+        }
         None => terrain,
     }
 }
+
+/// How far over the ground under it a body may ride, past its height (m,
+/// at a walker's size).
+pub const RIDE_OVER: f32 = 0.2;
+
+/// How far into its height over the ground under it a body may dip (m, at
+/// a walker's size; its bob, a landing's kick).
+pub const RIDE_UNDER: f32 = 0.25;
+
+/// How fast a body is brought back into its ride (m/s, at a walker's
+/// size): a drop off a ledge, not a jump.
+pub const RIDE_CATCH: f32 = 4.0;
 
 /// How fast the body rises to its rest height (/s; it settles at 6).
 pub const RISE_RATE: f32 = 14.0;
@@ -1052,6 +1123,7 @@ pub(crate) fn walk(
     mut steps: MessageWriter<WalkerStep>,
     snow: Option<Res<crate::world::snow::Snow>>,
     bodies: Query<(Option<&RigidBody>, Option<&ColliderOf>)>,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
 ) {
     let dt = time.delta_secs();
     // What a walker's body stops at: what's built (static), not a door
@@ -1068,7 +1140,11 @@ pub(crate) fn walk(
     };
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
-    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
+    // (Not the terrain's own collider: its triangles stand off the height
+    // map's smooth ground, that everything else stands on, by up to 9 cm
+    // up a 32-degree slope. The terrain is `zone.ground`.)
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item])
+        .with_excluded_entities(terrain.iter());
     for (
         entity,
         mut w,
