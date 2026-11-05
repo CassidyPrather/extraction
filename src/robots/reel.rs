@@ -60,7 +60,7 @@ impl Plugin for ReelPlugin {
     }
 }
 
-/// `reel:feetat,…,X2,Z2,DIST,HEIGHT`: the camera keeps beside the machine,
+/// `reel:feetat,…,X2,Z2,DIST,HEIGHT[,door]`: the camera keeps beside the machine,
 /// DIST m off its route's line and HEIGHT m over the ground under it,
 /// looking at it level, so its feet and the ground line read in
 /// silhouette. Each frame's body position is logged, so a shot can be
@@ -180,7 +180,7 @@ fn reel(
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     cases: Query<&TellCase>,
-    (mut sentry_acts, mut awares, mut drone_locks, mut melee, catalog): (
+    (mut sentry_acts, mut awares, mut drone_locks, mut melee, (catalog, nav)): (
         MessageWriter<super::sentry::SentryEvent>,
         Query<&mut super::Awareness, Without<EyeLevel>>,
         MessageWriter<super::drone::DroneLock>,
@@ -191,7 +191,7 @@ fn reel(
             Query<&mut super::grappler::Grappler>,
             Query<(&mut Brain, &mut super::Intent)>,
         ),
-        Res<crate::items::Catalog>,
+        (Res<crate::items::Catalog>, Option<Res<super::walker::Nav>>),
     ),
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
@@ -851,11 +851,27 @@ fn reel(
                 "feetat" => {
                     let a: Vec<&str> = spec.split(',').collect();
                     let n = |k: usize| a.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-                    vec![
-                        Vec3::new(n(6), 0.0, n(7)),
-                        Vec3::new(n(4), 0.0, n(5)),
-                        Vec3::new(n(6), 0.0, n(7)),
-                    ]
+                    // Round what the nav keeps it off, as `feet_gauge`
+                    // walks it (but a door's threshold, taken as it is).
+                    let (from, to) = ([n(4), n(5)], [n(6), n(7)]);
+                    let leg = |a: [f32; 2], b: [f32; 2]| -> Vec<Vec3> {
+                        let straight = vec![Vec3::new(b[0], 0.0, b[1])];
+                        if spec.ends_with(",door") {
+                            return straight;
+                        }
+                        nav.as_ref()
+                            .and_then(|nav| nav.0.path(a, b))
+                            .map(|p| {
+                                p.iter()
+                                    .skip(1)
+                                    .map(|q| Vec3::new(q[0], 0.0, q[1]))
+                                    .collect()
+                            })
+                            .unwrap_or(straight)
+                    };
+                    let mut path = leg(from, to);
+                    path.extend(leg(to, from));
+                    path
                 }
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
                 | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
