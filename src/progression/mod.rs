@@ -418,6 +418,7 @@ fn job_done(
     mut raid: ResMut<Raid>,
     mut save: MessageWriter<crate::persist::SaveNow>,
     mut handover: MessageWriter<crate::raid::lev::HandOver>,
+    mut loaded: MessageWriter<crate::raid::lev::HandOverLoaded>,
     catalog: Res<Catalog>,
 ) {
     for _ in done.read() {
@@ -430,14 +431,28 @@ fn job_done(
             // He passes them back through the cab's hatch (`raid::lev`).
             let mut gave = false;
             for (id, n, condition) in gifts(*u) {
-                if catalog.kind(id).is_none() {
+                let Some(kind) = catalog.kind(id) else {
                     continue;
-                }
+                };
+                // Its magazines and clips come filled: a gift fires at once
+                // (stripping a box into clips is a later thing to learn).
+                let full = catalog.get(kind).magazine.as_ref().map(|m| m.capacity);
                 for _ in 0..*n {
-                    handover.write(crate::raid::lev::HandOver {
-                        id: id.to_string(),
-                        condition: *condition,
-                    });
+                    match full {
+                        Some(rounds) => {
+                            loaded.write(crate::raid::lev::HandOverLoaded {
+                                id: id.to_string(),
+                                condition: *condition,
+                                rounds,
+                            });
+                        }
+                        None => {
+                            handover.write(crate::raid::lev::HandOver {
+                                id: id.to_string(),
+                                condition: *condition,
+                            });
+                        }
+                    }
                     gave = true;
                 }
             }
@@ -455,6 +470,16 @@ fn job_done(
     }
 }
 
+/// Whether the job on the card is a rolled scout not yet done in a valley
+/// other than `map`, the one the truck's in: one the driver swaps for a
+/// job here. A contract's step and a far job keep their valley (they're
+/// meant to send you there); a fetch goes anywhere.
+pub fn moved_off(p: &Progress, map: &str) -> bool {
+    p.contract.is_none()
+        && !p.tier_def().far
+        && matches!(&p.job, Some(Job::Scout { map: m, seen: false, .. }) if m != map)
+}
+
 /// There's always a job on the card.
 fn offer_job(
     opts: Res<LaunchOptions>,
@@ -467,6 +492,24 @@ fn offer_job(
 ) {
     if progression.0.quiet != epilogue.done {
         progression.0.quiet = epilogue.done;
+    }
+    // A career moved to another valley with a rolled scout still to do in
+    // the last: a job here instead (the second-valley runs: the card said
+    // "In Marrow Creek: ..." in Kettle, and there was nothing to do).
+    if opts.map != crate::camp::TRAINING_YARD
+        && opts.sim_run.is_none()
+        && raid.phase == Phase::AtBase
+        && moved_off(&progression.0, &opts.map)
+    {
+        progression.0.swaps += 1;
+        // Its first job here shows the valley: a look round its gentle
+        // place, as a career's first job does (else whatever rolls).
+        progression.0.job = valleys()
+            .iter()
+            .find(|(id, _)| *id == opts.map)
+            .and_then(|(id, map)| extraction_core::progression::first_job(id, map));
+        progression.0.job_raid = raid.raids;
+        raid.say(lines::job_here(&valley_name(&opts.map)));
     }
     if progression.0.job.is_some() {
         return;

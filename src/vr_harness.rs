@@ -7043,8 +7043,14 @@ mod salvage {
             vr.app.world().get_entity(all[0]).is_ok(),
             "out on half a turn"
         );
-        for b in &all {
-            unbolt(&mut vr, feet, *b, 1.2);
+        // (Whichever's left: on a wreck rolled onto its side its bolts
+        // stand up close in their ring, and a spanner put to one may take
+        // the one beside it.)
+        for _ in 0..2 * crate::robots::salvage::BOLTS {
+            let Some(b) = bolts(&mut vr).first().copied() else {
+                break;
+            };
+            unbolt(&mut vr, feet, b, 1.2);
         }
         let left = bolts(&mut vr);
         assert!(left.is_empty(), "bolts left in: {}", left.len());
@@ -7196,6 +7202,381 @@ mod salvage {
         vr.app.world_mut().get_mut::<Live>(cell).unwrap().left = 0.0;
         vr.step(3);
         assert!(take(&mut vr, Side::Right, cell), "a cold cell stuck");
+    }
+}
+
+/// A wreck's salvage where a hand can see and get at it: every part on
+/// every machine that wrecks, as it comes to rest (`robots::wreck`,
+/// `robots::salvage`, the heavy's seats).
+mod wreck_reach {
+    use super::*;
+    use crate::robots::salvage::{Bolt, Cable, OnWreck, SalvageSeat};
+    use crate::robots::{Job, JobKind, PartRole, Robot, RobotPart};
+    use crate::world::Layer;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+    /// How far off you stand to look a wreck over (m)...
+    const LOOK_FROM: f32 = 1.5;
+    /// ...with your eyes this high.
+    const EYES: f32 = 1.65;
+    /// A sight line or a reach that meets the wreck this near the part
+    /// has got to it (the part's in its hull, or sits on it).
+    const AT_PART: f32 = 0.15;
+    /// How near a point (m) a part of its wreck is the part it sits in.
+    const UNDER: f32 = 0.12;
+    /// A shoulder's lowest (crouched and leaning in) and highest
+    /// (standing) over the ground, m.
+    const SHOULDER: (f32, f32) = (0.55, 1.45);
+    /// The body you stand in: a capsule this wide, from shin to head.
+    const BODY: f32 = 0.2;
+
+    /// A salvageable part of a wreck: what it is, where, and what's its
+    /// own (a sight line ending on it has got there).
+    struct Point {
+        what: String,
+        at: Vec3,
+        own: Vec<Entity>,
+    }
+
+    /// `kind` killed on open ground `x` m along from the mark (where it
+    /// is seeds how it falls), at rest, its salvage fitted; held still.
+    fn wreck(kind: &str, x: f32) -> (Vr, Entity) {
+        let mut vr = Vr::new("training_yard");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let feet = zone.on_ground(OPEN.x + x, OPEN.z + 6.0);
+        vr.stand(feet, 0.0);
+        let at = zone.on_ground(OPEN.x + x, OPEN.z);
+        let job = Job {
+            kind: JobKind::Watch,
+            site: at,
+            duration: 999.0,
+            exit: at,
+        };
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            match kind {
+                "walker" => crate::robots::walker::spawn_walker(&mut c, &zone, at + Vec3::Y, job),
+                "crawler" => {
+                    let e = crate::robots::walker::spawn_walker_sized(
+                        &mut c,
+                        &zone,
+                        at + Vec3::Y,
+                        job,
+                        false,
+                        40.0,
+                        crate::robots::indoor::CRAWLER_SIZE,
+                        None,
+                    );
+                    c.entity(e)
+                        .insert(crate::robots::indoor::Crawler::default());
+                    e
+                }
+                "hound" => crate::robots::hound::spawn_hound(&mut c, &zone, at + Vec3::Y, job),
+                "drone" => crate::robots::drone::spawn_drone(&mut c, at + Vec3::Y * 3.0, job),
+                "heavy" => crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, at, job),
+                _ => unreachable!(),
+            }
+        };
+        vr.app.world_mut().flush();
+        vr.step(30);
+        vr.app.world_mut().get_mut::<Robot>(e).unwrap().wrecked = true;
+        // To rest and fitted (the heavy's fall is its own, and slower).
+        for _ in 0..30 {
+            vr.step(30);
+            let w = vr.app.world();
+            // (The heavy's done going over `FALL_TIME` after it's down.)
+            let settled = match w.get::<crate::robots::heavy::Heavy>(e) {
+                Some(h) => h.down_for > crate::robots::heavy::FALL_TIME + 1.5,
+                None => w.get::<crate::robots::salvage::Fitted>(e).is_some(),
+            };
+            if w.get::<crate::robots::Salvaged>(e).is_some() && settled {
+                break;
+            }
+        }
+        // (A body at rest is already static: inserting it again resets
+        // its colliders' scale, a crawler's to a walker's.)
+        if vr.app.world().get::<RigidBody>(e) != Some(&RigidBody::Static) {
+            vr.app.world_mut().entity_mut(e).insert(RigidBody::Static);
+        }
+        vr.step(4);
+        (vr, e)
+    }
+
+    /// Everything on `w` a hand takes off: what's seated (and its bolts
+    /// and cables), its plates, the heavy's seats.
+    fn points(vr: &mut Vr, w: Entity) -> Vec<Point> {
+        let world = vr.app.world_mut();
+        let at = |world: &World, e: Entity| {
+            world
+                .get::<GlobalTransform>(e)
+                .map(|g| g.translation())
+                .unwrap_or(Vec3::NAN)
+        };
+        let mut out = Vec::new();
+        let seats: Vec<(Entity, Entity, crate::robots::salvage::Hold)> = world
+            .query::<(Entity, &SalvageSeat)>()
+            .iter(world)
+            .filter(|(_, s)| s.wreck == w)
+            .map(|(e, s)| (e, s.item, s.hold))
+            .collect();
+        for (seat, item, hold) in &seats {
+            let name = world
+                .get::<crate::items::Item>(*item)
+                .map(|i| {
+                    world
+                        .resource::<crate::items::Catalog>()
+                        .get(i.0.kind)
+                        .id
+                        .clone()
+                })
+                .unwrap_or_default();
+            out.push(Point {
+                what: format!("{name} ({hold:?})"),
+                at: at(world, *item),
+                own: vec![*item, *seat],
+            });
+        }
+        let ties: Vec<(Entity, Entity, bool)> = world
+            .query::<(Entity, &OnWreck, Option<&Bolt>, Option<&Cable>)>()
+            .iter(world)
+            .filter(|(_, o, ..)| o.wreck == w)
+            .filter_map(|(e, _, b, c)| {
+                b.map(|b| (e, b.seat, true))
+                    .or(c.map(|c| (e, c.seat, false)))
+            })
+            .collect();
+        for (e, seat, bolt) in ties {
+            let item = seats.iter().find(|s| s.0 == seat).map(|s| s.1);
+            out.push(Point {
+                what: if bolt { "a bolt" } else { "a cable" }.into(),
+                at: world
+                    .get::<Transform>(e)
+                    .map_or(Vec3::NAN, |t| t.translation),
+                own: [Some(e), item].into_iter().flatten().collect(),
+            });
+        }
+        // (A heavy's Armour-role parts are its hull, bolts and vents, which
+        // no hand takes off; its plates are its seats, below.)
+        let is_heavy = world.get::<crate::robots::heavy::Heavy>(w).is_some();
+        let plates: Vec<Entity> = world
+            .query_filtered::<(Entity, &RobotPart), With<crate::robots::salvage::HealthAtDeath>>()
+            .iter(world)
+            .filter(|(_, p)| {
+                !is_heavy && p.robot == w && matches!(p.role, PartRole::Armour(_)) && p.alive()
+            })
+            .map(|(e, _)| e)
+            .collect();
+        for p in plates {
+            out.push(Point {
+                what: "a plate".into(),
+                at: at(world, p),
+                own: vec![p],
+            });
+        }
+        let heavy: Vec<(Entity, Option<Entity>, String)> = world
+            .query::<(
+                Entity,
+                &crate::robots::heavy::HeavySeat,
+                &crate::interact::Socket,
+            )>()
+            .iter(world)
+            .filter(|(_, s, _)| s.robot == w)
+            .map(|(e, s, k)| (e, k.occupant, format!("{:?}", s.slot)))
+            .collect();
+        // The cell's behind its hatch: got at once the hatch is off (its
+        // seat, the plate in it, the plate's part and bolts), the order a
+        // heavy is taken apart in.
+        let mut hatch: Vec<Entity> = heavy
+            .iter()
+            .filter(|(_, _, slot)| slot == "Plate(0)")
+            .flat_map(|(seat, item, _)| [Some(*seat), *item])
+            .flatten()
+            .collect();
+        hatch.extend(
+            world
+                .query::<(Entity, &RobotPart, &crate::robots::heavy::HeavyPart)>()
+                .iter(world)
+                .filter(|(_, p, h)| {
+                    p.robot == w
+                        && matches!(
+                            h.0,
+                            extraction_core::heavy::Slot::Plate(0)
+                                | extraction_core::heavy::Slot::Bolt { plate: 0, .. }
+                        )
+                })
+                .map(|(e, ..)| e),
+        );
+        for (seat, item, slot) in heavy {
+            if let Some(item) = item {
+                let mut own = vec![item, seat];
+                if slot == "Cell" {
+                    own.extend(&hatch);
+                }
+                out.push(Point {
+                    what: format!("the heavy's {slot}"),
+                    at: at(world, item),
+                    own,
+                });
+            }
+        }
+        // A seated thing isn't hidden by the part it sits in: the wreck's
+        // parts right at a point are its own.
+        let parts: Vec<(Entity, Vec3)> = world
+            .query::<(Entity, &RobotPart, &GlobalTransform)>()
+            .iter(world)
+            .filter(|(_, p, _)| p.robot == w)
+            .map(|(e, _, g)| (e, g.translation()))
+            .collect();
+        for p in &mut out {
+            for (e, at) in &parts {
+                if at.distance(p.at) < UNDER && !p.own.contains(e) {
+                    p.own.push(*e);
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether the line from `from` to `p` meets nothing short of it
+    /// (the wreck, its pieces, the ground), but `p`'s own.
+    fn clear(spatial: &SpatialQuery, from: Vec3, p: &Point) -> bool {
+        let d = p.at - from;
+        let Ok(dir) = Dir3::new(d) else {
+            return true;
+        };
+        let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Robot, Layer::Item])
+            .with_excluded_entities(p.own.iter().copied());
+        spatial
+            .cast_ray(from, dir, d.length(), true, &filter)
+            .is_none_or(|hit| hit.distance >= d.length() - AT_PART)
+    }
+
+    /// What's still out of sight or reach, and whose it is to fix: each
+    /// kind and part, and why. The test fails on one that now passes.
+    const PENDING: &[(&str, &str, &str)] = &[];
+
+    /// Every machine that wrecks leaves what can be taken off it where you
+    /// can see it from standing 1.5 m off, from one side or another, and
+    /// reach it with a hand from beside it, kneeling or standing, with
+    /// room to stand there (the wreck's colliders, which you can't walk
+    /// into, leave a place for you).
+    #[test]
+    fn every_wrecks_salvage_is_seen_and_reached() {
+        let mut bad = Vec::new();
+        let mut excused: Vec<(&str, String, bool)> = Vec::new();
+        let reach = crate::rig::stance::ARM;
+        // (Each where it falls differently: its seed is where it was.)
+        let runs = [
+            ("walker", 0.0),
+            ("walker", 7.0),
+            ("walker", 14.0),
+            ("walker", -7.0),
+            ("walker", -14.0),
+            ("crawler", 0.0),
+            ("crawler", 7.0),
+            ("hound", 0.0),
+            ("drone", 0.0),
+            ("drone", 7.0),
+            ("drone", 14.0),
+            ("drone", -7.0),
+            ("drone", -14.0),
+            ("heavy", 0.0),
+        ];
+        for (kind, x) in runs {
+            let (mut vr, w) = wreck(kind, x);
+            let pts = points(&mut vr, w);
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let c = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(w)
+                .unwrap()
+                .translation();
+            let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(vr.app.world_mut());
+            let spatial = q.get(vr.app.world()).unwrap();
+            let ring = |r: f32, n: usize| {
+                (0..n).map(move |k| {
+                    let a = k as f32 / n as f32 * std::f32::consts::TAU;
+                    Vec3::new(c.x + r * a.cos(), 0.0, c.z + r * a.sin())
+                })
+            };
+            let heads: Vec<Vec3> = ring(LOOK_FROM, 16)
+                .map(|p| zone.on_ground(p.x, p.z) + Vec3::Y * EYES)
+                .collect();
+            // Where you can stand: your body meets none of the wreck.
+            let body = Collider::capsule(BODY, 1.1);
+            let solid = SpatialQueryFilter::from_mask([Layer::Robot]);
+            let spots: Vec<Vec3> = (0..27)
+                .map(|k| 0.4 + 0.1 * k as f32)
+                .flat_map(|r| ring(r, 32))
+                .map(|p| zone.on_ground(p.x, p.z))
+                .filter(|f| {
+                    spatial
+                        .shape_intersections(
+                            &body,
+                            *f + Vec3::Y * (0.3 + BODY + 0.55),
+                            Quat::IDENTITY,
+                            &solid,
+                        )
+                        .is_empty()
+                })
+                .collect();
+            println!(
+                "{kind}: {} parts, {} places to stand",
+                pts.len(),
+                spots.len()
+            );
+            for p in &pts {
+                if !p.at.is_finite() {
+                    bad.push(format!("{kind}: {} has no place", p.what));
+                    continue;
+                }
+                let seen = heads.iter().any(|h| clear(&spatial, *h, p));
+                let reached = spots.iter().any(|f| {
+                    let y = p.at.y.clamp(f.y + SHOULDER.0, f.y + SHOULDER.1);
+                    let s = Vec3::new(f.x, y, f.z);
+                    s.distance(p.at) <= reach && clear(&spatial, s, p)
+                });
+                let off = p.at - c;
+                println!(
+                    "  {:28} {:5.2} m up, {:5.2} m out (centre {:4.2} up)  seen {seen:5} reached {reached}",
+                    p.what,
+                    p.at.y - zone.ground(p.at.x, p.at.z),
+                    off.with_y(0.0).length(),
+                    c.y - zone.ground(c.x, c.z)
+                );
+                let pending = PENDING
+                    .iter()
+                    .any(|(k, what, _)| *k == kind && p.what == *what);
+                if pending {
+                    excused.push((kind, p.what.clone(), seen && reached));
+                } else if !seen || !reached {
+                    bad.push(format!(
+                        "{kind}: {} {}{}",
+                        p.what,
+                        if seen { "" } else { "unseen from 1.5 m " },
+                        if reached { "" } else { "out of reach" }
+                    ));
+                }
+            }
+        }
+        for (k, what, why) in PENDING {
+            let rows: Vec<_> = excused
+                .iter()
+                .filter(|(ek, ew, _)| ek == k && ew == what)
+                .collect();
+            if rows.iter().all(|(.., ok)| *ok) {
+                bad.push(format!(
+                    "{k}: {what}: seen and reached now, off PENDING ({why})"
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "salvage a hand can't see or get at:\n{}",
+            bad.join("\n")
+        );
     }
 }
 

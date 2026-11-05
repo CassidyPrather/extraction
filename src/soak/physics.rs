@@ -204,6 +204,15 @@ fn wall_spots(app: &mut App) -> Vec<Wall> {
             }
             let n = Vec3::new(n.x, 0.0, n.z).normalize();
             let start = p + n * 1.5;
+            // Off the map (a building by its edge, seen from beyond the
+            // world's edge): no ground to stand on, nobody gets there.
+            if !app
+                .world()
+                .resource::<Zone>()
+                .ground_solid_at(start.x, start.z)
+            {
+                continue;
+            }
             let upright = [-0.5, 0.0, 0.5].into_iter().all(|dy| {
                 ray(app, start + Vec3::Y * dy, -n, 3.0).is_some_and(|(_, q, m)| {
                     (q.distance(start + Vec3::Y * dy) - 1.5).abs() < 0.15 && m.y.abs() < 0.3
@@ -217,6 +226,29 @@ fn wall_spots(app: &mut App) -> Vec<Wall> {
                 });
             }
         }
+    }
+    out
+}
+
+/// The world's edge from inside, by each side's middle and by Marrow's
+/// buildings near the north edge (where a sprint at it once got out).
+fn edge_spots(app: &App) -> Vec<Wall> {
+    let zone = app.world().resource::<Zone>();
+    let inner = zone.map.half() - 0.5;
+    let mut out = Vec::new();
+    for (along, side) in [(0.0, 0usize), (64.0, 0), (0.0, 1), (0.0, 2), (0.0, 3)] {
+        let (p, n) = match side {
+            0 => (Vec3::new(along, 0.0, inner), Vec3::NEG_Z),
+            1 => (Vec3::new(along, 0.0, -inner), Vec3::Z),
+            2 => (Vec3::new(inner, 0.0, along), Vec3::NEG_X),
+            _ => (Vec3::new(-inner, 0.0, along), Vec3::X),
+        };
+        let p = Vec3::new(p.x, zone.ground(p.x, p.z) + 1.1, p.z);
+        out.push(Wall {
+            p,
+            n,
+            what: "World edge, inside".into(),
+        });
     }
     out
 }
@@ -639,10 +671,13 @@ fn items_spawned_inside_things_are_not_launched() {
 fn the_player_cant_be_pushed_through_walls() {
     use crate::rig::RigInput;
     let mut vr = crate::vr_harness::Vr::new("marrow_creek");
-    let walls = wall_spots(&mut vr.app);
+    let mut walls = wall_spots(&mut vr.app);
+    walls.truncate(16);
+    walls.extend(edge_spots(&vr.app));
     let mut bad = Vec::new();
-    // (Sixteen walls, three ways at each: the suite's two-minute budget.)
-    for w in walls.iter().take(16) {
+    // (Sixteen walls and the world's edge, three ways at each: the suite's
+    // two-minute budget.)
+    for w in &walls {
         let (p, n) = (w.p, w.n);
         let g = vr.app.world().resource::<Zone>().ground(p.x, p.z);
         let start = p + n * 1.2;

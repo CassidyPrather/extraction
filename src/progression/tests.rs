@@ -936,3 +936,111 @@ fn a_gift_comes_with_its_family_out() {
     }
     assert!(early.is_empty(), "{early:#?}");
 }
+
+/// A career in another valley than its rolled scout gets a job here: the
+/// second-valley runs found the card saying "In Marrow Creek: ..." while
+/// the truck was in Kettle, and nothing to do there. A contract's step, a
+/// scout already seen, and a fetch stay as they are.
+#[test]
+fn moving_valley_brings_a_job_here() {
+    let elsewhere = || Job::Scout {
+        map: "kettle_pass".into(),
+        place: "Hunting lodge".into(),
+        at: [0.0, 0.0],
+        seen: false,
+    };
+    for (case, contract, seen, moves) in [
+        ("a rolled scout", false, false, true),
+        ("a contract's step", true, false, false),
+        ("a scout already seen", false, true, false),
+    ] {
+        let mut app = crate::raid::requests::tests::app();
+        {
+            let mut p = app.world_mut().resource_mut::<Progression>();
+            p.0.done = 1;
+            let mut job = elsewhere();
+            if let Job::Scout { seen: s, .. } = &mut job {
+                *s = seen;
+            }
+            p.0.job = Some(job);
+            p.0.contract = contract.then(|| extraction_core::contracts::Active {
+                id: "post_counter".into(),
+                step: 0,
+            });
+        }
+        app.update();
+        app.update();
+        let job = progress(&app).job;
+        // A look round this valley's gentle place, to show it.
+        let gentle = extraction_core::progression::first_job(
+            "marrow_creek",
+            &crate::progression::valleys()[0].1,
+        );
+        let here = job.is_some() && job == gentle;
+        assert_eq!(here, moves, "{case}: {job:?}");
+        let said = app
+            .world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .any(|(l, _)| l.contains("Something here for you"));
+        assert_eq!(said, moves, "{case}: said");
+    }
+}
+
+/// Every gun the driver gives can fire its first shot from what he hands
+/// over with it: a clip or magazine that fits it, filled (his SKS came
+/// with empty clips and a box, and nothing by raid 9 had shown how to
+/// strip a box into them: the gift couldn't be used).
+#[test]
+fn every_gift_gun_fires_from_its_gift() {
+    let mut app = crate::raid::requests::tests::app();
+    let catalog = app.world().resource::<Catalog>().clone();
+    for _ in 0..TIERS[0].jobs + TIERS[1].jobs + TIERS[2].jobs {
+        app.world_mut().write_message(JobDone);
+        app.update();
+    }
+    for _ in 0..6000 {
+        app.update();
+        if !app.world().resource::<crate::raid::lev::Handovers>().busy() {
+            break;
+        }
+    }
+    let handed: Vec<Entity> = app
+        .world()
+        .resource::<crate::raid::lev::Handovers>()
+        .handed
+        .iter()
+        .map(|(_, e)| *e)
+        .collect();
+    let items: Vec<(String, u32)> = handed
+        .iter()
+        .filter_map(|e| app.world().get::<Item>(*e))
+        .map(|i| (catalog.get(i.kind()).id.clone(), i.0.rounds))
+        .collect();
+    for u in [Upgrade::BenchVice, Upgrade::Aerial] {
+        for (gun, ..) in gifts(u) {
+            let Some(f) = catalog
+                .kind(gun)
+                .and_then(|k| catalog.get(k).firearm.clone())
+            else {
+                continue;
+            };
+            let fires = items.iter().any(|(id, rounds)| {
+                *rounds > 0
+                    && catalog
+                        .kind(id)
+                        .and_then(|k| catalog.get(k).magazine.clone())
+                        .is_some_and(|m| {
+                            (m.fits == *gun
+                                || f.magazine_family.as_deref() == Some(m.fits.as_str()))
+                                && m.cartridge == f.cartridge
+                        })
+            });
+            assert!(
+                fires,
+                "{u:?}: {gun} has nothing filled to fire from: {items:?}"
+            );
+        }
+    }
+}
