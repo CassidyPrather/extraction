@@ -451,7 +451,16 @@ fn run_macros(
                 Vec::new()
             }
         };
-        emit(e, &name, &mut gun, gt, ev, &mut out, &mut ejected);
+        emit(
+            e,
+            &name,
+            &mut gun,
+            gt,
+            ev,
+            &mut out,
+            &mut ejected,
+            super::CASE_THROW,
+        );
         if matches!(step, Step::LoadRound) {
             commands.queue(move |world: &mut World| load_one_round(world, player_e, gun_e));
         }

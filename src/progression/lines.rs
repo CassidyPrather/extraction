@@ -197,6 +197,12 @@ pub fn job_here(valley: &str) -> String {
     format!("Driver: \"{valley}, then. Something here for you.\"")
 }
 
+/// A contract's step lost raid after raid on the way the machines know:
+/// another way in, by `via`, `way` from the drop.
+pub fn another_way(via: &str, way: &str) -> String {
+    format!("Driver: \"They know your way. Go by {}, {way}.\"", the(via))
+}
+
 /// A scout or a recover he's given up waiting for.
 pub fn job_swapped(place: &str) -> String {
     format!("Driver: \"Forget {}. New job on the card.\"", the(place))
@@ -454,6 +460,7 @@ mod tests {
             fetch_swapped(name),
             job_swapped(place),
             job_here("Kettle Pass"),
+            another_way("Charcoal hut", "north-east, 120 m"),
             scout_noticed(place),
             job_this_way(place, "north-west, 1480 m", true),
             job_waiting(place, Some("north-west, 1480 m")),

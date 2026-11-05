@@ -1070,30 +1070,28 @@ fn first_person_hands(
             // the glove seated on it (`render::hold`).
             "read" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
-                let hand = rest(Side::Right);
+                // Brought in front of the face to read, not at rest.
+                let mut hand = rest(Side::Right);
+                hand.translation = eye + (flat * 0.4 + right * 0.03 - Vec3::Y * 0.3) / zoom;
                 let size = Vec2::new(0.3, 0.26);
-                let at = hand.translation + Vec3::Y * (size.y * 0.5 + 0.03) / zoom;
-                let card = Transform::from_translation(at).looking_to(-(eye - at), Vec3::Y);
-                // (Its mesh and paper added once spawned: the glove holds
-                // the asset stores.)
-                commands
-                    .spawn(view(card))
-                    .queue(move |mut e: EntityWorldMut| {
-                        let (mesh, paper) = e.world_scope(|w| {
-                            let mesh = w
-                                .resource_mut::<Assets<Mesh>>()
-                                .add(Cuboid::new(size.x, size.y, 0.004));
-                            let paper = w.resource_mut::<Assets<StandardMaterial>>().add(
-                                StandardMaterial {
-                                    base_color: Color::srgb(0.86, 0.83, 0.74),
-                                    perceptual_roughness: 0.9,
-                                    ..default()
-                                },
-                            );
-                            (mesh, paper)
-                        });
-                        e.insert((Mesh3d(mesh), MeshMaterial3d(paper)));
-                    });
+                let card = crate::interact::read::held_up(hand.translation, eye, size);
+                // The real card: its text drawn by `render::screen` on its
+                // face (a blank box here read as a grey slab at the eye).
+                let text = "ODD JOBS - JOB 1 OF 3\n\"Go up to the old farm and look \
+                    round. Tell me what's changed.\"\nFrom the drop: north-east, 190 m. \
+                    Ringed on your map. Call me from the gate after.";
+                let style = crate::raid::bench::ScreenStyle::Card;
+                commands.spawn((
+                    Name::new("Request card"),
+                    crate::render::legibility::TextSource::Request,
+                    crate::raid::bench::ScreenText {
+                        text: crate::render::screen::wrap_to_fit(text, size, style),
+                        size,
+                        style,
+                    },
+                    view(card),
+                    Visibility::default(),
+                ));
                 let rel = Transform::from_matrix(
                     (hand.compute_affine().inverse() * card.compute_affine()).into(),
                 );
