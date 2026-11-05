@@ -1532,11 +1532,15 @@ pub(super) fn direct_raid(
         }
     }
     // A walk about to be made that `walk` didn't plan: a long straight one,
-    // or one through the fence, goes by `walk` (once each). (Walked off from
+    // or one through the fence, isn't made (once each). (Walked off from
     // a heavy out through the south gate, it went on with the way it had
     // planned from inside, at the wire; and a 90 m stretch along the fence
     // timed out at a walk.)
-    if let Some(&Task::WalkTo { to, within }) = bot.tasks.front()
+    // As a timeout does it (above), only before the 30 s at the wire: the
+    // rest of that walk dropped, and what's next planned from here. (Put
+    // through `walk` to the same old waypoint instead, it went back the
+    // way it had been going, past the sentry, and round again.)
+    if let Some(&Task::WalkTo { to, .. }) = bot.tasks.front()
         && state.vetted != Some(to)
         && {
             // (Looked at once, as it comes up.)
@@ -1544,17 +1548,10 @@ pub(super) fn direct_raid(
             unvetted(&world, here, to)
         }
     {
-        let mut legs = walk(&world, here, to);
-        if let Some(Task::WalkTo { within: w, .. }) = legs.last_mut() {
-            *w = within;
-        }
-        if !legs.is_empty() {
+        while matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) && bot.tasks.len() > 1 {
             bot.tasks.pop_front();
-            for t in legs.into_iter().rev() {
-                bot.tasks.push_front(t);
-            }
-            bot.restart();
         }
+        bot.restart();
     }
     // A first raid that runs on past half an hour has lost its way.
     if now > 1800.0 && state.leg != Leg::Done {
