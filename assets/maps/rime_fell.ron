@@ -330,6 +330,19 @@
         (prefab: "snow_pole", at: (3.1, -181.8), rot: 0.0),
         (prefab: "snow_pole", at: (13.4, -223.3), rot: 0.0),
         (prefab: "snow_pole", at: (28.8, -237.3), rot: 0.0),
+        // On from the col fork along the saddle track, and up the observatory
+        // path: the first job's way doesn't stop where the col's does (walk
+        // review, 5 Nov: the poles went on to the col and left the way to the
+        // job white from the fork to the saddle).
+        (prefab: "snow_pole", at: (-6.9, -207.8), rot: 0.0),
+        (prefab: "snow_pole", at: (-20.6, -220.5), rot: 0.0),
+        (prefab: "snow_pole", at: (-35.8, -233.6), rot: 0.0),
+        (prefab: "snow_pole", at: (-59.5, -248.3), rot: 0.0),
+        (prefab: "snow_pole", at: (-89.0, -255.0), rot: 0.0),
+        (prefab: "snow_pole", at: (-131.8, -258.3), rot: 0.0),
+        (prefab: "snow_pole", at: (-151.8, -256.6), rot: 0.0),
+        (prefab: "snow_pole", at: (-165.9, -247.4), rot: 0.0),
+        (prefab: "snow_pole", at: (-179.9, -232.8), rot: 0.0),
 
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
@@ -405,6 +418,9 @@
         // 200 m of snow with nothing to steer by).
         (kind: Sign(text: "COL TRACK\nThe col and the observatory: keep the poles on your left.\nRefuge hut halfway."), at: (11.4, -25.5), rot: 30.0, name: "Col track sign"),
         (kind: Sign(text: "THE COL, ahead\nGATE TRACK, right\nIn cloud, wait at the refuge."), at: (24.0, -148.0), rot: 101.0, name: "Col fork sign"),
+        // Where the saddle track leaves the col track, square to whoever comes
+        // up it (walk review: the fork showed nothing down the way to the job).
+        (kind: Sign(text: "THE OBSERVATORY and THE SADDLE, left\nTHE COL, right\nPoles both ways."), at: (-1.5, -203.0), rot: 337.0, name: "Saddle fork sign"),
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
         (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),

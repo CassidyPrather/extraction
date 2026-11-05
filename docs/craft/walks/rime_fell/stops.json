@@ -9,10 +9,10 @@
    -10.0,
    266.0
   ],
-  "h": 52.5,
-  "fwd": 45,
-  "side": 91,
-  "side_what": "water_tower (120 m)"
+  "h": 51.7,
+  "fwd": 57,
+  "side": 341,
+  "side_what": "Hairpin hut (123 m)"
  },
  {
   "n": 2,
@@ -21,13 +21,13 @@
   "kind": "pace",
   "note": "",
   "at": [
-   21.6,
-   242.5
+   23.7,
+   243.7
   ],
-  "h": 53.3,
-  "fwd": 61,
+  "h": 53.9,
+  "fwd": 57,
   "side": 106,
-  "side_what": "water_tower (92 m)"
+  "side_what": "water_tower (90 m)"
  },
  {
   "n": 3,
@@ -36,13 +36,13 @@
   "kind": "fork",
   "note": "Lorry road / Station lane",
   "at": [
-   40.2,
-   232.0
+   40.6,
+   232.6
   ],
-  "h": 54.8,
-  "fwd": 48,
+  "h": 55.0,
+  "fwd": 46,
   "side": 117,
-  "side_what": "water_tower (79 m)"
+  "side_what": "water_tower (78 m)"
  },
  {
   "n": 4,
@@ -67,12 +67,12 @@
   "note": "",
   "at": [
    61.4,
-   181.0
+   180.0
   ],
-  "h": 65.0,
+  "h": 65.2,
   "fwd": 1,
   "side": 182,
-  "side_what": "Valley station (44 m)"
+  "side_what": "Valley station (45 m)"
  },
  {
   "n": 6,
@@ -82,12 +82,12 @@
   "note": "",
   "at": [
    62.3,
-   141.0
+   140.0
   ],
-  "h": 72.3,
+  "h": 72.5,
   "fwd": 1,
   "side": 182,
-  "side_what": "Valley station (84 m)"
+  "side_what": "Valley station (85 m)"
  },
  {
   "n": 7,
@@ -96,13 +96,13 @@
   "kind": "pace",
   "note": "",
   "at": [
-   61.4,
-   101.0
+   61.2,
+   100.0
   ],
-  "h": 79.7,
+  "h": 79.9,
   "fwd": 355,
-  "side": 315,
-  "side_what": "chimney (87 m)"
+  "side": 314,
+  "side_what": "chimney (86 m)"
  },
  {
   "n": 8,
@@ -156,10 +156,10 @@
   "kind": "pace",
   "note": "",
   "at": [
-   7.3,
-   -17.0
+   7.5,
+   -18.0
   ],
-  "h": 96.2,
+  "h": 96.3,
   "fwd": 4,
   "side": 225,
   "side_what": "Coldharbour (53 m)"
@@ -175,7 +175,7 @@
    -35.0
   ],
   "h": 98.9,
-  "fwd": 356,
+  "fwd": 354,
   "side": 215,
   "side_what": "Coldharbour (67 m)"
  },
@@ -186,238 +186,238 @@
   "kind": "pace",
   "note": "",
   "at": [
-   4.8,
+   4.5,
    -56.7
   ],
-  "h": 102.6,
-  "fwd": 339,
+  "h": 102.5,
+  "fwd": 342,
   "side": 204,
   "side_what": "Coldharbour (84 m)"
  },
  {
   "n": 14,
   "name": "s14",
-  "s": 440,
-  "kind": "pace",
-  "note": "",
+  "s": 425,
+  "kind": "door",
+  "note": "shed",
   "at": [
-   -8.5,
-   -93.9
+   -3.2,
+   -80.7
   ],
-  "h": 109.8,
-  "fwd": 28,
-  "side": 274,
-  "side_what": "Snow survey hut (17 m)"
+  "h": 107.0,
+  "fwd": 342,
+  "side": 77,
+  "side_what": "the shed's door"
  },
  {
   "n": 15,
   "name": "s15",
-  "s": 480,
+  "s": 440,
   "kind": "pace",
   "note": "",
   "at": [
-   10.5,
-   -129.1
+   -7.8,
+   -95.2
   ],
-  "h": 116.5,
-  "fwd": 28,
-  "side": 226,
-  "side_what": "Snow survey hut (49 m)"
+  "h": 109.6,
+  "fwd": 21,
+  "side": 269,
+  "side_what": "Snow survey hut (17 m)"
  },
  {
   "n": 16,
   "name": "s16",
-  "s": 499,
-  "kind": "fork",
-  "note": "Col track / Gate track",
+  "s": 480,
+  "kind": "pace",
+  "note": "",
   "at": [
-   18.6,
-   -145.9
+   11.6,
+   -128.6
   ],
-  "h": 119.6,
-  "fwd": 339,
-  "side": 60,
-  "side_what": "Avalanche watch (48 m)"
+  "h": 115.4,
+  "fwd": 35,
+  "side": 227,
+  "side_what": "Snow survey hut (50 m)"
  },
  {
   "n": 17,
   "name": "s17",
-  "s": 520,
-  "kind": "pace",
-  "note": "",
+  "s": 501,
+  "kind": "fork",
+  "note": "Col track / Gate track",
   "at": [
-   11.1,
-   -165.8
+   22.6,
+   -145.9
   ],
-  "h": 122.0,
-  "fwd": 339,
-  "side": 85,
-  "side_what": "Avalanche watch (49 m)"
+  "h": 118.4,
+  "fwd": 337,
+  "side": 57,
+  "side_what": "Avalanche watch (44 m)"
  },
  {
   "n": 18,
   "name": "s18",
-  "s": 560,
+  "s": 520,
   "kind": "pace",
   "note": "",
   "at": [
-   -3.0,
-   -202.6
+   15.1,
+   -163.6
   ],
-  "h": 126.4,
-  "fwd": 332,
-  "side": 29,
-  "side_what": "The col (48 m)"
+  "h": 120.8,
+  "fwd": 337,
+  "side": 82,
+  "side_what": "Avalanche watch (45 m)"
  },
  {
   "n": 19,
   "name": "s19",
-  "s": 600,
-  "kind": "pace",
-  "note": "",
+  "s": 556,
+  "kind": "fork",
+  "note": "Col track / Saddle track",
   "at": [
-   -29.1,
-   -232.0
+   1.3,
+   -196.1
   ],
-  "h": 130.6,
-  "fwd": 311,
-  "side": 75,
-  "side_what": "The col (51 m)"
+  "h": 125.2,
+  "fwd": 337,
+  "side": 21,
+  "side_what": "The col (52 m)"
  },
  {
   "n": 20,
   "name": "s20",
-  "s": 640,
+  "s": 600,
   "kind": "pace",
   "note": "",
   "at": [
-   -62.8,
-   -252.1
+   -26.2,
+   -229.3
   ],
-  "h": 134.1,
-  "fwd": 283,
-  "side": 95,
-  "side_what": "The col (83 m)"
+  "h": 130.2,
+  "fwd": 311,
+  "side": 71,
+  "side_what": "The col (49 m)"
  },
  {
   "n": 21,
   "name": "s21",
-  "s": 672,
-  "kind": "fork",
-  "note": "Miners' path / Saddle track",
+  "s": 640,
+  "kind": "pace",
+  "note": "",
   "at": [
-   -93.3,
-   -259.0
+   -58.8,
+   -251.2
   ],
-  "h": 135.8,
+  "h": 133.9,
   "fwd": 283,
-  "side": 180,
-  "side_what": "The bivouac (91 m)"
+  "side": 95,
+  "side_what": "The col (79 m)"
  },
  {
   "n": 22,
   "name": "s22",
-  "s": 686,
+  "s": 673,
+  "kind": "fork",
+  "note": "Miners' path / Saddle track",
+  "at": [
+   -91.3,
+   -258.6
+  ],
+  "h": 135.7,
+  "fwd": 283,
+  "side": 182,
+  "side_what": "The bivouac (91 m)"
+ },
+ {
+  "n": 23,
+  "name": "s23",
+  "s": 690,
   "kind": "door",
   "note": "shed",
   "at": [
    -107.1,
    -262.1
   ],
-  "h": 136.5,
+  "h": 136.6,
   "fwd": 270,
   "side": 14,
   "side_what": "the shed's door"
  },
  {
-  "n": 23,
-  "name": "s23",
-  "s": 702,
+  "n": 24,
+  "name": "s24",
+  "s": 704,
   "kind": "fork",
   "note": "Observatory path / Saddle track",
   "at": [
-   -123.0,
-   -262.0
+   -121.0,
+   -262.2
   ],
-  "h": 137.2,
+  "h": 137.1,
   "fwd": 265,
-  "side": 163,
+  "side": 164,
   "side_what": "The bivouac (98 m)"
- },
- {
-  "n": 24,
-  "name": "s24",
-  "s": 720,
-  "kind": "pace",
-  "note": "",
-  "at": [
-   -141.0,
-   -260.5
-  ],
-  "h": 139.0,
-  "fwd": 265,
-  "side": 82,
-  "side_what": "The saddle (26 m)"
  },
  {
   "n": 25,
   "name": "s25",
-  "s": 760,
+  "s": 720,
   "kind": "pace",
   "note": "",
   "at": [
-   -174.0,
-   -242.3
+   -137.0,
+   -260.8
   ],
-  "h": 145.2,
-  "fwd": 222,
-  "side": 70,
-  "side_what": "The saddle (63 m)"
+  "h": 138.1,
+  "fwd": 265,
+  "side": 82,
+  "side_what": "The saddle (22 m)"
  },
  {
   "n": 26,
   "name": "s26",
-  "s": 789,
-  "kind": "crest",
+  "s": 760,
+  "kind": "pace",
   "note": "",
   "at": [
-   -193.0,
-   -221.0
+   -171.6,
+   -245.9
   ],
-  "h": 147.9,
-  "fwd": 201,
-  "side": 61,
-  "side_what": "The saddle (89 m)"
+  "h": 144.4,
+  "fwd": 224,
+  "side": 72,
+  "side_what": "The saddle (59 m)"
  },
  {
   "n": 27,
   "name": "s27",
-  "s": 812,
+  "s": 805,
   "kind": "job",
   "note": "plant (up_the_fell: The observatory)",
   "at": [
-   -205.0,
-   -205.0
+   -189.0,
+   -227.6
   ],
-  "h": 147.6,
-  "fwd": 227,
-  "side": 57,
-  "side_what": "The saddle (108 m)"
+  "h": 146.2,
+  "fwd": 224,
+  "side": 64,
+  "side_what": "The saddle (82 m)"
  },
  {
   "n": 28,
   "name": "s28",
-  "s": 844,
+  "s": 833,
   "kind": "crest",
   "note": "",
   "at": [
-   -197.0,
-   -231.0
+   -195.0,
+   -239.0
   ],
-  "h": 149.7,
-  "fwd": 49,
-  "side": 208,
-  "side_what": "The observatory (24 m)"
+  "h": 149.2,
+  "fwd": 65,
+  "side": 204,
+  "side_what": "The observatory (32 m)"
  },
  {
   "n": 29,
@@ -426,33 +426,18 @@
   "kind": "pace",
   "note": "",
   "at": [
-   -170.1,
-   -254.3
+   -152.1,
+   -258.8
   ],
-  "h": 144.9,
+  "h": 141.8,
   "fwd": 75,
-  "side": 221,
-  "side_what": "The observatory (58 m)"
+  "side": 229,
+  "side_what": "The observatory (74 m)"
  },
  {
   "n": 30,
   "name": "s30",
-  "s": 920,
-  "kind": "pace",
-  "note": "",
-  "at": [
-   -131.0,
-   -261.0
-  ],
-  "h": 136.9,
-  "fwd": 79,
-  "side": 236,
-  "side_what": "The observatory (92 m)"
- },
- {
-  "n": 31,
-  "name": "s31",
-  "s": 936,
+  "s": 919,
   "kind": "rendezvous",
   "note": "The saddle",
   "at": [
