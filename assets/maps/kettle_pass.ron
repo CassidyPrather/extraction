@@ -246,6 +246,13 @@
 
     // Coming home: outcrops where a way in to a rendezvous was open for
     // more than a dash (map_lint, coming home).
+    // Someone's home at the Low farm: smoke from the farmhouse, a window
+    // lit after dark, drawing a newcomer off the road to the farm from
+    // 150 m (the workshop's cache is by the farm's lorry, 20 m on).
+    cues: [
+        Smoke(at: (-137.5, 147.5)),
+        LitWindow(at: (-140.5, 143.5)),
+    ],
     outcrops: [
         // The cairn's stones on the ridge's lip, by its figures: a mass on
         // the skyline from the way below, where the figures alone were a
