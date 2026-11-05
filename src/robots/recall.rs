@@ -758,8 +758,19 @@ mod tests {
         assert_eq!(drawn, 1, "a mark's paint drawn in {drawn} meshes");
         // Ring and cross, flat on the ground, a metre across.
         let m = w.get::<Mesh3d>(w.get::<Children>(mark).unwrap()[0]).unwrap().0.clone();
-        let aabb = w.resource::<Assets<Mesh>>().get(&m).unwrap().compute_aabb().unwrap();
-        let size = Vec3::from(aabb.half_extents) * 2.0;
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) = w
+            .resource::<Assets<Mesh>>()
+            .get(&m)
+            .unwrap()
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("a mark without positions");
+        };
+        let (lo, hi) = pos.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(lo, hi), p| (lo.min(Vec3::from(*p)), hi.max(Vec3::from(*p))),
+        );
+        let size = hi - lo;
         assert!(size.y < 0.01 && size.x > 0.95 && size.z > 0.95, "{size:?}");
     }
 
