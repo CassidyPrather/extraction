@@ -68,24 +68,43 @@ fn flash_lamps(time: Res<Time<Virtual>>, mut lamps: Query<(&Lamp, &mut Visibilit
 #[derive(Component)]
 pub(crate) struct DayGlow;
 
-/// The highest point of a prefab, in its own frame: the top middle of its
-/// highest piece.
-pub fn top_of(id: &str) -> Option<Vec3> {
-    let geo = prefab(id)?;
+/// The highest a prefab's pieces come (m, over its origin), and how near
+/// to it another piece's top must be to count as level with it.
+const TIED: f32 = 0.05;
+
+/// A piece's top, the middle of it, in its prefab's frame.
+fn piece_top(p: &crate::world::buildings::Piece) -> Vec3 {
+    // How far up from its origin its top is: a box's and a cylinder's
+    // origin is their middle, a gable prism's its base
+    // (`materials::gable_prism`: the ridge at its full height).
+    let up = match p.shape {
+        Shape::Box(s) => s.y * 0.5,
+        Shape::Prism(s) => s.y,
+        Shape::Cylinder(_, h) => h * 0.5,
+    };
+    p.at.translation + p.at.rotation * Vec3::Y * up
+}
+
+/// The pieces whose tops are a prefab's highest, level within `TIED`.
+fn highest(geo: &crate::world::buildings::Geo) -> Vec<&crate::world::buildings::Piece> {
+    let peak = geo
+        .pieces
+        .iter()
+        .map(|p| piece_top(p).y)
+        .fold(f32::MIN, f32::max);
     geo.pieces
         .iter()
-        .map(|p| {
-            // How far up from its origin its top is: a box's and a
-            // cylinder's origin is their middle, a gable prism's its base
-            // (`materials::gable_prism`: the ridge at its full height).
-            let up = match p.shape {
-                Shape::Box(s) => s.y * 0.5,
-                Shape::Prism(s) => s.y,
-                Shape::Cylinder(_, h) => h * 0.5,
-            };
-            p.at.translation + p.at.rotation * Vec3::Y * up
-        })
-        .max_by(|a, b| a.y.total_cmp(&b.y))
+        .filter(|p| piece_top(p).y >= peak - TIED)
+        .collect()
+}
+
+/// The highest point of a prefab, in its own frame: the middle of its
+/// highest pieces' tops (a cage's four corner posts level at the top put
+/// the lamp over the cage, not on one corner of it).
+pub fn top_of(id: &str) -> Option<Vec3> {
+    let geo = prefab(id)?;
+    let tops: Vec<Vec3> = highest(&geo).into_iter().map(piece_top).collect();
+    (!tops.is_empty()).then(|| tops.iter().copied().sum::<Vec3>() / tops.len() as f32)
 }
 
 /// How far a landmark's lamp stands up off its top, on a pole: half the
@@ -97,22 +116,15 @@ pub fn lamp_lift(id: &str) -> f32 {
     let Some(geo) = prefab(id) else {
         return 0.0;
     };
-    let top = |p: &&crate::world::buildings::Piece| {
-        let up = match p.shape {
-            Shape::Box(s) => s.y * 0.5,
-            Shape::Prism(s) => s.y,
-            Shape::Cylinder(_, h) => h * 0.5,
-        };
-        (p.at.translation + p.at.rotation * Vec3::Y * up).y
-    };
-    geo.pieces
-        .iter()
-        .max_by(|a, b| top(a).total_cmp(&top(b)))
-        .map_or(0.0, |p| match p.shape {
+    // The widest of the highest pieces sets it.
+    highest(&geo)
+        .into_iter()
+        .map(|p| match p.shape {
             Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
             Shape::Cylinder(r, _) => 0.75 * r,
             Shape::Prism(_) => 0.0,
         })
+        .fold(0.0, f32::max)
         .min(POLE_MAX)
 }
 
@@ -322,6 +334,29 @@ fn day_glows(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A lamp on a top that's several pieces level with each other (the
+    /// mill race's cage, four corner posts) stands over the middle of
+    /// them, not on whichever came last.
+    #[test]
+    fn a_lamp_stands_over_the_middle_of_a_level_top() {
+        let geo = prefab("mill_race").unwrap();
+        let tied = highest(&geo);
+        assert!(tied.len() > 1, "the mill race's top is its cage's posts");
+        let mid = tied.iter().map(|p| piece_top(p)).sum::<Vec3>() / tied.len() as f32;
+        let top = top_of("mill_race").unwrap();
+        assert!(
+            (top - mid).length() < 0.01,
+            "lamp at {top:?}, the posts' middle {mid:?}"
+        );
+        for p in tied {
+            let t = piece_top(p);
+            assert!(
+                (t.xz() - top.xz()).length() > 0.5,
+                "the lamp still on a post at {t:?}"
+            );
+        }
+    }
 
     /// With the clock stopped every lamp shows, whatever its phase: the
     /// captures' stills stop it to shoot every lamp lit, the same each
