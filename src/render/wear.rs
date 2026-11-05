@@ -12,14 +12,39 @@
 //! own space, so a moving part (the slide) takes its soot with it and
 //! nothing is written per frame.
 //!
-//! The material fields it borrows are ones only transmission reads, and a
-//! gun's metal has none (`encode` refuses a transmissive material):
-//! - `thickness`: the marker and the amounts ([`code`]);
-//! - `attenuation_color`: the muzzle (rgb) and the port's x (alpha);
-//! - `clearcoat_perceptual_roughness` and `ior`: the port's y and z.
+//! This is our own code editing Bevy's shader *asset* as it loads (the
+//! `Shader` in `Assets<Shader>` with import path `bevy_pbr::pbr_fragment`),
+//! as `render::fog` does for `pbr_functions`. The bevy_pbr crate, its
+//! source and Cargo.toml are untouched.
 //!
-//! None of them is in a pipeline key, so no new pipelines. If the anchors
-//! stop matching a new Bevy, it warns and guns keep the flat tint.
+//! ## Borrowed fields
+//!
+//! A gun's own material copy (`weapons::weather`) carries the wear in four
+//! `StandardMaterial` fields that only transmission (glass, liquids)
+//! reads:
+//!
+//! | Field | Holds | Read by Bevy only when |
+//! | - | - | - |
+//! | `thickness` | the marker (below 0) and the amounts ([`code`]) | `specular_transmission` or `diffuse_transmission` > 0 |
+//! | `attenuation_color` | the muzzle (rgb) and the port's x (alpha) | the same, and only with a finite `attenuation_distance` |
+//! | `clearcoat_perceptual_roughness` | the port's y | `clearcoat` > 0 |
+//! | `ior` | the port's z | transmission, as above |
+//!
+//! Why it is safe:
+//! - [`encode`] refuses any material with transmission or clearcoat, and
+//!   never turns either on, so Bevy never reads the fields as what they
+//!   are. (`attenuation_distance` is `render::held_light`'s, and is left
+//!   alone.)
+//! - None of the four is in `StandardMaterialKey`, so no new pipelines.
+//!   Both are tested (`wear_never_turns_on_transmission_or_a_new_pipeline`).
+//! - A material without the marker (`thickness` >= 0, Bevy's default 0)
+//!   skips the wear after one uniform read.
+//! - If a later Bevy reads one of these fields elsewhere, or moves the
+//!   anchor, this is where to look: the anchor test patches Bevy's own
+//!   source from the registry.
+//!
+//! If the anchor stops matching a new Bevy, it warns and guns keep the
+//! flat tint.
 
 use bevy::prelude::*;
 use bevy::shader::{Shader, ShaderImport, Source};
@@ -284,5 +309,49 @@ mod tests {
             Vec3::ZERO
         ));
         assert_eq!(glass.thickness, 0.01);
+    }
+
+    #[test]
+    fn wear_never_turns_on_transmission_or_a_new_pipeline() {
+        use bevy::pbr::StandardMaterialKey;
+        // Each finish a gun has: bluing, alloy, wood, and a held copy
+        // (held_light's finite attenuation_distance).
+        let finishes = [
+            StandardMaterial {
+                metallic: 0.9,
+                perceptual_roughness: 0.3,
+                ..default()
+            },
+            StandardMaterial {
+                metallic: 0.0,
+                ..default()
+            },
+            StandardMaterial {
+                attenuation_distance: 3e33,
+                ..default()
+            },
+        ];
+        for orig in finishes {
+            for (worn, late, soot) in [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (0.4, 0.0, 0.7)] {
+                let mut m = orig.clone();
+                assert!(encode(
+                    &mut m,
+                    CLASS_FADES,
+                    worn,
+                    late,
+                    soot,
+                    Vec3::new(0.0, 0.06, -0.12),
+                    Vec3::new(0.012, 0.068, -0.04),
+                ));
+                // Transmission and clearcoat stay off, so the borrowed
+                // fields are never read as what they are...
+                assert_eq!(m.specular_transmission, 0.0);
+                assert_eq!(m.diffuse_transmission, 0.0);
+                assert_eq!(m.clearcoat, 0.0);
+                assert_eq!(m.attenuation_distance, orig.attenuation_distance);
+                // ...and the pipeline key is the one it had.
+                assert!(StandardMaterialKey::from(&m) == StandardMaterialKey::from(&orig));
+            }
+        }
     }
 }
