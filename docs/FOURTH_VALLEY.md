@@ -346,9 +346,72 @@ minutes a batch of eight), then screenshots.
 - **A test that hand-lists valleys doesn't check yours.** Use
   `map::VALLEYS`.
 
+## Fixes since the first sims, and what holds each
+
+Each line: what was wrong, what changed, and the test that fails if it
+comes back.
+
+- **A raider walked off the face stair and fell 15 m** (seed 6). The
+  stair's outer wall took its height from a straight line up the stair,
+  but each terrace stands up to 1.5 m above that line, so the wall was
+  flush with the walk. Each wall panel now stands a metre over the
+  terrace beside it. Held by `dam::tests::the_stair_walls_stand_over_the_walk`
+  (the real ground beside every panel, 0.9 m under its top).
+- **The crest's upstream edge, viewing bay included, is guarded the
+  whole way.** Models' bay swaps the parapet for a steel rail at x 88 to
+  100. Held by `dam::tests::the_crest_edge_stands_over_the_crest`:
+  something solid 0.9 m over the crest at every x but the tower
+  bridge's opening, with no gap a body fits through (it fails with the
+  rail taken out).
+- **The valve house dug a ledge into the stair.** The terrain's
+  `settle` lowers the ground round any building on a slope, and at
+  (12, 170) that cut the stair's south strip down 7 m. The house is at
+  (22, 176) now. Held by `dam::tests::the_stair_walls_follow_the_stair`,
+  which samples that strip.
+- **The scours, where the reservoir went.** Two outlets low in the
+  downstream face at x -67 and -50.6, west of the stair, with their
+  water running down to the river in its own channel and heard
+  (`audio::OUTFLOWS`). The culvert mouths are `Mat::Void` and the
+  surround pale concrete, so the opening reads against the wall
+  through the bed's ground fog (best from 10 m; at 20 m in rain the fog
+  greys it). Held by `dam::tests::sallow_prefabs_are_sound_and_fit_their_footprints`,
+  `dam::tests::the_faces_have_no_ledges`, and soak's
+  `no_valley_has_a_ledge_trap`, which caught a first version that left
+  a 9 m² perch 10 m up each outlet.
+- **Cover on the walks home from the scours.** A bin row at (-14.2,
+  -140.7) and a silted car at (50.7, -201.5) bring the longest open run
+  on both first-job walks home from 30 m to 8 m. Held by map_lint's
+  first-jobs check (Map design's), against `COVER_GAP`.
+- **Every landmark lamp stands on its building.** A lamp went on
+  whichever of several level tops came last: one corner post of the
+  mill race's cage, one of a mast's legs. Now level tops within 10 m of
+  each other count as one top, the lamp goes over their middle, and
+  where nothing is under that middle it sits on steel bars out to each
+  post. Held by `landmarks::tests::every_landmark_lamp_stands_on_its_building`
+  (all 53 lamps in the five valleys, inside the footprint and on
+  something) and `a_lamp_stands_over_the_middle_of_a_level_top`.
+- **Lamps are lit in captures.** A stopped clock lights every lamp, so
+  stills always show them. Held by
+  `landmarks::tests::a_stopped_clock_lights_every_lamp`.
+- **The way-out beacons stay green up close.** Their bulbs are set
+  against the eyes' adaptation (`grade::ToTheEye`), and Visual design's
+  hue cap keeps the halo green. Held by `scripts/lamp_check.sh`, which
+  fails a lamp whose light isn't its own colour. Sallow passes with no
+  failing distances; at 50 m each beacon is a clear green point, at 150
+  m a faint one.
+
+Still open, with the session that has it:
+
+- Marrow's five lamps that read dim at 150 to 300 m (Visual design,
+  Map design): only Marrow, the one valley in the tight set.
+- The raider's route to the Gauge house truck runs through its shed
+  (the Verifier): bots snag on the shed and free themselves.
+- The walk along the dam's foot still reads as a corridor (Map design,
+  who has the walk's stops and route).
+
 ## Status
 
-Whitebox lint clean, sims iterated, the dam, tower and stock built
-(`src/world/dam.rs`, `art/props/dam.py`). Next: World models' drowned
-ruins and masonry in place of the stand-ins, a pass through the valley
-in fog with screenshots, and Performance's gauge on it.
+Lint clean, sims iterated (seeds 1 to 8 on main in November: 7 of 8
+out, no stuck pockets of the map's making), the dam, tower, stock and
+scours built (`src/world/dam.rs`, `art/props/dam.py`), every landmark
+lamp checked by day and night. Next: what's still open above.
