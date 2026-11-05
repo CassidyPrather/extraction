@@ -308,6 +308,12 @@ fn plan_lamps(
         })
         .collect();
     found.sort_by_key(|(e, _, _)| *e);
+    // `EXTRACTION_LAMPS=beacons`: the rendezvous beacons only (green, the
+    // way home), for their own before and after; a valley's every lamp
+    // can run past two hours on the software renderer.
+    if std::env::var("EXTRACTION_LAMPS").is_ok_and(|v| v == "beacons") {
+        found.retain(|(_, _, c)| c[1] > c[0]);
+    }
     let filter = avian3d::prelude::SpatialQueryFilter::default();
     let mut v = Vec::new();
     for (e, lamp, tint) in found {

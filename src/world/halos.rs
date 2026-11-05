@@ -300,6 +300,11 @@ fn hold_angle(
     lamps: Query<(&Halo, &HaloAngle, &GlowSphere, &GlobalTransform)>,
     mut spheres: Query<&mut Transform, With<HaloSphere>>,
 ) {
+    // `EXTRACTION_HALO_ANGLE=0`: none held (the A/B for shots).
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *OFF.get_or_init(|| std::env::var("EXTRACTION_HALO_ANGLE").is_ok_and(|v| v == "0")) {
+        return;
+    }
     let eyes: Vec<Vec3> = crate::render::eyes(&cams)
         .map(|g| g.translation())
         .collect();
