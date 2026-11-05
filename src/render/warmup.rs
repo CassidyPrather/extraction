@@ -855,9 +855,9 @@ fn record_layouts(
         let Some(mesh) = meshes.get(id) else {
             continue;
         };
-        let Some(l) = layout_of(mesh) else {
-            continue;
-        };
+        // (One whose layout can't be read counts as its own: recorded
+        // all the same, so `shelve` doesn't wait on it.)
+        let l = layout_of(mesh).unwrap_or_else(|| hash_of(id));
         shelf.layouts.insert(id, l);
         if !shelf.twins.contains_key(&l) {
             if let Some(twin) = point_twin(mesh) {
@@ -1094,6 +1094,7 @@ fn shelve<M: Material>(
         ),
     >,
     materials: Res<Assets<M>>,
+    meshes: Res<Assets<Mesh>>,
 ) where
     M::Data: std::hash::Hash,
 {
@@ -1105,12 +1106,16 @@ fn shelve<M: Material>(
         let Some(m) = materials.get(&mat.0) else {
             continue;
         };
-        // A mesh whose layout wasn't seen counts as its own.
-        let layout = shelf
-            .layouts
-            .get(&mesh.0.id())
-            .copied()
-            .unwrap_or_else(|| hash_of(mesh.0.id()));
+        // A mesh whose layout can't be read (its data gone to the render
+        // world) counts as its own, and is shelved as itself. One whose
+        // layout isn't recorded yet (`record_layouts`, made this frame)
+        // waits a frame for its twin: shelved as itself, a 147-vertex
+        // generated mesh stood on the shelf drawing.
+        let layout = match shelf.layouts.get(&mesh.0.id()) {
+            Some(l) => *l,
+            None if meshes.contains(mesh.0.id()) => continue,
+            None => hash_of(mesh.0.id()),
+        };
         let key = hash_of((
             ty,
             m.bind_group_data(),
