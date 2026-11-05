@@ -983,7 +983,16 @@ fn first_person_hands(
     for mut v in &mut players {
         *v = Visibility::Hidden;
     }
-    let eye = Vec3::new(cam.x, cam.y.max(zone.ground(cam.x, cam.z) + 0.3), cam.z);
+    // Where the camera stands its eye (`render`'s camera override): a
+    // height of 0 or less is standing there, 1.7 m up. (Taken as given,
+    // the hands were set out round the feet, under the view.)
+    let ground = zone.ground(cam.x, cam.z);
+    let eye_y = if cam.y <= 0.0 {
+        ground + crate::render::EYE_OVER_FEET
+    } else {
+        cam.y.max(ground + 0.3)
+    };
+    let eye = Vec3::new(cam.x, eye_y, cam.z);
     let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
     let fwd = rot * Vec3::NEG_Z;
     let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
@@ -1055,6 +1064,45 @@ fn first_person_hands(
             "open" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.0; 5]);
                 glove(&mut commands, Side::Right, rest(Side::Right), [0.0; 5]);
+            }
+            // The job card taken up to read, as `interact::read` holds it:
+            // its bottom edge 30 mm over the right hand, facing the eye,
+            // the glove seated on it (`render::hold`).
+            "read" => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+                // Brought in front of the face to read, not at rest.
+                let mut hand = rest(Side::Right);
+                hand.translation = eye + (flat * 0.4 + right * 0.03 - Vec3::Y * 0.3) / zoom;
+                let size = Vec2::new(0.3, 0.26);
+                let card = crate::interact::read::held_up(hand.translation, eye, size);
+                // The real card: its text drawn by `render::screen` on its
+                // face (a blank box here read as a grey slab at the eye).
+                let text = "ODD JOBS - JOB 1 OF 3\n\"Go up to the old farm and look \
+                    round. Tell me what's changed.\"\nFrom the drop: north-east, 190 m. \
+                    Ringed on your map. Call me from the gate after.";
+                let style = crate::raid::bench::ScreenStyle::Card;
+                commands.spawn((
+                    Name::new("Request card"),
+                    crate::render::legibility::TextSource::Request,
+                    crate::raid::bench::ScreenText {
+                        text: crate::render::screen::wrap_to_fit(text, size, style),
+                        size,
+                        style,
+                    },
+                    view(card),
+                    Visibility::default(),
+                ));
+                let rel = Transform::from_matrix(
+                    (hand.compute_affine().inverse() * card.compute_affine()).into(),
+                );
+                let half = Vec3::new(size.x, size.y, 0.01) * 0.5;
+                let seat = crate::render::hold::seat(Side::Right, half, rel);
+                let h = glove(&mut commands, Side::Right, hand * seat.glove(), seat.curl);
+                commands.entity(h).queue(move |mut e: EntityWorldMut| {
+                    if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                        v.thumb = Some(seat.thumb);
+                    }
+                });
             }
             "point" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);

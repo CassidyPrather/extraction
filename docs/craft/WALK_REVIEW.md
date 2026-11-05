@@ -152,3 +152,10 @@ The coming-home walks live in `docs/craft/walks/home/`.
   carries a newcomer over the white.
 - A walk's fixes move its route: a job or rendezvous moved, the arrival
   stop moves with it. Show the new arrival beside the old, and say so.
+- A great thing beside the way can go unseen because no stop looks at
+  it: the side view picks named places and landmarks, and Sallow's dam
+  face was neither, so the walk looked past the valley's biggest sight
+  for 200 m. Look for the reveal from the stops before you build one:
+  the face read whole from 20 m short of the valve house, looking
+  north-west. A structure that big is a landmark to the stop picker now
+  (`dam_face` in `scripts/walk_stops.py`).
