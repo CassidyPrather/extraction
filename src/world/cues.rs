@@ -75,8 +75,11 @@ const STEPS: usize = 8;
 /// `light`. Unlit, as every puff is (lit, a far thin one came out black):
 /// pale by day, dimmed with the light so it doesn't glow after dark.
 fn smoke_tint(k: usize, light: f32) -> Color {
-    // (Dimmer than the light's own fall: the eyes' adaptation lifts it.)
-    let c = SMOKE.to_linear() * light.clamp(0.0, 1.0).powf(1.7).max(0.004);
+    // With the light to dusk; then fast to dark, or the eyes' adaptation
+    // lifts it to a pale glow in a night sky (it's a dark plume there).
+    let l = light.clamp(0.0, 1.0);
+    let night = (l / 0.3).clamp(0.0, 1.0);
+    let c = SMOKE.to_linear() * (l * night * night * (3.0 - 2.0 * night)).max(0.002);
     Color::from(c).with_alpha(SMOKE_ALPHA * k as f32 / STEPS as f32)
 }
 
