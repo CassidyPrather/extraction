@@ -359,7 +359,14 @@ fn dress_heavies(
                     } else {
                         Transform::IDENTITY
                     };
-                    hang(&mut commands, c, "vent", turn, Some(Lit::Vent(v as usize)), on);
+                    hang(
+                        &mut commands,
+                        c,
+                        "vent",
+                        turn,
+                        Some(Lit::Vent(v as usize)),
+                        on,
+                    );
                 }
                 (Slot::Bolt { plate, .. }, _) => {
                     let rot = super::heavy::plate_transform(plate as usize).rotation;
@@ -864,7 +871,9 @@ mod tests {
             shown
                 .into_iter()
                 .filter(|e| {
-                    of.contains(e) || w.get::<ChildOf>(*e).is_some_and(|p| of.contains(&p.parent()))
+                    of.contains(e)
+                        || w.get::<ChildOf>(*e)
+                            .is_some_and(|p| of.contains(&p.parent()))
                 })
                 .count()
         };
@@ -926,7 +935,10 @@ mod tests {
             "{whole} then {after}, {singles} single bolt meshes, {lost} of the shot bolt's; \
              gone {gone:?}, came {came:?}"
         );
-        assert!(singles >= (bolts - 2) * 2, "{singles} single bolt meshes drawn");
+        assert!(
+            singles >= (bolts - 2) * 2,
+            "{singles} single bolt meshes drawn"
+        );
     }
 
     /// A footfall is felt on the house scale: never a kick (that's shots

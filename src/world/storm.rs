@@ -763,7 +763,11 @@ mod tests {
         let mut saved = None;
         flash_cascades(&mut c, &mut saved, true);
         assert_eq!(c.bounds.len(), 2);
-        assert!(*c.bounds.last().unwrap() <= FLASH_SHADOWS + 1e-3, "{:?}", c.bounds);
+        assert!(
+            *c.bounds.last().unwrap() <= FLASH_SHADOWS + 1e-3,
+            "{:?}",
+            c.bounds
+        );
         // Held over several frames, it stays as it is.
         flash_cascades(&mut c, &mut saved, true);
         assert!(*c.bounds.last().unwrap() <= FLASH_SHADOWS + 1e-3);

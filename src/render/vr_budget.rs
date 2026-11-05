@@ -186,8 +186,7 @@ fn holds_views_with(
     let _counting = super::budget::tests::counted();
     // A storm on its flash frames, its dearest (the sun's cascades on for
     // the strike, at any hour), as the one-eye gauges measure it.
-    let mut app =
-        super::budget::tests::client_flash(map, weather, None, weather == "storm", None);
+    let mut app = super::budget::tests::client_flash(map, weather, None, weather == "storm", None);
     if let Some(h) = hour {
         app.world_mut().resource_mut::<crate::LaunchOptions>().hour = Some(h.into());
     }
@@ -415,7 +414,11 @@ fn unnamed(app: &mut App, eye: Entity) -> String {
                     (c.red * 255.0) as u8,
                     (c.green * 255.0) as u8,
                     (c.blue * 255.0) as u8,
-                    if m.emissive != LinearRgba::BLACK { " lit" } else { "" }
+                    if m.emissive != LinearRgba::BLACK {
+                        " lit"
+                    } else {
+                        ""
+                    }
                 )
             })
             .unwrap_or_else(|| "another material".into());
