@@ -201,7 +201,9 @@ fn a_walker_loses_you_behind_a_building_and_searches_where_you_were() {
         let seen = w(hx + 3.0, hz + 3.0);
         let corner = w(-hx - 3.5, hz + 3.5);
         let hide = w(-hx - 3.0, -hz + 1.0);
-        let route = [seen, corner, hide];
+        // On round the back, if it's still in sight of you at `hide`.
+        let away = w(hx + 3.0, -hz - 3.0);
+        let route = [seen, corner, hide, away];
         let ok = [post, seen, corner, hide].iter().all(|p| walkable(*p))
             && (post.y - seen.y).abs() < 3.0;
         ok.then_some((post, route))
@@ -249,15 +251,81 @@ fn a_walker_loses_you_behind_a_building_and_searches_where_you_were() {
     }
     let lost_at = lost_at.expect("out of its sight behind the building");
     let hide = route[2];
+    let hide_away = route[3];
     // A moment behind the building (long enough that it's guessing), then
     // slip away out of everyone's sight.
+    // It may come round and see you along the wall (a walker chasing you
+    // doing its job); what it may not do is see you through the building:
+    // whenever it sees you, a line from its eye to some part of you clears
+    // the world. (The walk is chaotic in where the losses fall: Robot
+    // bodies' feet, 5 November, brought it 0.66 m further round in the
+    // wait. Robot minds' test, made robust to that timing.)
+    let mut lost = Some(lost_at);
+    let mut q =
+        bevy::ecs::system::SystemState::<avian3d::prelude::SpatialQuery>::new(app.world_mut());
     for _ in 0..(90.0 * 1.5) as usize {
         app.update();
+        if app.world().get::<Awareness>(walker).unwrap().can_see_target {
+            let t = *app.world().get::<Transform>(walker).unwrap();
+            let eye = t.transform_point(app.world().get::<super::Senses>(walker).unwrap().eye);
+            let feet = app.world().get::<Transform>(player).unwrap().translation;
+            let sq = q.get(app.world()).unwrap();
+            let walls =
+                avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+            // (From shin to head: whichever part of you it made out.)
+            let rays: Vec<(f32, Option<Vec3>)> = [0.3f32, 0.9, 1.4, 1.7]
+                .iter()
+                .map(|h| {
+                    let to = feet + Vec3::Y * *h;
+                    let d = to - eye;
+                    let hit = Dir3::new(d)
+                        .ok()
+                        .and_then(|dir| sq.cast_ray(eye, dir, d.length(), true, &walls))
+                        .map(|hit| eye + d.normalize() * hit.distance);
+                    (d.length(), hit)
+                })
+                .collect();
+            assert!(
+                rays.iter().any(|(_, hit)| hit.is_none()),
+                "it saw you through the building: rays {:.1} m long hit the world at {:?}",
+                rays[0].0,
+                rays.iter()
+                    .map(|(_, h)| h.map(|p| (p * 10.0).round() / 10.0))
+                    .collect::<Vec<_>>()
+            );
+            lost = None;
+        } else if lost.is_none() {
+            lost = Some(hide);
+        }
     }
-    assert!(
-        !app.world().get::<Awareness>(walker).unwrap().can_see_target,
-        "it can't see through the building"
-    );
+    // Still in its sight at the end of the wait: slip off along the back,
+    // at a walk, till it loses you (gone 200 m in a tick while it had you,
+    // it reckoned you'd run that way, and searched there).
+    if lost.is_none() {
+        // (On round the back while it has you; out of its sight a moment,
+        // and away.)
+        let mut at = hide;
+        let mut unseen = 0;
+        for _ in 0..90 * 12 {
+            let step = (hide_away - at).with_y(0.0).clamp_length_max(1.4 / 90.0);
+            if app.world().get::<Awareness>(walker).unwrap().can_see_target {
+                at += step;
+                put(&mut app, player, zone.on_ground(at.x, at.z));
+                unseen = 0;
+                lost = None;
+            } else {
+                if lost.is_none() {
+                    lost = Some(at);
+                }
+                unseen += 1;
+                if unseen > (90.0 * 1.5) as usize {
+                    break;
+                }
+            }
+            app.update();
+        }
+    }
+    let lost_at = lost.unwrap_or(hide);
     put(&mut app, player, zone.on_ground(hide.x, hide.z + 200.0));
     let mut searched = None;
     for _ in 0..90 * 45 {

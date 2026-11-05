@@ -286,6 +286,44 @@ moved to the lip, with a mass beside it on the skyline (Kettle's cairn
 and its stones); a thing in the trees gets a worn path off the
 way (Marrow's tag office desk).
 
+### Lit windows and smoke
+
+Someone's home: a map's `cues` list dresses buildings it already places
+(`world::cues`). Each cue finds the building whose placement is nearest
+its `at`, within 20 m (`cues::REACH`), and nothing else: it stands no
+structure, blocks no way and isn't a footprint to the lint.
+
+```ron
+cues: [
+    // The window nearest `at` glows warm from dusk to dawn. `light: true`
+    // puts a small lamp in the room (a light: most windows want only the
+    // glow); `always: true` lights it by day too.
+    LitWindow(at: (-140.5, 143.5), light: true),
+    LitWindow(at: (-134.5, 143.5)),
+    // A thin plume, bent by the wind, from the building's stack (the
+    // pump stations') or else a stovepipe added up through its roof over
+    // the stove. `y: Some(2.0)` instead rises from 2 m over the ground at
+    // `at`, with no pipe (a camp's fire).
+    Smoke(at: (-137.5, 147.5)),
+],
+```
+
+Put a window's `at` against the wall, by the window you mean: the
+nearest window to it is lit (`every_cue_finds_its_building` fails one
+more than 4 m from it). A window glows only where it's glazed or open: a
+ruin's is open, and lights up too. The plume reads at 150 m by day and in
+drizzle, a pale curl against the trees and sky. After dark it fades with
+the light, and the lit window takes over. `EXTRACTION_CUES` tries cues without
+editing the map (`window:X,Z[,light][,always];smoke:X,Z[,Y]`). The
+breadcrumbs gauge doesn't count either yet.
+
+![Kettle's farmhouse with two lit front windows, one east and its stove
+smoking: day, drizzle, dusk and night, from 50 m north and 150 m east
+(insets twice up)](shots/cues/kettle_farm_sheet.jpg)
+
+A lit window carries a halo outside its glass after dark (a lamp's,
+`halos`, out to 320 m), which is what reads at 150 m.
+
 ## Points of interest, density and pacing
 
 A point of interest (a `Poi` marker) is somewhere worth the walk: a

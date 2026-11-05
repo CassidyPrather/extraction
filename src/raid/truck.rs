@@ -575,10 +575,112 @@ fn press_things(
 /// pull up there: its length and a little.
 pub const PARK_CLEAR: f32 = 5.0;
 
+/// The truck's own ground, truck space (x, z): bonnet to rear steps.
+const TRUCK_BODY: (Vec2, Vec2) = (Vec2::new(-1.25, -5.0), Vec2::new(1.25, 2.45));
+/// The way in behind it a body walks up (`sim::raider::board_tasks` from
+/// 4.2 m back, and the line up to it from 8).
+const TRUCK_WAY_IN: (Vec2, Vec2) = (Vec2::new(-0.6, 2.45), Vec2::new(0.6, 8.5));
+
+/// Whether the truck standing at `t` keeps clear of every placement in the
+/// valley, its way in behind it too: room for it, and its bed and bell in
+/// reach of someone walking up. (Its fallbacks off a rendezvous used to be
+/// checked against people only: at Rime's Tip road it pulled in through
+/// the tip hut, 5 November.)
+pub fn park_clear(zone: &Zone, t: &Transform) -> bool {
+    let inv = t.compute_affine().inverse();
+    let inside = |w: Vec2| {
+        let l = inv.transform_point3(Vec3::new(w.x, t.translation.y, w.y));
+        let l = Vec2::new(l.x, l.z);
+        [TRUCK_BODY, TRUCK_WAY_IN]
+            .iter()
+            .any(|(lo, hi)| l.cmpge(*lo - 0.1).all() && l.cmple(*hi + 0.1).all())
+    };
+    // The truck's ground, every quarter metre.
+    let mut ours = Vec::new();
+    for (lo, hi) in [TRUCK_BODY, TRUCK_WAY_IN] {
+        let mut x = lo.x;
+        while x <= hi.x + 1e-3 {
+            let mut z = lo.y;
+            while z <= hi.y + 1e-3 {
+                ours.push(t.transform_point(Vec3::new(x, 0.0, z)).xz());
+                z += 0.25;
+            }
+            x += 0.25;
+        }
+    }
+    let here = t.translation.xz();
+    zone.map.placements.iter().all(|pl| {
+        let at = Vec2::from_array(pl.at);
+        if at.distance(here) > 30.0 {
+            return true;
+        }
+        let f = extraction_core::map::prefab_footprint(&pl.prefab);
+        let half = Vec2::new(f[0] * 0.5, f[2] * 0.5);
+        let (s, c) = pl.rot.to_radians().sin_cos();
+        let local = |w: Vec2| {
+            let d = w - at;
+            Vec2::new(d.x * c + d.y * s, -d.x * s + d.y * c)
+        };
+        let world = |l: Vec2| at + Vec2::new(l.x * c - l.y * s, l.x * s + l.y * c);
+        // None of ours in its footprint, nor any of its outline in ours.
+        let ours_clear = ours.iter().all(|w| {
+            let l = local(*w);
+            l.x.abs() > half.x || l.y.abs() > half.y
+        });
+        let mut theirs_clear = true;
+        let n = ((half.x + half.y) * 8.0).ceil().max(4.0) as usize;
+        for k in 0..n {
+            let a = k as f32 / n as f32 * 4.0;
+            let (side, t) = (a.floor() as i32, a.fract());
+            let l = match side {
+                0 => Vec2::new(-half.x + 2.0 * half.x * t, -half.y),
+                1 => Vec2::new(half.x, -half.y + 2.0 * half.y * t),
+                2 => Vec2::new(half.x - 2.0 * half.x * t, half.y),
+                _ => Vec2::new(-half.x, half.y - 2.0 * half.y * t),
+            };
+            if inside(world(l)) {
+                theirs_clear = false;
+                break;
+            }
+        }
+        ours_clear && theirs_clear
+    })
+}
+
+/// Where the truck may stop off a rendezvous's pose, its own frame (x, z):
+/// pulled on past, short of it, alongside, further on; then further short,
+/// waiting back down the road.
+const PARK_OFFSETS: &[Vec3] = &[
+    Vec3::new(0.0, 0.0, -9.0),
+    Vec3::new(0.0, 0.0, 9.0),
+    Vec3::new(6.0, 0.0, 0.0),
+    Vec3::new(-6.0, 0.0, 0.0),
+    Vec3::new(0.0, 0.0, -15.0),
+    Vec3::new(0.0, 0.0, 13.0),
+    Vec3::new(0.0, 0.0, 17.0),
+    Vec3::new(0.0, 0.0, 21.0),
+];
+
+/// The places off a rendezvous's pose the truck may stop at (`PARK_OFFSETS`),
+/// leaving out any that aren't [`park_clear`].
+pub fn park_spots(zone: &Zone, rv: usize) -> Vec<Transform> {
+    let base = rv_pose(zone, rv);
+    let (yaw, _, _) = base.rotation.to_euler(EulerRot::YXZ);
+    PARK_OFFSETS
+        .iter()
+        .map(|local| {
+            let at = base.transform_point(*local);
+            parked(zone, [at.x, at.z], yaw)
+        })
+        .filter(|t| park_clear(zone, t))
+        .collect()
+}
+
 /// The rendezvous pose, or the nearest one beside it with nobody standing
 /// in it: someone new waits right on the spot, and the truck came down on
 /// top of them (inside its bed's walls, they could neither move nor
-/// board).
+/// board). Never into a building: a spot that isn't [`park_clear`] isn't
+/// offered, and with none clear of them it waits on its pose regardless.
 pub fn rv_pose_clear(zone: &Zone, rv: usize, people: &[Vec3]) -> Transform {
     let base = rv_pose(zone, rv);
     let clear = |t: &Transform| {
@@ -589,22 +691,10 @@ pub fn rv_pose_clear(zone: &Zone, rv: usize, people: &[Vec3]) -> Transform {
     if clear(&base) {
         return base;
     }
-    let (yaw, _, _) = base.rotation.to_euler(EulerRot::YXZ);
-    // Pulled on past them, or short of them, or alongside.
-    for local in [
-        Vec3::new(0.0, 0.0, -9.0),
-        Vec3::new(0.0, 0.0, 9.0),
-        Vec3::new(6.0, 0.0, 0.0),
-        Vec3::new(-6.0, 0.0, 0.0),
-        Vec3::new(0.0, 0.0, -15.0),
-    ] {
-        let at = base.transform_point(local);
-        let t = parked(zone, [at.x, at.z], yaw);
-        if clear(&t) {
-            return t;
-        }
-    }
-    base
+    park_spots(zone, rv)
+        .into_iter()
+        .find(|t| clear(t))
+        .unwrap_or(base)
 }
 
 /// Arrived, the truck pulls in out of your sight, up to this long (s)
@@ -959,5 +1049,79 @@ mod park_tests {
             &GlobalTransform::from(Transform::IDENTITY.looking_at(Vec3::NEG_Z, Vec3::Y)),
             Vec3::new(0.0, 0.0, -20.0)
         ));
+    }
+
+    /// Every rendezvous in every valley: the truck's own pose there is
+    /// clear of every placement, its way in open; and with someone standing
+    /// on it, where it stops instead is clear too, and off them (Rime's
+    /// Tip road, 5 November: alongside it pulled in through the tip hut,
+    /// and the raider on its bed found the shed between it and the bell).
+    /// Some of the old fallbacks weren't, or the lint proves nothing.
+    #[test]
+    fn every_truck_stop_is_clear_of_buildings() {
+        let old = [
+            Vec3::new(0.0, 0.0, -9.0),
+            Vec3::new(0.0, 0.0, 9.0),
+            Vec3::new(6.0, 0.0, 0.0),
+            Vec3::new(-6.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, -15.0),
+        ];
+        let mut bad = Vec::new();
+        let (mut stops, mut old_into) = (0, 0);
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<Zone>().clone();
+            let names: Vec<String> = zone
+                .map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| m.name.clone())
+                .collect();
+            for (rv, name) in names.iter().enumerate() {
+                let base = rv_pose(&zone, rv);
+                stops += 1;
+                if !park_clear(&zone, &base) {
+                    bad.push(format!("{map} {name}: its own pose isn't clear"));
+                }
+                let (yaw, _, _) = base.rotation.to_euler(EulerRot::YXZ);
+                old_into += old
+                    .iter()
+                    .filter(|l| {
+                        let at = base.transform_point(**l);
+                        !park_clear(&zone, &parked(&zone, [at.x, at.z], yaw))
+                    })
+                    .count();
+                let person = base.translation;
+                let t = rv_pose_clear(&zone, rv, &[person]);
+                if !park_clear(&zone, &t) {
+                    bad.push(format!(
+                        "{map} {name}: stops at {:.1?}, not clear",
+                        t.translation
+                    ));
+                } else if t.translation.xz().distance(person.xz()) <= PARK_CLEAR {
+                    bad.push(format!(
+                        "{map} {name}: nowhere clear off its pose; stops on the person"
+                    ));
+                }
+            }
+        }
+        assert!(stops >= 10, "only {stops} rendezvous");
+        assert!(
+            old_into > 0,
+            "no old fallback went into anything: the lint proves nothing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {stops} truck stops (old fallbacks into something: {old_into}):\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
     }
 }
