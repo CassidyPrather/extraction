@@ -4465,16 +4465,20 @@ mod tests {
     #[test]
     fn a_wait_under_the_drones_without_shelter_is_found() {
         let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
-        map.placements.retain(|p| p.tag != "bus_shelter");
+        // The shelter, and the log pile by the truck (`WAIT_NEAR`).
+        map.placements
+            .retain(|p| p.tag != "bus_shelter" && p.tag != "wait_bus_depot");
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
-        assert!(
-            r.findings
-                .iter()
-                .any(|f| f.rule == Rule::Cover && f.what.contains("to wait behind at Bus depot")),
-            "{}",
-            r.text()
-        );
+        for what in ["to wait behind at Bus depot", "of the truck at Bus depot"] {
+            assert!(
+                r.findings
+                    .iter()
+                    .any(|f| f.rule == Rule::Cover && f.what.contains(what)),
+                "no \"{what}\" finding:\n{}",
+                r.text()
+            );
+        }
     }
 
     /// Every wreck is a light prop (`VIEW_LIGHT` names them again).
