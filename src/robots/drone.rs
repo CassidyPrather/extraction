@@ -546,8 +546,18 @@ fn drone_brain(
                     Vec3::new(h.x, zone.ground(h.x, h.z) + DOORWAY_ALTITUDE, h.z)
                 });
                 if let Some(h) = descending.filter(|h| h.distance(pos) > 1.5) {
-                    if let Brain::Search { left, .. } = &mut *brain {
-                        *left -= dt;
+                    // Its time runs out here too: one held off a doorway
+                    // (an eave over it) hung there for twenty minutes.
+                    let out = match &mut *brain {
+                        Brain::Search { left, .. } => {
+                            *left -= dt;
+                            *left <= 0.0
+                        }
+                        _ => false,
+                    };
+                    if out {
+                        search::give_up(&mut brain, &mut job);
+                        continue;
                     }
                     // Over it first, then down (not low across the yard).
                     let over = Vec2::new(h.x - pos.x, h.z - pos.z).length() < 4.0;
