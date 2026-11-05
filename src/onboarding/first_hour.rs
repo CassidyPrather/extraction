@@ -4213,6 +4213,11 @@ mod indoor_tests {
             (Vec2::new(22.0, 150.0), rv),
             (Vec2::new(-60.0, 10.0), rv),
             (Vec2::new(-74.8, 8.8), rv),
+            // Back in from the south gate's guard booth, outside the fence
+            // (under its roof from the first fight's sentry, the newcomer
+            // walked at the wire east of the gate).
+            (Vec2::new(32.2, 161.0), Vec2::new(31.64, 139.93)),
+            (Vec2::new(32.2, 161.0), rv),
         ] {
             let mut at = from;
             for t in super::walk(&world, from, to) {
