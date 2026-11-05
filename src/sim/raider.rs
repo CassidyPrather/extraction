@@ -41,6 +41,7 @@ use crate::robots::walker::Nav;
 use crate::robots::{Awareness, Brain, Job, JobKind, Robot};
 use crate::weapons::flat::MacroKind;
 use crate::weapons::{Gun, Mag};
+use crate::world::bridges::{Deck, decks};
 use crate::world::buildings::{Building, BuildingLoot, DoorLeaf};
 use crate::world::{Layer, Zone};
 use extraction_core::progression::Job as CardJob;
@@ -1428,77 +1429,38 @@ fn sidestep(
         .into_iter()
         .find(|d| d.holds(pos.xz(), 0.5))
     {
-        return deck.sidestep(scene, pos, step, start);
+        return deck_sidestep(&deck, scene, pos, step, start);
     }
     sidestep_open(plans, grid, scene, pos, step, start)
-}
-
-/// A bridge's deck: its two ends (x, z) and how wide it is.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Deck {
-    pub a: Vec2,
-    pub b: Vec2,
-    pub width: f32,
 }
 
 /// How far onto its abutments past a deck's ends a sidestep may land (m).
 const DECK_RUN_OFF: f32 = 1.5;
 
-impl Deck {
-    /// Whether a point is on the deck, `pad` metres either side of it
-    /// allowed (and as far past its ends).
-    pub fn holds(&self, p: Vec2, pad: f32) -> bool {
-        let ab = self.b - self.a;
-        let len = ab.length().max(1e-3);
-        let t = (p - self.a).dot(ab) / len;
-        let across = ((p - self.a) - ab / len * t).length();
-        t >= -pad && t <= len + pad && across <= self.width * 0.5 + pad
-    }
-
-    /// A sidestep along the deck: up or down it, as far as it goes (and
-    /// onto the ground past its ends), wherever a body walks straight to;
-    /// the deck's middle line beside it if nowhere will do. (Kettle seed 2,
-    /// 5 November: on the beck's 1.6 m footbridge, under a drone's fire,
-    /// three sidesteps found no floor of the Zone's 2 m grid beside it, and
-    /// the raider stood till it died.)
-    fn sidestep(&self, scene: &Scene, pos: Vec3, step: f32, start: f32) -> Vec2 {
-        let ab = self.b - self.a;
-        let len = ab.length().max(1e-3);
-        let axis = ab / len;
-        let t0 = (pos.xz() - self.a).dot(axis);
-        let first = if start.cos() >= 0.0 { 1.0 } else { -1.0 };
-        for far in [step, step * 0.5, step * 0.25] {
-            for sign in [first, -first] {
-                let t = (t0 + sign * far).clamp(-DECK_RUN_OFF, len + DECK_RUN_OFF);
-                if (t - t0).abs() < 0.3 {
-                    continue;
-                }
-                let q = self.a + axis * t;
-                if scene.walk_clear(pos, Vec3::new(q.x, pos.y, q.y)) {
-                    return q;
-                }
+/// A sidestep along a bridge's deck: up or down it, as far as it goes
+/// (and onto the ground past its ends), wherever a body walks straight
+/// to; the deck's middle line beside it if nowhere will do. (Kettle seed
+/// 2, 5 November: on the beck's 1.6 m footbridge, under a drone's fire,
+/// three sidesteps found no floor of the Zone's 2 m grid beside it, and
+/// the raider stood till it died.)
+fn deck_sidestep(deck: &Deck, scene: &Scene, pos: Vec3, step: f32, start: f32) -> Vec2 {
+    let axis = (deck.b - deck.a).normalize_or(Vec2::X);
+    let len = deck.a.distance(deck.b);
+    let t0 = deck.along(pos.xz());
+    let first = if start.cos() >= 0.0 { 1.0 } else { -1.0 };
+    for far in [step, step * 0.5, step * 0.25] {
+        for sign in [first, -first] {
+            let t = (t0 + sign * far).clamp(-DECK_RUN_OFF, len + DECK_RUN_OFF);
+            if (t - t0).abs() < 0.3 {
+                continue;
+            }
+            let q = deck.a + axis * t;
+            if scene.walk_clear(pos, Vec3::new(q.x, pos.y, q.y)) {
+                return q;
             }
         }
-        self.a + axis * t0.clamp(0.0, len)
     }
-}
-
-/// Every bridge's deck in the valley (`world::bridges` builds them on
-/// the same lines).
-pub(crate) fn decks(zone: &Zone) -> Vec<Deck> {
-    let mut out = Vec::new();
-    for rl in &zone.hm.road_lines {
-        for (a, b) in &rl.bridges {
-            let pa = extraction_core::geom::polyline_at(&rl.points, *a).0;
-            let pb = extraction_core::geom::polyline_at(&rl.points, *b).0;
-            out.push(Deck {
-                a: Vec2::from_array(pa),
-                b: Vec2::from_array(pb),
-                width: rl.width,
-            });
-        }
-    }
-    out
+    deck.a + axis * t0.clamp(0.0, len)
 }
 
 /// [`sidestep`] off a bridge: on its plan's floor indoors, the Zone's grid

@@ -407,6 +407,115 @@ pub fn bridge_visuals(
     }
 }
 
+/// A bridge's deck as something walked over: its two ends (x, z) on the
+/// deck's straight line, the deck's height at each, and how wide it is.
+/// One idea of a bridge for every walker that needs one (the smoke
+/// raider's sidestep, the first-hour bots' walk), taken from the same
+/// road lines [`bridges`] builds on.
+#[derive(Clone, Copy, Debug)]
+pub struct Deck {
+    pub a: Vec2,
+    pub b: Vec2,
+    /// The deck's walking height at `a` and at `b`.
+    pub ya: f32,
+    pub yb: f32,
+    pub width: f32,
+}
+
+impl Deck {
+    fn axis(&self) -> (Vec2, f32) {
+        let ab = self.b - self.a;
+        let len = ab.length().max(1e-3);
+        (ab / len, len)
+    }
+
+    /// How far along the deck from `a` toward `b` a point is (m; less than
+    /// 0 or more than its length off its ends).
+    pub fn along(&self, p: Vec2) -> f32 {
+        (p - self.a).dot(self.axis().0)
+    }
+
+    /// Whether a point is on the deck, `pad` metres either side of it
+    /// allowed (and as far past its ends).
+    pub fn holds(&self, p: Vec2, pad: f32) -> bool {
+        let (axis, len) = self.axis();
+        let t = (p - self.a).dot(axis);
+        let across = ((p - self.a) - axis * t).length();
+        t >= -pad && t <= len + pad && across <= self.width * 0.5 + pad
+    }
+
+    /// The deck's end nearer a point.
+    pub fn end_near(&self, p: Vec2) -> Vec2 {
+        if p.distance(self.a) <= p.distance(self.b) {
+            self.a
+        } else {
+            self.b
+        }
+    }
+
+    /// Where a straight walk from `from` to `to` first meets the deck's
+    /// footprint (`pad` either side), as a fraction of the walk; `None` if
+    /// it never does.
+    pub fn crosses(&self, from: Vec2, to: Vec2, pad: f32) -> Option<f32> {
+        let len = from.distance(to);
+        let n = (len / 0.1).ceil().max(1.0) as usize;
+        (0..=n)
+            .map(|k| k as f32 / n as f32)
+            .find(|t| self.holds(from.lerp(to, *t), pad))
+    }
+
+    /// Where each end meets the ground: on along the deck's line past the
+    /// end until the ground is up to the deck (or 6 m on, whichever's
+    /// first), the place a walk on or off the bridge steps from.
+    pub fn ground_ends(&self, zone: &Zone) -> [Vec3; 2] {
+        let (axis, _) = self.axis();
+        let out = |end: Vec2, y: f32, dir: Vec2| {
+            let mut d = 0.0;
+            while d < 6.0 {
+                let p = end + dir * d;
+                if zone.ground(p.x, p.y) >= y - 0.05 {
+                    return Vec3::new(p.x, zone.ground(p.x, p.y), p.y);
+                }
+                d += 0.25;
+            }
+            let p = end + dir * 6.0;
+            Vec3::new(p.x, zone.ground(p.x, p.y), p.y)
+        };
+        [out(self.a, self.ya, -axis), out(self.b, self.yb, axis)]
+    }
+}
+
+/// Every bridge's deck in the valley.
+pub fn decks(zone: &Zone) -> Vec<Deck> {
+    let mut out = Vec::new();
+    for rl in &zone.hm.road_lines {
+        let mut arc = vec![0.0f32; rl.points.len()];
+        for i in 1..rl.points.len() {
+            arc[i] = arc[i - 1] + extraction_core::geom::dist(rl.points[i - 1], rl.points[i]);
+        }
+        let height_at = |s: f32| {
+            let k = arc
+                .partition_point(|a| *a <= s)
+                .clamp(1, arc.len().max(2) - 1);
+            let (a0, a1) = (arc[k - 1], arc[k]);
+            let t = ((s - a0) / (a1 - a0).max(1e-4)).clamp(0.0, 1.0);
+            rl.heights[k - 1] + (rl.heights[k] - rl.heights[k - 1]) * t
+        };
+        for (a, b) in &rl.bridges {
+            let pa = extraction_core::geom::polyline_at(&rl.points, *a).0;
+            let pb = extraction_core::geom::polyline_at(&rl.points, *b).0;
+            out.push(Deck {
+                a: Vec2::from_array(pa),
+                b: Vec2::from_array(pb),
+                ya: height_at(*a),
+                yb: height_at(*b),
+                width: rl.width,
+            });
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,5 +632,57 @@ mod tests {
             }
         }
         assert!(stuck.is_empty(), "{stuck:#?}");
+    }
+
+    /// Every valley's decks, as walkers read them: each end's ground end
+    /// is on the ground, on the deck's line past its end, and not far; a
+    /// walk across a deck's middle crosses it, and one beside it, well off
+    /// to its side, doesn't.
+    #[test]
+    fn every_deck_has_its_ends_on_the_ground() {
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<Zone>().clone();
+            for (i, d) in decks(&zone).iter().enumerate() {
+                seen += 1;
+                let len = d.a.distance(d.b);
+                for (k, (g, end)) in d.ground_ends(&zone).iter().zip([d.a, d.b]).enumerate() {
+                    if (g.y - zone.ground(g.x, g.z)).abs() > 0.01 || g.xz().distance(end) > 6.01 {
+                        bad.push(format!("{map} deck {i} end {k}: ground end {g:.1?}"));
+                    }
+                    let t = d.along(g.xz());
+                    if t > 0.1 && t < len - 0.1 {
+                        bad.push(format!(
+                            "{map} deck {i} end {k}: ground end on the deck ({t:.1} of {len:.1})"
+                        ));
+                    }
+                }
+                let mid = d.a.lerp(d.b, 0.5);
+                let across = (d.b - d.a).perp().normalize_or(Vec2::X);
+                if d.crosses(mid - across * 5.0, mid + across * 5.0, 0.0)
+                    .is_none()
+                {
+                    bad.push(format!(
+                        "{map} deck {i}: a walk across its middle misses it"
+                    ));
+                }
+                let off = across * (d.width * 0.5 + 3.0);
+                if d.crosses(d.a + off, d.b + off, 0.0).is_some() {
+                    bad.push(format!("{map} deck {i}: a walk 3 m off its side meets it"));
+                }
+            }
+        }
+        assert!(seen >= 3, "only {seen} decks");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }
