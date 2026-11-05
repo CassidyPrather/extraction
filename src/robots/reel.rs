@@ -492,6 +492,34 @@ fn reel(
                 commands.entity(w).remove::<Senses>().remove::<Brain>();
                 w
             }
+            "feetat" => {
+                // `reel:feetat,SHOTS,EVERY,KIND,X1,Z1,X2,Z2`: a walker,
+                // crawler, hound or heavy walked from one point to another
+                // and back (`feet_gauge`'s worst, to look at).
+                let a: Vec<&str> = spec.split(',').collect();
+                let n = |k: usize| a.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+                let at = zone.on_ground(n(4), n(5));
+                let e = match a.get(3).copied().unwrap_or("walker") {
+                    "crawler" => super::walker::spawn_walker_sized(
+                        &mut commands,
+                        &zone,
+                        at,
+                        job(at),
+                        false,
+                        40.0,
+                        super::indoor::CRAWLER_SIZE,
+                        None,
+                    ),
+                    "hound" => super::hound::spawn_hound(&mut commands, &zone, at, job(at)),
+                    "heavy" => {
+                        super::heavy::spawn_heavy(&mut commands, &zone, &catalog, at, job(at))
+                    }
+                    _ => spawn_walker(&mut commands, &zone, at, job(at)),
+                };
+                commands.entity(e).remove::<Senses>().remove::<Brain>();
+                state.subject = Some(e);
+                return;
+            }
             "awarewalker" | "awaredrone" | "awareheavy" => {
                 // Four of a machine where you meet it in fog (walkers at
                 // 30 m, drones at 40, heavies at 15), facing you: at work,
@@ -769,6 +797,15 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
+                "feetat" => {
+                    let a: Vec<&str> = spec.split(',').collect();
+                    let n = |k: usize| a.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+                    vec![
+                        Vec3::new(n(6), 0.0, n(7)),
+                        Vec3::new(n(4), 0.0, n(5)),
+                        Vec3::new(n(6), 0.0, n(7)),
+                    ]
+                }
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
                 | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
                     vec![]
