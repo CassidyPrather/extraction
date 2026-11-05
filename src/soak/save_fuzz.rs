@@ -670,3 +670,250 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
     assert_eq!(full, 0, "no magazine holds more than it holds");
     assert!(w.resource::<Raid>().clock.is_finite());
 }
+
+// ---------------------------------------------------------------------
+// Quit anywhere: a bot raid in every valley, saved and loaded into a fresh
+// game the first time each awkward moment comes round.
+
+/// The seeds every valley's quit-anywhere raid is played on.
+const QUIT_SEEDS: &[u64] = &[1, 2];
+
+/// The awkward moments a raid is quit at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Moment {
+    MidWalk,
+    MidGrab,
+    InHand,
+    MidReload,
+    InTheBed,
+    Surge,
+    Countdown,
+}
+
+const MOMENTS: [Moment; 7] = [
+    Moment::MidWalk,
+    Moment::MidGrab,
+    Moment::InHand,
+    Moment::MidReload,
+    Moment::InTheBed,
+    Moment::Surge,
+    Moment::Countdown,
+];
+
+/// A bot raid (the smoke raider's) on `map`, saving to `path`.
+fn raid_on(path: &Path, map: &str, seed: u64) -> App {
+    let opts = LaunchOptions {
+        map: map.into(),
+        seed,
+        save: Some(path.to_owned()),
+        sim_run: Some("smoke".into()),
+        sim_out: Some(path.with_extension("sim")),
+        ..Default::default()
+    };
+    let mut app = crate::headless_app(opts, false);
+    app.finish();
+    app.cleanup();
+    for _ in 0..3 {
+        app.update();
+    }
+    app
+}
+
+/// Which awkward moments the raid is in this frame.
+fn moments_now(world: &mut World) -> Vec<Moment> {
+    use crate::bot::{Bot, Task};
+    let mut now = Vec::new();
+    let me = player(world);
+    let raid = world.resource::<Raid>();
+    let (phase, clock) = (raid.phase.clone(), raid.clock);
+    if phase == Phase::Out && clock > crate::raid::SURGE_AFTER {
+        now.push(Moment::Surge);
+    }
+    if matches!(phase, Phase::TruckWaiting { .. } | Phase::Extracting { .. }) {
+        now.push(Moment::Countdown);
+    }
+    if let Some(bot) = world.get::<Bot>(me) {
+        if bot.walk.is_some() && phase == Phase::Out {
+            now.push(Moment::MidWalk);
+        }
+        if matches!(bot.tasks.front(), Some(Task::Grab { .. })) {
+            now.push(Moment::MidGrab);
+        }
+    }
+    let held: Vec<Entity> = world
+        .query_filtered::<(Entity, &Held), With<Item>>()
+        .iter(world)
+        .filter(|(_, h)| h.player == me)
+        .map(|(e, _)| e)
+        .collect();
+    if !held.is_empty() {
+        now.push(Moment::InHand);
+    }
+    let reloading = held.iter().any(|e| {
+        world
+            .get::<Gun>(*e)
+            .and_then(|g| g.magwell)
+            .and_then(|w| world.get::<Socket>(w))
+            .is_some_and(|s| s.occupant.is_none())
+    }) && held.iter().any(|e| world.get::<Mag>(*e).is_some());
+    if reloading {
+        now.push(Moment::MidReload);
+    }
+    let feet = world.get::<GlobalTransform>(me).map(|g| g.translation());
+    let in_bed = feet.is_some_and(|p| {
+        world
+            .query::<(&crate::raid::truck::Truck, &GlobalTransform)>()
+            .iter(world)
+            .any(|(t, g)| t.in_bed(g, p + Vec3::Y * 0.1))
+    });
+    if in_bed {
+        now.push(Moment::InTheBed);
+    }
+    now
+}
+
+/// Everything the save holds, wherever it is (stash, body, hands, the
+/// ground, remains), each with its state but not its place: a resumed raid
+/// puts what was in your hands at your feet. Sorted, so two saves of the
+/// same things compare equal.
+fn items_held(save: &extraction_core::save::SaveGame) -> Vec<String> {
+    fn key(i: &SavedItem) -> String {
+        let mut inner: Vec<String> = i.inserted.iter().map(key).collect();
+        inner.sort();
+        format!(
+            "{} rounds {} condition {:.3} charge {:.2} loads {:?} gun {:?} [{}]",
+            i.id,
+            i.rounds,
+            i.condition,
+            i.charge_wh,
+            i.loads,
+            i.gun,
+            inner.join(", ")
+        )
+    }
+    let l = &save.loadout;
+    let mut out: Vec<String> = save
+        .stash
+        .iter()
+        .chain(l.slots.iter().map(|(_, i)| i))
+        .chain(l.backpack.iter())
+        .chain(l.hands.iter())
+        .chain(save.zone.items.iter().map(|p| &p.item))
+        .chain(save.zone.remains.iter().flat_map(|r| r.items.iter()))
+        .map(key)
+        .collect();
+    out.sort();
+    out
+}
+
+/// The career's parts a quit mustn't change: its tallies, the driver's
+/// jobs and contracts, the logbook, the memorial, the firsts.
+fn career_held(save: &extraction_core::save::SaveGame) -> String {
+    format!(
+        "stats {:?}\nrequests {:?}\nprogress {:?}\nlogbook {:?}\nmemorial {:?}\nfirsts {:?}",
+        save.stats, save.requests, save.progress, save.logbook, save.memorial, save.firsts
+    )
+}
+
+/// Saves, loads into a fresh raid, and says what changed over it.
+fn quit_and_reload(
+    a: &mut App,
+    path: &Path,
+    map: &str,
+    seed: u64,
+    when: &str,
+) -> (App, Vec<String>) {
+    let before = snapshot(a.world_mut());
+    save(a, path);
+    let mut b = raid_on(path, map, seed);
+    check_world(b.world_mut(), &format!("{when}, loaded"));
+    let after = snapshot(b.world_mut());
+    let mut found = Vec::new();
+    let (x, y) = (items_held(&before), items_held(&after));
+    if x != y {
+        let mut lost: Vec<String> = x.iter().filter(|k| !y.contains(k)).cloned().collect();
+        let mut more: Vec<String> = y.iter().filter(|k| !x.contains(k)).cloned().collect();
+        lost.dedup();
+        more.dedup();
+        found.push(format!(
+            "{when}: items changed ({} before, {} after)\n    gone or changed: {}\n    new or changed: {}",
+            x.len(),
+            y.len(),
+            lost.join("\n      "),
+            more.join("\n      ")
+        ));
+    }
+    let (c, d) = (career_held(&before), career_held(&after));
+    if c != d {
+        found.push(format!(
+            "{when}: the career changed\n    before {c}\n    after  {d}"
+        ));
+    }
+    (b, found)
+}
+
+/// A playtester moving house quits at odd moments. In every valley, on
+/// each of `QUIT_SEEDS`, a bot raid is saved and loaded into a fresh game
+/// the first time each of `MOMENTS` comes round: mid-walk, mid-grab, with
+/// something in hand, mid-reload, in the truck's bed, in the Surge, in the
+/// extract countdown. Each time nothing is lost or doubled (every item by
+/// id and state, the stash, the body and the ground), each gun keeps its
+/// state (chambers, magazine, fouling: in the saved item), and the career
+/// (its tallies, jobs and contracts, logbook) is as it was. Replay a
+/// finding: `cargo test --profile fast --lib -- --ignored
+/// soak_quit_anywhere --nocapture` with `QUIT_MAP` and `QUIT_SEED`.
+#[test]
+#[ignore = "soak: cargo test --profile fast --lib -- --ignored soak_quit_anywhere"]
+fn soak_quit_anywhere_in_every_valley() {
+    let maps: Vec<String> = match std::env::var("QUIT_MAP") {
+        Ok(m) => vec![m],
+        Err(_) => crate::test_maps()
+            .into_iter()
+            .filter(|m| m != crate::camp::TRAINING_YARD)
+            .collect(),
+    };
+    let seeds: Vec<u64> = std::env::var("QUIT_SEED")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .map_or(QUIT_SEEDS.to_vec(), |s| vec![s]);
+    let mut findings = Vec::new();
+    let mut covered = std::collections::HashSet::new();
+    for map in &maps {
+        for &seed in &seeds {
+            let path = profile(&format!("quit-{map}-{seed}"));
+            let mut a = raid_on(&path, map, seed);
+            let mut done = std::collections::HashSet::new();
+            let mut frame = 0usize;
+            while frame < 90 * 60 * 14 && done.len() < MOMENTS.len() {
+                a.update();
+                frame += 1;
+                for m in moments_now(a.world_mut()) {
+                    if done.insert(m) {
+                        let when = format!("{map} seed {seed}, {m:?} at frame {frame}");
+                        println!("quit: {when}");
+                        let (b, f) = quit_and_reload(&mut a, &path, map, seed, &when);
+                        a = b;
+                        covered.insert(m);
+                        findings.extend(f);
+                        break;
+                    }
+                }
+                if a.world().resource::<Raid>().phase == Phase::AtBase && frame > 90 * 60 {
+                    break;
+                }
+            }
+            println!("{map} seed {seed}: quit at {:?} over {frame} frames", done);
+        }
+    }
+    let missed: Vec<&Moment> = MOMENTS.iter().filter(|m| !covered.contains(*m)).collect();
+    assert!(
+        findings.is_empty(),
+        "{} findings over a quit and reload:\n{}",
+        findings.len(),
+        findings.join("\n\n")
+    );
+    assert!(
+        missed.is_empty(),
+        "never quit at {missed:?}: the soak didn't reach them"
+    );
+}
