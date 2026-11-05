@@ -509,6 +509,7 @@ fn offer_job(
             .find(|(id, _)| *id == opts.map)
             .and_then(|(id, map)| extraction_core::progression::first_job(id, map));
         progression.0.job_raid = raid.raids;
+        progression.0.lost_on_job = 0;
         raid.say(lines::job_here(&valley_name(&opts.map)));
     }
     if progression.0.job.is_some() {
@@ -580,6 +581,7 @@ fn offer_job(
     info!("job {}: {job:?}", progression.0.done + 1);
     progression.0.job = Some(job);
     progression.0.job_raid = raid.raids;
+    progression.0.lost_on_job = 0;
 }
 
 /// A Recover job in this valley with no recorder anywhere (not yet put
@@ -876,10 +878,11 @@ fn nudge(
 /// done: the driver says it's still waiting, and where (from the drop, as
 /// the card has it, in this valley; or which valley).
 fn restate_after_fall(
-    progression: Res<Progression>,
+    mut progression: ResMut<Progression>,
     mut raid: ResMut<Raid>,
     opts: Res<LaunchOptions>,
     zone: Res<Zone>,
+    mind: Option<Res<crate::robots::memory::ZoneMind>>,
     // The falls counted so far, and one not yet answered.
     mut seen: Local<Option<(u32, bool)>>,
 ) {
@@ -887,6 +890,10 @@ fn restate_after_fall(
     if raid.deaths > *deaths {
         *deaths = raid.deaths;
         *owed = true;
+        // Lost on this job, one more raid running.
+        if progression.0.job.is_some() {
+            progression.0.lost_on_job += 1;
+        }
     }
     if !*owed || raid.phase != Phase::AtBase {
         return;
@@ -905,7 +912,22 @@ fn restate_after_fall(
             .marker(&extraction_core::map::MarkerKind::Insertion)
             .map_or([0.0, 0.0], |m| m.at);
         let way = crate::raid::lines::way(drop, mark);
-        raid.say(lines::job_waiting(&place, Some(&way)));
+        // A contract's step lost raid after raid on the way the machines
+        // know: another way in to it (the step stays: its place on the
+        // ladder).
+        let another = (progression.0.contract.is_some()
+            && progression.0.lost_on_job >= extraction_core::progression::ANOTHER_WAY_AFTER)
+            .then_some(())
+            .and(mind.as_ref())
+            .and_then(|m| {
+                extraction_core::progression::another_way(&zone.map, &m.memory, drop, mark)
+            });
+        match another {
+            Some((via, at)) => {
+                raid.say(lines::another_way(&via, &crate::raid::lines::way(drop, at)))
+            }
+            None => raid.say(lines::job_waiting(&place, Some(&way))),
+        }
     } else {
         raid.say(lines::job_waiting(&place, Some(&valley_name(map))));
     }

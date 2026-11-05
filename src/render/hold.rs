@@ -814,7 +814,8 @@ mod tests {
     /// that moves, not an item of the table, which the test above holds,
     /// nor one only pressed) or take up to read is held every way by the
     /// rule, or listed. A
-    /// thing whose collider isn't a box gets no seat: that fails too.
+    /// thing whose collider isn't a box gets no seat: that fails too. And
+    /// a thing taken up to read shows its text to the eyes, legible.
     #[test]
     fn every_world_thing_carried_free_is_held_by_the_glove() {
         use avian3d::prelude::{Collider, RigidBody};
@@ -823,6 +824,14 @@ mod tests {
             .map(|v| v.0)
             .chain([crate::camp::TRAINING_YARD]);
         let mut found: std::collections::BTreeMap<String, Option<Vec3>> = Default::default();
+        // What each thing taken up to read says, and what it is.
+        let mut texts: std::collections::BTreeMap<
+            String,
+            Option<(
+                crate::raid::bench::ScreenText,
+                crate::render::legibility::TextSource,
+            )>,
+        > = Default::default();
         for map in maps {
             let _counting = crate::render::budget::tests::counted();
             let mut app = crate::render::budget::tests::client_threads(map, "clearing", None);
@@ -837,8 +846,10 @@ mod tests {
                 Has<crate::items::Item>,
                 Has<crate::raid::truck::Pressable>,
                 Has<crate::interact::read::Readable>,
+                Option<&crate::raid::bench::ScreenText>,
+                Option<&crate::render::legibility::TextSource>,
             )>();
-            for (e, g, name, collider, body, item, pressed, read) in q.iter(world) {
+            for (e, g, name, collider, body, item, pressed, read, text, source) in q.iter(world) {
                 let free = g
                     .points
                     .iter()
@@ -853,6 +864,11 @@ mod tests {
                 let half = collider
                     .and_then(|c| c.shape_scaled().as_cuboid())
                     .map(|c| Vec3::new(c.half_extents.x, c.half_extents.y, c.half_extents.z));
+                if read {
+                    texts
+                        .entry(format!("{name} ({map})"))
+                        .or_insert(text.cloned().zip(source.copied()));
+                }
                 found.entry(format!("{name} ({map})")).or_insert(half);
             }
         }
@@ -877,9 +893,57 @@ mod tests {
                 _ => {}
             }
         }
+        // Taken up to read, each shows its text to the eyes, legible:
+        // held up as `interact::read` holds it (`held_up`) in hands from
+        // close under the chin to arm's length, its text face (+Z) turned
+        // to the eye and its smallest letters over its floor
+        // (`render::legibility`) from there.
+        let eye = Vec3::new(0.0, 1.6, 0.0);
+        let hands = [
+            Vec3::new(0.12, 1.2, -0.28),
+            Vec3::new(-0.12, 1.25, -0.35),
+            Vec3::new(0.2, 1.15, -0.45),
+            Vec3::new(0.0, 1.3, -0.5),
+        ];
+        println!("{} things taken up to read:", texts.len());
+        for (name, text) in &texts {
+            let Some((screen, source)) = text else {
+                println!("  {name}: no text");
+                bad.push(format!("{name}: taken up to read, but it has no text"));
+                continue;
+            };
+            let floor = source.reading().need.floor();
+            let em = crate::render::screen::em_metres(screen);
+            let letters = crate::render::legibility::letter_height(&screen.text, em);
+            let mut worst = f32::MAX;
+            let mut faced = 1.0f32;
+            for hand in hands {
+                let at = crate::interact::read::held_up(hand, eye, screen.size);
+                let to_eye = (eye - at.translation).normalize();
+                let face = at.rotation * Vec3::Z;
+                faced = faced.min(face.dot(to_eye));
+                let tilt = face.dot(to_eye).clamp(-1.0, 1.0).acos().to_degrees();
+                let deg =
+                    crate::render::legibility::angle(letters, eye.distance(at.translation), tilt);
+                worst = worst.min(deg);
+            }
+            println!(
+                "  {name} ({source:?}): faces the eye {faced:.3}, letters {worst:.2} deg (floor {floor})"
+            );
+            if faced < 0.99 {
+                bad.push(format!(
+                    "{name}: its text face turned {faced:.2} to the eye"
+                ));
+            }
+            if worst + 1e-4 < floor {
+                bad.push(format!(
+                    "{name}: letters {worst:.2} deg held up, under its floor {floor}"
+                ));
+            }
+        }
         assert!(
             bad.is_empty(),
-            "{} world things not held:\n{}",
+            "{} world things not held or not legible:\n{}",
             bad.len(),
             bad.join("\n")
         );

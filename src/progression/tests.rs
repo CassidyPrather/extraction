@@ -1044,3 +1044,79 @@ fn every_gift_gun_fires_from_its_gift() {
         }
     }
 }
+
+/// A contract's step lost raid after raid on the way the machines know
+/// (reckless, first_jobs: nine raids lost on one step, each on the way to
+/// the weir cottage): at the second loss running the driver names another
+/// way in, by a place that comes at it from another side. A first loss
+/// gets the step as it stands.
+#[test]
+fn a_step_lost_twice_running_gets_another_way() {
+    let mut app = crate::raid::requests::tests::app();
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let drop = zone
+        .marker(&extraction_core::map::MarkerKind::Insertion)
+        .unwrap()
+        .at;
+    let to = extraction_core::contracts::place_at(&zone.map, "Radio mast").unwrap();
+    {
+        let mut p = app.world_mut().resource_mut::<Progression>();
+        p.0.job = Some(Job::Plant {
+            map: "marrow_creek".into(),
+            place: "Radio mast".into(),
+            item: "relay_box".into(),
+            at: to,
+            planted: false,
+        });
+        p.0.contract = Some(extraction_core::contracts::Active {
+            id: "mast_relay".into(),
+            step: 0,
+        });
+        p.0.lost_on_job = 0;
+    }
+    // The habit: the straight way in, known to the Zone.
+    {
+        let mut mind = app
+            .world_mut()
+            .resource_mut::<crate::robots::memory::ZoneMind>();
+        let steps = (extraction_core::geom::dist(drop, to) / 10.0).ceil() as usize;
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let c = extraction_core::zone_memory::cell(
+                drop[0] + (to[0] - drop[0]) * t,
+                drop[1] + (to[1] - drop[1]) * t,
+            );
+            if !mind.memory.heat.iter().any(|(h, _)| *h == c) {
+                mind.memory.heat.push((c, 2.0));
+            }
+        }
+    }
+    let fall = |app: &mut App| {
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().deaths += 1;
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        app.update();
+        app.update();
+    };
+    let said = |app: &App, what: &str| {
+        app.world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .filter(|(l, _)| l.contains(what))
+            .count()
+    };
+    fall(&mut app);
+    assert_eq!(progress(&app).lost_on_job, 1);
+    assert_eq!(said(&app, "They know your way"), 0, "not at the first loss");
+    fall(&mut app);
+    assert_eq!(
+        said(&app, "They know your way"),
+        1,
+        "{:?}",
+        app.world().resource::<Raid>().log
+    );
+    // The step stays.
+    assert!(matches!(progress(&app).job, Some(Job::Plant { .. })));
+}
