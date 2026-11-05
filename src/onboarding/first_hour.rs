@@ -3257,7 +3257,7 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
-        for d in round_decks(&decks, at, r) {
+        for d in round_decks(&world.zone, &decks, at, r) {
             for q in round_boxes(&boxes, at, d) {
                 t.extend(world.legs(at, q));
                 at = q;
@@ -3273,7 +3273,12 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
 /// `b`. (Along the ravine under Marrow's footbridge by the ranger tower,
 /// a walk to a point on the deck stood at the bank below it, a metre and a
 /// half down, three times in one raid.)
-fn round_decks(decks: &[(crate::world::bridges::Deck, [Vec2; 2])], a: Vec2, b: Vec2) -> Vec<Vec2> {
+fn round_decks(
+    zone: &crate::world::Zone,
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    a: Vec2,
+    b: Vec2,
+) -> Vec<Vec2> {
     // (On it: within its width. Its footprint: a body's width more.)
     const ON: f32 = 0.2;
     const NEAR: f32 = 0.6;
@@ -3285,7 +3290,15 @@ fn round_decks(decks: &[(crate::world::bridges::Deck, [Vec2; 2])], a: Vec2, b: V
         }
     };
     for (d, ends) in decks {
-        let (on_a, on_b) = (d.holds(a, ON), d.holds(b, ON));
+        // On it: over it, and the ground there up to its height (under it,
+        // in the ravine, is off it).
+        let on = |p: Vec2| {
+            let len = d.a.distance(d.b).max(1e-3);
+            let t = (d.along(p) / len).clamp(0.0, 1.0);
+            let deck_y = d.ya + (d.yb - d.ya) * t;
+            d.holds(p, ON) && zone.ground(p.x, p.y) >= deck_y - 0.6
+        };
+        let (on_a, on_b) = (on(a), on(b));
         if on_a && on_b {
             continue;
         }
