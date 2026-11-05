@@ -68,93 +68,87 @@ fn flash_lamps(time: Res<Time<Virtual>>, mut lamps: Query<(&Lamp, &mut Visibilit
 #[derive(Component)]
 pub(crate) struct DayGlow;
 
-/// A piece's highest point, in the prefab's frame, and whether it stands
-/// level (its own up is the prefab's). Level, it's the middle of its top
-/// (a chimney's mouth, a flat roof). Tilted, it's the middle of its
-/// highest corners: a hipped roof's slabs lean in, and their centres
-/// pushed up along their own tilted up came out lower than a corner
-/// post's top, so the lamp went on the post, under the eave (Marrow's
-/// watchtower: a sliver of red past the roof's edge, DIM at 150 m).
-fn highest(p: &crate::world::buildings::Piece) -> (Vec3, bool) {
-    let level = (p.at.rotation * Vec3::Y).y > 0.999;
-    let corners: Vec<Vec3> = match p.shape {
-        Shape::Box(s) => {
-            let h = s * 0.5;
-            (0..8)
-                .map(|i| {
-                    Vec3::new(
-                        if i & 1 == 0 { -h.x } else { h.x },
-                        if i & 2 == 0 { -h.y } else { h.y },
-                        if i & 4 == 0 { -h.z } else { h.z },
-                    )
-                })
-                .collect()
-        }
-        // `materials::gable_prism`: the base at the origin, the ridge at
-        // its full height along Z.
-        Shape::Prism(s) => vec![
-            Vec3::new(-s.x * 0.5, 0.0, -s.z * 0.5),
-            Vec3::new(s.x * 0.5, 0.0, -s.z * 0.5),
-            Vec3::new(-s.x * 0.5, 0.0, s.z * 0.5),
-            Vec3::new(s.x * 0.5, 0.0, s.z * 0.5),
-            Vec3::new(0.0, s.y, -s.z * 0.5),
-            Vec3::new(0.0, s.y, s.z * 0.5),
-        ],
-        Shape::Cylinder(r, h) => (0..16)
-            .map(|i| {
-                let a = i as f32 * std::f32::consts::TAU / 8.0;
-                let y = if i < 8 { h * 0.5 } else { -h * 0.5 };
-                Vec3::new(r * a.cos(), y, r * a.sin())
-            })
-            .collect(),
+/// The highest a prefab's pieces come (m, over its origin), and how near
+/// to it another piece's top must be to count as level with it.
+const TIED: f32 = 0.05;
+
+/// A piece's top, the middle of it, in its prefab's frame.
+fn piece_top(p: &crate::world::buildings::Piece) -> Vec3 {
+    // How far up from its origin its top is: a box's and a cylinder's
+    // origin is their middle, a gable prism's its base
+    // (`materials::gable_prism`: the ridge at its full height).
+    let up = match p.shape {
+        Shape::Box(s) => s.y * 0.5,
+        Shape::Prism(s) => s.y,
+        Shape::Cylinder(_, h) => h * 0.5,
     };
-    let world: Vec<Vec3> = corners.iter().map(|c| p.at.transform_point(*c)).collect();
-    let top = world.iter().map(|c| c.y).fold(f32::NEG_INFINITY, f32::max);
-    if level {
-        // The middle of its top, at the top's height.
-        let mid = match p.shape {
-            Shape::Prism(s) => Vec3::new(0.0, s.y, 0.0),
-            Shape::Box(s) => Vec3::new(0.0, s.y * 0.5, 0.0),
-            Shape::Cylinder(_, h) => Vec3::new(0.0, h * 0.5, 0.0),
-        };
-        return (p.at.transform_point(mid), true);
-    }
-    let ties: Vec<Vec3> = world.into_iter().filter(|c| c.y > top - 0.01).collect();
-    (
-        ties.iter().copied().sum::<Vec3>() / ties.len() as f32,
-        false,
-    )
+    p.at.translation + p.at.rotation * Vec3::Y * up
 }
 
-/// The prefab's highest piece, its highest point, and whether it's level.
-fn top_piece(id: &str) -> Option<(crate::world::buildings::Piece, Vec3, bool)> {
-    let geo = prefab(id)?;
-    geo.pieces
+/// How far apart level tops may be and still count as one top (m): a
+/// cage's corner posts or a mast's legs, not a dam's two end turrets.
+const ONE_TOP: f32 = 10.0;
+
+/// The pieces whose tops are a prefab's highest, level within `TIED`, and
+/// of those the ones that make one top: within `ONE_TOP` of the one
+/// nearest the prefab's middle.
+fn highest(geo: &crate::world::buildings::Geo) -> Vec<&crate::world::buildings::Piece> {
+    let peak = geo
+        .pieces
         .iter()
-        .map(|p| {
-            let (at, level) = highest(p);
-            (p.clone(), at, level)
-        })
-        .max_by(|a, b| a.1.y.total_cmp(&b.1.y))
+        .map(|p| piece_top(p).y)
+        .fold(f32::MIN, f32::max);
+    let tied: Vec<_> = geo
+        .pieces
+        .iter()
+        .filter(|p| piece_top(p).y >= peak - TIED)
+        .collect();
+    let Some(seed) = tied
+        .iter()
+        .map(|p| piece_top(p).xz())
+        .min_by(|a, b| a.length().total_cmp(&b.length()))
+    else {
+        return tied;
+    };
+    tied.into_iter()
+        .filter(|p| (piece_top(p).xz() - seed).length() <= ONE_TOP)
+        .collect()
 }
 
-/// The highest point of a prefab, in its own frame (see [`highest`]),
-/// or of its dressed art where that stands higher (see [`art_top`]).
+/// The highest point of a prefab's pieces, in its own frame: the middle
+/// of its highest pieces' tops (a cage's four corner posts level at the
+/// top put the lamp over the cage, not on one corner of it).
+fn pieces_top(geo: &crate::world::buildings::Geo) -> Option<Vec3> {
+    let tops: Vec<Vec3> = highest(geo).into_iter().map(piece_top).collect();
+    (!tops.is_empty()).then(|| tops.iter().copied().sum::<Vec3>() / tops.len() as f32)
+}
+
+/// The highest point of a prefab, in its own frame: its pieces' top, or
+/// its dressed art's where that stands higher ([`art_top`]).
 pub fn top_of(id: &str) -> Option<Vec3> {
-    let pieces = top_piece(id).map(|(_, at, _)| at);
+    let geo = prefab(id)?;
+    let pieces = pieces_top(&geo);
     match (pieces, art_top(id)) {
-        (Some(p), Some(a)) if a.y > p.y + 0.05 => Some(a),
+        (Some(p), Some(a)) if a.y > p.y + TIED => Some(a),
         (p, a) => p.or(a),
     }
+}
+
+/// Whether the lamp's top `t` is its dressed art's (the art stands over
+/// its pieces there, and carries it: a finial, a roof's peak).
+fn on_art(id: &str, t: Vec3) -> bool {
+    art_top(id)
+        .is_some_and(|a| (a.xz() - t.xz()).length() <= 0.3 && t.y >= a.y - 0.01 && t.y <= a.y + 0.6)
 }
 
 /// The highest point of a prefab's dressed art (its `models/props/` GLBs,
 /// posed as `Geo::props` has them): the middle of its highest vertices.
 /// A landmark dressed with a model can roof itself in the art alone: the
 /// mill race's hipped roof (25 to 27.4 m, a finial to 28.2) has no
-/// pieces, so its lamp went on a roof post's top at 25 m, under the eave:
+/// pieces, so its lamp sat on a roof post's top at 25 m, under the eave:
 /// a sliver of red past the roof's edge, DIM from 150 m. Read once a
-/// prefab; none (no GLB on disk) leaves the pieces to say.
+/// prefab; none where the prefab has no art, or its GLB can't be read
+/// (`every_landmark_lamp_stands_on_its_building` fails that loudly).
 fn art_top(id: &str) -> Option<Vec3> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
@@ -166,19 +160,25 @@ fn art_top(id: &str) -> Option<Vec3> {
     let geo = prefab(id)?;
     let root = crate::asset_root_path().join("models/props");
     let mut best: Option<Vec3> = None;
-    for prop in &geo.props {
-        for (name, at) in &prop.models {
-            let Some(local) = glb_top(&root.join(format!("{name}.glb"))) else {
-                continue;
-            };
-            let p = at.transform_point(local);
-            if best.is_none_or(|b| p.y > b.y) {
-                best = Some(p);
-            }
+    for (name, at) in art_of(&geo) {
+        let Some(local) = glb_top(&root.join(format!("{name}.glb"))) else {
+            continue;
+        };
+        let p = at.transform_point(local);
+        if best.is_none_or(|b| p.y > b.y) {
+            best = Some(p);
         }
     }
     cache.lock().ok()?.insert(id.to_owned(), best);
     best
+}
+
+/// The models a prefab is dressed with, posed in its frame.
+fn art_of(geo: &crate::world::buildings::Geo) -> Vec<(&'static str, Transform)> {
+    geo.props
+        .iter()
+        .flat_map(|p| p.models.iter().copied())
+        .collect()
 }
 
 /// A GLB's highest vertices' middle, in its own frame (node transforms
@@ -213,31 +213,62 @@ fn glb_top(path: &std::path::Path) -> Option<Vec3> {
     (!ties.is_empty()).then(|| ties.iter().copied().sum::<Vec3>() / ties.len() as f32)
 }
 
+/// Whether some piece of a prefab, solid or dressing, has its top just
+/// under `t` (within 0.6 m), there to carry a lamp.
+fn carried(geo: &crate::world::buildings::Geo, t: Vec3) -> bool {
+    geo.pieces.iter().any(|q| {
+        let l = q.at.compute_affine().inverse().transform_point3(t);
+        let (inside, top) = match q.shape {
+            Shape::Box(s) => (l.x.abs() <= s.x * 0.5 && l.z.abs() <= s.z * 0.5, s.y * 0.5),
+            Shape::Prism(s) => (l.x.abs() <= s.x * 0.5 && l.z.abs() <= s.z * 0.5, s.y),
+            Shape::Cylinder(r, h) => (l.xz().length() <= r, h * 0.5),
+        };
+        let y = (q.at.translation + q.at.rotation * Vec3::Y * top).y;
+        inside && y <= t.y + 0.01 && y >= t.y - 0.6
+    })
+}
+
+/// The bars a lamp sits on where nothing of its building is under the
+/// middle of its top (an open cage, a mast's legs): one from the lamp out
+/// to each of the top's pieces, in the prefab's frame.
+pub fn lamp_seat(id: &str) -> Vec<(Vec3, Vec3)> {
+    let (Some(geo), Some(t)) = (prefab(id), top_of(id)) else {
+        return Vec::new();
+    };
+    // On its art's top (a finial, a roof's peak), or on a piece: no bars.
+    if on_art(id, t) || carried(&geo, t) {
+        return Vec::new();
+    }
+    highest(&geo)
+        .into_iter()
+        .map(|p| (t, piece_top(p)))
+        .collect()
+}
+
 /// How far a landmark's lamp stands up off its top, on a pole: half the
 /// top's width times 0.75, so a wide flat top (a chimney's mouth, a
 /// tower's roof) doesn't hide it from below: it shows looking up at
 /// anything under 53 degrees (from 50 m off a 30 m chimney is 31). A
-/// pitched roof's lamp sits on the ridge, a hipped one's on its peak; no
-/// pole is over `POLE_MAX`.
+/// pitched roof's lamp sits on the ridge; no pole is over `POLE_MAX`.
 pub fn lamp_lift(id: &str) -> f32 {
-    let Some((p, at, level)) = top_piece(id) else {
+    let Some(geo) = prefab(id) else {
         return 0.0;
     };
-    let lift = if level {
-        match p.shape {
+    // The widest of the highest pieces sets it.
+    let lift = highest(&geo)
+        .into_iter()
+        .map(|p| match p.shape {
             Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
             Shape::Cylinder(r, _) => 0.75 * r,
             Shape::Prism(_) => 0.0,
-        }
-        .min(POLE_MAX)
-    } else {
-        0.0
-    };
+        })
+        .fold(0.0, f32::max)
+        .min(POLE_MAX);
     // On the art's own top where that's higher (`top_of`): only as much
     // pole as keeps the lamp where the pieces' top and pole had it, never
     // lower (a wide top's pole is what shows it from below).
-    match top_of(id) {
-        Some(t) if t.y > at.y + 0.05 => (at.y + lift - t.y).max(0.0),
+    match (pieces_top(&geo), top_of(id)) {
+        (Some(p), Some(t)) if t.y > p.y + TIED => (p.y + lift - t.y).max(0.0),
         _ => lift,
     }
 }
@@ -358,6 +389,31 @@ fn light_landmarks(
                 Transform::from_translation(top + Vec3::Y * lift * 0.5),
             ));
         }
+        // Bars to sit on, where its top is an open frame.
+        let seat = lamp_seat(&b.prefab);
+        if !seat.is_empty() {
+            let mat = pole_mat
+                .get_or_insert_with(|| {
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.08, 0.08, 0.08),
+                        perceptual_roughness: 0.7,
+                        metallic: 0.6,
+                        ..default()
+                    })
+                })
+                .clone();
+            for (from, to) in seat {
+                let run = (to - from).xz();
+                let bar = meshes.add(Cuboid::new(0.08, 0.08, run.length() + 0.1));
+                commands.entity(e).with_child((
+                    Name::new("Landmark lamp seat"),
+                    Mesh3d(bar),
+                    MeshMaterial3d(mat.clone()),
+                    Transform::from_translation((from + to) * 0.5 - Vec3::Y * 0.04)
+                        .with_rotation(Quat::from_rotation_y(run.x.atan2(run.y))),
+                ));
+            }
+        }
         commands.entity(e).with_children(|c| {
             c.spawn((
                 Name::new("Landmark lamp"),
@@ -449,6 +505,30 @@ fn day_glows(
 mod tests {
     use super::*;
 
+    /// A top that's several pieces level with each other (the mill race's
+    /// cage, four corner posts) is the middle of them, not whichever came
+    /// last. (The mill race's lamp itself goes higher, on its art's roof:
+    /// `the_mill_race_lamp_tops_its_roof`.)
+    #[test]
+    fn a_lamp_stands_over_the_middle_of_a_level_top() {
+        let geo = prefab("mill_race").unwrap();
+        let tied = highest(&geo);
+        assert!(tied.len() > 1, "the mill race's top is its cage's posts");
+        let mid = tied.iter().map(|p| piece_top(p)).sum::<Vec3>() / tied.len() as f32;
+        let top = pieces_top(&geo).unwrap();
+        assert!(
+            (top - mid).length() < 0.01,
+            "lamp at {top:?}, the posts' middle {mid:?}"
+        );
+        for p in tied {
+            let t = piece_top(p);
+            assert!(
+                (t.xz() - top.xz()).length() > 0.5,
+                "the lamp still on a post at {t:?}"
+            );
+        }
+    }
+
     /// With the clock stopped every lamp shows, whatever its phase: the
     /// captures' stills stop it to shoot every lamp lit, the same each
     /// build. Running, a lamp goes dark between flashes.
@@ -513,93 +593,6 @@ mod tests {
         assert!(lamp_lift("house_plank") <= POLE_MAX);
     }
 
-    /// A landmark's lamp sits at its true highest point, whatever its roof:
-    /// no piece of the building reaches above the lamp's foot (a hipped
-    /// roof's slabs, leaning in, once left it on a corner post under the
-    /// eave), and on a tilted top it sits on the peak with no pole.
-    #[test]
-    fn every_landmark_lamp_is_at_its_highest_point() {
-        let mut bad = Vec::new();
-        for id in crate::world::buildings::PREFABS {
-            if prefab_footprint(id)[1] < LANDMARK_HEIGHT {
-                continue;
-            }
-            let (Some(top), Some(geo)) = (top_of(id), prefab(id)) else {
-                continue;
-            };
-            // Its pieces' and its dressed art's (the mill race's roof is
-            // art alone).
-            let peak = geo
-                .pieces
-                .iter()
-                .map(|p| highest(p).0.y)
-                .fold(f32::NEG_INFINITY, f32::max)
-                .max(art_top(id).map_or(f32::NEG_INFINITY, |a| a.y));
-            if top.y < peak - 0.02 {
-                bad.push(format!("{id}: lamp at {:.2}, its top at {peak:.2}", top.y));
-            }
-        }
-        assert!(bad.is_empty(), "{bad:#?}");
-    }
-
-    /// Taking the art's top never lowers a lamp: it stands at least where
-    /// the pieces' top and pole had it.
-    #[test]
-    fn the_art_top_never_lowers_a_lamp() {
-        for id in crate::world::buildings::PREFABS {
-            let Some((p, at, level)) = top_piece(id) else {
-                continue;
-            };
-            let pole = if level {
-                match p.shape {
-                    Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
-                    Shape::Cylinder(r, _) => 0.75 * r,
-                    Shape::Prism(_) => 0.0,
-                }
-                .min(POLE_MAX)
-            } else {
-                0.0
-            };
-            let lamp = top_of(id).unwrap().y + lamp_lift(id);
-            assert!(
-                lamp >= at.y + pole - 1e-3,
-                "{id}: {lamp} under {}",
-                at.y + pole
-            );
-        }
-    }
-
-    /// The mill race's lamp is on its roof's peak (the art's finial at
-    /// 28.2 m), not on a roof post's top under the eave.
-    #[test]
-    fn the_mill_race_lamp_tops_its_roof() {
-        let top = top_of("mill_race").unwrap();
-        assert!(top.y > 28.0, "{top}");
-        assert!(top.x.abs() < 0.2, "over the roof's middle: {top}");
-        assert_eq!(lamp_lift("mill_race"), 0.0);
-    }
-
-    /// A hipped roof's slab: its highest point is its upper edge, not its
-    /// middle pushed up along its own tilt.
-    #[test]
-    fn a_leaning_slab_tops_out_at_its_upper_edge() {
-        let slab = crate::world::buildings::Piece {
-            at: Transform::from_rotation(Quat::from_rotation_x(0.5)),
-            ..prefab("house_plank").unwrap().pieces[0]
-        };
-        let slab = crate::world::buildings::Piece {
-            shape: Shape::Box(Vec3::new(4.0, 0.1, 3.0)),
-            ..slab
-        };
-        let (at, level) = highest(&slab);
-        assert!(!level);
-        // Tilted 0.5 rad about X: the edge 1.5 m along Z comes up by
-        // 1.5 sin 0.5 (plus half the thickness on the cos).
-        let want = 1.5 * 0.5f32.sin() + 0.05 * 0.5f32.cos();
-        assert!((at.y - want).abs() < 0.01, "{} against {want}", at.y);
-        assert!(at.x.abs() < 1e-3, "the middle of the edge: {at}");
-    }
-
     /// Every landmark the valleys place has a top to carry a lamp, near the
     /// height it's listed at.
     #[test]
@@ -632,5 +625,97 @@ mod tests {
         }
         assert!(!seen.is_empty());
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every landmark's lamp stands on its building: inside the prefab's
+    /// footprint, and on something, solid or dressing, whose top is just
+    /// under it there, or on its seat's bars (no lamp in the air over an
+    /// open frame, none on one post of several).
+    #[test]
+    fn every_landmark_lamp_stands_on_its_building() {
+        let mut bad = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for (_, text) in extraction_core::map::VALLEYS {
+            let map = extraction_core::map::MapDef::from_ron(text).unwrap();
+            for p in &map.placements {
+                let [w, h, d] = prefab_footprint(&p.prefab);
+                if h < LANDMARK_HEIGHT || LIT.contains(&p.prefab.as_str()) {
+                    continue;
+                }
+                if !seen.insert(p.prefab.clone()) {
+                    continue;
+                }
+                let (Some(t), Some(geo)) = (top_of(&p.prefab), prefab(&p.prefab)) else {
+                    continue;
+                };
+                if t.x.abs() > w * 0.5 + 0.1 || t.z.abs() > d * 0.5 + 0.1 {
+                    bad.push(format!(
+                        "{}: lamp at ({:.1}, {:.1}) outside its {w} x {d} footprint",
+                        p.prefab, t.x, t.z
+                    ));
+                }
+                // Its dressed art must be there to read: a missing GLB
+                // would leave the pieces' top to stand in, and hide a lamp
+                // floating under an art-only roof.
+                let root = crate::asset_root_path().join("models/props");
+                for (name, _) in art_of(&geo) {
+                    if glb_top(&root.join(format!("{name}.glb"))).is_none() {
+                        bad.push(format!("no art for {} ({name}.glb)", p.prefab));
+                    }
+                }
+                // On a piece, on its dressed art's top (just over the art's
+                // highest vertices, not merely under art higher somewhere),
+                // or on its seat's bars.
+                let under =
+                    carried(&geo, t) || on_art(&p.prefab, t) || !lamp_seat(&p.prefab).is_empty();
+                if !under {
+                    bad.push(format!(
+                        "{}: nothing under its lamp at ({:.1}, {:.1}, {:.1})",
+                        p.prefab, t.x, t.y, t.z
+                    ));
+                }
+            }
+        }
+        assert!(seen.len() > 5, "only {} landmark prefabs", seen.len());
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// The mill race's lamp is on its roof's peak (the art's finial at
+    /// 28.2 m), not on a roof post's top at 25 m under the eave, and needs
+    /// no seat there.
+    #[test]
+    fn the_mill_race_lamp_tops_its_roof() {
+        let top = top_of("mill_race").unwrap();
+        assert!(top.y > 28.0, "{top}");
+        assert!(on_art("mill_race", top), "{top}");
+        assert!(lamp_seat("mill_race").is_empty());
+        assert_eq!(lamp_lift("mill_race"), 0.0);
+    }
+
+    /// Taking the art's top never lowers a lamp: it stands at least where
+    /// the pieces' top and pole had it.
+    #[test]
+    fn the_art_top_never_lowers_a_lamp() {
+        for id in crate::world::buildings::PREFABS {
+            let geo = prefab(id).unwrap();
+            let Some(p) = pieces_top(&geo) else {
+                continue;
+            };
+            let pole = highest(&geo)
+                .into_iter()
+                .map(|q| match q.shape {
+                    Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
+                    Shape::Cylinder(r, _) => 0.75 * r,
+                    Shape::Prism(_) => 0.0,
+                })
+                .fold(0.0, f32::max)
+                .min(POLE_MAX);
+            let lamp = top_of(id).unwrap().y + lamp_lift(id);
+            assert!(
+                lamp >= p.y + pole - 1e-3,
+                "{id}: {lamp} under {}",
+                p.y + pole
+            );
+        }
     }
 }

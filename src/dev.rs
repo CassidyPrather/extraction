@@ -555,6 +555,26 @@ fn gallery(
                 commands.insert_resource(BrokenWalkers(broken, 0));
                 commands.insert_resource(DeadLineUp(dead, 0));
             }
+            s if s.starts_with("items:") => {
+                // A row of items lying side by side on the ground DIST
+                // ahead (1.2 m), for a contact sheet of every kind:
+                // `items:tea_tin+matches+bolt`. Each rests on its box's
+                // floor, turned TURN; SHIFT spaces them (0.3 m).
+                let ids: Vec<&str> = s["items:".len()..].split('+').collect();
+                let right = Vec3::new(-flat.z, 0.0, flat.x);
+                let gap = if shift > 0.0 { shift } else { 0.3 };
+                let d = dist.unwrap_or(1.2);
+                for (i, id) in ids.iter().enumerate() {
+                    let Some(kind) = catalog.kind(id) else {
+                        continue;
+                    };
+                    let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * d + right * off;
+                    let half = catalog.get(kind).size_m()[1] * 0.5;
+                    let at = zone.on_ground(at.x, at.z) + Vec3::Y * (half + 0.002);
+                    spawn_static(&mut commands, id, at);
+                }
+            }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
                 // the camera, looking where the camera looks.
@@ -963,7 +983,16 @@ fn first_person_hands(
     for mut v in &mut players {
         *v = Visibility::Hidden;
     }
-    let eye = Vec3::new(cam.x, cam.y.max(zone.ground(cam.x, cam.z) + 0.3), cam.z);
+    // Where the camera stands its eye (`render`'s camera override): a
+    // height of 0 or less is standing there, 1.7 m up. (Taken as given,
+    // the hands were set out round the feet, under the view.)
+    let ground = zone.ground(cam.x, cam.z);
+    let eye_y = if cam.y <= 0.0 {
+        ground + crate::render::EYE_OVER_FEET
+    } else {
+        cam.y.max(ground + 0.3)
+    };
+    let eye = Vec3::new(cam.x, eye_y, cam.z);
     let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
     let fwd = rot * Vec3::NEG_Z;
     let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
@@ -1035,6 +1064,47 @@ fn first_person_hands(
             "open" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.0; 5]);
                 glove(&mut commands, Side::Right, rest(Side::Right), [0.0; 5]);
+            }
+            // The job card taken up to read, as `interact::read` holds it:
+            // its bottom edge 30 mm over the right hand, facing the eye,
+            // the glove seated on it (`render::hold`).
+            "read" => {
+                glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);
+                let hand = rest(Side::Right);
+                let size = Vec2::new(0.3, 0.26);
+                let at = hand.translation + Vec3::Y * (size.y * 0.5 + 0.03) / zoom;
+                let card = Transform::from_translation(at).looking_to(-(eye - at), Vec3::Y);
+                // (Its mesh and paper added once spawned: the glove holds
+                // the asset stores.)
+                commands
+                    .spawn(view(card))
+                    .queue(move |mut e: EntityWorldMut| {
+                        let (mesh, paper) = e.world_scope(|w| {
+                            let mesh = w
+                                .resource_mut::<Assets<Mesh>>()
+                                .add(Cuboid::new(size.x, size.y, 0.004));
+                            let paper = w.resource_mut::<Assets<StandardMaterial>>().add(
+                                StandardMaterial {
+                                    base_color: Color::srgb(0.86, 0.83, 0.74),
+                                    perceptual_roughness: 0.9,
+                                    ..default()
+                                },
+                            );
+                            (mesh, paper)
+                        });
+                        e.insert((Mesh3d(mesh), MeshMaterial3d(paper)));
+                    });
+                let rel = Transform::from_matrix(
+                    (hand.compute_affine().inverse() * card.compute_affine()).into(),
+                );
+                let half = Vec3::new(size.x, size.y, 0.01) * 0.5;
+                let seat = crate::render::hold::seat(Side::Right, half, rel);
+                let h = glove(&mut commands, Side::Right, hand * seat.glove(), seat.curl);
+                commands.entity(h).queue(move |mut e: EntityWorldMut| {
+                    if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
+                        v.thumb = Some(seat.thumb);
+                    }
+                });
             }
             "point" => {
                 glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]);

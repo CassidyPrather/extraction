@@ -147,3 +147,25 @@ The weakest rows after dark are the heavy (113 px: its eye, no halo) and the sen
 ![walker, night](awareness_walker_night_before_after.png)
 ![drone, dusk](awareness_drone_dusk_before_after.png)
 ![drone, night](awareness_drone_night_before_after.png)
+
+## A wreck's salvage where you can see it and get at it
+
+`vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached` kills each machine that wrecks on open ground and lets it come to rest: the walker and the drone on five seeds each, the crawler, the hound and the heavy. It then checks every part a hand takes off: what's seated, its bolts and cables, its plates, and the heavy's seats. Each part has to pass two checks:
+
+- **Seen:** it is in sight from eyes 1.65 m up, standing 1.5 m off on some side.
+- **Reached:** it is within `stance::ARM` of a shoulder somewhere between 0.55 m (crouched, leaning in) and 1.45 m (standing). The arm's line has to be clear, from a spot where your body fits beside the wreck.
+
+What it found, and what changed:
+
+- **Walker:** it fell belly down, with its hip servo packs 0.16 m up under the orb (Models' wreck pass). As it settles, a walker's wreck now rocks over onto its bare side (`wreck::bare_side`, `roll_to_rest`), the side furthest from everything that comes off it. The servo packs are on the soundest side's two hips (`wreck::servo_hips`), and those two legs tear away as it lands, so the hips are bare. The other legs stay on under it and prop it.
+- **Drone:** it came down on its belly plate. It now goes over onto its back on impact.
+- **Heavy:** salvage gave it a walker's power cell, sealed inside its hull at 2.38 m, because the heavy is a walker too. `fit_salvage` now skips heavies; their seats are their own.
+
+Two of the heavy's rows are still pending, and they're Heavy's to fix: its back plates sit 1.9–2 m up on a wreck that stays on its legs, and its cell seat is inside its hull.
+
+Before and after, the walker and the drone 5 m off on the training yard in fog, after they've come to rest:
+
+![walker wreck](wreck_rests_on_bare_side_walker_before_after.png)
+![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)
+
+> **Reel spot.** Most recipes above put the camera at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
