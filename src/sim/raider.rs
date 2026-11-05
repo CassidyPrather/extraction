@@ -791,9 +791,46 @@ pub struct Scene<'w, 's> {
     flocks: Query<'w, 's, &'static crate::wildlife::flock::Flock>,
     herds: Query<'w, 's, &'static crate::wildlife::herd::Herd>,
     perches: Option<Res<'w, crate::wildlife::perches::Perches>>,
+    /// Every robot, standing or wrecked ([`Scene::wreck_at`]).
+    robot_state: Query<'w, 's, &'static Robot>,
 }
 
 impl Scene<'_, '_> {
+    /// Whether a wrecked robot's body is where a body walking across
+    /// `plan`'s floor at the world point `p` would be, at the shin or the
+    /// hip. (Not its loose debris: that's on the item layer, which a body
+    /// walks through.)
+    fn wreck_at(&self, plan: &BuildingPlan, p: Vec2) -> bool {
+        let local = plan.to_local(Vec3::new(p.x, 0.0, p.y)).xz();
+        let feet = plan
+            .xf
+            .transform_point(Vec3::new(local.x, plan.floor_at(local), local.y))
+            .y;
+        let filter = SpatialQueryFilter::from_mask([Layer::Robot]);
+        let wrecked = |e: Entity| self.robot_state.get(e).is_ok_and(|r| r.wrecked);
+        let is_wreck = |e: Entity| {
+            wrecked(e)
+                || self
+                    .names
+                    .get(e)
+                    .is_ok_and(|(_, parent)| parent.is_some_and(|p| wrecked(p.parent())))
+        };
+        [0.35, 0.95].iter().any(|h| {
+            let mut any = false;
+            self.spatial.shape_intersections_callback(
+                &Collider::sphere(0.26),
+                Vec3::new(p.x, feet + h, p.y),
+                Quat::IDENTITY,
+                &filter,
+                |e| {
+                    any |= is_wreck(e);
+                    !any
+                },
+            );
+            any
+        })
+    }
+
     /// The raid's clock less the time slept in it: a morning in the
     /// safehouse is a fresh start, not a raid gone late.
     fn awake(&self) -> f32 {
@@ -2591,6 +2628,58 @@ pub(crate) fn stand_within(goal: Vec2, to: Vec2, within: f32) -> f32 {
 /// Short of arm's reach a stop leaves, for the hand's last lean.
 const REACH_SPARE: f32 = 0.15;
 
+/// How many wrecks' worth of ground a take's route shuts before it gives
+/// the plan up as it is.
+const WRECK_SHUTS: usize = 8;
+
+/// A robot's wreck lying across a building's floor is nothing its plan
+/// knows of: the take's route to `goal`
+/// (building-local) is walked in the plan's mind first, at a body's
+/// height, and wherever it meets a wreck the ground there is shut in a
+/// copy of the plan, and the route found again round it in that (Marrow seed 7, 4
+/// November: through a Sorter it had just wrecked across the depot's
+/// aisle, two stucks). A robot still on its feet is no part of the
+/// floor: it moves, and is fought, not walked round.
+fn wrecks_shut(plan: &BuildingPlan, scene: &Scene, pos: Vec3, goal: Vec2) -> Option<BuildingPlan> {
+    let mut shut: Option<BuildingPlan> = None;
+    for _ in 0..WRECK_SHUTS {
+        let now = shut.as_ref().unwrap_or(plan);
+        let Some(route) = indoor_through_held(now, pos, goal, 0.3) else {
+            return shut;
+        };
+        let mut from = pos.xz();
+        let mut hit = None;
+        'legs: for t in &route {
+            let Task::WalkTo { to, .. } = t else {
+                continue;
+            };
+            let len = from.distance(*to);
+            let mut d = 0.3;
+            while d < len {
+                let p = from.lerp(*to, d / len);
+                if scene.wreck_at(now, p) {
+                    hit = Some(p);
+                    break 'legs;
+                }
+                d += 0.25;
+            }
+            from = *to;
+        }
+        let Some(p) = hit else {
+            return shut;
+        };
+        let local = plan.to_local(Vec3::new(p.x, pos.y, p.y)).xz();
+        shut.get_or_insert_with(|| plan.clone()).grid.block(
+            Obstacle::Circle {
+                at: local.to_array(),
+                radius: 0.4,
+            },
+            super::indoor::SITE_CLEARANCE,
+        );
+    }
+    shut
+}
+
 /// As [`indoor`], through doors held shut on power: for a route that
 /// throws their switches first.
 fn indoor_through_held(
@@ -2623,13 +2712,33 @@ fn indoor_path(
     within: f32,
     through_held: bool,
 ) -> Option<Vec<Task>> {
-    let a = plan.to_local(from).xz();
+    let here = plan.to_local(from).xz();
+    // Standing where the plan has no floor just outside a wall (by a
+    // porch's steps), the grid's nearest floor can be through the wall:
+    // start from the nearest on this side of it, and walk there first
+    // (Marrow seed 1, 4 November: from beside a plank house's porch the
+    // route went straight at the loot through its front wall).
+    // (Not down a site: there every cell is inside, and the nearest floor
+    // 3 m off can be a gallery behind the rock; Rime seed 8, adit_rime.)
+    let a = if plan.grid.walkable(here.to_array()) || plan.levels.is_some() {
+        here
+    } else {
+        // (Out to 3 m: a front's strip the plan shuts, by a porch's
+        // steps, can be that deep.)
+        near_walkable_same_side_within(plan, here, 3.0).unwrap_or(here)
+    };
     let path = if through_held {
         plan.path_through_held(a, goal)?
     } else {
         plan.path(a, goal)?
     };
     let mut tasks = Vec::new();
+    if a.distance(here) > 0.3 {
+        tasks.push(Task::WalkTo {
+            to: plan.world2(a),
+            within: 0.3,
+        });
+    }
     // A long straight run (an underground site's long stair) in legs, each
     // well inside a walk's time.
     let walk = |tasks: &mut Vec<Task>, from: Vec2, to: Vec2, within: f32| {
@@ -2712,11 +2821,16 @@ fn indoor_path(
 /// Wedged in a corner, the nearest walkable cell can be through the wall:
 /// the nearest one on the same side of the footprint's edge instead.
 fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
+    near_walkable_same_side_within(plan, from, 1.5)
+}
+
+/// As [`near_walkable_same_side`], looking up to `metres` off.
+fn near_walkable_same_side_within(plan: &BuildingPlan, from: Vec2, metres: f32) -> Option<Vec2> {
     let g = &plan.grid;
     let within = |p: Vec2, pad: f32| p.x.abs() < plan.half.x + pad && p.y.abs() < plan.half.y + pad;
     let inside = within(from, 0.0);
     let (ci, cj) = g.cell_of(from.to_array())?;
-    let r = (1.5 / g.cell).ceil() as i64;
+    let r = (metres / g.cell).ceil() as i64;
     let mut best: Option<(f32, Vec2)> = None;
     for dj in -r..=r {
         for di in -r..=r {
@@ -3939,11 +4053,15 @@ fn take_item(
     let mut tasks = Vec::new();
     match r.sites[s].kind {
         SiteKind::Building(b) => {
-            let plan = &r.plans[b];
-            if !plan.in_grid(pos) {
+            if !r.plans[b].in_grid(pos) {
                 return None;
             }
-            let goal = plan.to_local(at).xz();
+            let goal = r.plans[b].to_local(at).xz();
+            // (The wreck shut in a copy for this take's route only: a
+            // gallery a wreck half fills is shut for good otherwise, every
+            // walk out after planned round it into the walls; Rime seed 8.)
+            let shut = wrecks_shut(&r.plans[b], scene, pos, goal);
+            let plan = shut.as_ref().unwrap_or(&r.plans[b]);
             // A contract's thing to bring, somewhere the route can't stand
             // (behind a counter): as near as there's floor, and reach.
             let wanted = matches!(
@@ -4759,6 +4877,238 @@ mod run_tests {
                 "one in the open is the site's"
             );
         }
+    }
+
+    /// A take's route round a wrecked robot lying across a building's
+    /// floor, not through it: the plan knows nothing of the wreck, so the
+    /// raider finds it on the way in its mind and shuts the ground there
+    /// (Marrow seed 7, 4 November: through a Sorter it had just wrecked
+    /// across the depot's aisle, two stucks). A robot still standing there
+    /// is left in the plan's floor: it moves.
+    #[test]
+    fn a_take_route_goes_round_a_wreck() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        // A house, its door's entry to the floor at its middle, and the
+        // route's middle leg: where the wreck goes.
+        let (plan, from, goal, block) = plans
+            .iter()
+            .filter(|p| p.levels.is_none() && p.name.starts_with("house_") && !p.entries.is_empty())
+            .find_map(|p| {
+                let goal = Vec2::from_array(p.grid.nearest_walkable([0.0, 0.0])?);
+                let from = p.to_world(p.entries[0]);
+                let route = indoor_through_held(p, from, goal, 0.3)?;
+                let pts: Vec<Vec2> = route
+                    .iter()
+                    .filter_map(|t| match t {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    })
+                    .collect();
+                // Indoors, a metre short of the goal on the way in.
+                let end = p.world2(goal);
+                let before = pts.iter().rev().nth(1).copied().unwrap_or(from.xz());
+                let at = end + (before - end).normalize_or_zero() * 1.0;
+                p.indoors(p.to_local(Vec3::new(at.x, 0.0, at.y)).xz())
+                    .then(|| (p.clone(), from, goal, at))
+            })
+            .expect("a house with a route in");
+        let floor = plan
+            .to_world(plan.to_local(Vec3::new(block.x, 0.0, block.y)).xz())
+            .y;
+        // A wrecked robot's carriage, lying there: its body and its part.
+        let wreck = |app: &mut App, wrecked: bool| {
+            app.world_mut()
+                .spawn((
+                    Robot {
+                        kind: crate::robots::RobotKind::Sorter,
+                        wrecked,
+                    },
+                    Transform::from_xyz(block.x, floor, block.y),
+                ))
+                .with_children(|c| {
+                    c.spawn((
+                        Name::new("Sorter carriage"),
+                        Transform::from_xyz(0.0, 0.6, 0.0),
+                        RigidBody::Static,
+                        Collider::cuboid(0.8, 1.2, 0.8),
+                        CollisionLayers::new(
+                            Layer::Robot,
+                            [Layer::World, Layer::Player, Layer::Robot],
+                        ),
+                    ));
+                })
+                .id()
+        };
+        let routed = |app: &mut App| {
+            let plan = plan.clone();
+            app.world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let plan =
+                        wrecks_shut(&plan, &scene, from, goal).unwrap_or_else(|| plan.clone());
+                    let route = indoor_through_held(&plan, from, goal, 0.3).unwrap_or_default();
+                    // (No route at all is no way round it.)
+                    if route.is_empty() {
+                        return -1.0;
+                    }
+                    // How near the route's walks come to the wreck.
+                    let mut last = from.xz();
+                    let mut near = f32::MAX;
+                    for t in &route {
+                        if let Task::WalkTo { to, .. } = t {
+                            let d = (block - last).dot(*to - last)
+                                / (*to - last).length_squared().max(1e-6);
+                            let q = last + (*to - last) * d.clamp(0.0, 1.0);
+                            near = near.min(q.distance(block));
+                            last = *to;
+                        }
+                    }
+                    near
+                })
+                .unwrap()
+        };
+        let standing = wreck(&mut app, false);
+        for _ in 0..3 {
+            app.update();
+        }
+        let near = routed(&mut app);
+        assert!(
+            near < 0.4,
+            "the route keeps {near:.2} m off a robot still standing (it moves)"
+        );
+        app.world_mut().entity_mut(standing).despawn();
+        wreck(&mut app, true);
+        for _ in 0..3 {
+            app.update();
+        }
+        let near = routed(&mut app);
+        assert!(
+            near >= 0.6,
+            "{}: the route passes {near:.2} m from the wreck's middle",
+            plan.name
+        );
+    }
+
+    /// A take route from just outside a building's walls, where the plan
+    /// has no floor (beside a porch's steps, against the wall), goes in by
+    /// a door, not straight through the wall to the nearest floor indoors
+    /// (Marrow seed 1, 4 November: from beside house_plank's porch, a walk
+    /// at the loot through its front wall, a stuck). From every such point
+    /// round every building with a door, on every map, to a floor cell at
+    /// its middle: no walk on the route enters the footprint over a wall
+    /// (but through a doorway or an open bay).
+    #[test]
+    fn a_route_from_against_a_wall_goes_in_by_the_door() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for plan in plans
+                .iter()
+                .filter(|p| p.levels.is_none() && !p.doors.is_empty())
+            {
+                let g = &plan.grid;
+                let h = plan.half;
+                let inside = |q: Vec2, pad: f32| q.x.abs() < h.x - pad && q.y.abs() < h.y - pad;
+                // Somewhere to go: the floor cell nearest the middle.
+                let Some(goal) = g.nearest_walkable([0.0, 0.0]).map(Vec2::from_array) else {
+                    continue;
+                };
+                if !inside(goal, 0.3) {
+                    continue;
+                }
+                // Round the walls 0.4 m out, every 0.5 m, where there's no floor.
+                let mut starts = Vec::new();
+                let (w, d) = (h.x + 0.4, h.y + 0.4);
+                let mut t = -w;
+                while t <= w {
+                    starts.extend([Vec2::new(t, -d), Vec2::new(t, d)]);
+                    t += 0.5;
+                }
+                let mut t = -d;
+                while t <= d {
+                    starts.extend([Vec2::new(-w, t), Vec2::new(w, t)]);
+                    t += 0.5;
+                }
+                for start in starts.into_iter().filter(|q| !g.walkable(q.to_array())) {
+                    let from = plan.to_world(start);
+                    let Some(route) = indoor_path(plan, from, goal, 0.3, true) else {
+                        continue;
+                    };
+                    tried += 1;
+                    let mut last = start;
+                    for task in &route {
+                        let Task::WalkTo { to, .. } = task else {
+                            continue;
+                        };
+                        let next = plan.to_local(Vec3::new(to.x, from.y, to.y)).xz();
+                        // Into the footprint from outside it, with no
+                        // doorway on the way, over a wall: where it crosses
+                        // the footprint's edge the plan has shut the cells
+                        // (a doorway's and an open bay's are floor).
+                        let len = last.distance(next).max(1e-3);
+                        let mut d = 0.0;
+                        while d < len && !inside(last.lerp(next, d / len), 0.0) {
+                            d += 0.05;
+                        }
+                        let walled = [-0.1, 0.0, 0.1].iter().all(|o| {
+                            let q = last.lerp(next, ((d + o) / len).clamp(0.0, 1.0));
+                            !g.walkable(q.to_array())
+                        });
+                        if !inside(last, 0.0)
+                            && inside(next, 0.3)
+                            && plan.doors_on(last, next).is_empty()
+                            && walled
+                        {
+                            bad.push(format!(
+                                "{map} {} at {:.0?}: from {start:.2?}, {last:.2?} -> {next:.2?} through the wall",
+                                plan.name, plan.xf.translation
+                            ));
+                            break;
+                        }
+                        last = next;
+                    }
+                }
+            }
+        }
+        assert!(tried >= 100, "only {tried} routes tried");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} routes in through a wall:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
     }
 
     /// Buildings with loot nobody can stand in arm's reach of (furniture or

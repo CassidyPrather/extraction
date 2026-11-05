@@ -189,7 +189,19 @@ pub struct Grasp {
     pub curl: [f32; 5],
     /// Small enough to close the hand round ([`small`]).
     pub small: bool,
+    /// Thin and flat ([`thin`]): held by an edge, not laid on the hand.
+    pub thin: bool,
 }
+
+/// A thin flat thing (a card, a letter, a record): no thicker than
+/// [`THIN`]. Held, it's pinched by an edge, the thumb on one face and a
+/// finger on the other; laid flat on the hand, a card held up to read
+/// stood on the fingertips like a tray (the 100-degree eye, 5 November).
+pub fn thin(half: Vec3) -> bool {
+    half.min_element() * 2.0 <= THIN
+}
+
+pub const THIN: f32 = 0.012;
 
 /// Something a closed hand goes round: its middle size no more than
 /// [`SMALL_ACROSS`], its longest no more than [`SMALL_LONG`] (a power
@@ -263,6 +275,9 @@ impl Grasp {
                 self.gap[5] * 1000.0
             ));
         }
+        if self.thin && !self.pinched() {
+            return Some("laid on the hand, not pinched by an edge".to_owned());
+        }
         if self.small && !self.gripped() {
             return Some(format!(
                 "on an open hand, not gripped (fingers curled {:.2} {:.2} {:.2} {:.2}, {})",
@@ -319,6 +334,7 @@ pub fn grasp(side: Side, half: Vec3, item: Transform, seat: &Seat) -> Grasp {
         face,
         curl: seat.curl,
         small: small(half),
+        thin: thin(half),
     }
 }
 
@@ -446,7 +462,7 @@ fn open_gap(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> f32 {
 /// touches, the thing is held ([`Grasp::fault`]); failing all, the one
 /// with most fingers on it.
 pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
-    let (mut best, held) = seat_as(side, half, item, SLIDE);
+    let (mut best, held) = seat_as(side, half, item, SLIDE, false);
     if held {
         return best;
     }
@@ -480,10 +496,16 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
     square.sort_by(by_angle);
     let turns: Vec<Quat> = flat.into_iter().take(3).chain(square).collect();
     let mut best_score = score(&grasp(side, half, item, &best));
-    for turn in turns.into_iter().take(TURNS + 3) {
+    // A thin thing is tried at its nearest edge too, each turn.
+    let rims: &[bool] = if thin(half) { &[false, true] } else { &[false] };
+    for (turn, rim) in turns
+        .into_iter()
+        .take(TURNS + 3)
+        .flat_map(|t| rims.iter().map(move |r| (t, *r)))
+    {
         let inside = Transform::from_translation(turn.inverse() * item.translation)
             .with_rotation(turn.inverse() * item.rotation);
-        let (s, held) = seat_as(side, half, inside, TURNED_SLIDE);
+        let (s, held) = seat_as(side, half, inside, TURNED_SLIDE, rim);
         let s = Seat {
             shift: turn * s.shift,
             turn,
@@ -526,7 +548,7 @@ fn square_turns() -> impl Iterator<Item = Quat> {
 }
 
 /// `seat` with the glove as the hand is turned, and whether it holds.
-fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) {
+fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32, rim: bool) -> (Seat, bool) {
     let to_box = item.compute_affine().inverse();
     let n = palm_normal(side);
     let u = n.any_orthonormal_vector();
@@ -534,7 +556,25 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32) -> (Seat, bool) 
     // Turned, round the thing's nearest point to the hand (beside the
     // palm's facing): a rod end-on to the palm, turned, lies off past the
     // fist's end.
-    let near = item.transform_point(to_box.transform_point3(Vec3::ZERO).clamp(-half, half));
+    let mut near_in_box = to_box.transform_point3(Vec3::ZERO).clamp(-half, half);
+    if rim {
+        // To the nearest edge of its broad faces: a card, a letter, a map
+        // taken by the middle has its edges out of the hand's reach.
+        let t = if half.x <= half.y && half.x <= half.z {
+            0
+        } else if half.y <= half.z {
+            1
+        } else {
+            2
+        };
+        let (a, b) = ((t + 1) % 3, (t + 2) % 3);
+        if half[a] - near_in_box[a].abs() <= half[b] - near_in_box[b].abs() {
+            near_in_box[a] = half[a] * near_in_box[a].signum();
+        } else {
+            near_in_box[b] = half[b] * near_in_box[b].signum();
+        }
+    }
+    let near = item.transform_point(near_in_box);
     let centre = if slide > SLIDE {
         near - n * near.dot(n)
     } else {
@@ -746,6 +786,169 @@ mod tests {
         out
     }
 
+    /// Every take of a box of half-size `half` in either hand: how many
+    /// fail the rule, of how many, and the first fault.
+    fn box_holds(half: Vec3) -> (usize, usize, Option<String>) {
+        let (mut failed, mut tries, mut worst) = (0, 0, None);
+        for side in [Side::Right, Side::Left] {
+            for turn in turns() {
+                for item in takes(side, half, turn) {
+                    tries += 1;
+                    if let Some(why) = glove_on(side, half, item).fault() {
+                        failed += 1;
+                        worst.get_or_insert(why);
+                    }
+                }
+            }
+        }
+        (failed, tries, worst)
+    }
+
+    /// Things in the world a hand can take up that aren't in the item
+    /// table (cards, crates, panels, parts), known not to be held every
+    /// way yet, and why: this list only shrinks (as `STILL_FAILING`).
+    const WORLD_STILL_FAILING: &[(&str, &str)] = &[];
+
+    /// The world's own loose things are held as the table's are: every
+    /// map loaded, each thing a hand can carry (a free grab point, a body
+    /// that moves, not an item of the table, which the test above holds,
+    /// nor one only pressed) or take up to read is held every way by the
+    /// rule, or listed. A
+    /// thing whose collider isn't a box gets no seat: that fails too. And
+    /// a thing taken up to read shows its text to the eyes, legible.
+    #[test]
+    fn every_world_thing_carried_free_is_held_by_the_glove() {
+        use avian3d::prelude::{Collider, RigidBody};
+        let maps = extraction_core::map::VALLEYS
+            .iter()
+            .map(|v| v.0)
+            .chain([crate::camp::TRAINING_YARD]);
+        let mut found: std::collections::BTreeMap<String, Option<Vec3>> = Default::default();
+        // What each thing taken up to read says, and what it is.
+        let mut texts: std::collections::BTreeMap<
+            String,
+            Option<(
+                crate::raid::bench::ScreenText,
+                crate::render::legibility::TextSource,
+            )>,
+        > = Default::default();
+        for map in maps {
+            let _counting = crate::render::budget::tests::counted();
+            let mut app = crate::render::budget::tests::client_threads(map, "clearing", None);
+            crate::render::budget::tests::settle(&mut app);
+            let world = app.world_mut();
+            let mut q = world.query::<(
+                Entity,
+                &crate::interact::Grabbable,
+                Option<&Name>,
+                Option<&Collider>,
+                Option<&RigidBody>,
+                Has<crate::items::Item>,
+                Has<crate::raid::truck::Pressable>,
+                Has<crate::interact::read::Readable>,
+                Option<&crate::raid::bench::ScreenText>,
+                Option<&crate::render::legibility::TextSource>,
+            )>();
+            for (e, g, name, collider, body, item, pressed, read, text, source) in q.iter(world) {
+                let free = g
+                    .points
+                    .iter()
+                    .any(|p| p.role == crate::interact::GripRole::Free);
+                // Carried, or taken up to read (a note, the logbook, a
+                // card: pressable too, in flat mode).
+                let carried = !item && !pressed && body.is_some_and(|b| b.is_dynamic());
+                if !free || !(carried || read) {
+                    continue;
+                }
+                let name = name.map_or_else(|| format!("unnamed {e}"), |n| n.to_string());
+                let half = collider
+                    .and_then(|c| c.shape_scaled().as_cuboid())
+                    .map(|c| Vec3::new(c.half_extents.x, c.half_extents.y, c.half_extents.z));
+                if read {
+                    texts
+                        .entry(format!("{name} ({map})"))
+                        .or_insert(text.cloned().zip(source.copied()));
+                }
+                found.entry(format!("{name} ({map})")).or_insert(half);
+            }
+        }
+        println!("{} world things carried free:", found.len());
+        let mut bad = Vec::new();
+        for (name, half) in &found {
+            let thing = name.split(" (").next().unwrap_or(name);
+            let known = WORLD_STILL_FAILING.iter().any(|(id, _)| *id == thing);
+            let fault = match half {
+                None => Some("its collider isn't a box: no seat".to_owned()),
+                Some(half) => {
+                    let (failed, tries, worst) = box_holds(*half);
+                    worst.map(|w| format!("{failed} of {tries} holds fail, e.g. {w}"))
+                }
+            };
+            println!("  {name}: {}", fault.as_deref().unwrap_or("held"));
+            match fault {
+                Some(why) if !known => bad.push(format!("{name}: {why}")),
+                None if known => bad.push(format!(
+                    "{name}: held every way now: take it off WORLD_STILL_FAILING"
+                )),
+                _ => {}
+            }
+        }
+        // Taken up to read, each shows its text to the eyes, legible:
+        // held up as `interact::read` holds it (`held_up`) in hands from
+        // close under the chin to arm's length, its text face (+Z) turned
+        // to the eye and its smallest letters over its floor
+        // (`render::legibility`) from there.
+        let eye = Vec3::new(0.0, 1.6, 0.0);
+        let hands = [
+            Vec3::new(0.12, 1.2, -0.28),
+            Vec3::new(-0.12, 1.25, -0.35),
+            Vec3::new(0.2, 1.15, -0.45),
+            Vec3::new(0.0, 1.3, -0.5),
+        ];
+        println!("{} things taken up to read:", texts.len());
+        for (name, text) in &texts {
+            let Some((screen, source)) = text else {
+                println!("  {name}: no text");
+                bad.push(format!("{name}: taken up to read, but it has no text"));
+                continue;
+            };
+            let floor = source.reading().need.floor();
+            let em = crate::render::screen::em_metres(screen);
+            let letters = crate::render::legibility::letter_height(&screen.text, em);
+            let mut worst = f32::MAX;
+            let mut faced = 1.0f32;
+            for hand in hands {
+                let at = crate::interact::read::held_up(hand, eye, screen.size);
+                let to_eye = (eye - at.translation).normalize();
+                let face = at.rotation * Vec3::Z;
+                faced = faced.min(face.dot(to_eye));
+                let tilt = face.dot(to_eye).clamp(-1.0, 1.0).acos().to_degrees();
+                let deg =
+                    crate::render::legibility::angle(letters, eye.distance(at.translation), tilt);
+                worst = worst.min(deg);
+            }
+            println!(
+                "  {name} ({source:?}): faces the eye {faced:.3}, letters {worst:.2} deg (floor {floor})"
+            );
+            if faced < 0.99 {
+                bad.push(format!(
+                    "{name}: its text face turned {faced:.2} to the eye"
+                ));
+            }
+            if worst + 1e-4 < floor {
+                bad.push(format!(
+                    "{name}: letters {worst:.2} deg held up, under its floor {floor}"
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "{} world things not held or not legible:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
     /// How the glove holds a box: seated on it.
     fn glove_on(side: Side, half: Vec3, item: Transform) -> Grasp {
         grasp(side, half, item, &seat(side, half, item))
@@ -777,22 +980,7 @@ mod tests {
         let mut boxes: Vec<[u32; 3]> = defs.iter().map(|d| key(d)).collect();
         boxes.sort();
         boxes.dedup();
-        let holds = |b: &[u32; 3]| {
-            let half = Vec3::from(b.map(f32::from_bits)) * 0.5;
-            let (mut failed, mut tries, mut worst) = (0, 0, None);
-            for side in [Side::Right, Side::Left] {
-                for turn in turns() {
-                    for item in takes(side, half, turn) {
-                        tries += 1;
-                        if let Some(why) = glove_on(side, half, item).fault() {
-                            failed += 1;
-                            worst.get_or_insert(why);
-                        }
-                    }
-                }
-            }
-            (failed, tries, worst)
-        };
+        let holds = |b: &[u32; 3]| box_holds(Vec3::from(b.map(f32::from_bits)) * 0.5);
         let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
         let per = boxes.len().div_ceil(threads);
         let results: std::collections::HashMap<[u32; 3], (usize, usize, Option<String>)> =

@@ -62,6 +62,9 @@ pub enum First {
     Hush,
     /// Home with a job on the card: it's paid when the card is pressed.
     Payday,
+    /// Home from a raid, off again to the truck's tail with finds still in
+    /// the pack: what's on you goes at a fall, the stash keeps.
+    StashFinds,
     /// A machine that was shooting at you lost you, and is coming to where
     /// it last saw you, or back past you once it's given up
     /// (`robots::search::ComingBack`): a moving shape behind low cover is
@@ -124,6 +127,7 @@ pub const ALL: &[First] = &[
     First::Sentry,
     First::Hush,
     First::Payday,
+    First::StashFinds,
     First::ComingToLook,
     First::BrokenNoticed,
     First::Shoved,
@@ -223,6 +227,7 @@ impl First {
             // drone, the job given up, "that's the job paid" was said, and
             // the card wouldn't pay it.)
             First::Payday => &[PAYDAY_NOT_YET, "{verdict}"],
+            First::StashFinds => &[STASH_FINDS],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
@@ -285,7 +290,18 @@ struct Queue {
     /// test fell through the world's edge).
     filled: Vec<(&'static str, String)>,
     quiet: f32,
+    /// Seconds more that a machine has you, by its first (`HAS_YOU`): no
+    /// "go still" said meanwhile.
+    has_you: f32,
 }
+
+/// A machine that has you, by its first: what it says to do (a roof, run
+/// across, walk away) isn't "go still", and the two said together told a
+/// newcomer both at once. Heard waits for a machine that's only listening.
+const HAS_YOU: [First; 4] = [First::Sentry, First::DroneLock, First::Aimed, First::Heavy];
+
+/// How long a machine's having you holds "go still" back.
+const HAS_YOU_HOLD: f32 = 10.0;
 
 /// Seconds between two of these lines.
 const SPACING: f32 = 5.0;
@@ -348,8 +364,22 @@ fn meet(
     out: &mut MessageWriter<FirstMet>,
     fill: &dyn Fn(&str) -> String,
 ) -> bool {
+    if f == First::Heard && queue.has_you > 0.0 {
+        return false;
+    }
     if !firsts.0.insert(f.key()) {
         return false;
+    }
+    if HAS_YOU.contains(&f) {
+        queue.has_you = HAS_YOU_HOLD;
+        // Heard in the same breath, and not said yet: not now, and still
+        // to learn.
+        let heard: Vec<String> = First::Heard.lines().iter().map(|l| l.to_string()).collect();
+        let before = queue.lines.len();
+        queue.lines.retain(|l| !heard.contains(l));
+        if queue.lines.len() < before {
+            firsts.0.remove(&First::Heard.key());
+        }
     }
     for l in f.lines() {
         queue.filled.push((l, fill(l)));
@@ -742,23 +772,37 @@ fn convoy(
 }
 
 /// The spare: home with no radio (it went with the rest when you fell),
-/// the driver passes his through the hatch, or there'd be no calling him
-/// on the next raid.
-pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
+/// the driver's goes in the kit crate, or there'd be no calling him on the
+/// next raid.
+pub const SPARE_RADIO: &str = "Truck: \"No radio on you. My spare's in the crate.\"";
 /// Home with no gun on you, in the crate or on the ledge (a fall, and the
 /// convoy took the lot): the driver's own, a magazine and a box of its
-/// rounds, off the ledge. (Gone out unarmed after a lost kit, the hoarder
-/// died two minutes in, four raids running.)
+/// rounds, in the kit crate. (Gone out unarmed after a lost kit, the
+/// hoarder died two minutes in, four raids running; handed through the
+/// hatch, they came after a quick newcomer had left the truck.)
 pub const SPARE_GUN: &str = "Truck: \"No gun on you. Here, my spare. Don't lose this one.\"";
 
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
 pub fn spare_for(name: &str) -> String {
-    format!("Truck: \"Lost the {name}? Here's another, off the ledge.\"")
+    format!("Truck: \"Lost the {name}? There's another in the crate.\"")
 }
 
-/// Seconds at the truck before the driver notices what's missing.
-const SPARE_AFTER: f32 = 2.0;
+/// Off the truck again with finds in the pack (Story's wording). (A
+/// hoarder carried the lot out every raid, and lost it at the third.)
+pub const STASH_FINDS: &str =
+    "Driver: \"Stash what you found. What's on you is gone if you fall.\"";
+
+/// What counts as a find to stash: what's brought home for its worth, not
+/// the kit taken out.
+fn a_find(c: extraction_core::items::Category) -> bool {
+    use extraction_core::items::Category::*;
+    matches!(c, Material | RobotPart | Artifact | Curio)
+}
+
+/// Seconds at the truck before the driver's spares are in the crate (what
+/// you have is loaded by then: a career's save, a homecoming's hand-off).
+const SPARE_AFTER: f32 = 0.5;
 
 #[allow(clippy::too_many_arguments)]
 fn spare_radio(
@@ -773,30 +817,54 @@ fn spare_radio(
     catalog: Res<crate::items::Catalog>,
     progression: Option<Res<crate::progression::Progression>>,
     opts: Res<crate::launch::LaunchOptions>,
-    stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
+    mut stash: Query<
+        (Entity, &mut crate::interact::body::Backpack),
+        With<crate::raid::truck::Stash>,
+    >,
     trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
-    locals: Query<Entity, With<LocalPlayer>>,
+    locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     hatch: Res<crate::raid::lev::Handovers>,
-    mut handover: MessageWriter<crate::raid::lev::HandOver>,
-    mut queue: ResMut<Queue>,
+    mut commands: Commands,
+    mut m: Meet,
     mut home_for: Local<f32>,
     mut handed: Local<bool>,
+    mut from_a_raid: Local<bool>,
 ) {
     if raid.phase != Phase::AtBase {
         *home_for = 0.0;
         *handed = false;
+        *from_a_raid = true;
         return;
     }
     *home_for += time.delta_secs();
+    // Home from a raid and off again to the truck's tail, finds still on
+    // you: stash them (once a career).
+    if *from_a_raid
+        && !m.met(First::StashFinds)
+        && let (Some((me, feet)), Some(truck)) = (locals.iter().next(), trucks.iter().next())
+    {
+        let l = truck
+            .affine()
+            .inverse()
+            .transform_point3(feet.translation());
+        let at_tail = l.z > 1.3 && l.x.abs() < 1.3;
+        let stashed = |e: Entity| stash.iter().any(|(_, b)| b.contents.contains(&e));
+        let finds = items.iter().any(|(e, it, by, _)| {
+            by.is_some_and(|b| b.0 == me) && a_find(catalog.get(it.kind()).category) && !stashed(e)
+        });
+        if at_tail && finds {
+            m.meet(First::StashFinds);
+        }
+    }
     // (What's on its way through the hatch already counts, once it's down.)
     if *handed || *home_for < SPARE_AFTER || hatch.busy() {
         return;
     }
-    let (Some(me), Some(truck)) = (locals.iter().next(), trucks.iter().next()) else {
+    let (Some((me, _)), Some(truck)) = (locals.iter().next(), trucks.iter().next()) else {
         return;
     };
     *handed = true;
-    let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
+    let in_crate = |e: Entity| stash.iter().any(|(_, b)| b.contents.contains(&e));
     // On you, in the crate, or lying in the truck (on the ledge already).
     let have = |id: &str| {
         items.iter().any(|(e, it, by, gt)| {
@@ -817,12 +885,12 @@ fn spare_radio(
         Some(Job::Photograph { taken: false, .. }) => Some("camera".into()),
         _ => None,
     };
+    // Into the kit crate, where the kit's loaded from before a raid (on
+    // the ledge, the newcomer was out of the truck before it came).
+    let mut give: Vec<(String, f32)> = vec![];
     if !have("radio") {
-        handover.write(crate::raid::lev::HandOver {
-            id: "radio".into(),
-            condition: 0.8,
-        });
-        queue.lines.push_back(SPARE_RADIO.into());
+        give.push(("radio".into(), 0.8));
+        m.queue.lines.push_back(SPARE_RADIO.into());
     }
     // No gun anywhere of yours (in the yard, the kit is the yard's own).
     let armed = items.iter().any(|(e, it, by, gt)| {
@@ -834,20 +902,45 @@ fn spare_radio(
     if !armed && opts.map != crate::camp::TRAINING_YARD {
         // (Worn as the kit's are.)
         for (id, condition) in [("pm_pistol", 0.75), ("pm_mag", 0.75), ("ammo_9x18", 1.0)] {
-            handover.write(crate::raid::lev::HandOver {
-                id: id.into(),
-                condition,
-            });
+            give.push((id.into(), condition));
         }
-        queue.lines.push_back(SPARE_GUN.into());
+        m.queue.lines.push_back(SPARE_GUN.into());
     }
     if let Some(id) = wanted.filter(|id| !have(id)) {
         let name = catalog
             .kind(&id)
             .map(|k| catalog.get(k).name.to_lowercase())
             .unwrap_or_else(|| id.replace('_', " "));
-        handover.write(crate::raid::lev::HandOver { id, condition: 1.0 });
-        queue.lines.push_back(spare_for(&name));
+        give.push((id, 1.0));
+        m.queue.lines.push_back(spare_for(&name));
+    }
+    let Some((crate_e, mut bag)) = stash.iter_mut().next() else {
+        return;
+    };
+    let n = give.len() as f32;
+    for (i, (id, condition)) in give.into_iter().enumerate() {
+        let Some(kind) = catalog.kind(&id) else {
+            warn!("the driver has no {id} to spare");
+            continue;
+        };
+        let e = crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::default(),
+                condition,
+            },
+        );
+        // Side by side along the crate's shelf.
+        let x = bag.half.x * 0.8 * ((i as f32 + 0.5) / n.max(1.0) * 2.0 - 1.0);
+        crate::interact::body::stow_in_backpack(
+            &mut commands,
+            e,
+            crate_e,
+            &mut bag,
+            Vec3::new(x, 0.05, 0.0),
+        );
     }
 }
 
@@ -919,6 +1012,7 @@ fn speak(
 ) {
     let filled: Vec<_> = queue.filled.drain(..).collect();
     spoken.2.extend(filled);
+    queue.has_you -= time.delta_secs();
     queue.quiet -= time.delta_secs();
     if queue.quiet > 0.0 {
         return;
@@ -934,6 +1028,36 @@ fn speak(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "Go still" isn't said while a machine has you, either way round
+    /// (a sentry's chirp and its noticing you came in one frame: "Down, out
+    /// of its sweep" and "go still" at once). Still to learn, for later.
+    #[test]
+    fn go_still_isnt_said_while_a_machine_has_you() {
+        use bevy::ecs::system::SystemState;
+        for order in [[First::Heard, First::Sentry], [First::Sentry, First::Heard]] {
+            let mut app = App::new();
+            app.init_resource::<Firsts>()
+                .init_resource::<Queue>()
+                .add_message::<FirstMet>();
+            let mut st: SystemState<Meet> = SystemState::new(app.world_mut());
+            {
+                let mut m = st.get_mut(app.world_mut()).unwrap();
+                for f in order {
+                    m.meet(f);
+                }
+            }
+            st.apply(app.world_mut());
+            let q = app.world().resource::<Queue>();
+            let says = |f: First| q.lines.iter().any(|l| f.lines().contains(&l.as_str()));
+            assert!(!says(First::Heard), "{order:?}: {:?}", q.lines);
+            assert!(says(First::Sentry), "{order:?}: {:?}", q.lines);
+            assert!(
+                !app.world().resource::<Firsts>().met(First::Heard),
+                "{order:?}"
+            );
+        }
+    }
 
     /// An urgent line's first sentence (what to do: they're written
     /// action first) is on the wrist's
@@ -999,9 +1123,106 @@ mod tests {
         app
     }
 
+    /// Home from a raid, off to the truck's tail with a find in the pack:
+    /// "Stash what you found", once. Not with nothing found on you, nor at
+    /// the tail before a raid, nor a second time.
+    #[test]
+    fn finds_in_the_pack_off_the_tail_get_stash_them_once() {
+        let said = |app: &App| {
+            app.world()
+                .resource::<Spoken>()
+                .0
+                .iter()
+                .filter(|l| *l == STASH_FINDS)
+                .count()
+        };
+        let mut app = app();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .single(app.world())
+            .unwrap();
+        let truck = *app
+            .world_mut()
+            .query_filtered::<&GlobalTransform, With<crate::raid::truck::Truck>>()
+            .single(app.world())
+            .unwrap();
+        let tail = truck.transform_point(Vec3::new(0.0, 0.0, 1.6));
+        let stand = |app: &mut App, at: Vec3| {
+            app.world_mut()
+                .get_mut::<Transform>(me)
+                .unwrap()
+                .translation = at;
+        };
+        let raid = |app: &mut App| {
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+            app.update();
+            app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+            app.update();
+        };
+        let wait = |app: &mut App| {
+            for _ in 0..(8 * 90) {
+                app.update();
+            }
+        };
+        let pack = app
+            .world_mut()
+            .query_filtered::<(Entity, &crate::interact::body::Backpack), Without<crate::raid::truck::Stash>>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == me)
+            .map(|(e, _)| e)
+            .expect("the newcomer's pack");
+        let find_kind = catalog
+            .iter()
+            .find(|(_, d)| a_find(d.category))
+            .map(|(k, _)| k)
+            .expect("something that's a find");
+        // Home from a raid, at the tail, nothing found on you: nothing.
+        raid(&mut app);
+        stand(&mut app, tail);
+        wait(&mut app);
+        assert_eq!(said(&app), 0, "said with nothing found on you");
+        // A find in the pack, back to the tail: said.
+        stand(
+            &mut app,
+            truck.transform_point(Vec3::new(0.0, crate::raid::truck::FLOOR, 0.0)),
+        );
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let find = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: find_kind,
+                    transform: Transform::IDENTITY,
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        crate::persist::put_in_bag(app.world_mut(), find, pack, Vec3::ZERO);
+        // The pack on your back (in the app it starts off you): what's in it
+        // is on you.
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .carried = true;
+        app.update();
+        stand(&mut app, tail);
+        wait(&mut app);
+        assert_eq!(said(&app), 1, "not said at the tail with a find on you");
+        // Another raid, home, the find still on you, at the tail: not again.
+        raid(&mut app);
+        stand(&mut app, tail);
+        wait(&mut app);
+        assert_eq!(said(&app), 1, "said twice");
+    }
+
     /// Home with no gun anywhere (the convoy took the kit, the crate's
-    /// empty): the driver's spare, a magazine and rounds come through the
-    /// hatch, and he says so; armed, he doesn't. (Unarmed after a lost kit,
+    /// empty): the driver's spare, a magazine and rounds are in the kit
+    /// crate for the next raid's loadout, and he says so; armed, he doesn't. (Unarmed after a lost kit,
     /// the hoarder went out and died two minutes in, raid after raid.)
     #[test]
     fn no_gun_home_gets_the_spare() {
@@ -1029,13 +1250,27 @@ mod tests {
             1,
             "{spoken:?}"
         );
-        let pistols = app
-            .world_mut()
-            .query::<&crate::items::Item>()
-            .iter(app.world())
-            .filter(|i| catalog.get(i.kind()).id == "pm_pistol")
-            .count();
-        assert!(pistols >= 1, "no pistol came through the hatch");
+        // In the crate, all three: the next raid's loadout has a gun.
+        let in_crate: Vec<String> = {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>();
+            let contents: Vec<Entity> = q
+                .iter(app.world())
+                .flat_map(|b| b.contents.clone())
+                .collect();
+            contents
+                .into_iter()
+                .filter_map(|e| app.world().get::<crate::items::Item>(e))
+                .map(|i| catalog.get(i.kind()).id.clone())
+                .collect()
+        };
+        for id in ["pm_pistol", "pm_mag", "ammo_9x18"] {
+            assert!(
+                in_crate.iter().any(|c| c == id),
+                "no {id} in the kit crate: {in_crate:?}"
+            );
+        }
     }
 
     /// Home with no radio anywhere (it went with the rest at a fall): the
