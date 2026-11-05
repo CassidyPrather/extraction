@@ -287,3 +287,52 @@ fn a_slide_has_a_spring_a_rack_beats() {
         );
     }
 }
+
+/// A hand closes on a handle where it is: an open bolt (back and lifted),
+/// a slide or charging handle held back, on every gun with one. Left at
+/// the handle's rest, a hand reaching for an open Mosin bolt closed on
+/// nothing.
+#[test]
+fn a_hand_takes_a_handle_where_it_is() {
+    let mut bad = Vec::new();
+    for id in [
+        "pm_pistol",
+        "ak74",
+        "mosin",
+        "sks",
+        "ppsh",
+        "svd",
+        "toz8",
+        "rpk74",
+    ] {
+        let mut r = hold(id, false, false);
+        let h = gun_mut(&mut r).layout.handle.clone().unwrap();
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.handle_lift = 1.0;
+            g.firearm.bolt_travel = 1.0;
+            g.firearm.locked_back = true;
+        }
+        r.vr.step(2);
+        let lift = if h.kind == HandleKind::TurnBolt {
+            1.0
+        } else {
+            0.0
+        };
+        let at = {
+            let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            gt.transform_point(crate::weapons::handle_at(&h, 1.0, lift))
+        };
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(3);
+        r.vr.trigger(Side::Left, 1.0);
+        r.vr.step(3);
+        if r.vr.hand_state(Side::Left).handle.is_none() {
+            bad.push(format!(
+                "{id} ({:?}): open, its handle wasn't taken",
+                h.kind
+            ));
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}

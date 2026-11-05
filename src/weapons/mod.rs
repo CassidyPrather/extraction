@@ -267,6 +267,7 @@ impl Plugin for WeaponsPlugin {
             ))
             .init_resource::<reload::MagApproach>()
             .add_systems(Update, stage_duds)
+            .add_systems(FixedUpdate, follow_handles.before(InteractSystems::Grab))
             .add_systems(
                 FixedUpdate,
                 (
@@ -697,7 +698,7 @@ fn work_handles(
                     ev.extend(gun.firearm.free_bolt());
                 }
                 if gun.firearm.bolt_travel < 0.05 {
-                    let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
+                    let lift = (start_lift + d.y / HANDLE_RISE).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
                 }
                 if gun.firearm.handle_lift >= 0.95 {
@@ -752,6 +753,37 @@ fn work_handles(
         emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
 }
+
+/// A handle's grab point is where the handle is: an open bolt, a slide
+/// or charging handle held back, a drawn string. Left at the handle's
+/// rest, a hand reaching for an open Mosin bolt (9 cm back and lifted)
+/// closed on nothing.
+fn follow_handles(mut guns: Query<(&Gun, &mut Grabbable), Changed<Gun>>) {
+    for (gun, mut grab) in &mut guns {
+        let Some(h) = &gun.layout.handle else {
+            continue;
+        };
+        if matches!(h.kind, HandleKind::Pump | HandleKind::BreakBarrels) {
+            continue;
+        }
+        let at = handle_at(h, gun.firearm.bolt_travel, gun.firearm.handle_lift);
+        for p in grab.points.iter_mut() {
+            if p.role == GripRole::Handle(0) && p.local.translation != at {
+                p.local.translation = at;
+            }
+        }
+    }
+}
+
+/// Where a handle is (gun space), back `travel` of its stroke and lifted
+/// `lift` of its turn.
+pub fn handle_at(h: &layout::HandleLayout, travel: f32, lift: f32) -> Vec3 {
+    h.grab + Vec3::Z * h.travel * travel + Vec3::Y * HANDLE_RISE * lift
+}
+
+/// How far a turn-bolt's handle rises as it's lifted, m (as the hand
+/// lifts it: `work_handles`).
+pub const HANDLE_RISE: f32 = 0.035;
 
 /// A scenario's setup (`Task::Setup`): the next pull of every held gun
 /// strikes a dud (`shotgun_dud_drill`: the bot breaks the double, closes

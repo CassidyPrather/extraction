@@ -42,10 +42,21 @@ enum To {
     Slide(f32),
     /// The seated magazine's middle, plus this along the gun's up.
     Mag(f32),
-    /// The spare magazine's middle.
-    Spare,
+    /// A spare (a magazine, a round, a clip) where it lies or is held.
+    Spare(usize),
     /// The well's mouth, less this along the gun's up (below it).
     Well(f32),
+    /// The gun's loading port, this far above it along the gun's up.
+    Port(f32),
+    /// A bolt's handle: drawn back this share of its travel, lifted this
+    /// far (m) along the gun's up.
+    Bolt(f32, f32),
+    /// A pump's forend (the support grip), drawn back this share of its
+    /// travel.
+    Forend(f32),
+    /// The gun hand where the gun's sights sit this far (m) in front of
+    /// the eye.
+    Aim(f32),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -63,6 +74,14 @@ enum Act {
     SlideStop,
     /// The next shot's case hangs in the port.
     Stovepipe,
+    /// The gun hand moves there over so many ticks, the gun level.
+    MoveGun(To, u32),
+    /// What's in a hand (the gun, a spare) let go of its rest.
+    Lift(Side),
+    /// A spare let go of its rest where it lies.
+    LiftSpare(usize),
+    /// The gun hand's stick clicked (the selector).
+    Stick,
 }
 
 use Act::*;
@@ -124,7 +143,7 @@ fn script() -> Vec<Act> {
         Release(false),
         Wait(30),
         Beat("mag in"),
-        Move(Side::Left, To::Spare, Quat::IDENTITY, 36),
+        Move(Side::Left, To::Spare(0), Quat::IDENTITY, 36),
         Grip(Side::Left, 1.0),
         Wait(4),
         Move(Side::Left, To::Well(0.12), Quat::IDENTITY, 30),
@@ -195,19 +214,177 @@ pub struct Cycle {
     /// A move's start and end (world), fixed as it starts.
     path: Option<(Vec3, Vec3)>,
     pub gun: Option<Entity>,
-    pub spare: Option<Entity>,
+    pub spares: Vec<Entity>,
+    mag: Option<Entity>,
+    holster: bool,
+    /// Which gun's cycle.
+    pub id: String,
     stovepipe: bool,
     pub ticks: Vec<Tick>,
     pub done: bool,
 }
 
 impl Cycle {
+    /// The PM's cycle.
     pub fn new() -> Self {
+        Self::of("pm_pistol")
+    }
+
+    /// `id`'s cycle (the guns of [`GUNS`]).
+    pub fn of(id: &str) -> Self {
         Self {
-            acts: script(),
+            acts: script_for(id),
+            id: id.into(),
             ..Default::default()
         }
     }
+}
+
+/// The guns with a scripted cycle.
+pub const GUNS: &[&str] = &["pm_pistol", "toz8"];
+
+fn script_for(id: &str) -> Vec<Act> {
+    match id {
+        "toz8" => toz8(),
+        _ => script(),
+    }
+}
+
+/// What's laid out for a gun's cycle: its magazine (and rounds), whether
+/// it's holstered (else it lies on a rest in front), and the spares (with
+/// their rounds) in a pouch or on the rest.
+struct Kit {
+    gun: &'static str,
+    mag: Option<(&'static str, u32)>,
+    holster: bool,
+    spares: Vec<(&'static str, u32)>,
+}
+
+fn kit(id: &str) -> Kit {
+    match id {
+        "toz8" => Kit {
+            gun: "toz8",
+            mag: None,
+            holster: false,
+            spares: vec![("round_22lr", 1), ("round_22lr", 1)],
+        },
+        _ => Kit {
+            gun: "pm_pistol",
+            mag: Some(("pm_mag", 3)),
+            holster: true,
+            spares: vec![("pm_mag", 8)],
+        },
+    }
+}
+
+/// Where a long gun lies to be taken up, and the spares beside it
+/// (playspace).
+const REST: Vec3 = Vec3::new(0.2, 1.05, -0.4);
+const SPARES_AT: Vec3 = Vec3::new(-0.3, 1.0, -0.35);
+
+/// A long gun's lift: taken up off the rest, raised to the eye with the
+/// other hand on its handguard.
+fn take_up_and_aim() -> Vec<Act> {
+    vec![
+        Wait(30),
+        Beat("take up"),
+        MoveGun(To::Grab(GripRole::Primary, Vec3::ZERO), 30),
+        Grip(Side::Right, 1.0),
+        Wait(4),
+        Lift(Side::Right),
+        MoveGun(To::Local(Vec3::new(0.15, 1.2, -0.35)), 30),
+    ]
+}
+
+fn aim_long() -> Vec<Act> {
+    vec![
+        Beat("aim"),
+        MoveGun(To::Aim(0.12), 36),
+        Move(
+            Side::Left,
+            To::Grab(GripRole::Support, Vec3::ZERO),
+            Quat::IDENTITY,
+            20,
+        ),
+        Grip(Side::Left, 1.0),
+        Wait(24),
+    ]
+}
+
+const SHOT: [Act; 4] = [
+    Trigger(Side::Right, 1.0),
+    Wait(8),
+    Trigger(Side::Right, 0.0),
+    Wait(40),
+];
+
+/// A turn-bolt worked by the left hand: up, back (and the case out), and
+/// let go there, open.
+fn bolt_open() -> Vec<Act> {
+    vec![
+        Grip(Side::Left, 0.0),
+        Move(Side::Left, To::Bolt(0.0, 0.0), Quat::IDENTITY, 18),
+        Trigger(Side::Left, 1.0),
+        Wait(3),
+        Move(Side::Left, To::Bolt(0.0, 0.045), Quat::IDENTITY, 8),
+        Move(Side::Left, To::Bolt(1.15, 0.045), Quat::IDENTITY, 14),
+        Trigger(Side::Left, 0.0),
+        Wait(6),
+    ]
+}
+
+/// And home: taken at the back, forward, down.
+fn bolt_close() -> Vec<Act> {
+    vec![
+        Move(Side::Left, To::Bolt(1.0, 0.045), Quat::IDENTITY, 14),
+        Trigger(Side::Left, 1.0),
+        Wait(3),
+        Move(Side::Left, To::Bolt(-0.05, 0.045), Quat::IDENTITY, 14),
+        Move(Side::Left, To::Bolt(-0.05, -0.01), Quat::IDENTITY, 8),
+        Trigger(Side::Left, 0.0),
+        Wait(6),
+    ]
+}
+
+/// A loose round taken from beside the rest and thumbed in at the port.
+fn thumb_in(spare: usize) -> Vec<Act> {
+    vec![
+        Move(Side::Left, To::Spare(spare), Quat::IDENTITY, 30),
+        Grip(Side::Left, 1.0),
+        Wait(4),
+        LiftSpare(spare),
+        Move(Side::Left, To::Port(0.08), Quat::IDENTITY, 30),
+        Move(Side::Left, To::Port(0.0), Quat::IDENTITY, 10),
+        Grip(Side::Left, 0.0),
+        Wait(10),
+    ]
+}
+
+/// The TOZ-8: a single-shot .22 turn-bolt. Taken up, the bolt opened, a
+/// round thumbed into the chamber, the bolt closed; aimed and fired; the
+/// bolt opened (the case out), another round in, closed, fired.
+fn toz8() -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.push(Beat("open"));
+    s.extend(bolt_open());
+    s.push(Beat("load"));
+    s.extend(thumb_in(0));
+    s.push(Beat("close"));
+    s.extend(bolt_close());
+    s.extend(aim_long());
+    s.push(Beat("fire"));
+    s.extend(SHOT);
+    s.push(Beat("open again"));
+    s.extend(bolt_open());
+    s.push(Beat("load again"));
+    s.extend(thumb_in(1));
+    s.push(Beat("close again"));
+    s.extend(bolt_close());
+    s.extend(aim_long());
+    s.push(Beat("fire again"));
+    s.extend(SHOT);
+    s.extend([Beat("end"), Wait(45)]);
+    s
 }
 
 pub struct CyclePlugin;
@@ -238,36 +415,51 @@ fn hand_of(world: &mut World, side: Side) -> Option<Hand> {
         .map(|(_, h)| h.clone())
 }
 
-/// The PM in the holster, a magazine of three in it and the chamber empty;
-/// a spare of eight in a pouch.
+/// The gun (in the holster, or on its rest in front), its magazine in
+/// it, the chamber empty; the spares in a pouch or beside the rest.
 fn set_up(world: &mut World, c: &mut Cycle, who: Entity) {
     let catalog = world.resource::<Catalog>().clone();
     let root = *world.get::<Transform>(who).unwrap();
-    let near = root.transform_point(Vec3::new(0.3, 1.0, -0.3));
-    let spawn = |world: &mut World, id: &str| {
+    let k = kit(&c.id);
+    let spawn = |world: &mut World, id: &str, at: Vec3, rest: bool| {
         let kind = catalog.kind(id).expect("an item");
         let e = spawn_item(
             &mut world.commands(),
             &catalog,
             SpawnItem {
                 kind,
-                transform: Transform::from_translation(near),
+                transform: Transform::from_translation(at).with_rotation(root.rotation),
                 condition: 1.0,
             },
         );
         world.flush();
+        if rest {
+            world
+                .entity_mut(e)
+                .insert(avian3d::prelude::RigidBody::Static);
+        }
         e
     };
-    let gun = spawn(world, "pm_pistol");
-    let mag = spawn(world, "pm_mag");
-    let spare = spawn(world, "pm_mag");
-    world.get_mut::<Item>(mag).unwrap().rounds = 3;
-    world.get_mut::<Item>(spare).unwrap().rounds = 8;
+    let gun = spawn(world, k.gun, root.transform_point(REST), !k.holster);
+    if let Some((mag, n)) = k.mag {
+        let m = spawn(
+            world,
+            mag,
+            root.transform_point(Vec3::new(0.3, 1.0, -0.3)),
+            false,
+        );
+        world.get_mut::<Item>(m).unwrap().rounds = n;
+        c.mag = Some(m);
+    }
+    for (i, (id, n)) in k.spares.iter().enumerate() {
+        let at = root.transform_point(SPARES_AT + Vec3::new(i as f32 * 0.07, 0.0, 0.0));
+        let e = spawn(world, id, at, !k.holster);
+        world.get_mut::<Item>(e).unwrap().rounds = *n;
+        c.spares.push(e);
+    }
     c.gun = Some(gun);
-    c.spare = Some(spare);
+    c.holster = k.holster;
     c.since = 0;
-    // Its well and the player's holster and a pouch, once spawned.
-    let _ = mag;
 }
 
 /// Seats `item` in `socket` as a hand putting it there would.
@@ -316,7 +508,27 @@ fn place(world: &mut World, c: &Cycle, to: To, root: &Transform) -> Option<Vec3>
             let m = s.occupant?;
             world.get::<GlobalTransform>(m)?.translation() + up * off
         }
-        To::Spare => world.get::<GlobalTransform>(c.spare?)?.translation(),
+        To::Spare(i) => world
+            .get::<GlobalTransform>(*c.spares.get(i)?)?
+            .translation(),
+        To::Port(above) => gt.transform_point(g.layout.load_port) + up * above,
+        To::Bolt(back, lift) => {
+            let h = g.layout.handle.as_ref()?;
+            gt.transform_point(h.grab) + gt.back().as_vec3() * h.travel * back + up * lift
+        }
+        To::Forend(back) => {
+            let h = g.layout.handle.as_ref()?;
+            let grab = world.get::<Grabbable>(gun)?;
+            let p = grab.points.iter().find(|p| p.role == GripRole::Support)?;
+            gt.mul_transform(p.local).translation() + gt.back().as_vec3() * h.travel * back
+        }
+        To::Aim(ahead) => {
+            // Level, the sights `ahead` in front of the eye: the grip
+            // that far back of them.
+            let eye = root.transform_point(Vec3::new(0.0, 1.65, 0.0));
+            let sight = g.layout.sight.translation - g.layout.grip.translation;
+            eye + root.rotation * (Vec3::new(0.0, 0.0, -ahead) - sight)
+        }
     })
 }
 
@@ -360,22 +572,20 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
     }
     if c.frame == 4 {
         // Into the holster and the pouch, the magazine into the gun.
-        let (gun, spare) = (c.gun.unwrap(), c.spare.unwrap());
+        let gun = c.gun.unwrap();
         let well = world.get::<Gun>(gun).and_then(|g| g.magwell);
-        let mag = {
-            let mut q = world.query_filtered::<(Entity, &Item), With<Mag>>();
-            q.iter(world)
-                .find(|(e, i)| *e != spare && i.rounds == 3)
-                .map(|(e, _)| e)
-        };
-        if let (Some(well), Some(mag)) = (well, mag) {
+        if let (Some(well), Some(mag)) = (well, c.mag) {
             seat(world, mag, well);
         }
-        if let Some(h) = slot(world, who, SlotKind::Holster) {
-            seat(world, gun, h);
-        }
-        if let Some(p) = slot(world, who, SlotKind::Pouch) {
-            seat(world, spare, p);
+        if c.holster {
+            if let Some(h) = slot(world, who, SlotKind::Holster) {
+                seat(world, gun, h);
+            }
+            for spare in c.spares.clone() {
+                if let Some(p) = slot(world, who, SlotKind::Pouch) {
+                    seat(world, spare, p);
+                }
+            }
         }
         let mut g = world.get_mut::<Gun>(gun).unwrap();
         g.firearm.chambers.iter_mut().for_each(|r| *r = None);
@@ -426,6 +636,43 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
             next = c.since + 1 >= 6;
         }
         Stovepipe => c.stovepipe = true,
+        MoveGun(to, n) => {
+            let grip = c
+                .gun
+                .and_then(|g| world.get::<Gun>(g))
+                .map_or(Quat::IDENTITY, |g| g.layout.grip.rotation);
+            if c.since == 0 {
+                let from = {
+                    let i = world.get::<RigInput>(who).unwrap();
+                    root.transform_point(i.hand(Side::Right).pose.translation)
+                };
+                c.path = place(world, c, to, &root).map(|b| (from, b));
+            }
+            if let Some((a, b)) = c.path {
+                let k = ((c.since + 1) as f32 / n as f32).min(1.0);
+                let e = k * k * (3.0 - 2.0 * k);
+                set_hand(world, who, Side::Right, a.lerp(b, e), grip);
+            }
+            next = c.since + 1 >= n;
+        }
+        Lift(side) => {
+            if let Some(held) = hand_of(world, side).and_then(|h| h.holding) {
+                world
+                    .entity_mut(held)
+                    .insert(avian3d::prelude::RigidBody::Dynamic);
+            }
+        }
+        LiftSpare(i) => {
+            if let Some(&e) = c.spares.get(i) {
+                world
+                    .entity_mut(e)
+                    .insert(avian3d::prelude::RigidBody::Dynamic);
+            }
+        }
+        Stick => {
+            input(world, who, |h| h.stick_click = c.since < 3);
+            next = c.since + 1 >= 6;
+        }
     }
     if c.stovepipe
         && let Some(mut g) = c.gun.and_then(|g| world.get_mut::<Gun>(g))
@@ -442,7 +689,6 @@ fn run(world: &mut World, c: &mut Cycle, who: Entity) {
     } else {
         c.since += 1;
     }
-    let _ = hand_of;
 }
 
 /// What the frame showed and did.
@@ -505,7 +751,7 @@ fn film(
         return;
     };
     let mut args = rest.split(',');
-    let _what = args.next();
+    let what = args.next().unwrap_or("pm").to_owned();
     let every: u32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(3).max(1);
     *frame += 1;
     if *frame == 1 {
@@ -519,7 +765,12 @@ fn film(
     // the rig is ours.
     if cycle.is_none() {
         if loaded.is_some() && *frame > 8 {
-            commands.insert_resource(Cycle::new());
+            let id = if what == "pm" {
+                "pm_pistol"
+            } else {
+                what.as_str()
+            };
+            commands.insert_resource(Cycle::of(id));
         }
         return;
     }
@@ -660,8 +911,8 @@ mod tests {
     /// The whole cycle runs through headless and every beat does its
     /// thing: three shots to slide lock, the magazine out and in, the slide
     /// released onto a round, a stovepipe cleared, and a last shot.
-    #[test]
-    fn the_pm_cycle_runs_by_hand() {
+    /// Runs `id`'s cycle headless to its end; the world, to look at.
+    fn run(id: &str) -> Vr {
         let mut vr = Vr::new("training_yard");
         let feet = vr
             .app
@@ -669,13 +920,38 @@ mod tests {
             .resource::<crate::world::Zone>()
             .on_ground(0.0, 30.0);
         vr.stand(feet, 0.0);
-        vr.app.insert_resource(Cycle::new());
-        for _ in 0..3000 {
+        vr.app.insert_resource(Cycle::of(id));
+        for _ in 0..4000 {
             vr.step(1);
             if vr.app.world().resource::<Cycle>().done {
                 break;
             }
         }
+        vr
+    }
+
+    fn fired(c: &Cycle) -> usize {
+        c.ticks
+            .iter()
+            .flat_map(|t| &t.events)
+            .filter(|e| matches!(e, FireEvent::Fired { .. }))
+            .count()
+    }
+
+    /// The TOZ-8 by hand: the bolt opened, a round thumbed in, closed, a
+    /// shot; again. Two shots, each case out as the bolt comes back.
+    #[test]
+    fn the_toz8_cycle_runs_by_hand() {
+        let vr = run("toz8");
+        let c = vr.app.world().resource::<Cycle>();
+        println!("{}", c.report());
+        assert!(c.done, "the script ran out");
+        assert_eq!(fired(c), 2, "{}", c.report());
+    }
+
+    #[test]
+    fn the_pm_cycle_runs_by_hand() {
+        let vr = run("pm_pistol");
         let c = vr.app.world().resource::<Cycle>();
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
