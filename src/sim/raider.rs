@@ -1209,6 +1209,18 @@ pub fn think(
                         _ => String::new(),
                     }}),
                 );
+                if r.debug
+                    && let Some(Task::Grab { item, .. }) = bot.tasks.front()
+                    && let Ok((_, it, gt, ..)) = scene.items.get(*item)
+                {
+                    let at = gt.translation();
+                    log.event(
+                        "stuck_item",
+                        json!({"item": scene.catalog.get(it.kind()).id,
+                        "ix": round(at.x, 2), "iy": round(at.y, 2), "iz": round(at.z, 2),
+                        "by": scene.in_the_way(pos, at.xz())}),
+                    );
+                }
                 // Stuck again and again in one place: the waypoint it's
                 // making for can't be reached from here, whatever the grid
                 // says. Block it in its own grid so the next plan goes round.
@@ -3289,6 +3301,16 @@ fn raid_step(
                 match pick_item(me, r, scene, s, pos) {
                     Some(item) => {
                         r.act = Act::Take(s, item);
+                        if r.debug
+                            && let Ok((_, it, gt, ..)) = scene.items.get(item)
+                        {
+                            let at = gt.translation();
+                            log.event(
+                                "pick",
+                                json!({"item": scene.catalog.get(it.kind()).id, "site": r.sites[s].name,
+                                "ix": round(at.x, 2), "iy": round(at.y, 2), "iz": round(at.z, 2)}),
+                            );
+                        }
                         if let Some(t) = take_item(r, scene, s, item, pos) {
                             let power = t.iter().any(|t| {
                                 matches!(t, Task::Press(e) if scene.power_switches.contains(*e))
