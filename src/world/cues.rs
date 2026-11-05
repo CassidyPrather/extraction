@@ -65,7 +65,7 @@ const PIPE_PROUD: f32 = 0.7;
 pub const PUFFS: usize = 24;
 pub const LIFE: f32 = 18.0;
 /// Its thickest (a puff's heart, just clear of the pipe).
-const SMOKE_ALPHA: f32 = 0.7;
+const SMOKE_ALPHA: f32 = 0.6;
 /// Wood smoke, lit by the sky: a pale blue-grey.
 const SMOKE: Color = Color::srgb(0.8, 0.81, 0.84);
 /// Shared alpha steps for the puffs (`SmokeLook`).
@@ -75,7 +75,8 @@ const STEPS: usize = 8;
 /// `light`. Unlit, as every puff is (lit, a far thin one came out black):
 /// pale by day, dimmed with the light so it doesn't glow after dark.
 fn smoke_tint(k: usize, light: f32) -> Color {
-    let c = SMOKE.to_linear() * light.clamp(0.03, 1.0);
+    // (Dimmer than the light's own fall: the eyes' adaptation lifts it.)
+    let c = SMOKE.to_linear() * light.clamp(0.0, 1.0).powf(1.7).max(0.004);
     Color::from(c).with_alpha(SMOKE_ALPHA * k as f32 / STEPS as f32)
 }
 

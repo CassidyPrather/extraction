@@ -504,6 +504,19 @@ mod puffs {
             })
             .collect();
         out.push(("a firefight's wounds 6-15 m ahead", eye, look, fight));
+        // A chimney smoking (`world::cues`) 6 m ahead and 3 m up, a storm
+        // blowing its plume back over the eye: every puff of its loop.
+        let top = eye + fwd * 6.0 + Vec3::Y * 1.3;
+        let gale = -fwd * 2.5;
+        let plume: Vec<(Vec3, f32)> = (0..crate::world::cues::PUFFS)
+            .map(|i| {
+                let age =
+                    crate::world::cues::LIFE * (i as f32 + 0.5) / crate::world::cues::PUFFS as f32;
+                let (off, scale, _) = crate::world::cues::puff_at(age, i as f32, gale);
+                (top + off, scale)
+            })
+            .collect();
+        out.push(("a chimney's plume blown over the eye", eye, top, plume));
         out
     }
 
