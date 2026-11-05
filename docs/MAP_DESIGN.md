@@ -202,6 +202,20 @@ A good map makes the crossing a decision.
   the rail yard, the lodge's woodshed), 10-13 m off, on the side away
   from the rendezvous beacon (`map_landmarks::beacon_at`: 7 m off the
   truck's side), clear of the truck (`TRUCK_ROOM`) and its tailgate.
+- **And every rendezvous has somewhere to go still right by the truck**:
+  a roof's door or low cover (`LOW_COVER`: a log pile, a car wreck)
+  within 5 m of the truck's body (`WAIT_NEAR`). Low cover may stand
+  nearer than a building (`TRUCK_ROOM`, 8 m): 2.5 m off the truck's body
+  (`LOW_COVER_ROOM`), out of the strip behind it you climb in from and
+  line up in, and 2 m off its beacon. Crouched behind it you're still
+  past `raid::truck::PARK_CLEAR` (5 m from the truck's middle), so the
+  truck pulls up on its mark. In 6 of 6 raids a bot waiting in the open
+  by Kettle's hunting lodge was found there: carried attention buys a
+  response team to wherever you stand (`anomaly::spend_attention`),
+  so a still wait needs cover, not distance. Every valley's is a log
+  pile, one per rendezvous (`tag: "wait_<rendezvous>"`), each placed at
+  the nearest spot that keeps off roads, doors, the ways home and the
+  slope; `map_lint::wait_cover` gives what each waits by.
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.
@@ -516,6 +530,14 @@ fine on a monitor makes people sick or tired in a headset.
   than 16° over any 10 m (`ROUTE_GRADE`, `GRADE_RUN`), bridge decks
   counted at the deck. The body controller climbs far steeper; that's
   for scrambling on purpose, not for the way home.
+- **The gentle jobs come home short**: a career's first two jobs in a
+  first valley (`contracts::GENTLE_JOBS`; job 2 any scout place it can
+  roll, `progression::gentle_job_places`) walk home, to the nearest
+  rendezvous or by the gate while that run is free
+  (`progression::free_short_run`), no more than twice the walk there
+  (`GENTLE_HOME`). Kettle's job 2 was 75 m out and 506 m home; with the
+  gate free it's 1.0x. `kettles_gentle_jobs_need_the_free_run_home` keeps
+  the gate rule pinned.
 - **Edges**: no way a raid walks (a main route, a first job's walk there
   or home, a place's way to its nearest rendezvous) comes within 3 m
   (`EDGE_NEAR`) of the lip of a fall over 4.2 m (`EDGE_DROP`, where a

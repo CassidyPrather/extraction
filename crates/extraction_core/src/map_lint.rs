@@ -438,6 +438,12 @@ pub const OUTCROP_OFF: f32 = 3.0;
 /// The first this many metres of a way home leave its place (its door, its
 /// yard) and aren't judged for room.
 pub const PASS_FROM: f32 = 10.0;
+/// A career's gentle jobs (`contracts::GENTLE_JOBS`, the first two) in a
+/// first valley: the walk home from the job, to the nearest rendezvous or
+/// by the gate while that's free (`progression::free_short_run`), at most
+/// this many times the walk there. Kettle's job 2 was 75 m out and 506 m
+/// home: a newcomer's first raid shouldn't end with the longest walk.
+pub const GENTLE_HOME: f32 = 2.0;
 /// A routed way (a main route, a first job's walk, a way home) keeps this
 /// far, metres, from the lip of a fall...
 pub const EDGE_NEAR: f32 = 3.0;
@@ -525,6 +531,23 @@ pub const TRUCK_ROOM: f32 = 8.0;
 /// buildings, and this far from a rendezvous.
 pub const CRATE_ROOM: f32 = 1.5;
 pub const CRATE_FROM_RV: f32 = 10.0;
+/// The truck at a rendezvous, in its own space (`raid::truck` HOLD_MIN,
+/// HOLD_MAX: x across, z along, its bed (+z) toward the valley's middle):
+/// half its width, and how far its cab and its tail stand from its middle.
+pub const TRUCK_HALF_WIDTH: f32 = 1.6;
+pub const TRUCK_CAB: f32 = 5.4;
+pub const TRUCK_TAIL: f32 = 3.6;
+/// Cover low enough not to be a building, solid enough to get down behind
+/// (over [`WAIT_HEIGHT`]): it may stand nearer the truck than
+/// [`TRUCK_ROOM`], this far off its body, off its tail and its beacon...
+pub const LOW_COVER: &[&str] = &["log_pile", "wreck_lada", "wreck_uaz", "wreck_lorry"];
+pub const LOW_COVER_ROOM: f32 = 2.5;
+/// ...and every rendezvous has a roof's door or low cover this near the
+/// truck's body, metres: somewhere to go still while it's coming (6 of 6
+/// raids, a bot waiting in the open by Kettle's hunting lodge was found
+/// there). The wait behind it stays past `raid::truck::PARK_CLEAR` (5 m
+/// from the truck's middle), so the truck still pulls up on its mark.
+pub const WAIT_NEAR: f32 = 5.0;
 /// Where you stand to climb into the truck, metres behind its middle.
 pub const TAILGATE: f32 = 3.6;
 /// Where you line up behind it to walk in, metres behind its middle.
@@ -1294,6 +1317,83 @@ pub(crate) fn unwalled_edges(hm: &Heightmap, walls: &[Rect], way: &[P2]) -> Vec<
         }
     }
     hits
+}
+
+/// The truck's body where it parks at the rendezvous `rv` (`raid::truck::rv_pose`:
+/// its bed to the valley's middle).
+pub(crate) fn truck_body(rv: P2) -> Rect {
+    let l = geom::len(rv).max(1e-3);
+    let back = [-rv[0] / l, -rv[1] / l];
+    let mid = (TRUCK_TAIL - TRUCK_CAB) * 0.5;
+    Rect {
+        at: [rv[0] + back[0] * mid, rv[1] + back[1] * mid],
+        half: [TRUCK_HALF_WIDTH, (TRUCK_TAIL + TRUCK_CAB) * 0.5],
+        yaw: (-back[0]).atan2(back[1]),
+    }
+}
+
+/// How near a solid comes to a rect, metres (0 touching or in it).
+fn rect_gap(a: &Rect, b: &Rect) -> f32 {
+    b.outline(0.25)
+        .into_iter()
+        .chain(std::iter::once(b.at))
+        .map(|p| a.sdf(p))
+        .fold(f32::INFINITY, f32::min)
+        .max(0.0)
+        .min(
+            a.outline(0.25)
+                .into_iter()
+                .map(|p| b.sdf(p))
+                .fold(f32::INFINITY, f32::min)
+                .max(0.0),
+        )
+}
+
+/// Whether low cover at `q` stands where the truck allows it at `rv`: off
+/// its body by [`LOW_COVER_ROOM`], out of the strip behind it you climb in
+/// from and line up in ([`TRUCK_APPROACH`]), and clear of its beacon.
+pub(crate) fn low_cover_fits(rv: P2, q: &Rect) -> bool {
+    let body = truck_body(rv);
+    let l = geom::len(rv).max(1e-3);
+    let back = [-rv[0] / l, -rv[1] / l];
+    let behind = Rect {
+        at: [
+            rv[0] + back[0] * (TRUCK_TAIL + TRUCK_APPROACH) * 0.5,
+            rv[1] + back[1] * (TRUCK_TAIL + TRUCK_APPROACH) * 0.5,
+        ],
+        half: [
+            TRUCK_HALF_WIDTH + 1.0,
+            (TRUCK_APPROACH - TRUCK_TAIL) * 0.5 + 1.0,
+        ],
+        yaw: body.yaw,
+    };
+    rect_gap(&body, q) >= LOW_COVER_ROOM
+        && rect_gap(&behind, q) > 0.0
+        && q.sdf(crate::map_landmarks::beacon_at(rv)) >= 2.0
+}
+
+/// What a waiter goes still by at the rendezvous `rv`, if anything is near
+/// enough ([`WAIT_NEAR`] off the truck's body): a roof (its door) or low
+/// cover, and how far off the truck it is.
+pub fn wait_cover(map: &MapDef, rv: P2) -> Option<(String, f32)> {
+    let body = truck_body(rv);
+    solids(map)
+        .into_iter()
+        .filter_map(|q| {
+            if LOW_COVER.contains(&q.prefab.as_str()) {
+                return Some((q.name.clone(), rect_gap(&body, &q.rect)));
+            }
+            if crate::map_surge::roofed(&q.prefab) {
+                return crate::map::prefab_entrances(&q.prefab)
+                    .iter()
+                    .map(|e| body.sdf(q.rect.world(e.at)).max(0.0))
+                    .fold(None, |m: Option<f32>, d| Some(m.map_or(d, |m| m.min(d))))
+                    .map(|d| (q.name.clone(), d));
+            }
+            None
+        })
+        .filter(|(_, d)| *d <= WAIT_NEAR)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
 }
 
 /// The ways a raid walks, named: the main routes, each first job's walk
@@ -3523,7 +3623,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 *at,
             );
         }
-        if let Some((_, rc)) = rects.iter().find(|(_, rc)| rc.sdf(*at) < TRUCK_ROOM) {
+        if let Some((_, rc)) = rects.iter().find(|(i, rc)| {
+            rc.sdf(*at) < TRUCK_ROOM
+                && !(LOW_COVER.contains(&solids[*i].prefab.as_str()) && low_cover_fits(*at, rc))
+        }) {
             find(
                 &mut r,
                 Rule::Footing,
@@ -3533,6 +3636,20 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 ),
                 *at,
             );
+        }
+        match wait_cover(map, *at) {
+            Some((q, d)) => r.measures.push(format!(
+                "rendezvous {name}: waits by the {q} {d:.1} m off the truck"
+            )),
+            None => find(
+                &mut r,
+                Rule::Cover,
+                format!(
+                    "nothing to go still by within {WAIT_NEAR} m of the truck at {name}: a roof's door or low cover ({})",
+                    LOW_COVER.join(", ")
+                ),
+                *at,
+            ),
         }
         // The truck parks with its bed toward the map's middle
         // (`raid::truck::rv_pose`); you climb in from behind it.
@@ -3783,6 +3900,55 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // -- The Surge: a roof in reach, and its anomalies off the walls -------------
     crate::map_surge::check(map, hm, &comfy, &comfy_seen, &routes, &targets, &mut r);
 
+    // -- The gentle jobs: home no further than twice the way there -------------
+    {
+        let id = map.name.to_lowercase().replace(' ', "_");
+        let walk = |a: P2, b: P2| {
+            comfy
+                .path(a, b)
+                .map(|p| p.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>())
+        };
+        let rvs: Vec<P2> = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .map(|m| m.at)
+            .collect();
+        let gate = map.markers_of(&MarkerKind::ShortExfil).next().map(|m| m.at);
+        let mut worst: Option<(f32, String)> = None;
+        if crate::progression::FIRST_VALLEYS.contains(&id.as_str()) {
+            for done in 0..crate::contracts::GENTLE_JOBS {
+                for (place, at) in crate::progression::gentle_job_places(&id, map, done) {
+                    let Some(there) = walk(ins, at) else { continue };
+                    let home = rvs
+                        .iter()
+                        .copied()
+                        .chain(gate.filter(|_| crate::progression::free_short_run(done)))
+                        .filter_map(|to| walk(at, to))
+                        .fold(f32::INFINITY, f32::min);
+                    let k = home / there.max(1.0);
+                    if worst.as_ref().is_none_or(|(w, _)| k > *w) {
+                        worst = Some((k, format!("job {} at {place}", done + 1)));
+                    }
+                    if k > GENTLE_HOME {
+                        find(
+                            &mut r,
+                            Rule::Reach,
+                            format!(
+                                "job {} at {place}: {home:.0} m home from {there:.0} m there (at most {GENTLE_HOME}x)",
+                                done + 1
+                            ),
+                            at,
+                        );
+                    }
+                }
+            }
+        }
+        if let Some((k, what)) = worst {
+            r.measures.push(format!(
+                "gentle jobs: home at most {k:.1}x the way there ({what})"
+            ));
+        }
+    }
+
     // -- Edges: no routed way past an unwalled fall -------------------------------
     {
         let walls = edge_walls(map, &solids);
@@ -3867,6 +4033,49 @@ mod tests {
         }
     }
 
+    /// The gentle jobs come home short only by the gate: in Kettle, without
+    /// the free short run (`progression::free_short_run`), a gentle job's
+    /// way home to the nearest rendezvous is over twice the way there.
+    #[test]
+    fn kettles_gentle_jobs_need_the_free_run_home() {
+        let map = MapDef::from_ron(crate::map::KETTLE_PASS).unwrap();
+        let hm = Heightmap::build(&map);
+        let comfy = crate::map_nav::zone_grid(&map, &hm, COMFORT_SLOPE);
+        let walk = |a: P2, b: P2| {
+            comfy
+                .path(a, b)
+                .map(|p| p.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>())
+        };
+        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+        let gate = map.markers_of(&MarkerKind::ShortExfil).next().unwrap().at;
+        let rvs: Vec<P2> = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .map(|m| m.at)
+            .collect();
+        let mut by_rv = 0.0f32;
+        let mut by_gate = 0.0f32;
+        for done in 0..crate::contracts::GENTLE_JOBS {
+            assert!(crate::progression::free_short_run(done));
+            for (_, at) in crate::progression::gentle_job_places("kettle_pass", &map, done) {
+                let there = walk(ins, at).unwrap().max(1.0);
+                let rv = rvs
+                    .iter()
+                    .filter_map(|v| walk(at, *v))
+                    .fold(f32::INFINITY, f32::min);
+                by_rv = by_rv.max(rv / there);
+                by_gate = by_gate.max(rv.min(walk(at, gate).unwrap()) / there);
+            }
+        }
+        assert!(
+            by_rv > GENTLE_HOME,
+            "Kettle's rendezvous are now near its gentle jobs ({by_rv:.1}x): this test pins nothing"
+        );
+        assert!(
+            by_gate <= GENTLE_HOME,
+            "a gentle job is {by_gate:.1}x home even by the gate"
+        );
+    }
+
     /// The unwalled-edge rule sees a real fall: Sallow's main route climbs
     /// the dam's face stair along 20 m of embankment, which only the face's
     /// stair walls ([`crate::map::prefab_walls`]) close off. Without them
@@ -3899,6 +4108,124 @@ mod tests {
             "no fall seen off the face stair without its walls"
         );
         assert_eq!(walled, 0, "the face stair's walls don't close its edge");
+    }
+
+    /// Prints each rendezvous's wait point: what it waits behind, and how far
+    /// the point is from where the truck stops.
+    #[test]
+    #[ignore]
+    fn probe_wait() {
+        for (id, text) in crate::map::VALLEYS
+            .iter()
+            .chain([&("training_yard", TRAINING_YARD)])
+        {
+            let map = MapDef::from_ron(text).unwrap();
+            for m in map.markers_of(&MarkerKind::Rendezvous) {
+                match wait_shelter(&map, m.at, m.at) {
+                    Some((q, d, p)) => println!(
+                        "{id}: {}: behind the {q}, its edge {d:.1} m off, the wait point ({:.1}, {:.1}) {:.1} m from the truck",
+                        m.name,
+                        p[0],
+                        p[1],
+                        dist(p, m.at)
+                    ),
+                    None => println!("{id}: {}: nothing within {WAIT_COVER} m", m.name),
+                }
+            }
+        }
+    }
+
+    /// For each rendezvous, the nearest spot a log pile fits as its wait
+    /// cover (`WAIT_NEAR`), as a placement line: `MAP_ID` for one valley.
+    #[test]
+    #[ignore]
+    fn probe_wait_spots() {
+        let only = std::env::var("MAP_ID").ok();
+        for (id, text) in crate::map::VALLEYS
+            .iter()
+            .chain([&("training_yard", TRAINING_YARD)])
+        {
+            if only.as_deref().is_some_and(|o| o != *id) {
+                continue;
+            }
+            let mut map = MapDef::from_ron(text).unwrap();
+            map.placements.retain(|p| !p.tag.starts_with("wait_"));
+            let hm = Heightmap::build(&map);
+            let comfy = crate::map_nav::zone_grid(&map, &hm, COMFORT_SLOPE);
+            let solids = solids(&map);
+            let strips = crate::map_surge::door_strips(&map);
+            let r = lint(&map, &hm);
+            let ways: Vec<P2> = routed_ways(&map, &comfy, &r.routes)
+                .into_iter()
+                .flat_map(|(_, w)| w)
+                .collect();
+            let pile = std::env::var("PILE").unwrap_or_else(|_| "log_pile".into());
+            let f = crate::map::prefab_footprint(&pile);
+            let onlyrv = std::env::var("RV").ok();
+            for m in map.markers_of(&MarkerKind::Rendezvous) {
+                if onlyrv
+                    .as_deref()
+                    .is_some_and(|o| !o.split(',').any(|n| n == m.name.replace(' ', "_")))
+                {
+                    continue;
+                }
+                let rv = m.at;
+                let body = truck_body(rv);
+                let l = geom::len(rv).max(1e-3);
+                let back = [-rv[0] / l, -rv[1] / l];
+                let side = [back[1], -back[0]];
+                let mut best: Option<(f32, P2, f32)> = None;
+                for s in [1.0f32, -1.0] {
+                    for k in 0..24 {
+                        let off = 3.5 + k as f32 * 0.25;
+                        for a in -16..=8 {
+                            let along = a as f32 * 0.5;
+                            for turn in [0.0f32, 45.0, 90.0, 135.0] {
+                                let at = [
+                                    rv[0] + side[0] * s * off + back[0] * along,
+                                    rv[1] + side[1] * s * off + back[1] * along,
+                                ];
+                                let yaw = body.yaw + turn.to_radians();
+                                let q = Rect {
+                                    at,
+                                    half: [f[0] * 0.5, f[2] * 0.5],
+                                    yaw,
+                                };
+                                let gap = rect_gap(&body, &q);
+                                if gap > WAIT_NEAR || !low_cover_fits(rv, &q) {
+                                    continue;
+                                }
+                                let mut pts = q.outline(0.5);
+                                pts.push(at);
+                                let bad = pts.iter().any(|p| {
+                                    hm.road_at(*p).weight > 0
+                                        || hm.water_level(*p).is_some()
+                                        || hm.slope_deg(*p) > 14.0
+                                }) || solids.iter().any(|o| rect_gap(&o.rect, &q) < 1.5)
+                                    || strips.iter().any(|(_, st)| rect_gap(st, &q) < 0.5)
+                                    || ways.iter().any(|w| q.sdf(*w) < 1.5);
+                                if bad {
+                                    continue;
+                                }
+                                if best.is_none_or(|(g, _, _)| gap < g) {
+                                    best = Some((gap, at, yaw.to_degrees().rem_euclid(360.0)));
+                                }
+                            }
+                        }
+                    }
+                }
+                match best {
+                    Some((g, at, rot)) => println!(
+                        "SPOT {id} {} {:.1} {:.1} {:.0} gap {g:.1} {pile}",
+                        m.name.replace(' ', "_"),
+                        at[0],
+                        at[1],
+                        rot
+                    ),
+                    None => println!("SPOT {id} {} none", m.name.replace(' ', "_")),
+                }
+            }
+        }
     }
 
     /// Every valley on [`crate::map::VALLEYS`] lints clean: a new valley is
@@ -4138,16 +4465,20 @@ mod tests {
     #[test]
     fn a_wait_under_the_drones_without_shelter_is_found() {
         let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
-        map.placements.retain(|p| p.tag != "bus_shelter");
+        // The shelter, and the log pile by the truck (`WAIT_NEAR`).
+        map.placements
+            .retain(|p| p.tag != "bus_shelter" && p.tag != "wait_bus_depot");
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
-        assert!(
-            r.findings
-                .iter()
-                .any(|f| f.rule == Rule::Cover && f.what.contains("to wait behind at Bus depot")),
-            "{}",
-            r.text()
-        );
+        for what in ["to wait behind at Bus depot", "of the truck at Bus depot"] {
+            assert!(
+                r.findings
+                    .iter()
+                    .any(|f| f.rule == Rule::Cover && f.what.contains(what)),
+                "no \"{what}\" finding:\n{}",
+                r.text()
+            );
+        }
     }
 
     /// Every wreck is a light prop (`VIEW_LIGHT` names them again).
