@@ -7222,6 +7222,8 @@ mod wreck_reach {
     /// A sight line or a reach that meets the wreck this near the part
     /// has got to it (the part's in its hull, or sits on it).
     const AT_PART: f32 = 0.15;
+    /// How near a point (m) a part of its wreck is the part it sits in.
+    const UNDER: f32 = 0.12;
     /// A shoulder's lowest (crouched and leaning in) and highest
     /// (standing) over the ground, m.
     const SHOULDER: (f32, f32) = (0.55, 1.45);
@@ -7283,9 +7285,12 @@ mod wreck_reach {
         for _ in 0..30 {
             vr.step(30);
             let w = vr.app.world();
-            if w.get::<crate::robots::Salvaged>(e).is_some()
-                && (kind == "heavy" || w.get::<crate::robots::salvage::Fitted>(e).is_some())
-            {
+            // (The heavy's done going over `FALL_TIME` after it's down.)
+            let settled = match w.get::<crate::robots::heavy::Heavy>(e) {
+                Some(h) => h.down_for > crate::robots::heavy::FALL_TIME + 1.5,
+                None => w.get::<crate::robots::salvage::Fitted>(e).is_some(),
+            };
+            if w.get::<crate::robots::Salvaged>(e).is_some() && settled {
                 break;
             }
         }
@@ -7351,10 +7356,15 @@ mod wreck_reach {
                 own: [Some(e), item].into_iter().flatten().collect(),
             });
         }
+        // (A heavy's Armour-role parts are its hull, bolts and vents, which
+        // no hand takes off; its plates are its seats, below.)
+        let is_heavy = world.get::<crate::robots::heavy::Heavy>(w).is_some();
         let plates: Vec<Entity> = world
             .query_filtered::<(Entity, &RobotPart), With<crate::robots::salvage::HealthAtDeath>>()
             .iter(world)
-            .filter(|(_, p)| p.robot == w && matches!(p.role, PartRole::Armour(_)) && p.alive())
+            .filter(|(_, p)| {
+                !is_heavy && p.robot == w && matches!(p.role, PartRole::Armour(_)) && p.alive()
+            })
             .map(|(e, _)| e)
             .collect();
         for p in plates {
@@ -7374,13 +7384,55 @@ mod wreck_reach {
             .filter(|(_, s, _)| s.robot == w)
             .map(|(e, s, k)| (e, k.occupant, format!("{:?}", s.slot)))
             .collect();
+        // The cell's behind its hatch: got at once the hatch is off (its
+        // seat, the plate in it, the plate's part and bolts), the order a
+        // heavy is taken apart in.
+        let mut hatch: Vec<Entity> = heavy
+            .iter()
+            .filter(|(_, _, slot)| slot == "Plate(0)")
+            .flat_map(|(seat, item, _)| [Some(*seat), *item])
+            .flatten()
+            .collect();
+        hatch.extend(
+            world
+                .query::<(Entity, &RobotPart, &crate::robots::heavy::HeavyPart)>()
+                .iter(world)
+                .filter(|(_, p, h)| {
+                    p.robot == w
+                        && matches!(
+                            h.0,
+                            extraction_core::heavy::Slot::Plate(0)
+                                | extraction_core::heavy::Slot::Bolt { plate: 0, .. }
+                        )
+                })
+                .map(|(e, ..)| e),
+        );
         for (seat, item, slot) in heavy {
             if let Some(item) = item {
+                let mut own = vec![item, seat];
+                if slot == "Cell" {
+                    own.extend(&hatch);
+                }
                 out.push(Point {
                     what: format!("the heavy's {slot}"),
                     at: at(world, item),
-                    own: vec![item, seat],
+                    own,
                 });
+            }
+        }
+        // A seated thing isn't hidden by the part it sits in: the wreck's
+        // parts right at a point are its own.
+        let parts: Vec<(Entity, Vec3)> = world
+            .query::<(Entity, &RobotPart, &GlobalTransform)>()
+            .iter(world)
+            .filter(|(_, p, _)| p.robot == w)
+            .map(|(e, _, g)| (e, g.translation()))
+            .collect();
+        for p in &mut out {
+            for (e, at) in &parts {
+                if at.distance(p.at) < UNDER && !p.own.contains(e) {
+                    p.own.push(*e);
+                }
             }
         }
         out
@@ -7402,18 +7454,7 @@ mod wreck_reach {
 
     /// What's still out of sight or reach, and whose it is to fix: each
     /// kind and part, and why. The test fails on one that now passes.
-    const PENDING: &[(&str, &str, &str)] = &[
-        (
-            "heavy",
-            "a plate",
-            "Heavy's: its wreck stays up on its legs, its back plates 1.9-2 m up",
-        ),
-        (
-            "heavy",
-            "the heavy's Cell",
-            "Heavy's: its cell seat is inside its hull",
-        ),
-    ];
+    const PENDING: &[(&str, &str, &str)] = &[];
 
     /// Every machine that wrecks leaves what can be taken off it where you
     /// can see it from standing 1.5 m off, from one side or another, and
@@ -7454,21 +7495,21 @@ mod wreck_reach {
                 .translation();
             let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(vr.app.world_mut());
             let spatial = q.get(vr.app.world()).unwrap();
-            let ring = |r: f32| {
-                (0..16).map(move |k| {
-                    let a = k as f32 / 16.0 * std::f32::consts::TAU;
+            let ring = |r: f32, n: usize| {
+                (0..n).map(move |k| {
+                    let a = k as f32 / n as f32 * std::f32::consts::TAU;
                     Vec3::new(c.x + r * a.cos(), 0.0, c.z + r * a.sin())
                 })
             };
-            let heads: Vec<Vec3> = ring(LOOK_FROM)
+            let heads: Vec<Vec3> = ring(LOOK_FROM, 16)
                 .map(|p| zone.on_ground(p.x, p.z) + Vec3::Y * EYES)
                 .collect();
             // Where you can stand: your body meets none of the wreck.
             let body = Collider::capsule(BODY, 1.1);
             let solid = SpatialQueryFilter::from_mask([Layer::Robot]);
-            let spots: Vec<Vec3> = (0..14)
-                .map(|k| 0.4 + 0.2 * k as f32)
-                .flat_map(ring)
+            let spots: Vec<Vec3> = (0..27)
+                .map(|k| 0.4 + 0.1 * k as f32)
+                .flat_map(|r| ring(r, 32))
                 .map(|p| zone.on_ground(p.x, p.z))
                 .filter(|f| {
                     spatial
