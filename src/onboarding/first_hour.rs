@@ -283,6 +283,14 @@ fn passthrough() -> Vec<String> {
 fn run_fights(chain: &Chain) -> AppExit {
     let exe = std::env::current_exe().expect("own executable");
     let pass = passthrough();
+    // Marrow's, unless another valley's asked for (`--map`): each valley's
+    // first fight, on the way to the job its card names.
+    let map = pass
+        .iter()
+        .position(|a| a == "--map")
+        .and_then(|i| pass.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| "marrow_creek".to_string());
     let (mut failed, mut by_design) = (Vec::new(), Vec::new());
     for e in &chain.encounters {
         for p in &chain.personas {
@@ -303,14 +311,7 @@ fn run_fights(chain: &Chain) -> AppExit {
                     "--encounter",
                     e,
                 ])
-                .args([
-                    "--data-dir",
-                    &dir_s,
-                    "--save",
-                    &save,
-                    "--map",
-                    "marrow_creek",
-                ]);
+                .args(["--data-dir", &dir_s, "--save", &save, "--map", &map]);
             if p.one_handed {
                 cmd.arg("--one-handed");
             }
@@ -597,6 +598,8 @@ pub(super) struct Newcomer {
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
+    /// The walk last looked at as it came up (`unvetted`): once each.
+    vetted: Option<Vec2>,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1528,6 +1531,28 @@ pub(super) fn direct_raid(
             }
             bot.restart();
         }
+    }
+    // A walk about to be made that `walk` didn't plan: a long straight one,
+    // or one through the fence, isn't made (once each). (Walked off from
+    // a heavy out through the south gate, it went on with the way it had
+    // planned from inside, at the wire; and a 90 m stretch along the fence
+    // timed out at a walk.)
+    // As a timeout does it (above), only before the 30 s at the wire: the
+    // rest of that walk dropped, and what's next planned from here. (Put
+    // through `walk` to the same old waypoint instead, it went back the
+    // way it had been going, past the sentry, and round again.)
+    if let Some(&Task::WalkTo { to, .. }) = bot.tasks.front()
+        && state.vetted != Some(to)
+        && {
+            // (Looked at once, as it comes up.)
+            state.vetted = Some(to);
+            unvetted(&world, here, to)
+        }
+    {
+        while matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) && bot.tasks.len() > 1 {
+            bot.tasks.pop_front();
+        }
+        bot.restart();
     }
     // A first raid that runs on past half an hour has lost its way.
     if now > 1800.0 && state.leg != Leg::Done {
@@ -2649,9 +2674,41 @@ fn under_a_roof(
 /// off, and a breath to look back.
 fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
     let away = (here - from).normalize_or(Vec2::Y);
-    let mut t = walk(world, here, here + away * 15.0);
+    // Away, or turned along whatever's ahead (the fence, the map's edge):
+    // the first that stays inside the fence. (Straight away every 15 m, the
+    // lost newcomer went out through the south gate to the map's edge, and
+    // the heavy had it in the corner.)
+    let inside = world.zone.map.half() - world.zone.map.fence_inset.max(0.0) - 5.0;
+    let to = [0.0f32, 45.0, -45.0, 90.0, -90.0]
+        .into_iter()
+        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * 15.0)
+        .find(|p| p.x.abs() < inside && p.y.abs() < inside)
+        .unwrap_or(here + away * 15.0);
+    let mut t = walk(world, here, to);
     t.push(Task::Wait(2.0));
     t
+}
+
+/// A straight walk `walk` wouldn't make: longer than its legs go, or
+/// through the quarantine fence (out of doors only: a step in a building
+/// is its plan's).
+fn unvetted(world: &World2, here: Vec2, to: Vec2) -> bool {
+    let indoors = |p: Vec2| {
+        world
+            .entrances
+            .building_at(Vec3::new(p.x, world.zone.on_ground(p.x, p.y).y + 0.5, p.y))
+            .is_some()
+    };
+    if indoors(here) || indoors(to) {
+        return false;
+    }
+    here.distance(to) > 20.0
+        || fence_boxes(&world.zone).iter().any(|(xf, half)| {
+            let inv = xf.compute_affine().inverse();
+            let a = inv.transform_point3(Vec3::new(here.x, 0.0, here.y)).xz();
+            let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
+            segment_hits_box(a, b, *half).is_some()
+        })
 }
 
 /// Into cover from a machine at `from`: round the far side of the nearest
@@ -3635,7 +3692,9 @@ fn errand_done(errand: &Errand, world: &World2) -> String {
 
 /// Where along the way to the first job the machine is met: the drop to
 /// the Old farm, a little short of halfway.
-fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
+/// In a valley with no Old farm, on the way to the place the job card
+/// names (`card`), so the machine is on the newcomer's way.
+fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) {
     let drop = zone
         .map
         .markers
@@ -3647,7 +3706,9 @@ fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
         .markers
         .iter()
         .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
-        .map_or(drop + Vec2::new(100.0, -100.0), |m| Vec2::from(m.at));
+        .map(|m| Vec2::from(m.at))
+        .or(card)
+        .unwrap_or(drop + Vec2::new(100.0, -100.0));
     let at = drop.lerp(farm, 0.45);
     (at, (farm - drop).normalize_or(Vec2::NEG_Y))
 }
@@ -3664,6 +3725,7 @@ pub(super) fn first_fight(
     health: Query<&crate::health::Health, With<LocalPlayer>>,
     world: World2,
     time: Res<Time>,
+    cards: Query<&ScreenText, With<RequestCard>>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
         return;
@@ -3675,7 +3737,11 @@ pub(super) fn first_fight(
     // Put it there once the newcomer's out.
     if !fight.seeded && raid.phase == Phase::Out {
         fight.seeded = true;
-        let (at, ahead) = on_the_way(&zone);
+        let card = cards
+            .iter()
+            .find_map(|c| place_on_card(&c.text, &zone))
+            .map(|(_, at)| at);
+        let (at, ahead) = on_the_way_to(&zone, card);
         let side = ahead.perp();
         let job = |site: Vec3| crate::robots::Job {
             kind: crate::robots::JobKind::Watch,
@@ -3772,7 +3838,11 @@ pub(super) fn first_fight(
             }
             _ => at,
         };
-        info!("first fight: a {kind} at {placed:.0} for the {}", p.name);
+        info!(
+            "first fight: a {kind} at {placed:.0} for the {}, on the way to {}",
+            p.name,
+            card.map_or("the Old farm or a guess".to_string(), |c| format!("{c:.0}"))
+        );
         fight.machine = Some((kind.to_string(), placed));
     }
     // The tells, as they come.
@@ -4190,7 +4260,7 @@ mod indoor_tests {
         let w = app.world();
         let zone = w.resource::<crate::world::Zone>();
         let en = w.resource::<crate::robots::doors::Entrances>();
-        let (at, _) = super::on_the_way(zone);
+        let (at, _) = super::on_the_way_to(zone, None);
         let mut ds: Vec<(f32, Vec2)> = en
             .doors
             .iter()

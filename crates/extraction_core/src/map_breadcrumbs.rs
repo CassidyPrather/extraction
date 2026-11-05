@@ -28,6 +28,10 @@ pub const SILHOUETTE_SIGHT: f32 = 90.0;
 /// A structure this near a reward stands for it: its building, or the one
 /// it's beside.
 pub const CONTAINER: f32 = 12.0;
+/// A structure this long (m: a yard's bus rows, a terrace) makes a place
+/// of its own: a reward this near it is the place's.
+pub const YARD_LENGTH: f32 = 15.0;
+pub const YARD: f32 = 25.0;
 /// An offering's figures (a ring of standing shapes, `anomaly::offering`)
 /// read from this far, over the ground, at this height.
 pub const OFFERING_SIGHT: f32 = 60.0;
@@ -50,6 +54,11 @@ pub const ANOMALY_SIGHT: f32 = 50.0;
 pub const SPARKS: f32 = 3.0;
 /// A reward this near an artifact field is found by going to the field.
 pub const BY_THE_FIELD: f32 = 30.0;
+/// A shape reads from a way when it stands at least this tall in the
+/// eye, radians: against the ground behind it (a low woodpile in rain)...
+pub const READ_ANGLE: f32 = 0.07;
+/// ...or, on the skyline (nothing behind it but sky), this.
+pub const SKYLINE_ANGLE: f32 = 0.04;
 /// The walked ways are judged every this many metres.
 const STEP: f32 = 4.0;
 
@@ -169,6 +178,30 @@ fn seen(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> bool
         })
 }
 
+/// Whether a shape `height` tall at `to` reads from `from`: seen ([`seen`])
+/// and big enough in the eye, its `size` (the square root of its height
+/// times its narrowest breadth: a pole is a line, a lorry a mass) over the
+/// distance at least [`READ_ANGLE`], or less on the skyline
+/// ([`SKYLINE_ANGLE`]: the ground behind it, 150 m on, stays below it).
+fn reads(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32, size: f32) -> bool {
+    let d = dist(from, to).max(1.0);
+    let angle = size / d;
+    if angle < SKYLINE_ANGLE || !seen(hm, solids, from, to, height) {
+        return false;
+    }
+    if angle >= READ_ANGLE {
+        return true;
+    }
+    let eye = hm.height(from) + 1.7;
+    let rise = (hm.height(to) + height - eye) / d;
+    let dir = [(to[0] - from[0]) / d, (to[1] - from[1]) / d];
+    (1..=30).all(|k| {
+        let far = d + k as f32 * 5.0;
+        let p = [from[0] + dir[0] * far, from[1] + dir[1] * far];
+        (hm.height(p) - eye) / far < rise
+    })
+}
+
 /// The nearest cue to `at` met from the walked ways: what it is and how
 /// far from the way.
 fn cue_for(
@@ -187,15 +220,31 @@ fn cue_for(
         }
     };
     // Its building, or one beside it, over the ground.
-    for s in solids.iter().filter(|s| s.rect.sdf(at) <= CONTAINER) {
-        let h = prefab_footprint(&s.prefab)[1];
+    for s in solids.iter().filter(|s| {
+        let f = prefab_footprint(&s.prefab);
+        s.rect.sdf(at) <= CONTAINER || (f[0].max(f[2]) >= YARD_LENGTH && s.rect.sdf(at) <= YARD)
+    }) {
+        let f = prefab_footprint(&s.prefab);
+        let h = f[1];
         if h < SILHOUETTE_HEIGHT {
             continue;
         }
+        let size = (h * f[0].min(f[2])).sqrt();
         for w in walked {
             let d = dist(*w, s.rect.at);
-            if d <= SILHOUETTE_SIGHT && seen(hm, solids, *w, s.rect.at, h) {
+            if d <= SILHOUETTE_SIGHT && reads(hm, solids, *w, s.rect.at, h, size) {
                 take(format!("the {}'s silhouette", s.prefab), d);
+            }
+        }
+    }
+    // An outcrop set by hand beside it (a cairn's stones): about three
+    // quarters of its radius stands out of the ground, twice it across.
+    for o in map.outcrops.iter().filter(|o| dist(o.at, at) <= CONTAINER) {
+        let (h, b) = (o.radius * 0.75, o.radius * 2.0);
+        for w in walked {
+            let d = dist(*w, o.at);
+            if d <= SILHOUETTE_SIGHT && reads(hm, solids, *w, o.at, h, (h * b).sqrt()) {
+                take("its stones".to_string(), d);
             }
         }
     }
@@ -252,7 +301,7 @@ fn cue_for(
     if kind == "offering" {
         for w in walked {
             let d = dist(*w, at);
-            if d <= OFFERING_SIGHT && seen(hm, solids, *w, at, OFFERING_HEIGHT) {
+            if d <= OFFERING_SIGHT && reads(hm, solids, *w, at, OFFERING_HEIGHT, OFFERING_HEIGHT) {
                 take("its figures".to_string(), d);
             }
         }
