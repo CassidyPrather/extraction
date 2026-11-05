@@ -54,9 +54,9 @@ def camera():
     p.cyl(0.003, y0 + H + 0.017, y0 + H + 0.021, "Black", segs=10, xf=T(0.015, 0, 0.012) @ UP)
     # The lens: chrome barrel, black focusing ring, the glass.
     ly = y0 + H / 2
-    p.cyl(0.021, 0.019 - D / 2 - 0.004, 0.019 - D / 2, "Steel", segs=24,
+    p.cyl(0.021, 0.019 - D / 2 - 0.004, 0.019 - D / 2 + 0.001, "Steel", segs=24,
           xf=T(0.0, ly, 0.0))
-    p.cyl(0.018, -0.0318, -0.0045, "Steel", segs=24, xf=T(0.0, ly, 0.0))
+    p.cyl(0.018, -0.0318, 0.019 - D / 2 - 0.003, "Steel", segs=24, xf=T(0.0, ly, 0.0))
     p.cyl(0.0195, -0.022, -0.012, "Black", segs=24, xf=T(0.0, ly, 0.0))
     p.cyl(0.013, -0.035, -0.0318, "Lens", segs=20, xf=T(0.0, ly, 0.0))
     # Strap lugs.
@@ -100,10 +100,11 @@ def holm_watch():
     # Face up on its strap, laid out flat.
     R = 0.0165
     y0 = -0.006
+    # Short stubs of strap: a watch, not a belt (the catalogue's 4 cm).
     for sz in (-1, 1):
-        p.box((0.018, 0.003, 0.012), (0.0, y0 + 0.0015, sz * (R + 0.003)), "Leather",
+        p.box((0.018, 0.003, 0.008), (0.0, y0 + 0.0015, sz * (R + 0.002)), "Leather",
               bevel=0.001, segs=1)
-    p.box((0.008, 0.0035, 0.004), (0.0, y0 + 0.0018, R + 0.008), "Steel", segs=1)
+    p.box((0.008, 0.0035, 0.003), (0.0, y0 + 0.0018, R + 0.0045), "Steel", segs=1)
     p.lathe([(0.0, y0), (R, y0), (R + 0.0008, y0 + 0.002), (R + 0.0008, y0 + 0.008),
              (R - 0.0008, y0 + 0.009), (0.0, y0 + 0.009)], "Steel", segs=28, xf=UP)
     p.cyl(R - 0.0016, y0 + 0.009, y0 + 0.0094, "Cream", segs=28, xf=UP)
@@ -271,7 +272,7 @@ def boot(p, x, mirror):
     # The tongue and the laces up the front of the shaft.
     for k in range(5):
         y = y0 + 0.07 + k * 0.016
-        p.box((0.06, 0.004, 0.004), (x, y, 0.034 - k * 0.002), "Cream", segs=1)
+        p.box((0.06, 0.004, 0.004), (x, y, 0.0355), "Cream", segs=1)
     p.box((0.05, 0.012, 0.03), (x, y0 + 0.155, 0.08), "Feather", bevel=0.004, segs=1)
 
 
@@ -288,24 +289,29 @@ def work_boots():
 def can_suppressor():
     p = Part("body")
     L = 0.065
-    # The tin, its rolled rims and ribs, along Z.
-    p.cyl(0.036, -L + 0.004, L - 0.034, "Zinc", segs=28)
-    for z in (-L + 0.004, L - 0.034):
-        p.tube(0.0375, 0.034, z - 0.002, z + 0.002, "Zinc", segs=28)
-    for k in range(4):
-        z = -L + 0.02 + k * 0.018
-        p.tube(0.0368, 0.035, z - 0.001, z + 0.001, "Zinc", segs=28)
+    # A food tin pushed over the muzzle and clamped there: its back 45 mm
+    # an open sleeve the muzzle and its front sight go into, a hose clamp
+    # round it; then the tin packed with washers, its rolled rims and ribs,
+    # along -Z.
+    zs = L - 0.045
+    p.tube(0.0375, 0.0345, zs, L, "Zinc", segs=28)
+    p.tube(0.0388, 0.0375, L - 0.016, L - 0.006, "Steel", segs=28)
+    p.box((0.008, 0.007, 0.01), (0.0, 0.0405, L - 0.011), "Steel", segs=1)
+    p.cyl(0.0355, -L + 0.004, zs, "Zinc", segs=28)
+    p.tube(0.0345, 0.012, zs - 0.001, zs + 0.001, "Steel", segs=24)
+    for z in (-L + 0.004, zs - 0.004):
+        p.tube(0.0375, 0.0345, z - 0.002, z + 0.002, "Zinc", segs=28)
+    for k in range(2):
+        z = -L + 0.018 + k * 0.016
+        p.tube(0.0368, 0.0352, z - 0.001, z + 0.001, "Zinc", segs=28)
     # The front lid, punched through with a ragged hole.
     p.tube(0.034, 0.008, -L + 0.002, -L + 0.004, "Zinc", segs=28)
     p.tube(0.0085, 0.0075, -L, -L + 0.004, "Char", segs=12)
-    # The back: a turned coupling for the muzzle, clamped on with a hose
-    # clamp round the tin's neck.
-    p.lathe([(0.009, L), (0.0135, L), (0.0135, L - 0.03), (0.009, L - 0.03)], "Iron", segs=20,
-            closed=True)
-    p.lathe([(0.0, L - 0.034), (0.034, L - 0.034), (0.03, L - 0.03), (0.0, L - 0.03)], "Zinc",
-            segs=24)
-    p.tube(0.0148, 0.0135, L - 0.022, L - 0.012, "Steel", segs=20)
-    p.box((0.008, 0.007, 0.01), (0.0, 0.0165, L - 0.017), "Steel", segs=1)
+    # A slot snipped along its underside, end to end, for a fixed
+    # bayonet's spike to run through (the Mosin's lies 21 mm under the bore).
+    slot = Part("cut")
+    slot.box((0.013, 0.03, 2 * L + 0.01), (0.0, -0.0285, 0.0), "Char", segs=1)
+    p.cut(slot)
     return [p]
 
 
