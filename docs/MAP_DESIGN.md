@@ -202,6 +202,20 @@ A good map makes the crossing a decision.
   the rail yard, the lodge's woodshed), 10-13 m off, on the side away
   from the rendezvous beacon (`map_landmarks::beacon_at`: 7 m off the
   truck's side), clear of the truck (`TRUCK_ROOM`) and its tailgate.
+- **And every rendezvous has somewhere to go still right by the truck**:
+  a roof's door or low cover (`LOW_COVER`: a log pile, a car wreck)
+  within 5 m of the truck's body (`WAIT_NEAR`). Low cover may stand
+  nearer than a building (`TRUCK_ROOM`, 8 m): 2.5 m off the truck's body
+  (`LOW_COVER_ROOM`), out of the strip behind it you climb in from and
+  line up in, and 2 m off its beacon. Crouched behind it you're still
+  past `raid::truck::PARK_CLEAR` (5 m from the truck's middle), so the
+  truck pulls up on its mark. In 6 of 6 raids a bot waiting in the open
+  by Kettle's hunting lodge was found there: carried attention buys a
+  response team to wherever you stand (`anomaly::spend_attention`),
+  so a still wait needs cover, not distance. Every valley's is a log
+  pile, one per rendezvous (`tag: "wait_<rendezvous>"`), each placed at
+  the nearest spot that keeps off roads, doors, the ways home and the
+  slope; `map_lint::wait_cover` gives what each waits by.
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.

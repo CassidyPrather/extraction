@@ -45,6 +45,9 @@
     ],
 
     placements: [
+        // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
+        // to go still by while it comes (map_lint::WAIT_NEAR).
+        (prefab: "log_pile", at: (5.6, -78.0), rot: 0.0, tag: "wait_north_post"),
         (prefab: "quarantine_gate", at: (0.0, 74.0), rot: 0.0),
         // The firing line: targets at 15, 30 and 60 m from the bench.
         (prefab: "target", at: (-12.0, 25.0), rot: 0.0),
