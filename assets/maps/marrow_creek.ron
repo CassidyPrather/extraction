@@ -288,9 +288,9 @@
     placements: [
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
-        (prefab: "way_lamp", at: (105.6, -119.8), rot: 0.0),
+        (prefab: "way_lamp", at: (110.8, -97.7), rot: 0.0),
         (prefab: "way_lamp", at: (-87.7, 0.9), rot: 0.0),
-        (prefab: "way_lamp", at: (-129.3, -63.4), rot: 0.0),
+        (prefab: "way_lamp", at: (-144.7, -71.7), rot: 0.0),
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
