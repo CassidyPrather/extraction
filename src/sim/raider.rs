@@ -4814,6 +4814,15 @@ pub fn board_tasks(p: impl Fn(f32) -> Vec2, bell: Option<Entity>) -> Vec<Task> {
         },
     ];
     if let Some(bell) = bell {
+        // Up the bed to stand by the bell (at the front, 0.7 m to the
+        // side: 0.86 m from here, in reach) before pressing it, a walk of
+        // its own: not Press's own straight walk, which from wherever the
+        // raider ended up went nowhere (Rime seed 4, 5 November: four
+        // stucks on the truck, a drone's burst).
+        t.push(Task::WalkTo {
+            to: p(-1.2),
+            within: 0.3,
+        });
         t.push(Task::Press(bell));
     }
     t.push(Task::Wait(1.0));
