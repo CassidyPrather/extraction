@@ -37,7 +37,7 @@ impl Plugin for CuesPlugin {
     fn build(&self, app: &mut App) {
         puff::add_to(app);
         app.add_systems(Startup, place_cues)
-            .add_systems(Update, (switch_windows, play_smoke));
+            .add_systems(Update, (switch_windows, play_smoke, size_halos));
     }
 }
 
@@ -93,9 +93,11 @@ const PIPE_PROUD: f32 = 0.7;
 pub const PUFFS: usize = 24;
 pub const LIFE: f32 = 18.0;
 /// Its thickest (a puff's heart, just clear of the pipe).
-const SMOKE_ALPHA: f32 = 0.6;
-/// Wood smoke, lit by the sky: a pale blue-grey.
-const SMOKE: Color = Color::srgb(0.8, 0.81, 0.84);
+const SMOKE_ALPHA: f32 = 0.45;
+/// Wood smoke: a little under an overcast sky's grey, a hair cool, so it
+/// reads against the sky and not off it, and the fog takes it with the
+/// house (Visual design: whiter, it was steam off a kettle).
+const SMOKE: Color = Color::srgb(0.64, 0.64, 0.66);
 /// Shared alpha steps for the puffs (`SmokeLook`).
 const STEPS: usize = 8;
 
@@ -103,11 +105,15 @@ const STEPS: usize = 8;
 /// `light`. Unlit, as every puff is (lit, a far thin one came out black):
 /// pale by day, dimmed with the light so it doesn't glow after dark.
 fn smoke_tint(k: usize, light: f32) -> Color {
-    // With the light to dusk; then fast to dark, or the eyes' adaptation
-    // lifts it to a pale glow in a night sky (it's a dark plume there).
     let l = light.clamp(0.0, 1.0);
-    let night = (l / 0.3).clamp(0.0, 1.0);
-    let c = SMOKE.to_linear() * (l * night * night * (3.0 - 2.0 * night)).max(0.002);
+    let smooth = |t: f32| t * t * (3.0 - 2.0 * t);
+    // Down with the light sooner than the light itself (Visual design).
+    let tone = 0.35 + 0.65 * smooth(((l - 0.3) / 0.7).clamp(0.0, 1.0));
+    let night = smooth((l / 0.3).clamp(0.0, 1.0));
+    // Then under 0.3 fast to dark, or the eyes' adaptation lifts it to a
+    // glow in a night sky: there it's a dark plume against the stars.
+    let dark = night * (l / 0.35).min(1.0);
+    let c = SMOKE.to_linear() * (tone * dark).max(0.002);
     Color::from(c).with_alpha(SMOKE_ALPHA * k as f32 / STEPS as f32)
 }
 
@@ -275,6 +281,21 @@ pub struct LitWindow {
     pub always: bool,
 }
 
+/// A lit window's halo, and its size near to (m): further off it's drawn
+/// no smaller than [`HALO_MIN_DEG`] across, so a window carries at night
+/// without blooming at the door.
+#[derive(Component)]
+pub struct WindowHalo(pub f32);
+
+/// The least a window's halo spans from the eye, degrees (its radius's
+/// half-angle): a near window's own halo is bigger; at 150 m it's 1.4 m.
+pub const HALO_MIN_DEG: f32 = 0.55;
+
+/// A window's halo radius `dist` m off.
+pub fn halo_radius(near: f32, dist: f32) -> f32 {
+    near.max(dist * HALO_MIN_DEG.to_radians().tan())
+}
+
 /// One of a plume's puffs: its place in the loop.
 #[derive(Component)]
 pub struct SmokePuff {
@@ -410,11 +431,13 @@ fn place_cues(
                 // The glow in the damp air outside it, as a lamp's: what
                 // carries it across a valley (`halos`, only after dark).
                 // Outside the glass, so the wall hides it from the room.
+                let radius = (w.min(h) * 0.9).clamp(0.4, 1.0);
                 e.with_child((
                     Name::new("Window halo"),
+                    WindowHalo(radius),
                     super::halos::Halo {
                         color: HALO,
-                        radius: (w.min(h) * 0.9).clamp(0.4, 1.0),
+                        radius,
                     },
                     super::halos::HaloReach(HALO_REACH),
                     Transform::from_xyz(0.0, 0.0, 0.35),
@@ -485,6 +508,23 @@ fn switch_windows(conditions: Res<Conditions>, mut windows: Query<(&LitWindow, &
         };
         if *vis != want {
             *vis = want;
+        }
+    }
+}
+
+/// Window halos sized for the eye's distance, in 5 cm steps (only a
+/// changed `Halo` reaches the GPU).
+fn size_halos(
+    eyes: puff::Eyes,
+    mut halos: Query<(&WindowHalo, &GlobalTransform, &mut super::halos::Halo)>,
+) {
+    let Some(eye) = puff::eye(&eyes) else {
+        return;
+    };
+    for (w, at, mut halo) in &mut halos {
+        let r = (halo_radius(w.0, at.translation().distance(eye)) * 20.0).round() / 20.0;
+        if (halo.radius - r).abs() > 0.01 {
+            halo.radius = r;
         }
     }
 }
@@ -644,6 +684,15 @@ mod tests {
         // A few far apart all keep theirs.
         let few = [Vec3::ZERO, Vec3::X * 500.0, Vec3::Z * 500.0];
         assert!(keep_lamps(&few).into_iter().all(|k| k));
+    }
+
+    /// Near, a window's halo is its own size; across a valley it keeps
+    /// a little of the view.
+    #[test]
+    fn a_far_window_keeps_its_halo() {
+        assert_eq!(halo_radius(0.86, 50.0), 0.86);
+        let far = halo_radius(0.86, 150.0);
+        assert!((1.3..1.6).contains(&far), "{far}");
     }
 
     #[test]

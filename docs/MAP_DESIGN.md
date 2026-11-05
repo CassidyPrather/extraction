@@ -320,6 +320,23 @@ smoking: day, drizzle, dusk and night, from 50 m north and 150 m east
 At most 24 lamp-lit windows light any one view (`cues::MAX_LAMPS`, Performance's share of the 48-light budget within 60 m); past that a window keeps its glow and halo but loses its lamp, map order deciding. A lit window carries a halo outside its glass after dark (a lamp's,
 `halos`, out to 320 m), which is what reads at 150 m.
 
+### Snow-pole lines
+
+A track over open snow is marked by a line of poles, each in sight of the
+last (`art/props/rime.py`'s red-and-white tops). Rather than placing each,
+give its line:
+
+```ron
+pole_lines: [
+    // A pole at each end and evenly between, no more than `every` m apart
+    // along its bends (20 by default). Tagged `rime_dead_1`, `_2`, ...
+    (points: [(12.0, -40.0), (30.0, -95.0), (18.0, -160.0)], every: 20.0, tag: "rime_dead"),
+],
+```
+
+The poles are read in as `snow_pole` placements (`MapDef::place_pole_lines`),
+so the lint, the colliders and the art take them as hand-placed ones.
+
 ## Points of interest, density and pacing
 
 A point of interest (a `Poi` marker) is somewhere worth the walk: a

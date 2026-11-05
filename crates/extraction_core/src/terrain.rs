@@ -1512,6 +1512,7 @@ mod tests {
             snow: 0.0,
             sounds: SoundsDef::default(),
             cues: vec![],
+            pole_lines: vec![],
         }
     }
 
