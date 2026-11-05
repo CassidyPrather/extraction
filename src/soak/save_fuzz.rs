@@ -808,11 +808,12 @@ fn items_held(save: &extraction_core::save::SaveGame) -> Vec<String> {
 }
 
 /// The career's parts a quit mustn't change: its tallies, the driver's
-/// jobs and contracts, the logbook, the memorial, the firsts.
+/// jobs and contracts, the logbook, the memorial. (Its firsts only grow:
+/// the loaded game's first frames may say one; none is ever forgotten.)
 fn career_held(save: &extraction_core::save::SaveGame) -> String {
     format!(
-        "stats {:?}\nrequests {:?}\nprogress {:?}\nlogbook {:?}\nmemorial {:?}\nfirsts {:?}",
-        save.stats, save.requests, save.progress, save.logbook, save.memorial, save.firsts
+        "stats {:?}\nrequests {:?}\nprogress {:?}\nlogbook {:?}\nmemorial {:?}",
+        save.stats, save.requests, save.progress, save.logbook, save.memorial
     )
 }
 
@@ -867,6 +868,14 @@ fn quit_and_reload(
         found.push(format!(
             "{when}: the career changed\n    before {c}\n    after  {d}"
         ));
+    }
+    let forgot: Vec<&String> = before
+        .firsts
+        .iter()
+        .filter(|f| !after.firsts.contains(f))
+        .collect();
+    if !forgot.is_empty() {
+        found.push(format!("{when}: firsts forgotten: {forgot:?}"));
     }
     (b, found)
 }
