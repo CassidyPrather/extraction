@@ -136,6 +136,13 @@ hand-worked mechanisms table above, where a flick racks a slide.
   just after the rounds land, bottom frame 75, a quarter of a second on
   (`--gallery impact`, as above). On concrete the dust now bursts from
   the marks; on dirt it's still brown on brown.
+- `robot_smoke_*_before_after.jpg`: a machine's pale smoke now thins as
+  it spreads, like muzzle smoke (`robots::fx` `smoke_thin`, five steps
+  down to 13%). Soot, and so the dead gun's column, keeps its density.
+  `broken`: the broken walker beside a healthy one in Models' fog line-up
+  at 15 m (top) and 30 m (bottom), before (left), after (right); the
+  column reads the same. `wreck`: `reel:wreck,16,5` at 14:00, frames 6
+  and 12; the wreck's pale smoke is a fainter haze higher up.
 - `safety_*`, `jam_*`, `eyebox_*`, and the rest: earlier waves.
 
 ## Where I stopped (2 November, paused for usage)
