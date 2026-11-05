@@ -285,7 +285,18 @@ struct Queue {
     /// test fell through the world's edge).
     filled: Vec<(&'static str, String)>,
     quiet: f32,
+    /// Seconds more that a machine has you, by its first (`HAS_YOU`): no
+    /// "go still" said meanwhile.
+    has_you: f32,
 }
+
+/// A machine that has you, by its first: what it says to do (a roof, run
+/// across, walk away) isn't "go still", and the two said together told a
+/// newcomer both at once. Heard waits for a machine that's only listening.
+const HAS_YOU: [First; 4] = [First::Sentry, First::DroneLock, First::Aimed, First::Heavy];
+
+/// How long a machine's having you holds "go still" back.
+const HAS_YOU_HOLD: f32 = 10.0;
 
 /// Seconds between two of these lines.
 const SPACING: f32 = 5.0;
@@ -348,8 +359,22 @@ fn meet(
     out: &mut MessageWriter<FirstMet>,
     fill: &dyn Fn(&str) -> String,
 ) -> bool {
+    if f == First::Heard && queue.has_you > 0.0 {
+        return false;
+    }
     if !firsts.0.insert(f.key()) {
         return false;
+    }
+    if HAS_YOU.contains(&f) {
+        queue.has_you = HAS_YOU_HOLD;
+        // Heard in the same breath, and not said yet: not now, and still
+        // to learn.
+        let heard: Vec<String> = First::Heard.lines().iter().map(|l| l.to_string()).collect();
+        let before = queue.lines.len();
+        queue.lines.retain(|l| !heard.contains(l));
+        if queue.lines.len() < before {
+            firsts.0.remove(&First::Heard.key());
+        }
     }
     for l in f.lines() {
         queue.filled.push((l, fill(l)));
@@ -919,6 +944,7 @@ fn speak(
 ) {
     let filled: Vec<_> = queue.filled.drain(..).collect();
     spoken.2.extend(filled);
+    queue.has_you -= time.delta_secs();
     queue.quiet -= time.delta_secs();
     if queue.quiet > 0.0 {
         return;
@@ -934,6 +960,36 @@ fn speak(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// "Go still" isn't said while a machine has you, either way round
+    /// (a sentry's chirp and its noticing you came in one frame: "Down, out
+    /// of its sweep" and "go still" at once). Still to learn, for later.
+    #[test]
+    fn go_still_isnt_said_while_a_machine_has_you() {
+        use bevy::ecs::system::SystemState;
+        for order in [[First::Heard, First::Sentry], [First::Sentry, First::Heard]] {
+            let mut app = App::new();
+            app.init_resource::<Firsts>()
+                .init_resource::<Queue>()
+                .add_message::<FirstMet>();
+            let mut st: SystemState<Meet> = SystemState::new(app.world_mut());
+            {
+                let mut m = st.get_mut(app.world_mut());
+                for f in order {
+                    m.meet(f);
+                }
+            }
+            st.apply(app.world_mut());
+            let q = app.world().resource::<Queue>();
+            let says = |f: First| q.lines.iter().any(|l| f.lines().contains(&l.as_str()));
+            assert!(!says(First::Heard), "{order:?}: {:?}", q.lines);
+            assert!(says(First::Sentry), "{order:?}: {:?}", q.lines);
+            assert!(
+                !app.world().resource::<Firsts>().met(First::Heard),
+                "{order:?}"
+            );
+        }
+    }
 
     /// An urgent line's first sentence (what to do: they're written
     /// action first) is on the wrist's
