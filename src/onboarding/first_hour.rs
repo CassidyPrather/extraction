@@ -3172,85 +3172,11 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
         for q in round_boxes(&boxes, at, r) {
-            for p in round_solids(world, at, q, 3) {
-                t.extend(world.legs(at, p));
-                at = p;
-            }
+            t.extend(world.legs(at, q));
+            at = q;
         }
     }
     t
-}
-
-/// A body (`player`'s capsule, from a step's height up) swept along
-/// `a`..`b`: how far it gets before it meets something solid (a trunk, a
-/// rock, a wall, the fence; not the ground), or `None` if it gets there.
-fn body_meets(world: &World2, a: Vec2, b: Vec2) -> Option<f32> {
-    use avian3d::prelude::*;
-    let d = b - a;
-    let len = d.length();
-    let dir = Dir3::new(Vec3::new(d.x, 0.0, d.y)).ok()?;
-    let r = crate::player::CAPSULE_RADIUS;
-    // From a step up (it steps up that) to the head.
-    let low = 0.4;
-    let tall = (crate::player::CAPSULE_HEIGHT - low - 2.0 * r).max(0.1);
-    let foot = world.zone.on_ground(a.x, a.y).y;
-    let centre = Vec3::new(a.x, foot + low + r + tall * 0.5, a.y);
-    let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World])
-        .with_excluded_entities(world.terrain.iter());
-    // (Short of the end: what's by where it's going, a door it's going in
-    // by, a wall it stands at, is where it's going.)
-    let reach = len - 0.6;
-    if reach <= 0.0 {
-        return None;
-    }
-    let config = ShapeCastConfig {
-        max_distance: reach,
-        ignore_origin_penetration: true,
-        ..ShapeCastConfig::from_max_distance(reach)
-    };
-    world
-        .spatial
-        .cast_shape(
-            &Collider::capsule(r, tall),
-            centre,
-            Quat::IDENTITY,
-            dir,
-            &config,
-            &filter,
-        )
-        .map(|hit| hit.distance)
-}
-
-/// `a`..`b` round whatever solid a body would meet on it (`body_meets`):
-/// a step to one side of where it meets it, the nearest that's clear, as
-/// far as `depth` deep. The points after `a`, to `b`. (The walk's boxes
-/// are the fence, buildings and the map's solids: it walked into trunks,
-/// rocks and anything else a body stops at.)
-fn round_solids(world: &World2, a: Vec2, b: Vec2, depth: u32) -> Vec<Vec2> {
-    let Some(hit) = body_meets(world, a, b).filter(|_| depth > 0) else {
-        return vec![b];
-    };
-    let ab = b - a;
-    let dir = ab.normalize_or_zero();
-    // Just short of it, then off to a side and past it.
-    let short = a + dir * (hit - 0.3).max(0.0);
-    let side = dir.perp();
-    let Some(round) = [0.8f32, 1.4, 2.2, 3.5]
-        .into_iter()
-        .flat_map(|k| [side * k, -side * k])
-        .map(|s| short + s + dir * 0.8)
-        .find(|w| body_meets(world, short, *w).is_none() && body_meets(world, a, short).is_none())
-    else {
-        // Nothing clear to step to: as it was (a timeout replans).
-        return vec![b];
-    };
-    let mut out = vec![];
-    if short.distance(a) > 0.2 {
-        out.push(short);
-    }
-    out.push(round);
-    out.extend(round_solids(world, round, b, depth - 1));
-    out
 }
 
 /// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
@@ -4418,63 +4344,6 @@ mod indoor_tests {
             }
         }
         assert!(crossed.is_empty(), "{}", crossed.join("\n"));
-    }
-
-    /// A walk straight at a trunk or a rock goes round it: every stretch of
-    /// it clear for a body swept along it (the walk's boxes are buildings,
-    /// the fence and the map's solids; it walked into trunks and rocks).
-    #[test]
-    fn a_walk_goes_round_a_trunk_and_a_rock() {
-        let opts = crate::launch::LaunchOptions {
-            map: "marrow_creek".into(),
-            ..Default::default()
-        };
-        let mut app = crate::headless_app(opts, false);
-        app.finish();
-        app.cleanup();
-        for _ in 0..30 {
-            app.update();
-        }
-        let zone = app.world().resource::<crate::world::Zone>().clone();
-        let trunk = crate::world::trees::scatter_trees(&zone)
-            .into_iter()
-            .map(|t| t.pos.xz())
-            .find(|p| p.length() < 120.0)
-            .expect("a tree");
-        // One that stands up out of the ground past a step (a low one's
-        // stepped over).
-        let rock = zone
-            .rocks()
-            .iter()
-            .filter(|r| {
-                let top = r.pos[1] + r.radius * r.squash;
-                top - zone.on_ground(r.pos[0], r.pos[2]).y > 1.0 && r.radius > 0.8
-            })
-            .map(|r| Vec2::new(r.pos[0], r.pos[2]))
-            .find(|p| p.length() < 170.0)
-            .expect("a standing rock");
-        let w = app.world_mut();
-        let mut st: bevy::ecs::system::SystemState<super::World2> =
-            bevy::ecs::system::SystemState::new(w);
-        let world = st.get(w).unwrap();
-        for (what, at) in [("trunk", trunk), ("rock", rock)] {
-            let (from, to) = (at - Vec2::X * 6.0, at + Vec2::X * 6.0);
-            assert!(
-                super::body_meets(&world, from, to).is_some(),
-                "the {what} at {at} is in a straight walk's way"
-            );
-            let mut here = from;
-            for t in super::walk(&world, from, to) {
-                let crate::bot::Task::WalkTo { to: p, .. } = t else {
-                    continue;
-                };
-                assert!(
-                    super::body_meets(&world, here, p).is_none(),
-                    "round the {what} at {at}: {here} -> {p} still meets something"
-                );
-                here = p;
-            }
-        }
     }
 
     #[test]

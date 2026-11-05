@@ -1080,10 +1080,6 @@ fn report(bot: &mut Bot, rows: &[Row]) {
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct World2<'w, 's> {
     pub(super) zone: Res<'w, Zone>,
-    /// What a body meets walking (`first_hour::walk`'s last look along
-    /// each stretch: trunks, rocks, walls, whatever's solid).
-    pub(super) spatial: avian3d::prelude::SpatialQuery<'w, 's>,
-    pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
     pub(super) catalog: Res<'w, Catalog>,
     pub(super) items: Query<
         'w,
