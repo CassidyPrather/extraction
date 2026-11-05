@@ -1537,6 +1537,97 @@ The shelf grew from about 95 kinds (1,900 entries) to about 156
   Its lens glow has the drone lock halo's and the sentry halo's key,
   both measured.
 
+## The worst views: night, a storm, a fight (5 November)
+
+The playtest machine (a 3060 laptop driving a Beyond 2) ran 20-30 fps
+before render scale, so a valley's heaviest views matter most. The gauge
+is `render::vr_budget::gauge_worst_views_hold_the_stereo_budget`. Run it
+with `cargo test --lib -- --ignored gauge_worst`; `WORST_MAP` picks one
+valley and `WORST_VIEWS=hut,gate` picks views by name.
+
+**What it looks at.** Every Rendezvous, ShortExfil, Poi, WorkSite and
+Insertion marker, four ways round at eye height. It also takes the walk
+review's stops and the lookbook's views: 102-170 views a valley.
+
+**The conditions.** Each view is measured at night, in a storm, with a
+fight 8-14 m ahead: a drone, a walker, a hound, a heavy, and the
+firefight's 64 puffs. A storm is measured on a held flash, as the one-eye
+gauges already measure it. A flash turns the sun's cascades on at any hour,
+so it is the storm's dearest frame.
+
+**The budget, both eyes.** These are this document's own numbers:
+
+| What | Budget, both eyes |
+| - | - |
+| Draws | 2400 |
+| Triangles | 1.8M (now checked here too) |
+| Shadow draws | 1800 |
+| Fragments | 64.8M |
+| Lights reaching the view | 48 |
+
+A view over budget fails, and the failure names what it holds: draws by
+owner with their triangles, and overdraw by class.
+
+### Before and after, the five heaviest a valley
+
+The figure is each view's worst share of any budget. Before is c742c1f8
+plus the gauge; after adds the two fixes below.
+
+| valley | over, before | over, after | heaviest before | heaviest after |
+| - | - | - | - | - |
+| Marrow Creek | 27 | 0 | village_0 141% (shadow draws 2536) | gate fuel exfil 99% (draws 2383) |
+| Kettle Pass | 22 | 0 | gate fuel exfil 116% (shadow draws 2082) | gate fuel exfil 88% |
+| Cinder Works | 20 | 0 | s01_side 114% (shadow draws 2044) | s01_ahead 97% (draws 2319) |
+| Sallow Reservoir | 8 | 0 | s01_gate 111% (shadow draws 1996) | silt fans 96% (draws 2294) |
+| Rime Fell | 3 | 0 | gate fuel exfil 102% (shadow draws 1842) | gate fuel exfil 89% |
+
+The heaviest place in every valley is the south gate: the insertion,
+the fuel exfil and walk stop s01. It costs 1.5-1.7M triangles and
+1800-2400 draws, mostly buildings (about 150 an eye), doors (about 80)
+and the fight. The next heaviest are the points of interest where heavies
+work: Kettle's quarry, Cinder's slag heaps, Sallow's silt fans and
+Marrow's radio mast. No view reaches more than 13 lights of 48.
+
+### What was fixed
+
+- **A flash's shadows reach 30 m, not 90 (`world::storm`,
+  `FLASH_SHADOWS`).** A strike lit the valley with the sun's two cascades
+  out to the weather's 90 m, for a few frames. That was 1700-2500 shadow
+  draws at the gates and the village, against 1800. The shadows flicker
+  past too fast to read far off. The flash keeps its two cascades out to
+  30 m, and the weather's own cascades come back afterwards.
+- **A heavy's bolts draw merged until one goes
+  (`robots::heavy_look`, `BoltsMerged`).** Twelve bolts at two draws each
+  were 24 of a heavy's 89 up close. While every bolt is on, one mesh a
+  material (shared by every heavy) draws them all, and each bolt's own
+  meshes hang hidden. When one is shot out, or a plate takes its bolts,
+  the merged mesh goes and the rest show. That saves 22 draws a heavy; a
+  quarry has four.
+
+**What the unnamed meshes at the heavy sites are.** The gauge names
+unnamed meshes by their mesh and material, since component names need
+Bevy's debug build. At the radio mast they are robot strike effects,
+each its own entity, within `robots::fx`'s caps: 106 sparks (24-vertex
+cubes, lit orange), 79 glancing sparks (grey), and 54 wound flares in
+the embers material.
+
+### Overdraw counts what the GPU shades
+
+The coordinator approved the change on one condition: drop only layers the
+hardware really rejects. `render::overdraw` now counts what's drawn after
+the opaque pass (alpha-tested, alpha-to-coverage, blended) only in front
+of the nearest opaque surface, since the depth test drops it behind.
+Opaque layers all still count. Bevy bins the opaque pass by pipeline
+rather than sorting it near to far, so none of them is sure to be hidden.
+The raw count, depth test off, is printed beside the shaded count as
+`(raw ...)`, so overdraw behind walls can't hide.
+
+The case that called for it: Kettle's Switchback hut's marker stands
+inside the hut, and its north view faces a concrete wall 1 m away. It
+counted 71.7M fragments, over 64.8M. Of its 8.3 layers of ground cover,
+nearly all were ferns (alpha-tested) outside, behind the wall. It now
+counts 12.8M (raw 71.2M). Opaque grass blades behind a wall still count.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
