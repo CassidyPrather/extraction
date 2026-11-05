@@ -968,7 +968,11 @@ fn tap_magazines(
 /// round, box or clip must come, metres from the item's middle.
 pub const LOAD_REACH: f32 = 0.07;
 /// How far a clip in the guide must be pushed down to strip, metres.
-pub const STRIP_PUSH: f32 = 0.02;
+pub const STRIP_PUSH: f32 = 0.01;
+/// After seating, the push that strips a whole clip, m: its rounds go
+/// down one after another along it, each felt and heard (a full clip
+/// stripped on one tick).
+pub const CLIP_STROKE: f32 = 0.02;
 /// Seconds between rounds fed from a box held at the port.
 pub const BOX_FEED: f32 = 0.3;
 
@@ -1035,12 +1039,27 @@ fn feed_by_hand(
                 *entry = (gun_e, h);
             }
             entry.1 = entry.1.max(h);
-            if entry.1 - h >= STRIP_PUSH {
+            let pushed = entry.1 - h;
+            if pushed >= STRIP_PUSH {
+                // Seated: the rounds go down as far as it's pushed, one
+                // per share of the stroke, the first as it seats.
+                let cap = def
+                    .magazine
+                    .as_ref()
+                    .map_or(it.rounds, |m| m.capacity)
+                    .max(1);
+                let per = CLIP_STROKE / cap as f32;
+                let down = 1 + ((pushed - STRIP_PUSH) / per) as u32;
+                let gone = cap.saturating_sub(it.rounds);
                 let n = it.rounds;
-                let moved = gun.firearm.strip_clip_of(n, &mut it.loads);
+                let moved =
+                    gun.firearm
+                        .strip_clip_up_to(n, down.saturating_sub(gone), &mut it.loads);
                 it.rounds -= moved;
                 events.extend((0..moved).map(|_| FireEvent::RoundLoaded));
-                clips.remove(&hand_e);
+                if it.rounds == 0 {
+                    clips.remove(&hand_e);
+                }
             }
         } else if def.rounds <= 1 {
             // A loose round: thumbed in, out of the hand.

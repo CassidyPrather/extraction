@@ -2294,6 +2294,31 @@ pub(crate) mod vr_tests {
         assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 5);
     }
 
+    /// A clip's rounds go down one after another as the thumb pushes it:
+    /// part way, some of them; home, all ten. (A full clip stripped on the
+    /// one tick it seated.)
+    #[test]
+    fn a_clip_strips_a_round_at_a_time() {
+        let mut r = hold("sks", false, false);
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.internal_rounds = 0;
+            g.firearm.set_bolt_travel(1.0);
+            g.firearm.locked_back = true;
+        }
+        take(&mut r, "sks_clip", 10);
+        let (port, up) = load_port(&mut r);
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, port + up * 0.05, 15);
+        glide(&mut r, port + up * 0.05, port + up * 0.03, 8);
+        r.vr.step(2);
+        let part = gun_mut(&mut r).firearm.internal_rounds;
+        assert!((1..10).contains(&part), "part way down: {part} in");
+        glide(&mut r, port + up * 0.03, port + up * 0.015, 8);
+        r.vr.step(2);
+        assert_eq!(gun_mut(&mut r).firearm.internal_rounds, 10, "home");
+    }
+
     /// The double: thumb the lever to break it, bring a shell to each
     /// barrel, thumb it shut: two in.
     #[test]
