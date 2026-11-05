@@ -1017,6 +1017,29 @@ impl Scene<'_, '_> {
             .is_none()
     }
 
+    /// Nothing solid between a body at `from` (its feet) and something
+    /// lying at `to`, at the knee and the hip, short of the thing itself
+    /// (and the floor it lies on).
+    fn walk_clear(&self, from: Vec3, to: Vec3) -> bool {
+        [0.4, 0.9].iter().all(|h| {
+            let a = from + Vec3::Y * *h;
+            let b = to + Vec3::Y * 0.25;
+            let d = b - a;
+            let Ok(dir) = Dir3::new(d) else {
+                return true;
+            };
+            self.spatial
+                .cast_ray(
+                    a,
+                    dir,
+                    (d.length() - 0.3).max(0.0),
+                    true,
+                    &SpatialQueryFilter::from_mask(Layer::World),
+                )
+                .is_none()
+        })
+    }
+
     fn ray_clear(&self, from: Vec3, to: Vec3) -> bool {
         let d = to - from;
         let len = d.length();
@@ -4615,7 +4638,10 @@ fn maintain(
         .def
         .magazine_family
         .clone()?;
-    // Its own empties, lying where they fell.
+    // Its own empties, lying where they fell: in sight along the floor, as
+    // the grab walks straight there (not one lying in the next room
+    // through the rock: Rime seed 4, 5 November, an ammo crate's mag past
+    // an adit's wall, six stucks; Fifth valley's trace).
     let dropped = scene.items.iter().find(|(e, it, gt, h, s, b)| {
         h.is_none()
             && s.is_none()
@@ -4624,6 +4650,7 @@ fn maintain(
             && gt.translation().distance(pos) < 10.0
             && scene.mags.get(*e).is_ok_and(|(_, m)| m.family == family)
             && it.rounds < 5
+            && scene.walk_clear(pos, gt.translation())
     });
     if let Some((e, ..)) = dropped {
         r.skip.insert(e);
@@ -5100,6 +5127,41 @@ mod run_tests {
             "{}: the route passes {near:.2} m from the wreck's middle",
             plan.name
         );
+    }
+
+    /// An empty lying past a wall isn't walked at: the grab goes straight
+    /// for it (Rime seed 4, 5 November: a mag in the next room through an
+    /// adit's rock, six stucks). One in the open is.
+    #[test]
+    fn an_empty_past_a_wall_is_left() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "training_yard".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let feet = zone.on_ground(0.0, 30.0);
+        let mag = zone.on_ground(3.0, 30.0) + Vec3::Y * 0.02;
+        let clear = |app: &mut App| {
+            app.world_mut()
+                .run_system_once(move |scene: Scene| scene.walk_clear(feet, mag))
+                .unwrap()
+        };
+        assert!(clear(&mut app), "nothing between them, and not clear");
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(0.3, 3.0, 4.0),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_translation(zone.on_ground(1.5, 30.0) + Vec3::Y * 1.5),
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(!clear(&mut app), "a wall between them, and clear");
     }
 
     /// A walk over open ground goes round a wrecked robot lying on its
