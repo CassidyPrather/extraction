@@ -1309,6 +1309,7 @@ fn chaos_monkey_long() {
             "kettle_pass",
             "cinder_works",
             "sallow_reservoir",
+            "rime_fell",
         ]
         .map(String::from)
         .to_vec(),
@@ -1381,6 +1382,7 @@ fn every_loot_spot_is_over_the_ground() {
         "kettle_pass",
         "cinder_works",
         "sallow_reservoir",
+        "rime_fell",
     ] {
         let zone = Zone::load(map);
         for p in &zone.map.placements {
