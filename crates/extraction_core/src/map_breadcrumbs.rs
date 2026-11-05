@@ -179,11 +179,13 @@ fn seen(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> bool
 }
 
 /// Whether a shape `height` tall at `to` reads from `from`: seen ([`seen`])
-/// and tall enough in the eye ([`READ_ANGLE`]), or less on the skyline
+/// and big enough in the eye, its `size` (the square root of its height
+/// times its narrowest breadth: a pole is a line, a lorry a mass) over the
+/// distance at least [`READ_ANGLE`], or less on the skyline
 /// ([`SKYLINE_ANGLE`]: the ground behind it, 150 m on, stays below it).
-fn reads(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> bool {
+fn reads(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32, size: f32) -> bool {
     let d = dist(from, to).max(1.0);
-    let angle = height / d;
+    let angle = size / d;
     if angle < SKYLINE_ANGLE || !seen(hm, solids, from, to, height) {
         return false;
     }
@@ -222,14 +224,27 @@ fn cue_for(
         let f = prefab_footprint(&s.prefab);
         s.rect.sdf(at) <= CONTAINER || (f[0].max(f[2]) >= YARD_LENGTH && s.rect.sdf(at) <= YARD)
     }) {
-        let h = prefab_footprint(&s.prefab)[1];
+        let f = prefab_footprint(&s.prefab);
+        let h = f[1];
         if h < SILHOUETTE_HEIGHT {
             continue;
         }
+        let size = (h * f[0].min(f[2])).sqrt();
         for w in walked {
             let d = dist(*w, s.rect.at);
-            if d <= SILHOUETTE_SIGHT && reads(hm, solids, *w, s.rect.at, h) {
+            if d <= SILHOUETTE_SIGHT && reads(hm, solids, *w, s.rect.at, h, size) {
                 take(format!("the {}'s silhouette", s.prefab), d);
+            }
+        }
+    }
+    // An outcrop set by hand beside it (a cairn's stones): about three
+    // quarters of its radius stands out of the ground, twice it across.
+    for o in map.outcrops.iter().filter(|o| dist(o.at, at) <= CONTAINER) {
+        let (h, b) = (o.radius * 0.75, o.radius * 2.0);
+        for w in walked {
+            let d = dist(*w, o.at);
+            if d <= SILHOUETTE_SIGHT && reads(hm, solids, *w, o.at, h, (h * b).sqrt()) {
+                take("its stones".to_string(), d);
             }
         }
     }
@@ -286,7 +301,7 @@ fn cue_for(
     if kind == "offering" {
         for w in walked {
             let d = dist(*w, at);
-            if d <= OFFERING_SIGHT && reads(hm, solids, *w, at, OFFERING_HEIGHT) {
+            if d <= OFFERING_SIGHT && reads(hm, solids, *w, at, OFFERING_HEIGHT, OFFERING_HEIGHT) {
                 take("its figures".to_string(), d);
             }
         }
