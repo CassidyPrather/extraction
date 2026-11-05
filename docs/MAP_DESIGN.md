@@ -530,6 +530,14 @@ fine on a monitor makes people sick or tired in a headset.
   than 16° over any 10 m (`ROUTE_GRADE`, `GRADE_RUN`), bridge decks
   counted at the deck. The body controller climbs far steeper; that's
   for scrambling on purpose, not for the way home.
+- **The gentle jobs come home short**: a career's first two jobs in a
+  first valley (`contracts::GENTLE_JOBS`; job 2 any scout place it can
+  roll, `progression::gentle_job_places`) walk home, to the nearest
+  rendezvous or by the gate while that run is free
+  (`progression::free_short_run`), no more than twice the walk there
+  (`GENTLE_HOME`). Kettle's job 2 was 75 m out and 506 m home; with the
+  gate free it's 1.0x. `kettles_gentle_jobs_need_the_free_run_home` keeps
+  the gate rule pinned.
 - **Edges**: no way a raid walks (a main route, a first job's walk there
   or home, a place's way to its nearest rendezvous) comes within 3 m
   (`EDGE_NEAR`) of the lip of a fall over 4.2 m (`EDGE_DROP`, where a

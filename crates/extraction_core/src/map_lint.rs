@@ -438,6 +438,12 @@ pub const OUTCROP_OFF: f32 = 3.0;
 /// The first this many metres of a way home leave its place (its door, its
 /// yard) and aren't judged for room.
 pub const PASS_FROM: f32 = 10.0;
+/// A career's gentle jobs (`contracts::GENTLE_JOBS`, the first two) in a
+/// first valley: the walk home from the job, to the nearest rendezvous or
+/// by the gate while that's free (`progression::free_short_run`), at most
+/// this many times the walk there. Kettle's job 2 was 75 m out and 506 m
+/// home: a newcomer's first raid shouldn't end with the longest walk.
+pub const GENTLE_HOME: f32 = 2.0;
 /// A routed way (a main route, a first job's walk, a way home) keeps this
 /// far, metres, from the lip of a fall...
 pub const EDGE_NEAR: f32 = 3.0;
@@ -3894,6 +3900,55 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // -- The Surge: a roof in reach, and its anomalies off the walls -------------
     crate::map_surge::check(map, hm, &comfy, &comfy_seen, &routes, &targets, &mut r);
 
+    // -- The gentle jobs: home no further than twice the way there -------------
+    {
+        let id = map.name.to_lowercase().replace(' ', "_");
+        let walk = |a: P2, b: P2| {
+            comfy
+                .path(a, b)
+                .map(|p| p.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>())
+        };
+        let rvs: Vec<P2> = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .map(|m| m.at)
+            .collect();
+        let gate = map.markers_of(&MarkerKind::ShortExfil).next().map(|m| m.at);
+        let mut worst: Option<(f32, String)> = None;
+        if crate::progression::FIRST_VALLEYS.contains(&id.as_str()) {
+            for done in 0..crate::contracts::GENTLE_JOBS {
+                for (place, at) in crate::progression::gentle_job_places(&id, map, done) {
+                    let Some(there) = walk(ins, at) else { continue };
+                    let home = rvs
+                        .iter()
+                        .copied()
+                        .chain(gate.filter(|_| crate::progression::free_short_run(done)))
+                        .filter_map(|to| walk(at, to))
+                        .fold(f32::INFINITY, f32::min);
+                    let k = home / there.max(1.0);
+                    if worst.as_ref().is_none_or(|(w, _)| k > *w) {
+                        worst = Some((k, format!("job {} at {place}", done + 1)));
+                    }
+                    if k > GENTLE_HOME {
+                        find(
+                            &mut r,
+                            Rule::Reach,
+                            format!(
+                                "job {} at {place}: {home:.0} m home from {there:.0} m there (at most {GENTLE_HOME}x)",
+                                done + 1
+                            ),
+                            at,
+                        );
+                    }
+                }
+            }
+        }
+        if let Some((k, what)) = worst {
+            r.measures.push(format!(
+                "gentle jobs: home at most {k:.1}x the way there ({what})"
+            ));
+        }
+    }
+
     // -- Edges: no routed way past an unwalled fall -------------------------------
     {
         let walls = edge_walls(map, &solids);
@@ -3976,6 +4031,49 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The gentle jobs come home short only by the gate: in Kettle, without
+    /// the free short run (`progression::free_short_run`), a gentle job's
+    /// way home to the nearest rendezvous is over twice the way there.
+    #[test]
+    fn kettles_gentle_jobs_need_the_free_run_home() {
+        let map = MapDef::from_ron(crate::map::KETTLE_PASS).unwrap();
+        let hm = Heightmap::build(&map);
+        let comfy = crate::map_nav::zone_grid(&map, &hm, COMFORT_SLOPE);
+        let walk = |a: P2, b: P2| {
+            comfy
+                .path(a, b)
+                .map(|p| p.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>())
+        };
+        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+        let gate = map.markers_of(&MarkerKind::ShortExfil).next().unwrap().at;
+        let rvs: Vec<P2> = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .map(|m| m.at)
+            .collect();
+        let mut by_rv = 0.0f32;
+        let mut by_gate = 0.0f32;
+        for done in 0..crate::contracts::GENTLE_JOBS {
+            assert!(crate::progression::free_short_run(done));
+            for (_, at) in crate::progression::gentle_job_places("kettle_pass", &map, done) {
+                let there = walk(ins, at).unwrap().max(1.0);
+                let rv = rvs
+                    .iter()
+                    .filter_map(|v| walk(at, *v))
+                    .fold(f32::INFINITY, f32::min);
+                by_rv = by_rv.max(rv / there);
+                by_gate = by_gate.max(rv.min(walk(at, gate).unwrap()) / there);
+            }
+        }
+        assert!(
+            by_rv > GENTLE_HOME,
+            "Kettle's rendezvous are now near its gentle jobs ({by_rv:.1}x): this test pins nothing"
+        );
+        assert!(
+            by_gate <= GENTLE_HOME,
+            "a gentle job is {by_gate:.1}x home even by the gate"
+        );
     }
 
     /// The unwalled-edge rule sees a real fall: Sallow's main route climbs
