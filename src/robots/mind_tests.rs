@@ -3342,6 +3342,29 @@ fn a_fresh_career_is_unaffected_by_memory() {
     );
 }
 
+/// A raid that ends down is remembered as a loss where you went down: the
+/// place isn't known any better for it (`zone_memory::RaidTrace::lost`;
+/// a newcomer stuck on one step met a drone 110 s in, raid after raid).
+#[test]
+fn a_raid_lost_somewhere_doesnt_teach_them_the_place() {
+    let (mut app, player, zone) = app(None);
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    for _ in 0..100 {
+        app.update();
+    }
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::Down { left: 6.0 };
+    app.update();
+    let m = &app.world().resource::<super::memory::ZoneMind>().memory;
+    assert_eq!(m.raids, 1, "the raid went in");
+    assert_eq!(
+        m.corridor(100.0, 200.0),
+        0.0,
+        "went down there, and it's known for it: {:?}",
+        m.heat
+    );
+}
+
 /// A raid is remembered: where you walked, what you wrecked, where you
 /// got out.
 #[test]
