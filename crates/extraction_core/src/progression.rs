@@ -604,6 +604,10 @@ pub struct Progress {
     /// Fetches the driver gave up waiting for (varies the next roll).
     #[serde(default)]
     pub swaps: u32,
+    /// Raids lost running on the job on the card (back to 0 with a new
+    /// job): at [`ANOTHER_WAY_AFTER`] the driver names another way in.
+    #[serde(default)]
+    pub lost_on_job: u32,
     /// The place of the last job done (a scout's place, a recover's region):
     /// the next rolled job goes elsewhere if anywhere else will do.
     #[serde(default)]
@@ -989,6 +993,71 @@ pub fn gentle_job_places(id: &str, map: &MapDef, done: u32) -> Vec<(String, [f32
     }
     let last = first.as_ref().map(|(p, _)| p.as_str());
     elsewhere(places(map, TIERS[0].danger), |p| p.0.as_str(), last)
+}
+
+/// Raids lost running on one job before the driver names another way in
+/// to it (reckless, first_jobs: nine raids lost on one contract step, each
+/// on the way to the same weir cottage, its machines knowing the way).
+pub const ANOTHER_WAY_AFTER: u32 = 2;
+
+/// How much the Zone remembers your walking the straight way from `a` to
+/// `b`: the heat of each of its cells, once each.
+pub fn heat_along(memory: &crate::zone_memory::ZoneMemory, a: [f32; 2], b: [f32; 2]) -> f32 {
+    let d = crate::geom::dist(a, b);
+    let steps = (d / 10.0).ceil().max(1.0) as usize;
+    let mut cells: Vec<[i32; 2]> = Vec::new();
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let c = crate::zone_memory::cell(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t);
+        if !cells.contains(&c) {
+            cells.push(c);
+        }
+    }
+    cells
+        .iter()
+        .map(|c| {
+            memory
+                .heat
+                .iter()
+                .find(|(h, _)| h == c)
+                .map_or(0.0, |(_, w)| *w)
+        })
+        .sum()
+}
+
+/// Another way in to `to` from `from`, by a named place of `map` that
+/// comes at it from another side and over ground the Zone remembers less
+/// of you on: (its name, where). None if the straight way isn't known to
+/// it, or no other way is quieter.
+pub fn another_way(
+    map: &MapDef,
+    memory: &crate::zone_memory::ZoneMemory,
+    from: [f32; 2],
+    to: [f32; 2],
+) -> Option<(String, [f32; 2])> {
+    let straight = heat_along(memory, from, to);
+    if straight <= 0.0 {
+        return None;
+    }
+    let back = [from[0] - to[0], from[1] - to[1]];
+    let side = |p: [f32; 2]| {
+        let v = [p[0] - to[0], p[1] - to[1]];
+        let dot = back[0] * v[0] + back[1] * v[1];
+        let n = (back[0].hypot(back[1]) * v[0].hypot(v[1])).max(1e-3);
+        dot / n
+    };
+    map.markers_of(&MarkerKind::Poi)
+        .filter(|m| !m.name.is_empty())
+        .filter(|m| (40.0..=220.0).contains(&crate::geom::dist(m.at, to)))
+        // From another side: more than 60 degrees off the way you come.
+        .filter(|m| side(m.at) < 0.5)
+        .map(|m| {
+            let h = heat_along(memory, from, m.at) + heat_along(memory, m.at, to);
+            (m.name.clone(), m.at, h)
+        })
+        .filter(|(.., h)| *h < straight)
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(n, at, _)| (n, at))
 }
 
 /// The next job for `progress`, rolled from the career seed and the job's
@@ -1660,5 +1729,50 @@ mod tests {
             assert!(gentle_job_places(id, &map, 2).is_empty());
         }
         assert!(free_short_run(0) && free_short_run(1) && !free_short_run(2));
+    }
+
+    /// Another way in comes at the place from another side, over ground
+    /// the Zone remembers less of you on than the straight way: the way
+    /// the machines know (the weir cottage, reckless, first_jobs).
+    #[test]
+    fn another_way_avoids_the_watched_approach() {
+        use crate::zone_memory::{ZoneMemory, cell};
+        let map = MapDef::from_ron(crate::map::KETTLE_PASS).unwrap();
+        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+        let mut tried = 0;
+        for to in map
+            .markers_of(&MarkerKind::Poi)
+            .filter(|m| !m.name.is_empty())
+        {
+            let to = to.at;
+            // The habit: the straight way in, walked raid after raid.
+            let mut memory = ZoneMemory::default();
+            let steps = (crate::geom::dist(ins, to) / 10.0).ceil() as usize;
+            for i in 0..=steps {
+                let t = i as f32 / steps.max(1) as f32;
+                let c = cell(ins[0] + (to[0] - ins[0]) * t, ins[1] + (to[1] - ins[1]) * t);
+                if !memory.heat.iter().any(|(h, _)| *h == c) {
+                    memory.heat.push((c, 2.0));
+                }
+            }
+            let Some((_, via)) = another_way(&map, &memory, ins, to) else {
+                continue;
+            };
+            tried += 1;
+            let straight = heat_along(&memory, ins, to);
+            let other = heat_along(&memory, ins, via) + heat_along(&memory, via, to);
+            assert!(
+                other < straight,
+                "via {via:?} to {to:?}: {other} vs {straight}"
+            );
+            // And it comes at it from another side.
+            let a = [ins[0] - to[0], ins[1] - to[1]];
+            let b = [via[0] - to[0], via[1] - to[1]];
+            let cos = (a[0] * b[0] + a[1] * b[1]) / (a[0].hypot(a[1]) * b[0].hypot(b[1]));
+            assert!(cos < 0.5, "via {via:?}: from the same side");
+        }
+        assert!(tried > 3, "another way found for only {tried} places");
+        // Nothing remembered: nothing to avoid.
+        assert!(another_way(&map, &ZoneMemory::default(), ins, [0.0, 0.0]).is_none());
     }
 }
