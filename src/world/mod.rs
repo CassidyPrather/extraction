@@ -11,6 +11,7 @@ pub mod cage;
 pub mod clutter;
 pub mod cold;
 pub mod cover;
+pub mod cues;
 pub mod dam;
 pub mod dark;
 pub mod decay;
@@ -375,7 +376,7 @@ impl Plugin for WorldVisualsPlugin {
             storm::StormPlugin,
             snow::SnowVisualsPlugin,
         ))
-        .add_plugins(roadworks::RoadworksVisualsPlugin);
+        .add_plugins((roadworks::RoadworksVisualsPlugin, cues::CuesPlugin));
     }
 }
 
