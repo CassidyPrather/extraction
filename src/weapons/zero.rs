@@ -664,9 +664,20 @@ mod tests {
                 .collect()
         };
         assert!(ids.len() > 10, "only {} guns", ids.len());
+        /// Guns not held to their sights, and why.
+        const NOT_AIMED: &[(&str, &str)] = &[(
+            "flare_pistol",
+            // A star fired level brakes in all directions once it starts
+            // down (`flares::fly`'s descent drag), stalls within metres and
+            // sinks: 1.9 m low at 20 m. It's fired up, to light or signal.
+            "a flare's star stalls fired level",
+        )];
         let mut report = Vec::new();
         let mut bad = Vec::new();
         for (k, id) in ids.iter().enumerate() {
+            if NOT_AIMED.iter().any(|(g, _)| g == id) {
+                continue;
+            }
             let at = Vec3::new(k as f32 * 3.0, 400.0, 0.0);
             let gun = vr.spawn(id, Transform::from_translation(at));
             vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
