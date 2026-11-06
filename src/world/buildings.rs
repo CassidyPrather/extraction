@@ -135,9 +135,24 @@ pub struct Geo {
     /// Its shell's windows' sills, front (-Z) wall first and on round
     /// as `Builder::shell` builds the walls.
     pub sills: Vec<Sill>,
+    /// Its inside doorways and doors, between its own rooms (walls built
+    /// outside its shell): where a body walks from room to room
+    /// (`sim::indoor`'s `every_inner_doorway_is_walked_through`).
+    pub inner_doorways: Vec<InnerDoorway>,
     /// The open tops of its chimney stacks, where smoke comes out
     /// (`world::cues`). A stove's pipe isn't one: it stops under the roof.
     pub flues: Vec<Vec3>,
+}
+
+/// A doorway (or a door's opening) in a wall between rooms,
+/// building-local.
+#[derive(Clone, Copy, Debug)]
+pub struct InnerDoorway {
+    /// Its foot's middle, on the wall's centre line.
+    pub at: Vec3,
+    /// Square to the wall, level (either way through).
+    pub across: Vec2,
+    pub width: f32,
 }
 
 /// What a breakable thing is.
@@ -454,6 +469,21 @@ impl Builder {
         let at = |s: f32, y: f32| Vec3::new(a.x + dir.x * s, y, a.y + dir.y * s);
         let mut ops: Vec<Opening> = openings.to_vec();
         ops.sort_by(|p, q| p.centre.total_cmp(&q.centre));
+        if !self.exterior {
+            // A way from room to room, if a body fits under it.
+            for o in &ops {
+                if matches!(o.kind, OpeningKind::Door | OpeningKind::Gap)
+                    && o.top - o.bottom >= 1.8
+                    && o.bottom < 0.3
+                {
+                    self.geo.inner_doorways.push(InnerDoorway {
+                        at: at(o.centre, y0 + o.bottom),
+                        across: Vec2::new(-dir.y, dir.x),
+                        width: o.width,
+                    });
+                }
+            }
+        }
         let mut cursor = 0.0;
         let seg = |b: &mut Self, s0: f32, s1: f32, y_lo: f32, y_hi: f32| {
             if s1 - s0 < 0.01 || y_hi - y_lo < 0.01 {
@@ -1822,6 +1852,14 @@ pub fn prefab(id: &str) -> Option<Geo> {
     Some(b.finish())
 }
 
+/// A house's inner doorways' width (m), through the partition from its
+/// front room to its back rooms. At 0.9 m the indoor grid's 0.25 m cells
+/// and a body's clearance left it open or shut by where the cells fell
+/// (a bot hid in Kettle's mine office and couldn't leave its front room);
+/// 1.0 m keeps a clear column open wherever they fall
+/// (`sim::indoor`'s `every_inner_doorway_is_walked_through`).
+pub const INNER_DOOR: f32 = 1.0;
+
 fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, plan: HousePlan) {
     let f = 0.5;
     let h = 2.7;
@@ -1850,7 +1888,10 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, plan: HousePlan)
         h,
         0.1,
         Mat::Plaster,
-        &[gap(w * 0.25, 0.9, 2.05), gap(w * 0.75, 0.9, 2.05)],
+        &[
+            gap(w * 0.25, INNER_DOOR, 2.05),
+            gap(w * 0.75, INNER_DOOR, 2.05),
+        ],
     );
     b.wall(
         Vec2::new(0.0, pz),
@@ -2015,7 +2056,9 @@ pub fn house_layout(plan: HousePlan, w: f32, d: f32) -> HouseLayout {
             room_floor: flip(common.room_floor),
         },
         HousePlan::PlankC => HouseLayout {
-            table: (Vec3::new(x * 0.3, f, -z * 0.1), 0.4),
+            // Out in the front room: by the partition, its chair stood in
+            // the right-hand doorway (`every_inner_doorway_is_walked_through`).
+            table: (Vec3::new(x * 0.3, f, -z * 0.35), 0.4),
             shelf: (Vec3::new(-x + 0.3, f, -z * 0.7), -FRAC_PI_2),
             room_floor: Vec3::new(-x * 0.3, f + 0.03, -z * 0.5),
             ..common
@@ -2098,8 +2141,8 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
         0.1,
         Mat::Plaster,
         &[
-            gap(w * 0.25 - end, 0.9, 2.05),
-            gap(w * 0.75 - end, 0.9, 2.05),
+            gap(w * 0.25 - end, INNER_DOOR, 2.05),
+            gap(w * 0.75 - end, INNER_DOOR, 2.05),
         ],
     );
     b.wall(

@@ -60,6 +60,10 @@ impl Plugin for ReelPlugin {
     }
 }
 
+/// `feetat`'s disc under a foot in stance: which foot.
+#[derive(Component)]
+struct StanceMark(usize);
+
 /// `reel:feetat,…,X2,Z2,DIST,HEIGHT[,door]`: the camera keeps beside the machine,
 /// DIST m off its route's line and HEIGHT m over the ground under it,
 /// looking at it level, so its feet and the ground line read in
@@ -69,7 +73,20 @@ impl Plugin for ReelPlugin {
 fn feetat_follow(
     opts: Res<LaunchOptions>,
     zone: Option<Res<Zone>>,
-    bodies: Query<&GlobalTransform, With<Walker>>,
+    bodies: Query<(
+        &GlobalTransform,
+        &Walker,
+        &super::walker::LegPoses,
+        &super::anim::Gait,
+    )>,
+    spatial: avian3d::prelude::SpatialQuery,
+    mut commands: Commands,
+    mut made: Local<bool>,
+    mut marks: Query<
+        (&StanceMark, &mut Transform, &mut Visibility),
+        Without<crate::render::FreeCamera>,
+    >,
+    (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     mut cams: Query<&mut Transform, With<crate::render::FreeCamera>>,
     mut frame: Local<u32>,
     mut heading: Local<Vec3>,
@@ -90,13 +107,80 @@ fn feetat_follow(
     let (Some(&dist), Some(&height)) = (a.get(4), a.get(5)) else {
         return;
     };
-    let Some(body) = bodies.iter().next() else {
+    let Some((body, w, legs, gait)) = bodies.iter().next() else {
         return;
     };
     let at = body.translation();
+    // Each foot: in stance or swing, and how far its drawn tip stands
+    // over the ground under it (the fixed world and rubble, as
+    // `feet_gauge` reads it; m and in body sizes).
+    let surface = |p: Vec3| {
+        let terrain = zone.ground(p.x, p.z);
+        let filter = avian3d::prelude::SpatialQueryFilter::from_mask([
+            crate::world::Layer::World,
+            crate::world::Layer::Debris,
+        ]);
+        let from = p + Vec3::Y * 0.06;
+        spatial
+            .cast_ray(from, Dir3::NEG_Y, 3.0, true, &filter)
+            .filter(|h| h.distance > 0.02)
+            .map(|h| from.y - h.distance)
+            .map_or(terrain, |y| y.max(terrain))
+    };
+    // A bright disc on the ground under each foot in stance, so a foot
+    // down reads as down from low beside a slope (where its toe can sit
+    // above the slope's far line in the picture). The same before and
+    // after a change: it marks what the gait says, not what it draws.
+    if !*made {
+        *made = true;
+        let mesh = meshes.add(Cylinder::new(0.12 * gait.size, 0.03));
+        let mat = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.2, 1.0, 0.35),
+            unlit: true,
+            ..default()
+        });
+        for i in 0..w.feet.len() {
+            commands.spawn((
+                StanceMark(i),
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                Transform::default(),
+                Visibility::Hidden,
+            ));
+        }
+    }
+    for (mark, mut t, mut v) in &mut marks {
+        let (Some(f), Some(l)) = (w.feet.get(mark.0), legs.0.get(mark.0)) else {
+            continue;
+        };
+        t.translation = Vec3::new(l[2].x, surface(l[2]) + 0.015, l[2].z);
+        *v = if f.t >= 1.0 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    let feet: Vec<String> = w
+        .feet
+        .iter()
+        .zip(legs.0.iter())
+        .map(|(f, l)| {
+            let over = l[2].y - surface(l[2]);
+            format!(
+                "{}{:+.3}m/{:+.3}s",
+                if f.t >= 1.0 { "stance" } else { "swing" },
+                over,
+                over / gait.size
+            )
+        })
+        .collect();
     info!(
-        "feetat frame {} body {:.2} {:.2} {:.2}",
-        *frame, at.x, at.y, at.z
+        "feetat frame {} body {:.2} {:.2} {:.2} feet {}",
+        *frame,
+        at.x,
+        at.y,
+        at.z,
+        feet.join(" ")
     );
     // Square to the way it faces (smoothed, so a stride's sway doesn't
     // swing the camera).

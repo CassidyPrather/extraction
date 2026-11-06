@@ -303,6 +303,7 @@ fn holds_views_with(
             println!("    layers: {layers}");
         }
         if near(draws, b.draws) || near(l.tris + r.tris, b.tris) {
+            println!("    guns: {}", guns(&mut app, eyes.0));
             println!("    unnamed: {}", unnamed(&mut app, eyes.0));
         }
         let mut o = Vec::new();
@@ -364,6 +365,49 @@ fn holds_views_with(
         }
     }
     (over, rows)
+}
+
+/// The guns one eye draws meshes of, by what they're doing
+/// (`gun_rest::state_of`), with the meshes each state costs.
+fn guns(app: &mut App, eye: Entity) -> String {
+    let w = app.world_mut();
+    let seen: Vec<Entity> = w
+        .entity(eye)
+        .get::<VisibleEntities>()
+        .map(|v| v.get(std::any::TypeId::of::<Mesh3d>()).to_vec())
+        .unwrap_or_default();
+    let mut by: Vec<(&'static str, usize, usize)> = Vec::new();
+    let mut counted = std::collections::HashSet::new();
+    for e in seen {
+        let mut at = e;
+        let mut gun = None;
+        for _ in 0..16 {
+            if w.get::<crate::weapons::Gun>(at).is_some() {
+                gun = Some(at);
+                break;
+            }
+            match w.get::<ChildOf>(at) {
+                Some(p) => at = p.parent(),
+                None => break,
+            }
+        }
+        let Some(g) = gun else {
+            continue;
+        };
+        let state = super::gun_rest::state_of(w, g);
+        let new = counted.insert(g);
+        match by.iter_mut().find(|(s, _, _)| *s == state) {
+            Some((_, guns, meshes)) => {
+                *guns += new as usize;
+                *meshes += 1;
+            }
+            None => by.push((state, 1, 1)),
+        }
+    }
+    by.iter()
+        .map(|(s, g, m)| format!("{s} {g} ({m} meshes)"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// What the meshes one eye draws without a named ancestor are, by mesh
@@ -644,7 +688,9 @@ fn gauge_worst_views_hold_the_stereo_budget() {
         let look = crate::asset_root_path()
             .join("..")
             .join(format!("scripts/lookbook/{map}.views"));
-        let (o, mut rows) = holds_views_with(map, "storm", Some("night"), true, |zone| {
+        // `WORST_NO_FIGHT=1`: the views without the fight, to tell its cost.
+        let fight = std::env::var_os("WORST_NO_FIGHT").is_none();
+        let (o, mut rows) = holds_views_with(map, "storm", Some("night"), fight, |zone| {
             let mut v = place_views(zone);
             for f in [&walk, &look] {
                 if f.exists() {
