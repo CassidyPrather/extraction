@@ -396,7 +396,7 @@ fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
     commands.insert_resource(SaveSlot(slot));
 }
 
-fn load_save(
+pub(crate) fn load_save(
     mut commands: Commands,
     slot: Res<SaveSlot>,
     opts: Res<LaunchOptions>,
