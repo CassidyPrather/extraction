@@ -1,7 +1,8 @@
 //! Breakable parts nobody is near are drawn merged, a cell at a time.
 //!
 //! A building's shutters, boards and crates, a wreck's panels, a window's
-//! sash leaves, a counter's drawers and its doors are each drawn on their own
+//! sash leaves, a counter's drawers, its doors and the loose things lying
+//! about (`items::Item`, not guns: `gun_rest`) are each drawn on their own
 //! (`destruction::wood::Drawn`), so a crowbar can lever one off. Marrow
 //! Creek's gate view drew about 250 of them an eye. Parts rarely change,
 //! so once every part in a 16 m cell has stood unchanged for a while,
@@ -150,6 +151,9 @@ fn wake_parts(
     mut gone: RemovedComponents<ChildOf>,
     mut undrawn: RemovedComponents<Drawn>,
     mut unhung: RemovedComponents<DoorLeaf>,
+    mut taken: RemovedComponents<crate::items::Item>,
+    in_hand: Query<(), With<crate::interact::Held>>,
+    rematerialled: Query<Entity, (Changed<MeshMaterial3d<StandardMaterial>>, Without<PartRestMesh>)>,
     hit: Query<Entity, Changed<Timber>>,
     prised: Query<
         (Entity, &crate::destruction::hooks::Pryable),
@@ -165,6 +169,9 @@ fn wake_parts(
     for (q, reason) in [
         (moved.iter().collect::<Vec<_>>(), "moved"),
         (reshaped.iter().collect(), "reshaped"),
+        // A material of its own (an item worn, a gun weathered): the merged
+        // mesh still wears the old one.
+        (rematerialled.iter().collect(), "rematerialled"),
         (regrown.iter().collect(), "children changed"),
     ] {
         for e in q {
@@ -192,7 +199,11 @@ fn wake_parts(
         why.push((e, "prised"));
     }
     // Gone: broken, stripped, despawned.
-    let undrawn: Vec<Entity> = undrawn.read().chain(unhung.read()).collect();
+    let undrawn: Vec<Entity> = undrawn
+        .read()
+        .chain(unhung.read())
+        .chain(taken.read())
+        .collect();
     for e in &undrawn {
         woken.insert(*e);
         why.push((*e, "gone"));
@@ -247,11 +258,22 @@ fn wake_parts(
             t.1.clear();
         }
     }
+    // Parts that leave their cells: gone for good, taken in a hand, or
+    // carried into another cell (rest_cells takes them in where they lie).
+    let mut leaving = undrawn.clone();
+    for part in &woken {
+        if in_hand.contains(*part) {
+            leaving.push(*part);
+        } else if let (Ok((_, g, _, _)), Some(key)) = (parts.get(*part), cells.part_cell.get(part)) {
+            if cell_of(g.translation()) != *key {
+                leaving.push(*part);
+            }
+        }
+    }
     for part in woken {
         cells.wake(part, &mut vis, &mut commands);
     }
-    // Parts gone for good leave their cells.
-    for e in undrawn {
+    for e in leaving {
         if let Some(key) = cells.part_cell.remove(&e) {
             if let Some(cell) = cells.cells.get_mut(&key) {
                 cell.quiet.remove(&e);
@@ -260,6 +282,7 @@ fn wake_parts(
         cells.leaf_part.retain(|_, p| *p != e);
     }
 }
+
 
 /// Every mesh under a part (the part's own too) drawn with a standard
 /// material, not glass, not blended.
@@ -289,13 +312,16 @@ fn leaves_of(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn rest_cells(
     mut cells: ResMut<Cells>,
-    // Breakable parts, and doors (which swing, and are pressed, as parts
-    // are) but not a powered one (its lamp's colour is its state).
+    // Breakable parts, doors (which swing, and are pressed, as parts are)
+    // but not a powered one (its lamp's colour is its state), and loose
+    // items lying about (not guns: `gun_rest`'s; not one in a hand).
     parts: Query<
         (Entity, &GlobalTransform),
         (
-            Or<(With<Drawn>, With<DoorLeaf>)>,
+            Or<(With<Drawn>, With<DoorLeaf>, With<crate::items::Item>)>,
             Without<crate::world::underground::PowerLocked>,
+            Without<crate::weapons::Gun>,
+            Without<crate::interact::Held>,
         ),
     >,
     children: Query<&Children>,
@@ -744,6 +770,54 @@ mod tests {
         for (_, leaf) in &doors {
             assert!(shown(&app, *leaf), "a door left hidden");
         }
+    }
+
+    /// Loose things lying about rest with their cell (four tins on a shelf
+    /// drawn as one); one taken in a hand wakes the cell and leaves it,
+    /// and the rest rest again without it.
+    #[test]
+    fn loose_items_rest_and_one_taken_leaves_its_cell() {
+        let mut app = app();
+        let catalog = crate::items::Catalog::load();
+        let (kind, _) = catalog.0.iter().next().expect("a kind in the catalog");
+        let items: Vec<(Entity, Entity)> = (0..4)
+            .map(|i| {
+                let (p, leaf) = part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0));
+                app.world_mut()
+                    .entity_mut(p)
+                    .remove::<(Drawn, Timber, Pryable)>()
+                    .insert(crate::items::Item(
+                        extraction_core::items::ItemState::fresh(&catalog.0, kind, 1.0),
+                    ));
+                (p, leaf)
+            })
+            .collect();
+        rest(&mut app);
+        assert_eq!(resting(&mut app), 1, "four items of one material: one mesh");
+        for (_, leaf) in &items {
+            assert!(!shown(&app, *leaf), "a resting item's own mesh is hidden");
+        }
+        // Taken: in a hand, and lifted.
+        let (taken, _) = items[1];
+        let w = app.world_mut();
+        let hand = w.spawn_empty().id();
+        w.entity_mut(taken).insert(crate::interact::Held {
+            player: hand,
+            hand,
+            side: crate::rig::Side::Right,
+            point: 0,
+            offset: Transform::IDENTITY,
+        });
+        w.get_mut::<Transform>(taken).unwrap().translation += Vec3::new(0.0, 0.5, 40.0);
+        app.update();
+        assert_eq!(resting(&mut app), 0, "taken: merged meshes left");
+        assert!(
+            !app.world().resource::<Cells>().part_cell.contains_key(&taken),
+            "a held item still counted in its cell"
+        );
+        rest(&mut app);
+        assert_eq!(resting(&mut app), 1, "the rest merged again without it");
+        assert!(shown(&app, items[1].1), "the taken item is drawn as itself");
     }
 
     /// A pane breaking under a resting leaf: its mesh is swapped.
