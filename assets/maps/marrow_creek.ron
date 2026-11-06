@@ -318,6 +318,11 @@
         (prefab: "way_lamp", at: (110.8, -97.7), rot: 0.0),
         (prefab: "way_lamp", at: (-87.7, 0.9), rot: 0.0),
         (prefab: "way_lamp", at: (-144.7, -71.7), rot: 0.0),
+        // A marker post, banded with reflective tape, where a hand torch's
+        // pool shows nothing of the way home (scripts/night_route.sh, the
+        // torch case): 12 m on, where the way to the Ranger tower that the
+        // village's and the letter's ways share leaves the Forest path.
+        (prefab: "marker_post", at: (-89.9, -38.2), rot: 0.0),
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).

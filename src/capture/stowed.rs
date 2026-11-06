@@ -90,8 +90,8 @@ pub fn stowed() -> Vec<Stowed> {
         if piece(*slot).is_none() || !done.insert(*slot) {
             continue;
         }
-        let (pos, _, _) = crate::interact::body::slot_layout(*slot, index);
-        let place = Mat4::from_translation(pos);
+        let (place, _, _) = crate::interact::body::slot_layout(*slot, index);
+        let place = place.to_matrix();
         let kind = crate::interact::SocketKind::Body(*slot);
         let mut seen = std::collections::HashSet::new();
         for (_, def) in catalog.iter() {
@@ -203,21 +203,28 @@ pub fn check(s: &Stowed) -> Vec<String> {
             |(l, h), p| (l.min(*p), h.max(*p)),
         )
     };
-    let (bl, bh) = bounds(&bag);
+    // Its walls and outline in its slot's own space (a turned slot's
+    // outline is its piece's, not the torso's box round it).
+    let back = s.place.inverse();
+    let local = |p: &Vec3| back.transform_point3(*p);
+    let (bl, bh) = bounds(&piece_tris(RIG, name));
     if bagged {
         // Out of its walls or its bottom, under the mouth.
         let mouth = bh.y - MOUTH;
         let (mut worst, mut at) = (0.0f32, Vec3::ZERO);
         // The holster's back is open above the trigger guard: a grip
         // stands out of it there (`kit_cavities::HOLSTER_BACK_MOUTH`).
-        let back_open = |p: &Vec3| {
-            let l = s.place.inverse().transform_point3(*p);
+        let back_open = |l: &Vec3| {
             s.slot == SlotKind::Holster
                 && l.y > crate::kit_cavities::HOLSTER_BACK_MOUTH
                 && l.z > crate::kit_cavities::HOLSTER.centre().z
         };
-        for p in pts.iter().filter(|p| p.y < mouth && !back_open(p)) {
-            let out_by = (bl - *p).max(*p - bh).max_element();
+        for p in pts.iter() {
+            let l = local(p);
+            if l.y >= mouth || back_open(&l) {
+                continue;
+            }
+            let out_by = (bl - l).max(l - bh).max_element();
             if out_by > worst {
                 worst = out_by;
                 at = *p;
@@ -233,12 +240,17 @@ pub fn check(s: &Stowed) -> Vec<String> {
             ));
         }
     }
-    // Its middle in its piece's outline.
-    let (tl, th) = bounds(&thing);
+    // Its middle in its piece's outline (slot space).
+    let (tl, th) = bounds(
+        &thing
+            .iter()
+            .map(|t| t.map(|p| local(&p)))
+            .collect::<Vec<_>>(),
+    );
     let mid = (tl + th) / 2.0;
     if !(mid.cmpge(bl).all() && mid.cmple(bh).all()) {
         out.push(format!(
-            "{label}: its middle ({:.3}, {:.3}, {:.3}) is outside the {name} ({:.3}..{:.3}, {:.3}..{:.3}, {:.3}..{:.3})",
+            "{label}: its middle ({:.3}, {:.3}, {:.3}) is outside the {name} ({:.3}..{:.3}, {:.3}..{:.3}, {:.3}..{:.3}) in its slot's space",
             mid.x, mid.y, mid.z, bl.x, bh.x, bl.y, bh.y, bl.z, bh.z
         ));
     }
@@ -287,6 +299,80 @@ mod tests {
         "tape_bells in the Pocket: through the harness",
     ];
 
+    /// Each hip pocket hangs on the belt with the belt along its back, not
+    /// across it: neither goes into the other more than a millimetre (hung
+    /// square on the belt's curve, the belt cut 14 mm into the pocket's
+    /// inner top corner).
+    #[test]
+    fn the_belt_runs_along_each_hip_pocket() {
+        let rig = crate::asset_root_path().join(RIG);
+        let back = super::super::seated::node_transform(&rig, "harness")
+            .unwrap()
+            .inverse();
+        let belt: Vec<[Vec3; 3]> = nodes(RIG)
+            .into_iter()
+            .filter(|t| t.node == "harness")
+            .map(|t| t.p.map(|p| back.transform_point3(p)))
+            .collect();
+        assert!(!belt.is_empty(), "no harness");
+        let mut bad = Vec::new();
+        for (index, slot) in DEFAULT_SLOTS.iter().enumerate() {
+            if *slot != SlotKind::Pocket {
+                continue;
+            }
+            let place = crate::interact::body::slot_layout(*slot, index)
+                .0
+                .to_matrix();
+            let pocket: Vec<[Vec3; 3]> = piece_tris(RIG, "pocket")
+                .into_iter()
+                .map(|t| t.map(|p| place.transform_point3(p)))
+                .collect();
+            let pts = |t: &[[Vec3; 3]]| t.iter().flatten().copied().collect::<Vec<_>>();
+            let (d1, _, a1) = super::super::seated::through(&pocket, &pts(&belt));
+            let (d2, _, a2) = super::super::seated::through(&belt, &pts(&pocket));
+            for (d, at, what) in [(d1, a1, "the belt into it"), (d2, a2, "it into the belt")] {
+                if d > 0.001 {
+                    bad.push(format!(
+                        "pocket {index}: {what} {:.1} mm at ({:.3}, {:.3}, {:.3})",
+                        d * 1000.0,
+                        at.x,
+                        at.y,
+                        at.z
+                    ));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// The rig's art places its pocket where the game hangs the right hip
+    /// pocket's slot (`art/kit/rig.py` `pocket_place`, `slot_layout`).
+    #[test]
+    fn the_rig_places_its_pocket_where_its_slot_hangs() {
+        let rig = crate::asset_root_path().join(RIG);
+        let art = super::super::seated::node_transform(&rig, "pocket").unwrap();
+        let index = DEFAULT_SLOTS
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| **s == SlotKind::Pocket)
+            .map(|(i, _)| i)
+            .find(|i| {
+                crate::interact::body::slot_layout(SlotKind::Pocket, *i)
+                    .0
+                    .translation
+                    .x
+                    > 0.0
+            })
+            .unwrap();
+        let game = crate::interact::body::slot_layout(SlotKind::Pocket, index)
+            .0
+            .to_matrix();
+        assert!(
+            art.abs_diff_eq(game, 1e-4),
+            "the art's pocket at {art:?}, its slot at {game:?}"
+        );
+    }
+
     /// Writes the poses for the before/after shots of stowed kit
     /// (`docs/shots/models/`): a few things, each at the slot's origin
     /// (before) and as `slot_fit` seats it (after), torso space, as
@@ -308,8 +394,8 @@ mod tests {
             (SlotKind::Mount, 9, "radio"),
         ] {
             let def = catalog.get(catalog.kind(id).unwrap());
-            let (pos, seat, _) = crate::interact::body::slot_layout(slot, index);
-            let place = Mat4::from_translation(pos);
+            let (place, seat, _) = crate::interact::body::slot_layout(slot, index);
+            let place = place.to_matrix();
             let folder = if def.firearm.is_some() {
                 "guns"
             } else if def.category == extraction_core::items::Category::Magazine {

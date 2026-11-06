@@ -371,7 +371,7 @@ fn build_body(add: On<Add, Player>, mut commands: Commands) {
         ))
         .id();
     for (i, slot) in DEFAULT_SLOTS.iter().enumerate() {
-        let (pos, seat, radius) = slot_layout(*slot, i);
+        let (place, seat, radius) = slot_layout(*slot, i);
         commands.spawn((
             Name::new(format!("{slot:?} slot")),
             BodySlot(i),
@@ -382,7 +382,7 @@ fn build_body(add: On<Add, Player>, mut commands: Commands) {
                 seat,
             },
             SocketOwner(player),
-            Transform::from_translation(pos),
+            place,
             Visibility::default(),
             ChildOf(torso),
         ));
@@ -442,8 +442,9 @@ fn handed_slots(
         }
         let (mut pos, ..) = slot_layout(kind, slot.0);
         if comfort.left_handed {
-            pos.x = -pos.x;
+            pos.translation.x = -pos.translation.x;
         }
+        let pos = pos.translation;
         if t.translation != pos {
             t.translation = pos;
         }
@@ -492,11 +493,13 @@ fn lean_with_chest(
                 if !on_chest(kind) {
                     continue;
                 }
-                let (mut pos, ..) = slot_layout(kind, slot.0);
+                let (place, ..) = slot_layout(kind, slot.0);
+                let mut pos = place.translation;
                 if left && matches!(kind, SlotKind::Mount) {
                     pos.x = -pos.x;
                 }
-                let want = Transform::from_translation(leaned(lean, pos)).with_rotation(lean);
+                let want = Transform::from_translation(leaned(lean, pos))
+                    .with_rotation(lean * place.rotation);
                 if *t != want {
                     *t = want;
                 }
@@ -513,16 +516,39 @@ fn lean_with_chest(
     }
 }
 
-/// Where each slot sits on the torso (origin mid-chest), how its occupant
-/// is seated, and its snap radius.
-pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
+/// The belt round the hips (`art/kit/rig.py` `BELT_*`), torso space: an
+/// ellipse in x/z about the torso's axis, half-width x and half-depth z.
+pub const BELT_HALF: Vec2 = Vec2::new(0.20, 0.13);
+/// The belt's thickness, metres.
+pub const BELT_THICK: f32 = 0.005;
+/// A hip pocket's back face, in its slot's z (`rig.py` `POCKET_BACK`).
+pub const POCKET_BACK: f32 = 0.016;
+
+/// Where the hip pocket at `x` (torso space, `y` its slot's height) hangs
+/// on the belt, as its slot's place: its back on the belt's outer face,
+/// its front (-Z) out along the belt's normal there, so the belt runs
+/// along its back. (Hung square, the belt cut 14 mm into its inner top
+/// corner and a tape in it stood 4 mm through the belt.) `rig.py`
+/// `pocket_place` places the art the same way.
+pub fn pocket_place(x: f32, y: f32) -> Transform {
+    let a = (x / BELT_HALF.x).clamp(-1.0, 1.0).asin();
+    let on = Vec3::new(BELT_HALF.x * a.sin(), y, -BELT_HALF.y * a.cos());
+    let out = Vec3::new(a.sin() / BELT_HALF.x, 0.0, -a.cos() / BELT_HALF.y).normalize();
+    let at = on + out * (POCKET_BACK + BELT_THICK / 2.0);
+    Transform::from_translation(at).with_rotation(Quat::from_rotation_y((-out.x).atan2(-out.z)))
+}
+
+/// Where each slot sits on the torso (origin mid-chest) and how it's
+/// turned (its place: what's in it, its piece of the rig and its cavity
+/// are in its space), how its occupant is seated, and its snap radius.
+pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Transform, Transform, f32) {
     use std::f32::consts::FRAC_PI_2;
     match slot {
         SlotKind::Sling => {
             // Diagonally across the back, muzzle up over a shoulder.
             let side = if index == 0 { -1.0 } else { 1.0 };
             (
-                Vec3::new(0.12 * side, -0.05, 0.16),
+                Transform::from_xyz(0.12 * side, -0.05, 0.16),
                 Transform::from_rotation(
                     Quat::from_rotation_z(0.5 * side) * Quat::from_rotation_x(FRAC_PI_2),
                 ),
@@ -530,7 +556,7 @@ pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32
             )
         }
         SlotKind::Holster => (
-            Vec3::new(0.22, -0.42, 0.02),
+            Transform::from_xyz(0.22, -0.42, 0.02),
             Transform::from_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
             0.16,
         ),
@@ -539,29 +565,34 @@ pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32
             (
                 // Out from the chest panel's face (-0.104) by the pouch's
                 // back: nearer, a magazine went through the panel.
-                Vec3::new(-0.14 + k * 0.09, -0.16, -0.155),
+                Transform::from_xyz(-0.14 + k * 0.09, -0.16, -0.155),
                 Transform::IDENTITY,
                 0.08,
             )
         }
         SlotKind::Pocket => {
+            // On the belt's sides, turned to it.
             let side = if index % 2 == 0 { -1.0 } else { 1.0 };
-            (
-                Vec3::new(0.17 * side, -0.45, -0.08),
-                Transform::IDENTITY,
-                0.09,
-            )
+            (pocket_place(0.17 * side, -0.45), Transform::IDENTITY, 0.09)
         }
-        SlotKind::Mount => (Vec3::new(-0.13, 0.06, -0.12), Transform::IDENTITY, 0.08),
+        SlotKind::Mount => (
+            Transform::from_xyz(-0.13, 0.06, -0.12),
+            Transform::IDENTITY,
+            0.08,
+        ),
         // Worn: the vest on the chest (let go mid-chest, it sits in the
         // torso's own frame, as its worn model is drawn), the helmet on the
         // head (from the torso's middle).
         SlotKind::Vest => (
-            Vec3::new(0.0, -0.08, -0.02),
+            Transform::from_xyz(0.0, -0.08, -0.02),
             Transform::from_xyz(0.0, 0.08, 0.02),
             0.25,
         ),
-        SlotKind::Head => (Vec3::new(0.0, 0.43, -0.02), Transform::IDENTITY, 0.2),
+        SlotKind::Head => (
+            Transform::from_xyz(0.0, 0.43, -0.02),
+            Transform::IDENTITY,
+            0.2,
+        ),
     }
 }
 

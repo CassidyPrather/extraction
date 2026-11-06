@@ -49,6 +49,28 @@ fn along(path: &[P2], s: f32) -> Option<(P2, P2)> {
     None
 }
 
+/// The height a walker's feet are at: the ground, or a bridge's deck over
+/// it (the way crosses on the deck; the ground under is a gully, where the
+/// eye saw only the deck's underside).
+fn walked_height(hm: &Heightmap, p: P2) -> f32 {
+    let mut h = hm.height(p);
+    for rl in &hm.road_lines {
+        if rl.bridges.is_empty() {
+            continue;
+        }
+        let mut s = 0.0;
+        for (k, q) in rl.points.iter().enumerate() {
+            if k > 0 {
+                s += dist(rl.points[k - 1], *q);
+            }
+            if rl.on_bridge(s) && dist(*q, p) <= rl.width * 0.5 + 0.5 {
+                h = h.max(rl.heights[k]);
+            }
+        }
+    }
+    h
+}
+
 /// Each line of snow poles, by the rendezvous they're nearest: its far
 /// pole, to walk home from.
 fn pole_lines(map: &MapDef, rvs: &[(String, P2)]) -> Vec<(String, P2)> {
@@ -87,7 +109,8 @@ fn main() {
         .markers_of(&MarkerKind::Rendezvous)
         .map(|m| (m.name.clone(), m.at))
         .collect();
-    let ground = |p: P2| [p[0], hm.height(p), p[1]];
+    let height = |p: P2| walked_height(&hm, p);
+    let ground = |p: P2| [p[0], height(p), p[1]];
     let fmt = |v: [f32; 3]| format!("[{:.2},{:.2},{:.2}]", v[0], v[1], v[2]);
     let mut starts: Vec<(String, P2)> = extraction_core::map_lint::first_jobs(&map, &map_id)
         .into_iter()
@@ -121,7 +144,7 @@ fn main() {
                 [(q[0] - p[0]) / d, (q[1] - p[1]) / d]
             });
             let yaw = look[0].atan2(-look[1]).to_degrees().rem_euclid(360.0);
-            let eye = [p[0], hm.height(p) + EYE, p[1]];
+            let eye = [p[0], height(p) + EYE, p[1]];
             // A file name: the walk's number and the stop's.
             let name = format!("w{walk:02}_{stop:02}");
             let (mut ahead, mut lefts, mut rights) = (Vec::new(), Vec::new(), Vec::new());
