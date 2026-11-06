@@ -308,11 +308,27 @@ fn leaves_of(
     children: &Query<&Children>,
     meshes: &Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: &Query<(), With<crate::destruction::visuals::WindowGlass>>,
+    own: &Query<
+        (),
+        Or<(
+            With<crate::items::Item>,
+            With<crate::weapons::Gun>,
+            With<Drawn>,
+        )>,
+    >,
 ) -> Vec<Entity> {
     let mut out = Vec::new();
     let mut stack = vec![part];
     while let Some(e) = stack.pop() {
         if glass.contains(e) {
+            continue;
+        }
+        // Not into something with a life of its own seated on it (a gun
+        // in a rack, a tin on a crate's lid): its meshes are its own, and
+        // a gun's are `gun_rest`'s. Taken in, a rack's guns were hidden
+        // from `gun_rest`, which declined them, and the two woke each
+        // other (Marrow's gate, 5 November).
+        if e != part && own.contains(e) {
             continue;
         }
         if meshes.contains(e) {
@@ -355,6 +371,14 @@ fn rest_cells(
     children: Query<&Children>,
     meshes: Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: Query<(), With<crate::destruction::visuals::WindowGlass>>,
+    own: Query<
+        (),
+        Or<(
+            With<crate::items::Item>,
+            With<crate::weapons::Gun>,
+            With<Drawn>,
+        )>,
+    >,
     materials: Res<Assets<StandardMaterial>>,
     mesh_assets: Res<Assets<Mesh>>,
     leaf_info: Query<(
@@ -420,7 +444,7 @@ fn rest_cells(
         let mut taken: Vec<(Entity, Visibility)> = Vec::new();
         let mut owners: Vec<(Entity, Entity)> = Vec::new();
         for part in cell.quiet.keys() {
-            for leaf in leaves_of(*part, &children, &meshes, &glass) {
+            for leaf in leaves_of(*part, &children, &meshes, &glass, &own) {
                 owners.push((leaf, *part));
                 let Ok((mesh, mat)) = meshes.get(leaf) else {
                     continue;
@@ -841,8 +865,17 @@ mod tests {
         app.world_mut()
             .entity_mut(seated)
             .insert((avian3d::prelude::Sleeping, ChildOf(holder)));
+        // A tin seated on the first (its child, an item of its own): left
+        // drawn as itself, not taken into the shelf's merge.
+        let tin = item(&mut app, Vec3::ZERO);
+        let tin_leaf = app.world().get::<Children>(tin).unwrap()[0];
+        app.world_mut().entity_mut(tin).insert(ChildOf(items[0].0));
         rest(&mut app);
         assert_eq!(resting(&mut app), 1, "four items of one material: one mesh");
+        assert!(
+            shown(&app, tin_leaf),
+            "a thing seated on a resting item hidden"
+        );
         let cells = app.world().resource::<Cells>();
         assert!(
             !cells.part_cell.contains_key(&rolling),
