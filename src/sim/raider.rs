@@ -3345,7 +3345,7 @@ fn raid_step(
                         json!({"site": site.name, "items": all, "artifacts": artifacts}),
                     );
                     r.act = Act::Search(s);
-                    if let Some((relay, t)) = plant_tasks(me, scene, &r.sites[s]) {
+                    if let Some((relay, t)) = plant_tasks(me, scene, &r.plans, &r.sites[s], pos) {
                         // Set down for good: not loot to pick up again.
                         r.skip.insert(relay);
                         log.event("plant", json!({"site": r.sites[s].name}));
@@ -3644,8 +3644,15 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
         return;
     };
     let (map, place, at, kind) = match job {
-        CardJob::Scout { map, place, at, .. } | CardJob::Plant { map, place, at, .. } => {
-            (map, place, Vec2::from_array(at), SiteKind::Spot)
+        CardJob::Scout { map, place, at, .. } => (map, place, Vec2::from_array(at), SiteKind::Spot),
+        CardJob::Plant { map, place, at, .. } => {
+            let at = Vec2::from_array(at);
+            (
+                map,
+                place,
+                at,
+                job_site_kind(&r.plans, at, scene.zone.ground(at.x, at.y)),
+            )
         }
         CardJob::Bring {
             map, place, item, ..
@@ -3682,9 +3689,56 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
     });
 }
 
+/// Whether a place on the map (`ground` its height there) is within a
+/// building's walls. A plan with levels holds it only over one of its
+/// floors near that height: an underground gallery's bounds take in the
+/// ground over it (Sallow's draw-off tower stands over the gallery).
+fn plan_holds(plan: &BuildingPlan, at: Vec2, ground: f32) -> bool {
+    if plan.levels.is_some() {
+        return plan.contains(Vec3::new(at.x, ground, at.y), 0.0);
+    }
+    plan.indoors(
+        plan.to_local(Vec3::new(at.x, plan.xf.translation.y, at.y))
+            .xz(),
+    )
+}
+
+/// A Plant job's place as a site: in a building's walls, that building
+/// (gone into by its door, walked round indoors); a spot outdoors.
+fn job_site_kind(plans: &[BuildingPlan], at: Vec2, ground: f32) -> SiteKind {
+    plans
+        .iter()
+        .position(|p| plan_holds(p, at, ground))
+        .map_or(SiteKind::Spot, SiteKind::Building)
+}
+
+/// The walk to a relay's place to set it down: indoors, round the
+/// building's walls from inside its door; straight at it outdoors.
+fn plant_walk(plans: &[BuildingPlan], kind: SiteKind, pos: Vec3, spot: Vec2) -> Vec<Task> {
+    if let SiteKind::Building(b) = kind {
+        let plan = &plans[b];
+        if plan.in_grid(pos) {
+            let goal = plan.to_local(Vec3::new(spot.x, pos.y, spot.y)).xz();
+            if let Some(t) = indoor(plan, pos, goal, 0.6) {
+                return t;
+            }
+        }
+    }
+    vec![Task::WalkTo {
+        to: spot,
+        within: 1.0,
+    }]
+}
+
 /// A Plant job's place, reached: the relay out of the pack and set down
 /// on the ground by it.
-fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Task>)> {
+fn plant_tasks(
+    me: Entity,
+    scene: &Scene,
+    plans: &[BuildingPlan],
+    site: &Site,
+    pos: Vec3,
+) -> Option<(Entity, Vec<Task>)> {
     let Some(CardJob::Plant {
         item,
         at,
@@ -3702,14 +3756,9 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
     // As the contract scenarios plant (`progression::contracts::scenario`):
     // close, the gun slung so the right hand's free, the relay into it from
     // its body slot (drawn) or the pack, a look at the spot, let go.
-    let mut t = vec![
-        Task::Log(format!("planting the {item}")),
-        Task::WalkTo {
-            to: spot,
-            within: 1.0,
-        },
-        Task::Stow(Side::Right),
-    ];
+    let mut t = vec![Task::Log(format!("planting the {item}"))];
+    t.extend(plant_walk(plans, site.kind, pos, spot));
+    t.push(Task::Stow(Side::Right));
     let (socket, packed) = scene
         .items
         .get(relay)
@@ -3745,7 +3794,17 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
             side: Side::Right,
         }),
     }
-    let y = scene.zone.ground(spot.x, spot.y);
+    // Indoors, its floor (the station's is well off the fell's ground).
+    let y = match site.kind {
+        SiteKind::Building(b) => {
+            let plan = &plans[b];
+            let l = plan.to_local(Vec3::new(spot.x, pos.y, spot.y)).xz();
+            plan.xf
+                .transform_point(Vec3::new(l.x, plan.floor_at(l), l.y))
+                .y
+        }
+        _ => scene.zone.ground(spot.x, spot.y),
+    };
     t.extend([
         Task::Wait(0.5),
         Task::LookAt(Vec3::new(spot.x, y, spot.y)),
@@ -5790,6 +5849,86 @@ mod run_tests {
             "{}: the way out passes {d:.2} m from the wreck's middle",
             plan.name
         );
+    }
+
+    /// A contract's relay to plant in a building (the weather station up
+    /// Rime Fell): the job's site is that building, gone into by its door
+    /// and walked to indoors, the relay set down within reach of its place
+    /// (it was an outdoor spot: walked at through the wall, never set).
+    #[test]
+    fn a_relay_to_plant_indoors_is_carried_in() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for c in extraction_core::contracts::CONTRACTS {
+                for step in c.steps {
+                    let extraction_core::contracts::Step::Plant { map: m, place, .. } = step else {
+                        continue;
+                    };
+                    if *m != map {
+                        continue;
+                    }
+                    let Some(at) = extraction_core::contracts::place_at(&zone.map, place) else {
+                        continue;
+                    };
+                    let at = Vec2::from_array(at);
+                    let ground = zone.ground(at.x, at.y);
+                    let Some(b) = plans.iter().position(|p| plan_holds(p, at, ground)) else {
+                        continue;
+                    };
+                    tried += 1;
+                    let plan = &plans[b];
+                    let kind = job_site_kind(&plans, at, ground);
+                    if !matches!(kind, SiteKind::Building(k) if k == b) {
+                        bad.push(format!(
+                            "{map} {}: {place} is a spot, not the building",
+                            c.id
+                        ));
+                        continue;
+                    }
+                    // From each way in, inside its door.
+                    for e in &plan.entries {
+                        let from = plan.to_world(*e);
+                        let inn = from.xz();
+                        let walk = plant_walk(&plans, kind, from, at);
+                        let end = walk.iter().rev().find_map(|t| match t {
+                            Task::WalkTo { to, within } => Some((*to, *within)),
+                            _ => None,
+                        });
+                        let ok = walk.len() > 1
+                            && end.is_some_and(|(to, within)| to.distance(at) + within <= 1.6);
+                        if !ok {
+                            bad.push(format!(
+                                "{map} {}: {place} from the way in at {inn}: {} tasks, ends {end:?}",
+                                c.id,
+                                walk.len()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(tried >= 1, "no relay to plant indoors found");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Through every door of every building in every valley by its middle:
