@@ -139,8 +139,9 @@ def score_standing(stop, im, dark=None):
     def v(x, y):
         return max(px[x, y][:3])
     spots = []
-    for y in range(ya, y1, 2):
-        for x in range(x0, x1, 2):
+    # Every pixel: a band 25 m off is 2 px tall in a 720-line still.
+    for y in range(ya, y1):
+        for x in range(x0, x1):
             m = v(x, y)
             if m < SHINES:
                 continue
