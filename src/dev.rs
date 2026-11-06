@@ -264,10 +264,29 @@ fn turn_line_up(
     line_up: Option<ResMut<LineUp>>,
     mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
+    mut menders: Query<&mut crate::robots::mender::Mender>,
+    mut layers: Query<(&mut crate::robots::minelayer::Minelayer, &GlobalTransform)>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
+    // A mender with nothing to mend goes home after a while: not here.
+    for (e, ..) in line_up.0.iter() {
+        if let Ok(mut m) = menders.get_mut(*e) {
+            m.idle = 0.0;
+        }
+        // A minelayer done would crawl out: held about to lay, where it is.
+        if let Ok((mut m, gt)) = layers.get_mut(*e) {
+            use crate::robots::minelayer::Doing;
+            if !matches!(m.doing, Doing::Lay { .. } | Doing::Dead) {
+                m.doing = Doing::Lay {
+                    spots: vec![gt.translation().xz()],
+                    next: 0,
+                    wait: 1.0e6,
+                };
+            }
+        }
+    }
     for (e, yaw, at) in line_up.0.iter_mut() {
         if let Ok(mut w) = walkers.get_mut(*e) {
             if at.is_none() {
@@ -282,6 +301,16 @@ fn turn_line_up(
             continue;
         }
         if let Ok(mut t) = placed.get_mut(*e) {
+            // Held still, as a walker is: no mind to see the camera and
+            // act on it (a minelayer that saw it fled out of the frame,
+            // its body moved by the physics under the pin; a drone would
+            // go after it).
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+            }
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
         }
@@ -504,7 +533,11 @@ fn gallery(
                 // mender, plough;
                 // `walker!broken` is a walker with its gun dead and a leg
                 // failing.
-                let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
+                // (`+hits` is the hit gauge's word, not a machine.)
+                let ids: Vec<&str> = s["robots:".len()..]
+                    .split('+')
+                    .filter(|w| *w != "hits")
+                    .collect();
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
                 let mut dead = Vec::new();
@@ -585,6 +618,8 @@ fn gallery(
                         "minelayer" => {
                             let nav = nav.as_ref().map(|n| n.0.clone());
                             match nav {
+                                // (Held laying, by `turn_line_up`: with
+                                // nothing to do it would leave at once.)
                                 Some(nav) => crate::robots::minelayer::spawn_minelayer(
                                     &mut commands,
                                     &zone,
