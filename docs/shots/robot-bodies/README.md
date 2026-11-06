@@ -244,7 +244,10 @@ Robot minds' fairness frames found a drone's lock halo bright at night but faint
 | | 6 m | 15 m | 30 m |
 |---|---|---|---|
 | Noon, before | 47–89 | 6–10 | 2–13 |
-| Noon, after | 628–650 | 88–98 | 123–128 |
+| Noon, after (hard disc) | 628–650 | 88–98 | 123–128 |
+| Noon, after (soft glow, shown) | 429–527 | 88–106 | 118–143 |
 | 23:00, before → after | 2560–4533, the same | 242–319, the same | 51–59 → 55–61 |
 
 By day, red added to a bright grey sky went pink. Now, in daylight (`Conditions::light` over 0.25), the halo is laid over what's behind it, blended, in the tell's red (`LOCK_RED`, unlit). Its cover follows the tell's pulse, 0.4 at a trough and 0.9 at a crest (`lock_halo_alpha`), and it's drawn up to 2.5× wider in full daylight (`LOCK_HALO_DAY`). After dark it's the additive glow it was, and the night halo carries it as before, so nothing blooms more than it did. Its glow goes to the eye through `grade::ToTheEye`, kept to its colour by `hue_safe` and held steady against the eyes' adaptation.
+
+A flat disc with a hard edge read as a sticker, not a glow. By day the halo is now a soft disc turned to the eye (`soft_disc`: full cover over the middle half, falling smoothly to nothing at the edge). It's set `LOCK_HALO_BEHIND` (0.45 m) behind the lens, away from the eye, so the drone's body stays drawn over it and its silhouette reads through the glow at 6 m. Its red count at 15 and 30 m is the hard disc's. At 6 m it's 68–81% of it, the share the drone's body now covers.
