@@ -207,6 +207,15 @@
     ],
 
     roads: [
+        // A worn track where a first job's way home crosses open ground
+        // that nothing tells from the grass in a torch's pool
+        // (scripts/night_route.sh, the torch case): the last stretch of
+        // the valve house's key to the gauge house.
+        (
+            name: "Worn track to the gauge house", kind: Path, width: 2.0, shoulder: 1.0, smoothing: 4.0,
+            points: [(217.0, 85.1), (218.1, 79.2), (218.7, 76.3), (219.3, 73.3), (220.0, 69.4), (220.7, 65.5), (221.7, 60.6), (222.6, 55.7), (224.5, 45.8), (224.7, 35.9), (224.4, 29.9), (224.3, 26.9), (224.2, 23.9), (224.0, 19.9)],
+        ),
+
         // In from the south gate to the valve house at the dam's toe.
         (
             name: "River road", kind: Asphalt, width: 6.0, smoothing: 20.0,
