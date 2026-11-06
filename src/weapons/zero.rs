@@ -298,12 +298,23 @@ pub fn iron_zero_m(def: &extraction_core::firearm::FirearmDef) -> f32 {
     }
 }
 
-/// How far up (radians) the bore points over a gun's iron sight line, so
-/// the round crosses it at [`iron_zero_m`].
+/// How far up (radians, from the bore) a gun's round leaves, so it
+/// crosses its iron sight line at [`iron_zero_m`]: the line's own slope
+/// against the bore (`layout::irons`: a notch read with the post level
+/// with its shoulders), and the climb from under it at the muzzle.
 pub fn iron_up(gun: &Gun) -> f32 {
     let def = &gun.firearm.def;
-    let h = gun.layout.sight.translation.y - gun.layout.muzzle.y;
-    super::ballistics::zero_angle(def.muzzle_velocity, h, iron_zero_m(def))
+    let (h, slope) = iron_line(&gun.layout);
+    slope + super::ballistics::zero_angle(def.muzzle_velocity, h, iron_zero_m(def))
+}
+
+/// A gun's iron sight line against its bore: its height over the muzzle,
+/// there, and its slope (radians, up toward the muzzle).
+pub fn iron_line(layout: &super::layout::GunLayout) -> (f32, f32) {
+    let s = layout.sight;
+    let d = s.rotation * Vec3::NEG_Z;
+    let at_muzzle = s.translation + d * ((layout.muzzle.z - s.translation.z) / d.z);
+    (at_muzzle.y - layout.muzzle.y, d.y.asin())
 }
 
 /// Which way a shot leaves a gun turned `rotation`: down the bore, turned
@@ -584,7 +595,7 @@ mod tests {
             if f.muzzle_velocity < 150.0 {
                 continue;
             }
-            let h = layout.sight.translation.y - layout.muzzle.y;
+            let (h, slope) = super::iron_line(&layout);
             let gun = super::Gun {
                 firearm: extraction_core::firearm::Firearm::new(f.clone(), 1.0),
                 layout,
@@ -604,7 +615,7 @@ mod tests {
                 let Some((y, _)) = height_at(f.muzzle_velocity, angle, m) else {
                     break;
                 };
-                let off = y - h;
+                let off = y - (h + m * slope.tan());
                 let tol = if (m - zero).abs() < 0.5 { 0.01 } else { 0.06 };
                 if off.abs() > tol {
                     bad.push(format!(
