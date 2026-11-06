@@ -945,6 +945,63 @@ mod tests {
         assert_eq!(late_shown(0.08), 1.0);
         assert!(late_shown(0.2) > 0.0 && late_shown(0.2) < 1.0);
     }
+
+    /// A weathered gun's parts share their material copies, by material
+    /// and frame, so `render::gun_rest` has something to merge. With a
+    /// copy for every mesh, every part was its own merge group, and every
+    /// lying gun was declined (17 of Marrow's 17, 6 November).
+    #[test]
+    fn a_weathered_gun_shares_its_material_copies() {
+        let mut vr = Vr::new("training_yard");
+        for id in ["rpk74", "crossbow", "pm_pistol"] {
+            let y = ground(&vr, 0.0, 30.0);
+            let gun = vr.spawn(id, Transform::from_xyz(0.0, y + 0.5, 30.0));
+            let mut looked = false;
+            for _ in 0..600 {
+                vr.step(1);
+                if vr.app.world().get::<WeatheredLook>(gun).is_some() {
+                    looked = true;
+                    break;
+                }
+            }
+            assert!(looked, "{id}: never weathered");
+            vr.step(2);
+            let w = vr.app.world_mut();
+            let mut q = w.query::<(&MeshMaterial3d<StandardMaterial>, &ChildOf)>();
+            let mut meshes = 0;
+            let mut kinds = std::collections::HashSet::new();
+            let parts: Vec<(AssetId<StandardMaterial>, Entity)> =
+                q.iter(w).map(|(m, c)| (m.0.id(), c.parent())).collect();
+            for (mat, parent) in parts {
+                // Under this gun, however deep.
+                let mut at = parent;
+                let mut ours = at == gun;
+                for _ in 0..16 {
+                    if ours {
+                        break;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => {
+                            at = p.parent();
+                            ours = at == gun;
+                        }
+                        None => break,
+                    }
+                }
+                if ours {
+                    meshes += 1;
+                    kinds.insert(mat);
+                }
+            }
+            assert!(meshes > 3, "{id}: only {meshes} meshes");
+            assert!(
+                kinds.len() < meshes,
+                "{id}: {} material copies for {meshes} meshes: nothing for gun_rest to merge",
+                kinds.len()
+            );
+            vr.app.world_mut().despawn(gun);
+        }
+    }
     use crate::interact::GripRole;
     use crate::rig::Side;
     use crate::vr_harness::Vr;
