@@ -1153,3 +1153,26 @@ fn a_session_opening_on_a_lost_raid_says_whats_waiting() {
         "{log:?}"
     );
 }
+
+/// Quit mid-raid and loaded again: the raid goes on, it isn't another one
+/// on the valley's count (what the Zone hands out and when a job goes
+/// stale run on that count).
+#[test]
+fn a_raid_resumed_from_the_save_is_not_counted_again() {
+    let path = temp_save("resumed_count");
+    let mut a = app_with_save(&path, "marrow_creek");
+    a.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+    a.update();
+    assert_eq!(progress(&a).raids_in("marrow_creek"), 1, "set off once");
+    save_now(&mut a);
+    let mut b = app_with_save(&path, "marrow_creek");
+    assert_eq!(b.world().resource::<Raid>().phase, Phase::Out, "resumed");
+    for _ in 0..3 {
+        b.update();
+    }
+    assert_eq!(
+        progress(&b).raids_in("marrow_creek"),
+        1,
+        "the resumed raid is the same raid"
+    );
+}

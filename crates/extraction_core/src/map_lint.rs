@@ -573,7 +573,8 @@ pub const VIEW_MAX: usize = 16;
 /// wreck on a road through a village would cost it a house.
 ///
 /// A log pile is one too: ten logs and four stakes drawn as one model, no
-/// roof, nothing inside. So is a snow pole: one 9 cm stick, painted.
+/// roof, nothing inside. So is a snow pole: one 9 cm stick, painted; and
+/// a yard lamp: a post and its arm.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -581,6 +582,7 @@ pub const VIEW_LIGHT: &[&str] = &[
     "wreck_lorry",
     "log_pile",
     "snow_pole",
+    "way_lamp",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
