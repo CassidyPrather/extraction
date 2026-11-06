@@ -595,6 +595,7 @@ fn wrist_lines(
     mut back: MessageReader<ComingBack>,
     players: Query<(Entity, &GlobalTransform), With<crate::rig::LocalPlayer>>,
     aware: Query<&Awareness>,
+    hunters: Query<(Entity, &Awareness)>,
     raid: Option<ResMut<crate::raid::Raid>>,
     time: Res<Time>,
     mut said: Local<(std::collections::HashMap<Entity, f32>, f32, u32)>,
@@ -634,7 +635,15 @@ fn wrist_lines(
     }
     per_robot.retain(|_, t| now - *t < LINE_PER_ROBOT);
     for (is_lost, robot, at, about) in events {
+        // "It's given up" never while another still has you: it was said
+        // to a newcomer 3 s before a walker's first hit (Progression's
+        // careers, Marrow, r18).
+        let another_has_you = is_lost
+            && hunters
+                .iter()
+                .any(|(e, a)| e != robot && a.target == Some(me));
         if about != Some(me)
+            || another_has_you
             || at.distance(gt.translation()) > LINE_NEAR
             || (*last > 0.0 && now - *last < LINE_ANY)
             || per_robot

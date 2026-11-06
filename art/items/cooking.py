@@ -94,9 +94,12 @@ def mug(p, r=0.0205, h=0.045, x=-0.006, z=0.0):
 
 def board(p):
     """A worn wooden chopping board; returns its top."""
+    # Oiled dark with years of use: the pale food reads on it, and it on a
+    # floor of pale planks (by torchlight a pale board was lost on lit wood:
+    # ITEM_READING, "By torchlight").
     plan = fillet([(-0.032, -0.0215), (0.032, -0.0215), (0.032, 0.0215), (-0.032, 0.0215)],
                   0.004, 2)
-    p.prism(plan, YB, YB + 0.007, "Boards", axis="y", bevel=0.001, segs=1)
+    p.prism(plan, YB, YB + 0.007, "Wood", axis="y", bevel=0.001, segs=1)
     p.cyl(0.0028, YB + 0.0069, YB + 0.0072, "Black", segs=10, xf=T(0.026, 0, -0.015) @ UP)
     return YB + 0.007
 

@@ -207,7 +207,7 @@ line-up, not on one gun: take every gun's `threeq_30cm` into one sheet
 | `Stamped` | stamped sheet under black lacquer over phosphate: near black, little metal, the scan's relief only | the AK-74's and RPK-74's receivers and dust covers |
 | `Alloy` | aluminium alloy, anodised or painted black: a satin charcoal, no blue, no metal | the MP-133's receiver and trigger guard |
 | `Steel` | bright steel, in the white | carriers, pins, springs |
-| `Black` | blackened steel, matt | butt plates, small fittings |
+| `Black` | black paint, phosphate or anodising, satin: no metal showing, a deep base under a 4% sheen | butt plates, followers, pads, fittings; optics, lights, the PSO-1, the PBS-1 |
 | `Worn` | bare steel where the finish has rubbed off | edges, by `wear` |
 
 First pass (31 October): every gun wore the same scan at a 150 mm tile,
@@ -262,6 +262,44 @@ game.
 | ![](finishes/sky_mill_before.jpg) | ![](finishes/sky_mill_after.jpg) |
 
 ![The MP-133: Alloy receiver, blued barrel](finishes/sky_yard_mp133_alloy.jpg)
+
+
+Fifth pass (6 November), by torchlight: Models found most looting
+lit only by the hand torch, and dark metal items on a charred floor
+from 2 m going black (`docs/craft/ITEM_READING.md`, "By torchlight"). A
+metal shows only the reflection facing the eye, and with the torch at
+the eye little of it does. Most of what wore `Black` isn't bare metal
+anyway: phosphate under lacquer, rubber, paint and anodised aluminium.
+So `Black` is now a satin black paint (metallic 0, base 0.0046 linear,
+roughness 0.45). The PSO-1 (painted aluminium) and the PBS-1
+(phosphated steel) moved to it from `Blued`; the PU's tube is blued
+steel and stays. `Blued` and `Steel` are unchanged: bluing is a metal
+finish, and a rougher Steel read worse.
+
+Delta E from the floor (body), 2 m / arm's length, by
+`scripts/torchlit.py`:
+
+| Item | Charred, before | Charred, after | Wood, before | Wood, after | Concrete, before | Concrete, after |
+| - | - | - | - | - | - | - |
+| PBS-1 | 3.6 / 12.6 | 12.6 / 24.7 | 9.5 / 28.5 | 34.6 / 42.7 | 15.9 / 37.3 | 47.8 / 52.5 |
+| PSO-1 | 3.9 / 10.9 | 11.8 / 18.1 | 14.0 / 26.7 | 34.4 / 37.1 | 21.4 / 35.1 | 46.3 / 46.1 |
+| Weapon light | 5.6 / 11.9 | 12.1 / 22.6 | 14.0 / 28.5 | 33.8 / 42.2 | 22.0 / 37.2 | 47.2 / 51.9 |
+| Laser module | 5.6 / 12.9 | 11.7 / 24.5 | 17.1 / 30.5 | 31.2 / 45.0 | 27.0 / 39.1 | 45.3 / 54.4 |
+| Binoculars | 4.8 / 11.4 | 12.0 / 20.9 | 12.1 / 25.2 | 33.1 / 38.7 | 20.2 / 34.7 | 46.1 / 49.0 |
+| Side rail | 5.5 / 10.7 | 12.2 / 19.0 | 20.4 / 26.6 | 33.3 / 40.0 | 30.0 / 35.0 | 47.7 / 49.2 |
+
+The base value matters both ways. At 0.015 Black matches charred wood
+itself and read worse than the metal had (PBS-1 3.3 from 2 m). At 0.04
+the torch lifts it to a lit floor's value up close (PBS-1 on wood at
+arm's length 28.5 to 11.6). Only a deep base reads on all three floors,
+near and far; for a black paint the sheen, not the base, is most of
+what shows anyway.
+
+In daylight the AK's butt plate (top: before; middle and bottom: after)
+goes from a grainy blue-grey metal to a satin black, its edges caught
+by the sheen.
+
+![](finishes/black_paint_ak_day.jpg)
 
 ### 5. Hands
 

@@ -252,12 +252,23 @@ struct Puff {
     size: f32,
 }
 
-/// A wreck smouldering: seconds left, and to the next puff.
+/// A wreck smouldering: seconds left, and to the next puff; a drone's
+/// (small, down in the grass) sends up a column and leaves a scorch.
 #[derive(Component)]
 struct Smoulder {
     left: f32,
     next: f32,
+    drone: bool,
+    /// Its scorch, once it's down (gone when it stops smouldering).
+    scorch: Option<Entity>,
 }
+
+/// A downed drone's scorch on the ground under it, m across.
+const SCORCH: f32 = 1.1;
+
+/// How long a downed drone's column stands, seconds (then it smoulders
+/// as any wreck does): long enough to find it by.
+const DOWNED_COLUMN: f32 = 90.0;
 
 /// The glow under a smouldering wreck.
 #[derive(Component)]
@@ -500,6 +511,8 @@ fn light_wrecks(
         ec.insert(Smoulder {
             left: SMOULDER,
             next: 0.0,
+            drone: robot.kind == super::RobotKind::Drone,
+            scorch: None,
         });
         if lit < MAX_EMBERS {
             lit += 1;
@@ -523,6 +536,9 @@ fn smoulder(
     mut commands: Commands,
     mut wrecks: Query<(Entity, &mut Smoulder, &GlobalTransform, Option<&Children>)>,
     mut embers: Query<(&mut PointLight, &mut Transform), With<Ember>>,
+    zone: Option<Res<crate::world::Zone>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    mut scorch_look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
     soft: Res<crate::render::puff::PuffAssets>,
@@ -535,7 +551,39 @@ fn smoulder(
     let now = time.elapsed_secs();
     let mut n_puffs = puffs.iter().len();
     let mut a = None;
+    let eye = cameras.iter().next().map(|g| g.translation());
     for (e, mut s, gt, children) in &mut wrecks {
+        // A drone down: a scorch where it lies, once it's down.
+        if s.drone && s.scorch.is_none() {
+            if let Some(zone) = &zone {
+                let p = gt.translation();
+                let ground = zone.ground(p.x, p.z);
+                if p.y - ground < 0.6 {
+                    let (mesh, mat) = scorch_look
+                        .get_or_insert_with(|| {
+                            (
+                                meshes.add(Cylinder::new(SCORCH * 0.5, 0.01)),
+                                materials.add(StandardMaterial {
+                                    base_color: Color::srgb(0.035, 0.032, 0.03),
+                                    perceptual_roughness: 1.0,
+                                    ..default()
+                                }),
+                            )
+                        })
+                        .clone();
+                    s.scorch = Some(
+                        commands
+                            .spawn((
+                                Mesh3d(mesh),
+                                MeshMaterial3d(mat),
+                                Transform::from_xyz(p.x, ground + 0.02, p.z),
+                                NotShadowCaster,
+                            ))
+                            .id(),
+                    );
+                }
+            }
+        }
         s.left -= dt;
         s.next -= dt;
         let k = (s.left / SMOULDER).clamp(0.0, 1.0);
@@ -552,6 +600,9 @@ fn smoulder(
         }
         if s.left <= 0.0 {
             commands.entity(e).remove::<Smoulder>();
+            if let Some(sc) = s.scorch {
+                commands.entity(sc).despawn();
+            }
             for c in children.into_iter().flatten() {
                 if embers.contains(*c) {
                     commands.entity(*c).despawn();
@@ -564,10 +615,26 @@ fn smoulder(
                 assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
             });
             let at = gt.translation() + Vec3::Y * 0.25 + dice.signed() * 0.1;
-            puff(&mut commands, a, &mut dice, at, true, 0.3 + 0.3 * k);
+            if s.drone && SMOULDER - s.left < DOWNED_COLUMN {
+                // Down in the grass, a drone is small: it sends up a dead
+                // gun's column, to read from a distance and walk toward.
+                let size = 0.4 * at_range(eye, at).sqrt();
+                puff_rising(
+                    &mut commands,
+                    a,
+                    &mut dice,
+                    at,
+                    a.soot.clone(),
+                    size,
+                    COLUMN,
+                );
+                s.next = 1.0 / DEAD_GUN_SMOKE * (0.8 + dice.f() * 0.4);
+            } else {
+                puff(&mut commands, a, &mut dice, at, true, 0.3 + 0.3 * k);
+                // Thick at first, a thread later.
+                s.next = 0.12 + (1.0 - k) * 0.8 + dice.f() * 0.12;
+            }
             n_puffs += 1;
-            // Thick at first, a thread later.
-            s.next = 0.12 + (1.0 - k) * 0.8 + dice.f() * 0.12;
         }
     }
 }
