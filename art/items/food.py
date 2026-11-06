@@ -297,48 +297,132 @@ def canned_stew():
 
 # --- Flour sack ----------------------------------------------------------------------------
 
+def pillow_sack(p, yb, mat, seed=4):
+    """A filled flour sack standing: a squat pillow, its broad faces
+    nearly flat (the print sits on them), a square base settled wide with
+    dog-ear corners, side tucks down the narrow faces, creases running
+    off the shoulders, gathered into folds at the neck and flaring out
+    above it. Lofted from rounded-rectangle rings; returns the neck's
+    height and radius."""
+    rnd = random.Random(seed)
+    # (height over yb, half-width x, half-depth z, squareness, folds).
+    prof = [(0.0, 0.044, 0.028, 4.0, 0.0), (0.002, 0.0495, 0.0335, 4.6, 0.0),
+            (0.007, 0.0525, 0.036, 5.0, 0.0), (0.016, 0.0525, 0.0365, 4.8, 0.0),
+            (0.032, 0.0515, 0.0365, 4.4, 0.0), (0.047, 0.0495, 0.035, 4.0, 0.0),
+            (0.055, 0.046, 0.0325, 3.6, 0.06), (0.063, 0.039, 0.0275, 3.0, 0.14),
+            (0.071, 0.027, 0.0195, 2.5, 0.24), (0.077, 0.016, 0.0125, 2.2, 0.32),
+            (0.081, 0.0095, 0.0085, 2.0, 0.3), (0.0835, 0.0082, 0.0076, 2.0, 0.1),
+            (0.0875, 0.0082, 0.0076, 2.0, 0.1), (0.0905, 0.0108, 0.0098, 2.0, 0.26),
+            (0.0955, 0.0148, 0.0132, 2.0, 0.32), (0.0995, 0.0152, 0.0138, 2.0, 0.3),
+            (0.1025, 0.0115, 0.0105, 2.0, 0.3), (0.1045, 0.0055, 0.005, 2.0, 0.25)]
+    rings = []
+    for (y0, *v0), (y1, *v1) in zip(prof, prof[1:]):
+        steps = max(1, round((y1 - y0) / 0.0025))
+        for i in range(steps):
+            u = i / steps
+            u = u * u * (3 - 2 * u)
+            rings.append((y0 + (y1 - y0) * i / steps, *[a + (b - a) * u for a, b in zip(v0, v1)]))
+    rings.append(prof[-1])
+    N = 72
+    k_fold, phase = 7, rnd.uniform(0, math.tau)
+    # Creases off the shoulders: (angle at the shoulder, at the foot,
+    # depth); outside the print (it spans 0.03 either side of the middle).
+    creases = [(math.radians(a0), math.radians(a1), d) for a0, a1, d in
+               ((232, 218, 0.07), (308, 322, 0.06), (128, 142, 0.07), (52, 38, 0.06))]
+    bm = p.bm
+    verts, grid = [], []
+    for y, ax, bz, n, fold in rings:
+        row = []
+        h = y / 0.06
+        for j in range(N):
+            th = math.tau * j / N
+            c, s_ = math.cos(th), math.sin(th)
+            x = ax * math.copysign(abs(c) ** (2 / n), c)
+            z = bz * math.copysign(abs(s_) ** (2 / n), s_)
+            d = 0.0
+            # Folds gathered into the neck, uneven.
+            d += fold * (0.8 * math.sin(k_fold * th + phase)
+                         + 0.2 * math.sin(2 * k_fold * th + 2.3 * phase + 3 * y / 0.01))
+            # Dog ears: the base corners pushed out and down.
+            ear = max(0.0, 1.0 - abs(y - 0.006) / 0.012)
+            for cc in (0.25, 0.75, 1.25, 1.75):
+                dth = (th - cc * math.pi + math.pi) % math.tau - math.pi
+                d += 0.11 * ear * math.exp(-(dth / 0.13) ** 2)
+            # Side tucks: the narrow faces folded in, foot to shoulder.
+            tuck = max(0.0, min(1.0, (y - 0.004) / 0.008, (0.066 - y) / 0.012))
+            for cc in (0.0, math.pi):
+                dth = (th - cc + math.pi) % math.tau - math.pi
+                d -= 0.16 * tuck * math.exp(-(dth / 0.11) ** 2)
+            # Creases running down off the shoulders.
+            w = max(0.0, min(1.0, (y - 0.012) / 0.012, (0.07 - y) / 0.012))
+            for a0, a1, dep in creases:
+                at = a1 + (a0 - a1) * min(1.0, h)
+                dth = (th - at + math.pi) % math.tau - math.pi
+                d -= dep * w * math.exp(-(dth / 0.06) ** 2)
+            # The gathered top's rim rises and falls with its folds.
+            lift = 0.003 * max(0.0, min(1.0, (y - 0.09) / 0.008)) * math.sin(k_fold * th + phase + 0.6)
+            v = bm.verts.new((x * (1 + d), yb + y + lift, z * (1 + d)))
+            row.append(v)
+            verts.append(v)
+        grid.append(row)
+    faces = []
+    for r0, r1 in zip(grid, grid[1:]):
+        for j in range(N):
+            faces.append(bm.faces.new((r0[j], r0[(j + 1) % N], r1[(j + 1) % N], r1[j])))
+    bottom = bm.verts.new((0.0, yb, 0.0))
+    top = bm.verts.new((0.0, yb + 0.105, 0.0))
+    verts += [bottom, top]
+    for j in range(N):
+        faces.append(bm.faces.new((grid[0][(j + 1) % N], grid[0][j], bottom)))
+        faces.append(bm.faces.new((grid[-1][j], grid[-1][(j + 1) % N], top)))
+    p._finish_piece(verts, faces, mat)
+    return yb + 0.0855, 0.0082
+
+
 def flour_sack():
     s = cube(1.2)
     yb = -s / 2
     p = Part("body")
-    # A white cotton sack, slumped, its neck tied off with string; the word
-    # and two red stripes stencilled on the front.
-    neck = yb + 0.084
-    # Woven linen (`Sacking`), slumped heavy: a sagging foot, the flour
-    # settled in lumps and creases (smooth, by torchlight it was a blank
-    # balloon). Tied off with dark twine, wound thick.
-    sack(p, (0.051, 0.043, 0.04), (0.0, yb + 0.031, 0.0), yb, neck, "Sacking", seed=4, segs=32,
-         rings=20, lumps=18, depth=0.2, spread=0.32)
-    ring(p, 0.0074, 0.0026, "Black", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
-    ring(p, 0.0072, 0.0022, "Black", xf=T(0, neck + 0.0042, 0) @ UP @ RX(0.15), segs=14, sides=5)
-    # The gathered cloth above the tie, crumpled into points.
-    tuft = [((0.0125 if k % 2 else 0.0055) * math.cos(2 * math.pi * k / 14),
-             (0.0125 if k % 2 else 0.0055) * math.sin(2 * math.pi * k / 14)) for k in range(14)]
-    p.prism(tuft, neck + 0.002, neck + 0.0195, "Sacking", axis="y",
-            width=lambda a, b: (neck + 0.002,
-                                neck + 0.0125 + 0.007 * abs(math.sin(a * 900 + b * 500))))
-    tube_path(p, [(0.006, neck, -0.004), (0.013, neck - 0.004, -0.011),
-                  (0.016, neck - 0.012, -0.018)], 0.0016, "Black", sides=4, closed=False)
-    # The mill's stencil on both broad faces, set into the cloth where it
-    # lies (each mark at the surface a ray finds, the sack being lumpy),
-    # between two red stripes: a sack lands any way round, and on one face
-    # only, half the time it wasn't seen.
+    # A 2 kg flour sack of unbleached linen (`Sacking`), standing: a squat
+    # pillow, square at the base with dog-ear corners, folds gathered into
+    # the neck and tied off with dark twine wound thick. (A slumped ball,
+    # by torchlight it was a balloon; its tie a white cross.)
+    neck, rn = pillow_sack(p, yb, "Sacking")
+    for k, dy in enumerate((-0.0026, 0.0, 0.0026)):
+        ring(p, rn + 0.0018, 0.0021, "Black", xf=T(0, neck + dy, 0) @ UP @ RX(0.12 * (k - 1)),
+             segs=16, sides=6)
+    tube_path(p, [(rn + 0.002, neck - 0.001, -0.002), (0.0145, neck - 0.006, -0.009),
+                  (0.017, neck - 0.015, -0.016)], 0.0019, "Black", sides=5, closed=False)
+    tube_path(p, [(-rn - 0.002, neck - 0.001, -0.001), (-0.012, neck - 0.008, -0.01),
+                  (-0.0105, neck - 0.017, -0.016)], 0.0019, "Black", sides=5, closed=False)
+    # The mill's stencil on both broad faces, between two red stripes (a
+    # sack lands any way round). Each line sits on the cloth where it
+    # stands furthest out across its width, so none of it sinks.
     from mathutils.bvhtree import BVHTree
     tree = BVHTree.FromBMesh(p.bm)
 
-    def surface(y, side):
-        hit = tree.ray_cast(Vector((0.0, y, side * 0.2)), Vector((0.0, 0.0, -side)))
-        return hit[0].z if hit[0] is not None else side * 0.037
+    def surface(y, side, half):
+        zs = []
+        for i in range(9):
+            x = -half + 2 * half * i / 8
+            hit = tree.ray_cast(Vector((x, y, side * 0.2)), Vector((0.0, 0.0, -side)))
+            if hit[0] is not None:
+                zs.append(hit[0].z)
+        return (max(zs) if side > 0 else min(zs)) if zs else side * 0.036
 
     for side, face in ((-1.0, FRONT), (1.0, RY(0.0))):
-        y = yb + 0.0335
-        text(p, "МУКА", 0.0135, "Black", T(0.0, y, surface(y, side) - side * 0.0012) @ face,
-             depth=0.0024)
-        for y in (yb + 0.0155, yb + 0.052):
-            p.box((0.026, 0.0036, 0.0022), (0.0, y, surface(y, side) - side * 0.0004), "Red")
-        y = yb + 0.0595
-        text(p, "1 COPT", 0.0055, "Black", T(0.0, y, surface(y, side) - side * 0.001) @ face,
-             depth=0.0018)
+        def at(y, h, n):
+            """Where a line of n letters h high sits: furthest out across it."""
+            half = 2.9 * h / 4 * n / 2
+            z = max((surface(y + dy, side, half) for dy in (-h / 2, 0.0, h / 2)),
+                    key=lambda v: v * side)
+            return T(0.0, y, z - side * 0.0006) @ face
+
+        text(p, "МУКА", 0.0135, "Black", at(yb + 0.0285, 0.0135, 4), depth=0.0022)
+        text(p, "1 COPT", 0.0062, "Black", at(yb + 0.0445, 0.0062, 6), depth=0.0018)
+        for y in (yb + 0.0125, yb + 0.0525):
+            z = surface(y, side, 0.016)
+            p.box((0.032, 0.0036, 0.0016), (0.0, y, z + side * 0.0002), "Red")
     return [p]
 
 
