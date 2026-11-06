@@ -61,9 +61,9 @@ pub const SIGN: Vec2 = Vec2::new(1.0, 0.7);
 
 pub fn sign_panel(text: &str) -> ScreenText {
     ScreenText {
-        text: crate::render::screen::wrap_to_fit(text, SIGN, ScreenStyle::Paper),
+        text: crate::render::screen::wrap_to_fit(text, SIGN, ScreenStyle::Sign),
         size: SIGN,
-        style: ScreenStyle::Paper,
+        style: ScreenStyle::Sign,
     }
 }
 
@@ -290,5 +290,82 @@ fn press_terminals(
             t.page = (t.page + 1) % t.pages.len().max(1);
             screen.text = t.screen();
         }
+    }
+}
+
+#[cfg(test)]
+mod sign_tests {
+    use super::*;
+    use crate::render::legibility::{MUST_READ_DEG, letter_height};
+    use crate::render::screen::{em_metres, wrap_to_fit};
+
+    /// The farthest a panel's letters still read (m), at the must-read
+    /// floor.
+    fn reach(panel: &ScreenText) -> f32 {
+        letter_height(&panel.text, em_metres(panel)) / MUST_READ_DEG.to_radians().tan()
+    }
+
+    /// As a sign was before it had its own style: a page's letters.
+    fn as_page(text: &str) -> ScreenText {
+        ScreenText {
+            text: wrap_to_fit(text, SIGN, ScreenStyle::Paper),
+            size: SIGN,
+            style: ScreenStyle::Paper,
+        }
+    }
+
+    #[test]
+    fn a_two_word_warning_reads_from_ten_metres() {
+        for text in [
+            "KEEP OUT",
+            "NO ENTRY",
+            "HOT ZONE",
+            "DANGER RADIATION",
+            "TURN BACK",
+        ] {
+            let (now, was) = (reach(&sign_panel(text)), reach(&as_page(text)));
+            println!("{text:>18}: {was:4.1} m -> {now:4.1} m");
+            assert!(now >= 10.0, "{text}: {now:.1} m\n{}", sign_panel(text).text);
+            assert!(now > was * 1.5, "{text}: {was:.1} -> {now:.1} m");
+        }
+    }
+
+    #[test]
+    fn a_sign_never_cuts_a_word_and_a_long_one_still_wraps() {
+        // One long word, whole (a page's narrowest wrap cut it to 12).
+        let p = sign_panel("CONTAMINATION");
+        assert_eq!(p.text, "CONTAMINATION");
+        // A sentence still wraps to lines, every word whole.
+        let long = "Road closed beyond the dam. Walkers patrol the spillway at night; \
+                    keep to the fence line and use the north stair.";
+        let p = sign_panel(long);
+        assert!(p.text.lines().count() >= 3, "{}", p.text);
+        let words: Vec<&str> = long.split_whitespace().collect();
+        let drawn: Vec<&str> = p.text.split_whitespace().collect();
+        assert_eq!(words, drawn);
+        // And its letters no smaller than a page's.
+        assert!(em_metres(&p) >= em_metres(&as_page(long)) - 1e-4);
+    }
+
+    #[test]
+    fn notes_are_fitted_as_they_were() {
+        // A note is still a page: the sign's style is the sign's alone.
+        let text = "Ivan - the key is under the third sleeper from the hut. Don't \
+                    take the torch, they see it. Back by Thursday. - M.";
+        let p = note_panel(text);
+        assert_eq!(p.style, ScreenStyle::Paper);
+        let mut was = (0.0, String::new());
+        for columns in 12..=60 {
+            let w = crate::render::screen::wrap_lines(text, columns);
+            let em = em_metres(&ScreenText {
+                text: w.clone(),
+                size: NOTE,
+                style: ScreenStyle::Paper,
+            });
+            if em > was.0 + 1e-4 {
+                was = (em, w);
+            }
+        }
+        assert_eq!(p.text, was.1);
     }
 }
