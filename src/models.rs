@@ -734,6 +734,14 @@ mod tests {
     /// A model's bounds in its own space: every mesh node's POSITION
     /// accessor bounds, through the node's translation, rotation and scale.
     fn glb_bounds(path: &Path) -> Option<(bevy::math::Vec3, bevy::math::Vec3)> {
+        glb_bounds_without(path, &[])
+    }
+
+    /// [`glb_bounds`], leaving out the mesh nodes named in `skip`.
+    fn glb_bounds_without(
+        path: &Path,
+        skip: &[&str],
+    ) -> Option<(bevy::math::Vec3, bevy::math::Vec3)> {
         use bevy::math::{Quat, Vec3};
         let bytes = std::fs::read(path).unwrap();
         let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
@@ -746,6 +754,9 @@ mod tests {
             let Some(mesh) = node["mesh"].as_u64() else {
                 continue;
             };
+            if node["name"].as_str().is_some_and(|n| skip.contains(&n)) {
+                continue;
+            }
             let t = &node["translation"];
             let r = &node["rotation"];
             let sc = &node["scale"];
@@ -977,6 +988,62 @@ mod tests {
         assert!(
             bad.is_empty(),
             "item models that don't fit their boxes:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// Every gun's catalog box (`dims`) is its model: width, height and
+    /// length within 8% and 6 mm a side. The box is the gun's collider, its
+    /// seat in a holster or a pouch, and the gunsmith's length (a sawn-off
+    /// cuts from it), so a stale row put a revolver 2 cm high in its
+    /// holster and gave an AK-74 a magazine's height it doesn't have.
+    ///
+    /// The box is the gun as drawn, without what comes off or is an item
+    /// of its own: a magazine is its own item, never in a gun's model.
+    /// What a gun's model carries that isn't counted is named here:
+    #[test]
+    fn every_gun_box_is_its_model() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        /// Mesh nodes left out of a gun's box: the Mosin's bayonet, always
+        /// fixed in the game but not the rifle's 1.23 m (with it, 1.67 m).
+        const NOT_COUNTED: &[(&str, &[&str])] = &[("mosin", &["bayonet"])];
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models").join("guns");
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for (_, def) in cat.iter() {
+            if def.category != Category::Firearm {
+                continue;
+            }
+            let id = &def.id;
+            let path = root.join(format!("{id}.glb"));
+            let skip = NOT_COUNTED
+                .iter()
+                .find(|(g, _)| g == id)
+                .map_or(&[][..], |(_, s)| *s);
+            let Some((lo, hi)) = glb_bounds_without(&path, skip) else {
+                bad.push(format!("{id}: no model"));
+                continue;
+            };
+            let Some(dims) = def.dims else {
+                bad.push(format!("{id}: no dims"));
+                continue;
+            };
+            checked += 1;
+            let ext = hi - lo;
+            for (i, axis) in ["width", "height", "length"].iter().enumerate() {
+                let (row, model) = (dims[i], ext[i]);
+                if (row - model).abs() > 0.08 * model + 0.006 {
+                    bad.push(format!(
+                        "{id}: {axis} {row:.3} m in items.ron, {model:.3} m drawn"
+                    ));
+                }
+            }
+        }
+        assert!(checked > 10, "only {checked} guns checked");
+        assert!(
+            bad.is_empty(),
+            "gun boxes that aren't their models:\n{}",
             bad.join("\n")
         );
     }
