@@ -100,6 +100,59 @@ pub struct Pressure {
     pub stepped_at: Option<f32>,
     /// What most stirred the last step (for its line).
     pub why: Why,
+    /// A machine has had you on the job's own hot ground this raid
+    /// ([`job_hot_place`]): till then that ground counts as quiet, and
+    /// nothing fast is sent there.
+    pub met_at_job: bool,
+}
+
+/// The job's place, when the job sends you onto hot ground (Map design's
+/// five first jobs, on purpose: the Radio mast, the Charcoal hut, The works,
+/// Cinder wood, The summit): its region's name. The first machine met there
+/// is slow and weak, so the first contact doesn't bring a big answer
+/// (coordinator's ruling): keyed to the place and the job, not a count.
+///
+/// `map` is the valley's key (`LaunchOptions::map`, "marrow_creek"), what a
+/// job's mark names; not `MapDef::name`, its display name ("Marrow Creek").
+pub fn job_hot_place(
+    zone: &crate::world::Zone,
+    map: &str,
+    progression: Option<&crate::progression::Progression>,
+) -> Option<String> {
+    let (job_map, at) = progression?.0.job.as_ref()?.mark()?;
+    if job_map != map {
+        return None;
+    }
+    zone.map
+        .region_at(at)
+        .filter(|r| r.danger >= HOT_DANGER)
+        .map(|r| r.name.clone())
+}
+
+/// Whether `at` is hot ground for the account and the director: a region
+/// of [`HOT_DANGER`] or more, but never within `director::SURVEY_CLEAR` of
+/// a rendezvous: the run in can be tense, the wait at the pad can't
+/// (coordinator's ruling; one rule here in place of pocket regions).
+pub fn hot_at(zone: &crate::world::Zone, at: [f32; 2]) -> bool {
+    zone.map
+        .region_at(at)
+        .is_some_and(|r| r.danger >= HOT_DANGER)
+        && zone
+            .map
+            .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+            .all(|m| {
+                Vec2::from_array(m.at).distance(Vec2::from_array(at))
+                    > super::director::SURVEY_CLEAR
+            })
+}
+
+/// Whether `p` is on the job's hot place ([`job_hot_place`]).
+pub fn on_job_place(zone: &crate::world::Zone, place: Option<&str>, p: Vec3) -> bool {
+    place.is_some_and(|name| {
+        zone.map
+            .region_at([p.x, p.z])
+            .is_some_and(|r| r.name == name)
+    })
 }
 
 /// What moved it up.
@@ -223,6 +276,8 @@ fn tally_pressure(
     robots: Query<&super::Awareness>,
     time: Res<Time>,
     mut out: MessageWriter<Stepped>,
+    progression: Option<Res<crate::progression::Progression>>,
+    opts: Option<Res<crate::launch::LaunchOptions>>,
 ) {
     let Some(mut raid) = raid else {
         return;
@@ -237,22 +292,29 @@ fn tally_pressure(
             | crate::raid::Phase::TruckCalled { .. }
             | crate::raid::Phase::TruckWaiting { .. }
     );
-    let hot = zone
-        .map
-        .region_at([at.x, at.z])
-        .is_some_and(|r| r.danger >= HOT_DANGER);
+    let place = opts
+        .as_deref()
+        .and_then(|o| job_hot_place(&zone, &o.map, progression.as_deref()));
+    let at_job = on_job_place(&zone, place.as_deref(), at);
+    // The job's own hot ground is quiet till a machine's had you there.
+    let hot = hot_at(&zone, [at.x, at.z]) && !(at_job && !pressure.met_at_job);
+    let fought = robots
+        .iter()
+        .any(|a| a.target == Some(me) && a.can_see_target);
     let d = Doings {
         out: in_zone,
         shots: std::mem::take(&mut doing.shots),
-        fought: robots
-            .iter()
-            .any(|a| a.target == Some(me) && a.can_see_target),
+        fought,
         hot,
         into_hot: hot && !doing.was_hot,
         attention: attention.map_or(0.0, |a| a.total()),
     };
     doing.was_hot = hot && in_zone;
-    if let Some(level) = pressure.feed(d, time.delta_secs(), time.elapsed_secs()) {
+    let stepped_up = pressure.feed(d, time.delta_secs(), time.elapsed_secs());
+    if fought && at_job && in_zone {
+        pressure.met_at_job = true;
+    }
+    if let Some(level) = stepped_up {
         let why = pressure.why;
         info!("pressure: {level:?} ({why:?}), {:.2}", pressure.account());
         raid.say(stepped(level, why));
@@ -263,6 +325,48 @@ fn tally_pressure(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// No wait at a pad is on hot ground, in any valley: within
+    /// `SURVEY_CLEAR` of every rendezvous it's never hot, even where the
+    /// pad's region is (Marrow's Bus depot; coordinator's ruling, in place
+    /// of pocket regions).
+    #[test]
+    fn no_rendezvous_wait_is_hot_ground() {
+        let mut hot_pads = vec![];
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "rime_fell",
+            "sallow_reservoir",
+        ] {
+            let zone = crate::world::Zone::load(map);
+            for rv in zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+            {
+                if zone
+                    .map
+                    .region_at(rv.at)
+                    .is_some_and(|r| r.danger >= HOT_DANGER)
+                {
+                    hot_pads.push(format!("{map} {}", rv.name));
+                }
+                for r in [0.0, 10.0, 20.0, 40.0, 60.0, 79.0] {
+                    for k in 0..16 {
+                        let a = k as f32 * std::f32::consts::TAU / 16.0;
+                        let p = [rv.at[0] + r * a.cos(), rv.at[1] + r * a.sin()];
+                        assert!(!hot_at(&zone, p), "{map} {} at {r} m is hot", rv.name);
+                    }
+                }
+            }
+        }
+        // The rule has work to do: some pads are in hot regions.
+        assert!(
+            hot_pads.iter().any(|p| p == "marrow_creek Bus depot"),
+            "{hot_pads:?}"
+        );
+    }
 
     fn out() -> Doings {
         Doings {

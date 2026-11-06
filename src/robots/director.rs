@@ -334,13 +334,7 @@ pub fn survey_places(zone: &Zone, hot_only: bool) -> Vec<[f32; 2]> {
                 .iter()
                 .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
         })
-        .filter(|p| {
-            !hot_only
-                || zone
-                    .map
-                    .region_at(*p)
-                    .is_some_and(|r| r.danger >= super::pressure::HOT_DANGER)
-        })
+        .filter(|p| !hot_only || super::pressure::hot_at(zone, *p))
         .collect()
 }
 
@@ -389,6 +383,7 @@ pub(super) fn run_director(
     mind: Option<Res<super::memory::ZoneMind>>,
     progression: Option<Res<crate::progression::Progression>>,
     nav: Option<Res<super::walker::Nav>>,
+    opts: Option<Res<crate::launch::LaunchOptions>>,
     mut sized: Local<bool>,
 ) {
     let mind = mind.as_deref();
@@ -453,7 +448,16 @@ pub(super) fn run_director(
     // stir, a while back (`pressure`): till then, one walker comes to look,
     // slow and seen.
     let fast = pressure.fast_allowed(now);
+    // Nor to the job's own hot ground before a machine's had you there:
+    // its first contact is a slow one (`pressure::job_hot_place`).
+    let job_place = opts
+        .as_deref()
+        .and_then(|o| super::pressure::job_hot_place(&zone, &o.map, progression.as_deref()));
+    let held = |at: Vec3| {
+        !pressure.met_at_job && super::pressure::on_job_place(&zone, job_place.as_deref(), at)
+    };
     for at in dispatch {
+        let fast = fast && !held(at);
         if active >= director.max_active {
             continue;
         }
@@ -564,8 +568,11 @@ pub(super) fn run_director(
         Level::Hunting => (40.0, 80.0),
     };
     director.next_job = director.rng.range(lo, hi);
-    let pois = if pressure.level >= Level::Stirred {
+    let pois: Vec<[f32; 2]> = if pressure.level >= Level::Stirred {
         survey_places(&zone, pressure.level < Level::Busy)
+            .into_iter()
+            .filter(|p| !held(zone.on_ground(p[0], p[1])))
+            .collect()
     } else {
         vec![]
     };

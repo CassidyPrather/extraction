@@ -6526,3 +6526,122 @@ fn the_director_takes_no_count_of_the_job() {
     assert!(!first.is_empty(), "nothing sent in four minutes");
     assert_eq!(first, fourth, "job 1 against job 4");
 }
+
+/// A job that sends you onto hot ground (Marrow's Radio mast, on purpose)
+/// meets a slow machine there first: till one's had you there, an answer
+/// to a noise at the mast is one walker coming to look, though the Zone's
+/// stirred and said so, and no survey drone is sent over it. After that
+/// first contact, it's hot ground like any (coordinator's ruling: keyed to
+/// the place and the job, not a career count).
+#[test]
+fn a_jobs_own_hot_ground_meets_a_slow_machine_first() {
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 4);
+    let mast = [-54.0, -78.8];
+    app.world_mut()
+        .resource_mut::<crate::progression::Progression>()
+        .0
+        .job = Some(extraction_core::progression::Job::Scout {
+        map: "marrow_creek".into(),
+        place: "Radio mast".into(),
+        at: mast,
+        seen: false,
+    });
+    let at = zone.on_ground(mast[0], mast[1]);
+    assert_eq!(
+        super::pressure::job_hot_place(
+            &zone,
+            "marrow_creek",
+            Some(app.world().resource::<crate::progression::Progression>())
+        )
+        .as_deref(),
+        Some("Radio mast")
+    );
+    put(&mut app, player, at);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.heat = 0.0;
+    }
+    let answer = |app: &mut App, met: bool| {
+        let now = app.world().resource::<Time>().elapsed_secs();
+        *app.world_mut().resource_mut::<super::pressure::Pressure>() = super::pressure::Pressure {
+            stir: 1.4,
+            level: super::pressure::Level::Stirred,
+            stepped_at: Some(now - 20.0),
+            met_at_job: met,
+            ..Default::default()
+        };
+        let before: std::collections::HashSet<Entity> =
+            director_robots(app).into_iter().map(|r| r.0).collect();
+        app.world_mut()
+            .resource_mut::<super::director::Director>()
+            .queue_response(0.5, at + Vec3::X * 10.0);
+        for _ in 0..90 * 2 {
+            put(app, player, at);
+            app.update();
+        }
+        director_robots(app)
+            .into_iter()
+            .filter(|r| !before.contains(&r.0))
+            .map(|r| r.1 || r.2)
+            .collect::<Vec<bool>>()
+    };
+    let first = answer(&mut app, false);
+    assert!(
+        !first.is_empty() && first.iter().all(|fast| !fast),
+        "the first answer at the job's mast is a walker: {first:?}"
+    );
+    let after = answer(&mut app, true);
+    assert!(
+        after.iter().any(|fast| *fast),
+        "once met there, it's hot ground like any: {after:?}"
+    );
+}
+
+/// A newcomer walking from a hot job (Marrow's Radio mast) straight to its
+/// rendezvous (the Bus depot, in hot ground) hears no step in the last
+/// `SURVEY_CLEAR` of the way in: the wait at the pad isn't hot, so even an
+/// account a hair under a step drains there (coordinator's ruling).
+#[test]
+fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 4);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.heat = 0.0;
+    }
+    let from = Vec2::new(-54.0, -78.8);
+    let pad = Vec2::new(13.8, -147.0);
+    assert!(
+        zone.map
+            .region_at(pad.to_array())
+            .is_some_and(|r| r.danger >= 2),
+        "the Bus depot pad's region is hot"
+    );
+    let walk = 1.4 / 90.0;
+    let steps = (from.distance(pad) / walk) as usize;
+    let mut primed = false;
+    let mut said = vec![];
+    for i in 0..=steps + 90 * 5 {
+        let p = from.lerp(pad, (i as f32 / steps as f32).min(1.0));
+        put(&mut app, player, zone.on_ground(p.x, p.y));
+        let near = p.distance(pad) <= super::director::SURVEY_CLEAR;
+        if near && !primed {
+            // A hair under a step as you come in.
+            let mut pr = app.world_mut().resource_mut::<super::pressure::Pressure>();
+            pr.stir = 0.98 - pr.linger;
+            pr.level = super::pressure::Level::Quiet;
+            primed = true;
+        }
+        let before = app.world().resource::<super::pressure::Pressure>().level;
+        app.update();
+        let after = app.world().resource::<super::pressure::Pressure>().level;
+        if near && after > before {
+            said.push((p.distance(pad), after));
+        }
+    }
+    assert!(primed);
+    assert!(said.is_empty(), "a step voiced on the way in: {said:?}");
+}
