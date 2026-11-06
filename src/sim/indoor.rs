@@ -1756,6 +1756,95 @@ mod tests {
         }
     }
 
+    /// What's laid on a loot spot stays where a hand can get it once it
+    /// has settled: still in the building (or the site, on a floor of it,
+    /// not in the rock), and reached from the entrance on its own side of
+    /// any wall. A spot can pass every test of its own and its pile still
+    /// end up through the wall: the adit's assay crate, 0.25 m off the
+    /// rock, put a shotgun and four more things into it (Rime seed 4, 5
+    /// November: six stucks reaching for them). `every_loot_spot_*` try the
+    /// spot; this tries the things.
+    #[test]
+    fn what_is_laid_on_a_spot_settles_in_reach() {
+        use crate::items::Item;
+        // Long enough for a laid thing to fall off its lid, tumble and lie.
+        // (Seed 4 by default, `LAID_SEEDS=1,2,..` for more: each valley and
+        // seed is a raid's worth of loot settling.)
+        const SETTLE: usize = 90 * 3;
+        let mut failed = Vec::new();
+        let mut tried = 0;
+        let seeds: Vec<u64> = std::env::var("LAID_SEEDS")
+            .map(|s| s.split(',').filter_map(|x| x.parse().ok()).collect())
+            .unwrap_or(vec![4]);
+        for (map, seed) in crate::test_maps()
+            .into_iter()
+            .flat_map(|m| seeds.iter().map(move |s| (m.clone(), *s)))
+        {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                seed,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            let laid: Vec<(Entity, Vec3, usize)> = app
+                .world_mut()
+                .query_filtered::<(Entity, &Transform), With<Item>>()
+                .iter(app.world())
+                .filter_map(|(e, t)| {
+                    let at = t.translation;
+                    let k = plans.iter().position(|p| {
+                        p.name != "boxcar"
+                            && !p.entries.is_empty()
+                            && p.contains(at, 0.5)
+                            && p.reachable_height(at)
+                            && !behind_the_works(p, at)
+                    })?;
+                    Some((e, at, k))
+                })
+                .collect();
+            for _ in 0..SETTLE {
+                app.update();
+            }
+            for (e, from, k) in laid {
+                let plan = &plans[k];
+                let Some(t) = app.world().get::<Transform>(e) else {
+                    continue;
+                };
+                tried += 1;
+                let at = t.translation;
+                let goal = plan.to_local(at).xz();
+                let what = format!(
+                    "{map} seed {seed} {} at {:.0?}: laid at {:.2?}, lies at {:.2?}",
+                    plan.name,
+                    plan.xf.translation.xz(),
+                    plan.to_local(from),
+                    plan.to_local(at)
+                );
+                if !plan.contains(at, 0.5) {
+                    failed.push(format!("{what}: out of the plan (through a wall?)"));
+                    continue;
+                }
+                match super::super::raider::reach_cell(plan, plan.entries[0], goal) {
+                    Some(c) if super::super::raider::reaches(plan, c, goal) => {}
+                    Some(c) => failed.push(format!("{what}: reached from {c:.2?} through a wall")),
+                    None => failed.push(format!("{what}: out of reach")),
+                }
+            }
+        }
+        assert!(tried > 0, "no laid things tried");
+        assert!(
+            failed.is_empty(),
+            "{} of {tried} laid things settled out of reach:\n{}",
+            failed.len(),
+            failed.join("\n")
+        );
+    }
+
     /// Every outside door of every building on the map lets a bot in, as
     /// far as the room behind it.
     #[test]

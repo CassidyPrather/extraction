@@ -261,7 +261,11 @@ jobs' walks there and home, each place's way home
 it. Anything further needs one of:
 
 - **a silhouette**: its building, or one within 12 m of it
-  (`CONTAINER`), 1.5 m tall or more, in sight within 90 m;
+  (`CONTAINER`, or 25 m for a structure 15 m long: a yard), 1.5 m tall
+  or more, or a hand-set outcrop, in sight within 90 m and big enough in
+  the eye to read: its size (the square root of its height times its
+  narrowest breadth) at least 4 deg against the ground, 2.3 deg on the
+  skyline (`READ_ANGLE`, `SKYLINE_ANGLE`; a pole is a line, never a cue);
 - **its own shape**: an artifact field's sparks (judged 3 m up, within
   50 m), an offering's figures (1.8 m, within 60 m); a reward within
   30 m of a seen artifact field is found by going to the field;
@@ -277,9 +281,9 @@ Smoke and sound are the game's, not the map's, and aren't counted.
 Fix an uncued reward with the smallest cue that fits its story, never a
 signpost where a fence or a shape would do: a cache in the open gets the
 thing its name says (the shot-firer's store a magazine hut, the farm
-workshop its woodpile, the depot's stock pallet a lorry left in the
-yard); a thing on a ridge is moved to the lip, where it stands on the
-skyline (Kettle's cairn); a thing in the trees gets a worn path off the
+workshop the farm's lorry broadside to the track); a thing on a ridge is
+moved to the lip, with a mass beside it on the skyline (Kettle's cairn
+and its stones); a thing in the trees gets a worn path off the
 way (Marrow's tag office desk).
 
 ### Lit windows and smoke
@@ -311,7 +315,8 @@ ruin's is open, and lights up too. The plume reads at 150 m by day and in
 drizzle, a pale curl against the trees and sky. After dark it fades with
 the light, and the lit window takes over. `EXTRACTION_CUES` tries cues without
 editing the map (`window:X,Z[,light][,always];smoke:X,Z[,Y]`). The
-breadcrumbs gauge doesn't count either yet.
+breadcrumbs gauge counts both: smoke cues a reward within 12 m of it
+seen from 150 m (`SMOKE_SIGHT`), a lit window from 120 m (`WINDOW_SIGHT`).
 
 ![Kettle's farmhouse with two lit front windows, one east and its stove
 smoking: day, drizzle, dusk and night, from 50 m north and 150 m east

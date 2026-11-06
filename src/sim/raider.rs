@@ -41,6 +41,7 @@ use crate::robots::walker::Nav;
 use crate::robots::{Awareness, Brain, Job, JobKind, Robot};
 use crate::weapons::flat::MacroKind;
 use crate::weapons::{Gun, Mag};
+use crate::world::bridges::{Deck, decks};
 use crate::world::buildings::{Building, BuildingLoot, DoorLeaf};
 use crate::world::{Layer, Zone};
 use extraction_core::progression::Job as CardJob;
@@ -795,6 +796,8 @@ pub struct Scene<'w, 's> {
     robot_state: Query<'w, 's, (&'static Robot, &'static GlobalTransform)>,
     /// The ground's collider, left out of a ray for what's underfoot.
     terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
+    /// Where anything is (what a stuck raider was walking up to press).
+    placed: Query<'w, 's, &'static GlobalTransform>,
 }
 
 impl Scene<'_, '_> {
@@ -828,6 +831,11 @@ impl Scene<'_, '_> {
             )
             .map_or(ground, |hit| (from.y - hit.distance).max(ground));
         self.wreck_at_feet(p, feet)
+    }
+
+    /// Where a thing is, on the ground plane.
+    fn items_at(&self, e: Entity) -> Option<Vec2> {
+        self.placed.get(e).ok().map(|g| g.translation().xz())
     }
 
     /// Where wrecked robots lie (their bodies' roots).
@@ -1206,9 +1214,26 @@ pub fn think(
                         (Some(Task::WalkTo { within, .. }), Some(Task::WalkTo { to, .. }))
                             if *within == crate::bot::SIDESTEP => scene.in_the_way(pos, *to),
                         (Some(Task::WalkTo { to, .. }), _) => scene.in_the_way(pos, *to),
+                        // Walking up to press something (the truck's bell).
+                        (Some(Task::Press(e)), _) => scene
+                            .items_at(*e)
+                            .map(|at| scene.in_the_way(pos, at))
+                            .unwrap_or_default(),
                         _ => String::new(),
                     }}),
                 );
+                if r.debug
+                    && let Some(Task::Grab { item, .. }) = bot.tasks.front()
+                    && let Ok((_, it, gt, ..)) = scene.items.get(*item)
+                {
+                    let at = gt.translation();
+                    log.event(
+                        "stuck_item",
+                        json!({"item": scene.catalog.get(it.kind()).id,
+                        "ix": round(at.x, 2), "iy": round(at.y, 2), "iz": round(at.z, 2),
+                        "by": scene.in_the_way(pos, at.xz())}),
+                    );
+                }
                 // Stuck again and again in one place: the waypoint it's
                 // making for can't be reached from here, whatever the grid
                 // says. Block it in its own grid so the next plan goes round.
@@ -1404,6 +1429,55 @@ const SIDESTEP_TRIES: usize = 16;
 /// trace). Nearer if nowhere that far will do; the nearest floor if
 /// nowhere near will.
 fn sidestep(
+    plans: &[BuildingPlan],
+    grid: &NavGrid,
+    scene: &Scene,
+    pos: Vec3,
+    step: f32,
+    start: f32,
+) -> Vec2 {
+    // On a bridge: along its deck, never off it.
+    if let Some(deck) = decks(&scene.zone)
+        .into_iter()
+        .find(|d| d.holds(pos.xz(), 0.5))
+    {
+        return deck_sidestep(&deck, scene, pos, step, start);
+    }
+    sidestep_open(plans, grid, scene, pos, step, start)
+}
+
+/// How far onto its abutments past a deck's ends a sidestep may land (m).
+const DECK_RUN_OFF: f32 = 1.5;
+
+/// A sidestep along a bridge's deck: up or down it, as far as it goes
+/// (and onto the ground past its ends), wherever a body walks straight
+/// to; the deck's middle line beside it if nowhere will do. (Kettle seed
+/// 2, 5 November: on the beck's 1.6 m footbridge, under a drone's fire,
+/// three sidesteps found no floor of the Zone's 2 m grid beside it, and
+/// the raider stood till it died.)
+fn deck_sidestep(deck: &Deck, scene: &Scene, pos: Vec3, step: f32, start: f32) -> Vec2 {
+    let axis = (deck.b - deck.a).normalize_or(Vec2::X);
+    let len = deck.a.distance(deck.b);
+    let t0 = deck.along(pos.xz());
+    let first = if start.cos() >= 0.0 { 1.0 } else { -1.0 };
+    for far in [step, step * 0.5, step * 0.25] {
+        for sign in [first, -first] {
+            let t = (t0 + sign * far).clamp(-DECK_RUN_OFF, len + DECK_RUN_OFF);
+            if (t - t0).abs() < 0.3 {
+                continue;
+            }
+            let q = deck.a + axis * t;
+            if scene.walk_clear(pos, Vec3::new(q.x, pos.y, q.y)) {
+                return q;
+            }
+        }
+    }
+    deck.a + axis * t0.clamp(0.0, len)
+}
+
+/// [`sidestep`] off a bridge: on its plan's floor indoors, the Zone's grid
+/// out of doors.
+fn sidestep_open(
     plans: &[BuildingPlan],
     grid: &NavGrid,
     scene: &Scene,
@@ -3289,6 +3363,16 @@ fn raid_step(
                 match pick_item(me, r, scene, s, pos) {
                     Some(item) => {
                         r.act = Act::Take(s, item);
+                        if r.debug
+                            && let Ok((_, it, gt, ..)) = scene.items.get(item)
+                        {
+                            let at = gt.translation();
+                            log.event(
+                                "pick",
+                                json!({"item": scene.catalog.get(it.kind()).id, "site": r.sites[s].name,
+                                "ix": round(at.x, 2), "iy": round(at.y, 2), "iz": round(at.z, 2)}),
+                            );
+                        }
                         if let Some(t) = take_item(r, scene, s, item, pos) {
                             let power = t.iter().any(|t| {
                                 matches!(t, Task::Press(e) if scene.power_switches.contains(*e))
@@ -4607,7 +4691,24 @@ fn extract_step(
                 .find(|(_, p)| matches!(p, Pressable::BellPull))
                 .map(|(e, _)| e);
             r.act = Act::Board;
-            board_tasks(p, bell)
+            // Behind the truck as it stands: it parks off its pose when
+            // someone's on it (`rv_pose_clear`: pulled on past them, short
+            // of them or alongside), and the raider waiting at the RV is.
+            // Walked by the pose, the bed's line ran beside the truck
+            // (Rime seed 4, 5 November: six board stucks at its side, the
+            // bell out of reach, a drone's burst).
+            let truck = scene
+                .trucks
+                .iter()
+                .map(|(_, g)| g.compute_transform())
+                .min_by(|a, b| {
+                    a.translation
+                        .xz()
+                        .distance(here)
+                        .total_cmp(&b.translation.xz().distance(here))
+                })
+                .unwrap_or(pose);
+            board_tasks(|z| truck.transform_point(Vec3::new(0.0, 0.0, z)).xz(), bell)
         }
         _ => vec![Task::Wait(2.0)],
     }
@@ -4802,6 +4903,15 @@ pub fn board_tasks(p: impl Fn(f32) -> Vec2, bell: Option<Entity>) -> Vec<Task> {
         },
     ];
     if let Some(bell) = bell {
+        // Up the bed to stand by the bell (at the front, 0.7 m to the
+        // side: 0.86 m from here, in reach) before pressing it, a walk of
+        // its own: not Press's own straight walk, which from wherever the
+        // raider ended up went nowhere (Rime seed 4, 5 November: four
+        // stucks on the truck, a drone's burst).
+        t.push(Task::WalkTo {
+            to: p(-1.2),
+            within: 0.3,
+        });
         t.push(Task::Press(bell));
     }
     t.push(Task::Wait(1.0));
@@ -5196,6 +5306,100 @@ mod run_tests {
             near >= 0.6,
             "{}: the route passes {near:.2} m from the wreck's middle",
             plan.name
+        );
+    }
+
+    /// On every bridge in every valley, a stuck raider's sidestep keeps to
+    /// the deck (or runs off its ends onto the ground), never off its side:
+    /// the Zone's 2 m grid can't hold a 1.6 m footbridge, and off the deck
+    /// was the beck (Kettle seed 2, 5 November: three stucks on the beck's
+    /// footbridge under a drone's fire, then dead). From a quarter, half
+    /// and three quarters along each deck, at 3 m and 8 m. The grid's own
+    /// sidestep goes off a deck somewhere, or the test proves nothing.
+    #[test]
+    fn a_sidestep_on_a_bridge_keeps_to_its_deck() {
+        let mut bad = Vec::new();
+        let (mut tried, mut open_off) = (0, 0);
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let grid = app.world().resource::<Nav>().0.as_ref().clone();
+            let map2 = map.clone();
+            let (b, t, o) = app
+                .world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let (mut bad, mut tried, mut open_off) = (Vec::new(), 0, 0);
+                    for (i, d) in decks(&scene.zone).iter().enumerate() {
+                        for f in [0.25, 0.5, 0.75] {
+                            let at = d.a.lerp(d.b, f);
+                            let ground = scene.zone.ground(at.x, at.y);
+                            // On the deck: its own surface underfoot.
+                            let feet = scene
+                                .spatial
+                                .cast_ray(
+                                    Vec3::new(at.x, ground + 6.0, at.y),
+                                    Dir3::NEG_Y,
+                                    8.0,
+                                    true,
+                                    &SpatialQueryFilter::from_mask([Layer::World])
+                                        .with_excluded_entities(scene.terrain.iter()),
+                                )
+                                .map_or(ground, |h| ground + 6.0 - h.distance);
+                            let pos = Vec3::new(at.x, feet, at.y);
+                            for step in [3.0, 8.0] {
+                                for k in 0..4 {
+                                    let start = k as f32 * 1.57 + 0.3;
+                                    tried += 1;
+                                    let q = sidestep(&[], &grid, &scene, pos, step, start);
+                                    if !d.holds(q, 0.05) && !d.holds(q, DECK_RUN_OFF + 0.05) {
+                                        bad.push(format!("{map2} deck {i}: from {at:.1?}, {step} m: to {q:.1?}"));
+                                    } else if !d.holds(q, 0.05) {
+                                        // Past an end: along the axis, not off the side.
+                                        let ab = d.b - d.a;
+                                        let len = ab.length();
+                                        let along = (q - d.a).dot(ab) / len;
+                                        if along > 0.0 && along < len {
+                                            bad.push(format!(
+                                                "{map2} deck {i}: from {at:.1?}, {step} m: off its side to {q:.1?}"
+                                            ));
+                                        }
+                                    }
+                                    let o = sidestep_open(&[], &grid, &scene, pos, step, start);
+                                    if !d.holds(o, 0.05) {
+                                        let ab = d.b - d.a;
+                                        let along = (o - d.a).dot(ab) / ab.length();
+                                        if along > 0.0 && along < ab.length() {
+                                            open_off += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    (bad, tried, open_off)
+                })
+                .unwrap();
+            bad.extend(b);
+            tried += t;
+            open_off += o;
+        }
+        assert!(tried >= 48, "only {tried} sidesteps on bridges tried");
+        assert!(
+            open_off > 0,
+            "the grid's sidestep never left a deck: the test proves nothing"
+        );
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} sidesteps off a deck (the grid's own went off {open_off}):\n{}",
+            bad.len(),
+            bad.join("\n")
         );
     }
 

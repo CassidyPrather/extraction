@@ -21,7 +21,15 @@ pub const RES: usize = 192;
 
 #[derive(Clone, Debug, Default)]
 pub struct Overdraw {
+    /// Layers a pixel, as the GPU shades them: what's drawn after the
+    /// opaque pass (alpha-tested, alpha-to-coverage, blended) only in
+    /// front of the nearest opaque surface, since the depth test rejects
+    /// it behind; opaque layers all (that pass is binned by pipeline, not
+    /// sorted near to far, so none is sure to be hidden).
     pub mean: f32,
+    /// Every layer, depth test off: the upper bound, beside the gated
+    /// count so overdraw behind walls can't hide.
+    pub raw_mean: f32,
     pub p95: u16,
     pub max: u16,
     /// Layers a pixel (mean over the screen) by class, biggest first.
@@ -31,8 +39,8 @@ pub struct Overdraw {
 impl Overdraw {
     pub fn summary(&self) -> String {
         format!(
-            "overdraw mean {:.2}, p95 {}, max {} layers a pixel",
-            self.mean, self.p95, self.max
+            "overdraw mean {:.2} (raw {:.2}), p95 {}, max {} layers a pixel",
+            self.mean, self.raw_mean, self.p95, self.max
         )
     }
 }
@@ -194,11 +202,8 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         .unwrap()
         .get(std::any::TypeId::of::<Mesh3d>())
         .to_vec();
-    let mut layers = vec![0u16; RES * RES];
-    // The sky, and what opaque covers, apart: see `add_sky`.
-    let mut sky = vec![0u16; RES * RES];
-    let mut cover = vec![0u16; RES * RES];
     let mut by: HashMap<String, u64> = HashMap::new();
+    let mut drawn: Vec<Drawn> = Vec::new();
     for e in seen {
         let Some(m) = w.get::<Mesh3d>(e) else {
             continue;
@@ -266,29 +271,35 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         let is_sky = w
             .get::<MeshMaterial3d<crate::world::sky::SkyMaterial>>(e)
             .is_some();
-        let occludes = !is_sky && opaque(w, e);
-        let mut covered = 0u64;
+        let mut tris = Vec::with_capacity(idx.len() / 3);
         for t in idx.chunks_exact(3) {
             if let Some((eye, near, bases)) = &cut {
                 if eye.distance(Vec2::from(bases[t[0]])) < *near {
                     continue;
                 }
             }
-            let tri = [vs[t[0]], vs[t[1]], vs[t[2]]];
-            if is_sky {
-                raster(&tri, near, f, two, &mut sky);
-                continue;
-            }
-            covered += raster(&tri, near, f, two, &mut layers);
-            if occludes {
-                raster(&tri, near, f, two, &mut cover);
-            }
+            tris.push([vs[t[0]], vs[t[1]], vs[t[2]]]);
         }
-        if covered > 0 {
-            *by.entry(class(w, e)).or_default() += covered;
-        }
+        drawn.push(Drawn {
+            class: class(w, e),
+            is_sky,
+            occludes: !is_sky && opaque(w, e),
+            two,
+            tris,
+        });
+    }
+    let Counts {
+        mut layers,
+        mut raw,
+        sky,
+        cover,
+        by: counted,
+    } = count(&drawn, near, f);
+    for (k, v) in counted {
+        *by.entry(k).or_default() += v;
     }
     let shown = add_sky(&mut layers, &sky, &cover);
+    add_sky(&mut raw, &sky, &cover);
     if shown > 0 {
         *by.entry("sky".into()).or_default() += shown;
     }
@@ -319,7 +330,11 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         }
     }
     if worst.2 > 0 {
+        // (Counted whole: they fall round the eye, in front of most.)
         for (a, b) in layers.iter_mut().zip(&worst.1) {
+            *a = a.saturating_add(*b);
+        }
+        for (a, b) in raw.iter_mut().zip(&worst.1) {
             *a = a.saturating_add(*b);
         }
         by.insert(worst.0, worst.2);
@@ -331,6 +346,7 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
     by.sort_by(|a, b| b.1.total_cmp(&a.1));
     Overdraw {
         mean: layers.iter().map(|&l| l as f32).sum::<f32>() / px,
+        raw_mean: raw.iter().map(|&l| l as f32).sum::<f32>() / px,
         p95: sorted[(sorted.len() as f32 * 0.95) as usize],
         max: *sorted.last().unwrap_or(&0),
         by,
@@ -401,7 +417,97 @@ fn streaks(
 
 /// Rasterises one view-space triangle (the camera looks down -Z), clipped
 /// at the near plane; returns the pixels it covered.
+/// Every pixel's layers from what's drawn: as shaded (`layers`), raw
+/// (`raw`, depth off), and apart, the sky's and what opaque covers
+/// (`add_sky`).
+struct Counts {
+    layers: Vec<u16>,
+    raw: Vec<u16>,
+    sky: Vec<u16>,
+    cover: Vec<u16>,
+    by: HashMap<String, u64>,
+}
+
+fn count(drawn: &[Drawn], near: f32, f: f32) -> Counts {
+    let mut layers = vec![0u16; RES * RES];
+    let mut sky = vec![0u16; RES * RES];
+    let mut cover = vec![0u16; RES * RES];
+    let mut by: HashMap<String, u64> = HashMap::new();
+    // The nearest opaque surface a pixel (view distance).
+    let mut depth = vec![f32::INFINITY; RES * RES];
+    for d in drawn.iter().filter(|d| d.occludes) {
+        for tri in &d.tris {
+            raster_with(tri, near, f, d.two, |i, z| {
+                if z < depth[i] {
+                    depth[i] = z;
+                }
+                true
+            });
+        }
+    }
+    let mut raw = vec![0u16; RES * RES];
+    for d in drawn {
+        let mut covered = 0u64;
+        for tri in &d.tris {
+            if d.is_sky {
+                raster(tri, near, f, d.two, &mut sky);
+                continue;
+            }
+            raster(tri, near, f, d.two, &mut raw);
+            if d.occludes {
+                covered += raster(tri, near, f, d.two, &mut layers);
+                raster(tri, near, f, d.two, &mut cover);
+            } else {
+                // Past the opaque pass: only where it's in front.
+                covered += raster_with(tri, near, f, d.two, |i, z| {
+                    if z <= depth[i] * (1.0 + 1e-4) {
+                        layers[i] = layers[i].saturating_add(1);
+                        true
+                    } else {
+                        false
+                    }
+                });
+            }
+        }
+        if covered > 0 {
+            *by.entry(d.class.clone()).or_default() += covered;
+        }
+    }
+    Counts {
+        layers,
+        raw,
+        sky,
+        cover,
+        by,
+    }
+}
+
+/// One mesh's triangles in view space, and how it's drawn.
+struct Drawn {
+    class: String,
+    is_sky: bool,
+    /// Drawn in the opaque pass (and so writes depth before the rest).
+    occludes: bool,
+    two: bool,
+    tris: Vec<[Vec3; 3]>,
+}
+
 fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> u64 {
+    raster_with(tri, near, f, two, |i, _| {
+        layers[i] = layers[i].saturating_add(1);
+        true
+    })
+}
+
+/// Calls `pixel` with each pixel `tri` covers (its index) and the view
+/// distance there (perspective-correct); counts those it says to.
+fn raster_with(
+    tri: &[Vec3; 3],
+    near: f32,
+    f: f32,
+    two: bool,
+    mut pixel: impl FnMut(usize, f32) -> bool,
+) -> u64 {
     // Clip against z = -near (keep z <= -near).
     let mut poly: Vec<Vec3> = Vec::with_capacity(4);
     for i in 0..3 {
@@ -427,6 +533,7 @@ fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> 
     let mut covered = 0;
     for i in 1..pts.len() - 1 {
         let (a, b, c) = (pts[0], pts[i], pts[i + 1]);
+        let (za, zb, zc) = (poly[0].z, poly[i].z, poly[i + 1].z);
         // Counter-clockwise in view space is clockwise with y down.
         let area = (b - a).perp_dot(c - a);
         if area == 0.0 || (!two && area > 0.0) {
@@ -450,9 +557,13 @@ fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> 
                 let e1 = (c - b).perp_dot(p - b) * s;
                 let e2 = (a - c).perp_dot(p - c) * s;
                 if e0 >= 0.0 && e1 >= 0.0 && e2 >= 0.0 {
-                    let l = &mut layers[y * RES + x];
-                    *l = l.saturating_add(1);
-                    covered += 1;
+                    // Barycentric weights (e0 faces c, e1 a, e2 b); 1/z
+                    // is linear on screen.
+                    let sum = (e0 + e1 + e2).max(1e-12);
+                    let inv = (e1 / -za + e2 / -zb + e0 / -zc) / sum;
+                    if pixel(y * RES + x, 1.0 / inv.max(1e-9)) {
+                        covered += 1;
+                    }
                 }
             }
         }
@@ -462,6 +573,52 @@ fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> 
 
 #[cfg(test)]
 mod tests {
+
+    /// A card behind a wall isn't shaded (it's drawn after the opaque
+    /// pass, and the depth test drops it); in front of it, it is. A wall
+    /// behind a wall is: the opaque pass isn't drawn near to far. The raw
+    /// count keeps every layer.
+    #[test]
+    fn layers_behind_an_opaque_wall_count_only_if_opaque() {
+        use super::*;
+        // A quad filling the view at distance `d`, facing the eye.
+        let quad = |d: f32| {
+            let z = -d;
+            let (a, b, c, e) = (
+                Vec3::new(-50.0, -50.0, z),
+                Vec3::new(50.0, -50.0, z),
+                Vec3::new(50.0, 50.0, z),
+                Vec3::new(-50.0, 50.0, z),
+            );
+            vec![[a, b, c], [a, c, e]]
+        };
+        let drawn = |class: &str, occludes: bool, d: f32| Drawn {
+            class: class.into(),
+            is_sky: false,
+            occludes,
+            two: true,
+            tris: quad(d),
+        };
+        let mean = |l: &[u16]| l.iter().map(|&v| v as f32).sum::<f32>() / l.len() as f32;
+        let at = |v: Vec<Drawn>| {
+            let c = count(&v, 0.05, 1.0);
+            (mean(&c.layers), mean(&c.raw))
+        };
+        // A card behind the wall, then in front of it.
+        assert_eq!(
+            at(vec![drawn("wall", true, 2.0), drawn("card", false, 5.0)]),
+            (1.0, 2.0)
+        );
+        assert_eq!(
+            at(vec![drawn("wall", true, 5.0), drawn("card", false, 2.0)]),
+            (2.0, 2.0)
+        );
+        // Opaque behind opaque: both shaded.
+        assert_eq!(
+            at(vec![drawn("wall", true, 2.0), drawn("grass", true, 5.0)]),
+            (2.0, 2.0)
+        );
+    }
 
     /// A checkout without the fetched textures isn't measured: the error
     /// names the command that makes them. One with them is.
