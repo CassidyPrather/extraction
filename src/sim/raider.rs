@@ -4130,7 +4130,26 @@ fn run_from(
 }
 
 fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
-    leave_plans(&r.plans, pos, &|d| scene.power_locked.contains(d))
+    leave_round_wrecks(&r.plans, scene, pos)
+}
+
+/// [`leave_plans`] for a raider: out of whichever of `plans` it's in.
+fn leave_round_wrecks(plans: &[BuildingPlan], scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
+    let shut = |d: Entity| scene.power_locked.contains(d);
+    // A wreck across the way out (a robot it shot by the door) is nothing
+    // the plan knows of: the way out found again round it, in a copy of
+    // the plan (Cinder seed 8, 6 November: a minelayer wrecked by a shed's
+    // door at the North sidings, eight stucks walking out into it).
+    if let Some(plan) = plans
+        .iter()
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+        && let Some(exit) = way_out(plan, plan.to_local(pos).xz(), &shut)
+        && let Some(round) = wrecks_shut(plan, scene, pos, exit)
+        && let Some(out) = leave_plans(std::slice::from_ref(&round), pos, &shut)
+    {
+        return Some(out);
+    }
+    leave_plans(plans, pos, &shut)
 }
 
 /// Out of whichever of `plans` `pos` is in, by its nearest way out (a
@@ -5645,6 +5664,119 @@ mod run_tests {
             near(&route) >= 0.9,
             "the walk passes {:.2} m from the wreck's middle",
             near(&route)
+        );
+    }
+
+    /// Out of a building round a wreck across the way out, not into it: a
+    /// robot shot by the door is nothing the plan knows of (Cinder seed 8,
+    /// 6 November: a minelayer wrecked by a shed's door at the North
+    /// sidings, eight stucks walking out into it). With a robot still
+    /// standing there the way out is as it was.
+    #[test]
+    fn the_way_out_goes_round_a_wreck() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        // A house's middle, and its way out's walks.
+        let (plan, from, block) = plans
+            .iter()
+            .filter(|p| p.levels.is_none() && p.name.starts_with("house_") && !p.doors.is_empty())
+            .find_map(|p| {
+                let mid = Vec2::from_array(p.grid.nearest_walkable([0.0, 0.0])?);
+                let from = p.to_world(mid);
+                let out = leave_plans(std::slice::from_ref(p), from, &|_| false)?;
+                let pts: Vec<Vec2> = out
+                    .iter()
+                    .filter_map(|t| match t {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    })
+                    .collect();
+                // A metre along the way out, indoors.
+                let first = *pts.first()?;
+                let at = from.xz() + (first - from.xz()).normalize_or_zero() * 1.0;
+                p.indoors(p.to_local(Vec3::new(at.x, 0.0, at.y)).xz())
+                    .then(|| (p.clone(), from, at))
+            })
+            .expect("a house with a way out");
+        let floor = plan
+            .to_world(plan.to_local(Vec3::new(block.x, 0.0, block.y)).xz())
+            .y;
+        let wreck = |app: &mut App, wrecked: bool| {
+            app.world_mut()
+                .spawn((
+                    Robot {
+                        kind: crate::robots::RobotKind::Walker,
+                        wrecked,
+                    },
+                    Transform::from_xyz(block.x, floor, block.y),
+                ))
+                .with_children(|c| {
+                    c.spawn((
+                        Name::new("Minelayer hull"),
+                        Transform::from_xyz(0.0, 0.5, 0.0),
+                        RigidBody::Static,
+                        Collider::cuboid(0.6, 1.0, 0.6),
+                        CollisionLayers::new(
+                            Layer::Robot,
+                            [Layer::World, Layer::Player, Layer::Robot],
+                        ),
+                    ));
+                })
+                .id()
+        };
+        let near = |app: &mut App| {
+            let plan = plan.clone();
+            app.world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let Some(out) = leave_round_wrecks(std::slice::from_ref(&plan), &scene, from)
+                    else {
+                        return -1.0;
+                    };
+                    let mut last = from.xz();
+                    let mut near = f32::MAX;
+                    for t in &out {
+                        if let Task::WalkTo { to, .. } = t {
+                            near = near.min(seg_dist(last, *to, block));
+                            last = *to;
+                        }
+                    }
+                    near
+                })
+                .unwrap()
+        };
+        let standing = wreck(&mut app, false);
+        for _ in 0..3 {
+            app.update();
+        }
+        let d = near(&mut app);
+        assert!(
+            d >= 0.0 && d < 0.4,
+            "with a robot standing there the way out moved: {d:.2} m off"
+        );
+        app.world_mut().entity_mut(standing).despawn();
+        wreck(&mut app, true);
+        for _ in 0..3 {
+            app.update();
+        }
+        let d = near(&mut app);
+        assert!(
+            d >= 0.6,
+            "{}: the way out passes {d:.2} m from the wreck's middle",
+            plan.name
         );
     }
 
