@@ -719,6 +719,28 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
     app
 }
 
+/// A reload by hand put to the bot, out on the raid with a gun in hand
+/// and walking (kitted up, not mid-task): whether it was.
+fn hand_reload(world: &mut World) -> bool {
+    use crate::bot::{Bot, Task};
+    let me = player(world);
+    if world.resource::<Raid>().phase != Phase::Out {
+        return false;
+    }
+    let armed = world
+        .query_filtered::<&Held, With<Gun>>()
+        .iter(world)
+        .any(|h| h.player == me);
+    let Some(mut bot) = world.get_mut::<Bot>(me) else {
+        return false;
+    };
+    if !armed || !matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) {
+        return false;
+    }
+    bot.tasks.push_front(Task::OneHandReload);
+    true
+}
+
 /// Which awkward moments the raid is in this frame.
 fn moments_now(world: &mut World) -> Vec<Moment> {
     use crate::bot::{Bot, Task};
@@ -921,12 +943,20 @@ fn soak_quit_anywhere_in_every_valley() {
                 let mut a = raid_on(&path, map, seed);
                 let mut frame = 0usize;
                 let mut hit = false;
+                let mut asked = false;
                 while frame < 90 * 60 * 14 {
                     a.update();
                     frame += 1;
                     // The Surge is an hour in, past any bot raid: once out,
                     // the clock is wound to just short of it (as
                     // `--surge-in` does).
+                    // The sim raider's reload is the gun's macro, done in a
+                    // frame: for that moment, once it's out with its gun in
+                    // hand and nothing else on, it reloads by hand, as a
+                    // player does (the empty one out, the next in).
+                    if m == Moment::MidReload && !asked {
+                        asked = hand_reload(a.world_mut());
+                    }
                     if m == Moment::Surge {
                         let mut raid = a.world_mut().resource_mut::<Raid>();
                         if raid.phase == Phase::Out
