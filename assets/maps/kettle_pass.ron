@@ -252,6 +252,10 @@
     cues: [
         Smoke(at: (-137.5, 147.5)),
         LitWindow(at: (-140.5, 143.5)),
+        // The charcoal burners' hut on the lodge track: the window toward
+        // the way home lit after dark, ahead of a first job coming up the
+        // track (scripts/night_route.sh, the dark case; it was a yard lamp).
+        LitWindow(at: (87.3, -101.2)),
     ],
     outcrops: [
         // Boulders on the slope between the mine office and the boxcar,
@@ -272,7 +276,6 @@
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (85.8, 187.4), rot: 0.0),
-        (prefab: "way_lamp", at: (96.5, -105.6), rot: 0.0),
         (prefab: "way_lamp", at: (-101.6, -1.1), rot: 0.0),
         (prefab: "way_lamp", at: (-137.2, -26.5), rot: 0.0),
 
