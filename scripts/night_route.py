@@ -2,7 +2,7 @@
 """Can the way home be read at night? Scores the frames
 `scripts/night_route.sh` shoots along each first job's way home.
 
-    scripts/night_route.py WALKS.jsonl FRAMES_DIR --case torch|dark [--sheet OUT.png] [--worst N]
+    scripts/night_route.py WALKS.jsonl FRAMES_DIR --case torch|dark [--dark-frames DIR] [--sheet OUT.png] [--worst N]
 
 Each stop is a line of WALKS.jsonl, from `night-walks`. Two cases:
 
@@ -10,7 +10,13 @@ Each stop is a line of WALKS.jsonl, from `night-walks`. Two cases:
   the way stand out from the ground 2 m either side of it (worn track, or
   an edge: a wall, a kerb, a fence)? |way - beside| over beside's
   brightness, at each point; READ when `TORCH_POINTS` of them stand out by
-  `STANDS_OUT`.
+  `STANDS_OUT`. Or past the pool, within `CONE` of the way ahead,
+  something standing in the beam shines back (a reflective band on a
+  pole or a post, up to `STANDING` over the ground and no further off
+  the way than its sides): a small spot (`SHINES`, and twice as bright as the
+  frame `SPOT` px to either side and above and below, which leaves out
+  lit ground and rain streaks), where the same still shot with no torch
+  (--dark-frames, the dark case's) is dark: so not a lamp or a star.
 - dark (no torch, a newcomer's raid): is something lit within `CONE`
   degrees of the way ahead, a lamp, a beacon, a window? Lit is coloured
   and bright (`LIT`, `COLOURED`), which leaves out the stars. What stands
@@ -49,6 +55,11 @@ TORCH_POINTS = 2
 CONE = 30.0
 LIT = 40
 COLOURED = 0.35
+# Torch: a band shining back from the beam, past the pool.
+SHINES = 100
+SPOT = 12
+# How high over the ground a band on a pole or post can be (m).
+STANDING = 2.5
 
 
 def project(eye, yaw, pitch, p, w, h):
@@ -98,6 +109,51 @@ def score_dark(stop, im):
     return lit
 
 
+def score_standing(stop, im, dark=None):
+    """Small bright spots in the beam past the pool, within CONE of the
+    way ahead, as (brightness, x, y)."""
+    w, h = im.size
+    fy = (h / 2) / math.tan(math.radians(FOV) / 2)
+    half = fy * math.tan(math.radians(CONE))
+    # Where something standing by the way past the pool would be: the
+    # ground either side of it there, and STANDING over it (the sky above
+    # is stars).
+    box = []
+    for m, a, l, r in zip(AHEAD_M, stop["ahead"], stop["left"], stop["right"]):
+        if m <= POOL[1]:
+            continue
+        for q in (a, l, r):
+            for up in (0.0, STANDING):
+                p = project(stop["eye"], stop["yaw"], stop["pitch"], [q[0], q[1] + up, q[2]], w, h)
+                if p:
+                    box.append(p)
+    if not box:
+        return []
+    x0 = int(max(SPOT, w / 2 - half, min(p[0] for p in box)))
+    x1 = int(min(w - SPOT, w / 2 + half, max(p[0] for p in box)))
+    ya = int(max(SPOT, min(p[1] for p in box)))
+    y1 = int(min(h - SPOT, max(p[1] for p in box)))
+    px = im.load()
+    dk = dark.load() if dark is not None else None
+
+    def v(x, y):
+        return max(px[x, y][:3])
+    spots = []
+    for y in range(ya, y1, 2):
+        for x in range(x0, x1, 2):
+            m = v(x, y)
+            if m < SHINES:
+                continue
+            if not all(2 * v(x + dx, y + dy) <= m for dx, dy in ((SPOT, 0), (-SPOT, 0), (0, SPOT), (0, -SPOT))):
+                continue
+            # Only where the torch makes it: a lamp or a star shines
+            # without it.
+            if dark is not None and 2 * max(max(dk[x + dx, y + dy][:3]) for dx in (-2, 0, 2) for dy in (-2, 0, 2)) > m:
+                continue
+            spots.append((m, x, y))
+    return spots
+
+
 def score(stop, im):
     w, h = im.size
     out = []
@@ -121,13 +177,15 @@ def score(stop, im):
 
 
 def main(argv):
-    sheet, worst_n, case, rest = None, 12, "torch", []
+    sheet, worst_n, case, dark_dir, rest = None, 12, "torch", None, []
     it = iter(argv)
     for a in it:
         if a == "--sheet":
             sheet = next(it)
         elif a == "--case":
             case = next(it)
+        elif a == "--dark-frames":
+            dark_dir = next(it)
         elif a == "--worst":
             worst_n = int(next(it))
         else:
@@ -158,12 +216,20 @@ def main(argv):
         else:
             pts = score(s, im)
             read = sum(1 for c, _ in pts if c >= STANDS_OUT)
-            ok = read >= TORCH_POINTS
+            df = os.path.join(dark_dir, s["name"] + ".png") if dark_dir else None
+            shine = (
+                score_standing(s, im, Image.open(df).convert("RGB"))
+                if df and os.path.exists(df)
+                else []
+            )
+            ok = read >= TORCH_POINTS or len(shine) > 0
             share = read / len(pts) if pts else 0.0
             med = sorted(c for c, _ in pts)[len(pts) // 2] if pts else 0.0
+            pts = pts + [(1.0, (x, y)) for _, x, y in shine[:20]]
             print(
                 f"{'READ' if ok else 'LOST'}  {s['name']}  {s['walk']}  stop {s['stop']}: "
-                f"{read}/{len(pts)} points in the pool stand out (median {med:.2f})  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
+                f"{read}/{len(pts) - min(len(shine), 20)} points in the pool stand out (median {med:.2f}), "
+                f"{len(shine)} shining back past it  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
             )
         results.append((s, ok, share, med, pts, f))
     lost = [r for r in results if not r[1]]

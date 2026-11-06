@@ -345,7 +345,7 @@ fn reel(
         let walk_start = eye + flat * 6.0 - right * 4.5;
         let e = match what {
             "drone" | "dronewreck" | "lock" => {
-                let at = eye + flat * 8.0 + Vec3::Y * 0.8;
+                let at = eye + flat * lock_dist(spec) + Vec3::Y * 0.8;
                 spawn_drone(&mut commands, at, job(at))
             }
             "turn" => {
@@ -915,7 +915,7 @@ fn reel(
     // the turns, nose leading.
     if let Ok(mut d) = drones.get_mut(subject) {
         let k = frame as f32 / 30.0 * std::f32::consts::TAU / 7.0;
-        let centre = eye + flat * 8.0 + Vec3::Y * 0.8;
+        let centre = eye + flat * lock_dist(spec) + Vec3::Y * 0.8;
         d.goal = centre + right * (k.sin() * 4.5) + flat * ((2.0 * k).sin() * 2.0);
         if what == "dronewreck" || what == "lock" {
             d.goal = centre;
@@ -1487,6 +1487,15 @@ fn reel(
             }
         },
     );
+}
+
+/// How far ahead a drone hovers: 8 m, or `reel:lock,SHOTS,EVERY,DIST`'s
+/// DIST (to read its lock at 6-30 m).
+fn lock_dist(spec: &str) -> f32 {
+    spec.strip_prefix("lock,")
+        .and_then(|a| a.split(',').nth(2))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(8.0)
 }
 
 /// How far the ground between `eye` and `to` rises into the line of

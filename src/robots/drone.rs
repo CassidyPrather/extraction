@@ -1145,7 +1145,11 @@ mod tests {
     /// health kept up (a fight, not a death, is what's tested).
     fn drone_on_you() -> (App, Entity, Entity, Vec3) {
         drone_over(|zone| {
-            let at = zone.on_ground(40.0, 255.0);
+            // On Marrow's ground (its map is 388 m across, about the
+            // middle: off it a body falls every frame).
+            let at = zone.on_ground(40.0, 150.0);
+            let far = at + FAR_OFF;
+            assert!(zone.on_heightmap(far.x, far.z), "{far} is off the map");
             (at, at + Vec3::new(0.0, 6.0, -15.0))
         })
     }
@@ -1171,6 +1175,7 @@ mod tests {
             .next()
             .unwrap();
         let (at, site) = place(&zone);
+        assert!(zone.on_heightmap(at.x, at.z), "{at} is off the map");
         let mut queue = bevy::ecs::world::CommandQueue::default();
         let drone = {
             let mut c = Commands::new(&mut queue, app.world());
@@ -1189,14 +1194,20 @@ mod tests {
         (app, player, drone, at)
     }
 
+    /// Where you are, out of its sight (from [`drone_on_you`]'s spot):
+    /// about 345 m off, across Marrow, still on its ground.
+    const FAR_OFF: Vec3 = Vec3::new(-190.0, 0.0, -290.0);
+
     /// One tick of you: walking a small circle at `at` (seen), or far off
     /// (out of its sight); hale either way.
     fn step(app: &mut App, player: Entity, at: Vec3, seen: bool, i: usize) {
         let a = i as f32 / 90.0 * 0.5;
+        // Far off is still on the ground (on the heightmap: off it a body
+        // falls every frame), well past its sight ([`FAR_OFF`]).
         let here = if seen {
             at + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0
         } else {
-            at + Vec3::new(400.0, 0.0, 0.0)
+            at + FAR_OFF
         };
         app.world_mut()
             .get_mut::<Transform>(player)

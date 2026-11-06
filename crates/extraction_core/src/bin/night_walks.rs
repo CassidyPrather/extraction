@@ -7,6 +7,10 @@
 //! inside a torch's pool), for
 //! `scripts/night_route.py` to find in the frame.
 //!
+//! And along each line of snow poles (the poles nearest one rendezvous),
+//! home from its far pole, so a torch's case covers the poles where no
+//! first job's way runs beside them.
+//!
 //!   night-walks <map>
 //!   {"walk":"scout: Valve house>Gauge house","stop":3,"still":"...","ahead":[[x,y,z],..],"left":[..],"right":[..]}
 
@@ -45,6 +49,28 @@ fn along(path: &[P2], s: f32) -> Option<(P2, P2)> {
     None
 }
 
+/// Each line of snow poles, by the rendezvous they're nearest: its far
+/// pole, to walk home from.
+fn pole_lines(map: &MapDef, rvs: &[(String, P2)]) -> Vec<(String, P2)> {
+    let nearest = |p: P2| {
+        rvs.iter()
+            .enumerate()
+            .min_by(|a, b| dist(a.1.1, p).total_cmp(&dist(b.1.1, p)))
+            .map(|(i, _)| i)
+    };
+    let mut far: Vec<Option<P2>> = vec![None; rvs.len()];
+    for p in map.placements.iter().filter(|p| p.prefab == "snow_pole") {
+        let Some(i) = nearest(p.at) else { continue };
+        if far[i].is_none_or(|f| dist(p.at, rvs[i].1) > dist(f, rvs[i].1)) {
+            far[i] = Some(p.at);
+        }
+    }
+    far.into_iter()
+        .flatten()
+        .map(|at| (format!("pole line ({:.0}, {:.0})", at[0], at[1]), at))
+        .collect()
+}
+
 fn main() {
     let map_id = std::env::args()
         .nth(1)
@@ -63,10 +89,9 @@ fn main() {
         .collect();
     let ground = |p: P2| [p[0], hm.height(p), p[1]];
     let fmt = |v: [f32; 3]| format!("[{:.2},{:.2},{:.2}]", v[0], v[1], v[2]);
-    for (walk, (what, at)) in extraction_core::map_lint::first_jobs(&map, &map_id)
-        .into_iter()
-        .enumerate()
-    {
+    let mut starts = extraction_core::map_lint::first_jobs(&map, &map_id);
+    starts.extend(pole_lines(&map, &rvs));
+    for (walk, (what, at)) in starts.into_iter().enumerate() {
         let Some((rv, to)) = rvs
             .iter()
             .min_by(|a, b| dist(a.1, at).total_cmp(&dist(b.1, at)))
