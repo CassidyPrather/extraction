@@ -379,6 +379,11 @@ pub const MIX: &[Cue] = &[
     cue!("hit.shrug", "impacts/ricochet", -7.0, 45.0, 20.0, Action, 8.0),
     cue!("hit.wound", "impacts/metal", -5.0, 85.0, 20.0, Action, 8.0),
     cue!("hit.wound_thud", "physical/body_hit", -9.0, 70.0, 20.0, Action, 8.0),
+    // ...and by the part struck: armour's ring, a lens, a gas cell, a joint.
+    cue!("hit.ring", "impacts/metal", -7.0, 80.0, 20.0, Action, 8.0),
+    cue!("hit.wound_glass", "physical/glass_break", -7.0, 70.0, 20.0, Action, 8.0),
+    cue!("hit.wound_cloth", "physical/cloth", -2.5, 70.0, 20.0, Action, 8.0),
+    cue!("hit.wound_joint", "machines/clank", -4.5, 70.0, 20.0, Action, 8.0),
     cue!("hit.telling", "impacts/metal", -7.0, 105.0, 20.0, Signal, 12.0),
     cue!("hit.telling_glass", "physical/glass_break", -7.0, 100.0, 20.0, Signal, 12.0),
     cue!("hit.telling_fizz", "device/crackle", -8.0, 95.0, 20.0, Signal, 12.0),

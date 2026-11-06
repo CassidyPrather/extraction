@@ -372,6 +372,49 @@ pub fn notice_far(kind: RobotKind) -> f32 {
     }
 }
 
+/// A machine that comes for you, by how it's heard coming.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Coming {
+    Walker,
+    Drone,
+    Heavy,
+}
+
+/// How far a machine of this kind is heard coming (m) at `rain` (0 dry,
+/// 1 a downpour): the loudest of its moving sounds (a walker's servos and
+/// steps, a drone's rotors, a heavy's footfalls) over the wind and the
+/// rain, by the mix's masking model (`scripts/audio_mix.py`,
+/// `audible_range`; calm / downpour, read 5 November), between the two
+/// as the dB go. Every approach is warned, whatever the weather: nothing
+/// notices you from further than this (the gauge
+/// `nothing_notices_you_from_beyond_where_its_coming_is_heard`).
+pub fn heard_coming(machine: Coming, rain: f32) -> f32 {
+    let (calm, downpour): (f32, f32) = match machine {
+        // walker.step 76 / 33, walker.servo 71 / 46.
+        Coming::Walker => (76.0, 46.0),
+        // drone.rotor 464 / 61.
+        Coming::Drone => (464.0, 61.0),
+        // heavy.step 175 / 163.
+        Coming::Heavy => (175.0, 163.0),
+    };
+    let r = rain.clamp(0.0, 1.0);
+    calm * (downpour / calm).powf(r)
+}
+
+/// Whether a robot looking for you sees you plainly, low and still: all
+/// of you in its view (head, chest and hips: you're in the open), or
+/// most of you (two of them) within [`POINT_BLANK`]. Behind cover
+/// otherwise, it passes you over (the head is the one it already sees:
+/// `clear` says whether its line to a point is clear).
+pub fn seen_plainly(dist: f32, clear: impl Fn(Vec3) -> bool, feet: Vec3, height: f32) -> bool {
+    let body = [
+        feet + Vec3::Y * height * 0.65,
+        feet + Vec3::Y * height * 0.3,
+    ];
+    let shown = 1 + body.iter().filter(|p| clear(**p)).count();
+    shown == 3 || (dist <= POINT_BLANK && shown >= 2)
+}
+
 /// Sight and hearing, into each robot's [`Awareness`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn perceive(
@@ -390,6 +433,8 @@ pub(crate) fn perceive(
             Has<super::hazards::Dazzled>,
             Has<super::hazards::Deafened>,
             Has<super::hazards::Frosted>,
+            Has<super::heavy::Heavy>,
+            Option<&super::Brain>,
         ),
     )>,
     players: Query<
@@ -603,7 +648,7 @@ pub(crate) fn perceive(
         motion,
         dormant,
         mind_seed,
-        (dazzled, deaf, frosted),
+        (dazzled, deaf, frosted, heavy, brain),
     ) in &mut robots
     {
         let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
@@ -657,7 +702,17 @@ pub(crate) fn perceive(
             1.0
         };
         let acuity = conditions.sight(senses.sight) * frost;
-        let reach = conditions.sight(senses.sight.min(notice)) * frost;
+        // Nor further than it's heard coming over the rain: every
+        // approach warned, whatever the weather (a drone noticed you at
+        // 66 m in a downpour, its rotors heard only to 61 m).
+        let coming = match robot.kind {
+            RobotKind::Drone => Some(Coming::Drone),
+            RobotKind::Walker if heavy => Some(Coming::Heavy),
+            RobotKind::Walker => Some(Coming::Walker),
+            _ => None,
+        };
+        let heard = coming.map_or(f32::MAX, |c| heard_coming(c, conditions.rain));
+        let reach = (conditions.sight(senses.sight.min(notice)) * frost).min(heard);
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
@@ -679,6 +734,37 @@ pub(crate) fn perceive(
                     .ok()
                     .and_then(|dir| spatial.cast_ray(eye, dir, dist - 0.3, true, &world));
                 if blocked.is_some() {
+                    continue;
+                }
+                // Coming to look or searching, a walker passes over you
+                // low and still behind cover ("It only finds what moves"):
+                // only seen plainly ([`seen_plainly`]). Not the heavy:
+                // "Don't hide" is its lesson.
+                let looking = robot.kind == RobotKind::Walker
+                    && !heavy
+                    && matches!(
+                        brain,
+                        Some(super::Brain::Investigate { .. } | super::Brain::Search { .. })
+                    );
+                let still =
+                    t.speed <= 0.3 && t.load.is_none_or(|v| v <= super::signs::LOAD_SWINGING);
+                if looking
+                    && t.height < CROUCHED
+                    && still
+                    && !seen_plainly(
+                        dist,
+                        |p| {
+                            let to = p - eye;
+                            Dir3::new(to).ok().is_some_and(|dir| {
+                                spatial
+                                    .cast_ray(eye, dir, to.length() - 0.3, true, &world)
+                                    .is_none()
+                            })
+                        },
+                        t.feet,
+                        t.height,
+                    )
+                {
                     continue;
                 }
                 let mut e = exposure(&SightCase {

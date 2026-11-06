@@ -41,6 +41,7 @@ pub mod props;
 pub mod pry_cue;
 pub mod puff;
 pub mod readback;
+pub mod reflectors;
 pub mod rv_beacons;
 pub mod screen;
 pub mod sky_light;
@@ -127,6 +128,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(landmarks::LandmarkLampsPlugin)
         .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(way_lamps::WayLampsPlugin)
+        .add_plugins(reflectors::ReflectorsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)

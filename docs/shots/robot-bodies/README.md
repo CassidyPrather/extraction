@@ -225,3 +225,29 @@ The same log showed downhill swings peaking 0.3–1.15 m over the falling ground
 ![wide, before and after](feet_hold_the_ground_before_after.jpg)
 
 The earlier wide sheet shows each worst route from a high three-quarter view.
+
+## A downed drone you can find
+
+![a downed drone at 17 m, before and after](drone_wreck_at_17m_before_after.jpg)
+
+Heavy's `robot_frames` line-up found that a wrecked drone in Marrow's meadow grass at 17 m was all but invisible. The shots are clearing weather, the line-up camera, one wreck at a time, and the count is pixels changed against the empty view. There were two causes:
+
+1. **It wasn't there.** A line-up wrecks its machines four frames in, before a drawn app has the ground's heightfield collider in, so the drone fell and kept falling: 330 m under the meadow by the time it was still. `wreck::settle` now takes any wreck or piece found over half a metre under the ground, outside a site's rooms, back onto it. `a_wrecked_drone_comes_to_rest_on_the_ground` fails without this (334.8 m under) and passes with it.
+2. **On the ground it's small.** It's 75 changed pixels against a walker wreck's 212. Now, for its first 90 s, a downed drone sends up a dead gun's column (`fx::COLUMN`, dark, 1.6 m/s, about 8 m tall) instead of the thin smoulder, and leaves a scorch 1.1 m across under it that goes when it stops smouldering. That makes 160 changed pixels.
+
+## A drone's lock reads by day
+
+![a drone's lock at 6, 15 and 30 m, by day and night, before and after](drone_lock_by_day_before_after.jpg)
+
+Robot minds' fairness frames found a drone's lock halo bright at night but faint by day in every weather. I measured it with `reel:lock,9,5,DIST`: the strongest red pixels (red over both other channels by 60+) at the lock's peak, on the training yard, at noon and 23:00, clear, fog and downpour.
+
+| | 6 m | 15 m | 30 m |
+|---|---|---|---|
+| Noon, before | 47–89 | 6–10 | 2–13 |
+| Noon, after (hard disc) | 628–650 | 88–98 | 123–128 |
+| Noon, after (soft glow, shown) | 429–527 | 88–106 | 118–143 |
+| 23:00, before → after | 2560–4533, the same | 242–319, the same | 51–59 → 55–61 |
+
+By day, red added to a bright grey sky went pink. Now, in daylight (`Conditions::light` over 0.25), the halo is laid over what's behind it, blended, in the tell's red (`LOCK_RED`, unlit). Its cover follows the tell's pulse, 0.4 at a trough and 0.9 at a crest (`lock_halo_alpha`), and it's drawn up to 2.5× wider in full daylight (`LOCK_HALO_DAY`). After dark it's the additive glow it was, and the night halo carries it as before, so nothing blooms more than it did. Its glow goes to the eye through `grade::ToTheEye`, kept to its colour by `hue_safe` and held steady against the eyes' adaptation.
+
+A flat disc with a hard edge read as a sticker, not a glow. By day the halo is now a soft disc turned to the eye (`soft_disc`: full cover over the middle half, falling smoothly to nothing at the edge). It's set `LOCK_HALO_BEHIND` (0.45 m) behind the lens, away from the eye, so the drone's body stays drawn over it and its silhouette reads through the glow at 6 m. Its red count at 15 and 30 m is the hard disc's. At 6 m it's 68–81% of it, the share the drone's body now covers.
