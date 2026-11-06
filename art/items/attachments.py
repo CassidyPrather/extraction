@@ -195,9 +195,12 @@ def laser_module():
                   0.003, 2)
     p.prism(body, -0.035, -0.0275, "Black", axis="z", bevel=0.0015, segs=1)
     p.prism(body, 0.033, 0.035, "Black", axis="z", bevel=0.0012, segs=1)
-    # Emitter: a recessed aperture with a red lens (the beam starts at z -0.035).
-    p.tube(0.006, 0.0035, -0.036, -0.031, "Black", segs=16)
-    p.cyl(0.0036, -0.0345, -0.033, "LampRed", segs=12)
+    # Emitter: a wide red lens standing in its bezel (the beam starts at z
+    # -0.035), and the red warning label on top: from 2 m a laser, not a
+    # bare rail section (ITEM_READING, "By torchlight").
+    p.tube(0.0075, 0.0052, -0.0368, -0.031, "Black", segs=20)
+    p.cyl(0.0054, -0.0362, -0.033, "LampRed", segs=16)
+    p.box((0.021, 0.0006, 0.0065), (0.0, 0.0125 + 0.0003, -0.0312), "Red", segs=1)
     # Windage/elevation screws, on the front block.
     p.cyl(0.002, 0.0125, 0.014, "Steel", segs=8, xf=T(0, 0, -0.031) @ UP)
     p.cyl(0.002, 0.0125, 0.014, "Steel", segs=8, xf=T(0, 0, -0.031) @ ALONG_X)
