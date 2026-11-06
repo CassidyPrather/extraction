@@ -1290,16 +1290,26 @@ pub fn handling_sound(
         (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
             ("guns/shell_insert", "gun.shell_insert")
         }
+        // A single-shot takes one loose round at a time, thumbed into the
+        // chamber: a small push and seat, not a clip's rattle.
+        (FireEvent::RoundLoaded, _) if LOOSE_ONLY.contains(&item) => {
+            ("guns/shell_insert", "gun.round_in")
+        }
         (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip"),
         (FireEvent::BoltClosed, Some(BoltAction)) => ("guns/bolt_close", "gun.bolt_close"),
         (FireEvent::BoltClosed, Some(BreakAction)) => ("guns/shotgun_close", "gun.shotgun_close"),
         // A pump run home: the fore-end slapping forward and the bolt
         // locking up behind it.
         (FireEvent::BoltClosed, Some(Pump)) => ("guns/shotgun_close", "gun.pump_fwd"),
-        (FireEvent::BoltClosed, Some(SemiAuto)) if item == "ak74" => {
+        (FireEvent::BoltClosed, Some(SemiAuto)) if matches!(item, "ak74" | "rpk74") => {
             ("guns/charging_handle", "gun.charging")
         }
-        (FireEvent::BoltClosed, Some(SemiAuto)) => ("guns/slide_rack", "gun.slide_rack"),
+        (FireEvent::BoltClosed, Some(SemiAuto)) if PISTOLS.contains(&item) => {
+            ("guns/slide_rack", "gun.slide_rack")
+        }
+        // A rifle's bolt carrier running home (an SKS, an SVD): heavier
+        // than a pistol's slide, and not the AK's handle.
+        (FireEvent::BoltClosed, Some(SemiAuto)) => ("guns/bolt_close", "gun.bolt_close"),
         (FireEvent::Cocked, Some(BoltAction)) => ("guns/bolt_open", "gun.bolt_open"),
         (FireEvent::Cocked, Some(BreakAction)) => ("guns/shotgun_open", "gun.shotgun_open"),
         // A pump racked back: the fore-end's slide and the bolt unlocking.
@@ -1338,20 +1348,53 @@ pub fn handling_sound(
     })
 }
 
-/// How fast [`handling_sound`]'s sample plays for `event`.
+/// Self-loading pistols: their action closes with a slide.
+const PISTOLS: &[&str] = &["pm_pistol"];
+/// Single-shots: every round goes in loose, by hand.
+const LOOSE_ONLY: &[&str] = &["toz8"];
+
+/// How fast [`handling_sound`]'s sample (or a shot's, `Fired`) plays for
+/// `event` on `item`: the moment's speed, in the gun's own voice
+/// ([`voice`]), so no two first-hour guns sound alike for the same moment.
 pub fn handling_speed(
     event: &FireEvent,
     action: Option<extraction_core::firearm::ActionKind>,
+    item: &str,
 ) -> f64 {
     use extraction_core::firearm::ActionKind::Revolver;
-    match (event, action) {
+    let moment = match (event, action) {
+        // A shot keeps its gun's set; only these are pitched: the SKS's
+        // 7.62x39 deeper than the AK's 5.45 it shares a set with, a .22's
+        // crack small.
+        (FireEvent::Fired { .. }, _) => {
+            return match item {
+                "sks" => 0.9,
+                "toz8" => 1.15,
+                _ => 1.0,
+            };
+        }
         // A Nagant's: the cylinder's quick small ratchet (not a dry fire),
         // the gate flicked open higher than it's pushed shut.
         (FireEvent::Cocked, Some(Revolver)) => 1.6,
         (FireEvent::BoltLocked, Some(Revolver)) => 1.25,
         (FireEvent::BoltClosed, Some(Revolver)) => 0.85,
         (FireEvent::DryFire, Some(extraction_core::firearm::ActionKind::Crossbow)) => 0.75,
+        // A .22 pushed into the chamber: small and quick.
+        (FireEvent::RoundLoaded, _) if LOOSE_ONLY.contains(&item) => 1.3,
         _ => handling_speed_of(event),
+    };
+    moment * voice(item)
+}
+
+/// A gun's voice: how its parts sound against the same samples, heavier
+/// lower. The PM, everyone's first gun, is the reference; a Mosin's long
+/// bolt the heaviest; an SKS's carrier between; a TOZ-8's .22 parts small.
+pub fn voice(item: &str) -> f64 {
+    match item {
+        "mosin" => 0.85,
+        "sks" => 0.92,
+        "toz8" => 1.15,
+        _ => 1.0,
     }
 }
 
@@ -1408,7 +1451,8 @@ fn gun_sounds(
                         let cue = "gun.shot_suppressed";
                         commands.spawn((
                             SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
-                            PlaybackSettings::default().with_speed(0.94),
+                            PlaybackSettings::default()
+                                .with_speed(0.94 * handling_speed(&ev.event, action, &ev.item)),
                             Transform::from_translation(ev.at),
                             sample_effects![
                                 mix::spatial(cue),
@@ -1443,7 +1487,7 @@ fn gun_sounds(
             // Small and quick inside the receiver.
             FireEvent::CarrierHome => 1.35,
             FireEvent::OpenBoltSlam => 0.9,
-            _ => handling_speed(&ev.event, action),
+            _ => handling_speed(&ev.event, action, &ev.item),
         };
         play_at_speed(
             &mut commands,
@@ -5531,6 +5575,75 @@ fn pylon_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The guns of a first hour (a PM, an SKS, a TOZ-8, a Mosin) each
+    /// have their own voice: for the same moment, no two play the same
+    /// sample at the same speed. And a round going into a gun sounds like
+    /// what goes in: a clip's rattle, a loose round pushed home, a shell.
+    #[test]
+    fn the_first_hour_guns_each_sound_their_own() {
+        use extraction_core::firearm::{FireMode, Round};
+        let catalog = crate::items::Catalog::load();
+        let action = |id: &str| {
+            let (_, def) = catalog.iter().find(|(_, d)| d.id == id).unwrap();
+            def.firearm.as_ref().unwrap().action
+        };
+        let heard = |e: &FireEvent, id: &str| -> Option<String> {
+            let a = action(id);
+            let set = match e {
+                FireEvent::Fired { .. } => Some(shot_set(id)),
+                _ => handling_sound(e, Some(a), id).map(|(set, _)| set),
+            }?;
+            Some(format!("{set} x{:.2}", handling_speed(e, Some(a), id)))
+        };
+        let guns = ["pm_pistol", "sks", "toz8", "mosin"];
+        let moments = [
+            FireEvent::Fired { barrel: 0 },
+            FireEvent::DryFire,
+            FireEvent::Cocked,
+            FireEvent::BoltClosed,
+            FireEvent::BoltLocked,
+            FireEvent::Chambered,
+            FireEvent::RoundLoaded,
+            FireEvent::MagazineInserted,
+            FireEvent::MagazineRemoved,
+            FireEvent::ModeChanged(FireMode::Safe),
+            FireEvent::Ejected(Round::Live),
+        ];
+        let mut alike = Vec::new();
+        for m in &moments {
+            for (i, a) in guns.iter().enumerate() {
+                for b in &guns[i + 1..] {
+                    if let (Some(ha), Some(hb)) = (heard(m, a), heard(m, b)) {
+                        if ha == hb {
+                            alike.push(format!("{m:?}: {a} and {b} both {ha}"));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(alike.is_empty(), "{}", alike.join("\n"));
+        // What goes in: a clip into a Mosin or an SKS, a loose .22 into a
+        // TOZ-8, a shell into a shotgun.
+        let into = |id: &str| {
+            handling_sound(&FireEvent::RoundLoaded, Some(action(id)), id)
+                .unwrap()
+                .1
+        };
+        assert_eq!(into("mosin"), "gun.stripper_clip");
+        assert_eq!(into("sks"), "gun.stripper_clip");
+        assert_eq!(into("toz8"), "gun.round_in");
+        assert_eq!(into("mp133"), "gun.shell_insert");
+        assert_eq!(into("toz_double"), "gun.shell_insert");
+        // A rifle's bolt home isn't a pistol's slide.
+        let home = |id: &str| {
+            handling_sound(&FireEvent::BoltClosed, Some(action(id)), id)
+                .unwrap()
+                .0
+        };
+        assert_eq!(home("pm_pistol"), "guns/slide_rack");
+        assert_ne!(home("sks"), "guns/slide_rack");
+    }
 
     /// Thunder is quieter and darker the further the strike: 6 dB a
     /// doubling past 250 m, the roll from 1.5 kHz at 600 m to 300 Hz at
