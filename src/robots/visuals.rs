@@ -37,6 +37,7 @@ impl Plugin for RobotVisualsPlugin {
                 super::mender_look::MenderLookPlugin,
                 super::plough_look::PloughLookPlugin,
                 super::hit_gauge::HitGaugePlugin,
+                super::wear::WearPlugin,
             ))
             .add_systems(
                 Update,

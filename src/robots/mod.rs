@@ -75,6 +75,7 @@ pub mod tracks;
 pub mod visuals;
 pub mod walker;
 pub mod weak_points;
+pub mod wear;
 pub mod weathering;
 pub mod wreck;
 
