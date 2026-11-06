@@ -649,6 +649,8 @@ pub(super) struct Newcomer {
     aimer: Option<Entity>,
     /// When it last looked whether it's still out of that walker's line.
     line_checked: f32,
+    /// When a walker last aimed at it.
+    aimed_at: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -935,6 +937,7 @@ pub(super) fn direct_raid(
     }
     if let Some(ev) = tells.aims.read().filter(|ev| on_me(ev.walker)).last() {
         state.aimer = Some(ev.walker);
+        state.aimed_at = now;
         again.push(First::Aimed);
     }
     let mut chirped = false;
@@ -1549,6 +1552,37 @@ pub(super) fn direct_raid(
         super::second_hour::cut_in(
             &mut bot,
             vec![Task::DrawGun, Task::Ready { off_safe: false }],
+        );
+    }
+    // In a walker's line with no way out of it, a round up: it shoots back.
+    // (Told "Break its line", the careful newcomer stood in it with a
+    // loaded gun and took six rounds in eighteen seconds, its trigger never
+    // pulled, six raids of eleven.)
+    let eye = walker_eye(&world, &eyes, state.aimer, here, &on_me);
+    let hidden = eye.is_some_and(|e| line_hidden(&spatial, &world, here, e));
+    let running = fight.as_ref().is_some_and(|f| f.flee_until > now);
+    if !p.reckless
+        && !p.hoards
+        && eye.is_some()
+        && now - state.fought_at > 8.0
+        && no_way_out(
+            &state.shots,
+            now,
+            state.aimed_at,
+            hidden,
+            running,
+            armed_now && one_up(guns(), player),
+        )
+    {
+        state.fought_at = now;
+        state.note(
+            now,
+            Kind::Learned,
+            "in its line, no way out of it: shot back",
+        );
+        super::second_hour::cut_in(
+            &mut bot,
+            take_it_on_with(spare_loaded(&world, &view, player)),
         );
     }
 
@@ -2987,6 +3021,29 @@ const WALKER_NEAR: f32 = 80.0;
 const LINE_HELD: f32 = 12.0;
 /// A crouched head (m above the ground), as a walker's eye looks for it.
 const LOW_HEAD: f32 = 0.9;
+
+/// Whether to shoot back at a walker (`direct_raid`): aimed at lately, out
+/// of cover and not on the way to any, a round up, and shot at twice in a
+/// few seconds (its line couldn't be broken in time).
+fn no_way_out(
+    shots: &[f32],
+    now: f32,
+    aimed_at: f32,
+    hidden: bool,
+    running: bool,
+    ready: bool,
+) -> bool {
+    ready
+        && !hidden
+        && !running
+        && now - aimed_at < AIMED_FOR
+        && shots.iter().filter(|t| now - **t < SHOT_WINDOW).count() >= 2
+}
+
+/// A walker's aim this recent still has it in mind (s).
+const AIMED_FOR: f32 = 20.0;
+/// Two rounds at it inside this, out of cover, and it shoots back (s).
+const SHOT_WINDOW: f32 = 4.0;
 
 /// How long the run to a spot out of a walker's line takes (s): upright and
 /// at a run till there, then low (crept there, it was in the walker's line
@@ -4761,6 +4818,38 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn shot_at_in_the_open_it_shoots_back() {
+        let now = 300.0;
+        let two = [now - 3.0, now - 1.0];
+        // Aimed at, in the open, a round up, two rounds in: back at it.
+        assert!(no_way_out(&two, now, now - 5.0, false, false, true));
+        // Behind something, or on its way there: no.
+        assert!(!no_way_out(&two, now, now - 5.0, true, false, true));
+        assert!(!no_way_out(&two, now, now - 5.0, false, true, true));
+        // Nothing up the spout: no (readying comes first).
+        assert!(!no_way_out(&two, now, now - 5.0, false, false, false));
+        // One round only, or long ago: not yet.
+        assert!(!no_way_out(
+            &[now - 1.0],
+            now,
+            now - 5.0,
+            false,
+            false,
+            true
+        ));
+        assert!(!no_way_out(
+            &[now - 9.0, now - 8.0],
+            now,
+            now - 5.0,
+            false,
+            false,
+            true
+        ));
+        // No walker's aim on it lately: not this rule's.
+        assert!(!no_way_out(&two, now, now - 60.0, false, false, true));
     }
 
     #[test]
