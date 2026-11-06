@@ -746,7 +746,8 @@ fn raid_with(path: &Path, map: &str, seed: u64, contract: Option<String>) -> App
 fn hand_reload(world: &mut World) -> bool {
     use crate::bot::{Bot, Task};
     let me = player(world);
-    if world.resource::<Raid>().phase != Phase::Out {
+    let raid = world.resource::<Raid>();
+    if raid.phase != Phase::Out || raid.clock <= quit_at() {
         return false;
     }
     let walking = world
@@ -814,6 +815,16 @@ fn hand_reload(world: &mut World) -> bool {
     true
 }
 
+/// `QUIT_AT=<s>`: the raid clock the forced moments wait for (default 5
+/// s): late, say 300, the bot has looted first, and the quit carries a
+/// raid's worth of things.
+fn quit_at() -> f32 {
+    std::env::var("QUIT_AT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5.0)
+}
+
 /// The moments a raid may never come to on its own, brought about (as the
 /// Surge's clock is wound): a grab put to the bot (a dressing at its
 /// feet: mid-grab, then in hand), the truck called to the nearest
@@ -827,7 +838,7 @@ fn force_moment(world: &mut World, m: Moment, done: &mut bool) {
         (raid.phase.clone(), raid.clock)
     };
     match m {
-        Moment::MidGrab | Moment::InHand if !*done && phase == Phase::Out && clock > 5.0 => {
+        Moment::MidGrab | Moment::InHand if !*done && phase == Phase::Out && clock > quit_at() => {
             let walking = world.get::<Bot>(me).is_some_and(|b| {
                 b.walk.is_some() || matches!(b.tasks.front(), Some(Task::WalkTo { .. }))
             });
@@ -864,7 +875,9 @@ fn force_moment(world: &mut World, m: Moment, done: &mut bool) {
             }
             *done = true;
         }
-        Moment::Countdown | Moment::InTheBed if !*done && phase == Phase::Out && clock > 5.0 => {
+        Moment::Countdown | Moment::InTheBed
+            if !*done && phase == Phase::Out && clock > quit_at() =>
+        {
             let Some(here) = world
                 .get::<GlobalTransform>(me)
                 .map(|g| g.translation().xz())
@@ -1140,7 +1153,7 @@ fn soak_quit_anywhere_in_every_valley() {
                     if m == Moment::Surge {
                         let mut raid = a.world_mut().resource_mut::<Raid>();
                         if raid.phase == Phase::Out
-                            && raid.clock > 1.0
+                            && raid.clock > quit_at().max(1.0)
                             && raid.clock < crate::raid::SURGE_AFTER - 10.0
                         {
                             raid.clock = crate::raid::SURGE_AFTER - 10.0;
