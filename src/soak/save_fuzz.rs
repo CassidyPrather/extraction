@@ -719,9 +719,9 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
     app
 }
 
-/// A reload by hand put to the bot, out on the raid and walking
-/// (kitted up, not mid-task), its gun drawn first if it's slung: whether
-/// it was.
+/// A reload by hand put to the bot, out on the raid, kitted up and
+/// walking (not mid-task), its gun drawn first if it's slung: whether it
+/// was.
 fn hand_reload(world: &mut World) -> bool {
     use crate::bot::{Bot, Task};
     let me = player(world);
@@ -732,6 +732,18 @@ fn hand_reload(world: &mut World) -> bool {
         .query_filtered::<&Held, With<Gun>>()
         .iter(world)
         .any(|h| h.player == me);
+    // Kitted up: a gun on the body (its first walk is to the kit).
+    let slung = world
+        .query_filtered::<&InSocket, With<Gun>>()
+        .iter(world)
+        .any(|s| {
+            world
+                .get::<SocketOwner>(s.socket)
+                .is_some_and(|o| o.0 == me)
+        });
+    if !in_hand && !slung {
+        return false;
+    }
     let Some(mut bot) = world.get_mut::<Bot>(me) else {
         return false;
     };
