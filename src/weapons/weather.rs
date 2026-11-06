@@ -952,55 +952,87 @@ mod tests {
     /// lying gun was declined (17 of Marrow's 17, 6 November).
     #[test]
     fn a_weathered_gun_shares_its_material_copies() {
-        let mut vr = Vr::new("training_yard");
-        for id in ["rpk74", "crossbow", "pm_pistol"] {
-            let y = ground(&vr, 0.0, 30.0);
-            let gun = vr.spawn(id, Transform::from_xyz(0.0, y + 0.5, 30.0));
-            let mut looked = false;
-            for _ in 0..600 {
-                vr.step(1);
-                if vr.app.world().get::<WeatheredLook>(gun).is_some() {
-                    looked = true;
-                    break;
-                }
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_systems(Update, weather_looks);
+        let catalog = crate::items::Catalog::load();
+        let def = catalog
+            .iter()
+            .find(|(_, d)| d.id == "pm_pistol")
+            .map(|(_, d)| d.clone())
+            .unwrap();
+        let w = app.world_mut();
+        let (blued, steel) = {
+            let mut m = w.resource_mut::<Assets<StandardMaterial>>();
+            (
+                m.add(StandardMaterial::default()),
+                m.add(StandardMaterial {
+                    metallic: 1.0,
+                    ..default()
+                }),
+            )
+        };
+        let gun = w
+            .spawn((
+                Gun {
+                    firearm: extraction_core::firearm::Firearm::new(
+                        def.firearm.clone().unwrap(),
+                        1.0,
+                    ),
+                    layout: super::super::layout::layout("pm_pistol").unwrap(),
+                    magwell: None,
+                    trigger: 0.0,
+                    pulled: false,
+                    catch: false,
+                    dice: extraction_core::noise::Rng::new(1),
+                    mass: None,
+                },
+                Weathering::default(),
+                Transform::default(),
+            ))
+            .id();
+        // A frame and a slide (moved), each with two parts in each material.
+        let mut meshes = Vec::new();
+        for at in [Vec3::ZERO, Vec3::new(0.0, 0.06, 0.0)] {
+            let node = w
+                .spawn((Transform::from_translation(at), ChildOf(gun)))
+                .id();
+            for mat in [&blued, &steel, &blued] {
+                meshes.push(
+                    w.spawn((
+                        MeshMaterial3d(mat.clone()),
+                        Transform::default(),
+                        ChildOf(node),
+                    ))
+                    .id(),
+                );
             }
-            assert!(looked, "{id}: never weathered");
-            vr.step(2);
-            let w = vr.app.world_mut();
-            let mut q = w.query::<(&MeshMaterial3d<StandardMaterial>, &ChildOf)>();
-            let mut meshes = 0;
-            let mut kinds = std::collections::HashSet::new();
-            let parts: Vec<(AssetId<StandardMaterial>, Entity)> =
-                q.iter(w).map(|(m, c)| (m.0.id(), c.parent())).collect();
-            for (mat, parent) in parts {
-                // Under this gun, however deep.
-                let mut at = parent;
-                let mut ours = at == gun;
-                for _ in 0..16 {
-                    if ours {
-                        break;
-                    }
-                    match w.get::<ChildOf>(at) {
-                        Some(p) => {
-                            at = p.parent();
-                            ours = at == gun;
-                        }
-                        None => break,
-                    }
-                }
-                if ours {
-                    meshes += 1;
-                    kinds.insert(mat);
-                }
-            }
-            assert!(meshes > 3, "{id}: only {meshes} meshes");
-            assert!(
-                kinds.len() < meshes,
-                "{id}: {} material copies for {meshes} meshes: nothing for gun_rest to merge",
-                kinds.len()
-            );
-            vr.app.world_mut().despawn(gun);
         }
+        app.update();
+        app.update();
+        let w = app.world();
+        assert!(w.get::<WeatheredLook>(gun).is_some(), "weathered");
+        let copies: std::collections::HashSet<_> = meshes
+            .iter()
+            .map(|e| {
+                w.get::<MeshMaterial3d<StandardMaterial>>(*e)
+                    .unwrap()
+                    .0
+                    .id()
+            })
+            .collect();
+        assert!(
+            !copies.contains(&blued.id()),
+            "its own copies, not the shared ones"
+        );
+        // Two materials in two frames.
+        assert_eq!(
+            copies.len(),
+            4,
+            "{} copies for 6 meshes: one each leaves gun_rest nothing to merge",
+            copies.len()
+        );
     }
     use crate::interact::GripRole;
     use crate::rig::Side;
