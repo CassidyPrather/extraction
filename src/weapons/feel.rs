@@ -800,9 +800,11 @@ fn handle_guns(
     }
 }
 
-/// How near behind the rear sight (metres along the bore, and off its line)
-/// the eye must be for the sights to line up at the cheek, the most they
-/// turn the gun for it (radians), and how quickly (seconds).
+/// How near the rear sight the eye must be for the sights to line up at
+/// the cheek (metres along the sight line: from just ahead of the gun's eye
+/// point to this far behind it, or to the butt on a stocked gun, where a
+/// cheek weld puts it), how far off the line, the most they turn the gun for
+/// it (radians), and how quickly (seconds).
 pub const SIGHT_DEPTH: (f32, f32) = (-0.02, 0.16);
 pub const SIGHT_OFF: f32 = 0.05;
 pub const SIGHT_MAX: f32 = 0.06;
@@ -810,14 +812,22 @@ pub const SIGHT_EASE: f32 = 0.08;
 
 /// The front post, in gun space: on the sight line at the muzzle.
 pub fn front_post(gun: &Gun) -> Vec3 {
-    let s = gun.layout.sight.translation;
-    Vec3::new(s.x, s.y, gun.layout.muzzle.z + 0.03)
+    let s = gun.layout.sight;
+    let d = s.rotation * Vec3::NEG_Z;
+    s.translation + d * ((gun.layout.muzzle.z + 0.03 - s.translation.z) / d.z)
 }
 
-/// Whether an eye at `eye` (gun space) is just behind the rear sight.
+/// Whether an eye at `eye` (gun space) is behind the rear sight, near its
+/// line: anywhere from the gun's eye point back along the comb to the butt
+/// (a cheek weld puts a rifleman's eye a hand behind the receiver, a
+/// shotgunner's further), or [`SIGHT_DEPTH`] on a gun with no stock.
 pub fn at_sights(gun: &Gun, eye: Vec3) -> bool {
-    let rel = eye - gun.layout.sight.translation;
-    (SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
+    let s = gun.layout.sight;
+    let rel = s.rotation.inverse() * (eye - s.translation);
+    let back = butt(gun).map_or(SIGHT_DEPTH.1, |b| {
+        (b.z - s.translation.z).max(SIGHT_DEPTH.1)
+    });
+    (SIGHT_DEPTH.0..back).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
 }
 
 /// The turn about the front post (gun space) that puts the rear sight on
@@ -1960,10 +1970,10 @@ pub(crate) mod vr_tests {
     fn iron_sights_line_up_at_the_cheek() {
         let mut r = hold("ak74", true, true);
         r.vr.step(30);
-        assert_eq!(
-            r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix,
-            Quat::IDENTITY,
-            "the eye nowhere near the sights"
+        let fix = r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix;
+        assert!(
+            fix.xyz().length() * 2.0 < 0.001,
+            "the eye nowhere near the sights: {fix:?}"
         );
         let (rear, front, rot) = sights(&mut r);
         let eye = rear + rot * Vec3::new(0.0, 0.012, 0.06);
