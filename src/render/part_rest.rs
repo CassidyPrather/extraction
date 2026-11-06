@@ -208,9 +208,9 @@ fn wake_parts(
                 };
                 for part in cell.quiet.keys() {
                     if let Ok((_, pg, d, door)) = parts.get(*part) {
-                        let size = d.map(|d| d.size).or(door.map(|l| {
-                            Vec3::new(l.0.width, l.0.height, 0.05)
-                        }));
+                        let size = d
+                            .map(|d| d.size)
+                            .or(door.map(|l| Vec3::new(l.0.width, l.0.height, 0.05)));
                         let reach = NEAR + size.unwrap_or(Vec3::ONE).max_element() * 0.5;
                         if pg.translation().distance_squared(at) < reach * reach {
                             woken.insert(*part);
@@ -718,15 +718,15 @@ mod tests {
                 let (p, leaf) = part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0));
                 // A door, not a breakable part: its leaf, as `spawn_door`.
                 let w = app.world_mut();
-                w.entity_mut(p).remove::<(Drawn, Timber, Pryable)>().insert(DoorLeaf(
-                    crate::world::buildings::DoorDef {
+                w.entity_mut(p)
+                    .remove::<(Drawn, Timber, Pryable)>()
+                    .insert(DoorLeaf(crate::world::buildings::DoorDef {
                         hinge: Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0),
                         width: 0.9,
                         height: 2.0,
                         yaw: 0.0,
                         mat: crate::render::materials::Mat::Planks,
-                    },
-                ));
+                    }));
                 (p, leaf)
             })
             .collect();

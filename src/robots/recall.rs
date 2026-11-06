@@ -610,9 +610,7 @@ fn paint_marks(
         return;
     };
     let now = time.elapsed_secs();
-    let mark = shape
-        .get_or_insert_with(|| meshes.add(mark_mesh()))
-        .clone();
+    let mark = shape.get_or_insert_with(|| meshes.add(mark_mesh())).clone();
     for (e, m) in &new {
         let mat = materials.add(StandardMaterial {
             base_color: paint_colour(m.paint(now)),
@@ -646,8 +644,8 @@ fn paint_marks(
 /// A search mark's paint, flat on the ground: a ring and a cross through it.
 fn mark_mesh() -> Mesh {
     let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
-    let mut out = Mesh::from(Annulus::new(0.42, 0.52))
-        .transformed_by(Transform::from_rotation(flat));
+    let mut out =
+        Mesh::from(Annulus::new(0.42, 0.52)).transformed_by(Transform::from_rotation(flat));
     for a in [0.785f32, -0.785] {
         let bar = Mesh::from(Rectangle::new(1.0, 0.08))
             .transformed_by(Transform::from_rotation(Quat::from_rotation_y(a) * flat));
@@ -752,12 +750,16 @@ mod tests {
         };
         app.update();
         let w = app.world_mut();
-        let drawn = w
-            .get::<Children>(mark)
-            .map_or(0, |c| c.iter().filter(|e| w.get::<Mesh3d>(*e).is_some()).count());
+        let drawn = w.get::<Children>(mark).map_or(0, |c| {
+            c.iter().filter(|e| w.get::<Mesh3d>(*e).is_some()).count()
+        });
         assert_eq!(drawn, 1, "a mark's paint drawn in {drawn} meshes");
         // Ring and cross, flat on the ground, a metre across.
-        let m = w.get::<Mesh3d>(w.get::<Children>(mark).unwrap()[0]).unwrap().0.clone();
+        let m = w
+            .get::<Mesh3d>(w.get::<Children>(mark).unwrap()[0])
+            .unwrap()
+            .0
+            .clone();
         let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) = w
             .resource::<Assets<Mesh>>()
             .get(&m)
