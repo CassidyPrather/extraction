@@ -472,6 +472,7 @@
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (2.9, 168.3), rot: 0.0),  // by the valve house, the way west to the stair
         (prefab: "way_lamp", at: (26.0, 156.3), rot: 0.0),  // on the face stair, by the outer wall
+        (prefab: "way_lamp", at: (72.0, 120.0), rot: 0.0),  // at the foot of the climb to the gauge house, ahead along the shore
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
