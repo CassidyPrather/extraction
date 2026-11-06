@@ -25,7 +25,7 @@
             tags: ["metal"],
         ),
         (
-            id: "ak74", dims: Some((0.07, 0.24, 0.943)),
+            id: "ak74", dims: Some((0.076, 0.186, 0.948)),
             name: "AK-74 rifle",
             description: "Stamped receiver, side-folding charging handle, the selector you push with your trigger finger. Safe, auto, semi — in that order.",
             category: Firearm, size: Bulky, mass: 3.3, bulk: 6.0,
@@ -38,7 +38,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "mosin", dims: Some((0.07, 0.17, 1.23)),
+            id: "mosin", dims: Some((0.095, 0.195, 1.235)),
             name: "Mosin bolt rifle",
             description: "A five-shot turn-bolt older than anyone who has carried it. Lift, pull, push, drop. Hits like a door.",
             category: Firearm, size: Bulky, mass: 4.0, bulk: 7.5,
@@ -51,7 +51,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "sks", dims: Some((0.07, 0.2, 1.05)),
+            id: "sks", dims: Some((0.072, 0.179, 1.025)),
             name: "SKS carbine",
             description: "A ten-shot self-loader with a fixed magazine and a folding bayonet. Lock the bolt back, push a clip down through the top, let it go.",
             category: Firearm, size: Bulky, mass: 3.85, bulk: 6.5,
@@ -64,7 +64,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "nagant", dims: Some((0.04, 0.18, 0.235)),
+            id: "nagant", dims: Some((0.04, 0.141, 0.235)),
             name: "Nagant revolver",
             description: "Seven shots, and the cylinder slides forward to seal the gap: quiet for a revolver. Open the gate, push the empties out one by one, thumb rounds in one by one. Slow, sure.",
             category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,
@@ -77,7 +77,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "ppsh", dims: Some((0.07, 0.25, 0.85)),
+            id: "ppsh", dims: Some((0.069, 0.211, 0.849)),
             name: "PPSh-41",
             description: "Seventy-one rounds in a drum and nine hundred a minute: it fires from an open bolt, so pull the handle back to the sear and let go. Hold it short and close.",
             category: Firearm, size: Bulky, mass: 3.6, bulk: 5.5,
@@ -90,7 +90,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "toz_double", dims: Some((0.075, 0.16, 1.16)),
+            id: "toz_double", dims: Some((0.053, 0.174, 1.157)),
             name: "Double-barrel shotgun",
             description: "Side-by-side twelve gauge. Break it, drop two in, snap it shut. Ejectors throw the empties over your shoulder.",
             category: Firearm, size: Bulky, mass: 3.2, bulk: 6.5,
@@ -103,7 +103,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "mp133", dims: Some((0.045, 0.2, 1.13)),
+            id: "mp133", dims: Some((0.041, 0.177, 1.127)),
             name: "MP-133 pump shotgun",
             description: "A Baikal pump: four shells in the tube under the barrel, thumbed in through the port underneath. Pump it back hard and forward again. A cocked hammer locks it shut: the button by the trigger guard lets it open.",
             category: Firearm, size: Bulky, mass: 3.4, bulk: 6.5,
@@ -550,7 +550,7 @@
         // Gadgets
         // ---------------------------------------------------------------
         (
-            id: "flashlight", dims: Some((0.035, 0.035, 0.18)), name: "Flashlight",
+            id: "flashlight", dims: Some((0.036, 0.036, 0.19)), name: "Flashlight",
             category: Gadget, size: Medium, mass: 0.2, bulk: 0.2,
             tags: ["electronics", "metal"],
         ),
@@ -561,12 +561,12 @@
             tags: ["electronics"],
         ),
         (
-            id: "compass", dims: Some((0.066, 0.03, 0.057)), name: "Compass",
+            id: "compass", dims: Some((0.066, 0.031, 0.057)), name: "Compass",
             category: Gadget, size: Tiny, mass: 0.06, bulk: 0.03,
             tags: ["metal", "glass"],
         ),
         (
-            id: "map_case", dims: Some((0.32, 0.008, 0.344)), name: "Map case",
+            id: "map_case", dims: Some((0.31, 0.012, 0.322)), name: "Map case",
             description: "Your hand-drawn map of the valley, in a scuffed plastic sleeve.",
             category: Gadget, size: Small, mass: 0.1, bulk: 0.2,
         ),
@@ -577,7 +577,7 @@
             tags: ["electronics"],
         ),
         (
-            id: "cassette_player", dims: Some((0.15, 0.09, 0.04)), name: "Cassette player",
+            id: "cassette_player", dims: Some((0.154, 0.097, 0.042)), name: "Cassette player",
             description: "A portable tape recorder with chunky keys on top. Stop twice opens the door. Runs on a power cell.",
             category: Gadget, size: Small, mass: 0.55, bulk: 0.45,
             tags: ["electronics", "plastic"],
@@ -672,7 +672,7 @@
             tags: ["metal", "electronics"],
         ),
         (
-            id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
+            id: "lead_case", dims: Some((0.113, 0.087, 0.122)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,
             tags: ["metal"],
@@ -684,31 +684,31 @@
             tags: ["electronics"],
         ),
         (
-            id: "emp_trap", dims: Some((0.08, 0.079, 0.08)), name: "EMP trap",
+            id: "emp_trap", dims: Some((0.08, 0.055, 0.08)), name: "EMP trap",
             description: "A puck you leave on the ground. The first robot to step near it regrets it.",
             category: Gadget, size: Small, mass: 0.7, bulk: 0.5,
             tags: ["electronics"],
         ),
         (
-            id: "camera_drone", dims: Some((0.2, 0.06, 0.2)), name: "Camera drone",
+            id: "camera_drone", dims: Some((0.185, 0.048, 0.185)), name: "Camera drone",
             description: "A palm-sized quadcopter. Spin it up and let go: it circles where you released it and marks the robots it sees. Its feed shows on your wrist.",
             category: Gadget, size: Medium, mass: 0.5, bulk: 1.2,
             tags: ["electronics", "polymer"],
         ),
         (
-            id: "cloak_generator", dims: Some((0.25, 0.3, 0.25)), name: "Cloak generator",
+            id: "cloak_generator", dims: Some((0.249, 0.299, 0.24)), name: "Cloak generator",
             description: "Deploy it and robots stop seeing what's inside the bubble. Drinks power.",
             category: Gadget, size: Large, mass: 3.5, bulk: 6.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "jammer", dims: Some((0.16, 0.24, 0.2)), name: "Relay jammer",
+            id: "jammer", dims: Some((0.16, 0.239, 0.207)), name: "Relay jammer",
             description: "Bench-made, all whip aerials. Switched on, the machines' relays nearby go deaf. Drinks a cell fast, and they notice the quiet.",
             category: Gadget, size: Medium, mass: 1.2, bulk: 3.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "deployable_cover", dims: Some((0.6, 0.12, 0.5)), name: "Deployable cover",
+            id: "deployable_cover", dims: Some((0.58, 0.087, 0.5)), name: "Deployable cover",
             description: "A folding ballistic panel on legs.",
             category: Gadget, size: Large, mass: 6.0, bulk: 8.0,
             tags: ["metal"],
@@ -833,13 +833,13 @@
             tags: ["metal"],
         ),
         (
-            id: "crowbar", dims: Some((0.03, 0.05, 0.76)), name: "Crowbar",
+            id: "crowbar", dims: Some((0.022, 0.037, 0.747)), name: "Crowbar",
             description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
             category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
             tags: ["steel"],
         ),
         (
-            id: "bolt_cutters", dims: Some((0.16, 0.04, 0.62)), name: "Bolt cutters",
+            id: "bolt_cutters", dims: Some((0.163, 0.033, 0.561)), name: "Bolt cutters",
             description: "A handle in each hand, jaws on the shackle or the wire, squeeze. Padlocks, chain-link.",
             category: Tool, size: Medium, mass: 2.1, bulk: 1.4,
             tags: ["steel"],
@@ -887,7 +887,7 @@
             tags: ["steel", "gun_part"],
         ),
         (
-            id: "hacksaw", dims: Some((0.03, 0.12, 0.45)), name: "Hacksaw",
+            id: "hacksaw", dims: Some((0.026, 0.111, 0.425)), name: "Hacksaw",
             description: "A frame saw for steel. With a gun clamped in the vice, draw it back and forth across the barrel where you want it to end: a minute's work, and it doesn't grow back.",
             category: Tool, size: Medium, mass: 0.45, bulk: 0.5,
             tags: ["steel"],

@@ -1658,6 +1658,58 @@ Found on the way, by the gauge tier run whole:
   it as one that never rests. It's marked now (`gun_rest::RestDeclined`),
   and all 17 rest.
 
+### A fight's puffs, a draw a batch (6 November)
+
+A firefight's 64 puffs were 64 draws an eye. At Marrow's south gate that
+took the worst view over the line: 2443 draws against 2400. Now
+`render::puff` draws every shown puff in one mesh a batch. Puffs batch
+when their materials share everything but colour. The colour rides in
+vertex colours, and the quads are sorted far to near along the view. A
+fight's puffs are two draws an eye, not 64
+(`a_fights_puffs_are_a_draw_a_batch_each_drawn_as_it_was`).
+`EXTRACTION_PUFF_BATCH=0` turns it off to compare. `EXTRACTION_PUFF_LOG=1`
+prints the shown puffs each frame, summed, so a batched run can be
+checked against an unbatched one.
+
+**Marrow, three runs each (draws, both eyes, against 2400):**
+
+| view | before | after |
+| - | - | - |
+| gate insertion 2 | 2443 | 2131, 2182, 2144 |
+| gate fuel exfil 2 | 2383 | 2311, 2351, 2297 |
+
+The fuel exfil saves less than the fight's puffs should, because of the
+guns. The merge from main on 6 November left 8 of the 13 guns there
+declined by `gun_rest` (146 meshes), where before 12 rested and 1 was
+declined. That is next.
+
+**The look didn't change** (`shots/performance/puff_batch_before_after.jpg`).
+Each beat Weapon feel signs off was shot unbatched and batched, on the
+same frame with the same seed: muzzle smoke thinning as it spreads, the
+soft impact burst, the near-puff angle cap at 1.1 m, and a broken
+walker's smoke column. In the dust the difference is run-to-run noise:
+mean 0.005 and max 1 out of 255, the same as two batched runs. The
+column differs no more than two unbatched runs do. The rest is grass
+sway and sparks.
+
+Found on the way:
+- **A batch was drawn where its puffs had been a frame before.** The
+  batch entity was placed round its puffs' middle by a command, which
+  only took effect after transform propagation. The GPU drew the frame's
+  quads round last frame's middle. A round's dust shifted a pixel or two,
+  and in a PM's smoke the far haze was drawn metres away, so it vanished.
+  Batches are now built in world space with the entity at the origin. The
+  test reads each batch through its `GlobalTransform` and again after the
+  puffs move.
+- **A new puff went undrawn on its first frame.** Its own quad was taken
+  away before the batch had it. The batch now takes every shown puff.
+- **Galleries count their frames from when the world's in (`dev`,
+  `WorldIn`).** The impact and plate galleries fired at frame 60 counted
+  from launch, while a screenshot waits for the world. On a slow load the
+  rounds landed minutes before the shot and their dust was gone. With
+  a gallery staged, `--frames` and those clocks start once the world is
+  in.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:

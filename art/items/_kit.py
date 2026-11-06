@@ -84,24 +84,11 @@ def centred(parts):
 
 
 # Models built off their box's middle, kept there because code places
-# things in their space (a hand, a hinge, a cell): (id, what). Each is
-# centred with that code moved by the same step. Held to the models by
-# `models::tests::every_item_box_is_its_model`, which keeps the same list.
-KEEPS_ORIGIN = {
-    "flashlight": "gadgets: its cell's mount",
-    "cloak_generator": "gadgets: its cell's mount",
-    "jammer": "gadgets: its cell's mount",
-    "lead_case": "gadgets: its cradle and its lid",
-    "compass": "gadgets::visuals: its face and needle",
-    "map_case": "gadgets::visuals: the map in it",
-    "camera_drone": "gadgets::visuals: its rotors",
-    "emp_trap": "gadgets: its spikes and charge",
-    "deployable_cover": "gadgets: the cover it unfolds",
-    "cassette_player": "radio::deck: its well, door and buttons",
-    "crowbar": "interact::tools::crowbar: grip and claw",
-    "bolt_cutters": "interact::tools::cutters: grips and jaws",
-    "hacksaw": "weapons::gunsmith: its handle and blade",
-}
+# things in their space (a hand, a hinge, a cell): (id, what). Empty: when
+# one is needed, centre the model and move that code by the same step
+# instead. Held to the models by `models::tests::every_item_box_is_its_model`,
+# which keeps the same list.
+KEEPS_ORIGIN = {}
 
 # Drawn from where they seat, not their middle: magazines (the gun's well)
 # and attachments (their mount).
