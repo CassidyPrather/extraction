@@ -1516,21 +1516,6 @@ pub(super) fn direct_raid(
             vec![Task::DrawGun, Task::Ready { off_safe: false }],
         );
     }
-    // Shot at from close by, armed: it shoots back, whoever it is (stood at
-    // a door taking a walker's rounds at two metres, the careful newcomer
-    // went down without a shot, raid after raid).
-    if fired_on
-        && armed_now
-        && !p.hoards
-        && now - state.fought_at > 8.0
-        && world
-            .nearest_robot(here)
-            .is_some_and(|r| r.distance(here) < 10.0)
-    {
-        state.fought_at = now;
-        state.note(now, Kind::Learned, "shot at from close by: shot back");
-        super::second_hour::cut_in(&mut bot, take_it_on());
-    }
 
     // Hurt: warned, or not.
     if let Ok(h) = view.health.single() {
