@@ -2524,10 +2524,30 @@ pub(super) fn direct_raid(
                         Task::ToggleBackpack,
                         Task::Wait(0.5),
                     ]),
-                    (None, None) => {
-                        state.note(now, Kind::Confused, "no radio to call the truck with");
-                        state.leg = Leg::Done;
-                    }
+                    // ...or at its feet: a raid picked up again sets down
+                    // what was in the hands (`persist::apply_restore`).
+                    // (Looked for only on the body, the careers wedged: "no
+                    // radio", done, every run after it the same.)
+                    (None, None) => match radio_at_feet(&world, here) {
+                        Some((e, at)) => {
+                            state.note(now, Kind::Learned, "the radio at its feet, picked up");
+                            tasks.extend([
+                                Task::Stow(Side::Left),
+                                Task::WalkTo {
+                                    to: at,
+                                    within: 0.5,
+                                },
+                                Task::Grab {
+                                    item: e,
+                                    side: Side::Left,
+                                },
+                            ]);
+                        }
+                        None => {
+                            state.note(now, Kind::Confused, "no radio to call the truck with");
+                            state.leg = Leg::Done;
+                        }
+                    },
                 }
             }
         }
@@ -3646,6 +3666,25 @@ fn take_it_on() -> Vec<Task> {
         Task::Engage { shots: 12 },
     ]
 }
+
+/// A radio lying loose within reach of `here` (m), and where.
+fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
+    world
+        .items
+        .iter()
+        .filter(|(_, it, _, held, sock, bag)| {
+            held.is_none()
+                && sock.is_none()
+                && bag.is_none()
+                && world.catalog.get(it.kind()).id == "radio"
+        })
+        .map(|(e, _, gt, ..)| (e, gt.translation().xz()))
+        .filter(|(_, at)| at.distance(here) < FEET_REACH)
+        .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+}
+
+/// How far off a thing set down at a resume still counts as at its feet (m).
+const FEET_REACH: f32 = 3.0;
 
 /// Something on `player` to load a gun from, besides what's in it: a
 /// loaded box magazine, a stripper clip with rounds on it, or loose rounds
