@@ -37,7 +37,7 @@ pub const SETTLE: u32 = 108;
 pub const STAND: u32 = 300;
 /// The least a round's effect spans at the eye (degrees), out to 30 m:
 /// what reads as a hit in a fight at 15 to 25 m.
-pub const MIN_SPAN: f32 = 0.4;
+pub const MIN_SPAN: f32 = super::fx::MIN_SPAN_DEG;
 /// The same as an area at the eye (pixels, [`PX_PER_DEG`]): a hit's
 /// pieces cover at least a square [`MIN_SPAN`] on a side. (Its span alone
 /// can't tell: sparks fly half a metre in 100 ms, too thin to see.)
@@ -347,9 +347,11 @@ fn aim(world: &mut World, part: Entity, toward: Vec3) -> (Vec3, Vec3) {
     hit.unwrap_or((centre, back))
 }
 
+/// Where the player's view is (not a capture camera: the impostors' rigs
+/// stand far under the map).
 fn camera_at(world: &mut World) -> Vec3 {
     world
-        .query_filtered::<&GlobalTransform, With<Camera3d>>()
+        .query_filtered::<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>()
         .iter(world)
         .next()
         .map(|g| g.translation())
@@ -805,7 +807,8 @@ mod tests {
                 areas.sort_by(f32::total_cmp);
                 let med = |v: &[f32]| v[v.len() / 2];
                 println!(
-                    "{dist:>2} m {kind:<10} span min {:.2} median {:.2} deg; area min {:.0} median {:.0} px ({} parts)",
+                    "{dist:>2} m {kind:<10} (eye {:.0} m) span min {:.2} median {:.2} deg; area min {:.0} median {:.0} px ({} parts)",
+                    rows[0].dist,
                     spans[0],
                     med(&spans),
                     areas[0],
