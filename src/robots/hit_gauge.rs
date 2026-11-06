@@ -198,12 +198,23 @@ fn subtree(world: &World, root: Entity) -> Vec<Entity> {
 
 /// The machine's drawn pieces: each one's mesh and material, marks aside.
 fn look_of(
-    world: &World,
+    world: &mut World,
     robot: Entity,
     marks: &[AssetId<StandardMaterial>],
 ) -> HashMap<Entity, (AssetId<Mesh>, AssetId<StandardMaterial>)> {
     let mut out = HashMap::new();
-    for e in subtree(world, robot) {
+    // Its own, and what's drawn for it or its parts away from it.
+    let mut roots = vec![robot];
+    let mut q = world.query::<(Entity, &super::wear::DrawnFor)>();
+    let drawn: Vec<(Entity, Entity)> = q.iter(world).map(|(e, d)| (e, d.0)).collect();
+    for (e, d) in drawn {
+        let of = d == robot || world.get::<RobotPart>(d).is_some_and(|p| p.robot == robot);
+        if of {
+            roots.push(e);
+        }
+    }
+    let all: Vec<Entity> = roots.into_iter().flat_map(|r| subtree(world, r)).collect();
+    for e in all {
         let (Some(mesh), Some(mat)) = (
             world.get::<Mesh3d>(e),
             world.get::<MeshMaterial3d<StandardMaterial>>(e),
@@ -289,7 +300,12 @@ fn shoot(world: &mut World, part: Entity, point: Vec3, normal: Vec3, damage: f32
 
 /// New effect pieces and sounds near the point since the round went in.
 fn since(world: &mut World, g: &HitGauge, robot: Entity) -> (usize, Vec<&'static str>) {
-    let mine: HashSet<Entity> = subtree(world, robot).into_iter().collect();
+    let mut mine: HashSet<Entity> = subtree(world, robot).into_iter().collect();
+    let mut q = world.query::<(Entity, &super::wear::DrawnFor)>();
+    let roots: Vec<Entity> = q.iter(world).map(|(e, _)| e).collect();
+    for r in roots {
+        mine.extend(subtree(world, r));
+    }
     let p = g.point;
     let mut fx = 0;
     let mut q =

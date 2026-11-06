@@ -485,6 +485,7 @@ fn dress_parts(
                                 lower,
                                 model_length: Some(length),
                             },
+                            super::wear::DrawnFor(e),
                             Transform::default(),
                             Visibility::default(),
                         ))
@@ -739,6 +740,7 @@ fn dress_blockout(
                         lower,
                         model_length: None,
                     },
+                    super::wear::DrawnFor(e),
                     Mesh3d(meshes.add(Capsule3d::new(if lower { 0.045 } else { 0.06 }, 1.0))),
                     MeshMaterial3d(if lower {
                         m.dark.clone()

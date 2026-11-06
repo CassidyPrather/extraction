@@ -313,6 +313,7 @@ fn dress_heavies(
                 .spawn((
                     Name::new(format!("Heavy {name}")),
                     Limb { robot, kind },
+                    super::wear::DrawnFor(robot),
                     Transform::default(),
                     Visibility::default(),
                 ))

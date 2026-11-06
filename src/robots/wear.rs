@@ -36,6 +36,14 @@ impl Plugin for WearPlugin {
     }
 }
 
+/// A piece drawn for a part (or a machine) away from it: a leg's
+/// segments posed on their own, a heavy's limbs. On a part, the piece is
+/// that part's; on a machine, it's whichever part's hit volume it's
+/// nearest, as are the machine's own pieces not drawn under a part (a
+/// heavy's hull, a sentry's housing).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DrawnFor(pub Entity);
+
 /// How worn a part looks, and what it looked like before.
 #[derive(Component, Default)]
 pub struct Worn {
@@ -151,6 +159,11 @@ fn wear(
     is_part: Query<(), With<RobotPart>>,
     mats: Query<&MeshMaterial3d<StandardMaterial>, With<Mesh3d>>,
     mut transforms: Query<&mut Transform>,
+    (loose, volumes, places): (
+        Query<(Entity, &DrawnFor)>,
+        Query<(Entity, &RobotPart, &avian3d::prelude::ColliderAabb)>,
+        Query<(&GlobalTransform, Option<&bevy::camera::primitives::Aabb>)>,
+    ),
     fx: Option<Res<crate::weapons::impacts::FxAssets>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -189,7 +202,40 @@ fn wear(
         if band == 0 {
             continue;
         }
-        let pieces = drawn(e, &children, &is_part, &mats, &marks, &[]);
+        let mut pieces = drawn(e, &children, &is_part, &mats, &marks, &[]);
+        // Drawn for it elsewhere, and the machine's loose pieces nearest it.
+        let robot = part.robot;
+        let mut near_roots = vec![robot];
+        for (root, d) in &loose {
+            if d.0 == e {
+                pieces.extend(drawn(root, &children, &is_part, &mats, &marks, &[]));
+            } else if d.0 == robot {
+                near_roots.push(root);
+            }
+        }
+        let mine: Vec<_> = volumes
+            .iter()
+            .filter(|(_, p, _)| p.robot == robot)
+            .collect();
+        let reach =
+            |at: Vec3, a: &avian3d::prelude::ColliderAabb| at.clamp(a.min, a.max).distance(at);
+        for root in near_roots {
+            for piece in drawn(root, &children, &is_part, &mats, &marks, &[]) {
+                let Ok((gt, aabb)) = places.get(piece) else {
+                    continue;
+                };
+                let at = gt.transform_point(aabb.map_or(Vec3::ZERO, |a| Vec3::from(a.center)));
+                let nearest = mine
+                    .iter()
+                    .min_by(|a, b| reach(at, a.2).total_cmp(&reach(at, b.2)))
+                    .map(|(p, ..)| *p);
+                if nearest == Some(e) {
+                    pieces.push(piece);
+                }
+            }
+        }
+        pieces.sort();
+        pieces.dedup();
         for piece in pieces {
             let Ok(m) = mats.get(piece) else {
                 continue;
