@@ -1176,6 +1176,11 @@ fn soak_quit_anywhere_in_every_valley() {
                 println!("quit: {when}");
                 let (mut b, f) = quit_and_reload(&mut a, &path, map, seed, &when);
                 covered.insert(m);
+                // Said as found, not only at the end: a run cut short (a
+                // container restart) keeps what it found.
+                for x in &f {
+                    println!("FINDING {x}");
+                }
                 table.insert((map.clone(), seed, m), format!("{} found", f.len()));
                 findings.extend(f);
                 // And the game goes on from there, every item in one place.
@@ -1351,6 +1356,11 @@ fn soak_quit_on_every_contract_step() {
                 let when = format!("{what} at frame {frame}");
                 println!("quit: {when}");
                 let (mut b, f) = quit_and_reload(&mut a, &path, map, 1, &when);
+                // Said as found, not only at the end: a run cut short (a
+                // container restart) keeps what it found.
+                for x in &f {
+                    println!("FINDING {x}");
+                }
                 findings.extend(f);
                 covered.push(what);
                 frames(&mut b, 300, &format!("{when}, played on"));
