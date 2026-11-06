@@ -409,6 +409,9 @@ fn dress_heavies(
         }
         if merge {
             let mut merged = Vec::new();
+            // (The bolt is Steel and Warn only, so `hang`'s Weather and
+            // Burns, for Shell, Dark or no material, never reach it: given
+            // one of those, these would need the same match.)
             for (lod, m, mesh) in bolts_merged.iter().flatten() {
                 let mut l = None;
                 let material = mat(m.as_deref(), &mut l);
@@ -797,7 +800,24 @@ mod tests {
                 .looking_at(at + Vec3::Y * 1.5, Vec3::Y);
             // (14 m: all of it in view, every bolt; inside its first LOD.)
         }
-        for _ in 0..60 {
+        // Until it's dressed and its bolts merged: the model loads on the
+        // asset pool, which under a full test run (other valleys loading
+        // beside) takes any number of frames. Then a few more for the
+        // eye's visibility to catch up.
+        let mut frames = 0;
+        while app.world().get::<BoltsMerged>(robot).is_none() {
+            assert!(
+                frames < 6000,
+                "its bolts never merged in {frames} frames (dressed: {})",
+                app.world().get::<Undressed>(robot).is_none()
+            );
+            if frames > 60 {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            app.update();
+            frames += 1;
+        }
+        for _ in 0..10 {
             app.update();
         }
         // Meshes of the heavy's the eye draws (its own and its limbs').

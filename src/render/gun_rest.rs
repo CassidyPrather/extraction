@@ -223,6 +223,40 @@ fn wake_handled(
     }
 }
 
+/// What a gun is doing, for the gauges: resting, declined (not worth
+/// it), handled, hidden, being merged, or neither yet (settling).
+#[cfg(test)]
+pub(crate) fn state_of(w: &mut World, gun: Entity) -> &'static str {
+    if w.get::<AtRest>(gun).is_some() {
+        return "resting";
+    }
+    if w.get::<RestDeclined>(gun).is_some() {
+        return "declined";
+    }
+    if w.get::<Building>(gun).is_some() {
+        return "building";
+    }
+    if w.get::<InheritedVisibility>(gun).is_some_and(|v| !v.get()) {
+        return "hidden";
+    }
+    if w.get::<crate::interact::Held>(gun).is_some()
+        || w.get::<crate::interact::Supported>(gun).is_some()
+    {
+        return "in a hand";
+    }
+    let mut at = gun;
+    for _ in 0..24 {
+        if w.get::<crate::player::Player>(at).is_some() {
+            return "on the player";
+        }
+        match w.get::<ChildOf>(at) {
+            Some(p) => at = p.parent(),
+            None => break,
+        }
+    }
+    "settling"
+}
+
 /// Whether a mesh can be merged (`world_props::for_merge` takes it):
 /// without building the merge, which generates tangents and cost a frame
 /// its 31 ms a gun when asked every time. A mesh whose data went to the

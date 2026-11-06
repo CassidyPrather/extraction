@@ -1349,10 +1349,13 @@ fn observatory(b: &mut Builder) {
     // The instrument room: the radio desk under the east window (a
     // terminal's place), the barometers' shelf, a double bunk, the stove,
     // a first-aid box.
+    // (Loot on the desk, the upstairs table and the store's crate: the
+    // valley's longest walk had three spots at the end of it, four or five
+    // things a visit; seasoned-player pass, 5 Nov.)
     b.table(
         Vec3::new(ix - 0.55, f, 0.5),
         std::f32::consts::FRAC_PI_2,
-        None,
+        Some("gadgets"),
     );
     b.chair(Vec3::new(ix - 1.35, f, 0.5), -std::f32::consts::FRAC_PI_2);
     let from = b.geo.pieces.len();
@@ -1418,7 +1421,7 @@ fn observatory(b: &mut Builder) {
     b.stove(Vec3::new(-ix + 0.5, f, -1.6), std::f32::consts::FRAC_PI_2);
     b.crate_box(Vec3::new(-ix + 0.6, f, -0.3), 0.6, Some("medical"));
     // Upstairs: the store, the observer's chest.
-    b.table(Vec3::new(3.0, OBS_UPPER, -1.9), 0.0, None);
+    b.table(Vec3::new(3.0, OBS_UPPER, -1.9), 0.0, Some("curio"));
     b.furnish(
         "tool_chest",
         Vec3::new(0.9, 0.5, 0.5),
@@ -1426,7 +1429,11 @@ fn observatory(b: &mut Builder) {
         0.0,
         Some("driver_cache"),
     );
-    b.crate_box(Vec3::new(-ix + 0.6, OBS_UPPER, -1.8), 0.7, None);
+    b.crate_box(
+        Vec3::new(-ix + 0.6, OBS_UPPER, -1.8),
+        0.7,
+        Some("food_common"),
+    );
     b.bed(Vec3::new(-ix + 0.6, OBS_UPPER, 1.6), 0.0);
     // On the roof: the dome over the east end, white, on its drum.
     let (dx, dz, dr) = (2.6, 0.9, 2.0);
