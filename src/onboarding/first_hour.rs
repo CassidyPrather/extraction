@@ -1803,11 +1803,6 @@ pub(super) fn direct_raid(
             }
             state.leg = Leg::Kit;
         }
-        // Woken in the truck after a fall, the driver puts his spares in
-        // the crate a moment after: looked at first thing, the crate was
-        // empty, and the newcomer went out with no gun, radio or map, the
-        // driver saying "In the crate." as it went.
-        Leg::Kit if now < KIT_SETTLE => tasks.push(Task::Wait(1.0)),
         Leg::Kit => {
             let mut in_crate: Vec<(Entity, String)> = view
                 .stash
@@ -2979,9 +2974,6 @@ fn walker_eye(
     })
 }
 
-/// The crate looked in no sooner than this into a session (s): the
-/// driver's spares go in just after waking.
-const KIT_SETTLE: f32 = 3.0;
 /// A walker this near with nobody else in mind is the one aiming (m).
 const WALKER_NEAR: f32 = 80.0;
 /// Low and still out of a walker's line this long (s): its aim lasts
