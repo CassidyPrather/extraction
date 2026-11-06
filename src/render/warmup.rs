@@ -503,11 +503,20 @@ fn firsts(world: &mut World) {
             world.resource_mut::<crate::raid::Raid>().cycle += 1;
             "the next cycle: night, a storm, snow".into()
         }
-        _ => {
-            if step == 8 + kinds.len() as u32 {
-                info!("first use: done at frame {frame}");
+        s => {
+            // Then the heavy workstream's machines (`robots::firsts`).
+            let view = crate::robots::firsts::View {
+                at: cam.translation,
+                flat,
+            };
+            match crate::robots::firsts::step(world, s - (8 + kinds.len() as u32), view) {
+                Some(name) => name,
+                None => {
+                    info!("first use: done at frame {frame}");
+                    world.resource_mut::<Firsts>().from = u32::MAX;
+                    return;
+                }
             }
-            return;
         }
     };
     info!("first use: {name} at frame {frame}");

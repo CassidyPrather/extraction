@@ -69,19 +69,33 @@ def run(sets, out):
     return flags + f, lines + more
 
 
-# A robot struck (audio_machines::struck_layers): each kind's layers.
+# A robot struck (audio_machines::struck_layers): each kind's layers, by
+# the part struck where it differs.
 STRIKES = {
     "shrugged off": ["hit.shrug"],
+    "armour shrugged": ["hit.ring", "hit.shrug"],
     "a wound": ["hit.wound", "hit.wound_thud"],
-    "telling": ["hit.telling", "hit.telling_fizz"],
+    "a lens wounded": ["hit.wound_glass", "hit.wound_thud"],
+    "a gas cell wounded": ["hit.wound_cloth", "hit.wound_thud"],
+    "a joint wounded": ["hit.wound", "hit.wound_joint"],
+    "telling": ["hit.telling", "hit.telling_fizz", "hit.wound_thud"],
+    "a lens telling": ["hit.telling_glass", "hit.telling_fizz"],
+    "a gas cell telling": ["hit.wound_cloth", "hit.telling_fizz"],
 }
 STRIKE_AT = 30.0   # m: told apart this far off without looking...
 STRIKE_APART = 10.0  # ...by at least this much louder (LU), telling over shrug
+# Over your own report: a strike this far off, landing the round's flight
+# after your shot (it plays the frame the round lands; ROUND m/s), must
+# clear the shot's masking by CLEAR in its best band. All but a dead part's
+# or a glance's tink (`shrugged off`), which may sit under it.
+STRIKE_OVER = 20.0
+ROUND = 800.0
 
 
 def strikes(sets, mix):
     """How loud each kind of strike on a robot is heard at STRIKE_AT m
-    (its layers together), and whether telling stands clear of a shrug."""
+    (its layers together); whether telling stands clear of a shrug, and
+    armour's ring under a wound; and whether each clears your own shot."""
     import math
     loud = {}
     for kind, cues in STRIKES.items():
@@ -89,13 +103,27 @@ def strikes(sets, mix):
         for n in cues:
             c = next((c for c in mix if c["name"] == n), None)
             if c is None or c["set"] not in sets:
-                return 0, [f"  Strikes on a robot: {n} not in the mix or the bank"]
+                return 1, [f"  Strikes on a robot: {n} not in the mix or the bank"]
             p += 10 ** (am.heard(dict(c, dist=STRIKE_AT), sets) / 10)
         loud[kind] = 10 * math.log10(p)
     apart = loud["telling"] - loud["shrugged off"]
-    bad = apart < STRIKE_APART or not (loud["shrugged off"] < loud["a wound"] < loud["telling"])
-    line = (f"  A robot struck, heard at {STRIKE_AT:.0f} m: "
-            + ", ".join(f"{k} {v:.1f}" for k, v in loud.items())
-            + f" LUFS; telling over a shrug by {apart:+.1f} LU (wants {STRIKE_APART:+.0f})"
-            + (" (!)" if bad else ""))
-    return int(bad), [line]
+    bad = (apart < STRIKE_APART
+           or not (loud["shrugged off"] < loud["a wound"] < loud["telling"])
+           or not loud["armour shrugged"] < loud["a wound"])
+    lines = [f"  A robot struck, heard at {STRIKE_AT:.0f} m (LUFS), and over your own shot "
+             f"at {STRIKE_OVER:.0f} m (wants {CLEAR:+.0f} dB but a bare tink); telling over a "
+             f"shrug by {apart:+.1f} LU (wants {STRIKE_APART:+.0f})" + (" (!)" if bad else "")]
+    flags = int(bad)
+    lag = STRIKE_OVER / ROUND
+    for kind, cues in STRIKES.items():
+        scene = ([("wind", "loop", None, 0.0, None), ("gun.shot", 0.5, None, 0.0, None)]
+                 + [(c, 0.5 + lag, STRIKE_OVER, 0.0, None) for c in cues])
+        total, parts = am.render(scene, sets, mix, seconds=1.5)
+        best = max((am.margin(parts[f"{2 + i}:{c}"], total - parts[f"{2 + i}:{c}"],
+                              0.5 + lag, LISTEN) for i, c in enumerate(cues)),
+                   key=lambda m: m[0])
+        masked = kind != "shrugged off" and best[0] < CLEAR
+        flags += masked
+        lines.append(f"    {kind:20s} {loud[kind]:6.1f}   {best[0]:+5.1f} dB at {best[1]:>5} Hz"
+                     + ("  masked by your shot" if masked else ""))
+    return flags, lines

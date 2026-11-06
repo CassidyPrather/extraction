@@ -29,6 +29,7 @@ pub mod seated;
 pub mod sightline;
 pub mod stowed;
 pub mod sweep;
+pub mod torchlit;
 pub mod trailer;
 
 pub struct CapturePlugin;
@@ -42,6 +43,7 @@ impl Plugin for CapturePlugin {
         app.add_plugins((
             cinematic::CinematicPlugin,
             sweep::SweepPlugin,
+            torchlit::TorchlitPlugin,
             trailer::TrailerPlugin,
         ))
         .add_systems(PostUpdate, (keep_alive, hide_hands))
@@ -161,6 +163,11 @@ pub struct CaptureOptions {
     /// `--check-buildings 1`: fail loudly when a building in view draws
     /// nothing (`landmarks`).
     pub check_buildings: bool,
+    /// `--torchlit FLOORS`: every item by torchlight on those floors
+    /// (`all`, or `wood,concrete,ruin`).
+    pub torchlit: Option<String>,
+    /// `--torchlit-only a,b`: only the items whose ids contain one of these.
+    pub torchlit_only: Option<String>,
     /// `--cine-dump IN.cine,OUT.stills`: write each shot's first pose as a
     /// still and exit (`cinematic::dump`).
     pub dump: Option<(PathBuf, PathBuf)>,
@@ -183,6 +190,8 @@ impl CaptureOptions {
                 | "--hide-hands"
                 | "--cine-dump"
                 | "--check-buildings"
+                | "--torchlit"
+                | "--torchlit-only"
         )
     }
 
@@ -199,6 +208,8 @@ impl CaptureOptions {
             "--trailer" => self.trailer = Some(val),
             "--hide-hands" => self.hide_hands = val != "0",
             "--check-buildings" => self.check_buildings = val != "0",
+            "--torchlit" => self.torchlit = Some(val),
+            "--torchlit-only" => self.torchlit_only = Some(val),
             "--cine-dump" => {
                 self.dump = val
                     .split_once(',')
@@ -210,12 +221,15 @@ impl CaptureOptions {
 
     /// A capture run: rendered, flat, driven by tooling.
     pub fn active(&self) -> bool {
-        self.cinematic.is_some() || self.sweep.is_some() || self.trailer.is_some()
+        self.cinematic.is_some()
+            || self.sweep.is_some()
+            || self.trailer.is_some()
+            || self.torchlit.is_some()
     }
 
     /// A capture of a still valley (no robots, nobody playing).
     pub fn still(&self) -> bool {
-        self.cinematic.is_some() || self.sweep.is_some()
+        self.cinematic.is_some() || self.sweep.is_some() || self.torchlit.is_some()
     }
 
     pub fn out_dir(&self) -> PathBuf {

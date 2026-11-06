@@ -135,6 +135,54 @@ The reels are `<gun>_cycle_before.mp4`, `<gun>_cycle_after.mp4` and
 and `mosin`. `kick_pm_izh43_mosin_side.mp4` shows the three kicks from
 the side (`--gallery cycle:kick_<gun>,side`).
 
+## The sight picture, gun by gun
+
+`weapons::sight_picture` checks what the eye sees down iron sights on each
+gun, measured from the gun's model.
+
+**What was wrong:** each gun's sight line ran along the floor of its rear
+notch, level with the bore. Iron sights are read with the top of the post
+level with the notch's shoulders, which sit 1.5 to 2 mm higher. Holding the
+sights the way a shooter does therefore sent the round about 4 mrad high,
+which is 44 cm at 100 m from an AK. On the IZh-43, the breech hid half the
+bead from a real cheek weld.
+
+**The fix** applies to every gun:
+- `layout::irons` puts each gun's eye point on the line over the shoulders
+  to the post's top, looking down that line. On the two bead guns, the eye
+  sits just over the breech, so the whole bead shows on the rib.
+- `zero::iron_up` takes the line's slope, so the round still crosses the
+  line at the gun's zero.
+- `feel::at_sights` now reaches back to the butt. A cheek weld puts the eye
+  a hand behind the receiver, and 30 cm behind it on a shotgun; there, the
+  sights used not to line up at all.
+
+**The gauge** has three tests:
+- `every_guns_sight_picture_is_read_as_built`: the notch's shoulders and
+  the post's top are within 0.3 mm of the line, and the whole bead shows
+  from the weld.
+- `every_guns_post_reads_at_the_weld`: every post is at least 2 headset
+  pixels wide (at 20 px a degree). On a rifle zeroed at 100 m, the post is
+  no wider than a man at 100 m (25 to 49 cm, against a 50 cm limit).
+- `every_stocked_gun_lines_up_at_the_cheek_weld`: with the eye 8 mm high
+  and 4 mm to the side, every stocked gun comes to its sights within 0.3 mm.
+
+`zero::every_gun_hits_where_its_iron_sights_point` still holds every gun's
+round to its sights at its zero.
+
+None of these guns had a dot on its post, so none has one here.
+
+**Stills:** `sights/<gun>.jpg` shows each gun's sights at the weld, aimed
+at a walker:
+- by day at 25, 50 and 100 m
+- at dusk at 50 m
+- at night with the torch at 25 m
+
+The torch's beam reaches 45 m. Each image is the centre of the eye's view,
+enlarged three times. `sights/<gun>_before_after.jpg` shows the 50 m day
+picture before and after the fix. The stills come from `--gallery
+sights:<gun>,0,<metres>`, with `--hour dusk` or `--hour night --torch`.
+
 ## The shots
 
 - `models/`: the gun model passes (see `models/README.md`).

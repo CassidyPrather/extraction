@@ -465,3 +465,110 @@ is done on the line-ups:
   stripe (yellow, red, cream) and their scorch and ash; the loose rounds
   are brass specks at 1.2 m by nature.
 
+
+### By torchlight (6 November)
+
+Most looting is done indoors in the dark by the hand torch, and the
+user once said items felt muddy. `--torchlit all` (`capture::torchlit`)
+lays every item with a model (230) on three floors in a closed dark
+room: wood, concrete, and a burnt ruin's charred planks. The game's torch
+beam is held at the eye and aimed at the item. Each is seen from an
+arm's length (0.65 m, 55 degrees down) and from 2 m (40 degrees), at the
+headset's pixels a degree. `scripts/torchlit.py` takes the item's pixels
+from a second shot with the room hidden, and measures it in its own shot
+against the floor round it:
+
+- body: the median of its pixels' CIE delta E from the floor's colour;
+- rim: its outline against the floor just outside, the upper quartile.
+
+Under about 10 an item is the floor's colour. Run it per floor and read
+the runs together:
+
+    for f in wood concrete ruin; do
+      target/fast/extraction --size 800x800 --map training_yard --no-robots \
+        --torchlit $f --capture-out target/torch_$f
+    done
+    scripts/torchlit.py target/torch_wood target/torch_concrete target/torch_ruin \
+      --json torch.json --sheet worst.jpg --worst 20
+
+![The 20 worst by torchlight, each floor and eye](../shots/items/torchlit_worst20.jpg)
+
+Three findings, by cause:
+
+1. **At arm's length the torch washes the frame out.** The floor goes
+   nearly white, even the charred planks, and black scopes, binoculars
+   and the suppressor render a pale silver. Every item loses contrast
+   and colour this way, and it is the likeliest cause of "muddy". It is
+   the eye's exposure with a torch close to a surface (`render::grade`,
+   `torch_light`), not any item: Visual design's.
+
+   ![At arm's length and at 2 m: the same items, the floor blown out up close](../shots/items/torchlit_washout.jpg)
+
+2. **Dark metal on a dark floor goes black from 2 m.** 15 of the worst
+   20 are gun finishes on the charred floor: Blued, Black (blackened
+   steel) and Steel. Examples are the PBS, both scopes, the weapon
+   light, the laser, the binoculars, the PM and SVD magazines, the
+   spanner, the Mosin's bolt and the multitool. A metal shows only its
+   specular reflection, and with the torch at the eye and the item lying
+   flat, little of it faces the eye. The finishes are Gunsmith's
+   (`crates/gunsmith/src/finish.rs`). A trial on ten of them (the material
+   swapped in the game for one run, nothing committed), delta E on the
+   charred floor from 2 m:
+
+   | item | as is | Black as a satin black paint (metallic 0, sRGB 0.06, roughness 0.45) |
+   |---|---|---|
+   | weapon light | 5.8 | 11.8 |
+   | laser module | 5.9 | 10.3 |
+   | binoculars | 5.9 | 10.7 |
+   | side rail | 8.1 | 12.3 |
+   | PBS | 4.4 | 11.1 |
+
+   It also helped on concrete, and at arm's length (weapon light 19 to
+   31). The same trial with bright Steel rougher (0.55) made the steel
+   items worse (spanner 7.0 to 5.5, Mosin bolt 7.7 to 5.3): leave Steel as
+   it is. A lighter, rougher blackened steel (metallic, sRGB 0.3, 0.6)
+   helped about half as much as the paint did.
+
+   ![Charred floor from 2 m: as it is (top), Black as satin paint (below)](../shots/items/torchlit_black_satin_trial.jpg)
+
+3. **Small and pale.** The cooking's chopped vegetables are a pale board
+   10 cm across with crumbs on it, lost on lit wood up close. A grenade's
+   pin is 0.16 degrees from 2 m, a speck by nature. The pale card ammo
+   packets sit at 9 to 12 on lit concrete at arm's length, which is the
+   wash-out again.
+
+Near-twins (size, outline and colour from 2 m on wood): most read apart
+by shape once looked at. The two that don't, from 2 m, are the RGD-5 and
+the F1 (both olive eggs; the F1's ribs show only up close), and the
+laser module and the side rail (two small black blocks).
+
+#### Fixed: the boards, the laser, the F1 (6 November)
+
+The coordinator took the three that are the models' own. Measured again
+with `scripts/torchlit.py`, the worst of each item's views:
+
+- **The cooking boards** (chopped carrot, onion, tomato; the dough's)
+  are oiled dark now, not scrubbed pale: worst 6.2-10.9, now 18.5-18.7.
+  On lit wood up close, 6-7 is now 30, and on concrete 14 is now 40.
+- **The laser module** has a wide red lens standing in its bezel and the
+  red warning label on top of its front block: on the charred floor from
+  2 m, 5.9 is now 11.1. On the twin measure it's now as far from the
+  side rail (3.02) as unrelated things are (0.27 before).
+- **The F1**'s cast segments are deeper (3.4 mm proud, not 2) with wider
+  grooves between, so it reads as a grid of blocks from 2 m and not the
+  RGD-5's smooth egg. The twin measure, which sees only size, outline and
+  mean colour, can't tell them apart either way; the picture can.
+
+![Before (top) and after (below), each in its worst light](../shots/items/torchlit_fixes_before_after.jpg)
+
+#### The PU and the PSO-1 (6 November)
+
+Once Gunsmith made the PSO-1 Black, the two scopes came near twins from
+2 m. The real PU is a slim plain tube, its drums on a round saddle; it
+had the PSO-1's squared housing here. It has the round saddle now, and
+the PSO-1's brow shield sweeps wide and high over its eyecup. Twin
+distance from 2 m (size + outline + colour, these models' finishes):
+wood 0.54 → 0.65, charred floor 0.58 → 0.72, the rise in their outlines.
+With Gunsmith's Black PSO-1 merged in, 2 m: wood 1.57 (Gunsmith measured
+1.33 before the brow shield), charred floor 1.34; the PSO-1 reads 33.7 on
+wood and 11.6 on charred floor.

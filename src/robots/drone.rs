@@ -529,9 +529,11 @@ fn drone_brain(
             }
             Brain::Search { .. } => {
                 // A doorway on the round: down to it, hanging back, and
-                // look in.
+                // look in. Only a way in from outside: an inside door's
+                // spot is under the roof, and one that came down to the
+                // pump station's back door caught under its eave (r7).
                 let doorway = |p: Vec3| {
-                    entrances.doors.iter().find(|e| {
+                    entrances.doors.iter().filter(|e| e.outside).find(|e| {
                         let s = e.mid + e.out * 1.8;
                         Vec2::new(p.x - s.x, p.z - s.z).length() < 2.6
                     })
@@ -1075,11 +1077,79 @@ mod tests {
         );
     }
 
+    /// A drone searching a spot by an inside door (a back room's, the way
+    /// through to it) looks from over the roof: it never comes down by the
+    /// door to look in, under the eaves, for the door is indoors. One came down to Marrow's
+    /// pump station's and caught under its eave, pinning a newcomer inside
+    /// for 28 minutes (Progression's r7).
+    #[test]
+    fn a_searching_drone_never_comes_down_under_a_roof() {
+        let (mut app, player, drone, _) =
+            drone_over(|_| (Vec3::new(-108.0, 20.0, 8.3), Vec3::new(-90.0, 28.0, 10.0)));
+        app.update();
+        let doors = app
+            .world()
+            .resource::<super::super::doors::Entrances>()
+            .doors
+            .clone();
+        // The pump station's back door first (r7), then a few more.
+        let r7 = Vec2::new(-106.5, 10.6);
+        let mut inside: Vec<_> = doors.iter().filter(|e| !e.outside).collect();
+        assert!(!inside.is_empty(), "no inside doors on Marrow");
+        inside.sort_by(|a, b| {
+            Vec2::new(a.mid.x, a.mid.z)
+                .distance(r7)
+                .total_cmp(&Vec2::new(b.mid.x, b.mid.z).distance(r7))
+        });
+        let mut came_in = Vec::new();
+        for door in inside.iter().take(3) {
+            let spot = door.mid + door.out * 1.8;
+            let start = spot + Vec3::new(12.0, 10.0, 0.0);
+            app.world_mut()
+                .get_mut::<Transform>(drone)
+                .unwrap()
+                .translation = start;
+            app.world_mut().get_mut::<Drone>(drone).unwrap().goal = start;
+            *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Search {
+                at: spot,
+                left: 90.0,
+                spots: vec![spot],
+                dwell: 0.0,
+            };
+            for _ in 0..90 * 12 {
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = Vec3::new(400.0, 0.0, 400.0);
+                app.update();
+                let goal = app.world().get::<Drone>(drone).unwrap().goal;
+                let pos = app.world().get::<Transform>(drone).unwrap().translation;
+                // Indoors, or under its eaves (a roof over it, within a
+                // metre of the walls: an outside door's stand-off is 3.5 m
+                // out).
+                let e = app.world().resource::<super::super::doors::Entrances>();
+                let under = |p: Vec3| e.top_at(p.x, p.z, 1.0).is_some_and(|top| p.y < top);
+                if under(goal) || under(pos) {
+                    came_in.push(format!(
+                        "door at {:.1}: goal {goal:.1}, at {pos:.1}",
+                        door.mid
+                    ));
+                    break;
+                }
+            }
+        }
+        assert!(came_in.is_empty(), "{came_in:?}");
+    }
+
     /// A drone over the test field with you walking under it; your
     /// health kept up (a fight, not a death, is what's tested).
     fn drone_on_you() -> (App, Entity, Entity, Vec3) {
         drone_over(|zone| {
-            let at = zone.on_ground(40.0, 255.0);
+            // On Marrow's ground (its map is 388 m across, about the
+            // middle: off it a body falls every frame).
+            let at = zone.on_ground(40.0, 150.0);
+            let far = at + FAR_OFF;
+            assert!(zone.on_heightmap(far.x, far.z), "{far} is off the map");
             (at, at + Vec3::new(0.0, 6.0, -15.0))
         })
     }
@@ -1105,6 +1175,7 @@ mod tests {
             .next()
             .unwrap();
         let (at, site) = place(&zone);
+        assert!(zone.on_heightmap(at.x, at.z), "{at} is off the map");
         let mut queue = bevy::ecs::world::CommandQueue::default();
         let drone = {
             let mut c = Commands::new(&mut queue, app.world());
@@ -1123,14 +1194,20 @@ mod tests {
         (app, player, drone, at)
     }
 
+    /// Where you are, out of its sight (from [`drone_on_you`]'s spot):
+    /// about 345 m off, across Marrow, still on its ground.
+    const FAR_OFF: Vec3 = Vec3::new(-190.0, 0.0, -290.0);
+
     /// One tick of you: walking a small circle at `at` (seen), or far off
     /// (out of its sight); hale either way.
     fn step(app: &mut App, player: Entity, at: Vec3, seen: bool, i: usize) {
         let a = i as f32 / 90.0 * 0.5;
+        // Far off is still on the ground (on the heightmap: off it a body
+        // falls every frame), well past its sight ([`FAR_OFF`]).
         let here = if seen {
             at + Vec3::new(a.cos(), 0.0, a.sin()) * 2.0
         } else {
-            at + Vec3::new(400.0, 0.0, 0.0)
+            at + FAR_OFF
         };
         app.world_mut()
             .get_mut::<Transform>(player)
