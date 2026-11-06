@@ -135,9 +135,24 @@ pub struct Geo {
     /// Its shell's windows' sills, front (-Z) wall first and on round
     /// as `Builder::shell` builds the walls.
     pub sills: Vec<Sill>,
+    /// Its inside doorways and doors, between its own rooms (walls built
+    /// outside its shell): where a body walks from room to room
+    /// (`sim::indoor`'s `every_inner_doorway_is_walked_through`).
+    pub inner_doorways: Vec<InnerDoorway>,
     /// The open tops of its chimney stacks, where smoke comes out
     /// (`world::cues`). A stove's pipe isn't one: it stops under the roof.
     pub flues: Vec<Vec3>,
+}
+
+/// A doorway (or a door's opening) in a wall between rooms,
+/// building-local.
+#[derive(Clone, Copy, Debug)]
+pub struct InnerDoorway {
+    /// Its foot's middle, on the wall's centre line.
+    pub at: Vec3,
+    /// Square to the wall, level (either way through).
+    pub across: Vec2,
+    pub width: f32,
 }
 
 /// What a breakable thing is.
@@ -454,6 +469,21 @@ impl Builder {
         let at = |s: f32, y: f32| Vec3::new(a.x + dir.x * s, y, a.y + dir.y * s);
         let mut ops: Vec<Opening> = openings.to_vec();
         ops.sort_by(|p, q| p.centre.total_cmp(&q.centre));
+        if !self.exterior {
+            // A way from room to room, if a body fits under it.
+            for o in &ops {
+                if matches!(o.kind, OpeningKind::Door | OpeningKind::Gap)
+                    && o.top - o.bottom >= 1.8
+                    && o.bottom < 0.3
+                {
+                    self.geo.inner_doorways.push(InnerDoorway {
+                        at: at(o.centre, y0 + o.bottom),
+                        across: Vec2::new(-dir.y, dir.x),
+                        width: o.width,
+                    });
+                }
+            }
+        }
         let mut cursor = 0.0;
         let seg = |b: &mut Self, s0: f32, s1: f32, y_lo: f32, y_hi: f32| {
             if s1 - s0 < 0.01 || y_hi - y_lo < 0.01 {
@@ -1826,29 +1856,6 @@ pub fn prefab(id: &str) -> Option<Geo> {
 /// 1.0 m keeps a clear column open wherever they fall
 /// (`sim::indoor`'s `every_inner_doorway_is_walked_through`).
 pub const INNER_DOOR: f32 = 1.0;
-
-/// The houses built by [`house`] and their sizes (width, depth): where
-/// their inner doorways are, for the walk test.
-pub fn house_size(id: &str) -> Option<(f32, f32)> {
-    match id {
-        "house_plank" | "house_plank_b" | "house_plank_c" => Some((8.0, 7.0)),
-        "farmhouse" | "house_brick" | "post_office" => Some((10.0, 8.0)),
-        _ => None,
-    }
-}
-
-/// A house's inner doorways' middles, house-local (x, z): the partition
-/// at `d/2 - 0.42 d`, the doorways a quarter and three quarters across.
-pub fn inner_doorways(id: &str) -> Vec<Vec2> {
-    let Some((w, d)) = house_size(id) else {
-        return Vec::new();
-    };
-    let pz = d * 0.5 - d * 0.42;
-    [0.25, 0.75]
-        .iter()
-        .map(|k| Vec2::new(-w * 0.5 + w * k, pz))
-        .collect()
-}
 
 fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, plan: HousePlan) {
     let f = 0.5;
