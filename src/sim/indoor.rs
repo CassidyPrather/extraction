@@ -1966,6 +1966,74 @@ mod tests {
         }
     }
 
+    /// Inside doorways shut on purpose: a player ducks through, a bot
+    /// doesn't go. A burnt house's charred beam is wedged across the back
+    /// passage behind its left inner doorway, 1.25 to 1.45 m up
+    /// (`buildings::house_ruin`).
+    fn barred(prefab: &str, doorway: Vec2) -> bool {
+        prefab.ends_with("_burnt")
+            && matches!(
+                extraction_core::map::prefab_base(prefab),
+                "house_plank" | "house_brick" | "farmhouse"
+            )
+            && doorway.x < 0.0
+    }
+
+    /// Through every inside doorway of every building in every valley
+    /// (`buildings::Geo::inner_doorways`): from half a metre before one to
+    /// half a metre past it, the indoor grid's way is short, through it,
+    /// not round by another or none. A doorway the grid rasterises shut
+    /// strands a bot in a room (Kettle's mine office, 261 times in a raid).
+    #[test]
+    fn every_inner_doorway_is_walked_through() {
+        let mut checked = 0;
+        let mut failed = Vec::new();
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app) {
+                let Some(geo) = prefab(&plan.name) else {
+                    continue;
+                };
+                for d in &geo.inner_doorways {
+                    let mid = d.at.xz();
+                    if barred(&plan.name, mid) {
+                        continue;
+                    }
+                    let (a, b) = (mid - d.across * 0.5, mid + d.across * 0.5);
+                    checked += 1;
+                    let len = plan.path(a, b).map(|p| {
+                        p.windows(2).map(|w| w[0].distance(w[1])).sum::<f32>()
+                            + a.distance(p[0])
+                            + p.last().unwrap().distance(b)
+                    });
+                    if !len.is_some_and(|l| l < 1.8) {
+                        failed.push(format!(
+                            "{map} {} at {:.1?}: {:.1} m doorway at {mid:.2?}: {}",
+                            plan.name,
+                            plan.xf.translation,
+                            d.width,
+                            len.map_or("no way".into(), |l| format!("{l:.1} m round"))
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(checked > 50, "only {checked} doorways");
+        assert!(
+            failed.is_empty(),
+            "inside doorways shut:\n{}",
+            failed.join("\n")
+        );
+    }
+
     /// A drowned house has no doors, only a doorway with its silt banked
     /// down from it: from every way in its plan offers, a bot walks to
     /// stand by its loot.
