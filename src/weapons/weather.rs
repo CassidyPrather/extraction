@@ -653,6 +653,20 @@ pub fn weather_looks(
                 // marks *these* (`render::held_light`), and its look still
                 // changes in the hand (cleaned at the bench, wiped, worn).
                 let mut mats = Vec::new();
+                // One copy for each of its materials in each frame its parts
+                // sit in: parts that shared a material share its copy again
+                // (`render::gun_rest` merges a resting gun by material; a
+                // copy for every mesh left it nothing to merge, and declined
+                // most guns), and the wear's muzzle and port, in that
+                // frame, hold for each of them.
+                let mut made: HashMap<
+                    (AssetId<StandardMaterial>, [i32; 12]),
+                    Handle<StandardMaterial>,
+                > = HashMap::new();
+                let frame = |a: &Affine3A| {
+                    let c = a.to_cols_array();
+                    std::array::from_fn(|i| (c[i] * 1e4).round() as i32)
+                };
                 // Each with where it sits in the gun, for its muzzle and port.
                 let place = |c: Entity, up: Affine3A| {
                     up * transforms
@@ -681,7 +695,10 @@ pub fn weather_looks(
                             model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
                             metallic,
                         );
-                        let own = materials.add(orig);
+                        let own = made
+                            .entry((m.0.id(), frame(&at)))
+                            .or_insert_with(|| materials.add(orig))
+                            .clone();
                         commands.entity(c).insert(MeshMaterial3d(own.clone()));
                         let inv = at.inverse();
                         mats.push(OwnMaterial {
