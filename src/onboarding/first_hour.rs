@@ -639,8 +639,9 @@ pub(super) struct Newcomer {
     /// When it last readied its gun with a machine on it (`threatened`).
     readied_at: f32,
     /// Time's short (the Surge close, or the truck's wait running down)
-    /// till then: no roof holds it, and a drone on it homeward is run on
-    /// from (`TIME_SHORT_FOR`).
+    /// till then: a roof is a breath, not a hold (`TIME_SHORT_FOR`). (Run on
+    /// from a drone with time short, far from the truck, it was shot down
+    /// in the open inside 40 s.)
     pressed_until: f32,
     /// When it last came out from under cover for the truck.
     hurried_at: f32,
@@ -1360,9 +1361,7 @@ pub(super) fn direct_raid(
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < BED_RUN))
-                    || (state.pressed_until > now
-                        && matches!(state.leg, Leg::Call | Leg::Rendezvous | Leg::Board));
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN));
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
