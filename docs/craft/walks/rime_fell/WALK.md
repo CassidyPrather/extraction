@@ -796,6 +796,8 @@ At (-115.0, -264.0), 136.9 m; looking 79 deg along the way, and 168 deg to The b
 - Weakest now, in order: the col fork (s19), where the poles go on to the col and the way to the job turns off them into the white; the saddle track after it (s20, s21), off the poles with only the saddle's lamp to steer by; and the observatory path's foot and climb (s24, s25), where the job is a grey smudge on the brow and the fence pulls the eye the other way.
 - The arrival is good now (s27): the observatory square on, its door ahead (the 4 Nov fix).
 - Side view at s24 is the saddle beacon's post in your face: the beacon stands 7 m off the rendezvous, which is where the observatory path forks. It's a stop camera's frame, not a walker's: noted, not moved.
+- Night, with the hand torch (6 Nov, HOUR=night): the lower valley reads by its rooflines and the funicular's rails; Coldharbour by its lamps. Above it the torch lights only the snow at your feet and the snow poles are gone: you steer by the rendezvous beacons (green), the avalanche watch's red lamp and Coldharbour behind. Reflectors on the poles would carry the line after dark (a material and model change, asked of World models). The observatory's door is unlit; its way home has a yard lamp (dd59ca5d).
+- Cold, from extraction_core::cold along this route (cold 1.0, snow line 84 m): at a looking-about pace (1.4 m/s) with no stops a newcomer shivers from 430-550 m (past Coldharbour) and reaches the observatory frozen through (stamina capped at 0.45), worse in falling snow or at night; at 2.4 m/s by day, chill 0.5 at the job. A roof every 250 m or less (track refuge 425 m, snow survey hut 440 m, saddle refuge 690 m, the observatory 805 m), and 50 s under one warms you through; the col track's signs name the refuge. A pressure with a plain answer, not a stall.
 
 ## Fixes
 
@@ -819,3 +821,11 @@ Scenery: four poles from the saddle up the observatory path. From its foot the f
 
 ![before](s24_ahead.jpg) ![after](fixes/s24_ahead_after_5nov.jpg)
 ![before](s25_ahead.jpg) ![after](fixes/s25_ahead_after_5nov.jpg)
+
+### 4. A lamp at the saddle fork, for the way out after dark (s18, s19)
+
+At night the saddle fork sign was an unlit shape and the poles were gone. A way_lamp beside the sign: from s18 its light is a point ahead, and at the fork the sign stands lit in its pool.
+
+![before](fixes/s18_ahead_night_before_6nov.jpg) ![after](fixes/s18_ahead_night_after_6nov.jpg)
+![before](fixes/s19_ahead_night_before_6nov.jpg) ![after](fixes/s19_ahead_night_after_6nov.jpg)
+![before](fixes/s19_side_night_before_6nov.jpg) ![after](fixes/s19_side_night_after_6nov.jpg)
