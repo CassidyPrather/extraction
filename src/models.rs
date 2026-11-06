@@ -824,6 +824,112 @@ mod tests {
         );
     }
 
+    /// Models kept off their box's middle until the code that places
+    /// things in their space moves with them: `art/items/_kit.py`'s
+    /// `KEEPS_ORIGIN`, which this list matches.
+    const KEEPS_ORIGIN: &[(&str, &str)] = &[
+        ("flashlight", "gadgets: its cell's mount"),
+        ("cloak_generator", "gadgets: its cell's mount"),
+        ("jammer", "gadgets: its cell's mount"),
+        ("lead_case", "gadgets: its cradle and its lid"),
+        ("compass", "gadgets::visuals: its face and needle"),
+        ("map_case", "gadgets::visuals: the map in it"),
+        ("camera_drone", "gadgets::visuals: its rotors"),
+        ("emp_trap", "gadgets: its spikes and charge"),
+        ("deployable_cover", "gadgets: the cover it unfolds"),
+        ("cassette_player", "radio::deck: its well, door and buttons"),
+        ("crowbar", "interact::tools::crowbar: grip and claw"),
+        ("bolt_cutters", "interact::tools::cutters: grips and jaws"),
+        ("hacksaw", "weapons::gunsmith: its handle and blade"),
+    ];
+
+    /// Every item's box (`dims`) is its model: each side within a
+    /// millimetre of the model's, and the model in its middle. The box is
+    /// the item's collider, its fit in a pocket or pouch and where it's
+    /// grabbed, so a box off its model is felt: a vest 3 cm wider than
+    /// itself, a belt of rounds twice its height, boots 7 cm too wide.
+    /// Guns are placed by their layouts; magazines and attachments seat by
+    /// their origin (their middle may be off it), so only their size is
+    /// held. `python3 art/items/dims.py --write` sizes a row to its model;
+    /// `_kit.recentred` centres a model when it's built.
+    #[test]
+    fn every_item_box_is_its_model() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        // Rows are written to the millimetre.
+        const SIDE: f32 = 0.001;
+        const MIDDLE: f32 = 0.002;
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models");
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for (_, def) in cat.iter() {
+            let dir = match def.category {
+                Category::Firearm => continue,
+                Category::Magazine => "mags",
+                _ => "items",
+            };
+            let Some(dims) = def.dims else { continue };
+            let path = root.join(dir).join(format!("{}.glb", def.id));
+            let Some((lo, hi)) = path.exists().then(|| glb_bounds(&path)).flatten() else {
+                continue;
+            };
+            checked += 1;
+            let id = &def.id;
+            let (size, mid) = (hi - lo, (hi + lo) / 2.0);
+            let fmt = |v: bevy::math::Vec3| format!("({:.3}, {:.3}, {:.3})", v.x, v.y, v.z);
+            if let Some((_, why)) = KEEPS_ORIGIN.iter().find(|(k, _)| k == id) {
+                if mid.abs().max_element() <= MIDDLE {
+                    bad.push(format!(
+                        "{id}: centred now: take it off KEEPS_ORIGIN ({why}), here and in _kit"
+                    ));
+                }
+                continue;
+            }
+            let have = bevy::math::Vec3::from(dims);
+            if (size - have).abs().max_element() > SIDE {
+                bad.push(format!(
+                    "{id}: dims {} but its model is {}: python3 art/items/dims.py --write",
+                    fmt(have),
+                    fmt(size)
+                ));
+            }
+            let seated = matches!(def.category, Category::Magazine | Category::Attachment);
+            if !seated && mid.abs().max_element() > MIDDLE {
+                bad.push(format!(
+                    "{id}: its model's middle is {} off its box's: rebuild it (art/items/_kit.py centres it)",
+                    fmt(mid)
+                ));
+            }
+        }
+        // The kit's list is this one.
+        let kit = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("art/items/_kit.py"),
+        )
+        .unwrap();
+        let block = kit
+            .split("KEEPS_ORIGIN = {")
+            .nth(1)
+            .and_then(|b| b.split('}').next())
+            .expect("_kit.py has KEEPS_ORIGIN");
+        let kit_ids: Vec<&str> = block
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix('"')?.split('"').next())
+            .collect();
+        let ours: Vec<&str> = KEEPS_ORIGIN.iter().map(|(k, _)| *k).collect();
+        if kit_ids != ours {
+            bad.push(format!(
+                "KEEPS_ORIGIN: _kit.py has {kit_ids:?}, this test {ours:?}"
+            ));
+        }
+        assert!(checked > 150, "only {checked} item models checked");
+        assert!(
+            bad.is_empty(),
+            "item boxes off their models ({}):\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
     /// Every item model fits the box its collider is (`dims`, or a cube of
     /// its bulk): it doesn't stick out of it, rests on its floor rather
     /// than floating above or sinking into the ground, and a flat or long
