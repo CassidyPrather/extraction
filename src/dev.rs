@@ -239,10 +239,17 @@ fn turn_line_up(
     line_up: Option<ResMut<LineUp>>,
     mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
+    mut menders: Query<&mut crate::robots::mender::Mender>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
+    // A mender with nothing to mend goes home after a while: not here.
+    for (e, ..) in line_up.0.iter() {
+        if let Ok(mut m) = menders.get_mut(*e) {
+            m.idle = 0.0;
+        }
+    }
     for (e, yaw, at) in line_up.0.iter_mut() {
         if let Ok(mut w) = walkers.get_mut(*e) {
             if at.is_none() {
@@ -564,14 +571,22 @@ fn gallery(
                         "minelayer" => {
                             let nav = nav.as_ref().map(|n| n.0.clone());
                             match nav {
-                                Some(nav) => crate::robots::minelayer::spawn_minelayer(
-                                    &mut commands,
-                                    &zone,
-                                    &nav,
-                                    at,
-                                    Vec::new(),
-                                    at,
-                                ),
+                                // (A site far off, so it stays to be
+                                // looked at: with none it's done, and
+                                // leaves at once.)
+                                Some(nav) => {
+                                    crate::robots::minelayer::spawn_minelayer(
+                                        &mut commands,
+                                        &zone,
+                                        &nav,
+                                        at,
+                                        vec![zone.on_ground(
+                                            at.x + flat.x * 150.0,
+                                            at.z + flat.z * 150.0,
+                                        )],
+                                        at,
+                                    )
+                                }
                                 None => continue,
                             }
                         }
