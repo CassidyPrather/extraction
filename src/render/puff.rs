@@ -211,6 +211,16 @@ impl Plugin for PuffPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(PreStartup, make_assets)
             .add_systems(PostUpdate, face_puffs.before(TransformSystems::Propagate));
+        // `EXTRACTION_PUFF_LOG=1`: what's shown each frame, batched or
+        // not, to compare the two.
+        if std::env::var_os("EXTRACTION_PUFF_LOG").is_some() {
+            app.add_systems(
+                PostUpdate,
+                log_puffs
+                    .after(TransformSystems::Propagate)
+                    .after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            );
+        }
         // (`EXTRACTION_PUFF_BATCH=0`: each puff its own draw, to compare.)
         if !std::env::var("EXTRACTION_PUFF_BATCH").is_ok_and(|v| v == "0") {
             app.init_resource::<Batches>().add_systems(
@@ -223,6 +233,43 @@ impl Plugin for PuffPlugin {
                     .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
             );
         }
+    }
+}
+
+/// `EXTRACTION_PUFF_LOG`: the shown puffs this frame, summed (how many,
+/// where, how big, how thick), so a batched run can be checked against an
+/// unbatched one for the same puffs.
+fn log_puffs(
+    puffs: Query<
+        (
+            &GlobalTransform,
+            &InheritedVisibility,
+            &MeshMaterial3d<StandardMaterial>,
+        ),
+        With<SoftPuff>,
+    >,
+    materials: Res<Assets<StandardMaterial>>,
+    mut frame: Local<u32>,
+) {
+    *frame += 1;
+    let (mut n, mut at, mut size, mut alpha) = (0, Vec3::ZERO, 0.0, 0.0);
+    for (g, shown, m) in &puffs {
+        if !shown.get() {
+            continue;
+        }
+        let Some(m) = materials.get(&m.0) else {
+            continue;
+        };
+        n += 1;
+        at += g.translation();
+        size += g.scale().max_element();
+        alpha += m.base_color.alpha();
+    }
+    if n > 0 {
+        eprintln!(
+            "puffs shown {}: {n} at {at:.4} size {size:.5} alpha {alpha:.5}",
+            *frame
+        );
     }
 }
 
@@ -260,7 +307,6 @@ struct Batches {
 }
 
 struct Batch {
-    entity: Entity,
     mesh: Handle<Mesh>,
 }
 
@@ -341,6 +387,14 @@ fn batch_puffs(
         commands.entity(e).remove::<Mesh3d>().insert(Batched);
     }
     let eye = eye(&cams).unwrap_or(Vec3::ZERO);
+    // Sorted as each puff's own draw was: by depth along the view (the
+    // eyes' forward), not distance.
+    let ahead = cams
+        .iter()
+        .filter(|(_, c)| c.is_active)
+        .map(|(g, _)| g.forward().as_vec3())
+        .sum::<Vec3>()
+        .normalize_or(Vec3::NEG_Z);
     // This frame's quads, by batch: (distance from the eye, corners,
     // normal, colour).
     let mut quads: std::collections::HashMap<
@@ -374,7 +428,7 @@ fn batch_puffs(
             .entry(key)
             .or_insert_with(|| (mat.0.clone(), Vec::new()))
             .1
-            .push((at.distance_squared(eye), corners, normal, colour));
+            .push(((at - eye).dot(ahead), corners, normal, colour));
     }
     // Batches with nothing this frame draw nothing.
     for (key, b) in batches.by.iter_mut() {
@@ -384,12 +438,21 @@ fn batch_puffs(
             }
         }
     }
+    if std::env::var_os("EXTRACTION_PUFF_LOG").is_some() && !quads.is_empty() {
+        let mut n: Vec<usize> = quads.values().map(|q| q.1.len()).collect();
+        n.sort_unstable();
+        eprintln!("puff batches: {} with {:?} puffs", n.len(), n);
+    }
     for (key, (from, mut qs)) in quads {
         // Far to near.
         qs.sort_by(|a, b| b.0.total_cmp(&a.0));
-        // Where its quads are: so it's sorted among other blended things
-        // as they were, about.
-        let centre = qs.iter().map(|q| (q.1[0] + q.1[2]) * 0.5).sum::<Vec3>() / qs.len() as f32;
+        // In world space, the batch at the origin: placed anywhere else, its
+        // transform (written now, through commands) would only reach the
+        // GPU after this frame's propagation, and this frame's quads were
+        // drawn round last frame's place, shifted by however far the puffs'
+        // middle had moved (a pixel at a round's dust; metres where smoke
+        // came and went, a haze drawn away from where it hung). Sorted
+        // among other blended things at its bounds' middle.
         let mut pos = Vec::with_capacity(qs.len() * 4);
         let mut nor = Vec::with_capacity(qs.len() * 4);
         let mut uv = Vec::with_capacity(qs.len() * 4);
@@ -398,7 +461,7 @@ fn batch_puffs(
         for (_, corners, n, c) in &qs {
             let base = pos.len() as u32;
             for (k, p) in corners.iter().enumerate() {
-                pos.push((*p - centre).to_array());
+                pos.push(p.to_array());
                 nor.push(n.to_array());
                 col.push(*c);
                 // As `Rectangle`'s: v down from the top.
@@ -420,9 +483,6 @@ fn batch_puffs(
                 if let Some(mut m) = meshes.get_mut(&b.mesh) {
                     *m = mesh;
                 }
-                commands
-                    .entity(b.entity)
-                    .insert(Transform::from_translation(centre));
                 // (Its material is the puffs' but white: what the key
                 // holds is all the same, and the colour rides the
                 // vertices, so it never needs writing again.)
@@ -437,7 +497,7 @@ fn batch_puffs(
                     PuffBatch,
                     Mesh3d(handle.clone()),
                     MeshMaterial3d(material.clone()),
-                    Transform::from_translation(centre),
+                    Transform::IDENTITY,
                     Visibility::default(),
                     NoFrustumCulling,
                     bevy::light::NotShadowCaster,
@@ -448,7 +508,6 @@ fn batch_puffs(
                 batches.by.insert(
                     key,
                     Batch {
-                        entity: ec.id(),
                         mesh: handle,
                     },
                 );
@@ -521,9 +580,26 @@ mod tests {
                 .id();
             puffs.push((e, m));
         }
-        // One frame: a puff is drawn in its batch the frame it comes (a
-        // round's dust is a frame old when the next frame's shown).
-        app.update();
+        // A puff is drawn in its batch the frame it comes (a round's dust
+        // is a frame old when the next frame's shown), and where it is that
+        // frame after it moves: read as the GPU has it, through the
+        // batch's GlobalTransform (a batch placed by a command lagged its
+        // quads by a frame, shifted by however far their middle went).
+        for round in 0..2 {
+            if round == 1 {
+                let w = app.world_mut();
+                for (e, _) in &puffs {
+                    w.get_mut::<Transform>(*e).unwrap().translation += Vec3::new(2.0, 0.5, -3.0);
+                }
+            }
+            app.update();
+            check_batches(&mut app, &puffs);
+        }
+    }
+
+    /// Every puff's quad in a batch, where it is, its colour; the batches
+    /// far to near; no puff drawn on its own.
+    fn check_batches(app: &mut App, puffs: &[(Entity, Handle<StandardMaterial>)]) {
         let w = app.world_mut();
         let drawn: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
         let batches: Vec<Entity> = w
@@ -535,7 +611,7 @@ mod tests {
         // Every puff's quad in a batch, where it is, its colour.
         let mut quads: Vec<([Vec3; 4], [f32; 4])> = Vec::new();
         for b in &batches {
-            let at = w.get::<Transform>(*b).unwrap().translation;
+            let g = w.get::<GlobalTransform>(*b).unwrap().affine();
             let m = w.get::<Mesh3d>(*b).unwrap().0.clone();
             let mesh = w.resource::<Assets<Mesh>>().get(&m).unwrap();
             let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
@@ -549,12 +625,19 @@ mod tests {
                 panic!("no colours");
             };
             for (k, q) in p.chunks(4).enumerate() {
-                quads.push(([0, 1, 2, 3].map(|i| Vec3::from(q[i]) + at), c[k * 4]));
+                quads.push((
+                    [0, 1, 2, 3].map(|i| g.transform_point3(Vec3::from(q[i]))),
+                    c[k * 4],
+                ));
             }
-            // Far to near from the eye (no eye here: from the origin).
+            // Far to near along the view (no eye here: from the origin,
+            // looking down -Z), as each puff's own draw was sorted.
             let d: Vec<f32> = p
                 .chunks(4)
-                .map(|q| ((Vec3::from(q[0]) + Vec3::from(q[2])) * 0.5 + at).length())
+                .map(|q| {
+                    -g.transform_point3((Vec3::from(q[0]) + Vec3::from(q[2])) * 0.5)
+                        .z
+                })
                 .collect();
             assert!(
                 d.windows(2).all(|x| x[0] >= x[1] - 1e-3),
@@ -562,7 +645,7 @@ mod tests {
             );
         }
         assert_eq!(quads.len(), 64);
-        for (e, m) in &puffs {
+        for (e, m) in puffs {
             let g = w.get::<GlobalTransform>(*e).unwrap().affine();
             let h = QUAD * 0.5;
             let want = [(-h, -h), (h, -h), (h, h), (-h, h)]
