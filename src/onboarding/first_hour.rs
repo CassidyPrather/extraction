@@ -1423,11 +1423,10 @@ pub(super) fn direct_raid(
                     None => match line {
                         Some((tasks, how)) => {
                             state.note(now, Kind::Learned, format!("broke its line: {how}"));
-                            state.low_until = now + LINE_HELD;
-                            // Low, not running: upright, its head's in the
-                            // line the crouch keeps out of.
+                            let run = run_to_line(&tasks, here);
+                            state.low_until = now + run + LINE_HELD;
                             if let Some(f) = fight.as_mut() {
-                                f.flee_until = 0.0;
+                                f.flee_until = now + run;
                             }
                             tasks
                         }
@@ -1662,9 +1661,10 @@ pub(super) fn direct_raid(
             && let Some((tasks, how)) = break_line(&spatial, &world, here, eye)
         {
             state.note(now, Kind::Learned, format!("in its line again: {how}"));
-            state.low_until = now + LINE_HELD;
+            let run = run_to_line(&tasks, here);
+            state.low_until = now + run + LINE_HELD;
             if let Some(f) = fight.as_mut() {
-                f.flee_until = 0.0;
+                f.flee_until = now + run;
             }
             bot.tasks.pop_front();
             super::second_hour::cut_in(&mut bot, tasks);
@@ -2983,6 +2983,20 @@ const WALKER_NEAR: f32 = 80.0;
 const LINE_HELD: f32 = 12.0;
 /// A crouched head (m above the ground), as a walker's eye looks for it.
 const LOW_HEAD: f32 = 0.9;
+
+/// How long the run to a spot out of a walker's line takes (s): upright and
+/// at a run till there, then low (crept there, it was in the walker's line
+/// three times as long, and took its rounds on the way: first_jobs raid 5).
+/// Nothing to run to (down where it is), none.
+fn run_to_line(tasks: &[Task], here: Vec2) -> f32 {
+    match tasks.first() {
+        Some(Task::WalkTo { to, .. }) => to.distance(here) / RUN_PACE + 0.5,
+        _ => 0.0,
+    }
+}
+
+/// A run's pace on open ground (m/s), for timing one.
+const RUN_PACE: f32 = 3.0;
 
 /// A crouched head at `p` out of sight of `eye`: something solid between.
 fn line_hidden(
