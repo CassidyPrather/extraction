@@ -869,13 +869,19 @@ fn items_held(save: &extraction_core::save::SaveGame) -> Vec<String> {
     fn key(i: &SavedItem) -> String {
         let mut inner: Vec<String> = i.inserted.iter().map(key).collect();
         inner.sort();
+        // Its loads as the game keeps them: Standard rounds at the bottom
+        // are the same as unlisted (`Loads::fit`), and a restore trims
+        // them (Rime seed 2: a Nagant packet's fourteen listed came back
+        // eight, the same rounds).
+        let mut loads = i.loads.clone();
+        loads.fit(i.rounds);
         format!(
             "{} rounds {} condition {:.3} charge {:.2} loads {:?} gun {:?} [{}]",
             i.id,
             i.rounds,
             i.condition,
             i.charge_wh,
-            i.loads,
+            loads,
             i.gun,
             inner.join(", ")
         )
