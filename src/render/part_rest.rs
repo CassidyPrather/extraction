@@ -152,16 +152,18 @@ fn wake_parts(
     mut undrawn: RemovedComponents<Drawn>,
     mut unhung: RemovedComponents<DoorLeaf>,
     mut taken: RemovedComponents<crate::items::Item>,
-    in_hand: Query<(), With<crate::interact::Held>>,
-    // A loose item woken (it's moving) leaves its cell: it joins again
-    // where it comes to rest.
-    stirred: Query<
-        (),
-        (
-            With<crate::items::Item>,
-            Without<avian3d::prelude::Sleeping>,
-        ),
-    >,
+    // In a hand; and a loose item woken (it's moving), which leaves its
+    // cell to join again where it comes to rest.
+    (in_hand, stirred): (
+        Query<(), With<crate::interact::Held>>,
+        Query<
+            (),
+            (
+                With<crate::items::Item>,
+                Without<avian3d::prelude::Sleeping>,
+            ),
+        >,
+    ),
     rematerialled: Query<
         Entity,
         (
