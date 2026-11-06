@@ -4039,6 +4039,24 @@ fn errand_done(errand: &Errand, world: &World2) -> String {
 /// the Old farm, a little short of halfway.
 /// In a valley with no Old farm, on the way to the place the job card
 /// names (`card`), so the machine is on the newcomer's way.
+/// The loose `item` nearest the drop: where a newcomer on a fetch goes first.
+fn fetch_target(world: &World2, zone: &crate::world::Zone, item: &str) -> Option<Vec2> {
+    let drop = zone
+        .map
+        .markers
+        .iter()
+        .find(|m| m.kind == MarkerKind::Insertion)
+        .map(|m| Vec2::from(m.at))?;
+    world
+        .items
+        .iter()
+        .filter(|(e, _, _, held, sock, bag)| {
+            held.is_none() && sock.is_none() && bag.is_none() && world.id(*e) == Some(item)
+        })
+        .map(|(_, _, gt, ..)| gt.translation().xz())
+        .min_by(|a, b| a.distance(drop).total_cmp(&b.distance(drop)))
+}
+
 fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) {
     let drop = zone
         .map
@@ -4071,6 +4089,7 @@ pub(super) fn first_fight(
     world: World2,
     time: Res<Time>,
     cards: Query<&ScreenText, With<RequestCard>>,
+    progression: Option<Res<crate::progression::Progression>>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
         return;
@@ -4082,11 +4101,23 @@ pub(super) fn first_fight(
     // Put it there once the newcomer's out.
     if !fight.seeded && raid.phase == Phase::Out {
         fight.seeded = true;
+        // The place the card names; a fetch names none, so the nearest of
+        // what it asks for (off where the newcomer isn't going, Rime's first
+        // machine met nobody, and the director's walker had them instead).
         let card = cards
             .iter()
             .find_map(|c| place_on_card(&c.text, &zone))
-            .map(|(_, at)| at);
+            .map(|(_, at)| at)
+            .or_else(|| {
+                let crate::progression::Progression(p) = progression.as_deref()?;
+                let Some(extraction_core::progression::Job::Fetch { item, .. }) = p.job.as_ref()
+                else {
+                    return None;
+                };
+                fetch_target(&world, &zone, item)
+            });
         let (at, ahead) = on_the_way_to(&zone, card);
+        info!("first fight: {kind} placed at {at}, on the way to {card:?}");
         let side = ahead.perp();
         let job = |site: Vec3| crate::robots::Job {
             kind: crate::robots::JobKind::Watch,
