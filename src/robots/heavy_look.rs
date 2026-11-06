@@ -409,6 +409,9 @@ fn dress_heavies(
         }
         if merge {
             let mut merged = Vec::new();
+            // (The bolt is Steel and Warn only, so `hang`'s Weather and
+            // Burns, for Shell, Dark or no material, never reach it: given
+            // one of those, these would need the same match.)
             for (lod, m, mesh) in bolts_merged.iter().flatten() {
                 let mut l = None;
                 let material = mat(m.as_deref(), &mut l);
