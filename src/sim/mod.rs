@@ -164,7 +164,7 @@ fn spawn_sim_kit(
     };
     let (kit, _) = sim_kit(
         &opts.map,
-        &raider::contract_kit(),
+        &raider::contract_kit(&opts),
         opts.personality.as_deref().unwrap_or("looter"),
     );
     for (i, id) in kit.iter().enumerate() {

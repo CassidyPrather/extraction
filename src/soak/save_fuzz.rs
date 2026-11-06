@@ -713,7 +713,14 @@ const MOMENTS: [Moment; 7] = [
 
 /// A bot raid (the smoke raider's) on `map`, saving to `path`.
 fn raid_on(path: &Path, map: &str, seed: u64) -> App {
+    raid_with(path, map, seed, None)
+}
+
+/// [`raid_on`], the raider on a contract's step (`<id>:<step>`), or on
+/// none whatever `SIM_CONTRACT` says.
+fn raid_with(path: &Path, map: &str, seed: u64, contract: Option<String>) -> App {
     let opts = LaunchOptions {
+        sim_contract: contract,
         map: map.into(),
         seed,
         save: Some(path.to_owned()),
@@ -1300,12 +1307,11 @@ fn soak_quit_on_every_contract_step() {
                 _ => home,
             };
             let Some(map) = map else { continue };
-            // SAFETY: the soak runs alone (an ignored test, by name).
-            unsafe { std::env::set_var("SIM_CONTRACT", format!("{}:{k}", c.id)) };
+            let on = format!("{}:{k}", c.id);
             let mut to_hit = vec![JobMoment::Carried, JobMoment::Done];
             for m in to_hit.drain(..) {
                 let path = profile(&format!("contract-{}-{k}-{m:?}", c.id));
-                let mut a = raid_on(&path, map, 1);
+                let mut a = raid_with(&path, map, 1, Some(on.clone()));
                 let mut frame = 0usize;
                 let mut hit = false;
                 while frame < 90 * 60 * 14 {
@@ -1334,8 +1340,6 @@ fn soak_quit_on_every_contract_step() {
             }
         }
     }
-    // SAFETY: as above.
-    unsafe { std::env::remove_var("SIM_CONTRACT") };
     println!(
         "{} contract moments quit at, {} never came round",
         covered.len(),
