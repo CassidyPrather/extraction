@@ -749,14 +749,14 @@ fn moments_now(world: &mut World) -> Vec<Moment> {
     if !held.is_empty() {
         now.push(Moment::InHand);
     }
-    let reloading = held.iter().any(|e| {
-        world
-            .get::<Gun>(*e)
-            .and_then(|g| g.magwell)
-            .and_then(|w| world.get::<Socket>(w))
-            .is_some_and(|s| s.occupant.is_none())
-    }) && held.iter().any(|e| world.get::<Mag>(*e).is_some());
-    if reloading {
+    // The empty magazine out and the next not yet in (the bot's reload
+    // past its first step). (A held gun's `magwell` with a magazine in
+    // the other hand never came round: the well is the gun's socket, not
+    // `Gun::magwell`, and the soak never quit mid-reload.)
+    let reloading = world
+        .get::<Bot>(me)
+        .is_some_and(|b| matches!(b.tasks.front(), Some(Task::OneHandReload)) && b.fired >= 1);
+    if reloading && phase == Phase::Out {
         now.push(Moment::MidReload);
     }
     let feet = world.get::<GlobalTransform>(me).map(|g| g.translation());
@@ -900,6 +900,8 @@ fn soak_quit_anywhere_in_every_valley() {
             .filter(|m| m != crate::camp::TRAINING_YARD)
             .collect(),
     };
+    // `QUIT_MOMENT=Surge` (say): that moment only.
+    let only = std::env::var("QUIT_MOMENT").ok();
     let seeds: Vec<u64> = std::env::var("QUIT_SEED")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -912,6 +914,9 @@ fn soak_quit_anywhere_in_every_valley() {
     for map in &maps {
         for &seed in &seeds {
             for m in MOMENTS {
+                if only.as_ref().is_some_and(|o| *o != format!("{m:?}")) {
+                    continue;
+                }
                 let path = profile(&format!("quit-{map}-{seed}-{m:?}"));
                 let mut a = raid_on(&path, map, seed);
                 let mut frame = 0usize;
@@ -919,6 +924,18 @@ fn soak_quit_anywhere_in_every_valley() {
                 while frame < 90 * 60 * 14 {
                     a.update();
                     frame += 1;
+                    // The Surge is an hour in, past any bot raid: once out,
+                    // the clock is wound to just short of it (as
+                    // `--surge-in` does).
+                    if m == Moment::Surge {
+                        let mut raid = a.world_mut().resource_mut::<Raid>();
+                        if raid.phase == Phase::Out
+                            && raid.clock > 1.0
+                            && raid.clock < crate::raid::SURGE_AFTER - 10.0
+                        {
+                            raid.clock = crate::raid::SURGE_AFTER - 10.0;
+                        }
+                    }
                     if moments_now(a.world_mut()).contains(&m) {
                         hit = true;
                         break;
@@ -941,7 +958,11 @@ fn soak_quit_anywhere_in_every_valley() {
             }
         }
     }
-    let missed: Vec<&Moment> = MOMENTS.iter().filter(|m| !covered.contains(*m)).collect();
+    let missed: Vec<&Moment> = MOMENTS
+        .iter()
+        .filter(|m| only.as_ref().is_none_or(|o| *o == format!("{m:?}")))
+        .filter(|m| !covered.contains(*m))
+        .collect();
     assert!(
         findings.is_empty(),
         "{} findings over a quit and reload:\n{}",
