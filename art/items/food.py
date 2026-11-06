@@ -411,12 +411,15 @@ def flour_sack():
         return (max(zs) if side > 0 else min(zs)) if zs else side * 0.036
 
     for side, face in ((-1.0, FRONT), (1.0, RY(0.0))):
-        for y, h, line, dep in ((yb + 0.0285, 0.0135, "МУКА", 0.0022),
-                                (yb + 0.0445, 0.0062, "1 COPT", 0.0018)):
-            half = 2.9 * h / 4 * len(line) / 2
+        def at(y, h, n):
+            """Where a line of n letters h high sits: furthest out across it."""
+            half = 2.9 * h / 4 * n / 2
             z = max((surface(y + dy, side, half) for dy in (-h / 2, 0.0, h / 2)),
                     key=lambda v: v * side)
-            text(p, line, h, "Black", T(0.0, y, z - side * 0.0006) @ face, depth=dep)
+            return T(0.0, y, z - side * 0.0006) @ face
+
+        text(p, "МУКА", 0.0135, "Black", at(yb + 0.0285, 0.0135, 4), depth=0.0022)
+        text(p, "1 COPT", 0.0062, "Black", at(yb + 0.0445, 0.0062, 6), depth=0.0018)
         for y in (yb + 0.0125, yb + 0.0525):
             z = surface(y, side, 0.016)
             p.box((0.032, 0.0036, 0.0016), (0.0, y, z + side * 0.0002), "Red")
