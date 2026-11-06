@@ -2253,7 +2253,28 @@ pub(super) fn direct_raid(
             if noted {
                 state.note(now, Kind::Learned, "the place, noted: \"Now get it home\"");
                 state.leg = Leg::Call;
-            } else if close || state.tries >= 3 {
+            } else if !close && state.tries >= 3 {
+                // Not there, three walks on: caught on the way (in a
+                // building on the line: the lost newcomer stood in Kettle's
+                // chapel ten minutes, 66 m short of the cottage, and called
+                // it there). Out of the building it's in by its plan, and on
+                // again; at last, said so.
+                state.tries += 1;
+                let inside = view.entrances.as_deref().is_some_and(|en| {
+                    en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
+                        .is_some()
+                });
+                if state.tries > 6 {
+                    state.note(now, Kind::Stuck, "couldn't get to the place");
+                    state.leg = Leg::Call;
+                    state.tries = 0;
+                } else if let Some((_, g)) = state.goal.clone() {
+                    if inside {
+                        tasks.extend(way_out(&world, &view, &plans, here).0);
+                    }
+                    tasks.extend(route(&world, &view, here, g));
+                }
+            } else if close {
                 // There, but not noted: about the place's middle.
                 if let Some((_, g)) = state.goal.clone() {
                     tasks.extend(route(&world, &view, here, g));
