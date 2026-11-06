@@ -720,7 +720,7 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
 }
 
 /// A reload by hand put to the bot: out on the raid and walking, a rifle
-/// and a magazine laid at its feet, picked up, the magazine packed and
+/// and a loaded magazine laid at its feet, picked up, the magazine packed and
 /// the rifle reloaded by hand, as a player does it. Whether it was. (The
 /// soak's raid kits up from a fresh game's stash, with no rifle in it:
 /// there was never a gun to reload. And the sim raider's own reload is
@@ -741,12 +741,13 @@ fn hand_reload(world: &mut World) -> bool {
         return false;
     };
     let catalog = world.resource::<Catalog>().clone();
+    let mut spawned = Vec::new();
     for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {
             return false;
         };
         let at = feet + Vec3::new(0.6, 0.3, 0.3 * k as f32);
-        crate::items::spawn_item(
+        let e = crate::items::spawn_item(
             &mut world.commands(),
             &catalog,
             crate::items::SpawnItem {
@@ -755,8 +756,19 @@ fn hand_reload(world: &mut World) -> bool {
                 condition: 0.9,
             },
         );
+        spawned.push(e);
     }
     world.flush();
+    // The magazine loaded (a fresh one is empty): the reload takes the
+    // fullest in a pouch, and an empty one is no reload at all.
+    if let Some(&mag) = spawned.get(1) {
+        let def = catalog.get(catalog.kind("ak_mag").unwrap());
+        let (cap, every) = (def.capacity, def.tracer_every);
+        if let Some(mut it) = world.get_mut::<Item>(mag) {
+            it.0.rounds = cap;
+            it.0.loads = extraction_core::ammo::Loads::with_tracers(cap, every);
+        }
+    }
     // The sim raider's mind lets go of the bot: it plans its walks again
     // every few frames, and a reload put in front of them was gone the
     // next. The quit loads a fresh game anyway.
