@@ -484,20 +484,28 @@ fn rest_idle(
         let mut groups: Vec<(Shade, Vec<(AssetId<Mesh>, Mat4)>)> = Vec::new();
         let mut taken: Vec<(Entity, Visibility)> = Vec::new();
         let mut range = None;
+        // Why leaves were left out (`EXTRACTION_GUN_REST_LOG`): not a
+        // mesh, hidden, no asset, not mergeable, shrunk to nothing.
+        let mut left = [0usize; 5];
         for e in leaves {
             let Ok((mesh, mat, inherited)) = meshes.get(e) else {
+                left[0] += 1;
                 continue;
             };
             if !inherited.get() {
+                left[1] += 1;
                 continue;
             }
             let Ok((gt, v, r, reach, no_shadow)) = leaf_info.get(e) else {
+                left[0] += 1;
                 continue;
             };
             let Some(m) = mesh_assets.get(&mesh.0) else {
+                left[2] += 1;
                 continue;
             };
             if !mergeable(m) {
+                left[3] += 1;
                 continue;
             }
             if range.is_none() {
@@ -507,6 +515,7 @@ fn rest_idle(
             // (A part shrunk to nothing to hide it draws nothing: left be.)
             let (scale, _, _) = local.to_scale_rotation_translation();
             if !scale.is_finite() || scale.abs().min_element() < 1e-6 {
+                left[4] += 1;
                 continue;
             }
             let shade = Shade {
@@ -523,6 +532,21 @@ fn rest_idle(
         }
         // Not worth it for a gun that's a draw or two already.
         if taken.len() <= groups.len() {
+            if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+                let name = names.get(gun).map_or("?", |n| n.as_str());
+                eprintln!(
+                    "gun_rest: {name} declined: {} leaves, {} taken in {} groups; left out: \
+                     not a mesh {}, hidden {}, no asset {}, not mergeable {}, shrunk {}",
+                    all.len(),
+                    taken.len(),
+                    groups.len(),
+                    left[0],
+                    left[1],
+                    left[2],
+                    left[3],
+                    left[4]
+                );
+            }
             commands.entity(gun).insert(RestDeclined(all.len()));
             continue;
         }
