@@ -57,9 +57,12 @@ def pu_scope():
     drum = Part("drum", origin=(0.0, 0.01825, -0.012))
     drum.cyl(0.0105, 0.014, 0.0225, "Blued", segs=20, xf=T(0, 0, -0.012) @ UP, chamfer=0.0015)
     drum.box((0.002, 0.004, 0.001), (0.0, 0.019, -0.0226), "Cream")
-    p.box((0.0012, 0.0012, 0.003), (0.0, 0.0152, -0.0255), "Cream", segs=1)
     p.cyl(0.0105, -0.0225, -0.014, "Blued", segs=20, xf=T(0, 0, -0.012) @ ALONG_X, chamfer=0.0015)
-    p.box((0.03, 0.03, 0.024), (0.0, 0.0, -0.012), "Blued", bevel=0.004, segs=2)
+    # The drums stand on a round saddle on the tube, not a box: the PU is a
+    # slim plain tube, where the PSO-1 has its squared housing (from 2 m by
+    # torchlight the two were twins: ITEM_READING, "By torchlight").
+    p.cyl(0.0172, -0.026, 0.002, "Blued", segs=28, chamfer=0.002)
+    p.box((0.0012, 0.003, 0.0012), (0.0, 0.0125, -0.0265), "Cream", segs=1)
     # Side mount: two rings, a base on the dovetail, a lever on the left.
     for z in (-0.06, 0.05):
         p.tube(0.0158, 0.0128, z - 0.008, z + 0.008, "Black", segs=24, chamfer=0.001)
@@ -90,8 +93,10 @@ def pso_scope():
     # The rubber eyecup, its brow shield up on the left.
     p.lathe([(0.015, 0.119), (0.0185, 0.12), (0.0195, 0.168), (0.018, 0.172), (0.0165, 0.172),
              (0.0155, 0.13)], "Rubber", segs=28, closed=True)
-    p.lathe([(0.0192, 0.15), (0.026, 0.168), (0.026, 0.1725), (0.0192, 0.168)], "Rubber",
-            segs=10, closed=True, start=100.0, sweep=110.0)
+    # The brow shield wide and high over the left: the PSO-1's look from
+    # above, and not the plain PU's (ITEM_READING, "By torchlight").
+    p.lathe([(0.0192, 0.142), (0.0295, 0.166), (0.0295, 0.1725), (0.0192, 0.168)], "Rubber",
+            segs=14, closed=True, start=70.0, sweep=170.0)
     p.cyl(0.0135, 0.118, 0.122, "Lens", segs=24)
     # The turret housing, and the drums with their caps and index marks.
     p.box((0.034, 0.034, 0.05), (0.0, 0.0, -0.01), "Blued", bevel=0.005, segs=2)
