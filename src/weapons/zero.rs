@@ -324,6 +324,16 @@ pub fn shot_dir(gun: &Gun, rotation: Quat, scoped: bool) -> Vec3 {
     rotation * Quat::from_rotation_x(up) * Vec3::NEG_Z
 }
 
+/// [`shot_dir`] for a barrel `across` metres to the side of the gun's
+/// muzzle (a double's two): turned in so it crosses the sight line at the
+/// zero, as a double gun's barrels are regulated to shoot to one point.
+/// Parallel, each struck 1.3 cm off the bead at 20 m.
+pub fn barrel_dir(gun: &Gun, rotation: Quat, scoped: bool, across: f32) -> Vec3 {
+    let up = if scoped { 0.0 } else { iron_up(gun) };
+    let zero = iron_zero_m(&gun.firearm.def);
+    rotation * Quat::from_rotation_x(up) * Quat::from_rotation_y(across / zero) * Vec3::NEG_Z
+}
+
 /// The height of a scope's line of sight over its gun's bore.
 pub fn sight_height(gun: &Gun, gun_gt: &GlobalTransform, scope_gt: &GlobalTransform) -> f32 {
     gun_gt
@@ -678,13 +688,17 @@ mod tests {
             let eye = gt.transform_point(g.layout.sight.translation);
             let look = (gt.rotation() * g.layout.sight.rotation * Vec3::NEG_Z).normalize();
             let aim = eye + look * zero_m;
-            let dir = shot_dir(g, gt.rotation(), false);
             let muzzle0 = g.layout.muzzle;
             for barrel in 0..barrels.max(1) {
                 let mut muzzle = muzzle0;
                 if barrels > 1 {
                     muzzle.x += if barrel == 0 { -0.0128 } else { 0.0128 };
                 }
+                // As `triggers` sends it.
+                let dir = {
+                    let g = vr.app.world().get::<Gun>(gun).unwrap();
+                    barrel_dir(g, gt.rotation(), false, muzzle.x - muzzle0.x)
+                };
                 vr.app.world_mut().write_message(Shot {
                     gun,
                     shooter: None,
