@@ -23,8 +23,13 @@ LINEUPS=(
     "pylon+sorter+spotter+minelayer"
     "mender+plough"
 )
-# Marrow's farm meadow (lookbook m03), on the map, open ground ahead.
-CAM="92.9,0,131.9,315,-4"
+# Marrow's farm meadow (lookbook m03's spot), looking north over open
+# grass to the farm: on the map, nothing in the foreground. The line-up
+# 17 m ahead, each machine checked in its own column (frame_check
+# --lineup; FOV is the free camera's, render::desktop_fov's 75 degrees).
+CAM="92.9,0,131.9,0,-4"
+DIST=17
+FOV=75
 frames=()
 under=0
 # The view with no machines, a weather each: a frame of machines must
@@ -52,7 +57,7 @@ for weather in ${WEATHERS:-clearing downpour}; do
                 xvfb-run -a -s "-screen 0 960x540x24" "$BIN" \
                 --map marrow_creek --data-dir "$data" --new-game --no-robots \
                 --weather "$weather" --camera "$CAM" \
-                --gallery "robots:$spec,0,17" \
+                --gallery "robots:$spec,0,$DIST" \
                 --screenshot "$png" --frames 420 --size 960x540 \
                 > "$OUT/$name.log" 2>&1
             rm -rf "$data"
@@ -67,7 +72,8 @@ for weather in ${WEATHERS:-clearing downpour}; do
     done
 done
 all=$(ls "$OUT"/standing_*.png "$OUT"/wrecked_*.png 2>/dev/null)
-python3 scripts/frame_check.py --sheet "$OUT/sheet.png" --empty "$OUT/empty_" $all
+python3 scripts/frame_check.py --sheet "$OUT/sheet.png" --empty "$OUT/empty_" \
+    --lineup "$DIST,$FOV" $all
 blank=$?
 under=$(grep -la "camera: .* under the ground" "$OUT"/*.log 2>/dev/null | wc -l)
 echo "camera under the ground in $under runs"
