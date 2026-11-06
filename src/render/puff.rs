@@ -217,6 +217,9 @@ impl Plugin for PuffPlugin {
                 PostUpdate,
                 batch_puffs
                     .after(TransformSystems::Propagate)
+                    // This frame's shown-or-not, as each puff's own draw
+                    // had it.
+                    .after(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate)
                     .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
             );
         }
@@ -327,7 +330,9 @@ fn batch_puffs(
             &MeshMaterial3d<StandardMaterial>,
             Has<bevy::light::NotShadowReceiver>,
         ),
-        With<Batched>,
+        // Every puff, those new this frame too: they're drawn the frame
+        // they come, as their own quad drew them.
+        With<SoftPuff>,
     >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -516,7 +521,8 @@ mod tests {
                 .id();
             puffs.push((e, m));
         }
-        app.update();
+        // One frame: a puff is drawn in its batch the frame it comes (a
+        // round's dust is a frame old when the next frame's shown).
         app.update();
         let w = app.world_mut();
         let drawn: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
