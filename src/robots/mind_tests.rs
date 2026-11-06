@@ -4215,7 +4215,12 @@ fn a_sprint_across_its_line_throws_a_walker_off() {
                 .extend(s.read().filter(|s| s.shooter.is_some()).map(|s| s.spread));
         },
     );
-    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    // You stand on the ground (on the heightmap: off it a body falls
+    // every frame), out of its sight while it settles, then in its line.
+    for (x, z) in [(100.0, 300.0), (100.0, 200.0)] {
+        assert!(zone.on_heightmap(x, z), "({x}, {z}) is off the field");
+    }
+    put(&mut app, player, zone.on_ground(100.0, 300.0));
     let me = zone.on_ground(100.0, 200.0);
     let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 225.0));
     put(&mut app, player, me);
@@ -4238,8 +4243,10 @@ fn a_sprint_across_its_line_throws_a_walker_off() {
     let s = &app.world().resource::<Spreads>().0;
     assert!(!s.is_empty(), "it fired");
     assert!(
+        // A 5 m/s sprint, less what the ground takes off a body that's
+        // standing on it (about 4.3 m/s of it left).
         s.iter()
-            .all(|x| *x >= 0.025 + super::walker::CROSSING_SPREAD * 4.5),
+            .all(|x| *x >= 0.025 + super::walker::CROSSING_SPREAD * 5.0 * 0.8),
         "wide of a sprint: {s:?}"
     );
 }
