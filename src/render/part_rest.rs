@@ -324,18 +324,41 @@ fn rest_cells(
         cells.cells.entry(key).or_default().quiet.insert(e, 0);
     }
     let mut started = 0;
+    // (`EXTRACTION_PART_REST_LOG`: why leaves and cells weren't merged.)
+    static SKIPS: std::sync::Mutex<(u32, Vec<(&'static str, u32)>)> =
+        std::sync::Mutex::new((0, Vec::new()));
+    let log = std::env::var_os("EXTRACTION_PART_REST_LOG").is_some();
+    let skip = |why: &'static str| {
+        if log {
+            let mut t = SKIPS.lock().unwrap();
+            match t.1.iter_mut().find(|(r, _)| *r == why) {
+                Some((_, n)) => *n += 1,
+                None => t.1.push((why, 1)),
+            }
+        }
+    };
+    if log {
+        let mut t = SKIPS.lock().unwrap();
+        t.0 += 1;
+        if t.0 % 300 == 0 {
+            eprintln!("part_rest: skipped in 300 frames: {:?}", t.1);
+            t.1.clear();
+        }
+    }
     let keys: Vec<(i32, i32)> = cells.cells.keys().copied().collect();
     for key in keys {
         let cell = cells.cells.get_mut(&key).unwrap();
         for q in cell.quiet.values_mut() {
             *q = q.saturating_add(1);
         }
-        if cell.rest.is_some()
-            || cell.building.is_some()
-            || cell.quiet.len() < MIN_PARTS
-            || cell.quiet.values().any(|q| *q < SETTLE)
-            || started >= PER_FRAME
-        {
+        if cell.rest.is_some() || cell.building.is_some() {
+            continue;
+        }
+        if cell.quiet.len() < MIN_PARTS {
+            skip("cell: too few parts");
+            continue;
+        }
+        if cell.quiet.values().any(|q| *q < SETTLE) || started >= PER_FRAME {
             continue;
         }
         // Every shown leaf, by what it shares, in the world.
@@ -349,9 +372,11 @@ fn rest_cells(
                     continue;
                 };
                 let Ok((gt, v, shown, range, reach, no_shadow)) = leaf_info.get(leaf) else {
+                    skip("leaf: no transform or visibility");
                     continue;
                 };
                 if !shown.get() {
+                    skip("leaf: hidden");
                     continue;
                 }
                 if materials.get(&mat.0).is_none_or(|m| {
@@ -363,12 +388,15 @@ fn rest_cells(
                             | AlphaMode::Multiply
                     )
                 }) {
+                    skip("leaf: blended");
                     continue;
                 }
                 let Some(m) = mesh_assets.get(&mesh.0) else {
+                    skip("leaf: mesh on the GPU only");
                     continue;
                 };
                 if !super::gun_rest::mergeable(m) {
+                    skip("leaf: not mergeable");
                     continue;
                 }
                 let shade = Shade {
@@ -391,6 +419,7 @@ fn rest_cells(
         }
         // Not worth it for a cell that's a few draws already.
         if taken.len() <= groups.len() + 1 {
+            skip("cell: not worth it");
             continue;
         }
         started += 1;
