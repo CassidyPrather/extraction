@@ -2976,6 +2976,10 @@ fn walker_eye(
     })
 }
 
+/// A standing head (m above the ground).
+const STAND_HEAD: f32 = 1.6;
+/// How far either side a fighting walker's eye is allowed for (m).
+const EYE_SWAY: f32 = 2.5;
 /// A walker this near with nobody else in mind is the one aiming (m).
 const WALKER_NEAR: f32 = 80.0;
 /// Low and still out of a walker's line this long (s): its aim lasts
@@ -3005,8 +3009,19 @@ fn line_hidden(
     p: Vec2,
     eye: Vec3,
 ) -> bool {
+    hidden_at(spatial, world, p, eye, LOW_HEAD)
+}
+
+/// A head `head` m up at `p` out of sight of `eye`.
+fn hidden_at(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    p: Vec2,
+    eye: Vec3,
+    head: f32,
+) -> bool {
     let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
-    let head = world.zone.on_ground(p.x, p.y) + Vec3::Y * LOW_HEAD;
+    let head = world.zone.on_ground(p.x, p.y) + Vec3::Y * head;
     let to = head - eye;
     let d = to.length();
     Dir3::new(to)
@@ -3032,6 +3047,55 @@ fn break_line(
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
     let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
     let away = (here - eye.xz()).normalize_or(Vec2::Y);
+    // The eye a step or two either side of where it is: a walker that's
+    // fighting moves, and a spot only just out of its line now was in it
+    // again a breath later ("in its line again", twice, on Rime).
+    let side = away.perp() * EYE_SWAY;
+    let sway = [
+        eye,
+        eye + Vec3::new(side.x, 0.0, side.y),
+        eye - Vec3::new(side.x, 0.0, side.y),
+    ];
+    // Best first: hidden standing from all three, then low from all three;
+    // last, low from where it is now.
+    let ranks: [(&dyn Fn(Vec2) -> bool, &'static str); 3] = [
+        (
+            &|p| {
+                sway.iter()
+                    .all(|e| hidden_at(spatial, world, p, *e, STAND_HEAD))
+            },
+            "behind something tall",
+        ),
+        (
+            &|p| {
+                sway.iter()
+                    .all(|e| hidden_at(spatial, world, p, *e, LOW_HEAD))
+            },
+            "low behind something",
+        ),
+        (&hidden, "behind something near"),
+    ];
+    for (good, how) in ranks {
+        if let Some(p) = nearest_where(here, away, &open, nav, good) {
+            return Some((
+                vec![Task::WalkTo { to: p, within: 0.6 }, Task::Wait(LINE_HELD)],
+                how,
+            ));
+        }
+    }
+    None
+}
+
+/// The nearest walkable spot within 12 m, reached without crossing what
+/// can't be walked, where `good` holds: nearest first, and at a range those
+/// off the line from `away`'s far end before those back toward it.
+fn nearest_where(
+    here: Vec2,
+    away: Vec2,
+    open: &dyn Fn(Vec2) -> bool,
+    nav: Option<&extraction_core::nav::NavGrid>,
+    good: &dyn Fn(Vec2) -> bool,
+) -> Option<Vec2> {
     for r in [2.0f32, 3.5, 5.0, 7.0, 9.5, 12.0] {
         // Nearest first; at a range, those off its line before those
         // back toward it.
@@ -3045,11 +3109,9 @@ fn break_line(
         });
         if let Some(p) = ring
             .into_iter()
-            .find(|p| open(*p) && nav.is_none_or(|n| blocked_run(n, here, *p) < 0.5) && hidden(*p))
+            .find(|p| open(*p) && nav.is_none_or(|n| blocked_run(n, here, *p) < 0.5) && good(*p))
         {
-            let mut t = vec![Task::WalkTo { to: p, within: 0.6 }];
-            t.push(Task::Wait(LINE_HELD));
-            return Some((t, "behind something near"));
+            return Some(p);
         }
     }
     None
