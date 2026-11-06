@@ -743,6 +743,10 @@ fn hand_reload(world: &mut World) -> bool {
     if !in_hand {
         bot.tasks.push_front(Task::DrawGun);
     }
+    // The sim raider's mind lets go of the bot: it plans its walks again
+    // every few frames, and a reload put in front of them was gone the
+    // next (the draw lasted a frame). The quit loads a fresh game anyway.
+    world.entity_mut(me).remove::<crate::sim::raider::Raider>();
     true
 }
 
