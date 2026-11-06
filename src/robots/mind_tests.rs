@@ -745,7 +745,9 @@ fn a_searching_drone_looks_in_at_a_doorway() {
         .world()
         .resource::<super::doors::Entrances>()
         .doors
-        .first()
+        .iter()
+        // A way in from outside (a drone comes down to no inside door).
+        .find(|d| d.outside)
         .expect("a door");
     let start = door.mid + door.out * 25.0 + Vec3::Y * 10.0;
     let mut queue = CommandQueue::default();
@@ -799,7 +801,9 @@ fn a_drone_held_off_a_doorway_still_ends_its_search() {
         .world()
         .resource::<super::doors::Entrances>()
         .doors
-        .first()
+        .iter()
+        // A way in from outside (a drone comes down to no inside door).
+        .find(|d| d.outside)
         .expect("a door");
     let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
     let held = Vec3::new(
@@ -6237,4 +6241,58 @@ fn a_searching_walker_passes_over_you_low_and_still_behind_cover() {
         }
     }
     assert!(wrong.is_empty(), "{wrong:?}");
+}
+
+/// Going down isn't being lost: a machine that lets you go because you
+/// went down (`search::forget_the_downed`) doesn't say it's given up, so
+/// "Lost you, has it? Good. Stay low a while." isn't the last thing you
+/// hear (Rime's first hound: said at the moment the one-handed newcomer
+/// went down). One whose search runs out still says it.
+#[test]
+fn nothing_says_its_lost_you_as_you_go_down() {
+    #[derive(Resource, Default)]
+    struct Lost(usize);
+    for downed in [true, false] {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Lost>().add_systems(
+            Last,
+            |mut l: MessageReader<super::search::LostYou>, mut n: ResMut<Lost>| {
+                n.0 += l.read().count();
+            },
+        );
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        let w = walker_at(&mut app, &zone, zone.on_ground(me.x + 12.0, me.z));
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(me);
+            a.suspicion = 0.3;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Search {
+            at: me,
+            left: if downed { 60.0 } else { 0.05 },
+            spots: vec![me],
+            dwell: 0.0,
+        };
+        // Away from its eye while it searches.
+        put(&mut app, player, zone.on_ground(me.x - 150.0, me.z));
+        for _ in 0..3 {
+            app.update();
+        }
+        app.world_mut().resource_mut::<Lost>().0 = 0;
+        if downed {
+            app.world_mut()
+                .write_message(crate::health::Downed { player, at: me });
+        }
+        for _ in 0..30 {
+            app.update();
+        }
+        let said = app.world().resource::<Lost>().0;
+        assert_eq!(
+            said > 0,
+            !downed,
+            "you went down: {downed}; said it lost you {said} times"
+        );
+    }
 }
