@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 5f941c7 | 2026-11-06 (gate 194, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Marrow 8, Kettle 7, Rime 7, Sallow 7); stucks 47 (a974f23: 52): Cinder seed 8 has 12 (7 to_rv against a Minelayer's hull at (65, -169)), Sallow seed 1 has 16 (8 to_rv against the drowned chapel's walls at (-75, -20)); deaths Kettle seed 5 (Crawler), Rime seed 1 (Walker), Sallow seed 2 (Drone); stowing: 2113 carried, 0 drops, kit 40/40, 1 stow stuck; 13/13 contract scenarios; second_hour passes; `first_jobs_cautious` places the broken walker for job 2, fails on WalkTo (-87.76, -35.05) by Marrow's footbridge (Onboarding's) and a Press; `--check-buildings` 46 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1837 passed, 0 FAILED | first_contact passes on its first run; gauges: 2 FAILED, `gauge_guns_lying_about_rest` (a declined gun hidden in a Local; Performance's RestDeclined, gating) and `gauge_the_shelf_stocks_and_clears` (a shelf entry drawing the real mesh, deterministic alone) |
 | a974f23 | 2026-11-05 (after gate 175, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Sallow 8, Kettle 7, Marrow 7, Rime 7); stucks 52 (63a83d1: 41): Marrow seed 2 has 21, all depot_marrow takes beside a Sorter wreck (the wreck class, fixed in 04a443f4, on main after this sha), its bridge stucks gone; Rime seed 4 6 in adit_rime; Rime seed 8 0 (was 7); deaths: Marrow seed 2 (Walker, to_rv), Kettle seed 6 and Rime seed 1 (Drone); Sallow seed 6's fall gone (the dam fix); stowing: 2105 carried, 0 drops, kit 40/40, 1 stow stuck; 13/13 contract scenarios; second_hour passes; `first_jobs_cautious` places the broken walker for job 2 (Robot minds' fix holds) but fails: stuck on WalkTo (-80.7, 8.71) after the Surge at 2049 s; `--check-buildings` 38 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1419 lib, 324 + 47 core, 0 FAILED | first_contact passes on its first run; gauges: `gauge_guns_lying_about_rest` fails under batch load (16 of 17 guns resting) |
 | 63a83d1 | 2026-11-04 (gate 169, release check) | 40/40 exit 0, no timeouts, 37 extracted (Cinder 8, Kettle 8, Marrow 7, Rime 7, Sallow 6); stucks 41 (all of the +2 in Marrow; every other valley's stucks identical run for run); Marrow seed 2 now dies to a Walker at (-88.0, -24.7) while travelling; Kettle seed 6 now extracts; Sallow seed 6's fall unchanged; stowing unchanged (1978 carried, 0 drops, kit 40/40, 1 stow stuck); 13/13 contract scenarios; second_hour passes (it never reaches job 2, so no walker line either way); `--check-buildings` 42 checked, 0 flagged; sim_guards pass | fast-profile workspace suite: 1367 lib, 322 + 47 core, 0 FAILED | first_contact passes on its first run; gauges all within budget |
 | 8d5c110 | 2026-11-04 (release check, after the pause) | 40/40 exit 0, no timeouts, 36 extracted; stucks 39; Sallow seed 6 dies to a fall at (50.9, 163.8) from 79 hp; stowing unchanged; 13/13 contract scenarios; second_hour passes, no broken walker placed (the Director looks once per app, on job 1); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1356 lib, 319 + 47 core, 0 FAILED | first_contact cold run over on Marrow (10.07 > 9.8 s, 273 frames), passes alone; gauges 18/18 |
@@ -80,12 +81,17 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of a974f23, with the Verifier's fixes since (on main or in gate 194) and a Marrow smoke on main a5b7aeb7.
+As of 5f941c7.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `first_jobs_cautious` on Marrow: the bot times out on WalkTo (-80.7, 8.71) after the Surge (2049 s), never home | | Onboarding | reported |
-| Sim: Kettle seed 2 dies to a Drone on the beck's footbridge (a fight it loses there; 1 stuck since the bridge sidestep, 3 before) | combat | Robot minds / none | watching |
+| `render::warmup::tests::gauge_the_shelf_stocks_and_clears`: "shelf entries drawing the real mesh" (one entry, Mesh index 4499), alone and in the tier | | Performance | reported |
+| `render::gun_rest::tests::gauge_guns_lying_about_rest`: one gun of 17 never AtRest (a declined gun kept in a Local, the census blind to it) | | Performance | fixed (RestDeclined), gating |
+| `first_jobs_cautious` on Marrow: times out on WalkTo (-87.76, -35.05) at the footbridge approach, and on a Press; earlier, WalkTo (-80.7, 8.71) after the Surge | | Onboarding | reported |
+| Save and quit: a raid resumed from its save is counted again in raids_by_map (loot, Lev, job patience) | | Progression | fixed in ed8289fb (their branch), to merge |
+| Sim: Cinder seed 8, to_rv against a Minelayer's hull (65, -169), 7 stucks; Sallow seed 1, to_rv against the drowned chapel (-75, -20), 8 | raider routing | Verifier | to look at |
+| Sim, Rime careers (Fifth valley): a plant job inside a building never planted (up_the_fell); the cautious raider turns home on the contract's hearth; waiting for the truck inside the col refuge; stuck on the hinge side of the ore mill's open door | raider | Verifier | queued |
+| Sim: a raider in a ravine under a footbridge counts as on its deck (`Deck::holds` is 2D) | raider | Verifier | queued |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
