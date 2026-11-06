@@ -1369,6 +1369,9 @@ impl Firearm {
             // The action bar lock holds it shut on a cocked hammer.
             return events;
         }
+        if from >= OPENED_AT || to >= OPENED_AT {
+            self.bolt_opened = true;
+        }
         if to > from {
             if from < COCK_AT && to >= COCK_AT && !self.hammers_cocked[0] {
                 self.hammers_cocked[0] = true;
@@ -1411,7 +1414,9 @@ impl Firearm {
                     events.push(Event::Chambered);
                 }
                 self.action_released = false;
-                events.push(Event::BoltClosed);
+                if std::mem::take(&mut self.bolt_opened) {
+                    events.push(Event::BoltClosed);
+                }
             }
         }
         self.bolt_travel = to;
@@ -1805,7 +1810,7 @@ pub(crate) mod tests {
     /// opening clicked shut a third of the way through it).
     #[test]
     fn only_a_bolt_that_opened_comes_home() {
-        for def in [mosin(), pistol(), rifle()] {
+        for def in [mosin(), pistol(), rifle(), pump()] {
             let mut gun = Firearm::new(def.clone(), 1.0);
             gun.set_handle_lift(1.0);
             let mut ev = Vec::new();
