@@ -85,8 +85,6 @@ As of 5f941c7.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::warmup::tests::gauge_the_shelf_stocks_and_clears`: "shelf entries drawing the real mesh" (one entry, Mesh index 4499), alone and in the tier | | Performance | reported |
-| `render::gun_rest::tests::gauge_guns_lying_about_rest`: one gun of 17 never AtRest (a declined gun kept in a Local, the census blind to it) | | Performance | fixed (RestDeclined), gating |
 | `first_jobs_cautious` on Marrow: times out on WalkTo (-87.76, -35.05) at the footbridge approach, and on a Press; earlier, WalkTo (-80.7, 8.71) after the Surge | | Onboarding | reported |
 | Save and quit: a raid resumed from its save is counted again in raids_by_map (loot, Lev, job patience) | | Progression | fixed in ed8289fb (their branch), to merge |
 | Sim: Cinder seed 8, to_rv against a Minelayer's hull (65, -169), 7 stucks; Sallow seed 1, to_rv against the drowned chapel (-75, -20), 8 | raider routing | Verifier | to look at |
@@ -99,6 +97,7 @@ As of 5f941c7.
 
 | test / run | fixed in | by |
 | - | - | - |
+| `gauge_guns_lying_about_rest` (a declined gun kept in a Local: RestDeclined) and `gauge_the_shelf_stocks_and_clears` (shelve met a mesh made that frame): both pass alone and together on 65787db | 197 | Performance |
 | Raider routing: take routes through wrecks indoors (04a443f4) and out of doors, the wreck at the walk's end left on it (e75a5656..935b442f); a wall from just outside (378c8033..f0056e7b); empties through rock (8107aa5b, Rime seed 4's adit); sidesteps onto floor (a08fa083) and along a bridge's deck (8cee2b9b, shared `world::bridges::Deck` 89fde86c); boarding from the truck as it stands (83eb0f50); the truck never parked into a building (4e3aad60, lint `every_truck_stop_is_clear_of_buildings`); the gun-rest gauge's settle (74befaf3); Marrow seed 1's door (Onboarding's 200068c2: 0 stucks on a5b7aeb7); the door leaf shoving a player (200068c2); the Sallow shed waypoint (doesn't reproduce on a974f23 or after) | 192 / 194 | Verifier, Onboarding |
 | The broken walker on job 2 in one session (Robot minds, 9bfdd9df: `first_jobs_cautious` places it at (50.9, 133.5)); first_contact's cold run (the asset read-ahead, 8e76ed67); Marrow seed 2's bridge (Map design); Sallow seed 6's fall (the dam fix, 626243b3) | a974f23 | Robot minds, Verifier, Performance, Map design |
 | the puff gauge and Marrow m05_spruce (the sky counted), `second_hour` (0/40 → passes) | 8d5c110 | Performance, Weapon feel, Onboarding |
