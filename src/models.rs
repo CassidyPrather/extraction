@@ -274,6 +274,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Pale",
     "Hoof",
     "Drake",
+    // Retroreflective tape (a snow pole's bands): lit for the eye's torch
+    // by `render::reflectors`.
+    "Reflector",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -284,6 +287,11 @@ pub struct ModelMaterials {
 }
 
 impl ModelMaterials {
+    /// The material made for `name`, if it has been.
+    pub fn cached(&self, name: &str) -> Option<&Handle<StandardMaterial>> {
+        self.cache.get(name)
+    }
+
     /// The name a shared model material was made from, if it's one of
     /// these (`weapons::weather` asks, to know steel from wood).
     pub fn name_of(&self, id: AssetId<StandardMaterial>) -> Option<&str> {
@@ -476,6 +484,9 @@ impl ModelMaterials {
             "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
             "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
+            // Retroreflective tape by day: a pale cool grey, its beads a
+            // little glossy (`render::reflectors` lights it for a torch).
+            "Reflector" => flat(materials, Color::srgb(0.72, 0.73, 0.72), 0.0, 0.35),
             "Rotor" => flat(materials, Color::srgb(0.06, 0.06, 0.065), 0.3, 0.45),
             "Lens" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.05, 0.07, 0.1),

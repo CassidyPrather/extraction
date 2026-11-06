@@ -2146,11 +2146,72 @@ struct LockHalo {
     /// Its drone.
     robot: Entity,
     left: f32,
-    mat: Handle<StandardMaterial>,
+    /// Its material, when it's laid over the day (blended): its cover
+    /// follows the pulse.
+    blended: Option<Handle<StandardMaterial>>,
+    /// By day, the lens it's set behind (it's a soft disc turned to the
+    /// eye, not a child of the lens).
+    lens: Option<Entity>,
+}
+
+/// How far behind the lens (away from the eye) a day halo is set, m: past
+/// the drone's body, which stays drawn over it.
+const LOCK_HALO_BEHIND: f32 = 0.45;
+
+/// A soft disc: white, its cover full over the middle half and falling
+/// off to nothing at the edge, as a glow does.
+fn soft_disc() -> Image {
+    const N: usize = 64;
+    let mut data = Vec::with_capacity(N * N * 4);
+    for j in 0..N {
+        for i in 0..N {
+            let x = (i as f32 + 0.5) / N as f32 * 2.0 - 1.0;
+            let y = (j as f32 + 0.5) / N as f32 * 2.0 - 1.0;
+            let r = (x * x + y * y).sqrt().min(1.0);
+            // Full over the middle half, then falling smoothly to nothing.
+            let k = ((1.0 - r) / 0.5).clamp(0.0, 1.0);
+            let a = k * k * (3.0 - 2.0 * k);
+            data.extend_from_slice(&[255, 255, 255, (a * 255.0).round() as u8]);
+        }
+    }
+    Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: N as u32,
+            height: N as u32,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::default(),
+    )
+}
+
+/// Brighter than this (`Conditions::light`), a lock's halo is laid over
+/// what's behind it rather than added to it.
+const LOCK_HALO_DAYLIGHT: f32 = 0.25;
+
+/// How much of what's behind a blended halo it covers, at its glow:
+/// most at a crest (0.95), never under 0.55 while the lock runs.
+fn lock_halo_alpha(glow: LinearRgba) -> f32 {
+    let k = (glow.red / tell_halo(tell_gain(1.0, 1.0, true)).red).clamp(0.0, 1.0);
+    0.55 + 0.4 * k
 }
 
 /// Its radius, m (a drone's eye is half a walker's).
 const LOCK_HALO: f32 = 0.12;
+
+/// How much wider it's drawn in full daylight (`Conditions::light` 1),
+/// where a lens's glow is up against the bright.
+const LOCK_HALO_DAY: f32 = 2.4;
+
+/// A blended halo's red by day (the tell's hue, as `tell_halo` burns it).
+const LOCK_RED: Color = Color::srgb(0.92, 0.1, 0.06);
+
+/// Its glow over the tell's (`drone_lock_halo`) as it goes to the eye:
+/// `hue_safe` caps the crests, so this lifts the troughs between them,
+/// and the lock reads for all of its lead.
+const LOCK_HALO_GAIN: f32 = 2.0;
 
 /// A red flare under a drone settling its gun on you.
 #[derive(Component)]
@@ -2166,14 +2227,27 @@ fn lock_flares(
     mut windups: MessageReader<super::sorter::SorterWindup>,
     mut flares: Query<(Entity, &mut LockFlare, &mut PointLight)>,
     time: Res<Time>,
-    (mut halos, parts, kids, mut meshes, mut materials): (
-        Query<(Entity, &mut LockHalo)>,
+    (mut halos, parts, kids, mut meshes, mut materials, conditions): (
+        Query<(
+            Entity,
+            &mut LockHalo,
+            &mut crate::render::grade::ToTheEye,
+            &mut Transform,
+        )>,
         Query<&RobotPart>,
         Query<&Children>,
         ResMut<Assets<Mesh>>,
         ResMut<Assets<StandardMaterial>>,
+        Option<Res<crate::world::weather::Conditions>>,
+    ),
+    (mut images, mut soft, places, cameras): (
+        ResMut<Assets<Image>>,
+        Local<Option<Handle<Image>>>,
+        Query<&GlobalTransform, Without<LockHalo>>,
+        Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     ),
 ) {
+    let light = conditions.map_or(1.0, |c| c.light);
     for l in locks.read() {
         // The glow round its lens, the sentry's chirp over its lock.
         let lens = kids.get(l.drone).ok().and_then(|cs| {
@@ -2181,29 +2255,70 @@ fn lock_flares(
                 .find(|c| parts.get(*c).is_ok_and(|p| p.role == PartRole::Sensor))
         });
         if let Some(lens) = lens {
+            // By day it's laid over what's behind it (blended), its red in
+            // place of the bright: added to a grey sky, red went pink. After
+            // dark it adds to the dark, as a glow does.
+            let day = light > LOCK_HALO_DAYLIGHT;
             let mat = materials.add(StandardMaterial {
-                base_color: Color::BLACK,
+                // (Unlit by day: a red that holds as red against the bright,
+                // the tell's hue, `tell_halo`'s.)
+                base_color: if day {
+                    LOCK_RED.with_alpha(lock_halo_alpha(drone_lock_halo(0.0)))
+                } else {
+                    Color::BLACK
+                },
+                // (A glow's falloff by day, not a disc's edge.)
+                base_color_texture: day
+                    .then(|| soft.get_or_insert_with(|| images.add(soft_disc())).clone()),
+                unlit: day,
                 emissive: drone_lock_halo(0.0),
                 perceptual_roughness: 1.0,
                 reflectance: 0.0,
-                alpha_mode: AlphaMode::Add,
+                alpha_mode: if day {
+                    AlphaMode::Blend
+                } else {
+                    AlphaMode::Add
+                },
                 // A lamp: held through fog, drawn as far as the drone.
                 fog_enabled: false,
                 ..default()
             });
-            commands.spawn((
+            // Held to the eye (`ToTheEye`): its colour kept (`hue_safe`)
+            // and its brightness on screen the same whatever the eyes'
+            // adaptation, so it isn't three stops brighter at night than
+            // by day. Wider by day, against the bright.
+            let radius = LOCK_HALO * (1.0 + LOCK_HALO_DAY * light);
+            let halo = (
                 LockHalo {
                     robot: l.drone,
                     left: super::drone::LOCK_TIME,
-                    mat: mat.clone(),
+                    blended: day.then(|| mat.clone()),
+                    lens: day.then_some(lens),
                 },
-                Mesh3d(meshes.add(Sphere::new(LOCK_HALO).mesh().ico(2).unwrap())),
+                crate::render::grade::ToTheEye {
+                    material: mat.clone(),
+                    emissive: drone_lock_halo(0.0) * LOCK_HALO_GAIN,
+                },
                 MeshMaterial3d(mat),
-                Transform::IDENTITY,
                 NotShadowCaster,
                 HeldSize,
-                ChildOf(lens),
-            ));
+            );
+            if day {
+                // A soft disc turned to the eye, set behind the drone (below,
+                // each frame), so its body stays drawn over the glow.
+                commands.spawn((
+                    halo,
+                    Mesh3d(meshes.add(Rectangle::new(radius * 2.0, radius * 2.0))),
+                    Transform::IDENTITY,
+                ));
+            } else {
+                commands.spawn((
+                    halo,
+                    Mesh3d(meshes.add(Sphere::new(radius).mesh().ico(2).unwrap())),
+                    Transform::IDENTITY,
+                    ChildOf(lens),
+                ));
+            }
         }
         if let Ok(mut c) = commands.get_entity(l.drone) {
             c.with_child((
@@ -2261,14 +2376,28 @@ fn lock_flares(
         }
     }
     let dt = time.delta_secs();
-    for (e, mut h) in &mut halos {
+    let eye_at = cameras.iter().next().map(|g| g.translation());
+    for (e, mut h, mut eye, mut t) in &mut halos {
         h.left -= dt;
-        if h.left <= 0.0 {
+        let lens_at = h.lens.map(|l| places.get(l).map(|g| g.translation()));
+        if h.left <= 0.0 || matches!(lens_at, Some(Err(_))) {
             commands.entity(e).despawn();
             continue;
         }
-        if let Some(mut m) = materials.get_mut(&h.mat) {
-            m.emissive = drone_lock_halo(super::drone::LOCK_TIME - h.left);
+        if let (Some(Ok(at)), Some(cam)) = (lens_at, eye_at) {
+            let away = (at - cam).normalize_or(Vec3::NEG_Z);
+            t.translation = at + away * LOCK_HALO_BEHIND;
+            t.rotation = Transform::from_translation(t.translation)
+                .looking_at(t.translation + away, Vec3::Y)
+                .rotation;
+        }
+        let glow = drone_lock_halo(super::drone::LOCK_TIME - h.left);
+        eye.emissive = glow * LOCK_HALO_GAIN;
+        if let Some(m) = h.blended.as_ref().and_then(|m| materials.get_mut(m)) {
+            let a = lock_halo_alpha(glow);
+            if (m.base_color.alpha() - a).abs() > 0.02 {
+                m.into_inner().base_color.set_alpha(a);
+            }
         }
     }
     for (e, mut f, mut light) in &mut flares {
@@ -2732,7 +2861,7 @@ fn alert_eyes(
         Query<(&Eye, &mut crate::world::halos::Halo)>,
         Query<(&mut Transform, &GlobalTransform), With<HeldSize>>,
         Query<(&RobotPart, &MeleeLens)>,
-        Query<&LockHalo>,
+        Query<(&LockHalo, &crate::render::grade::ToTheEye)>,
     ),
     gaits: Query<&super::anim::Gait>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
@@ -2845,8 +2974,11 @@ fn alert_eyes(
             tells.insert(p.robot, e);
         }
     }
-    for l in &locks {
-        if let Some(e) = glowing(&l.mat) {
+    // (A lock's own glow, not what goes to the eye: its halo after dark
+    // is as it was.)
+    for (l, eye) in &locks {
+        let e = eye.emissive * (1.0 / LOCK_HALO_GAIN);
+        if e != LinearRgba::BLACK {
             tells.insert(l.robot, e);
         }
     }
