@@ -152,6 +152,25 @@ fn launch(
     }
 }
 
+/// A star's velocity a step on: gravity, the air's drag on its whole
+/// speed, and, once it's falling, the slow sink (a burning star hangs, at
+/// about 6 m/s) on its fall alone. (Braking its whole speed by the sink
+/// stalled a star fired level within a few metres of the muzzle: it was
+/// "falling" from its first frame.)
+pub fn star_step(v: Vec3, dt: f32) -> Vec3 {
+    let mut nv = v + Vec3::new(0.0, -9.81, 0.0) * dt;
+    let speed = nv.length();
+    let across = Vec3::new(nv.x, 0.0, nv.z);
+    nv -= across * (DRAG_UP * speed * dt).min(0.9);
+    let k = if nv.y > 0.0 {
+        DRAG_UP * speed
+    } else {
+        DRAG_DOWN * -nv.y
+    };
+    nv.y -= nv.y * (k * dt).min(0.9);
+    nv
+}
+
 /// Stars fly, hit, burn and draw robots; then they're gone.
 fn fly(
     mut commands: Commands,
@@ -174,9 +193,7 @@ fn fly(
         }
         if !f.landed {
             let v = f.velocity;
-            let k = if v.y > 0.0 { DRAG_UP } else { DRAG_DOWN };
-            let mut nv = v + Vec3::new(0.0, -9.81, 0.0) * dt;
-            nv -= nv * (k * nv.length() * dt).min(0.9);
+            let nv = star_step(v, dt);
             let step = (v + nv) * 0.5 * dt;
             if let Ok(dir) = Dir3::new(step) {
                 if let Some(hit) =
@@ -287,6 +304,43 @@ mod vr_tests {
     use crate::rig::Side;
     use crate::weapons::ballistics::Projectile;
     use crate::weapons::feel::vr_tests::*;
+
+    /// A star's flight: straight up it tops out about 85 m and sinks
+    /// slowly; fired level (at a machine, down a corridor) it carries well
+    /// past 20 m before it comes down (it stalled at the muzzle: braked by
+    /// the sink from its first frame), and a little up, further still.
+    #[test]
+    fn a_star_flies_on_its_speed_and_sinks_slowly() {
+        use super::star_step;
+        let dt = 1.0 / 90.0;
+        // Fired from the shoulder at 75 m/s: where it comes down.
+        let fly = |dir: Vec3| {
+            let (mut p, mut v, mut top) = (Vec3::Y * 1.5, dir.normalize() * 75.0, 0.0f32);
+            let mut t = 0.0;
+            while p.y > 0.0 && t < 60.0 {
+                let nv = star_step(v, dt);
+                p += (v + nv) * 0.5 * dt;
+                v = nv;
+                top = top.max(p.y);
+                t += dt;
+            }
+            (p, v, top)
+        };
+        // Straight up: it tops out about 85 m and sinks at about 6 m/s.
+        let (_, v, top) = fly(Vec3::Y);
+        assert!(
+            (75.0..95.0).contains(&top),
+            "straight up tops out at {top:.0} m"
+        );
+        assert!((5.0..7.0).contains(&-v.y), "sinks at {:.1} m/s", -v.y);
+        // Level (at a machine, down a corridor): it carries.
+        let (p, ..) = fly(Vec3::NEG_Z);
+        let far = -p.z;
+        assert!(far > 20.0, "fired level, down at {far:.1} m");
+        // A little up: further still.
+        let (p, ..) = fly(Vec3::new(0.0, 0.2, -1.0));
+        assert!(-p.z > far, "a little up: {:.1} m, level {far:.1} m", -p.z);
+    }
 
     /// The signal pistol by hand: broken open with A, a star thumbed in,
     /// shut, fired up. A star (no bullet) climbs and lights: a white one

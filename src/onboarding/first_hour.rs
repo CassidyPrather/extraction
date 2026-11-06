@@ -1505,11 +1505,7 @@ pub(super) fn direct_raid(
     // it does.
     let loadable = guns().any(|(g, by, packed)| {
         by == player && !packed && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
-    }) || world.items.iter().any(|(e, it, ..)| {
-        world.id(e).is_some_and(|id| id.ends_with("_mag"))
-            && it.rounds > 0
-            && carried(&world, &view, player, world.id(e).unwrap_or("")).contains(&e)
-    });
+    }) || spare_loaded(&world, &view, player);
     if threatened
         && armed_now
         && !p.hoards
@@ -3237,6 +3233,19 @@ fn take_it_on() -> Vec<Task> {
         Task::Ready { off_safe: true },
         Task::Engage { shots: 12 },
     ]
+}
+
+/// Something on `player` to load a gun from, besides what's in it: a
+/// loaded box magazine, a stripper clip with rounds on it, or loose rounds
+/// (box magazines only, and the careful newcomer with an SKS and two full
+/// clips read as having nothing to load).
+fn spare_loaded(world: &World2, view: &RaidView, player: Entity) -> bool {
+    world.items.iter().any(|(e, it, ..)| {
+        let def = world.catalog.get(it.kind());
+        (def.magazine.is_some() || def.category == extraction_core::items::Category::Ammo)
+            && it.rounds > 0
+            && carried(world, view, player, &def.id).contains(&e)
+    })
 }
 
 /// Whether a gun on `player`'s body has a round up (any: a rifle picked

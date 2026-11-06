@@ -745,7 +745,9 @@ fn a_searching_drone_looks_in_at_a_doorway() {
         .world()
         .resource::<super::doors::Entrances>()
         .doors
-        .first()
+        .iter()
+        // A way in from outside (a drone comes down to no inside door).
+        .find(|d| d.outside)
         .expect("a door");
     let start = door.mid + door.out * 25.0 + Vec3::Y * 10.0;
     let mut queue = CommandQueue::default();
@@ -799,7 +801,9 @@ fn a_drone_held_off_a_doorway_still_ends_its_search() {
         .world()
         .resource::<super::doors::Entrances>()
         .doors
-        .first()
+        .iter()
+        // A way in from outside (a drone comes down to no inside door).
+        .find(|d| d.outside)
         .expect("a door");
     let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
     let held = Vec3::new(
@@ -6071,4 +6075,224 @@ fn nothing_comes_for_you_at_base() {
         "it let you go"
     );
     assert!(hp(&app, player) >= hp0, "hurt at base");
+}
+
+/// Where a walker searching beside a low wall stands and where you are,
+/// in [`searching_walker_by_a_low_wall`]: how you're placed and whether
+/// the wall's there.
+#[derive(Clone, Copy, Debug)]
+enum Hiding {
+    /// Crouched and still, behind the wall from where it searches.
+    CrouchedStill,
+    /// Standing (still), behind the same wall.
+    Standing,
+    /// Crouched, shuffling along behind it.
+    CrouchedMoving,
+    /// Crouched and still with no wall.
+    InTheOpen,
+    /// Crouched and still behind the wall, and it searches the spot
+    /// round the wall's end, on your side, right by you.
+    Beside,
+}
+
+/// Nothing built within 16 m of `p` (a house's walls would hide or
+/// show you, not the test's).
+fn entrances_clear(app: &App, p: Vec3) -> bool {
+    let e = app.world().resource::<super::doors::Entrances>();
+    e.top_at(p.x, p.z, 16.0).is_none()
+}
+
+/// A walker searching where it last had you, a low wall (0.85 m: your
+/// head shows over it crouched, your body doesn't) between: whether it
+/// had you while it searched (s of its search before it had you).
+fn searching_walker_by_a_low_wall(hiding: Hiding) -> Option<f32> {
+    // On Marrow (the test field is all grass, and crouched in grass hides
+    // you anyway): flat firm ground, a yard or a road.
+    let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        robots: false,
+        ..Default::default()
+    });
+    let nav = app.world().resource::<super::walker::Nav>().0.clone();
+    let firm = |q: Vec3| {
+        !matches!(
+            zone.hm
+                .surface([q.x, q.z], zone.forest_cover(q.x, q.z) > 0.5),
+            extraction_core::terrain::Surface::Grass | extraction_core::terrain::Surface::Forest
+        )
+    };
+    let me = (0..2000)
+        .map(|i| {
+            let a = i as f32 * 2.399;
+            let r = 5.0 + i as f32 * 0.085;
+            zone.on_ground(a.cos() * r, a.sin() * r)
+        })
+        .find(|p| {
+            let around = [
+                Vec3::ZERO,
+                Vec3::new(9.0, 0.0, -0.5),
+                Vec3::new(0.0, 0.0, 14.0),
+                Vec3::new(4.0, 0.0, 4.0),
+                Vec3::new(-4.0, 0.0, 4.0),
+            ];
+            around.iter().all(|o| {
+                let q = zone.on_ground(p.x + o.x, p.z + o.z);
+                nav.walkable([q.x, q.z]) && (q.y - p.y).abs() < 0.4
+            }) && firm(*p)
+                && entrances_clear(&app, *p)
+        })
+        .expect("flat firm ground somewhere");
+    // The wall, along x, 0.6 m to your +z (the walker's side).
+    if !matches!(hiding, Hiding::InTheOpen) {
+        app.world_mut().spawn((
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(6.0, 0.85, 0.2),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+            Transform::from_translation(me + Vec3::new(0.0, 0.425, 0.6)),
+        ));
+    }
+    let crouched = !matches!(hiding, Hiding::Standing);
+    let head = |app: &mut App| {
+        app.world_mut()
+            .get_mut::<RigInput>(player)
+            .unwrap()
+            .head
+            .translation
+            .y = if crouched { 0.85 } else { 1.65 };
+    };
+    // Out of its way while it comes up to its post.
+    put(&mut app, player, zone.on_ground(me.x, me.z - 150.0));
+    let (post, spot) = match hiding {
+        // From your side of the wall, past its end, to right by you.
+        Hiding::Beside => (Vec3::new(9.0, 0.0, -0.5), Vec3::new(3.0, 0.0, -0.5)),
+        // Over the wall: it comes to 4 m short of where you are.
+        _ => (Vec3::new(0.0, 0.0, 14.0), Vec3::new(0.0, 0.0, 4.0)),
+    };
+    let post = zone.on_ground(me.x + post.x, me.z + post.z);
+    let spot = zone.on_ground(me.x + spot.x, me.z + spot.z);
+    let w = walker_at(&mut app, &zone, post);
+    head(&mut app);
+    put(&mut app, player, me);
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(spot);
+        a.suspicion = 0.6;
+        a.uncertainty = 3.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Search {
+        at: spot,
+        left: 40.0,
+        spots: vec![spot],
+        dwell: 0.0,
+    };
+    let mut t = 0.0;
+    for i in 0..90 * 40 {
+        head(&mut app);
+        let here = match hiding {
+            Hiding::CrouchedMoving => me + Vec3::X * (((i as f32 / 90.0) * 0.5).sin() * 1.5),
+            _ => me,
+        };
+        put(&mut app, player, here);
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = match hiding {
+            Hiding::CrouchedMoving => Vec3::X * 0.75,
+            _ => Vec3::ZERO,
+        };
+        app.update();
+        t += 1.0 / 90.0;
+        // Only while it searches (at its job again, it sees what it sees).
+        if !matches!(
+            app.world().get::<Brain>(w).unwrap(),
+            Brain::Search { .. } | Brain::Investigate { .. }
+        ) {
+            break;
+        }
+        if app.world().get::<Awareness>(w).unwrap().can_see_target {
+            return Some(t);
+        }
+    }
+    None
+}
+
+/// The driver's "Low behind it, and keep still. It only finds what moves."
+/// holds for a walker searching where it lost you: crouched and still
+/// behind cover, you're passed over, though your head shows over it. It
+/// finds you standing, moving, in the open, or coming right up by you,
+/// round the cover, where it sees you plainly (Onboarding's careful bots
+/// went down crouched and still behind cover, coordinator's ruling).
+#[test]
+fn a_searching_walker_passes_over_you_low_and_still_behind_cover() {
+    let mut wrong = Vec::new();
+    for (hiding, found) in [
+        (Hiding::CrouchedStill, false),
+        (Hiding::Standing, true),
+        (Hiding::CrouchedMoving, true),
+        (Hiding::InTheOpen, true),
+        (Hiding::Beside, true),
+    ] {
+        let had = searching_walker_by_a_low_wall(hiding);
+        if had.is_some() != found {
+            wrong.push(format!("{hiding:?}: had you {had:?}, should {found}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:?}");
+}
+
+/// Going down isn't being lost: a machine that lets you go because you
+/// went down (`search::forget_the_downed`) doesn't say it's given up, so
+/// "Lost you, has it? Good. Stay low a while." isn't the last thing you
+/// hear (Rime's first hound: said at the moment the one-handed newcomer
+/// went down). One whose search runs out still says it.
+#[test]
+fn nothing_says_its_lost_you_as_you_go_down() {
+    #[derive(Resource, Default)]
+    struct Lost(usize);
+    for downed in [true, false] {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Lost>().add_systems(
+            Last,
+            |mut l: MessageReader<super::search::LostYou>, mut n: ResMut<Lost>| {
+                n.0 += l.read().count();
+            },
+        );
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        let w = walker_at(&mut app, &zone, zone.on_ground(me.x + 12.0, me.z));
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(me);
+            a.suspicion = 0.3;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Search {
+            at: me,
+            left: if downed { 60.0 } else { 0.05 },
+            spots: vec![me],
+            dwell: 0.0,
+        };
+        // Away from its eye while it searches.
+        put(&mut app, player, zone.on_ground(me.x - 150.0, me.z));
+        for _ in 0..3 {
+            app.update();
+        }
+        app.world_mut().resource_mut::<Lost>().0 = 0;
+        if downed {
+            app.world_mut()
+                .write_message(crate::health::Downed { player, at: me });
+        }
+        for _ in 0..30 {
+            app.update();
+        }
+        let said = app.world().resource::<Lost>().0;
+        assert_eq!(
+            said > 0,
+            !downed,
+            "you went down: {downed}; said it lost you {said} times"
+        );
+    }
 }

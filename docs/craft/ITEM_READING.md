@@ -660,6 +660,39 @@ for all of it.
 ![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
 planks](../shots/items/torchlit_scopes_arm.jpg)
 
+#### Black's sheen: no single value helps (6 November)
+
+Gunsmith tried a brighter sheen on `Black` for black kit on the charred
+floor. The test: all 116 models that wear it, `--torchlit ruin` with
+the settled eyes, Black's roughness swapped for one run each. Body delta
+E, worst views:
+
+| Item, view | 0.35 | 0.40 | 0.45 (kept) | 0.55 |
+| - | - | - | - | - |
+| PBS-1, arm's length | 3.4 | 5.0 | 10.9 | 19.1 |
+| PSO-1, arm's length | 7.4 | 9.2 | 10.3 | 12.9 |
+| Weapon light, arm's length | 10.1 | 14.6 | 16.8 | 18.3 |
+| AK-74 stock, 2 m | 16.7 | 16.9 | 23.8 | 24.7 |
+| Rotor assembly, arm's length | 8.3 | 7.1 | 5.7 | 3.3 |
+| PU, 2 m | 6.0 | 5.8 | 5.9 | 5.5 |
+| PM and SVD mags, 2 m | 5.5, 5.3 | same | same | same |
+| Views under 10 | 12 | 12 | 10 | 11 |
+
+- **Glossier is worse.** Up close the torch's highlight on smoother
+  black matches the washed-out floor, and black kit sinks into it.
+- **Rougher trades views.** At 0.55 the black-led kit gains at arm's
+  length, but other views drop: the bolt cutters by 25.5 at arm's
+  length, the side rail by 6.6 from 2 m.
+- **What stays under 10 isn't Black's.** By triangle share the PM and
+  SVD mags are 52-56% `Blued`, the PU 43% `Blued`, the multitool 70%
+  `Steel`, the bolts mostly `Steel` and the rotor 59% `Dark`. None of
+  them moves at any value of Black. The Black-led items (PBS-1 95%,
+  PSO-1 73%) already clear 10 at 0.45.
+
+So Black stays at 0.45. Chasing Blued and Steel for the charred floor
+was declined: a dark thing on charcoal is dark in life too, and the
+levers left cost other views. Don't re-run this without a new lever.
+
 #### The thirteen off their middle, centred (6 November)
 
 Thirteen models were off their box's middle because code places things
