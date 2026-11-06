@@ -651,6 +651,8 @@ pub(super) struct Newcomer {
     line_checked: f32,
     /// When a walker last aimed at it.
     aimed_at: f32,
+    /// When it last put a dressing on.
+    dressed_at: f32,
     /// On its way to a spot out of a walker's line till then.
     line_run_until: f32,
     /// When machines after it fired at it, the last half minute.
@@ -1549,6 +1551,10 @@ pub(super) fn direct_raid(
         && loadable
         && !one_up(guns(), player)
         && now - state.readied_at > 10.0
+        // Not mid-fight: between shots the chamber reads empty a moment,
+        // and a rack then throws the next round away (r10).
+        && now - state.fought_at > 3.0
+        && !bot.tasks.iter().any(|t| matches!(t, Task::Engage { .. }))
     {
         state.readied_at = now;
         state.note(now, Kind::Learned, "a machine on it: readied the gun");
@@ -1556,6 +1562,43 @@ pub(super) fn direct_raid(
             &mut bot,
             vec![Task::DrawGun, Task::Ready { off_safe: false }],
         );
+    }
+    // Bleeding, a dressing on it, nothing at it this moment: the dressing
+    // on, whoever said so and however long ago. (Told once a career, the
+    // careful newcomer shot a walker blind at r10 and bled to death beside
+    // it over twenty seconds, a dressing in its pouch.)
+    if wound_to_dress(
+        world.bleeding(player),
+        &state.shots,
+        now,
+        state.dressed_at,
+        state.line_run_until > now,
+    ) && world.alive(player)
+    {
+        let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
+            held.is_none()
+                && sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                && world.catalog.get(it.kind()).id == "field_dressing"
+        });
+        if let Some((e, ..)) = dressing {
+            state.dressed_at = now;
+            state.note(
+                now,
+                Kind::Learned,
+                "bleeding, nothing at it: the dressing on",
+            );
+            super::second_hour::cut_in(
+                &mut bot,
+                vec![
+                    Task::Stow(Side::Left),
+                    Task::Grab {
+                        item: e,
+                        side: Side::Left,
+                    },
+                    Task::Use(Side::Left),
+                ],
+            );
+        }
     }
     // In a walker's line with no way out of it, a round up: it shoots back.
     // (Told "Break its line", the careful newcomer stood in it with a
@@ -3038,6 +3081,23 @@ fn no_way_out(
         && now - aimed_at < AIMED_FOR
         && shots.iter().filter(|t| now - **t < SHOT_WINDOW).count() >= 2
 }
+
+/// Whether to dress a wound now: bleeding enough to matter, no round at
+/// it in the last few seconds, not on a run to cover, and not again for a
+/// few seconds after the last (its use takes that long).
+fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, running: bool) -> bool {
+    bleeding > BLEED_WORTH
+        && !running
+        && now - dressed_at > DRESS_EVERY
+        && shots.iter().all(|t| now - t > CONTACT_FOR)
+}
+
+/// A bleed this fast is worth stopping to dress (hp/s).
+const BLEED_WORTH: f32 = 0.3;
+/// Not more often than this (s).
+const DRESS_EVERY: f32 = 8.0;
+/// Shot at within this, it's still in the fight (s).
+const CONTACT_FOR: f32 = 3.0;
 
 /// A walker's aim this recent still has it in mind (s).
 const AIMED_FOR: f32 = 20.0;
@@ -4805,6 +4865,21 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn a_bleed_is_dressed_once_out_of_contact() {
+        let now = 400.0;
+        // Bleeding, nothing at it for a while: dress it.
+        assert!(wound_to_dress(1.5, &[now - 10.0], now, 0.0, false));
+        // Still being shot at, or running to cover: not yet.
+        assert!(!wound_to_dress(1.5, &[now - 1.0], now, 0.0, false));
+        assert!(!wound_to_dress(1.5, &[now - 10.0], now, 0.0, true));
+        // A graze that's stopping: no.
+        assert!(!wound_to_dress(0.1, &[], now, 0.0, false));
+        // Just put one on: not again at once.
+        assert!(!wound_to_dress(1.5, &[], now, now - 2.0, false));
+        assert!(wound_to_dress(1.5, &[], now, now - 20.0, false));
     }
 
     #[test]
