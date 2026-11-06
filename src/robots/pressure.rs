@@ -1,0 +1,369 @@
+//! The Zone's pressure on you: how busy you've made it, from what you do.
+//!
+//! Danger follows what the player does, reads in the world before it
+//! arrives, and comes slow and strategic before fast and tactical (the
+//! user's direction for early difficulty, 6 November). There's no career
+//! counter in it: one account a raid, fed by your own doings.
+//!
+//! - **Stir**, from your actions, and it dies down: a shot that's heard
+//!   ([`SHOT`]), a fight with a machine on you ([`FIGHTING`] a second),
+//!   time on hot ground (a region of danger 2 or more, [`HOT`] a second,
+//!   and [`INTO_HOT`] each time you go in), and what you carry draws
+//!   ([`ATTENTION`] a second, `anomaly::Attention`). It drains at
+//!   [`DRAIN`] a second. Shoot one weak machine and leave: it stays low,
+//!   and goes.
+//! - **Linger**, the slow clock: [`LINGER`] a second out in the Zone, and it
+//!   doesn't drain. A cautious half hour isn't safe forever. The Surge is
+//!   still the hard clock.
+//!
+//! The account sets a [`Level`]. Each step up is said in the world before
+//! anything it brings ([`stepped`], [`Stepped`]): a fast machine (a drone,
+//! hounds) is only sent once a step has been heard [`CUE_LEAD`] before
+//! (`director`). Below that, an answer to a noise is one walker coming to
+//! look.
+
+use bevy::prelude::*;
+
+/// A shot that's reported (`director::LOUD`, at most one a
+/// `director::HEAT_GAP`) stirs this much...
+pub const SHOT: f32 = 0.25;
+/// ...a second with a machine on you (it sees you and has you)...
+pub const FIGHTING: f32 = 1.0 / 60.0;
+/// ...a second on hot ground (danger 2 and up: about two and a half
+/// minutes there is a step, over the drain), and each time you go in...
+pub const HOT: f32 = 1.0 / 120.0;
+pub const INTO_HOT: f32 = 0.3;
+/// ...and a second of the Zone's attention, per unit
+/// (`anomaly::Attention::total`: about 1 for a hard minute's noise, more
+/// for an artifact in the pack).
+pub const ATTENTION: f32 = 1.0 / 120.0;
+/// Stir drains this much a second.
+pub const DRAIN: f32 = 1.0 / 300.0;
+/// Linger: a second out in the Zone adds this (a step in 15 minutes).
+pub const LINGER: f32 = 1.0 / 900.0;
+/// A fast machine is sent only this long (s) after the step that allows
+/// it was said.
+pub const CUE_LEAD: f32 = 10.0;
+/// Danger at or above this is hot ground (`Region::danger`; Map design's
+/// read: 0–1 quiet edges, 2–3 hot).
+pub const HOT_DANGER: u8 = 2;
+
+/// How busy you've made the Zone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Level {
+    /// It's at its own work: walkers at their jobs, patrols, the dirigible.
+    #[default]
+    Quiet,
+    /// Up and about: it looks round where you've been, a drone over hot
+    /// ground, and a noise may bring one.
+    Stirred,
+    /// Busy: drones about, responses in force.
+    Busy,
+    /// Hunting you.
+    Hunting,
+}
+
+impl Level {
+    pub fn of(account: f32) -> Self {
+        match account {
+            a if a < 1.0 => Level::Quiet,
+            a if a < 2.0 => Level::Stirred,
+            a if a < 3.0 => Level::Busy,
+            _ => Level::Hunting,
+        }
+    }
+}
+
+/// What the account was fed this tick (s and counts).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Doings {
+    /// Out in the Zone (the raid's clock running).
+    pub out: bool,
+    /// Reported shots this tick.
+    pub shots: u32,
+    /// A machine has you this tick.
+    pub fought: bool,
+    /// On hot ground this tick, and whether you just went in.
+    pub hot: bool,
+    pub into_hot: bool,
+    /// The Zone's attention on you (`anomaly::Attention::total`).
+    pub attention: f32,
+}
+
+/// The account, a raid's.
+#[derive(Resource, Clone, Debug, Default)]
+pub struct Pressure {
+    pub stir: f32,
+    pub linger: f32,
+    pub level: Level,
+    /// When the level last stepped up (s, `Time::elapsed`), if it has.
+    pub stepped_at: Option<f32>,
+    /// What most stirred the last step (for its line).
+    pub why: Why,
+}
+
+/// What moved it up.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Why {
+    #[default]
+    Time,
+    Noise,
+    Fight,
+    Ground,
+    Carried,
+}
+
+impl Pressure {
+    pub fn account(&self) -> f32 {
+        self.stir + self.linger
+    }
+
+    /// One tick: fed `d`, `dt` seconds, at `now`. The new level if it
+    /// stepped up.
+    pub fn feed(&mut self, d: Doings, dt: f32, now: f32) -> Option<Level> {
+        if !d.out {
+            *self = Pressure::default();
+            return None;
+        }
+        let parts = [
+            (Why::Noise, SHOT * d.shots as f32),
+            (Why::Fight, if d.fought { FIGHTING * dt } else { 0.0 }),
+            (
+                Why::Ground,
+                if d.hot { HOT * dt } else { 0.0 } + if d.into_hot { INTO_HOT } else { 0.0 },
+            ),
+            (Why::Carried, ATTENTION * d.attention.max(0.0) * dt),
+        ];
+        let fed: f32 = parts.iter().map(|p| p.1).sum();
+        self.stir = (self.stir + fed - DRAIN * dt).max(0.0);
+        self.linger += LINGER * dt;
+        let level = Level::of(self.account());
+        let up = level > self.level;
+        // (Down it goes quietly; it was said going up.)
+        self.level = level;
+        if up {
+            self.stepped_at = Some(now);
+            self.why = parts
+                .iter()
+                .filter(|p| p.1 > 0.0)
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .map_or(Why::Time, |p| p.0);
+            return Some(level);
+        }
+        None
+    }
+
+    /// Whether a fast machine may be sent now: a step up was said at least
+    /// [`CUE_LEAD`] ago, and it's still stirred.
+    pub fn fast_allowed(&self, now: f32) -> bool {
+        self.level >= Level::Stirred && self.stepped_at.is_some_and(|t| now - t >= CUE_LEAD)
+    }
+}
+
+/// A step up, said in the world (`raid::Raid::say`) before what it brings:
+/// Audio gives it a sound (`at`: where you are).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Stepped {
+    pub level: Level,
+    pub why: Why,
+    pub at: Vec3,
+}
+
+/// What's said at a step up, by what moved it (Onboarding's words to
+/// own; these say what each step means).
+pub fn stepped(level: Level, why: Why) -> &'static str {
+    match (level, why) {
+        (Level::Quiet, _) => "",
+        (Level::Stirred, Why::Time) => {
+            "Someone's been about too long. A whine from the Gate's side, rising."
+        }
+        (Level::Stirred, Why::Ground) => {
+            "You're on their ground now. A whine from the Gate's side, rising."
+        }
+        (Level::Stirred, _) => "They heard that. A whine from the Gate's side, rising.",
+        (Level::Busy, _) => "Machine traffic on the wind, all of it this way.",
+        (Level::Hunting, _) => "The whole Zone is looking at you.",
+    }
+}
+
+pub struct PressurePlugin;
+
+impl Plugin for PressurePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<Pressure>()
+            .init_resource::<Doing>()
+            .add_message::<Stepped>()
+            .add_systems(
+                FixedUpdate,
+                tally_pressure
+                    .after(super::director::hear_reports)
+                    .before(super::director::run_director),
+            );
+    }
+}
+
+/// This tick's reported shots (`director::hear_reports` counts them),
+/// and whether you were on hot ground last tick.
+#[derive(Resource, Debug, Default)]
+pub struct Doing {
+    pub shots: u32,
+    pub was_hot: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn tally_pressure(
+    mut pressure: ResMut<Pressure>,
+    mut doing: ResMut<Doing>,
+    raid: Option<ResMut<crate::raid::Raid>>,
+    zone: Res<crate::world::Zone>,
+    players: Query<
+        (Entity, &GlobalTransform, Option<&crate::anomaly::Attention>),
+        With<crate::rig::LocalPlayer>,
+    >,
+    robots: Query<&super::Awareness>,
+    time: Res<Time>,
+    mut out: MessageWriter<Stepped>,
+) {
+    let Some(mut raid) = raid else {
+        return;
+    };
+    let Some((me, gt, attention)) = players.iter().next() else {
+        return;
+    };
+    let at = gt.translation();
+    let in_zone = matches!(
+        raid.phase,
+        crate::raid::Phase::Out
+            | crate::raid::Phase::TruckCalled { .. }
+            | crate::raid::Phase::TruckWaiting { .. }
+    );
+    let hot = zone
+        .map
+        .region_at([at.x, at.z])
+        .is_some_and(|r| r.danger >= HOT_DANGER);
+    let d = Doings {
+        out: in_zone,
+        shots: std::mem::take(&mut doing.shots),
+        fought: robots
+            .iter()
+            .any(|a| a.target == Some(me) && a.can_see_target),
+        hot,
+        into_hot: hot && !doing.was_hot,
+        attention: attention.map_or(0.0, |a| a.total()),
+    };
+    doing.was_hot = hot && in_zone;
+    if let Some(level) = pressure.feed(d, time.delta_secs(), time.elapsed_secs()) {
+        let why = pressure.why;
+        info!("pressure: {level:?} ({why:?}), {:.2}", pressure.account());
+        raid.say(stepped(level, why));
+        out.write(Stepped { level, why, at });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn out() -> Doings {
+        Doings {
+            out: true,
+            ..Default::default()
+        }
+    }
+
+    fn run(p: &mut Pressure, secs: f32, mut d: impl FnMut(f32) -> Doings) -> Vec<(f32, Level)> {
+        let dt = 1.0 / 90.0;
+        let mut steps = vec![];
+        let t0 = p.stepped_at.unwrap_or(0.0);
+        for i in 0..(secs * 90.0) as usize {
+            let t = t0 + i as f32 * dt;
+            if let Some(l) = p.feed(d(t), dt, t) {
+                steps.push((t, l));
+            }
+        }
+        steps
+    }
+
+    /// Quiet, it stays quiet a good while; lingering still counts, slowly,
+    /// and says so when it steps: a cautious half hour isn't risk-free.
+    #[test]
+    fn lingering_steps_slowly_and_says_so() {
+        let mut p = Pressure::default();
+        let steps = run(&mut p, 30.0 * 60.0, |_| out());
+        let first = steps.first().expect("it stepped in half an hour");
+        assert!(
+            (14.0 * 60.0..16.0 * 60.0).contains(&first.0),
+            "first step at {:.0} s",
+            first.0
+        );
+        assert_eq!(p.why, Why::Time);
+        assert!(stepped(Level::Stirred, Why::Time).contains("too long"));
+        assert!(p.level >= Level::Stirred, "half an hour: {p:?}");
+    }
+
+    /// Shoot one weak machine and leave: it stirs, short of a step, and
+    /// dies down.
+    #[test]
+    fn a_shot_or_two_is_a_small_answer_that_dies_down() {
+        let mut p = Pressure::default();
+        let mut first = true;
+        let steps = run(&mut p, 60.0, |_| Doings {
+            shots: if std::mem::take(&mut first) { 2 } else { 0 },
+            ..out()
+        });
+        assert!(steps.is_empty(), "{steps:?}");
+        assert!(p.stir > 0.25, "it stirred: {p:?}");
+        run(&mut p, 150.0, |_| out());
+        assert!(p.stir < 0.05, "it died down: {p:?}");
+        assert!(!p.fast_allowed(1e4));
+    }
+
+    /// Keep shooting, and fight, and it builds: a step, said, and only
+    /// some seconds after it may anything fast come.
+    #[test]
+    fn keeping_it_up_builds_and_fast_waits_on_the_cue() {
+        let mut p = Pressure::default();
+        // A shot every 8 s (one a heat gap), and a machine on you.
+        let steps = run(&mut p, 60.0, |t| Doings {
+            shots: ((t * 90.0) as usize % 720 == 0) as u32,
+            fought: true,
+            ..out()
+        });
+        let (at, l) = *steps.first().expect("it stepped");
+        assert_eq!(l, Level::Stirred);
+        assert!(!p.fast_allowed(at + CUE_LEAD - 0.5), "fast before its cue");
+        assert!(p.fast_allowed(at + CUE_LEAD + 0.5) || p.level > Level::Stirred);
+        assert!(matches!(p.why, Why::Noise | Why::Fight), "{p:?}");
+    }
+
+    /// Going onto hot ground is a step sooner than anywhere else.
+    #[test]
+    fn hot_ground_stirs_it() {
+        let mut quiet = Pressure::default();
+        let mut hot = Pressure::default();
+        let mut entered = false;
+        run(&mut quiet, 300.0, |_| out());
+        let s = run(&mut hot, 300.0, |_| Doings {
+            hot: true,
+            into_hot: !std::mem::replace(&mut entered, true),
+            ..out()
+        });
+        assert!(hot.account() > quiet.account() + 1.0, "{hot:?} {quiet:?}");
+        assert_eq!(s.first().map(|s| s.1), Some(Level::Stirred));
+        assert_eq!(hot.why, Why::Ground);
+    }
+
+    /// Back at base it's all forgotten: each raid starts quiet.
+    #[test]
+    fn each_raid_starts_quiet() {
+        let mut p = Pressure {
+            stir: 2.5,
+            linger: 0.5,
+            level: Level::Hunting,
+            ..Default::default()
+        };
+        p.feed(Doings::default(), 0.1, 1.0);
+        assert_eq!(p.level, Level::Quiet);
+        assert_eq!(p.account(), 0.0);
+    }
+}

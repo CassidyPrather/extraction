@@ -2018,12 +2018,14 @@ fn a_badly_hurt_walker_breaks_off() {
     );
 }
 
-/// Keep shooting and they send more: one reported shot gets the usual
-/// response; three in half a minute, and two walkers come to look as well.
+/// Keep shooting and they send more: with the Zone already busy (said
+/// long since: `pressure`), one reported shot gets the usual response;
+/// three in half a minute, and two walkers come to look as well. Quiet,
+/// three shots bring one walker to look, slow, and nothing fast.
 #[test]
 fn keep_shooting_and_walkers_come_too() {
     use super::director::{Director, ESCALATE, HEAT_GAP};
-    let walkers_sent = |shots: usize| {
+    let walkers_sent = |shots: usize, busy: bool| {
         let (mut app, player, zone) = app(None);
         app.update();
         {
@@ -2032,6 +2034,16 @@ fn keep_shooting_and_walkers_come_too() {
             d.next_job = 1e9;
             d.next_logistics = 1e9;
             d.max_active = 99;
+        }
+        app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+        if busy {
+            *app.world_mut().resource_mut::<super::pressure::Pressure>() =
+                super::pressure::Pressure {
+                    stir: 2.6,
+                    level: super::pressure::Level::Busy,
+                    stepped_at: Some(-100.0),
+                    ..Default::default()
+                };
         }
         let at = zone.on_ground(100.0, 200.0);
         for _ in 0..shots {
@@ -2048,19 +2060,32 @@ fn keep_shooting_and_walkers_come_too() {
         for _ in 0..90 * 70 {
             app.update();
         }
-        app.world_mut()
-            .query::<(&Robot, &Job)>()
+        let mut q = app
+            .world_mut()
+            .query::<(&Robot, &Job, Has<super::hound::Hound>)>();
+        let sent: Vec<_> = q
             .iter(app.world())
-            .filter(|(r, j)| {
-                r.kind == super::RobotKind::Walker
-                    && j.kind == JobKind::Response
-                    && j.site.distance(at) < 0.5
-            })
-            .count()
+            .filter(|(_, j, _)| j.kind == JobKind::Response && j.site.distance(at) < 0.5)
+            .map(|(r, _, hound)| (r.kind, hound))
+            .collect();
+        let walkers = sent
+            .iter()
+            .filter(|(k, hound)| *k == super::RobotKind::Walker && !hound)
+            .count();
+        let fast = sent
+            .iter()
+            .filter(|(k, hound)| *k == super::RobotKind::Drone || *hound)
+            .count();
+        (walkers, fast)
     };
     assert!(ESCALATE > 1.0);
-    assert_eq!(walkers_sent(1), 0, "one shot: the usual response");
-    assert_eq!(walkers_sent(3), 2, "three: two walkers as well");
+    assert_eq!(walkers_sent(1, true).0, 0, "one shot: the usual response");
+    assert_eq!(walkers_sent(3, true).0, 2, "three: two walkers as well");
+    assert_eq!(
+        walkers_sent(3, false),
+        (1, 0),
+        "quiet: one walker to look, nothing fast"
+    );
 }
 
 /// A drone that notices you is the walkers' spotter: its call reaches a
@@ -2725,8 +2750,13 @@ fn survey_drones_keep_off_the_rendezvous() {
         d.next_logistics = 1e9;
         d.max_active = 999;
     }
+    // Busy (`pressure`): survey drones go anywhere but a rendezvous.
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
     for _ in 0..60 {
         app.world_mut().resource_mut::<Director>().next_job = 0.0;
+        app.world_mut()
+            .resource_mut::<super::pressure::Pressure>()
+            .stir = 2.6;
         app.update();
     }
     let rvs: Vec<Vec2> = zone
@@ -6323,4 +6353,176 @@ fn every_drill_and_test_module_is_test_only() {
         }
     }
     assert!(loose.is_empty(), "not under #[cfg(test)]: {loose:?}");
+}
+
+/// What the director has out: (entity, a drone, a hound, its brain's at
+/// work), new ones in order.
+fn director_robots(app: &mut App) -> Vec<(Entity, bool, bool, bool)> {
+    let mut q = app
+        .world_mut()
+        .query::<(Entity, &Robot, &Brain, Has<super::hound::Hound>)>();
+    q.iter(app.world())
+        .map(|(e, r, b, hound)| {
+            (
+                e,
+                r.kind == super::RobotKind::Drone,
+                hound,
+                matches!(b, Brain::Working { .. }),
+            )
+        })
+        .collect()
+}
+
+/// A director app: the valley's machines on, you out of the truck,
+/// standing still where `at` says, saying nothing.
+fn director_app(map: &str, seed: u64, done: u32) -> (App, Entity, Zone) {
+    let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: map.into(),
+        robots: true,
+        seed,
+        ..Default::default()
+    });
+    app.insert_resource(crate::progression::Progression(
+        extraction_core::progression::Progress {
+            done,
+            ..Default::default()
+        },
+    ));
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    (app, player, zone)
+}
+
+/// Quiet, the valley is at its own work, and nothing fast comes: no drone,
+/// no hounds, in eight minutes standing still at the drop; yet walkers go
+/// to their jobs, crews, the dirigible: a quiet world isn't an empty one
+/// (the user's direction: danger follows what you do, slow before fast).
+#[test]
+fn a_quiet_raid_sends_nothing_fast_and_the_valley_still_works() {
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 2);
+    let drop = zone
+        .marker(&extraction_core::map::MarkerKind::Insertion)
+        .map(|m| zone.on_ground(m.at[0], m.at[1]))
+        .expect("a drop");
+    let mut seen: std::collections::HashSet<Entity> = Default::default();
+    let mut working: std::collections::HashSet<Entity> = Default::default();
+    let mut fast = vec![];
+    let before: std::collections::HashSet<Entity> =
+        director_robots(&mut app).into_iter().map(|r| r.0).collect();
+    for i in 0..90 * 60 * 8 {
+        put(&mut app, player, drop);
+        app.update();
+        if i % 45 != 0 {
+            continue;
+        }
+        for (e, drone, hound, at_work) in director_robots(&mut app) {
+            if at_work {
+                working.insert(e);
+            }
+            if !before.contains(&e) && seen.insert(e) && (drone || hound) {
+                fast.push((i as f32 / 90.0, if drone { "drone" } else { "hound" }));
+            }
+        }
+    }
+    let p = app.world().resource::<super::pressure::Pressure>().clone();
+    assert_eq!(p.level, super::pressure::Level::Quiet, "{p:?}");
+    assert!(
+        fast.is_empty(),
+        "fast machines sent to a quiet raid: {fast:?}"
+    );
+    assert!(
+        working.len() >= 2,
+        "the valley at work: {} at their jobs",
+        working.len()
+    );
+}
+
+/// A noise answered while the Zone's quiet is one walker coming to look;
+/// only once a step's been said, a while back, may a drone or hounds come.
+#[test]
+fn a_response_is_a_walker_till_a_step_has_been_said() {
+    let (mut app, player, zone) = director_app(extraction_core::map::TEST_FIELD_ID, 1, 2);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let sent = |app: &mut App, before: &std::collections::HashSet<Entity>| {
+        director_robots(app)
+            .into_iter()
+            .filter(|r| !before.contains(&r.0))
+            .collect::<Vec<_>>()
+    };
+    let out = |app: &mut App| {
+        director_robots(app)
+            .into_iter()
+            .map(|r| r.0)
+            .collect::<std::collections::HashSet<_>>()
+    };
+    let mut d = app.world_mut().resource_mut::<super::director::Director>();
+    d.next_job = 1.0e6;
+    d.next_logistics = 1.0e6;
+    d.heat = 0.0;
+    let before = out(&mut app);
+    app.world_mut()
+        .resource_mut::<super::director::Director>()
+        .queue_response(0.5, me + Vec3::X * 20.0);
+    for _ in 0..90 * 2 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    let quiet = sent(&mut app, &before);
+    assert!(
+        !quiet.is_empty() && quiet.iter().all(|r| !r.1 && !r.2),
+        "quiet, a walker comes to look: {quiet:?}"
+    );
+    // Stirred, said 20 s ago.
+    let now = app.world().resource::<Time>().elapsed_secs();
+    *app.world_mut().resource_mut::<super::pressure::Pressure>() = super::pressure::Pressure {
+        stir: 1.4,
+        level: super::pressure::Level::Stirred,
+        stepped_at: Some(now - 20.0),
+        ..Default::default()
+    };
+    let before = out(&mut app);
+    app.world_mut()
+        .resource_mut::<super::director::Director>()
+        .queue_response(0.5, me + Vec3::X * 20.0);
+    for _ in 0..90 * 2 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    let stirred = sent(&mut app, &before);
+    assert!(
+        stirred.iter().any(|r| r.1 || r.2),
+        "stirred and said, a drone or hounds: {stirred:?}"
+    );
+}
+
+/// The director takes no count of the career's job: the same raid, the
+/// same seed, the same player, the same machines sent at the same times,
+/// on job 1 and on job 4 (the user's direction: no step "after the 3rd
+/// job"; a career's second job's broken walker aside, `broken`).
+#[test]
+fn the_director_takes_no_count_of_the_job() {
+    let sends = |done: u32| {
+        let (mut app, player, zone) = director_app("marrow_creek", 3, done);
+        let drop = zone
+            .marker(&extraction_core::map::MarkerKind::Insertion)
+            .map(|m| zone.on_ground(m.at[0], m.at[1]))
+            .expect("a drop");
+        let mut seen: std::collections::HashSet<Entity> =
+            director_robots(&mut app).into_iter().map(|r| r.0).collect();
+        let mut log = vec![];
+        for i in 0..90 * 60 * 4 {
+            put(&mut app, player, drop);
+            app.update();
+            for (e, drone, hound, _) in director_robots(&mut app) {
+                if seen.insert(e) {
+                    log.push((i / 90, drone, hound));
+                }
+            }
+        }
+        log
+    };
+    let first = sends(0);
+    let fourth = sends(3);
+    assert!(!first.is_empty(), "nothing sent in four minutes");
+    assert_eq!(first, fourth, "job 1 against job 4");
 }
