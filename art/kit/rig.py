@@ -28,7 +28,8 @@ zipped shut, or folded down from its bottom edge).
 
 Slot positions, from body.rs (`slot_layout`), torso space:
 holster (0.22, -0.42, 0.02); pouches (-0.14 + 0.09 k, -0.16, -0.155);
-pockets (+-0.17, -0.45, -0.08); mount (-0.13, 0.06, -0.12).
+pockets on the belt's sides at x +-0.17, turned to it (`pocket_place`,
+body.rs `pocket_place`); mount (-0.13, 0.06, -0.12).
 """
 
 import math
@@ -42,7 +43,7 @@ from mathutils import Vector
 
 HOLSTER = Vector((0.22, -0.42, 0.02))
 POUCH_Y, POUCH_Z = -0.16, -0.155
-POCKET = Vector((0.17, -0.45, -0.08))
+POCKET_X, POCKET_Y = 0.17, -0.45
 MOUNT = Vector((-0.13, 0.06, -0.12))
 
 # The belt: an ellipse round the hips.
@@ -50,6 +51,8 @@ BELT_Y, BELT_A, BELT_B, BELT_Z0 = -0.43, 0.20, 0.13, 0.0
 BELT_H, BELT_T = 0.045, 0.005
 # The chest panel's front face.
 PANEL_Z = -0.104
+# A hip pocket's back face (slot z): it sits on the belt's outer face.
+POCKET_BACK = 0.016
 
 
 def strap(p, pts, width, thick, mat, up=None, normals=None):
@@ -222,12 +225,41 @@ def pouch_flap(open_):
     return p
 
 
+def pocket_place(x=POCKET_X):
+    """Where the hip pocket at `x` on the belt hangs (game space) and its
+    yaw: its back face on the belt's outer face there, its front out along
+    the belt's normal, so the belt runs along its back rather than across
+    it (square on, the belt cut 14 mm into its inner top corner and a tape
+    in it poked 4 mm through the belt). Matches body.rs `pocket_place`."""
+    a = math.asin(x / BELT_A)
+    on = belt_point(a, y=POCKET_Y)
+    out = Vector((math.sin(a) / BELT_A, 0, -math.cos(a) / BELT_B)).normalized()
+    at = on + out * (POCKET_BACK + BELT_T / 2)
+    # The slot's -Z (the pocket's front) along `out`.
+    return at, math.atan2(-out.x, -out.z)
+
+
+# The pocket's slot y, from the belt's: the belt band in slot space.
+BELT_LO = BELT_Y - BELT_H / 2 - POCKET_Y
+BELT_HI = BELT_Y + BELT_H / 2 - POCKET_Y
+
+
 def pocket():
     p = Part("pocket")
-    prof = fillet([(-0.017, -0.062), (0.016, -0.062), (0.016, 0.012), (-0.017, 0.012)], 0.007, 2)
+    prof = fillet([(-0.017, -0.062), (POCKET_BACK, -0.062), (POCKET_BACK, 0.012),
+                   (-0.017, 0.012)], 0.007, 2)
     p.prism(prof, -0.032, 0.032, "Canvas", axis="x", bevel=0.005, segs=2)
-    # Its loop over the belt.
-    p.box((0.03, 0.06, 0.006), (0.0, 0.01, 0.018), "Olive", bevel=0.0015, segs=1)
+    # Its loop round the belt: up the belt's face from the pocket's top,
+    # over it, and down behind it (the belt between, 1 mm clear).
+    back = POCKET_BACK + BELT_T + 0.001
+    top = BELT_HI + 0.004
+    p.box((0.03, top - 0.006, 0.003), (0.0, (top + 0.006) / 2, POCKET_BACK - 0.0015),
+          "Olive", bevel=0.001, segs=1)
+    p.box((0.03, 0.004, back + 0.003 - POCKET_BACK + 0.003),
+          (0.0, top - 0.002, (back + 0.003 + POCKET_BACK - 0.003) / 2), "Olive",
+          bevel=0.001, segs=1)
+    p.box((0.03, top - BELT_LO + 0.004, 0.003),
+          (0.0, (top + BELT_LO - 0.004) / 2, back + 0.0015), "Olive", bevel=0.001, segs=1)
     return p
 
 
@@ -238,7 +270,8 @@ def pocket_flap(open_):
         p.box((0.06, 0.03, 0.006), (0.0, 0.0, -0.0205), "Canvas", bevel=0.002, segs=1)
     else:
         # Folded back behind its loop, against the belt (as the pouch's).
-        p.box((0.064, 0.05, 0.005), (0.0, -0.012, 0.0235), "Canvas", bevel=0.002, segs=1)
+        z = POCKET_BACK + BELT_T + 0.001 + 0.003 + 0.0025
+        p.box((0.064, 0.05, 0.005), (0.0, -0.012, z), "Canvas", bevel=0.002, segs=1)
     return p
 
 
@@ -336,9 +369,10 @@ def lid(open_):
 
 # --- Build -----------------------------------------------------------------
 
-def place(obj, pos):
-    """Put an object built about the origin at `pos` (game space)."""
-    obj.matrix_world = TO_BLENDER @ T(*pos) @ TO_BLENDER.inverted()
+def place(obj, pos, yaw=0.0):
+    """Put an object built about the origin at `pos` (game space), turned
+    by `yaw` about game +Y."""
+    obj.matrix_world = TO_BLENDER @ T(*pos) @ RY(yaw) @ TO_BLENDER.inverted()
 
 
 POUCH0 = Vector((-0.14, POUCH_Y, POUCH_Z))
@@ -348,9 +382,11 @@ def slots(open_):
     """The slot pieces at their places on the rig (the game hangs each
     mesh on its own slot), with their flaps open or closed."""
     for part, at in ((holster(), HOLSTER), (holster_flap(open_), HOLSTER),
-                     (pouch(), POUCH0), (pouch_flap(open_), POUCH0),
-                     (pocket(), POCKET), (pocket_flap(open_), POCKET)):
+                     (pouch(), POUCH0), (pouch_flap(open_), POUCH0)):
         place(make(part), at)
+    at, yaw = pocket_place()
+    for part in (pocket(), pocket_flap(open_)):
+        place(make(part), at, yaw)
 
 
 # rig.glb: the rig as worn, empty (flaps closed), and the mount.

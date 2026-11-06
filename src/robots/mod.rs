@@ -38,6 +38,8 @@ pub mod heavy_look;
 pub mod heavy_mind;
 pub mod hit_gauge;
 pub mod hound;
+#[cfg(test)]
+mod hound_drill;
 pub mod hound_mind;
 pub mod indoor;
 #[cfg(test)]
