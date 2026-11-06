@@ -268,11 +268,25 @@ fn leaves_of(
     children: &Query<&Children>,
     meshes: &Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: &Query<(), With<crate::destruction::visuals::WindowGlass>>,
+    own: &Query<
+        (),
+        Or<(
+            With<crate::items::Item>,
+            With<crate::weapons::Gun>,
+            With<Drawn>,
+        )>,
+    >,
 ) -> Vec<Entity> {
     let mut out = Vec::new();
     let mut stack = vec![part];
     while let Some(e) = stack.pop() {
         if glass.contains(e) {
+            continue;
+        }
+        // Not into something with a life of its own seated on it (a gun
+        // on a shelf, a tin in a drawer, another part): its meshes are its
+        // own, and a gun's are `gun_rest`'s.
+        if e != part && own.contains(e) {
             continue;
         }
         if meshes.contains(e) {
@@ -301,6 +315,14 @@ fn rest_cells(
     children: Query<&Children>,
     meshes: Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: Query<(), With<crate::destruction::visuals::WindowGlass>>,
+    own: Query<
+        (),
+        Or<(
+            With<crate::items::Item>,
+            With<crate::weapons::Gun>,
+            With<Drawn>,
+        )>,
+    >,
     materials: Res<Assets<StandardMaterial>>,
     mesh_assets: Res<Assets<Mesh>>,
     leaf_info: Query<(
@@ -366,7 +388,7 @@ fn rest_cells(
         let mut taken: Vec<(Entity, Visibility)> = Vec::new();
         let mut owners: Vec<(Entity, Entity)> = Vec::new();
         for part in cell.quiet.keys() {
-            for leaf in leaves_of(*part, &children, &meshes, &glass) {
+            for leaf in leaves_of(*part, &children, &meshes, &glass, &own) {
                 owners.push((leaf, *part));
                 let Ok((mesh, mat)) = meshes.get(leaf) else {
                     continue;
@@ -744,6 +766,31 @@ mod tests {
         for (_, leaf) in &doors {
             assert!(shown(&app, *leaf), "a door left hidden");
         }
+    }
+
+    /// Something with a life of its own seated on a part (a tin left in a
+    /// drawer) keeps its own meshes: they're not taken into the cell's.
+    #[test]
+    fn a_thing_seated_on_a_part_keeps_its_own_meshes() {
+        let mut app = app();
+        let parts: Vec<_> = (0..4)
+            .map(|i| part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0)))
+            .collect();
+        let catalog = crate::items::Catalog::load();
+        let (kind, _) = catalog.0.iter().next().expect("a kind in the catalog");
+        let (tin, tin_leaf) = part(&mut app, Vec3::ZERO);
+        app.world_mut()
+            .entity_mut(tin)
+            .remove::<(Drawn, Timber, Pryable)>()
+            .insert((
+                crate::items::Item(extraction_core::items::ItemState::fresh(
+                    &catalog.0, kind, 1.0,
+                )),
+                ChildOf(parts[0].0),
+            ));
+        rest(&mut app);
+        assert_eq!(resting(&mut app), 1, "the parts merged");
+        assert!(shown(&app, tin_leaf), "a tin in a resting drawer hidden");
     }
 
     /// A pane breaking under a resting leaf: its mesh is swapped.
