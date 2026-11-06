@@ -2926,8 +2926,9 @@ fn time_short(
 }
 
 /// The eye of the walker after it: the one that last aimed, else the
-/// nearest walker with it in mind (the first warning comes before any aim
-/// it's told of).
+/// nearest walker with it in mind, else the nearest walker in reach (the
+/// first warning can come before any aim it's told of, or a mind that has
+/// it).
 fn walker_eye(
     world: &World2,
     eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
@@ -2940,14 +2941,20 @@ fn walker_eye(
         world
             .robots
             .iter()
-            .filter(|(e, r, _)| {
-                r.kind == crate::robots::RobotKind::Walker && !r.wrecked && on_me(*e)
+            .filter(|(_, r, _)| r.kind == crate::robots::RobotKind::Walker && !r.wrecked)
+            .filter_map(|(e, ..)| eye(e).map(|p| (p, on_me(e))))
+            .filter(|(p, mine)| *mine || p.xz().distance(here) < WALKER_NEAR)
+            .min_by(|a, b| {
+                (!a.1, a.0.xz().distance(here))
+                    .partial_cmp(&(!b.1, b.0.xz().distance(here)))
+                    .unwrap_or(std::cmp::Ordering::Equal)
             })
-            .filter_map(|(e, ..)| eye(e))
-            .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)))
+            .map(|(p, _)| p)
     })
 }
 
+/// A walker this near with nobody else in mind is the one aiming (m).
+const WALKER_NEAR: f32 = 80.0;
 /// Low and still out of a walker's line this long (s): its aim lasts
 /// 1.5 s, and it comes round to look.
 const LINE_HELD: f32 = 12.0;
