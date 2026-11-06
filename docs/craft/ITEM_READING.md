@@ -629,11 +629,9 @@ Some items are checked differently:
 - Guns are left out, because their layouts place them.
 - Magazines and attachments seat by their origin, so only their size is
   held.
-- Thirteen models stay off their middle until the code that places
-  things in their space moves with them (`KEEPS_ORIGIN`, which names
-  each one's code). These are the bolt cutters' grips and jaws, the
-  crowbar's grip and claw, the hacksaw's blade, the cassette deck's
-  well and buttons, and the gadgets' cell mounts and visuals.
+- Models whose space code places things in (a grip, a hinge, a cell's
+  bay) are centred with that code moved by the same step. `KEEPS_ORIGIN`
+  is where one would wait for that, and it's empty.
 
 Sixteen models were centred, and four `kit_cavities::ORIGIN_OFFSET`
 entries that made up for them went away.
@@ -661,3 +659,35 @@ for all of it.
 
 ![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
 planks](../shots/items/torchlit_scopes_arm.jpg)
+
+#### The thirteen off their middle, centred (6 November)
+
+Thirteen models were off their box's middle because code places things
+in their space. Each is centred now, its pivots with it, and every
+place in their space moved by the same step, measured from the model
+itself:
+
+- the bolt cutters' grips and jaws (19 mm), the crowbar's grip, shaft
+  and claw, and the hacksaw's grip and blade;
+- the cassette deck's keys, well, hinge and cell bay (it's centred when
+  it's written now, like every item);
+- the cell bays of the torch, the cloak and the jammer, which shared
+  one place and have one each now, and the torch's beam;
+- the lead case's cradle, the compass's face and needle, the map in
+  the map case, and the drone's eye.
+
+Things held by those places are where they were to the pixel: the
+cutters, crowbar and hacksaw in the hand, and all thirteen lying under
+the torch. Things held free shift a little in the fist, because a free
+hold is seated on the item's box, and the boxes are the models now.
+
+Two changes come with honest boxes:
+
+- The compass's strap lies close under it. Looped 12 mm down, the
+  compass was 35 mm thick, through a hip pocket's front.
+- The map case's pencil, loop and stud sit level with its sleeve, so
+  it's under 12 mm through. Held, it's pinched by its edge as a card is,
+  not covering the hand.
+
+![Held in the left hand, before and after: the thirteen centred
+models](../shots/items/centred_held_before_after.jpg)

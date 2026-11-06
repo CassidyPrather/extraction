@@ -815,22 +815,9 @@ mod tests {
 
     /// Models kept off their box's middle until the code that places
     /// things in their space moves with them: `art/items/_kit.py`'s
-    /// `KEEPS_ORIGIN`, which this list matches.
-    const KEEPS_ORIGIN: &[(&str, &str)] = &[
-        ("flashlight", "gadgets: its cell's mount"),
-        ("cloak_generator", "gadgets: its cell's mount"),
-        ("jammer", "gadgets: its cell's mount"),
-        ("lead_case", "gadgets: its cradle and its lid"),
-        ("compass", "gadgets::visuals: its face and needle"),
-        ("map_case", "gadgets::visuals: the map in it"),
-        ("camera_drone", "gadgets::visuals: its rotors"),
-        ("emp_trap", "gadgets: its spikes and charge"),
-        ("deployable_cover", "gadgets: the cover it unfolds"),
-        ("cassette_player", "radio::deck: its well, door and buttons"),
-        ("crowbar", "interact::tools::crowbar: grip and claw"),
-        ("bolt_cutters", "interact::tools::cutters: grips and jaws"),
-        ("hacksaw", "weapons::gunsmith: its handle and blade"),
-    ];
+    /// `KEEPS_ORIGIN`, which this list matches (empty: each was centred
+    /// with its code moved by the same step).
+    const KEEPS_ORIGIN: &[(&str, &str)] = &[];
 
     /// Every item's box (`dims`) is its model: each side within a
     /// millimetre of the model's, and the model in its middle. The box is
