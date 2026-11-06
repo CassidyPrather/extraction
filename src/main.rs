@@ -58,6 +58,7 @@ fn main() -> AppExit {
     // Someone new (no career, never through the training yard) starts in
     // the yard; a saved career opens wherever the truck was headed.
     extraction::persist::choose_start(&mut opts);
+    extraction::persist::choose_seed(&mut opts);
     // Nothing hunts you in the training yard.
     if opts.map == extraction::camp::TRAINING_YARD {
         opts.robots = false;

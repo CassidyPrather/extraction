@@ -116,6 +116,9 @@ pub struct LaunchOptions {
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
+    /// `--seed` was given: the seed is the command line's, never the
+    /// career's.
+    pub seed_pinned: bool,
     /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `storm`,
     /// `clearing`).
     pub weather: Option<String>,
@@ -202,6 +205,7 @@ impl Default for LaunchOptions {
             moon: None,
             sun_elevation: 20.0,
             map_explicit: false,
+            seed_pinned: false,
             sim: None,
             sim_run: None,
             personality: None,
@@ -236,6 +240,17 @@ impl LaunchOptions {
             || self.scenario.is_some()
             || self.sim_run.is_some()
             || self.capture.active()
+    }
+
+    /// A player's own session, whose world comes from the career's seed:
+    /// not a pinned `--seed`, a headless or tooling run, a sim, or the
+    /// training yard (the same for everyone).
+    pub fn rolls_career_seed(&self) -> bool {
+        !self.seed_pinned
+            && !self.headless
+            && !self.tooling()
+            && self.sim.is_none()
+            && self.map != crate::camp::TRAINING_YARD
     }
 
     pub fn from_args() -> Self {
@@ -328,7 +343,10 @@ impl LaunchOptions {
                     o.map = val();
                     o.map_explicit = true;
                 }
-                "--seed" => o.seed = val().parse().unwrap_or(1),
+                "--seed" => {
+                    o.seed = val().parse().unwrap_or(1);
+                    o.seed_pinned = true;
+                }
                 "--scene" => {
                     o.scene = match val().as_str() {
                         "range" => SceneChoice::Range,

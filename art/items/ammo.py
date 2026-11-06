@@ -494,7 +494,11 @@ def repack_box(dims, c, calibre, shells=False):
     back, the re-packed rounds standing in it noses up (or shells heads
     up), a pencilled paper label on the front."""
     def build():
-        sx, sy, sz = dims
+        # The carton is inset by what stands off it (the string and the
+        # slip under it at the front, the flap at the back, the string at
+        # the sides), so the whole is the factory box's size: as drawn
+        # first it was 1 cm deeper, and too big for the chest mount.
+        sx, sy, sz = dims[0] - 0.0034, dims[1], dims[2] - 0.0092
         p = Part("body")
         y0 = -sy / 2
         wall = 0.0012
