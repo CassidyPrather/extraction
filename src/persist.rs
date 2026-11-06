@@ -730,8 +730,13 @@ fn put_in_slot(world: &mut World, item: Entity, slot_e: Entity) {
     // An item is in one place: one already seated stays where it is (the
     // sim seated the hearth a save had sealed in one lead case in a second
     // case too on the load, both cradles holding it: the save soak, Cinder
-    // seed 2, mid-reload).
-    if world.get::<InSocket>(item).is_some() {
+    // seed 2, mid-reload). Seated means its socket holds it: one being
+    // moved, its old socket emptied first, goes on to the new one.
+    let seated = world
+        .get::<InSocket>(item)
+        .and_then(|s| world.get::<Socket>(s.socket))
+        .is_some_and(|s| s.occupant == Some(item));
+    if seated && world.get::<InSocket>(item).map(|s| s.socket) != Some(slot_e) {
         return;
     }
     let Some(mut socket) = world.get_mut::<Socket>(slot_e) else {
