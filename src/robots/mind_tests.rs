@@ -6296,3 +6296,31 @@ fn nothing_says_its_lost_you_as_you_go_down() {
         );
     }
 }
+
+/// A drill or a test module is test-only: declared right under
+/// `#[cfg(test)]`, or the game build compiles it (and it leans on other
+/// test-only modules: `cargo fmt` sorted `mod hound_drill;` away from its
+/// `#[cfg(test)]` once, and only the gate's game build caught it, an hour
+/// in).
+#[test]
+fn every_drill_and_test_module_is_test_only() {
+    let src = include_str!("mod.rs");
+    let lines: Vec<&str> = src.lines().map(str::trim).collect();
+    let mut loose = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        let Some(name) = l
+            .trim_start_matches("pub ")
+            .strip_prefix("mod ")
+            .and_then(|r| r.strip_suffix(';'))
+        else {
+            continue;
+        };
+        if name.ends_with("_drill") || name.ends_with("_tests") {
+            let above = i.checked_sub(1).map_or("", |j| lines[j]);
+            if above != "#[cfg(test)]" {
+                loose.push(name);
+            }
+        }
+    }
+    assert!(loose.is_empty(), "not under #[cfg(test)]: {loose:?}");
+}
