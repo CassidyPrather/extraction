@@ -78,6 +78,8 @@ MATERIALS = {
     "RagBlue": ((0.22, 0.26, 0.33), 0.0, 0.95, None),
     "Russet": ((0.46, 0.23, 0.11), 0.0, 0.92, None),
     "Leaf": ((0.2, 0.4, 0.1), 0.0, 0.7, None),
+    # Retroreflective tape (lit for a torch in the game: render::reflectors).
+    "Reflector": ((0.72, 0.73, 0.72), 0.0, 0.35, None),
     "Enamel": ((0.88, 0.88, 0.85), 0.0, 0.3, None),
     "Worn": ((0.5, 0.5, 0.5), 1.0, 0.45, None),
     "Red": ((0.5, 0.06, 0.04), 0.0, 0.6, None),

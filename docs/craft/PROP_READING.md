@@ -278,3 +278,30 @@ wall, the hatch, the shelf. By day (11:00), at dusk (20:00) and at night
   seen from the bed at all. That is the design (the driver opens it to
   talk); nothing muddy.
 
+
+### Snow poles by torchlight (6 November)
+
+Fifth valley walked Rime's col track at night and lost the pole line
+just where it's needed: red and white paint is lost from a pole off.
+Each pole now wears two 10 cm bands of reflective tape in its white
+(`Reflector`). `render::reflectors` lights each band for the eye's own
+torch: the light reaching it (the beam's cone, falling with distance
+squared, full at 25 m) picks one of six glowing steps, through
+`grade::ToTheEye`, so it keeps its colour (`hue_safe`) through the eye's
+adaptation. Out of the beam, or by day, it's pale grey tape.
+
+From 3 m beside the track at new moon, the hand torch on: peak
+brightness (0-255) on the background behind, before → after:
+
+| | pole at 20 m | pole at 43 m |
+|---|---|---|
+| clear night | 84 → 148 on 14 | marks visible on the sheet |
+| downpour night | 43 → 146 on 8 | 9 → 32 on 8 |
+| clearing day | 154 → 190 on 143 | unchanged |
+
+Fourth valley's `night_route.sh` reads Rime's first job's way home,
+three stops from the observatory to the saddle, which doesn't pass the
+pole line: it scores 0 of 3 lost before and after.
+
+![Snow poles at 20 m and 43 m: before (left), after (right); clear
+night, downpour, day](../shots/props/snow_pole_reflectors.jpg)
