@@ -401,6 +401,20 @@ pub fn heard_coming(machine: Coming, rain: f32) -> f32 {
     calm * (downpour / calm).powf(r)
 }
 
+/// Whether a robot looking for you sees you plainly, low and still: all
+/// of you in its view (head, chest and hips: you're in the open), or
+/// most of you (two of them) within [`POINT_BLANK`]. Behind cover
+/// otherwise, it passes you over (the head is the one it already sees:
+/// `clear` says whether its line to a point is clear).
+pub fn seen_plainly(dist: f32, clear: impl Fn(Vec3) -> bool, feet: Vec3, height: f32) -> bool {
+    let body = [
+        feet + Vec3::Y * height * 0.65,
+        feet + Vec3::Y * height * 0.3,
+    ];
+    let shown = 1 + body.iter().filter(|p| clear(**p)).count();
+    shown == 3 || (dist <= POINT_BLANK && shown >= 2)
+}
+
 /// Sight and hearing, into each robot's [`Awareness`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn perceive(
@@ -420,6 +434,7 @@ pub(crate) fn perceive(
             Has<super::hazards::Deafened>,
             Has<super::hazards::Frosted>,
             Has<super::heavy::Heavy>,
+            Option<&super::Brain>,
         ),
     )>,
     players: Query<
@@ -633,7 +648,7 @@ pub(crate) fn perceive(
         motion,
         dormant,
         mind_seed,
-        (dazzled, deaf, frosted, heavy),
+        (dazzled, deaf, frosted, heavy, brain),
     ) in &mut robots
     {
         let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
@@ -719,6 +734,37 @@ pub(crate) fn perceive(
                     .ok()
                     .and_then(|dir| spatial.cast_ray(eye, dir, dist - 0.3, true, &world));
                 if blocked.is_some() {
+                    continue;
+                }
+                // Coming to look or searching, a walker passes over you
+                // low and still behind cover ("It only finds what moves"):
+                // only seen plainly ([`seen_plainly`]). Not the heavy:
+                // "Don't hide" is its lesson.
+                let looking = robot.kind == RobotKind::Walker
+                    && !heavy
+                    && matches!(
+                        brain,
+                        Some(super::Brain::Investigate { .. } | super::Brain::Search { .. })
+                    );
+                let still =
+                    t.speed <= 0.3 && t.load.is_none_or(|v| v <= super::signs::LOAD_SWINGING);
+                if looking
+                    && t.height < CROUCHED
+                    && still
+                    && !seen_plainly(
+                        dist,
+                        |p| {
+                            let to = p - eye;
+                            Dir3::new(to).ok().is_some_and(|dir| {
+                                spatial
+                                    .cast_ray(eye, dir, to.length() - 0.3, true, &world)
+                                    .is_none()
+                            })
+                        },
+                        t.feet,
+                        t.height,
+                    )
+                {
                     continue;
                 }
                 let mut e = exposure(&SightCase {

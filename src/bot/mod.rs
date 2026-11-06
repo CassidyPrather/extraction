@@ -1129,9 +1129,15 @@ fn run_tasks(
                         })
                         .map(|(e, ..)| e)
                         .collect();
+                    // One with a round in it before one without (an empty
+                    // SKS drawn over a pistol with one up the spout), then
+                    // the one it last had out.
+                    let live = |e: &Entity| guns.get(*e).is_ok_and(|g| g.firearm.live_rounds() > 0);
                     let slung = on_body
                         .iter()
-                        .find(|e| Some(**e) == bot.last_gun)
+                        .find(|e| Some(**e) == bot.last_gun && live(e))
+                        .or_else(|| on_body.iter().find(|e| live(e)))
+                        .or_else(|| on_body.iter().find(|e| Some(**e) == bot.last_gun))
                         .or(on_body.first())
                         .map(|e| (*e,));
                     let Some((gun_e, ..)) = slung else {
@@ -1302,9 +1308,7 @@ fn run_tasks(
                     continue;
                 };
                 let mut steps = Vec::new();
-                if f.def.magazine_family.is_some()
-                    && f.magazine.as_ref().is_none_or(|m| m.rounds == 0)
-                {
+                if needs_loading(f) {
                     // (Its macro chambers one too: a rack after would throw
                     // a round away.)
                     steps.push(Task::Gun(MacroKind::Reload));
@@ -2055,4 +2059,19 @@ fn clear_stoppage(bot: &mut Bot, mac: &mut GunMacro, gun_e: Entity, gun: &Gun) -
     bot.note(format!("stoppage: {what}"));
     mac.start(gun_e, macro_steps(MacroKind::Rack, gun));
     true
+}
+
+/// Whether `Ready` loads this gun before anything else, by what it's fed
+/// with: a box magazine run dry (or none in); anything else (a fixed
+/// magazine fed by clip or by hand, a tube, a cylinder, the barrels of a
+/// break action, a crossbow's groove) with no live round in it at all.
+/// Only box magazines were looked at: an SKS with full clips on it was
+/// racked on its empty magazine, and its newcomer went out with nothing to
+/// fire, eleven raids running.
+pub fn needs_loading(f: &extraction_core::firearm::Firearm) -> bool {
+    if f.def.magazine_family.is_some() {
+        f.magazine.as_ref().is_none_or(|m| m.rounds == 0)
+    } else {
+        f.live_rounds() == 0
+    }
 }

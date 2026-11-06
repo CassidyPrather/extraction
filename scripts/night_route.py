@@ -16,10 +16,14 @@ Each stop is a line of WALKS.jsonl, from `night-walks`. Two cases:
   the way than its sides): a small spot (`SHINES`, and twice as bright as the
   frame `SPOT` px to either side and above and below, which leaves out
   lit ground and rain streaks), where the same still shot with no torch
-  (--dark-frames, the dark case's) is dark: so not a lamp or a star.
+  (--dark-frames, the dark case's) is dark: so not a lamp or a star. Or,
+  as in the dark case, a lamp still shows within `CONE` of the way with
+  the torch on (counted apart: `(a lamp only)`).
 - dark (no torch, a newcomer's raid): is something lit within `CONE`
   degrees of the way ahead, a lamp, a beacon, a window? Lit is coloured
-  and bright (`LIT`, `COLOURED`), which leaves out the stars. What stands
+  and bright (`LIT`, `COLOURED`), which leaves out the stars, not blue at
+  its strongest (the night sky, between trunks), and a spot (`SPOT_RATIO`
+  over the frame round it), which leaves out lit cloud. What stands
   against the sky isn't scored (every treeline breaks the skyline): judge
   that off the sheet.
 
@@ -35,7 +39,7 @@ import math
 import os
 import sys
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 # The stills camera's vertical field of view (capture::cinematic::STILL_FOV).
 FOV = 75.0
@@ -55,6 +59,10 @@ TORCH_POINTS = 2
 CONE = 30.0
 LIT = 40
 COLOURED = 0.35
+# And a spot: this many times brighter than the frame round it (blurred
+# BLUR px), which leaves out a lit cloud or the sky's glow.
+SPOT_RATIO = 1.6
+BLUR = 16
 # Torch: a band shining back from the beam, past the pool.
 SHINES = 100
 SPOT = 12
@@ -91,20 +99,40 @@ def lum(im, at):
     return vals[len(vals) // 2]
 
 
-def score_dark(stop, im):
+def score_dark(stop, im, above_pool=False, dark=None):
     """The lit pixels within CONE of the way ahead (the frame's middle,
-    the camera looking along the way), as (brightness, x, y)."""
+    the camera looking along the way), as (brightness, x, y). With
+    `above_pool` (a torch frame), only past the torch's pool: the lit
+    ground in it is coloured and bright too; and with `dark`, the same
+    still with no torch, only what's lit there too (a lamp shines without
+    the torch; timber the torch lights doesn't)."""
     w, h = im.size
+    y_end = h
+    if above_pool:
+        far = [a for m, a in zip(AHEAD_M, stop["ahead"]) if m > POOL[1]]
+        p = project(stop["eye"], stop["yaw"], stop["pitch"], far[0], w, h) if far else None
+        y_end = int(p[1]) if p else 0
     fy = (h / 2) / math.tan(math.radians(FOV) / 2)
     half = fy * math.tan(math.radians(CONE))
     x0, x1 = int(max(0, w / 2 - half)), int(min(w, w / 2 + half))
     px = im.load()
+    dk = dark.load() if dark is not None else None
+    round_it = None
     lit = []
-    for y in range(0, h, 2):
+    for y in range(0, y_end, 2):
         for x in range(x0, x1, 2):
             r, g, b = px[x, y][:3]
             m = max(r, g, b)
-            if m >= LIT and (m - min(r, g, b)) / m >= COLOURED:
+            # Blue at its strongest is the night sky (between trunks, over
+            # a skyline); the lamps, beacons and windows are warm, red or
+            # green.
+            if m >= LIT and (m - min(r, g, b)) / m >= COLOURED and b < m:
+                if round_it is None:
+                    round_it = im.filter(ImageFilter.GaussianBlur(BLUR)).load()
+                if m < SPOT_RATIO * max(round_it[x, y][:3]):
+                    continue
+                if dk is not None and max(dk[x, y][:3]) < LIT:
+                    continue
                 lit.append((m, x, y))
     return lit
 
@@ -139,8 +167,9 @@ def score_standing(stop, im, dark=None):
     def v(x, y):
         return max(px[x, y][:3])
     spots = []
-    for y in range(ya, y1, 2):
-        for x in range(x0, x1, 2):
+    # Every pixel: a band 25 m off is 2 px tall in a 720-line still.
+    for y in range(ya, y1):
+        for x in range(x0, x1):
             m = v(x, y)
             if m < SHINES:
                 continue
@@ -193,6 +222,7 @@ def main(argv):
     walks, frames = rest
     stops = [json.loads(l) for l in open(walks) if l.strip()]
     results = []
+    lamp_only = 0
     for s in stops:
         f = os.path.join(frames, s["name"] + ".png")
         if not os.path.exists(f):
@@ -217,19 +247,22 @@ def main(argv):
             pts = score(s, im)
             read = sum(1 for c, _ in pts if c >= STANDS_OUT)
             df = os.path.join(dark_dir, s["name"] + ".png") if dark_dir else None
-            shine = (
-                score_standing(s, im, Image.open(df).convert("RGB"))
-                if df and os.path.exists(df)
-                else []
-            )
-            ok = read >= TORCH_POINTS or len(shine) > 0
+            dark = Image.open(df).convert("RGB") if df and os.path.exists(df) else None
+            shine = score_standing(s, im, dark) if dark is not None else []
+            # A lamp that still shows with the torch on reads too.
+            lamps = score_dark(s, im, above_pool=True, dark=dark) if dark is not None else []
+            by_torch = read >= TORCH_POINTS or len(shine) > 0
+            ok = by_torch or len(lamps) > 0
+            if not by_torch:
+                lamp_only += ok
             share = read / len(pts) if pts else 0.0
             med = sorted(c for c, _ in pts)[len(pts) // 2] if pts else 0.0
             pts = pts + [(1.0, (x, y)) for _, x, y in shine[:20]]
             print(
                 f"{'READ' if ok else 'LOST'}  {s['name']}  {s['walk']}  stop {s['stop']}: "
                 f"{read}/{len(pts) - min(len(shine), 20)} points in the pool stand out (median {med:.2f}), "
-                f"{len(shine)} shining back past it  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
+                f"{len(shine)} shining back past it, {len(lamps)} lit within {CONE:.0f} deg"
+                f"{' (a lamp only)' if ok and not by_torch else ''}  at {s['eye'][0]:.0f},{s['eye'][2]:.0f}"
             )
         results.append((s, ok, share, med, pts, f))
     lost = [r for r in results if not r[1]]
@@ -251,6 +284,8 @@ def main(argv):
             f"stretch: {a['walk']} stops {a['stop']}-{b['stop']} "
             f"({len(run) * 50} m from {a['eye'][0]:.0f},{a['eye'][2]:.0f})"
         )
+    if case == "torch":
+        print(f"{len(lost) + lamp_only} of {len(results)} without the lamps ({lamp_only} read on a lamp only)")
     print(f"{len(lost)} of {len(results)} stops where the way home can't be read")
     if sheet and results:
         worst = sorted(results, key=lambda r: (r[2], r[3]))[:worst_n]

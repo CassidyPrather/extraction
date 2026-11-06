@@ -572,3 +572,125 @@ wood 0.54 → 0.65, charred floor 0.58 → 0.72, the rise in their outlines.
 With Gunsmith's Black PSO-1 merged in, 2 m: wood 1.57 (Gunsmith measured
 1.33 before the brow shield), charred floor 1.34; the PSO-1 reads 33.7 on
 wood and 11.6 on charred floor.
+
+#### Pale, not paper-white (6 November)
+
+On Visual design's settled-eye sheet the flour sack was a blank white
+blob at arm's length and from 2 m. Measured with Visual design's
+settled-eye `--torchlit` applied locally (not merged), nothing clips,
+before or after: the wash-out was exposure, and their fix took it. So
+Paper and Enamel keep their albedo. A flat model material is held to
+enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
+so nothing new comes in whiter.
+
+What the sack lacked was surface and shape. Slumped into a lumpy ball,
+it still read as a balloon at 2 m, its tie as a white cross. It stands
+now as a filled sack does (`pillow_sack` in `art/items/food.py`). It is
+a squat pillow lofted from rounded-rectangle rings, with near-flat broad
+faces and a square base settled wide with dog-ear corners. Side tucks
+and shoulder creases are geometry, and folds gather into the neck and
+flare into a puff of the same cloth. Three wraps of dark twine and two
+tails tie it off. Its stencil (МУКА, 1 СОРТ) and red stripes are on
+both broad faces. Each line sits where the cloth stands furthest out
+across its width, so no letter sinks (on the lumpy ball 1 СОРТ read
+"1 ПРТ"). The material is `Sacking`, unbleached linen with the canvas
+scan's weave.
+
+By the settled-eye torch it reads 36.1 against the floors (36.6
+before), with no pixel clipped. Detail (L* spread, worst view) is 15.0
+(8.9 before), and it is larger from 2 m (5.1° to 6.2°: a pillow's broad
+face, not a ball's). The other pale items (the hana letter, the rice
+bag, the crackers) already carry a seal, grains or docking, and are
+unchanged. The weave is too fine to read from 2 m. The stencil, the
+stripes, the twine and the outline read.
+
+![Flour sack by torchlight: the original, 0ce75fc9's slumped ball, and
+now; wood and concrete at arm's length, wood and charred floor from 2 m
+(enlarged)](../shots/items/torchlit_flour_before_after.jpg)
+
+#### An item's box is its model (6 November)
+
+An item's `dims` row is its box: its collider, its fit in a pocket or
+pouch, and where it's grabbed. 78 rows had drifted from their models as
+the models were redrawn. Among them, the vest was 3 cm too wide, the
+work boots 7 cm too wide, and the Mosin bolt 4 cm too long. The robot's
+belt of rounds had a box twice its height, and the electronics' model
+stuck out of the bottom of its box.
+
+`models::tests::every_item_box_is_its_model` holds every item with a
+model and a row to it. Each side must be within a millimetre of the
+model's, and the model must sit in the box's middle, within 2 mm. A
+failure names each item, its row and its model.
+`python3 art/items/dims.py --write` sizes the rows, and the kit centres
+a model when it's built (`_kit.recentred`, its pivots moving with it).
+
+Some items are checked differently:
+
+- Guns are left out, because their layouts place them.
+- Magazines and attachments seat by their origin, so only their size is
+  held.
+- Thirteen models stay off their middle until the code that places
+  things in their space moves with them (`KEEPS_ORIGIN`, which names
+  each one's code). These are the bolt cutters' grips and jaws, the
+  crowbar's grip and claw, the hacksaw's blade, the cassette deck's
+  well and buttons, and the gadgets' cell mounts and visuals.
+
+Sixteen models were centred, and four `kit_cavities::ORIGIN_OFFSET`
+entries that made up for them went away.
+
+![Item boxes before (red) and after (green), over their models: vest,
+work boots, robot ammo belt, Mosin bolt, electronics, crossbow bolt
+bundle, car bonnet, scour key](../shots/items/item_boxes_before_after.png)
+
+#### The scopes at arm's length, by the settled torch (6 November)
+
+I re-shot the PU and the PSO-1 by torchlight from an arm's length
+(0.65 m, 55 degrees down), with Visual design's settled eye (3297ad2e).
+The wash-out is gone. Both render black with a soft sheen, not the pale
+silver they were, and nothing clips. They aren't twins up close. The
+PSO-1 shows its turret drum with white graduations, its side bracket and
+the rubber brow shield at its eyepiece. The PU is a slim, plain tube
+with one small knob.
+
+They stand off wood and concrete easily (body delta E 24 to 46). On a
+burnt house's charred planks they are black on black. The PSO-1 at arm's
+length sits at the edge (9.9), read by its sheen and the drum's marks.
+The PU from 2 m is the floor's colour (5.0). That holds for any black
+kit on a burnt floor; Gunsmith is trying a brighter sheen on `Black`
+for all of it.
+
+![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
+planks](../shots/items/torchlit_scopes_arm.jpg)
+
+#### Black's sheen: no single value helps (6 November)
+
+Gunsmith tried a brighter sheen on `Black` for black kit on the charred
+floor. The test: all 116 models that wear it, `--torchlit ruin` with
+the settled eyes, Black's roughness swapped for one run each. Body delta
+E, worst views:
+
+| Item, view | 0.35 | 0.40 | 0.45 (kept) | 0.55 |
+| - | - | - | - | - |
+| PBS-1, arm's length | 3.4 | 5.0 | 10.9 | 19.1 |
+| PSO-1, arm's length | 7.4 | 9.2 | 10.3 | 12.9 |
+| Weapon light, arm's length | 10.1 | 14.6 | 16.8 | 18.3 |
+| AK-74 stock, 2 m | 16.7 | 16.9 | 23.8 | 24.7 |
+| Rotor assembly, arm's length | 8.3 | 7.1 | 5.7 | 3.3 |
+| PU, 2 m | 6.0 | 5.8 | 5.9 | 5.5 |
+| PM and SVD mags, 2 m | 5.5, 5.3 | same | same | same |
+| Views under 10 | 12 | 12 | 10 | 11 |
+
+- **Glossier is worse.** Up close the torch's highlight on smoother
+  black matches the washed-out floor, and black kit sinks into it.
+- **Rougher trades views.** At 0.55 the black-led kit gains at arm's
+  length, but other views drop: the bolt cutters by 25.5 at arm's
+  length, the side rail by 6.6 from 2 m.
+- **What stays under 10 isn't Black's.** By triangle share the PM and
+  SVD mags are 52-56% `Blued`, the PU 43% `Blued`, the multitool 70%
+  `Steel`, the bolts mostly `Steel` and the rotor 59% `Dark`. None of
+  them moves at any value of Black. The Black-led items (PBS-1 95%,
+  PSO-1 73%) already clear 10 at 0.45.
+
+So Black stays at 0.45. Chasing Blued and Steel for the charred floor
+was declined: a dark thing on charcoal is dark in life too, and the
+levers left cost other views. Don't re-run this without a new lever.

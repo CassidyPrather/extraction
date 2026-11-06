@@ -153,7 +153,15 @@ def measure(shot_path, mask_path, void, px_per_deg):
     ev = np.sort(np.linalg.eigvalsh(cov))
     aspect = math.sqrt(max(ev[1], 1e-6) / max(ev[0], 1e-6))
     L, a, b = lab_px(item)
+    # Clipped: its share of pixels white-hot (any channel 250 or over);
+    # detail: how its lightness varies across it (L* standard deviation),
+    # a blank disc near 0.
+    clip = float((item.max(axis=1) >= 250).mean())
+    lstar = 116 * np.cbrt(np.clip(lum(item), 0.008856, None)) - 16
+    detail = float(np.std(lstar))
     return {
+        "clip": clip,
+        "detail": detail,
         "bad": False,
         "px": n,
         "deg": math.sqrt(n) / px_per_deg,

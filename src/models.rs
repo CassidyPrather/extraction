@@ -277,6 +277,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // Retroreflective tape (a snow pole's bands): lit for the eye's torch
     // by `render::reflectors`.
     "Reflector",
+    // Unbleached linen sacking (art/items/food.py's sacks).
+    "Sacking",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -361,6 +363,13 @@ impl ModelMaterials {
             // metre, as the rag cloth's.
             "Canvas" => derive(Mat::Canvas, &|m| {
                 m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+            }),
+            // Linen sacking: the canvas scan's weave and its roughness, in
+            // the cloth's own pale colour (a flour sack).
+            "Sacking" => derive(Mat::Canvas, &|m| {
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(3.0));
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.84, 0.81, 0.72);
             }),
             "Planks" => lib.get(Mat::Planks, server, materials),
             "Boards" => lib.get(Mat::WoodFloor, server, materials),
@@ -725,6 +734,14 @@ mod tests {
     /// A model's bounds in its own space: every mesh node's POSITION
     /// accessor bounds, through the node's translation, rotation and scale.
     fn glb_bounds(path: &Path) -> Option<(bevy::math::Vec3, bevy::math::Vec3)> {
+        glb_bounds_without(path, &[])
+    }
+
+    /// [`glb_bounds`], leaving out the mesh nodes named in `skip`.
+    fn glb_bounds_without(
+        path: &Path,
+        skip: &[&str],
+    ) -> Option<(bevy::math::Vec3, bevy::math::Vec3)> {
         use bevy::math::{Quat, Vec3};
         let bytes = std::fs::read(path).unwrap();
         let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
@@ -737,6 +754,9 @@ mod tests {
             let Some(mesh) = node["mesh"].as_u64() else {
                 continue;
             };
+            if node["name"].as_str().is_some_and(|n| skip.contains(&n)) {
+                continue;
+            }
             let t = &node["translation"];
             let r = &node["rotation"];
             let sc = &node["scale"];
@@ -804,6 +824,112 @@ mod tests {
         );
     }
 
+    /// Models kept off their box's middle until the code that places
+    /// things in their space moves with them: `art/items/_kit.py`'s
+    /// `KEEPS_ORIGIN`, which this list matches.
+    const KEEPS_ORIGIN: &[(&str, &str)] = &[
+        ("flashlight", "gadgets: its cell's mount"),
+        ("cloak_generator", "gadgets: its cell's mount"),
+        ("jammer", "gadgets: its cell's mount"),
+        ("lead_case", "gadgets: its cradle and its lid"),
+        ("compass", "gadgets::visuals: its face and needle"),
+        ("map_case", "gadgets::visuals: the map in it"),
+        ("camera_drone", "gadgets::visuals: its rotors"),
+        ("emp_trap", "gadgets: its spikes and charge"),
+        ("deployable_cover", "gadgets: the cover it unfolds"),
+        ("cassette_player", "radio::deck: its well, door and buttons"),
+        ("crowbar", "interact::tools::crowbar: grip and claw"),
+        ("bolt_cutters", "interact::tools::cutters: grips and jaws"),
+        ("hacksaw", "weapons::gunsmith: its handle and blade"),
+    ];
+
+    /// Every item's box (`dims`) is its model: each side within a
+    /// millimetre of the model's, and the model in its middle. The box is
+    /// the item's collider, its fit in a pocket or pouch and where it's
+    /// grabbed, so a box off its model is felt: a vest 3 cm wider than
+    /// itself, a belt of rounds twice its height, boots 7 cm too wide.
+    /// Guns are placed by their layouts; magazines and attachments seat by
+    /// their origin (their middle may be off it), so only their size is
+    /// held. `python3 art/items/dims.py --write` sizes a row to its model;
+    /// `_kit.recentred` centres a model when it's built.
+    #[test]
+    fn every_item_box_is_its_model() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        // Rows are written to the millimetre.
+        const SIDE: f32 = 0.001;
+        const MIDDLE: f32 = 0.002;
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models");
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for (_, def) in cat.iter() {
+            let dir = match def.category {
+                Category::Firearm => continue,
+                Category::Magazine => "mags",
+                _ => "items",
+            };
+            let Some(dims) = def.dims else { continue };
+            let path = root.join(dir).join(format!("{}.glb", def.id));
+            let Some((lo, hi)) = path.exists().then(|| glb_bounds(&path)).flatten() else {
+                continue;
+            };
+            checked += 1;
+            let id = &def.id;
+            let (size, mid) = (hi - lo, (hi + lo) / 2.0);
+            let fmt = |v: bevy::math::Vec3| format!("({:.3}, {:.3}, {:.3})", v.x, v.y, v.z);
+            if let Some((_, why)) = KEEPS_ORIGIN.iter().find(|(k, _)| k == id) {
+                if mid.abs().max_element() <= MIDDLE {
+                    bad.push(format!(
+                        "{id}: centred now: take it off KEEPS_ORIGIN ({why}), here and in _kit"
+                    ));
+                }
+                continue;
+            }
+            let have = bevy::math::Vec3::from(dims);
+            if (size - have).abs().max_element() > SIDE {
+                bad.push(format!(
+                    "{id}: dims {} but its model is {}: python3 art/items/dims.py --write",
+                    fmt(have),
+                    fmt(size)
+                ));
+            }
+            let seated = matches!(def.category, Category::Magazine | Category::Attachment);
+            if !seated && mid.abs().max_element() > MIDDLE {
+                bad.push(format!(
+                    "{id}: its model's middle is {} off its box's: rebuild it (art/items/_kit.py centres it)",
+                    fmt(mid)
+                ));
+            }
+        }
+        // The kit's list is this one.
+        let kit = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("art/items/_kit.py"),
+        )
+        .unwrap();
+        let block = kit
+            .split("KEEPS_ORIGIN = {")
+            .nth(1)
+            .and_then(|b| b.split('}').next())
+            .expect("_kit.py has KEEPS_ORIGIN");
+        let kit_ids: Vec<&str> = block
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix('"')?.split('"').next())
+            .collect();
+        let ours: Vec<&str> = KEEPS_ORIGIN.iter().map(|(k, _)| *k).collect();
+        if kit_ids != ours {
+            bad.push(format!(
+                "KEEPS_ORIGIN: _kit.py has {kit_ids:?}, this test {ours:?}"
+            ));
+        }
+        assert!(checked > 150, "only {checked} item models checked");
+        assert!(
+            bad.is_empty(),
+            "item boxes off their models ({}):\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
     /// Every item model fits the box its collider is (`dims`, or a cube of
     /// its bulk): it doesn't stick out of it, rests on its floor rather
     /// than floating above or sinking into the ground, and a flat or long
@@ -866,7 +992,100 @@ mod tests {
         );
     }
 
+    /// Every gun's catalog box (`dims`) is its model: width, height and
+    /// length within 8% and 6 mm a side. The box is the gun's collider, its
+    /// seat in a holster or a pouch, and the gunsmith's length (a sawn-off
+    /// cuts from it), so a stale row put a revolver 2 cm high in its
+    /// holster and gave an AK-74 a magazine's height it doesn't have.
+    ///
+    /// The box is the gun as drawn, without what comes off or is an item
+    /// of its own: a magazine is its own item, never in a gun's model.
+    /// What a gun's model carries that isn't counted is named here:
+    #[test]
+    fn every_gun_box_is_its_model() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        /// Mesh nodes left out of a gun's box: the Mosin's bayonet, always
+        /// fixed in the game but not the rifle's 1.23 m (with it, 1.67 m).
+        const NOT_COUNTED: &[(&str, &[&str])] = &[("mosin", &["bayonet"])];
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models").join("guns");
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for (_, def) in cat.iter() {
+            if def.category != Category::Firearm {
+                continue;
+            }
+            let id = &def.id;
+            let path = root.join(format!("{id}.glb"));
+            let skip = NOT_COUNTED
+                .iter()
+                .find(|(g, _)| g == id)
+                .map_or(&[][..], |(_, s)| *s);
+            let Some((lo, hi)) = glb_bounds_without(&path, skip) else {
+                bad.push(format!("{id}: no model"));
+                continue;
+            };
+            let Some(dims) = def.dims else {
+                bad.push(format!("{id}: no dims"));
+                continue;
+            };
+            checked += 1;
+            let ext = hi - lo;
+            for (i, axis) in ["width", "height", "length"].iter().enumerate() {
+                let (row, model) = (dims[i], ext[i]);
+                if (row - model).abs() > 0.08 * model + 0.006 {
+                    bad.push(format!(
+                        "{id}: {axis} {row:.3} m in items.ron, {model:.3} m drawn"
+                    ));
+                }
+            }
+        }
+        assert!(checked > 10, "only {checked} guns checked");
+        assert!(
+            bad.is_empty(),
+            "gun boxes that aren't their models:\n{}",
+            bad.join("\n")
+        );
+    }
+
     /// The art kit's preview palette names the same materials as the game.
+    #[test]
+    fn no_flat_model_material_is_paper_white() {
+        // Nothing flat (no texture, not glowing, not see-through) is
+        // whiter than enamel: paper-white has no shading left in it under a
+        // torch held close. (With the eyes closing on what the beam lands
+        // on, `render::grade`, nothing up to here clips.)
+        use super::ModelMaterials;
+        use crate::render::materials::MaterialLibrary;
+        use bevy::prelude::*;
+        const PALE: f32 = 0.78;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Image>();
+        let world = app.world_mut();
+        let server = world.resource::<AssetServer>().clone();
+        let mut lib = MaterialLibrary::default();
+        let mut mm = ModelMaterials::default();
+        let mut bad = Vec::new();
+        world.resource_scope(|_, mut materials: Mut<Assets<StandardMaterial>>| {
+            for name in MATERIAL_NAMES {
+                let h = mm.get(name, &mut lib, &server, &mut materials);
+                let Some(m) = materials.get(&h) else { continue };
+                let lit = m.emissive.red + m.emissive.green + m.emissive.blue > 0.0;
+                if m.base_color_texture.is_some() || lit || m.base_color.alpha() < 1.0 || m.unlit {
+                    continue;
+                }
+                let c = m.base_color.to_linear();
+                let l = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+                if l > PALE {
+                    bad.push(format!("{name}: {l:.2}"));
+                }
+            }
+        });
+        assert!(bad.is_empty(), "paper-white:\n{}", bad.join("\n"));
+    }
+
     #[test]
     fn art_palette_matches_the_game() {
         let common = crate::asset_root_path()
