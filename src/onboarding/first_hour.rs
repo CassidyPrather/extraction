@@ -1304,7 +1304,7 @@ pub(super) fn direct_raid(
                     Kind::Learned,
                     "a broken walker: took it on, as the driver said",
                 );
-                take_it_on()
+                take_it_on_with(spare_loaded(&world, &view, player))
             }
             // "Keep your distance": back off it, and at it again.
             First::Shoved if !p.lost => {
@@ -1314,7 +1314,7 @@ pub(super) fn direct_raid(
                     to: here + away * 4.0,
                     within: 1.0,
                 }];
-                t.extend(take_it_on());
+                t.extend(take_it_on_with(spare_loaded(&world, &view, player)));
                 t
             }
             // "Run across it, to cover", "Break its line", "Down, out of
@@ -1347,7 +1347,7 @@ pub(super) fn direct_raid(
             First::DroneLock | First::Aimed if p.reckless && armed_now => {
                 state.fought_at = now;
                 state.note(now, Kind::Learned, "shot back at it");
-                take_it_on()
+                take_it_on_with(spare_loaded(&world, &view, player))
             }
             First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
@@ -1748,7 +1748,10 @@ pub(super) fn direct_raid(
     {
         state.fought_at = now;
         state.note(now, Kind::Learned, "a machine in range: took it on");
-        super::second_hour::cut_in(&mut bot, take_it_on());
+        super::second_hour::cut_in(
+            &mut bot,
+            take_it_on_with(spare_loaded(&world, &view, player)),
+        );
         return;
     }
     // The truck's there: whatever the walk, to it now.
@@ -3408,6 +3411,27 @@ fn take_it_on() -> Vec<Task> {
         Task::Ready { off_safe: true },
         Task::Engage { shots: 12 },
     ]
+}
+
+/// `take_it_on`, and with a loaded magazine to spare on it, again from that
+/// once the first runs dry (`Ready` reloads an empty one): seven rounds
+/// and dry at a drone, a full spare in its pocket, the reckless newcomer
+/// went down the same way three raids running.
+fn take_it_on_with(spare: bool) -> Vec<Task> {
+    let mut t = take_it_on();
+    if spare {
+        t.extend([Task::Ready { off_safe: true }, Task::Engage { shots: 12 }]);
+    }
+    t
+}
+
+/// A loaded magazine on `player` besides the one in its gun.
+fn spare_loaded(world: &World2, view: &RaidView, player: Entity) -> bool {
+    world.items.iter().any(|(e, it, ..)| {
+        world.id(e).is_some_and(|id| id.ends_with("_mag"))
+            && it.rounds > 0
+            && carried(world, view, player, world.id(e).unwrap_or("")).contains(&e)
+    })
 }
 
 /// Whether a gun on `player`'s body has a round up (any: a rifle picked
