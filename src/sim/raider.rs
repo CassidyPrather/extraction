@@ -3051,28 +3051,60 @@ fn indoor_path(
             // From near or far: from further off, the old way went through on
             // the path's slant, 0.2-0.35 m off the middle, the body on the
             // jamb (every valley's doors; the ore mill's cost whole raids).
-            // A tower's landing is narrow: stand closer in, but still square.
-            let stand = [1.1, 0.8, 0.6]
+            // On the side its leaf swings into, out of the leaf's reach from
+            // its hinge (wherever within reach of the stand the walk stops):
+            // square on at 1.1 m the body stood in the swing, the leaf
+            // stopped against it and the door never opened (the ore mill
+            // again). A tower's landing is narrow: closer in, still square.
+            let info = plan.doors.iter().find(|d| d.entity == door);
+            let swings_here = info.is_some_and(|d| (d.tip - (d.a + d.b) * 0.5).dot(normal) > 0.0);
+            let out = info.map_or(1.1, |d| {
+                let w = d.a.distance(d.b);
+                let reach = w + crate::player::CAPSULE_RADIUS + 0.1 + DOOR_STAND_WITHIN;
+                (reach * reach - w * w * 0.25).max(0.0).sqrt()
+            });
+            let far = if swings_here { out.max(1.1) } else { 1.1 };
+            // Short of that (no floor out there), toward the far jamb: as
+            // far from the hinge, nearer the doorway.
+            let away = info.map_or(Vec2::ZERO, |d| (d.b - d.a).normalize_or_zero());
+            let clear = |q: Vec2| {
+                !swings_here
+                    || info.is_none_or(|d| {
+                        let w = d.a.distance(d.b);
+                        q.distance(d.a) - DOOR_STAND_WITHIN - w
+                            >= crate::player::CAPSULE_RADIUS + 0.1
+                    })
+            };
+            let offsets = (0..=4).map(|k| k as f32 * 0.15);
+            let clear_stand = (0..=4)
+                .map(|k| far - k as f32 * 0.1)
+                .flat_map(|d| offsets.clone().map(move |o| (d, o)))
+                .map(|(d, o)| cross + normal * d + away * o)
+                .find(|&q| walkable(q) && clear(q));
+            let square = [1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 1.2, 1.3, 1.4]
                 .into_iter()
                 .map(|d| cross + normal * d)
                 .find(|&q| walkable(q));
+            let stand = clear_stand.or(square);
             let square_on = stand.is_some();
             let before = stand.unwrap_or(cross - dir * 1.1);
+            // Squared up to the doorway, once it's open.
+            let square = square.unwrap_or(before);
             // Stand clear of the leaf's swing to open it: from further off,
             // walk up to there; from closer in (starting at the door),
             // step back out to there first, or the leaf swings into you and
             // pins you in the doorway.
             let back = square_on || (before - start).dot(dir) > 0.0;
             if back {
-                walk(&mut tasks, start, before, 0.3);
+                walk(&mut tasks, start, before, DOOR_STAND_WITHIN);
             }
             tasks.push(Task::OpenDoor(door));
             // A door swinging out can shove you aside: square up to the
             // doorway again rather than go at the frame on a slant.
             if back {
                 tasks.push(Task::WalkTo {
-                    to: plan.world2(before),
-                    within: 0.3,
+                    to: plan.world2(square),
+                    within: DOOR_STAND_WITHIN,
                 });
             }
             // Straight through, clear of the open leaf, before turning.
@@ -3092,6 +3124,9 @@ fn indoor_path(
     }
     Some(tasks)
 }
+
+/// How near the stand to open a door from a walk gets (m).
+const DOOR_STAND_WITHIN: f32 = 0.2;
 
 /// Wedged in a corner, the nearest walkable cell can be through the wall:
 /// the nearest one on the same side of the footprint's edge instead.
@@ -5935,7 +5970,10 @@ mod run_tests {
     /// a route out from a little way in walks through within a hand's
     /// breadth of the doorway's middle, not along its edge (Rime's ore
     /// mill, 6 November: out along the gap's edge, the body on the jamb
-    /// and the open leaf beside it, 27 stucks a raid).
+    /// and the open leaf beside it, 27 stucks a raid). Both ways, and
+    /// opened from where its leaf swings clear of the body: square on but
+    /// too close in, the leaf stopped against the body and the door never
+    /// opened (the ore mill again, 15 stucks a raid).
     #[test]
     fn a_route_through_a_door_takes_its_middle() {
         let mut bad = Vec::new();
@@ -5959,8 +5997,8 @@ mod run_tests {
                     },
                 )
                 .unwrap();
-            for plan in plans.iter().filter(|p| p.levels.is_none()) {
-                for d in &plan.doors {
+            for plan in &plans {
+                for (d, out) in plan.doors.iter().flat_map(|d| [(d, true), (d, false)]) {
                     let mid = (d.a + d.b) * 0.5;
                     let t = (d.b - d.a).normalize_or(Vec2::X);
                     let n = Vec2::new(-t.y, t.x);
@@ -5980,6 +6018,7 @@ mod run_tests {
                     ) else {
                         continue;
                     };
+                    let (a, b) = if out { (a, b) } else { (b, a) };
                     let Some(route) = indoor_path(plan, plan.to_world(a), b, 0.3, true) else {
                         continue;
                     };
@@ -5997,13 +6036,41 @@ mod run_tests {
                         continue;
                     };
                     tried += 1;
+                    let way = if out { "out" } else { "in" };
                     let l = plan.to_local(Vec3::new(through.x, 0.0, through.y)).xz();
                     let off = (l - mid).dot(t).abs();
-                    if off > 0.1 {
+                    // (Unless there's no floor on its middle's line on the
+                    // side it's come at from: the nearest cell beside it.)
+                    let side = if (l - mid).dot(n) > 0.0 { 1.0 } else { -1.0 };
+                    let lined = (6..=14).any(|k| {
+                        plan.grid
+                            .walkable((mid + n * side * k as f32 * 0.1).to_array())
+                    });
+                    if off > 0.1 && (lined || off > plan.grid.cell) {
                         bad.push(format!(
-                            "{map} {} at {:.0?}: door {:?}, through {off:.2} m off its middle",
+                            "{map} {} at {:.0?}: door {:?} {way}, through {off:.2} m off its middle",
                             plan.name, plan.xf.translation, d.entity
                         ));
+                    }
+                    // Where it's opened from: the leaf (hinged at `a`) and
+                    // the body clear, wherever within reach of the stand
+                    // the walk stops.
+                    let stand = route[..k].iter().rev().find_map(|x| match x {
+                        Task::WalkTo { to, within } => Some((*to, *within)),
+                        _ => None,
+                    });
+                    if let Some((to, within)) = stand {
+                        let l = plan.to_local(Vec3::new(to.x, 0.0, to.y)).xz();
+                        let w = d.a.distance(d.b);
+                        let gap = l.distance(d.a) - within - w;
+                        // (Its leaf swings away from the other side.)
+                        let in_swing = (l - mid).dot(n) * (d.tip - mid).dot(n) > 0.0;
+                        if in_swing && gap < crate::player::CAPSULE_RADIUS + 0.05 {
+                            bad.push(format!(
+                                "{map} {} at {:.0?}: door {:?} {way}, opened {gap:.2} m clear of its leaf",
+                                plan.name, plan.xf.translation, d.entity
+                            ));
+                        }
                     }
                 }
             }

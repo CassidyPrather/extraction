@@ -68,6 +68,17 @@ pub struct DoorInfo {
     pub b: Vec2,
     /// Where to stand outside it, building-local, if it's an outside door.
     pub outside: Option<Vec2>,
+    /// Its leaf's free end, swung open (building-local): the side of the
+    /// doorway it swings into.
+    pub tip: Vec2,
+}
+
+impl DoorInfo {
+    /// Its leaf's free end open, from its definition (building-local).
+    fn open_tip(def: &crate::world::buildings::DoorDef) -> Vec2 {
+        let open = Quat::from_rotation_y(def.yaw + OPEN_SWING);
+        (def.hinge + open * Vec3::new(def.width, 0.0, 0.0)).xz()
+    }
 }
 
 impl DoorInfo {
@@ -516,6 +527,7 @@ pub(crate) fn plan_buildings_with(
                 let a3 = def.hinge;
                 let b3 = def.hinge + rot * Vec3::new(def.width, 0.0, 0.0);
                 DoorInfo {
+                    tip: DoorInfo::open_tip(&def),
                     entity: *d,
                     a: Vec2::new(a3.x, a3.z),
                     b: Vec2::new(b3.x, b3.z),
@@ -846,6 +858,7 @@ fn plan_site(
                 .map(|s| mid + normal * s * 2.6);
             entries.extend(outside);
             DoorInfo {
+                tip: DoorInfo::open_tip(&def),
                 entity: *d,
                 a,
                 b: c,
