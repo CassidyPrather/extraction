@@ -745,7 +745,9 @@ fn a_searching_drone_looks_in_at_a_doorway() {
         .world()
         .resource::<super::doors::Entrances>()
         .doors
-        .first()
+        .iter()
+        // A way in from outside (a drone comes down to no inside door).
+        .find(|d| d.outside)
         .expect("a door");
     let start = door.mid + door.out * 25.0 + Vec3::Y * 10.0;
     let mut queue = CommandQueue::default();
@@ -799,7 +801,9 @@ fn a_drone_held_off_a_doorway_still_ends_its_search() {
         .world()
         .resource::<super::doors::Entrances>()
         .doors
-        .first()
+        .iter()
+        // A way in from outside (a drone comes down to no inside door).
+        .find(|d| d.outside)
         .expect("a door");
     let hover = door.mid + door.out * super::drone::DOORWAY_STANDOFF;
     let held = Vec3::new(
