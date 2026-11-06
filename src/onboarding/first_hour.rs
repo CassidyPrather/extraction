@@ -651,6 +651,8 @@ pub(super) struct Newcomer {
     line_checked: f32,
     /// When a walker last aimed at it.
     aimed_at: f32,
+    /// On its way to a spot out of a walker's line till then.
+    line_run_until: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -1427,6 +1429,7 @@ pub(super) fn direct_raid(
                         Some((tasks, how)) => {
                             state.note(now, Kind::Learned, format!("broke its line: {how}"));
                             let run = run_to_line(&tasks, here);
+                            state.line_run_until = now + run;
                             state.low_until = now + run + LINE_HELD;
                             if let Some(f) = fight.as_mut() {
                                 f.flee_until = now + run;
@@ -1560,7 +1563,9 @@ pub(super) fn direct_raid(
     // pulled, six raids of eleven.)
     let eye = walker_eye(&world, &eyes, state.aimer, here, &on_me);
     let hidden = eye.is_some_and(|e| line_hidden(&spatial, &world, here, e));
-    let running = fight.as_ref().is_some_and(|f| f.flee_until > now);
+    // On its way to a spot out of its line (not any run for cover: a run
+    // that doesn't break its line is seven rounds in six seconds, r10).
+    let running = state.line_run_until > now;
     if !p.reckless
         && eye.is_some()
         && now - state.fought_at > 8.0
@@ -1695,6 +1700,7 @@ pub(super) fn direct_raid(
         {
             state.note(now, Kind::Learned, format!("in its line again: {how}"));
             let run = run_to_line(&tasks, here);
+            state.line_run_until = now + run;
             state.low_until = now + run + LINE_HELD;
             if let Some(f) = fight.as_mut() {
                 f.flee_until = now + run;
