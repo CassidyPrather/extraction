@@ -58,13 +58,15 @@ def labelled_tin(p, r, y0, y1, label, trim):
     return rl
 
 
-def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12):
+def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12, lumps=6, depth=0.1,
+         spread=0.12):
     """A soft filled bag: a ball of radii `r` slumped flat on y_floor,
-    lumpy, gathered in to a neck at height `neck`."""
+    `lumps` lumps up to `depth` deep, its foot spread by `spread`,
+    gathered in to a neck at height `neck`."""
     bm = p.bm
     rnd = random.Random(seed)
     bumps = [(Vector((rnd.uniform(-1, 1), rnd.uniform(-0.4, 0.6), rnd.uniform(-1, 1))).normalized(),
-              rnd.uniform(-0.08, 0.1)) for _ in range(6)]
+              rnd.uniform(-depth * 0.8, depth)) for _ in range(lumps)]
     res = bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=1.0)
     verts = res["verts"]
     cx, cy, cz = centre
@@ -77,7 +79,7 @@ def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12):
         f = 1.0 - 0.86 * t ** 1.4
         if y < y_floor + 0.004:
             # Slumped: the bottom spreads a little and sits flat.
-            f *= 1.0 + 0.12 * min(1.0, (y_floor + 0.004 - y) / 0.01)
+            f *= 1.0 + spread * min(1.0, (y_floor + 0.004 - y) / 0.01)
             y = max(y, y_floor)
         v.co = Vector((cx + x * f, y, cz + z * f))
     faces = list({f for v in verts for f in v.link_faces})
@@ -302,24 +304,41 @@ def flour_sack():
     # A white cotton sack, slumped, its neck tied off with string; the word
     # and two red stripes stencilled on the front.
     neck = yb + 0.084
-    sack(p, (0.047, 0.05, 0.037), (0.0, yb + 0.036, 0.0), yb, neck, "Paper", seed=4, segs=22,
-         rings=14)
-    ring(p, 0.0072, 0.0019, "Rope", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
-    ring(p, 0.007, 0.0016, "Rope", xf=T(0, neck + 0.0035, 0) @ UP @ RX(0.15), segs=14, sides=5)
+    # Woven linen (`Sacking`), slumped heavy: a sagging foot, the flour
+    # settled in lumps and creases (smooth, by torchlight it was a blank
+    # balloon). Tied off with dark twine, wound thick.
+    sack(p, (0.051, 0.043, 0.04), (0.0, yb + 0.031, 0.0), yb, neck, "Sacking", seed=4, segs=32,
+         rings=20, lumps=18, depth=0.2, spread=0.32)
+    ring(p, 0.0074, 0.0026, "Black", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
+    ring(p, 0.0072, 0.0022, "Black", xf=T(0, neck + 0.0042, 0) @ UP @ RX(0.15), segs=14, sides=5)
     # The gathered cloth above the tie, crumpled into points.
     tuft = [((0.0125 if k % 2 else 0.0055) * math.cos(2 * math.pi * k / 14),
              (0.0125 if k % 2 else 0.0055) * math.sin(2 * math.pi * k / 14)) for k in range(14)]
-    p.prism(tuft, neck + 0.002, neck + 0.0195, "Paper", axis="y",
+    p.prism(tuft, neck + 0.002, neck + 0.0195, "Sacking", axis="y",
             width=lambda a, b: (neck + 0.002,
                                 neck + 0.0125 + 0.007 * abs(math.sin(a * 900 + b * 500))))
     tube_path(p, [(0.006, neck, -0.004), (0.013, neck - 0.004, -0.011),
-                  (0.016, neck - 0.012, -0.018)], 0.0011, "Rope", sides=4, closed=False)
-    # Stencil on the front, which bulges: the letters sit on its crown.
-    zf = -0.0372
-    text(p, "МУКА", 0.0125, "Black", T(0.0, yb + 0.036, zf) @ FRONT, depth=0.0008)
-    for y in (yb + 0.022, yb + 0.05):
-        p.box((0.034, 0.0028, 0.0008), (0.0, y, zf + 0.0003), "Red")
-    text(p, "1 COPT", 0.0055, "Black", T(0.0, yb + 0.0145, zf + 0.0012) @ FRONT, depth=0.0008)
+                  (0.016, neck - 0.012, -0.018)], 0.0016, "Black", sides=4, closed=False)
+    # The mill's stencil on both broad faces, set into the cloth where it
+    # lies (each mark at the surface a ray finds, the sack being lumpy),
+    # between two red stripes: a sack lands any way round, and on one face
+    # only, half the time it wasn't seen.
+    from mathutils.bvhtree import BVHTree
+    tree = BVHTree.FromBMesh(p.bm)
+
+    def surface(y, side):
+        hit = tree.ray_cast(Vector((0.0, y, side * 0.2)), Vector((0.0, 0.0, -side)))
+        return hit[0].z if hit[0] is not None else side * 0.037
+
+    for side, face in ((-1.0, FRONT), (1.0, RY(0.0))):
+        y = yb + 0.0335
+        text(p, "МУКА", 0.0135, "Black", T(0.0, y, surface(y, side) - side * 0.0012) @ face,
+             depth=0.0024)
+        for y in (yb + 0.0155, yb + 0.052):
+            p.box((0.026, 0.0036, 0.0022), (0.0, y, surface(y, side) - side * 0.0004), "Red")
+        y = yb + 0.0595
+        text(p, "1 COPT", 0.0055, "Black", T(0.0, y, surface(y, side) - side * 0.001) @ face,
+             depth=0.0018)
     return [p]
 
 

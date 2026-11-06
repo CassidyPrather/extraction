@@ -313,6 +313,8 @@ pub struct Raider {
     burned: HashSet<Entity>,
     /// Doors a lockdown has bolted for good: shut in its plans.
     sealed: HashSet<Entity>,
+    /// Doors tried and found wedged shut: shut in its plans.
+    wedged: HashSet<Entity>,
     /// The current plan was cut short (a fight, a repath): redo, don't
     /// give up.
     interrupted: bool,
@@ -605,6 +607,7 @@ pub fn attach_raider(
                 known: HashSet::new(),
                 burned: HashSet::new(),
                 sealed: HashSet::new(),
+                wedged: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
                 rv: career_rv,
@@ -749,6 +752,8 @@ pub struct Scene<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     /// Underground sites' power: doors held shut, and the switches.
     power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    /// Doors wedged shut (a wedge under one, or the valley's memory).
+    wedged: Query<'w, 's, &'static GlobalTransform, With<crate::robots::doors::Wedged>>,
     site_power: Query<'w, 's, &'static crate::world::underground::SitePower>,
     power_switches: Query<
         'w,
@@ -1184,6 +1189,7 @@ pub fn think(
             }
             spot_anomalies(&mut bot, r, &scene, here, pos);
             spot_sealed(&mut bot, r, &scene, &mut log);
+            spot_wedged(&mut bot, r, &scene, here, &mut log);
             spot_held(&mut bot, r, &scene);
             sneak(
                 me,
@@ -1437,10 +1443,7 @@ fn sidestep(
     start: f32,
 ) -> Vec2 {
     // On a bridge: along its deck, never off it.
-    if let Some(deck) = decks(&scene.zone)
-        .into_iter()
-        .find(|d| d.holds(pos.xz(), 0.5))
-    {
+    if let Some(deck) = decks(&scene.zone).into_iter().find(|d| d.bears(pos, 0.5)) {
         return deck_sidestep(&deck, scene, pos, step, start);
     }
     sidestep_open(plans, grid, scene, pos, step, start)
@@ -2718,6 +2721,48 @@ fn spot_held(bot: &mut Bot, r: &mut Raider, scene: &Scene) {
     }
 }
 
+/// A door it's gone to open and found wedged ("It won't budge"): its
+/// doorway is a wall in the plans from then on, and the walk is planned
+/// again by another way, as anyone would (Rime's ore mill, careers seed 7:
+/// the valley's memory wedged the door it meant to leave by, and it
+/// pressed it every two seconds till the clock ran out, 15 stucks).
+fn spot_wedged(bot: &mut Bot, r: &mut Raider, scene: &Scene, pos: Vec2, log: &mut SimLog) {
+    let Some(Task::OpenDoor(d)) = bot.tasks.front() else {
+        return;
+    };
+    let d = *d;
+    // Tried: up to it, its leaf in reach.
+    let tried = scene
+        .wedged
+        .get(d)
+        .is_ok_and(|gt| gt.translation().xz().distance(pos) < 2.0);
+    if !tried || !r.wedged.insert(d) {
+        return;
+    }
+    for plan in r.plans.iter_mut() {
+        if shut_door(plan, d) {
+            log.event("wedged", json!({"site": plan.name}));
+        }
+    }
+    r.interrupted = true;
+    bot.replace([Task::Wait(0.1)]);
+}
+
+/// A door shut for good in a plan: its doorway a wall. Whether the plan
+/// has it.
+fn shut_door(plan: &mut BuildingPlan, door: Entity) -> bool {
+    let Some(leaf) = plan
+        .doors
+        .iter()
+        .find(|i| i.entity == door)
+        .map(|i| i.leaf())
+    else {
+        return false;
+    };
+    plan.grid.block(leaf, 0.0);
+    true
+}
+
 fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
     let mut new = Vec::new();
     for plan in r.plans.iter_mut() {
@@ -3025,6 +3070,16 @@ fn indoor_path(
     for (i, p) in path.into_iter().enumerate().skip(1) {
         let mut start = last;
         for (door, cross) in plan.doors_on(last, p) {
+            // Through the doorway's middle, not wherever the path's line
+            // meets it: along its edge the body rubs the jamb with the open
+            // leaf beside it (Rime's ore mill, 6 November: out along the
+            // gap's edge, 27 stucks a raid and two raids run out of time;
+            // Fifth valley's trace).
+            let cross = plan
+                .doors
+                .iter()
+                .find(|d| d.entity == door)
+                .map_or(cross, |d| (d.a + d.b) * 0.5);
             let dir = (p - last).normalize_or_zero();
             // Square to the doorway: its normal, toward the side it's
             // coming from.
@@ -3041,29 +3096,63 @@ fn indoor_path(
             let walkable = |q: Vec2| plan.grid.walkable(q.to_array());
             // Square on where there's floor for it (a tower's landing may
             // have none); along the path otherwise.
-            // Only when it starts at the door, inside the leaf's swing (the
-            // trap); from further off the old way in works.
-            let square_on = start.distance(cross) < 1.1 && walkable(cross + normal * 1.1);
-            let before = if square_on {
-                cross + normal * 1.1
-            } else {
-                cross - dir * 1.1
+            // From near or far: from further off, the old way went through on
+            // the path's slant, 0.2-0.35 m off the middle, the body on the
+            // jamb (every valley's doors; the ore mill's cost whole raids).
+            // On the side its leaf swings into, out of the leaf's reach from
+            // its hinge (wherever within reach of the stand the walk stops):
+            // square on at 1.1 m the body stood in the swing, the leaf
+            // stopped against it and the door never opened (the ore mill
+            // again). A tower's landing is narrow: closer in, still square.
+            let info = plan.doors.iter().find(|d| d.entity == door);
+            let swings_here = info.is_some_and(|d| (d.tip - (d.a + d.b) * 0.5).dot(normal) > 0.0);
+            let out = info.map_or(1.1, |d| {
+                let w = d.a.distance(d.b);
+                let reach = w + crate::player::CAPSULE_RADIUS + 0.1 + DOOR_STAND_WITHIN;
+                (reach * reach - w * w * 0.25).max(0.0).sqrt()
+            });
+            let far = if swings_here { out.max(1.1) } else { 1.1 };
+            // Short of that (no floor out there), toward the far jamb: as
+            // far from the hinge, nearer the doorway.
+            let away = info.map_or(Vec2::ZERO, |d| (d.b - d.a).normalize_or_zero());
+            let clear = |q: Vec2| {
+                !swings_here
+                    || info.is_none_or(|d| {
+                        let w = d.a.distance(d.b);
+                        q.distance(d.a) - DOOR_STAND_WITHIN - w
+                            >= crate::player::CAPSULE_RADIUS + 0.1
+                    })
             };
+            let offsets = (0..=4).map(|k| k as f32 * 0.15);
+            let clear_stand = (0..=4)
+                .map(|k| far - k as f32 * 0.1)
+                .flat_map(|d| offsets.clone().map(move |o| (d, o)))
+                .map(|(d, o)| cross + normal * d + away * o)
+                .find(|&q| walkable(q) && clear(q));
+            let square = [1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 1.2, 1.3, 1.4]
+                .into_iter()
+                .map(|d| cross + normal * d)
+                .find(|&q| walkable(q));
+            let stand = clear_stand.or(square);
+            let square_on = stand.is_some();
+            let before = stand.unwrap_or(cross - dir * 1.1);
+            // Squared up to the doorway, once it's open.
+            let square = square.unwrap_or(before);
             // Stand clear of the leaf's swing to open it: from further off,
             // walk up to there; from closer in (starting at the door),
             // step back out to there first, or the leaf swings into you and
             // pins you in the doorway.
             let back = square_on || (before - start).dot(dir) > 0.0;
             if back {
-                walk(&mut tasks, start, before, 0.3);
+                walk(&mut tasks, start, before, DOOR_STAND_WITHIN);
             }
             tasks.push(Task::OpenDoor(door));
             // A door swinging out can shove you aside: square up to the
             // doorway again rather than go at the frame on a slant.
             if back {
                 tasks.push(Task::WalkTo {
-                    to: plan.world2(before),
-                    within: 0.3,
+                    to: plan.world2(square),
+                    within: DOOR_STAND_WITHIN,
                 });
             }
             // Straight through, clear of the open leaf, before turning.
@@ -3083,6 +3172,9 @@ fn indoor_path(
     }
     Some(tasks)
 }
+
+/// How near the stand to open a door from a walk gets (m).
+const DOOR_STAND_WITHIN: f32 = 0.2;
 
 /// Wedged in a corner, the nearest walkable cell can be through the wall:
 /// the nearest one on the same side of the footprint's edge instead.
@@ -3336,7 +3428,7 @@ fn raid_step(
                         json!({"site": site.name, "items": all, "artifacts": artifacts}),
                     );
                     r.act = Act::Search(s);
-                    if let Some((relay, t)) = plant_tasks(me, scene, &r.sites[s]) {
+                    if let Some((relay, t)) = plant_tasks(me, scene, &r.plans, &r.sites[s], pos) {
                         // Set down for good: not loot to pick up again.
                         r.skip.insert(relay);
                         log.event("plant", json!({"site": r.sites[s].name}));
@@ -3635,8 +3727,15 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
         return;
     };
     let (map, place, at, kind) = match job {
-        CardJob::Scout { map, place, at, .. } | CardJob::Plant { map, place, at, .. } => {
-            (map, place, Vec2::from_array(at), SiteKind::Spot)
+        CardJob::Scout { map, place, at, .. } => (map, place, Vec2::from_array(at), SiteKind::Spot),
+        CardJob::Plant { map, place, at, .. } => {
+            let at = Vec2::from_array(at);
+            (
+                map,
+                place,
+                at,
+                job_site_kind(&r.plans, at, scene.zone.ground(at.x, at.y)),
+            )
         }
         CardJob::Bring {
             map, place, item, ..
@@ -3673,9 +3772,56 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
     });
 }
 
+/// Whether a place on the map (`ground` its height there) is within a
+/// building's walls. A plan with levels holds it only over one of its
+/// floors near that height: an underground gallery's bounds take in the
+/// ground over it (Sallow's draw-off tower stands over the gallery).
+fn plan_holds(plan: &BuildingPlan, at: Vec2, ground: f32) -> bool {
+    if plan.levels.is_some() {
+        return plan.contains(Vec3::new(at.x, ground, at.y), 0.0);
+    }
+    plan.indoors(
+        plan.to_local(Vec3::new(at.x, plan.xf.translation.y, at.y))
+            .xz(),
+    )
+}
+
+/// A Plant job's place as a site: in a building's walls, that building
+/// (gone into by its door, walked round indoors); a spot outdoors.
+fn job_site_kind(plans: &[BuildingPlan], at: Vec2, ground: f32) -> SiteKind {
+    plans
+        .iter()
+        .position(|p| plan_holds(p, at, ground))
+        .map_or(SiteKind::Spot, SiteKind::Building)
+}
+
+/// The walk to a relay's place to set it down: indoors, round the
+/// building's walls from inside its door; straight at it outdoors.
+fn plant_walk(plans: &[BuildingPlan], kind: SiteKind, pos: Vec3, spot: Vec2) -> Vec<Task> {
+    if let SiteKind::Building(b) = kind {
+        let plan = &plans[b];
+        if plan.in_grid(pos) {
+            let goal = plan.to_local(Vec3::new(spot.x, pos.y, spot.y)).xz();
+            if let Some(t) = indoor(plan, pos, goal, 0.6) {
+                return t;
+            }
+        }
+    }
+    vec![Task::WalkTo {
+        to: spot,
+        within: 1.0,
+    }]
+}
+
 /// A Plant job's place, reached: the relay out of the pack and set down
 /// on the ground by it.
-fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Task>)> {
+fn plant_tasks(
+    me: Entity,
+    scene: &Scene,
+    plans: &[BuildingPlan],
+    site: &Site,
+    pos: Vec3,
+) -> Option<(Entity, Vec<Task>)> {
     let Some(CardJob::Plant {
         item,
         at,
@@ -3693,14 +3839,9 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
     // As the contract scenarios plant (`progression::contracts::scenario`):
     // close, the gun slung so the right hand's free, the relay into it from
     // its body slot (drawn) or the pack, a look at the spot, let go.
-    let mut t = vec![
-        Task::Log(format!("planting the {item}")),
-        Task::WalkTo {
-            to: spot,
-            within: 1.0,
-        },
-        Task::Stow(Side::Right),
-    ];
+    let mut t = vec![Task::Log(format!("planting the {item}"))];
+    t.extend(plant_walk(plans, site.kind, pos, spot));
+    t.push(Task::Stow(Side::Right));
     let (socket, packed) = scene
         .items
         .get(relay)
@@ -3736,7 +3877,17 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Ta
             side: Side::Right,
         }),
     }
-    let y = scene.zone.ground(spot.x, spot.y);
+    // Indoors, its floor (the station's is well off the fell's ground).
+    let y = match site.kind {
+        SiteKind::Building(b) => {
+            let plan = &plans[b];
+            let l = plan.to_local(Vec3::new(spot.x, pos.y, spot.y)).xz();
+            plan.xf
+                .transform_point(Vec3::new(l.x, plan.floor_at(l), l.y))
+                .y
+        }
+        _ => scene.zone.ground(spot.x, spot.y),
+    };
     t.extend([
         Task::Wait(0.5),
         Task::LookAt(Vec3::new(spot.x, y, spot.y)),
@@ -4130,7 +4281,26 @@ fn run_from(
 }
 
 fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
-    leave_plans(&r.plans, pos, &|d| scene.power_locked.contains(d))
+    leave_round_wrecks(&r.plans, scene, pos)
+}
+
+/// [`leave_plans`] for a raider: out of whichever of `plans` it's in.
+fn leave_round_wrecks(plans: &[BuildingPlan], scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
+    let shut = |d: Entity| scene.power_locked.contains(d);
+    // A wreck across the way out (a robot it shot by the door) is nothing
+    // the plan knows of: the way out found again round it, in a copy of
+    // the plan (Cinder seed 8, 6 November: a minelayer wrecked by a shed's
+    // door at the North sidings, eight stucks walking out into it).
+    if let Some(plan) = plans
+        .iter()
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+        && let Some(exit) = way_out(plan, plan.to_local(pos).xz(), &shut)
+        && let Some(round) = wrecks_shut(plan, scene, pos, exit)
+        && let Some(out) = leave_plans(std::slice::from_ref(&round), pos, &shut)
+    {
+        return Some(out);
+    }
+    leave_plans(plans, pos, &shut)
 }
 
 /// Out of whichever of `plans` `pos` is in, by its nearest way out (a
@@ -5336,7 +5506,8 @@ mod run_tests {
                 .world_mut()
                 .run_system_once(move |scene: Scene| {
                     let (mut bad, mut tried, mut open_off) = (Vec::new(), 0, 0);
-                    for (i, d) in decks(&scene.zone).iter().enumerate() {
+                    let all = decks(&scene.zone);
+                    for (i, d) in all.iter().enumerate() {
                         for f in [0.25, 0.5, 0.75] {
                             let at = d.a.lerp(d.b, f);
                             let ground = scene.zone.ground(at.x, at.y);
@@ -5358,18 +5529,20 @@ mod run_tests {
                                     let start = k as f32 * 1.57 + 0.3;
                                     tried += 1;
                                     let q = sidestep(&[], &grid, &scene, pos, step, start);
-                                    if !d.holds(q, 0.05) && !d.holds(q, DECK_RUN_OFF + 0.05) {
-                                        bad.push(format!("{map2} deck {i}: from {at:.1?}, {step} m: to {q:.1?}"));
-                                    } else if !d.holds(q, 0.05) {
-                                        // Past an end: along the axis, not off the side.
-                                        let ab = d.b - d.a;
-                                        let len = ab.length();
-                                        let along = (q - d.a).dot(ab) / len;
-                                        if along > 0.0 && along < len {
-                                            bad.push(format!(
-                                                "{map2} deck {i}: from {at:.1?}, {step} m: off its side to {q:.1?}"
-                                            ));
-                                        }
+                                    // (On any deck will do: a curved bridge is
+                                    // several, end to end.)
+                                    // On some deck (a curved bridge is several,
+                                    // end to end), or on ground about as high
+                                    // as it stood (the abutments past its ends):
+                                    // never off its side, down into what it spans.
+                                    let on_one = all.iter().any(|e| e.holds(q, 0.05));
+                                    let level = scene.zone.ground(q.x, q.y) >= pos.y - 0.6;
+                                    if !on_one && !level {
+                                        bad.push(format!(
+                                            "{map2} deck {i}: from {at:.1?} ({:.1} up), {step} m: off it to {q:.1?} ({:.1} up)",
+                                            pos.y,
+                                            scene.zone.ground(q.x, q.y)
+                                        ));
                                     }
                                     let o = sidestep_open(&[], &grid, &scene, pos, step, start);
                                     if !d.holds(o, 0.05) {
@@ -5645,6 +5818,410 @@ mod run_tests {
             near(&route) >= 0.9,
             "the walk passes {:.2} m from the wreck's middle",
             near(&route)
+        );
+    }
+
+    /// Out of a building round a wreck across the way out, not into it: a
+    /// robot shot by the door is nothing the plan knows of (Cinder seed 8,
+    /// 6 November: a minelayer wrecked by a shed's door at the North
+    /// sidings, eight stucks walking out into it). With a robot still
+    /// standing there the way out is as it was.
+    #[test]
+    fn the_way_out_goes_round_a_wreck() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        // A house's middle, and its way out's walks.
+        let (plan, from, block) = plans
+            .iter()
+            .filter(|p| p.levels.is_none() && p.name.starts_with("house_") && !p.doors.is_empty())
+            .find_map(|p| {
+                let mid = Vec2::from_array(p.grid.nearest_walkable([0.0, 0.0])?);
+                let from = p.to_world(mid);
+                let out = leave_plans(std::slice::from_ref(p), from, &|_| false)?;
+                let pts: Vec<Vec2> = out
+                    .iter()
+                    .filter_map(|t| match t {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    })
+                    .collect();
+                // A metre along the way out, indoors.
+                let first = *pts.first()?;
+                let at = from.xz() + (first - from.xz()).normalize_or_zero() * 1.0;
+                p.indoors(p.to_local(Vec3::new(at.x, 0.0, at.y)).xz())
+                    .then(|| (p.clone(), from, at))
+            })
+            .expect("a house with a way out");
+        let floor = plan
+            .to_world(plan.to_local(Vec3::new(block.x, 0.0, block.y)).xz())
+            .y;
+        let wreck = |app: &mut App, wrecked: bool| {
+            app.world_mut()
+                .spawn((
+                    Robot {
+                        kind: crate::robots::RobotKind::Walker,
+                        wrecked,
+                    },
+                    Transform::from_xyz(block.x, floor, block.y),
+                ))
+                .with_children(|c| {
+                    c.spawn((
+                        Name::new("Minelayer hull"),
+                        Transform::from_xyz(0.0, 0.5, 0.0),
+                        RigidBody::Static,
+                        Collider::cuboid(0.6, 1.0, 0.6),
+                        CollisionLayers::new(
+                            Layer::Robot,
+                            [Layer::World, Layer::Player, Layer::Robot],
+                        ),
+                    ));
+                })
+                .id()
+        };
+        let near = |app: &mut App| {
+            let plan = plan.clone();
+            app.world_mut()
+                .run_system_once(move |scene: Scene| {
+                    let Some(out) = leave_round_wrecks(std::slice::from_ref(&plan), &scene, from)
+                    else {
+                        return -1.0;
+                    };
+                    let mut last = from.xz();
+                    let mut near = f32::MAX;
+                    for t in &out {
+                        if let Task::WalkTo { to, .. } = t {
+                            near = near.min(seg_dist(last, *to, block));
+                            last = *to;
+                        }
+                    }
+                    near
+                })
+                .unwrap()
+        };
+        let standing = wreck(&mut app, false);
+        for _ in 0..3 {
+            app.update();
+        }
+        let d = near(&mut app);
+        assert!(
+            d >= 0.0 && d < 0.4,
+            "with a robot standing there the way out moved: {d:.2} m off"
+        );
+        app.world_mut().entity_mut(standing).despawn();
+        wreck(&mut app, true);
+        for _ in 0..3 {
+            app.update();
+        }
+        let d = near(&mut app);
+        assert!(
+            d >= 0.6,
+            "{}: the way out passes {d:.2} m from the wreck's middle",
+            plan.name
+        );
+    }
+
+    /// A contract's relay to plant in a building (the weather station up
+    /// Rime Fell): the job's site is that building, gone into by its door
+    /// and walked to indoors, the relay set down within reach of its place
+    /// (it was an outdoor spot: walked at through the wall, never set).
+    #[test]
+    fn a_relay_to_plant_indoors_is_carried_in() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for c in extraction_core::contracts::CONTRACTS {
+                for step in c.steps {
+                    let extraction_core::contracts::Step::Plant { map: m, place, .. } = step else {
+                        continue;
+                    };
+                    if *m != map {
+                        continue;
+                    }
+                    let Some(at) = extraction_core::contracts::place_at(&zone.map, place) else {
+                        continue;
+                    };
+                    let at = Vec2::from_array(at);
+                    let ground = zone.ground(at.x, at.y);
+                    let Some(b) = plans.iter().position(|p| plan_holds(p, at, ground)) else {
+                        continue;
+                    };
+                    tried += 1;
+                    let plan = &plans[b];
+                    let kind = job_site_kind(&plans, at, ground);
+                    if !matches!(kind, SiteKind::Building(k) if k == b) {
+                        bad.push(format!(
+                            "{map} {}: {place} is a spot, not the building",
+                            c.id
+                        ));
+                        continue;
+                    }
+                    // From each way in, inside its door.
+                    for e in &plan.entries {
+                        let from = plan.to_world(*e);
+                        let inn = from.xz();
+                        let walk = plant_walk(&plans, kind, from, at);
+                        let end = walk.iter().rev().find_map(|t| match t {
+                            Task::WalkTo { to, within } => Some((*to, *within)),
+                            _ => None,
+                        });
+                        let ok = walk.len() > 1
+                            && end.is_some_and(|(to, within)| to.distance(at) + within <= 1.6);
+                        if !ok {
+                            bad.push(format!(
+                                "{map} {}: {place} from the way in at {inn}: {} tasks, ends {end:?}",
+                                c.id,
+                                walk.len()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(tried >= 1, "no relay to plant indoors found");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// A door found wedged is a wall from then on: in every building with
+    /// another way out, shut as `spot_wedged` shuts it, the way out from
+    /// just inside it goes by another door (Rime's ore mill: the valley's
+    /// memory wedged the one it meant to leave by).
+    #[test]
+    fn a_wedged_door_is_left_by_another() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for plan in &plans {
+                let outs: Vec<_> = plan.doors.iter().filter(|d| d.outside.is_some()).collect();
+                if outs.len() < 2 {
+                    continue;
+                }
+                for d in &outs {
+                    let mid = (d.a + d.b) * 0.5;
+                    let n = (d.outside.unwrap() - mid).normalize_or_zero();
+                    let (Some(inside), Some(outside)) = (
+                        plan.grid
+                            .nearest_walkable((mid - n * 1.2).to_array())
+                            .map(Vec2::from_array),
+                        d.outside,
+                    ) else {
+                        continue;
+                    };
+                    // Out by it, shut or not: not a building this checks.
+                    let Some(open) = indoor_path(plan, plan.to_world(inside), outside, 0.6, true)
+                    else {
+                        continue;
+                    };
+                    if !open
+                        .iter()
+                        .any(|t| matches!(t, Task::OpenDoor(e) if *e == d.entity))
+                    {
+                        continue;
+                    }
+                    tried += 1;
+                    let mut shut = plan.clone();
+                    shut_door(&mut shut, d.entity);
+                    // Anywhere outside will do: to its doorstep the long way round.
+                    let route = indoor_path(&shut, plan.to_world(inside), outside, 0.6, true);
+                    let through = route.as_ref().is_some_and(|r| {
+                        r.iter()
+                            .any(|t| matches!(t, Task::OpenDoor(e) if *e == d.entity))
+                    });
+                    let crossed = route.as_ref().is_some_and(|r| {
+                        let mut at = inside;
+                        r.iter().any(|t| match t {
+                            Task::WalkTo { to, .. } => {
+                                let l = plan.to_local(Vec3::new(to.x, 0.0, to.y)).xz();
+                                let hit = crate::sim::indoor::segments_cross(at, l, d.a, d.b);
+                                at = l;
+                                hit
+                            }
+                            _ => false,
+                        })
+                    });
+                    if through || crossed {
+                        bad.push(format!(
+                            "{map} {} at {:.0?}: door {:?} shut, still out by it",
+                            plan.name, plan.xf.translation, d.entity
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(tried >= 20, "only {tried} doors tried");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried}:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
+
+    /// Through every door of every building in every valley by its middle:
+    /// a route out from a little way in walks through within a hand's
+    /// breadth of the doorway's middle, not along its edge (Rime's ore
+    /// mill, 6 November: out along the gap's edge, the body on the jamb
+    /// and the open leaf beside it, 27 stucks a raid). Both ways, and
+    /// opened from where its leaf swings clear of the body: square on but
+    /// too close in, the leaf stopped against the body and the door never
+    /// opened (the ore mill again, 15 stucks a raid).
+    #[test]
+    fn a_route_through_a_door_takes_its_middle() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for plan in &plans {
+                for (d, out) in plan.doors.iter().flat_map(|d| [(d, true), (d, false)]) {
+                    let mid = (d.a + d.b) * 0.5;
+                    let t = (d.b - d.a).normalize_or(Vec2::X);
+                    let n = Vec2::new(-t.y, t.x);
+                    // In and out, a little to one side of the middle.
+                    let (inside, outside) = if plan.indoors(mid + n * 1.5) {
+                        (mid + n * 1.5 + t * 0.4, mid - n * 3.0 - t * 0.4)
+                    } else {
+                        (mid - n * 1.5 + t * 0.4, mid + n * 3.0 - t * 0.4)
+                    };
+                    let (Some(a), Some(b)) = (
+                        plan.grid
+                            .nearest_walkable(inside.to_array())
+                            .map(Vec2::from_array),
+                        plan.grid
+                            .nearest_walkable(outside.to_array())
+                            .map(Vec2::from_array),
+                    ) else {
+                        continue;
+                    };
+                    let (a, b) = if out { (a, b) } else { (b, a) };
+                    let Some(route) = indoor_path(plan, plan.to_world(a), b, 0.3, true) else {
+                        continue;
+                    };
+                    // The first walk after the door's opened.
+                    let Some(k) = route
+                        .iter()
+                        .position(|x| matches!(x, Task::OpenDoor(e) if *e == d.entity))
+                    else {
+                        continue;
+                    };
+                    let Some(through) = route[k..].iter().find_map(|x| match x {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    tried += 1;
+                    let way = if out { "out" } else { "in" };
+                    let l = plan.to_local(Vec3::new(through.x, 0.0, through.y)).xz();
+                    let off = (l - mid).dot(t).abs();
+                    // (Unless there's no floor on its middle's line on the
+                    // side it's come at from: the nearest cell beside it.)
+                    let side = if (l - mid).dot(n) > 0.0 { 1.0 } else { -1.0 };
+                    let lined = (6..=14).any(|k| {
+                        plan.grid
+                            .walkable((mid + n * side * k as f32 * 0.1).to_array())
+                    });
+                    if off > 0.1 && (lined || off > plan.grid.cell) {
+                        bad.push(format!(
+                            "{map} {} at {:.0?}: door {:?} {way}, through {off:.2} m off its middle",
+                            plan.name, plan.xf.translation, d.entity
+                        ));
+                    }
+                    // Where it's opened from: the leaf (hinged at `a`) and
+                    // the body clear, wherever within reach of the stand
+                    // the walk stops.
+                    let stand = route[..k].iter().rev().find_map(|x| match x {
+                        Task::WalkTo { to, within } => Some((*to, *within)),
+                        _ => None,
+                    });
+                    if let Some((to, within)) = stand {
+                        let l = plan.to_local(Vec3::new(to.x, 0.0, to.y)).xz();
+                        let w = d.a.distance(d.b);
+                        let gap = l.distance(d.a) - within - w;
+                        // (Its leaf swings away from the other side.)
+                        let in_swing = (l - mid).dot(n) * (d.tip - mid).dot(n) > 0.0;
+                        if in_swing && gap < crate::player::CAPSULE_RADIUS + 0.05 {
+                            bad.push(format!(
+                                "{map} {} at {:.0?}: door {:?} {way}, opened {gap:.2} m clear of its leaf",
+                                plan.name, plan.xf.translation, d.entity
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(tried >= 50, "only {tried} doors walked through");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} doors walked through off their middle:\n{}",
+            bad.len(),
+            bad.join("\n")
         );
     }
 

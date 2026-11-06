@@ -122,6 +122,7 @@ fn torchlit(
     mut commands: Commands,
     mut opts: ResMut<LaunchOptions>,
     mut st: ResMut<Torchlit>,
+    mut adapt: ResMut<crate::render::grade::Adaptation>,
     zone: Option<Res<crate::world::Zone>>,
     catalog: Res<crate::items::Catalog>,
     mut cams: Query<(Entity, &mut Transform), With<FreeCamera>>,
@@ -379,6 +380,14 @@ fn torchlit(
         Stage::Shoot => {
             // A few frames for the move and the light to settle.
             st.frames += 1;
+            // Eyes settled to each shot, as someone crouched over an item
+            // holds still a few seconds: they close as the torch comes
+            // near what it lights (`render::grade::torch_near`), and a
+            // shot mid-way had its item, mask and empty floor at
+            // different exposures.
+            if st.frames == SETTLE - 3 {
+                adapt.resettle();
+            }
             if st.frames < SETTLE {
                 return;
             }
@@ -522,6 +531,10 @@ fn build_room(
             Mesh3d(slab(Vec3::new(SIDE, 0.2, SIDE), floor_mat, meshes)),
             MeshMaterial3d(floor_h),
             Transform::from_translation(ROOM - Vec3::Y * (0.1 + 0.002)),
+            // Solid, as a floor in the game is: the torch's beam finds
+            // where it lands by a physics ray (`world::beams::Throw`).
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(SIDE, 0.2, SIDE),
         ))
         .id();
     st.room.push(floor);
