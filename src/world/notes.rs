@@ -59,6 +59,58 @@ pub fn note_panel(text: &str) -> ScreenText {
 /// headset session couldn't read the 0.74 m ones).
 pub const SIGN: Vec2 = Vec2::new(1.0, 0.7);
 
+/// A warning board's carrier (`art/props/warnings.py`): the prop, its text
+/// area (w x h, m) about its `text_face` node, how high that is, and the
+/// material the area is painted (or cast) in. Nothing of the prop stands
+/// in front of the area: the words go on it, facing the prop's +Z.
+pub struct WarningBoard {
+    pub prop: &'static str,
+    pub area: Vec2,
+    pub centre_y: f32,
+    pub ground: &'static str,
+}
+
+/// The warning boards, each big enough that a few words read from 10 m and
+/// more (Visual design's sizes for `ScreenStyle::Sign`).
+pub const WARNING_BOARDS: &[WarningBoard] = &[
+    // Across a track: one line of up to ~16 letters, read from ~15 m.
+    WarningBoard {
+        prop: "warning_gate",
+        area: Vec2::new(2.4, 0.5),
+        centre_y: 1.1,
+        ground: "Cream",
+    },
+    // On two posts: three short lines, read from ~12 m.
+    WarningBoard {
+        prop: "warning_hoarding",
+        area: Vec2::new(2.0, 1.2),
+        centre_y: 1.6,
+        ground: "Cream",
+    },
+    // A railway's enamel plate on a post, at eye height.
+    WarningBoard {
+        prop: "warning_enamel",
+        area: Vec2::new(1.0, 0.6),
+        centre_y: 1.45,
+        ground: "Enamel",
+    },
+    // Stencilled on a concrete fence slab.
+    WarningBoard {
+        prop: "warning_wall",
+        area: Vec2::new(1.6, 0.8),
+        centre_y: 1.6,
+        ground: "Concrete",
+    },
+    // Stencilled on a steel booth door, on a panel of fresh flat paint
+    // (the door's own is blotched with rust).
+    WarningBoard {
+        prop: "warning_door",
+        area: Vec2::new(1.0, 0.6),
+        centre_y: 1.6,
+        ground: "Pebble",
+    },
+];
+
 pub fn sign_panel(text: &str) -> ScreenText {
     ScreenText {
         text: crate::render::screen::wrap_to_fit(text, SIGN, ScreenStyle::Paper),
@@ -290,5 +342,96 @@ fn press_terminals(
             t.page = (t.page + 1) % t.pages.len().max(1);
             screen.text = t.screen();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Where a ray from `o` along `d` meets the triangle, as a distance.
+    fn hit(o: Vec3, d: Vec3, t: &[Vec3; 3]) -> Option<f32> {
+        let (e1, e2) = (t[1] - t[0], t[2] - t[0]);
+        let p = d.cross(e2);
+        let det = e1.dot(p);
+        if det.abs() < 1e-9 {
+            return None;
+        }
+        let s = o - t[0];
+        let u = s.dot(p) / det;
+        let q = s.cross(e1);
+        let v = d.dot(q) / det;
+        if !(0.0..=1.0).contains(&u) || v < 0.0 || u + v > 1.0 {
+            return None;
+        }
+        let k = e2.dot(q) / det;
+        (k > 0.0).then_some(k)
+    }
+
+    /// Every warning board's model has its `text_face` where the table
+    /// says, facing +Z, and its text area is clear: looked at square from
+    /// in front, every point of it (a 2 cm grid) is the area's own painted
+    /// ground on the face's plane, nothing in front of it. A wobbled plank
+    /// once stood 4 mm through a hoarding's paint; a cast rib ran across a
+    /// wall's stencil patch.
+    #[test]
+    fn warning_boards_keep_their_text_areas_clear() {
+        let mut bad = Vec::new();
+        for b in WARNING_BOARDS {
+            let path = crate::asset_root_path().join(crate::render::world_props::path(b.prop));
+            let Some(face) = crate::capture::seated::node_transform(&path, "text_face") else {
+                bad.push(format!("{}: no text_face", b.prop));
+                continue;
+            };
+            let (_, turn, at) = face.to_scale_rotation_translation();
+            if turn.angle_between(Quat::IDENTITY) > 0.01 {
+                bad.push(format!("{}: text_face turned off +Z", b.prop));
+            }
+            if (at.x.abs() > 0.005) || (at.y - b.centre_y).abs() > 0.005 {
+                bad.push(format!(
+                    "{}: text_face at {at:.3}, not over the origin at {} m",
+                    b.prop, b.centre_y
+                ));
+            }
+            let tris = crate::capture::glb::triangles(&path).unwrap();
+            let back = face.inverse();
+            let local: Vec<([Vec3; 3], &str)> = tris
+                .iter()
+                .map(|t| (t.p.map(|p| back.transform_point3(p)), t.material.as_str()))
+                .collect();
+            let (nx, ny) = ((b.area.x / 0.02) as i32, (b.area.y / 0.02) as i32);
+            let mut wrong = 0;
+            let mut first = None;
+            for i in 0..=nx {
+                for j in 0..=ny {
+                    // Inset 3 mm from the area's edge (the border's own edge).
+                    let x = (i as f32 / nx as f32 - 0.5) * (b.area.x - 0.006);
+                    let y = (j as f32 / ny as f32 - 0.5) * (b.area.y - 0.006);
+                    let o = Vec3::new(x, y, 1.0);
+                    let near = local
+                        .iter()
+                        .filter_map(|(t, m)| hit(o, Vec3::NEG_Z, t).map(|k| (k, *m)))
+                        .min_by(|a, b| a.0.total_cmp(&b.0));
+                    let ok = near.is_some_and(|(k, m)| (1.0 - k).abs() <= 0.001 && m == b.ground);
+                    if !ok {
+                        wrong += 1;
+                        first.get_or_insert((x, y, near));
+                    }
+                }
+            }
+            if wrong > 0 {
+                let (x, y, near) = first.unwrap();
+                bad.push(format!(
+                    "{}: {wrong} points of its text area aren't clear {} ground, e.g. at \
+                     ({x:.2}, {y:.2}): {near:?} (distance from 1 m in front, material)",
+                    b.prop, b.ground
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "warning boards' text areas:\n{}",
+            bad.join("\n")
+        );
     }
 }
