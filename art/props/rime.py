@@ -579,7 +579,8 @@ for name, build in (("felt_boots", felt_boots), ("snow_shovel", snow_shovel),
 def snow_pole():
     """A snow pole marking a track over open snow: a 9 cm pole 2.5 m out
     of the snow, its top half banded red and white to be seen against
-    the white from a pole or two off, a cap on top."""
+    the white from a pole or two off, two bands of reflective tape for a
+    torch at night, a cap on top."""
     p = Part("static")
     r = 0.045
     # The foot, weathered timber, from below the snow to half way.
@@ -590,6 +591,11 @@ def snow_pole():
         mat = "Red" if (4 - k) % 2 == 0 else "Enamel"
         p.cyl(r, y0, y0 + 0.25, mat, segs=10, xf=UP)
     p.cyl(r + 0.008, 2.5, 2.53, "Iron", segs=10, xf=UP, chamfer=0.006)
+    # Two bands of reflective tape round the top, in the white: they send a
+    # torch back to whoever holds it, so the line reads at night from a
+    # pole or two off (the game lights them: render::reflectors).
+    for y in (1.595, 2.095):
+        p.cyl(r + 0.002, y, y + 0.06, "Reflector", segs=10, xf=UP)
     return [p]
 
 
