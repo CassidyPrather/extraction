@@ -20,9 +20,10 @@ use std::path::PathBuf;
 use super::glb;
 
 /// How deep a vertex of the thing may lie inside the kit, or the kit's in
-/// the thing (m): what the cloth gives as a thing settles in its slot
-/// (`interact::body::SLOT_GIVE`), and a millimetre.
-pub const DEPTH: f32 = crate::interact::body::SLOT_GIVE + 0.001;
+/// the thing (m): a millimetre. What the cloth gives as a thing settles in
+/// its slot (`interact::body::SLOT_GIVE`) is in the pouch's wall, not
+/// through it, and anything deeper shows when you look down at your kit.
+pub const DEPTH: f32 = 0.001;
 
 /// How far below a bag's top its mouth is (m): its rim's bevel.
 const MOUTH: f32 = 0.006;
@@ -283,7 +284,20 @@ mod tests {
         );
     }
 
-    const KNOWN: &[&str] = &[];
+    /// Off their kit, waiting on a fix that isn't the thing's: each hip
+    /// pocket hangs square on a belt that curves round the hip, so the
+    /// belt runs across the pocket's inner top corner, through what stands
+    /// up out of it (a cassette, 29 mm proud). Leaning it out puts it
+    /// through the pocket's side; the pocket wants turning to the belt
+    /// (`art/kit/rig.py` and `interact::body::slot_layout`).
+    const KNOWN: &[&str] = &[
+        "tape_practice in the Pocket: through the harness",
+        "tape_hymns in the Pocket: through the harness",
+        "tape_lodge in the Pocket: through the harness",
+        "tape_duty in the Pocket: through the harness",
+        "tape_birthday in the Pocket: through the harness",
+        "tape_bells in the Pocket: through the harness",
+    ];
 
     /// Each hip pocket hangs on the belt with the belt along its back, not
     /// across it: neither goes into the other more than a millimetre (hung
