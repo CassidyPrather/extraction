@@ -602,20 +602,15 @@ fn paint_marks(
     drawn: Query<(&SearchMark, &Children)>,
     paint: Query<&MeshMaterial3d<StandardMaterial>>,
     time: Res<Time>,
-    mut shapes: Local<Option<(Handle<Mesh>, Handle<Mesh>)>>,
+    // The ring and its cross as one mesh: a mark is one draw, not three
+    // (Cinder Works' first walk stop drew 111 of them an eye).
+    mut shape: Local<Option<Handle<Mesh>>>,
 ) {
     let (Some(mut meshes), Some(mut materials)) = (meshes, materials) else {
         return;
     };
     let now = time.elapsed_secs();
-    let (ring, bar) = shapes
-        .get_or_insert_with(|| {
-            (
-                meshes.add(Annulus::new(0.42, 0.52)),
-                meshes.add(Rectangle::new(1.0, 0.08)),
-            )
-        })
-        .clone();
+    let mark = shape.get_or_insert_with(|| meshes.add(mark_mesh())).clone();
     for (e, m) in &new {
         let mat = materials.add(StandardMaterial {
             base_color: paint_colour(m.paint(now)),
@@ -625,23 +620,11 @@ fn paint_marks(
             depth_bias: 50.0,
             ..default()
         });
-        let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
         commands
             .entity(e)
             .insert(MeshMaterial3d(mat.clone()))
             .with_children(|c| {
-                c.spawn((
-                    Mesh3d(ring.clone()),
-                    MeshMaterial3d(mat.clone()),
-                    Transform::from_rotation(flat),
-                ));
-                for a in [0.785f32, -0.785] {
-                    c.spawn((
-                        Mesh3d(bar.clone()),
-                        MeshMaterial3d(mat.clone()),
-                        Transform::from_rotation(Quat::from_rotation_y(a) * flat),
-                    ));
-                }
+                c.spawn((Mesh3d(mark.clone()), MeshMaterial3d(mat.clone())));
             });
     }
     for (m, children) in &drawn {
@@ -656,6 +639,19 @@ fn paint_marks(
             }
         }
     }
+}
+
+/// A search mark's paint, flat on the ground: a ring and a cross through it.
+fn mark_mesh() -> Mesh {
+    let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+    let mut out =
+        Mesh::from(Annulus::new(0.42, 0.52)).transformed_by(Transform::from_rotation(flat));
+    for a in [0.785f32, -0.785] {
+        let bar = Mesh::from(Rectangle::new(1.0, 0.08))
+            .transformed_by(Transform::from_rotation(Quat::from_rotation_y(a) * flat));
+        let _ = out.merge(&bar);
+    }
+    out
 }
 
 /// Fluorescent paint: it carries at 20-40 m in daylight by its glow, not
@@ -733,6 +729,52 @@ pub struct HasLamp(pub Entity);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A search mark's paint, ring and cross, is one mesh: one draw a
+    /// mark, not three.
+    #[test]
+    fn a_search_mark_is_one_draw() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
+            .add_systems(Update, paint_marks);
+        let mark = {
+            let w = app.world_mut();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let mut c = Commands::new(&mut queue, w);
+            spawn_mark(&mut c, Vec3::ZERO, 0.0, 1.0);
+            queue.apply(w);
+            let mut q = w.query_filtered::<Entity, With<SearchMark>>();
+            q.single(w).unwrap()
+        };
+        app.update();
+        let w = app.world_mut();
+        let drawn = w.get::<Children>(mark).map_or(0, |c| {
+            c.iter().filter(|e| w.get::<Mesh3d>(*e).is_some()).count()
+        });
+        assert_eq!(drawn, 1, "a mark's paint drawn in {drawn} meshes");
+        // Ring and cross, flat on the ground, a metre across.
+        let m = w
+            .get::<Mesh3d>(w.get::<Children>(mark).unwrap()[0])
+            .unwrap()
+            .0
+            .clone();
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) = w
+            .resource::<Assets<Mesh>>()
+            .get(&m)
+            .unwrap()
+            .attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("a mark without positions");
+        };
+        let (lo, hi) = pos.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(lo, hi), p| (lo.min(Vec3::from(*p)), hi.max(Vec3::from(*p))),
+        );
+        let size = hi - lo;
+        assert!(size.y < 0.01 && size.x > 0.95 && size.z > 0.95, "{size:?}");
+    }
 
     /// Every memory fades by a rule and shows by a tell.
     #[test]

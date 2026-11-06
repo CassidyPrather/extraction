@@ -2,11 +2,11 @@
 //! (`render::warmup`, `EXTRACTION_FIRSTS`): each machine brought out in
 //! front of the camera, then what it does that's first drawn mid-raid,
 //! one a step, so `EXTRACTION_PIPELINES=1` shows which of them builds a
-//! pipeline on the frame it first shows. The run's own steps come first;
-//! these follow them ([`step`]).
+//! pipeline on the frame it first shows. The run's own steps come first
+//! (a sentry placed and its chirp among them); these follow them
+//! ([`step`]).
 //!
-//! A heavy (it arrives, slams, is wrecked and scorched), a sentry (it
-//! stands, chirps; its searchlight with `--hour night`), a spotter (it
+//! A heavy (it arrives, slams, is wrecked and scorched), a spotter (it
 //! goes up, calls), a minelayer (it arrives, a mine laid in its ring of
 //! turned earth), a mender (it arrives, welds), and the valley's plough
 //! where there is one (set ploughing: its plume, its lane and its bank).
@@ -36,7 +36,6 @@ impl View {
 #[derive(Resource, Default)]
 struct Out {
     heavy: Option<Entity>,
-    sentry: Option<Entity>,
     spotter: Option<Entity>,
     mender: Option<Entity>,
 }
@@ -48,9 +47,9 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
     world.init_resource::<Out>();
     let out = |world: &World| {
         let o = world.resource::<Out>();
-        (o.heavy, o.sentry, o.spotter, o.mender)
+        (o.heavy, o.spotter, o.mender)
     };
-    let (heavy, sentry, spotter, mender) = out(world);
+    let (heavy, spotter, mender) = out(world);
     let name = match i {
         0 => {
             let at = view.ground(&zone, 22.0, -6.0);
@@ -94,36 +93,6 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
             "a heavy wrecked"
         }
         3 => {
-            let at = view.ground(&zone, 16.0, 5.0);
-            let toward = view.at - at;
-            let centre = extraction_core::sentry::bearing([0.0, 0.0], [toward.x, toward.z]);
-            let back = at - view.flat * 3.0;
-            let e = with_commands(world, |c| {
-                let e = super::sentry::spawn_sentry(
-                    c,
-                    &zone,
-                    Vec2::new(at.x, at.z),
-                    centre,
-                    220.0,
-                    Vec2::new(back.x, back.z),
-                );
-                c.entity(e).remove::<Senses>();
-                e
-            });
-            world.resource_mut::<Out>().sentry = Some(e);
-            "a sentry stands"
-        }
-        4 => {
-            if let Some(e) = sentry {
-                world.write_message(super::sentry::SentryEvent {
-                    sentry: e,
-                    at: view.ground(&zone, 16.0, 5.0),
-                    what: super::sentry::SentryAct::Chirp,
-                });
-            }
-            "a sentry chirps"
-        }
-        5 => {
             let at = view.ground(&zone, 40.0, 14.0);
             let e = with_commands(world, |c| {
                 let e = super::spotter::spawn_spotter(c, &zone, Vec2::new(at.x, at.z));
@@ -133,7 +102,7 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
             world.resource_mut::<Out>().spotter = Some(e);
             "a spotter goes up"
         }
-        6 => {
+        4 => {
             if let Some(e) = spotter {
                 world.write_message(super::spotter::SpotterEvent {
                     spotter: e,
@@ -143,7 +112,7 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
             }
             "a spotter calls"
         }
-        7 => {
+        5 => {
             let Some(nav) = world
                 .get_resource::<super::walker::Nav>()
                 .map(|n| n.0.clone())
@@ -158,14 +127,14 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
             });
             "a minelayer arrives"
         }
-        8 => {
+        6 => {
             let at = view.ground(&zone, 8.0, 1.5);
             with_commands(world, |c| {
                 super::minelayer::lay_mine(c, at, 0.0);
             });
             "a mine laid"
         }
-        9 => {
+        7 => {
             let at = view.ground(&zone, 10.0, 3.0);
             let e = with_commands(world, |c| {
                 let e = super::mender::spawn_mender(c, at + Vec3::Y * 2.5, at);
@@ -175,14 +144,14 @@ pub fn step(world: &mut World, i: u32, view: View) -> Option<String> {
             world.resource_mut::<Out>().mender = Some(e);
             "a mender arrives"
         }
-        10 => {
+        8 => {
             let at = view.ground(&zone, 10.0, 3.0) + Vec3::Y * 1.2;
             if let Some(mut m) = mender.and_then(|e| world.get_mut::<super::mender::Mender>(e)) {
                 m.welding = Some(at);
             }
             "a mender welds"
         }
-        11 => {
+        9 => {
             // The valley's own plough (it's out from the start where snow
             // lies, its look warmed with the valley): set ploughing, its
             // first bank thrown up now, mid-raid.
