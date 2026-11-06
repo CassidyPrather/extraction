@@ -1974,6 +1974,9 @@ mod tests {
     fn every_spot_inside_is_reached_from_the_door() {
         use extraction_core::map::MarkerKind;
         const REACH: f32 = 1.2;
+        // A marker whose ground stands more than this off a plan's floor is on
+        // the surface over an underground site, not in that site's rooms.
+        const OFF_FLOOR: f32 = 2.5;
         let mut checked = 0;
         let mut failed = Vec::new();
         for map in crate::test_maps() {
@@ -2010,7 +2013,7 @@ mod tests {
                     // On this plan's floor, not the ground over an
                     // underground site's rooms.
                     let floor = plan.xf.transform_point(Vec3::new(at.x, plan.floor, at.y)).y;
-                    if (hm.height(m.at) - floor).abs() > 2.5 {
+                    if (hm.height(m.at) - floor).abs() > OFF_FLOOR {
                         continue;
                     }
                     checked += 1;
@@ -2040,7 +2043,8 @@ mod tests {
         assert!(checked > 20, "only {checked} spots inside");
         assert!(
             failed.is_empty(),
-            "spots inside out of reach:\n{}",
+            "spots inside out of reach (markers more than {OFF_FLOOR} m off a plan's floor \
+             are skipped as surface spots over underground sites):\n{}",
             failed.join("\n")
         );
     }
