@@ -56,6 +56,8 @@ def item(item_id, build):
     if k is not None:
         k = k if isinstance(k, tuple) else (k, k, k)
         transform(centred(parts), common.S(*k))
+    elif keeps_origin(item_id) is None:
+        recentred(parts)
     for p in parts:
         make(p)
     print(f"{item_id}:")
@@ -79,6 +81,74 @@ def centred(parts):
     lo = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
     hi = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
     return transform(parts, T(*(-(lo + hi) / 2)))
+
+
+# Models built off their box's middle, kept there because code places
+# things in their space (a hand, a hinge, a cell): (id, what). Each is
+# centred with that code moved by the same step. Held to the models by
+# `models::tests::every_item_box_is_its_model`, which keeps the same list.
+KEEPS_ORIGIN = {
+    "flashlight": "gadgets: its cell's mount",
+    "cloak_generator": "gadgets: its cell's mount",
+    "jammer": "gadgets: its cell's mount",
+    "lead_case": "gadgets: its cradle and its lid",
+    "compass": "gadgets::visuals: its face and needle",
+    "map_case": "gadgets::visuals: the map in it",
+    "camera_drone": "gadgets::visuals: its rotors",
+    "emp_trap": "gadgets: its spikes and charge",
+    "deployable_cover": "gadgets: the cover it unfolds",
+    "cassette_player": "radio::deck: its well, door and buttons",
+    "crowbar": "interact::tools::crowbar: grip and claw",
+    "bolt_cutters": "interact::tools::cutters: grips and jaws",
+    "hacksaw": "weapons::gunsmith: its handle and blade",
+}
+
+# Drawn from where they seat, not their middle: magazines (the gun's well)
+# and attachments (their mount).
+_SEATED = ("Magazine", "Attachment")
+
+
+def _category(item_id):
+    """The item's category in assets/data/items.ron (None if no row)."""
+    global _CATS
+    if _CATS is None:
+        import re
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                                "assets", "data", "items.ron")).read()
+        _CATS = {}
+        for m in re.finditer(r'id: "([^"]+)"', src):
+            c = re.search(r"category: (\w+)", src[m.end():m.end() + 2000])
+            _CATS[m.group(1)] = c.group(1) if c else None
+    return _CATS.get(item_id)
+
+
+_CATS = None
+
+
+def keeps_origin(item_id):
+    """Why an item's model isn't centred on its box (None: it is)."""
+    if item_id in KEEPS_ORIGIN:
+        return KEEPS_ORIGIN[item_id]
+    if _category(item_id) in _SEATED:
+        return "seated by its origin"
+    return None
+
+
+def recentred(parts):
+    """Move Parts, their pivots with them, so their joint bounds are
+    centred on the origin: the middle of the item's `dims` box, which
+    `art/items/dims.py --write` sizes to the model."""
+    vs = [v.co for p in parts for v in p.bm.verts]
+    if not vs:
+        return parts
+    lo = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
+    hi = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
+    c = (lo + hi) / 2
+    transform(parts, T(*(-c)))
+    for p in parts:
+        for q in [p] + p.cutters:
+            q.origin = q.origin - c
+    return parts
 
 
 def wanted(item_id):

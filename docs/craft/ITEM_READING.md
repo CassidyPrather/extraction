@@ -607,3 +607,57 @@ stripes, the twine and the outline read.
 ![Flour sack by torchlight: the original, 0ce75fc9's slumped ball, and
 now; wood and concrete at arm's length, wood and charred floor from 2 m
 (enlarged)](../shots/items/torchlit_flour_before_after.jpg)
+
+#### An item's box is its model (6 November)
+
+An item's `dims` row is its box: its collider, its fit in a pocket or
+pouch, and where it's grabbed. 78 rows had drifted from their models as
+the models were redrawn. Among them, the vest was 3 cm too wide, the
+work boots 7 cm too wide, and the Mosin bolt 4 cm too long. The robot's
+belt of rounds had a box twice its height, and the electronics' model
+stuck out of the bottom of its box.
+
+`models::tests::every_item_box_is_its_model` holds every item with a
+model and a row to it. Each side must be within a millimetre of the
+model's, and the model must sit in the box's middle, within 2 mm. A
+failure names each item, its row and its model.
+`python3 art/items/dims.py --write` sizes the rows, and the kit centres
+a model when it's built (`_kit.recentred`, its pivots moving with it).
+
+Some items are checked differently:
+
+- Guns are left out, because their layouts place them.
+- Magazines and attachments seat by their origin, so only their size is
+  held.
+- Thirteen models stay off their middle until the code that places
+  things in their space moves with them (`KEEPS_ORIGIN`, which names
+  each one's code). These are the bolt cutters' grips and jaws, the
+  crowbar's grip and claw, the hacksaw's blade, the cassette deck's
+  well and buttons, and the gadgets' cell mounts and visuals.
+
+Sixteen models were centred, and four `kit_cavities::ORIGIN_OFFSET`
+entries that made up for them went away.
+
+![Item boxes before (red) and after (green), over their models: vest,
+work boots, robot ammo belt, Mosin bolt, electronics, crossbow bolt
+bundle, car bonnet, scour key](../shots/items/item_boxes_before_after.png)
+
+#### The scopes at arm's length, by the settled torch (6 November)
+
+I re-shot the PU and the PSO-1 by torchlight from an arm's length
+(0.65 m, 55 degrees down), with Visual design's settled eye (3297ad2e).
+The wash-out is gone. Both render black with a soft sheen, not the pale
+silver they were, and nothing clips. They aren't twins up close. The
+PSO-1 shows its turret drum with white graduations, its side bracket and
+the rubber brow shield at its eyepiece. The PU is a slim, plain tube
+with one small knob.
+
+They stand off wood and concrete easily (body delta E 24 to 46). On a
+burnt house's charred planks they are black on black. The PSO-1 at arm's
+length sits at the edge (9.9), read by its sheen and the drum's marks.
+The PU from 2 m is the floor's colour (5.0). That holds for any black
+kit on a burnt floor; Gunsmith is trying a brighter sheen on `Black`
+for all of it.
+
+![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
+planks](../shots/items/torchlit_scopes_arm.jpg)
