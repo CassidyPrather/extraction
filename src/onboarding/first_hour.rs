@@ -645,6 +645,8 @@ pub(super) struct Newcomer {
     pressed_until: f32,
     /// When it last came out from under cover for the truck.
     hurried_at: f32,
+    /// The walker that last aimed at it (its eye is what to break line with).
+    aimer: Option<Entity>,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -797,6 +799,10 @@ pub(super) fn direct_raid(
     minds: Query<&crate::robots::Awareness>,
     mut plans: Local<Vec<crate::sim::indoor::BuildingPlan>>,
     time: Res<Time>,
+    (spatial, eyes): (
+        avian3d::prelude::SpatialQuery,
+        Query<(&GlobalTransform, &crate::robots::Senses)>,
+    ),
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
         return;
@@ -925,7 +931,8 @@ pub(super) fn direct_raid(
     if tells.locks.read().any(|ev| on_me(ev.drone)) {
         again.push(First::DroneLock);
     }
-    if tells.aims.read().any(|ev| on_me(ev.walker)) {
+    if let Some(ev) = tells.aims.read().filter(|ev| on_me(ev.walker)).last() {
+        state.aimer = Some(ev.walker);
         again.push(First::Aimed);
     }
     let mut chirped = false;
@@ -1391,6 +1398,20 @@ pub(super) fn direct_raid(
                 let roof = (overhead && !going_home)
                     .then(|| under_a_roof(&world, &plans, here, &state.no_roof))
                     .flatten();
+                // "Break its line": out of its eye's sight, the nearest way
+                // (low where it stands, round the corner, behind the wall):
+                // run for a building's far side, the careful newcomer stood
+                // in its line on the way and took its rounds, raid after
+                // raid.
+                let line = (!overhead)
+                    .then(|| {
+                        let eye = state
+                            .aimer
+                            .and_then(|w| eyes.get(w).ok())
+                            .map(|(gt, s)| gt.transform_point(s.eye))?;
+                        break_line(&spatial, &world, here, eye)
+                    })
+                    .flatten();
                 match roof {
                     _ if overhead && going_home => {
                         state.note(now, Kind::Learned, "a drone on it, homeward: ran on");
@@ -1400,7 +1421,14 @@ pub(super) fn direct_raid(
                         state.roof_try = Some((b, bot.failed, now));
                         tasks
                     }
-                    None => run_for_cover(&world.zone, here, from, 0.0),
+                    None => match line {
+                        Some((tasks, how)) => {
+                            state.note(now, Kind::Learned, format!("broke its line: {how}"));
+                            state.low_until = now + LINE_HELD;
+                            tasks
+                        }
+                        None => run_for_cover(&world.zone, here, from, 0.0),
+                    },
                 }
             }
             // "Big one, and slow. Walk away from it": off, upright, at a
@@ -2869,6 +2897,61 @@ fn time_short(
         && matches!(leg, Leg::Call | Leg::Rendezvous | Leg::Board)
         && since_hurried > 30.0)
         .then_some(Hurry::Truck)
+}
+
+/// Low and still out of a walker's line this long (s): its aim lasts
+/// 1.5 s, and it comes round to look.
+const LINE_HELD: f32 = 12.0;
+/// A crouched head (m above the ground), as a walker's eye looks for it.
+const LOW_HEAD: f32 = 0.9;
+
+/// Out of sight of `eye`, the nearest way: low where it is, if that does it
+/// (a wall, a bank, a car between); else the nearest spot within 12 m it
+/// can walk to where a crouched head is hidden, and still there. None:
+/// nothing near breaks the line.
+fn break_line(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    here: Vec2,
+    eye: Vec3,
+) -> Option<(Vec<Task>, &'static str)> {
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    let hidden = |p: Vec2| {
+        let head = world.zone.on_ground(p.x, p.y) + Vec3::Y * LOW_HEAD;
+        let to = head - eye;
+        let d = to.length();
+        Dir3::new(to)
+            .ok()
+            .and_then(|dir| spatial.cast_ray(eye, dir, d - 0.3, true, &walls))
+            .is_some()
+    };
+    if hidden(here) {
+        return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
+    }
+    let nav = world.nav.as_deref().map(|n| n.0.as_ref());
+    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
+    let away = (here - eye.xz()).normalize_or(Vec2::Y);
+    for r in [2.0f32, 3.5, 5.0, 7.0, 9.5, 12.0] {
+        // Nearest first; at a range, those off its line before those
+        // back toward it.
+        let mut ring: Vec<Vec2> = (0..16)
+            .map(|k| here + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 16.0) * r)
+            .collect();
+        ring.sort_by(|a, b| {
+            let fa = (*a - here).normalize_or_zero().dot(away);
+            let fb = (*b - here).normalize_or_zero().dot(away);
+            fb.total_cmp(&fa)
+        });
+        if let Some(p) = ring
+            .into_iter()
+            .find(|p| open(*p) && nav.is_none_or(|n| blocked_run(n, here, *p) < 0.5) && hidden(*p))
+        {
+            let mut t = vec![Task::WalkTo { to: p, within: 0.6 }];
+            t.push(Task::Wait(LINE_HELD));
+            return Some((t, "behind something near"));
+        }
+    }
+    None
 }
 
 /// Home ahead of the Surge's warning by this much (s): time to call and
