@@ -74,6 +74,13 @@ impl Material for BeamMaterial {
 #[derive(Component)]
 struct Beam(Handle<BeamMaterial>);
 
+/// Where a light's beam lands (m, from the light; `REACH` when it finds
+/// nothing), settled over a few frames: on the light. A held torch on a
+/// surface at arm's length lights the eye far more than one on the floor
+/// across a room (`render::grade::torch_near`).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Throw(pub f32);
+
 /// How much the air shows a beam, for the weather: dust on a dry night,
 /// mist, fog's droplets, rain's streaks.
 pub fn air(c: &Conditions) -> (f32, f32) {
@@ -149,7 +156,7 @@ fn add_beams(
                 axis: Vec4::NEG_Z,
             },
         });
-        commands.entity(e).with_child((
+        commands.entity(e).insert(Throw(REACH)).with_child((
             Name::new("Torch beam"),
             Beam(material.clone()),
             Mesh3d(mesh),
@@ -199,12 +206,12 @@ fn beam_transform(tan: f32, length: f32) -> Transform {
 
 /// Each beam stops where its light lands: one ray down it a frame.
 fn throw_beams(
-    lights: Query<(&GlobalTransform, &Children), With<SpotLight>>,
+    mut lights: Query<(&GlobalTransform, &Children, Option<&mut Throw>), With<SpotLight>>,
     mut beams: Query<(&Beam, &mut Transform)>,
     mut materials: ResMut<Assets<BeamMaterial>>,
     spatial: SpatialQuery,
 ) {
-    for (gt, children) in &lights {
+    for (gt, children, mut throw) in &mut lights {
         for c in children.iter() {
             let Ok((beam, mut xf)) = beams.get_mut(c) else {
                 continue;
@@ -212,11 +219,17 @@ fn throw_beams(
             let fwd = gt.forward();
             // Start clear of the hand that holds it.
             let from = gt.translation() + fwd * 0.3;
-            let hit = spatial
+            let landed = spatial
                 .cast_ray(from, fwd, REACH, true, &SpatialQueryFilter::default())
                 .map(|h| h.distance + 0.3)
-                .unwrap_or(REACH)
-                .max(0.8);
+                .unwrap_or(REACH);
+            if let Some(t) = throw.as_deref_mut() {
+                let to = t.0 + (landed - t.0) * 0.5;
+                if (t.0 - to).abs() > 0.01 {
+                    t.0 = to;
+                }
+            }
+            let hit = landed.max(0.8);
             // Settle, don't snap: a ray grazing an edge flickers.
             let len = xf.scale.z + (hit - xf.scale.z) * 0.5;
             let Some(m) = materials.get(&beam.0) else {
