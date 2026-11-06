@@ -87,6 +87,8 @@ MATERIALS = {
     "Char": ((0.1, 0.092, 0.085), 0.0, 0.9, None),
     "Ember": ((0.9, 0.35, 0.08), 0.0, 0.5, (1.0, 0.35, 0.05)),
     "Paper": ((0.85, 0.83, 0.76), 0.0, 0.9, None),
+    # Unbleached linen sacking, its weave from the canvas scan (game).
+    "Sacking": ((0.84, 0.81, 0.72), 0.0, 0.95, None),
     "Strange": ((0.5, 0.35, 0.8), 0.6, 0.15, (0.6, 0.35, 1.0)),
     # World props (art/props; src/models.rs maps them).
     "Bark": ((0.22, 0.17, 0.13), 0.0, 0.95, None),

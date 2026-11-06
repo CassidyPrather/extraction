@@ -572,3 +572,38 @@ wood 0.54 → 0.65, charred floor 0.58 → 0.72, the rise in their outlines.
 With Gunsmith's Black PSO-1 merged in, 2 m: wood 1.57 (Gunsmith measured
 1.33 before the brow shield), charred floor 1.34; the PSO-1 reads 33.7 on
 wood and 11.6 on charred floor.
+
+#### Pale, not paper-white (6 November)
+
+On Visual design's settled-eye sheet the flour sack was a blank white
+blob at arm's length and from 2 m. Measured with Visual design's
+settled-eye `--torchlit` applied locally (not merged), nothing clips,
+before or after: the wash-out was exposure, and their fix took it. So
+Paper and Enamel keep their albedo. A flat model material is held to
+enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
+so nothing new comes in whiter.
+
+What the sack lacked was surface and shape. Slumped into a lumpy ball,
+it still read as a balloon at 2 m, its tie as a white cross. It stands
+now as a filled sack does (`pillow_sack` in `art/items/food.py`). It is
+a squat pillow lofted from rounded-rectangle rings, with near-flat broad
+faces and a square base settled wide with dog-ear corners. Side tucks
+and shoulder creases are geometry, and folds gather into the neck and
+flare into a puff of the same cloth. Three wraps of dark twine and two
+tails tie it off. Its stencil (МУКА, 1 СОРТ) and red stripes are on
+both broad faces. Each line sits where the cloth stands furthest out
+across its width, so no letter sinks (on the lumpy ball 1 СОРТ read
+"1 ПРТ"). The material is `Sacking`, unbleached linen with the canvas
+scan's weave.
+
+By the settled-eye torch it reads 36.1 against the floors (36.6
+before), with no pixel clipped. Detail (L* spread, worst view) is 15.0
+(8.9 before), and it is larger from 2 m (5.1° to 6.2°: a pillow's broad
+face, not a ball's). The other pale items (the hana letter, the rice
+bag, the crackers) already carry a seal, grains or docking, and are
+unchanged. The weave is too fine to read from 2 m. The stencil, the
+stripes, the twine and the outline read.
+
+![Flour sack by torchlight: the original, 0ce75fc9's slumped ball, and
+now; wood and concrete at arm's length, wood and charred floor from 2 m
+(enlarged)](../shots/items/torchlit_flour_before_after.jpg)
