@@ -719,25 +719,30 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
     app
 }
 
-/// A reload by hand put to the bot, out on the raid with a gun in hand
-/// and walking (kitted up, not mid-task): whether it was.
+/// A reload by hand put to the bot, out on the raid and walking
+/// (kitted up, not mid-task), its gun drawn first if it's slung: whether
+/// it was.
 fn hand_reload(world: &mut World) -> bool {
     use crate::bot::{Bot, Task};
     let me = player(world);
     if world.resource::<Raid>().phase != Phase::Out {
         return false;
     }
-    let armed = world
+    let in_hand = world
         .query_filtered::<&Held, With<Gun>>()
         .iter(world)
         .any(|h| h.player == me);
     let Some(mut bot) = world.get_mut::<Bot>(me) else {
         return false;
     };
-    if !armed || !matches!(bot.tasks.front(), Some(Task::WalkTo { .. })) {
+    let walking = bot.walk.is_some() || matches!(bot.tasks.front(), Some(Task::WalkTo { .. }));
+    if !walking || matches!(bot.tasks.front(), Some(Task::PickUp { .. } | Task::Stow(_))) {
         return false;
     }
     bot.tasks.push_front(Task::OneHandReload);
+    if !in_hand {
+        bot.tasks.push_front(Task::DrawGun);
+    }
     true
 }
 
