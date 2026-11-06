@@ -3184,6 +3184,13 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
             let t = ((c - from).dot(d) / d.length_squared().max(1e-6)).clamp(0.0, 1.0);
             c.distance(from + d * t) < bx.1.length() + ROUND + 20.0
         })
+        // Not the building an end is in: the walk's into it (or out of
+        // it), and its rooms' plan has the inside. Kept, no way round
+        // reached the end, and the walk went straight: through Kettle's
+        // chapel to the Weir cottage's marker, inside its walls.
+        // (Inside its walls, that is: one at its door step still goes round
+        // it.)
+        .filter(|bx| !within(local(&bx.0, from), bx.1) && !within(local(&bx.0, to), bx.1))
         .collect();
     let clear = |a: Vec2, b: Vec2| near.iter().all(|bx| clear_of(bx, a, b));
     if clear(from, to) {
@@ -4964,6 +4971,49 @@ mod indoor_tests {
     /// pile, a wreck, the stock, a scene's crates) goes round it instead:
     /// every one on Marrow, crossed through its middle from either side.
     /// And a bank too steep to walk up is one, however short.
+    /// A walk to a place inside a building (Kettle's Weir cottage marker is
+    /// in its walls) still goes round the buildings on the way: with the
+    /// end in a box, no way round reached it, and the walk went straight
+    /// through the chapel, where the lost newcomer stood ten minutes a raid.
+    #[test]
+    fn a_walk_into_a_building_goes_round_the_others() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "kettle_pass".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..5 {
+            app.update();
+        }
+        let en = app.world().resource::<crate::robots::doors::Entrances>();
+        let boxes: Vec<(Transform, Vec2)> = en.shells.iter().map(|s| (s.xf, s.half)).collect();
+        let chapel = en
+            .shells
+            .iter()
+            .find(|s| s.xf.translation.xz().distance(Vec2::new(-7.4, 123.4)) < 2.0)
+            .expect("Kettle's chapel");
+        let (from, cottage) = (Vec2::new(123.5, 140.5), Vec2::new(-74.2, 115.5));
+        let inv = chapel.xf.compute_affine().inverse();
+        let local = |q: Vec2| inv.transform_point3(Vec3::new(q.x, 0.0, q.y)).xz();
+        assert!(
+            segment_hits_box(local(from), local(cottage), chapel.half).is_some(),
+            "the straight way crosses the chapel"
+        );
+        let way = round_boxes(&boxes, from, cottage);
+        assert_eq!(way.last(), Some(&cottage));
+        let mut at = from;
+        for p in way {
+            assert!(
+                segment_hits_box(local(at), local(p), chapel.half).is_none(),
+                "{at} -> {p} goes through the chapel"
+            );
+            at = p;
+        }
+    }
+
     #[test]
     fn outdoor_walks_go_round_what_cant_be_walked_through() {
         let opts = crate::launch::LaunchOptions {
