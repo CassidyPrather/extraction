@@ -165,7 +165,8 @@ fn check_world(world: &mut World, when: &str) -> usize {
             }
         }
         if let Some(s) = sock {
-            if !c.iter().any(|w| w == &format!("socket {s}")) {
+            // (A claim is "socket <e> (<kind> of <owner>)".)
+            if !c.iter().any(|w| w.starts_with(&format!("socket {s} "))) {
                 problems.push(format!(
                     "{e} says it's in socket {s}, which holds something else"
                 ));
