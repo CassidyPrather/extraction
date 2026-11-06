@@ -305,6 +305,13 @@ impl BuildingPlan {
     }
 }
 
+/// Whether segment `a`-`b` crosses a doorway `c`-`d` (its jambs a hair
+/// wider).
+#[cfg(test)]
+pub fn segments_cross(a: Vec2, b: Vec2, c: Vec2, d: Vec2) -> bool {
+    crossing(a, b, c, d).is_some()
+}
+
 /// Where segment `a`-`b` crosses `c`-`d`: (t along a-b, point).
 fn crossing(a: Vec2, b: Vec2, c: Vec2, d: Vec2) -> Option<(f32, Vec2)> {
     let r = b - a;

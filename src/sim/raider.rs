@@ -313,6 +313,8 @@ pub struct Raider {
     burned: HashSet<Entity>,
     /// Doors a lockdown has bolted for good: shut in its plans.
     sealed: HashSet<Entity>,
+    /// Doors tried and found wedged shut: shut in its plans.
+    wedged: HashSet<Entity>,
     /// The current plan was cut short (a fight, a repath): redo, don't
     /// give up.
     interrupted: bool,
@@ -605,6 +607,7 @@ pub fn attach_raider(
                 known: HashSet::new(),
                 burned: HashSet::new(),
                 sealed: HashSet::new(),
+                wedged: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
                 rv: career_rv,
@@ -749,6 +752,8 @@ pub struct Scene<'w, 's> {
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     /// Underground sites' power: doors held shut, and the switches.
     power_locked: Query<'w, 's, &'static crate::world::underground::PowerLocked>,
+    /// Doors wedged shut (a wedge under one, or the valley's memory).
+    wedged: Query<'w, 's, &'static GlobalTransform, With<crate::robots::doors::Wedged>>,
     site_power: Query<'w, 's, &'static crate::world::underground::SitePower>,
     power_switches: Query<
         'w,
@@ -1184,6 +1189,7 @@ pub fn think(
             }
             spot_anomalies(&mut bot, r, &scene, here, pos);
             spot_sealed(&mut bot, r, &scene, &mut log);
+            spot_wedged(&mut bot, r, &scene, here, &mut log);
             spot_held(&mut bot, r, &scene);
             sneak(
                 me,
@@ -2713,6 +2719,48 @@ fn spot_held(bot: &mut Bot, r: &mut Raider, scene: &Scene) {
             _ => {}
         }
     }
+}
+
+/// A door it's gone to open and found wedged ("It won't budge"): its
+/// doorway is a wall in the plans from then on, and the walk is planned
+/// again by another way, as anyone would (Rime's ore mill, careers seed 7:
+/// the valley's memory wedged the door it meant to leave by, and it
+/// pressed it every two seconds till the clock ran out, 15 stucks).
+fn spot_wedged(bot: &mut Bot, r: &mut Raider, scene: &Scene, pos: Vec2, log: &mut SimLog) {
+    let Some(Task::OpenDoor(d)) = bot.tasks.front() else {
+        return;
+    };
+    let d = *d;
+    // Tried: up to it, its leaf in reach.
+    let tried = scene
+        .wedged
+        .get(d)
+        .is_ok_and(|gt| gt.translation().xz().distance(pos) < 2.0);
+    if !tried || !r.wedged.insert(d) {
+        return;
+    }
+    for plan in r.plans.iter_mut() {
+        if shut_door(plan, d) {
+            log.event("wedged", json!({"site": plan.name}));
+        }
+    }
+    r.interrupted = true;
+    bot.replace([Task::Wait(0.1)]);
+}
+
+/// A door shut for good in a plan: its doorway a wall. Whether the plan
+/// has it.
+fn shut_door(plan: &mut BuildingPlan, door: Entity) -> bool {
+    let Some(leaf) = plan
+        .doors
+        .iter()
+        .find(|i| i.entity == door)
+        .map(|i| i.leaf())
+    else {
+        return false;
+    };
+    plan.grid.block(leaf, 0.0);
+    true
 }
 
 fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
@@ -5964,6 +6012,99 @@ mod run_tests {
         }
         assert!(tried >= 1, "no relay to plant indoors found");
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// A door found wedged is a wall from then on: in every building with
+    /// another way out, shut as `spot_wedged` shuts it, the way out from
+    /// just inside it goes by another door (Rime's ore mill: the valley's
+    /// memory wedged the one it meant to leave by).
+    #[test]
+    fn a_wedged_door_is_left_by_another() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for plan in &plans {
+                let outs: Vec<_> = plan.doors.iter().filter(|d| d.outside.is_some()).collect();
+                if outs.len() < 2 {
+                    continue;
+                }
+                for d in &outs {
+                    let mid = (d.a + d.b) * 0.5;
+                    let n = (d.outside.unwrap() - mid).normalize_or_zero();
+                    let (Some(inside), Some(outside)) = (
+                        plan.grid
+                            .nearest_walkable((mid - n * 1.2).to_array())
+                            .map(Vec2::from_array),
+                        d.outside,
+                    ) else {
+                        continue;
+                    };
+                    // Out by it, shut or not: not a building this checks.
+                    let Some(open) = indoor_path(plan, plan.to_world(inside), outside, 0.6, true)
+                    else {
+                        continue;
+                    };
+                    if !open
+                        .iter()
+                        .any(|t| matches!(t, Task::OpenDoor(e) if *e == d.entity))
+                    {
+                        continue;
+                    }
+                    tried += 1;
+                    let mut shut = plan.clone();
+                    shut_door(&mut shut, d.entity);
+                    // Anywhere outside will do: to its doorstep the long way round.
+                    let route = indoor_path(&shut, plan.to_world(inside), outside, 0.6, true);
+                    let through = route.as_ref().is_some_and(|r| {
+                        r.iter()
+                            .any(|t| matches!(t, Task::OpenDoor(e) if *e == d.entity))
+                    });
+                    let crossed = route.as_ref().is_some_and(|r| {
+                        let mut at = inside;
+                        r.iter().any(|t| match t {
+                            Task::WalkTo { to, .. } => {
+                                let l = plan.to_local(Vec3::new(to.x, 0.0, to.y)).xz();
+                                let hit = crate::sim::indoor::segments_cross(at, l, d.a, d.b);
+                                at = l;
+                                hit
+                            }
+                            _ => false,
+                        })
+                    });
+                    if through || crossed {
+                        bad.push(format!(
+                            "{map} {} at {:.0?}: door {:?} shut, still out by it",
+                            plan.name, plan.xf.translation, d.entity
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(tried >= 20, "only {tried} doors tried");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried}:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
     }
 
     /// Through every door of every building in every valley by its middle:
