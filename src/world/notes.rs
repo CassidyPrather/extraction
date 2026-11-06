@@ -208,9 +208,12 @@ fn spawn_notes(
                     ChildOf(sign),
                     crate::render::world_props::Blockout,
                 ));
+                // For shots: `EXTRACTION_SIGN_TEXT` puts these words on
+                // every sign (a warning at 10 m, before and after).
+                let shown = std::env::var("EXTRACTION_SIGN_TEXT").ok();
                 commands.spawn((
                     crate::render::legibility::TextSource::Sign,
-                    sign_panel(text),
+                    sign_panel(shown.as_deref().unwrap_or(text)),
                     Transform::from_xyz(0.0, 1.45, 0.05),
                     Visibility::default(),
                     ChildOf(sign),
