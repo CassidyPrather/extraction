@@ -2143,7 +2143,10 @@ pub(super) fn direct_raid(
                 // rather than back into the fence.
                 let side = (at - from).normalize_or_zero().perp();
                 let side = if side.dot(-from) >= 0.0 { side } else { -side };
-                let wrong = from + side * 70.0;
+                // Short of any building that lands in (walked at, the lost
+                // newcomer pinned itself to Kettle's chapel wall ten
+                // minutes a raid).
+                let wrong = outside(&world, &view, from, from + side * 70.0);
                 state.note(now, Kind::Confused, "set off the wrong way");
                 tasks.extend(route(&world, &view, from, wrong));
                 from = wrong;
