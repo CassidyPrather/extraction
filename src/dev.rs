@@ -276,6 +276,16 @@ fn turn_line_up(
             continue;
         }
         if let Ok(mut t) = placed.get_mut(*e) {
+            // Held still, as a walker is: no mind to see the camera and
+            // act on it (a minelayer that saw it fled out of the frame,
+            // its body moved by the physics under the pin; a drone would
+            // go after it).
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+            }
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
         }

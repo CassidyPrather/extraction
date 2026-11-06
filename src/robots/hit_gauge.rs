@@ -134,6 +134,9 @@ pub struct HitGauge {
     look_before: HashMap<Entity, (AssetId<Mesh>, AssetId<StandardMaterial>)>,
     row: Option<Row>,
     pub rows: Vec<Row>,
+    /// Each machine as it stands, and how many of its meshes the player's
+    /// camera draws ([`drawn_meshes`]).
+    pub drawn: Vec<(String, usize)>,
     pub done: bool,
 }
 
@@ -181,6 +184,43 @@ pub fn kind_name(world: &World, e: Entity) -> String {
         None => "?",
     }
     .into()
+}
+
+/// How many of a machine's meshes the player's camera would draw: shown
+/// (their visibility inherited all the way down) and on its layer (none
+/// set, or the first). A machine with none can't be seen, whatever its
+/// parts do.
+pub fn drawn_meshes(world: &mut World, robot: Entity) -> usize {
+    use bevy::camera::visibility::RenderLayers;
+    let mut roots = vec![robot];
+    let mut q = world.query::<(Entity, &RobotPart)>();
+    roots.extend(
+        q.iter(world)
+            .filter(|(_, p)| p.robot == robot)
+            .map(|(e, _)| e),
+    );
+    let mut q = world.query::<(Entity, &super::wear::DrawnFor)>();
+    let drawn_for: Vec<(Entity, Entity)> = q.iter(world).map(|(e, d)| (e, d.0)).collect();
+    for (e, d) in drawn_for {
+        if d == robot || world.get::<RobotPart>(d).is_some_and(|p| p.robot == robot) {
+            roots.push(e);
+        }
+    }
+    let mut seen = HashSet::new();
+    roots
+        .into_iter()
+        .flat_map(|r| subtree(world, r))
+        .filter(|e| seen.insert(*e))
+        .filter(|e| {
+            world.get::<Mesh3d>(*e).is_some()
+                && world
+                    .get::<InheritedVisibility>(*e)
+                    .is_some_and(|v| v.get())
+                && world
+                    .get::<RenderLayers>(*e)
+                    .is_none_or(|l| l.intersects(&RenderLayers::layer(0)))
+        })
+        .count()
 }
 
 /// Every entity under `root`, itself included.
@@ -358,8 +398,31 @@ fn step(world: &mut World, g: &mut HitGauge) {
         return;
     }
     g.frame += 1;
-    if g.frame == 1 {
-        info!("hit gauge: machines standing; rounds from frame {STAND}");
+    if g.frame == 1 || g.frame == STAND {
+        // Each machine and its height over the ground (one under it, or
+        // off where it can't be seen, shows here).
+        let zone = world.get_resource::<crate::world::Zone>().cloned();
+        let mut q = world.query_filtered::<(Entity, &GlobalTransform), With<Robot>>();
+        let at: Vec<(Entity, Vec3)> = q.iter(world).map(|(e, g)| (e, g.translation())).collect();
+        let list: Vec<String> = at
+            .iter()
+            .map(|&(e, p)| {
+                let over = zone.as_ref().map_or(0.0, |z| p.y - z.ground(p.x, p.z));
+                format!(
+                    "{} at {:.1},{:.1} ({over:+.1} m)",
+                    kind_name(world, e),
+                    p.x,
+                    p.z
+                )
+            })
+            .collect();
+        info!("hit gauge: frame {}: {}", g.frame, list.join("; "));
+        if g.frame == STAND {
+            g.drawn = at
+                .iter()
+                .map(|&(e, _)| (kind_name(world, e), drawn_meshes(world, e)))
+                .collect();
+        }
     }
     if g.frame < STAND {
         return;
@@ -514,6 +577,11 @@ fn finish(g: &mut HitGauge) {
 /// Every machine the line-up has (`dev::gallery`), for the gauge.
 pub const EVERY_MACHINE: &str = "walker+drone+grappler+sentry+hound+heavy+crawler+dirigible+pylon+sorter+spotter+minelayer+mender+plough";
 
+/// The machines a `+`-separated list asks for.
+pub fn kinds_asked(list: &str) -> Vec<String> {
+    list.split('+').map(String::from).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -558,6 +626,27 @@ mod tests {
             .map(|r| r.line())
             .collect();
         assert!(!g.rows.is_empty(), "no parts shot");
+        // Every machine drawn for the player's camera at all.
+        for (kind, n) in &g.drawn {
+            println!("{kind}: {n} meshes drawn");
+        }
+        let unseen: Vec<&String> = g
+            .drawn
+            .iter()
+            .filter(|(_, n)| *n == 0)
+            .map(|(k, _)| k)
+            .collect();
+        assert!(
+            unseen.is_empty(),
+            "machines nothing of which is drawn: {unseen:?}"
+        );
+        let kinds: HashSet<&str> = g.drawn.iter().map(|(k, _)| k.as_str()).collect();
+        for want in kinds_asked(&std::env::var("HIT_GAUGE_KINDS").unwrap_or(EVERY_MACHINE.into())) {
+            assert!(
+                kinds.contains(want.as_str()),
+                "{want} never stood in the line-up"
+            );
+        }
         assert!(
             bad.is_empty(),
             "{} of {} parts:\n{}",
