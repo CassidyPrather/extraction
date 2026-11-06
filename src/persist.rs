@@ -727,6 +727,13 @@ pub(crate) fn put_in_bag_turned(
 }
 
 fn put_in_slot(world: &mut World, item: Entity, slot_e: Entity) {
+    // An item is in one place: one already seated stays where it is (the
+    // sim seated the hearth a save had sealed in one lead case in a second
+    // case too on the load, both cradles holding it: the save soak, Cinder
+    // seed 2, mid-reload).
+    if world.get::<InSocket>(item).is_some() {
+        return;
+    }
     let Some(mut socket) = world.get_mut::<Socket>(slot_e) else {
         return;
     };
@@ -1583,6 +1590,55 @@ pub fn reset_zone(world: &mut World) {
 mod tests {
     use super::*;
     use crate::raid::SURGE_AFTER;
+
+    /// An item in one place: seated in one lead case's cradle, it isn't
+    /// seated again in another's (the save soak, Cinder seed 2, quit
+    /// mid-reload: on the load the sim seated the hearth the save had
+    /// sealed in one case in a second case too, both cradles holding it,
+    /// and the world an item short of the save).
+    #[test]
+    fn a_seated_item_is_not_seated_again() {
+        let dir = std::env::temp_dir().join(format!("extraction-seat-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = app_with_save(&dir.join("save.ron"));
+        let catalog = app.world().resource::<Catalog>().clone();
+        let spawn = |app: &mut App, id: &str, x: f32| {
+            let kind = catalog.kind(id).unwrap();
+            let world = app.world_mut();
+            let e = crate::items::spawn_item(
+                &mut world.commands(),
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_xyz(x, 50.0, 0.0),
+                    condition: 1.0,
+                },
+            );
+            world.flush();
+            e
+        };
+        let a = spawn(&mut app, "lead_case", 0.0);
+        let b = spawn(&mut app, "lead_case", 2.0);
+        let hearth = spawn(&mut app, "art_hearth", 4.0);
+        // The cradles come with the cases' first frames.
+        for _ in 0..3 {
+            app.update();
+        }
+        seat_in_mount(app.world_mut(), a, hearth);
+        seat_in_mount(app.world_mut(), b, hearth);
+        let world = app.world_mut();
+        let holding: Vec<Entity> = world
+            .query::<(Entity, &Socket)>()
+            .iter(world)
+            .filter(|(_, s)| s.occupant == Some(hearth))
+            .map(|(e, _)| e)
+            .collect();
+        let at = world.get::<InSocket>(hearth).map(|s| s.socket);
+        assert_eq!(holding.len(), 1, "the hearth is held by {holding:?}");
+        assert_eq!(at, holding.first().copied());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn app_with_save(path: &std::path::Path) -> App {
         let opts = LaunchOptions {
