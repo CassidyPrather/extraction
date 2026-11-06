@@ -477,9 +477,8 @@
         // pool shows nothing of the way home (scripts/night_route.sh, the
         // torch case): a stop's post stands 15 m on, beside the way (by 22 m
         // a band is lost in the haze at the dam's foot).
-        (prefab: "marker_post", at: (-8.5, 117.7), rot: 0.0),  // w01_00, the shore under the dam
+        (prefab: "marker_post", at: (-5.6, 112.4), rot: 0.0),  // w01_00, the shore under the dam
         (prefab: "marker_post", at: (41.0, 122.5), rot: 0.0),  // w01_01, the shore under the dam
-        (prefab: "marker_post", at: (90.3, 128.3), rot: 0.0),  // w01_02, the climb to the gauge house
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
