@@ -88,6 +88,18 @@
         Plateau(polygon: [(-124.6, 68.5), (-55.8, 63.5), (-55.8, 123.5), (-125.8, 123.5)], blend: 16.5),
         Plateau(polygon: [(59.0, 54.8), (129.0, 54.8), (129.0, 109.8), (59.0, 109.8)], blend: 11.0),
         Plateau(polygon: [(-135.0, -5.9), (-85.0, -5.9), (-85.0, 30.1), (-135.0, 30.1)], blend: 16.5),
+        // Down off the depot exit's pad (26.9) to the pump station's flat (21.1):
+        // its kiosk opens north onto a 5.7 m drop, the way off was west round
+        // the creek, 187 m home. A landing at the door, then 8 terraces east.
+        Plateau(polygon: [(-140.0, -2.6), (-136.0, -2.6), (-136.0, 5.5), (-140.0, 5.5)], height: Some(26.90), blend: 2.5),
+        Plateau(polygon: [(-136.0, 0.5), (-133.0, 0.5), (-133.0, 5.5), (-136.0, 5.5)], height: Some(26.18), blend: 2.5),
+        Plateau(polygon: [(-133.0, 0.5), (-130.0, 0.5), (-130.0, 5.5), (-133.0, 5.5)], height: Some(25.46), blend: 2.5),
+        Plateau(polygon: [(-130.0, 0.5), (-127.0, 0.5), (-127.0, 5.5), (-130.0, 5.5)], height: Some(24.74), blend: 2.5),
+        Plateau(polygon: [(-127.0, 0.5), (-124.0, 0.5), (-124.0, 5.5), (-127.0, 5.5)], height: Some(24.02), blend: 2.5),
+        Plateau(polygon: [(-124.0, 0.5), (-121.0, 0.5), (-121.0, 5.5), (-124.0, 5.5)], height: Some(23.30), blend: 2.5),
+        Plateau(polygon: [(-121.0, 0.5), (-118.0, 0.5), (-118.0, 5.5), (-121.0, 5.5)], height: Some(22.58), blend: 2.5),
+        Plateau(polygon: [(-118.0, 0.5), (-115.0, 0.5), (-115.0, 5.5), (-118.0, 5.5)], height: Some(21.86), blend: 2.5),
+        Plateau(polygon: [(-115.0, 0.5), (-112.0, 0.5), (-112.0, 5.5), (-115.0, 5.5)], height: Some(21.14), blend: 2.5),
         Plateau(polygon: [(44.0, -136.0), (159.0, -133.1), (158.5, -72.8), (52.8, -88.1)], blend: 13.8),
         Plateau(polygon: [(-21.2, -137.0), (43.8, -137.0), (43.8, -92.3), (-21.2, -92.6)], blend: 11.0),
         Plateau(polygon: [(-156.0, -92.0), (-136.0, -92.0), (-136.0, -72.0), (-156.0, -72.0)], blend: 20.0),
@@ -140,6 +152,12 @@
         (
             name: "Mast road", kind: Gravel, width: 4.0, smoothing: 35.0,
             points: [(8.0, -80.0), (-6.0, -74.0), (-20.0, -66.0), (-30.0, -56.0), (-40.0, -46.0), (-50.0, -44.0), (-62.0, -56.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
+        ),
+        // Down off the depot exit's pad by its terraces (terrain, above) to
+        // the Forest path: the way home from the ledger by the exit.
+        (
+            name: "Depot exit way", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 10.0,
+            points: [(-138.0, -2.6), (-138.0, 3.0), (-126.0, 3.0), (-112.0, 3.0), (-100.0, 1.0), (-90.0, -1.9)],
         ),
         // The ranger's path: off the forest path at the footbridge, north
         // under the ridge to the tower. With the logging road and the forest
