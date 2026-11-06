@@ -638,6 +638,12 @@ pub(super) struct Newcomer {
     fought_at: f32,
     /// When it last readied its gun with a machine on it (`threatened`).
     readied_at: f32,
+    /// Time's short (the Surge close, or the truck's wait running down)
+    /// till then: no roof holds it, and a drone on it homeward is run on
+    /// from (`TIME_SHORT_FOR`).
+    pressed_until: f32,
+    /// When it last came out from under cover for the truck.
+    hurried_at: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -901,6 +907,7 @@ pub(super) fn direct_raid(
     // (a flat 20 s, and it came out to be found again, every 25 s for ten
     // minutes, till the truck had gone), for two minutes at most.
     if state.roof_try.is_some_and(|(_, _, t)| now - t < 120.0)
+        && state.pressed_until <= now
         && matches!(bot.tasks.front(), Some(Task::Wait(_)))
         && view.entrances.as_deref().is_some_and(|en| {
             en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
@@ -1348,12 +1355,14 @@ pub(super) fn direct_raid(
                 // back at the gate, the one-handed newcomer went under the
                 // gate's shelter instead, waited out in the open beside it,
                 // and two drones shot it down 15 m behind the bed).
-                let going_home = matches!(state.leg, Leg::Board)
+                let going_home = (matches!(state.leg, Leg::Board)
                     && matches!(raid.phase, Phase::TruckWaiting { .. })
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < BED_RUN);
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN))
+                    || (state.pressed_until > now
+                        && matches!(state.leg, Leg::Call | Leg::Rendezvous | Leg::Board));
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
@@ -1611,6 +1620,48 @@ pub(super) fn direct_raid(
         bot.tasks.clear();
         bot.tasks.push_back(Task::Wait(IDLE));
         bot.restart();
+    }
+
+    // A time sense: in cover or on the job, the clock still runs. A person
+    // under a roof keeps half an eye on the time, and goes when it's short:
+    // the Surge close (the driver's warning is said once a career: told
+    // before, the careful newcomer sat at a door 17 minutes into it, and
+    // never called), or the truck there and its wait running down (held
+    // under a roof by a drone that kept finding it, the truck waited five
+    // minutes and went, and the Surge took it 28 minutes on).
+    let hiding = state.roof_try.is_some()
+        || matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s != IDLE && *s >= 10.0);
+    let hurry = time_short(
+        &raid.phase,
+        raid.surge_in(),
+        state.leg,
+        hiding,
+        state.pressed_until > now,
+        now - state.hurried_at,
+    );
+    if hurry == Some(Hurry::Surge) {
+        state.note(now, Kind::Learned, "the Surge is close: home now");
+        state.leg = Leg::Call;
+        state.pressed_until = now + TIME_SHORT_FOR;
+        state.roof_try = None;
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.walk = None;
+        bot.restart();
+        return;
+    }
+    if hurry == Some(Hurry::Truck) {
+        state.hurried_at = now;
+        state.note(now, Kind::Learned, "the truck won't wait: out to it");
+        state.pressed_until = now + TIME_SHORT_FOR;
+        state.roof_try = None;
+        bot.tasks.clear();
+        bot.walk = None;
+        bot.tasks.extend(world.go_home(here, &raid, state.tries));
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
+        state.leg = Leg::Board;
+        return;
     }
 
     let idle_only =
@@ -2774,6 +2825,50 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
 
+/// What the clock says to do now, under cover or on the job.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Hurry {
+    /// Home ahead of the Surge: call the truck, from wherever it is.
+    Surge,
+    /// The truck's there and its wait running down: out from cover to it.
+    Truck,
+}
+
+/// A time sense (`direct_raid`): out on the job with the Surge's warning
+/// near, or hiding while it is (once), it calls; hiding with the truck
+/// there a minute and more, out to it (not more than every 30 s).
+fn time_short(
+    phase: &Phase,
+    surge_in: f32,
+    leg: Leg,
+    hiding: bool,
+    pressed: bool,
+    since_hurried: f32,
+) -> Option<Hurry> {
+    let surge_close =
+        matches!(phase, Phase::Out) && surge_in < crate::raid::SURGE_WARNING + SURGE_MARGIN;
+    let wait_running = matches!(phase, Phase::TruckWaiting { left, .. }
+        if *left < crate::raid::TRUCK_WAIT - TRUCK_PATIENCE);
+    if surge_close
+        && (matches!(leg, Leg::Out | Leg::Place) || (leg == Leg::Call && hiding && !pressed))
+    {
+        return Some(Hurry::Surge);
+    }
+    (wait_running
+        && hiding
+        && matches!(leg, Leg::Call | Leg::Rendezvous | Leg::Board)
+        && since_hurried > 30.0)
+        .then_some(Hurry::Truck)
+}
+
+/// Home ahead of the Surge's warning by this much (s): time to call and
+/// get to the truck.
+const SURGE_MARGIN: f32 = 180.0;
+/// Under cover with the truck there, out to it once it has waited this
+/// long (s; it waits `TRUCK_WAIT`).
+const TRUCK_PATIENCE: f32 = 60.0;
+/// Once time's short, it stays short this long (s).
+const TIME_SHORT_FOR: f32 = 600.0;
 /// The truck waiting within this, a run for its bed beats any roof (m).
 const BED_RUN: f32 = 40.0;
 
@@ -4354,6 +4449,61 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn the_clock_gets_it_out_from_under_cover() {
+        use crate::raid::{SURGE_AFTER, SURGE_WARNING, TRUCK_WAIT};
+        let out = Phase::Out;
+        let far = SURGE_AFTER - 600.0;
+        let near = SURGE_WARNING + SURGE_MARGIN - 1.0;
+        // Hours to the Surge: on with the job, hidden or not.
+        for leg in [Leg::Out, Leg::Place, Leg::Call] {
+            assert_eq!(time_short(&out, far, leg, true, false, 99.0), None);
+        }
+        // The Surge near, on the job: home, whether it's hiding or not
+        // (told once a career, a second warning isn't said).
+        for leg in [Leg::Out, Leg::Place] {
+            for hiding in [false, true] {
+                assert_eq!(
+                    time_short(&out, near, leg, hiding, false, 99.0),
+                    Some(Hurry::Surge),
+                    "{leg:?}, hiding {hiding}"
+                );
+            }
+        }
+        // Calling already: only out from cover, and once.
+        assert_eq!(
+            time_short(&out, near, Leg::Call, true, false, 99.0),
+            Some(Hurry::Surge)
+        );
+        assert_eq!(time_short(&out, near, Leg::Call, true, true, 99.0), None);
+        assert_eq!(time_short(&out, near, Leg::Call, false, false, 99.0), None);
+        // At the camp, in the truck, home: the clock isn't its business.
+        for leg in [Leg::Camp, Leg::Kit, Leg::Paid, Leg::Done] {
+            assert_eq!(time_short(&out, near, leg, true, false, 99.0), None);
+        }
+        // The truck there: a minute's grace, then out from cover to it.
+        let just = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - 10.0,
+        };
+        let running = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - TRUCK_PATIENCE - 1.0,
+        };
+        for leg in [Leg::Call, Leg::Rendezvous, Leg::Board] {
+            assert_eq!(time_short(&just, far, leg, true, false, 99.0), None);
+            assert_eq!(
+                time_short(&running, far, leg, true, false, 99.0),
+                Some(Hurry::Truck),
+                "{leg:?}"
+            );
+            // Not hiding: its walk to the truck is already the way.
+            assert_eq!(time_short(&running, far, leg, false, false, 99.0), None);
+            // Not every frame: once in 30 s.
+            assert_eq!(time_short(&running, far, leg, true, true, 5.0), None);
+        }
     }
 }
 
