@@ -764,7 +764,7 @@
         (id: "carrot", dims: Some((0.189, 0.115, 0.126)), name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
         (id: "onion", dims: Some((0.088, 0.092, 0.083)), name: "Onion", category: Food, size: Small, mass: 0.15, bulk: 0.15, tags: ["food:Onion"]),
         (id: "canned_tomato", dims: Some((0.083, 0.126, 0.086)), name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal", "can"]),
-        (id: "flour_sack", dims: Some((0.228, 0.248, 0.185)), name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
+        (id: "flour_sack", dims: Some((0.249, 0.258, 0.183)), name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
         (id: "rice_bag", dims: Some((0.178, 0.198, 0.133)), name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
         (id: "canned_beans", dims: Some((0.083, 0.126, 0.085)), name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal", "can"]),
         (id: "sugar_cubes", dims: Some((0.105, 0.115, 0.09)), name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),

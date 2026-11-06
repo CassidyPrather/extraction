@@ -583,19 +583,30 @@ Paper and Enamel keep their albedo. A flat model material is held to
 enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
 so nothing new comes in whiter.
 
-What the sack lacked was surface. It is `Sacking` now, unbleached linen
-with the canvas scan's weave, slumped low and spread with creases where
-it lies, tied off at the neck with thick dark twine. Its stencil and red
-stripes are on both broad faces, ray-cast onto the cloth so the slump
-doesn't swallow them: before, a sack lying turned away had none. Its
-detail (L* spread, worst view) went from 8.9 to 16.5 with 0% clipped,
-and it still stands off every floor (delta E 36.6 → 36.4). The other
-pale items (the hana letter, the rice bag, the crackers) already carry
-a seal, grains or docking, and are unchanged. The weave is too fine to
-read from 2 m; the stencil, the stripes, the tie and the slump read.
+What the sack lacked was surface and shape. Slumped into a lumpy ball,
+it still read as a balloon at 2 m, its tie as a white cross. It stands
+now as a filled sack does (`pillow_sack` in `art/items/food.py`). It is
+a squat pillow lofted from rounded-rectangle rings, with near-flat broad
+faces and a square base settled wide with dog-ear corners. Side tucks
+and shoulder creases are geometry, and folds gather into the neck and
+flare into a puff of the same cloth. Three wraps of dark twine and two
+tails tie it off. Its stencil (МУКА, 1 СОРТ) and red stripes are on
+both broad faces. Each line sits where the cloth stands furthest out
+across its width, so no letter sinks (on the lumpy ball 1 СОРТ read
+"1 ПРТ"). The material is `Sacking`, unbleached linen with the canvas
+scan's weave.
 
-![Flour sack, before (top) and after: wood and concrete at arm's length,
-wood and charred floor from 2 m](../shots/items/torchlit_flour_before_after.jpg)
+By the settled-eye torch it reads 36.1 against the floors (36.6
+before), with no pixel clipped. Detail (L* spread, worst view) is 15.0
+(8.9 before), and it is larger from 2 m (5.1° to 6.2°: a pillow's broad
+face, not a ball's). The other pale items (the hana letter, the rice
+bag, the crackers) already carry a seal, grains or docking, and are
+unchanged. The weave is too fine to read from 2 m. The stencil, the
+stripes, the twine and the outline read.
+
+![Flour sack by torchlight: the original, 0ce75fc9's slumped ball, and
+now; wood and concrete at arm's length, wood and charred floor from 2 m
+(enlarged)](../shots/items/torchlit_flour_before_after.jpg)
 
 #### Black's sheen: no single value helps (6 November)
 
