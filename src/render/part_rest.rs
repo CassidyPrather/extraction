@@ -153,7 +153,22 @@ fn wake_parts(
     mut unhung: RemovedComponents<DoorLeaf>,
     mut taken: RemovedComponents<crate::items::Item>,
     in_hand: Query<(), With<crate::interact::Held>>,
-    rematerialled: Query<Entity, (Changed<MeshMaterial3d<StandardMaterial>>, Without<PartRestMesh>)>,
+    // A loose item woken (it's moving) leaves its cell: it joins again
+    // where it comes to rest.
+    stirred: Query<
+        (),
+        (
+            With<crate::items::Item>,
+            Without<avian3d::prelude::Sleeping>,
+        ),
+    >,
+    rematerialled: Query<
+        Entity,
+        (
+            Changed<MeshMaterial3d<StandardMaterial>>,
+            Without<PartRestMesh>,
+        ),
+    >,
     hit: Query<Entity, Changed<Timber>>,
     prised: Query<
         (Entity, &crate::destruction::hooks::Pryable),
@@ -262,9 +277,10 @@ fn wake_parts(
     // carried into another cell (rest_cells takes them in where they lie).
     let mut leaving = undrawn.clone();
     for part in &woken {
-        if in_hand.contains(*part) {
+        if in_hand.contains(*part) || stirred.contains(*part) {
             leaving.push(*part);
-        } else if let (Ok((_, g, _, _)), Some(key)) = (parts.get(*part), cells.part_cell.get(part)) {
+        } else if let (Ok((_, g, _, _)), Some(key)) = (parts.get(*part), cells.part_cell.get(part))
+        {
             if cell_of(g.translation()) != *key {
                 leaving.push(*part);
             }
@@ -282,7 +298,6 @@ fn wake_parts(
         cells.leaf_part.retain(|_, p| *p != e);
     }
 }
-
 
 /// Every mesh under a part (the part's own too) drawn with a standard
 /// material, not glass, not blended.
@@ -312,14 +327,25 @@ fn leaves_of(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn rest_cells(
     mut cells: ResMut<Cells>,
-    // Breakable parts, doors (which swing, and are pressed, as parts are)
-    // but not a powered one (its lamp's colour is its state), and loose
-    // items lying about (not guns: `gun_rest`'s; not one in a hand).
+    // Breakable parts, and doors (which swing, and are pressed, as parts
+    // are) but not a powered one (its lamp's colour is its state).
     parts: Query<
         (Entity, &GlobalTransform),
         (
-            Or<(With<Drawn>, With<DoorLeaf>, With<crate::items::Item>)>,
+            Or<(With<Drawn>, With<DoorLeaf>)>,
             Without<crate::world::underground::PowerLocked>,
+        ),
+    >,
+    // And loose items lying still: asleep, on nothing (a plate seated on
+    // a heavy, a walker's armour, moves with it: in a cell it kept the
+    // whole cell awake, the gate's doors and all), not a gun (`gun_rest`'s)
+    // and not in a hand.
+    loose: Query<
+        (Entity, &GlobalTransform),
+        (
+            With<crate::items::Item>,
+            With<avian3d::prelude::Sleeping>,
+            Without<ChildOf>,
             Without<crate::weapons::Gun>,
             Without<crate::interact::Held>,
         ),
@@ -340,7 +366,7 @@ fn rest_cells(
 ) {
     let cells = &mut *cells;
     // New parts join (a valley's, a mended Surge's), quiet from now.
-    for (e, g) in &parts {
+    for (e, g) in parts.iter().chain(loose.iter()) {
         if cells.part_cell.contains_key(&e) {
             continue;
         }
@@ -786,14 +812,44 @@ mod tests {
                 app.world_mut()
                     .entity_mut(p)
                     .remove::<(Drawn, Timber, Pryable)>()
-                    .insert(crate::items::Item(
-                        extraction_core::items::ItemState::fresh(&catalog.0, kind, 1.0),
+                    .insert((
+                        crate::items::Item(extraction_core::items::ItemState::fresh(
+                            &catalog.0, kind, 1.0,
+                        )),
+                        avian3d::prelude::Sleeping,
                     ));
                 (p, leaf)
             })
             .collect();
+        // Not resting: one still rolling (awake), and one seated on
+        // something that moves (a heavy's plate).
+        let item = |app: &mut App, at: Vec3| {
+            let (p, _) = part(app, at);
+            app.world_mut()
+                .entity_mut(p)
+                .remove::<(Drawn, Timber, Pryable)>()
+                .insert(crate::items::Item(
+                    extraction_core::items::ItemState::fresh(&catalog.0, kind, 1.0),
+                ));
+            p
+        };
+        let rolling = item(&mut app, Vec3::new(3.0, 1.0, 4.0));
+        let seated = item(&mut app, Vec3::new(5.0, 1.0, 4.0));
+        let holder = app.world_mut().spawn(Transform::IDENTITY).id();
+        app.world_mut()
+            .entity_mut(seated)
+            .insert((avian3d::prelude::Sleeping, ChildOf(holder)));
         rest(&mut app);
         assert_eq!(resting(&mut app), 1, "four items of one material: one mesh");
+        let cells = app.world().resource::<Cells>();
+        assert!(
+            !cells.part_cell.contains_key(&rolling),
+            "an awake item in a cell"
+        );
+        assert!(
+            !cells.part_cell.contains_key(&seated),
+            "a seated item in a cell"
+        );
         for (_, leaf) in &items {
             assert!(!shown(&app, *leaf), "a resting item's own mesh is hidden");
         }
@@ -812,7 +868,10 @@ mod tests {
         app.update();
         assert_eq!(resting(&mut app), 0, "taken: merged meshes left");
         assert!(
-            !app.world().resource::<Cells>().part_cell.contains_key(&taken),
+            !app.world()
+                .resource::<Cells>()
+                .part_cell
+                .contains_key(&taken),
             "a held item still counted in its cell"
         );
         rest(&mut app);
