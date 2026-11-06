@@ -719,46 +719,65 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
     app
 }
 
-/// A reload by hand put to the bot, out on the raid, kitted up and
-/// walking (not mid-task), its gun drawn first if it's slung: whether it
-/// was.
+/// A reload by hand put to the bot: out on the raid and walking, a rifle
+/// and a magazine laid at its feet, picked up, the magazine packed and
+/// the rifle reloaded by hand, as a player does it. Whether it was. (The
+/// soak's raid kits up from a fresh game's stash, with no rifle in it:
+/// there was never a gun to reload. And the sim raider's own reload is
+/// the gun's macro, done in a frame.)
 fn hand_reload(world: &mut World) -> bool {
     use crate::bot::{Bot, Task};
     let me = player(world);
     if world.resource::<Raid>().phase != Phase::Out {
         return false;
     }
-    let in_hand = world
-        .query_filtered::<&Held, With<Gun>>()
-        .iter(world)
-        .any(|h| h.player == me);
-    // Kitted up: a gun on the body (its first walk is to the kit).
-    let slung = world
-        .query_filtered::<&InSocket, With<Gun>>()
-        .iter(world)
-        .any(|s| {
-            world
-                .get::<SocketOwner>(s.socket)
-                .is_some_and(|o| o.0 == me)
-        });
-    if !in_hand && !slung {
+    let walking = world
+        .get::<Bot>(me)
+        .is_some_and(|b| b.walk.is_some() || matches!(b.tasks.front(), Some(Task::WalkTo { .. })));
+    if !walking {
         return false;
     }
+    let Some(feet) = world.get::<GlobalTransform>(me).map(|g| g.translation()) else {
+        return false;
+    };
+    let catalog = world.resource::<Catalog>().clone();
+    for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
+        let Some(kind) = catalog.kind(id) else {
+            return false;
+        };
+        let at = feet + Vec3::new(0.6, 0.3, 0.3 * k as f32);
+        crate::items::spawn_item(
+            &mut world.commands(),
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 0.9,
+            },
+        );
+    }
+    world.flush();
+    // The sim raider's mind lets go of the bot: it plans its walks again
+    // every few frames, and a reload put in front of them was gone the
+    // next. The quit loads a fresh game anyway.
+    world.entity_mut(me).remove::<crate::sim::raider::Raider>();
     let Some(mut bot) = world.get_mut::<Bot>(me) else {
         return false;
     };
-    let walking = bot.walk.is_some() || matches!(bot.tasks.front(), Some(Task::WalkTo { .. }));
-    if !walking || matches!(bot.tasks.front(), Some(Task::PickUp { .. } | Task::Stow(_))) {
-        return false;
-    }
-    bot.tasks.push_front(Task::OneHandReload);
-    if !in_hand {
-        bot.tasks.push_front(Task::DrawGun);
-    }
-    // The sim raider's mind lets go of the bot: it plans its walks again
-    // every few frames, and a reload put in front of them was gone the
-    // next (the draw lasted a frame). The quit loads a fresh game anyway.
-    world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+    let s = |x: &str| x.to_string();
+    bot.tasks.clear();
+    bot.tasks.extend([
+        Task::PickUp {
+            id: s("ak74"),
+            side: crate::rig::Side::Right,
+        },
+        Task::PickUp {
+            id: s("ak_mag"),
+            side: crate::rig::Side::Left,
+        },
+        Task::Stow(crate::rig::Side::Left),
+        Task::OneHandReload,
+    ]);
     true
 }
 
