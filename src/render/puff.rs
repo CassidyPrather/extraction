@@ -486,7 +486,8 @@ mod tests {
         ))
         .init_asset::<Mesh>()
         .init_asset::<Image>()
-        .init_asset::<StandardMaterial>();
+        .init_asset::<StandardMaterial>()
+        .init_asset::<bevy::mesh::skinning::SkinnedMeshInverseBindposes>();
         add_to(&mut app);
         app.update();
         let a = app.world().resource::<PuffAssets>().clone();
