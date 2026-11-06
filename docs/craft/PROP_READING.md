@@ -312,7 +312,7 @@ Where a track crosses into a hot place, a warning has to read from 10 m
 or more. Five carriers hold it (`art/props/warnings.py`):
 
 - `warning_gate`: a plank field gate across a track, a painted board
-  across it. It has a chain and padlock, a trefoil plate on the latch
+  across it. It has a padlock on its latch, a trefoil plate on the latch
   post, and a hazard lamp with an empty `lamp` before its red glass.
 - `warning_hoarding`: a plank hoarding on two posts, braced behind.
 - `warning_enamel`: a railway's enamel plate on a steel post, its

@@ -2,7 +2,7 @@
 place, read from 10 m and more. Writes assets/models/props/<name>.glb:
 
 - `warning_gate`      a plank field gate across a track between two posts,
-                      a painted board across it, a chain and padlock, a
+                      a painted board across it, a padlock on its latch, a
                       hazard lamp on the latch post, a trefoil plate
 - `warning_hoarding`  a plank hoarding on two posts, braced behind
 - `warning_enamel`    an enamel railway sign on a steel post, its rolled rim
@@ -104,18 +104,6 @@ def trefoil(p, at, size, z):
     p.cyl(size * 0.065, z + 0.0002, z + 0.0035, "Black", segs=16, xf=T(x, y, 0))
 
 
-def chain(p, a, b, sag, links=14, r=0.012, wire=0.0028):
-    """A hanging chain from a to b, sagging `sag` at its middle: links
-    turned a quarter each to the last."""
-    for i in range(links):
-        t = (i + 0.5) / links
-        x = a[0] + (b[0] - a[0]) * t
-        y = a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t)
-        z = a[2] + (b[2] - a[2]) * t
-        turn = RY(math.pi / 2) if i % 2 else RX(0.0)
-        p.tube(r, r - wire, -wire / 2, wire / 2, "Iron", segs=10, xf=T(x, y, z) @ turn)
-
-
 # --- Plank gate ---------------------------------------------------------------------------
 
 GATE_AREA = (2.4, 0.5, 1.1)
@@ -147,13 +135,11 @@ def warning_gate():
         for sy in (-1, 1):
             bolt(p, (sx * (aw / 2 + 0.08), acy + sy * (ah / 2 + 0.08), zb), (0, 0, 1), r=0.012,
                  h=0.008)
-    # Hinge straps on the left post, a latch and a chain with its padlock
-    # on the right.
+    # Hinge straps on the left post, a latch and its padlock on the right.
     for y in (0.42, 1.52):
         p.box((0.42, 0.05, 0.008), (-1.5, y, zr + 0.03), "Iron", bevel=0.002, segs=1)
         rod(p, (-1.72, y - 0.06, 0.09), (-1.72, y + 0.06, 0.09), 0.012, "Iron")
     p.box((0.2, 0.04, 0.01), (1.62, 1.3, 0.025), "Iron", bevel=0.002, segs=1)
-    chain(p, (1.56, 1.3, 0.05), (1.72, 1.24, 0.1), 0.14, links=9)
     p.box((0.045, 0.055, 0.02), (1.65, 1.09, 0.08), "Rusty", bevel=0.004, segs=1)
     p.tube(0.016, 0.012, -0.003, 0.003, "Steel", segs=12,
            xf=T(1.65, 1.128, 0.08) @ RX(math.pi / 2) @ RY(math.pi / 2))
@@ -161,10 +147,11 @@ def warning_gate():
     trefoil(p, (1.72, 0.78), 0.2, 0.0805)
     # The hazard lamp on the latch post's top: an iron hood over a red glass
     # facing the track.
-    lx, ly = 1.72, 1.86
+    # (Its hood sits down over the post's pointed top.)
+    lx, ly = 1.72, 1.8
     p.cyl(0.07, ly - 0.08, ly + 0.08, "Iron", segs=16, xf=T(lx, 0.0, 0.0) @ UP)
     p.cyl(0.055, 0.0, 0.03, "Red", segs=16, xf=T(lx, ly, 0.065))
-    p.box((0.16, 0.012, 0.11), (lx, ly + 0.09, 0.03), "Iron", bevel=0.003, segs=1)
+    p.box((0.16, 0.012, 0.11), (lx, ly + 0.084, 0.03), "Iron", bevel=0.003, segs=1)
     return [p]
 
 
@@ -340,7 +327,7 @@ FACE_Z = {
     "warning_door": 0.034,
 }
 
-write_with("warning_gate", warning_gate, GATE_AREA, {"lamp": (1.72, 1.86, 0.11)})
+write_with("warning_gate", warning_gate, GATE_AREA, {"lamp": (1.72, 1.8, 0.11)})
 write_with("warning_hoarding", warning_hoarding, HOARDING_AREA)
 write_with("warning_enamel", warning_enamel, ENAMEL_AREA)
 write_with("warning_wall", warning_wall, WALL_AREA)
