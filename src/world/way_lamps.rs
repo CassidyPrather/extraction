@@ -67,3 +67,24 @@ fn way_lamp(b: &mut Builder) {
         Mat::DarkMetal,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// No ivy climbs a marker post: it smothered the bands, so the torch
+    /// had nothing to shine back from.
+    #[test]
+    fn a_marker_post_grows_no_ivy() {
+        let geo = geo("marker_post").unwrap();
+        let occ = crate::world::buildings::occluders(&geo);
+        for k in 1..24u64 {
+            let g =
+                crate::world::overgrowth::grow_on("marker_post", &geo, &occ, k * 7919, Vec3::NEG_Z);
+            assert!(
+                g.vines.is_empty() && g.leaves.is_empty(),
+                "seed {k}: ivy on a marker post"
+            );
+        }
+    }
+}
