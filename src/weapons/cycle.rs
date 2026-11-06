@@ -1207,6 +1207,21 @@ mod tests {
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
         assert_eq!(fired(c), 2, "{}", c.report());
+        never_shut_opening(c);
+    }
+
+    /// No opening stroke sounds or feels like the bolt going home (the
+    /// TOZ-8's first opening did, the hand on the lifted handle wobbling
+    /// the bolt about its lug: `Firearm`'s `OPENED_AT`).
+    fn never_shut_opening(c: &Cycle) {
+        let shut: Vec<&str> = c
+            .ticks
+            .iter()
+            .filter(|t| t.beat.starts_with("open"))
+            .filter(|t| t.events.contains(&FireEvent::BoltClosed))
+            .map(|t| t.beat)
+            .collect();
+        assert!(shut.is_empty(), "the bolt went home opening: {shut:?}\n{}", c.report());
     }
 
     /// The IZh-43 by hand: broken open, two shells in, shut; both barrels
@@ -1266,6 +1281,7 @@ mod tests {
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
         assert_eq!(fired(c), 2, "{}", c.report());
+        never_shut_opening(c);
     }
 
     /// The Mosin by hand: a clip of five stripped in through the open
@@ -1277,6 +1293,7 @@ mod tests {
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
         assert_eq!(fired(c), 2, "{}", c.report());
+        never_shut_opening(c);
     }
 
     #[test]
