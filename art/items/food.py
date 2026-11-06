@@ -58,13 +58,15 @@ def labelled_tin(p, r, y0, y1, label, trim):
     return rl
 
 
-def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12):
+def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12, lumps=6, depth=0.1,
+         spread=0.12):
     """A soft filled bag: a ball of radii `r` slumped flat on y_floor,
-    lumpy, gathered in to a neck at height `neck`."""
+    `lumps` lumps up to `depth` deep, its foot spread by `spread`,
+    gathered in to a neck at height `neck`."""
     bm = p.bm
     rnd = random.Random(seed)
     bumps = [(Vector((rnd.uniform(-1, 1), rnd.uniform(-0.4, 0.6), rnd.uniform(-1, 1))).normalized(),
-              rnd.uniform(-0.08, 0.1)) for _ in range(6)]
+              rnd.uniform(-depth * 0.8, depth)) for _ in range(lumps)]
     res = bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=1.0)
     verts = res["verts"]
     cx, cy, cz = centre
@@ -77,7 +79,7 @@ def sack(p, r, centre, y_floor, neck, mat, seed=1, segs=20, rings=12):
         f = 1.0 - 0.86 * t ** 1.4
         if y < y_floor + 0.004:
             # Slumped: the bottom spreads a little and sits flat.
-            f *= 1.0 + 0.12 * min(1.0, (y_floor + 0.004 - y) / 0.01)
+            f *= 1.0 + spread * min(1.0, (y_floor + 0.004 - y) / 0.01)
             y = max(y, y_floor)
         v.co = Vector((cx + x * f, y, cz + z * f))
     faces = list({f for v in verts for f in v.link_faces})
@@ -302,10 +304,11 @@ def flour_sack():
     # A white cotton sack, slumped, its neck tied off with string; the word
     # and two red stripes stencilled on the front.
     neck = yb + 0.084
-    # Unbleached linen, woven (`Sacking`): pale, not paper-white, which by
-    # torchlight was a blank blob. Tied off with dark twine, wound thick.
-    sack(p, (0.047, 0.05, 0.037), (0.0, yb + 0.036, 0.0), yb, neck, "Sacking", seed=4, segs=22,
-         rings=14)
+    # Woven linen (`Sacking`), slumped heavy: a sagging foot, the flour
+    # settled in lumps and creases (smooth, by torchlight it was a blank
+    # balloon). Tied off with dark twine, wound thick.
+    sack(p, (0.049, 0.047, 0.039), (0.0, yb + 0.034, 0.0), yb, neck, "Sacking", seed=4, segs=28,
+         rings=18, lumps=14, depth=0.16, spread=0.22)
     ring(p, 0.0074, 0.0026, "Black", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
     ring(p, 0.0072, 0.0022, "Black", xf=T(0, neck + 0.0042, 0) @ UP @ RX(0.15), segs=14, sides=5)
     # The gathered cloth above the tie, crumpled into points.
