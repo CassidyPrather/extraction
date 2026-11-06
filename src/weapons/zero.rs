@@ -631,6 +631,133 @@ mod tests {
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
+    /// Every gun, fired through the game's own shot (`ballistics::Shot`,
+    /// flown as a `Projectile`) with no spread, lands on its iron sights'
+    /// point of aim at its zero ([`iron_zero_m`]): within 2 MOA, up and
+    /// across, for each barrel. (`every_gun_hits_where_its_iron_sights_point`
+    /// checks the sum; this flies the round, slow ones included, and a
+    /// double's two barrels.) The gun is set in the air, its sight line
+    /// level, so nothing is in the way.
+    #[test]
+    fn every_gun_fired_lands_on_its_point_of_aim_at_its_zero() {
+        use crate::weapons::ballistics::{Projectile, Shot};
+        use avian3d::prelude::RigidBody;
+        const MOA: f32 = std::f32::consts::PI / (180.0 * 60.0);
+        let mut vr = crate::vr_harness::Vr::new("training_yard");
+        let ids: Vec<String> = {
+            let cat = vr.app.world().resource::<crate::items::Catalog>();
+            cat.iter()
+                .filter(|(_, d)| {
+                    d.firearm.is_some() && super::super::layout::layout(&d.id).is_some()
+                })
+                .map(|(_, d)| d.id.clone())
+                .collect()
+        };
+        assert!(ids.len() > 10, "only {} guns", ids.len());
+        let mut report = Vec::new();
+        let mut bad = Vec::new();
+        for (k, id) in ids.iter().enumerate() {
+            let at = Vec3::new(k as f32 * 3.0, 400.0, 0.0);
+            let gun = vr.spawn(id, Transform::from_translation(at));
+            vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+            vr.step(2);
+            // Its sight line level.
+            let (sight, barrels) = {
+                let g = vr.app.world().get::<Gun>(gun).expect("a gun");
+                (g.layout.sight, g.firearm.def.barrels)
+            };
+            let d = sight.rotation * Vec3::NEG_Z;
+            let pose =
+                Transform::from_translation(at).with_rotation(Quat::from_rotation_x(-d.y.asin()));
+            *vr.app.world_mut().get_mut::<Transform>(gun).unwrap() = pose;
+            vr.step(2);
+            let gt = *vr.app.world().get::<GlobalTransform>(gun).unwrap();
+            let g = vr.app.world().get::<Gun>(gun).unwrap();
+            let def = g.firearm.def.clone();
+            let zero_m = iron_zero_m(&def);
+            let eye = gt.transform_point(g.layout.sight.translation);
+            let look = (gt.rotation() * g.layout.sight.rotation * Vec3::NEG_Z).normalize();
+            let aim = eye + look * zero_m;
+            let dir = shot_dir(g, gt.rotation(), false);
+            let muzzle0 = g.layout.muzzle;
+            for barrel in 0..barrels.max(1) {
+                let mut muzzle = muzzle0;
+                if barrels > 1 {
+                    muzzle.x += if barrel == 0 { -0.0128 } else { 0.0128 };
+                }
+                vr.app.world_mut().write_message(Shot {
+                    gun,
+                    shooter: None,
+                    origin: gt.transform_point(muzzle),
+                    direction: dir,
+                    speed: def.muzzle_velocity,
+                    damage: 1.0,
+                    projectiles: 1,
+                    spread: 0.0,
+                    recoil: 0.0,
+                    seed: 1,
+                });
+                let along = |x: Vec3| (x - eye).dot(look);
+                let mut last: Option<Vec3> = None;
+                let mut hit: Option<Vec3> = None;
+                for i in 0..400 {
+                    vr.step(1);
+                    let mut q = vr.app.world_mut().query::<(&Projectile, &Transform)>();
+                    let Some((_, t)) = q.iter(vr.app.world()).find(|(p, _)| p.gun == gun) else {
+                        if i < 5 {
+                            continue;
+                        }
+                        break;
+                    };
+                    let p = t.translation;
+                    if along(p) >= zero_m {
+                        let a = last.unwrap_or(p);
+                        let f = (zero_m - along(a)) / (along(p) - along(a)).max(1e-6);
+                        hit = Some(a.lerp(p, f));
+                        break;
+                    }
+                    last = Some(p);
+                }
+                // Let any round still flying go.
+                let flying: Vec<Entity> = {
+                    let mut q = vr.app.world_mut().query::<(Entity, &Projectile)>();
+                    q.iter(vr.app.world())
+                        .filter(|(_, p)| p.gun == gun)
+                        .map(|(e, _)| e)
+                        .collect()
+                };
+                for e in flying {
+                    vr.app.world_mut().despawn(e);
+                }
+                let Some(hit) = hit else {
+                    bad.push(format!("{id}: the round never reached {zero_m} m"));
+                    continue;
+                };
+                let off = hit - aim;
+                let side = gt.rotation() * Vec3::X;
+                let (up, across) = (off.y, off.dot(side));
+                let tol = 2.0 * MOA * zero_m;
+                let line = format!(
+                    "{id} barrel {barrel}: at {zero_m} m, {:+.1} cm up, {:+.1} cm across (2 MOA is {:.1} cm)",
+                    up * 100.0,
+                    across * 100.0,
+                    tol * 100.0
+                );
+                if up.abs() > tol || across.abs() > tol {
+                    bad.push(line.clone());
+                }
+                report.push(line);
+            }
+            vr.app.world_mut().despawn(gun);
+        }
+        println!("{}", report.join("\n"));
+        assert!(
+            bad.is_empty(),
+            "off their point of aim:\n{}",
+            bad.join("\n")
+        );
+    }
+
     use super::*;
     use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
     use crate::rig::Side;
