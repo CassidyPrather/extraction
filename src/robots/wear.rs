@@ -222,6 +222,7 @@ fn wear(
             .collect();
         let reach =
             |at: Vec3, a: &avian3d::prelude::ColliderAabb| at.clamp(a.min, a.max).distance(at);
+        let middle = |at: Vec3, a: &avian3d::prelude::ColliderAabb| a.center().distance(at);
         // (Each loose piece and how far it is from this part's volume.)
         let mut others = Vec::new();
         let own_volume = mine.iter().find(|(p, ..)| *p == e).map(|(_, _, a)| *a);
@@ -233,7 +234,13 @@ fn wear(
                 let at = gt.transform_point(aabb.map_or(Vec3::ZERO, |a| Vec3::from(a.center)));
                 let nearest = mine
                     .iter()
-                    .min_by(|a, b| reach(at, a.2).total_cmp(&reach(at, b.2)))
+                    // (Inside two volumes, a hub inside the body's: the
+                    // one whose middle it's nearest.)
+                    .min_by(|a, b| {
+                        reach(at, a.2)
+                            .total_cmp(&reach(at, b.2))
+                            .then(middle(at, a.2).total_cmp(&middle(at, b.2)))
+                    })
                     .map(|(p, ..)| *p);
                 if nearest == Some(e) {
                     pieces.push(piece);
