@@ -307,8 +307,8 @@ def flour_sack():
     # Woven linen (`Sacking`), slumped heavy: a sagging foot, the flour
     # settled in lumps and creases (smooth, by torchlight it was a blank
     # balloon). Tied off with dark twine, wound thick.
-    sack(p, (0.049, 0.047, 0.039), (0.0, yb + 0.034, 0.0), yb, neck, "Sacking", seed=4, segs=28,
-         rings=18, lumps=14, depth=0.16, spread=0.22)
+    sack(p, (0.051, 0.043, 0.04), (0.0, yb + 0.031, 0.0), yb, neck, "Sacking", seed=4, segs=32,
+         rings=20, lumps=18, depth=0.2, spread=0.32)
     ring(p, 0.0074, 0.0026, "Black", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
     ring(p, 0.0072, 0.0022, "Black", xf=T(0, neck + 0.0042, 0) @ UP @ RX(0.15), segs=14, sides=5)
     # The gathered cloth above the tie, crumpled into points.
@@ -319,16 +319,26 @@ def flour_sack():
                                 neck + 0.0125 + 0.007 * abs(math.sin(a * 900 + b * 500))))
     tube_path(p, [(0.006, neck, -0.004), (0.013, neck - 0.004, -0.011),
                   (0.016, neck - 0.012, -0.018)], 0.0016, "Black", sides=4, closed=False)
-    # The mill's stencil on both broad faces, which bulge: the letters sit
-    # on their crowns, between two red stripes (a sack lands any way round:
-    # on one face only, half the time it wasn't seen).
-    for zf, face in ((-0.0372, FRONT), (0.0372, RY(0.0))):
-        out = -1.0 if zf < 0 else 1.0
-        text(p, "МУКА", 0.0135, "Black", T(0.0, yb + 0.036, zf) @ face, depth=0.0009)
-        for y in (yb + 0.0215, yb + 0.0505):
-            p.box((0.036, 0.0036, 0.0008), (0.0, y, zf - out * 0.0003), "Red")
-        text(p, "1 COPT", 0.0055, "Black", T(0.0, yb + 0.0145, zf + out * 0.0012) @ face,
-             depth=0.0008)
+    # The mill's stencil on both broad faces, set into the cloth where it
+    # lies (each mark at the surface a ray finds, the sack being lumpy),
+    # between two red stripes: a sack lands any way round, and on one face
+    # only, half the time it wasn't seen.
+    from mathutils.bvhtree import BVHTree
+    tree = BVHTree.FromBMesh(p.bm)
+
+    def surface(y, side):
+        hit = tree.ray_cast(Vector((0.0, y, side * 0.2)), Vector((0.0, 0.0, -side)))
+        return hit[0].z if hit[0] is not None else side * 0.037
+
+    for side, face in ((-1.0, FRONT), (1.0, RY(0.0))):
+        y = yb + 0.0335
+        text(p, "МУКА", 0.0135, "Black", T(0.0, y, surface(y, side) - side * 0.0012) @ face,
+             depth=0.0024)
+        for y in (yb + 0.0155, yb + 0.052):
+            p.box((0.026, 0.0036, 0.0022), (0.0, y, surface(y, side) - side * 0.0004), "Red")
+        y = yb + 0.0595
+        text(p, "1 COPT", 0.0055, "Black", T(0.0, y, surface(y, side) - side * 0.001) @ face,
+             depth=0.0018)
     return [p]
 
 
