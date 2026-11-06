@@ -2804,6 +2804,14 @@ pub struct Fight {
 }
 
 impl Fight {
+    /// Its machine's on the route (placed once the newcomer's out, its kit
+    /// on): before that, a tell is some other machine's business.
+    fn heeds_tells(&self) -> bool {
+        self.machine.is_some()
+    }
+}
+
+impl Fight {
     /// The last tell, if any.
     /// When any tell last came (a second lock, a later aim): what warns of
     /// a hit. `tells` keeps each kind's first, for the report.
@@ -4453,6 +4461,12 @@ pub(super) fn first_fight(
         came.push("inside a hush (the sound goes dull)");
     }
     let mut first_tell = None;
+    // (None before its machine is out: a crawler on its round noticing a
+    // deer 0.2 s in, with the kit still in the crate, had every reckless
+    // newcomer draw a gun it hadn't got, 13 runs of 40.)
+    if !fight.heeds_tells() {
+        came.clear();
+    }
     for what in came {
         if fight.tell(now, what) && first_tell.is_none() {
             first_tell = Some(what);
@@ -4890,6 +4904,15 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn the_fight_waits_for_its_machine() {
+        let mut fight = Fight::default();
+        // Loading, the kit in the crate: another machine's tell isn't it.
+        assert!(!fight.heeds_tells());
+        fight.machine = Some(("walker".into(), Vec2::ZERO));
+        assert!(fight.heeds_tells());
     }
 
     #[test]
