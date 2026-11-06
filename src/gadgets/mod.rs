@@ -245,17 +245,20 @@ fn item_mounts(
             // A light's cell lies along it in an open cradle on its top
             // (`art/items/_kit.py`'s `cell_cradle`); it once stood across
             // the tube through a bore (the 28 October playtest, 0:11:13).
+            // Where each model's bay holds it (each centred on its box,
+            // `art/items/_kit.py`).
             let (at, seat) = match id {
-                "flashlight" => (0.02, CELL_ALONG),
-                "weapon_light" => (0.008, CELL_ALONG),
-                "laser_module" => (0.0025, CELL_ALONG),
-                _ => (0.02, CELL_UPRIGHT),
+                "flashlight" => (Vec3::new(0.0, 0.0, 0.0155), CELL_ALONG),
+                "weapon_light" => (Vec3::new(0.0, 0.0, 0.008), CELL_ALONG),
+                "laser_module" => (Vec3::new(0.0, 0.0, 0.0025), CELL_ALONG),
+                "cloak_generator" => (Vec3::new(0.0, 0.00065, 0.0252), CELL_UPRIGHT),
+                _ => (Vec3::new(0.0, 0.0005, 0.0235), CELL_UPRIGHT),
             };
             spawn_mount(
                 &mut commands,
                 e,
                 Mount::Cell,
-                Transform::from_xyz(0.0, 0.0, at),
+                Transform::from_translation(at),
                 Transform::from_rotation(seat),
             );
             let (watts, kind) = match id {
@@ -284,7 +287,7 @@ fn item_mounts(
                 &mut commands,
                 e,
                 Mount::Cradle,
-                Transform::from_xyz(0.0, 0.0, 0.0),
+                Transform::from_xyz(0.0, -0.0086, 0.0),
                 Transform::IDENTITY,
             );
             commands.entity(e).insert(LeadCase);

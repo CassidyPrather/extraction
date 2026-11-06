@@ -233,7 +233,7 @@ fn spot(
         if !d.airborne() {
             continue;
         }
-        let eye = gt.translation() - Vec3::Y * 0.1;
+        let eye = gt.translation() - Vec3::Y * 0.094;
         for (r, robot, rgt, spotted) in &robots {
             if robot.wrecked {
                 continue;
