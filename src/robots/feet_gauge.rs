@@ -3,14 +3,18 @@
 //! grappler and the collector are walkers in body) is walked over each
 //! valley's own ground, where it's hardest: its steepest walkable slopes,
 //! in and out of its doors (their steps), across its ruins' rubble, down
-//! its banks to the water, and along Sallow's dam. Three things are held:
+//! its banks to the water, and along Sallow's dam. Four things are held:
 //!
 //! - a foot on the ground stays where it came down: it slides less than
 //!   [`SLIDE`] over a stance;
 //! - a foot comes down on the surface: within [`TOUCH`] of it, not in the
 //!   air over it nor in it;
 //! - the body rides on its feet: never more than [`RIDE`] off the height
-//!   its planted feet hold it at.
+//!   its planted feet hold it at;
+//! - a swinging foot keeps low over even ground: no more than [`SWING`]
+//!   over the ground under it (held high going down a slope, it stood up
+//!   to a body's height over it mid-stride, and the machine read as
+//!   floating). Over a step or an edge it may hold high to clear it.
 //!
 //! The report is the worst of each per valley, with where it was, to look
 //! at (`reel:feetat`).
@@ -34,6 +38,15 @@ pub const TOUCH: f32 = 0.08;
 /// inside [`RIDE_USUALLY`]; coming down off a raised doorway it's brought
 /// back at `anim::RIDE_CATCH`, a drop, not a jump, and is out to this.
 pub const RIDE: f32 = 0.6;
+/// The highest a swinging foot may go over the ground under it, over a
+/// slope's even ground (m, at a walker's size): its lift is
+/// `anim::STEP_HEIGHT` and a little, and held high over a falling slope
+/// it read as floating. (Over a step or an edge, `anim::EDGE`, it holds
+/// high to clear it, and isn't held to this.)
+pub const SWING: f32 = 0.3;
+/// Even ground under a swing: none of it stands this far over or falls
+/// this far under the swing's line (m, at a walker's size; as `anim::EDGE` judges it).
+pub const EVEN: f32 = 0.1;
 /// What the body rides inside all but [`RIDE_RARELY`] of the time.
 pub const RIDE_USUALLY: f32 = 0.3;
 /// The share of its ticks a body may be past [`RIDE_USUALLY`].
@@ -249,6 +262,8 @@ pub struct Report {
     pub sink: Worst,
     pub high: Worst,
     pub low: Worst,
+    /// A swing's peak over the ground under the foot, over even ground.
+    pub swing: Worst,
     pub steps: usize,
 }
 
@@ -263,10 +278,39 @@ fn surface(spatial: &SpatialQuery, zone: &Zone, p: Vec3) -> f32 {
     // railing or a trunk beside it, and found nothing.)
     let from = p + Vec3::Y * 0.06;
     spatial
-        .cast_ray(from, Dir3::NEG_Y, 1.5, true, &filter)
+        .cast_ray(from, Dir3::NEG_Y, 3.0, true, &filter)
         .filter(|h| h.distance > 0.02)
         .map(|h| from.y - h.distance)
         .map_or(terrain, |y| y.max(terrain))
+}
+
+/// How high a swinging foot at `p` is over what's under it: the world,
+/// rubble or the terrain (none, at or in something: a ray from just over
+/// it starts inside a floor it's skimming, and would read the terrain
+/// under the building).
+fn clearance(spatial: &SpatialQuery, zone: &Zone, p: Vec3) -> f32 {
+    let terrain = zone.ground(p.x, p.z);
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris]);
+    let from = p + Vec3::Y * 0.06;
+    match spatial.cast_ray(from, Dir3::NEG_Y, 3.0, true, &filter) {
+        Some(h) if h.distance <= 0.08 => 0.0,
+        Some(h) => p.y - (from.y - h.distance).max(terrain),
+        None => p.y - terrain,
+    }
+    .max(0.0)
+}
+
+/// The ground under `p`, as [`surface`] reads it; none when the probe
+/// starts inside something (a trunk, a wall: no even ground there).
+fn level(spatial: &SpatialQuery, zone: &Zone, p: Vec3) -> Option<f32> {
+    let terrain = zone.ground(p.x, p.z);
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris]);
+    let from = p + Vec3::Y * 0.06;
+    match spatial.cast_ray(from, Dir3::NEG_Y, 3.0, true, &filter) {
+        Some(h) if h.distance <= 0.02 => None,
+        Some(h) => Some((from.y - h.distance).max(terrain)),
+        None => Some(terrain),
+    }
 }
 
 /// The ground under a body at `p`: the first thing down from it (the
@@ -363,6 +407,11 @@ pub fn gauge(map: &str, secs: f32) -> (Report, Vec<Route>) {
     // and whether it's slipping on ice (`anim::slip_feet`: meant to slide).
     let mut stood: Vec<[(Vec3, f32, f32, bool); super::anim::LEGS]> =
         vec![[(Vec3::NAN, 0.0, 1.0, false); super::anim::LEGS]; bots.len()];
+    // Per machine, per foot, this swing: its peak over the ground under it.
+    let mut peak: Vec<[(f32, Vec3); super::anim::LEGS]> =
+        vec![[(0.0, Vec3::ZERO); super::anim::LEGS]; bots.len()];
+    // And where it was aimed at lift-off (the retarget may move it).
+    let mut aimed = vec![[Vec3::ZERO; super::anim::LEGS]; bots.len()];
     let mut spatial = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
     let ticks = (secs * 90.0) as usize;
     for tick in 0..ticks {
@@ -391,6 +440,53 @@ pub fn gauge(map: &str, secs: f32) -> (Report, Vec<Route>) {
                     feet_y.push(f.planted.y);
                 }
                 let icy = icy || g.slid[i] > 0.0;
+                if f.t < 1.0 {
+                    if t0 >= 1.0 || f.t < t0 {
+                        // Lifted off (or set off again): a new swing.
+                        peak[b][i] = (0.0, Vec3::ZERO);
+                        aimed[b][i] = f.to;
+                    }
+                    // (The swing's own path, `Foot::planted` mid-step: a
+                    // leg that can't reach draws its foot short of it,
+                    // which is the ride's business, not the swing's.)
+                    let c = clearance(&sq, &zone, f.planted);
+                    if c > peak[b][i].0 {
+                        peak[b][i] = (c, f.planted);
+                    }
+                } else if t0 < 1.0 {
+                    // Landed: over even ground (none of it standing over
+                    // or falling under the swing's line by `EVEN`), how
+                    // high it went.
+                    // (And under its peak: a canal's wall or a doorway's
+                    // drop between the samples is no even ground.)
+                    let (by, at) = peak[b][i];
+                    let run = (f.to - f.from).with_y(0.0);
+                    let k = ((at - f.from).with_y(0.0).dot(run) / run.length_squared().max(1e-6))
+                        .clamp(0.0, 1.0);
+                    let at_peak = (at.y - by) - (f.from.y + (f.to.y - f.from.y) * k);
+                    // (Judged to where it was aimed at lift-off too: aimed
+                    // down off an edge it held high, rightly.)
+                    let even = at_peak.abs() <= EVEN * s
+                        && [aimed[b][i], f.to].into_iter().all(|to| {
+                            [1.0 / 3.0, 2.0 / 3.0].into_iter().all(|k| {
+                                let p = f.from.lerp(to, k);
+                                level(&sq, &zone, p.with_y(p.y + 1.0))
+                                    .is_some_and(|y| (y - p.y).abs() <= EVEN * s)
+                            })
+                        });
+                    if even && tick > 90 {
+                        report.swing.see_why(by / s, kind, route, at, || {
+                            format!(
+                                "from {:.2?} to {:.2?} (aimed {:.2?}), terrain there {:.2}",
+                                f.from,
+                                f.to,
+                                aimed[b][i],
+                                zone.ground(at.x, at.z)
+                            )
+                        });
+                    }
+                    peak[b][i] = (0.0, Vec3::ZERO);
+                }
                 stood[b][i] = if f.t < 1.0 {
                     (was, slid, f.t, false)
                 } else if t0 < 1.0 || !was.is_finite() {
@@ -519,6 +615,7 @@ mod tests {
                 ("sink", &r.sink, TOUCH),
                 ("ride high", &r.high, RIDE),
                 ("ride low", &r.low, RIDE),
+                ("swing", &r.swing, SWING),
             ] {
                 println!(
                     "  {name:9} {:6.3} m  {:7} {} ({:.1}, {:.1}, {:.1}) {}",

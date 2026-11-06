@@ -41,6 +41,10 @@ const ACCEL: f32 = 2.6;
 const TURN_RATE: f32 = 1.7;
 const TURN_RESPONSE: f32 = 5.0;
 const STEP_HEIGHT: f32 = 0.26;
+/// Ground standing this far (at a walker's size) over or under a swing's
+/// straight line is an edge to clear (`Gait::edge`); less, it's a slope's
+/// unevenness and the swing follows the line.
+pub const EDGE: f32 = 0.1;
 /// A dazzled walker's turret casts about this far either way (rad).
 pub const DAZZLED_CAST: f32 = 1.2;
 /// How fast a walker's turret swings onto a device it's hunting (rad/s):
@@ -154,6 +158,11 @@ pub struct Gait {
     dur: [f32; LEGS],
     /// Whether a swing has had its mid-flight retarget.
     retargeted: [bool; LEGS],
+    /// How far the ground between a swing's lift-off and landing stands
+    /// over or falls under the straight line between them (m; set at
+    /// lift-off and at the retarget). Over [`EDGE`]: an edge or a step to clear, so the
+    /// foot holds high; else it follows the line (a slope) at its lift.
+    edge: [f32; LEGS],
     /// Where a dead leg's foot hangs (it lags the body).
     dangle: [Vec3; LEGS],
     /// Seconds standing with a foot out of place, before it tidies up.
@@ -265,6 +274,7 @@ impl Default for Gait {
             under_was: None,
             dur: [0.3; LEGS],
             retargeted: [false; LEGS],
+            edge: [f32::INFINITY; LEGS],
             dangle: [Vec3::ZERO; LEGS],
             idle: 0.0,
             last_v: Vec3::ZERO,
@@ -579,13 +589,21 @@ pub fn step_walker_walled(
             if !drive.down {
                 let p = clear(Vec3::new(next.x, probe_y, next.z), ideal_xz(i));
                 f.to = Vec3::new(p.x, ground(Vec3::new(p.x, probe_y, p.z)), p.z);
+                g.edge[i] = edge_over(&mut *ground, f.from, f.to, probe_y, s);
             }
         }
         f.t = nt;
-        let s = nt * nt * (3.0 - 2.0 * nt);
-        // Climbing, the foot rises first; stepping down, it travels first.
+        let ease = nt * nt * (3.0 - 2.0 * nt);
         let dy = f.to.y - f.from.y;
-        let sv = if dy > 0.0 {
+        // Over a step or an edge: climbing, the foot rises first; stepping
+        // down, it travels first, clear of the edge. Over a slope's even
+        // ground it goes along the slope's line, at its lift over it (held
+        // high going downhill it stood up to a body's height over the
+        // falling ground mid-stride, and read as floating).
+        let smooth = g.edge[i] <= EDGE * s;
+        let sv = if smooth {
+            ease
+        } else if dy > 0.0 {
             let k = (nt * 1.6).min(1.0);
             k * k * (3.0 - 2.0 * k)
         } else {
@@ -600,11 +618,11 @@ pub fn step_walker_walled(
         } else {
             1.0
         };
-        let lift = (STEP_HEIGHT * s * (0.8 + 0.4 * fast.min(1.0)) * (1.0 - 0.4 * g.crouch)
-            + dy.abs() * 0.4)
+        let lift = (STEP_HEIGHT * s * ease * (0.8 + 0.4 * fast.min(1.0)) * (1.0 - 0.4 * g.crouch)
+            + if smooth { 0.0 } else { dy.abs() * 0.4 })
             * (std::f32::consts::PI * nt).sin()
             * scuff;
-        let xz = f.from.lerp(f.to, s);
+        let xz = f.from.lerp(f.to, ease);
         f.planted = Vec3::new(xz.x, f.from.y + dy * sv + lift, xz.z);
         if nt >= 1.0 {
             f.planted = f.to;
@@ -686,6 +704,7 @@ pub fn step_walker_walled(
             f.from = f.planted;
             f.to = Vec3::new(p.x, ground(Vec3::new(p.x, probe_y, p.z)), p.z);
             f.t = 0.0;
+            g.edge[i] = edge_over(&mut *ground, f.from, f.to, probe_y, s);
             g.retargeted[i] = false;
             g.dur[i] = step_time * (0.7 + 0.3 * g.leg_health[i]);
         }
@@ -1014,6 +1033,32 @@ pub fn body_out(
 /// nothing and took it for a floor below ground: the foot came down a
 /// body's height inside the hill (`feet_gauge`, 5 November: 1.6-2.1 m in
 /// every valley's steepest slopes).
+/// How far the ground between `from` and `to` stands over or falls under
+/// the straight line between them, at a third and two thirds of the way
+/// (probed from `probe_y`, as feet are): an edge or a step (up, or down
+/// off a ledge whose corner the line would cut) when it's over [`EDGE`].
+/// A level step (under [`EDGE`] between its ends) isn't probed: over
+/// level ground the swing is the same either way, so walking on the flat
+/// costs nothing more (`ground_probes_stay_in_budget`).
+fn edge_over(
+    ground: &mut impl FnMut(Vec3) -> f32,
+    from: Vec3,
+    to: Vec3,
+    probe_y: f32,
+    size: f32,
+) -> f32 {
+    if (to.y - from.y).abs() < EDGE * size {
+        return 0.0;
+    }
+    [1.0 / 3.0, 2.0 / 3.0]
+        .into_iter()
+        .map(|k| {
+            let p = from.lerp(to, k);
+            (ground(Vec3::new(p.x, probe_y.max(p.y), p.z)) - p.y).abs()
+        })
+        .fold(f32::NEG_INFINITY, f32::max)
+}
+
 pub fn footing(
     p: Vec3,
     terrain: f32,
@@ -1254,6 +1299,7 @@ pub(crate) fn walk(
                 f.to = to;
                 f.t = 0.0;
                 g.retargeted[i] = true;
+                g.edge[i] = f32::INFINITY;
                 g.dur[i] = g.dur[i].max(0.25);
             }
         }

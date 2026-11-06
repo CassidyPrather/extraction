@@ -210,11 +210,17 @@ What's left: the ride's worst is 0.4–0.56, the body coming down off a raised d
 
 ![side on, before and after](feet_hold_the_ground_side_on_before_after.jpg)
 
-One row per valley, each at its worst case in the gauge, with the hound on the gauge's own route, the nav's way round. The camera follows it side-on and low, on the downhill side. Each pair is the same frame before and after: the one where the hound passes the gauge's worst point. Fog is at 11:00, with `--detail 0.25` so the ground cover doesn't hide the feet.
+One row per valley, each at its worst case in the gauge, with the hound on the gauge's own route, the nav's way round. The camera follows it side-on and low, on the downhill side. Each pair is the same frame before and after: within half a second of where the hound passes the gauge's worst point, chosen mid-stance, with two or more feet down. Fog is at 11:00, with `--detail 0.25` so the ground cover doesn't hide the feet. A green disc lies on the ground under each foot in stance, drawn where the gait says the foot is, so before and after mark the same thing.
 
-On the slopes, before, the downhill legs reach out long for footholds down inside the hill and the body is held up off them. After, they come down on the slope's line. At Marrow's doorway, before, the body rides high off the steps with its legs hanging; after, it sits down on its feet.
+On the slopes, before, the stance feet's discs are on the slope but the legs go on into the hill, a body's height below. After, the feet stand on their discs. At Marrow's doorway, before, the body rides high off the steps with its legs hanging; after, it sits down on its feet.
 
-The `reel:feetat,SHOTS,EVERY,KIND,X1,Z1,X2,Z2,DIST,HEIGHT[,door]` command shoots these. It logs the body's position every frame, which is how each pair's frame was picked.
+The `reel:feetat,SHOTS,EVERY,KIND,X1,Z1,X2,Z2,DIST,HEIGHT[,door]` command shoots these. It logs, every frame, the body's position and each foot's stance or swing with its height over the ground under it. From low beside a slope a planted toe can look above the slope's far line. The log settles it: no foot in stance in any frame was more than 0.08 m off the ground.
+
+### A swing keeps low over a slope
+
+The same log showed downhill swings peaking 0.3–1.15 m over the falling ground: going down, a swing held at lift-off height for its first 30% (to clear a step's edge) while it travelled out over the slope. The gauge now holds a fourth measure, `SWING`: over even ground, a swing's peak over the ground under the foot is no more than 0.3 at a walker's size. Even ground is within `EVEN` of the swing's line at a third and two thirds, both to its landing and to where it was aimed at lift-off, and under its peak.
+
+`anim` probes the same two points at lift-off and at the retarget (`edge_over`). It skips them for a level step, so walking on the flat costs no more probes. Within `EDGE` of the line, the swing follows the slope at its lift; further off, a step or a ledge or a trunk, it holds high as before. Worst swing per valley, old swing → new: 1.26–1.46 → 0.28–0.30.
 
 ![wide, before and after](feet_hold_the_ground_before_after.jpg)
 
