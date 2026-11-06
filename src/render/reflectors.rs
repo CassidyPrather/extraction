@@ -24,8 +24,13 @@ impl Plugin for ReflectorsPlugin {
 /// How many glowing steps (besides dark).
 pub const STEPS: usize = 6;
 /// The tape's glow at its brightest (linear, before the eye's exposure):
-/// a lantern's core is (6, 3.2, 1); white tape a little cool.
-const GLOW: LinearRgba = LinearRgba::rgb(5.5, 5.5, 5.0);
+/// the torch's own light sent back, so its colour is the torch's (a
+/// little warm) and never reads as a light of its own (Visual design).
+const GLOW_GAIN: f32 = 5.5;
+
+fn glow() -> LinearRgba {
+    crate::gadgets::visuals::torch_beam().color.to_linear() * GLOW_GAIN
+}
 /// How far off a band in the beam's middle shines at its brightest (m):
 /// nearer, as bright; further, falling with distance squared.
 pub const FULL_AT: f32 = 25.0;
@@ -65,7 +70,7 @@ fn make_steps(
             Name::new(format!("Reflector glow {k}")),
             crate::render::grade::ToTheEye {
                 material: h.clone(),
-                emissive: GLOW * level(k),
+                emissive: glow() * level(k),
             },
         ));
         all.push(h);
