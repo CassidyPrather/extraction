@@ -505,12 +505,7 @@ fn batch_puffs(
                 if !receives {
                     ec.insert(bevy::light::NotShadowReceiver);
                 }
-                batches.by.insert(
-                    key,
-                    Batch {
-                        mesh: handle,
-                    },
-                );
+                batches.by.insert(key, Batch { mesh: handle });
             }
         }
     }
