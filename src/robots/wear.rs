@@ -24,6 +24,9 @@ use super::{PartRole, RobotPart};
 
 /// A plate's tilt on its mounts once failing (radians, ~5°).
 pub const ASKEW: f32 = 0.09;
+/// A loose piece this near (m) a part with nothing of its own drawn is
+/// that part's too.
+const TOUCHING: f32 = 0.15;
 /// A material glowing more than this is lit, and left to what lights it.
 const LIT: f32 = 0.5;
 
@@ -219,6 +222,9 @@ fn wear(
             .collect();
         let reach =
             |at: Vec3, a: &avian3d::prelude::ColliderAabb| at.clamp(a.min, a.max).distance(at);
+        // (Each loose piece and how far it is from this part's volume.)
+        let mut others = Vec::new();
+        let own_volume = mine.iter().find(|(p, ..)| *p == e).map(|(_, _, a)| *a);
         for root in near_roots {
             for piece in drawn(root, &children, &is_part, &mats, &marks, &[]) {
                 let Ok((gt, aabb)) = places.get(piece) else {
@@ -231,7 +237,29 @@ fn wear(
                     .map(|(p, ..)| *p);
                 if nearest == Some(e) {
                     pieces.push(piece);
+                } else if let Some(v) = own_volume {
+                    others.push((piece, reach(at, v)));
                 }
+            }
+        }
+        // A part with nothing drawn of its own (a plate in front of a
+        // housing that's nearer the core): what touches its volume, or the
+        // nearest piece to it.
+        if pieces.is_empty() {
+            let touching: Vec<Entity> = others
+                .iter()
+                .filter(|(_, d)| *d <= TOUCHING)
+                .map(|(p, _)| *p)
+                .collect();
+            if touching.is_empty() {
+                pieces.extend(
+                    others
+                        .iter()
+                        .min_by(|a, b| a.1.total_cmp(&b.1))
+                        .map(|(p, _)| *p),
+                );
+            } else {
+                pieces = touching;
             }
         }
         pieces.sort();

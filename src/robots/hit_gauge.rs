@@ -207,6 +207,14 @@ fn look_of(
     let mut roots = vec![robot];
     let mut q = world.query::<(Entity, &super::wear::DrawnFor)>();
     let drawn: Vec<(Entity, Entity)> = q.iter(world).map(|(e, d)| (e, d.0)).collect();
+    // (Its parts that stand apart from it: a sentry's box, a spotter's
+    // winch.)
+    let mut q = world.query::<(Entity, &RobotPart)>();
+    roots.extend(
+        q.iter(world)
+            .filter(|(_, p)| p.robot == robot)
+            .map(|(e, _)| e),
+    );
     for (e, d) in drawn {
         let of = d == robot || world.get::<RobotPart>(d).is_some_and(|p| p.robot == robot);
         if of {
@@ -351,6 +359,10 @@ fn step(world: &mut World, g: &mut HitGauge) {
     }
     g.frame += 1;
     if g.frame < STAND {
+        return;
+    }
+    if std::env::var_os("EXTRACTION_HIT_SHOW").is_some() {
+        show(world, g);
         return;
     }
     if g.frame == STAND {
@@ -550,5 +562,54 @@ mod tests {
             g.rows.len(),
             bad.join("\n")
         );
+    }
+}
+
+/// Frames into a show (`EXTRACTION_HIT_SHOW`) that its rounds start
+/// landing, and how often after (a screenshot any time after has some in
+/// flight: a spark lives about 0.3 s).
+pub const SHOW_HITS: u32 = STAND + SETTLE;
+pub const SHOW_EVERY: u32 = 12;
+
+/// For a contact sheet: every part left failing at once, and once that
+/// shows, a round into each part every [`SHOW_EVERY`] frames, each part
+/// put back to failing after (so it stays as worn, and stays on), so a
+/// frame taken has the hits landing on the machines worn by them
+/// (`scripts/hit_gauge.sh`).
+fn show(world: &mut World, g: &mut HitGauge) {
+    let since = g.frame.saturating_sub(SHOW_HITS);
+    let landing = g.frame >= SHOW_HITS && since % SHOW_EVERY == 0;
+    let mending = g.frame > SHOW_HITS && since % SHOW_EVERY == 1;
+    if mending {
+        for mut p in world.query::<&mut RobotPart>().iter_mut(world) {
+            if p.alive() {
+                p.hp = p.hp.max(p.max_hp * FAILING);
+            }
+        }
+        return;
+    }
+    if g.frame != STAND && !landing {
+        return;
+    }
+    let cam = camera_at(world);
+    let parts: Vec<(Entity, f32, f32)> = world
+        .query::<(Entity, &RobotPart)>()
+        .iter(world)
+        .map(|(e, p)| (e, p.hp, p.max_hp))
+        .collect();
+    for (part, hp, max) in parts {
+        if hp <= 0.0 {
+            continue;
+        }
+        let (point, normal) = aim(world, part, cam);
+        let damage = if g.frame == STAND {
+            (hp - max * FAILING).max(1.0)
+        } else {
+            (max * 0.15).min(hp * 0.6)
+        };
+        shoot(world, part, point, normal, damage);
+    }
+    if g.frame == STAND || since == 0 {
+        info!("hit gauge: show, rounds in from frame {}", g.frame);
     }
 }
