@@ -1562,7 +1562,6 @@ pub(super) fn direct_raid(
     let hidden = eye.is_some_and(|e| line_hidden(&spatial, &world, here, e));
     let running = fight.as_ref().is_some_and(|f| f.flee_until > now);
     if !p.reckless
-        && !p.hoards
         && eye.is_some()
         && now - state.fought_at > 8.0
         && no_way_out(
