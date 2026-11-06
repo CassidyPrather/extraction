@@ -583,16 +583,81 @@ Paper and Enamel keep their albedo. A flat model material is held to
 enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
 so nothing new comes in whiter.
 
-What the sack lacked was surface. It is `Sacking` now, unbleached linen
-with the canvas scan's weave, slumped low and spread with creases where
-it lies, tied off at the neck with thick dark twine. Its stencil and red
-stripes are on both broad faces, ray-cast onto the cloth so the slump
-doesn't swallow them: before, a sack lying turned away had none. Its
-detail (L* spread, worst view) went from 8.9 to 16.5 with 0% clipped,
-and it still stands off every floor (delta E 36.6 → 36.4). The other
-pale items (the hana letter, the rice bag, the crackers) already carry
-a seal, grains or docking, and are unchanged. The weave is too fine to
-read from 2 m; the stencil, the stripes, the tie and the slump read.
+What the sack lacked was surface and shape. Slumped into a lumpy ball,
+it still read as a balloon at 2 m, its tie as a white cross. It stands
+now as a filled sack does (`pillow_sack` in `art/items/food.py`). It is
+a squat pillow lofted from rounded-rectangle rings, with near-flat broad
+faces and a square base settled wide with dog-ear corners. Side tucks
+and shoulder creases are geometry, and folds gather into the neck and
+flare into a puff of the same cloth. Three wraps of dark twine and two
+tails tie it off. Its stencil (МУКА, 1 СОРТ) and red stripes are on
+both broad faces. Each line sits where the cloth stands furthest out
+across its width, so no letter sinks (on the lumpy ball 1 СОРТ read
+"1 ПРТ"). The material is `Sacking`, unbleached linen with the canvas
+scan's weave.
 
-![Flour sack, before (top) and after: wood and concrete at arm's length,
-wood and charred floor from 2 m](../shots/items/torchlit_flour_before_after.jpg)
+By the settled-eye torch it reads 36.1 against the floors (36.6
+before), with no pixel clipped. Detail (L* spread, worst view) is 15.0
+(8.9 before), and it is larger from 2 m (5.1° to 6.2°: a pillow's broad
+face, not a ball's). The other pale items (the hana letter, the rice
+bag, the crackers) already carry a seal, grains or docking, and are
+unchanged. The weave is too fine to read from 2 m. The stencil, the
+stripes, the twine and the outline read.
+
+![Flour sack by torchlight: the original, 0ce75fc9's slumped ball, and
+now; wood and concrete at arm's length, wood and charred floor from 2 m
+(enlarged)](../shots/items/torchlit_flour_before_after.jpg)
+
+#### An item's box is its model (6 November)
+
+An item's `dims` row is its box: its collider, its fit in a pocket or
+pouch, and where it's grabbed. 78 rows had drifted from their models as
+the models were redrawn. Among them, the vest was 3 cm too wide, the
+work boots 7 cm too wide, and the Mosin bolt 4 cm too long. The robot's
+belt of rounds had a box twice its height, and the electronics' model
+stuck out of the bottom of its box.
+
+`models::tests::every_item_box_is_its_model` holds every item with a
+model and a row to it. Each side must be within a millimetre of the
+model's, and the model must sit in the box's middle, within 2 mm. A
+failure names each item, its row and its model.
+`python3 art/items/dims.py --write` sizes the rows, and the kit centres
+a model when it's built (`_kit.recentred`, its pivots moving with it).
+
+Some items are checked differently:
+
+- Guns are left out, because their layouts place them.
+- Magazines and attachments seat by their origin, so only their size is
+  held.
+- Thirteen models stay off their middle until the code that places
+  things in their space moves with them (`KEEPS_ORIGIN`, which names
+  each one's code). These are the bolt cutters' grips and jaws, the
+  crowbar's grip and claw, the hacksaw's blade, the cassette deck's
+  well and buttons, and the gadgets' cell mounts and visuals.
+
+Sixteen models were centred, and four `kit_cavities::ORIGIN_OFFSET`
+entries that made up for them went away.
+
+![Item boxes before (red) and after (green), over their models: vest,
+work boots, robot ammo belt, Mosin bolt, electronics, crossbow bolt
+bundle, car bonnet, scour key](../shots/items/item_boxes_before_after.png)
+
+#### The scopes at arm's length, by the settled torch (6 November)
+
+I re-shot the PU and the PSO-1 by torchlight from an arm's length
+(0.65 m, 55 degrees down), with Visual design's settled eye (3297ad2e).
+The wash-out is gone. Both render black with a soft sheen, not the pale
+silver they were, and nothing clips. They aren't twins up close. The
+PSO-1 shows its turret drum with white graduations, its side bracket and
+the rubber brow shield at its eyepiece. The PU is a slim, plain tube
+with one small knob.
+
+They stand off wood and concrete easily (body delta E 24 to 46). On a
+burnt house's charred planks they are black on black. The PSO-1 at arm's
+length sits at the edge (9.9), read by its sheen and the drum's marks.
+The PU from 2 m is the floor's colour (5.0). That holds for any black
+kit on a burnt floor; Gunsmith is trying a brighter sheen on `Black`
+for all of it.
+
+![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
+planks](../shots/items/torchlit_scopes_arm.jpg)

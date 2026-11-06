@@ -578,12 +578,8 @@ pub fn attach_raider(
     // On Rime Fell, the hearth the sim kit lays, sealed: the career's from
     // "Up the fell", the way into the frost.
     // (The case, with the hearth seated in it: `sim::seat_sim_hearth`.)
-    let hearth = (opts.map == "rime_fell").then_some("lead_case");
-    for id in contract_kit()
-        .into_iter()
-        .chain(super::harvest::kit(traits.name))
-        .chain(hearth)
-    {
+    let (_, picked) = super::sim_kit(&opts.map, &contract_kit(), traits.name);
+    for id in picked {
         kit.push(Task::PickUp {
             id: id.to_owned(),
             side: Side::Left,
@@ -3607,6 +3603,36 @@ fn route_exposure(map: &extraction_core::map::MapDef, from: Vec2, to: Vec2) -> f
     danger * d / 100.0
 }
 
+/// A walk's time from its straight line: its bends and climbs make it
+/// about twice that at the pace the pack allows (Rime seed 1, a contract
+/// raid: 314 m to the observatory not walked in four minutes).
+fn walk_time(d: f32, pace: f32) -> f32 {
+    d * WAY_FACTOR / pace.max(0.5)
+}
+const WAY_FACTOR: f32 = 2.0;
+/// A loot stop, a job's doing, and time to spare, in seconds.
+const STOP_SECS: f32 = 60.0;
+const JOB_SECS: f32 = 45.0;
+const SPARE_SECS: f32 = 60.0;
+
+/// The rendezvous nearest a point (the walk home from a job there).
+fn nearest_rv(map: &MapDef, at: Vec2) -> Vec2 {
+    map.markers_of(&MarkerKind::Rendezvous)
+        .map(|m| Vec2::from_array(m.at))
+        .min_by(|a, b| a.distance(at).total_cmp(&b.distance(at)))
+        .unwrap_or(at)
+}
+
+/// Whether a loot stop at `site` still leaves time for the job at `job`
+/// and the walk home from it to `home`, with `left` seconds of the raid
+/// to go: a raider on a contract budgets its time (Rime seed 1, "Up the
+/// fell": four buildings looted first, then out of time 240 s short of
+/// the observatory).
+fn stop_fits(here: Vec2, site: Vec2, job: Vec2, home: Vec2, pace: f32, left: f32) -> bool {
+    let walk = here.distance(site) + site.distance(job) + job.distance(home);
+    walk_time(walk, pace) + STOP_SECS + JOB_SECS + SPARE_SECS <= left
+}
+
 /// Picks the next site: worth, distance, the danger of the walk there, and
 /// the pull of the far side as the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
@@ -3624,10 +3650,25 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
     let late = (scene.awake() / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
     let heat = r.heat;
+    // A job still to do: a loot stop only if the job and the walk home
+    // from it still fit in the time left after it.
+    let job = r
+        .sites
+        .iter()
+        .find(|s| s.job && !s.visited && s.tries < 3 && r.hp >= 50.0)
+        .map(|s| (s.at, nearest_rv(&scene.zone.map, s.at)));
+    let pace =
+        crate::player::WALK_SPEED * extraction_core::inventory::Encumbrance::from_mass(r.kg).speed;
+    let left = r.traits.minutes * 60.0 - scene.awake();
     let mut best: Option<(f32, usize)> = None;
     for (i, s) in r.sites.iter().enumerate() {
         if s.visited || s.tries >= 3 {
             continue;
+        }
+        if let Some((at, home)) = job {
+            if !s.job && !stop_fits(here, s.at, at, home, pace, left) {
+                continue;
+            }
         }
         let pull = match s.kind {
             // The driver's scout job: a player goes for it, as long as
@@ -6012,6 +6053,103 @@ mod run_tests {
         }
         assert!(tried >= 1, "no relay to plant indoors found");
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// A raider on a contract budgets its time: from the insertion, a
+    /// raider taking the nearest loot stop the budget allows, again and
+    /// again, still does the job and gets home in its time, for every
+    /// contract's place in every valley (the cautious raider's ten
+    /// minutes). Without the budget it looted till the clock ran out
+    /// (Rime seed 1, "Up the fell": out of time 240 s short of the
+    /// observatory).
+    #[test]
+    fn a_contract_raider_does_its_job_before_the_loot_runs_its_time_out() {
+        use extraction_core::contracts::{CONTRACTS, Step, place_at};
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        let budget = 10.0 * 60.0;
+        let pace = crate::player::WALK_SPEED;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            let Some(ins) = zone.map.markers_of(&MarkerKind::Insertion).next() else {
+                continue;
+            };
+            let start = Vec2::from_array(ins.at);
+            let loot: Vec<Vec2> = plans.iter().map(|p| p.xf.translation.xz()).collect();
+            for c in CONTRACTS {
+                for step in c.steps {
+                    let (m, place) = match step {
+                        Step::Plant { map, place, .. } | Step::Scout { map, place, .. } => {
+                            (*map, *place)
+                        }
+                        _ => continue,
+                    };
+                    if m != map {
+                        continue;
+                    }
+                    let Some(job) = place_at(&zone.map, place).map(Vec2::from_array) else {
+                        continue;
+                    };
+                    let home = nearest_rv(&zone.map, job);
+                    // Within a raid's reach at all, straight there.
+                    let direct =
+                        walk_time(start.distance(job) + job.distance(home), pace) + JOB_SECS;
+                    if direct > budget {
+                        continue;
+                    }
+                    tried += 1;
+                    let (mut here, mut t) = (start, 0.0f32);
+                    let mut done = vec![false; loot.len()];
+                    while t < budget {
+                        let next = loot
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, l)| {
+                                !done[*i] && stop_fits(here, **l, job, home, pace, budget - t)
+                            })
+                            .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)));
+                        let Some((i, l)) = next else { break };
+                        done[i] = true;
+                        t += walk_time(here.distance(*l), pace) + STOP_SECS;
+                        here = *l;
+                    }
+                    let end =
+                        t + walk_time(here.distance(job) + job.distance(home), pace) + JOB_SECS;
+                    if end > budget {
+                        bad.push(format!(
+                            "{map} {}: {place} after {} stops, home at {end:.0} s of {budget:.0}",
+                            c.id,
+                            done.iter().filter(|d| **d).count()
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(tried >= 5, "only {tried} contract places tried");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried}:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
     }
 
     /// A door found wedged is a wall from then on: in every building with

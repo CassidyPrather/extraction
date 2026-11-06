@@ -2304,6 +2304,80 @@ pub(crate) mod vr_tests {
         assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 5);
     }
 
+    /// Every gun fed by stripper clip, its bolt open, charged by hand: a
+    /// full clip of its cartridge set in the guide strips some of its
+    /// rounds part way down and all of them home, and the bolt closed
+    /// puts one up the spout. Walks the catalog, so a clip-fed gun added
+    /// later is held to it too.
+    #[test]
+    fn every_clip_fed_gun_charges_from_its_clip_by_hand() {
+        let catalog = crate::items::Catalog::load();
+        let clip_of = |cartridge: &str| {
+            catalog
+                .iter()
+                .find(|(_, d)| {
+                    d.magazine
+                        .as_ref()
+                        .is_some_and(|m| m.stripper && m.cartridge == cartridge)
+                })
+                .map(|(_, d)| (d.id.clone(), d.magazine.as_ref().unwrap().capacity))
+        };
+        let guns: Vec<(String, String, u32)> = catalog
+            .iter()
+            .filter_map(|(_, d)| {
+                let f = d.firearm.as_ref()?;
+                if f.magazine_family.is_some() || f.internal_capacity == 0 {
+                    return None;
+                }
+                let (clip, cap) = clip_of(&f.cartridge)?;
+                Some((d.id.clone(), clip, cap.min(f.internal_capacity)))
+            })
+            .collect();
+        let ids: Vec<&str> = guns.iter().map(|(g, ..)| g.as_str()).collect();
+        assert!(
+            ids.contains(&"sks") && ids.contains(&"mosin"),
+            "the clip-fed guns: {ids:?}"
+        );
+        let mut bad = Vec::new();
+        for (id, clip_id, cap) in &guns {
+            let mut r = hold(id, false, false);
+            {
+                let mut g = gun_mut(&mut r);
+                g.firearm.internal_rounds = 0;
+                g.firearm.set_handle_lift(1.0);
+                g.firearm.set_bolt_travel(1.0);
+                g.firearm.locked_back = true;
+            }
+            let clip = take(&mut r, clip_id, *cap);
+            let (port, up) = load_port(&mut r);
+            let away = r.vr.hand_state(Side::Left).world.translation;
+            glide(&mut r, away, port + up * 0.05, 15);
+            glide(&mut r, port + up * 0.05, port + up * 0.03, 8);
+            r.vr.step(2);
+            let part = gun_mut(&mut r).firearm.internal_rounds;
+            glide(&mut r, port + up * 0.03, port + up * 0.015, 8);
+            r.vr.step(2);
+            let home = gun_mut(&mut r).firearm.internal_rounds;
+            let left = r.vr.app.world().get::<Item>(clip).unwrap().rounds;
+            let live = {
+                let mut g = gun_mut(&mut r);
+                g.firearm.locked_back = false;
+                g.firearm.set_bolt_travel(0.0);
+                g.firearm.set_handle_lift(0.0);
+                g.firearm.live_rounds()
+            };
+            println!(
+                "{id:8} {clip_id}: part way {part}, home {home}, clip left {left}, live {live}"
+            );
+            if !(1..*cap).contains(&part) || home != *cap || left != 0 || live != *cap {
+                bad.push(format!(
+                    "{id} from {clip_id}: part way {part}, home {home} of {cap}, clip left {left}, live {live}"
+                ));
+            }
+        }
+        assert!(bad.is_empty(), "{bad:#?}");
+    }
+
     /// A clip's rounds go down one after another as the thumb pushes it:
     /// part way, some of them; home, all ten. (A full clip stripped on the
     /// one tick it seated.)

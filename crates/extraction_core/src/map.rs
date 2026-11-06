@@ -653,6 +653,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "snow_pole" => [0.2, 2.5, 0.2],
         // A yard lamp on its post (`world::way_lamps`), the arm out over +X.
         "way_lamp" => [1.2, 2.7, 0.4],
+        // A marker post, banded with reflective tape (`world::way_lamps`).
+        "marker_post" => [0.1, 1.3, 0.1],
         // Landmarks (src/world/buildings.rs); the headframe's back struts
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
@@ -1146,6 +1148,7 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             // A pole stands in the snow as it lies; so does a lamp post.
             | "snow_pole"
             | "way_lamp"
+            | "marker_post"
             // Stepped down its slope: the map terraces the ground for it.
             | "ore_mill"
             // On the line's grade.
