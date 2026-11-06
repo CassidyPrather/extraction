@@ -1309,7 +1309,7 @@ pub(super) fn direct_raid(
                     Kind::Learned,
                     "a broken walker: took it on, as the driver said",
                 );
-                take_it_on_with(spare_loaded(&world, &view, player))
+                take_it_on()
             }
             // "Keep your distance": back off it, and at it again.
             First::Shoved if !p.lost => {
@@ -1319,7 +1319,7 @@ pub(super) fn direct_raid(
                     to: here + away * 4.0,
                     within: 1.0,
                 }];
-                t.extend(take_it_on_with(spare_loaded(&world, &view, player)));
+                t.extend(take_it_on());
                 t
             }
             // "Run across it, to cover", "Break its line", "Down, out of
@@ -1352,7 +1352,7 @@ pub(super) fn direct_raid(
             First::DroneLock | First::Aimed if p.reckless && armed_now => {
                 state.fought_at = now;
                 state.note(now, Kind::Learned, "shot back at it");
-                take_it_on_with(spare_loaded(&world, &view, player))
+                take_it_on()
             }
             First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
@@ -1584,10 +1584,7 @@ pub(super) fn direct_raid(
             Kind::Learned,
             "in its line, no way out of it: shot back",
         );
-        super::second_hour::cut_in(
-            &mut bot,
-            take_it_on_with(spare_loaded(&world, &view, player)),
-        );
+        super::second_hour::cut_in(&mut bot, take_it_on());
     }
 
     // Hurt: warned, or not.
@@ -1783,10 +1780,7 @@ pub(super) fn direct_raid(
     {
         state.fought_at = now;
         state.note(now, Kind::Learned, "a machine in range: took it on");
-        super::second_hour::cut_in(
-            &mut bot,
-            take_it_on_with(spare_loaded(&world, &view, player)),
-        );
+        super::second_hour::cut_in(&mut bot, take_it_on());
         return;
     }
     // The truck's there: whatever the walk, to it now.
@@ -3545,18 +3539,6 @@ fn take_it_on() -> Vec<Task> {
         Task::Ready { off_safe: true },
         Task::Engage { shots: 12 },
     ]
-}
-
-/// `take_it_on`, and with a loaded magazine to spare on it, again from that
-/// once the first runs dry (`Ready` reloads an empty one): seven rounds
-/// and dry at a drone, a full spare in its pocket, the reckless newcomer
-/// went down the same way three raids running.
-fn take_it_on_with(spare: bool) -> Vec<Task> {
-    let mut t = take_it_on();
-    if spare {
-        t.extend([Task::Ready { off_safe: true }, Task::Engage { shots: 12 }]);
-    }
-    t
 }
 
 /// Something on `player` to load a gun from, besides what's in it: a
