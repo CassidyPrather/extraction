@@ -716,14 +716,24 @@ mod tests {
                 let mut hit: Option<Vec3> = None;
                 for i in 0..400 {
                     vr.step(1);
-                    let mut q = vr.app.world_mut().query::<(&Projectile, &Transform)>();
-                    let Some((_, t)) = q.iter(vr.app.world()).find(|(p, _)| p.gun == gun) else {
+                    // A bullet, or what a launcher throws (a star, a bolt).
+                    let world = vr.app.world_mut();
+                    let mut bullets = world.query::<(&Projectile, &Transform)>();
+                    let mut thrown = world.query_filtered::<&Transform, Or<(
+                        With<crate::weapons::flares::Flare>,
+                        With<crate::weapons::crossbow::Quarrel>,
+                    )>>();
+                    let at = bullets
+                        .iter(world)
+                        .find(|(p, _)| p.gun == gun)
+                        .map(|(_, t)| t.translation)
+                        .or_else(|| thrown.iter(world).next().map(|t| t.translation));
+                    let Some(p) = at else {
                         if i < 5 {
                             continue;
                         }
                         break;
                     };
-                    let p = t.translation;
                     if along(p) >= zero_m {
                         let a = last.unwrap_or(p);
                         let f = (zero_m - along(a)) / (along(p) - along(a)).max(1e-6);
@@ -734,11 +744,13 @@ mod tests {
                 }
                 // Let any round still flying go.
                 let flying: Vec<Entity> = {
-                    let mut q = vr.app.world_mut().query::<(Entity, &Projectile)>();
-                    q.iter(vr.app.world())
-                        .filter(|(_, p)| p.gun == gun)
-                        .map(|(e, _)| e)
-                        .collect()
+                    let world = vr.app.world_mut();
+                    let mut q = world.query_filtered::<Entity, Or<(
+                        With<Projectile>,
+                        With<crate::weapons::flares::Flare>,
+                        With<crate::weapons::crossbow::Quarrel>,
+                    )>>();
+                    q.iter(world).collect()
                 };
                 for e in flying {
                     vr.app.world_mut().despawn(e);
