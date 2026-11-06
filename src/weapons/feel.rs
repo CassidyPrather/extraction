@@ -800,9 +800,11 @@ fn handle_guns(
     }
 }
 
-/// How near behind the rear sight (metres along the bore, and off its line)
-/// the eye must be for the sights to line up at the cheek, the most they
-/// turn the gun for it (radians), and how quickly (seconds).
+/// How near the rear sight the eye must be for the sights to line up at
+/// the cheek (metres along the sight line: from just ahead of the gun's eye
+/// point to this far behind it, or to the butt on a stocked gun, where a
+/// cheek weld puts it), how far off the line, the most they turn the gun for
+/// it (radians), and how quickly (seconds).
 pub const SIGHT_DEPTH: (f32, f32) = (-0.02, 0.16);
 pub const SIGHT_OFF: f32 = 0.05;
 pub const SIGHT_MAX: f32 = 0.06;
@@ -810,14 +812,22 @@ pub const SIGHT_EASE: f32 = 0.08;
 
 /// The front post, in gun space: on the sight line at the muzzle.
 pub fn front_post(gun: &Gun) -> Vec3 {
-    let s = gun.layout.sight.translation;
-    Vec3::new(s.x, s.y, gun.layout.muzzle.z + 0.03)
+    let s = gun.layout.sight;
+    let d = s.rotation * Vec3::NEG_Z;
+    s.translation + d * ((gun.layout.muzzle.z + 0.03 - s.translation.z) / d.z)
 }
 
-/// Whether an eye at `eye` (gun space) is just behind the rear sight.
+/// Whether an eye at `eye` (gun space) is behind the rear sight, near its
+/// line: anywhere from the gun's eye point back along the comb to the butt
+/// (a cheek weld puts a rifleman's eye a hand behind the receiver, a
+/// shotgunner's further), or [`SIGHT_DEPTH`] on a gun with no stock.
 pub fn at_sights(gun: &Gun, eye: Vec3) -> bool {
-    let rel = eye - gun.layout.sight.translation;
-    (SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
+    let s = gun.layout.sight;
+    let rel = s.rotation.inverse() * (eye - s.translation);
+    let back = butt(gun).map_or(SIGHT_DEPTH.1, |b| {
+        (b.z - s.translation.z).max(SIGHT_DEPTH.1)
+    });
+    (SIGHT_DEPTH.0..back).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
 }
 
 /// The turn about the front post (gun space) that puts the rear sight on
@@ -1960,10 +1970,10 @@ pub(crate) mod vr_tests {
     fn iron_sights_line_up_at_the_cheek() {
         let mut r = hold("ak74", true, true);
         r.vr.step(30);
-        assert_eq!(
-            r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix,
-            Quat::IDENTITY,
-            "the eye nowhere near the sights"
+        let fix = r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix;
+        assert!(
+            fix.xyz().length() * 2.0 < 0.001,
+            "the eye nowhere near the sights: {fix:?}"
         );
         let (rear, front, rot) = sights(&mut r);
         let eye = rear + rot * Vec3::new(0.0, 0.012, 0.06);
@@ -2292,6 +2302,80 @@ pub(crate) mod vr_tests {
             g.firearm.set_handle_lift(0.0);
         }
         assert_eq!(gun_mut(&mut r).firearm.live_rounds(), 5);
+    }
+
+    /// Every gun fed by stripper clip, its bolt open, charged by hand: a
+    /// full clip of its cartridge set in the guide strips some of its
+    /// rounds part way down and all of them home, and the bolt closed
+    /// puts one up the spout. Walks the catalog, so a clip-fed gun added
+    /// later is held to it too.
+    #[test]
+    fn every_clip_fed_gun_charges_from_its_clip_by_hand() {
+        let catalog = crate::items::Catalog::load();
+        let clip_of = |cartridge: &str| {
+            catalog
+                .iter()
+                .find(|(_, d)| {
+                    d.magazine
+                        .as_ref()
+                        .is_some_and(|m| m.stripper && m.cartridge == cartridge)
+                })
+                .map(|(_, d)| (d.id.clone(), d.magazine.as_ref().unwrap().capacity))
+        };
+        let guns: Vec<(String, String, u32)> = catalog
+            .iter()
+            .filter_map(|(_, d)| {
+                let f = d.firearm.as_ref()?;
+                if f.magazine_family.is_some() || f.internal_capacity == 0 {
+                    return None;
+                }
+                let (clip, cap) = clip_of(&f.cartridge)?;
+                Some((d.id.clone(), clip, cap.min(f.internal_capacity)))
+            })
+            .collect();
+        let ids: Vec<&str> = guns.iter().map(|(g, ..)| g.as_str()).collect();
+        assert!(
+            ids.contains(&"sks") && ids.contains(&"mosin"),
+            "the clip-fed guns: {ids:?}"
+        );
+        let mut bad = Vec::new();
+        for (id, clip_id, cap) in &guns {
+            let mut r = hold(id, false, false);
+            {
+                let mut g = gun_mut(&mut r);
+                g.firearm.internal_rounds = 0;
+                g.firearm.set_handle_lift(1.0);
+                g.firearm.set_bolt_travel(1.0);
+                g.firearm.locked_back = true;
+            }
+            let clip = take(&mut r, clip_id, *cap);
+            let (port, up) = load_port(&mut r);
+            let away = r.vr.hand_state(Side::Left).world.translation;
+            glide(&mut r, away, port + up * 0.05, 15);
+            glide(&mut r, port + up * 0.05, port + up * 0.03, 8);
+            r.vr.step(2);
+            let part = gun_mut(&mut r).firearm.internal_rounds;
+            glide(&mut r, port + up * 0.03, port + up * 0.015, 8);
+            r.vr.step(2);
+            let home = gun_mut(&mut r).firearm.internal_rounds;
+            let left = r.vr.app.world().get::<Item>(clip).unwrap().rounds;
+            let live = {
+                let mut g = gun_mut(&mut r);
+                g.firearm.locked_back = false;
+                g.firearm.set_bolt_travel(0.0);
+                g.firearm.set_handle_lift(0.0);
+                g.firearm.live_rounds()
+            };
+            println!(
+                "{id:8} {clip_id}: part way {part}, home {home}, clip left {left}, live {live}"
+            );
+            if !(1..*cap).contains(&part) || home != *cap || left != 0 || live != *cap {
+                bad.push(format!(
+                    "{id} from {clip_id}: part way {part}, home {home} of {cap}, clip left {left}, live {live}"
+                ));
+            }
+        }
+        assert!(bad.is_empty(), "{bad:#?}");
     }
 
     /// A clip's rounds go down one after another as the thumb pushes it:
@@ -2988,5 +3072,121 @@ mod macro_reload_tests {
             "its only magazine isn't back in the well"
         );
         assert!(has, "the well holds it, the gun reads none");
+    }
+
+    /// Every gun the game has, loaded by the flat reload (the R key's, and
+    /// the bots' `Ready`) from what it's fed with, on the body: a full box
+    /// magazine for one with a magazine well, else a full stripper clip
+    /// where one fits it, else loose rounds. (Only box magazines loaded:
+    /// an SKS carried with two full clips was racked on its empty
+    /// magazine, and the careful newcomer met eleven machines with nothing
+    /// to fire.) A new kind of feed fails here, not out in a raid.
+    #[test]
+    fn every_gun_loads_by_the_flat_reload_from_its_feed() {
+        let catalog = {
+            let r = hold("pm_pistol", false, false);
+            r.vr.app.world().resource::<crate::items::Catalog>().clone()
+        };
+        let guns: Vec<(String, extraction_core::firearm::FirearmDef)> = catalog
+            .iter()
+            .filter_map(|(_, d)| d.firearm.clone().map(|f| (d.id.clone(), f)))
+            .collect();
+        assert!(guns.len() > 10, "only {} guns", guns.len());
+        let mut failed = vec![];
+        for (id, def) in &guns {
+            let mut r = hold(id, false, false);
+            let player = r.vr.player;
+            // What it's fed with.
+            let feed = |want: &dyn Fn(&extraction_core::items::ItemDef) -> bool| {
+                catalog
+                    .iter()
+                    .find(|(_, d)| want(d))
+                    .map(|(_, d)| d.id.clone())
+            };
+            let feed_id = match &def.magazine_family {
+                Some(fam) => feed(&|d| {
+                    d.magazine
+                        .as_ref()
+                        .is_some_and(|m| &m.fits == fam && !m.stripper)
+                }),
+                None => feed(&|d| {
+                    d.magazine
+                        .as_ref()
+                        .is_some_and(|m| m.stripper && m.cartridge == def.cartridge)
+                })
+                .or_else(|| {
+                    feed(&|d| {
+                        d.category == extraction_core::items::Category::Ammo
+                            && d.cartridge.as_deref() == Some(def.cartridge.as_str())
+                    })
+                }),
+            };
+            let Some(feed_id) = feed_id else {
+                failed.push(format!("{id}: nothing in the catalog feeds it"));
+                continue;
+            };
+            let feet = r.feet;
+            let full = r.vr.spawn(
+                &feed_id,
+                Transform::from_translation(feet + Vec3::new(0.3, 1.0, 0.0)),
+            );
+            {
+                let w = r.vr.app.world_mut();
+                let cap = catalog
+                    .get(w.get::<Item>(full).unwrap().kind())
+                    .magazine
+                    .as_ref()
+                    .map(|m| m.capacity);
+                let mut it = w.get_mut::<Item>(full).unwrap();
+                if let Some(c) = cap {
+                    it.rounds = c;
+                    it.loads.fit(c);
+                }
+            }
+            let pouch = {
+                let w = r.vr.app.world_mut();
+                let mut q = w.query::<(Entity, &Socket, &SocketOwner)>();
+                q.iter(w)
+                    .find(|(_, s, o)| {
+                        o.0 == player
+                            && s.occupant.is_none()
+                            && matches!(s.kind, SocketKind::Body(SlotKind::Pouch))
+                    })
+                    .map(|(e, ..)| e)
+                    .expect("a pouch on the body")
+            };
+            r.vr.app.world_mut().commands().queue(move |w: &mut World| {
+                let mut socket = w.get_mut::<Socket>(pouch).unwrap().clone();
+                {
+                    let mut commands = w.commands();
+                    crate::interact::seat_in_socket(&mut commands, full, pouch, &mut socket);
+                }
+                *w.get_mut::<Socket>(pouch).unwrap() = socket;
+            });
+            r.vr.step(4);
+            if !crate::bot::needs_loading(&gun_mut(&mut r).firearm) {
+                failed.push(format!("{id}: empty, and Ready wouldn't load it"));
+                continue;
+            }
+            let gun = r.gun;
+            let steps = macro_steps(MacroKind::Reload, &gun_mut(&mut r));
+            r.vr.app
+                .world_mut()
+                .entity_mut(player)
+                .insert(GunMacro::default());
+            r.vr.app
+                .world_mut()
+                .get_mut::<GunMacro>(player)
+                .unwrap()
+                .start(gun, steps);
+            r.vr.step(600);
+            let live = gun_mut(&mut r).firearm.live_rounds();
+            if live == 0 {
+                failed.push(format!(
+                    "{id}: reloaded from {feed_id}, no live round in it"
+                ));
+            }
+        }
+        assert!(failed.is_empty(), "{failed:#?}");
     }
 }

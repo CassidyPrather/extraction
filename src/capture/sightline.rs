@@ -1,11 +1,13 @@
-//! Iron sights that line up. The game zeroes a gun along a line parallel
-//! to its bore at its eye point's height (`layout.sight`: `weapons::zero`,
+//! Iron sights that line up. The game zeroes a gun along its iron sight
+//! line (`layout.sight`, looking down it: `layout::irons`, `weapons::zero`,
 //! `feel::front_post`), so the rear sight's floor (the notch, the rib, the
 //! groove) and the front sight's top (the post, the bead) must both sit on
 //! that line: a notch standing over it hides the post, and a post short of
 //! it has the round go somewhere the sights don't show.
+//! (`weapons::sight_picture` holds the rest of the picture: the post level
+//! with the notch's shoulders, the whole bead on the rib.)
 //!
-//! From the eye point down the bore, through every triangle of the gun's
+//! From the eye point down the line, through every triangle of the gun's
 //! model as it rests: a line [`ABOVE`] over the eye line runs clear to the
 //! muzzle (over the notch and the post), and one [`BELOW`] under it first
 //! meets the front sight (nothing nearer stands that high).
@@ -30,7 +32,7 @@ pub const FRONT: f32 = 0.12;
 
 /// Where a ray from `o` along -Z first meets a triangle (its z), if before
 /// `z_end`.
-fn first_hit(tris: &[[Vec3; 3]], o: Vec3, z_end: f32) -> Option<f32> {
+pub(crate) fn first_hit(tris: &[[Vec3; 3]], o: Vec3, z_end: f32) -> Option<f32> {
     let d = Vec3::NEG_Z;
     let mut best: Option<f32> = None;
     for t in tris {
@@ -62,17 +64,30 @@ fn first_hit(tris: &[[Vec3; 3]], o: Vec3, z_end: f32) -> Option<f32> {
     best
 }
 
+/// A gun model's triangles (its LODs left out) in its sight line's frame:
+/// the eye point at the origin, looking down -Z (`layout.sight`).
+pub fn sight_frame(
+    layout: &crate::weapons::layout::GunLayout,
+    model: &Path,
+) -> Option<Vec<[Vec3; 3]>> {
+    let to = layout.sight.compute_affine().inverse();
+    Some(
+        super::glb::triangles(model)
+            .ok()?
+            .into_iter()
+            .filter(|t| !t.node.ends_with("_lod"))
+            .map(|t| t.p.map(|p| to.transform_point3(p)))
+            .collect(),
+    )
+}
+
 /// What's wrong with a gun's sight line, if anything.
 pub fn check(id: &str, model: &Path) -> Option<String> {
     let layout = crate::weapons::layout::layout(id)?;
-    let tris: Vec<[Vec3; 3]> = super::glb::triangles(model)
-        .ok()?
-        .into_iter()
-        .filter(|t| !t.node.ends_with("_lod"))
-        .map(|t| t.p)
-        .collect();
-    let eye = layout.sight.translation;
-    let muzzle = layout.muzzle.z;
+    let tris = sight_frame(&layout, model)?;
+    // In the sight line's frame: the eye at the origin, the line down -Z.
+    let eye = Vec3::ZERO;
+    let muzzle = layout.muzzle.z - layout.sight.translation.z;
     let end = muzzle - 0.05;
     let fmt = |z: Option<f32>| z.map_or("nothing".to_owned(), |z| format!("z {z:.3}"));
     let over = first_hit(&tris, eye + Vec3::Y * ABOVE, end);
@@ -81,14 +96,14 @@ pub fn check(id: &str, model: &Path) -> Option<String> {
     if let Some(z) = over {
         bad.push(format!(
             "something stands over the eye line (y {:.4}) at z {z:.3}",
-            eye.y
+            layout.sight.translation.y
         ));
     }
     match under {
         Some(z) if z <= muzzle + FRONT => {}
         _ => bad.push(format!(
             "the front sight's top is short of the eye line (y {:.4}): {:.1} mm under it meets {}",
-            eye.y,
+            layout.sight.translation.y,
             BELOW * 1000.0,
             fmt(under)
         )),

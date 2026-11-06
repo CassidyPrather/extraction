@@ -636,6 +636,15 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// When it last readied its gun with a machine on it (`threatened`).
+    readied_at: f32,
+    /// Time's short (the Surge close, or the truck's wait running down)
+    /// till then: a roof is a breath, not a hold (`TIME_SHORT_FOR`). (Run on
+    /// from a drone with time short, far from the truck, it was shot down
+    /// in the open inside 40 s.)
+    pressed_until: f32,
+    /// When it last came out from under cover for the truck.
+    hurried_at: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -899,6 +908,7 @@ pub(super) fn direct_raid(
     // (a flat 20 s, and it came out to be found again, every 25 s for ten
     // minutes, till the truck had gone), for two minutes at most.
     if state.roof_try.is_some_and(|(_, _, t)| now - t < 120.0)
+        && state.pressed_until <= now
         && matches!(bot.tasks.front(), Some(Task::Wait(_)))
         && view.entrances.as_deref().is_some_and(|en| {
             en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
@@ -1247,6 +1257,8 @@ pub(super) fn direct_raid(
             && (held.is_some_and(|h| h.player == player)
                 || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
     });
+    // A machine on it: noticed, aimed at, locked on, its sweep, shot at.
+    let threatened = in_its_sights || noticed_now || fired_on;
     let moments = firsts
         .into_iter()
         .map(|f| (f, true))
@@ -1339,12 +1351,17 @@ pub(super) fn direct_raid(
                 // the truck there. Anywhere short of it, a roof still
                 // (pinned and running on in the open, three newcomers were
                 // shot down in under two minutes; under roofs, two got
-                // home).
-                let going_home = matches!(state.leg, Leg::Board)
+                // home). Its bed is the roof nearest: the truck waiting
+                // within a short run, on into it (at 21 m from the truck
+                // back at the gate, the one-handed newcomer went under the
+                // gate's shelter instead, waited out in the open beside it,
+                // and two drones shot it down 15 m behind the bed).
+                let going_home = (matches!(state.leg, Leg::Board)
+                    && matches!(raid.phase, Phase::TruckWaiting { .. })
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < 15.0);
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN));
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
@@ -1481,6 +1498,28 @@ pub(super) fn direct_raid(
             }
         }
     }
+    // Armed, with a machine on it, and nothing up the spout: it readies the
+    // gun, a loaded magazine in from those on it (Ready). (Three of the
+    // careful newcomer's losses: dead with an empty magazine in the gun and
+    // a loaded one on it, never a round fired.) The hoarder carries on as
+    // it does.
+    let loadable = guns().any(|(g, by, packed)| {
+        by == player && !packed && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
+    }) || spare_loaded(&world, &view, player);
+    if threatened
+        && armed_now
+        && !p.hoards
+        && loadable
+        && !one_up(guns(), player)
+        && now - state.readied_at > 10.0
+    {
+        state.readied_at = now;
+        state.note(now, Kind::Learned, "a machine on it: readied the gun");
+        super::second_hour::cut_in(
+            &mut bot,
+            vec![Task::DrawGun, Task::Ready { off_safe: false }],
+        );
+    }
 
     // Hurt: warned, or not.
     if let Ok(h) = view.health.single() {
@@ -1576,6 +1615,56 @@ pub(super) fn direct_raid(
         bot.tasks.clear();
         bot.tasks.push_back(Task::Wait(IDLE));
         bot.restart();
+    }
+
+    // A time sense: in cover or on the job, the clock still runs. A person
+    // under a roof keeps half an eye on the time, and goes when it's short:
+    // the Surge close (the driver's warning is said once a career: told
+    // before, the careful newcomer sat at a door 17 minutes into it, and
+    // never called), or the truck there and its wait running down (held
+    // under a roof by a drone that kept finding it, the truck waited five
+    // minutes and went, and the Surge took it 28 minutes on).
+    let hiding = state.roof_try.is_some()
+        || matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s != IDLE && *s >= 10.0);
+    // A drone that has it still: out from under its roof is out under its
+    // gun (out to the truck with one on it, the careful newcomer was worn
+    // down in the open, at each try). Between its looks, then.
+    let hunted = world
+        .robots
+        .iter()
+        .any(|(e, r, _)| r.kind == crate::robots::RobotKind::Drone && !r.wrecked && on_me(e));
+    let hurry = time_short(
+        &raid.phase,
+        raid.surge_in(),
+        state.leg,
+        hiding,
+        hunted,
+        state.pressed_until > now,
+        now - state.hurried_at,
+    );
+    if hurry == Some(Hurry::Surge) {
+        state.note(now, Kind::Learned, "the Surge is close: home now");
+        state.leg = Leg::Call;
+        state.pressed_until = now + TIME_SHORT_FOR;
+        state.roof_try = None;
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.walk = None;
+        bot.restart();
+        return;
+    }
+    if hurry == Some(Hurry::Truck) {
+        state.hurried_at = now;
+        state.note(now, Kind::Learned, "the truck won't wait: out to it");
+        state.pressed_until = now + TIME_SHORT_FOR;
+        state.roof_try = None;
+        bot.tasks.clear();
+        bot.walk = None;
+        bot.tasks.extend(world.go_home(here, &raid, state.tries));
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
+        state.leg = Leg::Board;
+        return;
     }
 
     let idle_only =
@@ -2739,6 +2828,56 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
 
+/// What the clock says to do now, under cover or on the job.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Hurry {
+    /// Home ahead of the Surge: call the truck, from wherever it is.
+    Surge,
+    /// The truck's there and its wait running down: out from cover to it.
+    Truck,
+}
+
+/// A time sense (`direct_raid`): out on the job with the Surge's warning
+/// near, or hiding while it is (once), it calls; hiding with the truck
+/// there a minute and more, out to it while no drone has it (not more
+/// than every 30 s).
+fn time_short(
+    phase: &Phase,
+    surge_in: f32,
+    leg: Leg,
+    hiding: bool,
+    hunted: bool,
+    pressed: bool,
+    since_hurried: f32,
+) -> Option<Hurry> {
+    let surge_close =
+        matches!(phase, Phase::Out) && surge_in < crate::raid::SURGE_WARNING + SURGE_MARGIN;
+    let wait_running = matches!(phase, Phase::TruckWaiting { left, .. }
+        if *left < crate::raid::TRUCK_WAIT - TRUCK_PATIENCE);
+    if surge_close
+        && (matches!(leg, Leg::Out | Leg::Place) || (leg == Leg::Call && hiding && !pressed))
+    {
+        return Some(Hurry::Surge);
+    }
+    (wait_running
+        && hiding
+        && !hunted
+        && matches!(leg, Leg::Call | Leg::Rendezvous | Leg::Board)
+        && since_hurried > 30.0)
+        .then_some(Hurry::Truck)
+}
+
+/// Home ahead of the Surge's warning by this much (s): time to call and
+/// get to the truck.
+const SURGE_MARGIN: f32 = 180.0;
+/// Under cover with the truck there, out to it once it has waited this
+/// long (s; it waits `TRUCK_WAIT`).
+const TRUCK_PATIENCE: f32 = 60.0;
+/// Once time's short, it stays short this long (s).
+const TIME_SHORT_FOR: f32 = 600.0;
+/// The truck waiting within this, a run for its bed beats any roof (m).
+const BED_RUN: f32 = 40.0;
+
 /// Clear of walls round a building's box, m: a body (0.28) and a stride.
 const ROUND: f32 = 2.0;
 
@@ -3094,6 +3233,19 @@ fn take_it_on() -> Vec<Task> {
         Task::Ready { off_safe: true },
         Task::Engage { shots: 12 },
     ]
+}
+
+/// Something on `player` to load a gun from, besides what's in it: a
+/// loaded box magazine, a stripper clip with rounds on it, or loose rounds
+/// (box magazines only, and the careful newcomer with an SKS and two full
+/// clips read as having nothing to load).
+fn spare_loaded(world: &World2, view: &RaidView, player: Entity) -> bool {
+    world.items.iter().any(|(e, it, ..)| {
+        let def = world.catalog.get(it.kind());
+        (def.magazine.is_some() || def.category == extraction_core::items::Category::Ammo)
+            && it.rounds > 0
+            && carried(world, view, player, &def.id).contains(&e)
+    })
 }
 
 /// Whether a gun on `player`'s body has a round up (any: a rifle picked
@@ -4065,6 +4217,179 @@ mod tests {
         assert_eq!(round_sentries(&[], a, b, 3), vec![b]);
     }
 
+    /// The bot's PM against a drone held still, slightly above it, at 10,
+    /// 20 and 33 m: hits out of eight. A measurement (the coordinator's
+    /// question: seven rounds a raid at a locked-on drone, none hit), not
+    /// a gate: `cargo test ... the_bots_pm_at_a_still_drone -- --ignored
+    /// --nocapture`.
+    #[test]
+    #[ignore]
+    fn the_bots_pm_at_a_still_drone() {
+        use avian3d::prelude::{AngularVelocity, LinearVelocity};
+        let drop = |app: &mut App, id: &str, at: Vec3, rounds: Option<u32>| {
+            let catalog = app.world().resource::<crate::items::Catalog>().clone();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind(id).unwrap(),
+                        transform: Transform::from_translation(at),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            if let Some(n) = rounds {
+                let mut i = app.world_mut().get_mut::<crate::items::Item>(e).unwrap();
+                i.rounds = n;
+                i.loads.fit(n);
+            }
+            e
+        };
+        for d in [10.0f32, 20.0, 33.0] {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            #[derive(Resource, Default)]
+            struct Struck(Vec<(String, Vec3)>);
+            fn struck(
+                mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+                names: Query<&Name>,
+                parents: Query<&ChildOf>,
+                mut out: ResMut<Struck>,
+            ) {
+                for h in hits.read() {
+                    let mut e = h.entity;
+                    let mut name = format!("{e:?}");
+                    for _ in 0..4 {
+                        if let Ok(n) = names.get(e) {
+                            name = n.to_string();
+                            break;
+                        }
+                        match parents.get(e) {
+                            Ok(c) => e = c.parent(),
+                            Err(_) => break,
+                        }
+                    }
+                    out.0.push((name, h.point));
+                }
+            }
+            app.init_resource::<Struck>().add_systems(Update, struck);
+            app.finish();
+            app.cleanup();
+            for _ in 0..10 {
+                app.update();
+            }
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+            let p = app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .single(app.world())
+                .unwrap();
+            // Out of the truck (in it, every round hit its wall): in the
+            // open inside the south gate, the drone to the north.
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let me = zone.on_ground(22.0, 140.0) + Vec3::Y * 0.05;
+            let fwd = Vec3::NEG_Z;
+            {
+                let mut t = app.world_mut().get_mut::<Transform>(p).unwrap();
+                t.translation = me;
+                t.rotation = Quat::IDENTITY;
+            }
+            for _ in 0..10 {
+                app.update();
+            }
+            let gun = drop(&mut app, "pm_pistol", me + Vec3::new(0.3, 0.9, 0.0), None);
+            let mag = drop(&mut app, "pm_mag", me + Vec3::new(-0.3, 0.9, 0.0), Some(8));
+            let at = me + fwd * d + Vec3::Y * 6.0;
+            let drone = {
+                let zone = app.world().resource::<crate::world::Zone>().clone();
+                let mut queue = bevy::ecs::world::CommandQueue::default();
+                let e = {
+                    let mut c = Commands::new(&mut queue, app.world());
+                    let site = zone.on_ground(at.x, at.z);
+                    crate::robots::drone::spawn_drone(
+                        &mut c,
+                        at,
+                        crate::robots::Job {
+                            kind: crate::robots::JobKind::Watch,
+                            site,
+                            duration: f32::INFINITY,
+                            exit: site,
+                        },
+                    )
+                };
+                queue.apply(app.world_mut());
+                e
+            };
+            app.update();
+            app.world_mut()
+                .entity_mut(p)
+                .insert(crate::bot::Bot::new(vec![
+                    crate::bot::Task::Grab {
+                        item: mag,
+                        side: crate::rig::Side::Left,
+                    },
+                    crate::bot::Task::Stow(crate::rig::Side::Left),
+                    crate::bot::Task::Grab {
+                        item: gun,
+                        side: crate::rig::Side::Right,
+                    },
+                    crate::bot::Task::Ready { off_safe: true },
+                    crate::bot::Task::Engage { shots: 8 },
+                ]));
+            for _ in 0..90 * 25 {
+                if let Ok(mut e) = app.world_mut().get_entity_mut(drone) {
+                    if let Some(mut t) = e.get_mut::<Transform>() {
+                        t.translation = at;
+                        t.rotation = Quat::IDENTITY;
+                    }
+                    if let Some(mut v) = e.get_mut::<LinearVelocity>() {
+                        v.0 = Vec3::ZERO;
+                    }
+                    if let Some(mut v) = e.get_mut::<AngularVelocity>() {
+                        v.0 = Vec3::ZERO;
+                    }
+                    if let Some(mut dr) = e.get_mut::<crate::robots::drone::Drone>() {
+                        dr.gun_cooldown = 99.0;
+                    }
+                }
+                app.update();
+                if app.world().get::<crate::bot::Bot>(p).unwrap().done() {
+                    break;
+                }
+            }
+            let eye = me + Vec3::Y * 1.6;
+            println!(
+                "AIM {d} m: drone at {at:.1}, eye {eye:.1}; struck {:?}",
+                app.world()
+                    .resource::<Struck>()
+                    .0
+                    .iter()
+                    .map(|(n, p)| format!("{n} @ {p:.1}"))
+                    .collect::<Vec<_>>()
+            );
+            let bot = app.world().get::<crate::bot::Bot>(p).unwrap();
+            println!(
+                "AIM {d} m (slant {:.1} m): fired {}, hits {}, robot hits {}, log {:?}",
+                me.distance(at),
+                bot.fired,
+                bot.hits,
+                bot.robot_hits,
+                bot.log
+                    .iter()
+                    .filter(|l| l.contains("FAIL"))
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
     /// A job in another valley isn't gone after here: its place is that
     /// valley's (a Marrow job's place, walked to inside Cinder, stuck the
     /// newcomer in a corner of the works). One with no valley goes anywhere.
@@ -4143,6 +4468,75 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn the_clock_gets_it_out_from_under_cover() {
+        use crate::raid::{SURGE_AFTER, SURGE_WARNING, TRUCK_WAIT};
+        let out = Phase::Out;
+        let far = SURGE_AFTER - 600.0;
+        let near = SURGE_WARNING + SURGE_MARGIN - 1.0;
+        // Hours to the Surge: on with the job, hidden or not.
+        for leg in [Leg::Out, Leg::Place, Leg::Call] {
+            assert_eq!(time_short(&out, far, leg, true, false, false, 99.0), None);
+        }
+        // The Surge near, on the job: home, whether it's hiding or not
+        // (told once a career, a second warning isn't said).
+        for leg in [Leg::Out, Leg::Place] {
+            for hiding in [false, true] {
+                assert_eq!(
+                    time_short(&out, near, leg, hiding, false, false, 99.0),
+                    Some(Hurry::Surge),
+                    "{leg:?}, hiding {hiding}"
+                );
+            }
+        }
+        // Calling already: only out from cover, and once.
+        assert_eq!(
+            time_short(&out, near, Leg::Call, true, false, false, 99.0),
+            Some(Hurry::Surge)
+        );
+        assert_eq!(
+            time_short(&out, near, Leg::Call, true, false, true, 99.0),
+            None
+        );
+        assert_eq!(
+            time_short(&out, near, Leg::Call, false, false, false, 99.0),
+            None
+        );
+        // At the camp, in the truck, home: the clock isn't its business.
+        for leg in [Leg::Camp, Leg::Kit, Leg::Paid, Leg::Done] {
+            assert_eq!(time_short(&out, near, leg, true, false, false, 99.0), None);
+        }
+        // The truck there: a minute's grace, then out from cover to it.
+        let just = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - 10.0,
+        };
+        let running = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - TRUCK_PATIENCE - 1.0,
+        };
+        for leg in [Leg::Call, Leg::Rendezvous, Leg::Board] {
+            assert_eq!(time_short(&just, far, leg, true, false, false, 99.0), None);
+            assert_eq!(
+                time_short(&running, far, leg, true, false, false, 99.0),
+                Some(Hurry::Truck),
+                "{leg:?}"
+            );
+            // Not hiding: its walk to the truck is already the way.
+            assert_eq!(
+                time_short(&running, far, leg, false, false, false, 99.0),
+                None
+            );
+            // A drone on it still: under the roof till it looks away.
+            assert_eq!(
+                time_short(&running, far, leg, true, true, false, 99.0),
+                None
+            );
+            // Not every frame: once in 30 s.
+            assert_eq!(time_short(&running, far, leg, true, false, true, 5.0), None);
+        }
     }
 }
 

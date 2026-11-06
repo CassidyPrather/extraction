@@ -161,9 +161,10 @@ fn vigour(seed: u64) -> f32 {
 
 /// The ivy on the prefab `id`, as `grow`: none on a vehicle (a wreck, a
 /// boxcar), which isn't a wall for it to climb (what grows at its feet is
-/// `reclaim`'s).
+/// `reclaim`'s), nor on a marker post, whose tape a road-mender keeps clear
+/// (`world::way_lamps`: ivy smothered its bands).
 pub fn grow_on(id: &str, geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
-    if extraction_core::map::prefab_is_vehicle(id) {
+    if extraction_core::map::prefab_is_vehicle(id) || id == "marker_post" {
         return Growth::default();
     }
     grow_clear_of(geo, occ, seed, north, lettered(id))

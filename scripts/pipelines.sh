@@ -18,7 +18,7 @@ OUT="${OUT:-target/pipelines}"
 SIZE="${SIZE:-256x256}"
 OUT_AT=950    # everything out: after the shelf's 900 frames
 FIRSTS_AT=1000
-FRAMES="${FRAMES:-2700}"  # the effects (90 frames apart), the tells, the next cycle, and time to queue
+FRAMES="${FRAMES:-3600}"  # the effects (90 frames apart), the tells, the next cycle, the heavy workstream's 10 (robots::firsts), and time to queue
 MAPS=("$@")
 [ ${#MAPS[@]} -eq 0 ] && MAPS=(marrow_creek kettle_pass cinder_works sallow_reservoir rime_fell)
 # Built by the tool, not the game: the screenshot that ends the run.

@@ -32,6 +32,7 @@ pub mod range;
 pub mod reload;
 pub mod report;
 pub mod reverb;
+pub mod sight_picture;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;

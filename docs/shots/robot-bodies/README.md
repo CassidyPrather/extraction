@@ -184,7 +184,7 @@ Open ground is walked the way the nav paths it, round the boulders. `every_legge
 - **Touchdown:** a foot comes down within `TOUCH` (0.08) of the fixed world's surface, neither over it nor in it.
 - **Ride:** the body stays within `RIDE` (0.6) of what holds it up, its planted feet and the ground under it, and within `RIDE_USUALLY` (0.3) for all but 0.2% of its ticks.
 
-`FEET_MAP=name` gauges one valley; `--nocapture` prints each valley's worst cases and where they happen; `reel:feetat,N,EVERY,KIND,X1,Z1,X2,Z2` films one.
+`FEET_MAP=name` gauges one valley; `--nocapture` prints each valley's worst cases and where they happen; `reel:feetat,N,EVERY,KIND,X1,Z1,X2,Z2,DIST,HEIGHT` films one, side-on.
 
 Worst cases per valley, before and after (the same gauge):
 
@@ -208,7 +208,46 @@ The causes, each fixed in `anim` for every legged machine:
 
 What's left: the ride's worst is 0.4–0.56, the body coming down off a raised doorway's 1.15 m drop at `RIDE_CATCH`. Touchdowns are within 4 cm in real metres.
 
-![close up, before and after](feet_hold_the_ground_close_before_after.jpg)
+![side on, before and after](feet_hold_the_ground_side_on_before_after.jpg)
+
+One row per valley, each at its worst case in the gauge, with the hound on the gauge's own route, the nav's way round. The camera follows it side-on and low, on the downhill side. Each pair is the same frame before and after: within half a second of where the hound passes the gauge's worst point, chosen mid-stance, with two or more feet down. Fog is at 11:00, with `--detail 0.25` so the ground cover doesn't hide the feet. A green disc lies on the ground under each foot in stance, drawn where the gait says the foot is, so before and after mark the same thing.
+
+On the slopes, before, the stance feet's discs are on the slope but the legs go on into the hill, a body's height below. After, the feet stand on their discs. At Marrow's doorway, before, the body rides high off the steps with its legs hanging; after, it sits down on its feet.
+
+The `reel:feetat,SHOTS,EVERY,KIND,X1,Z1,X2,Z2,DIST,HEIGHT[,door]` command shoots these. It logs, every frame, the body's position and each foot's stance or swing with its height over the ground under it. From low beside a slope a planted toe can look above the slope's far line. The log settles it: no foot in stance in any frame was more than 0.08 m off the ground.
+
+### A swing keeps low over a slope
+
+The same log showed downhill swings peaking 0.3–1.15 m over the falling ground: going down, a swing held at lift-off height for its first 30% (to clear a step's edge) while it travelled out over the slope. The gauge now holds a fourth measure, `SWING`: over even ground, a swing's peak over the ground under the foot is no more than 0.3 at a walker's size. Even ground is within `EVEN` of the swing's line at a third and two thirds, both to its landing and to where it was aimed at lift-off, and under its peak.
+
+`anim` probes the same two points at lift-off and at the retarget (`edge_over`). It skips them for a level step, so walking on the flat costs no more probes. Within `EDGE` of the line, the swing follows the slope at its lift; further off, a step or a ledge or a trunk, it holds high as before. Worst swing per valley, old swing → new: 1.26–1.46 → 0.28–0.30.
+
 ![wide, before and after](feet_hold_the_ground_before_after.jpg)
 
-Each valley's worst route is filmed, hound walking, fog at 11:00, before beside after. On Kettle's and Sallow's 32° slopes the hound's downhill feet reached into the hillside; now they come down on it.
+The earlier wide sheet shows each worst route from a high three-quarter view.
+
+## A downed drone you can find
+
+![a downed drone at 17 m, before and after](drone_wreck_at_17m_before_after.jpg)
+
+Heavy's `robot_frames` line-up found that a wrecked drone in Marrow's meadow grass at 17 m was all but invisible. The shots are clearing weather, the line-up camera, one wreck at a time, and the count is pixels changed against the empty view. There were two causes:
+
+1. **It wasn't there.** A line-up wrecks its machines four frames in, before a drawn app has the ground's heightfield collider in, so the drone fell and kept falling: 330 m under the meadow by the time it was still. `wreck::settle` now takes any wreck or piece found over half a metre under the ground, outside a site's rooms, back onto it. `a_wrecked_drone_comes_to_rest_on_the_ground` fails without this (334.8 m under) and passes with it.
+2. **On the ground it's small.** It's 75 changed pixels against a walker wreck's 212. Now, for its first 90 s, a downed drone sends up a dead gun's column (`fx::COLUMN`, dark, 1.6 m/s, about 8 m tall) instead of the thin smoulder, and leaves a scorch 1.1 m across under it that goes when it stops smouldering. That makes 160 changed pixels.
+
+## A drone's lock reads by day
+
+![a drone's lock at 6, 15 and 30 m, by day and night, before and after](drone_lock_by_day_before_after.jpg)
+
+Robot minds' fairness frames found a drone's lock halo bright at night but faint by day in every weather. I measured it with `reel:lock,9,5,DIST`: the strongest red pixels (red over both other channels by 60+) at the lock's peak, on the training yard, at noon and 23:00, clear, fog and downpour.
+
+| | 6 m | 15 m | 30 m |
+|---|---|---|---|
+| Noon, before | 47–89 | 6–10 | 2–13 |
+| Noon, after (hard disc) | 628–650 | 88–98 | 123–128 |
+| Noon, after (soft glow, shown) | 429–527 | 88–106 | 118–143 |
+| 23:00, before → after | 2560–4533, the same | 242–319, the same | 51–59 → 55–61 |
+
+By day, red added to a bright grey sky went pink. Now, in daylight (`Conditions::light` over 0.25), the halo is laid over what's behind it, blended, in the tell's red (`LOCK_RED`, unlit). Its cover follows the tell's pulse, 0.4 at a trough and 0.9 at a crest (`lock_halo_alpha`), and it's drawn up to 2.5× wider in full daylight (`LOCK_HALO_DAY`). After dark it's the additive glow it was, and the night halo carries it as before, so nothing blooms more than it did. Its glow goes to the eye through `grade::ToTheEye`, kept to its colour by `hue_safe` and held steady against the eyes' adaptation.
+
+A flat disc with a hard edge read as a sticker, not a glow. By day the halo is now a soft disc turned to the eye (`soft_disc`: full cover over the middle half, falling smoothly to nothing at the edge). It's set `LOCK_HALO_BEHIND` (0.45 m) behind the lens, away from the eye, so the drone's body stays drawn over it and its silhouette reads through the glow at 6 m. Its red count at 15 and 30 m is the hard disc's. At 6 m it's 68–81% of it, the share the drone's body now covers.

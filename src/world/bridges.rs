@@ -435,6 +435,23 @@ impl Deck {
         (p - self.a).dot(self.axis().0)
     }
 
+    /// The deck's walking height over a point (lerped end to end along it,
+    /// held at the ends' heights past them).
+    pub fn y_at(&self, p: Vec2) -> f32 {
+        let (_, len) = self.axis();
+        let t = (self.along(p) / len).clamp(0.0, 1.0);
+        self.ya + (self.yb - self.ya) * t
+    }
+
+    /// Whether a body's feet at `feet` are on the deck: over it (`pad`
+    /// either side) and up at its height, not on the ground under it (a
+    /// ravine's floor under a footbridge is over its deck too: Onboarding,
+    /// Marrow's ranger tower, 6 November).
+    pub fn bears(&self, feet: Vec3, pad: f32) -> bool {
+        let p = feet.xz();
+        self.holds(p, pad) && feet.y >= self.y_at(p) - 0.6
+    }
+
     /// Whether a point is on the deck, `pad` metres either side of it
     /// allowed (and as far past its ends).
     pub fn holds(&self, p: Vec2, pad: f32) -> bool {
@@ -485,7 +502,8 @@ impl Deck {
     }
 }
 
-/// Every bridge's deck in the valley.
+/// Every bridge's deck in the valley: a straight deck per stretch of its
+/// road line (a bridge over a bend is two or more).
 pub fn decks(zone: &Zone) -> Vec<Deck> {
     let mut out = Vec::new();
     for rl in &zone.hm.road_lines {
@@ -502,15 +520,42 @@ pub fn decks(zone: &Zone) -> Vec<Deck> {
             rl.heights[k - 1] + (rl.heights[k] - rl.heights[k - 1]) * t
         };
         for (a, b) in &rl.bridges {
-            let pa = extraction_core::geom::polyline_at(&rl.points, *a).0;
-            let pb = extraction_core::geom::polyline_at(&rl.points, *b).0;
-            out.push(Deck {
-                a: Vec2::from_array(pa),
-                b: Vec2::from_array(pb),
-                ya: height_at(*a),
-                yb: height_at(*b),
-                width: rl.width,
-            });
+            // A straight deck per stretch of the line the bridge covers:
+            // one laid over a bend follows it (Cinder's keeper's path, on
+            // a corner of the path), and its chord isn't on the boards.
+            // (The line is sampled about a metre apart: cut only where it
+            // turns, more than 10 degrees from the stretch so far.)
+            let at = |s: f32| Vec2::from_array(extraction_core::geom::polyline_at(&rl.points, s).0);
+            let mut cuts = vec![*a];
+            let inner: Vec<f32> = arc.iter().copied().filter(|s| s > a && s < b).collect();
+            for (k, s) in inner.iter().enumerate() {
+                let next = inner.get(k + 1).copied().unwrap_or(*b);
+                let from = at(*cuts.last().unwrap());
+                let (here, ahead) = (at(*s), at(next));
+                let (d0, d1) = (
+                    (here - from).normalize_or_zero(),
+                    (ahead - here).normalize_or_zero(),
+                );
+                if d0 != Vec2::ZERO && d1 != Vec2::ZERO && d0.dot(d1) < 10f32.to_radians().cos() {
+                    cuts.push(*s);
+                }
+            }
+            cuts.push(*b);
+            for w in cuts.windows(2) {
+                let (s0, s1) = (w[0], w[1]);
+                if s1 - s0 < 0.05 {
+                    continue;
+                }
+                let pa = extraction_core::geom::polyline_at(&rl.points, s0).0;
+                let pb = extraction_core::geom::polyline_at(&rl.points, s1).0;
+                out.push(Deck {
+                    a: Vec2::from_array(pa),
+                    b: Vec2::from_array(pb),
+                    ya: height_at(s0),
+                    yb: height_at(s1),
+                    width: rl.width,
+                });
+            }
         }
     }
     out
@@ -635,13 +680,14 @@ mod tests {
     }
 
     /// Every valley's decks, as walkers read them: each end's ground end
-    /// is on the ground, on the deck's line past its end, and not far; a
+    /// is on the ground, on the deck's line past its end, and not far; its
+    /// middle bears a body on it, and not one on the ground under it; a
     /// walk across a deck's middle crosses it, and one beside it, well off
     /// to its side, doesn't.
     #[test]
     fn every_deck_has_its_ends_on_the_ground() {
         let mut bad = Vec::new();
-        let mut seen = 0;
+        let (mut seen, mut under) = (0, 0);
         for map in crate::test_maps() {
             let opts = crate::launch::LaunchOptions {
                 robots: false,
@@ -668,6 +714,23 @@ mod tests {
                     }
                 }
                 let mid = d.a.lerp(d.b, 0.5);
+                // On the deck it bears you; on the ground under it, not.
+                let up = Vec3::new(mid.x, d.y_at(mid), mid.y);
+                if !d.bears(up, 0.0) {
+                    bad.push(format!(
+                        "{map} deck {i}: its own middle doesn't bear a body"
+                    ));
+                }
+                let floor = zone.ground(mid.x, mid.y);
+                if floor < d.y_at(mid) - 1.0 {
+                    under += 1;
+                    if d.bears(Vec3::new(mid.x, floor, mid.y), 0.0) {
+                        bad.push(format!(
+                            "{map} deck {i}: the ground {:.1} m under its middle counts as on it",
+                            d.y_at(mid) - floor
+                        ));
+                    }
+                }
                 let across = (d.b - d.a).perp().normalize_or(Vec2::X);
                 if d.crosses(mid - across * 5.0, mid + across * 5.0, 0.0)
                     .is_none()
@@ -683,6 +746,10 @@ mod tests {
             }
         }
         assert!(seen >= 3, "only {seen} decks");
+        assert!(
+            under >= 1,
+            "no deck stands over a drop: the height check proves nothing"
+        );
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }

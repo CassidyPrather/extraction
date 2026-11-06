@@ -76,14 +76,24 @@ pub const ALLOY: SteelFinish = SteelFinish {
     tile: TILE,
 };
 
-/// Blackened steel, matt: butt plates and small fittings.
+/// Black paint, phosphate or anodising, satin: what most "black" parts
+/// really wear (the AK's butt plate and the mag followers are phosphate
+/// under lacquer, optics, lights and binoculars painted or anodised
+/// aluminium, the PBS-1 phosphated steel). Not bare metal, so no metal
+/// showing: a dielectric's 4% sheen over a deep black base. Under the hand
+/// torch, a metal shows only the reflection that happens to face the eye,
+/// and on a charred floor from 2 m it went black; this reads on every
+/// floor near and far (`docs/craft/ITEM_READING.md`, "By torchlight").
+/// The base is deep on purpose: about 0.015 matches the charred floor
+/// itself and reads worse than the old metal, and at 0.04 the torch lifts
+/// it to a lit floor's value up close.
 pub const BLACK: SteelFinish = SteelFinish {
-    gain: Some([1.5, 1.5, 1.5]),
-    flat: [0.0; 3],
-    metallic: 1.0,
-    roughness: 1.6,
-    keep_scan_metal: true,
-    tile: 0.15,
+    gain: None,
+    flat: [0.0046, 0.0046, 0.0046],
+    metallic: 0.0,
+    roughness: 0.45,
+    keep_scan_metal: false,
+    tile: TILE,
 };
 
 #[cfg(test)]
@@ -95,5 +105,17 @@ mod tests {
     fn stamped_is_not_blued() {
         assert!(STAMPED.metallic < BLUED.metallic);
         assert!(!STAMPED.keep_scan_metal && BLUED.keep_scan_metal);
+    }
+
+    /// Black is a paint: no metal to go dark under a torch, and its base
+    /// kept clear of a charred floor's value (about 0.015).
+    #[test]
+    fn black_is_a_paint_clear_of_charred_wood() {
+        assert_eq!(BLACK.metallic, 0.0);
+        assert!(!BLACK.keep_scan_metal);
+        assert!(
+            BLACK.flat[0] < 0.008,
+            "near 0.015 it vanishes on charred floors"
+        );
     }
 }
