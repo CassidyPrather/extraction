@@ -278,7 +278,7 @@ fn kick(pistol: bool, shots: usize) -> Vec<Act> {
 }
 
 /// The guns with a scripted cycle.
-pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133", "sks"];
+pub const GUNS: &[&str] = &["pm_pistol", "toz8", "toz_double", "mp133", "sks", "mosin"];
 
 fn script_for(id: &str) -> Vec<Act> {
     if let Some(gun) = id.strip_prefix("kick_") {
@@ -289,6 +289,7 @@ fn script_for(id: &str) -> Vec<Act> {
         "toz_double" => izh43(),
         "mp133" => mp133(),
         "sks" => sks(),
+        "mosin" => mosin(),
         _ => script(),
     }
 }
@@ -320,6 +321,13 @@ fn kit(id: &str) -> Kit {
         };
     }
     match id {
+        "mosin" => Kit {
+            gun: "mosin",
+            mag: None,
+            holster: false,
+            spares: vec![("mosin_clip", 5)],
+            ready: false,
+        },
         "sks" => Kit {
             gun: "sks",
             mag: None,
@@ -496,6 +504,31 @@ fn sks() -> Vec<Act> {
     s.extend(aim_long());
     s.push(Beat("fire"));
     s.extend(SHOT);
+    s.extend(SHOT);
+    s.extend([Beat("end"), Wait(45)]);
+    s
+}
+
+/// The Mosin: a five-shot turn-bolt fed by stripper clip. Taken up, the
+/// bolt opened, a clip of five stripped in, the bolt closed (a round up
+/// the spout); aimed, fired; the bolt worked (the case out at the hand's
+/// speed, the next round in); fired again.
+fn mosin() -> Vec<Act> {
+    let mut s = take_up_and_aim();
+    s.push(Beat("open"));
+    s.extend(bolt_open());
+    s.push(Beat("clip in"));
+    s.extend(strip_in(0));
+    s.push(Beat("close"));
+    s.extend(bolt_close());
+    s.extend(aim_long());
+    s.push(Beat("fire"));
+    s.extend(SHOT);
+    s.push(Beat("work the bolt"));
+    s.extend(bolt_open());
+    s.extend(bolt_close());
+    s.extend(aim_long());
+    s.push(Beat("fire again"));
     s.extend(SHOT);
     s.extend([Beat("end"), Wait(45)]);
     s
@@ -1229,6 +1262,17 @@ mod tests {
     #[test]
     fn the_sks_cycle_runs_by_hand() {
         let vr = run("sks");
+        let c = vr.app.world().resource::<Cycle>();
+        println!("{}", c.report());
+        assert!(c.done, "the script ran out");
+        assert_eq!(fired(c), 2, "{}", c.report());
+    }
+
+    /// The Mosin by hand: a clip of five stripped in through the open
+    /// bolt, a shot, the bolt worked, a shot: three left in the magazine.
+    #[test]
+    fn the_mosin_cycle_runs_by_hand() {
+        let vr = run("mosin");
         let c = vr.app.world().resource::<Cycle>();
         println!("{}", c.report());
         assert!(c.done, "the script ran out");
