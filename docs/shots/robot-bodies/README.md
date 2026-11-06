@@ -225,3 +225,12 @@ The same log showed downhill swings peaking 0.3–1.15 m over the falling ground
 ![wide, before and after](feet_hold_the_ground_before_after.jpg)
 
 The earlier wide sheet shows each worst route from a high three-quarter view.
+
+## A downed drone you can find
+
+![a downed drone at 17 m, before and after](drone_wreck_at_17m_before_after.jpg)
+
+Heavy's `robot_frames` line-up found that a wrecked drone in Marrow's meadow grass at 17 m was all but invisible. The shots are clearing weather, the line-up camera, one wreck at a time, and the count is pixels changed against the empty view. There were two causes:
+
+1. **It wasn't there.** A line-up wrecks its machines four frames in, before a drawn app has the ground's heightfield collider in, so the drone fell and kept falling: 330 m under the meadow by the time it was still. `wreck::settle` now takes any wreck or piece found over half a metre under the ground, outside a site's rooms, back onto it. `a_wrecked_drone_comes_to_rest_on_the_ground` fails without this (334.8 m under) and passes with it.
+2. **On the ground it's small.** It's 75 changed pixels against a walker wreck's 212. Now, for its first 90 s, a downed drone sends up a dead gun's column (`fx::COLUMN`, dark, 1.6 m/s, about 8 m tall) instead of the thin smoulder, and leaves a scorch 1.1 m across under it that goes when it stops smouldering. That makes 160 changed pixels.
