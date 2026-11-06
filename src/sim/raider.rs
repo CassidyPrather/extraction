@@ -1437,10 +1437,7 @@ fn sidestep(
     start: f32,
 ) -> Vec2 {
     // On a bridge: along its deck, never off it.
-    if let Some(deck) = decks(&scene.zone)
-        .into_iter()
-        .find(|d| d.holds(pos.xz(), 0.5))
-    {
+    if let Some(deck) = decks(&scene.zone).into_iter().find(|d| d.bears(pos, 0.5)) {
         return deck_sidestep(&deck, scene, pos, step, start);
     }
     sidestep_open(plans, grid, scene, pos, step, start)
@@ -5355,7 +5352,8 @@ mod run_tests {
                 .world_mut()
                 .run_system_once(move |scene: Scene| {
                     let (mut bad, mut tried, mut open_off) = (Vec::new(), 0, 0);
-                    for (i, d) in decks(&scene.zone).iter().enumerate() {
+                    let all = decks(&scene.zone);
+                    for (i, d) in all.iter().enumerate() {
                         for f in [0.25, 0.5, 0.75] {
                             let at = d.a.lerp(d.b, f);
                             let ground = scene.zone.ground(at.x, at.y);
@@ -5377,18 +5375,20 @@ mod run_tests {
                                     let start = k as f32 * 1.57 + 0.3;
                                     tried += 1;
                                     let q = sidestep(&[], &grid, &scene, pos, step, start);
-                                    if !d.holds(q, 0.05) && !d.holds(q, DECK_RUN_OFF + 0.05) {
-                                        bad.push(format!("{map2} deck {i}: from {at:.1?}, {step} m: to {q:.1?}"));
-                                    } else if !d.holds(q, 0.05) {
-                                        // Past an end: along the axis, not off the side.
-                                        let ab = d.b - d.a;
-                                        let len = ab.length();
-                                        let along = (q - d.a).dot(ab) / len;
-                                        if along > 0.0 && along < len {
-                                            bad.push(format!(
-                                                "{map2} deck {i}: from {at:.1?}, {step} m: off its side to {q:.1?}"
-                                            ));
-                                        }
+                                    // (On any deck will do: a curved bridge is
+                                    // several, end to end.)
+                                    // On some deck (a curved bridge is several,
+                                    // end to end), or on ground about as high
+                                    // as it stood (the abutments past its ends):
+                                    // never off its side, down into what it spans.
+                                    let on_one = all.iter().any(|e| e.holds(q, 0.05));
+                                    let level = scene.zone.ground(q.x, q.y) >= pos.y - 0.6;
+                                    if !on_one && !level {
+                                        bad.push(format!(
+                                            "{map2} deck {i}: from {at:.1?} ({:.1} up), {step} m: off it to {q:.1?} ({:.1} up)",
+                                            pos.y,
+                                            scene.zone.ground(q.x, q.y)
+                                        ));
                                     }
                                     let o = sidestep_open(&[], &grid, &scene, pos, step, start);
                                     if !d.holds(o, 0.05) {
