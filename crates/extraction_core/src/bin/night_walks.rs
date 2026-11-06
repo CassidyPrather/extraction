@@ -92,7 +92,7 @@ fn main() {
     let mut starts: Vec<(String, P2)> = extraction_core::map_lint::first_jobs(&map, &map_id)
         .into_iter()
         .map(|(what, at)| {
-            let at = surfaced(&map, &hm, at);
+            let at = surfaced(&map, &hm, &grid, &rvs, at);
             (what, at)
         })
         .collect();
@@ -169,11 +169,26 @@ fn main() {
 const BELOW: f32 = 2.5;
 
 /// Where the way home from a job starts on the surface: for one down in an
-/// underground site (the depot's ledger), the nearest of the site's
-/// entrance and its exit kiosks, where the player comes up, not the ground
-/// over the job's room, which no one stands on.
-fn surfaced(map: &MapDef, hm: &Heightmap, at: P2) -> P2 {
+/// underground site (the depot's ledger), a step out of whichever of the
+/// site's kiosks, its entrance or an exit, makes the shorter way home, the
+/// way to it underground (as the crow flies) and the walk on from it to
+/// the nearest rendezvous together; not the ground over the job's room,
+/// which no one stands on.
+fn surfaced(
+    map: &MapDef,
+    hm: &Heightmap,
+    grid: &extraction_core::nav::NavGrid,
+    rvs: &[(String, P2)],
+    at: P2,
+) -> P2 {
     use extraction_core::underground;
+    let ways = extraction_core::map_lint::kiosk_ways_out(map);
+    let home = |p: P2| {
+        rvs.iter()
+            .filter_map(|(_, rv)| grid.path(p, *rv))
+            .map(|path| path.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>())
+            .min_by(f32::total_cmp)
+    };
     for site in underground::placed(map) {
         let Some(r) = underground::raster(&site.id) else {
             continue;
@@ -184,8 +199,12 @@ fn surfaced(map: &MapDef, hm: &Heightmap, at: P2) -> P2 {
         if hm.footing(&site.id, site.at, site.rot) + floor > hm.height(at) - BELOW {
             continue;
         }
-        let ways = std::iter::once(site.at).chain(site.exits().into_iter().map(|e| e.0));
-        if let Some(up) = ways.min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at))) {
+        let up = ways
+            .iter()
+            .filter(|(id, _)| *id == site.id)
+            .filter_map(|(_, p)| home(*p).map(|h| (*p, dist(*p, at) + h)))
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((up, _)) = up {
             eprintln!("start {at:?} is down in {}: from {up:?}", site.id);
             return up;
         }
