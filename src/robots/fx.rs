@@ -641,6 +641,18 @@ fn smoulder(
 
 /// How much bigger a wound's sparks, drops and smoke are drawn this far
 /// from the eye, so they still read at 20-40 m: 1 within 10 m, up to 4.
+/// The least a round's flash spans at the eye (degrees), out to any range
+/// a fight is had at: what still reads as a hit at 15 to 25 m in a headset.
+pub const MIN_SPAN_DEG: f32 = 0.4;
+/// A shrug's glint: how long it lasts (s).
+const GLINT: f32 = 0.06;
+
+/// A flash's least size (its diameter at its peak, m) `d` m from the eye:
+/// [`MIN_SPAN_DEG`] across, with a tenth to spare.
+pub fn flash_floor(d: f32) -> f32 {
+    2.0 * d * (MIN_SPAN_DEG * 0.55).to_radians().tan()
+}
+
 fn at_range(eye: Option<Vec3>, at: Vec3) -> f32 {
     eye.map_or(1.0, |e| (e.distance(at) / 10.0).clamp(1.0, 4.0))
 }
@@ -1205,23 +1217,28 @@ fn strike_flashes(
         });
         let n = s.normal.normalize_or(-s.dir);
         let range = at_range(eye, s.at);
-        if look.flare > 0.0 {
-            let max = if s.strike == Strike::Telling {
-                0.16
-            } else {
-                0.1
+        // Never smaller at the eye than [`MIN_SPAN_DEG`] across: a round
+        // that lands reads at fighting range, plate or no (a shrug glints,
+        // the round sparking off it). Close in it's the hit's own size.
+        let floor = eye.map_or(0.0, |e| flash_floor(e.distance(s.at)));
+        let size = (look.flare * range).max(floor);
+        if size > 0.0 {
+            let max = match s.strike {
+                Strike::Telling => 0.16,
+                Strike::Wound => 0.1,
+                Strike::Shrug => GLINT,
             };
             commands.spawn((
                 Flare {
                     life: max,
                     max,
-                    size: look.flare * range,
+                    size,
                 },
                 Mesh3d(a.flash.clone()),
-                MeshMaterial3d(if s.strike == Strike::Telling {
-                    a.star.clone()
-                } else {
+                MeshMaterial3d(if s.strike == Strike::Wound {
                     a.embers.clone()
+                } else {
+                    a.star.clone()
                 }),
                 Transform::from_translation(s.at + n * 0.03).with_scale(Vec3::splat(0.0)),
                 NotShadowCaster,
@@ -1540,6 +1557,17 @@ mod strike_tests {
             "the flash that tells is the big one"
         );
         assert!(tells.streaks > shrug.streaks && tells.bold > shrug.bold);
+    }
+
+    /// A flash's least size spans [`MIN_SPAN_DEG`] at the eye wherever it
+    /// is, and close in it's a pinprick (the hit's own look carries it).
+    #[test]
+    fn a_flash_is_never_too_small_to_see() {
+        for d in [5.0, 10.0, 20.0, 30.0, 60.0] {
+            let deg = 2.0 * (flash_floor(d) * 0.5 / d).atan().to_degrees();
+            assert!(deg >= MIN_SPAN_DEG, "{deg:.2} deg at {d} m");
+        }
+        assert!(flash_floor(3.0) < 0.03, "{:.3} m at 3 m", flash_floor(3.0));
     }
 }
 
