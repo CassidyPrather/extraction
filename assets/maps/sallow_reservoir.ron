@@ -473,6 +473,12 @@
         (prefab: "way_lamp", at: (2.9, 168.3), rot: 0.0),  // by the valve house, the way west to the stair
         (prefab: "way_lamp", at: (26.0, 156.3), rot: 0.0),  // on the face stair, by the outer wall
         (prefab: "way_lamp", at: (72.0, 120.0), rot: 0.0),  // at the foot of the climb to the gauge house, ahead along the shore
+        // Marker posts, banded with reflective tape, where a hand torch's
+        // pool shows nothing of the way home (scripts/night_route.sh, the
+        // torch case): a stop's post stands 22 m on, beside the way.
+        (prefab: "marker_post", at: (-0.4, 118.7), rot: 0.0),  // w01_00, the shore under the dam
+        (prefab: "marker_post", at: (49.4, 123.3), rot: 0.0),  // w01_01, the shore under the dam
+        (prefab: "marker_post", at: (99.2, 127.9), rot: 0.0),  // w01_02, the climb to the gauge house
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
