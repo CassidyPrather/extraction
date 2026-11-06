@@ -124,7 +124,16 @@ fn check_world(world: &mut World, when: &str) -> usize {
     }
     for (s_e, s) in world.query::<(Entity, &Socket)>().iter(world) {
         if let Some(o) = s.occupant {
-            claimed.entry(o).or_default().push(format!("socket {s_e}"));
+            // Which socket, and whose: a gun's magazine well, a body's
+            // pouch.
+            let owner = world.get::<SocketOwner>(s_e).map(|o| o.0);
+            let whose = owner
+                .and_then(|o| world.get::<Item>(o).map(|it| it.0.kind))
+                .map_or_else(|| format!("{owner:?}"), |k| format!("{k:?}"));
+            claimed
+                .entry(o)
+                .or_default()
+                .push(format!("socket {s_e} ({:?} of {whose})", s.kind));
         }
     }
     for h in world.query::<&crate::interact::Hand>().iter(world) {
@@ -136,7 +145,8 @@ fn check_world(world: &mut World, when: &str) -> usize {
     for &e in &items {
         let c = claimed.get(&e).cloned().unwrap_or_default();
         if c.len() > 1 {
-            problems.push(format!("{e} is in {} places: {c:?}", c.len()));
+            let kind = world.get::<Item>(e).map(|it| it.0.kind);
+            problems.push(format!("{e} ({kind:?}) is in {} places: {c:?}", c.len()));
         }
         let (bag, sock, held) = (
             world.get::<InBackpack>(e).map(|b| b.bag),
