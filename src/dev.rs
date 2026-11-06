@@ -479,7 +479,11 @@ fn gallery(
                 // mender, plough;
                 // `walker!broken` is a walker with its gun dead and a leg
                 // failing.
-                let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
+                // (`+hits` is the hit gauge's word, not a machine.)
+                let ids: Vec<&str> = s["robots:".len()..]
+                    .split('+')
+                    .filter(|w| *w != "hits")
+                    .collect();
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
                 let mut dead = Vec::new();

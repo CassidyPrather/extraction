@@ -358,6 +358,9 @@ fn step(world: &mut World, g: &mut HitGauge) {
         return;
     }
     g.frame += 1;
+    if g.frame == 1 {
+        info!("hit gauge: machines standing; rounds from frame {STAND}");
+    }
     if g.frame < STAND {
         return;
     }
