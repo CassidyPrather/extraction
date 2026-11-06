@@ -159,3 +159,13 @@ The coming-home walks live in `docs/craft/walks/home/`.
   the face read whole from 20 m short of the valve house, looking
   north-west. A structure that big is a landmark to the stop picker now
   (`dam_face` in `scripts/walk_stops.py`).
+- A waymark line has to follow the walk you're judging through its forks.
+  Rime's snow poles ran up the col track to the col, and at the fork
+  where the first job's way turns off for the saddle and the observatory
+  they went on without it: a newcomer keeping "the poles on your left"
+  walks to the wrong place. At every fork the walk takes, ask where the
+  waymarks go, and put a sign square in the way-ahead frame (its `rot`
+  is the arriving walker's heading).
+- Re-walk after the valley moves on. Rime's 4 Nov dead stretch had come
+  alive by 5 Nov (a refuge, poles, a tower), and the weakest moments had
+  moved on to the stretch after it.

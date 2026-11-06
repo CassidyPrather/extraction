@@ -50,7 +50,17 @@ pub(crate) struct Lamp(pub extraction_core::map_landmarks::Character);
 
 /// Every lamp lit or dark by its character on the game's clock; with the
 /// clock stopped (a frozen capture), lit.
-fn flash_lamps(time: Res<Time<Virtual>>, mut lamps: Query<(&Lamp, &mut Visibility)>) {
+/// A lamp put out on purpose (the lamp gauge's shot without it): its
+/// flashing leaves it be. The clock stopped lights every lamp, and lit the
+/// beacons the gauge had hidden: their "without" shot was as bright as
+/// their "with", and every beacon view came out n/a.
+#[derive(Component)]
+pub struct Doused;
+
+fn flash_lamps(
+    time: Res<Time<Virtual>>,
+    mut lamps: Query<(&Lamp, &mut Visibility), Without<Doused>>,
+) {
     let t = time.elapsed_secs();
     for (lamp, mut v) in &mut lamps {
         let want = if time.is_paused() || lamp.0.lit_at(t) {
@@ -115,13 +125,102 @@ fn highest(geo: &crate::world::buildings::Geo) -> Vec<&crate::world::buildings::
         .collect()
 }
 
-/// The highest point of a prefab, in its own frame: the middle of its
-/// highest pieces' tops (a cage's four corner posts level at the top put
-/// the lamp over the cage, not on one corner of it).
+/// The highest point of a prefab's pieces, in its own frame: the middle
+/// of its highest pieces' tops (a cage's four corner posts level at the
+/// top put the lamp over the cage, not on one corner of it).
+fn pieces_top(geo: &crate::world::buildings::Geo) -> Option<Vec3> {
+    let tops: Vec<Vec3> = highest(geo).into_iter().map(piece_top).collect();
+    (!tops.is_empty()).then(|| tops.iter().copied().sum::<Vec3>() / tops.len() as f32)
+}
+
+/// The highest point of a prefab, in its own frame: its pieces' top, or
+/// its dressed art's where that stands higher ([`art_top`]).
 pub fn top_of(id: &str) -> Option<Vec3> {
     let geo = prefab(id)?;
-    let tops: Vec<Vec3> = highest(&geo).into_iter().map(piece_top).collect();
-    (!tops.is_empty()).then(|| tops.iter().copied().sum::<Vec3>() / tops.len() as f32)
+    let pieces = pieces_top(&geo);
+    match (pieces, art_top(id)) {
+        (Some(p), Some(a)) if a.y > p.y + TIED => Some(a),
+        (p, a) => p.or(a),
+    }
+}
+
+/// Whether the lamp's top `t` is its dressed art's (the art stands over
+/// its pieces there, and carries it: a finial, a roof's peak).
+fn on_art(id: &str, t: Vec3) -> bool {
+    art_top(id)
+        .is_some_and(|a| (a.xz() - t.xz()).length() <= 0.3 && t.y >= a.y - 0.01 && t.y <= a.y + 0.6)
+}
+
+/// The highest point of a prefab's dressed art (its `models/props/` GLBs,
+/// posed as `Geo::props` has them): the middle of its highest vertices.
+/// A landmark dressed with a model can roof itself in the art alone: the
+/// mill race's hipped roof (25 to 27.4 m, a finial to 28.2) has no
+/// pieces, so its lamp sat on a roof post's top at 25 m, under the eave:
+/// a sliver of red past the roof's edge, DIM from 150 m. Read once a
+/// prefab; none where the prefab has no art, or its GLB can't be read
+/// (`every_landmark_lamp_stands_on_its_building` fails that loudly).
+fn art_top(id: &str) -> Option<Vec3> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Vec3>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().ok()?.get(id) {
+        return *v;
+    }
+    let geo = prefab(id)?;
+    let root = crate::asset_root_path().join("models/props");
+    let mut best: Option<Vec3> = None;
+    for (name, at) in art_of(&geo) {
+        let Some(local) = glb_top(&root.join(format!("{name}.glb"))) else {
+            continue;
+        };
+        let p = at.transform_point(local);
+        if best.is_none_or(|b| p.y > b.y) {
+            best = Some(p);
+        }
+    }
+    cache.lock().ok()?.insert(id.to_owned(), best);
+    best
+}
+
+/// The models a prefab is dressed with, posed in its frame.
+fn art_of(geo: &crate::world::buildings::Geo) -> Vec<(&'static str, Transform)> {
+    geo.props
+        .iter()
+        .flat_map(|p| p.models.iter().copied())
+        .collect()
+}
+
+/// A GLB's highest vertices' middle, in its own frame (node transforms
+/// taken as they are: the structures' art is one untransformed node).
+fn glb_top(path: &std::path::Path) -> Option<Vec3> {
+    let f = std::fs::read(path).ok()?;
+    let u32_at = |o: usize| {
+        f.get(o..o + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let json_len = u32_at(12)? as usize;
+    let json: serde_json::Value = serde_json::from_slice(f.get(20..20 + json_len)?).ok()?;
+    let bin = 20 + json_len + 8;
+    let mut pts: Vec<Vec3> = Vec::new();
+    for mesh in json["meshes"].as_array()? {
+        for prim in mesh["primitives"].as_array()? {
+            let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64()? as usize];
+            let view = &json["bufferViews"][acc["bufferView"].as_u64()? as usize];
+            let off = bin
+                + view["byteOffset"].as_u64().unwrap_or(0) as usize
+                + acc["byteOffset"].as_u64().unwrap_or(0) as usize;
+            let stride = view["byteStride"].as_u64().unwrap_or(12) as usize;
+            for i in 0..acc["count"].as_u64()? as usize {
+                let o = off + i * stride;
+                let c = |k: usize| u32_at(o + 4 * k).map(f32::from_bits);
+                pts.push(Vec3::new(c(0)?, c(1)?, c(2)?));
+            }
+        }
+    }
+    let top = pts.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+    let ties: Vec<Vec3> = pts.into_iter().filter(|p| p.y > top - 0.01).collect();
+    (!ties.is_empty()).then(|| ties.iter().copied().sum::<Vec3>() / ties.len() as f32)
 }
 
 /// Whether some piece of a prefab, solid or dressing, has its top just
@@ -146,7 +245,8 @@ pub fn lamp_seat(id: &str) -> Vec<(Vec3, Vec3)> {
     let (Some(geo), Some(t)) = (prefab(id), top_of(id)) else {
         return Vec::new();
     };
-    if carried(&geo, t) {
+    // On its art's top (a finial, a roof's peak), or on a piece: no bars.
+    if on_art(id, t) || carried(&geo, t) {
         return Vec::new();
     }
     highest(&geo)
@@ -165,7 +265,7 @@ pub fn lamp_lift(id: &str) -> f32 {
         return 0.0;
     };
     // The widest of the highest pieces sets it.
-    highest(&geo)
+    let lift = highest(&geo)
         .into_iter()
         .map(|p| match p.shape {
             Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
@@ -173,7 +273,14 @@ pub fn lamp_lift(id: &str) -> f32 {
             Shape::Prism(_) => 0.0,
         })
         .fold(0.0, f32::max)
-        .min(POLE_MAX)
+        .min(POLE_MAX);
+    // On the art's own top where that's higher (`top_of`): only as much
+    // pole as keeps the lamp where the pieces' top and pole had it, never
+    // lower (a wide top's pole is what shows it from below).
+    match (pieces_top(&geo), top_of(id)) {
+        (Some(p), Some(t)) if t.y > p.y + TIED => (p.y + lift - t.y).max(0.0),
+        _ => lift,
+    }
 }
 
 /// The tallest a lamp's pole gets (m).
@@ -408,16 +515,17 @@ fn day_glows(
 mod tests {
     use super::*;
 
-    /// A lamp on a top that's several pieces level with each other (the
-    /// mill race's cage, four corner posts) stands over the middle of
-    /// them, not on whichever came last.
+    /// A top that's several pieces level with each other (the mill race's
+    /// cage, four corner posts) is the middle of them, not whichever came
+    /// last. (The mill race's lamp itself goes higher, on its art's roof:
+    /// `the_mill_race_lamp_tops_its_roof`.)
     #[test]
     fn a_lamp_stands_over_the_middle_of_a_level_top() {
         let geo = prefab("mill_race").unwrap();
         let tied = highest(&geo);
         assert!(tied.len() > 1, "the mill race's top is its cage's posts");
         let mid = tied.iter().map(|p| piece_top(p)).sum::<Vec3>() / tied.len() as f32;
-        let top = top_of("mill_race").unwrap();
+        let top = pieces_top(&geo).unwrap();
         assert!(
             (top - mid).length() < 0.01,
             "lamp at {top:?}, the posts' middle {mid:?}"
@@ -429,6 +537,27 @@ mod tests {
                 "the lamp still on a post at {t:?}"
             );
         }
+    }
+
+    /// A doused lamp stays out, even with the clock stopped (which lights
+    /// every other): the lamp gauge's shot without a flashing beacon.
+    #[test]
+    fn a_doused_lamp_stays_out() {
+        use extraction_core::map_landmarks::MASTS;
+        let mut app = App::new();
+        let mut time = Time::<Virtual>::default();
+        time.pause();
+        app.insert_resource(time);
+        app.add_systems(Update, flash_lamps);
+        let lamp = app
+            .world_mut()
+            .spawn((Lamp(MASTS[0]), Visibility::Hidden, Doused))
+            .id();
+        app.update();
+        assert_eq!(
+            *app.world().get::<Visibility>(lamp).unwrap(),
+            Visibility::Hidden
+        );
     }
 
     /// With the clock stopped every lamp shows, whatever its phase: the
@@ -556,7 +685,20 @@ mod tests {
                         p.prefab, t.x, t.z
                     ));
                 }
-                let under = carried(&geo, t) || !lamp_seat(&p.prefab).is_empty();
+                // Its dressed art must be there to read: a missing GLB
+                // would leave the pieces' top to stand in, and hide a lamp
+                // floating under an art-only roof.
+                let root = crate::asset_root_path().join("models/props");
+                for (name, _) in art_of(&geo) {
+                    if glb_top(&root.join(format!("{name}.glb"))).is_none() {
+                        bad.push(format!("no art for {} ({name}.glb)", p.prefab));
+                    }
+                }
+                // On a piece, on its dressed art's top (just over the art's
+                // highest vertices, not merely under art higher somewhere),
+                // or on its seat's bars.
+                let under =
+                    carried(&geo, t) || on_art(&p.prefab, t) || !lamp_seat(&p.prefab).is_empty();
                 if !under {
                     bad.push(format!(
                         "{}: nothing under its lamp at ({:.1}, {:.1}, {:.1})",
@@ -567,5 +709,44 @@ mod tests {
         }
         assert!(seen.len() > 5, "only {} landmark prefabs", seen.len());
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// The mill race's lamp is on its roof's peak (the art's finial at
+    /// 28.2 m), not on a roof post's top at 25 m under the eave, and needs
+    /// no seat there.
+    #[test]
+    fn the_mill_race_lamp_tops_its_roof() {
+        let top = top_of("mill_race").unwrap();
+        assert!(top.y > 28.0, "{top}");
+        assert!(on_art("mill_race", top), "{top}");
+        assert!(lamp_seat("mill_race").is_empty());
+        assert_eq!(lamp_lift("mill_race"), 0.0);
+    }
+
+    /// Taking the art's top never lowers a lamp: it stands at least where
+    /// the pieces' top and pole had it.
+    #[test]
+    fn the_art_top_never_lowers_a_lamp() {
+        for id in crate::world::buildings::PREFABS {
+            let geo = prefab(id).unwrap();
+            let Some(p) = pieces_top(&geo) else {
+                continue;
+            };
+            let pole = highest(&geo)
+                .into_iter()
+                .map(|q| match q.shape {
+                    Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
+                    Shape::Cylinder(r, _) => 0.75 * r,
+                    Shape::Prism(_) => 0.0,
+                })
+                .fold(0.0, f32::max)
+                .min(POLE_MAX);
+            let lamp = top_of(id).unwrap().y + lamp_lift(id);
+            assert!(
+                lamp >= p.y + pole - 1e-3,
+                "{id}: {lamp} under {}",
+                p.y + pole
+            );
+        }
     }
 }
