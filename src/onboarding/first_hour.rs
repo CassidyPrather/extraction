@@ -217,16 +217,9 @@ pub fn run_chain(chain: &Chain) -> AppExit {
     }
     let personas = &chain.personas;
     let exe = std::env::current_exe().expect("own executable");
-    // Everything else on the command line goes to both sessions.
-    let passthrough: Vec<String> = std::env::args()
-        .skip(1)
-        .scan(false, |skip, a| {
-            let keep = !*skip && a != "--scenario";
-            *skip = a == "--scenario";
-            Some(keep.then_some(a))
-        })
-        .flatten()
-        .collect();
+    // Everything else on the command line goes to both sessions, bar the
+    // valley (`--map`), which is the raids' (the yard is the yard).
+    let (passthrough, map) = raids_map(passthrough());
     let mut failed = Vec::new();
     for p in personas {
         let dir = folder(p);
@@ -238,7 +231,7 @@ pub fn run_chain(chain: &Chain) -> AppExit {
         let stages = std::iter::once((YARD, vec![])).chain(
             // As the cord would open it: on to the next valley; then a raid
             // a job.
-            (0..chain.raids).map(|_| (RAID, vec!["--map".to_string(), "marrow_creek".to_string()])),
+            (0..chain.raids).map(|_| (RAID, vec!["--map".to_string(), map.clone()])),
         );
         for (n, (stage, extra)) in stages.enumerate() {
             let mut cmd = std::process::Command::new(&exe);
@@ -266,6 +259,24 @@ pub fn run_chain(chain: &Chain) -> AppExit {
         println!("first hour: FAILED for {failed:?}");
         AppExit::error()
     }
+}
+
+/// The valley a career's raids are in (`--map`, Marrow if none's given),
+/// and the rest of the command line without it.
+fn raids_map(args: Vec<String>) -> (Vec<String>, String) {
+    let mut rest = Vec::new();
+    let mut map = "marrow_creek".to_string();
+    let mut args = args.into_iter();
+    while let Some(a) = args.next() {
+        if a == "--map" {
+            if let Some(m) = args.next() {
+                map = m;
+            }
+        } else {
+            rest.push(a);
+        }
+    }
+    (rest, map)
 }
 
 fn passthrough() -> Vec<String> {
@@ -4904,6 +4915,23 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn a_careers_raids_go_to_the_valley_asked() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let (rest, map) = raids_map(args(&[
+            "--headless",
+            "--map",
+            "rime_fell",
+            "--weather",
+            "fog",
+        ]));
+        assert_eq!(map, "rime_fell");
+        assert_eq!(rest, args(&["--headless", "--weather", "fog"]));
+        let (rest, map) = raids_map(args(&["--headless"]));
+        assert_eq!(map, "marrow_creek");
+        assert_eq!(rest, args(&["--headless"]));
     }
 
     #[test]
