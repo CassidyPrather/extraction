@@ -594,8 +594,8 @@ def snow_pole():
     # Two bands of reflective tape round the top, in the white: they send a
     # torch back to whoever holds it, so the line reads at night from a
     # pole or two off (the game lights them: render::reflectors).
-    for y in (1.595, 2.095):
-        p.cyl(r + 0.002, y, y + 0.06, "Reflector", segs=10, xf=UP)
+    for y in (1.575, 2.075):
+        p.cyl(r + 0.002, y, y + 0.1, "Reflector", segs=10, xf=UP)
     return [p]
 
 

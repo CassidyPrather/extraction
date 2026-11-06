@@ -25,7 +25,7 @@ impl Plugin for ReflectorsPlugin {
 pub const STEPS: usize = 6;
 /// The tape's glow at its brightest (linear, before the eye's exposure):
 /// a lantern's core is (6, 3.2, 1); white tape a little cool.
-const GLOW: LinearRgba = LinearRgba::rgb(3.6, 3.6, 3.3);
+const GLOW: LinearRgba = LinearRgba::rgb(5.5, 5.5, 5.0);
 /// How far off a band in the beam's middle shines at its brightest (m):
 /// nearer, as bright; further, falling with distance squared.
 pub const FULL_AT: f32 = 25.0;
@@ -78,7 +78,7 @@ fn make_steps(
 
 /// Step `k`'s share of the full glow.
 pub fn level(k: usize) -> f32 {
-    (k as f32 / STEPS as f32).powi(2)
+    k as f32 / STEPS as f32
 }
 
 /// Meshes come in drawn in the tape: they're reflectors.
