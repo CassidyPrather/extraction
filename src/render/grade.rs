@@ -364,6 +364,15 @@ pub fn torch_light<'a>(
         // The walls it lights, a couple of metres off: its lumens into
         // its cone (2 pi (1 - cos angle) steradians) over 4 m^2, and the
         // share of what you see that they fill.
+        // (Kept on purpose, though the renderer draws a spot as a point
+        // light's candela cut to its cone, 4 pi / cone ~28x less, and the
+        // wall isn't always 2 m off: the held torch sits on the 0.2 cap
+        // wherever it points. Measured honestly, by where the beam lands,
+        // the eyes opened 1.2 stops on open ground at night and the rain's
+        // fog came up with them, a grey veil: Fourth valley's night-route
+        // gauge read fewer stops, 3 -> 5 lost clear, 6 -> 8 in a downpour.
+        // A torch that keeps your eyes from the dark beyond it is the
+        // look we want.)
         let cone = std::f32::consts::TAU * (1.0 - l.outer_angle.cos()).max(0.05);
         lux += l.intensity / cone / 4.0 * 0.3;
     }

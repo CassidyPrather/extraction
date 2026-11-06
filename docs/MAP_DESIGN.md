@@ -315,7 +315,8 @@ ruin's is open, and lights up too. The plume reads at 150 m by day and in
 drizzle, a pale curl against the trees and sky. After dark it fades with
 the light, and the lit window takes over. `EXTRACTION_CUES` tries cues without
 editing the map (`window:X,Z[,light][,always];smoke:X,Z[,Y]`). The
-breadcrumbs gauge doesn't count either yet.
+breadcrumbs gauge counts both: smoke cues a reward within 12 m of it
+seen from 150 m (`SMOKE_SIGHT`), a lit window from 120 m (`WINDOW_SIGHT`).
 
 ![Kettle's farmhouse with two lit front windows, one east and its stove
 smoking: day, drizzle, dusk and night, from 50 m north and 150 m east

@@ -101,6 +101,39 @@ a newcomer racks it like a drawer. A spring weight for every slide and
 charging handle, as the crossbow's draw has (`DRAW_WEIGHT`), would
 give it one. That would need retuning the flick rule in the
 hand-worked mechanisms table above, where a flick racks a slide.
+(Since done: `SPRING_PULL`, the slide spring that a rack beats.)
+
+## Raids 3 to 8: TOZ-8, IZh-43, MP-133, SKS, Mosin, by hand
+
+Each gun has a script in `weapons::cycle` (`Cycle::of`), and a headless
+test, `the_<gun>_cycle_runs_by_hand`, prints its beats. The weakest beats
+were the same on every gun, so each fix covers a whole class:
+
+- **A hand takes a handle where it is** (`follow_handles`,
+  `handle_at`). A bolt handle, pump forend or charging handle used to be
+  grabbed where it rested, even after it had moved. Now the grab point
+  follows the part. Test:
+  `a_hand_takes_a_handle_where_it_is` (in `weapons/strokes.rs`).
+- **A case leaves as fast as the hand drew the bolt** (`hand_throw`,
+  `CASE_THROW`). On a hand-worked action, a slow draw now dribbles the
+  empty out and a hard one flings it. Test:
+  `a_case_leaves_as_briskly_as_the_hand_drew_the_bolt`.
+- **A shot never works the pump.** The forend is measured against the
+  grip hand along the bore, so the gun's own shove no longer reads as
+  half a stroke. Test: `a_shot_never_works_the_pump`.
+- **A heavy round kicks as a shove and a slow settle** (`feel::heft`).
+  Test: `a_heavy_rounds_kick_is_a_shove_and_a_slow_settle`.
+- **A clip strips a round at a time** (`Firearm::strip_clip_up_to`,
+  `STRIP_PUSH`, `CLIP_STROKE`), on the SKS and the Mosin. Test:
+  `a_clip_strips_a_round_at_a_time`.
+
+The game's IZh-43 is the ejector model, so it still throws both hulls
+when it is broken open.
+
+The reels are `<gun>_cycle_before.mp4`, `<gun>_cycle_after.mp4` and
+`<gun>_cycle_before_after.mp4`, for `toz8`, `toz_double`, `mp133`, `sks`
+and `mosin`. `kick_pm_izh43_mosin_side.mp4` shows the three kicks from
+the side (`--gallery cycle:kick_<gun>,side`).
 
 ## The shots
 
