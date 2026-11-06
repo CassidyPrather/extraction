@@ -1263,7 +1263,7 @@ pub(super) fn direct_raid(
         || firsts.iter().chain(&again).any(|f| {
             matches!(
                 f,
-                First::Sentry | First::DroneLock | First::Aimed | First::Heavy
+                First::Sentry | First::DroneLock | First::Aimed | First::Heavy | First::Hound
             )
         });
     // A gun to hand (in a hand, or on the body), for the reckless to shoot
@@ -1441,6 +1441,28 @@ pub(super) fn direct_raid(
                         None => run_for_cover(&world.zone, here, from, 0.0),
                     },
                 }
+            }
+            // "Hound. Don't run... Plant your feet and shoot": stopped where
+            // it is, at it (a run only draws it on; a gun to hand, the lost
+            // one too: there's no going anywhere from a hound).
+            First::Hound if armed_now => {
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = 0.0;
+                }
+                state.fought_at = now;
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "a hound: stood and shot, as the driver said",
+                );
+                take_it_on()
+            }
+            // Nothing to shoot with: feet planted, still.
+            First::Hound => {
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = 0.0;
+                }
+                vec![Task::Wait(8.0)]
             }
             // "Big one, and slow. Walk away from it": off, upright, at a
             // walk (a heavy sees a still shape as well as a moving one;
