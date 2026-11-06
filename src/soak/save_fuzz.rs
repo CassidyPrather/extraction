@@ -1195,3 +1195,157 @@ fn soak_quit_anywhere_in_every_valley() {
         "never quit at {missed:?}: the soak didn't reach them"
     );
 }
+
+/// Where a contract's job stands, for a quit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum JobMoment {
+    /// Its thing on the body: a relay to plant, a thing brought (a hearth
+    /// in its lead case with it).
+    Carried,
+    /// Just done: the relay set down, the place seen.
+    Done,
+}
+
+/// Which job moments the raid is in this frame.
+fn job_moments(world: &mut World) -> Vec<JobMoment> {
+    use extraction_core::progression::Job;
+    let me = player(world);
+    let job = world
+        .resource::<crate::progression::Progression>()
+        .0
+        .job
+        .clone();
+    let mut now = Vec::new();
+    let item = match &job {
+        Some(Job::Bring { item, .. } | Job::Plant { item, .. }) => Some(item.clone()),
+        _ => None,
+    };
+    if matches!(
+        job,
+        Some(Job::Plant { planted: true, .. } | Job::Scout { seen: true, .. })
+    ) {
+        now.push(JobMoment::Done);
+    }
+    if let Some(id) = item {
+        let catalog = world.resource::<Catalog>().clone();
+        let mine: Vec<Entity> = world
+            .query::<(Entity, &Item)>()
+            .iter(world)
+            .filter(|(_, it)| catalog.get(it.0.kind).id == id)
+            .map(|(e, _)| e)
+            .collect();
+        let on_body = |world: &World, e: Entity| -> bool {
+            // Up through what holds it: a hand, a bag, a socket, to its owner.
+            let mut at = e;
+            for _ in 0..6 {
+                if world.get::<Held>(at).is_some_and(|h| h.player == me) {
+                    return true;
+                }
+                if let Some(b) = world.get::<InBackpack>(at) {
+                    at = b.bag;
+                } else if let Some(s) = world.get::<InSocket>(at) {
+                    match world.get::<SocketOwner>(s.socket) {
+                        Some(o) if o.0 == me => return true,
+                        Some(o) => at = o.0,
+                        None => return false,
+                    }
+                } else {
+                    return at == me;
+                }
+                if at == me {
+                    return true;
+                }
+            }
+            false
+        };
+        if mine.iter().any(|e| on_body(world, *e)) {
+            now.push(JobMoment::Carried);
+        }
+    }
+    now
+}
+
+/// A playtester quits mid-contract. For every step of every contract
+/// that lies in a valley (a fetch's and a photograph's in the contract's
+/// other steps' valley), a bot raid on that step (`SIM_CONTRACT`) is
+/// saved and loaded into a fresh game when its thing is first on the body
+/// (a relay to plant, a thing to bring, a hearth in its case with it) and
+/// again just after it's done (the relay set down, the place seen): each
+/// time every item comes back as it was (by id and state, what's inside
+/// it with it) and the career, its contract and its job, as it was.
+/// `QUIT_CONTRACT=<id>`: that contract only.
+#[test]
+#[ignore = "soak: cargo test --profile fast --lib -- --ignored soak_quit_on_every_contract_step"]
+fn soak_quit_on_every_contract_step() {
+    use extraction_core::contracts::{CONTRACTS, Step};
+    let only = std::env::var("QUIT_CONTRACT").ok();
+    let mut findings = Vec::new();
+    let mut covered: Vec<String> = Vec::new();
+    let mut missed: Vec<String> = Vec::new();
+    for c in CONTRACTS {
+        if only.as_ref().is_some_and(|o| o != c.id) {
+            continue;
+        }
+        let home = c.steps.iter().find_map(|s| match s {
+            Step::Bring { map, .. } | Step::Plant { map, .. } | Step::Scout { map, .. } => {
+                Some(*map)
+            }
+            _ => None,
+        });
+        for (k, step) in c.steps.iter().enumerate() {
+            let map = match step {
+                Step::Bring { map, .. } | Step::Plant { map, .. } | Step::Scout { map, .. } => {
+                    Some(*map)
+                }
+                _ => home,
+            };
+            let Some(map) = map else { continue };
+            // SAFETY: the soak runs alone (an ignored test, by name).
+            unsafe { std::env::set_var("SIM_CONTRACT", format!("{}:{k}", c.id)) };
+            let mut to_hit = vec![JobMoment::Carried, JobMoment::Done];
+            for m in to_hit.drain(..) {
+                let path = profile(&format!("contract-{}-{k}-{m:?}", c.id));
+                let mut a = raid_on(&path, map, 1);
+                let mut frame = 0usize;
+                let mut hit = false;
+                while frame < 90 * 60 * 14 {
+                    a.update();
+                    frame += 1;
+                    if job_moments(a.world_mut()).contains(&m) {
+                        hit = true;
+                        break;
+                    }
+                    if a.world().resource::<Raid>().phase == Phase::AtBase && frame > 90 * 60 {
+                        break;
+                    }
+                }
+                let what = format!("{} step {k} ({map}) {m:?}", c.id);
+                if !hit {
+                    println!("{what}: never ({frame} frames)");
+                    missed.push(what);
+                    continue;
+                }
+                let when = format!("{what} at frame {frame}");
+                println!("quit: {when}");
+                let (mut b, f) = quit_and_reload(&mut a, &path, map, 1, &when);
+                findings.extend(f);
+                covered.push(what);
+                frames(&mut b, 300, &format!("{when}, played on"));
+            }
+        }
+    }
+    // SAFETY: as above.
+    unsafe { std::env::remove_var("SIM_CONTRACT") };
+    println!(
+        "{} contract moments quit at, {} never came round",
+        covered.len(),
+        missed.len()
+    );
+    assert!(
+        findings.is_empty(),
+        "{} findings over a quit and reload:\n{}",
+        findings.len(),
+        findings.join("\n\n")
+    );
+    assert!(!covered.is_empty(), "no contract moment came round");
+}
