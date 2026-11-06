@@ -155,6 +155,51 @@ pub fn choose_start(opts: &mut LaunchOptions) {
     }
 }
 
+/// The world seed for a player's own session: the career's own, rolled
+/// for a new career or an older one that has none. Pinned runs (`--seed`,
+/// headless, tooling, sims, the yard) keep the seed they were given.
+pub fn choose_seed(opts: &mut LaunchOptions) {
+    if !opts.rolls_career_seed() {
+        return;
+    }
+    let kept = if opts.new_game {
+        None
+    } else {
+        career_path(opts)
+            .and_then(|p| read_career(&p).career)
+            .and_then(|c| c.seed)
+    };
+    opts.seed = kept.unwrap_or_else(roll_seed);
+    info!(
+        "world seed {}{}",
+        opts.seed,
+        if kept.is_some() { "" } else { " (new)" }
+    );
+}
+
+/// A fresh seed: the process's own random hasher keys, the time and the
+/// process id (never the old fixed 1).
+fn roll_seed() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    h.write_u128(now);
+    h.write_u32(std::process::id());
+    match h.finish() {
+        1 => 2,
+        s => s,
+    }
+}
+
+/// Writes the session's seed into the career when the session rolled it.
+pub(crate) fn stamp_seed(career: &mut Career, opts: &LaunchOptions) {
+    if opts.rolls_career_seed() {
+        career.seed = Some(opts.seed);
+    }
+}
+
 /// The valley the truck goes on to from the yard: the career's, or the
 /// first.
 pub fn next_valley(opts: &LaunchOptions) -> String {
@@ -407,6 +452,7 @@ fn load_save(
         Career::from_game(&fresh_save(&opts.map))
     });
     career.map = opts.map.clone();
+    stamp_seed(&mut career, &opts);
     let save = career.game(&opts.map);
     commands.insert_resource(CareerState(career));
     let zone = save.zone.map == opts.map && save.zone.rolled;

@@ -146,6 +146,7 @@ impl Plugin for DirectorPlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    reseed_each_raid,
                     hear_reports,
                     night_visits,
                     look_again_each_raid,
@@ -157,10 +158,38 @@ impl Plugin for DirectorPlugin {
     }
 }
 
+/// The director's dice for a raid: the world's seed and how many raids
+/// the career had before this one (0 is the seed alone, as it always was:
+/// a fresh save's first raid rolls as it did).
+pub fn raid_rng(seed: u64, before: u32) -> Rng {
+    Rng::new(seed ^ 0xD1EC ^ u64::from(before).wrapping_mul(0x9E37_79B9_7F4A_7C15))
+}
+
+/// Each raid its own machines: the dice start from the career's raid
+/// count when the session opens, and again whenever a later raid starts
+/// in it (the first one keeps the dice it opened with).
+fn reseed_each_raid(
+    raid: Res<crate::raid::Raid>,
+    opts: Res<LaunchOptions>,
+    mut director: ResMut<Director>,
+    mut seeded_for: Local<Option<u32>>,
+) {
+    let Some(was) = *seeded_for else {
+        *seeded_for = Some(raid.raids);
+        director.rng = raid_rng(opts.seed, raid.raids);
+        return;
+    };
+    let before = raid.raids.saturating_sub(1);
+    if raid.raids > 0 && before != was {
+        *seeded_for = Some(before);
+        director.rng = raid_rng(opts.seed, before);
+    }
+}
+
 fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
     commands.insert_resource(Director {
         enabled: opts.robots,
-        rng: Rng::new(opts.seed ^ 0xD1EC),
+        rng: raid_rng(opts.seed, 0),
         next_job: 25.0,
         responses: Vec::new(),
         response_cooldown: 0.0,
