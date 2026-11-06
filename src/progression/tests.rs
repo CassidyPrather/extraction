@@ -1176,3 +1176,110 @@ fn a_raid_resumed_from_the_save_is_not_counted_again() {
         "the resumed raid is the same raid"
     );
 }
+
+/// A player's own launch (no `--seed`, a window, not the yard), its
+/// profile in `dir`.
+fn play_launch(dir: &Path) -> LaunchOptions {
+    LaunchOptions {
+        data_dir: Some(dir.to_owned()),
+        map: "marrow_creek".into(),
+        ..Default::default()
+    }
+}
+
+/// Two players' new careers don't share a world: each rolls its own seed,
+/// and neither is the old fixed 1.
+#[test]
+fn two_new_careers_get_different_seeds() {
+    let a = temp_save("seed_new_a");
+    let b = temp_save("seed_new_b");
+    let mut oa = play_launch(a.parent().unwrap());
+    let mut ob = play_launch(b.parent().unwrap());
+    assert!(oa.rolls_career_seed(), "a play launch rolls its seed");
+    crate::persist::choose_seed(&mut oa);
+    crate::persist::choose_seed(&mut ob);
+    assert_ne!(oa.seed, 1, "not everyone's seed");
+    assert_ne!(oa.seed, ob.seed, "two careers, two worlds");
+}
+
+/// A career keeps its seed from session to session; a pinned run (and
+/// the yard) keeps the seed it was given.
+#[test]
+fn a_career_keeps_its_seed_and_pinned_runs_their_own() {
+    let path = temp_save("seed_kept");
+    let career = Career {
+        version: extraction_core::save::SAVE_VERSION,
+        map: "marrow_creek".into(),
+        seed: Some(777),
+        ..Default::default()
+    };
+    crate::persist::write_career(&path, &career);
+    let mut o = play_launch(path.parent().unwrap());
+    crate::persist::choose_seed(&mut o);
+    assert_eq!(o.seed, 777, "the career's own seed");
+    let mut pinned =
+        LaunchOptions::parse(["--seed", "5", "--map", "marrow_creek"].map(String::from));
+    pinned.data_dir = path.parent().map(Path::to_owned);
+    crate::persist::choose_seed(&mut pinned);
+    assert_eq!(pinned.seed, 5, "--seed wins");
+    let mut yard = play_launch(path.parent().unwrap());
+    yard.map = crate::camp::TRAINING_YARD.into();
+    crate::persist::choose_seed(&mut yard);
+    assert_eq!(yard.seed, 1, "the yard is the same for everyone");
+}
+
+/// An older career with no seed gets one rolled on its first load, and
+/// written into the career, so the next session plays the same world.
+#[test]
+fn an_older_career_gets_its_seed_on_first_load() {
+    let path = temp_save("seed_old");
+    let career = Career {
+        version: extraction_core::save::SAVE_VERSION,
+        map: "marrow_creek".into(),
+        ..Default::default()
+    };
+    crate::persist::write_career(&path, &career);
+    let mut o = play_launch(path.parent().unwrap());
+    crate::persist::choose_seed(&mut o);
+    assert_ne!(o.seed, 1);
+    let mut loaded = crate::persist::read_career(&path).career.unwrap();
+    crate::persist::stamp_seed(&mut loaded, &o);
+    assert_eq!(loaded.seed, Some(o.seed), "kept with the career");
+    let mut pinned = LaunchOptions::parse(["--seed", "5"].map(String::from));
+    pinned.data_dir = path.parent().map(Path::to_owned);
+    let mut other = crate::persist::read_career(&path).career.unwrap();
+    crate::persist::stamp_seed(&mut other, &pinned);
+    assert_eq!(other.seed, None, "a pinned run writes no seed");
+}
+
+/// The director's first roll once the raid count is set in a fresh
+/// headless app (seed pinned at 1).
+fn director_roll_at(raids: u32) -> u64 {
+    let path = temp_save(&format!("seed_director_{raids}"));
+    let mut app = app_with_save(&path, "marrow_creek");
+    app.world_mut().resource_mut::<Raid>().raids = raids;
+    for _ in 0..3 {
+        app.update();
+    }
+    app.world()
+        .resource::<crate::robots::director::Director>()
+        .rng
+        .clone()
+        .next_u64()
+}
+
+/// Each attempt differs: two raids that differ only in the raid count get
+/// different director rolls; the same raid count gives the same ones.
+#[test]
+fn each_raid_rolls_its_own_director_and_replays_the_same() {
+    assert_ne!(
+        director_roll_at(3),
+        director_roll_at(4),
+        "a new raid, new machines"
+    );
+    assert_eq!(
+        director_roll_at(3),
+        director_roll_at(3),
+        "the same save and raid count replay"
+    );
+}

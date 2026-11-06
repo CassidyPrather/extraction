@@ -277,6 +277,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // Retroreflective tape (a snow pole's bands): lit for the eye's torch
     // by `render::reflectors`.
     "Reflector",
+    // Unbleached linen sacking (art/items/food.py's sacks).
+    "Sacking",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -361,6 +363,13 @@ impl ModelMaterials {
             // metre, as the rag cloth's.
             "Canvas" => derive(Mat::Canvas, &|m| {
                 m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+            }),
+            // Linen sacking: the canvas scan's weave and its roughness, in
+            // the cloth's own pale colour (a flour sack).
+            "Sacking" => derive(Mat::Canvas, &|m| {
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(3.0));
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.84, 0.81, 0.72);
             }),
             "Planks" => lib.get(Mat::Planks, server, materials),
             "Boards" => lib.get(Mat::WoodFloor, server, materials),
@@ -867,6 +876,43 @@ mod tests {
     }
 
     /// The art kit's preview palette names the same materials as the game.
+    #[test]
+    fn no_flat_model_material_is_paper_white() {
+        // Nothing flat (no texture, not glowing, not see-through) is
+        // whiter than enamel: paper-white has no shading left in it under a
+        // torch held close. (With the eyes closing on what the beam lands
+        // on, `render::grade`, nothing up to here clips.)
+        use super::ModelMaterials;
+        use crate::render::materials::MaterialLibrary;
+        use bevy::prelude::*;
+        const PALE: f32 = 0.78;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Image>();
+        let world = app.world_mut();
+        let server = world.resource::<AssetServer>().clone();
+        let mut lib = MaterialLibrary::default();
+        let mut mm = ModelMaterials::default();
+        let mut bad = Vec::new();
+        world.resource_scope(|_, mut materials: Mut<Assets<StandardMaterial>>| {
+            for name in MATERIAL_NAMES {
+                let h = mm.get(name, &mut lib, &server, &mut materials);
+                let Some(m) = materials.get(&h) else { continue };
+                let lit = m.emissive.red + m.emissive.green + m.emissive.blue > 0.0;
+                if m.base_color_texture.is_some() || lit || m.base_color.alpha() < 1.0 || m.unlit {
+                    continue;
+                }
+                let c = m.base_color.to_linear();
+                let l = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+                if l > PALE {
+                    bad.push(format!("{name}: {l:.2}"));
+                }
+            }
+        });
+        assert!(bad.is_empty(), "paper-white:\n{}", bad.join("\n"));
+    }
+
     #[test]
     fn art_palette_matches_the_game() {
         let common = crate::asset_root_path()
