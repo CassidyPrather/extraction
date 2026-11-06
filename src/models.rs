@@ -277,6 +277,8 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // Retroreflective tape (a snow pole's bands): lit for the eye's torch
     // by `render::reflectors`.
     "Reflector",
+    // Unbleached linen sacking (art/items/food.py's sacks).
+    "Sacking",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -361,6 +363,14 @@ impl ModelMaterials {
             // metre, as the rag cloth's.
             "Canvas" => derive(Mat::Canvas, &|m| {
                 m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+            }),
+            // Unbleached linen sacking: the canvas scan's weave and its
+            // roughness, in the cloth's own pale colour (a flour or sugar
+            // sack): pale, never paper-white.
+            "Sacking" => derive(Mat::Canvas, &|m| {
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(3.0));
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.68, 0.63, 0.52);
             }),
             "Planks" => lib.get(Mat::Planks, server, materials),
             "Boards" => lib.get(Mat::WoodFloor, server, materials),
@@ -472,7 +482,7 @@ impl ModelMaterials {
             "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
             // White enamel: mugs, bowls, the kettle, labels' white print, and the
             // houses' stoves and sinks.
-            "Enamel" => flat(materials, Color::srgb(0.88, 0.88, 0.85), 0.0, 0.3),
+            "Enamel" => flat(materials, Color::srgb(0.78, 0.78, 0.75), 0.0, 0.3),
             // Bare steel showing through worn bluing, on gun edges.
             "Worn" => flat(materials, Color::srgb(0.5, 0.5, 0.5), 1.0, 0.45),
             "Red" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
@@ -480,7 +490,7 @@ impl ModelMaterials {
             "Char" => flat(materials, Color::srgb(0.1, 0.092, 0.085), 0.0, 0.9),
             "Ember" => glow(materials, Color::srgb(0.9, 0.35, 0.08), (6.0, 1.8, 0.25)),
             "Cream" => flat(materials, Color::srgb(0.82, 0.78, 0.66), 0.0, 0.6),
-            "Paper" => flat(materials, Color::srgb(0.85, 0.83, 0.76), 0.0, 0.9),
+            "Paper" => flat(materials, Color::srgb(0.76, 0.74, 0.67), 0.0, 0.9),
             "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
             "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
@@ -867,6 +877,43 @@ mod tests {
     }
 
     /// The art kit's preview palette names the same materials as the game.
+    #[test]
+    fn no_flat_model_material_is_whiter_than_pale() {
+        // By torchlight up close the eyes can't take paper-white: a flat
+        // colour (no texture, not glowing, not see-through) is held to
+        // `PALE`, linear luminance, about sRGB 0.8 grey. Pale reads as
+        // pale; whiter clipped to a blank blob (the flour sack).
+        use super::ModelMaterials;
+        use crate::render::materials::MaterialLibrary;
+        use bevy::prelude::*;
+        const PALE: f32 = 0.6;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Image>();
+        let world = app.world_mut();
+        let server = world.resource::<AssetServer>().clone();
+        let mut lib = MaterialLibrary::default();
+        let mut mm = ModelMaterials::default();
+        let mut bad = Vec::new();
+        world.resource_scope(|_, mut materials: Mut<Assets<StandardMaterial>>| {
+            for name in MATERIAL_NAMES {
+                let h = mm.get(name, &mut lib, &server, &mut materials);
+                let Some(m) = materials.get(&h) else { continue };
+                let lit = m.emissive.red + m.emissive.green + m.emissive.blue > 0.0;
+                if m.base_color_texture.is_some() || lit || m.base_color.alpha() < 1.0 || m.unlit {
+                    continue;
+                }
+                let c = m.base_color.to_linear();
+                let l = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+                if l > PALE {
+                    bad.push(format!("{name}: {l:.2}"));
+                }
+            }
+        });
+        assert!(bad.is_empty(), "whiter than pale:\n{}", bad.join("\n"));
+    }
+
     #[test]
     fn art_palette_matches_the_game() {
         let common = crate::asset_root_path()

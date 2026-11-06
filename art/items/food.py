@@ -302,24 +302,30 @@ def flour_sack():
     # A white cotton sack, slumped, its neck tied off with string; the word
     # and two red stripes stencilled on the front.
     neck = yb + 0.084
-    sack(p, (0.047, 0.05, 0.037), (0.0, yb + 0.036, 0.0), yb, neck, "Paper", seed=4, segs=22,
+    # Unbleached linen, woven (`Sacking`): pale, not paper-white, which by
+    # torchlight was a blank blob. Tied off with dark twine, wound thick.
+    sack(p, (0.047, 0.05, 0.037), (0.0, yb + 0.036, 0.0), yb, neck, "Sacking", seed=4, segs=22,
          rings=14)
-    ring(p, 0.0072, 0.0019, "Rope", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
-    ring(p, 0.007, 0.0016, "Rope", xf=T(0, neck + 0.0035, 0) @ UP @ RX(0.15), segs=14, sides=5)
+    ring(p, 0.0074, 0.0026, "Black", xf=T(0, neck, 0) @ UP, segs=14, sides=5)
+    ring(p, 0.0072, 0.0022, "Black", xf=T(0, neck + 0.0042, 0) @ UP @ RX(0.15), segs=14, sides=5)
     # The gathered cloth above the tie, crumpled into points.
     tuft = [((0.0125 if k % 2 else 0.0055) * math.cos(2 * math.pi * k / 14),
              (0.0125 if k % 2 else 0.0055) * math.sin(2 * math.pi * k / 14)) for k in range(14)]
-    p.prism(tuft, neck + 0.002, neck + 0.0195, "Paper", axis="y",
+    p.prism(tuft, neck + 0.002, neck + 0.0195, "Sacking", axis="y",
             width=lambda a, b: (neck + 0.002,
                                 neck + 0.0125 + 0.007 * abs(math.sin(a * 900 + b * 500))))
     tube_path(p, [(0.006, neck, -0.004), (0.013, neck - 0.004, -0.011),
-                  (0.016, neck - 0.012, -0.018)], 0.0011, "Rope", sides=4, closed=False)
-    # Stencil on the front, which bulges: the letters sit on its crown.
-    zf = -0.0372
-    text(p, "МУКА", 0.0125, "Black", T(0.0, yb + 0.036, zf) @ FRONT, depth=0.0008)
-    for y in (yb + 0.022, yb + 0.05):
-        p.box((0.034, 0.0028, 0.0008), (0.0, y, zf + 0.0003), "Red")
-    text(p, "1 COPT", 0.0055, "Black", T(0.0, yb + 0.0145, zf + 0.0012) @ FRONT, depth=0.0008)
+                  (0.016, neck - 0.012, -0.018)], 0.0016, "Black", sides=4, closed=False)
+    # The mill's stencil on both broad faces, which bulge: the letters sit
+    # on their crowns, between two red stripes (a sack lands any way round:
+    # on one face only, half the time it wasn't seen).
+    for zf, face in ((-0.0372, FRONT), (0.0372, RY(0.0))):
+        out = -1.0 if zf < 0 else 1.0
+        text(p, "МУКА", 0.0135, "Black", T(0.0, yb + 0.036, zf) @ face, depth=0.0009)
+        for y in (yb + 0.0215, yb + 0.0505):
+            p.box((0.036, 0.0036, 0.0008), (0.0, y, zf - out * 0.0003), "Red")
+        text(p, "1 COPT", 0.0055, "Black", T(0.0, yb + 0.0145, zf + out * 0.0012) @ face,
+             depth=0.0008)
     return [p]
 
 
