@@ -647,6 +647,8 @@ pub(super) struct Newcomer {
     hurried_at: f32,
     /// The walker that last aimed at it (its eye is what to break line with).
     aimer: Option<Entity>,
+    /// When it last looked whether it's still out of that walker's line.
+    line_checked: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -1405,10 +1407,7 @@ pub(super) fn direct_raid(
                 // raid.
                 let line = (!overhead)
                     .then(|| {
-                        let eye = state
-                            .aimer
-                            .and_then(|w| eyes.get(w).ok())
-                            .map(|(gt, s)| gt.transform_point(s.eye))?;
+                        let eye = walker_eye(&world, &eyes, state.aimer, here, &on_me)?;
                         break_line(&spatial, &world, here, eye)
                     })
                     .flatten();
@@ -1425,6 +1424,11 @@ pub(super) fn direct_raid(
                         Some((tasks, how)) => {
                             state.note(now, Kind::Learned, format!("broke its line: {how}"));
                             state.low_until = now + LINE_HELD;
+                            // Low, not running: upright, its head's in the
+                            // line the crouch keeps out of.
+                            if let Some(f) = fight.as_mut() {
+                                f.flee_until = 0.0;
+                            }
                             tasks
                         }
                         None => run_for_cover(&world.zone, here, from, 0.0),
@@ -1649,6 +1653,28 @@ pub(super) fn direct_raid(
         bot.restart();
     }
 
+    // Held out of a walker's line: still out of it? (It comes round to
+    // look: low behind a car, the careful newcomer was found from the side
+    // five seconds on.) Seen again, out of it again; once a second.
+    if state.low_until > now
+        && now - state.line_checked > 1.0
+        && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == LINE_HELD)
+        && let Some(eye) = walker_eye(&world, &eyes, state.aimer, here, &on_me)
+    {
+        state.line_checked = now;
+        if !line_hidden(&spatial, &world, here, eye)
+            && let Some((tasks, how)) = break_line(&spatial, &world, here, eye)
+        {
+            state.note(now, Kind::Learned, format!("in its line again: {how}"));
+            state.low_until = now + LINE_HELD;
+            if let Some(f) = fight.as_mut() {
+                f.flee_until = 0.0;
+            }
+            bot.tasks.pop_front();
+            super::second_hour::cut_in(&mut bot, tasks);
+            return;
+        }
+    }
     // A time sense: in cover or on the job, the clock still runs. A person
     // under a roof keeps half an eye on the time, and goes when it's short:
     // the Surge close (the driver's warning is said once a career: told
@@ -2899,11 +2925,51 @@ fn time_short(
         .then_some(Hurry::Truck)
 }
 
+/// The eye of the walker after it: the one that last aimed, else the
+/// nearest walker with it in mind (the first warning comes before any aim
+/// it's told of).
+fn walker_eye(
+    world: &World2,
+    eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
+    aimer: Option<Entity>,
+    here: Vec2,
+    on_me: &impl Fn(Entity) -> bool,
+) -> Option<Vec3> {
+    let eye = |e: Entity| eyes.get(e).ok().map(|(gt, s)| gt.transform_point(s.eye));
+    aimer.and_then(eye).or_else(|| {
+        world
+            .robots
+            .iter()
+            .filter(|(e, r, _)| {
+                r.kind == crate::robots::RobotKind::Walker && !r.wrecked && on_me(*e)
+            })
+            .filter_map(|(e, ..)| eye(e))
+            .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)))
+    })
+}
+
 /// Low and still out of a walker's line this long (s): its aim lasts
 /// 1.5 s, and it comes round to look.
 const LINE_HELD: f32 = 12.0;
 /// A crouched head (m above the ground), as a walker's eye looks for it.
 const LOW_HEAD: f32 = 0.9;
+
+/// A crouched head at `p` out of sight of `eye`: something solid between.
+fn line_hidden(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    p: Vec2,
+    eye: Vec3,
+) -> bool {
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    let head = world.zone.on_ground(p.x, p.y) + Vec3::Y * LOW_HEAD;
+    let to = head - eye;
+    let d = to.length();
+    Dir3::new(to)
+        .ok()
+        .and_then(|dir| spatial.cast_ray(eye, dir, d - 0.3, true, &walls))
+        .is_some()
+}
 
 /// Out of sight of `eye`, the nearest way: low where it is, if that does it
 /// (a wall, a bank, a car between); else the nearest spot within 12 m it
@@ -2915,16 +2981,7 @@ fn break_line(
     here: Vec2,
     eye: Vec3,
 ) -> Option<(Vec<Task>, &'static str)> {
-    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
-    let hidden = |p: Vec2| {
-        let head = world.zone.on_ground(p.x, p.y) + Vec3::Y * LOW_HEAD;
-        let to = head - eye;
-        let d = to.length();
-        Dir3::new(to)
-            .ok()
-            .and_then(|dir| spatial.cast_ray(eye, dir, d - 0.3, true, &walls))
-            .is_some()
-    };
+    let hidden = |p: Vec2| line_hidden(spatial, world, p, eye);
     if hidden(here) {
         return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
     }
