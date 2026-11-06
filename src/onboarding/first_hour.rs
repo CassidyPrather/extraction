@@ -1507,6 +1507,7 @@ pub(super) fn direct_raid(
                 match dressing {
                     Some((e, ..)) if sheltering && wait_at.is_some() => {
                         let at = wait_at.unwrap_or(0);
+                        state.dressed_at = now;
                         for (k, t) in dress(e).into_iter().enumerate() {
                             bot.tasks.insert(at + k, t);
                         }
@@ -1517,7 +1518,10 @@ pub(super) fn direct_raid(
                         );
                         vec![]
                     }
-                    Some((e, ..)) => dress(e),
+                    Some((e, ..)) => {
+                        state.dressed_at = now;
+                        dress(e)
+                    }
                     None => {
                         state.note(now, Kind::Confused, "bleeding, and no dressing on me");
                         vec![]
@@ -1596,6 +1600,9 @@ pub(super) fn direct_raid(
         state.dressed_at,
         state.line_run_until > now,
     ) && world.alive(player)
+        // (Not twice: the first bleed's own answer, or the last, still on
+        // its way; a second grab found the dressing gone.)
+        && !bot.tasks.iter().any(|t| matches!(t, Task::Use(_) | Task::Grab { .. }))
     {
         let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
             held.is_none()
