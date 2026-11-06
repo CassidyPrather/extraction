@@ -560,3 +560,12 @@ with `scripts/torchlit.py`, the worst of each item's views:
   mean colour, can't tell them apart either way; the picture can.
 
 ![Before (top) and after (below), each in its worst light](../shots/items/torchlit_fixes_before_after.jpg)
+
+#### The PU and the PSO-1 (6 November)
+
+Once Gunsmith made the PSO-1 Black, the two scopes came near twins from
+2 m. The real PU is a slim plain tube, its drums on a round saddle; it
+had the PSO-1's squared housing here. It has the round saddle now, and
+the PSO-1's brow shield sweeps wide and high over its eyecup. Twin
+distance from 2 m (size + outline + colour, these models' finishes):
+wood 0.54 → 0.65, charred floor 0.58 → 0.72, the rise in their outlines.
