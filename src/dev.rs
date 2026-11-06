@@ -577,7 +577,9 @@ fn gallery(
                             at,
                         ),
                         "plough" => {
-                            let (a, b) = (at - right * 6.0, at + right * 6.0);
+                            // (It stands at its road's start, its shed:
+                            // here, in its place in the line.)
+                            let (a, b) = (at, at + right * 12.0);
                             crate::robots::plough::spawn_plough(
                                 &mut commands,
                                 &zone,

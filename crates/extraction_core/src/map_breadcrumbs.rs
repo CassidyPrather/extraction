@@ -59,6 +59,13 @@ pub const BY_THE_FIELD: f32 = 30.0;
 pub const READ_ANGLE: f32 = 0.07;
 /// ...or, on the skyline (nothing behind it but sky), this.
 pub const SKYLINE_ANGLE: f32 = 0.04;
+/// A chimney's plume (`MapDef::cues`, `world::cues`) reads this far by
+/// day and in drizzle, rising about this high over the ground...
+pub const SMOKE_SIGHT: f32 = 150.0;
+pub const SMOKE_HEIGHT: f32 = 8.0;
+/// ...and a lit window this far after dark, at this height.
+pub const WINDOW_SIGHT: f32 = 120.0;
+pub const WINDOW_HEIGHT: f32 = 1.5;
 /// The walked ways are judged every this many metres.
 const STEP: f32 = 4.0;
 
@@ -245,6 +252,19 @@ fn cue_for(
             let d = dist(*w, o.at);
             if d <= SILHOUETTE_SIGHT && reads(hm, solids, *w, o.at, h, (h * b).sqrt()) {
                 take("its stones".to_string(), d);
+            }
+        }
+    }
+    // Someone's home: a plume from a chimney, a lit window.
+    for c in map.cues.iter().filter(|c| dist(c.at(), at) <= CONTAINER) {
+        let (what, sight, h) = match c {
+            crate::map::Cue::Smoke { .. } => ("smoke from a chimney", SMOKE_SIGHT, SMOKE_HEIGHT),
+            crate::map::Cue::LitWindow { .. } => ("a lit window", WINDOW_SIGHT, WINDOW_HEIGHT),
+        };
+        for w in walked {
+            let d = dist(*w, c.at());
+            if d <= sight && seen(hm, solids, *w, c.at(), h) {
+                take(what.to_string(), d);
             }
         }
     }

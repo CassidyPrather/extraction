@@ -225,12 +225,14 @@ fn count_raids(
     opts: Res<LaunchOptions>,
     mut progression: ResMut<Progression>,
     catalog: Res<Catalog>,
-    mut was_out: Local<bool>,
+    mut was_out: Local<Option<bool>>,
 ) {
     let out = raid.phase != Phase::AtBase;
-    let set_off = out && !*was_out;
-    let home = !out && *was_out;
-    *was_out = out;
+    // First seen already out: a raid resumed from the save, counted when
+    // it set off (the restore is done before the first update).
+    let was = was_out.replace(out).unwrap_or(out);
+    let set_off = out && !was;
+    let home = !out && was;
     if opts.map == crate::camp::TRAINING_YARD {
         return;
     }

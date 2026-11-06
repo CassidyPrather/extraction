@@ -184,7 +184,7 @@ Open ground is walked the way the nav paths it, round the boulders. `every_legge
 - **Touchdown:** a foot comes down within `TOUCH` (0.08) of the fixed world's surface, neither over it nor in it.
 - **Ride:** the body stays within `RIDE` (0.6) of what holds it up, its planted feet and the ground under it, and within `RIDE_USUALLY` (0.3) for all but 0.2% of its ticks.
 
-`FEET_MAP=name` gauges one valley; `--nocapture` prints each valley's worst cases and where they happen; `reel:feetat,N,EVERY,KIND,X1,Z1,X2,Z2` films one.
+`FEET_MAP=name` gauges one valley; `--nocapture` prints each valley's worst cases and where they happen; `reel:feetat,N,EVERY,KIND,X1,Z1,X2,Z2,DIST,HEIGHT` films one, side-on.
 
 Worst cases per valley, before and after (the same gauge):
 
@@ -208,7 +208,14 @@ The causes, each fixed in `anim` for every legged machine:
 
 What's left: the ride's worst is 0.4–0.56, the body coming down off a raised doorway's 1.15 m drop at `RIDE_CATCH`. Touchdowns are within 4 cm in real metres.
 
-![close up, before and after](feet_hold_the_ground_close_before_after.jpg)
+![side on, before and after](feet_hold_the_ground_side_on_before_after.jpg)
+
+One row per valley, each at its worst case in the gauge, with the hound on the gauge's own route, the nav's way round. The camera follows it side-on and low, on the downhill side. Each pair is the same frame before and after: the one where the hound passes the gauge's worst point. Fog is at 11:00, with `--detail 0.25` so the ground cover doesn't hide the feet.
+
+On the slopes, before, the downhill legs reach out long for footholds down inside the hill and the body is held up off them. After, they come down on the slope's line. At Marrow's doorway, before, the body rides high off the steps with its legs hanging; after, it sits down on its feet.
+
+The `reel:feetat,SHOTS,EVERY,KIND,X1,Z1,X2,Z2,DIST,HEIGHT[,door]` command shoots these. It logs the body's position every frame, which is how each pair's frame was picked.
+
 ![wide, before and after](feet_hold_the_ground_before_after.jpg)
 
-Each valley's worst route is filmed, hound walking, fog at 11:00, before beside after. On Kettle's and Sallow's 32° slopes the hound's downhill feet reached into the hillside; now they come down on it.
+The earlier wide sheet shows each worst route from a high three-quarter view.

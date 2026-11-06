@@ -15,7 +15,7 @@ use extraction_core::map_landmarks::{BEACON_HEIGHT, beacon_at, beacon_character}
 
 use super::landmarks::{DayGlow, Lamp, falloff};
 use crate::world::Zone;
-use crate::world::halos::{Halo, HaloReach};
+use crate::world::halos::{Halo, HaloAngle, HaloReach};
 
 pub struct RvBeaconsPlugin;
 
@@ -33,6 +33,11 @@ const DAY_R: f32 = 1.4;
 /// than a landmark's, the way out being the thing you look for.
 const HALO: LinearRgba = LinearRgba::rgb(0.1, 1.7, 0.35);
 const HALO_REACH: f32 = 400.0;
+/// The least its halo spans from the eye (half-angle, radians, about
+/// 1.5 degrees): the core is the inner sixth of it, so at 150 m it holds
+/// a few pixels a degree's worth of green, not a pin-prick, and as much
+/// at 300 m (`world::halos::HaloAngle`).
+const HALO_ANGLE: f32 = 0.026;
 /// The bulb's light as the tonemapper gets it (`render::grade::ToTheEye`):
 /// green on screen up close, not white.
 const BULB: LinearRgba = LinearRgba::rgb(0.03, 0.9, 0.16);
@@ -127,6 +132,7 @@ fn spawn_beacons(
                         radius: HALO_R,
                     },
                     HaloReach(HALO_REACH),
+                    HaloAngle(HALO_ANGLE),
                 ))
                 .with_child((
                     Name::new("Beacon lamp glow"),
