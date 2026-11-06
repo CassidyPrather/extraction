@@ -235,6 +235,10 @@
         (at: (-109.0, -187.0), radius: 1.8, stones: 4),
     ],
     placements: [
+        // Yard lamps where a first job's way home can't be told after
+        // dark without a torch (scripts/night_route.sh, the dark case).
+        (prefab: "way_lamp", at: (-192.4, -235.9), rot: 0.0),
+
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
         (prefab: "log_pile", at: (-111.5, -269.9), rot: 336.0, tag: "wait_the_saddle"),
