@@ -641,3 +641,23 @@ entries that made up for them went away.
 ![Item boxes before (red) and after (green), over their models: vest,
 work boots, robot ammo belt, Mosin bolt, electronics, crossbow bolt
 bundle, car bonnet, scour key](../shots/items/item_boxes_before_after.png)
+
+#### The scopes at arm's length, by the settled torch (6 November)
+
+I re-shot the PU and the PSO-1 by torchlight from an arm's length
+(0.65 m, 55 degrees down), with Visual design's settled eye (3297ad2e).
+The wash-out is gone. Both render black with a soft sheen, not the pale
+silver they were, and nothing clips. They aren't twins up close. The
+PSO-1 shows its turret drum with white graduations, its side bracket and
+the rubber brow shield at its eyepiece. The PU is a slim, plain tube
+with one small knob.
+
+They stand off wood and concrete easily (body delta E 24 to 46). On a
+burnt house's charred planks they are black on black. The PSO-1 at arm's
+length sits at the edge (9.9), read by its sheen and the drum's marks.
+The PU from 2 m is the floor's colour (5.0). That holds for any black
+kit on a burnt floor; Gunsmith is trying a brighter sheen on `Black`
+for all of it.
+
+![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
+planks](../shots/items/torchlit_scopes_arm.jpg)
