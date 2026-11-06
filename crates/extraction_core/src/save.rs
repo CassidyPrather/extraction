@@ -264,6 +264,11 @@ pub struct Career {
     /// (one line each, once a career).
     #[serde(default)]
     pub firsts: Vec<String>,
+    /// This career's own world seed, rolled at its start by a play launch
+    /// (the director's raids, the wildlife's homes). Older careers have
+    /// none: one is rolled on their first load.
+    #[serde(default)]
+    pub seed: Option<u64>,
 }
 
 /// The most of anything a save may claim: counters past this are a

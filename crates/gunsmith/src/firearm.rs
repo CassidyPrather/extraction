@@ -323,6 +323,10 @@ const COCK_AT: f32 = 0.5;
 const STRIP_AT: f32 = 0.6;
 /// Bolt travel below which the bolt counts as closed.
 const CLOSED_AT: f32 = 0.03;
+/// Bolt travel past which the bolt has opened: only a bolt that got this
+/// far comes home (a hand on a lifted handle wobbling it about its lug
+/// isn't a stroke, and mustn't sound or feel like the bolt closing).
+const OPENED_AT: f32 = 0.1;
 /// Bolt-handle lift at or below which a turn-bolt is locked down.
 const HANDLE_DOWN_AT: f32 = 0.05;
 /// Where a stovepipe's case holds the bolt.
@@ -373,6 +377,9 @@ pub struct Firearm {
     /// The bolt cleared the ejection port on this stroke and is coming
     /// back forward: the next pass of [`STRIP_AT`] picks up a round.
     stroke_cleared: bool,
+    /// The bolt got past [`OPENED_AT`] since it last came home.
+    #[serde(default)]
+    bolt_opened: bool,
     /// A round stripped from the magazine, riding the bolt face forward.
     in_transit: Option<Round>,
     pub magazine: Option<Magazine>,
@@ -503,6 +510,7 @@ impl Firearm {
             handle_lift: 0.0,
             locked_back: false,
             stroke_cleared: false,
+            bolt_opened: false,
             in_transit: None,
             magazine: None,
             internal_rounds: 0,
@@ -1276,6 +1284,9 @@ impl Firearm {
             self.locked_back = false;
             self.stroke_cleared = !self.def.open_bolt;
         }
+        if from >= OPENED_AT || to >= OPENED_AT {
+            self.bolt_opened = true;
+        }
         if to > from {
             // A half-seated magazine doesn't ride out the rack.
             if self.mag_half && from < STRIP_AT && to >= STRIP_AT {
@@ -1330,7 +1341,9 @@ impl Firearm {
                         self.slam_pending = true;
                     }
                 }
-                events.push(Event::BoltClosed);
+                if std::mem::take(&mut self.bolt_opened) {
+                    events.push(Event::BoltClosed);
+                }
             }
         }
         self.bolt_travel = to;
@@ -1355,6 +1368,9 @@ impl Firearm {
         {
             // The action bar lock holds it shut on a cocked hammer.
             return events;
+        }
+        if from >= OPENED_AT || to >= OPENED_AT {
+            self.bolt_opened = true;
         }
         if to > from {
             if from < COCK_AT && to >= COCK_AT && !self.hammers_cocked[0] {
@@ -1398,7 +1414,9 @@ impl Firearm {
                     events.push(Event::Chambered);
                 }
                 self.action_released = false;
-                events.push(Event::BoltClosed);
+                if std::mem::take(&mut self.bolt_opened) {
+                    events.push(Event::BoltClosed);
+                }
             }
         }
         self.bolt_travel = to;
@@ -1783,6 +1801,43 @@ pub(crate) mod tests {
             last_round_hold_open: false,
             double_action: false,
             ..pistol()
+        }
+    }
+
+    /// A bolt wobbled about home (a hand on a lifted handle, a thumb on a
+    /// slide) never closes: only one that opened comes home, and it does
+    /// so once a stroke, whatever the stroke's way back (the TOZ-8's first
+    /// opening clicked shut a third of the way through it).
+    #[test]
+    fn only_a_bolt_that_opened_comes_home() {
+        for def in [mosin(), pistol(), rifle(), pump()] {
+            let mut gun = Firearm::new(def.clone(), 1.0);
+            gun.set_handle_lift(1.0);
+            let mut ev = Vec::new();
+            for t in [0.04, 0.0, 0.06, 0.01, 0.05, 0.0] {
+                ev.extend(gun.set_bolt_travel(t));
+            }
+            assert!(
+                !ev.contains(&Event::BoltClosed),
+                "{:?} wobbled: {ev:?}",
+                def.action
+            );
+            let mut ev = Vec::new();
+            for t in [0.3, 0.02, 0.05, 0.0] {
+                ev.extend(gun.set_bolt_travel(t));
+            }
+            let closed = ev.iter().filter(|e| **e == Event::BoltClosed).count();
+            assert_eq!(closed, 1, "{:?} opened and home: {ev:?}", def.action);
+            // Locked back and let go: home.
+            gun.set_bolt_travel(1.0);
+            gun.locked_back = true;
+            gun.bolt_opened = false;
+            gun.bolt_travel = 1.0;
+            assert!(
+                gun.set_bolt_travel(0.0).contains(&Event::BoltClosed),
+                "{:?} from the stop",
+                def.action
+            );
         }
     }
 

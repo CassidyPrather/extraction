@@ -68,6 +68,17 @@ pub struct DoorInfo {
     pub b: Vec2,
     /// Where to stand outside it, building-local, if it's an outside door.
     pub outside: Option<Vec2>,
+    /// Its leaf's free end, swung open (building-local): the side of the
+    /// doorway it swings into.
+    pub tip: Vec2,
+}
+
+impl DoorInfo {
+    /// Its leaf's free end open, from its definition (building-local).
+    fn open_tip(def: &crate::world::buildings::DoorDef) -> Vec2 {
+        let open = Quat::from_rotation_y(def.yaw + OPEN_SWING);
+        (def.hinge + open * Vec3::new(def.width, 0.0, 0.0)).xz()
+    }
 }
 
 impl DoorInfo {
@@ -294,6 +305,13 @@ impl BuildingPlan {
     }
 }
 
+/// Whether segment `a`-`b` crosses a doorway `c`-`d` (its jambs a hair
+/// wider).
+#[cfg(test)]
+pub fn segments_cross(a: Vec2, b: Vec2, c: Vec2, d: Vec2) -> bool {
+    crossing(a, b, c, d).is_some()
+}
+
 /// Where segment `a`-`b` crosses `c`-`d`: (t along a-b, point).
 fn crossing(a: Vec2, b: Vec2, c: Vec2, d: Vec2) -> Option<(f32, Vec2)> {
     let r = b - a;
@@ -516,6 +534,7 @@ pub(crate) fn plan_buildings_with(
                 let a3 = def.hinge;
                 let b3 = def.hinge + rot * Vec3::new(def.width, 0.0, 0.0);
                 DoorInfo {
+                    tip: DoorInfo::open_tip(&def),
                     entity: *d,
                     a: Vec2::new(a3.x, a3.z),
                     b: Vec2::new(b3.x, b3.z),
@@ -846,6 +865,7 @@ fn plan_site(
                 .map(|s| mid + normal * s * 2.6);
             entries.extend(outside);
             DoorInfo {
+                tip: DoorInfo::open_tip(&def),
                 entity: *d,
                 a,
                 b: c,
@@ -1964,6 +1984,91 @@ mod tests {
     /// half a metre past it, the indoor grid's way is short, through it,
     /// not round by another or none. A doorway the grid rasterises shut
     /// strands a bot in a room (Kettle's mine office, 261 times in a raid).
+    /// Every spot the map puts a player at inside a building (a note, a
+    /// terminal, a cache, an offering, the valley's key) is in reach from
+    /// the building's way in on the bots' indoor grid: within a hand's
+    /// reach (1.2 m), not behind the furniture or a wall (Progression's
+    /// cautious raids spent 7-12 minutes in Kettle's chapel failing to
+    /// reach its note).
+    #[test]
+    fn every_spot_inside_is_reached_from_the_door() {
+        use extraction_core::map::MarkerKind;
+        const REACH: f32 = 1.2;
+        // A marker whose ground stands more than this off a plan's floor is on
+        // the surface over an underground site, not in that site's rooms.
+        const OFF_FLOOR: f32 = 2.5;
+        let mut checked = 0;
+        let mut failed = Vec::new();
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>();
+            let (def, hm) = (zone.map.clone(), zone.hm.clone());
+            let plans = plans(&mut app);
+            for m in &def.markers {
+                if !matches!(
+                    m.kind,
+                    MarkerKind::Note { .. }
+                        | MarkerKind::Terminal { .. }
+                        | MarkerKind::Loot { .. }
+                        | MarkerKind::Offering
+                        | MarkerKind::ValleyKey { .. }
+                ) {
+                    continue;
+                }
+                for plan in &plans {
+                    let l = plan.to_local(Vec3::new(m.at[0], plan.xf.translation.y, m.at[1]));
+                    let at = l.xz();
+                    let Some((lo, hi)) = plan.inner else { continue };
+                    if at.x < lo.x || at.y < lo.y || at.x > hi.x || at.y > hi.y {
+                        continue;
+                    }
+                    // On this plan's floor, not the ground over an
+                    // underground site's rooms.
+                    let floor = plan.xf.transform_point(Vec3::new(at.x, plan.floor, at.y)).y;
+                    if (hm.height(m.at) - floor).abs() > OFF_FLOOR {
+                        continue;
+                    }
+                    checked += 1;
+                    // Up to the spot, or to any walkable cell in reach of it.
+                    let goals: Vec<Vec2> = std::iter::once(at)
+                        .chain((0..16).flat_map(|k| {
+                            let a = k as f32 / 16.0 * std::f32::consts::TAU;
+                            [0.5f32, 0.9].map(|r| at + Vec2::new(a.cos(), a.sin()) * r)
+                        }))
+                        .filter(|g| plan.grid.walkable(g.to_array()))
+                        .collect();
+                    let reached = plan.entries.iter().any(|e| {
+                        goals.iter().any(|g| {
+                            plan.path(*e, *g)
+                                .is_some_and(|p| p.last().is_some_and(|q| q.distance(at) <= REACH))
+                        })
+                    });
+                    if !reached {
+                        failed.push(format!(
+                            "{map}: {} at ({:.1}, {:.1}) in the {} at {:.1?}: no way to it from the door",
+                            m.name, m.at[0], m.at[1], plan.name, plan.xf.translation
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(checked > 20, "only {checked} spots inside");
+        assert!(
+            failed.is_empty(),
+            "spots inside out of reach (markers more than {OFF_FLOOR} m off a plan's floor \
+             are skipped as surface spots over underground sites):\n{}",
+            failed.join("\n")
+        );
+    }
+
     #[test]
     fn every_inner_doorway_is_walked_through() {
         let mut checked = 0;

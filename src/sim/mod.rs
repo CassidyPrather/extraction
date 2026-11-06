@@ -40,7 +40,7 @@ impl Plugin for SimPlugin {
             .clone()
             .unwrap_or_else(|| std::path::PathBuf::from("target/sim").join(&opts.map));
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
-            .add_systems(Startup, spawn_sim_kit)
+            .add_systems(Startup, spawn_sim_kit.after(crate::persist::load_save))
             .add_systems(PostStartup, raider::attach_raider)
             .add_systems(Update, (armour_up, seat_sim_hearth, wear_guns))
             .add_systems(
@@ -111,12 +111,21 @@ fn career_memory(
 /// What a fresh game keeps in the truck's stash and the dev cache lacks:
 /// the radio and two dressings (and a skilled raider's bolts,
 /// `harvest::kit`), laid out by the insertion point.
+///
+/// Not when the game resumes a saved raid in this valley: the kit came
+/// with it, and a second one doubled it at every reload (the save-and-quit
+/// soak, `soak::save_fuzz`, 5 November: four bolts, two dressings and a
+/// radio more each time).
 fn spawn_sim_kit(
     mut commands: Commands,
     zone: Res<Zone>,
     catalog: Res<crate::items::Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
+    restore: Option<Res<crate::persist::Restore>>,
 ) {
+    if restore.is_some_and(|r| r.zone) {
+        return;
+    }
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };

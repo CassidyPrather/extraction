@@ -276,6 +276,7 @@ pub fn adapt_eyes(
     mut grades: Query<&mut ColorGrading>,
     lamps: Query<(&PointLight, &GlobalTransform)>,
     spots: Query<(&SpotLight, &GlobalTransform)>,
+    throws: Query<(&SpotLight, &GlobalTransform, &crate::world::beams::Throw)>,
     below: Option<Res<Below>>,
     mut adapt: ResMut<Adaptation>,
     time: Res<Time>,
@@ -307,8 +308,21 @@ pub fn adapt_eyes(
     let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) * (1.0 - below)
         + adapt.lamps;
     let room = adapt.indoors * room_adapt() * conditions.light.min(1.0) * (1.0 - below);
-    let target =
-        (Adaptation::target_below(light, below) + room).min(ADAPT_MAX - BELOW_ADAPT_CUT * below);
+    // A torch in hand on something at arm's length: its light there
+    // closes the eyes the more (below a day's, if need be), so what you
+    // crouch over keeps its own value.
+    let near = eye.map_or(0.0, |p| {
+        throws
+            .iter()
+            .filter(|(l, g, _)| {
+                l.intensity > 0.0 && g.translation().distance_squared(p) <= 1.5 * 1.5
+            })
+            .map(|(_, _, t)| torch_near(t.0))
+            .fold(0.0, f32::max)
+    });
+    let target = (Adaptation::target_below(light, below) + room)
+        .min(ADAPT_MAX - BELOW_ADAPT_CUT * below)
+        - near;
     // A new raid starts with the eyes already used to its light.
     if !adapt.settled || conditions.is_changed() {
         adapt.stops = target;
@@ -348,6 +362,28 @@ pub fn room_reach(shell: &crate::robots::doors::Shell, eye: Vec3) -> f32 {
 
 /// The farthest a room is taken to reach (m).
 pub const ROOM_MAX: f32 = 40.0;
+
+/// Inside this (m), a held torch's beam landing on something closes the
+/// eyes further (`torch_near`); from here out `torch_light` alone, as a
+/// night in the open needs (the night-route gauge read worse with less).
+pub const TORCH_WALLS: f32 = 2.0;
+
+/// How much of a near surface's extra light the eyes take back (of the
+/// inverse square's 2 log2(TORCH_WALLS / d) stops): most of it, so an
+/// item at arm's length reads about as it does from 2 m, a little
+/// brighter for being near.
+const NEAR_SHARE: f32 = 0.85;
+
+/// The stops a held torch's beam closes the eyes by, landing `throw` m
+/// off: none from `TORCH_WALLS` out; at arm's length (0.65 m) its light
+/// on what you're looking at is 9x what it is at 2 m, and without this a
+/// black scope there read pale silver (Models' `--torchlit`).
+pub fn torch_near(throw: f32) -> f32 {
+    if throw >= TORCH_WALLS {
+        return 0.0;
+    }
+    NEAR_SHARE * 2.0 * (TORCH_WALLS / throw.max(0.3)).log2()
+}
 
 /// The light a held torch throws back at the eye, against a day's: a
 /// share of its light, if it's within arm's reach (a spot light carried
@@ -848,6 +884,20 @@ mod tests {
         assert_eq!(torch_light(Vec3::ZERO, [(&torch, &far)]), 0.0);
         // It keeps the eyes about half a stop from opening all the way.
         assert!(Adaptation::target(lit) < Adaptation::target(0.0) - 0.4);
+    }
+
+    #[test]
+    fn a_torch_on_something_at_arms_length_closes_the_eyes() {
+        // From 2 m out, nothing more than the torch's own light at the
+        // eye: a night in the open keeps the eyes it had.
+        assert_eq!(torch_near(TORCH_WALLS), 0.0);
+        assert_eq!(torch_near(crate::world::beams::REACH), 0.0);
+        // At arm's length its light on the item is 9x what it is at 2 m
+        // (3.2 stops): most of that comes back.
+        let arm = torch_near(0.65);
+        assert!(arm > 2.4 && arm < 3.2, "{arm}");
+        // Nearer closes more, smoothly from nothing at 2 m.
+        assert!(torch_near(0.4) > arm && arm > torch_near(1.2) && torch_near(1.9) < 0.15);
     }
 
     #[test]
