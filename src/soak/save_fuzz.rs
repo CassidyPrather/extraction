@@ -807,6 +807,98 @@ fn hand_reload(world: &mut World) -> bool {
     true
 }
 
+/// The moments a raid may never come to on its own, brought about (as the
+/// Surge's clock is wound): a grab put to the bot (a dressing at its
+/// feet: mid-grab, then in hand), the truck called to the nearest
+/// rendezvous and its drive wound to two seconds (the countdown), and,
+/// once it waits there, the bot put in its bed. `done` keeps each to once.
+fn force_moment(world: &mut World, m: Moment, done: &mut bool) {
+    use crate::bot::{Bot, Task};
+    let me = player(world);
+    let (phase, clock) = {
+        let raid = world.resource::<Raid>();
+        (raid.phase.clone(), raid.clock)
+    };
+    match m {
+        Moment::MidGrab | Moment::InHand if !*done && phase == Phase::Out && clock > 5.0 => {
+            let walking = world.get::<Bot>(me).is_some_and(|b| {
+                b.walk.is_some() || matches!(b.tasks.front(), Some(Task::WalkTo { .. }))
+            });
+            let Some(root) = world.get::<GlobalTransform>(me).copied() else {
+                return;
+            };
+            if !walking {
+                return;
+            }
+            let catalog = world.resource::<Catalog>().clone();
+            let Some(kind) = catalog.kind("field_dressing") else {
+                return;
+            };
+            let at = root.translation() + root.forward().as_vec3() * 0.5 + Vec3::Y * 0.9;
+            let item = crate::items::spawn_item(
+                &mut world.commands(),
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at),
+                    condition: 1.0,
+                },
+            );
+            world.flush();
+            // (The sim raider's mind lets go: it plans again every few
+            // frames, and a grab put in front was gone the next.)
+            world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+            if let Some(mut bot) = world.get_mut::<Bot>(me) {
+                bot.tasks.clear();
+                bot.tasks.push_back(Task::Grab {
+                    item,
+                    side: crate::rig::Side::Left,
+                });
+            }
+            *done = true;
+        }
+        Moment::Countdown | Moment::InTheBed if !*done && phase == Phase::Out && clock > 5.0 => {
+            let Some(here) = world
+                .get::<GlobalTransform>(me)
+                .map(|g| g.translation().xz())
+            else {
+                return;
+            };
+            let zone = world.resource::<crate::world::Zone>().clone();
+            let rv = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+                .enumerate()
+                .min_by(|a, b| {
+                    Vec2::from_array(a.1.at)
+                        .distance(here)
+                        .total_cmp(&Vec2::from_array(b.1.at).distance(here))
+                })
+                .map(|(i, _)| i);
+            if let Some(rv) = rv {
+                world.resource_mut::<Raid>().phase = Phase::TruckCalled { rv, eta: 2.0 };
+                *done = true;
+            }
+        }
+        Moment::InTheBed if *done && matches!(phase, Phase::TruckWaiting { .. }) => {
+            let truck = world
+                .query::<(&crate::raid::truck::Truck, &GlobalTransform)>()
+                .iter(world)
+                .next()
+                .map(|(_, g)| *g);
+            if let (Some(g), Some(t)) = (truck, world.get::<Transform>(me).copied()) {
+                let mut t = t;
+                t.translation = g.transform_point(Vec3::new(0.0, 1.05, 0.0));
+                world
+                    .entity_mut(me)
+                    .remove::<crate::sim::raider::Raider>()
+                    .insert(t);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Which awkward moments the raid is in this frame.
 fn moments_now(world: &mut World) -> Vec<Moment> {
     use crate::bot::{Bot, Task};
@@ -1002,6 +1094,8 @@ fn soak_quit_anywhere_in_every_valley() {
         .map_or(QUIT_SEEDS.to_vec(), |s| vec![s]);
     let mut findings = Vec::new();
     let mut covered = std::collections::HashSet::new();
+    // (valley, seed, moment): "never", or how many findings the quit had.
+    let mut table: HashMap<(String, u64, Moment), String> = HashMap::new();
     // A fresh raid for each moment, run up to it, quit and loaded once,
     // then played on: the smoke raider kits up from the truck's stash, and
     // on a raid resumed with its kit at its feet it never takes it up again.
@@ -1016,6 +1110,7 @@ fn soak_quit_anywhere_in_every_valley() {
                 let mut frame = 0usize;
                 let mut hit = false;
                 let mut asked = false;
+                let mut forced = false;
                 while frame < 90 * 60 * 14 {
                     a.update();
                     frame += 1;
@@ -1028,6 +1123,12 @@ fn soak_quit_anywhere_in_every_valley() {
                     // player does (the empty one out, the next in).
                     if m == Moment::MidReload && !asked {
                         asked = hand_reload(a.world_mut());
+                    }
+                    if matches!(
+                        m,
+                        Moment::MidGrab | Moment::InHand | Moment::Countdown | Moment::InTheBed
+                    ) {
+                        force_moment(a.world_mut(), m, &mut forced);
                     }
                     if m == Moment::Surge {
                         let mut raid = a.world_mut().resource_mut::<Raid>();
@@ -1048,16 +1149,34 @@ fn soak_quit_anywhere_in_every_valley() {
                 }
                 if !hit {
                     println!("{map} seed {seed}: never {m:?} ({frame} frames)");
+                    table.insert((map.clone(), seed, m), "never".to_string());
                     continue;
                 }
                 let when = format!("{map} seed {seed}, {m:?} at frame {frame}");
                 println!("quit: {when}");
                 let (mut b, f) = quit_and_reload(&mut a, &path, map, seed, &when);
                 covered.insert(m);
+                table.insert((map.clone(), seed, m), format!("{} found", f.len()));
                 findings.extend(f);
                 // And the game goes on from there, every item in one place.
                 frames(&mut b, 300, &format!("{when}, played on"));
             }
+        }
+    }
+    // Moments by valleys, a seed at a time.
+    for &seed in &seeds {
+        println!("\nseed {seed} | {}", maps.join(" | "));
+        for m in MOMENTS {
+            let row: Vec<String> = maps
+                .iter()
+                .map(|map| {
+                    table
+                        .get(&(map.clone(), seed, m))
+                        .cloned()
+                        .unwrap_or_else(|| "-".into())
+                })
+                .collect();
+            println!("{m:?} | {}", row.join(" | "));
         }
     }
     let missed: Vec<&Moment> = MOMENTS
