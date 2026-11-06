@@ -541,3 +541,22 @@ Near-twins (size, outline and colour from 2 m on wood): most read apart
 by shape once looked at. The two that don't, from 2 m, are the RGD-5 and
 the F1 (both olive eggs; the F1's ribs show only up close), and the
 laser module and the side rail (two small black blocks).
+
+#### Fixed: the boards, the laser, the F1 (6 November)
+
+The coordinator took the three that are the models' own. Measured again
+with `scripts/torchlit.py`, the worst of each item's views:
+
+- **The cooking boards** (chopped carrot, onion, tomato; the dough's)
+  are oiled dark now, not scrubbed pale: worst 6.2-10.9, now 18.5-18.7.
+  On lit wood up close, 6-7 is now 30, and on concrete 14 is now 40.
+- **The laser module** has a wide red lens standing in its bezel and the
+  red warning label on top of its front block: on the charred floor from
+  2 m, 5.9 is now 11.1. On the twin measure it's now as far from the
+  side rail (3.02) as unrelated things are (0.27 before).
+- **The F1**'s cast segments are deeper (3.4 mm proud, not 2) with wider
+  grooves between, so it reads as a grid of blocks from 2 m and not the
+  RGD-5's smooth egg. The twin measure, which sees only size, outline and
+  mean colour, can't tell them apart either way; the picture can.
+
+![Before (top) and after (below), each in its worst light](../shots/items/torchlit_fixes_before_after.jpg)
