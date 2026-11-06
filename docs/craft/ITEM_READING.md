@@ -572,3 +572,27 @@ wood 0.54 → 0.65, charred floor 0.58 → 0.72, the rise in their outlines.
 With Gunsmith's Black PSO-1 merged in, 2 m: wood 1.57 (Gunsmith measured
 1.33 before the brow shield), charred floor 1.34; the PSO-1 reads 33.7 on
 wood and 11.6 on charred floor.
+
+#### Pale, not paper-white (6 November)
+
+On Visual design's settled-eye sheet the flour sack was a blank white
+blob at arm's length and from 2 m. Measured with Visual design's
+settled-eye `--torchlit` applied locally (not merged), nothing clips,
+before or after: the wash-out was exposure, and their fix took it. So
+Paper and Enamel keep their albedo. A flat model material is held to
+enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
+so nothing new comes in whiter.
+
+What the sack lacked was surface. It is `Sacking` now, unbleached linen
+with the canvas scan's weave, slumped low and spread with creases where
+it lies, tied off at the neck with thick dark twine. Its stencil and red
+stripes are on both broad faces, ray-cast onto the cloth so the slump
+doesn't swallow them: before, a sack lying turned away had none. Its
+detail (L* spread, worst view) went from 8.9 to 16.5 with 0% clipped,
+and it still stands off every floor (delta E 36.6 → 36.4). The other
+pale items (the hana letter, the rice bag, the crackers) already carry
+a seal, grains or docking, and are unchanged. The weave is too fine to
+read from 2 m; the stencil, the stripes, the tie and the slump read.
+
+![Flour sack, before (top) and after: wood and concrete at arm's length,
+wood and charred floor from 2 m](../shots/items/torchlit_flour_before_after.jpg)
