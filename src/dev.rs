@@ -23,6 +23,7 @@ impl Plugin for DevPlugin {
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
+                    camera_over_ground,
                 ),
             )
             .add_systems(
@@ -350,9 +351,10 @@ pub fn gallery_word(spec: &str, word: &str) -> bool {
 fn gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
-    (zone, stood): (
+    (zone, stood, nav): (
         Option<Res<crate::world::Zone>>,
         Res<crate::render::StoodEye>,
+        Option<Res<crate::robots::walker::Nav>>,
     ),
     catalog: Res<crate::items::Catalog>,
     mut guns: Query<&mut crate::weapons::Gun>,
@@ -472,7 +474,9 @@ fn gallery(
                 // A line-up of machines side by side, DIST ahead, each
                 // turned YAW from facing the camera, for reading them at a
                 // glance (`docs/craft/ROBOT_READING.md`):
-                // `robots:walker+drone+grappler+sentry+hound+heavy`;
+                // `robots:walker+drone+grappler+sentry+hound+heavy`, and
+                // crawler, dirigible, pylon, sorter, spotter, minelayer,
+                // mender, plough;
                 // `walker!broken` is a walker with its gun dead and a leg
                 // failing.
                 let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
@@ -520,6 +524,68 @@ fn gallery(
                             at,
                             job(at),
                         ),
+                        "crawler" => {
+                            let e = crate::robots::walker::spawn_walker_sized(
+                                &mut commands,
+                                &zone,
+                                at + Vec3::Y,
+                                job(at),
+                                false,
+                                40.0,
+                                crate::robots::indoor::CRAWLER_SIZE,
+                                None,
+                            );
+                            commands
+                                .entity(e)
+                                .insert(crate::robots::indoor::Crawler::default());
+                            e
+                        }
+                        "dirigible" => crate::robots::dirigible::spawn_dirigible(
+                            &mut commands,
+                            at + Vec3::Y * 9.0,
+                            job(at),
+                        ),
+                        "pylon" => crate::robots::pylon::spawn_pylon(&mut commands, at, 1.0e6, at),
+                        "sorter" => crate::robots::sorter::spawn_sorter(
+                            &mut commands,
+                            Transform::from_translation(at),
+                            Vec2::splat(3.0),
+                            3.0,
+                            Vec::new(),
+                            0,
+                        ),
+                        "spotter" => {
+                            crate::robots::spotter::spawn_spotter(&mut commands, &zone, at.xz())
+                        }
+                        "minelayer" => {
+                            let nav = nav.as_ref().map(|n| n.0.clone());
+                            match nav {
+                                Some(nav) => crate::robots::minelayer::spawn_minelayer(
+                                    &mut commands,
+                                    &zone,
+                                    &nav,
+                                    at,
+                                    Vec::new(),
+                                    at,
+                                ),
+                                None => continue,
+                            }
+                        }
+                        "mender" => crate::robots::mender::spawn_mender(
+                            &mut commands,
+                            at + Vec3::Y * 2.0,
+                            at,
+                        ),
+                        "plough" => {
+                            // (It stands at its road's start, its shed:
+                            // here, in its place in the line.)
+                            let (a, b) = (at, at + right * 12.0);
+                            crate::robots::plough::spawn_plough(
+                                &mut commands,
+                                &zone,
+                                vec![[a.x, a.z], [b.x, b.z]],
+                            )
+                        }
                         "sentry" => {
                             let toward = -flat;
                             let centre = toward.x.atan2(-toward.z) + turn.to_radians();
@@ -2100,6 +2166,74 @@ fn treat_for_gallery(
     left.tracked = true;
 }
 
+/// How far under the ground (m) a screenshot's camera may be before it's
+/// told: a camera under the ground draws a blank frame (fog and rain).
+pub const CAMERA_UNDER: f32 = 1.0;
+
+/// A screenshot's camera under the ground, told once (`camera: N m under
+/// the ground`), for the gauges to fail on: `scripts/robot_frames.sh`.
+/// Underground sites aside (a camera down a bunker is meant to be).
+fn camera_over_ground(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    cams: Query<
+        (
+            &GlobalTransform,
+            &Camera,
+            Option<&bevy::camera::RenderTarget>,
+        ),
+        With<Camera3d>,
+    >,
+    mut told: Local<bool>,
+) {
+    let (Some(_), Some(zone)) = (&opts.screenshot, zone) else {
+        return;
+    };
+    if *told {
+        return;
+    }
+    for (g, c, target) in &cams {
+        // The eye drawing to the window, not a capture rig drawing into an
+        // image (4 km down, on purpose).
+        if !c.is_active
+            || target.is_some_and(|t| !matches!(t, bevy::camera::RenderTarget::Window(_)))
+        {
+            continue;
+        }
+        let at = g.translation();
+        if crate::world::underground::floor_under(&zone, at).is_some() {
+            continue;
+        }
+        let over = at.y - zone.ground(at.x, at.z);
+        if !over.is_finite() || over < -CAMERA_UNDER {
+            error!("camera: {:.1} m under the ground at {at:.1}", -over);
+            *told = true;
+        }
+    }
+}
+
+/// The subjects whose gallery poses the body: the kit on it, wounds
+/// treated on it, climbing, the body itself.
+const BODY_SUBJECTS: [&str; 4] = ["kit", "treat", "climb", "body"];
+/// The pose words (`pose_body_for_gallery`).
+const BODY_POSES: [&str; 6] = ["stoop", "behind", "above", "down", "side", "crouch"];
+
+/// Whether a `--gallery` spec is a gallery of the body: its subject (its
+/// first word, [`gallery_word`]'s way) one of [`BODY_SUBJECTS`], or a
+/// pose alone (`--gallery above`). Another gallery's words (a machine's
+/// `heavy:down`) are none of its business: that one took the camera with
+/// the body's head as it fell through the ground.
+pub fn is_body_gallery(spec: &str) -> bool {
+    let subject = spec
+        .split(',')
+        .next()
+        .unwrap_or("")
+        .split(['+', ':'])
+        .next()
+        .unwrap_or("");
+    BODY_SUBJECTS.contains(&subject) || BODY_POSES.contains(&subject)
+}
+
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment
 /// standing, the head drops 0.35 m and comes 0.25 m forward, looking down,
 /// as you bend to your belt (the torso keeps its standing height until the
@@ -2126,6 +2260,12 @@ fn pose_body_for_gallery(
     let Some(spec) = opts.gallery.as_deref() else {
         return;
     };
+    // Only a gallery of the body: its words whole, its subject the body's
+    // (a machine's own `down` or `side`, `--gallery heavy:down`, once took
+    // the camera with the body's head as it fell through the ground).
+    if !is_body_gallery(spec) {
+        return;
+    }
     // A gallery of the body (or of wounds on it) draws it, whatever the
     // setting (off by default).
     if let Some(mut c) = comfort
@@ -2205,6 +2345,34 @@ fn pose_body_for_gallery(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The body's gallery poses the body for its own specs, by whole
+    /// word; a machine's gallery words (`heavy:down`, `sentry:down`) are
+    /// left alone.
+    #[test]
+    fn only_a_body_gallery_poses_the_body() {
+        for spec in [
+            "kit+stoop",
+            "kit+down",
+            "treat,down",
+            "treat+down+wrist",
+            "body+down+side",
+            "climb+behind",
+            "above",
+        ] {
+            assert!(is_body_gallery(spec), "{spec}");
+        }
+        for spec in [
+            "heavy:down,160,12",
+            "heavy:down+open",
+            "sentry:down",
+            "plough:after",
+            "ak74",
+            "robots:walker!dead+drone!dead,0,17",
+        ] {
+            assert!(!is_body_gallery(spec), "{spec}");
+        }
+    }
 
     /// A shot is never taken in the frames just after everything's in,
     /// however few `--frames` asked for (a gun close-up shot 5 frames

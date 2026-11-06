@@ -922,7 +922,7 @@ fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExi
 
 /// A model's nodes under `parent`, as the game would place them, leaving
 /// out far stand-ins (`_lod` nodes), which the game only draws far off.
-fn spawn_nodes(
+pub(super) fn spawn_nodes(
     commands: &mut Commands,
     parent: Entity,
     nodes: &[ModelNode],
@@ -945,7 +945,7 @@ fn spawn_nodes(
     }
 }
 
-fn collect(e: Entity, children: &Query<&Children>, out: &mut Vec<Entity>) {
+pub(super) fn collect(e: Entity, children: &Query<&Children>, out: &mut Vec<Entity>) {
     out.push(e);
     if let Ok(c) = children.get(e) {
         for c in c.iter() {
@@ -954,7 +954,7 @@ fn collect(e: Entity, children: &Query<&Children>, out: &mut Vec<Entity>) {
     }
 }
 
-fn world_aabb(gt: &GlobalTransform, aabb: &Aabb) -> (Vec3, Vec3) {
+pub(super) fn world_aabb(gt: &GlobalTransform, aabb: &Aabb) -> (Vec3, Vec3) {
     let (c, h) = (Vec3::from(aabb.center), Vec3::from(aabb.half_extents));
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     for k in 0..8 {
