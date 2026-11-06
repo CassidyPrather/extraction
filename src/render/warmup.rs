@@ -623,6 +623,9 @@ struct Shelf {
     on: Vec<(Entity, u32)>,
     layouts: std::collections::HashMap<AssetId<Mesh>, u64>,
     cube: Option<Handle<Mesh>>,
+    /// The cube with vertex colours (its twin): a puff batch's layout
+    /// (`render::puff`), worn by blended materials.
+    cube_coloured: Option<(Handle<Mesh>, u64)>,
     /// For each layout, a mesh of it that draws nothing: see [`point_twin`].
     twins: std::collections::HashMap<u64, Handle<Mesh>>,
     /// A robot primitive's weathered twin (`robots::weathering` adds vertex
@@ -661,6 +664,7 @@ impl Default for Shelf {
             on: Vec::new(),
             layouts: default(),
             cube: None,
+            cube_coloured: None,
             twins: default(),
             weathered: default(),
             catalogue: Vec::new(),
@@ -1030,6 +1034,13 @@ fn shelve_start(
         let cube = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
         shelf.cube = Some(meshes.add(point_twin(&cube).unwrap_or(cube)));
     }
+    if shelf.cube_coloured.is_none() {
+        let mut cube = Mesh::from(Cuboid::new(1.0, 1.0, 1.0));
+        let n = cube.count_vertices();
+        cube.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[1.0f32; 4]; n]);
+        let l = layout_of(&cube).unwrap_or_default();
+        shelf.cube_coloured = Some((meshes.add(point_twin(&cube).unwrap_or(cube)), l));
+    }
     // The decoys come in now, are dressed next frame, are shelved at the
     // second restock and go.
     if now == 1 {
@@ -1311,7 +1322,15 @@ fn shelve_unworn(
         // an item brought out) or that fades with distance (a robot's lamp
         // halo) built that variant at first sight when only the plain one
         // was warmed here.
-        for (ranged, casts) in [(false, false), (false, true), (true, false), (true, true)] {
+        // A blended material may be worn by a puff batch too: with vertex
+        // colours, not shadowed, never faded (`render::puff`).
+        let blended = matches!(m.alpha_mode, AlphaMode::Blend);
+        let coloured = shelf.cube_coloured.clone().filter(|_| blended);
+        let shapes = [(false, false), (false, true), (true, false), (true, true)]
+            .into_iter()
+            .map(|(r, c)| (cube.clone(), layout, r, c))
+            .chain(coloured.map(|(mesh, l)| (mesh, l, false, false)));
+        for (mesh, layout, ranged, casts) in shapes {
             let key = hash_of((ty, data, alpha.clone(), bias, layout, ranged, !casts));
             if !shelf.seen.insert(key) {
                 continue;
@@ -1319,7 +1338,7 @@ fn shelve_unworn(
             if shelf.kinds.insert(key) {
                 *shelf.by_type.entry("unworn".into()).or_default() += 1;
             }
-            if let Some(e) = shelf.put(&mut commands, cube.clone(), ranged, casts) {
+            if let Some(e) = shelf.put(&mut commands, mesh, ranged, casts) {
                 commands
                     .entity(e)
                     .insert((MeshMaterial3d(handle.clone()), ShelfMark));
@@ -1418,6 +1437,7 @@ mod tests {
                 .values()
                 .map(|h| h.id())
                 .chain(shelf.cube.iter().map(|h| h.id()))
+                .chain(shelf.cube_coloured.iter().map(|(h, _)| h.id()))
                 .chain(shelf.weathered.values().flatten().map(|(h, _)| h.id()))
                 .collect();
             let w = app.world_mut();
