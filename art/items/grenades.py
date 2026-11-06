@@ -180,11 +180,13 @@ def f1():
         ny = (y - yc) / (rb * rb)
         nr = rr / (ra * ra)
         tilt = math.atan2(ny, nr)
-        h = pitch / math.cos(tilt) * 0.78
-        w = 2 * math.pi * rr / cols * 0.74
+        # Deep blocks with wide grooves between: the F1's cast segments read
+        # as a pineapple from 2 m, not the RGD-5's smooth egg.
+        h = pitch / math.cos(tilt) * 0.7
+        w = 2 * math.pi * rr / cols * 0.64
         # A block in section: chamfered on its top and bottom edges.
-        block = [(-0.003, -h / 2), (0.0011, -h / 2), (0.002, -h / 2 + 0.0011),
-                 (0.002, h / 2 - 0.0011), (0.0011, h / 2), (-0.003, h / 2)]
+        block = [(-0.003, -h / 2), (0.0022, -h / 2), (0.0034, -h / 2 + 0.0012),
+                 (0.0034, h / 2 - 0.0012), (0.0022, h / 2), (-0.003, h / 2)]
         for j in range(cols):
             a = 2 * math.pi * (j + 0.5) / cols
             body.prism(block, -w / 2, w / 2, "Olive", axis="z", segs=1,

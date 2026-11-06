@@ -147,10 +147,13 @@
         ),
         // The keeper's path: from the gate through the spruce, over the
         // pumps' footbridge to the works yard. The hidden way east.
+        // Straight over its footbridge and 6 m on at each end: a deck
+        // centred on a bend sends a walker off its side (Marrow's Forest
+        // path; Verifier saw this one bend at its middle).
         (
             name: "Keeper's path", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
             points: [(-56.0, 168.8), (-9.0, 166.6), (42.0, 133.0), (91.0, 105.0), (130.2, 84.0),
-                     (138.7, 68.2), (132.5, 43.6), (131.0, 14.7)],
+                     (138.7, 68.2), (135.3, 62.4), (129.7, 24.8), (131.0, 14.7)],
             bridges: [(at: (132.5, 43.6), length: 26.0)],
         ),
         // Off the slag road to the chimney and its strongbox.
@@ -262,6 +265,12 @@
     ],
 
     placements: [
+        // Yard lamps where a first job's way home can't be told after
+        // dark without a torch (scripts/night_route.sh, the dark case).
+        (prefab: "way_lamp", at: (84.5, 9.0), rot: 0.0),
+        (prefab: "way_lamp", at: (93.3, -12.3), rot: 0.0),
+        (prefab: "way_lamp", at: (-101.7, 58.0), rot: 0.0),
+
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
         (prefab: "log_pile", at: (-111.9, -129.6), rot: 317.0, tag: "wait_fire_lookout"),

@@ -56,7 +56,165 @@ struct EyeLevel(u8);
 
 impl Plugin for ReelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, reel);
+        app.add_systems(Update, (reel, feetat_follow));
+    }
+}
+
+/// `feetat`'s disc under a foot in stance: which foot.
+#[derive(Component)]
+struct StanceMark(usize);
+
+/// `reel:feetat,…,X2,Z2,DIST,HEIGHT[,door]`: the camera keeps beside the machine,
+/// DIST m off its route's line and HEIGHT m over the ground under it,
+/// looking at it level, so its feet and the ground line read in
+/// silhouette. Each frame's body position is logged, so a shot can be
+/// matched to the gauge's worst point (and the same frame shot before
+/// and after a change).
+fn feetat_follow(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<Zone>>,
+    bodies: Query<(
+        &GlobalTransform,
+        &Walker,
+        &super::walker::LegPoses,
+        &super::anim::Gait,
+    )>,
+    spatial: avian3d::prelude::SpatialQuery,
+    mut commands: Commands,
+    mut made: Local<bool>,
+    mut marks: Query<
+        (&StanceMark, &mut Transform, &mut Visibility),
+        Without<crate::render::FreeCamera>,
+    >,
+    (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
+    mut cams: Query<&mut Transform, With<crate::render::FreeCamera>>,
+    mut frame: Local<u32>,
+    mut heading: Local<Vec3>,
+    mut downhill: Local<f32>,
+) {
+    let (Some(spec), Some(zone)) = (&opts.gallery, zone) else {
+        return;
+    };
+    let Some(spec) = spec.strip_prefix("reel:feetat,") else {
+        return;
+    };
+    *frame += 1;
+    let a: Vec<f32> = spec
+        .split(',')
+        .skip(3)
+        .map(|v| v.parse().unwrap_or(0.0))
+        .collect();
+    let (Some(&dist), Some(&height)) = (a.get(4), a.get(5)) else {
+        return;
+    };
+    let Some((body, w, legs, gait)) = bodies.iter().next() else {
+        return;
+    };
+    let at = body.translation();
+    // Each foot: in stance or swing, and how far its drawn tip stands
+    // over the ground under it (the fixed world and rubble, as
+    // `feet_gauge` reads it; m and in body sizes).
+    let surface = |p: Vec3| {
+        let terrain = zone.ground(p.x, p.z);
+        let filter = avian3d::prelude::SpatialQueryFilter::from_mask([
+            crate::world::Layer::World,
+            crate::world::Layer::Debris,
+        ]);
+        let from = p + Vec3::Y * 0.06;
+        spatial
+            .cast_ray(from, Dir3::NEG_Y, 3.0, true, &filter)
+            .filter(|h| h.distance > 0.02)
+            .map(|h| from.y - h.distance)
+            .map_or(terrain, |y| y.max(terrain))
+    };
+    // A bright disc on the ground under each foot in stance, so a foot
+    // down reads as down from low beside a slope (where its toe can sit
+    // above the slope's far line in the picture). The same before and
+    // after a change: it marks what the gait says, not what it draws.
+    if !*made {
+        *made = true;
+        let mesh = meshes.add(Cylinder::new(0.12 * gait.size, 0.03));
+        let mat = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.2, 1.0, 0.35),
+            unlit: true,
+            ..default()
+        });
+        for i in 0..w.feet.len() {
+            commands.spawn((
+                StanceMark(i),
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                Transform::default(),
+                Visibility::Hidden,
+            ));
+        }
+    }
+    for (mark, mut t, mut v) in &mut marks {
+        let (Some(f), Some(l)) = (w.feet.get(mark.0), legs.0.get(mark.0)) else {
+            continue;
+        };
+        t.translation = Vec3::new(l[2].x, surface(l[2]) + 0.015, l[2].z);
+        *v = if f.t >= 1.0 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+    let feet: Vec<String> = w
+        .feet
+        .iter()
+        .zip(legs.0.iter())
+        .map(|(f, l)| {
+            let over = l[2].y - surface(l[2]);
+            format!(
+                "{}{:+.3}m/{:+.3}s",
+                if f.t >= 1.0 { "stance" } else { "swing" },
+                over,
+                over / gait.size
+            )
+        })
+        .collect();
+    info!(
+        "feetat frame {} body {:.2} {:.2} {:.2} feet {}",
+        *frame,
+        at.x,
+        at.y,
+        at.z,
+        feet.join(" ")
+    );
+    // Square to the way it faces (smoothed, so a stride's sway doesn't
+    // swing the camera).
+    let along = Vec3::new(a[2] - a[0], 0.0, a[3] - a[1]).normalize_or(Vec3::X);
+    let fwd = body.forward().with_y(0.0).normalize_or(along);
+    let fwd = if fwd.dot(along) < 0.0 { -fwd } else { fwd };
+    *heading = if *heading == Vec3::ZERO {
+        fwd
+    } else {
+        heading.lerp(fwd, 0.08).normalize_or(fwd)
+    };
+    let side = Vec3::new(-heading.z, 0.0, heading.x);
+    let ground = zone.ground(at.x, at.z);
+    // On its downhill side (chosen once), so no hill stands between.
+    // (Judged square to the route at its middle, before it has a heading.)
+    if *downhill == 0.0 {
+        let mid = Vec3::new(a[0] + a[2], 0.0, a[1] + a[3]) * 0.5;
+        let across = Vec3::new(-along.z, 0.0, along.x) * dist;
+        let g = |s: f32| zone.ground(mid.x + across.x * s, mid.z + across.z * s);
+        let lower = if g(1.0) <= g(-1.0) { 1.0 } else { -1.0 };
+        *downhill = lower * across.dot(side).signum();
+    }
+    let side = side * *downhill;
+    let c = Vec3::new(at.x, 0.0, at.z) + side * dist;
+    // Eye at HEIGHT over the ground under the machine, so a slope's line
+    // runs through its feet; looking level, between feet and body.
+    let eye = Vec3::new(
+        c.x,
+        (ground + height).max(zone.ground(c.x, c.z) + 0.05),
+        c.z,
+    );
+    let look = Vec3::new(at.x, eye.y + (at.y - ground) * 0.25, at.z);
+    for mut t in &mut cams {
+        *t = Transform::from_translation(eye).looking_at(look, Vec3::Y);
     }
 }
 
@@ -129,7 +287,7 @@ fn reel(
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     cases: Query<&TellCase>,
-    (mut sentry_acts, mut awares, mut drone_locks, mut melee, catalog): (
+    (mut sentry_acts, mut awares, mut drone_locks, mut melee, (catalog, nav)): (
         MessageWriter<super::sentry::SentryEvent>,
         Query<&mut super::Awareness, Without<EyeLevel>>,
         MessageWriter<super::drone::DroneLock>,
@@ -140,7 +298,7 @@ fn reel(
             Query<&mut super::grappler::Grappler>,
             Query<(&mut Brain, &mut super::Intent)>,
         ),
-        Res<crate::items::Catalog>,
+        (Res<crate::items::Catalog>, Option<Res<super::walker::Nav>>),
     ),
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
@@ -800,11 +958,27 @@ fn reel(
                 "feetat" => {
                     let a: Vec<&str> = spec.split(',').collect();
                     let n = |k: usize| a.get(k).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
-                    vec![
-                        Vec3::new(n(6), 0.0, n(7)),
-                        Vec3::new(n(4), 0.0, n(5)),
-                        Vec3::new(n(6), 0.0, n(7)),
-                    ]
+                    // Round what the nav keeps it off, as `feet_gauge`
+                    // walks it (but a door's threshold, taken as it is).
+                    let (from, to) = ([n(4), n(5)], [n(6), n(7)]);
+                    let leg = |a: [f32; 2], b: [f32; 2]| -> Vec<Vec3> {
+                        let straight = vec![Vec3::new(b[0], 0.0, b[1])];
+                        if spec.ends_with(",door") {
+                            return straight;
+                        }
+                        nav.as_ref()
+                            .and_then(|nav| nav.0.path(a, b))
+                            .map(|p| {
+                                p.iter()
+                                    .skip(1)
+                                    .map(|q| Vec3::new(q[0], 0.0, q[1]))
+                                    .collect()
+                            })
+                            .unwrap_or(straight)
+                    };
+                    let mut path = leg(from, to);
+                    path.extend(leg(to, from));
+                    path
                 }
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
                 | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {

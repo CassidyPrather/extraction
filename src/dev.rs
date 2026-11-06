@@ -177,9 +177,11 @@ fn save_alpha(image: &Image, path: &std::path::Path) {
     }
 }
 
-/// `--gallery sights:<gun>`: the gun's sight line on the camera's, its
-/// rear sight just ahead of the eye, and the eye down behind the sights
-/// (so the front post goes soft, as `weapons::optics` draws it).
+/// `--gallery sights:<gun>[,TURN,DIST]`: the gun at the cheek weld
+/// (`weapons::sight_picture::weld_eye` on the camera), its sight line on the
+/// camera's, the post gone soft (as `weapons::optics` draws it); with a
+/// DIST, a walker stands that far off and the sights and the eye are on its
+/// middle (the sight-picture stills).
 fn sights_to_the_eye(
     opts: Res<LaunchOptions>,
     zone: Option<Res<crate::world::Zone>>,
@@ -190,14 +192,24 @@ fn sights_to_the_eye(
         &mut Transform,
         &mut crate::weapons::feel::Handling,
     )>,
+    mut cams: Query<
+        &mut Transform,
+        (
+            With<crate::render::FreeCamera>,
+            Without<crate::weapons::Gun>,
+        ),
+    >,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
     else {
         return;
     };
-    let Some(id) = spec.strip_prefix("sights:") else {
+    let Some(rest) = spec.strip_prefix("sights:") else {
         return;
     };
+    let mut parts = rest.split(',');
+    let id = parts.next().unwrap_or_default();
+    let dist: Option<f32> = parts.nth(1).and_then(|v| v.parse().ok());
     let ground = zone.ground(cam.x, cam.z);
     let eye_y = if cam.y == 0.0 {
         ground + 1.7
@@ -205,23 +217,36 @@ fn sights_to_the_eye(
         cam.y.max(ground + 0.3)
     };
     let eye = Vec3::new(cam.x, eye_y, cam.z);
-    let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    let mut look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    if let Some(d) = dist {
+        let fwd = look * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let at = eye + flat * d;
+        let mark = Vec3::new(at.x, zone.ground(at.x, at.z) + TARGET_MIDDLE, at.z);
+        look = Transform::from_translation(eye)
+            .looking_at(mark, Vec3::Y)
+            .rotation;
+        for mut tf in &mut cams {
+            tf.rotation = look;
+        }
+    }
     // The gallery's gun only: one lying in the zone would come to the eye
     // too, over it.
     for (gun, item, mut tf, mut handling) in &mut guns {
         if catalog.get(item.kind()).id != id {
             continue;
         }
-        // The eye 4 cm behind the rear sight, on the line to the front post.
-        let rear = gun.layout.sight.translation;
-        let front = crate::weapons::feel::front_post(gun);
-        let line = Quat::from_rotation_arc(Vec3::NEG_Z, (front - rear).normalize());
+        let line = gun.layout.sight.rotation;
         let rot = look * line.inverse();
-        let at_eye = rear - (front - rear).normalize() * 0.04;
+        let at_eye = crate::weapons::sight_picture::weld_eye(gun);
         *tf = Transform::from_translation(eye - rot * at_eye).with_rotation(rot);
         handling.at_eye = 1.0;
     }
 }
+
+/// How high a sight-picture still's walker is aimed at, over the ground
+/// it stands on (its body's middle, where `spawn_walker` puts it).
+const TARGET_MIDDLE: f32 = 1.15;
 
 /// A `--gallery robots:` line-up: each machine, the yaw it faces (a
 /// walker's `yaw`), and where it stood when it came (taken on its first
@@ -577,7 +602,9 @@ fn gallery(
                             at,
                         ),
                         "plough" => {
-                            let (a, b) = (at - right * 6.0, at + right * 6.0);
+                            // (It stands at its road's start, its shed:
+                            // here, in its place in the line.)
+                            let (a, b) = (at, at + right * 12.0);
                             crate::robots::plough::spawn_plough(
                                 &mut commands,
                                 &zone,
@@ -763,6 +790,12 @@ fn gallery(
             // front of the camera (`sights_to_the_eye` places it).
             s if s.starts_with("sights:") => {
                 spawn_static(&mut commands, &s["sights:".len()..], eye + fwd * 0.5);
+                if let Some(d) = dist {
+                    let at = zone.on_ground(eye.x + flat.x * d, eye.z + flat.z * d);
+                    let w = crate::robots::walker::spawn_walker(&mut commands, &zone, at, job(at));
+                    let face_cam = flat.x.atan2(flat.z);
+                    commands.insert_resource(LineUp(vec![(w, face_cam, None)]));
+                }
             }
             // `first_person_hands`, `wear_kit` and `weapons::cycle` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") || s.starts_with("cycle:") => {}

@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! extraction [--flat] [--mirror] [--headset] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
-//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch]]]
+//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch] [--torch-dip DEG]]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --report [--data-dir DIR]
@@ -60,6 +60,10 @@ pub struct LaunchOptions {
     /// The camera override carries a lit flashlight, pointing where it
     /// looks (`--torch`: night shots as a player sees them).
     pub torch: bool,
+    /// How far below the look that flashlight points (degrees,
+    /// `--torch-dip DEG`, which lights it): a hand holds a torch on the
+    /// ground a few metres ahead while the eye looks further on.
+    pub torch_dip: f32,
     /// The local player is driven by the bot brain.
     pub bot: bool,
     /// Run a scripted bot scenario (see `bot::scenarios`); exits when done.
@@ -173,6 +177,7 @@ impl Default for LaunchOptions {
             frames: 90,
             camera: None,
             torch: false,
+            torch_dip: 0.0,
             tour: None,
             tour_only: None,
             tour_views: None,
@@ -399,6 +404,10 @@ impl LaunchOptions {
                     o.robots = false;
                 }
                 "--torch" => o.torch = true,
+                "--torch-dip" => {
+                    o.torch = true;
+                    o.torch_dip = val().parse::<f32>().unwrap_or(0.0).clamp(0.0, 60.0);
+                }
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {
@@ -500,6 +509,18 @@ mod tests {
 
     /// The onboarding scenario calls the truck; its run must end there,
     /// not reopen the game in the next valley.
+    #[test]
+    fn a_torch_dips_below_the_look_when_asked() {
+        let parse = |a: &str| LaunchOptions::parse(a.split(' ').map(String::from));
+        let o = parse("--camera 1,2,3,0,-6 --torch");
+        assert!(o.torch);
+        assert_eq!(o.torch_dip, 0.0, "it points where the eye looks");
+        let o = parse("--camera 1,2,3,0,-6 --torch-dip 15");
+        assert!(o.torch, "a dip lights it");
+        assert_eq!(o.torch_dip, 15.0);
+        assert_eq!(parse("--torch-dip 200").torch_dip, 60.0);
+    }
+
     #[test]
     fn tooling_runs_are_told_apart_from_play() {
         let parse = |a: &str| LaunchOptions::parse(a.split(' ').map(String::from));

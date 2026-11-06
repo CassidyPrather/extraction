@@ -246,7 +246,25 @@
 
     // Coming home: outcrops where a way in to a rendezvous was open for
     // more than a dash (map_lint, coming home).
+    // Someone's home at the Low farm: smoke from the farmhouse, a window
+    // lit after dark, drawing a newcomer off the road to the farm from
+    // 150 m (the workshop's cache is by the farm's lorry, 20 m on).
+    cues: [
+        Smoke(at: (-137.5, 147.5)),
+        LitWindow(at: (-140.5, 143.5)),
+        // The charcoal burners' hut on the lodge track: the window toward
+        // the way home lit after dark, ahead of a first job coming up the
+        // track (scripts/night_route.sh, the dark case; it was a yard lamp).
+        LitWindow(at: (87.3, -101.2)),
+    ],
     outcrops: [
+        // Boulders on the slope between the mine office and the boxcar,
+        // a dash apart beside the way down (Progression's cautious raids:
+        // a raider pinned in the office went down this open ground past
+        // the beck site's walker, with nowhere to get down).
+        (at: (-62.0, 33.5), radius: 1.0, stones: 3),
+        (at: (-75.5, 21.0), radius: 1.0, stones: 3),
+        (at: (-85.5, 7.5), radius: 1.0, stones: 3),
         // The cairn's stones on the ridge's lip, by its figures: a mass on
         // the skyline from the way below, where the figures alone were a
         // speck in grey weather.
@@ -255,6 +273,12 @@
         (at: (4.0, -176.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // Yard lamps where a first job's way home can't be told after
+        // dark without a torch (scripts/night_route.sh, the dark case).
+        (prefab: "way_lamp", at: (85.8, 187.4), rot: 0.0),
+        (prefab: "way_lamp", at: (-101.6, -1.1), rot: 0.0),
+        (prefab: "way_lamp", at: (-137.2, -26.5), rot: 0.0),
+
         // Breadcrumbs: the shot-firer's store: a magazine hut by the mine, its cache behind it.
         (prefab: "shed", at: (-135.1, -75.4), rot: 12.0),
         // Breadcrumbs: the farm's lorry by the workshop, broadside to the
@@ -341,7 +365,7 @@
         (prefab: "boxcar", at: (-183.3, -41.9), rot: 102.05),
         // The yard's lamp hut by the pickup, and the road-menders' hut at the
         // pass: each a roof to wait under for the truck.
-        (prefab: "shed", at: (-154.4, -28.5), rot: 188.0, tag: "lamp_hut"),
+        (prefab: "shed", at: (-154.4, -28.5), rot: 270.0, tag: "lamp_hut"),
         (prefab: "shed", at: (18.9, -201.1), rot: 272.0, tag: "road_hut"),
         (prefab: "boxcar", at: (-96.4, -22.0), rot: 284.9),
         (prefab: "pump_station", at: (-151.3, -86.5), rot: 90.0),
