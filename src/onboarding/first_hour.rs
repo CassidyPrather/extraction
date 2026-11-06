@@ -1453,10 +1453,12 @@ pub(super) fn direct_raid(
                     },
                 }
             }
-            // "Hound. Don't run... Plant your feet and shoot": stopped where
-            // it is, at it (a run only draws it on; a gun to hand, the lost
-            // one too: there's no going anywhere from a hound).
-            First::Hound if armed_now => {
+            // "Plant your feet and shoot. A hound: don't run": stopped where
+            // it is, at it, for those who'd take a machine on. The rest stay
+            // low and still in its sight (`state.hound`, the answer that got
+            // them home: stood shooting, the lost one held the hound by it
+            // and never got up again).
+            First::Hound if armed_now && (p.reckless || p.hoards) => {
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
@@ -1469,7 +1471,7 @@ pub(super) fn direct_raid(
                 take_it_on()
             }
             // Nothing to shoot with: feet planted, still.
-            First::Hound => {
+            First::Hound if p.reckless || p.hoards => {
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
