@@ -1314,6 +1314,9 @@ fn shelve_unworn(
             format!("{:?}", m.alpha_mode()),
             m.depth_bias().to_bits(),
         );
+        // A blended material may be worn by a puff batch too: with vertex
+        // colours, not shadowed, never faded (`render::puff`).
+        let blended = matches!(m.alpha_mode, AlphaMode::Blend);
         let Some(handle) = materials.get_strong_handle(id) else {
             continue;
         };
@@ -1322,9 +1325,6 @@ fn shelve_unworn(
         // an item brought out) or that fades with distance (a robot's lamp
         // halo) built that variant at first sight when only the plain one
         // was warmed here.
-        // A blended material may be worn by a puff batch too: with vertex
-        // colours, not shadowed, never faded (`render::puff`).
-        let blended = matches!(m.alpha_mode, AlphaMode::Blend);
         let coloured = shelf.cube_coloured.clone().filter(|_| blended);
         let shapes = [(false, false), (false, true), (true, false), (true, true)]
             .into_iter()

@@ -374,7 +374,7 @@ fn batch_puffs(
     // Batches with nothing this frame draw nothing.
     for (key, b) in batches.by.iter_mut() {
         if !quads.contains_key(key) {
-            if let Some(m) = meshes.get_mut(&b.mesh) {
+            if let Some(mut m) = meshes.get_mut(&b.mesh) {
                 *m = empty_batch();
             }
         }
@@ -412,7 +412,7 @@ fn batch_puffs(
         mesh.insert_indices(bevy::mesh::Indices::U32(idx));
         match batches.by.get_mut(&key) {
             Some(b) => {
-                if let Some(m) = meshes.get_mut(&b.mesh) {
+                if let Some(mut m) = meshes.get_mut(&b.mesh) {
                     *m = mesh;
                 }
                 commands
