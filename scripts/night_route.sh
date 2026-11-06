@@ -16,39 +16,18 @@ mkdir -p "$OUT"
 cargo run -q --profile fast -p extraction_core --bin night-walks -- "$MAP" > "$OUT/walks.jsonl"
 python3 -c "import json,sys; [print(json.loads(l)['still']) for l in open(sys.argv[1])]" \
     "$OUT/walks.jsonl" > "$OUT/walks.stills"
-# The torch case looks lower: a hand torch is held toward the ground
-# ahead (TORCH_PITCH degrees), not where the eye looks, and the torch
-# follows the camera.
-TORCH_PITCH="${TORCH_PITCH:--15}"
-python3 - "$OUT/walks.jsonl" "$TORCH_PITCH" > "$OUT/walks_torch.jsonl" <<'PY'
-import json, sys
-for line in open(sys.argv[1]):
-    s = json.loads(line)
-    s["pitch"] = float(sys.argv[2])
-    name, pose = s["still"].split(" ", 1)
-    v = pose.split(",")
-    v[4] = sys.argv[2]
-    s["still"] = name + " " + ",".join(v)
-    print(json.dumps(s))
-PY
-python3 -c "import json,sys; [print(json.loads(l)['still']) for l in open(sys.argv[1])]" \
-    "$OUT/walks_torch.jsonl" > "$OUT/walks_torch.stills"
 lost=0
 for case in ${CASES:-dark torch}; do
     flag=""
-    walks="$OUT/walks.jsonl"
-    stills="$OUT/walks.stills"
-    if [ "$case" = torch ]; then
-        flag="--torch"
-        walks="$OUT/walks_torch.jsonl"
-        stills="$OUT/walks_torch.stills"
-    fi
+    # The torch case: the eye looks along the way while the hand holds the
+    # torch on the ground a few metres ahead (TORCH_DIP degrees under it).
+    [ "$case" = torch ] && flag="--torch --torch-dip ${TORCH_DIP:-9}"
     for weather in clearing downpour; do
         dir="$OUT/${case}_$weather"
         mkdir -p "$dir"
-        CINE="$stills" HOUR=night WEATHER="$weather" EXTRACTION_BIN="$BIN" \
+        CINE="$OUT/walks.stills" HOUR=night WEATHER="$weather" EXTRACTION_BIN="$BIN" \
             scripts/capture_cinematic.sh "$MAP" "$dir" --moon new $flag > "$dir/capture.log" 2>&1
-        python3 scripts/night_route.py "$walks" "$dir" --case "$case" \
+        python3 scripts/night_route.py "$OUT/walks.jsonl" "$dir" --case "$case" \
             --sheet "$dir/worst.png" > "$dir/report.txt"
         n=$?
         echo "$MAP $case $weather: $(tail -1 "$dir/report.txt")"
