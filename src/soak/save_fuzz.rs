@@ -124,7 +124,16 @@ fn check_world(world: &mut World, when: &str) -> usize {
     }
     for (s_e, s) in world.query::<(Entity, &Socket)>().iter(world) {
         if let Some(o) = s.occupant {
-            claimed.entry(o).or_default().push(format!("socket {s_e}"));
+            // Which socket, and whose: a gun's magazine well, a body's
+            // pouch.
+            let owner = world.get::<SocketOwner>(s_e).map(|o| o.0);
+            let whose = owner
+                .and_then(|o| world.get::<Item>(o).map(|it| it.0.kind))
+                .map_or_else(|| format!("{owner:?}"), |k| format!("{k:?}"));
+            claimed
+                .entry(o)
+                .or_default()
+                .push(format!("socket {s_e} ({:?} of {whose})", s.kind));
         }
     }
     for h in world.query::<&crate::interact::Hand>().iter(world) {
@@ -136,7 +145,8 @@ fn check_world(world: &mut World, when: &str) -> usize {
     for &e in &items {
         let c = claimed.get(&e).cloned().unwrap_or_default();
         if c.len() > 1 {
-            problems.push(format!("{e} is in {} places: {c:?}", c.len()));
+            let kind = world.get::<Item>(e).map(|it| it.0.kind);
+            problems.push(format!("{e} ({kind:?}) is in {} places: {c:?}", c.len()));
         }
         let (bag, sock, held) = (
             world.get::<InBackpack>(e).map(|b| b.bag),
@@ -155,7 +165,8 @@ fn check_world(world: &mut World, when: &str) -> usize {
             }
         }
         if let Some(s) = sock {
-            if !c.iter().any(|w| w == &format!("socket {s}")) {
+            // (A claim is "socket <e> (<kind> of <owner>)".)
+            if !c.iter().any(|w| w.starts_with(&format!("socket {s} "))) {
                 problems.push(format!(
                     "{e} says it's in socket {s}, which holds something else"
                 ));
@@ -719,6 +730,83 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
     app
 }
 
+/// A reload by hand put to the bot: out on the raid and walking, a rifle
+/// and a loaded magazine laid at its feet, picked up, the magazine packed and
+/// the rifle reloaded by hand, as a player does it. Whether it was. (The
+/// soak's raid kits up from a fresh game's stash, with no rifle in it:
+/// there was never a gun to reload. And the sim raider's own reload is
+/// the gun's macro, done in a frame.)
+fn hand_reload(world: &mut World) -> bool {
+    use crate::bot::{Bot, Task};
+    let me = player(world);
+    if world.resource::<Raid>().phase != Phase::Out {
+        return false;
+    }
+    let walking = world
+        .get::<Bot>(me)
+        .is_some_and(|b| b.walk.is_some() || matches!(b.tasks.front(), Some(Task::WalkTo { .. })));
+    if !walking {
+        return false;
+    }
+    let Some(feet) = world.get::<GlobalTransform>(me).map(|g| g.translation()) else {
+        return false;
+    };
+    let catalog = world.resource::<Catalog>().clone();
+    let mut spawned = Vec::new();
+    for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
+        let Some(kind) = catalog.kind(id) else {
+            return false;
+        };
+        let at = feet + Vec3::new(0.6, 0.3, 0.3 * k as f32);
+        let e = crate::items::spawn_item(
+            &mut world.commands(),
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 0.9,
+            },
+        );
+        spawned.push(e);
+    }
+    world.flush();
+    // The magazine loaded (a fresh one is empty): the reload takes the
+    // fullest in a pouch, and an empty one is no reload at all.
+    if let Some(&mag) = spawned.get(1) {
+        let def = catalog.get(catalog.kind("ak_mag").unwrap());
+        let (cap, every) = (
+            def.magazine.as_ref().map_or(30, |m| m.capacity),
+            def.tracer_every,
+        );
+        if let Some(mut it) = world.get_mut::<Item>(mag) {
+            it.0.rounds = cap;
+            it.0.loads = extraction_core::ammo::Loads::with_tracers(cap, every);
+        }
+    }
+    // The sim raider's mind lets go of the bot: it plans its walks again
+    // every few frames, and a reload put in front of them was gone the
+    // next. The quit loads a fresh game anyway.
+    world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+    let Some(mut bot) = world.get_mut::<Bot>(me) else {
+        return false;
+    };
+    let s = |x: &str| x.to_string();
+    bot.tasks.clear();
+    bot.tasks.extend([
+        Task::PickUp {
+            id: s("ak74"),
+            side: crate::rig::Side::Right,
+        },
+        Task::PickUp {
+            id: s("ak_mag"),
+            side: crate::rig::Side::Left,
+        },
+        Task::Stow(crate::rig::Side::Left),
+        Task::OneHandReload,
+    ]);
+    true
+}
+
 /// Which awkward moments the raid is in this frame.
 fn moments_now(world: &mut World) -> Vec<Moment> {
     use crate::bot::{Bot, Task};
@@ -749,14 +837,14 @@ fn moments_now(world: &mut World) -> Vec<Moment> {
     if !held.is_empty() {
         now.push(Moment::InHand);
     }
-    let reloading = held.iter().any(|e| {
-        world
-            .get::<Gun>(*e)
-            .and_then(|g| g.magwell)
-            .and_then(|w| world.get::<Socket>(w))
-            .is_some_and(|s| s.occupant.is_none())
-    }) && held.iter().any(|e| world.get::<Mag>(*e).is_some());
-    if reloading {
+    // The empty magazine out and the next not yet in (the bot's reload
+    // past its first step). (A held gun's `magwell` with a magazine in
+    // the other hand never came round: the well is the gun's socket, not
+    // `Gun::magwell`, and the soak never quit mid-reload.)
+    let reloading = world
+        .get::<Bot>(me)
+        .is_some_and(|b| matches!(b.tasks.front(), Some(Task::OneHandReload)) && b.fired >= 1);
+    if reloading && phase == Phase::Out {
         now.push(Moment::MidReload);
     }
     let feet = world.get::<GlobalTransform>(me).map(|g| g.translation());
@@ -781,13 +869,19 @@ fn items_held(save: &extraction_core::save::SaveGame) -> Vec<String> {
     fn key(i: &SavedItem) -> String {
         let mut inner: Vec<String> = i.inserted.iter().map(key).collect();
         inner.sort();
+        // Its loads as the game keeps them: Standard rounds at the bottom
+        // are the same as unlisted (`Loads::fit`), and a restore trims
+        // them (Rime seed 2: a Nagant packet's fourteen listed came back
+        // eight, the same rounds).
+        let mut loads = i.loads.clone();
+        loads.fit(i.rounds);
         format!(
             "{} rounds {} condition {:.3} charge {:.2} loads {:?} gun {:?} [{}]",
             i.id,
             i.rounds,
             i.condition,
             i.charge_wh,
-            i.loads,
+            loads,
             i.gun,
             inner.join(", ")
         )
@@ -900,6 +994,8 @@ fn soak_quit_anywhere_in_every_valley() {
             .filter(|m| m != crate::camp::TRAINING_YARD)
             .collect(),
     };
+    // `QUIT_MOMENT=Surge` (say): that moment only.
+    let only = std::env::var("QUIT_MOMENT").ok();
     let seeds: Vec<u64> = std::env::var("QUIT_SEED")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -912,13 +1008,36 @@ fn soak_quit_anywhere_in_every_valley() {
     for map in &maps {
         for &seed in &seeds {
             for m in MOMENTS {
+                if only.as_ref().is_some_and(|o| *o != format!("{m:?}")) {
+                    continue;
+                }
                 let path = profile(&format!("quit-{map}-{seed}-{m:?}"));
                 let mut a = raid_on(&path, map, seed);
                 let mut frame = 0usize;
                 let mut hit = false;
+                let mut asked = false;
                 while frame < 90 * 60 * 14 {
                     a.update();
                     frame += 1;
+                    // The Surge is an hour in, past any bot raid: once out,
+                    // the clock is wound to just short of it (as
+                    // `--surge-in` does).
+                    // The sim raider's reload is the gun's macro, done in a
+                    // frame: for that moment, once it's out with its gun in
+                    // hand and nothing else on, it reloads by hand, as a
+                    // player does (the empty one out, the next in).
+                    if m == Moment::MidReload && !asked {
+                        asked = hand_reload(a.world_mut());
+                    }
+                    if m == Moment::Surge {
+                        let mut raid = a.world_mut().resource_mut::<Raid>();
+                        if raid.phase == Phase::Out
+                            && raid.clock > 1.0
+                            && raid.clock < crate::raid::SURGE_AFTER - 10.0
+                        {
+                            raid.clock = crate::raid::SURGE_AFTER - 10.0;
+                        }
+                    }
                     if moments_now(a.world_mut()).contains(&m) {
                         hit = true;
                         break;
@@ -941,7 +1060,11 @@ fn soak_quit_anywhere_in_every_valley() {
             }
         }
     }
-    let missed: Vec<&Moment> = MOMENTS.iter().filter(|m| !covered.contains(*m)).collect();
+    let missed: Vec<&Moment> = MOMENTS
+        .iter()
+        .filter(|m| only.as_ref().is_none_or(|o| *o == format!("{m:?}")))
+        .filter(|m| !covered.contains(*m))
+        .collect();
     assert!(
         findings.is_empty(),
         "{} findings over a quit and reload:\n{}",

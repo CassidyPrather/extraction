@@ -19,9 +19,9 @@ use crate::items::{Catalog, Item};
 use crate::rig::haptics::Haptic;
 
 /// In the cutters' space: the two handle ends, and the jaws (-Z).
-pub const LEFT: Vec3 = Vec3::new(-0.07, 0.0, 0.26);
-pub const RIGHT: Vec3 = Vec3::new(0.07, 0.0, 0.26);
-pub const JAWS: Vec3 = Vec3::new(0.0, 0.0, -0.3);
+pub const LEFT: Vec3 = Vec3::new(-0.07, 0.0, 0.27938);
+pub const RIGHT: Vec3 = Vec3::new(0.07, 0.0, 0.27938);
+pub const JAWS: Vec3 = Vec3::new(0.0, 0.0, -0.28062);
 /// How far the hands must close from where they were when the jaws went
 /// on (m), and how near together they must end.
 const CLOSE: f32 = 0.1;

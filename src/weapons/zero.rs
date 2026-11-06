@@ -324,6 +324,16 @@ pub fn shot_dir(gun: &Gun, rotation: Quat, scoped: bool) -> Vec3 {
     rotation * Quat::from_rotation_x(up) * Vec3::NEG_Z
 }
 
+/// [`shot_dir`] for a barrel `across` metres to the side of the gun's
+/// muzzle (a double's two): turned in so it crosses the sight line at the
+/// zero, as a double gun's barrels are regulated to shoot to one point.
+/// Parallel, each struck 1.3 cm off the bead at 20 m.
+pub fn barrel_dir(gun: &Gun, rotation: Quat, scoped: bool, across: f32) -> Vec3 {
+    let up = if scoped { 0.0 } else { iron_up(gun) };
+    let zero = iron_zero_m(&gun.firearm.def);
+    rotation * Quat::from_rotation_x(up) * Quat::from_rotation_y(across / zero) * Vec3::NEG_Z
+}
+
 /// The height of a scope's line of sight over its gun's bore.
 pub fn sight_height(gun: &Gun, gun_gt: &GlobalTransform, scope_gt: &GlobalTransform) -> f32 {
     gun_gt
@@ -629,6 +639,163 @@ mod tests {
             }
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every gun, fired through the game's own shot (`ballistics::Shot`,
+    /// flown as a `Projectile`) with no spread, lands on its iron sights'
+    /// point of aim at its zero ([`iron_zero_m`]): within 2 MOA, up and
+    /// across, for each barrel. (`every_gun_hits_where_its_iron_sights_point`
+    /// checks the sum; this flies the round, slow ones included, and a
+    /// double's two barrels.) The gun is set in the air, its sight line
+    /// level, so nothing is in the way.
+    #[test]
+    fn every_gun_fired_lands_on_its_point_of_aim_at_its_zero() {
+        use crate::weapons::ballistics::{Projectile, Shot};
+        use avian3d::prelude::RigidBody;
+        const MOA: f32 = std::f32::consts::PI / (180.0 * 60.0);
+        let mut vr = crate::vr_harness::Vr::new("training_yard");
+        let ids: Vec<String> = {
+            let cat = vr.app.world().resource::<crate::items::Catalog>();
+            cat.iter()
+                .filter(|(_, d)| {
+                    d.firearm.is_some() && super::super::layout::layout(&d.id).is_some()
+                })
+                .map(|(_, d)| d.id.clone())
+                .collect()
+        };
+        assert!(ids.len() > 10, "only {} guns", ids.len());
+        /// Guns held to their own tolerance (MOA), and why: everything
+        /// else to 2 MOA.
+        const OWN_TOLERANCE: &[(&str, f32)] = &[
+            // A 26 mm star is slow, and slows faster than a bullet, so the
+            // bullet's zero (`iron_up`) leaves it about 12 MOA low at 20 m
+            // (7 cm). Its own spread is 90 MOA; 15 MOA is a sixth of it.
+            // (Before `flares::star_step`, a star fired level stalled and
+            // landed 1.9 m low.)
+            ("flare_pistol", 15.0),
+        ];
+        let mut report = Vec::new();
+        let mut bad = Vec::new();
+        for (k, id) in ids.iter().enumerate() {
+            let at = Vec3::new(k as f32 * 3.0, 400.0, 0.0);
+            let gun = vr.spawn(id, Transform::from_translation(at));
+            vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+            vr.step(2);
+            // Its sight line level.
+            let (sight, barrels) = {
+                let g = vr.app.world().get::<Gun>(gun).expect("a gun");
+                (g.layout.sight, g.firearm.def.barrels)
+            };
+            let d = sight.rotation * Vec3::NEG_Z;
+            let pose =
+                Transform::from_translation(at).with_rotation(Quat::from_rotation_x(-d.y.asin()));
+            *vr.app.world_mut().get_mut::<Transform>(gun).unwrap() = pose;
+            vr.step(2);
+            let gt = *vr.app.world().get::<GlobalTransform>(gun).unwrap();
+            let g = vr.app.world().get::<Gun>(gun).unwrap();
+            let def = g.firearm.def.clone();
+            let zero_m = iron_zero_m(&def);
+            let eye = gt.transform_point(g.layout.sight.translation);
+            let look = (gt.rotation() * g.layout.sight.rotation * Vec3::NEG_Z).normalize();
+            let aim = eye + look * zero_m;
+            let muzzle0 = g.layout.muzzle;
+            for barrel in 0..barrels.max(1) {
+                let mut muzzle = muzzle0;
+                if barrels > 1 {
+                    muzzle.x += if barrel == 0 { -0.0128 } else { 0.0128 };
+                }
+                // As `triggers` sends it.
+                let dir = {
+                    let g = vr.app.world().get::<Gun>(gun).unwrap();
+                    barrel_dir(g, gt.rotation(), false, muzzle.x - muzzle0.x)
+                };
+                vr.app.world_mut().write_message(Shot {
+                    gun,
+                    shooter: None,
+                    origin: gt.transform_point(muzzle),
+                    direction: dir,
+                    speed: def.muzzle_velocity,
+                    damage: 1.0,
+                    projectiles: 1,
+                    spread: 0.0,
+                    recoil: 0.0,
+                    seed: 1,
+                });
+                let along = |x: Vec3| (x - eye).dot(look);
+                let mut last: Option<Vec3> = None;
+                let mut hit: Option<Vec3> = None;
+                for i in 0..400 {
+                    vr.step(1);
+                    // A bullet, or what a launcher throws (a star, a bolt).
+                    let world = vr.app.world_mut();
+                    let mut bullets = world.query::<(&Projectile, &Transform)>();
+                    let mut thrown = world.query_filtered::<&Transform, Or<(
+                        With<crate::weapons::flares::Flare>,
+                        With<crate::weapons::crossbow::Quarrel>,
+                    )>>();
+                    let at = bullets
+                        .iter(world)
+                        .find(|(p, _)| p.gun == gun)
+                        .map(|(_, t)| t.translation)
+                        .or_else(|| thrown.iter(world).next().map(|t| t.translation));
+                    let Some(p) = at else {
+                        if i < 5 {
+                            continue;
+                        }
+                        break;
+                    };
+                    if along(p) >= zero_m {
+                        let a = last.unwrap_or(p);
+                        let f = (zero_m - along(a)) / (along(p) - along(a)).max(1e-6);
+                        hit = Some(a.lerp(p, f));
+                        break;
+                    }
+                    last = Some(p);
+                }
+                // Let any round still flying go.
+                let flying: Vec<Entity> = {
+                    let world = vr.app.world_mut();
+                    let mut q = world.query_filtered::<Entity, Or<(
+                        With<Projectile>,
+                        With<crate::weapons::flares::Flare>,
+                        With<crate::weapons::crossbow::Quarrel>,
+                    )>>();
+                    q.iter(world).collect()
+                };
+                for e in flying {
+                    vr.app.world_mut().despawn(e);
+                }
+                let Some(hit) = hit else {
+                    bad.push(format!("{id}: the round never reached {zero_m} m"));
+                    continue;
+                };
+                let off = hit - aim;
+                let side = gt.rotation() * Vec3::X;
+                let (up, across) = (off.y, off.dot(side));
+                let moa = OWN_TOLERANCE
+                    .iter()
+                    .find(|(g, _)| g == id)
+                    .map_or(2.0, |(_, m)| *m);
+                let tol = moa * MOA * zero_m;
+                let line = format!(
+                    "{id} barrel {barrel}: at {zero_m} m, {:+.1} cm up, {:+.1} cm across ({moa} MOA is {:.1} cm)",
+                    up * 100.0,
+                    across * 100.0,
+                    tol * 100.0
+                );
+                if up.abs() > tol || across.abs() > tol {
+                    bad.push(line.clone());
+                }
+                report.push(line);
+            }
+            vr.app.world_mut().despawn(gun);
+        }
+        println!("{}", report.join("\n"));
+        assert!(
+            bad.is_empty(),
+            "off their point of aim:\n{}",
+            bad.join("\n")
+        );
     }
 
     use super::*;

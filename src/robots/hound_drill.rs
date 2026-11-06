@@ -48,7 +48,11 @@ pub const SHUFFLE: f32 = 0.6;
 
 #[derive(Clone, Debug)]
 pub struct Fight {
+    /// Which valley and stance the fight was in: carried for the record's
+    /// Debug print, which the drill's report reads by eye.
+    #[allow(dead_code)]
     pub valley: &'static str,
+    #[allow(dead_code)]
     pub stance: Stance,
     /// When the hound was out of it (s): wrecked, or its core or a leg
     /// gone (it can't come at you).

@@ -88,12 +88,13 @@ def compass():
               xf=RY(2 * math.pi * k / 16) @ T(0.0278, 0, 0))
     p.cyl(0.0244, 0.0205, 0.0212, "Clear", segs=24, xf=UP)
     p.box((0.002, 0.0015, 0.004), (0.0, 0.0215, -0.0255), "Glow", bevel=0.0004, segs=1)
-    # Strap lugs and a canvas wrist strap under it.
+    # Strap lugs and a canvas wrist strap under it, lying close under the
+    # case (looped 12 mm down, the compass was thicker than a hip pocket).
     for sx in (-1, 1):
         p.box((0.006, 0.006, 0.016), (sx * 0.025, 0.0, 0.0), "Blued", bevel=0.0015, segs=1)
         p.cyl(0.0012, -0.008, 0.008, "Steel", segs=6, xf=T(sx * 0.0265, 0.0, 0.0))
-    strap = [(-0.032, 0.0), (-0.027, -0.009), (-0.018, -0.012), (0.018, -0.012), (0.027, -0.009),
-             (0.032, 0.0)]
+    strap = [(-0.032, 0.0), (-0.027, -0.006), (-0.018, -0.0075), (0.018, -0.0075),
+             (0.027, -0.006), (0.032, 0.0)]
     p.sweep([(x, y) for x, y in strap], section_rect(0.014, 0.0025), "Olive",
             xf=RY(math.pi / 2))
     return [p]
@@ -241,15 +242,17 @@ def map_case():
     # sleeve stands 3 mm off the board so the two never fight.
     p.box((0.276, 0.0004, 0.276), (0.0, 0.0077, 0.0), "Clear")
     for sx in (-1, 1):
-        p.box((0.012, 0.0038, 0.3), (sx * 0.144, 0.0064, 0.0), "Olive", bevel=0.001, segs=1)
-        p.box((0.276, 0.0038, 0.012), (0.0, 0.0064, sx * 0.144), "Olive", bevel=0.001, segs=1)
-    # A press stud flap on one edge, and a pencil in a loop.
-    p.box((0.06, 0.004, 0.022), (0.0, 0.006, 0.161), "Olive", bevel=0.0015, segs=1)
-    p.cyl(0.004, 0.006, 0.0095, "Steel", segs=10, xf=T(0, 0, 0.162) @ UP)
-    p.cyl(0.0035, -0.12, 0.07, "Yellow", segs=6, xf=T(0.155, 0.006, 0.0))
+        p.box((0.012, 0.0038, 0.3), (sx * 0.144, 0.006, 0.0), "Olive", bevel=0.001, segs=1)
+        p.box((0.276, 0.0038, 0.012), (0.0, 0.006, sx * 0.144), "Olive", bevel=0.001, segs=1)
+    # A press stud flap on one edge, and a pencil in a loop: none of it
+    # standing over the sleeve, so the case is under 12 mm through and a
+    # hand pinches it by an edge (`render::hold::THIN`).
+    p.box((0.06, 0.004, 0.022), (0.0, 0.0058, 0.161), "Olive", bevel=0.0015, segs=1)
+    p.cyl(0.004, 0.006, 0.0078, "Steel", segs=10, xf=T(0, 0, 0.162) @ UP)
+    p.cyl(0.0035, -0.12, 0.07, "Yellow", segs=6, xf=T(0.155, 0.0043, 0.0))
     p.lathe([(0.0, 0.07), (0.0035, 0.07), (0.0, 0.085)], "Planks", segs=6,
-            xf=T(0.155, 0.006, 0.0))
-    p.box((0.01, 0.009, 0.012), (0.155, 0.006, -0.08), "Olive")
+            xf=T(0.155, 0.0043, 0.0))
+    p.box((0.01, 0.007, 0.012), (0.155, 0.0043, -0.08), "Olive")
     return [p]
 
 

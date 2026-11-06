@@ -5407,6 +5407,103 @@ mod body {
         }
     }
 
+    /// Each hand reaches down to the hip pocket on its side (from in front
+    /// of the belly, down along the outside of the pocket to its mouth),
+    /// lets a compass go there and it's in that pocket, seated as the
+    /// pocket fits it and turned with it (the pocket hangs on the belt's
+    /// side, turned to it); reaching in again, the hand takes it back out.
+    #[test]
+    fn each_hand_stows_in_and_takes_from_its_hip_pocket() {
+        for side in [Side::Left, Side::Right] {
+            let (mut vr, _) = standing();
+            let feet = vr.root().translation;
+            let at = feet + Vec3::new(0.25 * side.sign(), 1.0, -0.4);
+            let compass = vr.spawn("compass", Transform::from_translation(at));
+            vr.app
+                .world_mut()
+                .entity_mut(compass)
+                .insert(RigidBody::Static);
+            vr.hand(side, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(side, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(side).holding, Some(compass), "{side:?}");
+            // The pocket on this hand's side, and its mouth.
+            let (pocket, index, place) = {
+                let mut q = vr
+                    .app
+                    .world_mut()
+                    .query::<(Entity, &BodySlot, &Socket, &GlobalTransform)>();
+                q.iter(vr.app.world())
+                    .filter(|(_, _, s, _)| s.kind == SocketKind::Body(SlotKind::Pocket))
+                    .map(|(e, b, _, g)| (e, b.0, *g))
+                    .find(|(_, _, g)| (g.translation().x - feet.x) * side.sign() > 0.0)
+                    .expect("a hip pocket on this side")
+            };
+            let cavity = crate::kit_cavities::cavity(SlotKind::Pocket).unwrap();
+            let mouth = place.transform_point(Vec3::new(0.0, cavity.mouth() + 0.02, 0.0));
+            // Its front faces out of the hip: out to this side, and ahead.
+            let front = place.rotation() * Vec3::NEG_Z;
+            assert!(
+                front.x * side.sign() > 0.5 && front.z < -0.5,
+                "{side:?} pocket faces {front}"
+            );
+            // Down from in front of the belly, past the pocket's front, to
+            // its mouth.
+            let from = vr.hand_state(side).world.translation;
+            let past = mouth + front * 0.12 + Vec3::Y * 0.1;
+            for i in 1..=12 {
+                vr.move_hand(side, from.lerp(past, i as f32 / 12.0));
+                vr.step(1);
+            }
+            for i in 1..=8 {
+                vr.move_hand(side, past.lerp(mouth, i as f32 / 8.0));
+                vr.step(1);
+            }
+            vr.grip(side, 0.0);
+            vr.step(4);
+            let on = vr.app.world().get::<crate::interact::InSocket>(compass);
+            assert_eq!(on.map(|s| s.socket), Some(pocket), "{side:?}: not pocketed");
+            assert!(!vr.stow_refused(side), "{side:?}: refused");
+            let catalog = vr.app.world().resource::<crate::items::Catalog>();
+            let def = catalog.get(catalog.kind("compass").unwrap());
+            let fit = crate::interact::body::slot_fit(SlotKind::Pocket, index, def)
+                .expect("a compass fits a hip pocket");
+            vr.step(2);
+            let got = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(compass)
+                .unwrap()
+                .compute_transform();
+            let want = place.mul_transform(fit).compute_transform();
+            assert!(
+                got.translation.distance(want.translation) < 1e-3
+                    && got.rotation.dot(want.rotation).abs() > 0.9999,
+                "{side:?}: in the pocket at {got:?}, it fits at {want:?}"
+            );
+            // Back out: the hand away, then in at it and closed.
+            vr.move_hand(side, past);
+            vr.step(4);
+            vr.move_hand(side, got.translation);
+            vr.step(2);
+            vr.grip(side, 1.0);
+            vr.step(4);
+            assert_eq!(
+                vr.hand_state(side).holding,
+                Some(compass),
+                "{side:?}: not taken back out"
+            );
+            assert!(
+                vr.app
+                    .world()
+                    .get::<crate::interact::InSocket>(compass)
+                    .is_none(),
+                "{side:?}: still pocketed"
+            );
+        }
+    }
+
     /// The holster is on the gun hand's hip and the pockets on the thighs'
     /// fronts, where the drawn body has them: reaching down to them, the
     /// arm stays outside the body all the way.

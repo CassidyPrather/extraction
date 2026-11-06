@@ -782,6 +782,11 @@ pub const SPARE_RADIO: &str = "Truck: \"No radio on you. My spare's in the crate
 /// hatch, they came after a quick newcomer had left the truck.)
 pub const SPARE_GUN: &str = "Truck: \"No gun on you. Here, my spare. Don't lose this one.\"";
 
+/// No dressing on you, in the crate or the stash (the first was used): one
+/// in the crate, never a second while one is unused.
+pub const SPARE_DRESSING: &str =
+    "Truck: \"Put a dressing in the crate. Don't make me do it twice.\"";
+
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
 pub fn spare_for(name: &str) -> String {
@@ -905,6 +910,12 @@ fn spare_radio(
             give.push((id.into(), condition));
         }
         m.queue.lines.push_back(SPARE_GUN.into());
+    }
+    // No dressing anywhere of yours (the first used, none stashed): one,
+    // and never a second while it lies there unused.
+    if !have("field_dressing") && opts.map != crate::camp::TRAINING_YARD {
+        give.push(("field_dressing".into(), 1.0));
+        m.queue.lines.push_back(SPARE_DRESSING.into());
     }
     if let Some(id) = wanted.filter(|id| !have(id)) {
         let name = catalog
@@ -1740,5 +1751,90 @@ mod tests {
         let want = fill(First::Death.lines()[1], in_crate, 2);
         assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every field dressing in the world.
+    fn dressings(app: &mut App) -> usize {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| catalog.get(i.kind()).id == "field_dressing")
+            .count()
+    }
+
+    fn drop_dressings(app: &mut App) {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let all: Vec<Entity> = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item)>()
+            .iter(app.world())
+            .filter(|(_, i)| catalog.get(i.kind()).id == "field_dressing")
+            .map(|(e, _)| e)
+            .collect();
+        for e in all {
+            app.world_mut().despawn(e);
+        }
+    }
+
+    /// Out on a raid and home again, long enough for the driver's spares.
+    fn out_and_home(app: &mut App) {
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+    }
+
+    /// The driver's dressing line, said or waiting its turn to be.
+    fn said_dressing(app: &App) -> usize {
+        let spoken = app.world().resource::<Spoken>().0.iter();
+        let queued = app.world().resource::<Queue>().lines.iter();
+        spoken
+            .chain(queued)
+            .filter(|l| *l == SPARE_DRESSING)
+            .count()
+    }
+
+    /// No dressing anywhere (the first was used, the stash has none): one
+    /// is in the crate at the next raid's start, and the driver says so
+    /// (with none, every bite and every wound bled out).
+    #[test]
+    fn no_dressing_anywhere_gets_one_in_the_crate() {
+        let mut app = app();
+        drop_dressings(&mut app);
+        out_and_home(&mut app);
+        assert_eq!(dressings(&mut app), 1, "one dressing in the crate");
+        assert_eq!(said_dressing(&app), 1);
+    }
+
+    /// One in the stash crate already: none added, nothing said.
+    #[test]
+    fn a_dressing_in_the_stash_gets_no_spare() {
+        let mut app = app();
+        drop_dressings(&mut app);
+        out_and_home(&mut app);
+        assert_eq!(dressings(&mut app), 1, "the spare");
+        let before = said_dressing(&app);
+        out_and_home(&mut app);
+        assert_eq!(
+            dressings(&mut app),
+            1,
+            "no second while one is in the crate"
+        );
+        assert_eq!(said_dressing(&app), before, "nothing said");
+    }
+
+    /// Unused raid after raid, the spare never piles up.
+    #[test]
+    fn the_spare_dressing_never_accumulates() {
+        let mut app = app();
+        drop_dressings(&mut app);
+        for _ in 0..4 {
+            out_and_home(&mut app);
+        }
+        assert_eq!(dressings(&mut app), 1, "one, however many raids");
+        assert_eq!(said_dressing(&app), 1);
     }
 }
