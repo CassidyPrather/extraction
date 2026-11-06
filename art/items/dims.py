@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Print each rescaled item's model bounds (`_kit.SCALE`), the `dims` its
-row in assets/data/items.ron should have; `--write` puts them there.
+"""Print each item's model bounds, the `dims` its row in
+assets/data/items.ron should have; `--write` puts them there.
 
-    python3 art/items/dims.py            # print
+    python3 art/items/dims.py            # print the rows that are off
     python3 art/items/dims.py --write    # and update items.ron
+
+Every item with a model and a row, guns aside (their layouts place them):
+a row is off when a side differs from its model's by more than 1 mm
+(`models::tests::every_item_box_is_its_model`). The models kept off
+their box's middle (`_kit.KEEPS_ORIGIN`) are left for their owners.
 
 Runs without Blender: it reads the .glb's vertices itself.
 """
@@ -18,14 +23,44 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 
 
-def scaled_ids():
-    """The keys of `_kit.SCALE`, read from its source (no Blender here)."""
+def kit_keys(name):
+    """The keys of a dict in `_kit`, read from its source (no Blender here)."""
     src = open(os.path.join(ROOT, "art", "items", "_kit.py")).read()
     tree = ast.parse(src)
     for node in tree.body:
-        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "SCALE":
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == name:
             return [k.value for k in node.value.keys]
     return []
+
+
+def scaled_ids():
+    """The keys of `_kit.SCALE`."""
+    return kit_keys("SCALE")
+
+
+# A side may differ from its model's by this much (m): dims are written to
+# the millimetre.
+TOLERANCE = 0.001
+
+
+def rows(ron):
+    """Every row with dims: (id, dims, category)."""
+    out = []
+    for m in re.finditer(r'id: "([^"]+)",\s*dims: Some\(\(([^)]*)\)\)', ron):
+        c = re.search(r"category: (\w+)", ron[m.end():m.end() + 2000])
+        out.append((m.group(1), [float(x) for x in m.group(2).split(",")],
+                    c.group(1) if c else None))
+    return out
+
+
+def model_path(item, category):
+    folder = "mags" if category == "Magazine" else "items"
+    return os.path.join(ROOT, "assets", "models", folder, f"{item}.glb")
+
+
+def fmt(v):
+    """To the millimetre; to a tenth under a centimetre (a round)."""
+    return f"{round(v, 4) if v < 0.01 else round(v, 3)}"
 
 
 def quat_rotate(q, v):
@@ -80,25 +115,26 @@ def main():
     write = "--write" in sys.argv
     ron_path = os.path.join(ROOT, "assets", "data", "items.ron")
     ron = open(ron_path).read()
-    for item in scaled_ids():
-        lo, hi = bounds(os.path.join(ROOT, "assets", "models", "items", f"{item}.glb"))
-        size = tuple(round(hi[a] - lo[a], 3) for a in range(3))
+    kept = set(kit_keys("KEEPS_ORIGIN"))
+    for item, have, category in rows(ron):
+        if category == "Firearm" or item in kept:
+            continue
+        path = model_path(item, category)
+        if not os.path.exists(path):
+            continue
+        lo, hi = bounds(path)
+        size = [hi[a] - lo[a] for a in range(3)]
+        if all(abs(size[a] - have[a]) <= TOLERANCE for a in range(3)):
+            continue
         off = tuple(round((hi[a] + lo[a]) / 2, 4) for a in range(3))
-        dims = f"dims: Some(({size[0]}, {size[1]}, {size[2]}))"
-        print(f"{item:<16} {dims}  (centre off by {off})")
+        dims = f"dims: Some(({fmt(size[0])}, {fmt(size[1])}, {fmt(size[2])}))"
+        print(f"{item:<22} {dims}  was {tuple(have)}  (centre off by {off})")
         if not write:
             continue
         m = re.search(r'id: "%s",' % re.escape(item), ron)
-        if not m:
-            print(f"  {item}: no row")
-            continue
         end = ron.index(")", ron.index("category", m.end()))
-        row = ron[m.end():end]
-        if "dims:" in row:
-            row2 = re.sub(r"dims: Some\(\([^)]*\)\)", dims, row, count=1)
-        else:
-            row2 = " " + dims + "," + row
-        ron = ron[:m.end()] + row2 + ron[end:]
+        row = re.sub(r"dims: Some\(\([^)]*\)\)", dims, ron[m.end():end], count=1)
+        ron = ron[:m.end()] + row + ron[end:]
     if write:
         open(ron_path, "w").write(ron)
 

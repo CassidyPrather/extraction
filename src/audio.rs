@@ -529,6 +529,11 @@ impl Placed {
     pub fn new(cue: &str) -> Self {
         Self(mix::static_name(cue))
     }
+
+    /// Its cue (`audio_mix`), for gauges.
+    pub fn cue(&self) -> &'static str {
+        self.0
+    }
 }
 
 /// Placed sounds heard through the head-related filter at once (each
