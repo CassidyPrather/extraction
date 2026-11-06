@@ -629,11 +629,9 @@ Some items are checked differently:
 - Guns are left out, because their layouts place them.
 - Magazines and attachments seat by their origin, so only their size is
   held.
-- Thirteen models stay off their middle until the code that places
-  things in their space moves with them (`KEEPS_ORIGIN`, which names
-  each one's code). These are the bolt cutters' grips and jaws, the
-  crowbar's grip and claw, the hacksaw's blade, the cassette deck's
-  well and buttons, and the gadgets' cell mounts and visuals.
+- Models whose space code places things in (a grip, a hinge, a cell's
+  bay) are centred with that code moved by the same step. `KEEPS_ORIGIN`
+  is where one would wait for that, and it's empty.
 
 Sixteen models were centred, and four `kit_cavities::ORIGIN_OFFSET`
 entries that made up for them went away.
@@ -661,3 +659,68 @@ for all of it.
 
 ![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
 planks](../shots/items/torchlit_scopes_arm.jpg)
+
+#### Black's sheen: no single value helps (6 November)
+
+Gunsmith tried a brighter sheen on `Black` for black kit on the charred
+floor. The test: all 116 models that wear it, `--torchlit ruin` with
+the settled eyes, Black's roughness swapped for one run each. Body delta
+E, worst views:
+
+| Item, view | 0.35 | 0.40 | 0.45 (kept) | 0.55 |
+| - | - | - | - | - |
+| PBS-1, arm's length | 3.4 | 5.0 | 10.9 | 19.1 |
+| PSO-1, arm's length | 7.4 | 9.2 | 10.3 | 12.9 |
+| Weapon light, arm's length | 10.1 | 14.6 | 16.8 | 18.3 |
+| AK-74 stock, 2 m | 16.7 | 16.9 | 23.8 | 24.7 |
+| Rotor assembly, arm's length | 8.3 | 7.1 | 5.7 | 3.3 |
+| PU, 2 m | 6.0 | 5.8 | 5.9 | 5.5 |
+| PM and SVD mags, 2 m | 5.5, 5.3 | same | same | same |
+| Views under 10 | 12 | 12 | 10 | 11 |
+
+- **Glossier is worse.** Up close the torch's highlight on smoother
+  black matches the washed-out floor, and black kit sinks into it.
+- **Rougher trades views.** At 0.55 the black-led kit gains at arm's
+  length, but other views drop: the bolt cutters by 25.5 at arm's
+  length, the side rail by 6.6 from 2 m.
+- **What stays under 10 isn't Black's.** By triangle share the PM and
+  SVD mags are 52-56% `Blued`, the PU 43% `Blued`, the multitool 70%
+  `Steel`, the bolts mostly `Steel` and the rotor 59% `Dark`. None of
+  them moves at any value of Black. The Black-led items (PBS-1 95%,
+  PSO-1 73%) already clear 10 at 0.45.
+
+So Black stays at 0.45. Chasing Blued and Steel for the charred floor
+was declined: a dark thing on charcoal is dark in life too, and the
+levers left cost other views. Don't re-run this without a new lever.
+
+#### The thirteen off their middle, centred (6 November)
+
+Thirteen models were off their box's middle because code places things
+in their space. Each is centred now, its pivots with it, and every
+place in their space moved by the same step, measured from the model
+itself:
+
+- the bolt cutters' grips and jaws (19 mm), the crowbar's grip, shaft
+  and claw, and the hacksaw's grip and blade;
+- the cassette deck's keys, well, hinge and cell bay (it's centred when
+  it's written now, like every item);
+- the cell bays of the torch, the cloak and the jammer, which shared
+  one place and have one each now, and the torch's beam;
+- the lead case's cradle, the compass's face and needle, the map in
+  the map case, and the drone's eye.
+
+Things held by those places are where they were to the pixel: the
+cutters, crowbar and hacksaw in the hand, and all thirteen lying under
+the torch. Things held free shift a little in the fist, because a free
+hold is seated on the item's box, and the boxes are the models now.
+
+Two changes come with honest boxes:
+
+- The compass's strap lies close under it. Looped 12 mm down, the
+  compass was 35 mm thick, through a hip pocket's front.
+- The map case's pencil, loop and stud sit level with its sleeve, so
+  it's under 12 mm through. Held, it's pinched by its edge as a card is,
+  not covering the hand.
+
+![Held in the left hand, before and after: the thirteen centred
+models](../shots/items/centred_held_before_after.jpg)

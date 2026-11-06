@@ -18,17 +18,21 @@ OUT="${1:-target/hit_gauge}"
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
 mkdir -p "$OUT"
 KINDS="${KINDS:-walker drone grappler sentry hound heavy crawler dirigible pylon sorter spotter minelayer mender plough}"
-# Marrow's farm meadow, as robot_frames.sh. Past the gauge's STAND +
-# SETTLE (408 frames of the line-up standing), its rounds landing.
-FRAMES=640
+# Marrow's farm meadow, as robot_frames.sh. The gauge counts from when
+# the machine first stands (some 200 frames after the start on lavapipe):
+# past its STAND + SETTLE (408 more), its rounds land every 12 frames.
+FRAMES=900
 for kind in $KINDS; do
-    # How far off and how high to look: by the machine's size.
+    # How far off and how high to look: by the machine's size (the free
+    # camera's 75 degrees takes in a lot).
     case "$kind" in
-        heavy|sorter) cam="92.9,0,131.9,0,-6" dist=7 ;;
-        dirigible) cam="92.9,0,131.9,0,28" dist=14 ;;
-        pylon|plough) cam="92.9,0,131.9,0,-8" dist=6 ;;
-        drone|mender) cam="92.9,0,131.9,0,4" dist=4 ;;
-        *) cam="92.9,0,131.9,0,-10" dist=4.5 ;;
+        heavy|sorter) cam="92.9,0,131.9,0,-8" dist=5 ;;
+        plough) cam="92.9,0,131.9,0,-10" dist=5 ;;
+        dirigible) cam="92.9,0,131.9,0,30" dist=12 ;;
+        sentry|spotter) cam="92.9,0,131.9,0,8" dist=4 ;;
+        drone|mender) cam="92.9,0,131.9,0,6" dist=2.4 ;;
+        pylon|minelayer) cam="92.9,0,131.9,0,-14" dist=3 ;;
+        *) cam="92.9,0,131.9,0,-16" dist=2.6 ;;
     esac
     data=$(mktemp -d)
     EXTRACTION_HIT_SHOW=1 EXTRACTION_WARMUP=0 WGPU_BACKEND=vulkan timeout 1500 \

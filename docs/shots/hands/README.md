@@ -219,3 +219,13 @@ fingers (a thin flat thing is now held only pinched by an edge,
 the eye. (`fp:read`, new, holds the job card up as `interact::read`
 does; the `fp` gallery now stands a 0-height camera's eye 1.7 m up, as
 the camera does: it had set the hands out round the feet.)
+`36_hip_pockets.jpg` (the headset eye as above, bent to the belt,
+`--body`, `--gallery kit+stoop+left` and `kit+stoop+right`: the eye aims
+at that hip's pocket; `down+left`/`down+right` do the same standing,
+where the pouches hide the pockets): each hip pocket, before and after,
+with a closer crop of each. Before, it hung square on the belt's curve:
+the belt ran across under it at an angle, 13 mm into its inner top
+corner, and a tape in it stood 4 mm through the belt. After, it hangs on
+the belt's side turned to it (46° at x = ±0.17, `interact::body::pocket_place`,
+the art's `rig.py` `pocket_place` the same), the belt along its back and
+through its loop, what's in it turned with it.
