@@ -3022,6 +3022,16 @@ fn indoor_path(
     for (i, p) in path.into_iter().enumerate().skip(1) {
         let mut start = last;
         for (door, cross) in plan.doors_on(last, p) {
+            // Through the doorway's middle, not wherever the path's line
+            // meets it: along its edge the body rubs the jamb with the open
+            // leaf beside it (Rime's ore mill, 6 November: out along the
+            // gap's edge, 27 stucks a raid and two raids run out of time;
+            // Fifth valley's trace).
+            let cross = plan
+                .doors
+                .iter()
+                .find(|d| d.entity == door)
+                .map_or(cross, |d| (d.a + d.b) * 0.5);
             let dir = (p - last).normalize_or_zero();
             // Square to the doorway: its normal, toward the side it's
             // coming from.
@@ -3038,14 +3048,16 @@ fn indoor_path(
             let walkable = |q: Vec2| plan.grid.walkable(q.to_array());
             // Square on where there's floor for it (a tower's landing may
             // have none); along the path otherwise.
-            // Only when it starts at the door, inside the leaf's swing (the
-            // trap); from further off the old way in works.
-            let square_on = start.distance(cross) < 1.1 && walkable(cross + normal * 1.1);
-            let before = if square_on {
-                cross + normal * 1.1
-            } else {
-                cross - dir * 1.1
-            };
+            // From near or far: from further off, the old way went through on
+            // the path's slant, 0.2-0.35 m off the middle, the body on the
+            // jamb (every valley's doors; the ore mill's cost whole raids).
+            // A tower's landing is narrow: stand closer in, but still square.
+            let stand = [1.1, 0.8, 0.6]
+                .into_iter()
+                .map(|d| cross + normal * d)
+                .find(|&q| walkable(q));
+            let square_on = stand.is_some();
+            let before = stand.unwrap_or(cross - dir * 1.1);
             // Stand clear of the leaf's swing to open it: from further off,
             // walk up to there; from closer in (starting at the door),
             // step back out to there first, or the leaf swings into you and
@@ -5777,6 +5789,92 @@ mod run_tests {
             d >= 0.6,
             "{}: the way out passes {d:.2} m from the wreck's middle",
             plan.name
+        );
+    }
+
+    /// Through every door of every building in every valley by its middle:
+    /// a route out from a little way in walks through within a hand's
+    /// breadth of the doorway's middle, not along its edge (Rime's ore
+    /// mill, 6 November: out along the gap's edge, the body on the jamb
+    /// and the open leaf beside it, 27 stucks a raid).
+    #[test]
+    fn a_route_through_a_door_takes_its_middle() {
+        let mut bad = Vec::new();
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            for plan in plans.iter().filter(|p| p.levels.is_none()) {
+                for d in &plan.doors {
+                    let mid = (d.a + d.b) * 0.5;
+                    let t = (d.b - d.a).normalize_or(Vec2::X);
+                    let n = Vec2::new(-t.y, t.x);
+                    // In and out, a little to one side of the middle.
+                    let (inside, outside) = if plan.indoors(mid + n * 1.5) {
+                        (mid + n * 1.5 + t * 0.4, mid - n * 3.0 - t * 0.4)
+                    } else {
+                        (mid - n * 1.5 + t * 0.4, mid + n * 3.0 - t * 0.4)
+                    };
+                    let (Some(a), Some(b)) = (
+                        plan.grid
+                            .nearest_walkable(inside.to_array())
+                            .map(Vec2::from_array),
+                        plan.grid
+                            .nearest_walkable(outside.to_array())
+                            .map(Vec2::from_array),
+                    ) else {
+                        continue;
+                    };
+                    let Some(route) = indoor_path(plan, plan.to_world(a), b, 0.3, true) else {
+                        continue;
+                    };
+                    // The first walk after the door's opened.
+                    let Some(k) = route
+                        .iter()
+                        .position(|x| matches!(x, Task::OpenDoor(e) if *e == d.entity))
+                    else {
+                        continue;
+                    };
+                    let Some(through) = route[k..].iter().find_map(|x| match x {
+                        Task::WalkTo { to, .. } => Some(*to),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    tried += 1;
+                    let l = plan.to_local(Vec3::new(through.x, 0.0, through.y)).xz();
+                    let off = (l - mid).dot(t).abs();
+                    if off > 0.1 {
+                        bad.push(format!(
+                            "{map} {} at {:.0?}: door {:?}, through {off:.2} m off its middle",
+                            plan.name, plan.xf.translation, d.entity
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(tried >= 50, "only {tried} doors walked through");
+        assert!(
+            bad.is_empty(),
+            "{} of {tried} doors walked through off their middle:\n{}",
+            bad.len(),
+            bad.join("\n")
         );
     }
 
