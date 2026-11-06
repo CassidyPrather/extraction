@@ -5829,6 +5829,76 @@ fn a_hound_loses_you_low_and_still() {
     assert!(later <= 1, "bitten {later} times more, low and still");
 }
 
+/// The gauge for "every approach is warned, whatever the weather": a
+/// machine doesn't notice you from further than it's heard coming
+/// (`senses::heard_coming`: its steps, servos or rotors over the rain).
+/// A walker, a drone and a heavy, each 5 m past that, by day and at dawn
+/// (after a Surge a raid opens at dawn), dry and in a downpour; you up
+/// and about in the open in plain view, for 20 s. (Progression's careers:
+/// in the raids after a Surge, dawn in rain, the fauna say nothing.)
+#[test]
+fn nothing_notices_you_from_beyond_where_its_coming_is_heard() {
+    use super::senses::Coming;
+    let mut seen = Vec::new();
+    for (weather, rain) in [("clearing", 0.0f32), ("downpour", 1.0)] {
+        for hour in ["day", "dawn"] {
+            for kind in [Coming::Walker, Coming::Drone, Coming::Heavy] {
+                let (mut app, player, zone) = app_with(crate::LaunchOptions {
+                    map: extraction_core::map::TEST_FIELD_ID.into(),
+                    robots: false,
+                    weather: Some(weather.into()),
+                    hour: Some(hour.into()),
+                    ..Default::default()
+                });
+                let me = zone.on_ground(100.0, 200.0);
+                put(&mut app, player, me);
+                let far = super::senses::heard_coming(kind, rain) + 5.0;
+                // Within the test field, or as far as it goes.
+                let far = far.min(110.0);
+                let at = zone.on_ground(100.0, 200.0 + far);
+                let job = Job {
+                    kind: JobKind::Watch,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                };
+                let m = {
+                    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+                    let mut queue = CommandQueue::default();
+                    let mut c = Commands::new(&mut queue, app.world());
+                    let m = match kind {
+                        Coming::Walker => super::walker::spawn_walker(&mut c, &zone, at, job),
+                        Coming::Drone => {
+                            super::drone::spawn_drone(&mut c, at + Vec3::Y * 12.0, job)
+                        }
+                        _ => super::heavy::spawn_heavy(&mut c, &zone, &catalog, at, job),
+                    };
+                    queue.apply(app.world_mut());
+                    m
+                };
+                let mut saw = false;
+                for i in 0..90 * 20 {
+                    put(&mut app, player, me);
+                    let a = i as f32 / 90.0;
+                    app.world_mut()
+                        .get_mut::<crate::player::Body>(player)
+                        .unwrap()
+                        .velocity = Vec3::new(a.cos(), 0.0, a.sin()) * 1.4;
+                    app.update();
+                    saw |= app.world().get::<Awareness>(m).unwrap().can_see_target;
+                }
+                if saw {
+                    seen.push(format!("{kind:?} at {far:.0} m, {weather}, {hour}"));
+                }
+            }
+        }
+    }
+    assert!(
+        seen.is_empty(),
+        "noticed you from beyond where it's heard coming: {seen:?}"
+    );
+}
+
 /// "It's given up" isn't said while another machine still has you: one
 /// told a newcomer they were safe 3 s before a walker's first hit (it was
 /// about another machine; Progression's careers, Marrow, r18). With
