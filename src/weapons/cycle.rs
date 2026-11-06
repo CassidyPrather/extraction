@@ -1221,7 +1221,11 @@ mod tests {
             .filter(|t| t.events.contains(&FireEvent::BoltClosed))
             .map(|t| t.beat)
             .collect();
-        assert!(shut.is_empty(), "the bolt went home opening: {shut:?}\n{}", c.report());
+        assert!(
+            shut.is_empty(),
+            "the bolt went home opening: {shut:?}\n{}",
+            c.report()
+        );
     }
 
     /// The IZh-43 by hand: broken open, two shells in, shut; both barrels
