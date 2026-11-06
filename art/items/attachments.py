@@ -88,7 +88,7 @@ def pso_scope():
     prof = [(0.0, -0.1875), (0.0195, -0.1875), (0.0205, -0.185), (0.0205, -0.13),
             (0.0195, -0.127), (0.0195, -0.11), (0.013, -0.082), (0.013, 0.07), (0.0165, 0.088),
             (0.0165, 0.12), (0.0, 0.12)]
-    p.lathe(prof, "Blued", segs=32)
+    p.lathe(prof, "Black", segs=32)
     p.cyl(0.0182, -0.186, -0.18, "Lens", segs=28)
     # The rubber eyecup, its brow shield up on the left.
     p.lathe([(0.015, 0.119), (0.0185, 0.12), (0.0195, 0.168), (0.018, 0.172), (0.0165, 0.172),
@@ -99,19 +99,19 @@ def pso_scope():
             segs=14, closed=True, start=70.0, sweep=170.0)
     p.cyl(0.0135, 0.118, 0.122, "Lens", segs=24)
     # The turret housing, and the drums with their caps and index marks.
-    p.box((0.034, 0.034, 0.05), (0.0, 0.0, -0.01), "Blued", bevel=0.005, segs=2)
+    p.box((0.034, 0.034, 0.05), (0.0, 0.0, -0.01), "Black", bevel=0.005, segs=2)
     # The elevation drum is its own node (`drum`), turning about +Y through
     # its centre (0, 0.0235, -0.01) with the range setting; a fixed index
     # on the housing's front to read it against.
     drum = Part("drum", origin=(0.0, 0.0235, -0.01))
-    drum.cyl(0.0125, 0.017, 0.03, "Blued", segs=24, xf=T(0, 0, -0.01) @ UP, chamfer=0.0015)
+    drum.cyl(0.0125, 0.017, 0.03, "Black", segs=24, xf=T(0, 0, -0.01) @ UP, chamfer=0.0015)
     for k in range(12):
         drum.box((0.0012, 0.004, 0.0012), (0.0, 0.0, 0.0), "Enamel",
                  xf=T(0, 0.0255, -0.01) @ RY(2 * math.pi * k / 12) @ T(0.0127, 0, 0))
     p.box((0.0012, 0.0012, 0.003), (0.0, 0.0172, -0.0285), "Enamel", segs=1)
-    p.cyl(0.0125, -0.03, -0.017, "Blued", segs=24, xf=T(0, 0, -0.01) @ ALONG_X, chamfer=0.0015)
+    p.cyl(0.0125, -0.03, -0.017, "Black", segs=24, xf=T(0, 0, -0.01) @ ALONG_X, chamfer=0.0015)
     # The battery cap for the lit reticle, up on the left of the housing.
-    p.cyl(0.007, 0.0, 0.012, "Blued", segs=16, xf=T(-0.016, 0.017, 0.012) @ RZ(0.6) @ UP,
+    p.cyl(0.007, 0.0, 0.012, "Black", segs=16, xf=T(-0.016, 0.017, 0.012) @ RZ(0.6) @ UP,
           chamfer=0.001)
     # The bracket: a long base on the dovetail, its clamp lever on the left.
     for z in (-0.06, 0.05):
@@ -123,7 +123,7 @@ def pso_scope():
     p.box((0.004, 0.006, 0.05), (-0.013, -0.021, -0.03), "Black", bevel=0.0015, segs=1,
           xf=RY(-0.12, about=(-0.013, -0.021, -0.005)))
     # The sunshade's screw ring, a little proud.
-    p.tube(0.0215, 0.0195, -0.13, -0.124, "Blued", segs=32)
+    p.tube(0.0215, 0.0195, -0.13, -0.124, "Black", segs=32)
     return [p, drum]
 
 
@@ -138,18 +138,18 @@ def pbs_suppressor():
     # The coupling is hollow, 36 mm deep: a gun's muzzle (and its brake)
     # goes into it, not through the can (`capture::seated`).
     p.lathe([(0.0128, L), (0.0165, L), (0.0175, L - 0.002), (0.0175, L - 0.034),
-             (0.0165, L - 0.036), (0.0128, L - 0.036)], "Blued", segs=28, closed=True)
+             (0.0165, L - 0.036), (0.0128, L - 0.036)], "Black", segs=28, closed=True)
     for k in range(18):
-        p.box((0.0012, 0.0012, 0.028), (0.0, 0.0, 0.0), "Blued",
+        p.box((0.0012, 0.0012, 0.028), (0.0, 0.0, 0.0), "Black",
               xf=RZ(2 * math.pi * k / 18) @ T(0.0175, 0, L - 0.018))
     p.lathe([(0.0, L - 0.036), (0.0165, L - 0.036), (0.0165, -L + 0.022), (0.0, -L + 0.022)],
             "Black", segs=28)
     p.lathe([(0.0, -L + 0.022), (0.0175, -L + 0.022), (0.0175, -L + 0.002), (0.0165, -L),
-             (0.006, -L), (0.0, -L + 0.004)], "Blued", segs=28)
+             (0.006, -L), (0.0, -L + 0.004)], "Black", segs=28)
     p.cyl(0.0058, -L - 0.0004, -L + 0.006, "Rubber", segs=16)
     # Two welded seams round the body.
     for z in (-0.02, 0.03):
-        p.tube(0.0172, 0.016, z - 0.0015, z + 0.0015, "Blued", segs=28)
+        p.tube(0.0172, 0.016, z - 0.0015, z + 0.0015, "Black", segs=28)
     return [p]
 
 

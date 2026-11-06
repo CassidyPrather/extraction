@@ -372,6 +372,35 @@ pub fn notice_far(kind: RobotKind) -> f32 {
     }
 }
 
+/// A machine that comes for you, by how it's heard coming.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Coming {
+    Walker,
+    Drone,
+    Heavy,
+}
+
+/// How far a machine of this kind is heard coming (m) at `rain` (0 dry,
+/// 1 a downpour): the loudest of its moving sounds (a walker's servos and
+/// steps, a drone's rotors, a heavy's footfalls) over the wind and the
+/// rain, by the mix's masking model (`scripts/audio_mix.py`,
+/// `audible_range`; calm / downpour, read 5 November), between the two
+/// as the dB go. Every approach is warned, whatever the weather: nothing
+/// notices you from further than this (the gauge
+/// `nothing_notices_you_from_beyond_where_its_coming_is_heard`).
+pub fn heard_coming(machine: Coming, rain: f32) -> f32 {
+    let (calm, downpour): (f32, f32) = match machine {
+        // walker.step 76 / 33, walker.servo 71 / 46.
+        Coming::Walker => (76.0, 46.0),
+        // drone.rotor 464 / 61.
+        Coming::Drone => (464.0, 61.0),
+        // heavy.step 175 / 163.
+        Coming::Heavy => (175.0, 163.0),
+    };
+    let r = rain.clamp(0.0, 1.0);
+    calm * (downpour / calm).powf(r)
+}
+
 /// Sight and hearing, into each robot's [`Awareness`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn perceive(
@@ -390,6 +419,7 @@ pub(crate) fn perceive(
             Has<super::hazards::Dazzled>,
             Has<super::hazards::Deafened>,
             Has<super::hazards::Frosted>,
+            Has<super::heavy::Heavy>,
         ),
     )>,
     players: Query<
@@ -603,7 +633,7 @@ pub(crate) fn perceive(
         motion,
         dormant,
         mind_seed,
-        (dazzled, deaf, frosted),
+        (dazzled, deaf, frosted, heavy),
     ) in &mut robots
     {
         let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
@@ -657,7 +687,17 @@ pub(crate) fn perceive(
             1.0
         };
         let acuity = conditions.sight(senses.sight) * frost;
-        let reach = conditions.sight(senses.sight.min(notice)) * frost;
+        // Nor further than it's heard coming over the rain: every
+        // approach warned, whatever the weather (a drone noticed you at
+        // 66 m in a downpour, its rotors heard only to 61 m).
+        let coming = match robot.kind {
+            RobotKind::Drone => Some(Coming::Drone),
+            RobotKind::Walker if heavy => Some(Coming::Heavy),
+            RobotKind::Walker => Some(Coming::Walker),
+            _ => None,
+        };
+        let heard = coming.map_or(f32::MAX, |c| heard_coming(c, conditions.rain));
+        let reach = (conditions.sight(senses.sight.min(notice)) * frost).min(heard);
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;

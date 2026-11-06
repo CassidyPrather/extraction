@@ -908,8 +908,24 @@ the rest were moved to samples that sound where a click is heard:
 **A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
 what the hit did. Shrugged off, a thin tink; a wound, the impact and a
 low thud; telling (a weak spot, a part giving way), a crunch and an
-electrical crack, a sensor's glass breaking. At 30 m telling stands 11.7
-LU over a shrug (wants 10), and a wound between them.
+electrical crack with a deep thud under it, a sensor's glass breaking.
+It's also heard by the part struck (`struck_layers`):
+- armour rings, a short high clang over the tink (`hit.ring`);
+- a lens wounded tinkles (`hit.wound_glass`);
+- a gas cell thumps soft like canvas, wounded or telling
+  (`hit.wound_cloth`);
+- a leg or rotor wounded clanks at the joint (`hit.wound_joint`).
+
+At 30 m telling stands 12.4 LU over a shrug (wants 10), a wound between
+them, and armour's ring under a wound: shrugged, not harmed.
+
+Every strike also has to be heard over your own report
+(`audio_gunstate.strikes`). Struck 20 m off, landing the round's flight
+after your shot, each clears the shot's masking by 6 dB: a wound by 9.0,
+telling by 11.2, armour's ring by 6.8. The only exception is a dead
+part's or a glance's bare tink, at +3.6. The tink alone was what armour
+played before the ring, and it was masked. Nothing is delayed or ducked
+for this, so no warning cue is touched.
 
 **A walker hunting you is never silent:** standing to look, its head
 sweeps round (`walker.scan`), heard to 81 m.

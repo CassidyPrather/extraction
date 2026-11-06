@@ -611,26 +611,38 @@ fn struck_sounds(
     }
 }
 
-/// What a strike sounds like: (set, cue, speed) layers.
+/// What a strike sounds like: (set, cue, speed) layers, by what the hit
+/// did and what it struck, so the part is heard as well as the harm:
+/// armour rings (`hit.ring`, a short high clang over the tink, heard over
+/// your own shot where the tink alone isn't); a lens tinkles; a gas cell
+/// thumps like canvas; a leg or rotor clanks at the joint; a weak spot
+/// goes in with a deep thud under its crunch.
 pub fn struck_layers(
     strike: crate::robots::damage::Strike,
     role: crate::robots::PartRole,
 ) -> &'static [(&'static str, &'static str, f64)] {
+    use crate::robots::PartRole as R;
     use crate::robots::damage::Strike;
+    const THUD: (&str, &str, f64) = ("physical/body_hit", "hit.wound_thud", 0.6);
+    const DEEP: (&str, &str, f64) = ("physical/body_hit", "hit.wound_thud", 0.5);
+    const FIZZ: (&str, &str, f64) = (CRACKLE_SET, "hit.telling_fizz", 1.2);
+    const CLOTH: (&str, &str, f64) = ("physical/cloth", "hit.wound_cloth", 0.7);
     match (strike, role) {
+        (Strike::Shrug, R::Armour(_)) => &[
+            ("impacts/metal", "hit.ring", 1.45),
+            ("impacts/ricochet", "hit.shrug", 1.5),
+        ],
         (Strike::Shrug, _) => &[("impacts/ricochet", "hit.shrug", 1.5)],
-        (Strike::Wound, _) => &[
+        (Strike::Wound, R::Sensor) => &[("physical/glass_break", "hit.wound_glass", 1.7), THUD],
+        (Strike::Wound, R::GasCell(_)) => &[CLOTH, DEEP],
+        (Strike::Wound, R::Leg(_) | R::Rotor(_)) => &[
             ("impacts/metal", "hit.wound", 1.0),
-            ("physical/body_hit", "hit.wound_thud", 0.6),
+            ("machines/clank", "hit.wound_joint", 1.3),
         ],
-        (Strike::Telling, crate::robots::PartRole::Sensor) => &[
-            ("physical/glass_break", "hit.telling_glass", 1.3),
-            (CRACKLE_SET, "hit.telling_fizz", 1.2),
-        ],
-        (Strike::Telling, _) => &[
-            ("impacts/metal", "hit.telling", 0.8),
-            (CRACKLE_SET, "hit.telling_fizz", 1.2),
-        ],
+        (Strike::Wound, _) => &[("impacts/metal", "hit.wound", 1.0), THUD],
+        (Strike::Telling, R::Sensor) => &[("physical/glass_break", "hit.telling_glass", 1.3), FIZZ],
+        (Strike::Telling, R::GasCell(_)) => &[CLOTH, FIZZ],
+        (Strike::Telling, _) => &[("impacts/metal", "hit.telling", 0.8), FIZZ, DEEP],
     }
 }
 
@@ -1171,7 +1183,22 @@ mod tests {
                     "{role:?}: telling plays a shrug's {l:?}"
                 );
             }
+            let wound = struck_layers(Strike::Wound, role);
+            let telling = struck_layers(Strike::Telling, role);
+            assert!(shrug != wound && wound != telling, "{role:?}");
         }
+        // The part is heard as well as the harm: armour rings, a lens
+        // tinkles, a gas cell thumps soft, a joint clanks; a weak spot
+        // thuds deep under its crunch.
+        let cues = |k, r| -> Vec<&str> { struck_layers(k, r).iter().map(|l| l.1).collect() };
+        assert!(cues(Strike::Shrug, PartRole::Armour(0)).contains(&"hit.ring"));
+        assert!(!cues(Strike::Shrug, PartRole::Core).contains(&"hit.ring"));
+        assert!(cues(Strike::Wound, PartRole::Sensor).contains(&"hit.wound_glass"));
+        assert!(cues(Strike::Wound, PartRole::GasCell(0)).contains(&"hit.wound_cloth"));
+        assert!(!cues(Strike::Telling, PartRole::GasCell(0)).contains(&"hit.telling"));
+        assert!(cues(Strike::Wound, PartRole::Leg(0)).contains(&"hit.wound_joint"));
+        assert!(cues(Strike::Wound, PartRole::Rotor(0)).contains(&"hit.wound_joint"));
+        assert!(cues(Strike::Telling, PartRole::Core).contains(&"hit.wound_thud"));
     }
 
     /// A minelayer crawling is heard (its grind, in the mix with its set,

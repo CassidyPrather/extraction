@@ -5829,6 +5829,202 @@ fn a_hound_loses_you_low_and_still() {
     assert!(later <= 1, "bitten {later} times more, low and still");
 }
 
+/// The gauge for "every approach is warned, whatever the weather": a
+/// machine doesn't notice you from further than it's heard coming
+/// (`senses::heard_coming`: its steps, servos or rotors over the rain).
+/// A walker, a drone and a heavy, each 5 m past that, by day and at dawn
+/// (after a Surge a raid opens at dawn), dry and in a downpour; you up
+/// and about in the open in plain view, for 20 s. (Progression's careers:
+/// in the raids after a Surge, dawn in rain, the fauna say nothing.)
+#[test]
+fn nothing_notices_you_from_beyond_where_its_coming_is_heard() {
+    use super::senses::Coming;
+    let mut seen = Vec::new();
+    for (weather, rain) in [("clearing", 0.0f32), ("downpour", 1.0)] {
+        for hour in ["day", "dawn"] {
+            for kind in [Coming::Walker, Coming::Drone, Coming::Heavy] {
+                let (mut app, player, zone) = app_with(crate::LaunchOptions {
+                    map: extraction_core::map::TEST_FIELD_ID.into(),
+                    robots: false,
+                    weather: Some(weather.into()),
+                    hour: Some(hour.into()),
+                    ..Default::default()
+                });
+                let me = zone.on_ground(100.0, 200.0);
+                put(&mut app, player, me);
+                let far = super::senses::heard_coming(kind, rain) + 5.0;
+                // Within the test field, or as far as it goes.
+                let far = far.min(110.0);
+                let at = zone.on_ground(100.0, 200.0 + far);
+                let job = Job {
+                    kind: JobKind::Watch,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                };
+                let m = {
+                    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+                    let mut queue = CommandQueue::default();
+                    let mut c = Commands::new(&mut queue, app.world());
+                    let m = match kind {
+                        Coming::Walker => super::walker::spawn_walker(&mut c, &zone, at, job),
+                        Coming::Drone => {
+                            super::drone::spawn_drone(&mut c, at + Vec3::Y * 12.0, job)
+                        }
+                        _ => super::heavy::spawn_heavy(&mut c, &zone, &catalog, at, job),
+                    };
+                    queue.apply(app.world_mut());
+                    m
+                };
+                let mut saw = false;
+                for i in 0..90 * 20 {
+                    put(&mut app, player, me);
+                    let a = i as f32 / 90.0;
+                    app.world_mut()
+                        .get_mut::<crate::player::Body>(player)
+                        .unwrap()
+                        .velocity = Vec3::new(a.cos(), 0.0, a.sin()) * 1.4;
+                    app.update();
+                    saw |= app.world().get::<Awareness>(m).unwrap().can_see_target;
+                }
+                if saw {
+                    seen.push(format!("{kind:?} at {far:.0} m, {weather}, {hour}"));
+                }
+            }
+        }
+    }
+    assert!(
+        seen.is_empty(),
+        "noticed you from beyond where it's heard coming: {seen:?}"
+    );
+}
+
+/// "It's given up" isn't said while another machine still has you: one
+/// told a newcomer they were safe 3 s before a walker's first hit (it was
+/// about another machine; Progression's careers, Marrow, r18). With
+/// nothing else after you, it's said as before.
+#[test]
+fn it_never_says_its_given_up_while_another_has_you() {
+    let lost_said = |app: &App| {
+        app.world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .any(|(t, _)| crate::raid::lines::LOST_YOU.iter().any(|l| t.contains(l)))
+    };
+    for other_has_you in [true, false] {
+        let (mut app, player, zone) = app(None);
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+        let quitter = walker_at(&mut app, &zone, zone.on_ground(me.x + 12.0, me.z));
+        // Close and after you; or far off on its own business.
+        let off = if other_has_you { 15.0 } else { 300.0 };
+        let hunter = walker_at(&mut app, &zone, zone.on_ground(me.x - off, me.z));
+        // Past any line said as they come to (lines are spaced `LINE_ANY`,
+        // and a robot's own `LINE_PER_ROBOT`).
+        let quiet = super::search::LINE_ANY.max(super::search::LINE_PER_ROBOT) + 1.0;
+        for _ in 0..(90.0 * quiet) as usize {
+            app.update();
+        }
+        for (w, has) in [(quitter, true), (hunter, other_has_you)] {
+            let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            a.target = has.then_some(player);
+            a.last_known = has.then_some(me);
+            // (Low: high, they'd call each other, and that line would take
+            // the slot.)
+            a.suspicion = if has { 0.2 } else { 0.0 };
+        }
+        app.world_mut().write_message(super::search::LostYou {
+            robot: quitter,
+            at: zone.on_ground(me.x + 12.0, me.z),
+            searched: me,
+        });
+        for _ in 0..5 {
+            app.update();
+        }
+        assert_eq!(
+            lost_said(&app),
+            !other_has_you,
+            "another after you: {other_has_you}; said it's given up: {}",
+            lost_said(&app)
+        );
+    }
+}
+
+/// In the back of the truck, as the driver says ("Get in the back"),
+/// nothing shoots you while it waits to pull out: the canvas and the cab
+/// hide the bed, even from a drone low behind the open back. (A newcomer
+/// shot dead "at the truck" in a downpour turned out to be 15 m behind it
+/// in the open, not in the back: first_fight_drone, one-handed.)
+#[test]
+fn nothing_shoots_you_in_the_back_of_the_truck() {
+    let (mut app, player, zone) = app(Some("downpour"));
+    // The truck waiting at the rendezvous to pull out (it drives there).
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::TruckWaiting { rv: 0, left: 600.0 };
+    for _ in 0..5 {
+        app.update();
+    }
+    let truck = app
+        .world_mut()
+        .query_filtered::<&GlobalTransform, With<crate::raid::truck::Truck>>()
+        .iter(app.world())
+        .next()
+        .copied()
+        .expect("a truck");
+    let bed = truck.transform_point(Vec3::new(0.0, crate::raid::truck::FLOOR + 0.05, 0.0));
+    // Stood there, still (`put` moves you, not how fast you were falling).
+    let stand = |app: &mut App| {
+        put(app, player, bed);
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::ZERO;
+    };
+    stand(&mut app);
+    let d = {
+        let mut queue = CommandQueue::default();
+        let mut c = Commands::new(&mut queue, app.world());
+        // Low behind the truck, looking in at the open back, as the two
+        // were (about 4 m off, level with the bed): the cab and the canvas
+        // hide the bed from anywhere else.
+        let behind = truck.transform_point(Vec3::new(0.0, 2.4, 7.0));
+        let site = zone.on_ground(behind.x, behind.z);
+        let d = super::drone::spawn_drone(
+            &mut c,
+            behind,
+            Job {
+                kind: JobKind::Watch,
+                site,
+                duration: 999.0,
+                exit: site,
+            },
+        );
+        queue.apply(app.world_mut());
+        d
+    };
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(d).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(bed);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(d).unwrap() = Brain::Engage;
+    let hp0 = hp(&app, player);
+    let mut worst = hp0;
+    for _ in 0..90 * 30 {
+        stand(&mut app);
+        app.update();
+        worst = worst.min(hp(&app, player));
+    }
+    // (Not a round's worth lost: a knock settling on the boards is no shot.)
+    assert!(
+        worst > hp0 - super::drone::DAMAGE,
+        "shot in the back of the truck: {hp0:.0} -> {worst:.0} hp"
+    );
+}
+
 /// Home is home: a machine with you in its sights lets you go when the
 /// truck pulls out, and nothing comes for you at base (first fights: the
 /// hoarder got home, was paid, and a heavy that had followed it slammed it
