@@ -238,6 +238,10 @@
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (-192.4, -235.9), rot: 0.0),
+        // And by the saddle fork's sign, where the way to the job leaves the
+        // col's poles: after dark the sign is a shape and the poles are gone
+        // (newcomer's night walk, 6 Nov).
+        (prefab: "way_lamp", at: (-2.6, -204.6), rot: 0.0),
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
