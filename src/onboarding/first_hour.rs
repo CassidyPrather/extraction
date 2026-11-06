@@ -1577,10 +1577,6 @@ pub(super) fn direct_raid(
         && loadable
         && !one_up(guns(), player)
         && now - state.readied_at > 10.0
-        // Not mid-fight: between shots the chamber reads empty a moment,
-        // and a rack then throws the next round away (r10).
-        && now - state.fought_at > 3.0
-        && !bot.tasks.iter().any(|t| matches!(t, Task::Engage { .. }))
     {
         state.readied_at = now;
         state.note(now, Kind::Learned, "a machine on it: readied the gun");
