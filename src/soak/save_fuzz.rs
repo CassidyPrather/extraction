@@ -1325,6 +1325,10 @@ fn soak_quit_on_every_contract_step() {
             for m in to_hit.drain(..) {
                 let path = profile(&format!("contract-{}-{k}-{m:?}", c.id));
                 let mut a = raid_with(&path, map, 1, Some(on.clone()));
+                {
+                    let p = &a.world().resource::<crate::progression::Progression>().0;
+                    println!("{on} on {map}: contract {:?}, job {:?}", p.contract, p.job);
+                }
                 let mut frame = 0usize;
                 let mut hit = false;
                 while frame < 90 * 60 * 14 {
