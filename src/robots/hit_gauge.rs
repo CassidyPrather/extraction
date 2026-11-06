@@ -1,0 +1,538 @@
+//! A gauge of what a round landing on a machine looks and sounds like:
+//! every part of every machine in a `--gallery robots:...+hits` line-up
+//! (or with `EXTRACTION_HIT_GAUGE=1`) is shot in turn, as a round would
+//! strike it (a `Hit`, as `ballistics` writes one), and what follows is
+//! counted:
+//!
+//! - within [`WINDOW`] frames (100 ms at 90 Hz), the effect at the point
+//!   (meshes and lights spawned within [`NEAR`] m of it, not on the
+//!   machine) and the sounds placed there (their cues, `audio_mix`);
+//! - a second round that leaves the part failing (under a third of its
+//!   strength, as a few more rounds would), and [`SETTLE`] frames later the
+//!   machine's drawn meshes held against how they were before the first:
+//!   a mesh or material changed, or a new piece on the part (a crack, a
+//!   dent), is the part looking damaged. A round's mark (`fx::shell_marks`)
+//!   is a mark, not a damaged look: it's counted apart.
+//!
+//! Each part's row goes to the log (`hit gauge:`) and, with
+//! `EXTRACTION_HIT_GAUGE_OUT`, to that file as tab-separated lines. The
+//! test `every_part_of_every_machine_answers_a_hit` holds every row to it;
+//! `scripts/hit_gauge.sh` renders the contact sheet.
+
+use std::collections::{HashMap, HashSet};
+
+use avian3d::prelude::*;
+use bevy::prelude::*;
+
+use super::{PartRole, Robot, RobotPart};
+
+/// Frames a round's effect and sound have to show in (100 ms at 90 Hz).
+pub const WINDOW: u32 = 9;
+/// How near the point (m) an effect or a sound counts as the hit's.
+pub const NEAR: f32 = 2.5;
+/// Frames after the second round that the damaged look is taken (1.2 s:
+/// past an eye's hurt flicker, `visuals::alert_eyes`).
+pub const SETTLE: u32 = 108;
+/// Frames the line-up stands before the first round (dressed, settled).
+pub const STAND: u32 = 300;
+/// The first round's damage (a rifle round's, `items`), or less on a part
+/// with little to it.
+const ROUND: f32 = 40.0;
+/// The second round leaves the part at this share of its strength.
+const FAILING: f32 = 0.3;
+
+/// One part's row.
+#[derive(Clone, Debug)]
+pub struct Row {
+    pub kind: String,
+    pub role: PartRole,
+    /// The first round: effect pieces and cues, and the frame each first
+    /// showed on (1-based, `None` if not within the window).
+    pub fx: usize,
+    pub fx_at: Option<u32>,
+    pub cues: Vec<&'static str>,
+    pub cue_at: Option<u32>,
+    /// The second round's.
+    pub fx2: usize,
+    pub cues2: Vec<&'static str>,
+    /// Marks left on the part.
+    pub marks: usize,
+    /// Drawn pieces of the machine changed or added (marks aside).
+    pub look: usize,
+    /// The part's strength after the two rounds (share).
+    pub left: f32,
+}
+
+impl Row {
+    pub fn seen(&self) -> bool {
+        self.fx > 0 && self.fx2 > 0
+    }
+    pub fn heard(&self) -> bool {
+        !self.cues.is_empty() && !self.cues2.is_empty()
+    }
+    pub fn looks_damaged(&self) -> bool {
+        self.look > 0
+    }
+    pub fn ok(&self) -> bool {
+        self.seen() && self.heard() && self.looks_damaged()
+    }
+
+    pub fn line(&self) -> String {
+        let cues = |c: &[&str]| {
+            let mut c = c.to_vec();
+            c.sort();
+            c.dedup();
+            if c.is_empty() {
+                "-".to_owned()
+            } else {
+                c.join(",")
+            }
+        };
+        format!(
+            "{}\t{:?}\tfx {} (frame {})\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\t{}",
+            self.kind,
+            self.role,
+            self.fx,
+            self.fx_at.map_or("-".into(), |f| f.to_string()),
+            cues(&self.cues),
+            self.cue_at.map_or("-".into(), |f| f.to_string()),
+            self.fx2,
+            cues(&self.cues2),
+            self.marks,
+            self.look,
+            self.left * 100.0,
+            if self.ok() {
+                "ok".to_owned()
+            } else {
+                let mut why = Vec::new();
+                if !self.seen() {
+                    why.push("UNSEEN");
+                }
+                if !self.heard() {
+                    why.push("UNHEARD");
+                }
+                if !self.looks_damaged() {
+                    why.push("NO DAMAGED LOOK");
+                }
+                why.join(" ")
+            }
+        )
+    }
+}
+
+/// What the gauge has found, and where it is.
+#[derive(Resource, Default)]
+pub struct HitGauge {
+    frame: u32,
+    targets: Vec<(Entity, Entity, String)>,
+    next: usize,
+    /// The part being shot: when its first round went in.
+    at: u32,
+    point: Vec3,
+    meshes_before: HashSet<Entity>,
+    sounds_before: HashSet<Entity>,
+    look_before: HashMap<Entity, (AssetId<Mesh>, AssetId<StandardMaterial>)>,
+    row: Option<Row>,
+    pub rows: Vec<Row>,
+    pub done: bool,
+}
+
+pub struct HitGaugePlugin;
+
+impl Plugin for HitGaugePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, gauge.run_if(enabled));
+    }
+}
+
+fn enabled(opts: Option<Res<crate::LaunchOptions>>) -> bool {
+    std::env::var_os("EXTRACTION_HIT_GAUGE").is_some()
+        || opts
+            .and_then(|o| o.gallery.clone())
+            .is_some_and(|g| crate::dev::gallery_word(&g, "hits"))
+}
+
+/// The machine's name as the line-up has it.
+pub fn kind_name(world: &World, e: Entity) -> String {
+    use super::*;
+    let has = |c: bevy::ecs::component::ComponentId| world.entity(e).contains_id(c);
+    let named = [
+        (world.component_id::<heavy::Heavy>(), "heavy"),
+        (world.component_id::<sentry::Sentry>(), "sentry"),
+        (world.component_id::<spotter::Spotter>(), "spotter"),
+        (world.component_id::<minelayer::Minelayer>(), "minelayer"),
+        (world.component_id::<mender::Mender>(), "mender"),
+        (world.component_id::<plough::Plough>(), "plough"),
+        (world.component_id::<hound::Hound>(), "hound"),
+        (world.component_id::<grappler::Grappler>(), "grappler"),
+        (world.component_id::<indoor::Crawler>(), "crawler"),
+    ];
+    for (id, name) in named {
+        if id.is_some_and(has) {
+            return name.into();
+        }
+    }
+    match world.get::<Robot>(e).map(|r| r.kind) {
+        Some(RobotKind::Drone) => "drone",
+        Some(RobotKind::Walker) => "walker",
+        Some(RobotKind::Dirigible) => "dirigible",
+        Some(RobotKind::Pylon) => "pylon",
+        Some(RobotKind::Sorter) => "sorter",
+        None => "?",
+    }
+    .into()
+}
+
+/// Every entity under `root`, itself included.
+fn subtree(world: &World, root: Entity) -> Vec<Entity> {
+    let mut out = vec![root];
+    let mut i = 0;
+    while i < out.len() {
+        if let Some(c) = world.get::<Children>(out[i]) {
+            out.extend(c.iter());
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The machine's drawn pieces: each one's mesh and material, marks aside.
+fn look_of(
+    world: &World,
+    robot: Entity,
+    marks: &[AssetId<StandardMaterial>],
+) -> HashMap<Entity, (AssetId<Mesh>, AssetId<StandardMaterial>)> {
+    let mut out = HashMap::new();
+    for e in subtree(world, robot) {
+        let (Some(mesh), Some(mat)) = (
+            world.get::<Mesh3d>(e),
+            world.get::<MeshMaterial3d<StandardMaterial>>(e),
+        ) else {
+            continue;
+        };
+        if marks.contains(&mat.id()) {
+            continue;
+        }
+        if world
+            .get::<Visibility>(e)
+            .is_some_and(|v| *v == Visibility::Hidden)
+        {
+            continue;
+        }
+        out.insert(e, (mesh.id(), mat.id()));
+    }
+    out
+}
+
+fn mark_materials(world: &World) -> Vec<AssetId<StandardMaterial>> {
+    world
+        .get_resource::<crate::weapons::impacts::FxAssets>()
+        .map(|a| vec![a.bright_pock.id(), a.hole.id()])
+        .unwrap_or_default()
+}
+
+fn all_with<T: Component>(world: &mut World) -> HashSet<Entity> {
+    world
+        .query_filtered::<Entity, With<T>>()
+        .iter(world)
+        .collect()
+}
+
+/// Where a round from the camera's side strikes `part`: on its collider,
+/// coming in from `toward` (the camera), or at its middle.
+fn aim(world: &mut World, part: Entity, toward: Vec3) -> (Vec3, Vec3) {
+    let centre = world
+        .get::<ColliderAabb>(part)
+        .map(|a| a.center())
+        .or_else(|| world.get::<GlobalTransform>(part).map(|g| g.translation()))
+        .unwrap_or(Vec3::ZERO);
+    let back = (toward - centre).normalize_or(Vec3::Z);
+    let from = centre + back * 4.0;
+    let Ok(dir) = Dir3::new(-back) else {
+        return (centre, back);
+    };
+    let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+    let Ok(spatial) = state.get(world) else {
+        return (centre, back);
+    };
+    let hit = spatial
+        .ray_hits(from, dir, 8.0, 32, true, &SpatialQueryFilter::default())
+        .into_iter()
+        .find(|h| h.entity == part)
+        .map(|h| (from + *dir * h.distance, h.normal));
+    hit.unwrap_or((centre, back))
+}
+
+fn camera_at(world: &mut World) -> Vec3 {
+    world
+        .query_filtered::<&GlobalTransform, With<Camera3d>>()
+        .iter(world)
+        .next()
+        .map(|g| g.translation())
+        .unwrap_or(Vec3::new(0.0, 50.0, 0.0))
+}
+
+/// Writes one round at `part`, as `ballistics` does.
+fn shoot(world: &mut World, part: Entity, point: Vec3, normal: Vec3, damage: f32) {
+    world.write_message(crate::weapons::ballistics::Hit {
+        entity: part,
+        point,
+        normal,
+        velocity: -normal * 700.0,
+        damage,
+        shooter: None,
+        mass_g: 3.4,
+        load: Default::default(),
+        blow: None,
+    });
+}
+
+/// New effect pieces and sounds near the point since the round went in.
+fn since(world: &mut World, g: &HitGauge, robot: Entity) -> (usize, Vec<&'static str>) {
+    let mine: HashSet<Entity> = subtree(world, robot).into_iter().collect();
+    let p = g.point;
+    let mut fx = 0;
+    let mut q =
+        world.query_filtered::<(Entity, &GlobalTransform), Or<(With<Mesh3d>, With<PointLight>)>>();
+    for (e, gt) in q.iter(world) {
+        if g.meshes_before.contains(&e) || mine.contains(&e) {
+            continue;
+        }
+        if gt.translation().distance(p) < NEAR {
+            fx += 1;
+        }
+    }
+    let mut cues = Vec::new();
+    let mut q = world.query::<(Entity, &crate::audio::Placed, &Transform)>();
+    for (e, placed, t) in q.iter(world) {
+        if g.sounds_before.contains(&e) {
+            continue;
+        }
+        if t.translation.distance(p) < NEAR + 1.0 {
+            cues.push(placed.cue());
+        }
+    }
+    (fx, cues)
+}
+
+fn gauge(world: &mut World) {
+    let mut g = world.remove_resource::<HitGauge>().unwrap_or_default();
+    step(world, &mut g);
+    world.insert_resource(g);
+}
+
+fn step(world: &mut World, g: &mut HitGauge) {
+    if g.done {
+        return;
+    }
+    let any = world
+        .query_filtered::<(), With<Robot>>()
+        .iter(world)
+        .next()
+        .is_some();
+    if !any {
+        return;
+    }
+    g.frame += 1;
+    if g.frame < STAND {
+        return;
+    }
+    if g.frame == STAND {
+        let mut parts: Vec<(Entity, Entity, PartRole)> = world
+            .query::<(Entity, &RobotPart)>()
+            .iter(world)
+            .map(|(e, p)| (p.robot, e, p.role))
+            .collect();
+        parts.sort_by_key(|(r, _, role)| (r.index_u32(), format!("{role:?}")));
+        g.targets = parts
+            .into_iter()
+            .map(|(r, e, _)| (r, e, kind_name(world, r)))
+            .collect();
+        info!("hit gauge: {} parts", g.targets.len());
+        g.next = 0;
+        g.at = 0;
+    }
+    let Some(&(robot, part, ref kind)) = g.targets.get(g.next) else {
+        finish(g);
+        return;
+    };
+    let kind = kind.clone();
+    if world.get_entity(part).is_err() || world.get::<RobotPart>(part).is_none() {
+        g.next += 1;
+        g.at = 0;
+        return;
+    }
+    let t = g.frame - g.at;
+    if g.at == 0 || t == 0 {
+        // The first round.
+        let marks = mark_materials(world);
+        g.look_before = look_of(world, robot, &marks);
+        g.meshes_before = all_with::<Mesh3d>(world);
+        g.meshes_before.extend(all_with::<PointLight>(world));
+        g.sounds_before = all_with::<crate::audio::Placed>(world);
+        let cam = camera_at(world);
+        let (point, normal) = aim(world, part, cam);
+        g.point = point;
+        let p = world.get::<RobotPart>(part).unwrap();
+        let (role, hp) = (p.role, p.hp);
+        shoot(world, part, point, normal, ROUND.min(hp * 0.4));
+        g.row = Some(Row {
+            kind,
+            role,
+            fx: 0,
+            fx_at: None,
+            cues: Vec::new(),
+            cue_at: None,
+            fx2: 0,
+            cues2: Vec::new(),
+            marks: 0,
+            look: 0,
+            left: 1.0,
+        });
+        g.at = g.frame;
+        return;
+    }
+    if t <= WINDOW {
+        let (fx, cues) = since(world, g, robot);
+        let row = g.row.as_mut().unwrap();
+        if fx > 0 && row.fx_at.is_none() {
+            row.fx_at = Some(t);
+        }
+        if !cues.is_empty() && row.cue_at.is_none() {
+            row.cue_at = Some(t);
+        }
+        row.fx = row.fx.max(fx);
+        for c in cues {
+            if !row.cues.contains(&c) {
+                row.cues.push(c);
+            }
+        }
+        return;
+    }
+    // The second round, a little after: the part left failing.
+    let second = WINDOW + 21;
+    if t == second {
+        g.meshes_before = all_with::<Mesh3d>(world);
+        g.meshes_before.extend(all_with::<PointLight>(world));
+        g.sounds_before = all_with::<crate::audio::Placed>(world);
+        let p = world.get::<RobotPart>(part).unwrap();
+        let damage = (p.hp - p.max_hp * FAILING).max(1.0);
+        let normal = (camera_at(world) - g.point).normalize_or(Vec3::Z);
+        shoot(world, part, g.point, normal, damage);
+        return;
+    }
+    if t > second && t <= second + WINDOW {
+        let (fx, cues) = since(world, g, robot);
+        let row = g.row.as_mut().unwrap();
+        row.fx2 = row.fx2.max(fx);
+        for c in cues {
+            if !row.cues2.contains(&c) {
+                row.cues2.push(c);
+            }
+        }
+        return;
+    }
+    if t < second + SETTLE {
+        return;
+    }
+    // The damaged look.
+    let marks = mark_materials(world);
+    let now = look_of(world, robot, &marks);
+    let changed = now
+        .iter()
+        .filter(|(e, v)| g.look_before.get(*e) != Some(*v))
+        .count();
+    let gone = g
+        .look_before
+        .keys()
+        .filter(|e| !now.contains_key(*e) && world.get_entity(**e).is_ok())
+        .count();
+    let marked = subtree(world, part)
+        .into_iter()
+        .filter(|e| {
+            world
+                .get::<MeshMaterial3d<StandardMaterial>>(*e)
+                .is_some_and(|m| marks.contains(&m.id()))
+        })
+        .count();
+    let left = world
+        .get::<RobotPart>(part)
+        .map_or(0.0, |p| p.hp / p.max_hp.max(1e-3));
+    let mut row = g.row.take().unwrap();
+    row.look = changed + gone;
+    row.marks = marked;
+    row.left = left;
+    info!("hit gauge: {}", row.line());
+    g.rows.push(row);
+    g.next += 1;
+    g.at = 0;
+}
+
+fn finish(g: &mut HitGauge) {
+    g.done = true;
+    let ok = g.rows.iter().filter(|r| r.ok()).count();
+    info!("hit gauge: done, {ok}/{} parts answer a hit", g.rows.len());
+    if let Some(path) = std::env::var_os("EXTRACTION_HIT_GAUGE_OUT") {
+        let text: String = g.rows.iter().map(|r| r.line() + "\n").collect();
+        if let Err(e) = std::fs::write(&path, text) {
+            warn!("hit gauge: can't write {path:?}: {e}");
+        }
+    }
+}
+
+/// Every machine the line-up has (`dev::gallery`), for the gauge.
+pub const EVERY_MACHINE: &str = "walker+drone+grappler+sentry+hound+heavy+crawler+dirigible+pylon+sorter+spotter+minelayer+mender+plough";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every part of every machine, shot: within 100 ms of each round an
+    /// effect at the point and a sound there, and once it's failing the
+    /// part looks it. (A client in a valley, no window and no GPU: some
+    /// minutes. `HIT_GAUGE_KINDS=heavy+drone` for some of them.)
+    #[test]
+    #[ignore = "the whole client in a valley; scripts/hit_gauge.sh"]
+    fn every_part_of_every_machine_answers_a_hit() {
+        let kinds = std::env::var("HIT_GAUGE_KINDS").unwrap_or(EVERY_MACHINE.into());
+        let opts = crate::LaunchOptions {
+            map: "marrow_creek".into(),
+            map_explicit: true,
+            new_game: true,
+            robots: false,
+            gallery: Some(format!("robots:{kinds}+hits,0,17")),
+            camera: Some((Vec3::new(92.9, 0.0, 131.9), 0.0, -4.0)),
+            ..Default::default()
+        };
+        let mut app = crate::soak::drive::client_app(opts);
+        for _ in 0..200_000 {
+            app.update();
+            if app
+                .world()
+                .get_resource::<HitGauge>()
+                .is_some_and(|g| g.done)
+            {
+                break;
+            }
+        }
+        let g = app.world().resource::<HitGauge>();
+        assert!(g.done, "the gauge never finished ({} rows)", g.rows.len());
+        for r in &g.rows {
+            println!("{}", r.line());
+        }
+        let bad: Vec<String> = g
+            .rows
+            .iter()
+            .filter(|r| !r.ok())
+            .map(|r| r.line())
+            .collect();
+        assert!(!g.rows.is_empty(), "no parts shot");
+        assert!(
+            bad.is_empty(),
+            "{} of {} parts:\n{}",
+            bad.len(),
+            g.rows.len(),
+            bad.join("\n")
+        );
+    }
+}

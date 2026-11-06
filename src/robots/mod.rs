@@ -36,6 +36,7 @@ pub mod hazards;
 pub mod heavy;
 pub mod heavy_look;
 pub mod heavy_mind;
+pub mod hit_gauge;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;

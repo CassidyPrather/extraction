@@ -36,6 +36,7 @@ impl Plugin for RobotVisualsPlugin {
                 super::minelayer_look::MinelayerLookPlugin,
                 super::mender_look::MenderLookPlugin,
                 super::plough_look::PloughLookPlugin,
+                super::hit_gauge::HitGaugePlugin,
             ))
             .add_systems(
                 Update,
