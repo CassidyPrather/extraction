@@ -664,20 +664,19 @@ mod tests {
                 .collect()
         };
         assert!(ids.len() > 10, "only {} guns", ids.len());
-        /// Guns not held to their sights, and why.
-        const NOT_AIMED: &[(&str, &str)] = &[(
-            "flare_pistol",
-            // A star fired level brakes in all directions once it starts
-            // down (`flares::fly`'s descent drag), stalls within metres and
-            // sinks: 1.9 m low at 20 m. It's fired up, to light or signal.
-            "a flare's star stalls fired level",
-        )];
+        /// Guns held to their own tolerance (MOA), and why: everything
+        /// else to 2 MOA.
+        const OWN_TOLERANCE: &[(&str, f32)] = &[
+            // A 26 mm star is slow, and slows faster than a bullet, so the
+            // bullet's zero (`iron_up`) leaves it about 12 MOA low at 20 m
+            // (7 cm). Its own spread is 90 MOA; 15 MOA is a sixth of it.
+            // (Before `flares::star_step`, a star fired level stalled and
+            // landed 1.9 m low.)
+            ("flare_pistol", 15.0),
+        ];
         let mut report = Vec::new();
         let mut bad = Vec::new();
         for (k, id) in ids.iter().enumerate() {
-            if NOT_AIMED.iter().any(|(g, _)| g == id) {
-                continue;
-            }
             let at = Vec3::new(k as f32 * 3.0, 400.0, 0.0);
             let gun = vr.spawn(id, Transform::from_translation(at));
             vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
@@ -773,9 +772,13 @@ mod tests {
                 let off = hit - aim;
                 let side = gt.rotation() * Vec3::X;
                 let (up, across) = (off.y, off.dot(side));
-                let tol = 2.0 * MOA * zero_m;
+                let moa = OWN_TOLERANCE
+                    .iter()
+                    .find(|(g, _)| g == id)
+                    .map_or(2.0, |(_, m)| *m);
+                let tol = moa * MOA * zero_m;
                 let line = format!(
-                    "{id} barrel {barrel}: at {zero_m} m, {:+.1} cm up, {:+.1} cm across (2 MOA is {:.1} cm)",
+                    "{id} barrel {barrel}: at {zero_m} m, {:+.1} cm up, {:+.1} cm across ({moa} MOA is {:.1} cm)",
                     up * 100.0,
                     across * 100.0,
                     tol * 100.0

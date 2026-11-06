@@ -317,10 +317,29 @@ fn turn_line_up(
     line_up: Option<ResMut<LineUp>>,
     mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
+    mut menders: Query<&mut crate::robots::mender::Mender>,
+    mut layers: Query<(&mut crate::robots::minelayer::Minelayer, &GlobalTransform)>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
+    // A mender with nothing to mend goes home after a while: not here.
+    for (e, ..) in line_up.0.iter() {
+        if let Ok(mut m) = menders.get_mut(*e) {
+            m.idle = 0.0;
+        }
+        // A minelayer done would crawl out: held about to lay, where it is.
+        if let Ok((mut m, gt)) = layers.get_mut(*e) {
+            use crate::robots::minelayer::Doing;
+            if !matches!(m.doing, Doing::Lay { .. } | Doing::Dead) {
+                m.doing = Doing::Lay {
+                    spots: vec![gt.translation().xz()],
+                    next: 0,
+                    wait: 1.0e6,
+                };
+            }
+        }
+    }
     for (e, yaw, at) in line_up.0.iter_mut() {
         if let Ok(mut w) = walkers.get_mut(*e) {
             if at.is_none() {
@@ -335,6 +354,16 @@ fn turn_line_up(
             continue;
         }
         if let Ok(mut t) = placed.get_mut(*e) {
+            // Held still, as a walker is: no mind to see the camera and
+            // act on it (a minelayer that saw it fled out of the frame,
+            // its body moved by the physics under the pin; a drone would
+            // go after it).
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+            }
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
         }
@@ -557,7 +586,11 @@ fn gallery(
                 // mender, plough;
                 // `walker!broken` is a walker with its gun dead and a leg
                 // failing.
-                let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
+                // (`+hits` is the hit gauge's word, not a machine.)
+                let ids: Vec<&str> = s["robots:".len()..]
+                    .split('+')
+                    .filter(|w| *w != "hits")
+                    .collect();
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
                 let mut dead = Vec::new();
@@ -638,6 +671,8 @@ fn gallery(
                         "minelayer" => {
                             let nav = nav.as_ref().map(|n| n.0.clone());
                             match nav {
+                                // (Held laying, by `turn_line_up`: with
+                                // nothing to do it would leave at once.)
                                 Some(nav) => crate::robots::minelayer::spawn_minelayer(
                                     &mut commands,
                                     &zone,
@@ -2340,6 +2375,10 @@ fn pose_body_for_gallery(
             Without<crate::rig::LocalPlayer>,
         ),
     >,
+    slots: Query<
+        (&crate::interact::Socket, &GlobalTransform),
+        With<crate::interact::body::BodySlot>,
+    >,
     mut frames: Local<u32>,
 ) {
     let Some(spec) = opts.gallery.as_deref() else {
@@ -2389,14 +2428,23 @@ fn pose_body_for_gallery(
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-0.9);
     }
+    // `+left` / `+right`: looking down (or bent) at that hip's pocket (+1
+    // left, -1 right).
+    let hip: Option<f32> = match (gallery_word(spec, "left"), gallery_word(spec, "right")) {
+        (true, _) if down || stoop => Some(1.0),
+        (_, true) if down || stoop => Some(-1.0),
+        _ => None,
+    };
     if down && *frames > 20 {
         // A head looking down pivots on the neck: the eyes come forward.
         let fwd = input.head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        // To a hip (the camera turns there below): steeper.
+        let pitch = if hip.is_some() { -1.35 } else { -1.05 };
         // (The flat rig writes the head afresh each frame, as for `stoop`.)
         input.head.translation += flat * 0.08 - Vec3::Y * 0.04;
         input.head.rotation =
-            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.05);
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(pitch);
     }
     let head = root.mul_transform(input.head);
     let Ok(mut cam) = cams.single_mut() else {
@@ -2424,6 +2472,23 @@ fn pose_body_for_gallery(
             Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
     } else if *frames > 20 {
         *cam = head;
+        // Only the eye turns to the hip pocket on that side: the head held
+        // turned, the torso would come round after it, the hip with it.
+        let right = root.rotation * Vec3::X;
+        let pocket = slots
+            .iter()
+            .filter(|(s, _)| {
+                s.kind
+                    == crate::interact::SocketKind::Body(
+                        extraction_core::inventory::SlotKind::Pocket,
+                    )
+            })
+            .map(|(_, g)| g.translation())
+            .find(|p| (p - root.translation).dot(right).signum() == -hip.unwrap_or(0.0).signum());
+        if let (Some(_), Some(p)) = (hip, pocket) {
+            *cam = Transform::from_translation(head.translation)
+                .looking_at(p, root.rotation * Vec3::NEG_Z);
+        }
     }
 }
 
