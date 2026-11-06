@@ -89,7 +89,13 @@ fn main() {
         .collect();
     let ground = |p: P2| [p[0], hm.height(p), p[1]];
     let fmt = |v: [f32; 3]| format!("[{:.2},{:.2},{:.2}]", v[0], v[1], v[2]);
-    let mut starts = extraction_core::map_lint::first_jobs(&map, &map_id);
+    let mut starts: Vec<(String, P2)> = extraction_core::map_lint::first_jobs(&map, &map_id)
+        .into_iter()
+        .map(|(what, at)| {
+            let at = surfaced(&map, &hm, at);
+            (what, at)
+        })
+        .collect();
     starts.extend(pole_lines(&map, &rvs));
     for (walk, (what, at)) in starts.into_iter().enumerate() {
         let Some((rv, to)) = rvs
@@ -156,4 +162,33 @@ fn main() {
             s += STEP;
         }
     }
+}
+
+/// How far under the ground a job's floor lies before it's down in a site
+/// and not on the surface over it (m).
+const BELOW: f32 = 2.5;
+
+/// Where the way home from a job starts on the surface: for one down in an
+/// underground site (the depot's ledger), the nearest of the site's
+/// entrance and its exit kiosks, where the player comes up, not the ground
+/// over the job's room, which no one stands on.
+fn surfaced(map: &MapDef, hm: &Heightmap, at: P2) -> P2 {
+    use extraction_core::underground;
+    for site in underground::placed(map) {
+        let Some(r) = underground::raster(&site.id) else {
+            continue;
+        };
+        let Some(floor) = r.floor_at(site.to_site(at)) else {
+            continue;
+        };
+        if hm.footing(&site.id, site.at, site.rot) + floor > hm.height(at) - BELOW {
+            continue;
+        }
+        let ways = std::iter::once(site.at).chain(site.exits().into_iter().map(|e| e.0));
+        if let Some(up) = ways.min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at))) {
+            eprintln!("start {at:?} is down in {}: from {up:?}", site.id);
+            return up;
+        }
+    }
+    at
 }
