@@ -576,19 +576,23 @@ wood and 11.6 on charred floor.
 #### Pale, not paper-white (6 November)
 
 On Visual design's settled-eye sheet the flour sack was a blank white
-blob at arm's length and from 2 m. A flat model material is now held to
-linear luminance 0.6, about sRGB 0.8 grey
-(`no_flat_model_material_is_whiter_than_pale`): Paper 0.66 is now 0.50,
-Enamel 0.74 is now 0.56. The flour sack is `Sacking` now, unbleached
-linen with the canvas scan's weave, tied off with thick dark twine. Its
-stencil and red stripes are on both broad faces: on the front only, a
-sack lying turned away had none. Measured with Visual design's
-settled-eye `--torchlit` applied locally (not merged): nothing clips
-before or after (Visual design's fix did that). The sack's detail (L*
-spread, its worst view) went from 8.9 to 13.1, and it still stands off
-every floor (delta E 36.6 → 27.2). The other pale items lose up to 3
-and all stay above 17. The weave is too fine to read from 2 m; the
-stencil, the stripes and the tie read.
+blob at arm's length and from 2 m. Measured with Visual design's
+settled-eye `--torchlit` applied locally (not merged), nothing clips,
+before or after: the wash-out was exposure, and their fix took it. So
+Paper and Enamel keep their albedo. A flat model material is held to
+enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
+so nothing new comes in whiter.
+
+What the sack lacked was surface. It is `Sacking` now, unbleached linen
+with the canvas scan's weave, slumped low and spread with creases where
+it lies, tied off at the neck with thick dark twine. Its stencil and red
+stripes are on both broad faces, ray-cast onto the cloth so the slump
+doesn't swallow them: before, a sack lying turned away had none. Its
+detail (L* spread, worst view) went from 8.9 to 16.5 with 0% clipped,
+and it still stands off every floor (delta E 36.6 → 36.4). The other
+pale items (the hana letter, the rice bag, the crackers) already carry
+a seal, grains or docking, and are unchanged. The weave is too fine to
+read from 2 m; the stencil, the stripes, the tie and the slump read.
 
 ![Flour sack, before (top) and after: wood and concrete at arm's length,
 wood and charred floor from 2 m](../shots/items/torchlit_flour_before_after.jpg)
