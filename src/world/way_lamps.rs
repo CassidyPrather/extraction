@@ -9,7 +9,7 @@
 //! drives in beside a way over open ground, two bands of reflective tape
 //! round its top, as on the fell's snow poles. Where a torch's pool shows
 //! nothing of the way (`scripts/night_route.sh`, the torch case), the
-//! bands shine back from the beam 20-odd metres on. The tape is the
+//! bands shine back from the beam 15 m on. The tape is the
 //! client's (`render::way_lamps`).
 
 use bevy::prelude::*;

@@ -90,8 +90,8 @@ struct Banded;
 const BAND_W: f32 = MARKER_W + 0.006;
 
 /// Bands a marker post (`world::way_lamps::BANDS`) once the tape's
-/// material is made: a frame after it is, so `render::reflectors` has its
-/// glowing copies before the bands arrive to be found.
+/// material is made and `render::reflectors` has its glowing copies, so
+/// the bands are there to be found when they arrive.
 fn band_marker_posts(
     mut commands: Commands,
     posts: Query<(Entity, &Building), Without<Banded>>,
@@ -100,6 +100,7 @@ fn band_marker_posts(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     server: Res<AssetServer>,
+    names: Query<&Name>,
     mut band: Local<Option<Handle<Mesh>>>,
 ) {
     let mut posts = posts
@@ -113,6 +114,15 @@ fn band_marker_posts(
         model_mats.get("Reflector", &mut lib, &server, &mut materials);
         return;
     };
+    // `render::reflectors` finds the tape as it's added, and only once it
+    // has made its glowing copies (it names them): in a valley with no
+    // snow poles the tape is first made here, so wait for those.
+    if !names
+        .iter()
+        .any(|n| n.as_str().starts_with("Reflector glow"))
+    {
+        return;
+    }
     let mesh = band
         .get_or_insert_with(|| meshes.add(Cuboid::new(BAND_W, BAND_H, BAND_W)))
         .clone();
