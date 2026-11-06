@@ -467,6 +467,57 @@ fn run_macros(
     }
 }
 
+/// One round off a carried stripper clip of `cartridge` into the gun's
+/// fixed magazine, as a thumb on the clip in the guide does.
+fn strip_one_from_clip(
+    world: &mut World,
+    player: Entity,
+    gun_e: Entity,
+    cartridge: &str,
+    catalog: &Catalog,
+) {
+    let mut q = world.query::<(Entity, &Item, Option<&InSocket>, Option<&InBackpack>)>();
+    let clips: Vec<(Entity, Option<Entity>, Option<Entity>)> = q
+        .iter(world)
+        .filter(|(_, it, ..)| {
+            it.rounds > 0
+                && catalog
+                    .get(it.kind())
+                    .magazine
+                    .as_ref()
+                    .is_some_and(|m| m.stripper && m.cartridge == cartridge)
+        })
+        .map(|(e, _, s, b)| (e, s.map(|s| s.socket), b.map(|b| b.bag)))
+        .collect();
+    let Some(clip) = clips
+        .into_iter()
+        .find(|(_, s, b)| {
+            s.is_some_and(|s| world.get::<SocketOwner>(s).is_some_and(|o| o.0 == player))
+                || b.is_some_and(|b| {
+                    world
+                        .get::<Backpack>(b)
+                        .is_some_and(|bag| bag.owner == player)
+                })
+        })
+        .map(|(e, ..)| e)
+    else {
+        return;
+    };
+    let (n, mut loads) = {
+        let it = world.get::<Item>(clip).expect("clip exists");
+        (it.rounds, it.loads.clone())
+    };
+    let moved = world
+        .get_mut::<Gun>(gun_e)
+        .map_or(0, |mut g| g.firearm.strip_clip_up_to(n, 1, &mut loads));
+    if moved > 0
+        && let Some(mut it) = world.get_mut::<Item>(clip)
+    {
+        it.rounds -= moved;
+        it.loads = loads;
+    }
+}
+
 /// Moves one round from carried ammunition into the gun.
 fn load_one_round(world: &mut World, player: Entity, gun_e: Entity) {
     let Some(cartridge) = world
@@ -504,6 +555,10 @@ fn load_one_round(world: &mut World, player: Entity, gun_e: Entity) {
         .collect();
     // Loose rounds first, then the emptiest box.
     let Some((ammo_e, _, socket, bag)) = mine.into_iter().min_by_key(|(_, r, _, _)| *r) else {
+        // None loose: a stripper clip of its rounds on you, one pressed
+        // down the guide (an SKS or a Mosin carried with full clips and no
+        // box had nothing to load from by hand, and went out unarmed).
+        strip_one_from_clip(world, player, gun_e, &cartridge, &catalog);
         return;
     };
     let load = {
