@@ -2286,6 +2286,10 @@ fn pose_body_for_gallery(
             Without<crate::rig::LocalPlayer>,
         ),
     >,
+    slots: Query<
+        (&crate::interact::Socket, &GlobalTransform),
+        With<crate::interact::body::BodySlot>,
+    >,
     mut frames: Local<u32>,
 ) {
     let Some(spec) = opts.gallery.as_deref() else {
@@ -2335,14 +2339,23 @@ fn pose_body_for_gallery(
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-0.9);
     }
+    // `+left` / `+right`: looking down (or bent) at that hip's pocket (+1
+    // left, -1 right).
+    let hip: Option<f32> = match (gallery_word(spec, "left"), gallery_word(spec, "right")) {
+        (true, _) if down || stoop => Some(1.0),
+        (_, true) if down || stoop => Some(-1.0),
+        _ => None,
+    };
     if down && *frames > 20 {
         // A head looking down pivots on the neck: the eyes come forward.
         let fwd = input.head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        // To a hip (the camera turns there below): steeper.
+        let pitch = if hip.is_some() { -1.35 } else { -1.05 };
         // (The flat rig writes the head afresh each frame, as for `stoop`.)
         input.head.translation += flat * 0.08 - Vec3::Y * 0.04;
         input.head.rotation =
-            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.05);
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(pitch);
     }
     let head = root.mul_transform(input.head);
     let Ok(mut cam) = cams.single_mut() else {
@@ -2370,6 +2383,23 @@ fn pose_body_for_gallery(
             Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
     } else if *frames > 20 {
         *cam = head;
+        // Only the eye turns to the hip pocket on that side: the head held
+        // turned, the torso would come round after it, the hip with it.
+        let right = root.rotation * Vec3::X;
+        let pocket = slots
+            .iter()
+            .filter(|(s, _)| {
+                s.kind
+                    == crate::interact::SocketKind::Body(
+                        extraction_core::inventory::SlotKind::Pocket,
+                    )
+            })
+            .map(|(_, g)| g.translation())
+            .find(|p| (p - root.translation).dot(right).signum() == -hip.unwrap_or(0.0).signum());
+        if let (Some(_), Some(p)) = (hip, pocket) {
+            *cam = Transform::from_translation(head.translation)
+                .looking_at(p, root.rotation * Vec3::NEG_Z);
+        }
     }
 }
 
