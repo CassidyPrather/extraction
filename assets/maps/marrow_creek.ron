@@ -297,6 +297,10 @@
         (prefab: "way_lamp", at: (110.8, -97.7), rot: 0.0),
         (prefab: "way_lamp", at: (-87.7, 0.9), rot: 0.0),
         (prefab: "way_lamp", at: (-144.7, -71.7), rot: 0.0),
+        // Where the ways home from the underground jobs come up (their
+        // kiosk doors) with nothing lit ahead.
+        (prefab: "way_lamp", at: (-33.0, 16.4), rot: 0.0),  // w03_00, the letter's, out of the bunker, past the post office on the Station road's far side
+        (prefab: "way_lamp", at: (-121.5, -68.6), rot: 0.0),  // w04_01, the ledger's, down to the Ranger tower
         // A marker post, banded with reflective tape, where a hand torch's
         // pool shows nothing of the way home (scripts/night_route.sh, the
         // torch case): 12 m on, where the way to the Ranger tower that the
