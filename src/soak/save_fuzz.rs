@@ -763,7 +763,10 @@ fn hand_reload(world: &mut World) -> bool {
     // fullest in a pouch, and an empty one is no reload at all.
     if let Some(&mag) = spawned.get(1) {
         let def = catalog.get(catalog.kind("ak_mag").unwrap());
-        let (cap, every) = (def.capacity, def.tracer_every);
+        let (cap, every) = (
+            def.magazine.as_ref().map_or(30, |m| m.capacity),
+            def.tracer_every,
+        );
         if let Some(mut it) = world.get_mut::<Item>(mag) {
             it.0.rounds = cap;
             it.0.loads = extraction_core::ammo::Loads::with_tracers(cap, every);
