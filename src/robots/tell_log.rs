@@ -1,7 +1,8 @@
 //! Every attack's tell, in the raid record: a machine that has you began
 //! the warning before its blow (a walker's aim, a drone's lock, a hound
 //! coiling, a crawler's spark gun charging, a heavy's arm rising, a
-//! grappler winding up, a sentry's chirp). `"tell"` lines, so a gauge
+//! grappler winding up, a sentry's chirp, a failing machine's flare tube
+//! going up). `"tell"` lines, so a gauge
 //! measures warning to harm from the warning each attack gives
 //! (`robots::MIN_LEAD`), not only from an approach seen coming: a crawler
 //! lying in wait in the dark never "comes", and its crackle was missing
@@ -14,6 +15,7 @@ use crate::rig::LocalPlayer;
 use crate::sim::telemetry::{SimLog, round};
 
 use super::Awareness;
+use super::distress::{FlareAct, FlareEvent};
 use super::drone::DroneLock;
 use super::grappler::HarpoonWindup;
 use super::heavy::{HeavyAct, HeavyEvent};
@@ -45,6 +47,8 @@ fn log_tells(
     mut heavies: MessageReader<HeavyEvent>,
     mut harpoons: MessageReader<HarpoonWindup>,
     mut sentries: MessageReader<SentryEvent>,
+    mut flares: MessageReader<FlareEvent>,
+    is_sentry: Query<(), With<super::sentry::Sentry>>,
 ) {
     let (Some(mut log), Ok((me, body))) = (log, me.single()) else {
         aims.clear();
@@ -54,6 +58,7 @@ fn log_tells(
         heavies.clear();
         harpoons.clear();
         sentries.clear();
+        flares.clear();
         return;
     };
     let here = body.translation();
@@ -104,6 +109,19 @@ fn log_tells(
             })
             .map(|e| ("Sentry", "chirp", e.at)),
     );
+    tells.extend(
+        flares
+            .read()
+            .filter(|e| e.what == FlareAct::Tell && on_me(e.robot))
+            .map(|e| {
+                let who = if is_sentry.contains(e.robot) {
+                    "Sentry"
+                } else {
+                    "Walker"
+                };
+                (who, "flare", e.at)
+            }),
+    );
     for (robot, what, at) in tells {
         log.event(
             "tell",
@@ -128,6 +146,7 @@ mod tests {
             .add_message::<HeavyEvent>()
             .add_message::<HarpoonWindup>()
             .add_message::<SentryEvent>()
+            .add_message::<FlareEvent>()
             .add_plugins(TellLogPlugin);
         let path = std::env::temp_dir().join(format!(
             "tell_log_{}_{:?}.jsonl",
