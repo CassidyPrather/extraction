@@ -74,6 +74,7 @@ pub mod squad;
 #[cfg(test)]
 mod squad_drill;
 pub mod subjects;
+pub mod tell_log;
 pub mod tracks;
 pub mod visuals;
 pub mod walker;
@@ -387,6 +388,7 @@ impl Plugin for RobotsPlugin {
                 walker::WalkerPlugin,
                 director::DirectorPlugin,
                 pressure::PressurePlugin,
+                tell_log::TellLogPlugin,
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,

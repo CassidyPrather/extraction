@@ -315,10 +315,14 @@ struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
 fn turn_line_up(
     mut commands: Commands,
     line_up: Option<ResMut<LineUp>>,
-    mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
+    mut placed: Query<
+        (&mut Transform, Option<&mut Position>),
+        Without<crate::robots::walker::Walker>,
+    >,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
     mut menders: Query<&mut crate::robots::mender::Mender>,
     mut layers: Query<(&mut crate::robots::minelayer::Minelayer, &GlobalTransform)>,
+    spotters: Query<(), With<crate::robots::spotter::Spotter>>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
@@ -353,7 +357,19 @@ fn turn_line_up(
             w.path.clear();
             continue;
         }
-        if let Ok(mut t) = placed.get_mut(*e) {
+        // (A spotter holds itself over its winch, swaying on its tether:
+        // its sway is its look.)
+        if spotters.contains(*e) {
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+                *at = Some(Vec3::ZERO);
+            }
+            continue;
+        }
+        if let Ok((mut t, body)) = placed.get_mut(*e) {
             // Held still, as a walker is: no mind to see the camera and
             // act on it (a minelayer that saw it fled out of the frame,
             // its body moved by the physics under the pin; a drone would
@@ -366,6 +382,12 @@ fn turn_line_up(
             }
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
+            // And its physics body, which drives the Transform when it
+            // moves itself (a plough ploughing its road, a spotter's
+            // balloon swaying on its tether).
+            if let Some(mut p) = body {
+                p.0 = at;
+            }
         }
     }
 }

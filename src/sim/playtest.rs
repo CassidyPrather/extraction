@@ -157,7 +157,8 @@ fn open_recording(
     log.event(
         "start",
         json!({"run": name, "map": opts.map, "seed": opts.seed, "personality": "player",
-               "minutes": 0, "format": telemetry::FORMAT, "cycle": raid.cycle}),
+               "minutes": 0, "format": telemetry::FORMAT, "cycle": raid.cycle,
+               "assets": crate::asset_identity().data, "build": crate::asset_identity().build}),
     );
     info!("recording this raid to {}", log.path.display());
     commands.insert_resource(log);

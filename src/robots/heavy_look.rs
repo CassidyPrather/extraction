@@ -818,9 +818,6 @@ mod tests {
             app.update();
             frames += 1;
         }
-        for _ in 0..10 {
-            app.update();
-        }
         // Meshes of the heavy's the eye draws (its own and its limbs').
         let drawn = |app: &mut App| -> Vec<Entity> {
             // (What the eye itself draws: other cameras see other LODs.)
@@ -867,6 +864,74 @@ mod tests {
             }
             "(unnamed)".into()
         };
+        // Settled before the count: every item seated on it (its plates,
+        // its cell) dressed in, and what the eye draws of it the same for
+        // [`SETTLED`] frames. Under a full test run an item's model comes
+        // in on the asset pool any number of frames after the bolts merge:
+        // gate 218 counted before the plates had come, then nine more.
+        const SETTLED: u32 = 30;
+        let undressed = |app: &mut App| -> Vec<String> {
+            let w = app.world_mut();
+            let mut q = w.query_filtered::<Entity, With<crate::items::Item>>();
+            let items: Vec<Entity> = q.iter(w).collect();
+            let under = |w: &World, e: Entity, root: Entity| {
+                let mut at = e;
+                for _ in 0..8 {
+                    if at == root {
+                        return true;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => at = p.parent(),
+                        None => return false,
+                    }
+                }
+                false
+            };
+            let has_mesh = |w: &World, e: Entity| {
+                let mut stack = vec![e];
+                while let Some(x) = stack.pop() {
+                    if w.get::<Mesh3d>(x).is_some() {
+                        return true;
+                    }
+                    if let Some(c) = w.get::<Children>(x) {
+                        stack.extend(c.iter());
+                    }
+                }
+                false
+            };
+            items
+                .into_iter()
+                .filter(|e| under(w, *e, robot) && !has_mesh(w, *e))
+                .map(|e| {
+                    w.get::<Name>(e)
+                        .map_or_else(|| format!("{e}"), |n| n.as_str().to_string())
+                })
+                .collect()
+        };
+        let (mut frames, mut same, mut last) = (0u32, 0u32, usize::MAX);
+        loop {
+            app.update();
+            frames += 1;
+            let waiting = undressed(&mut app);
+            let n = drawn(&mut app).len();
+            same = if waiting.is_empty() && n == last {
+                same + 1
+            } else {
+                0
+            };
+            last = n;
+            if same >= SETTLED {
+                break;
+            }
+            assert!(
+                frames < 6000,
+                "it never settled in {frames} frames: undressed {waiting:?}, \
+                 drawing {n} (steady {same} frames)"
+            );
+            if frames > 60 {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
         let before = drawn(&mut app);
         let whole = before.len();
         let (merged, holders) = {

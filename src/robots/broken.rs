@@ -90,8 +90,14 @@ pub const QUIET_AFTER: f32 = 45.0;
 /// Where a career's second job's broken walker stands, if this raid is
 /// that job's: on the way from the drop to the job's place, a third of
 /// the way along and a little to the side. None on any other job.
+///
+/// `map` is the valley's key (`LaunchOptions::map`, "marrow_creek"), what a
+/// job's mark names; it was matched to `MapDef::name` ("Marrow Creek"),
+/// never equal, so it always stood on the way to the nearest place instead
+/// of the job's (as `pressure::job_hot_place` did).
 pub fn second_job_meet(
     zone: &Zone,
+    map: &str,
     progress: &extraction_core::progression::Progress,
 ) -> Option<Vec3> {
     if progress.done != 1 {
@@ -104,7 +110,7 @@ pub fn second_job_meet(
     );
     let place = job
         .mark()
-        .filter(|(map, _)| *map == zone.map.name)
+        .filter(|(job_map, _)| *job_map == map)
         .map(|(_, at)| Vec2::from(at))
         .or_else(|| {
             zone.map
@@ -250,7 +256,7 @@ mod tests {
             .unwrap();
         [
             Career::Scout {
-                map: zone.map.name.clone(),
+                map: "marrow_creek".into(),
                 place: far.name.clone(),
                 at: far.at,
                 seen: false,
@@ -281,7 +287,7 @@ mod tests {
                     job: Some(job.clone()),
                     ..Default::default()
                 };
-                let at = second_job_meet(&zone, &p);
+                let at = second_job_meet(&zone, "marrow_creek", &p);
                 assert_eq!(at.is_some(), done == 1, "{job:?} with {done} done: {at:?}");
                 if let Some(at) = at {
                     let d = at.xz().distance(drop);
@@ -300,10 +306,45 @@ mod tests {
                 ..Default::default()
             };
             assert!(
-                second_job_meet(&zone, &none).is_none(),
+                second_job_meet(&zone, "marrow_creek", &none).is_none(),
                 "no job, no meeting"
             );
         }
+    }
+
+    /// On the way to the job's own place, not the nearest one: a scout of
+    /// the farthest place has it out along that line (a little aside), and
+    /// a job in another valley, or none here, falls back to the nearest.
+    #[test]
+    fn it_stands_on_the_way_to_the_jobs_own_place() {
+        let app = app(marrow(false));
+        let zone = app.world().resource::<Zone>().clone();
+        let drop = Vec2::from(
+            zone.marker(&extraction_core::map::MarkerKind::Insertion)
+                .unwrap()
+                .at,
+        );
+        let job = jobs(&zone)[0].clone();
+        let (_, place) = job.mark().unwrap();
+        let way = (Vec2::from(place) - drop).normalize();
+        let p = |job: Career| Progress {
+            done: 1,
+            job: Some(job),
+            ..Default::default()
+        };
+        let at = second_job_meet(&zone, "marrow_creek", &p(job.clone())).unwrap();
+        let off = (at.xz() - drop)
+            .normalize()
+            .angle_to(way)
+            .abs()
+            .to_degrees();
+        assert!(off < 20.0, "{off:.0} degrees off the way to {place:?}");
+        // Somewhere else's job: not this valley's mark.
+        let elsewhere = second_job_meet(&zone, "kettle_pass", &p(job)).unwrap();
+        assert!(
+            elsewhere.xz().distance(at.xz()) > 1.0,
+            "another valley's job read as this one's"
+        );
     }
 
     /// Job 1 then job 2 in one game session, no restart: the second job
