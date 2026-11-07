@@ -620,6 +620,7 @@
         // tells of it before you're in it (map_gradient). Texts: Fifth valley.
         (kind: Sign(text: "MACHINES\nAT WORK"), at: (-247.5, -114.5), rot: 0.0, name: "New Sallow works sign"),
         (kind: Sign(text: "SORTING\nNO ENTRY"), at: (116.0, -19.0), rot: 0.0, name: "Sorting ground stencil"),
+        (kind: Sign(text: "CATCHWATER\nKEEP OUT", board: Some("warning_wall")), at: (217.0, 70.0), rot: 0.0, name: "Catchwater sign"),
         (kind: Insertion, at: (25.0, 262.0), rot: 0.0, name: "South gate"),
         (kind: TruckStop, at: (25.0, 300.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (31.0, 270.0), name: "South gate (fuel)"),
