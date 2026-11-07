@@ -3928,6 +3928,19 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
         }
         at = p;
     }
+    // A bridge's deck only by its ends: the grid's flat, and joined the
+    // gully under Marrow's Forest path footbridge to the deck over it; the
+    // newcomer walked the gully floor to the deck's far end and stood under
+    // its abutment, 2 m below it, till the walk gave up (Map design).
+    let decks: Vec<(crate::world::bridges::Deck, [Vec2; 2])> =
+        crate::world::bridges::decks(&world.zone)
+            .into_iter()
+            .map(|d| {
+                let [a, b] = d.ground_ends(&world.zone);
+                (d, [a.xz(), b.xz()])
+            })
+            .collect();
+    let pts = by_deck_ends(&decks, from, pts);
     // The grid's waypoints and a bank's sidestep know nothing of buildings:
     // each out of any it lands in (bar the end), and each stretch round any
     // in its way (from by the pump house, a waypoint past it was walked to
@@ -3943,6 +3956,54 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     }
     t
 }
+
+/// `pts`, walked from `from`, on and off each bridge's deck only at its
+/// ends (`ends`: where each meets the ground): a point on a deck reached
+/// from off it goes by the deck's end nearer where it comes from, and one
+/// off it reached from the deck by the end nearer where it's going. A walk
+/// under a bridge, never on its deck, is left as it is.
+fn by_deck_ends(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    from: Vec2,
+    pts: Vec<Vec2>,
+) -> Vec<Vec2> {
+    let on = |p: Vec2| decks.iter().position(|(d, _)| d.holds(p, 0.0));
+    let nearer = |ends: &[Vec2; 2], p: Vec2| {
+        if p.distance(ends[0]) <= p.distance(ends[1]) {
+            ends[0]
+        } else {
+            ends[1]
+        }
+    };
+    let mut out = Vec::with_capacity(pts.len() + 2);
+    let mut at = from;
+    for p in pts {
+        let (was, is) = (on(at), on(p));
+        if was != is {
+            // Off one deck (by the end toward where it's going), then on
+            // another (by the end toward where it comes from).
+            if let Some(i) = was {
+                let e = nearer(&decks[i].1, p);
+                if e.distance(at) > DECK_END_NEAR && e.distance(p) > DECK_END_NEAR {
+                    out.push(e);
+                    at = e;
+                }
+            }
+            if let Some(i) = is {
+                let e = nearer(&decks[i].1, at);
+                if e.distance(at) > DECK_END_NEAR && e.distance(p) > DECK_END_NEAR {
+                    out.push(e);
+                }
+            }
+        }
+        out.push(p);
+        at = p;
+    }
+    out
+}
+
+/// A waypoint this near a deck's end is at it already (m).
+const DECK_END_NEAR: f32 = 1.0;
 
 /// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
 /// point off to one side of its middle, the nearest that clears it both
@@ -5040,6 +5101,72 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    /// A deck point is reached by the deck's own ends: from the gully under
+    /// it (by the end nearer), from either end (straight on), and off it to
+    /// the ground below (by the end nearer there). A walk under the bridge,
+    /// never on it, is left alone.
+    #[test]
+    fn a_bridge_deck_is_walked_on_and_off_only_at_its_ends() {
+        use crate::world::bridges::Deck;
+        let deck = Deck {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.0, 20.0),
+            ya: 18.0,
+            yb: 18.0,
+            width: 2.0,
+        };
+        let ends = [Vec2::new(0.0, -2.0), Vec2::new(0.0, 22.0)];
+        let decks = [(deck, ends)];
+        let mid = Vec2::new(0.0, 12.0);
+        // Up from the gully east of it, nearer the far end.
+        let gully = Vec2::new(8.0, 16.0);
+        assert_eq!(by_deck_ends(&decks, gully, vec![mid]), vec![ends[1], mid]);
+        // Along it from either end: straight on.
+        assert_eq!(by_deck_ends(&decks, ends[0], vec![mid]), vec![mid]);
+        assert_eq!(by_deck_ends(&decks, ends[1], vec![mid]), vec![mid]);
+        // Off it, down to the gully by the near end.
+        let below = Vec2::new(6.0, 3.0);
+        assert_eq!(by_deck_ends(&decks, mid, vec![below]), vec![ends[0], below]);
+        // Under it, east to west, never on it: as it was.
+        let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
+        assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+    }
+
+    /// Every bridge in every valley: a deck's middle reached from the
+    /// ground beside it goes by one of its ends, and from each end straight
+    /// on along it.
+    #[test]
+    fn every_bridge_is_walked_onto_by_its_ends() {
+        use crate::world::bridges;
+        for map in crate::test_maps() {
+            let zone = crate::world::Zone::load(&map);
+            let decks: Vec<_> = bridges::decks(&zone)
+                .into_iter()
+                .map(|d| {
+                    let [a, b] = d.ground_ends(&zone);
+                    (d, [a.xz(), b.xz()])
+                })
+                .collect();
+            for (d, ends) in &decks {
+                let mid = (d.a + d.b) * 0.5;
+                let side = (d.b - d.a).perp().normalize_or(Vec2::X) * (d.width + 6.0);
+                for beside in [mid + side, mid - side] {
+                    let way = by_deck_ends(&decks, beside, vec![mid]);
+                    assert!(
+                        way.len() == 2 && ends.contains(&way[0]) && way[1] == mid,
+                        "{map}: deck {:?}..{:?} from {beside:?}: {way:?}",
+                        d.a,
+                        d.b
+                    );
+                }
+                for end in ends {
+                    let way = by_deck_ends(&decks, *end, vec![mid]);
+                    assert_eq!(way, vec![mid], "{map}: from its end {end:?}");
+                }
+            }
+        }
     }
 
     #[test]
