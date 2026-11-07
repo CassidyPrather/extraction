@@ -379,6 +379,15 @@ fn shoot(world: &mut World, part: Entity, point: Vec3, normal: Vec3, damage: f32
 }
 
 /// New effect pieces and sounds near the point since the round went in.
+/// A piece with no bounds of its own (one drawn whatever the frustum, so
+/// never given any: a soft puff, `render::puff`), taken as the unit quad
+/// it's drawn on, scaled.
+const UNBOUNDED: Vec3 = Vec3::new(
+    crate::render::puff::QUAD * 0.5,
+    crate::render::puff::QUAD * 0.5,
+    0.0,
+);
+
 /// Pixels a degree on the desktop view the sheets are shot at: 1080 lines
 /// over the free camera's 75 degrees (`render::desktop_fov`).
 pub const PX_PER_DEG: f32 = 1080.0 / 75.0;
@@ -411,8 +420,14 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> Seen {
         &GlobalTransform,
         Option<&bevy::camera::primitives::Aabb>,
         Has<Mesh3d>,
-    ), Or<(With<Mesh3d>, With<PointLight>)>>();
-    for (e, gt, aabb, mesh) in q.iter(world) {
+        Has<crate::render::puff::SoftPuff>,
+    ), Or<(
+        With<Mesh3d>,
+        With<PointLight>,
+        With<crate::render::puff::SoftPuff>,
+    )>>();
+    for (e, gt, aabb, mesh, puff) in q.iter(world) {
+        let mesh = mesh || puff;
         if g.meshes_before.contains(&e) || mine.contains(&e) {
             continue;
         }
@@ -425,7 +440,7 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> Seen {
             continue;
         }
         // Its half size in the world: its bounds, scaled.
-        let half = aabb.map_or(Vec3::splat(0.01), |a| Vec3::from(a.half_extents)) * gt.scale();
+        let half = aabb.map_or(UNBOUNDED, |a| Vec3::from(a.half_extents)) * gt.scale();
         reach = reach.max(at.distance(p) + half.max_element());
         // Square to the eye: its two largest sides.
         let mut s = [half.x, half.y, half.z];
@@ -562,6 +577,8 @@ fn step(world: &mut World, g: &mut HitGauge) {
         g.look_before = look_of(world, robot, &marks);
         g.meshes_before = all_with::<Mesh3d>(world);
         g.meshes_before.extend(all_with::<PointLight>(world));
+        g.meshes_before
+            .extend(all_with::<crate::render::puff::SoftPuff>(world));
         g.sounds_before = all_with::<crate::audio::Placed>(world);
         let cam = camera_at(world);
         let (point, normal) = aim(world, part, cam);
@@ -626,6 +643,8 @@ fn step(world: &mut World, g: &mut HitGauge) {
     if t == second {
         g.meshes_before = all_with::<Mesh3d>(world);
         g.meshes_before.extend(all_with::<PointLight>(world));
+        g.meshes_before
+            .extend(all_with::<crate::render::puff::SoftPuff>(world));
         g.sounds_before = all_with::<crate::audio::Placed>(world);
         let p = world.get::<RobotPart>(part).unwrap();
         let damage = (p.hp - p.max_hp * FAILING).max(1.0);
@@ -886,8 +905,8 @@ mod tests {
 }
 
 /// A machine left failing, how its tells read at the eye over
-/// [`TELL_FRAMES`]: the share of frames something of them covered
-/// [`MIN_AREA`], and the median and the most they covered (pixels).
+/// [`TELL_FRAMES`]: the share of frames its largest single piece covered
+/// [`MIN_AREA`], and the median and the most that covered (pixels).
 #[derive(Clone, Debug)]
 pub struct TellRow {
     pub kind: String,
@@ -905,7 +924,7 @@ pub const TELL_FRAMES: u32 = 180;
 /// A piece's area square to an eye `d` m off (pixels, [`PX_PER_DEG`]):
 /// its bounds' two largest sides.
 fn area_at(gt: &GlobalTransform, aabb: Option<&bevy::camera::primitives::Aabb>, d: f32) -> f32 {
-    let half = aabb.map_or(Vec3::splat(0.01), |a| Vec3::from(a.half_extents)) * gt.scale();
+    let half = aabb.map_or(UNBOUNDED, |a| Vec3::from(a.half_extents)) * gt.scale();
     let mut s = [half.x, half.y, half.z];
     s.sort_by(|a, b| b.total_cmp(a));
     let deg = |m: f32| (m / d.max(0.1)).atan().to_degrees();
@@ -922,6 +941,8 @@ fn tells(world: &mut World, g: &mut HitGauge) {
             p.hp = p.max_hp * FAILING;
         }
         g.meshes_before = all_with::<Mesh3d>(world);
+        g.meshes_before
+            .extend(all_with::<crate::render::puff::SoftPuff>(world));
         return;
     }
     if t < TELL_SETTLE {
@@ -933,11 +954,12 @@ fn tells(world: &mut World, g: &mut HitGauge) {
         .iter(world)
         .map(|(e, g)| (e, g.translation()))
         .collect();
+    // (A batched puff has no mesh of its own: `render::puff` draws it.)
     let mut q = world.query_filtered::<(
         Entity,
         &GlobalTransform,
         Option<&bevy::camera::primitives::Aabb>,
-    ), With<Mesh3d>>();
+    ), Or<(With<Mesh3d>, With<crate::render::puff::SoftPuff>)>>();
     let pieces: Vec<(Entity, Vec3, f32)> = q
         .iter(world)
         .filter(|(e, ..)| !g.meshes_before.contains(e))
@@ -957,11 +979,13 @@ fn tells(world: &mut World, g: &mut HitGauge) {
         for p in parts {
             mine.extend(subtree(world, p));
         }
+        // (Its largest single piece: puffs overlap, so a sum would count
+        // the same patch of sky more than once.)
         let area: f32 = pieces
             .iter()
             .filter(|(e, p, _)| !mine.contains(e) && p.distance(at) < 4.0)
-            .map(|(_, _, a)| a)
-            .sum();
+            .map(|(_, _, a)| *a)
+            .fold(0.0, f32::max);
         g.tell_areas.entry(robot).or_default().push(area);
     }
     if t < TELL_SETTLE + TELL_FRAMES {
