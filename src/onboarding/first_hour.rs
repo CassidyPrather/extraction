@@ -3958,10 +3958,16 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
 }
 
 /// The bridges: decks joined end to end (a bridge over a bend is two or
-/// more) as one, each with the ground ends of its outer ends (those joined
-/// to no other deck), where a walk steps on or off it. Per deck, its
-/// bridge's index; and per bridge, its ends.
-fn bridges_of(decks: &[(crate::world::bridges::Deck, [Vec2; 2])]) -> (Vec<usize>, Vec<Vec<Vec2>>) {
+/// more) as one, each with its outer ends (those joined to no other deck):
+/// where it meets the ground, and a point out from that along the deck's
+/// line, to line up from (a footbridge is 1.6 m wide: come at its end on
+/// the slant and the first step is off its side, into the gully under
+/// it). Per deck, its bridge's index; per bridge, its ends as (ground end,
+/// lined-up approach).
+#[allow(clippy::type_complexity)]
+fn bridges_of(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+) -> (Vec<usize>, Vec<Vec<(Vec2, Vec2)>>) {
     let n = decks.len();
     let ends = |i: usize| [decks[i].0.a, decks[i].0.b];
     let joined = |i: usize, k: usize| {
@@ -3984,16 +3990,21 @@ fn bridges_of(decks: &[(crate::world::bridges::Deck, [Vec2; 2])]) -> (Vec<usize>
             }
         }
     }
-    let mut outer: Vec<Vec<Vec2>> = vec![vec![]; n];
+    let mut outer: Vec<Vec<(Vec2, Vec2)>> = vec![vec![]; n];
     for i in 0..n {
         for k in 0..2 {
             if !joined(i, k) {
-                outer[of[i]].push(decks[i].1[k]);
+                let out = (ends(i)[k] - ends(i)[1 - k]).normalize_or(Vec2::X);
+                let ground = decks[i].1[k];
+                outer[of[i]].push((ground, ground + out * DECK_LINE_UP));
             }
         }
     }
     (of, outer)
 }
+
+/// How far out from a bridge's end it lines up to step on (m).
+const DECK_LINE_UP: f32 = 3.0;
 
 /// Deck ends this near one another are one bridge's (m).
 const DECK_JOIN: f32 = 1.5;
@@ -4020,7 +4031,7 @@ fn by_deck_ends(
         ends[b]
             .iter()
             .copied()
-            .min_by(|x, y| x.distance(p).total_cmp(&y.distance(p)))
+            .min_by(|x, y| x.0.distance(p).total_cmp(&y.0.distance(p)))
     };
     let mut out = Vec::with_capacity(pts.len() + 2);
     let mut at = from;
@@ -4029,17 +4040,23 @@ fn by_deck_ends(
         if was != is {
             // Off one bridge (by the end toward where it's going), then on
             // another (by the end toward where it comes from).
-            if let Some(e) = was.and_then(|b| nearer(b, p))
+            // (Off: its end, then out along its line; on: lined up
+            // first, then its end.)
+            if let Some((e, line)) = was.and_then(|b| nearer(b, p))
                 && e.distance(at) > DECK_END_NEAR
                 && e.distance(p) > DECK_END_NEAR
             {
                 out.push(e);
-                at = e;
+                out.push(line);
+                at = line;
             }
-            if let Some(e) = is.and_then(|b| nearer(b, at))
+            if let Some((e, line)) = is.and_then(|b| nearer(b, at))
                 && e.distance(at) > DECK_END_NEAR
                 && e.distance(p) > DECK_END_NEAR
             {
+                if line.distance(at) > DECK_END_NEAR {
+                    out.push(line);
+                }
                 out.push(e);
             }
         }
@@ -5166,16 +5183,27 @@ the Hollow.";
         };
         let ends = [Vec2::new(0.0, -2.0), Vec2::new(0.0, 22.0)];
         let decks = [(deck, ends)];
+        // Lined up out along its line from each end.
+        let line = [
+            Vec2::new(0.0, -2.0 - DECK_LINE_UP),
+            Vec2::new(0.0, 22.0 + DECK_LINE_UP),
+        ];
         let mid = Vec2::new(0.0, 12.0);
-        // Up from the gully east of it, nearer the far end.
+        // Up from the gully east of it, nearer the far end: lined up, on.
         let gully = Vec2::new(8.0, 16.0);
-        assert_eq!(by_deck_ends(&decks, gully, vec![mid]), vec![ends[1], mid]);
+        assert_eq!(
+            by_deck_ends(&decks, gully, vec![mid]),
+            vec![line[1], ends[1], mid]
+        );
         // Along it from either end: straight on.
         assert_eq!(by_deck_ends(&decks, ends[0], vec![mid]), vec![mid]);
         assert_eq!(by_deck_ends(&decks, ends[1], vec![mid]), vec![mid]);
-        // Off it, down to the gully by the near end.
+        // Off it, down to the gully by the near end, out along its line.
         let below = Vec2::new(6.0, 3.0);
-        assert_eq!(by_deck_ends(&decks, mid, vec![below]), vec![ends[0], below]);
+        assert_eq!(
+            by_deck_ends(&decks, mid, vec![below]),
+            vec![ends[0], line[0], below]
+        );
         // Under it, east to west, never on it: as it was.
         let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
         assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
@@ -5207,7 +5235,7 @@ the Hollow.";
                 let mid = (d.a + d.b) * 0.5;
                 let side = (d.b - d.a).perp().normalize_or(Vec2::X) * (d.width + 6.0);
                 // (Its middle at one of the bridge's ends already: straight on.)
-                let at_end = outer.iter().any(|e| e.distance(mid) <= DECK_END_NEAR);
+                let at_end = outer.iter().any(|(e, _)| e.distance(mid) <= DECK_END_NEAR);
                 for beside in [mid + side, mid - side] {
                     // (Beside it on another deck of the same bridge: along it.)
                     if decks
@@ -5219,15 +5247,18 @@ the Hollow.";
                         continue;
                     }
                     let way = by_deck_ends(&decks, beside, vec![mid]);
+                    // Lined up out on its line, then its end, then on.
+                    let by_an_end = way.len() == 3
+                        && outer.iter().any(|(e, l)| way[0] == *l && way[1] == *e)
+                        && way[2] == mid;
                     assert!(
-                        (way.len() == 2 && outer.contains(&way[0]) && way[1] == mid)
-                            || (at_end && way == vec![mid]),
+                        by_an_end || (at_end && way == vec![mid]),
                         "{map}: deck {:?}..{:?} from {beside:?}: {way:?}",
                         d.a,
                         d.b
                     );
                 }
-                for end in outer {
+                for (end, _) in outer {
                     let way = by_deck_ends(&decks, *end, vec![mid]);
                     assert_eq!(way, vec![mid], "{map}: from its end {end:?}");
                 }
