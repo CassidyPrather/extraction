@@ -66,6 +66,9 @@ RANGE_TARGETS = {
     # and stopping to lay (audio_machines::hiss_sounds): the warning (as
     # quiet; heard only 5 m off in a downpour)
     "minelayer.hiss": (30, 5),
+    # the Zone's pressure stepping up, played STEP_FROM (80 m) toward the
+    # Gate (audio_machines::pressure_sounds): heard from there, rain or not
+    "zone.stirred": (80, 80), "zone.busy": (80, 80), "zone.hunting": (80, 80),
     # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
     "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
     "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),

@@ -202,6 +202,9 @@ fn wake_handled(
         let mut wake = handled(gun, &hands, &players, &parents);
         if !wake && !rematerialled.is_empty() {
             wake = rest.leaves.iter().any(|(e, _)| rematerialled.contains(e));
+            if wake && std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+                eprintln!("gun_rest: {gun} woken: a part given a material of its own");
+            }
         }
         if !wake && reparented {
             // Something came or went: the leaves under it now aren't the
@@ -549,6 +552,15 @@ fn rest_idle(
             }
             commands.entity(gun).insert(RestDeclined(all.len()));
             continue;
+        }
+        if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+            let name = names.get(gun).map_or("?", |n| n.as_str());
+            eprintln!(
+                "gun_rest: {name} resting: {} leaves, {} taken in {} groups",
+                all.len(),
+                taken.len(),
+                groups.len()
+            );
         }
         let keyed: Vec<(Shade, u64, Vec<(AssetId<Mesh>, Mat4)>)> = groups
             .into_iter()

@@ -619,6 +619,7 @@ pub fn weather_looks(
     mut guns: Query<(Entity, &Gun, &Weathering, Option<&mut WeatheredLook>)>,
     children: Query<&Children>,
     transforms: Query<&Transform>,
+    parts: Query<&super::visuals::GunPart>,
     meshes: Query<&MeshMaterial3d<StandardMaterial>>,
     skip: Query<
         (),
@@ -653,26 +654,33 @@ pub fn weather_looks(
                 // marks *these* (`render::held_light`), and its look still
                 // changes in the hand (cleaned at the bench, wiped, worn).
                 let mut mats = Vec::new();
-                // One copy for each of its materials in each frame its parts
-                // sit in: parts that shared a material share its copy again
-                // (`render::gun_rest` merges a resting gun by material; a
-                // copy for every mesh left it nothing to merge, and declined
-                // most guns), and the wear's muzzle and port, in that
-                // frame, hold for each of them.
+                // One copy for each of its materials, shared by every part
+                // that wears it (`render::gun_rest` merges a resting gun by
+                // material: a copy for every mesh left it nothing to merge,
+                // and declined most guns). The wear's muzzle and port are in
+                // the gun's space, and each part's place in the gun, at rest,
+                // goes in its `MeshTag` for the shader to take off
+                // (`render::wear::tag_for`). A part turned or scaled in its
+                // rest pose (none is yet) gets a copy of its own, its points
+                // in its own space.
                 let mut made: HashMap<
-                    (AssetId<StandardMaterial>, [i32; 12]),
+                    (AssetId<StandardMaterial>, Option<[i32; 12]>),
                     Handle<StandardMaterial>,
                 > = HashMap::new();
                 let frame = |a: &Affine3A| {
                     let c = a.to_cols_array();
                     std::array::from_fn(|i| (c[i] * 1e4).round() as i32)
                 };
-                // Each with where it sits in the gun, for its muzzle and port.
+                // Each with where it sits in the gun at rest (a moving part's
+                // `GunPart::rest`, not wherever it is just now).
                 let place = |c: Entity, up: Affine3A| {
-                    up * transforms
+                    let local = parts
                         .get(c)
+                        .map(|p| p.rest)
+                        .or_else(|_| transforms.get(c).copied())
                         .map(|t| t.compute_affine())
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    up * local
                 };
                 let mut stack: Vec<(Entity, Affine3A)> = children
                     .get(e)
@@ -695,12 +703,32 @@ pub fn weather_looks(
                             model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
                             metallic,
                         );
+                        let (scale, turn, offset) = at.to_scale_rotation_translation();
+                        let plain = turn.angle_between(Quat::IDENTITY) < 1e-3
+                            && (scale - Vec3::ONE).abs().max_element() < 1e-3;
+                        let (key, muzzle, port, tag) = if plain {
+                            (
+                                None,
+                                gun.layout.muzzle,
+                                gun.layout.port,
+                                crate::render::wear::tag_for(offset),
+                            )
+                        } else {
+                            let inv = at.inverse();
+                            (
+                                Some(frame(&at)),
+                                inv.transform_point3(gun.layout.muzzle),
+                                inv.transform_point3(gun.layout.port),
+                                0,
+                            )
+                        };
                         let own = made
-                            .entry((m.0.id(), frame(&at)))
+                            .entry((m.0.id(), key))
                             .or_insert_with(|| materials.add(orig))
                             .clone();
-                        commands.entity(c).insert(MeshMaterial3d(own.clone()));
-                        let inv = at.inverse();
+                        commands
+                            .entity(c)
+                            .insert((MeshMaterial3d(own.clone()), bevy::mesh::MeshTag(tag)));
                         mats.push(OwnMaterial {
                             mesh: c,
                             handle: own,
@@ -708,8 +736,8 @@ pub fn weather_looks(
                             rough,
                             metallic,
                             how,
-                            muzzle: inv.transform_point3(gun.layout.muzzle),
-                            port: inv.transform_point3(gun.layout.port),
+                            muzzle,
+                            port,
                         });
                     }
                     if let Ok(cs) = children.get(c) {
@@ -1026,13 +1054,20 @@ mod tests {
             !copies.contains(&blued.id()),
             "its own copies, not the shared ones"
         );
-        // Two materials in two frames.
+        // One a material, however many frames.
         assert_eq!(
             copies.len(),
-            4,
-            "{} copies for 6 meshes: one each leaves gun_rest nothing to merge",
+            2,
+            "{} copies for 6 meshes in 2 materials: gun_rest merges by material",
             copies.len()
         );
+        // Each part's place in the gun is in its tag, for the wear.
+        for (k, e) in meshes.iter().enumerate() {
+            let tag = w.get::<bevy::mesh::MeshTag>(*e).expect("a tag").0;
+            let want = if k < 3 { 0.0 } else { 0.06 };
+            let got = crate::render::wear::offset_of(tag);
+            assert!((got.y - want).abs() < 0.002, "mesh {k}: offset {got}");
+        }
     }
     use crate::interact::GripRole;
     use crate::rig::Side;
