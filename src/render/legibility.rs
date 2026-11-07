@@ -1101,7 +1101,8 @@ mod tests {
 
     /// A writer's aid: how far each sign text reads from, at the must-read
     /// floor. `SIGN_TEXTS=<file>` holds the texts, one to a block (blank
-    /// line between; `\n` in a line breaks it as in a map's RON). Prints
+    /// line between; `\n` in a line breaks it as in a map's RON; a block
+    /// starting `[warning_gate]` puts it on that board). Prints
     /// each as the board wraps it, its letters and the farthest it reads.
     ///   SIGN_TEXTS=signs.txt cargo test --lib sign_reach -- --ignored --nocapture
     #[test]
@@ -1112,8 +1113,24 @@ mod tests {
         };
         let file = std::fs::read_to_string(path).unwrap();
         for block in file.split("\n\n").map(str::trim).filter(|b| !b.is_empty()) {
-            let text = block.replace("\\n", "\n");
-            let panel = crate::world::notes::sign_panel(&text);
+            // `[warning_gate] TEXT`: the text on that board (`world::notes::
+            // warning_board`), else on a post.
+            let (board, text) = match block.strip_prefix('[').and_then(|b| b.split_once(']')) {
+                Some((name, rest)) => (Some(name.trim()), rest.trim()),
+                None => (None, block),
+            };
+            let text = text.replace("\\n", "\n");
+            let panel = match board {
+                Some(name) => crate::world::notes::warning_panel(
+                    &text,
+                    crate::world::notes::warning_board(name)
+                        .unwrap_or_else(|| panic!("no warning board {name}")),
+                ),
+                None => crate::world::notes::sign_panel(&text),
+            };
+            if let Some(name) = board {
+                print!("[{name}] ");
+            }
             let em = crate::render::screen::em_metres(&panel);
             let h = letter_height(&panel.text, em);
             let reach = h / MUST_READ_DEG.to_radians().tan();
@@ -1170,12 +1187,26 @@ mod tests {
                 let Some(ins) = ins else {
                     continue;
                 };
+                let danger = |p: Vec2| map.region_at(p.to_array()).map_or(0, |r| r.danger);
                 let from = match near {
-                    // Back along the road, the way you walk up it.
-                    Some((d, q, along)) if d < 25.0 => [q + along * 10.0, q - along * 10.0]
-                        .into_iter()
-                        .min_by(|a, b| a.distance(ins).total_cmp(&b.distance(ins)))
-                        .unwrap(),
+                    // Back along the road, the way you walk up it: from the
+                    // quieter side where the road crosses into hot ground (a
+                    // warning faces whoever is about to cross, `map_gradient`),
+                    // else from the truck's side.
+                    Some((d, q, along)) if d < 25.0 => {
+                        let (a, b) = (q + along * 10.0, q - along * 10.0);
+                        match danger(a).cmp(&danger(b)) {
+                            std::cmp::Ordering::Less => a,
+                            std::cmp::Ordering::Greater => b,
+                            std::cmp::Ordering::Equal => {
+                                if a.distance(ins) <= b.distance(ins) {
+                                    a
+                                } else {
+                                    b
+                                }
+                            }
+                        }
+                    }
                     _ => ins,
                 };
                 // The board faces the marker's +Z, turned by its rot.
