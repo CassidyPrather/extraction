@@ -96,6 +96,8 @@ pub struct Doings {
     pub out: bool,
     /// Reported shots this tick.
     pub shots: u32,
+    /// Distress flares burst this tick (`distress::STIR` each).
+    pub flares: u32,
     /// A machine has you this tick.
     pub fought: bool,
     /// On hot ground this tick, and whether you just went in.
@@ -209,7 +211,10 @@ impl Pressure {
             return None;
         }
         let parts = [
-            (Why::Noise, SHOT * d.shots as f32),
+            (
+                Why::Noise,
+                SHOT * d.shots as f32 + super::distress::STIR * d.flares as f32,
+            ),
             (Why::Fight, if d.fought { FIGHTING * dt } else { 0.0 }),
             (
                 Why::Ground,
@@ -297,6 +302,8 @@ impl Plugin for PressurePlugin {
 #[derive(Resource, Debug, Default)]
 pub struct Doing {
     pub shots: u32,
+    /// Distress flares that burst this tick (`distress`).
+    pub flares: u32,
     pub was_hot: bool,
 }
 
@@ -346,6 +353,7 @@ fn tally_pressure(
     let d = Doings {
         out: in_zone,
         shots: if only_broken { 0 } else { shots },
+        flares: std::mem::take(&mut doing.flares),
         fought,
         hot,
         into_hot: hot && !doing.was_hot,
