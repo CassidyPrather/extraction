@@ -20,11 +20,17 @@ pub const HOT: u8 = 2;
 /// does off the way (`map_breadcrumbs::READ_ANGLE`); not the skyline's
 /// smaller allowance: a tell is found in the frame without a caption.
 pub const READ_ANGLE: f32 = crate::map_breadcrumbs::READ_ANGLE;
-/// It must read from the last stretch before the line, this far short of
-/// it (m): what a newcomer sees coming up to it, the approach frame's
-/// 20 m among it; not from far back along the way, past something else.
+/// It must read from the approach, from this far short of the line (m)
+/// back to [`READ_FROM`]: what a newcomer sees coming up to it, not only
+/// once they're at it.
 pub const SHORT: f32 = 8.0;
-pub const READ_FROM: f32 = 30.0;
+pub const READ_FROM: f32 = APPROACH;
+/// And it must be ahead, within this of the way's heading where it's
+/// read from (degrees): in the frame walking on, not over a shoulder. A
+/// tell beside the way short of the line reads from further back, where
+/// it's ahead; the heading, not a narrow window, keeps out what's only
+/// passed.
+pub const AHEAD: f32 = 35.0;
 /// How near the line a thing outside the hot ground still tells of it (m).
 pub const BY_THE_LINE: f32 = 40.0;
 
@@ -159,7 +165,24 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 let d = dist(at, to).max(0.1);
                 (at, [(to[0] - at[0]) / d, (to[1] - at[1]) / d])
             };
-            let approach: Vec<P2> = approach.into_iter().step_by(3).collect();
+            // Each reading point with the way's heading there (toward the
+            // line: the point before it in `approach`, or the line itself).
+            let approach: Vec<(P2, P2)> = (0..approach.len())
+                .step_by(3)
+                .map(|k| {
+                    let at = approach[k];
+                    let to = if k == 0 { w[1] } else { approach[k - 1] };
+                    let to = if dist(at, to) < 0.1 { w[1] } else { to };
+                    let d = dist(at, to).max(0.1);
+                    (at, [(to[0] - at[0]) / d, (to[1] - at[1]) / d])
+                })
+                .collect();
+            let ahead = |p: P2, h: P2, at: P2| {
+                let d = dist(p, at);
+                d < 1.0
+                    || (h[0] * (at[0] - p[0]) + h[1] * (at[1] - p[1])) / d
+                        >= AHEAD.to_radians().cos()
+            };
             let mut signals = Vec::new();
             for (kind, name, at, h, reach, size) in &tells {
                 // Its own: in the hot ground being entered, or by the line.
@@ -169,7 +192,8 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 }
                 let near = approach
                     .iter()
-                    .map(|p| (dist(*p, *at), *p))
+                    .filter(|(p, h)| ahead(*p, *h, *at))
+                    .map(|(p, _)| (dist(*p, *at), *p))
                     .filter(|(d, _)| d <= reach)
                     // Found in the frame without a caption: big enough at
                     // its distance (the lamps aside: they glow), from a
