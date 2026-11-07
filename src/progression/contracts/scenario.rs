@@ -9,7 +9,8 @@
 //! is open.
 //!
 //! Every contract's steps lie in one valley (a photograph can be taken in
-//! any), so each runs whole on its own map:
+//! any), so each runs whole on its own map ([`VALLEYS`]). Without `--map`
+//! it loads that valley; with another it fails at once, saying which:
 //!
 //! - `contract_post_counter`, `contract_mast_relay`, `contract_annas_tape`,
 //!   `contract_the_overflow`, `contract_keepers_log`: `--map marrow_creek`
@@ -77,6 +78,40 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ("contract_deputys_lamp", "deputys_lamp"),
     ("contract_charging_manifest", "charging_manifest"),
 ];
+
+/// (contract, valley): where each contract's steps lie, so its run loads
+/// there without `--map` (`LaunchOptions::parse`) and says so at once if
+/// told another (a run on the wrong map only failed later, "no <item>
+/// laid by its place", and read as a broken build).
+pub const VALLEYS: &[(&str, &str)] = &[
+    ("post_counter", "marrow_creek"),
+    ("mast_relay", "marrow_creek"),
+    ("annas_tape", "marrow_creek"),
+    ("the_overflow", "marrow_creek"),
+    ("keepers_log", "marrow_creek"),
+    ("hajek_tin", "kettle_pass"),
+    ("the_canary", "kettle_pass"),
+    ("deputys_lamp", "kettle_pass"),
+    ("walker_portrait", "cinder_works"),
+    ("the_heavy", "cinder_works"),
+    ("charging_manifest", "cinder_works"),
+    ("scour_key", "sallow_reservoir"),
+    ("up_the_fell", "rime_fell"),
+];
+
+/// The valley a contract scenario (`contract_<id>`) runs in.
+pub fn valley(scenario: &str) -> Option<&'static str> {
+    let (_, id) = SCENARIOS.iter().find(|(s, _)| *s == scenario)?;
+    VALLEYS.iter().find(|(c, _)| c == id).map(|(_, v)| *v)
+}
+
+/// Why a contract scenario can't run on `map`: it's not the contract's
+/// valley.
+pub fn wrong_valley(scenario: &str, map: &str) -> Option<String> {
+    let (_, id) = SCENARIOS.iter().find(|(s, _)| *s == scenario)?;
+    let v = valley(scenario)?;
+    (v != map).then(|| format!("contract {id} lives in {v}: pass --map {v}"))
+}
 
 /// The last task while the scenario runs: the director adds each step's.
 const IDLE: f32 = 4.5;
@@ -417,6 +452,11 @@ pub fn direct(
     };
     match run.stage {
         Stage::Setup => {
+            if let Some(why) = wrong_valley(name, &scene.opts.map) {
+                fail(&mut bot, why);
+                advance(&mut run, Stage::Done);
+                return;
+            }
             progression.0 = career_for(c);
             // Home, and the driver offers it with its kit.
             raid.phase = Phase::Extracting { left: 0.3 };
@@ -1080,6 +1120,44 @@ mod tests {
         }
         for (s, _) in SCENARIOS {
             assert!(crate::bot::scenarios::OPT_IN.contains(s), "{s}: not opt-in");
+        }
+    }
+
+    /// Run without `--map`, each contract's scenario loads its own valley
+    /// (it used the default one and failed late, "no <item> laid by its
+    /// place"); told another, it says where the contract lives at once.
+    #[test]
+    fn every_contract_runs_in_its_own_valley() {
+        assert_eq!(VALLEYS.len(), SCENARIOS.len());
+        for (s, id) in SCENARIOS {
+            let c = contract(id).unwrap();
+            let v = valley(s).unwrap_or_else(|| panic!("{s}: no valley"));
+            // The steps that name a valley name this one.
+            for step in c.steps {
+                use extraction_core::contracts::Step;
+                if let Step::Scout { map, .. } | Step::Bring { map, .. } | Step::Plant { map, .. } =
+                    step
+                {
+                    assert_eq!(*map, v, "{s}: a step in {map}");
+                }
+            }
+            let parse = |a: String| LaunchOptions::parse(a.split(' ').map(String::from));
+            let o = parse(format!("--headless --scenario {s}"));
+            assert_eq!(o.map, v, "{s} without --map");
+            let o = parse(format!("--headless --scenario {s} --map {v}"));
+            assert_eq!(o.map, v, "{s} with its own --map");
+            assert_eq!(wrong_valley(s, v), None);
+            let other = if v == "marrow_creek" {
+                "kettle_pass"
+            } else {
+                "marrow_creek"
+            };
+            let o = parse(format!("--headless --scenario {s} --map {other}"));
+            assert_eq!(o.map, other, "{s}: an explicit --map is kept");
+            assert_eq!(
+                wrong_valley(s, other).as_deref(),
+                Some(format!("contract {id} lives in {v}: pass --map {v}").as_str())
+            );
         }
     }
 }
