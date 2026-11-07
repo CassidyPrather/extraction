@@ -30,6 +30,11 @@
 //! | `clearcoat_perceptual_roughness` | the port's y | `clearcoat` > 0 |
 //! | `ior` | the port's z | transmission, as above |
 //!
+//! The muzzle and port are in the gun's space, shared by every part
+//! wearing the material; each part's place in the gun at rest is in its
+//! per-instance `MeshTag` ([`tag_for`]), taken off in the shader. A tag is
+//! instance data, not a key: no new pipelines or batches.
+//!
 //! Why it is safe:
 //! - [`encode`] refuses any material with transmission or clearcoat, and
 //!   never turns either on, so Bevy never reads the fields as what they
@@ -101,6 +106,24 @@ pub fn encode(
     true
 }
 
+/// A part's place in its gun (metres, the gun's space), for its
+/// `MeshTag`: 2 mm steps, ±1.02 m an axis, and a flag (bit 30) so that a
+/// mesh with no tag (a resting gun's merged mesh, in the gun's own space)
+/// reads as no offset.
+pub fn tag_for(offset: Vec3) -> u32 {
+    let q = |v: f32| ((v / 0.002).round() + 512.0).clamp(0.0, 1023.0) as u32;
+    0x4000_0000 | q(offset.x) | (q(offset.y) << 10) | (q(offset.z) << 20)
+}
+
+/// The offset a tag carries, as the shader reads it.
+pub fn offset_of(tag: u32) -> Vec3 {
+    if tag & 0x4000_0000 == 0 {
+        return Vec3::ZERO;
+    }
+    let f = |s: u32| (((tag >> s) & 1023) as f32 - 512.0) * 0.002;
+    Vec3::new(f(0), f(10), f(20))
+}
+
 /// Reads one field of the material, bound or bindless.
 fn field(name: &str) -> String {
     format!(
@@ -136,8 +159,15 @@ const WEAR_BODY: &str = r#"
             let xw_l = xw_late / 99.0;
             // The muzzle and port, from the mesh's space to the world.
             let xw_a = mesh[in.instance_index].world_from_local;
-            let xw_m4 = vec4<f32>(xw_attenuation_color.xyz, 1.0);
-            let xw_p4 = vec4<f32>(xw_attenuation_color.w, xw_clearcoat_perceptual_roughness, xw_ior, 1.0);
+            // In the gun's space; the part's place in the gun (its tag,
+            // `tag_for`) taken off puts them in the part's own.
+            let xw_tag = mesh[in.instance_index].tag;
+            var xw_off = vec3<f32>(0.0);
+            if ((xw_tag & 0x40000000u) != 0u) {
+                xw_off = (vec3<f32>(f32(xw_tag & 1023u), f32((xw_tag >> 10u) & 1023u), f32((xw_tag >> 20u) & 1023u)) - 512.0) * 0.002;
+            }
+            let xw_m4 = vec4<f32>(xw_attenuation_color.xyz - xw_off, 1.0);
+            let xw_p4 = vec4<f32>(vec3<f32>(xw_attenuation_color.w, xw_clearcoat_perceptual_roughness, xw_ior) - xw_off, 1.0);
             let xw_muzzle = vec3<f32>(dot(xw_a[0], xw_m4), dot(xw_a[1], xw_m4), dot(xw_a[2], xw_m4));
             let xw_port = vec3<f32>(dot(xw_a[0], xw_p4), dot(xw_a[1], xw_p4), dot(xw_a[2], xw_p4));
             let xw_P = pbr_input.world_position.xyz;
@@ -290,6 +320,23 @@ mod tests {
             code(CLASS_RUSTS, 0.0, 0.0, 0.0) < 0.0,
             "a clean gun is still marked"
         );
+    }
+
+    #[test]
+    fn a_tag_carries_a_parts_place() {
+        for v in [
+            Vec3::ZERO,
+            Vec3::new(0.0, 0.062, 0.0),
+            Vec3::new(0.012, -0.038, 0.041),
+            Vec3::new(0.0, 0.045, -0.847),
+        ] {
+            let back = offset_of(tag_for(v));
+            assert!(
+                (back - v).abs().max_element() <= 0.001,
+                "{v} came back {back}"
+            );
+        }
+        assert_eq!(offset_of(0), Vec3::ZERO, "no tag, no offset");
     }
 
     #[test]
