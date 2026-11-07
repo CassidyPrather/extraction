@@ -763,13 +763,14 @@ impl Solid {
 }
 
 /// Where you stand once out of each underground site's kiosks, its
-/// entrance and its exits: the site's id, and a step out from the door.
-pub fn kiosk_ways_out(map: &MapDef) -> Vec<(String, P2)> {
+/// entrance and its exits: the site's id, a step out from the door, and
+/// the way the door faces (a unit vector, out of it).
+pub fn kiosk_ways_out(map: &MapDef) -> Vec<(String, P2, P2)> {
     solids(map)
         .iter()
         .filter_map(|s| {
             let (at, out) = s.kiosk_door()?;
-            Some((s.prefab.clone(), geom::add(at, geom::scale(out, 1.5))))
+            Some((s.prefab.clone(), geom::add(at, geom::scale(out, 1.5)), out))
         })
         .collect()
 }
