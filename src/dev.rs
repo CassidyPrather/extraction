@@ -694,14 +694,17 @@ fn gallery(
                             let nav = nav.as_ref().map(|n| n.0.clone());
                             match nav {
                                 // (Held laying, by `turn_line_up`: with
-                                // nothing to do it would leave at once.)
+                                // nothing to do it would leave at once.
+                                // It faces its way out, so YAW turns it
+                                // too: a metre from it toward the camera
+                                // and turned, as a walker's `yaw` faces.)
                                 Some(nav) => crate::robots::minelayer::spawn_minelayer(
                                     &mut commands,
                                     &zone,
                                     &nav,
                                     at,
                                     Vec::new(),
-                                    at,
+                                    at - Vec3::new(face_cam.sin(), 0.0, face_cam.cos()),
                                 ),
                                 None => continue,
                             }
