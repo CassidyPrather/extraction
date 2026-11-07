@@ -13,8 +13,10 @@ only The Hollow announced itself. After:
 - **Pumping station** is cut down to the station and its yard. Its
   polygon had reached about 100 m out over the fields and the Forest
   path, a way home that was counted hot without being hot.
-- **Radio mast**, the mast_relay job's two ways in: a guard booth at each,
-  the relay compound's own.
+- **Radio mast**, the mast_relay job's two ways in: a guard booth on the
+  east way, and the relay's jeep just inside the compound on the north
+  one. A booth there stood on the slope, and its door step failed the
+  legged machines' footing test (feet_gauge).
 - **Bus depot** and **Rail yard**: a wrecked car by the way, short of the
   line.
 - **The depot exit's landing** (the coordinator's note): two marker posts
