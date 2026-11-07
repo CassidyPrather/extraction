@@ -88,7 +88,7 @@ pub fn spawn_pylon(commands: &mut Commands, site: Vec3, run_for: f32, exit: Vec3
             Senses {
                 sight: 70.0,
                 fov_deg: 360.0,
-                hearing: 0.4,
+                hearing: super::senses::SIGHT_ONLY,
                 eye: Vec3::new(0.0, CABINET.y + 0.3, 0.0),
             },
             Awareness::default(),

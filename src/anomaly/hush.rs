@@ -154,6 +154,23 @@ mod tests {
             .find(|(a, _)| a.kind == AnomalyKind::Hush)
             .map(|(a, g)| (g.translation(), a.radius))
             .expect("the Hollow's hush");
+        // A walker within earshot, for a shot to be reported by (only a
+        // machine that hears reports one: `robots::director::heard_by_any`).
+        let ear = at + Vec3::new(r + 30.0, 0.0, 0.0);
+        app.world_mut().spawn((
+            crate::robots::Robot {
+                kind: crate::robots::RobotKind::Walker,
+                wrecked: false,
+            },
+            crate::robots::Senses {
+                sight: 0.0,
+                fov_deg: 90.0,
+                hearing: 1.2,
+                eye: Vec3::ZERO,
+            },
+            Transform::from_translation(ear),
+            GlobalTransform::from_translation(ear),
+        ));
         (app, p, at, r)
     }
 

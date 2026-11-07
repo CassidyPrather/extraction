@@ -206,16 +206,32 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
 }
 
 /// Loud noises get reported; a team goes to look, late.
+#[allow(clippy::type_complexity)]
 pub(super) fn hear_reports(
     mut noises: MessageReader<Noise>,
     mut director: ResMut<Director>,
     mut doing: ResMut<super::pressure::Doing>,
     players: Query<(), With<crate::player::Player>>,
     hushes: Option<Res<crate::anomaly::hush::Hushes>>,
+    ears: Query<(
+        &Robot,
+        &super::Senses,
+        &GlobalTransform,
+        Option<&super::indoor::LocalNav>,
+    )>,
 ) {
     for n in noises.read() {
         // Nothing made in a Hush is heard (`anomaly::hush`).
         if hushes.as_ref().is_some_and(|h| h.eats(n.at)) {
+            continue;
+        }
+        // Reported only if something that hears was in its reach: nothing
+        // hears in the empty, so nothing comes, and nothing stirs
+        // (`senses::SIGHT_ONLY`: the kinds that only see don't report it).
+        if !heard_by_any(
+            ears.iter().map(|(r, s, g, l)| (r, s, g.translation(), l)),
+            n,
+        ) {
             continue;
         }
         let by_player = n.source.is_some_and(|s| players.contains(s));
@@ -231,6 +247,28 @@ pub(super) fn hear_reports(
             director.response_cooldown = 45.0;
         }
     }
+}
+
+/// Whether a machine that hears (`Senses::hearing` above
+/// `senses::SIGHT_ONLY`), whole, was within the noise's reach of it; a
+/// resident only of a noise in its own site (`indoor::LocalNav`).
+pub fn heard_by_any<'a>(
+    mut ears: impl Iterator<
+        Item = (
+            &'a Robot,
+            &'a super::Senses,
+            Vec3,
+            Option<&'a super::indoor::LocalNav>,
+        ),
+    >,
+    n: &Noise,
+) -> bool {
+    ears.any(|(r, s, at, local)| {
+        !r.wrecked
+            && s.hearing > super::senses::SIGHT_ONLY
+            && at.distance(n.at) < n.radius * s.hearing
+            && local.is_none_or(|l| l.contains(n.at))
+    })
 }
 
 /// Night visits: queued as they're sent (clearing responses near them),
