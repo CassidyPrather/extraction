@@ -66,6 +66,13 @@ struct LastHit {
 #[derive(Resource, Default)]
 struct WornMaterials(HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>);
 
+/// A part still going but failing: what sends up a machine's soot
+/// (`fx::sputter`), gutters its lights ([`gutter`]) and may set off its
+/// flare. One test for all three, so they can't drift apart.
+pub fn failing(part: &RobotPart) -> bool {
+    part.alive() && Band::of(part.hp / part.max_hp.max(1e-3)) == Band::Failing
+}
+
 /// A band's number: 0 whole, 1 hurt, 2 failing (and gone: what's left of
 /// a dead part is failing to look at).
 pub fn band_of(part: &RobotPart) -> u8 {
@@ -379,6 +386,15 @@ const BETWEEN: (f32, f32) = (0.15, 1.1);
 /// A dropped-out light's glow, of its own.
 const DIM: f32 = 0.06;
 
+/// `EXTRACTION_GUTTER=out`, read once.
+struct HeldOut(bool);
+
+impl Default for HeldOut {
+    fn default() -> Self {
+        Self(std::env::var("EXTRACTION_GUTTER").is_ok_and(|v| v == "out"))
+    }
+}
+
 #[derive(Default)]
 struct GutterState {
     out: bool,
@@ -400,12 +416,14 @@ fn gutter(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: ResMut<WornMaterials>,
     mut states: Local<HashMap<Entity, GutterState>>,
+    held: Local<HeldOut>,
     time: Res<Time>,
 ) {
+    let held = &held.0;
     let dt = time.delta_secs();
     let failing: HashSet<Entity> = parts
         .iter()
-        .filter(|p| p.alive() && band_of(p) == 2)
+        .filter(|p| failing(p))
         .map(|p| p.robot)
         .collect();
     // Back as it was, where a machine's mended or wrecked (a wreck's
@@ -425,7 +443,10 @@ fn gutter(
         if st.left > 0.0 {
             continue;
         }
-        st.out = !st.out;
+        // `EXTRACTION_GUTTER=out`: held out, for a still of how a light
+        // that's dropped out looks (a still catches one about a frame in
+        // five).
+        st.out = !st.out || *held;
         st.seed = st
             .seed
             .wrapping_mul(6_364_136_223_846_793_005)
