@@ -5466,7 +5466,11 @@ the Hollow.";
                     Vec2::new(7.304625, -2.495706),
                     Vec2::new(-0.6695702, -12.451674),
                 );
-                if meets_deck_side(&decks, a, b, &ground) {
+                assert!(
+                    meets_deck_side(&decks, a, b, &ground),
+                    "the District bridge leg should cut the deck's corner"
+                );
+                {
                     let way = round_deck_sides(&decks, a, vec![b], &ground);
                     let mut at = a;
                     for p in &way {
