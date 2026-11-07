@@ -67,6 +67,9 @@ pub struct WarningBoard {
     pub prop: &'static str,
     pub area: Vec2,
     pub centre_y: f32,
+    /// How far in front of the prop's origin the area's face is (m): its
+    /// `text_face`'s z. The words go just proud of it.
+    pub face_z: f32,
     pub ground: &'static str,
 }
 
@@ -78,6 +81,7 @@ pub const WARNING_BOARDS: &[WarningBoard] = &[
         prop: "warning_gate",
         area: Vec2::new(2.4, 0.5),
         centre_y: 1.1,
+        face_z: 0.039,
         ground: "Cream",
     },
     // On two posts: three short lines, read from ~12 m.
@@ -85,6 +89,7 @@ pub const WARNING_BOARDS: &[WarningBoard] = &[
         prop: "warning_hoarding",
         area: Vec2::new(2.0, 1.2),
         centre_y: 1.6,
+        face_z: 0.040,
         ground: "Cream",
     },
     // A railway's enamel plate on a post, at eye height.
@@ -92,6 +97,7 @@ pub const WARNING_BOARDS: &[WarningBoard] = &[
         prop: "warning_enamel",
         area: Vec2::new(1.0, 0.6),
         centre_y: 1.45,
+        face_z: 0.050,
         ground: "Enamel",
     },
     // Stencilled on a concrete fence slab.
@@ -99,6 +105,7 @@ pub const WARNING_BOARDS: &[WarningBoard] = &[
         prop: "warning_wall",
         area: Vec2::new(1.6, 0.8),
         centre_y: 1.6,
+        face_z: 0.050,
         ground: "Concrete",
     },
     // Stencilled on a steel booth door, on a panel of fresh flat paint
@@ -107,6 +114,7 @@ pub const WARNING_BOARDS: &[WarningBoard] = &[
         prop: "warning_door",
         area: Vec2::new(1.0, 0.6),
         centre_y: 1.6,
+        face_z: 0.034,
         ground: "Pebble",
     },
 ];
@@ -273,7 +281,7 @@ fn spawn_warning(
         crate::render::legibility::TextSource::Sign,
         warning_panel(text, b),
         warning_ink(b),
-        Transform::from_xyz(0.0, b.centre_y, 0.003),
+        Transform::from_xyz(0.0, b.centre_y, b.face_z + 0.003),
         Visibility::default(),
         ChildOf(root),
     ));
@@ -648,6 +656,26 @@ mod sign_tests {
                 .ground
                 .is_none()
         );
+    }
+
+    #[test]
+    fn every_boards_words_sit_on_its_face() {
+        // Each prop's text_face, where its words are put: in front of the
+        // origin by its face_z (3 mm in front of the origin, they were
+        // inside the boards, the areas blank).
+        for b in WARNING_BOARDS {
+            let path = crate::asset_root_path().join(crate::render::world_props::path(b.prop));
+            let face = crate::capture::seated::node_transform(&path, "text_face").unwrap();
+            let at = face.to_scale_rotation_translation().2;
+            assert!(
+                (at.z - b.face_z).abs() < 0.002,
+                "{}: face at z {} not {}",
+                b.prop,
+                at.z,
+                b.face_z
+            );
+            assert!((at.y - b.centre_y).abs() < 0.005, "{}", b.prop);
+        }
     }
 
     #[test]
