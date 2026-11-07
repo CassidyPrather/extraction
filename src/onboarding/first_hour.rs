@@ -5603,6 +5603,17 @@ mod indoor_tests {
                         continue;
                     };
                     let from = plan.to_local(at + Vec3::Y * 1.0).xz();
+                    // (Shut off as it stands, by heat not vented or a door
+                    // held on power: no way in either, so not where it'd be.)
+                    let into = plan
+                        .doors
+                        .iter()
+                        .filter_map(|d| d.outside)
+                        .any(|o| plan.path(o, from).is_some());
+                    if !into {
+                        rooms -= 1;
+                        continue;
+                    }
                     match out_of(plan, from) {
                         None => bad.push(format!("{what}: no way out")),
                         Some((_, end)) if on_its_floors(plan, end) => {
