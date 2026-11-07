@@ -24,8 +24,12 @@ only The Hollow announced itself. After:
   footing test.) It was held a while: with it placed, Onboarding's bot
   drew another plan in second_hour that walked it under the Forest path
   footbridge to reach the deck from below. The bot's planner now goes on
-  and off a deck only by its ground ends (Onboarding), and the jeep is
-  back.
+  and off a deck only by its ground ends (Onboarding), but the jeep is
+  held again: its breakable parts change second_hour's loot roll, and the
+  raid that follows walks the bot onto the District road bridge's north
+  end and then west through its railing, toward (-0.7, -12.5). The bridge
+  walk is Onboarding's; the jeep comes back when their fix lands. Until
+  then the north way's crossing stays untold.
 
 A tell counts only if it can be found in the approach frame without a
 caption. `map_gradient` holds this: the tell must look big enough for
