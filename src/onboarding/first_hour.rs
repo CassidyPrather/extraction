@@ -1299,21 +1299,31 @@ pub(super) fn direct_raid(
     });
     // A machine on it: noticed, aimed at, locked on, its sweep, shot at.
     let threatened = in_its_sights || noticed_now || fired_on;
-    // A crawler charging at it: those who'd take a machine on shoot it (it
-    // goes down to a few rounds); the rest back out the way they came, out
-    // of its line. (No answer at all, the newcomers stood in its line, or
+    // A crawler charging at it: armed, it shoots it (it goes down to a few
+    // rounds); with nothing to shoot, it backs out the way it came, out of
+    // its line. (No answer at all, the newcomers stood in its line, or
     // pressed on into it, and were zapped down.)
     if let Some(from) = charge_from
         && now - state.crawled_at > CRAWLER_EVERY
         && world.alive(player)
     {
         state.crawled_at = now;
-        let answer = if armed_now && (p.reckless || p.hoards) {
+        // (Every armed one: backing out of a shelter's dorm at a walk, the
+        // careful newcomers made a metre between zaps and went down.)
+        let answer = if armed_now {
             state.fought_at = now;
             state.note(now, Kind::Learned, "a crawler crackling at it: shot it");
             take_it_on()
         } else {
-            state.note(now, Kind::Learned, "a crawler crackling at it: backed out");
+            let packed = world.packed_guns.iter().any(|(_, _, by)| by.0 == player);
+            state.note(
+                now,
+                Kind::Learned,
+                format!(
+                    "a crawler crackling at it: backed out (no gun to hand{})",
+                    if packed { "; one in the pack" } else { "" }
+                ),
+            );
             let (out, _) = way_out(&world, &view, &plans, here);
             if out.is_empty() {
                 walk_away(&world, here, from)
