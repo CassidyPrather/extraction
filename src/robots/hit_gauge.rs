@@ -1023,6 +1023,19 @@ pub const SHOW_EVERY: u32 = 12;
 /// frame taken has the hits landing on the machines worn by them
 /// (`scripts/hit_gauge.sh`).
 fn show(world: &mut World, g: &mut HitGauge) {
+    // `EXTRACTION_HIT_SHOW=failing`: every part left failing and held
+    // there, nothing fired: how a failing machine looks, with no hit's
+    // flash in the frame.
+    if std::env::var("EXTRACTION_HIT_SHOW").is_ok_and(|v| v == "failing") {
+        if g.frame >= STAND {
+            for mut p in world.query::<&mut RobotPart>().iter_mut(world) {
+                if p.alive() {
+                    p.hp = p.hp.min(p.max_hp * FAILING);
+                }
+            }
+        }
+        return;
+    }
     let since = g.frame.saturating_sub(SHOW_HITS);
     let landing = g.frame >= SHOW_HITS && since % SHOW_EVERY == 0;
     let mending = g.frame > SHOW_HITS && since % SHOW_EVERY == 1;

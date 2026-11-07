@@ -476,7 +476,7 @@ fn sputter(
             }
         }
     }
-    // A machine with a part failing sends up a thread of smoke from it,
+    // A machine with a part failing sends up a thread of soot from it,
     // whatever the part (a plate's sparks and an eye's spit are too small
     // to tell at 30 m): one a machine, never smaller at the eye than
     // [`wisp_floor`], on the shared puff batch (no mesh of its own, no
@@ -494,7 +494,9 @@ fn sputter(
         });
         let d = eye.map_or(0.0, |e| e.distance(at));
         let size = (0.3 * at_range(eye, at).sqrt()).max(wisp_floor(d));
-        puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+        // Soot, not pale smoke: grey on an overcast sky is a big puff no
+        // one sees.
+        puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, true, size);
         n_puffs += 1;
     }
 }
