@@ -35,6 +35,16 @@ pub const NEAR: f32 = 2.5;
 pub const SETTLE: u32 = 108;
 /// Frames the line-up stands before the first round (dressed, settled).
 pub const STAND: u32 = 300;
+/// The least a round's effect spans at the eye (degrees), out to 30 m:
+/// what reads as a hit in a fight at 15 to 25 m.
+pub const MIN_SPAN: f32 = super::fx::MIN_SPAN_DEG;
+/// The same as an area at the eye (pixels, [`PX_PER_DEG`]): a hit's
+/// pieces cover at least a square [`MIN_SPAN`] on a side. (Its span alone
+/// can't tell: sparks fly half a metre in 100 ms, too thin to see.)
+pub const MIN_AREA: f32 = MIN_SPAN * PX_PER_DEG * MIN_SPAN * PX_PER_DEG;
+/// How far (m, along the ground: a flyer rises to its height) a line-up
+/// machine may go from where it was put by the time it stands.
+pub const STAY: f32 = 0.5;
 /// The first round's damage (a rifle round's, `items`), or less on a part
 /// with little to it.
 const ROUND: f32 = 40.0;
@@ -52,6 +62,12 @@ pub struct Row {
     pub fx_at: Option<u32>,
     pub cues: Vec<&'static str>,
     pub cue_at: Option<u32>,
+    /// The first round's effect at its biggest within the window: its
+    /// span at the eye (degrees) and its area there (pixels, [`Seen`]).
+    pub span: f32,
+    pub area: f32,
+    /// How far off the camera was (m).
+    pub dist: f32,
     /// The second round's.
     pub fx2: usize,
     pub cues2: Vec<&'static str>,
@@ -89,11 +105,14 @@ impl Row {
             }
         };
         format!(
-            "{}\t{:?}\tfx {} (frame {})\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\t{}",
+            "{}\t{:?}\tfx {} (frame {})\t{:.2} deg, {:.0} px at {:.0} m\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\t{}",
             self.kind,
             self.role,
             self.fx,
             self.fx_at.map_or("-".into(), |f| f.to_string()),
+            self.span,
+            self.area,
+            self.dist,
             cues(&self.cues),
             self.cue_at.map_or("-".into(), |f| f.to_string()),
             self.fx2,
@@ -137,6 +156,12 @@ pub struct HitGauge {
     /// Each machine as it stands, and how many of its meshes the player's
     /// camera draws ([`drawn_meshes`]).
     pub drawn: Vec<(String, usize)>,
+    /// Each machine and how far (m) it went between its first frame and
+    /// its standing one: a line-up machine stands where it's put.
+    pub moved: Vec<(String, f32)>,
+    placed: HashMap<Entity, Vec3>,
+    /// First rounds only, for how a hit reads at range.
+    pub quick: bool,
     pub done: bool,
 }
 
@@ -322,9 +347,11 @@ fn aim(world: &mut World, part: Entity, toward: Vec3) -> (Vec3, Vec3) {
     hit.unwrap_or((centre, back))
 }
 
+/// Where the player's view is (not a capture camera: the impostors' rigs
+/// stand far under the map).
 fn camera_at(world: &mut World) -> Vec3 {
     world
-        .query_filtered::<&GlobalTransform, With<Camera3d>>()
+        .query_filtered::<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>()
         .iter(world)
         .next()
         .map(|g| g.translation())
@@ -347,7 +374,23 @@ fn shoot(world: &mut World, part: Entity, point: Vec3, normal: Vec3, damage: f32
 }
 
 /// New effect pieces and sounds near the point since the round went in.
-fn since(world: &mut World, g: &HitGauge, robot: Entity) -> (usize, Vec<&'static str>) {
+/// Pixels a degree on the desktop view the sheets are shot at: 1080 lines
+/// over the free camera's 75 degrees (`render::desktop_fov`).
+pub const PX_PER_DEG: f32 = 1080.0 / 75.0;
+
+/// What showed of a round since it went in: effect pieces near the point,
+/// the cues placed there, and how big the effect is at the eye: the
+/// angle (degrees) of the sphere round the point that holds every piece,
+/// and the pieces' summed area square to the eye in pixels
+/// ([`PX_PER_DEG`]).
+struct Seen {
+    fx: usize,
+    cues: Vec<&'static str>,
+    span: f32,
+    area: f32,
+}
+
+fn since(world: &mut World, g: &HitGauge, robot: Entity) -> Seen {
     let mut mine: HashSet<Entity> = subtree(world, robot).into_iter().collect();
     let mut q = world.query::<(Entity, &super::wear::DrawnFor)>();
     let roots: Vec<Entity> = q.iter(world).map(|(e, _)| e).collect();
@@ -355,16 +398,35 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> (usize, Vec<&'static
         mine.extend(subtree(world, r));
     }
     let p = g.point;
-    let mut fx = 0;
-    let mut q =
-        world.query_filtered::<(Entity, &GlobalTransform), Or<(With<Mesh3d>, With<PointLight>)>>();
-    for (e, gt) in q.iter(world) {
+    let eye = camera_at(world);
+    let d = eye.distance(p).max(0.1);
+    let (mut fx, mut reach, mut area) = (0, 0.0f32, 0.0f32);
+    let mut q = world.query_filtered::<(
+        Entity,
+        &GlobalTransform,
+        Option<&bevy::camera::primitives::Aabb>,
+        Has<Mesh3d>,
+    ), Or<(With<Mesh3d>, With<PointLight>)>>();
+    for (e, gt, aabb, mesh) in q.iter(world) {
         if g.meshes_before.contains(&e) || mine.contains(&e) {
             continue;
         }
-        if gt.translation().distance(p) < NEAR {
-            fx += 1;
+        let at = gt.translation();
+        if at.distance(p) >= NEAR {
+            continue;
         }
+        fx += 1;
+        if !mesh {
+            continue;
+        }
+        // Its half size in the world: its bounds, scaled.
+        let half = aabb.map_or(Vec3::splat(0.01), |a| Vec3::from(a.half_extents)) * gt.scale();
+        reach = reach.max(at.distance(p) + half.max_element());
+        // Square to the eye: its two largest sides.
+        let mut s = [half.x, half.y, half.z];
+        s.sort_by(|a, b| b.total_cmp(a));
+        let deg = |m: f32| (m / d).atan().to_degrees();
+        area += deg(2.0 * s[0]) * deg(2.0 * s[1]) * PX_PER_DEG * PX_PER_DEG;
     }
     let mut cues = Vec::new();
     let mut q = world.query::<(Entity, &crate::audio::Placed, &Transform)>();
@@ -376,7 +438,12 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> (usize, Vec<&'static
             cues.push(placed.cue());
         }
     }
-    (fx, cues)
+    Seen {
+        fx,
+        cues,
+        span: 2.0 * (reach / d).atan().to_degrees(),
+        area,
+    }
 }
 
 fn gauge(world: &mut World) {
@@ -403,7 +470,20 @@ fn step(world: &mut World, g: &mut HitGauge) {
         // off where it can't be seen, shows here).
         let zone = world.get_resource::<crate::world::Zone>().cloned();
         let mut q = world.query_filtered::<(Entity, &GlobalTransform), With<Robot>>();
-        let at: Vec<(Entity, Vec3)> = q.iter(world).map(|(e, g)| (e, g.translation())).collect();
+        // (Where its body is: a physics body's own place, which a pinned
+        // Transform can hide, as a fleeing minelayer's did.)
+        let at: Vec<(Entity, Vec3)> = q
+            .iter(world)
+            .map(|(e, g)| (e, g.translation()))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|(e, p)| (e, world.get::<Position>(e).map_or(p, |b| b.0)))
+            // (A spotter's place is its winch: it sways over it.)
+            .map(|(e, p)| {
+                let winch = world.get::<super::spotter::Spotter>(e).map(|s| s.winch);
+                (e, winch.unwrap_or(p))
+            })
+            .collect();
         let list: Vec<String> = at
             .iter()
             .map(|&(e, p)| {
@@ -417,10 +497,20 @@ fn step(world: &mut World, g: &mut HitGauge) {
             })
             .collect();
         info!("hit gauge: frame {}: {}", g.frame, list.join("; "));
+        if g.frame == 1 {
+            g.placed = at.iter().copied().collect();
+        }
         if g.frame == STAND {
             g.drawn = at
                 .iter()
                 .map(|&(e, _)| (kind_name(world, e), drawn_meshes(world, e)))
+                .collect();
+            g.moved = at
+                .iter()
+                .filter_map(|&(e, p)| {
+                    let was = g.placed.get(&e)?;
+                    Some((kind_name(world, e), was.xz().distance(p.xz())))
+                })
                 .collect();
         }
     }
@@ -477,6 +567,9 @@ fn step(world: &mut World, g: &mut HitGauge) {
             fx_at: None,
             cues: Vec::new(),
             cue_at: None,
+            span: 0.0,
+            area: 0.0,
+            dist: cam.distance(point),
             fx2: 0,
             cues2: Vec::new(),
             marks: 0,
@@ -487,8 +580,15 @@ fn step(world: &mut World, g: &mut HitGauge) {
         return;
     }
     if t <= WINDOW {
-        let (fx, cues) = since(world, g, robot);
+        let Seen {
+            fx,
+            cues,
+            span,
+            area,
+        } = since(world, g, robot);
         let row = g.row.as_mut().unwrap();
+        row.span = row.span.max(span);
+        row.area = row.area.max(area);
         if fx > 0 && row.fx_at.is_none() {
             row.fx_at = Some(t);
         }
@@ -501,6 +601,15 @@ fn step(world: &mut World, g: &mut HitGauge) {
                 row.cues.push(c);
             }
         }
+        return;
+    }
+    // At range (`HIT_GAUGE_QUICK`): how the first round reads is all.
+    if g.quick || std::env::var_os("HIT_GAUGE_QUICK").is_some() {
+        let row = g.row.take().unwrap();
+        info!("hit gauge: {}", row.line());
+        g.rows.push(row);
+        g.next += 1;
+        g.at = 0;
         return;
     }
     // The second round, a little after: the part left failing.
@@ -516,7 +625,7 @@ fn step(world: &mut World, g: &mut HitGauge) {
         return;
     }
     if t > second && t <= second + WINDOW {
-        let (fx, cues) = since(world, g, robot);
+        let Seen { fx, cues, .. } = since(world, g, robot);
         let row = g.row.as_mut().unwrap();
         row.fx2 = row.fx2.max(fx);
         for c in cues {
@@ -590,20 +699,23 @@ mod tests {
     /// effect at the point and a sound there, and once it's failing the
     /// part looks it. (A client in a valley, no window and no GPU: some
     /// minutes. `HIT_GAUGE_KINDS=heavy+drone` for some of them.)
-    #[test]
-    #[ignore = "the whole client in a valley; scripts/hit_gauge.sh"]
-    fn every_part_of_every_machine_answers_a_hit() {
-        let kinds = std::env::var("HIT_GAUGE_KINDS").unwrap_or(EVERY_MACHINE.into());
+    /// The client in Marrow, `kinds` lined up `dist` m off, the gauge run
+    /// over them to its end.
+    fn run(kinds: &str, dist: f32, quick: bool) -> App {
         let opts = crate::LaunchOptions {
             map: "marrow_creek".into(),
             map_explicit: true,
             new_game: true,
             robots: false,
-            gallery: Some(format!("robots:{kinds}+hits,0,17")),
+            gallery: Some(format!("robots:{kinds}+hits,0,{dist}")),
             camera: Some((Vec3::new(92.9, 0.0, 131.9), 0.0, -4.0)),
             ..Default::default()
         };
         let mut app = crate::soak::drive::client_app(opts);
+        app.insert_resource(HitGauge {
+            quick,
+            ..Default::default()
+        });
         for _ in 0..200_000 {
             app.update();
             if app
@@ -614,6 +726,14 @@ mod tests {
                 break;
             }
         }
+        app
+    }
+
+    #[test]
+    #[ignore = "the whole client in a valley; scripts/hit_gauge.sh"]
+    fn every_part_of_every_machine_answers_a_hit() {
+        let kinds = std::env::var("HIT_GAUGE_KINDS").unwrap_or(EVERY_MACHINE.into());
+        let app = run(&kinds, 17.0, false);
         let g = app.world().resource::<HitGauge>();
         assert!(g.done, "the gauge never finished ({} rows)", g.rows.len());
         for r in &g.rows {
@@ -640,6 +760,18 @@ mod tests {
             unseen.is_empty(),
             "machines nothing of which is drawn: {unseen:?}"
         );
+        // Every machine stood where it was put (one that wandered off, or
+        // fled the camera, isn't in its frame).
+        let wandered: Vec<String> = g
+            .moved
+            .iter()
+            .filter(|(_, d)| *d > STAY)
+            .map(|(k, d)| format!("{k} {d:.1} m"))
+            .collect();
+        assert!(
+            wandered.is_empty(),
+            "machines that left their place: {wandered:?}"
+        );
         let kinds: HashSet<&str> = g.drawn.iter().map(|(k, _)| k.as_str()).collect();
         for want in kinds_asked(&std::env::var("HIT_GAUGE_KINDS").unwrap_or(EVERY_MACHINE.into())) {
             assert!(
@@ -653,6 +785,53 @@ mod tests {
             bad.len(),
             g.rows.len(),
             bad.join("\n")
+        );
+    }
+
+    /// A round landing on the big machines reads at fighting range: its
+    /// effect covers at least [`MIN_AREA`] at the eye from 10 m out to
+    /// 30 m (`HIT_GAUGE_RANGE_KINDS` for others).
+    #[test]
+    #[ignore = "the whole client in a valley, three times; scripts/hit_gauge.sh"]
+    fn a_hit_reads_out_to_thirty_metres() {
+        let kinds = std::env::var("HIT_GAUGE_RANGE_KINDS")
+            .unwrap_or("heavy+plough+pylon+sorter+sentry".into());
+        let mut short = Vec::new();
+        for dist in [10.0, 20.0, 30.0] {
+            let app = run(&kinds, dist, true);
+            let g = app.world().resource::<HitGauge>();
+            assert!(g.done && !g.rows.is_empty(), "no rounds at {dist} m");
+            let mut by_kind: HashMap<&str, Vec<&Row>> = HashMap::new();
+            for r in &g.rows {
+                by_kind.entry(r.kind.as_str()).or_default().push(r);
+            }
+            for (kind, rows) in by_kind {
+                let mut spans: Vec<f32> = rows.iter().map(|r| r.span).collect();
+                let mut areas: Vec<f32> = rows.iter().map(|r| r.area).collect();
+                spans.sort_by(f32::total_cmp);
+                areas.sort_by(f32::total_cmp);
+                let med = |v: &[f32]| v[v.len() / 2];
+                println!(
+                    "{dist:>2} m {kind:<10} (eye {:.0} m) span min {:.2} median {:.2} deg; area min {:.0} median {:.0} px ({} parts)",
+                    rows[0].dist,
+                    spans[0],
+                    med(&spans),
+                    areas[0],
+                    med(&areas),
+                    rows.len()
+                );
+                for r in rows.iter().filter(|r| r.area < MIN_AREA) {
+                    short.push(format!(
+                        "{dist} m {kind} {:?} {:.0} px ({:.2} deg)",
+                        r.role, r.area, r.span
+                    ));
+                }
+            }
+        }
+        assert!(
+            short.is_empty(),
+            "hits under {MIN_SPAN} deg:\n{}",
+            short.join("\n")
         );
     }
 }

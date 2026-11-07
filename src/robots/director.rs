@@ -206,9 +206,10 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
 }
 
 /// Loud noises get reported; a team goes to look, late.
-fn hear_reports(
+pub(super) fn hear_reports(
     mut noises: MessageReader<Noise>,
     mut director: ResMut<Director>,
+    mut doing: ResMut<super::pressure::Doing>,
     players: Query<(), With<crate::player::Player>>,
     hushes: Option<Res<crate::anomaly::hush::Hushes>>,
 ) {
@@ -221,6 +222,8 @@ fn hear_reports(
         if by_player && n.radius >= LOUD && director.heat_gap <= 0.0 {
             director.heat += 1.0;
             director.heat_gap = HEAT_GAP;
+            // (It stirs the Zone too: `pressure`.)
+            doing.shots += 1;
         }
         if by_player && n.radius >= LOUD && director.response_cooldown <= 0.0 {
             let delay = director.rng.range(35.0, 70.0);
@@ -312,14 +315,16 @@ pub fn gate(zone: &Zone) -> Vec3 {
 }
 
 /// Where a survey drone may be sent: the named places, but not over a
-/// rendezvous (it doesn't loiter where you wait for the truck), nor a
-/// career's first job.
-pub fn survey_places(zone: &Zone, first_job_at: Option<Vec2>) -> Vec<[f32; 2]> {
+/// rendezvous (it doesn't loiter where you wait for the truck); only hot
+/// ground's (`pressure::HOT_DANGER`) when `hot_only`, as while the Zone's
+/// only stirred: a quiet edge isn't flown over till you've made it busy.
+/// (It was a career's first job's place that was left alone: a counter,
+/// not the ground.)
+pub fn survey_places(zone: &Zone, hot_only: bool) -> Vec<[f32; 2]> {
     let keep_off: Vec<Vec2> = zone
         .map
         .markers_of(&MarkerKind::Rendezvous)
         .map(|m| Vec2::from_array(m.at))
-        .chain(first_job_at)
         .collect();
     zone.map
         .markers_of(&MarkerKind::Poi)
@@ -329,6 +334,7 @@ pub fn survey_places(zone: &Zone, first_job_at: Option<Vec2>) -> Vec<[f32; 2]> {
                 .iter()
                 .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
         })
+        .filter(|p| !hot_only || super::pressure::hot_at(zone, *p))
         .collect()
 }
 
@@ -354,9 +360,10 @@ fn look_again_each_raid(
     }
 }
 
-fn run_director(
+pub(super) fn run_director(
     mut commands: Commands,
     mut director: ResMut<Director>,
+    pressure: Res<super::pressure::Pressure>,
     zone: Res<Zone>,
     // Robots that live in a site (underground residents) and the machines
     // that aren't patrol strength (`heavy::NotOnPatrol`: sentries,
@@ -376,6 +383,7 @@ fn run_director(
     mind: Option<Res<super::memory::ZoneMind>>,
     progression: Option<Res<crate::progression::Progression>>,
     nav: Option<Res<super::walker::Nav>>,
+    opts: Option<Res<crate::launch::LaunchOptions>>,
     mut sized: Local<bool>,
 ) {
     let mind = mind.as_deref();
@@ -389,15 +397,6 @@ fn run_director(
             km2, director.max_active
         );
     }
-    // A career's first job: its place is left alone (a survey drone sent
-    // to the Old farm met every newcomer the driver sent there, on open
-    // ground, on their first raid). `docs/FIRST_HOUR.md`.
-    let first_job_at: Option<Vec2> = progression
-        .as_ref()
-        .filter(|p| p.0.done == 0)
-        .and_then(|p| p.0.job.as_ref())
-        .and_then(|j| j.mark())
-        .map(|(_, at)| Vec2::from_array(at));
     if !director.enabled {
         return;
     }
@@ -414,7 +413,8 @@ fn run_director(
         director.broken_placed = true;
         if let Some(at) = progression
             .as_ref()
-            .and_then(|p| super::broken::second_job_meet(&zone, &p.0))
+            .zip(opts.as_deref())
+            .and_then(|(p, o)| super::broken::second_job_meet(&zone, &o.map, &p.0))
         {
             // (The Verifier's release check reads this line.)
             let job = progression.as_ref().map_or(0, |p| p.0.done + 1);
@@ -444,7 +444,21 @@ fn run_director(
         }
     }
     director.responses.retain(|r| r.0 > 0.0);
+    let now = time.elapsed_secs();
+    // Fast machines (a drone, hounds) only once the Zone's been heard to
+    // stir, a while back (`pressure`): till then, one walker comes to look,
+    // slow and seen.
+    let fast = pressure.fast_allowed(now);
+    // Nor to the job's own hot ground before a machine's had you there:
+    // its first contact is a slow one (`pressure::job_hot_place`).
+    let job_place = opts
+        .as_deref()
+        .and_then(|o| super::pressure::job_hot_place(&zone, &o.map, progression.as_deref()));
+    let held = |at: Vec3| {
+        !pressure.met_at_job && super::pressure::on_job_place(&zone, job_place.as_deref(), at)
+    };
     for at in dispatch {
+        let fast = fast && !held(at);
         if active >= director.max_active {
             continue;
         }
@@ -454,9 +468,21 @@ fn run_director(
             duration: 40.0,
             exit,
         };
+        if !fast {
+            info!("director: a walker to look at {at:.0} (quiet)");
+            let w = spawn_walker(&mut commands, &zone, exit, job.clone());
+            commands.entity(w).insert(super::Brain::Investigate {
+                at,
+                left: super::search::INVESTIGATE_TIME * 4.0,
+            });
+            continue;
+        }
         // You've been loud: two walkers come to look as well (and fight as
         // a pair: `squad`).
-        if director.heat >= ESCALATE && active + 3 <= director.max_active {
+        if director.heat >= ESCALATE
+            && pressure.level >= super::pressure::Level::Busy
+            && active + 3 <= director.max_active
+        {
             info!("director: walkers to {at:.0} (heat {:.1})", director.heat);
             for k in 0..2 {
                 let side = Vec3::new(k as f32 * 2.0 - 1.0, 0.0, 0.0) * 2.0;
@@ -532,8 +558,25 @@ fn run_director(
     if director.next_job > 0.0 || active >= director.max_active {
         return;
     }
-    director.next_job = director.rng.range(50.0, 110.0);
-    let pois = survey_places(&zone, first_job_at);
+    // The Zone at its own work, at a pace with how busy you've made it:
+    // quiet, walkers to work sites and crews, seen and slow; stirred, a
+    // drone over hot ground too; busy, drones anywhere.
+    use super::pressure::Level;
+    let (lo, hi) = match pressure.level {
+        Level::Quiet => (120.0, 200.0),
+        Level::Stirred => (80.0, 140.0),
+        Level::Busy => (50.0, 110.0),
+        Level::Hunting => (40.0, 80.0),
+    };
+    director.next_job = director.rng.range(lo, hi);
+    let pois: Vec<[f32; 2]> = if pressure.level >= Level::Stirred {
+        survey_places(&zone, pressure.level < Level::Busy)
+            .into_iter()
+            .filter(|p| !held(zone.on_ground(p[0], p[1])))
+            .collect()
+    } else {
+        vec![]
+    };
     let sites: Vec<[f32; 2]> = zone
         .map
         .markers_of(&MarkerKind::WorkSite)
@@ -586,10 +629,11 @@ fn run_director(
 mod first_job_tests {
     use super::*;
 
-    /// Survey drones go to the Old farm on any raid but a career's first,
-    /// whose job is to scout it.
+    /// A quiet edge (the Old farm, a first job's place) isn't flown over
+    /// while the Zone's only stirred; once it's busy, anywhere is. No
+    /// career's job count in it.
     #[test]
-    fn a_first_job_place_is_left_alone() {
+    fn a_quiet_edge_is_left_alone_till_its_busy() {
         let mut app = crate::headless_app(
             crate::LaunchOptions {
                 robots: false,
@@ -608,8 +652,18 @@ mod first_job_tests {
             .find(|m| m.name == "Old farm")
             .map(|m| m.at)
             .expect("the Old farm");
-        assert!(survey_places(zone, None).contains(&farm));
-        assert!(!survey_places(zone, Some(Vec2::from_array(farm))).contains(&farm));
+        assert!(
+            zone.map
+                .region_at(farm)
+                .is_none_or(|r| r.danger < super::super::pressure::HOT_DANGER),
+            "the Old farm is a quiet edge"
+        );
+        assert!(survey_places(zone, false).contains(&farm));
+        assert!(!survey_places(zone, true).contains(&farm));
+        assert!(
+            !survey_places(zone, true).is_empty(),
+            "some hot ground to fly over"
+        );
     }
 }
 

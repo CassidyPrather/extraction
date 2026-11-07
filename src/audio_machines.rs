@@ -1007,6 +1007,10 @@ mod tests {
         ("SiteGrid", "a nav grid"),
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
+        (
+            "Stepped",
+            "the Zone's pressure stepping up, said in the raid's line; its sound is Audio's to add (robots::pressure)",
+        ),
         ("ToggleBackpack", "flat mode's pack; opening it is heard"),
         (
             "Treated",

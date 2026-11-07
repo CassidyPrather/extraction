@@ -228,7 +228,7 @@ fn reload(g: &mut Firearm) -> Vec<FireEvent> {
             ev.extend(g.set_bolt_travel(1.0));
             for _ in 0..def.internal_capacity.max(1) {
                 if g.load_round_of(Load::Standard) {
-                    ev.push(FireEvent::RoundLoaded);
+                    ev.push(FireEvent::RoundThumbed);
                 }
             }
             ev.extend(g.set_bolt_travel(0.0));
@@ -601,7 +601,7 @@ mod tests {
             }
             if crate::audio::fault_layers(e).is_empty() {
                 if let Some((set, _)) = crate::audio::handling_sound(e, Some(action), id) {
-                    let speed = crate::audio::handling_speed(e, Some(action));
+                    let speed = crate::audio::handling_speed(e, Some(action), id);
                     out.push(format!("{set} x{speed:.2}"));
                 }
             }
