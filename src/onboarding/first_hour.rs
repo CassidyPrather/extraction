@@ -3957,6 +3957,7 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
             })
             .collect();
     let pts = by_deck_ends(&decks, from, pts);
+    let pts = round_deck_sides(&decks, from, pts, &|p: Vec2| world.zone.ground(p.x, p.y));
     // The grid's waypoints and a bank's sidestep know nothing of buildings:
     // each out of any it lands in (bar the end), and each stretch round any
     // in its way (from by the pump house, a waypoint past it was walked to
@@ -4084,6 +4085,122 @@ fn by_deck_ends(
 
 /// A waypoint this near a deck's end is at it already (m).
 const DECK_END_NEAR: f32 = 1.0;
+
+/// A deck this little above the ground under it is one a walk steps up
+/// onto (and into its railing), not one it passes under (m).
+const DECK_STEP_UP: f32 = 1.4;
+/// How far out from a deck's side a walk round its end keeps (m).
+const DECK_SIDE_CLEAR: f32 = 1.2;
+
+/// Whether the straight walk `a`..`b` meets a deck's side: over its
+/// footprint (a capsule's width either side) where the deck is within a
+/// step of the ground, so the walk goes up on it and into its railing
+/// (from the road north of the District bridge, a leg to the bank west of
+/// it cut the deck's corner, and the newcomer stood against the railing
+/// for the rest of the raid). Under a deck over its gully: clear.
+fn meets_deck_side(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    a: Vec2,
+    b: Vec2,
+    ground: &dyn Fn(Vec2) -> f32,
+) -> bool {
+    let n = (a.distance(b) / 0.25).ceil().max(1.0) as usize;
+    (0..=n).map(|k| a.lerp(b, k as f32 / n as f32)).any(|q| {
+        decks
+            .iter()
+            .any(|(d, _)| d.holds(q, 0.35) && d.y_at(q) - ground(q) < DECK_STEP_UP)
+    })
+}
+
+/// The walk's legs from off every bridge to off every bridge kept off
+/// their decks' sides (`meets_deck_side`): round the outside of the
+/// nearer end of the deck in the way, by its line-up point or beside its
+/// ground end, whichever clears and is shortest. On and off a bridge by
+/// its ends (`by_deck_ends`) is left as it is, and so is a leg no way
+/// round clears.
+fn round_deck_sides(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    from: Vec2,
+    pts: Vec<Vec2>,
+    ground: &dyn Fn(Vec2) -> f32,
+) -> Vec<Vec2> {
+    if decks.is_empty() {
+        return pts;
+    }
+    let (of, ends) = bridges_of(decks);
+    let off = |p: Vec2| !decks.iter().any(|(d, _)| d.holds(p, 0.0));
+    // The legs `by_deck_ends` lays to an end from its line-up point (and
+    // back): along the deck's line, and on or off by the end.
+    let is_end_leg = |a: Vec2, b: Vec2| {
+        ends.iter().flatten().any(|(e, l)| {
+            (a.distance(*e) < 0.05 && b.distance(*l) < 0.05)
+                || (a.distance(*l) < 0.05 && b.distance(*e) < 0.05)
+        })
+    };
+    let meets = |a: Vec2, b: Vec2, i: usize| meets_deck_side(&decks[i..=i], a, b, ground);
+    // Ways round bridge `k`: each outer end's line-up point, and beside its
+    // ground end and its line-up point, either side, clear of the railing.
+    let round_of = |k: usize| -> Vec<Vec2> {
+        let mut r = Vec::new();
+        for (e, l) in &ends[k] {
+            let Some((d, _)) = decks
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| of[*i] == k)
+                .map(|(_, d)| d)
+                .min_by(|x, y| {
+                    x.0.end_near(*e)
+                        .distance(*e)
+                        .total_cmp(&y.0.end_near(*e).distance(*e))
+                })
+            else {
+                continue;
+            };
+            let side = (d.b - d.a).perp().normalize_or(Vec2::X) * (d.width * 0.5 + DECK_SIDE_CLEAR);
+            let out = (*l - *e).normalize_or(Vec2::X);
+            r.push(*l);
+            for s in [side, -side] {
+                r.push(*e + out + s);
+                r.push(*l + s);
+            }
+        }
+        r
+    };
+    let mut out = Vec::with_capacity(pts.len());
+    let mut at = from;
+    for p in pts {
+        let hit: Vec<usize> = (0..decks.len()).filter(|i| meets(at, p, *i)).collect();
+        if off(at) && off(p) && !is_end_leg(at, p) && !hit.is_empty() {
+            let clear = |x: Vec2, y: Vec2| !meets_deck_side(decks, x, y, ground);
+            let mut round: Vec<Vec2> = Vec::new();
+            for i in &hit {
+                round.extend(round_of(of[*i]));
+            }
+            round.dedup_by(|a, b| a.distance(*b) < 0.05);
+            // One stop round, else two (round the end, then along the
+            // side): the shortest that clears.
+            let one = round
+                .iter()
+                .filter(|c| clear(at, **c) && clear(**c, p))
+                .map(|c| (at.distance(*c) + c.distance(p), vec![*c]));
+            let two = round.iter().flat_map(|c| {
+                round
+                    .iter()
+                    .filter(move |k| k.distance(*c) > 0.05)
+                    .map(move |k| (*c, *k))
+            });
+            let two = two
+                .filter(|(c, k)| clear(at, *c) && clear(*c, *k) && clear(*k, p))
+                .map(|(c, k)| (at.distance(c) + c.distance(k) + k.distance(p), vec![c, k]));
+            if let Some((_, via)) = one.chain(two).min_by(|x, y| x.0.total_cmp(&y.0)) {
+                out.extend(via);
+            }
+        }
+        out.push(p);
+        at = p;
+    }
+    out
+}
 
 /// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
 /// point off to one side of its middle, the nearest that clears it both
@@ -5276,6 +5393,127 @@ the Hollow.";
         // Under it, east to west, never on it: as it was.
         let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
         assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+    }
+
+    /// A walk past a bridge's end, from off it to off it, keeps off its
+    /// deck's side where the deck is level with the ground (into its
+    /// railing): round the end. Under it, over its gully: as it was.
+    #[test]
+    fn a_walk_past_a_bridge_end_goes_round_it() {
+        use crate::world::bridges::Deck;
+        let deck = Deck {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.0, 20.0),
+            ya: 18.0,
+            yb: 18.0,
+            width: 7.0,
+        };
+        let decks = [(deck, [Vec2::new(0.0, 0.0), Vec2::new(0.0, 20.0)])];
+        // Level with the deck by its ends; a gully 8 m down between.
+        let ground = |p: Vec2| if p.y < 4.0 || p.y > 16.0 { 18.0 } else { 10.0 };
+        // From the road north-east of its end to the bank west of it,
+        // straight across its corner.
+        let (from, to) = (Vec2::new(5.0, -4.0), Vec2::new(-6.0, 3.0));
+        assert!(meets_deck_side(&decks, from, to, &ground));
+        let way = round_deck_sides(&decks, from, vec![to], &ground);
+        assert_eq!(way.last(), Some(&to));
+        assert!(way.len() > 1, "{way:?}");
+        let mut at = from;
+        for p in &way {
+            assert!(
+                !meets_deck_side(&decks, at, *p, &ground),
+                "{at}..{p} in {way:?}"
+            );
+            at = *p;
+        }
+        // Under it, east to west over the gully: as it was.
+        let (e, w) = (Vec2::new(8.0, 10.0), Vec2::new(-8.0, 10.0));
+        assert!(!meets_deck_side(&decks, e, w, &ground));
+        assert_eq!(round_deck_sides(&decks, e, vec![w], &ground), vec![w]);
+        // On and off by its end, along its line: as it was.
+        assert_eq!(
+            round_deck_sides(
+                &decks,
+                Vec2::new(0.0, -3.0),
+                vec![Vec2::new(0.0, 0.0)],
+                &ground
+            ),
+            vec![Vec2::new(0.0, 0.0)]
+        );
+    }
+
+    /// Every bridge in every valley: a walk between any two points round
+    /// its ends (off it) never goes up on a deck's side; and on Marrow, the
+    /// leg past the District road bridge's north end that cut its corner
+    /// (Map design's wreck repro) goes round.
+    #[test]
+    fn walks_past_every_bridge_end_keep_off_its_sides() {
+        use crate::world::bridges;
+        let mut bad = Vec::new();
+        let mut legs = 0;
+        for map in crate::test_maps() {
+            let zone = crate::world::Zone::load(&map);
+            let decks: Vec<_> = bridges::decks(&zone)
+                .into_iter()
+                .map(|d| {
+                    let [a, b] = d.ground_ends(&zone);
+                    (d, [a.xz(), b.xz()])
+                })
+                .collect();
+            let ground = |p: Vec2| zone.ground(p.x, p.y);
+            if map == "marrow_creek" {
+                let (a, b) = (
+                    Vec2::new(7.304625, -2.495706),
+                    Vec2::new(-0.6695702, -12.451674),
+                );
+                if meets_deck_side(&decks, a, b, &ground) {
+                    let way = round_deck_sides(&decks, a, vec![b], &ground);
+                    let mut at = a;
+                    for p in &way {
+                        if meets_deck_side(&decks, at, *p, &ground) {
+                            bad.push(format!("{map}: District bridge leg {at}..{p} in {way:?}"));
+                        }
+                        at = *p;
+                    }
+                }
+            }
+            let (_, ends) = bridges_of(&decks);
+            for bridge in &ends {
+                for (e, _) in bridge {
+                    let ring: Vec<Vec2> = (0..12)
+                        .map(|k| {
+                            let t = k as f32 / 12.0 * std::f32::consts::TAU;
+                            *e + Vec2::new(t.cos(), t.sin()) * 9.0
+                        })
+                        .filter(|p| !decks.iter().any(|(d, _)| d.holds(*p, 0.5)))
+                        .collect();
+                    for a in &ring {
+                        for b in &ring {
+                            if a == b {
+                                continue;
+                            }
+                            legs += 1;
+                            let way = round_deck_sides(&decks, *a, vec![*b], &ground);
+                            let mut at = *a;
+                            for p in &way {
+                                if meets_deck_side(&decks, at, *p, &ground) {
+                                    bad.push(format!("{map}: {a}..{b}: leg {at}..{p}"));
+                                    break;
+                                }
+                                at = *p;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(legs > 0);
+        assert!(
+            bad.is_empty(),
+            "{} of {legs} walks past bridge ends on a deck's side:\n{}",
+            bad.len(),
+            bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
+        );
     }
 
     /// Every bridge in every valley: a deck's middle reached from the
