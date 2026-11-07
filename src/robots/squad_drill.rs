@@ -708,6 +708,22 @@ fn batch(arm: Arm) {
         .and_then(|s| s.parse().ok())
         .unwrap_or(SEEDS);
     let out = std::env::var("SIM_DRILL_OUT").unwrap_or_else(|_| "target/squad_drill.jsonl".into());
+    // What data it ran on (`asset_identity`), ahead of its lines.
+    eprintln!("{}", crate::asset_identity());
+    {
+        let id = crate::asset_identity();
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&out)
+            .unwrap();
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({"ev": "assets", "assets": id.data, "build": id.build})
+        )
+        .unwrap();
+    }
     for seed in 1..=seeds {
         let o = drill(seed, arm);
         let l = line(&o);

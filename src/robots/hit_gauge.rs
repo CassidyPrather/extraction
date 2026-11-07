@@ -478,6 +478,11 @@ fn step(world: &mut World, g: &mut HitGauge) {
             .collect::<Vec<_>>()
             .into_iter()
             .map(|(e, p)| (e, world.get::<Position>(e).map_or(p, |b| b.0)))
+            // (A spotter's place is its winch: it sways over it.)
+            .map(|(e, p)| {
+                let winch = world.get::<super::spotter::Spotter>(e).map(|s| s.winch);
+                (e, winch.unwrap_or(p))
+            })
             .collect();
         let list: Vec<String> = at
             .iter()
