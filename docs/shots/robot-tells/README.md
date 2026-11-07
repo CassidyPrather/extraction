@@ -58,3 +58,23 @@ What reads, by the close sheet:
   soot over the carriage.
 
 Weakest: the sorter at 20 m in this still, and a spotter right overhead.
+
+## Against a dark backdrop
+
+`dark.jpg`: the minelayer at 10 m in front of the dark house, the case
+the bar is about: of the two cues, at least one has to read.
+
+- **Facing:** soot over the roof line; with the gutter held out
+  (`EXTRACTION_GUTTER=out`, a still of a light that has dropped out),
+  its striped hopper goes nearly dark.
+- **Turned away:** its eye is hidden behind the hull, but the hopper's
+  lit stripes face every way and gutter with it. The soot reads here
+  against the mist at the house's edge.
+
+The case where neither would read: a machine whose lit pieces all face
+away, close in front of a backdrop tall enough to hide the whole climb of
+its soot (a wall, a treeline). None of these four machines is lit on one
+side only, but the soot alone can't promise that. The cheapest fix, not
+made: an ember at the soot's root, a small orange puff on the batch
+(`fx`'s `embers` material). That's one more puff batch while a failing
+machine smokes in view, about 2 stereo draws.

@@ -6373,6 +6373,28 @@ fn piece_mesh(piece: &Piece) -> Mesh {
     mesh.transformed_by(piece.at)
 }
 
+/// A building's windows in its shell's own material go into the shell's
+/// mesh (one draw, not two, at the same range); the rest are left to draw
+/// as their own, and returned. Folded in after the shell is weathered,
+/// so they stay as they were; they cast the shell's shadow then, which
+/// lands on their own reveal or sill.
+fn fold_windows(
+    outer: &mut [(Handle<StandardMaterial>, Mesh)],
+    windows: Vec<(Handle<StandardMaterial>, Mesh)>,
+) -> Vec<(Handle<StandardMaterial>, Mesh)> {
+    let mut rest = Vec::new();
+    for (mat, mesh) in windows {
+        let folded = outer
+            .iter_mut()
+            .find(|(m, _)| *m == mat)
+            .is_some_and(|(_, into)| into.merge(&mesh).is_ok());
+        if !folded {
+            rest.push((mat, mesh));
+        }
+    }
+    rest
+}
+
 /// Each piece as `dress_buildings` draws it when it isn't furniture's
 /// stand-in: a box shaded face by face, anything else shaded at its
 /// vertices (not under the ground: a site's rooms go unshaded).
@@ -6619,7 +6641,8 @@ pub fn dress_buildings(
             }
         }
         // Four meshes a material: the shell; its windows, which cast no
-        // shadow worth the cost (they're in the wall's own); the
+        // shadow worth the cost (they're in the wall's own; those in the
+        // shell's own material are drawn with it, `fold_windows`); the
         // furniture's models, near and shadowless (the sun doesn't reach
         // it); the furniture's boxes, further off.
         const OUTER: usize = 0;
@@ -6956,6 +6979,7 @@ pub fn dress_buildings(
                 ));
             }
         }
+        let windows = fold_windows(&mut outer, windows);
         for (mat, mesh) in outer {
             commands.spawn((
                 Mesh3d(meshes.add(mesh)),
@@ -7065,6 +7089,38 @@ mod tests {
     }
 
     use super::*;
+
+    /// A window in its shell's material is drawn in the shell's mesh,
+    /// whole; one in a material of its own is still its own draw.
+    #[test]
+    fn a_window_in_its_shells_material_is_drawn_with_the_shell() {
+        let mut mats = Assets::<StandardMaterial>::default();
+        let (paint, timber) = (
+            mats.add(StandardMaterial::default()),
+            mats.add(StandardMaterial::default()),
+        );
+        let wall = Mesh::from(Cuboid::new(6.0, 3.0, 0.3));
+        let casing = Mesh::from(Cuboid::new(1.0, 1.2, 0.1)).translated_by(Vec3::new(1.0, 0.5, 0.2));
+        let sash = Mesh::from(Cuboid::new(0.8, 1.0, 0.05)).translated_by(Vec3::new(-1.5, 0.5, 0.2));
+        let mut outer = vec![(paint.clone(), wall.clone())];
+        let rest = fold_windows(
+            &mut outer,
+            vec![(paint.clone(), casing.clone()), (timber.clone(), sash)],
+        );
+        assert_eq!(outer.len(), 1, "the shell is still one mesh a material");
+        assert_eq!(rest.len(), 1, "only the window in its own material is left");
+        assert!(rest[0].0 == timber);
+        let tris = |m: &Mesh| m.indices().unwrap().len() / 3;
+        assert_eq!(
+            tris(&outer[0].1),
+            tris(&wall) + tris(&casing),
+            "the shell's mesh holds the casing whole"
+        );
+        assert_eq!(
+            outer[0].1.count_vertices(),
+            wall.count_vertices() + casing.count_vertices()
+        );
+    }
 
     /// A log pile collides with the logs its model draws: `LOG_STACK` is
     /// `art/props/yards.py`'s table, number for number.

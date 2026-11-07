@@ -416,7 +416,7 @@ fn sputter(
             continue;
         }
         let share = part.hp / part.max_hp.max(1.0);
-        if part.alive() && super::damage::Band::of(share) == super::damage::Band::Failing {
+        if super::wear::failing(part) {
             let worst = failing.entry(part.robot).or_insert((f32::MAX, Vec3::ZERO));
             // Its top: soot let out of a part's middle would rise inside it
             // (a spotter's envelope is 2.8 m across) and fade unseen.
