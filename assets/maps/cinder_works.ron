@@ -405,7 +405,7 @@
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
         (kind: Sentry(arc: 140.0, power: Some((178.1, -176.1))), at: (164.6, -172.5), rot: -45.0, name: "Gate sentry"),
-        (kind: Sentry(arc: 140.0, power: Some((102.1, -57.0))), at: (90.0, -50.0), rot: -30.0, name: "Chimney sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((80.1, -40.1))), at: (90.0, -50.0), rot: 135.0, name: "Chimney sentry"),
         // A spotter over the open ground the west way crosses to the fire
         // lookout: the east ways have the chimney's sentry (map_spotter).
         (kind: Spotter, at: (-119.0, -7.0), name: "Ash pit spotter"),
