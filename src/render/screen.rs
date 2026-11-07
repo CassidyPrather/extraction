@@ -57,6 +57,8 @@ struct ScreenView {
     font: f32,
     /// The margin a side, in ems (`margin`).
     margin: f32,
+    /// A painted board's words: centred, in heavy strokes (`HEAVY`).
+    sign: bool,
     bg: Color,
     fg: Color,
     /// The panel's material, and whether it shows the picture as light.
@@ -73,7 +75,16 @@ struct Drawing {
     camera: Entity,
     ui: Entity,
     text: Entity,
+    /// A sign's words again, a touch off, for heavy strokes (placeholders
+    /// on other panels).
+    heavy: [Entity; 3],
 }
+
+/// How far a sign's words are drawn again, in ems, for strokes that
+/// read black from 10 m: the default face's strokes are ~0.08 em, a pixel
+/// at that range, and came out mid-grey against the board (ink at 0.41 of
+/// the ground's light, not its 0.01). Painted warnings are heavy letters.
+const HEAVY: f32 = 0.055;
 
 /// Panels' drawing entities, so a panel that goes away takes them along.
 #[derive(Resource, Default)]
@@ -94,12 +105,24 @@ fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Draw
         .id();
     let font = fit_font(text, view.px, view.font, view.margin);
     let mut text_e = Entity::PLACEHOLDER;
+    let mut heavy = [Entity::PLACEHOLDER; 3];
     let mut root = commands.spawn((
         Node {
             width: percent(100),
             height: percent(100),
             padding: UiRect::all(px(font * view.margin)),
             flex_direction: FlexDirection::Column,
+            // A sign's words in the middle of its board.
+            justify_content: if view.sign {
+                JustifyContent::Center
+            } else {
+                JustifyContent::default()
+            },
+            align_items: if view.sign {
+                AlignItems::Center
+            } else {
+                AlignItems::default()
+            },
             ..default()
         },
         UiTargetCamera(camera),
@@ -119,24 +142,53 @@ fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Draw
             ImageNode::new(paper.clone()).with_mode(NodeImageMode::Stretch),
         ));
     }
+    let words = |text: &str| {
+        (
+            Text::new(text.to_owned()),
+            TextFont {
+                font_size: FontSize::Px(font),
+                ..default()
+            },
+            TextColor(view.fg),
+            TextLayout::justify(if view.sign {
+                Justify::Center
+            } else {
+                Justify::default()
+            }),
+        )
+    };
     let ui = root
         .with_children(|ui| {
-            text_e = ui
-                .spawn((
-                    Text::new(text.to_owned()),
-                    TextFont {
-                        font_size: FontSize::Px(font),
-                        ..default()
-                    },
-                    TextColor(view.fg),
-                ))
-                .id();
+            if !view.sign {
+                text_e = ui.spawn(words(text)).id();
+                return;
+            }
+            // The words, and over them the same words a touch right, down,
+            // and both: one heavy stroke.
+            ui.spawn(Node::default()).with_children(|block| {
+                text_e = block.spawn(words(text)).id();
+                let d = font * HEAVY;
+                for (i, (x, y)) in [(d, 0.0), (0.0, d), (d, d)].into_iter().enumerate() {
+                    heavy[i] = block
+                        .spawn((
+                            words(text),
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: px(x),
+                                top: px(y),
+                                ..default()
+                            },
+                        ))
+                        .id();
+                }
+            });
         })
         .id();
     Drawing {
         camera,
         ui,
         text: text_e,
+        heavy,
     }
 }
 
@@ -376,6 +428,7 @@ fn build_screens(
             px: Vec2::new(w as f32, h as f32),
             font,
             margin: margin(screen.style),
+            sign: screen.style == ScreenStyle::Sign,
             bg,
             fg,
             material: material.clone(),
@@ -404,16 +457,20 @@ fn update_screens(
     for (e, screen, mut view) in &mut screens {
         match view.drawing {
             Some(d) => {
-                if let Ok((mut t, mut f)) = texts.get_mut(d.text) {
-                    if t.0 != screen.text {
-                        view.refresh = view.refresh.max(REFRESH_FRAMES);
-                        view.generation += 1;
-                        show_target(&mut materials, &mut images, &view);
-                        t.0 = screen.text.clone();
-                        let size =
-                            FontSize::Px(fit_font(&screen.text, view.px, view.font, view.margin));
-                        if f.font_size != size {
-                            f.font_size = size;
+                let changed = texts.get(d.text).is_ok_and(|(t, _)| t.0 != screen.text);
+                if changed {
+                    view.refresh = view.refresh.max(REFRESH_FRAMES);
+                    view.generation += 1;
+                    show_target(&mut materials, &mut images, &view);
+                    let size =
+                        FontSize::Px(fit_font(&screen.text, view.px, view.font, view.margin));
+                    // The words and a sign's heavy strokes alike.
+                    for e in std::iter::once(d.text).chain(d.heavy) {
+                        if let Ok((mut t, mut f)) = texts.get_mut(e) {
+                            t.0 = screen.text.clone();
+                            if f.font_size != size {
+                                f.font_size = size;
+                            }
                         }
                     }
                 }
@@ -742,6 +799,7 @@ mod tests {
             px: Vec2::new(w as f32, h as f32),
             font: 20.0,
             margin: 0.8,
+            sign: false,
             bg: Color::BLACK,
             fg: Color::WHITE,
             material: material.clone(),
