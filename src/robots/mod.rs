@@ -417,7 +417,13 @@ impl Plugin for RobotsPlugin {
             .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
             .add_systems(
                 FixedUpdate,
-                (damage_parts, senses::door_noise, perceive, wreck_loot)
+                (
+                    damage_parts,
+                    senses::door_noise,
+                    senses::deafen_sight_only,
+                    perceive,
+                    wreck_loot,
+                )
                     .chain()
                     .after(crate::weapons::ballistics::BallisticsSystems),
             );

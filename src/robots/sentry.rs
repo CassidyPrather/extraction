@@ -229,7 +229,7 @@ pub fn spawn_sentry(
             Senses {
                 sight: rules::SIGHT,
                 fov_deg: rules::FOV,
-                hearing: 1.0,
+                hearing: super::senses::SIGHT_ONLY,
                 eye: Vec3::new(0.0, 0.05, -0.3),
             },
             Awareness::default(),

@@ -643,23 +643,40 @@ pub fn asset_identity() -> &'static AssetIdentity {
         }
         files.sort();
         // FNV-1a, 64 bits: stable across builds and platforms.
-        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-        let mut eat = |bytes: &[u8]| {
+        fn fnv(h: &mut u64, bytes: &[u8]) {
             for b in bytes {
-                h ^= *b as u64;
-                h = h.wrapping_mul(0x0100_0000_01b3);
+                *h ^= *b as u64;
+                *h = h.wrapping_mul(0x0100_0000_01b3);
             }
-        };
+        }
+        const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut h = BASIS;
         for f in &files {
             let rel = f.strip_prefix(&root).unwrap_or(f);
-            eat(rel.to_string_lossy().as_bytes());
-            eat(&std::fs::read(f).unwrap_or_default());
+            fnv(&mut h, rel.to_string_lossy().as_bytes());
+            fnv(&mut h, &std::fs::read(f).unwrap_or_default());
         }
+        // The catalog compiled in (`include_str!`), against the one on
+        // disk the game loads: a target dir shared with an old worktree
+        // left a binary's built-in catalog an older items.ron than its
+        // data (Onboarding, 7 November: twelve items off their models).
+        let mut built = BASIS;
+        fnv(
+            &mut built,
+            extraction_core::items::BUILTIN_CATALOG.as_bytes(),
+        );
+        let mut disk = BASIS;
+        fnv(
+            &mut disk,
+            &std::fs::read(root.join("data/items.ron")).unwrap_or_default(),
+        );
         AssetIdentity {
             data: format!("{h:016x}"),
             files: files.len(),
             root: root.display().to_string(),
             build: report::build(),
+            catalog: format!("{built:016x}"),
+            catalog_matches: built == disk,
         }
     })
 }
@@ -671,14 +688,27 @@ pub struct AssetIdentity {
     pub files: usize,
     pub root: String,
     pub build: &'static str,
+    /// The built-in item catalog's hash (`BUILTIN_CATALOG`), and whether
+    /// it's the root's `data/items.ron`, byte for byte.
+    pub catalog: String,
+    pub catalog_matches: bool,
 }
 
 impl std::fmt::Display for AssetIdentity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "assets: data {} ({} files) from {}; build {}",
-            self.data, self.files, self.root, self.build
+            "assets: data {} ({} files) from {}; build {}; built-in catalog {} {}",
+            self.data,
+            self.files,
+            self.root,
+            self.build,
+            self.catalog,
+            if self.catalog_matches {
+                "(= data/items.ron)"
+            } else {
+                "(DIFFERS from data/items.ron: a stale build, or other data)"
+            }
         )
     }
 }
