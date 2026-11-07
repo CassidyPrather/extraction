@@ -5467,8 +5467,8 @@ the Hollow.";
 #[cfg(test)]
 mod indoor_tests {
     use super::{
-        STEEP_RUN, Stop, indoor_stops, round_banks, round_boxes, segment_hits_box, shot_warns,
-        solid, steep_run,
+        STEEP_RUN, Stop, below_in, indoor_stops, on_its_floors, out_of, round_banks, round_boxes,
+        segment_hits_box, shot_warns, solid, steep_run,
     };
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
