@@ -1,6 +1,6 @@
 //! Distress flares (#79, the coordinator's design): a walker or a sentry
-//! that has you and is visibly failing (a part in `damage::Band::Failing`:
-//! the state that sends up Heavy's soot wisp and gutters its eye) may call
+//! that has you and is visibly failing (a part `wear::failing`: the state
+//! that sends up Heavy's soot wisp and gutters its eye) may call
 //! for help, once. It's a flare you can stop:
 //!
 //! - **The tell** ([`TELL`]): the tube rises, its lamp ticking. Put a
@@ -21,7 +21,6 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use super::damage::Band;
 use super::{Awareness, Robot, RobotKind, RobotPart, Stunned};
 use crate::weapons::ballistics::Hit;
 use crate::world::{Layer, Zone};
@@ -108,12 +107,9 @@ pub struct Canister {
 pub struct FlaresSaid {
     pub up: bool,
     pub downed: bool,
+    /// Bursts said this raid (which of Story's words is next).
+    pub bursts: u32,
 }
-
-/// Lev's words (stand-ins till Radio's lines land).
-pub const LINE_UP: &str = "Flare! Knock it down.";
-pub const LINE_BURST: &str = "That's gone up. They'll come and look.";
-pub const LINE_DOWNED: &str = "Good. That one never saw the sky.";
 
 pub struct DistressPlugin;
 
@@ -194,6 +190,7 @@ fn fit_tubes(
                         raised: 0.0,
                         hp: TUBE_HP,
                     },
+                    crate::weapons::impacts::StruckMetal,
                     Collider::cuboid(TUBE_SIZE.x, TUBE_SIZE.y, TUBE_SIZE.z),
                     CollisionLayers::new(Layer::Robot, [Layer::World, Layer::Robot]),
                     Transform::from_translation(mount(m)),
@@ -231,12 +228,10 @@ fn hit_tubes(
     }
 }
 
-/// Whether a machine shows it's failing: any live part of it in the
-/// failing band (Heavy's wisp and gutter read the same).
+/// Whether a machine shows it's failing: any part of it `wear::failing`
+/// (Heavy's one test: what sends up its soot and gutters its lights).
 pub fn failing<'a>(parts: impl IntoIterator<Item = &'a RobotPart>) -> bool {
-    parts
-        .into_iter()
-        .any(|p| p.alive() && Band::of(p.hp / p.max_hp.max(1e-3)) == Band::Failing)
+    parts.into_iter().any(super::wear::failing)
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -329,6 +324,7 @@ fn tell(
                         from: tgt,
                         age: 0.0,
                     },
+                    crate::weapons::impacts::StruckMetal,
                     // Moved by its velocity, so the physics index (what a
                     // round's ray tests) keeps up with it (Weapon feel).
                     RigidBody::Kinematic,
@@ -346,7 +342,7 @@ fn tell(
                 if !said.up {
                     said.up = true;
                     if let Some(r) = raid.as_deref_mut() {
-                        r.say(LINE_UP);
+                        r.say(crate::raid::lines::FLARE_UP);
                     }
                 }
             }
@@ -365,6 +361,7 @@ fn climb(
     mut director: Option<ResMut<super::director::Director>>,
     mut doing: Option<ResMut<super::pressure::Doing>>,
     mut raid: Option<ResMut<crate::raid::Raid>>,
+    mut said: ResMut<FlaresSaid>,
     zone: Option<Res<Zone>>,
     time: Res<Time>,
 ) {
@@ -403,9 +400,16 @@ fn climb(
         if let Some(d) = doing.as_deref_mut() {
             d.flares += 1;
         }
+        // Every burst says something's coming (it is), each the next of
+        // Story's words: a second inside the radio's 30 s repeat throttle
+        // is still heard.
         if let Some(r) = raid.as_deref_mut() {
-            r.say(LINE_BURST);
+            r.say(crate::raid::lines::pick(
+                crate::raid::lines::FLARE_BURST,
+                said.bursts,
+            ));
         }
+        said.bursts += 1;
     }
 }
 
@@ -434,7 +438,7 @@ fn hit_canisters(
         if !said.downed {
             said.downed = true;
             if let Some(r) = raid.as_deref_mut() {
-                r.say(LINE_DOWNED);
+                r.say(crate::raid::lines::FLARE_DOWNED);
             }
         }
     }
