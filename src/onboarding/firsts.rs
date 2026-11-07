@@ -262,7 +262,7 @@ impl First {
             // five newcomers were zapped down in a shelter's dorm: back out
             // of its line, or a few rounds and it's down.)
             First::Crawler => {
-                &["Truck: \"Back out the way you came, or put it down. It's charging.\""]
+                &["Truck: \"Back out the way you came. Or put it down: it's charging.\""]
             }
         }
     }
