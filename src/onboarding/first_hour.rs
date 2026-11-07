@@ -1310,20 +1310,30 @@ pub(super) fn direct_raid(
         state.crawled_at = now;
         // (Every armed one: backing out of a shelter's dorm at a walk, the
         // careful newcomers made a metre between zaps and went down.)
+        let packed = world
+            .packed_guns
+            .iter()
+            .find(|(_, g, by)| by.0 == player && g.firearm.live_rounds() > 0)
+            .map(|(e, ..)| e);
         let answer = if armed_now {
             state.fought_at = now;
             state.note(now, Kind::Learned, "a crawler crackling at it: shot it");
             take_it_on()
-        } else {
-            let packed = world.packed_guns.iter().any(|(_, _, by)| by.0 == player);
+        } else if let Some(gun) = packed {
+            // Its only gun in the pack (put there with the hands full after
+            // a fight): out, and at it. (Backing out instead, the reckless
+            // one was zapped down with a loaded gun on its back.)
+            state.fought_at = now;
             state.note(
                 now,
                 Kind::Learned,
-                format!(
-                    "a crawler crackling at it: backed out (no gun to hand{})",
-                    if packed { "; one in the pack" } else { "" }
-                ),
+                "a crawler crackling at it: its gun out of the pack, and shot it",
             );
+            let mut t = unpack_gun(gun);
+            t.extend(take_it_on());
+            t
+        } else {
+            state.note(now, Kind::Learned, "a crawler crackling at it: backed out");
             let (out, _) = way_out(&world, &view, &plans, here);
             if out.is_empty() {
                 walk_away(&world, here, from)
@@ -3713,6 +3723,21 @@ fn shot_warns(shots: &[f32], now: f32, window: f32) -> bool {
 /// A fight, for the reckless one: the gun out, readied by the one in hand
 /// (`Task::Ready`: the PM comes out of the crate on safe, and with two on
 /// it, the one drawn may not be the one first found), and fired.
+/// `gun`, out of the pack into the right hand.
+fn unpack_gun(gun: Entity) -> Vec<Task> {
+    vec![
+        Task::Stow(Side::Right),
+        Task::ToggleBackpack,
+        Task::Wait(0.6),
+        Task::GrabFromHere {
+            item: gun,
+            side: Side::Right,
+        },
+        Task::ToggleBackpack,
+        Task::Wait(0.5),
+    ]
+}
+
 fn take_it_on() -> Vec<Task> {
     vec![
         Task::DrawGun,
