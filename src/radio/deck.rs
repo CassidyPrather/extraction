@@ -19,19 +19,22 @@ use crate::items::{Catalog, Item};
 
 /// The player's body, centred on its origin (m): width, height, depth.
 pub const BODY: Vec3 = Vec3::new(0.150, 0.090, 0.040);
-/// The keys along the top, left to right (`art/items/music.py`: their
-/// top faces stand 6 mm proud of the body, at y 0.051).
+/// The keys along the top, left to right, and their tops, 6 mm proud of
+/// the body (`art/items/music.py` prints where each lands, the model
+/// centred on its box).
 pub const KEYS: [(Key, f32); 4] = [
-    (Key::Rewind, -0.051),
-    (Key::FastForward, -0.017),
-    (Key::Play, 0.017),
-    (Key::Stop, 0.051),
+    (Key::Rewind, -0.0502),
+    (Key::FastForward, -0.0162),
+    (Key::Play, 0.0178),
+    (Key::Stop, 0.0518),
 ];
-pub const KEY_TOP: f32 = 0.051;
+pub const KEY_TOP: f32 = 0.0486;
+/// The keys' line across the body (z).
+pub const KEY_Z: f32 = -0.0005;
 /// Where a cassette sits in the well, behind the door.
-pub const WELL: Vec3 = Vec3::new(0.0, -0.007, 0.0085);
+pub const WELL: Vec3 = Vec3::new(0.0008, -0.0094, 0.008);
 /// The door's hinge, along its bottom edge, and its height.
-pub const HINGE: Vec3 = Vec3::new(0.0, -0.0385, 0.0185);
+pub const HINGE: Vec3 = Vec3::new(0.0008, -0.0409, 0.018);
 pub const DOOR_HEIGHT: f32 = 0.0655;
 /// How far the door swings open (rad).
 pub const DOOR_OPEN: f32 = 1.2;
@@ -177,7 +180,7 @@ pub(super) fn deck_parts(
             ),
         },
         SocketOwner(e),
-        Transform::from_xyz(0.0, -0.02, -BODY.z * 0.5 + 0.012),
+        Transform::from_xyz(0.0008, -0.0224, -BODY.z * 0.5 + 0.0115),
         Visibility::default(),
         ChildOf(e),
     ));
@@ -186,7 +189,7 @@ pub(super) fn deck_parts(
         commands.spawn((
             Name::new(format!("{key:?} key")),
             DeckKey { deck: e, key },
-            Transform::from_xyz(x, KEY_TOP, 0.0).with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
+            Transform::from_xyz(x, KEY_TOP, KEY_Z).with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
             Visibility::default(),
             ChildOf(e),
         ));

@@ -16,9 +16,10 @@ The parts are separate nodes the game moves:
   `cell_door` is the battery cover on the back, origin at the centre of its
   outer face (it slides off along -Y). The cassette stands in the well
   behind the door, long axis along X, open edge down (-Y), side A toward
-  +Z (`WELL`, `SEAT` below). Built on the body's centre rather than its
-  bounds' (which run from the feet at y -0.0465 to the keys' tops at
-  +0.051), so the keys sit at X -0.051, -0.017, +0.017, +0.051 exactly.
+  +Z (`WELL`, `SEAT` below). Drawn about the body's centre, then centred
+  on its bounds when written (as every item is), which moves it by the
+  offset the build prints; `radio::deck` places its keys, well and hinge
+  by the same step.
 - cassette: the same frame -- long axis X, open (tape) edge at -Y, side A's
   label on +Z, side B's on -Z. `hub_l`, `hub_r` spin about local Z.
 - record: a 10-inch shellac 78 lying flat (+Y up), `label` both sides.
@@ -376,10 +377,10 @@ def record(colour="Red"):
 
 if __name__ == "__main__":
     if wanted("cassette_player"):
-        # Built on the body's centre, not the bounds' (the keys stand 6 mm
-        # over the top), so the keys sit at their X exactly.
-        d = write("cassette_player", cassette_player(), children=[("door_window", "door")],
-                  centre=False)
+        # Centred on its bounds, as every item is (its box is its model);
+        # `radio::deck`'s keys, well, hinge and cell mount are where this
+        # prints them.
+        d = write("cassette_player", cassette_player(), children=[("door_window", "door")])
         print(f"  well centre ({WELL[0] + d.x:+.4f}, {WELL[1] + d.y:+.4f}, {WELL[2] + d.z:+.4f}),"
               f" cassette seat ({SEAT[0] + d.x:+.4f}, {SEAT[1] + d.y:+.4f}, {SEAT[2] + d.z:+.4f})")
     if wanted("cassette"):
