@@ -40,6 +40,49 @@ use crate::player::{Body, Footstep, Player};
 use crate::rig::RigHead;
 use crate::world::{Layer, Zone};
 
+// --- Who hears ----------------------------------------------------------
+
+/// A kind that only sees: its `Senses::hearing`. Hearing is kept where it
+/// is the lesson (the walker that searches, the heavy that follows, the
+/// hound that hunts by ear) and taken from the rest, so a ridge, a wall or
+/// a tree line closes a place off, and a shot doesn't draw a circle round
+/// it (the user's direction: the map shouldn't feel artificially big).
+///
+/// | Kind | Hears? | Why |
+/// | - | - | - |
+/// | walker | yes | the soldier: noise draws it, it searches ("move off quiet, go still") |
+/// | heavy | yes | the hunter that follows ("walk away, keep going") |
+/// | hound | yes (poor eyes) | hunts by ear ("feet planted") |
+/// | sorter, warden | in its own site | a room is a sound space, not the valley |
+/// | drone | no | a camera dome; noise still brings drones, by reports, voiced |
+/// | sentry | no | the sweep: a sightline lesson |
+/// | crawler | in its own site | it lives in one: a site's walls close it off, and it still hears round its corners and wakes to a noise in its hall |
+/// | relay pylon | no | it sees and reports; hearing would ring a site |
+/// | spotter | no | (as it was) |
+/// | broken walker | no | the first fight: its eye is the lesson |
+/// | dirigible, grappler, minelayer, collector | no | logistics and workers: slow, seen |
+///
+/// (Mender and plough carry no senses at all.)
+pub const SIGHT_ONLY: f32 = 0.0;
+
+/// The walker-bodied kinds that only see ([`SIGHT_ONLY`]): spawned with a
+/// walker's senses, deafened as they come.
+#[allow(clippy::type_complexity)]
+pub fn deafen_sight_only(
+    mut new: Query<
+        &mut Senses,
+        Or<(
+            Added<super::broken::Broken>,
+            Added<super::grappler::Grappler>,
+            Added<super::collector::Collector>,
+        )>,
+    >,
+) {
+    for mut s in &mut new {
+        s.hearing = SIGHT_ONLY;
+    }
+}
+
 // --- Sight -------------------------------------------------------------
 
 /// A full-height body (m): posture is measured against it.
@@ -848,8 +891,16 @@ pub(crate) fn perceive(
         }
         let ear = gt.translation();
         // Deafened by a hazard (`hazards`): it hears nothing.
-        for s in sounds.iter().filter(|_| !deaf) {
+        for s in sounds
+            .iter()
+            .filter(|_| !deaf && senses.hearing > SIGHT_ONLY)
+        {
             if s.source == Some(robot_e) {
+                continue;
+            }
+            // A resident hears in its own hall only: a site is a sound
+            // space of its own, not the valley's.
+            if local.is_some_and(|l| !l.contains(s.at)) {
                 continue;
             }
             let dull = s.source.is_none()
