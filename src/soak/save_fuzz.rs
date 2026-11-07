@@ -1236,23 +1236,28 @@ enum JobMoment {
 }
 
 /// Which job moments the raid is in this frame.
-fn job_moments(world: &mut World) -> Vec<JobMoment> {
+fn job_moments(world: &mut World, id: &str, step: u32) -> Vec<JobMoment> {
     use extraction_core::progression::Job;
     let me = player(world);
-    let job = world
-        .resource::<crate::progression::Progression>()
-        .0
-        .job
-        .clone();
+    let p = &world.resource::<crate::progression::Progression>().0;
+    let job = p.job.clone();
+    // Handed in: the contract on to its next step, or done.
+    let handed = p
+        .contract
+        .as_ref()
+        .is_none_or(|a| a.id != id || a.step > step);
     let mut now = Vec::new();
-    let item = match &job {
-        Some(Job::Bring { item, .. } | Job::Plant { item, .. }) => Some(item.clone()),
-        _ => None,
-    };
-    if matches!(
-        job,
-        Some(Job::Plant { planted: true, .. } | Job::Scout { seen: true, .. })
-    ) {
+    let item = job_item(job.as_ref());
+    if handed
+        || matches!(
+            job,
+            Some(
+                Job::Plant { planted: true, .. }
+                    | Job::Scout { seen: true, .. }
+                    | Job::Photograph { taken: true, .. }
+            )
+        )
+    {
         now.push(JobMoment::Done);
     }
     if let Some(id) = item {
@@ -1292,6 +1297,162 @@ fn job_moments(world: &mut World) -> Vec<JobMoment> {
         }
     }
     now
+}
+
+/// The thing a job has on the body: what's to be brought, planted or
+/// fetched, or the camera for a photograph.
+fn job_item(job: Option<&extraction_core::progression::Job>) -> Option<String> {
+    use extraction_core::progression::Job;
+    match job? {
+        Job::Bring { item, .. } | Job::Plant { item, .. } | Job::Fetch { item, .. } => {
+            Some(item.clone())
+        }
+        Job::Photograph { .. } => Some("camera".into()),
+        _ => None,
+    }
+}
+
+/// How far [`force_job`] has gone.
+#[derive(Default)]
+struct JobForce {
+    /// The thing laid at the raider's feet, to pick up.
+    laid: bool,
+    /// The step's part done (set down, seen, taken; for a thing to bring
+    /// or fetch, put in the stash and the truck sent home).
+    done: bool,
+    /// Home with it: the card to press once at base.
+    home: bool,
+    pressed: bool,
+}
+
+/// A contract's moments the raid may never come to, brought about once
+/// it's out (as `force_moment` does the raid's): for carried, the job's
+/// thing laid at the raider's feet and picked up; for done, the step's
+/// part done as the game would see it, the relay laid by its place, the
+/// raider put at the place to see, the camera's record of its subject
+/// set, and a thing to bring or fetch put in the stash, the truck sent
+/// home and the card pressed at base.
+fn force_job(world: &mut World, m: JobMoment, f: &mut JobForce) {
+    use crate::bot::{Bot, Task};
+    use extraction_core::progression::Job;
+    let me = player(world);
+    let (phase, clock) = {
+        let raid = world.resource::<Raid>();
+        (raid.phase.clone(), raid.clock)
+    };
+    let job = world
+        .resource::<crate::progression::Progression>()
+        .0
+        .job
+        .clone();
+    let catalog = world.resource::<Catalog>().clone();
+    let Some(root) = world.get::<GlobalTransform>(me).copied() else {
+        return;
+    };
+    let spawn = |world: &mut World, id: &str, at: Vec3| -> Option<Entity> {
+        let kind = catalog.kind(id)?;
+        let e = crate::items::spawn_item(
+            &mut world.commands(),
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        );
+        world.flush();
+        Some(e)
+    };
+    let out = phase == Phase::Out && clock > quit_at();
+    match m {
+        JobMoment::Carried if out && !f.laid => {
+            let Some(id) = job_item(job.as_ref()) else {
+                return;
+            };
+            let at = root.translation() + root.forward().as_vec3() * 0.5 + Vec3::Y * 0.9;
+            if spawn(world, &id, at).is_none() {
+                return;
+            }
+            world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+            if let Some(mut bot) = world.get_mut::<Bot>(me) {
+                bot.tasks.clear();
+                bot.tasks.extend([
+                    Task::PickUp {
+                        id,
+                        side: crate::rig::Side::Left,
+                    },
+                    Task::Stow(crate::rig::Side::Left),
+                ]);
+            }
+            f.laid = true;
+        }
+        JobMoment::Done if out && !f.done => {
+            let zone = world.resource::<crate::world::Zone>().clone();
+            match job.clone() {
+                Some(Job::Plant { item, at, .. }) => {
+                    let p = zone.on_ground(at[0], at[1]) + Vec3::Y * 0.3;
+                    spawn(world, &item, p);
+                }
+                Some(Job::Scout { at, .. }) => {
+                    if let Some(t) = world.get::<Transform>(me).copied() {
+                        let mut t = t;
+                        t.translation = zone.on_ground(at[0], at[1]);
+                        world.entity_mut(me).insert(t);
+                    }
+                }
+                Some(Job::Photograph { .. }) => {
+                    if let Some(Job::Photograph { taken, .. }) = &mut world
+                        .resource_mut::<crate::progression::Progression>()
+                        .0
+                        .job
+                    {
+                        *taken = true;
+                    }
+                }
+                Some(Job::Bring { ref item, .. }) | Some(Job::Fetch { ref item, .. }) => {
+                    let n = match &job {
+                        Some(Job::Fetch { n, .. }) => *n,
+                        _ => 1,
+                    };
+                    let stash = world
+                        .query_filtered::<Entity, With<Stash>>()
+                        .iter(world)
+                        .next();
+                    let Some(stash) = stash else {
+                        return;
+                    };
+                    for i in 0..n {
+                        if let Some(e) = spawn(world, item, Vec3::ZERO) {
+                            crate::persist::put_in_bag(
+                                world,
+                                e,
+                                stash,
+                                Vec3::new(0.1 * i as f32, 0.1, 0.0),
+                            );
+                        }
+                    }
+                    world.resource_mut::<Raid>().phase = Phase::Extracting { left: 0.5 };
+                    f.home = true;
+                }
+                _ => return,
+            }
+            f.done = true;
+        }
+        JobMoment::Done if f.home && !f.pressed && phase == Phase::AtBase => {
+            let card = world
+                .query_filtered::<Entity, With<crate::raid::requests::RequestCard>>()
+                .iter(world)
+                .next();
+            if let Some(card) = card {
+                world.write_message(crate::interact::InteractEvent::Pressed {
+                    item: card,
+                    player: me,
+                });
+                f.pressed = true;
+            }
+        }
+        _ => {}
+    }
 }
 
 /// A playtester quits mid-contract. For every step of every contract
@@ -1334,6 +1495,7 @@ fn soak_quit_on_every_contract_step() {
             for m in to_hit.drain(..) {
                 let path = profile(&format!("contract-{}-{k}-{m:?}", c.id));
                 let mut a = raid_with(&path, map, 1, Some(on.clone()));
+                let mut forced = JobForce::default();
                 {
                     let p = &a.world().resource::<crate::progression::Progression>().0;
                     println!("{on} on {map}: contract {:?}, job {:?}", p.contract, p.job);
@@ -1343,11 +1505,15 @@ fn soak_quit_on_every_contract_step() {
                 while frame < 90 * 60 * 14 {
                     a.update();
                     frame += 1;
-                    if job_moments(a.world_mut()).contains(&m) {
+                    force_job(a.world_mut(), m, &mut forced);
+                    if job_moments(a.world_mut(), c.id, k as u32).contains(&m) {
                         hit = true;
                         break;
                     }
-                    if a.world().resource::<Raid>().phase == Phase::AtBase && frame > 90 * 60 {
+                    if a.world().resource::<Raid>().phase == Phase::AtBase
+                        && frame > 90 * 60
+                        && !forced.home
+                    {
                         break;
                     }
                 }
