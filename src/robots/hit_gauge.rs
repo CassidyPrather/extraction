@@ -162,6 +162,11 @@ pub struct HitGauge {
     placed: HashMap<Entity, Vec3>,
     /// First rounds only, for how a hit reads at range.
     pub quick: bool,
+    /// No rounds: every part left failing at once, and what its tells
+    /// show at the eye measured over [`TELL_FRAMES`] (`tells`).
+    pub tells: bool,
+    pub tell_rows: Vec<TellRow>,
+    tell_areas: HashMap<Entity, Vec<f32>>,
     pub done: bool,
 }
 
@@ -517,6 +522,10 @@ fn step(world: &mut World, g: &mut HitGauge) {
     if g.frame < STAND {
         return;
     }
+    if g.tells {
+        tells(world, g);
+        return;
+    }
     if std::env::var_os("EXTRACTION_HIT_SHOW").is_some() {
         show(world, g);
         return;
@@ -702,6 +711,10 @@ mod tests {
     /// The client in Marrow, `kinds` lined up `dist` m off, the gauge run
     /// over them to its end.
     fn run(kinds: &str, dist: f32, quick: bool) -> App {
+        run_with(kinds, dist, quick, false)
+    }
+
+    fn run_with(kinds: &str, dist: f32, quick: bool, tells: bool) -> App {
         let opts = crate::LaunchOptions {
             map: "marrow_creek".into(),
             map_explicit: true,
@@ -714,6 +727,7 @@ mod tests {
         let mut app = crate::soak::drive::client_app(opts);
         app.insert_resource(HitGauge {
             quick,
+            tells,
             ..Default::default()
         });
         for _ in 0..200_000 {
@@ -830,10 +844,147 @@ mod tests {
         }
         assert!(
             short.is_empty(),
-            "hits under {MIN_SPAN} deg:\n{}",
+            "hits under {MIN_AREA:.0} px:\n{}",
             short.join("\n")
         );
     }
+
+    /// A machine left failing tells it at fighting range, rounds or no:
+    /// something it throws off (smoke, sparks) covers [`MIN_AREA`] at the
+    /// eye at least half the time, from 10 m out to 30 m
+    /// (`HIT_GAUGE_TELL_KINDS` for others).
+    #[test]
+    #[ignore = "the whole client in a valley, three times; scripts/hit_gauge.sh"]
+    fn a_failing_machine_reads_out_to_thirty_metres() {
+        let kinds = std::env::var("HIT_GAUGE_TELL_KINDS")
+            .unwrap_or("heavy+spotter+minelayer+sorter".into());
+        let mut short = Vec::new();
+        for dist in [10.0, 20.0, 30.0] {
+            let app = run_with(&kinds, dist, false, true);
+            let g = app.world().resource::<HitGauge>();
+            assert!(g.done && !g.tell_rows.is_empty(), "no tells at {dist} m");
+            for r in &g.tell_rows {
+                println!(
+                    "{dist:>2} m {:<10} (eye {:.0} m) seen {:.0}% of frames, median {:.0} px, most {:.0} px",
+                    r.kind,
+                    r.dist,
+                    r.seen * 100.0,
+                    r.median,
+                    r.peak
+                );
+                if r.seen < 0.5 {
+                    short.push(format!("{dist} m {} seen {:.0}%", r.kind, r.seen * 100.0));
+                }
+            }
+        }
+        assert!(
+            short.is_empty(),
+            "failing machines that don't read:\n{}",
+            short.join("\n")
+        );
+    }
+}
+
+/// A machine left failing, how its tells read at the eye over
+/// [`TELL_FRAMES`]: the share of frames something of them covered
+/// [`MIN_AREA`], and the median and the most they covered (pixels).
+#[derive(Clone, Debug)]
+pub struct TellRow {
+    pub kind: String,
+    pub dist: f32,
+    pub seen: f32,
+    pub median: f32,
+    pub peak: f32,
+}
+
+/// Frames a failing machine's tells settle before they're measured, and
+/// how many are measured (2 s).
+pub const TELL_SETTLE: u32 = 60;
+pub const TELL_FRAMES: u32 = 180;
+
+/// A piece's area square to an eye `d` m off (pixels, [`PX_PER_DEG`]):
+/// its bounds' two largest sides.
+fn area_at(gt: &GlobalTransform, aabb: Option<&bevy::camera::primitives::Aabb>, d: f32) -> f32 {
+    let half = aabb.map_or(Vec3::splat(0.01), |a| Vec3::from(a.half_extents)) * gt.scale();
+    let mut s = [half.x, half.y, half.z];
+    s.sort_by(|a, b| b.total_cmp(a));
+    let deg = |m: f32| (m / d.max(0.1)).atan().to_degrees();
+    deg(2.0 * s[0]) * deg(2.0 * s[1]) * PX_PER_DEG * PX_PER_DEG
+}
+
+/// Every part left failing at once (no rounds: its own tells, not a
+/// hit's), then what's thrown off near each machine that isn't the
+/// machine, measured at the eye a frame at a time.
+fn tells(world: &mut World, g: &mut HitGauge) {
+    let t = g.frame - STAND;
+    if t == 0 {
+        for mut p in world.query::<&mut RobotPart>().iter_mut(world) {
+            p.hp = p.max_hp * FAILING;
+        }
+        g.meshes_before = all_with::<Mesh3d>(world);
+        return;
+    }
+    if t < TELL_SETTLE {
+        return;
+    }
+    let eye = camera_at(world);
+    let robots: Vec<(Entity, Vec3)> = world
+        .query_filtered::<(Entity, &GlobalTransform), With<Robot>>()
+        .iter(world)
+        .map(|(e, g)| (e, g.translation()))
+        .collect();
+    let mut q = world.query_filtered::<(
+        Entity,
+        &GlobalTransform,
+        Option<&bevy::camera::primitives::Aabb>,
+    ), With<Mesh3d>>();
+    let pieces: Vec<(Entity, Vec3, f32)> = q
+        .iter(world)
+        .filter(|(e, ..)| !g.meshes_before.contains(e))
+        .map(|(e, gt, aabb)| {
+            let at = gt.translation();
+            (e, at, area_at(gt, aabb, eye.distance(at)))
+        })
+        .collect();
+    for (robot, at) in robots {
+        let mut mine: HashSet<Entity> = subtree(world, robot).into_iter().collect();
+        let mut q = world.query::<(Entity, &RobotPart)>();
+        let parts: Vec<Entity> = q
+            .iter(world)
+            .filter(|(_, p)| p.robot == robot)
+            .map(|(e, _)| e)
+            .collect();
+        for p in parts {
+            mine.extend(subtree(world, p));
+        }
+        let area: f32 = pieces
+            .iter()
+            .filter(|(e, p, _)| !mine.contains(e) && p.distance(at) < 4.0)
+            .map(|(_, _, a)| a)
+            .sum();
+        g.tell_areas.entry(robot).or_default().push(area);
+    }
+    if t < TELL_SETTLE + TELL_FRAMES {
+        return;
+    }
+    let areas = std::mem::take(&mut g.tell_areas);
+    for (robot, mut v) in areas {
+        let at = world
+            .get::<GlobalTransform>(robot)
+            .map_or(Vec3::ZERO, |g| g.translation());
+        v.sort_by(f32::total_cmp);
+        let seen = v.iter().filter(|a| **a >= MIN_AREA).count() as f32 / v.len().max(1) as f32;
+        let row = TellRow {
+            kind: kind_name(world, robot),
+            dist: eye.distance(at),
+            seen,
+            median: v[v.len() / 2],
+            peak: *v.last().unwrap_or(&0.0),
+        };
+        info!("hit gauge: tells {row:?}");
+        g.tell_rows.push(row);
+    }
+    g.done = true;
 }
 
 /// Frames into a show (`EXTRACTION_HIT_SHOW`) that its rounds start
