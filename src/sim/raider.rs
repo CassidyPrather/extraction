@@ -578,7 +578,7 @@ pub fn attach_raider(
     // On Rime Fell, the hearth the sim kit lays, sealed: the career's from
     // "Up the fell", the way into the frost.
     // (The case, with the hearth seated in it: `sim::seat_sim_hearth`.)
-    let (_, picked) = super::sim_kit(&opts.map, &contract_kit(), traits.name);
+    let (_, picked) = super::sim_kit(&opts.map, &contract_kit(&opts), traits.name);
     for id in picked {
         kit.push(Task::PickUp {
             id: id.to_owned(),
@@ -647,8 +647,8 @@ pub fn attach_raider(
 /// magazines, a box of rounds, the radio, two dressings.
 /// `SIM_CONTRACT=<id>[:step]`: the contract's kit (a relay to plant; the
 /// camera, though the raider can't take pictures).
-pub fn contract_kit() -> Vec<&'static str> {
-    let Ok(v) = std::env::var("SIM_CONTRACT") else {
+pub fn contract_kit(opts: &LaunchOptions) -> Vec<&'static str> {
+    let Some(v) = opts.sim_contract.as_deref() else {
         return Vec::new();
     };
     let id = v.split(':').next().unwrap_or_default();
@@ -3676,7 +3676,7 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             // (`SIM_OVERNIGHT`'s safehouse is the point of the run.)
             _ if s.job && r.hp >= 50.0 && s.name == "safehouse" => 40.0,
             // (`SIM_CONTRACT`'s step is the point of the run, too.)
-            _ if s.job && r.hp >= 50.0 && std::env::var_os("SIM_CONTRACT").is_some() => 40.0,
+            _ if s.job && r.hp >= 50.0 && scene.opts.sim_contract.is_some() => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
             // A big place looks worth more, up to a point: from the field

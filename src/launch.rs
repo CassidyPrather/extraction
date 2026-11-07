@@ -155,6 +155,9 @@ pub struct LaunchOptions {
     pub sim_minutes: Option<f32>,
     /// Where sim telemetry goes (default `target/sim/<map>`).
     pub sim_out: Option<PathBuf>,
+    /// A sim bot on a contract's step: `<id>[:step]` (`SIM_CONTRACT`, read
+    /// once here, so a test sets it here and not in the environment).
+    pub sim_contract: Option<String>,
     /// Sim raids run at once.
     pub jobs: usize,
     /// Capture tooling: cinematics and sweeps (see `capture`).
@@ -213,6 +216,7 @@ impl Default for LaunchOptions {
             job: None,
             sim_minutes: None,
             sim_out: None,
+            sim_contract: std::env::var("SIM_CONTRACT").ok(),
             jobs: 2,
             capture: Default::default(),
         }
