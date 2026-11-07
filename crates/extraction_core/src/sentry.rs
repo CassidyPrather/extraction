@@ -37,10 +37,14 @@ pub const BEAM_HALF: f32 = 9.0;
 /// newcomer who froze at the chirp was hit before they moved: Robot
 /// minds' fairness runs, 1 November.)
 pub const CHIRP: f32 = 2.5;
-/// Rounds in a burst, seconds between them, and between bursts.
+/// Rounds in a burst, seconds between them, and between bursts. The gap
+/// between bursts is what a player caught in its line has to turn and step
+/// to cover: at 1.8 s, 2.3 s from its first hit to down if every round
+/// lands (at 1.4 s it was 2.0 s, too little in a headset: coordinator,
+/// #85; `robots::sentry`'s walking_across_its_line gauge).
 pub const BURST: u32 = 3;
 pub const ROUND_GAP: f32 = 0.12;
-pub const BURST_GAP: f32 = 1.4;
+pub const BURST_GAP: f32 = 1.8;
 /// Out of its sight this long and it has to chirp again.
 pub const LOSE_LOCK: f32 = 2.0;
 
@@ -296,7 +300,8 @@ mod tests {
         let mut g = Gun::default();
         g.step(true, dt);
         let mut first = Vec::new();
-        for _ in 0..600 {
+        // Long enough for three bursts after the chirp.
+        for _ in 0..800 {
             if g.step(true, dt) == GunAct::Fire {
                 first.push(g.warning());
             }

@@ -932,6 +932,10 @@ mod tests {
             "devices.rs",
             "how long each device has run (its, not a robot's)",
         ),
+        (
+            "director.rs",
+            "how near a machine has got to its goal, and since when: its headway, not the player",
+        ),
         ("drone.rs", "how long it's been firing: its aim settling"),
         ("fx.rs", "an effect's count"),
         ("fx.rs", "an effect's next puff"),
