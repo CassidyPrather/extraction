@@ -979,6 +979,17 @@ pub const CLIP_STROKE: f32 = 0.02;
 /// Seconds between rounds fed from a box held at the port.
 pub const BOX_FEED: f32 = 0.3;
 
+/// A round put into `firearm` by hand, not off a clip: a rifle's is
+/// thumbed in ([`FireEvent::RoundThumbed`]); a shell or a revolver's round
+/// is as any other.
+pub fn by_hand(firearm: &extraction_core::firearm::Firearm) -> FireEvent {
+    use extraction_core::firearm::ActionKind::*;
+    match firearm.def.action {
+        BoltAction | SemiAuto => FireEvent::RoundThumbed,
+        _ => FireEvent::RoundLoaded,
+    }
+}
+
 /// Rounds by hand: with the action open, a loose round or shell brought to
 /// the load port goes in (and leaves the hand), a box held there feeds a
 /// round at a time, and a stripper clip set in the guide and pushed down
@@ -1068,7 +1079,7 @@ fn feed_by_hand(
             // A loose round: thumbed in, out of the hand.
             let load = it.loads.pop_or(1, def.load);
             if gun.firearm.load_round_of(load) {
-                events.push(FireEvent::RoundLoaded);
+                events.push(by_hand(&gun.firearm));
                 hand.holding = None;
                 commands.entity(held).despawn();
             }
@@ -1079,7 +1090,7 @@ fn feed_by_hand(
             if gun.firearm.load_round_of(load) {
                 it.loads = left;
                 it.rounds -= 1;
-                events.push(FireEvent::RoundLoaded);
+                events.push(by_hand(&gun.firearm));
                 boxes.insert(hand_e, now);
             }
         }

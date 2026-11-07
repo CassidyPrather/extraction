@@ -256,8 +256,13 @@ pub enum Event {
     /// empty magazine, a bolt drawn. Let it go home first.
     ActionOpen,
     MagazineRemoved,
-    /// A round was pushed into an internal magazine or a breech.
+    /// A round was pushed into an internal magazine or a breech (off a
+    /// clip, a shell, a revolver's chamber).
     RoundLoaded,
+    /// A loose round thumbed into a rifle by hand: into a single-shot's
+    /// chamber, or one at a time into a magazine that also takes clips
+    /// (heard as itself, not a clip's rattle: `audio::handling_sound`).
+    RoundThumbed,
     Malfunctioned(Malfunction),
     ModeChanged(FireMode),
     /// A squib: the primer popped, too little powder, and the bullet
