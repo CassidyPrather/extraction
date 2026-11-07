@@ -1207,7 +1207,9 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             )
         })
         .collect();
-    let mut remains: std::collections::HashMap<Entity, RemainsSave> = default();
+    // In entity order, not a hash map's: the same world saves to the same
+    // bytes, and a replayed career loads its bags in the same order.
+    let mut remains: std::collections::BTreeMap<Entity, RemainsSave> = default();
     let mut loadout = LoadoutSave::default();
     for (e, bag, socket, held, t, gt) in items {
         if let Some(s) = socket {
@@ -1689,6 +1691,46 @@ mod tests {
         assert_eq!(holding.len(), 1, "the hearth is held by {holding:?}");
         assert_eq!(at, holding.first().copied());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The same world saves to the same bytes: remains come out in one
+    /// order every time (they went through a hash map, whose order is new
+    /// each run, so a career replayed from one save wrote a different file
+    /// one time in two, and the next raid loaded its bags in another order).
+    #[test]
+    fn remains_save_in_the_same_order_every_time() {
+        let path = temp_save("remains_order.ron");
+        let mut app = app_with_save(&path);
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let catalog = app.world().resource::<Catalog>().clone();
+        let world = app.world_mut();
+        for i in 0..8 {
+            let at = zone.on_ground(30.0 + 6.0 * i as f32, -40.0);
+            let bag = spawn_remains(world, at);
+            let saved = SavedItem {
+                id: "field_dressing".into(),
+                condition: 1.0 - 0.05 * i as f32,
+                rounds: 0,
+                charge_wh: 0.0,
+                local: [0.0; 3],
+                turn: [0.0, 0.0, 0.0, 1.0],
+                gun: None,
+                inserted: Vec::new(),
+                loads: Default::default(),
+            };
+            assert!(catalog.kind("field_dressing").is_some());
+            let e = restore_item(world, &saved, Transform::IDENTITY).unwrap();
+            settle_turned(world, e, Some(bag), Vec3::ZERO, Quat::IDENTITY, at);
+        }
+        app.update();
+        let order = |world: &mut World| -> Vec<[f32; 3]> {
+            snapshot(world).zone.remains.iter().map(|r| r.at).collect()
+        };
+        let first = order(app.world_mut());
+        assert_eq!(first.len(), 8, "eight bags: {first:?}");
+        for _ in 0..6 {
+            assert_eq!(order(app.world_mut()), first, "the same order each save");
+        }
     }
 
     fn app_with_save(path: &std::path::Path) -> App {

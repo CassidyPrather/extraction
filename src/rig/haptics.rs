@@ -11,7 +11,8 @@
 //!   seated in a pouch or holster, the action worked, a far grab caught;
 //! - a knock (0.4-0.6) is "that took force": a magazine seating, a heavy
 //!   thing taken up, a refusal;
-//! - a kick (0.6-1.0) is a shot or a hit, and only those.
+//! - a kick (0.6-1.0) is a hit or a shot; a shot is felt by its recoil,
+//!   from a knock for a .22 to full for a twelve-bore ([`shot_kick`]).
 //!
 //! Taking something up is felt by its weight: a tin is a tick, a rifle a
 //! knock. Pulses on one controller in the same frame merge into one (the
