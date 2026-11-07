@@ -935,6 +935,7 @@ mod tests {
         ("drone.rs", "how long it's been firing: its aim settling"),
         ("fx.rs", "an effect's count"),
         ("fx.rs", "an effect's next puff"),
+        ("fx.rs", "a failing machine's next wisp of soot"),
         ("grip.rs", "how long it's been held: a fight in progress"),
         ("mod.rs", "a wreck's loot timer"),
         ("search.rs", "a call's cooldown"),
@@ -955,6 +956,7 @@ mod tests {
         ("visuals.rs", "a material made"),
         ("visuals.rs", "a lamp's flicker"),
         ("walker.rs", "a burst through a wall"),
+        ("wear.rs", "a failing machine's lights guttering"),
         ("walker.rs", "how long it's been firing: its aim settling"),
     ];
 
