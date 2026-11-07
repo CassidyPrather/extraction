@@ -17,9 +17,16 @@ only The Hollow announced itself. After:
   response then failed. It comes back with Robot minds' fix to that test.
   Until then its three crossings (out in the fields) stay untold.
 - **Radio mast**, the mast_relay job's two ways in: a guard booth on the
-  east way, and the relay's jeep just inside the compound on the north
-  one. A booth there stood on the slope, and its door step failed the
-  legged machines' footing test (feet_gauge).
+  east way, and the relay's jeep on the north one, in the way's mouth
+  where the cut ends, so it stands dark against the trees from 20 m
+  short. (Further in, on the skyline, it couldn't be found in the frame
+  without a caption. A booth on the slope failed the legged machines'
+  footing test.)
+
+A tell counts only if it can be found in the approach frame without a
+caption. `map_gradient` holds this: the tell must look big enough for
+its distance (as `map_breadcrumbs` reads a cue, with no skyline allowance),
+seen from the last 8 to 30 m before the line.
 - **Bus depot** and **Rail yard**: a wrecked car by the way, short of the
   line.
 - **The depot exit's landing** (the coordinator's note): two marker posts
