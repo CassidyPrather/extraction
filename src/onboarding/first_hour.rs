@@ -776,9 +776,6 @@ pub(super) struct RaidView<'w, 's> {
     robots: Query<'w, 's, crate::robots::subjects::Candidate>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
-    /// Doors held shut on an underground site's power right now (a way out
-    /// planned through one went at it for the rest of the raid).
-    power_locked: Query<'w, 's, (), With<crate::world::underground::PowerLocked>>,
 }
 
 /// The wanderer goes this share of the way to the job (the playtest: in
@@ -896,17 +893,6 @@ pub(super) fn direct_raid(
     // The buildings' plans, once they're up (in from a drone, a find indoors).
     if plans.is_empty() && !view.buildings.is_empty() {
         *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
-    }
-    // Which of their doors are held shut on power now (as the raider keeps
-    // them, `spot_held`): no way out is planned through one.
-    for plan in plans.iter_mut() {
-        plan.held.clear();
-        plan.held.extend(
-            plan.doors
-                .iter()
-                .map(|d| d.entity)
-                .filter(|d| view.power_locked.contains(*d)),
-        );
     }
     // Indoors, a walk about to start that some answer cut in (from a
     // shed, sheltered from a drone, the walk to cover went at its wall
