@@ -653,6 +653,20 @@ pub fn weather_looks(
                 // marks *these* (`render::held_light`), and its look still
                 // changes in the hand (cleaned at the bench, wiped, worn).
                 let mut mats = Vec::new();
+                // One copy for each of its materials in each frame its parts
+                // sit in: parts that shared a material share its copy again
+                // (`render::gun_rest` merges a resting gun by material; a
+                // copy for every mesh left it nothing to merge, and declined
+                // most guns), and the wear's muzzle and port, in that
+                // frame, hold for each of them.
+                let mut made: HashMap<
+                    (AssetId<StandardMaterial>, [i32; 12]),
+                    Handle<StandardMaterial>,
+                > = HashMap::new();
+                let frame = |a: &Affine3A| {
+                    let c = a.to_cols_array();
+                    std::array::from_fn(|i| (c[i] * 1e4).round() as i32)
+                };
                 // Each with where it sits in the gun, for its muzzle and port.
                 let place = |c: Entity, up: Affine3A| {
                     up * transforms
@@ -681,7 +695,10 @@ pub fn weather_looks(
                             model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
                             metallic,
                         );
-                        let own = materials.add(orig);
+                        let own = made
+                            .entry((m.0.id(), frame(&at)))
+                            .or_insert_with(|| materials.add(orig))
+                            .clone();
                         commands.entity(c).insert(MeshMaterial3d(own.clone()));
                         let inv = at.inverse();
                         mats.push(OwnMaterial {
@@ -927,6 +944,95 @@ mod tests {
         assert_eq!(late_shown(RUSTED_AT), 0.0);
         assert_eq!(late_shown(0.08), 1.0);
         assert!(late_shown(0.2) > 0.0 && late_shown(0.2) < 1.0);
+    }
+
+    /// A weathered gun's parts share their material copies, by material
+    /// and frame, so `render::gun_rest` has something to merge. With a
+    /// copy for every mesh, every part was its own merge group, and every
+    /// lying gun was declined (17 of Marrow's 17, 6 November).
+    #[test]
+    fn a_weathered_gun_shares_its_material_copies() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_systems(Update, weather_looks);
+        let catalog = crate::items::Catalog::load();
+        let def = catalog
+            .iter()
+            .find(|(_, d)| d.id == "pm_pistol")
+            .map(|(_, d)| d.clone())
+            .unwrap();
+        let w = app.world_mut();
+        let (blued, steel) = {
+            let mut m = w.resource_mut::<Assets<StandardMaterial>>();
+            (
+                m.add(StandardMaterial::default()),
+                m.add(StandardMaterial {
+                    metallic: 1.0,
+                    ..default()
+                }),
+            )
+        };
+        let gun = w
+            .spawn((
+                Gun {
+                    firearm: extraction_core::firearm::Firearm::new(
+                        def.firearm.clone().unwrap(),
+                        1.0,
+                    ),
+                    layout: super::super::layout::layout("pm_pistol").unwrap(),
+                    magwell: None,
+                    trigger: 0.0,
+                    pulled: false,
+                    catch: false,
+                    dice: extraction_core::noise::Rng::new(1),
+                    mass: None,
+                },
+                Weathering::default(),
+                Transform::default(),
+            ))
+            .id();
+        // A frame and a slide (moved), each with two parts in each material.
+        let mut meshes = Vec::new();
+        for at in [Vec3::ZERO, Vec3::new(0.0, 0.06, 0.0)] {
+            let node = w
+                .spawn((Transform::from_translation(at), ChildOf(gun)))
+                .id();
+            for mat in [&blued, &steel, &blued] {
+                meshes.push(
+                    w.spawn((
+                        MeshMaterial3d(mat.clone()),
+                        Transform::default(),
+                        ChildOf(node),
+                    ))
+                    .id(),
+                );
+            }
+        }
+        app.update();
+        app.update();
+        let w = app.world();
+        assert!(w.get::<WeatheredLook>(gun).is_some(), "weathered");
+        let copies: std::collections::HashSet<_> = meshes
+            .iter()
+            .map(|e| {
+                w.get::<MeshMaterial3d<StandardMaterial>>(*e)
+                    .unwrap()
+                    .0
+                    .id()
+            })
+            .collect();
+        assert!(
+            !copies.contains(&blued.id()),
+            "its own copies, not the shared ones"
+        );
+        // Two materials in two frames.
+        assert_eq!(
+            copies.len(),
+            4,
+            "{} copies for 6 meshes: one each leaves gun_rest nothing to merge",
+            copies.len()
+        );
     }
     use crate::interact::GripRole;
     use crate::rig::Side;
