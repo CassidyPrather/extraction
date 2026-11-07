@@ -68,6 +68,20 @@ pub struct Flare {
 }
 
 impl Flare {
+    /// A star already lit where it's spawned, moving at `velocity`: a
+    /// machine's distress flare bursting at the top of its climb
+    /// (`robots::distress`).
+    pub fn lit(star: Star, velocity: Vec3, shooter: Option<Entity>) -> Self {
+        Self {
+            star,
+            velocity,
+            age: IGNITE,
+            landed: false,
+            shooter,
+            draw_in: 0.0,
+        }
+    }
+
     pub fn burning(&self) -> bool {
         self.age >= IGNITE && self.age < IGNITE + BURN
     }
