@@ -25,10 +25,14 @@ if [ ${#args[@]} -eq 0 ]; then
   args=(--scenario first_raid --personality reckless --encounter walker --map marrow_creek)
 fi
 out=$(mktemp -d "${TMPDIR:-/tmp}/determinism.XXXXXX")
-# Third, four threads again beside eight busy processes: load changes the
-# order a query walks things in, and the save was written in that order
-# (two bags of remains swapped, the bytes not the play: Progression's
-# wanderer r14, 7 November).
+# Third, four threads again beside eight busy processes, for anything
+# paced by the machine. And every run's save compared byte for byte: the
+# same play can be written in another order. Progression's wanderer r14,
+# 7 November: two bags of remains swapped in the save, because they went
+# through a std HashMap, whose RandomState is new in every process. Any
+# two runs of a raid leaving two or more bags would show it (fa596c46
+# keys them in a BTreeMap); the default probe leaves none, so give a
+# scenario that does to test that.
 for t in 1 4 4load; do
   d="$out/t$t"
   mkdir -p "$d/data"
