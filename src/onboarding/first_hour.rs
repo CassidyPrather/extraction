@@ -917,7 +917,7 @@ pub(super) fn direct_raid(
             && inside(to) != Some(b)
             && !en.doors.iter().any(|d| d.building == b && exit_step(d))
         {
-            let (out, _) = way_out(&world, &view, &plans, here);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if !out.is_empty() {
                 for t in out.into_iter().rev() {
                     bot.tasks.push_front(t);
@@ -1334,7 +1334,7 @@ pub(super) fn direct_raid(
             t
         } else {
             state.note(now, Kind::Learned, "a crawler crackling at it: backed out");
-            let (out, _) = way_out(&world, &view, &plans, here);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if out.is_empty() {
                 walk_away(&world, here, from)
             } else {
@@ -2274,7 +2274,7 @@ pub(super) fn direct_raid(
                         Kind::Confused,
                         format!("wandered off from {name}, and nothing said which way it was"),
                     );
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     let idle = bot.tasks.pop_back();
                     bot.tasks.extend(tasks);
@@ -2413,13 +2413,13 @@ pub(super) fn direct_raid(
                 }
                 Ok(None) => {
                     state.note(now, Kind::Learned, errand_done(&errand, &world));
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
                 Err(why) => {
                     state.note(now, Kind::Stuck, why);
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
@@ -2451,7 +2451,7 @@ pub(super) fn direct_raid(
                     state.tries = 0;
                 } else if let Some((_, g)) = state.goal.clone() {
                     if inside {
-                        tasks.extend(way_out(&world, &view, &plans, here).0);
+                        tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     }
                     tasks.extend(route(&world, &view, here, g));
                 }
@@ -2823,10 +2823,12 @@ pub(super) fn direct_raid(
     // wall, and it stood there half an hour).
     if let (Some(en), Some(Task::WalkTo { to, .. })) = (view.entrances.as_deref(), tasks.first()) {
         let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
-        if let Some(b) = inside(here)
-            && inside(*to) != Some(b)
-        {
-            let (mut out, _) = way_out(&world, &view, &plans, here);
+        // Below ground, in a site, with a walk planned off its floors (to
+        // the truck at the ranger tower, over the shelter it was in): up
+        // and out by the site's way first.
+        let below = below_in(&plans, root.translation).is_some_and(|pl| !on_its_floors(pl, *to));
+        if below || inside(here).is_some_and(|b| inside(*to) != Some(b)) {
+            let (mut out, _) = way_out_at(&world, &view, &plans, root.translation);
             out.append(&mut tasks);
             tasks = out;
         }
@@ -4118,6 +4120,85 @@ fn name_of(world: &World2, id: &str) -> String {
         .unwrap_or_else(|| id.replace('_', " "))
 }
 
+/// The plan of the underground site the bot stands in at `at` (its feet,
+/// at their real height), if it's in one: the ground over a shelter isn't
+/// in it, so a test by the ground's height (as indoors on the surface)
+/// never finds it.
+fn below_in<'a>(
+    plans: &'a [crate::sim::indoor::BuildingPlan],
+    at: Vec3,
+) -> Option<&'a crate::sim::indoor::BuildingPlan> {
+    let p = at + Vec3::Y * 1.0;
+    plans
+        .iter()
+        .find(|pl| pl.levels.is_some() && pl.contains(p, 0.3))
+}
+
+/// Whether `to` (world, on the map) is on one of `plan`'s floors, at any
+/// level: a walk there from inside it stays in it.
+fn on_its_floors(plan: &crate::sim::indoor::BuildingPlan, to: Vec2) -> bool {
+    let l = plan.to_local(Vec3::new(to.x, plan.xf.translation.y, to.y));
+    let Some((i, j)) = plan.grid.cell_of([l.x, l.z]) else {
+        return false;
+    };
+    let k = j * plan.grid.n + i;
+    !plan.outside[k]
+        && plan
+            .levels
+            .as_ref()
+            .is_none_or(|lv| lv.get(k).is_some_and(|y| !y.is_nan()))
+}
+
+/// As [`way_out`], from the bot's feet at their real height: below ground
+/// in a site, up through its rooms and out by its way to the surface
+/// (in the shelter under the ranger tower with the truck waiting overhead,
+/// the walk to it went straight at the truck through the rock, and it
+/// pressed for the bell from under the ground the rest of the raid).
+fn way_out_at(
+    world: &World2,
+    view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    at: Vec3,
+) -> (Vec<Task>, Vec2) {
+    if let Some(plan) = below_in(plans, at)
+        && let Some(out) = out_of(plan, plan.to_local(at + Vec3::Y * 1.0).xz())
+    {
+        return out;
+    }
+    way_out(world, view, plans, at.xz())
+}
+
+/// Through `plan`'s rooms from `from` (its space) to the nearest of its
+/// ways outside: the walk, and where it leaves the bot (world).
+fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Task>, Vec2)> {
+    let (o, path) = plan
+        .doors
+        .iter()
+        .filter_map(|d| d.outside)
+        .filter_map(|o| Some((o, plan.path(from, o)?)))
+        .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)))?;
+    let mut t = Vec::new();
+    for stop in indoor_stops(plan, from, &path) {
+        match stop {
+            Stop::Door(door, before) => {
+                t.push(Task::WalkTo {
+                    to: plan.world2(before),
+                    within: 0.4,
+                });
+                t.push(Task::OpenDoor(door));
+            }
+            Stop::At(w) => t.push(Task::WalkTo {
+                to: plan.world2(w),
+                within: 0.4,
+            }),
+        }
+    }
+    if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+        *within = 0.6;
+    }
+    Some((t, plan.world2(o)))
+}
+
 /// Indoors at `here`: out by the nearest door, and where that leaves it.
 /// Through the rooms by the building's plan, where it has one (straight at
 /// the door from behind the post office's counter, the newcomer pressed
@@ -4132,36 +4213,10 @@ fn way_out(
         return (vec![], here);
     };
     let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
-    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3)) {
-        let from = plan.to_local(at).xz();
-        let way = plan
-            .doors
-            .iter()
-            .filter_map(|d| d.outside)
-            .filter_map(|o| Some((o, plan.path(from, o)?)))
-            .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)));
-        if let Some((o, path)) = way {
-            let mut t = Vec::new();
-            for stop in indoor_stops(plan, from, &path) {
-                match stop {
-                    Stop::Door(door, before) => {
-                        t.push(Task::WalkTo {
-                            to: plan.world2(before),
-                            within: 0.4,
-                        });
-                        t.push(Task::OpenDoor(door));
-                    }
-                    Stop::At(w) => t.push(Task::WalkTo {
-                        to: plan.world2(w),
-                        within: 0.4,
-                    }),
-                }
-            }
-            if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
-                *within = 0.6;
-            }
-            return (t, plan.world2(o));
-        }
+    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3))
+        && let Some(out) = out_of(plan, plan.to_local(at).xz())
+    {
+        return out;
     }
     let Some(b) = en.building_at(at) else {
         return (vec![], here);
@@ -5500,6 +5555,70 @@ mod indoor_tests {
             "{} of {walks} indoor walks cut through furniture:\n{}",
             cut.len(),
             cut.join("\n")
+        );
+    }
+
+    /// From any room of any underground site, on every map, a walk off
+    /// its floors (to the truck) goes up and out by the site's way first:
+    /// the bot below ground is known to be in it at its feet's height (in
+    /// the shelter under the ranger tower, the walk to the truck went
+    /// straight at it through the rock, and it pressed for the bell from
+    /// under the ground the rest of the raid).
+    #[test]
+    fn from_every_room_below_ground_the_way_out_goes_up() {
+        use extraction_core::underground as ug;
+        let mut bad = Vec::new();
+        let mut rooms = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let w = app.world_mut();
+            let mut st: SystemState<(
+                Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+                Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>,
+            )> = SystemState::new(w);
+            let (b, d) = st.get(w).unwrap();
+            let plans = crate::sim::indoor::plan_buildings(&b, &d);
+            for (_, building, xf) in b.iter() {
+                let Some(l) = ug::layout(&building.prefab) else {
+                    continue;
+                };
+                for room in &l.rooms {
+                    let at = xf.transform_point(Vec3::new(
+                        room.at[0],
+                        l.floor_of(room) + 0.05,
+                        room.at[1],
+                    ));
+                    rooms += 1;
+                    let what = format!("{map}: {} `{}` at {at:.1}", building.prefab, room.id);
+                    let Some(plan) = below_in(&plans, at) else {
+                        bad.push(format!("{what}: not known to be in the site"));
+                        continue;
+                    };
+                    let from = plan.to_local(at + Vec3::Y * 1.0).xz();
+                    match out_of(plan, from) {
+                        None => bad.push(format!("{what}: no way out")),
+                        Some((_, end)) if on_its_floors(plan, end) => {
+                            bad.push(format!("{what}: the way out ends on its floors, {end:.1}"))
+                        }
+                        Some(_) => {}
+                    }
+                }
+            }
+        }
+        assert!(rooms > 0, "no underground rooms on any map");
+        assert!(
+            bad.is_empty(),
+            "{} of {rooms} rooms below ground:\n{}",
+            bad.len(),
+            bad.join("\n")
         );
     }
 
