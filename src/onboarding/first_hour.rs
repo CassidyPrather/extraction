@@ -3957,43 +3957,90 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     t
 }
 
-/// `pts`, walked from `from`, on and off each bridge's deck only at its
-/// ends (`ends`: where each meets the ground): a point on a deck reached
-/// from off it goes by the deck's end nearer where it comes from, and one
-/// off it reached from the deck by the end nearer where it's going. A walk
-/// under a bridge, never on its deck, is left as it is.
+/// The bridges: decks joined end to end (a bridge over a bend is two or
+/// more) as one, each with the ground ends of its outer ends (those joined
+/// to no other deck), where a walk steps on or off it. Per deck, its
+/// bridge's index; and per bridge, its ends.
+fn bridges_of(decks: &[(crate::world::bridges::Deck, [Vec2; 2])]) -> (Vec<usize>, Vec<Vec<Vec2>>) {
+    let n = decks.len();
+    let ends = |i: usize| [decks[i].0.a, decks[i].0.b];
+    let joined = |i: usize, k: usize| {
+        (0..n).any(|j| j != i && ends(j).iter().any(|e| e.distance(ends(i)[k]) < DECK_JOIN))
+    };
+    // Bridge of each deck: joined ones share the lowest index's.
+    let mut of: Vec<usize> = (0..n).collect();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for i in 0..n {
+            for j in 0..n {
+                let touch = ends(i)
+                    .iter()
+                    .any(|a| ends(j).iter().any(|b| a.distance(*b) < DECK_JOIN));
+                if i != j && touch && of[j] < of[i] {
+                    of[i] = of[j];
+                    changed = true;
+                }
+            }
+        }
+    }
+    let mut outer: Vec<Vec<Vec2>> = vec![vec![]; n];
+    for i in 0..n {
+        for k in 0..2 {
+            if !joined(i, k) {
+                outer[of[i]].push(decks[i].1[k]);
+            }
+        }
+    }
+    (of, outer)
+}
+
+/// Deck ends this near one another are one bridge's (m).
+const DECK_JOIN: f32 = 1.5;
+
+/// `pts`, walked from `from`, on and off each bridge only at its ends (its
+/// outer decks' ground ends, `bridges_of`): a point on a bridge reached
+/// from off it goes by the end nearer where it comes from, and one off it
+/// reached from the bridge by the end nearer where it's going. Along a
+/// bridge, deck to deck over a bend, straight on; a walk under one, never
+/// on it, is left as it is.
 fn by_deck_ends(
     decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
     from: Vec2,
     pts: Vec<Vec2>,
 ) -> Vec<Vec2> {
-    let on = |p: Vec2| decks.iter().position(|(d, _)| d.holds(p, 0.0));
-    let nearer = |ends: &[Vec2; 2], p: Vec2| {
-        if p.distance(ends[0]) <= p.distance(ends[1]) {
-            ends[0]
-        } else {
-            ends[1]
-        }
+    let (of, ends) = bridges_of(decks);
+    let on = |p: Vec2| {
+        decks
+            .iter()
+            .position(|(d, _)| d.holds(p, 0.0))
+            .map(|i| of[i])
+    };
+    let nearer = |b: usize, p: Vec2| {
+        ends[b]
+            .iter()
+            .copied()
+            .min_by(|x, y| x.distance(p).total_cmp(&y.distance(p)))
     };
     let mut out = Vec::with_capacity(pts.len() + 2);
     let mut at = from;
     for p in pts {
         let (was, is) = (on(at), on(p));
         if was != is {
-            // Off one deck (by the end toward where it's going), then on
+            // Off one bridge (by the end toward where it's going), then on
             // another (by the end toward where it comes from).
-            if let Some(i) = was {
-                let e = nearer(&decks[i].1, p);
-                if e.distance(at) > DECK_END_NEAR && e.distance(p) > DECK_END_NEAR {
-                    out.push(e);
-                    at = e;
-                }
+            if let Some(e) = was.and_then(|b| nearer(b, p))
+                && e.distance(at) > DECK_END_NEAR
+                && e.distance(p) > DECK_END_NEAR
+            {
+                out.push(e);
+                at = e;
             }
-            if let Some(i) = is {
-                let e = nearer(&decks[i].1, at);
-                if e.distance(at) > DECK_END_NEAR && e.distance(p) > DECK_END_NEAR {
-                    out.push(e);
-                }
+            if let Some(e) = is.and_then(|b| nearer(b, at))
+                && e.distance(at) > DECK_END_NEAR
+                && e.distance(p) > DECK_END_NEAR
+            {
+                out.push(e);
             }
         }
         out.push(p);
@@ -5149,19 +5196,38 @@ the Hollow.";
                     (d, [a.xz(), b.xz()])
                 })
                 .collect();
-            for (d, ends) in &decks {
+            let (of, ends) = bridges_of(&decks);
+            for (i, (d, _)) in decks.iter().enumerate() {
+                let outer = &ends[of[i]];
+                assert!(
+                    !outer.is_empty(),
+                    "{map}: a bridge with no ends at {:?}",
+                    d.a
+                );
                 let mid = (d.a + d.b) * 0.5;
                 let side = (d.b - d.a).perp().normalize_or(Vec2::X) * (d.width + 6.0);
+                // (Its middle at one of the bridge's ends already: straight on.)
+                let at_end = outer.iter().any(|e| e.distance(mid) <= DECK_END_NEAR);
                 for beside in [mid + side, mid - side] {
+                    // (Beside it on another deck of the same bridge: along it.)
+                    if decks
+                        .iter()
+                        .position(|(d, _)| d.holds(beside, 0.0))
+                        .map(|j| of[j])
+                        == Some(of[i])
+                    {
+                        continue;
+                    }
                     let way = by_deck_ends(&decks, beside, vec![mid]);
                     assert!(
-                        way.len() == 2 && ends.contains(&way[0]) && way[1] == mid,
+                        (way.len() == 2 && outer.contains(&way[0]) && way[1] == mid)
+                            || (at_end && way == vec![mid]),
                         "{map}: deck {:?}..{:?} from {beside:?}: {way:?}",
                         d.a,
                         d.b
                     );
                 }
-                for end in ends {
+                for end in outer {
                     let way = by_deck_ends(&decks, *end, vec![mid]);
                     assert_eq!(way, vec![mid], "{map}: from its end {end:?}");
                 }
