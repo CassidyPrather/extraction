@@ -930,7 +930,9 @@ an SKS's carrier 0.92; a TOZ-8's .22 parts 1.15. An SKS's bolt going
 home is a rifle's carrier (`guns/bolt_close`), not the PM's slide, and
 its 7.62x39 report is the AK's set at 0.9, deeper. A round going in sounds
 like what goes in: a clip's rattle into a Mosin or an SKS, a shell into
-a shotgun, and a loose .22 into a TOZ-8, pushed home (`gun.round_in`).
+a shotgun, and a loose round thumbed into any rifle, pushed home
+(`gun.round_in` on Weapon feel's `RoundThumbed`: a TOZ-8's .22, or a
+Mosin or an SKS filled a round at a time).
 `audio::tests::the_first_hour_guns_each_sound_their_own` holds it: for
 the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
 speed for the same moment.
