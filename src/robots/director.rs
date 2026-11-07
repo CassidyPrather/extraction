@@ -439,7 +439,7 @@ pub fn survey_places(zone: &Zone, hot_only: bool) -> Vec<[f32; 2]> {
                 .iter()
                 .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
         })
-        .filter(|p| !hot_only || super::pressure::hot_at(zone, *p))
+        .filter(|p| !hot_only || super::pressure::hot_at(zone, *p, None))
         .collect()
 }
 
