@@ -140,6 +140,7 @@ def main():
                                           + glob.glob(os.path.join(runs_dir, "*", "*.jsonl")))]
     regs_by = {m: regions(m) for m in maps}
     runs = []
+    assets = set()
     for m, path in paths:
         regs = regs_by[m]
         visited, end, personality = set(), None, "?"
@@ -150,6 +151,8 @@ def main():
                 continue
             if e["ev"] == "start":
                 personality = e.get("personality", "?")
+                # What data each raid ran on: an A/B compares like with like.
+                assets.add((e.get("assets", "?"), e.get("build", "?")))
             elif e["ev"] == "pos":
                 name, danger = region_of(regs, e["x"], e["z"])
                 if name:
@@ -207,6 +210,10 @@ def main():
         return reach(lo, hi)
 
     ts, wants, STANDING = tiers()
+    # (Raids from before the field: "?".)
+    print("assets: " + "; ".join(f"data {a} build {b}" for a, b in sorted(assets)))
+    if len(assets) > 1:
+        print("WARNING: these raids ran on more than one set of data or build")
     print(f"{map_name}: {n} sim raids, {home:.0%} home, "
           f"{sum(r['minutes'] for r in runs) / n:.0f} min a raid on average\n")
     print("| Danger reached and home | Share of raids |\n| - | - |")

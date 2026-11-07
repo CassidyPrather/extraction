@@ -565,7 +565,8 @@ pub fn attach_raider(
         json!({"run": run, "map": opts.map, "seed": seed, "personality": traits.name,
                "minutes": traits.minutes, "format": super::telemetry::FORMAT,
                "sites": sites.len(), "buildings": plans.len(),
-               "objective": objective.map(|o| [round(o.x, 1), round(o.y, 1)])}),
+               "objective": objective.map(|o| [round(o.x, 1), round(o.y, 1)]),
+               "assets": crate::asset_identity().data, "build": crate::asset_identity().build}),
     );
     info!(
         "sim: {} raider, {} sites ({} buildings planned)",

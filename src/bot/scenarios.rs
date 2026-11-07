@@ -1142,6 +1142,8 @@ fn finish_scenario(
     }
     *done = true;
     let ok = bot.failed == 0;
+    // What data it ran on: an A/B is only one if both read the same.
+    println!("{}", crate::asset_identity());
     println!(
         "scenario {}: {} passed, {} failed -> {}",
         opts.scenario.as_deref().unwrap_or(""),
