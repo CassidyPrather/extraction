@@ -619,6 +619,10 @@ fn lights_reaching(app: &mut App, eye: Vec3) -> usize {
 /// heavy 8-14 m out (their lamps, halos and tells), and the firefight's
 /// smoke off their wounds (`puffs::scenes`). Settled before the view is
 /// measured; what it spawned, to despawn after.
+///
+/// `WORST_HEAVY_AT=9` puts the heavy that many metres out instead of 14,
+/// standing there (a heavy at fighting range, to measure its own draws);
+/// the budget's views keep 14, walking in toward 10.
 fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
     use crate::robots::{Job, JobKind};
     let fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
@@ -637,6 +641,19 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
         duration: 600.0,
         exit: site + Vec3::X * 200.0,
     };
+    // (The fight's job walks the heavy toward the site, 10 m out; one put
+    // elsewhere by `WORST_HEAVY_AT` watches where it stands, so it's
+    // measured there.)
+    let heavy = on(heavy_at(), 0.0);
+    let heavy_job = if std::env::var_os("WORST_HEAVY_AT").is_some() {
+        Job {
+            site: heavy,
+            exit: heavy + Vec3::X * 200.0,
+            ..job()
+        }
+    } else {
+        job()
+    };
     let mut queue = bevy::ecs::world::CommandQueue::default();
     let mut out = {
         let mut c = Commands::new(&mut queue, w);
@@ -644,7 +661,7 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
             crate::robots::drone::spawn_drone(&mut c, on(12.0, 2.0) + Vec3::Y * 6.0, job()),
             crate::robots::walker::spawn_walker(&mut c, &zone, on(10.0, -4.0), job()),
             crate::robots::hound::spawn_hound(&mut c, &zone, on(8.0, 3.0), job()),
-            crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, on(14.0, 0.0), job()),
+            crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, heavy, heavy_job),
         ]
     };
     queue.apply(w);
@@ -655,6 +672,15 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
         app.update();
     }
     out
+}
+
+/// How far out the fight's heavy stands: 14 m, or `WORST_HEAVY_AT`.
+fn heavy_at() -> f32 {
+    std::env::var("WORST_HEAVY_AT")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|d| (2.0..=60.0).contains(d))
+        .unwrap_or(14.0)
 }
 
 /// Where Map design's walk reviews live: a valley's `walk.stills`, its
