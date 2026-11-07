@@ -7100,3 +7100,437 @@ fn a_machine_without_headway_gives_up() {
         "still here, going nowhere"
     );
 }
+
+/// Every flare event, and when (s, from the first update).
+#[derive(Resource, Default)]
+struct FlareLog(Vec<(f32, super::distress::FlareEvent)>);
+
+fn log_flares(
+    mut ev: MessageReader<super::distress::FlareEvent>,
+    mut log: ResMut<FlareLog>,
+    time: Res<Time>,
+) {
+    let t = time.elapsed_secs();
+    log.0.extend(ev.read().map(|e| (t, *e)));
+}
+
+/// A walker 15 m off in the open, facing you, its core failing; you've
+/// stirred the Zone. Returns the app, you, it, and where you stand.
+fn failing_walker(level: super::pressure::Level) -> (App, Entity, Entity, Vec3) {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 4);
+    app.init_resource::<FlareLog>()
+        .add_systems(Last, log_flares);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+    }
+    // Open, level ground, nothing between you (drone_drill's open spots).
+    let (me, at) = super::drone_drill::open_ground(&app, &zone)
+        .into_iter()
+        .map(|(p, _)| (zone.on_ground(p.x, p.y), zone.on_ground(p.x + 15.0, p.y)))
+        .find(|(a, b)| (a.y - b.y).abs() < 0.5)
+        .expect("open level ground");
+    put(&mut app, player, me);
+    let z = zone.clone();
+    let walker = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                at,
+                Job {
+                    kind: JobKind::Watch,
+                    site: at,
+                    duration: 600.0,
+                    exit: at,
+                },
+            )
+        })
+        .unwrap();
+    app.update();
+    {
+        let mut t = app.world_mut().get_mut::<Transform>(walker).unwrap();
+        let y = t.translation.y;
+        t.look_at(Vec3::new(me.x, y, me.z), Vec3::Y);
+    }
+    let core = app
+        .world_mut()
+        .query::<&mut super::RobotPart>()
+        .iter_mut(app.world_mut())
+        .filter(|p| p.robot == walker && p.role == super::PartRole::Core)
+        .map(|mut p| {
+            p.hp = p.max_hp * 0.3;
+        })
+        .count();
+    assert_eq!(core, 1, "its core");
+    let stir = match level {
+        super::pressure::Level::Quiet => 0.0,
+        _ => 1.5,
+    };
+    {
+        let mut p = app.world_mut().resource_mut::<super::pressure::Pressure>();
+        p.stir = stir;
+        p.level = level;
+        p.stepped_at = Some(-1.0e3);
+    }
+    (app, player, walker, me)
+}
+
+/// Run `secs`, the player held where they stand; `each` sees every tick.
+fn run_flare(
+    app: &mut App,
+    player: Entity,
+    me: Vec3,
+    secs: f32,
+    mut each: impl FnMut(&mut App, f32),
+) {
+    let t0 = app.world().resource::<Time>().elapsed_secs();
+    for _ in 0..(secs * 90.0) as usize {
+        put(app, player, me);
+        {
+            let mut p = app.world_mut().resource_mut::<super::pressure::Pressure>();
+            p.stir = p.stir.max(1.5);
+        }
+        app.update();
+        let t = app.world().resource::<Time>().elapsed_secs() - t0;
+        each(app, t);
+    }
+}
+
+fn flare_acts(app: &App) -> Vec<(f32, super::distress::FlareAct)> {
+    app.world()
+        .resource::<FlareLog>()
+        .0
+        .iter()
+        .map(|(t, e)| (*t, e.what))
+        .collect()
+}
+
+/// A failing walker that has you tells (its tube up for the readable
+/// lead), fires, and the canister bursts 60 m up: the director queues, and
+/// owes, an answer to where it went up, and the account takes a step's
+/// worth (#79: the burst is all anything knows).
+#[test]
+fn a_failing_walker_that_has_you_tells_then_flares_and_is_answered() {
+    use super::distress::{CLIMB, FlareAct, HEIGHT, TELL};
+    let (mut app, player, _walker, me) = failing_walker(super::pressure::Level::Stirred);
+    let mut stir_at_burst = None;
+    let mut answered = false;
+    let mut before = 0.0;
+    run_flare(&mut app, player, me, 15.0, |app, _| {
+        let p = app.world().resource::<super::pressure::Pressure>().stir;
+        let burst = app
+            .world()
+            .resource::<FlareLog>()
+            .0
+            .iter()
+            .find(|e| e.1.what == FlareAct::Burst)
+            .map(|e| e.1.at);
+        if let Some(up) = burst {
+            // (The account takes it on its next tally.)
+            match &mut stir_at_burst {
+                None => stir_at_burst = Some((before, p, 0)),
+                Some((_, after, n)) if *n < 45 => {
+                    *after = after.max(p);
+                    *n += 1;
+                }
+                _ => {}
+            }
+            let d = app.world().resource::<super::director::Director>();
+            let near = |v: Vec3| Vec2::new(v.x - up.x, v.z - up.z).length() < 5.0;
+            answered |= d.owed.iter().any(|o| near(*o)) && d.responses.iter().any(|r| near(r.1));
+        }
+        before = p;
+    });
+    let acts = flare_acts(&app);
+    let at = |w: FlareAct| acts.iter().find(|a| a.1 == w).map(|a| a.0);
+    let (tell, launch, burst) = (
+        at(FlareAct::Tell).expect("it told"),
+        at(FlareAct::Launch).expect("and fired"),
+        at(FlareAct::Burst).expect("and it burst"),
+    );
+    assert!(launch - tell >= TELL - 0.05, "{acts:?}");
+    assert!(burst - launch >= CLIMB - 0.05, "{acts:?}");
+    let log = &app.world().resource::<FlareLog>().0;
+    let tube = log
+        .iter()
+        .find(|e| e.1.what == FlareAct::Launch)
+        .unwrap()
+        .1
+        .at;
+    let up = log
+        .iter()
+        .find(|e| e.1.what == FlareAct::Burst)
+        .unwrap()
+        .1
+        .at;
+    assert!(
+        (up.y - tube.y - HEIGHT).abs() < 1.0,
+        "burst {up} from {tube}"
+    );
+    assert_eq!(
+        acts.iter().filter(|a| a.1 == FlareAct::Tell).count(),
+        1,
+        "once"
+    );
+    assert!(answered, "an answer queued, and owed, to where it went up");
+    let (b, a, _) = stir_at_burst.expect("stir read at the burst");
+    assert!(a - b > 0.5, "a step's worth of stir: {b:.2} -> {a:.2}");
+}
+
+/// Shot down in its climb, a canister fizzles and calls nothing: no
+/// burst, nothing queued or owed to where it went up from.
+#[test]
+fn a_flare_shot_down_in_its_climb_calls_nothing() {
+    use super::distress::{Canister, FlareAct};
+    let (mut app, player, _walker, me) = failing_walker(super::pressure::Level::Stirred);
+    let mut shot = false;
+    let mut from = None::<Vec3>;
+    let mut answered = false;
+    run_flare(&mut app, player, me, 12.0, |app, _| {
+        if let Some(f) = from {
+            let d = app.world().resource::<super::director::Director>();
+            let near = |v: Vec3| Vec2::new(v.x - f.x, v.z - f.z).length() < 5.0;
+            answered |= d.owed.iter().any(|o| near(*o)) || d.responses.iter().any(|r| near(r.1));
+        }
+        if shot {
+            return;
+        }
+        let can = app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Canister>>()
+            .iter(app.world())
+            .next()
+            .map(|(e, g)| (e, g.translation()));
+        if let Some((e, p)) = can {
+            from = Some(p);
+            app.world_mut()
+                .write_message(crate::weapons::ballistics::Hit {
+                    entity: e,
+                    point: p,
+                    normal: Vec3::NEG_Y,
+                    velocity: Vec3::Y * 300.0,
+                    damage: 30.0,
+                    shooter: Some(player),
+                    mass_g: 8.0,
+                    load: Default::default(),
+                    blow: None,
+                });
+            shot = true;
+        }
+    });
+    assert!(shot, "it fired: {:?}", flare_acts(&app));
+    let acts = flare_acts(&app);
+    assert!(acts.iter().any(|a| a.1 == FlareAct::Downed), "{acts:?}");
+    assert!(!acts.iter().any(|a| a.1 == FlareAct::Burst), "{acts:?}");
+    assert!(!answered, "nothing sent to where it went up from");
+}
+
+/// Shoot the tube while it's up and nothing goes up.
+#[test]
+fn its_tube_shot_in_the_tell_stops_the_flare() {
+    use super::distress::{FlareAct, FlareTube};
+    let (mut app, player, walker, me) = failing_walker(super::pressure::Level::Stirred);
+    let mut shot = false;
+    run_flare(&mut app, player, me, 10.0, |app, _| {
+        if shot || !flare_acts(app).iter().any(|a| a.1 == FlareAct::Tell) {
+            return;
+        }
+        let tube = app
+            .world_mut()
+            .query::<(Entity, &FlareTube, &GlobalTransform)>()
+            .iter(app.world())
+            .find(|t| t.1.robot == walker)
+            .map(|(e, _, g)| (e, g.translation()))
+            .expect("its tube");
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Hit {
+                entity: tube.0,
+                point: tube.1,
+                normal: Vec3::Z,
+                velocity: Vec3::NEG_Z * 300.0,
+                damage: super::distress::TUBE_HP,
+                shooter: Some(player),
+                mass_g: 8.0,
+                load: Default::default(),
+                blow: None,
+            });
+        shot = true;
+    });
+    let acts = flare_acts(&app);
+    assert!(acts.iter().any(|a| a.1 == FlareAct::Stopped), "{acts:?}");
+    assert!(!acts.iter().any(|a| a.1 == FlareAct::Launch), "{acts:?}");
+}
+
+/// At Quiet a failing machine that has you calls no one (a flare is
+/// something you made happen), and the broken walker never carries one.
+#[test]
+fn no_flare_at_quiet_nor_from_the_broken_walker() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, _walker, me) = failing_walker(super::pressure::Level::Quiet);
+    let t0 = app.world().resource::<Time>().elapsed_secs();
+    for _ in 0..90 * 10 {
+        put(&mut app, player, me);
+        {
+            let mut p = app.world_mut().resource_mut::<super::pressure::Pressure>();
+            p.stir = 0.0;
+            p.level = super::pressure::Level::Quiet;
+        }
+        app.update();
+    }
+    let _ = t0;
+    assert!(flare_acts(&app).is_empty(), "{:?}", flare_acts(&app));
+    let zone = app.world().resource::<Zone>().clone();
+    let at = zone.on_ground(10.0, 170.0);
+    let broken = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::broken::spawn_broken_walker(&mut c, &zone, at, at)
+        })
+        .unwrap();
+    app.update();
+    app.update();
+    assert!(
+        app.world()
+            .get::<super::distress::Distress>(broken)
+            .is_none(),
+        "the broken walker carries no flare"
+    );
+}
+
+/// Stopping it is really possible: someone 15 m off with a pistol, aiming
+/// at the tube from its tell and then at the canister in its climb, as a
+/// person in a headset does (drone_drill's lag, jitter and cadence: where
+/// it was a quarter second ago, the canister led), stops the flare before it bursts in most
+/// tries (coordinator, #79). Reported: how many in the tell, how many in
+/// the climb.
+#[test]
+fn aiming_at_the_tube_in_its_tell_stops_it_most_tries() {
+    use super::distress::{Canister, FlareAct, FlareTube};
+    use super::drone_drill::{AIM_JITTER, AIM_LAG, SHOT_EVERY, normal};
+    let (mut in_tell, mut in_climb) = (0, 0);
+    let mut tries = vec![];
+    for k in 0..8u64 {
+        let (mut app, player, walker, me) = failing_walker(super::pressure::Level::Stirred);
+        let mut rng = extraction_core::noise::Rng::new(0xF1A2 ^ k);
+        let mut told = false;
+        let mut next = 0.0f32;
+        let mut shots = 0;
+        let mut seen: std::collections::VecDeque<(f32, Vec3)> = Default::default();
+        let eye = me + Vec3::Y * 1.6;
+        app.init_resource::<HitsOn>().add_systems(Last, count_hits);
+        run_flare(&mut app, player, me, 8.0, |app, t| {
+            let acts = flare_acts(app);
+            if !told && acts.iter().any(|a| a.1 == FlareAct::Tell) {
+                told = true;
+                next = t + AIM_LAG;
+            }
+            if !told
+                || acts
+                    .iter()
+                    .any(|a| matches!(a.1, FlareAct::Burst | FlareAct::Downed | FlareAct::Stopped))
+            {
+                return;
+            }
+            // The tube till it's away, then the canister.
+            let can = app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<Canister>>()
+                .iter(app.world())
+                .next()
+                .map(|g| g.translation());
+            let tube = app
+                .world_mut()
+                .query::<(&FlareTube, &GlobalTransform)>()
+                .iter(app.world())
+                .find(|x| x.0.robot == walker)
+                .map(|x| x.1.translation());
+            let Some(now_at) = can.or(tube) else { return };
+            seen.push_back((t, now_at));
+            while seen.len() > 2 && seen[1].0 <= t - AIM_LAG {
+                seen.pop_front();
+            }
+            if t < next {
+                return;
+            }
+            // Where it was a moment ago; a climbing canister led, as a
+            // shooter leads a rising thing: its speed then, over the lag
+            // and the round's flight (Weapon feel).
+            let mut aim = seen.front().map_or(now_at, |s| s.1);
+            if can.is_some() && seen.len() >= 2 {
+                let (t0, p0) = seen[0];
+                let (t1, p1) = seen[1];
+                let v = (p1 - p0) / (t1 - t0).max(1e-3);
+                aim += v * (AIM_LAG + aim.distance(eye) / 315.0);
+            }
+            let dir = (aim - eye).normalize_or(Vec3::NEG_Z);
+            let right = dir.cross(Vec3::Y).normalize_or(Vec3::X);
+            let up = right.cross(dir);
+            let dir = (dir
+                + right * (normal(&mut rng) * AIM_JITTER).tan()
+                + up * (normal(&mut rng) * AIM_JITTER).tan())
+            .normalize();
+            app.world_mut()
+                .write_message(crate::weapons::ballistics::Shot {
+                    gun: player,
+                    shooter: Some(player),
+                    origin: eye + dir * 0.4,
+                    direction: dir,
+                    speed: 315.0,
+                    damage: 34.0,
+                    projectiles: 1,
+                    spread: 0.0,
+                    recoil: 0.0,
+                    seed: rng.next_u64(),
+                });
+            shots += 1;
+            next = t + SHOT_EVERY;
+        });
+        let acts = flare_acts(&app);
+        let tell_stop = acts.iter().any(|a| a.1 == FlareAct::Stopped);
+        let climb_stop = acts.iter().any(|a| a.1 == FlareAct::Downed);
+        in_tell += tell_stop as u32;
+        in_climb += climb_stop as u32;
+        let hits: Vec<String> = app
+            .world()
+            .resource::<HitsOn>()
+            .0
+            .iter()
+            .map(|h| h.1.clone())
+            .filter(|w| !matches!(w.as_str(), "Body collider" | "Terrain collider"))
+            .collect();
+        tries.push((shots, hits, acts));
+    }
+    let stopped = in_tell + in_climb;
+    eprintln!(
+        "stopped before it burst: {stopped} of 8 ({in_tell} in its tell, {in_climb} in its climb)"
+    );
+    assert!(stopped >= 5, "stopped {stopped} of 8: {tries:?}");
+}
+
+#[derive(Resource, Default)]
+struct HitsOn(Vec<(f32, String)>);
+
+fn count_hits(
+    mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+    parts: Query<&super::RobotPart>,
+    tubes: Query<&super::distress::FlareTube>,
+    names: Query<&Name>,
+    mut out: ResMut<HitsOn>,
+    time: Res<Time>,
+) {
+    let t = time.elapsed_secs();
+    for h in hits.read() {
+        let what = if tubes.contains(h.entity) {
+            "tube".to_string()
+        } else if let Ok(p) = parts.get(h.entity) {
+            format!("{:?}", p.role)
+        } else {
+            names.get(h.entity).map_or("?".into(), |n| n.to_string())
+        };
+        out.0.push((t, what));
+    }
+}
