@@ -7606,15 +7606,6 @@ fn a_machine_on_a_long_way_round_is_not_given_up() {
         };
         at = g.translation();
         nearest = nearest.min(at.xz().distance(gate.xz()));
-        if std::env::var("TRACK").is_ok()
-            && app.world().resource::<Time>().elapsed_secs() as u32 % 5 == 0
-        {
-            eprintln!(
-                "t {:.0} at {at:.0} d {:.0}",
-                app.world().resource::<Time>().elapsed_secs(),
-                at.xz().distance(gate.xz())
-            );
-        }
         if nearest < 8.0 {
             break;
         }
