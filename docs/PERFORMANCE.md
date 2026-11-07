@@ -1710,6 +1710,59 @@ Found on the way:
   a gallery staged, `--frames` and those clocks start once the world is
   in.
 
+### Far stand-ins, a block a draw (7 November)
+
+Past 120 m a building is one stand-in mesh (`lod::StandIn`), and past the
+forest's far LOD so is a chunk's trees, all in one shared material. Each
+is still a draw. At Marrow's south gate that was 47 buildings' and 18
+chunks' draws an eye. `render::far_rest` merges every far stand-in in a
+192 m block that shares a material and vertex layout into one mesh, and
+hides theirs. The merged mesh is shown only while every stand-in in it is
+drawn whole for every eye: inside its own `VisibilityRange`, clear of
+both crossfades. When one isn't, the block draws its stand-ins again and
+is merged afresh from those that are. The same happens when one moves,
+comes, goes or has its mesh changed. Blended stand-ins are left alone.
+
+Stand-in meshes live on the GPU alone (`RenderAssetUsages::RENDER_WORLD`),
+so their data is gone from the main world once drawn. Each is copied the
+frame it comes, before extraction takes it. At Marrow that is 357 meshes,
+about 23 MiB. A stand-in never seen readable draws as itself.
+`EXTRACTION_FAR_REST=0` turns the merge off. `EXTRACTION_FAR_REST_LOG=1`
+prints what is shown merged and the size of the copies.
+
+**Marrow, three runs each (draws, both eyes, against 2400):**
+
+| view | before | after | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2263-2287 | 2121, 2153, 2189 | 9-12% |
+| gate insertion 2 | | 2018, 2000, 2045 | 15-17% |
+| s01_ahead | | 1890, 1924, 1896 | 20-21% |
+
+At the fuel exfil, building stand-ins went from 47 an eye to 5, and far
+chunks from 18 to 4, with about 11 merged meshes in their place.
+
+**What is drawn is the same.**
+- `a_blocks_far_stand_ins_draw_merged_only_while_each_is_whole` checks
+  the merged mesh holds exactly the hidden stand-ins' triangles. It does
+  this from far off, in one stand-in's crossfade, near, after a move and
+  after a despawn, with a sheared member and GPU-only members.
+- The ignored `gauge_every_far_stand_in_draws_merged_as_its_own` checks
+  every valley's merged blocks triangle for triangle, then rasterises
+  each member's view both ways. In all five valleys it finds 0 blocks
+  unlike and 0 pixels differing (95-190 stand-ins a valley).
+- In the game, at the fuel exfil (`--camera 28,0,154.5,0,0`, Marrow,
+  clearing, 11:00), 109 stand-ins are drawn in 11 merged meshes.
+  Against the same shot unmerged, the largest difference is 4 out of
+  255, and 4 pixels of 1.44M differ by more than 2.
+
+Found on the way:
+- **A puff batched kept its visibility class.** The visibility pass
+  listed it as a mesh to draw each frame, though nothing was. It is now
+  removed with the mesh.
+- **`Mesh::transformed_by` drops shear.** A stand-in under an unevenly
+  scaled parent moved wrong. Members now go into the block's frame by
+  their full affine.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
