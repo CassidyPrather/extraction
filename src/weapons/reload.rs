@@ -299,7 +299,7 @@ mod tests {
                 crate::audio::handling_sound(e, Some(action), id).map(|(set, _)| {
                     format!(
                         "{set} x{:.2}",
-                        crate::audio::handling_speed(e, Some(action))
+                        crate::audio::handling_speed(e, Some(action), id)
                     )
                 })
             })
