@@ -1611,6 +1611,40 @@ each its own entity, within `robots::fx`'s caps: 106 sparks (24-vertex
 cubes, lit orange), 79 glancing sparks (grey), and 54 wound flares in
 the embers material.
 
+### A heavy, piece by piece
+
+What the eye draws of one settled heavy, every part on, from 9 m and
+from 14 m (the same: its first LOD holds to 27 m). Counted from the
+camera's own `VisibleEntities`, after `VisibilityRange` has picked an
+LOD. `hang` spawns all three of a part's LODs, so a count of every
+visible mesh comes out about three times this.
+
+| Piece | Drawn | Why that many |
+|---|---|---|
+| Hull and brow | 8 | one mesh a material |
+| Plates (3, items) | 9 | 3 a plate; they come off |
+| Cell (item) | 5 | it comes out |
+| Bolts, merged | 2 | `BoltsMerged`: one mesh a material for all 12 |
+| Bolts' weak-point rings | 12 | `weak_points`: a ring a bolt, one shared mesh and material |
+| Eye | 3 | lit, gutters |
+| Vents | 2 + 2 | lit, can be shot |
+| Knees | 3 each, 12 | posed with their leg |
+| Thighs | 2 each, 8 | posed segments |
+| Shins | 3 each, 12 | posed segments |
+| Upper arm, forearm | 3 + 3 | posed segments |
+| **Total** | **81** | |
+
+The sun's shadow: 68 of these cast in each of the flash's two cascades
+(136), and every caster is also drawn by the eye. No LOD casts that the
+eye doesn't draw, so the shadow count is twice the casters, not waste.
+
+Every limb segment is its own posed entity, already one mesh a material,
+so merging BoltsMerged's way has nothing left in them. What's rigid with
+the hull (eye, vents, knees, plates, cell) has to stay apart: it gutters,
+is shot off or comes out. Fewer draws a heavy would take fewer materials
+a segment, one atlas for Shell, Dark and Steel, which is a change to the
+model. The bar is met, so it's left: headroom to spend if it's needed.
+
 ### Overdraw counts what the GPU shades
 
 The coordinator approved the change on one condition: drop only layers the
