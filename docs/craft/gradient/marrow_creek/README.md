@@ -10,9 +10,12 @@ one. `map_gradient` finds the crossings: run
 Before, 7 of Marrow's 10 crossings had nothing of the place in sight, and
 only The Hollow announced itself. After:
 
-- **Pumping station** is cut down to the station and its yard. Its
-  polygon had reached about 100 m out over the fields and the Forest
-  path, a way home that was counted hot without being hot.
+- **Pumping station**: its polygon reaches about 100 m out over the
+  fields and the Forest path, a way home that is counted hot without
+  being hot. Cutting it to the station and its yard is agreed but held:
+  it moved the director's survey ground, and a Hush test that counts any
+  response then failed. It comes back with Robot minds' fix to that test.
+  Until then its three crossings (out in the fields) stay untold.
 - **Radio mast**, the mast_relay job's two ways in: a guard booth on the
   east way, and the relay's jeep just inside the compound on the north
   one. A booth there stood on the slope, and its door step failed the
@@ -23,6 +26,6 @@ only The Hollow announced itself. After:
   either side of the head of the way down, so a newcomer stepping out of
   the kiosk sees there is a way.
 
-All 7 crossings are now told. The map lint is clean.
+With the shrink held, Marrow's other crossings are all told. The map lint is clean.
 
 `before_after.jpg`: from the approaches at day, before and after.
