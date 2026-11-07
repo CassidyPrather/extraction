@@ -6,6 +6,7 @@
 //! beacons and the lit windows the map asks for (`Cue::LitWindow`), each
 //! as far as its glow carries; in sight over the land, past the buildings
 //! between and under no canopy, and in the frame's height.
+//! `every_first_way_home_reads_at_night` holds it in every valley.
 
 use crate::geom::{P2, dist};
 use crate::map::{Cue, MapDef, MarkerKind};
@@ -297,6 +298,35 @@ mod tests {
     /// Each stop, READ (and on what) or LOST, for setting beside the night
     /// gauge's dark case: `MAP_ID=<valley> cargo test -p extraction_core
     /// probe_night -- --ignored --nocapture`.
+    /// In every valley, after dark and with no torch, each stop on a first
+    /// job's way home (and along each line of snow poles) has a light ahead
+    /// to steer by. Held in each valley's own ground by the night gauge's
+    /// frames (`scripts/night_route.sh`, the dark case), which this agreed
+    /// with on 77 of 78 stops (the one: two lamps glimpsed between trunks
+    /// at 130-150 m, which the canopy rightly calls hidden). A stop near
+    /// its rendezvous reads either way: you're at its beacon.
+    #[test]
+    fn every_first_way_home_reads_at_night() {
+        let mut bad = Vec::new();
+        for (id, text) in crate::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            for (s, seen) in read(&map, &hm, id) {
+                if seen.is_empty() && s.to_rv > 25.0 {
+                    bad.push(format!(
+                        "{id} {}: {} > {}, at ({:.0}, {:.0}) looking {:.0} deg: nothing lit within {CONE:.0} deg",
+                        s.name, s.what, s.rv, s.at[0], s.at[1], s.yaw
+                    ));
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "ways home with nothing lit ahead:\n{}",
+            bad.join("\n")
+        );
+    }
+
     #[test]
     #[ignore]
     fn probe_night_why() {
