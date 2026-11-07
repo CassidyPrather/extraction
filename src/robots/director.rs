@@ -413,7 +413,8 @@ pub(super) fn run_director(
         director.broken_placed = true;
         if let Some(at) = progression
             .as_ref()
-            .and_then(|p| super::broken::second_job_meet(&zone, &p.0))
+            .zip(opts.as_deref())
+            .and_then(|(p, o)| super::broken::second_job_meet(&zone, &o.map, &p.0))
         {
             // (The Verifier's release check reads this line.)
             let job = progression.as_ref().map_or(0, |p| p.0.done + 1);
