@@ -1010,6 +1010,24 @@ it plays, rain or not, and well past it: 231/175, 123/123 and 231/215 m
 in calm/downpour (`RANGE_TARGETS`, wants 80/80). Going down is silent, as
 the words are.
 
+A failing machine's distress flare (`robots::distress::FlareEvent`,
+`audio_machines::flare_sounds`) is heard at every moment:
+- The tell: the tube rising, a ratchet winding and a tick as it locks
+  (`distress.tell`, a stand-in). It's the moment to shoot the tube, so it
+  must read through a fight: 30 m off, at its best 0.15 s in the tell, it
+  clears walker fire at 20 m, running, and both by 6 dB
+  (`audio_gunstate.tells`), and it's heard 163 m in calm and 38 m in a
+  downpour.
+- The launch: a thump (`distress.launch`), then the canister's hiss
+  following it up (`distress.hiss`, a loop on the `Canister`, gone with
+  it).
+- The burst, 60 m up: a pop that carries, a call (`distress.burst`),
+  heard 266 m in calm and 163 m in a downpour (wants 200/120; no machine
+  ceiling, since it's meant to be heard).
+- Shot down: a fizzle where it falls (`distress.fizzle`).
+- The tube spoiled in its tell: a broken clank and a short fizzle
+  (`distress.broken`).
+
 A minelayer crawling grinds, its treads labouring, louder and quicker
 the faster it goes, silent standing (`audio_machines::grind_sounds`,
 `minelayer.grind`). Stopped over a spot to lay, its chute charges with a
