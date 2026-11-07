@@ -391,6 +391,7 @@ fn sputter(
         Option<&avian3d::prelude::ColliderAabb>,
     )>,
     robots: Query<&Robot>,
+    sorters: Query<&super::sorter::Sorter>,
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
@@ -495,7 +496,18 @@ fn sputter(
     // [`wisp_floor`], on the shared puff batch (no mesh of its own, no
     // shadow).
     wisps.retain(|r, _| failing.contains_key(r));
-    for (robot, (_, at)) in failing {
+    for (robot, (_, mut at)) in failing {
+        // A sorter's carriage hangs right under its bridge (and that under
+        // the ceiling): its soot leaves the carriage's side, off the rails'
+        // way and toward the eye, so it climbs beside the bridge, not into
+        // it.
+        if let Ok(s) = sorters.get(robot) {
+            let mut side = s.hall.rotation * Vec3::X;
+            if eye.is_some_and(|e| (e - at).dot(side) < 0.0) {
+                side = -side;
+            }
+            at += side * SORTER_SOOT_OUT;
+        }
         let c = wisps.entry(robot).or_insert_with(|| dice.f());
         *c += WISP_RATE * dt * (0.7 + 0.6 * dice.f());
         if *c < 1.0 || n_puffs >= MAX_PUFFS {
@@ -513,6 +525,10 @@ fn sputter(
         n_puffs += 1;
     }
 }
+
+/// How far out from a sorter carriage's middle its soot leaves (m): past
+/// its 0.7 m half width, clear of the bridge over it.
+const SORTER_SOOT_OUT: f32 = 0.9;
 
 /// Wisps a second from a machine with a part failing.
 pub const WISP_RATE: f32 = 1.4;
