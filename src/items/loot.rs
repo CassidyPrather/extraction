@@ -694,8 +694,11 @@ pub(crate) mod tests {
             .step_by(spots.len() / 6)
             .take(6)
             .cloned()
-            .map(|mut s| {
+            .enumerate()
+            .map(|(i, mut s)| {
                 s.at += far;
+                // A building of its own, as a new prop is.
+                s.building = 100_000 + i;
                 s
             })
             .collect();
@@ -746,10 +749,11 @@ pub(crate) mod tests {
             for (e, ..) in &rows {
                 world.despawn(*e);
             }
-            // The far spots' things (a kilometre off) left out.
+            // The far spots' things (a kilometre off, the valley being
+            // some 400 m across) left out.
             let mut out: Vec<String> = rows
                 .drain(..)
-                .filter(|(_, x, _)| *x < 900.0)
+                .filter(|(_, x, _)| *x < 600.0)
                 .map(|(.., r)| r)
                 .collect();
             out.sort();
