@@ -457,7 +457,7 @@
         // By the keepers' way down to the Inflow bridge.
         (at: (74.0, -180.0), radius: 1.5, stones: 3),
         // Above the old road, on the way to Sallow Head.
-        (at: (-88.7, -220.6), radius: 1.5, stones: 3),
+        (at: (-91.0, -221.0), radius: 1.5, stones: 3),
         // Down from the Draw-off tower to the Inflow bridge.
         (at: (0.6, -190.8), radius: 1.6, stones: 3),
         // Over the silt fans, on the way to the Inflow bridge.
