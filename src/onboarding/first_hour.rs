@@ -3957,19 +3957,28 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
             })
             .collect();
     let pts = by_deck_ends(&decks, from, pts);
-    let pts = round_deck_sides(&decks, from, pts, &|p: Vec2| world.zone.ground(p.x, p.y));
     // The grid's waypoints and a bank's sidestep know nothing of buildings:
     // each out of any it lands in (bar the end), and each stretch round any
     // in its way (from by the pump house, a waypoint past it was walked to
     // straight through it, and two newcomers stood at its wall).
-    let mut t = vec![];
+    let mut way = vec![];
     let mut at = from;
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
         for q in round_boxes(&boxes, at, r) {
-            t.extend(world.legs(at, q));
+            way.push(q);
             at = q;
         }
+    }
+    // Then off the decks' sides, the way as it'll be walked: round a house
+    // by the District bridge's north end, the way cut the deck's corner
+    // (Map design's wreck repro), where the waypoints before it hadn't.
+    let way = round_deck_sides(&decks, from, way, &|p: Vec2| world.zone.ground(p.x, p.y));
+    let mut t = vec![];
+    let mut at = from;
+    for q in way {
+        t.extend(world.legs(at, q));
+        at = q;
     }
     t
 }
