@@ -501,7 +501,7 @@ fn raster(tri: &[Vec3; 3], near: f32, f: f32, two: bool, layers: &mut [u16]) -> 
 
 /// Calls `pixel` with each pixel `tri` covers (its index) and the view
 /// distance there (perspective-correct); counts those it says to.
-fn raster_with(
+pub(crate) fn raster_with(
     tri: &[Vec3; 3],
     near: f32,
     f: f32,

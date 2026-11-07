@@ -305,6 +305,7 @@ fn holds_views_with(
         if near(draws, b.draws) || near(l.tris + r.tris, b.tris) {
             println!("    guns: {}", guns(&mut app, eyes.0));
             println!("    buildings: {}", buildings(&mut app, eyes.0));
+            println!("    forest: {}", forest(&mut app, eyes.0));
             println!("    unnamed: {}", unnamed(&mut app, eyes.0));
         }
         let mut o = Vec::new();
@@ -427,6 +428,10 @@ fn buildings(app: &mut App, eye: Entity) -> String {
         r.end_margin == o.end_margin && r.start_margin == o.start_margin
     };
     let mut n = [0usize; 5];
+    let mut shared = 0;
+    // Why the stand-ins drawn on their own aren't merged.
+    let mut alone: std::collections::BTreeMap<&str, usize> = Default::default();
+    let mut window_mats: std::collections::BTreeMap<String, usize> = Default::default();
     for e in seen {
         let Some(p) = w.get::<ChildOf>(e) else {
             continue;
@@ -439,16 +444,88 @@ fn buildings(app: &mut App, eye: Entity) -> String {
         let caster = w.get::<bevy::light::NotShadowCaster>(e).is_none();
         let k = match w.get::<VisibilityRange>(e) {
             Some(r) if same(r, &near) && caster => 0,
-            Some(r) if same(r, &near) => 2,
-            Some(r) if same(r, &far) => 3,
+            Some(r) if same(r, &near) => {
+                // Does a shell of the same building share its material?
+                let mat = w
+                    .get::<MeshMaterial3d<StandardMaterial>>(e)
+                    .map(|m| m.0.id());
+                let shares = w.get::<Children>(p.parent()).is_some_and(|kids| {
+                    kids.iter().any(|k| {
+                        k != e
+                            && w.get::<bevy::light::NotShadowCaster>(k).is_none()
+                            && w.get::<VisibilityRange>(k).is_some_and(|r| same(r, &near))
+                            && w.get::<MeshMaterial3d<StandardMaterial>>(k)
+                                .map(|m| m.0.id())
+                                == mat
+                    })
+                });
+                shared += shares as usize;
+                if let Some(m) = mat {
+                    *window_mats.entry(format!("{m:?}")).or_default() += 1;
+                }
+                2
+            }
+            Some(r) if same(r, &far) => {
+                *alone.entry(super::far_rest::state_of(w, e)).or_default() += 1;
+                3
+            }
             _ => 4,
         };
         n[k] += 1;
     }
     format!(
-        "shells {}, windows {}, stand-ins {}, other {}",
-        n[0], n[2], n[3], n[4]
+        "shells {}, windows {} ({shared} sharing their shell's material; {} window materials), \
+         stand-ins {} (drawn alone: {alone:?}), other {}",
+        n[0],
+        n[2],
+        window_mats.len(),
+        n[3],
+        n[4]
     )
+}
+
+/// The forest's meshes one eye draws, by what they are: a chunk's near
+/// trunks (a mesh a bark) and crowns, its far stand-in, the impostors (a
+/// mesh a variant a block), and each near tree's own cards and (a
+/// spruce's) dark core.
+fn forest(app: &mut App, eye: Entity) -> String {
+    let w = app.world_mut();
+    let seen: Vec<Entity> = w
+        .entity(eye)
+        .get::<VisibleEntities>()
+        .map(|v| v.get(std::any::TypeId::of::<Mesh3d>()).to_vec())
+        .unwrap_or_default();
+    let mut by: std::collections::BTreeMap<&str, usize> = Default::default();
+    // Why the far chunks drawn on their own aren't merged.
+    let mut far: std::collections::BTreeMap<&str, usize> = Default::default();
+    for e in seen {
+        let name = |x: Entity| w.get::<Name>(x).map(|n| n.as_str().to_string());
+        let parent = w.get::<ChildOf>(e).map(|p| p.parent());
+        let kind = if w.get::<super::far_rest::FarRestMesh>(e).is_some() {
+            "merged far stand-ins (any)"
+        } else if w.get::<crate::world::trees::FarForest>(e).is_some() {
+            *far.entry(super::far_rest::state_of(w, e)).or_default() += 1;
+            "far chunks"
+        } else if name(e).as_deref() == Some("Forest impostors") {
+            "impostors"
+        } else if parent.and_then(name).as_deref() == Some("Forest chunk") {
+            if w.get::<bevy::light::NotShadowCaster>(e).is_some() {
+                "near crowns"
+            } else {
+                "near trunks"
+            }
+        } else if parent.is_some_and(|p| w.get::<crate::world::trees::Tree>(p).is_some()) {
+            if w.get::<bevy::light::NotShadowReceiver>(e).is_some() {
+                "spruce cores"
+            } else {
+                "tree cards"
+            }
+        } else {
+            continue;
+        };
+        *by.entry(kind).or_default() += 1;
+    }
+    format!("{by:?}; far chunks drawn alone: {far:?}")
 }
 
 /// What the meshes one eye draws without a named ancestor are, by mesh
