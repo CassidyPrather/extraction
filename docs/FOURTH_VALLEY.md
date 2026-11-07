@@ -399,6 +399,21 @@ comes back.
   fails a lamp whose light isn't its own colour. Sallow passes with no
   failing distances; at 50 m each beacon is a clear green point, at 150
   m a faint one.
+- **The climb to the gauge house is a scramble by torch, with a light
+  above you.** The way up from the shore (w01_02 of the Draw-off tower's
+  way home) is a straight pull of some 15 m up the bench. A zig-zag
+  path was tried and dropped: by day it didn't read as a way, and the
+  routes don't take it. The gauge house's
+  beacon stands some 230 m away, well off to one side of the climb, so it
+  can't be the light you climb to. A yard lamp stands up the climb
+  instead, at (112, 123.5) beside the way: from the foot it's a warm
+  point on the skyline straight ahead, and from mid-climb a lamp on its
+  post, in clear weather and in the downpour
+  (`docs/shots/fourth-valley/night_climb_lamp_before_after.jpg`). On the
+  lip (130, 123.5) the slope hid it from the foot, so it stands lower.
+  `map_night`'s rule doesn't need an exception here: w01_02 already
+  read in the dark on the radio mast's lamp, and now also on this one.
+  Only the torch case lost the climb, and that has no fast rule.
 
 Still open, with the session that has it:
 
