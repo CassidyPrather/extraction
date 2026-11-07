@@ -69,7 +69,8 @@ fn dress_tubes(
         let s = shared.get_or_insert_with(|| Shared {
             housing: meshes.add(Cuboid::new(TUBE_SIZE.x, HOUSING, TUBE_SIZE.z)),
             barrel: meshes.add(Cylinder::new(BARREL_R, BARREL)),
-            lamp: meshes.add(Sphere::new(0.05).mesh().ico(2).unwrap()),
+            // (A lens cap on the barrel's top.)
+            lamp: meshes.add(Cylinder::new(0.06, 0.05)),
             steel: materials.add(StandardMaterial {
                 base_color: Color::srgb(0.22, 0.23, 0.24),
                 perceptual_roughness: 0.6,
@@ -191,6 +192,7 @@ fn dress_canisters(
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.9, 0.08, 0.05),
                         emissive: LinearRgba::rgb(3.0, 0.06, 0.03),
+                        // A light going up: held through fog, to be seen.
                         fog_enabled: false,
                         ..default()
                     }),
