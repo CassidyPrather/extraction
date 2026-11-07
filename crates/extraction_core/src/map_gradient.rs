@@ -31,6 +31,10 @@ pub const READ_FROM: f32 = APPROACH;
 /// it's ahead; the heading, not a narrow window, keeps out what's only
 /// passed.
 pub const AHEAD: f32 = 35.0;
+/// How much quiet ground a way must have crossed before the line for it
+/// to be a way out of the quiet (m): the approach frame's 20 m. Less, and
+/// it's a gap between hot places, walked hot to hot.
+pub const QUIET_RUN: f32 = 20.0;
 /// How near the line a thing outside the hot ground still tells of it (m).
 pub const BY_THE_LINE: f32 = 40.0;
 
@@ -146,14 +150,23 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
             if !(a.1 < HOT && b.1 >= HOT) {
                 continue;
             }
-            // The approach: back along the way from the line.
+            // The approach: back along the way from the line, on quiet
+            // ground (it ends where the way was last in hot ground).
             let mut approach = Vec::new();
             let mut s = 0.0;
             let mut j = i + 1;
             while j > 0 && s <= APPROACH {
                 approach.push(pts[j]);
+                if danger(map, pts[j - 1]).1 >= HOT {
+                    break;
+                }
                 s += dist(pts[j], pts[j - 1]);
                 j -= 1;
+            }
+            // A gap of quiet ground narrower than the approach frame
+            // between hot places isn't a way out of the quiet: no crossing.
+            if s < QUIET_RUN {
+                continue;
             }
             let back = {
                 let mut k = 0;
