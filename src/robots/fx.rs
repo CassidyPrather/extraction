@@ -384,7 +384,12 @@ fn puff_rising(
 /// tick together.
 fn sputter(
     mut commands: Commands,
-    parts: Query<(Entity, &RobotPart, &GlobalTransform)>,
+    parts: Query<(
+        Entity,
+        &RobotPart,
+        &GlobalTransform,
+        Option<&avian3d::prelude::ColliderAabb>,
+    )>,
     robots: Query<&Robot>,
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
@@ -393,6 +398,7 @@ fn sputter(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut counts: Local<std::collections::HashMap<Entity, Vec3>>,
+    mut wisps: Local<std::collections::HashMap<Entity, f32>>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut dice: Local<Dice>,
@@ -402,10 +408,27 @@ fn sputter(
     let (mut n_sparks, mut n_puffs) = (sparks.iter().len(), puffs.iter().len());
     let mut a = None;
     counts.retain(|e, _| parts.contains(*e));
-    for (e, part, gt) in &parts {
+    // Each machine's most nearly gone part still going, and where.
+    let mut failing: std::collections::HashMap<Entity, (f32, Vec3)> = Default::default();
+    for (e, part, gt, bounds) in &parts {
         // A wreck smoulders instead (`smoulder`).
         if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
+        }
+        let share = part.hp / part.max_hp.max(1.0);
+        if part.alive() && super::damage::Band::of(share) == super::damage::Band::Failing {
+            let worst = failing.entry(part.robot).or_insert((f32::MAX, Vec3::ZERO));
+            // Its top: soot let out of a part's middle would rise inside it
+            // (a spotter's envelope is 2.8 m across) and fade unseen.
+            let mut at = gt.translation();
+            if let Some(b) = bounds.filter(|b| b.max.is_finite()) {
+                at.y = at.y.max(b.max.y);
+            }
+            // Of two as near gone, the higher: its soot clears more cover
+            // (a spotter's envelope, not its winch in the grass).
+            if share < worst.0 || (share == worst.0 && at.y > worst.1.y) {
+                *worst = (share, at);
+            }
         }
         let mut tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
         // A gun shot off sends up a column, every robot's alike.
@@ -466,6 +489,39 @@ fn sputter(
             }
         }
     }
+    // A machine with a part failing sends up a thread of soot from it,
+    // whatever the part (a plate's sparks and an eye's spit are too small
+    // to tell at 30 m): one a machine, never smaller at the eye than
+    // [`wisp_floor`], on the shared puff batch (no mesh of its own, no
+    // shadow).
+    wisps.retain(|r, _| failing.contains_key(r));
+    for (robot, (_, at)) in failing {
+        let c = wisps.entry(robot).or_insert_with(|| dice.f());
+        *c += WISP_RATE * dt * (0.7 + 0.6 * dice.f());
+        if *c < 1.0 || n_puffs >= MAX_PUFFS {
+            continue;
+        }
+        *c -= 1.0;
+        let a = a.get_or_insert_with(|| {
+            assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
+        });
+        let d = eye.map_or(0.0, |e| e.distance(at));
+        let size = (0.3 * at_range(eye, at).sqrt()).max(wisp_floor(d));
+        // Soot, not pale smoke: grey on an overcast sky is a big puff no
+        // one sees.
+        puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, true, size);
+        n_puffs += 1;
+    }
+}
+
+/// Wisps a second from a machine with a part failing.
+pub const WISP_RATE: f32 = 1.4;
+
+/// A failing machine's wisp's least size `d` m from the eye: a puff is
+/// born at a third of it and swells, so this keeps it [`MIN_SPAN_DEG`]
+/// across from its first moments.
+pub fn wisp_floor(d: f32) -> f32 {
+    3.0 * flash_floor(d)
 }
 
 /// Whether `part` is a weapon that's been shot off.
