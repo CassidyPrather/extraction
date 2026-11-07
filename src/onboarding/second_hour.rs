@@ -28,6 +28,9 @@ pub const SCENARIO: &str = "second_hour";
 /// The last task while the run goes on: the director adds each step's
 /// tasks ahead of it.
 const IDLE: f32 = 4.5;
+/// An anomaly this near the ground's height over it is out where a walk
+/// reaches it (m; one under a building's floor or a site's roof isn't).
+const PROBE_ABOVE_GROUND: f32 = 3.0;
 
 pub fn opening() -> Vec<Task> {
     vec![
@@ -1326,6 +1329,10 @@ impl World2<'_, '_> {
             .iter()
             .filter(|(a, _)| a.kind != extraction_core::anomaly::AnomalyKind::Burner)
             .map(|(_, gt)| gt.translation())
+            // One out on the ground, where a walk reaches it (Marrow's
+            // shelter's snare, a storey under the village, was the nearest:
+            // walked over, never met, and the second hour's Anomaly missed).
+            .filter(|p| (p.y - self.zone.ground(p.x, p.z)).abs() < PROBE_ABOVE_GROUND)
             .min_by(|a, b| a.xz().distance(near).total_cmp(&b.xz().distance(near)))
     }
 
