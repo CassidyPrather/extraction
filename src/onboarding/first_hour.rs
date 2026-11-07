@@ -1404,7 +1404,12 @@ pub(super) fn direct_raid(
             // burst and a sentry's sweep alike): out in the open after a
             // warning, a burst every 2 s wore them down. No roof near:
             // low across its line.
-            First::Sentry if !p.reckless && !p.hoards => {
+            // (The hoarder too: walking on through its chirp it was shot
+            // down. Not yet the reckless one: sent for the nearest roof by
+            // the way round, it crossed the sweep and went down where
+            // walking on got it home, first_fight's sentry; its own answer
+            // is to come.)
+            First::Sentry if !p.reckless => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
                 match under_a_roof(&world, &plans, here, &state.no_roof) {
                     Some((tasks, b)) => {
