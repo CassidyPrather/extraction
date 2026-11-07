@@ -6923,3 +6923,172 @@ fn a_walker_sent_from_the_gate_gets_going() {
         "{made:.1} m of headway in 60 s from {start:.1}: {trail:#?}"
     );
 }
+
+/// The broken walker (job 2's dead gun, the fight a newcomer is meant to
+/// win) feeds the Zone's account nothing: two minutes of it on you, in its
+/// sight, and the Zone stays quiet; an armed walker in its place stirs it
+/// (lost's job 2 went Stirred, Busy, Hunting on that fight).
+#[test]
+fn the_broken_walker_feeds_nothing() {
+    use bevy::ecs::system::RunSystemOnce;
+    let level = |broken: bool| {
+        let (mut app, player, zone) = director_app("marrow_creek", 1, 1);
+        {
+            let mut d = app.world_mut().resource_mut::<super::director::Director>();
+            d.next_job = 1.0e6;
+            d.next_logistics = 1.0e6;
+            d.broken_placed = true;
+        }
+        let me = zone.on_ground(10.0, 150.0);
+        let at = zone.on_ground(16.0, 150.0);
+        let z = zone.clone();
+        let m = app
+            .world_mut()
+            .run_system_once(move |mut c: Commands| {
+                if broken {
+                    super::broken::spawn_broken_walker(&mut c, &z, at, at)
+                } else {
+                    super::walker::spawn_walker(
+                        &mut c,
+                        &z,
+                        at,
+                        Job {
+                            kind: JobKind::Survey,
+                            site: at,
+                            duration: 1.0e6,
+                            exit: at,
+                        },
+                    )
+                }
+            })
+            .unwrap();
+        for _ in 0..90 * 120 {
+            put(&mut app, player, me);
+            if let Some(mut a) = app.world_mut().get_mut::<Awareness>(m) {
+                a.target = Some(player);
+                a.can_see_target = true;
+                a.suspicion = 1.0;
+            }
+            // (Kept up: a downed player's raid isn't out, and resets it.)
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = h.max;
+                h.bleeding = 0.0;
+                h.down = false;
+            }
+            // Its sight kept on you (as in a fight), the Zone ticks.
+            app.update();
+        }
+        app.world().resource::<super::pressure::Pressure>().level
+    };
+    assert_eq!(
+        level(true),
+        super::pressure::Level::Quiet,
+        "the broken walker"
+    );
+    assert!(
+        level(false) > super::pressure::Level::Quiet,
+        "an armed walker on you stirs it"
+    );
+}
+
+/// A step said aloud at Hunting brings something to you within its cue,
+/// even with every one of the director's places taken: the radio said the
+/// Zone is coming, and it comes (Hunting with nothing sent for 40 minutes:
+/// Progression's wanderer r19).
+#[test]
+fn a_voiced_hunting_step_brings_something_even_at_the_cap() {
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    let me = zone.on_ground(10.0, 60.0);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.broken_placed = true;
+        d.max_active = 0;
+    }
+    for _ in 0..30 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    app.world_mut()
+        .resource_mut::<super::director::Director>()
+        .max_active = 0;
+    app.world_mut().write_message(super::pressure::Stepped {
+        level: super::pressure::Level::Hunting,
+        why: super::pressure::Why::Carried,
+        at: me,
+    });
+    let mut sent = 0;
+    for _ in 0..(90.0 * (super::pressure::CUE_LEAD + 3.0)) as usize {
+        put(&mut app, player, me);
+        app.update();
+        sent = app
+            .world_mut()
+            .query::<&Job>()
+            .iter(app.world())
+            .filter(|j| j.kind == JobKind::Response && j.site.xz().distance(me.xz()) < 2.0)
+            .count();
+        if sent > 0 {
+            break;
+        }
+    }
+    assert!(sent > 0, "nothing came at Hunting with the places full");
+}
+
+/// A machine that makes no headway on its way gives the errand up and goes
+/// out; one that can't get out either is gone (`director::NO_HEADWAY`).
+#[test]
+fn a_machine_without_headway_gives_up() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.broken_placed = true;
+    }
+    let far = zone.on_ground(0.0, 180.0);
+    let at = zone.on_ground(-40.0, 20.0);
+    let site = zone.on_ground(60.0, -60.0);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                at,
+                Job {
+                    kind: JobKind::Survey,
+                    site,
+                    duration: 60.0,
+                    exit: at + Vec3::X * 300.0,
+                },
+            )
+        })
+        .unwrap();
+    // Held where it is (as against the Gate's pier).
+    let hold = |app: &mut App| {
+        put(app, player, far);
+        if let Some(mut t) = app.world_mut().get_mut::<Transform>(w) {
+            t.translation = at;
+        }
+        app.update();
+    };
+    let secs = |s: f32| (90.0 * s) as usize;
+    for _ in 0..secs(super::director::NO_HEADWAY + 3.0) {
+        hold(&mut app);
+    }
+    assert!(
+        matches!(app.world().get::<Brain>(w), Some(Brain::Leave { .. })),
+        "{:?}",
+        app.world().get::<Brain>(w)
+    );
+    for _ in 0..secs(super::director::NO_HEADWAY + 3.0) {
+        hold(&mut app);
+    }
+    assert!(
+        app.world().get_entity(w).is_err(),
+        "still here, going nowhere"
+    );
+}
