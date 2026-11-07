@@ -6866,3 +6866,60 @@ fn a_shot_nothing_hears_brings_nothing() {
         "out of its reach (100 m x 1.2)"
     );
 }
+
+/// A walker sent out of the Marrow Gate gets going: 60 s after it's sent
+/// to a work site across the valley it's well on its way (every walker
+/// sent from there stood 7 m out of the Gate for the whole raid, holding
+/// the director's places: Progression's wanderer r19, my first_jobs runs).
+#[test]
+fn a_walker_sent_from_the_gate_gets_going() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+    }
+    let far = zone.on_ground(0.0, 180.0);
+    for _ in 0..90 * 2 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    let gate = super::director::gate(&zone);
+    let site = zone.on_ground(40.0, -95.0);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                gate,
+                Job {
+                    kind: JobKind::Survey,
+                    site,
+                    duration: 60.0,
+                    exit: gate,
+                },
+            )
+        })
+        .unwrap();
+    let start = gate;
+    let mut trail = vec![];
+    for i in 0..90 * 60 {
+        put(&mut app, player, far);
+        app.update();
+        if i % (90 * 10) == 0 {
+            let at = app.world().get::<GlobalTransform>(w).unwrap().translation();
+            let walker = app.world().get::<super::walker::Walker>(w).unwrap();
+            let (vel, next) = (walker.velocity, walker.path.first().copied());
+            trail.push((i / 90, at, vel, next));
+        }
+    }
+    let at = app.world().get::<GlobalTransform>(w).unwrap().translation();
+    let made = start.xz().distance(site.xz()) - at.xz().distance(site.xz());
+    assert!(
+        made > 30.0,
+        "{made:.1} m of headway in 60 s from {start:.1}: {trail:#?}"
+    );
+}
