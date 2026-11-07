@@ -664,6 +664,8 @@ pub(super) struct Newcomer {
     aimed_at: f32,
     /// When it last put a dressing on.
     dressed_at: f32,
+    /// When it last answered a crawler's crackle.
+    crawled_at: f32,
     /// On its way to a spot out of a walker's line till then.
     line_run_until: f32,
     /// When machines after it fired at it, the last half minute.
@@ -1208,7 +1210,14 @@ pub(super) fn direct_raid(
             }
         }
     }
-    let charged = tells.crawlers.read().any(|ev| on_me(ev.crawler));
+    // A crawler's crackle at it: where from.
+    let charge_from = tells
+        .crawlers
+        .read()
+        .filter(|ev| on_me(ev.crawler))
+        .last()
+        .map(|ev| ev.at.xz());
+    let charged = charge_from.is_some();
     let mut raised = false;
     for ev in tells.heavies.read() {
         if ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy) {
@@ -1271,6 +1280,10 @@ pub(super) fn direct_raid(
     // the 15 s, the newcomer took six rounds and went down; the cover the
     // other answer runs for comes first.
     let in_its_sights = state.shots.iter().any(|t| now - t < 5.0)
+        // (A crawler crackling at it as much as a sentry's sweep: stood
+        // still for "Something heard you", five newcomers took a zap every
+        // 2 s in a shelter's dorm, Marrow job 2.)
+        || charged
         || firsts.iter().chain(&again).any(|f| {
             matches!(
                 f,
@@ -1286,6 +1299,53 @@ pub(super) fn direct_raid(
     });
     // A machine on it: noticed, aimed at, locked on, its sweep, shot at.
     let threatened = in_its_sights || noticed_now || fired_on;
+    // A crawler charging at it: armed, it shoots it (it goes down to a few
+    // rounds); with nothing to shoot, it backs out the way it came, out of
+    // its line. (No answer at all, the newcomers stood in its line, or
+    // pressed on into it, and were zapped down.)
+    if let Some(from) = charge_from
+        && now - state.crawled_at > CRAWLER_EVERY
+        && world.alive(player)
+    {
+        state.crawled_at = now;
+        // (Every armed one: backing out of a shelter's dorm at a walk, the
+        // careful newcomers made a metre between zaps and went down.)
+        let packed = world
+            .packed_guns
+            .iter()
+            .find(|(_, g, by)| by.0 == player && g.firearm.live_rounds() > 0)
+            .map(|(e, ..)| e);
+        let answer = if armed_now {
+            state.fought_at = now;
+            state.note(now, Kind::Learned, "a crawler crackling at it: shot it");
+            take_it_on()
+        } else if let Some(gun) = packed {
+            // Its only gun in the pack (put there with the hands full after
+            // a fight): out, and at it. (Backing out instead, the reckless
+            // one was zapped down with a loaded gun on its back.)
+            state.fought_at = now;
+            state.note(
+                now,
+                Kind::Learned,
+                "a crawler crackling at it: its gun out of the pack, and shot it",
+            );
+            let mut t = unpack_gun(gun);
+            t.extend(take_it_on());
+            t
+        } else {
+            state.note(now, Kind::Learned, "a crawler crackling at it: backed out");
+            let (out, _) = way_out(&world, &view, &plans, here);
+            if out.is_empty() {
+                walk_away(&world, here, from)
+            } else {
+                out
+            }
+        };
+        if let Some(f) = fight.as_mut() {
+            f.flee_until = 0.0;
+        }
+        super::second_hour::cut_in(&mut bot, answer);
+    }
     let moments = firsts
         .into_iter()
         .map(|f| (f, true))
@@ -3158,6 +3218,10 @@ fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, runni
         && shots.iter().all(|t| now - t > CONTACT_FOR)
 }
 
+/// Not answering a crawler's crackle again sooner than this (s): its zaps
+/// come every 2 s or so, and the answer takes longer.
+const CRAWLER_EVERY: f32 = 3.0;
+
 /// A bleed this fast is worth stopping to dress (hp/s).
 const BLEED_WORTH: f32 = 0.3;
 /// Not more often than this (s).
@@ -3659,6 +3723,21 @@ fn shot_warns(shots: &[f32], now: f32, window: f32) -> bool {
 /// A fight, for the reckless one: the gun out, readied by the one in hand
 /// (`Task::Ready`: the PM comes out of the crate on safe, and with two on
 /// it, the one drawn may not be the one first found), and fired.
+/// `gun`, out of the pack into the right hand.
+fn unpack_gun(gun: Entity) -> Vec<Task> {
+    vec![
+        Task::Stow(Side::Right),
+        Task::ToggleBackpack,
+        Task::Wait(0.6),
+        Task::GrabFromHere {
+            item: gun,
+            side: Side::Right,
+        },
+        Task::ToggleBackpack,
+        Task::Wait(0.5),
+    ]
+}
+
 fn take_it_on() -> Vec<Task> {
     vec![
         Task::DrawGun,
