@@ -970,6 +970,10 @@ mod tests {
         ),
         ("EnteredWell", "a first-time hint; the well is heard"),
         ("FirstMet", "the bot's report"),
+        (
+            "FlareEvent",
+            "a failing machine's distress flare (tell, launch, burst, downed, stopped); its sounds are Audio's to add (robots::distress)",
+        ),
         ("Gestured", "a gesture's start (UI)"),
         ("GoalDone", "the onboarding's step is heard (StepDone)"),
         (
