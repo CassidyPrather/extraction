@@ -24,9 +24,11 @@ DISTS="${DISTS:-10 20 30}"
 FRAMES=700
 for kind in $KINDS; do
     for d in $DISTS; do
-        # A spotter flies its balloon high: look up to it.
-        case "$kind" in
-            spotter) cam="92.9,0,131.9,0,12" ;;
+        # A spotter flies its balloon some 23 m up: look up to it.
+        case "$kind:$d" in
+            spotter:10) cam="92.9,0,131.9,0,64" ;;
+            spotter:20) cam="92.9,0,131.9,0,47" ;;
+            spotter:30) cam="92.9,0,131.9,0,37" ;;
             *) cam="92.9,0,131.9,0,-2" ;;
         esac
         for state in intact failing; do

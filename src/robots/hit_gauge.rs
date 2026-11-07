@@ -421,12 +421,17 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> Seen {
         Option<&bevy::camera::primitives::Aabb>,
         Has<Mesh3d>,
         Has<crate::render::puff::SoftPuff>,
+        Option<&InheritedVisibility>,
     ), Or<(
         With<Mesh3d>,
         With<PointLight>,
         With<crate::render::puff::SoftPuff>,
     )>>();
-    for (e, gt, aabb, mesh, puff) in q.iter(world) {
+    for (e, gt, aabb, mesh, puff, vis) in q.iter(world) {
+        // A hidden puff (one `render::puff` has put out) is not seen.
+        if puff && vis.is_some_and(|v| !v.get()) {
+            continue;
+        }
         let mesh = mesh || puff;
         if g.meshes_before.contains(&e) || mine.contains(&e) {
             continue;
@@ -959,11 +964,15 @@ fn tells(world: &mut World, g: &mut HitGauge) {
         Entity,
         &GlobalTransform,
         Option<&bevy::camera::primitives::Aabb>,
+        Has<crate::render::puff::SoftPuff>,
+        Option<&InheritedVisibility>,
     ), Or<(With<Mesh3d>, With<crate::render::puff::SoftPuff>)>>();
     let pieces: Vec<(Entity, Vec3, f32)> = q
         .iter(world)
-        .filter(|(e, ..)| !g.meshes_before.contains(e))
-        .map(|(e, gt, aabb)| {
+        .filter(|(e, _, _, puff, vis)| {
+            !g.meshes_before.contains(e) && !(*puff && vis.is_some_and(|v| !v.get()))
+        })
+        .map(|(e, gt, aabb, ..)| {
             let at = gt.translation();
             (e, at, area_at(gt, aabb, eye.distance(at)))
         })

@@ -384,7 +384,12 @@ fn puff_rising(
 /// tick together.
 fn sputter(
     mut commands: Commands,
-    parts: Query<(Entity, &RobotPart, &GlobalTransform)>,
+    parts: Query<(
+        Entity,
+        &RobotPart,
+        &GlobalTransform,
+        Option<&avian3d::prelude::ColliderAabb>,
+    )>,
     robots: Query<&Robot>,
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
@@ -405,7 +410,7 @@ fn sputter(
     counts.retain(|e, _| parts.contains(*e));
     // Each machine's most nearly gone part still going, and where.
     let mut failing: std::collections::HashMap<Entity, (f32, Vec3)> = Default::default();
-    for (e, part, gt) in &parts {
+    for (e, part, gt, bounds) in &parts {
         // A wreck smoulders instead (`smoulder`).
         if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
@@ -413,8 +418,16 @@ fn sputter(
         let share = part.hp / part.max_hp.max(1.0);
         if part.alive() && super::damage::Band::of(share) == super::damage::Band::Failing {
             let worst = failing.entry(part.robot).or_insert((f32::MAX, Vec3::ZERO));
-            if share < worst.0 {
-                *worst = (share, gt.translation());
+            // Its top: soot let out of a part's middle would rise inside it
+            // (a spotter's envelope is 2.8 m across) and fade unseen.
+            let mut at = gt.translation();
+            if let Some(b) = bounds.filter(|b| b.max.is_finite()) {
+                at.y = at.y.max(b.max.y);
+            }
+            // Of two as near gone, the higher: its soot clears more cover
+            // (a spotter's envelope, not its winch in the grass).
+            if share < worst.0 || (share == worst.0 && at.y > worst.1.y) {
+                *worst = (share, at);
             }
         }
         let mut tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
