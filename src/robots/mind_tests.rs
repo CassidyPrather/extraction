@@ -2046,6 +2046,22 @@ fn keep_shooting_and_walkers_come_too() {
                 };
         }
         let at = zone.on_ground(100.0, 200.0);
+        // A walker within earshot to report them (`director::heard_by_any`).
+        let ear = at + Vec3::new(40.0, 0.0, 0.0);
+        app.world_mut().spawn((
+            Robot {
+                kind: super::RobotKind::Walker,
+                wrecked: false,
+            },
+            super::Senses {
+                sight: 0.0,
+                fov_deg: 90.0,
+                hearing: 1.2,
+                eye: Vec3::ZERO,
+            },
+            Transform::from_translation(ear),
+            GlobalTransform::from_translation(ear),
+        ));
         for _ in 0..shots {
             app.world_mut().write_message(super::Noise {
                 at,
@@ -6644,4 +6660,209 @@ fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
     }
     assert!(primed);
     assert!(said.is_empty(), "a step voiced on the way in: {said:?}");
+}
+
+/// A kind that only sees (`senses::SIGHT_ONLY`) never reacts to sound: a
+/// loud noise 5 m off, its eye shut, leaves it as it was, for every
+/// sight-only kind in a real valley (job 2: the broken walker out, a drone
+/// sent). The kinds that hear (a walker) still turn to the same noise.
+#[test]
+fn a_sight_only_kind_never_reacts_to_sound() {
+    use super::senses::SIGHT_ONLY;
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 1);
+    let far = zone.on_ground(0.0, 180.0);
+    put(&mut app, player, far);
+    for _ in 0..90 * 3 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    // One of each the valley may not have out yet: a drone, a relay, the
+    // broken walker, a walker (the one that hears), apart from each other.
+    let at = zone.on_ground(-40.0, 20.0) + Vec3::Y * 20.0;
+    let (pylon_at, broken_at, walker_at) = (
+        zone.on_ground(-80.0, 20.0),
+        zone.on_ground(-40.0, 60.0),
+        zone.on_ground(-80.0, 60.0),
+    );
+    let z = zone.clone();
+    app.world_mut()
+        .run_system_once(move |mut c: Commands| {
+            let job = |site: Vec3| Job {
+                kind: JobKind::Survey,
+                site,
+                duration: 600.0,
+                exit: site,
+            };
+            super::drone::spawn_drone(&mut c, at, job(at));
+            super::pylon::spawn_pylon(&mut c, pylon_at, 600.0, pylon_at);
+            super::broken::spawn_broken_walker(&mut c, &z, broken_at, broken_at);
+            super::walker::spawn_walker(&mut c, &z, walker_at, job(walker_at));
+        })
+        .unwrap();
+    for _ in 0..30 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    app.update();
+    #[allow(clippy::type_complexity)]
+    let kinds = app
+        .world_mut()
+        .run_system_once(
+            |q: Query<(
+                Entity,
+                &Robot,
+                &super::Senses,
+                (
+                    Has<super::indoor::Crawler>,
+                    Has<super::broken::Broken>,
+                    Has<super::grappler::Grappler>,
+                    Has<super::collector::Collector>,
+                    Has<super::sentry::Sentry>,
+                    Has<super::minelayer::Minelayer>,
+                    Has<super::spotter::Spotter>,
+                    Has<super::heavy::Heavy>,
+                    Has<super::hound::Hound>,
+                ),
+            )>| {
+                q.iter()
+                    .filter(|r| !r.1.wrecked)
+                    .map(|(e, r, s, (cr, br, gr, co, se, mi, sp, he, ho))| {
+                        let kind = match () {
+                            _ if cr => "crawler",
+                            _ if br => "broken walker",
+                            _ if gr => "grappler",
+                            _ if co => "collector",
+                            _ if se => "sentry",
+                            _ if mi => "minelayer",
+                            _ if sp => "spotter",
+                            _ if he => "heavy",
+                            _ if ho => "hound",
+                            _ => match r.kind {
+                                super::RobotKind::Drone => "drone",
+                                super::RobotKind::Pylon => "pylon",
+                                super::RobotKind::Dirigible => "dirigible",
+                                super::RobotKind::Sorter => "sorter",
+                                super::RobotKind::Walker => "walker",
+                            },
+                        };
+                        (e, kind, s.hearing)
+                    })
+                    .collect::<Vec<_>>()
+            },
+        )
+        .unwrap();
+    let sight_only = [
+        "broken walker",
+        "grappler",
+        "collector",
+        "sentry",
+        "minelayer",
+        "spotter",
+        "drone",
+        "pylon",
+        "dirigible",
+    ];
+    for (_, kind, hearing) in &kinds {
+        assert_eq!(
+            *hearing <= SIGHT_ONLY,
+            sight_only.contains(kind),
+            "{kind} hears at {hearing}"
+        );
+    }
+    for must in [
+        "drone",
+        "sentry",
+        "crawler",
+        "broken walker",
+        "pylon",
+        "walker",
+    ] {
+        assert!(
+            kinds.iter().any(|k| k.1 == must),
+            "no {must} in the valley to try: {:?}",
+            kinds
+                .iter()
+                .map(|k| k.1)
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+    }
+    // Each one's eye shut, its mind cleared; a noise 5 m off, heard by an
+    // ordinary ear to about 12 m, so no hearing machine nearby hears it and
+    // calls it in (a call is machines telling each other, not hearing).
+    let react = |app: &mut App, e: Entity| -> f32 {
+        let Some(gt) = app.world().get::<GlobalTransform>(e) else {
+            return 0.0;
+        };
+        let here = gt.translation();
+        app.world_mut().get_mut::<super::Senses>(e).unwrap().sight = 0.0;
+        *app.world_mut().get_mut::<Awareness>(e).unwrap() = Awareness::default();
+        for _ in 0..10 {
+            put(app, player, far);
+            app.world_mut().write_message(super::Noise {
+                at: here + Vec3::X * 5.0,
+                radius: 10.0,
+                source: Some(player),
+            });
+            app.update();
+        }
+        app.world().get::<Awareness>(e).map_or(0.0, |a| a.suspicion)
+    };
+    let mut heard = vec![];
+    for (e, kind, _) in kinds.clone() {
+        let s = react(&mut app, e);
+        if sight_only.contains(&kind) {
+            assert!(s < 0.01, "{kind} heard a shot it can't see: {s}");
+        } else if kind == "walker" {
+            heard.push(s);
+        }
+    }
+    assert!(
+        heard.iter().any(|s| *s > 0.2),
+        "a walker still hears it: {heard:?}"
+    );
+}
+
+/// A noise nothing that hears is near is reported to no one: no response,
+/// no heat, no stir (`director::heard_by_any`). Near a walker, it is.
+#[test]
+fn a_shot_nothing_hears_brings_nothing() {
+    use super::director::heard_by_any;
+    let walker = Robot {
+        kind: super::RobotKind::Walker,
+        wrecked: false,
+    };
+    let drone = Robot {
+        kind: super::RobotKind::Drone,
+        wrecked: false,
+    };
+    let ears = |h: f32| super::Senses {
+        sight: 60.0,
+        fov_deg: 120.0,
+        hearing: h,
+        eye: Vec3::ZERO,
+    };
+    let (hears, sees) = (ears(1.2), ears(super::senses::SIGHT_ONLY));
+    let shot = super::Noise {
+        at: Vec3::ZERO,
+        radius: 100.0,
+        source: None,
+    };
+    let near = Vec3::new(30.0, 0.0, 0.0);
+    assert!(!heard_by_any(std::iter::empty(), &shot), "the empty");
+    assert!(
+        !heard_by_any([(&drone, &sees, near, None)].into_iter(), &shot),
+        "a drone 30 m off only sees"
+    );
+    assert!(heard_by_any(
+        [(&walker, &hears, near, None)].into_iter(),
+        &shot
+    ));
+    assert!(
+        !heard_by_any(
+            [(&walker, &hears, Vec3::new(130.0, 0.0, 0.0), None)].into_iter(),
+            &shot
+        ),
+        "out of its reach (100 m x 1.2)"
+    );
 }
