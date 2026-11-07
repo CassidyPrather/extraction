@@ -601,7 +601,7 @@ mod tests {
             }
             if crate::audio::fault_layers(e).is_empty() {
                 if let Some((set, _)) = crate::audio::handling_sound(e, Some(action), id) {
-                    let speed = crate::audio::handling_speed(e, Some(action));
+                    let speed = crate::audio::handling_speed(e, Some(action), id);
                     out.push(format!("{set} x{speed:.2}"));
                 }
             }
