@@ -1671,7 +1671,14 @@ fn run_tasks(
                     let hinge = Vec2::new(gt.translation().x, gt.translation().z);
                     if pos.distance(hinge) > REACH + 1.5 {
                         bot.failed += 1;
-                        bot.note("FAIL door out of reach".into());
+                        // (Which one, and where: a held shut door in a
+                        // site's plan, read from its place.)
+                        bot.note(format!(
+                            "FAIL door out of reach: {door:?} hinge at {:.1} {:.1}, {:.1} m off",
+                            hinge.x,
+                            hinge.y,
+                            pos.distance(hinge)
+                        ));
                         bot.next();
                         continue;
                     }
