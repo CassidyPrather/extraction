@@ -347,10 +347,22 @@ fn climbs(r: Rise) -> f32 {
     r.rise * (1.0 - (-0.3 * r.life).exp()) / 0.3
 }
 
-fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: bool, size: f32) {
+fn puff(
+    commands: &mut Commands,
+    a: &FxAssets,
+    dice: &mut Dice,
+    at: Vec3,
+    dark: bool,
+    size: f32,
+) -> Entity {
     let mat = if dark { &a.soot } else { &a.smoke };
-    puff_rising(commands, a, dice, at, mat.clone(), size, WISP);
+    puff_rising(commands, a, dice, at, mat.clone(), size, WISP)
 }
+
+/// A failing machine's soot, and whose: the hit gauge counts a machine's
+/// own soot, not a neighbour's drifting past it.
+#[derive(Component)]
+pub struct SootOf(pub Entity);
 
 #[allow(clippy::too_many_arguments)]
 fn puff_rising(
@@ -361,22 +373,24 @@ fn puff_rising(
     mat: Handle<StandardMaterial>,
     size: f32,
     r: Rise,
-) {
+) -> Entity {
     let max = r.life * (0.8 + dice.f() * 0.4);
-    commands.spawn((
-        Puff {
-            vel: Vec3::Y * r.rise * (0.8 + dice.f() * 0.4) + dice.signed() * r.wander,
-            life: max,
-            max,
-            size,
-        },
-        Mesh3d(a.puff.clone()),
-        crate::render::puff::SoftPuff,
-        bevy::camera::visibility::NoFrustumCulling,
-        MeshMaterial3d(mat),
-        Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
-        NotShadowCaster,
-    ));
+    commands
+        .spawn((
+            Puff {
+                vel: Vec3::Y * r.rise * (0.8 + dice.f() * 0.4) + dice.signed() * r.wander,
+                life: max,
+                max,
+                size,
+            },
+            Mesh3d(a.puff.clone()),
+            crate::render::puff::SoftPuff,
+            bevy::camera::visibility::NoFrustumCulling,
+            MeshMaterial3d(mat),
+            Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
+            NotShadowCaster,
+        ))
+        .id()
 }
 
 /// A hurt part shows it (`damage::tell`): sparks, smoke and coolant off
@@ -521,7 +535,8 @@ fn sputter(
         let size = (0.3 * at_range(eye, at).sqrt()).max(wisp_floor(d));
         // Soot, not pale smoke: grey on an overcast sky is a big puff no
         // one sees.
-        puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, true, size);
+        let soot = puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, true, size);
+        commands.entity(soot).insert(SootOf(robot));
         n_puffs += 1;
     }
 }
