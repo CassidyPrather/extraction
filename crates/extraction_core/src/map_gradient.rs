@@ -16,6 +16,15 @@ use crate::terrain::Heightmap;
 pub const APPROACH: f32 = 60.0;
 /// The danger from which ground is hot.
 pub const HOT: u8 = 2;
+/// A tell reads when it spans this much of the eye (radians), as a cue
+/// does off the way (`map_breadcrumbs::READ_ANGLE`); not the skyline's
+/// smaller allowance: a tell is found in the frame without a caption.
+pub const READ_ANGLE: f32 = crate::map_breadcrumbs::READ_ANGLE;
+/// It must read from the last stretch before the line, this far short of
+/// it (m): what a newcomer sees coming up to it, the approach frame's
+/// 20 m among it; not from far back along the way, past something else.
+pub const SHORT: f32 = 8.0;
+pub const READ_FROM: f32 = 30.0;
 /// How near the line a thing outside the hot ground still tells of it (m).
 pub const BY_THE_LINE: f32 = 40.0;
 
@@ -28,7 +37,13 @@ pub struct Crossing {
     /// What tells of it on the approach: kind, name, how far from the
     /// nearest approach point that sees it.
     pub signals: Vec<(&'static str, String, f32)>,
+    /// The way's point [`BACK`] metres back from the line, and the way's
+    /// bearing there (a unit vector, toward the line): where a tell goes.
+    pub back: (P2, P2),
 }
+
+/// How far back from the line a tell's spot is suggested (m).
+pub const BACK: f32 = 15.0;
 
 fn danger(map: &MapDef, p: P2) -> (String, u8) {
     map.region_at(p)
@@ -61,8 +76,10 @@ fn in_sight(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> 
 pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]) -> Vec<Crossing> {
     let solids = solids(map);
     let marks = crate::map_landmarks::landmarks(map, hm);
-    // Every thing that can tell: kind, name, where, how tall, how far it carries.
-    let mut tells: Vec<(&'static str, String, P2, f32, f32)> = Vec::new();
+    // Every thing that can tell: kind, name, where, how tall, how far it
+    // carries, and how big it looks (the square root of its height times
+    // its narrowest breadth, as `map_breadcrumbs` reads a cue).
+    let mut tells: Vec<(&'static str, String, P2, f32, f32, f32)> = Vec::new();
     for m in &map.markers {
         match &m.kind {
             MarkerKind::Sign { text, .. } => tells.push((
@@ -71,11 +88,16 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 m.at,
                 1.5,
                 30.0,
+                1.1,
             )),
-            MarkerKind::Sentry { .. } => tells.push(("sentry", m.name.clone(), m.at, 2.0, 90.0)),
-            MarkerKind::RobotGate => tells.push(("robot gate", m.name.clone(), m.at, 3.0, 120.0)),
+            MarkerKind::Sentry { .. } => {
+                tells.push(("sentry", m.name.clone(), m.at, 2.0, 90.0, 1.6))
+            }
+            MarkerKind::RobotGate => {
+                tells.push(("robot gate", m.name.clone(), m.at, 3.0, 120.0, 3.0))
+            }
             MarkerKind::Anomaly { kind, .. } => {
-                tells.push(("anomaly", kind.clone(), m.at, 1.0, 40.0))
+                tells.push(("anomaly", kind.clone(), m.at, 1.0, 40.0, 2.0))
             }
             _ => {}
         }
@@ -92,14 +114,22 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
         } else {
             continue;
         };
-        tells.push((kind, p.prefab.clone(), p.at, h.max(1.5), 80.0));
+        let f = prefab_footprint(&p.prefab);
+        tells.push((
+            kind,
+            p.prefab.clone(),
+            p.at,
+            h.max(1.5),
+            80.0,
+            (h * f[0].min(f[2])).sqrt(),
+        ));
     }
     // A landmark's lamp over hot ground: red, far off.
     for l in &marks {
         for (top, y) in &l.tops {
             if danger(map, *top).1 >= HOT {
                 let h = y - hm.height(*top);
-                tells.push(("red lamp over it", l.name.clone(), *top, h, 250.0));
+                tells.push(("red lamp over it", l.name.clone(), *top, h, 250.0, 1.0));
             }
         }
     }
@@ -119,9 +149,19 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 s += dist(pts[j], pts[j - 1]);
                 j -= 1;
             }
+            let back = {
+                let mut k = 0;
+                while k + 1 < approach.len() && dist(approach[k + 1], w[1]) < BACK {
+                    k += 1;
+                }
+                let at = approach[(k + 1).min(approach.len() - 1)];
+                let to = approach[k];
+                let d = dist(at, to).max(0.1);
+                (at, [(to[0] - at[0]) / d, (to[1] - at[1]) / d])
+            };
             let approach: Vec<P2> = approach.into_iter().step_by(3).collect();
             let mut signals = Vec::new();
-            for (kind, name, at, h, reach) in &tells {
+            for (kind, name, at, h, reach, size) in &tells {
                 // Its own: in the hot ground being entered, or by the line.
                 let here = danger(map, *at).0 == b.0 || dist(*at, w[1]) <= BY_THE_LINE;
                 if !here {
@@ -131,6 +171,14 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                     .iter()
                     .map(|p| (dist(*p, *at), *p))
                     .filter(|(d, _)| d <= reach)
+                    // Found in the frame without a caption: big enough at
+                    // its distance (the lamps aside: they glow), from a
+                    // point on the approach short of the line.
+                    .filter(|(d, p)| {
+                        *kind == "red lamp over it"
+                            || (*size / d.max(1.0) >= READ_ANGLE
+                                && (SHORT..=READ_FROM).contains(&dist(*p, w[1])))
+                    })
                     .filter(|(_, p)| in_sight(hm, &solids, *p, *at, *h))
                     .map(|(d, _)| d)
                     .fold(f32::INFINITY, f32::min);
@@ -146,6 +194,7 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 from: a,
                 into: b,
                 signals,
+                back,
             });
         }
     }
@@ -204,6 +253,19 @@ mod tests {
                         .collect::<Vec<_>>()
                         .join(", ")
                 };
+                let (p, d) = c.back;
+                let side = |k: f32| [p[0] - d[1] * k, p[1] + d[0] * k];
+                let (l, r) = (side(4.0), side(-4.0));
+                let tell = format!(
+                    "{tell}  | {BACK:.0} m back ({:.1}, {:.1}): beside ({:.1}, {:.1}) or ({:.1}, {:.1}), facing {:.0}",
+                    p[0],
+                    p[1],
+                    l[0],
+                    l[1],
+                    r[0],
+                    r[1],
+                    d[0].atan2(-d[1]).to_degrees().rem_euclid(360.0)
+                );
                 let tell = format!(
                     "{tell}  | its lamps: {}",
                     if lamps.is_empty() {
