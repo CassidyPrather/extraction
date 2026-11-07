@@ -384,7 +384,12 @@ fn batch_puffs(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for e in &new {
-        commands.entity(e).remove::<Mesh3d>().insert(Batched);
+        // (Its visibility class too: left, the visibility pass still
+        // listed it as a mesh to draw, every frame, though nothing was.)
+        commands
+            .entity(e)
+            .remove::<(Mesh3d, bevy::camera::visibility::VisibilityClass)>()
+            .insert(Batched);
     }
     let eye = eye(&cams).unwrap_or(Vec3::ZERO);
     // Sorted as each puff's own draw was: by depth along the view (the
@@ -661,6 +666,17 @@ mod tests {
             assert!(
                 w.get::<Mesh3d>(*e).is_none(),
                 "a batched puff still drawn on its own"
+            );
+            assert!(
+                w.get::<bevy::camera::visibility::VisibilityClass>(*e)
+                    .is_none(),
+                "a batched puff still listed as a mesh to draw"
+            );
+            // What gauges read a batched puff by (`robots::hit_gauge`): its
+            // marker, and where it is.
+            assert!(
+                w.get::<SoftPuff>(*e).is_some(),
+                "a batched puff keeps SoftPuff"
             );
         }
     }

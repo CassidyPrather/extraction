@@ -479,6 +479,16 @@ impl LaunchOptions {
             o.map = "rime_fell".into();
             o.map_explicit = true;
         }
+        // A contract's run is its own valley's (told another, it says so).
+        if let Some(v) = o
+            .scenario
+            .as_deref()
+            .and_then(crate::progression::contracts::scenario::valley)
+            .filter(|_| !o.map_explicit)
+        {
+            o.map = v.into();
+            o.map_explicit = true;
+        }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
             o.map = crate::camp::TRAINING_YARD.into();
