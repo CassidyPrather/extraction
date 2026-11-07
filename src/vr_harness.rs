@@ -8295,19 +8295,64 @@ mod door_hinge {
     use crate::world::buildings::{Door, DoorLeaf};
     use crate::world::hinge::{MOST, Motion, Moving, PER_UNIT, Swinging};
 
-    /// Every door pressed open with someone 0.6 of the way along its leaf:
-    /// in its swing (45 degrees round), already against it shut (10), or
-    /// against it on the side it swings away from (-10). However they
-    /// started, they aren't moved more than a few centimetres: it stops
-    /// against them (or, swinging away, opens); stepped clear, it opens the
-    /// rest of the way. (Driven through, a leaf shoved
-    /// a standing body 0.3-1.6 m: in a headset, the world moving you, and
-    /// off a doorstep. Verifier's probe, 5 November.)
+    /// What can tell one door's swing from another's: how deep its hinge's
+    /// frame is (a door in a building that's a child of another, as
+    /// Kettle's are, has its hinge in that building's frame), which way it
+    /// faces in the world (to the quarter: the frames' turns and the
+    /// leaf's own), its leaf's size to 5 cm, and what it's made of.
+    /// (`swing_doors` stops a leaf by its gap to a body, `leaf_gap`:
+    /// nothing else about a door enters it.)
+    fn door_kind(vr: &Vr, door: Entity, leaf: &crate::world::buildings::DoorDef) -> String {
+        let mut depth = 0;
+        let mut e = door;
+        while let Some(p) = vr.app.world().get::<ChildOf>(e) {
+            depth += 1;
+            e = p.parent();
+        }
+        let cm5 = |m: f32| (m * 20.0).round() as i32;
+        let along = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(door)
+            .unwrap()
+            .rotation()
+            * Vec3::X;
+        let quarter = (along.z.atan2(along.x) / std::f32::consts::FRAC_PI_2).round() as i32 & 3;
+        format!(
+            "depth {depth}, facing {quarter}, {}x{}, {:?}",
+            cm5(leaf.width),
+            cm5(leaf.height),
+            leaf.mat
+        )
+    }
+
+    /// Steps until `done`, at most `max` ticks.
+    fn step_until(vr: &mut Vr, max: usize, mut done: impl FnMut(&Vr) -> bool) {
+        for _ in 0..max {
+            if done(vr) {
+                return;
+            }
+            vr.step(1);
+        }
+    }
+
+    /// Every kind of door ([`door_kind`]) in every valley pressed open
+    /// with someone 0.6 of the way along its leaf: in its swing (45
+    /// degrees round), already against it shut (10), or against it on the
+    /// side it swings away from (-10). However they started, they aren't
+    /// moved more than a few centimetres: it stops against them (or,
+    /// swinging away, opens); stepped clear, it opens the rest of the way.
+    /// (Driven through, a leaf shoved a standing body 0.3-1.6 m: in a
+    /// headset, the world moving you, and off a doorstep. Verifier's
+    /// probe, 5 November.) One door of each kind per valley for each of
+    /// the three, the first with somewhere to stand there: every door of
+    /// every valley took most of the lib suite's time.
     #[test]
     fn a_door_stops_against_someone_in_its_swing_in_every_valley() {
         use crate::robots::doors::Wedged;
         let mut bad = Vec::new();
         let mut checked = 0;
+        let mut uncovered = Vec::new();
         for map in crate::test_maps() {
             let mut vr = Vr::new(&map);
             vr.step(5);
@@ -8322,10 +8367,18 @@ mod door_hinge {
                 )>();
                 q.iter(vr.app.world()).map(|(e, l)| (e, l.0)).collect()
             };
+            let cases = [(45.0f32, false), (10.0, false), (-10.0, true)];
+            let mut kinds = std::collections::BTreeSet::new();
+            let mut covered = std::collections::HashSet::new();
             for (door, leaf) in doors {
+                let kind = door_kind(&vr, door, &leaf);
+                kinds.insert(kind.clone());
                 // In its swing; already against it, shut; and on the side it
                 // swings away from, against it (which it leaves, opening).
-                for (deg, away) in [(45.0f32, false), (10.0, false), (-10.0, true)] {
+                for (case, (deg, away)) in cases.into_iter().enumerate() {
+                    if covered.contains(&(kind.clone(), case)) {
+                        continue;
+                    }
                     {
                         let mut e = vr.app.world_mut().entity_mut(door);
                         e.remove::<crate::world::hinge::Resting>();
@@ -8349,36 +8402,63 @@ mod door_hinge {
                         continue;
                     }
                     checked += 1;
+                    covered.insert((kind.clone(), case));
+                    let angle = |vr: &Vr| vr.app.world().get::<Door>(door).unwrap().angle;
                     vr.app.world_mut().get_mut::<Door>(door).unwrap().open = true;
-                    vr.step(80);
+                    // Till it's open, or has stood still against them a
+                    // quarter of a second (it swings open in 0.6 s).
+                    let mut last = (angle(&vr), 0);
+                    step_until(&mut vr, 80, |vr| {
+                        let a = angle(vr);
+                        last = if a == last.0 { (a, last.1 + 1) } else { (a, 0) };
+                        a >= 1.0 || last.1 >= 15
+                    });
                     let moved = vr.feet().xz().distance(before.xz());
-                    let angle = vr.app.world().get::<Door>(door).unwrap().angle;
+                    let angle_now = angle(&vr);
                     let at = format!(
-                        "{map}: door {door} at {:.1}, body {deg} deg",
+                        "{map}: door {door} ({kind}) at {:.1}, body {deg} deg",
                         gt.translation()
                     );
                     if moved > 0.03 {
                         bad.push(format!("{at}: moved {moved:.2} m"));
-                    } else if away && angle < 0.99 {
-                        bad.push(format!("{at}: held at {angle:.2}, swinging away from them"));
+                    } else if away && angle_now < 0.99 {
+                        bad.push(format!(
+                            "{at}: held at {angle_now:.2}, swinging away from them"
+                        ));
                     } else {
                         // Clear of it: it opens the rest of the way.
                         vr.stand(clear, 0.0);
-                        vr.step(60);
-                        let angle = vr.app.world().get::<Door>(door).unwrap().angle;
-                        if angle < 0.99 {
-                            bad.push(format!("{at}: stopped at {angle:.2} with no one there"));
+                        step_until(&mut vr, 60, |vr| angle(vr) >= 1.0);
+                        let angle_now = angle(&vr);
+                        if angle_now < 0.99 {
+                            bad.push(format!("{at}: stopped at {angle_now:.2} with no one there"));
                         }
                     }
                     vr.stand(clear, 0.0);
                     vr.app.world_mut().get_mut::<Door>(door).unwrap().open = false;
-                    vr.step(60);
+                    step_until(&mut vr, 60, |vr| angle(vr) <= 0.0);
                 }
             }
+            // Every kind of door in the valley, in at least one of the three.
+            for kind in &kinds {
+                if !(0..cases.len()).any(|c| covered.contains(&(kind.clone(), c))) {
+                    uncovered.push(format!("{map}: {kind}"));
+                }
+            }
+            println!(
+                "{map}: {} kinds of door, {} of kind x case tried: {kinds:?}",
+                kinds.len(),
+                covered.len()
+            );
         }
         assert!(
             checked > 20,
             "only {checked} doors with somewhere to stand in their swing"
+        );
+        assert!(
+            uncovered.is_empty(),
+            "kinds of door with nowhere to stand by them:\n{}",
+            uncovered.join("\n")
         );
         assert!(
             bad.is_empty(),

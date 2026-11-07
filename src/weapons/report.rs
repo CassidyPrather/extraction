@@ -367,7 +367,7 @@ mod tests {
             let side = fwd.cross(Vec3::Y).normalize();
             let at = muzzle + fwd * 150.0 + side * 8.0;
             let zone = r.vr.app.world().resource::<crate::world::Zone>().clone();
-            let drone = {
+            let listener = {
                 let mut commands = r.vr.app.world_mut().commands();
                 let job = crate::robots::Job {
                     kind: crate::robots::JobKind::Survey,
@@ -380,14 +380,14 @@ mod tests {
             r.vr.app.world_mut().flush();
             r.vr.app
                 .world_mut()
-                .entity_mut(drone)
+                .entity_mut(listener)
                 .insert((RigidBody::Static, Transform::from_translation(at)));
             r.vr.step(5);
             one_shot(&mut r);
             let aware =
                 r.vr.app
                     .world()
-                    .get::<crate::robots::Awareness>(drone)
+                    .get::<crate::robots::Awareness>(listener)
                     .unwrap();
             (aware.last_known.expect("it heard something"), muzzle)
         };
