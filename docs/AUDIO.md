@@ -905,11 +905,39 @@ the rest were moved to samples that sound where a click is heard:
 - the dud, its low-pass opened from 4 to 12 kHz, so it keeps dry fire's
   highs and stays duller than it.
 
+**Each gun its own voice** (`audio::voice`, `handling_speed`): where
+guns share a sample for the same moment, each plays it at its own speed,
+heavier lower. The PM is the reference (1.0); a Mosin's long bolt 0.85;
+an SKS's carrier 0.92; a TOZ-8's .22 parts 1.15. An SKS's bolt going
+home is a rifle's carrier (`guns/bolt_close`), not the PM's slide, and
+its 7.62x39 report is the AK's set at 0.9, deeper. A round going in sounds
+like what goes in: a clip's rattle into a Mosin or an SKS, a shell into
+a shotgun, and a loose .22 into a TOZ-8, pushed home (`gun.round_in`).
+`audio::tests::the_first_hour_guns_each_sound_their_own` holds it: for
+the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
+speed for the same moment.
+
 **A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
 what the hit did. Shrugged off, a thin tink; a wound, the impact and a
 low thud; telling (a weak spot, a part giving way), a crunch and an
-electrical crack, a sensor's glass breaking. At 30 m telling stands 11.7
-LU over a shrug (wants 10), and a wound between them.
+electrical crack with a deep thud under it, a sensor's glass breaking.
+It's also heard by the part struck (`struck_layers`):
+- armour rings, a short high clang over the tink (`hit.ring`);
+- a lens wounded tinkles (`hit.wound_glass`);
+- a gas cell thumps soft like canvas, wounded or telling
+  (`hit.wound_cloth`);
+- a leg or rotor wounded clanks at the joint (`hit.wound_joint`).
+
+At 30 m telling stands 12.4 LU over a shrug (wants 10), a wound between
+them, and armour's ring under a wound: shrugged, not harmed.
+
+Every strike also has to be heard over your own report
+(`audio_gunstate.strikes`). Struck 20 m off, landing the round's flight
+after your shot, each clears the shot's masking by 6 dB: a wound by 9.0,
+telling by 11.2, armour's ring by 6.8. The only exception is a dead
+part's or a glance's bare tink, at +3.6. The tink alone was what armour
+played before the ring, and it was masked. Nothing is delayed or ducked
+for this, so no warning cue is touched.
 
 **A walker hunting you is never silent:** standing to look, its head
 sweeps round (`walker.scan`), heard to 81 m.

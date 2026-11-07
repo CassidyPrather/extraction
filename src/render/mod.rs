@@ -41,6 +41,7 @@ pub mod props;
 pub mod pry_cue;
 pub mod puff;
 pub mod readback;
+pub mod reflectors;
 pub mod rv_beacons;
 pub mod screen;
 pub mod sky_light;
@@ -58,6 +59,7 @@ pub mod vr_budget;
 pub mod vram;
 pub mod warmup;
 pub mod water_material;
+pub mod way_lamps;
 pub mod wayfind_shots;
 pub mod wear;
 pub mod world_props;
@@ -125,6 +127,8 @@ impl Plugin for RenderPlugin {
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
         .add_plugins(rv_beacons::RvBeaconsPlugin)
+        .add_plugins(way_lamps::WayLampsPlugin)
+        .add_plugins(reflectors::ReflectorsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
@@ -336,11 +340,13 @@ fn attach_flat_camera(
         let cam = cam.id();
         commands.entity(cam).with_children(|c| {
             // Held up by the eye and aimed where it looks, as anyone
-            // looking at something by torchlight does.
+            // looking at something by torchlight does; or dipped below
+            // it (`--torch-dip`), as a hand holds one on the way ahead.
             if opts.torch {
                 c.spawn((
                     crate::gadgets::visuals::torch_beam(),
-                    Transform::from_xyz(0.15, -0.1, 0.0),
+                    Transform::from_xyz(0.15, -0.1, 0.0)
+                        .with_rotation(Quat::from_rotation_x(-opts.torch_dip.to_radians())),
                 ));
             }
         });

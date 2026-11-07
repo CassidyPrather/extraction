@@ -206,6 +206,7 @@ impl Plugin for SearchPlugin {
             .add_message::<ComingBack>()
             .add_message::<MindShift>()
             .init_resource::<MindLog>()
+            .init_resource::<LetGoDowned>()
             .add_systems(
                 FixedUpdate,
                 (call_out, forget_the_downed, let_go_at_home).after(super::perceive),
@@ -322,12 +323,20 @@ pub fn search_step(brain: &mut Brain, pos: Vec3, near: f32, dt: f32, sweep: f32)
 /// A player who goes down is let go: every robot holding them forgets
 /// them and gives up (responders go home), so nobody is waiting at the
 /// truck when they come to.
+/// Machines that let you go because you went down, this tick: they gave
+/// up on you, but they didn't lose you, so [`announce`] says nothing of
+/// it ("Lost you, has it?" was the last thing a newcomer heard going
+/// down: Rime's first hound).
+#[derive(Resource, Default, Debug)]
+pub struct LetGoDowned(pub Vec<Entity>);
+
 fn forget_the_downed(
     mut downed: MessageReader<crate::health::Downed>,
-    mut robots: Query<(&mut Awareness, &mut Brain, &mut Job)>,
+    mut robots: Query<(Entity, &mut Awareness, &mut Brain, &mut Job)>,
+    mut let_go: ResMut<LetGoDowned>,
 ) {
     for d in downed.read() {
-        for (mut aware, mut brain, mut job) in &mut robots {
+        for (e, mut aware, mut brain, mut job) in &mut robots {
             if aware.target != Some(d.player) {
                 continue;
             }
@@ -340,6 +349,7 @@ fn forget_the_downed(
                 Brain::Engage | Brain::Investigate { .. } | Brain::Search { .. }
             ) {
                 give_up(&mut brain, &mut job);
+                let_go.0.push(e);
             }
         }
     }
@@ -595,6 +605,7 @@ fn wrist_lines(
     mut back: MessageReader<ComingBack>,
     players: Query<(Entity, &GlobalTransform), With<crate::rig::LocalPlayer>>,
     aware: Query<&Awareness>,
+    hunters: Query<(Entity, &Awareness)>,
     raid: Option<ResMut<crate::raid::Raid>>,
     time: Res<Time>,
     mut said: Local<(std::collections::HashMap<Entity, f32>, f32, u32)>,
@@ -634,7 +645,15 @@ fn wrist_lines(
     }
     per_robot.retain(|_, t| now - *t < LINE_PER_ROBOT);
     for (is_lost, robot, at, about) in events {
+        // "It's given up" never while another still has you: it was said
+        // to a newcomer 3 s before a walker's first hit (Progression's
+        // careers, Marrow, r18).
+        let another_has_you = is_lost
+            && hunters
+                .iter()
+                .any(|(e, a)| e != robot && a.target == Some(me));
         if about != Some(me)
+            || another_has_you
             || at.distance(gt.translation()) > LINE_NEAR
             || (*last > 0.0 && now - *last < LINE_ANY)
             || per_robot
@@ -662,13 +681,15 @@ fn announce(
     mut minds: MessageWriter<MindShift>,
     mut log: ResMut<MindLog>,
     time: Res<Time>,
-    (flankers, retreats, mut looked): (
+    (flankers, retreats, mut looked, mut let_go): (
         Query<(Entity, &GlobalTransform), Added<super::walker::Flanker>>,
         Query<(Entity, &GlobalTransform), Added<super::walker::Retreating>>,
         Local<std::collections::HashMap<Entity, Vec3>>,
+        ResMut<LetGoDowned>,
     ),
 ) {
     let now = time.elapsed_secs();
+    let downed = std::mem::take(&mut let_go.0);
     for (e, gt) in &flankers {
         log.shift(&mut minds, e, Mind::Flanking, gt.translation(), now);
     }
@@ -730,7 +751,8 @@ fn announce(
                 }
                 searching.write(Searching { robot: e, at });
             }
-            (Some(2 | 3), Brain::Transit { .. } | Brain::Leave { .. }) => {
+            // (Not one that let you go as you went down.)
+            (Some(2 | 3), Brain::Transit { .. } | Brain::Leave { .. }) if !downed.contains(&e) => {
                 lost.write(LostYou {
                     robot: e,
                     at,

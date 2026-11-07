@@ -11,6 +11,8 @@ pub struct DevPlugin;
 impl Plugin for DevPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FrameCount>()
+            .init_resource::<WorldIn>()
+            .add_systems(First, note_world_in)
             .add_systems(
                 Update,
                 (
@@ -35,8 +37,8 @@ impl Plugin for DevPlugin {
                     fight_for_gallery,
                     treat_for_gallery,
                     spall_for_gallery,
-                    plate_hits_for_gallery,
-                    impact_hits_for_gallery,
+                    plate_hits_for_gallery.run_if(world_in),
+                    impact_hits_for_gallery.run_if(world_in),
                     present_for_gallery,
                 )
                     .chain()
@@ -60,8 +62,59 @@ struct FrameCount {
 /// other.
 const SHOT_SETTLE: u32 = 15;
 
-fn count_frames(mut count: ResMut<FrameCount>) {
-    count.frames += 1;
+/// `--frames` counts from launch; with a gallery staged, from when the
+/// world's in ([`WorldIn`]), so a gallery's frame is an age.
+fn count_frames(mut count: ResMut<FrameCount>, opts: Res<LaunchOptions>, world: Res<WorldIn>) {
+    if opts.gallery.is_none() || world.frames.is_some() {
+        count.frames += 1;
+    }
+}
+
+/// When the world was first all in, as a screenshot waits for it (loaded,
+/// ready, near trees streamed, settled [`SHOT_SETTLE`] frames; or
+/// [`SHOT_WAIT_MAX`] waited), and frames since. Galleries that stage
+/// events at a frame (rounds fired at 60) count from it: counted from
+/// launch, a slow load (the software renderer warming its pipelines) had
+/// the rounds land minutes before the shot, their dust long gone.
+#[derive(Resource, Default)]
+pub(crate) struct WorldIn {
+    settle: ShotSettle,
+    /// Frames since the world was in; `None` till then.
+    pub(crate) frames: Option<u32>,
+}
+
+impl WorldIn {
+    /// This frame's: whether the world is all in, and whether the wait for
+    /// it is over regardless.
+    fn tick(&mut self, ready: bool, waited: bool) {
+        match &mut self.frames {
+            Some(n) => *n += 1,
+            None => {
+                if self.settle.tick(ready) || waited {
+                    self.frames = Some(0);
+                }
+            }
+        }
+    }
+}
+
+fn note_world_in(
+    mut w: ResMut<WorldIn>,
+    world: crate::render::timeline::WorldReady,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
+    time: Res<Time<Real>>,
+) {
+    if w.frames.is_some() {
+        w.tick(true, true);
+        return;
+    }
+    let ready = loaded.is_some() && world.ready_for_a_shot() && world.materials() && world.props();
+    w.tick(ready, time.elapsed_secs() >= SHOT_WAIT_MAX);
+}
+
+/// A run condition: the world's in ([`WorldIn`]).
+pub(crate) fn world_in(w: Res<WorldIn>) -> bool {
+    w.frames.is_some()
 }
 
 /// The longest a screenshot waits on the world beyond its frames, seconds
@@ -177,9 +230,11 @@ fn save_alpha(image: &Image, path: &std::path::Path) {
     }
 }
 
-/// `--gallery sights:<gun>`: the gun's sight line on the camera's, its
-/// rear sight just ahead of the eye, and the eye down behind the sights
-/// (so the front post goes soft, as `weapons::optics` draws it).
+/// `--gallery sights:<gun>[,TURN,DIST]`: the gun at the cheek weld
+/// (`weapons::sight_picture::weld_eye` on the camera), its sight line on the
+/// camera's, the post gone soft (as `weapons::optics` draws it); with a
+/// DIST, a walker stands that far off and the sights and the eye are on its
+/// middle (the sight-picture stills).
 fn sights_to_the_eye(
     opts: Res<LaunchOptions>,
     zone: Option<Res<crate::world::Zone>>,
@@ -190,14 +245,24 @@ fn sights_to_the_eye(
         &mut Transform,
         &mut crate::weapons::feel::Handling,
     )>,
+    mut cams: Query<
+        &mut Transform,
+        (
+            With<crate::render::FreeCamera>,
+            Without<crate::weapons::Gun>,
+        ),
+    >,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
     else {
         return;
     };
-    let Some(id) = spec.strip_prefix("sights:") else {
+    let Some(rest) = spec.strip_prefix("sights:") else {
         return;
     };
+    let mut parts = rest.split(',');
+    let id = parts.next().unwrap_or_default();
+    let dist: Option<f32> = parts.nth(1).and_then(|v| v.parse().ok());
     let ground = zone.ground(cam.x, cam.z);
     let eye_y = if cam.y == 0.0 {
         ground + 1.7
@@ -205,23 +270,36 @@ fn sights_to_the_eye(
         cam.y.max(ground + 0.3)
     };
     let eye = Vec3::new(cam.x, eye_y, cam.z);
-    let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    let mut look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    if let Some(d) = dist {
+        let fwd = look * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let at = eye + flat * d;
+        let mark = Vec3::new(at.x, zone.ground(at.x, at.z) + TARGET_MIDDLE, at.z);
+        look = Transform::from_translation(eye)
+            .looking_at(mark, Vec3::Y)
+            .rotation;
+        for mut tf in &mut cams {
+            tf.rotation = look;
+        }
+    }
     // The gallery's gun only: one lying in the zone would come to the eye
     // too, over it.
     for (gun, item, mut tf, mut handling) in &mut guns {
         if catalog.get(item.kind()).id != id {
             continue;
         }
-        // The eye 4 cm behind the rear sight, on the line to the front post.
-        let rear = gun.layout.sight.translation;
-        let front = crate::weapons::feel::front_post(gun);
-        let line = Quat::from_rotation_arc(Vec3::NEG_Z, (front - rear).normalize());
+        let line = gun.layout.sight.rotation;
         let rot = look * line.inverse();
-        let at_eye = rear - (front - rear).normalize() * 0.04;
+        let at_eye = crate::weapons::sight_picture::weld_eye(gun);
         *tf = Transform::from_translation(eye - rot * at_eye).with_rotation(rot);
         handling.at_eye = 1.0;
     }
 }
+
+/// How high a sight-picture still's walker is aimed at, over the ground
+/// it stands on (its body's middle, where `spawn_walker` puts it).
+const TARGET_MIDDLE: f32 = 1.15;
 
 /// A `--gallery robots:` line-up: each machine, the yaw it faces (a
 /// walker's `yaw`), and where it stood when it came (taken on its first
@@ -822,6 +900,12 @@ fn gallery(
             // front of the camera (`sights_to_the_eye` places it).
             s if s.starts_with("sights:") => {
                 spawn_static(&mut commands, &s["sights:".len()..], eye + fwd * 0.5);
+                if let Some(d) = dist {
+                    let at = zone.on_ground(eye.x + flat.x * d, eye.z + flat.z * d);
+                    let w = crate::robots::walker::spawn_walker(&mut commands, &zone, at, job(at));
+                    let face_cam = flat.x.atan2(flat.z);
+                    commands.insert_resource(LineUp(vec![(w, face_cam, None)]));
+                }
             }
             // `first_person_hands`, `wear_kit` and `weapons::cycle` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") || s.starts_with("cycle:") => {}
@@ -2051,8 +2135,9 @@ fn plate_hits_for_gallery(
 /// `--gallery impact`: three rifle rounds from the camera along its line
 /// of sight, a frame apart, into whatever it looks at (the ground, a
 /// wall): what each throws up as it flies. The clock runs a sixtieth of
-/// a second a frame: the rounds land at frames 60 to 62, so `--frames 75`
-/// shows them a quarter of a second on.
+/// a second a frame: the rounds land at frames 60 to 62 (both counted
+/// from when the world's in, [`WorldIn`]), so `--frames 75` shows them a
+/// quarter of a second on.
 fn impact_hits_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -2312,6 +2397,10 @@ fn pose_body_for_gallery(
             Without<crate::rig::LocalPlayer>,
         ),
     >,
+    slots: Query<
+        (&crate::interact::Socket, &GlobalTransform),
+        With<crate::interact::body::BodySlot>,
+    >,
     mut frames: Local<u32>,
 ) {
     let Some(spec) = opts.gallery.as_deref() else {
@@ -2361,14 +2450,23 @@ fn pose_body_for_gallery(
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-0.9);
     }
+    // `+left` / `+right`: looking down (or bent) at that hip's pocket (+1
+    // left, -1 right).
+    let hip: Option<f32> = match (gallery_word(spec, "left"), gallery_word(spec, "right")) {
+        (true, _) if down || stoop => Some(1.0),
+        (_, true) if down || stoop => Some(-1.0),
+        _ => None,
+    };
     if down && *frames > 20 {
         // A head looking down pivots on the neck: the eyes come forward.
         let fwd = input.head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        // To a hip (the camera turns there below): steeper.
+        let pitch = if hip.is_some() { -1.35 } else { -1.05 };
         // (The flat rig writes the head afresh each frame, as for `stoop`.)
         input.head.translation += flat * 0.08 - Vec3::Y * 0.04;
         input.head.rotation =
-            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.05);
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(pitch);
     }
     let head = root.mul_transform(input.head);
     let Ok(mut cam) = cams.single_mut() else {
@@ -2396,12 +2494,71 @@ fn pose_body_for_gallery(
             Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
     } else if *frames > 20 {
         *cam = head;
+        // Only the eye turns to the hip pocket on that side: the head held
+        // turned, the torso would come round after it, the hip with it.
+        let right = root.rotation * Vec3::X;
+        let pocket = slots
+            .iter()
+            .filter(|(s, _)| {
+                s.kind
+                    == crate::interact::SocketKind::Body(
+                        extraction_core::inventory::SlotKind::Pocket,
+                    )
+            })
+            .map(|(_, g)| g.translation())
+            .find(|p| (p - root.translation).dot(right).signum() == -hip.unwrap_or(0.0).signum());
+        if let (Some(_), Some(p)) = (hip, pocket) {
+            *cam = Transform::from_translation(head.translation)
+                .looking_at(p, root.rotation * Vec3::NEG_Z);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A gallery's rounds go at its frame 60 and `--frames 75` shoots 15
+    /// frames on, however long the world takes to load: both count from
+    /// when it's in. (Counted from launch, a 400-frame load had the shot
+    /// taken 340 frames after the rounds, their dust gone.)
+    #[test]
+    fn a_gallerys_frames_count_from_when_the_world_is_in() {
+        for load in [0u32, 30, 400] {
+            let mut w = WorldIn::default();
+            let (mut gallery, mut shot_frames) = (0u32, 0u32);
+            let (mut fired_at, mut shot_at) = (None, None);
+            for frame in 0..2000u32 {
+                // Not ready while loading, and once a blip in the middle.
+                let ready = frame >= load && frame != load + 5;
+                w.tick(ready, false);
+                if w.frames.is_some() {
+                    gallery += 1;
+                    shot_frames += 1;
+                }
+                if gallery == 60 && fired_at.is_none() {
+                    fired_at = Some(frame);
+                }
+                if shot_frames == 75 && shot_at.is_none() {
+                    shot_at = Some(frame);
+                }
+            }
+            let (f, s) = (fired_at.unwrap(), shot_at.unwrap());
+            assert_eq!(s - f, 15, "load {load}: rounds at {f}, shot at {s}");
+            assert!(
+                f > load + 5 + SHOT_SETTLE,
+                "load {load}: rounds at {f}, before it was in"
+            );
+        }
+        // Never ready: in all the same once the wait's over.
+        let mut w = WorldIn::default();
+        w.tick(false, false);
+        assert!(w.frames.is_none());
+        w.tick(false, true);
+        assert_eq!(w.frames, Some(0));
+        w.tick(false, false);
+        assert_eq!(w.frames, Some(1), "once in, it stays in");
+    }
 
     /// The body's gallery poses the body for its own specs, by whole
     /// word; a machine's gallery words (`heavy:down`, `sentry:down`) are

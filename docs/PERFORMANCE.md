@@ -1537,6 +1537,179 @@ The shelf grew from about 95 kinds (1,900 entries) to about 156
   Its lens glow has the drone lock halo's and the sentry halo's key,
   both measured.
 
+## The worst views: night, a storm, a fight (5 November)
+
+The playtest machine (a 3060 laptop driving a Beyond 2) ran 20-30 fps
+before render scale, so a valley's heaviest views matter most. The gauge
+is `render::vr_budget::gauge_worst_views_hold_the_stereo_budget`. Run it
+with `cargo test --lib -- --ignored gauge_worst`; `WORST_MAP` picks one
+valley and `WORST_VIEWS=hut,gate` picks views by name.
+
+**What it looks at.** Every Rendezvous, ShortExfil, Poi, WorkSite and
+Insertion marker, four ways round at eye height. It also takes the walk
+review's stops and the lookbook's views: 102-170 views a valley.
+
+**The conditions.** Each view is measured at night, in a storm, with a
+fight 8-14 m ahead: a drone, a walker, a hound, a heavy, and the
+firefight's 64 puffs. A storm is measured on a held flash, as the one-eye
+gauges already measure it. A flash turns the sun's cascades on at any hour,
+so it is the storm's dearest frame.
+
+**The budget, both eyes.** These are this document's own numbers:
+
+| What | Budget, both eyes |
+| - | - |
+| Draws | 2400 |
+| Triangles | 1.8M (now checked here too) |
+| Shadow draws | 1800 |
+| Fragments | 64.8M |
+| Lights reaching the view | 48 |
+
+A view over budget fails, and the failure names what it holds: draws by
+owner with their triangles, and overdraw by class.
+
+### Before and after, the five heaviest a valley
+
+The figure is each view's worst share of any budget. Before is c742c1f8
+plus the gauge; after adds the two fixes below.
+
+| valley | over, before | over, after | heaviest before | heaviest after |
+| - | - | - | - | - |
+| Marrow Creek | 27 | 0 | village_0 141% (shadow draws 2536) | gate fuel exfil 99% (draws 2383) |
+| Kettle Pass | 22 | 0 | gate fuel exfil 116% (shadow draws 2082) | gate fuel exfil 88% |
+| Cinder Works | 20 | 0 | s01_side 114% (shadow draws 2044) | s01_ahead 97% (draws 2319) |
+| Sallow Reservoir | 8 | 0 | s01_gate 111% (shadow draws 1996) | silt fans 96% (draws 2294) |
+| Rime Fell | 3 | 0 | gate fuel exfil 102% (shadow draws 1842) | gate fuel exfil 89% |
+
+The heaviest place in every valley is the south gate: the insertion,
+the fuel exfil and walk stop s01. It costs 1.5-1.7M triangles and
+1800-2400 draws, mostly buildings (about 150 an eye), doors (about 80)
+and the fight. The next heaviest are the points of interest where heavies
+work: Kettle's quarry, Cinder's slag heaps, Sallow's silt fans and
+Marrow's radio mast. No view reaches more than 13 lights of 48.
+
+### What was fixed
+
+- **A flash's shadows reach 30 m, not 90 (`world::storm`,
+  `FLASH_SHADOWS`).** A strike lit the valley with the sun's two cascades
+  out to the weather's 90 m, for a few frames. That was 1700-2500 shadow
+  draws at the gates and the village, against 1800. The shadows flicker
+  past too fast to read far off. The flash keeps its two cascades out to
+  30 m, and the weather's own cascades come back afterwards.
+- **A heavy's bolts draw merged until one goes
+  (`robots::heavy_look`, `BoltsMerged`).** Twelve bolts at two draws each
+  were 24 of a heavy's 89 up close. While every bolt is on, one mesh a
+  material (shared by every heavy) draws them all, and each bolt's own
+  meshes hang hidden. When one is shot out, or a plate takes its bolts,
+  the merged mesh goes and the rest show. That saves 22 draws a heavy; a
+  quarry has four.
+
+**What the unnamed meshes at the heavy sites are.** The gauge names
+unnamed meshes by their mesh and material, since component names need
+Bevy's debug build. At the radio mast they are robot strike effects,
+each its own entity, within `robots::fx`'s caps: 106 sparks (24-vertex
+cubes, lit orange), 79 glancing sparks (grey), and 54 wound flares in
+the embers material.
+
+### Overdraw counts what the GPU shades
+
+The coordinator approved the change on one condition: drop only layers the
+hardware really rejects. `render::overdraw` now counts what's drawn after
+the opaque pass (alpha-tested, alpha-to-coverage, blended) only in front
+of the nearest opaque surface, since the depth test drops it behind.
+Opaque layers all still count. Bevy bins the opaque pass by pipeline
+rather than sorting it near to far, so none of them is sure to be hidden.
+The raw count, depth test off, is printed beside the shaded count as
+`(raw ...)`, so overdraw behind walls can't hide.
+
+The case that called for it: Kettle's Switchback hut's marker stands
+inside the hut, and its north view faces a concrete wall 1 m away. It
+counted 71.7M fragments, over 64.8M. Of its 8.3 layers of ground cover,
+nearly all were ferns (alpha-tested) outside, behind the wall. It now
+counts 12.8M (raw 71.2M). Opaque grass blades behind a wall still count.
+
+**Every fragment gauge, re-baselined on the merged tree (5 November).**
+These are the worst view of each, as shaded with the raw count beside
+it. The budgets are unchanged: 64.8M both eyes, and 10 layers mean for
+one eye.
+
+| gauge | worst view | shaded | raw |
+| - | - | - | - |
+| worst views (night, storm, fight) | Marrow m05_spruce | 42.0M | 58.6M |
+| every valley's lookbook | Marrow m05_spruce | 39.6M | 54.2M |
+| the walks | Sallow s04_ahead | 33.4M | 36.9M |
+| the yard's stations | st06_ahead | 10.9M | 12.4M |
+| puffs: wreck, cloud, firefight | standing in a hazard's cloud | 44.4M | (bare view 15.0M) |
+| one eye, per valley | Marrow | 6.15 layers | 8.37 layers |
+
+The other valleys' one-eye worst views, shaded then raw: Kettle 4.31 and
+6.22, Sallow 3.53 and 3.83, Rime 2.87 and 3.09, Cinder 2.20 and 2.44.
+Everything passes. Where a view's raw count passes far over its shaded
+one, alpha-tested cards stand behind something opaque: Marrow's pines
+(9.1M and 24.6M) and the Switchback hut.
+
+Found on the way, by the gauge tier run whole:
+- **The warm-up shelf showed a real mesh.** `shelve` could meet a mesh
+  made that frame before `record_layouts` had it, and shelved the mesh
+  itself (147 vertices, generated). It now waits a frame for the
+  layout.
+- **The gun-rest census missed a declined gun.** A gun not worth merging
+  (a draw or two already) was declined in a `Local`, so the census read
+  it as one that never rests. It's marked now (`gun_rest::RestDeclined`),
+  and all 17 rest.
+
+### A fight's puffs, a draw a batch (6 November)
+
+A firefight's 64 puffs were 64 draws an eye. At Marrow's south gate that
+took the worst view over the line: 2443 draws against 2400. Now
+`render::puff` draws every shown puff in one mesh a batch. Puffs batch
+when their materials share everything but colour. The colour rides in
+vertex colours, and the quads are sorted far to near along the view. A
+fight's puffs are two draws an eye, not 64
+(`a_fights_puffs_are_a_draw_a_batch_each_drawn_as_it_was`).
+`EXTRACTION_PUFF_BATCH=0` turns it off to compare. `EXTRACTION_PUFF_LOG=1`
+prints the shown puffs each frame, summed, so a batched run can be
+checked against an unbatched one.
+
+**Marrow, three runs each (draws, both eyes, against 2400):**
+
+| view | before | after |
+| - | - | - |
+| gate insertion 2 | 2443 | 2131, 2182, 2144 |
+| gate fuel exfil 2 | 2383 | 2311, 2351, 2297 |
+
+The fuel exfil saves less than the fight's puffs should, because of the
+guns. The merge from main on 6 November left 8 of the 13 guns there
+declined by `gun_rest` (146 meshes), where before 12 rested and 1 was
+declined. That is next.
+
+**The look didn't change** (`shots/performance/puff_batch_before_after.jpg`).
+Each beat Weapon feel signs off was shot unbatched and batched, on the
+same frame with the same seed: muzzle smoke thinning as it spreads, the
+soft impact burst, the near-puff angle cap at 1.1 m, and a broken
+walker's smoke column. In the dust the difference is run-to-run noise:
+mean 0.005 and max 1 out of 255, the same as two batched runs. The
+column differs no more than two unbatched runs do. The rest is grass
+sway and sparks.
+
+Found on the way:
+- **A batch was drawn where its puffs had been a frame before.** The
+  batch entity was placed round its puffs' middle by a command, which
+  only took effect after transform propagation. The GPU drew the frame's
+  quads round last frame's middle. A round's dust shifted a pixel or two,
+  and in a PM's smoke the far haze was drawn metres away, so it vanished.
+  Batches are now built in world space with the entity at the origin. The
+  test reads each batch through its `GlobalTransform` and again after the
+  puffs move.
+- **A new puff went undrawn on its first frame.** Its own quad was taken
+  away before the batch had it. The batch now takes every shown puff.
+- **Galleries count their frames from when the world's in (`dev`,
+  `WorldIn`).** The impact and plate galleries fired at frame 60 counted
+  from launch, while a screenshot waits for the world. On a slow load the
+  rounds landed minutes before the shot and their dust was gone. With
+  a gallery staged, `--frames` and those clocks start once the world is
+  in.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:

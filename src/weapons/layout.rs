@@ -149,6 +149,21 @@ pub fn cup_pose(layout: &GunLayout) -> Option<Transform> {
     cup(layout).map(Transform::from_translation)
 }
 
+/// Iron sights as built: the eye point at `eye_z` on the line over the
+/// rear sight's top and the front sight's, looking down that line. A notch
+/// sight is read with the post's top level with the notch's shoulders, so
+/// `rear` is the shoulders' top (not the notch's floor); a bead gun's eye
+/// rides a little over its breech, so the whole bead sits on the rib, and
+/// `rear` is a point on that line. The round is zeroed to this line
+/// (`weapons::zero::iron_up`) and the cheek lines up on it
+/// (`feel::sight_fix`): it needn't run with the bore.
+/// `weapons::sight_picture` holds each gun's to its model.
+pub fn irons(rear: Vec3, front: Vec3, eye_z: f32) -> Transform {
+    let d = (front - rear).normalize();
+    let at = rear + d * ((eye_z - rear.z) / d.z);
+    Transform::from_translation(at).with_rotation(Quat::from_rotation_arc(Vec3::NEG_Z, d))
+}
+
 pub fn layout(id: &str) -> Option<GunLayout> {
     match id {
         "pm_pistol" => Some(pm()),
@@ -184,7 +199,12 @@ fn pm() -> GunLayout {
         eject: Vec3::new(1.0, 0.6, 0.15),
         // The eye line: through the rear notch (its floor 79.8 mm) onto the
         // front blade's top.
-        sight: at(0.0, 0.0805, 0.0275),
+        // The notch's shoulders 0.9 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.0814, 0.0209),
+            Vec3::new(0.0, 0.0804, -0.1115),
+            0.0275,
+        ),
         // The well's mouth, at the top of the grip; magazines hang from it,
         // raked back with the grip.
         magwell: Some(
@@ -290,7 +310,12 @@ fn ak74() -> GunLayout {
         eject: Vec3::new(1.0, 0.35, 0.1),
         // The eye line: over the rear notch's floor onto the front post's
         // top (`capture::sightline`; it ran 2.6 mm under the notch).
-        sight: at(0.0, 0.1071, 0.0),
+        // The notch's shoulders 1.7 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.1088, -0.181),
+            Vec3::new(0.0, 0.1071, -0.5468),
+            0.0,
+        ),
         magwell: Some(
             Transform::from_xyz(0.0, 0.02, -0.12).with_rotation(Quat::from_rotation_x(-0.12)),
         ),
@@ -383,7 +408,12 @@ fn mosin() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.90),
         port: Vec3::new(0.0, 0.07, -0.136),
         eject: Vec3::new(0.7, 0.8, 0.2),
-        sight: at(0.0, 0.084, -0.02),
+        // The notch's shoulders 1.3 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.0853, -0.280),
+            Vec3::new(0.0, 0.0839, -0.865),
+            -0.02,
+        ),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::TurnBolt,
@@ -460,7 +490,12 @@ fn sks() -> GunLayout {
         // The open top of the receiver, between the rear sight and the cover.
         port: Vec3::new(0.0, 0.068, -0.179),
         eject: Vec3::new(0.6, 0.9, 0.1),
-        sight: at(0.0, 0.078, -0.02),
+        // The notch's shoulders 1.5 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.0795, -0.217),
+            Vec3::new(0.0, 0.0779, -0.690),
+            -0.02,
+        ),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
@@ -542,7 +577,12 @@ fn nagant() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
         eject: Vec3::new(1.0, -0.2, 0.3),
-        sight: at(0.0, 0.0835, 0.012),
+        // The notch's shoulders 2.1 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.0856, 0.0047),
+            Vec3::new(0.0, 0.0834, -0.1645),
+            0.012,
+        ),
         magwell: None,
         handle: None,
         load_port: gate,
@@ -650,7 +690,13 @@ fn mp133() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.795),
         port: Vec3::new(0.022, 0.05, -0.12),
         eject: Vec3::new(1.0, 0.5, 0.1),
-        sight: at(0.0, 0.0665, -0.03),
+        // The eye 1 mm over the bead's top at the cheek weld (`sight_picture`
+        // `WELD`), so the whole bead sits on the receiver.
+        sight: irons(
+            Vec3::new(0.0, 0.0675, 0.17),
+            Vec3::new(0.0, 0.0665, -0.789),
+            -0.03,
+        ),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::Pump,
@@ -713,7 +759,12 @@ fn svd() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.955),
         port: Vec3::new(0.0175, 0.0705, -0.148),
         eject: Vec3::new(1.0, 0.4, 0.1),
-        sight: at(0.0, 0.1071, 0.0),
+        // The notch's shoulders 1.7 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.1088, -0.219),
+            Vec3::new(0.0, 0.1070, -0.855),
+            0.0,
+        ),
         magwell: Some(Transform::from_xyz(0.0, 0.025, -0.185)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
@@ -781,7 +832,12 @@ fn toz8() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.81),
         port: Vec3::new(0.0, 0.05, -0.15),
         eject: Vec3::new(0.7, 0.8, 0.2),
-        sight: at(0.0, 0.062, -0.03),
+        // The notch's shoulders 1.8 mm over the post's top.
+        sight: irons(
+            Vec3::new(0.0, 0.0638, -0.253),
+            Vec3::new(0.0, 0.0619, -0.793),
+            -0.03,
+        ),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::TurnBolt,
@@ -839,6 +895,13 @@ fn rpk74() -> GunLayout {
     let bore = 0.058;
     l.muzzle = Vec3::new(0.0, bore, -0.795);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
+    // Its rear sight further forward, its post further out: the
+    // shoulders 1.7 mm over the post's top.
+    l.sight = irons(
+        Vec3::new(0.0, 0.1088, -0.165),
+        Vec3::new(0.0, 0.1071, -0.7214),
+        0.0,
+    );
     // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
     // was before the AK was measured.
     l.port = Vec3::new(0.025, 0.07, -0.13);
@@ -979,7 +1042,13 @@ fn toz() -> GunLayout {
         muzzle: Vec3::new(0.0, 0.035, -0.8385),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
-        sight: at(0.0, 0.0534, -0.05),
+        // The eye 1 mm over the bead's top at the cheek weld (`sight_picture`
+        // `WELD`), so the whole bead sits on the rib.
+        sight: irons(
+            Vec3::new(0.0, 0.0544, 0.13),
+            Vec3::new(0.0, 0.0534, -0.830),
+            -0.05,
+        ),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::BreakBarrels,

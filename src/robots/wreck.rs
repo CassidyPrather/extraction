@@ -865,24 +865,42 @@ fn roll_to_rest(
     }
 }
 
+/// How far under the ground a settling wreck may be before it's taken to
+/// have come through it (m): deeper than any piece half-sunk in soft ground.
+const UNDER_GROUND: f32 = 0.5;
+
 /// Pieces that have lain still a moment, or tumbled long enough, stop.
 fn settle(
     mut commands: Commands,
     mut moving: Query<(
         Entity,
         &mut Settling,
-        &LinearVelocity,
-        &AngularVelocity,
+        &mut LinearVelocity,
+        &mut AngularVelocity,
         Option<&super::anim::Gait>,
         Option<&Children>,
+        &mut Transform,
     )>,
     // (Immutable: a hull's layers are replaced, not edited.)
     layered: Query<(), With<CollisionLayers>>,
+    zone: Res<crate::world::Zone>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut s, v, w, gait, children) in &mut moving {
+    for (e, mut s, mut v, mut w, gait, children, mut tr) in &mut moving {
         s.age += dt;
+        // Under the ground, out of any site's rooms: it came through it (a
+        // wreck made before the ground's collider was in, as a line-up's
+        // was, fell and kept falling, 330 m under the meadow by the time
+        // it was still). Back on the ground, at rest.
+        let p = tr.translation;
+        let ground = zone.ground(p.x, p.z);
+        if p.y < ground - UNDER_GROUND && crate::world::underground::floor_under(&zone, p).is_none()
+        {
+            tr.translation.y = ground + 0.3;
+            v.0 = Vec3::ZERO;
+            w.0 = Vec3::ZERO;
+        }
         let k = (dt * 8.0).min(1.0);
         s.v = s.v.lerp(v.0, k);
         s.w = s.w.lerp(w.0, k);
@@ -1184,6 +1202,76 @@ mod tests {
             Some(&RigidBody::Static),
             "at rest"
         );
+    }
+
+    /// A drone wrecked low or high comes to rest on the ground, not under
+    /// it: one wrecked 2.5 m up, as a line-up stands it, fell through the
+    /// meadow and was 330 m under it by the time it was still (Heavy's
+    /// `robot_frames`: a wrecked drone at 17 m was all but invisible).
+    #[test]
+    fn a_wrecked_drone_comes_to_rest_on_the_ground() {
+        // (Up, ticks before it's wrecked, and whether the ground's collider
+        // is there to stop it.)
+        for (up, after, through) in [
+            (2.5f32, 4usize, false),
+            (2.5, 90, false),
+            (14.0, 90, false),
+            (2.5, 90, true),
+        ] {
+            let opts = crate::LaunchOptions {
+                map: extraction_core::map::TEST_FIELD_ID.into(),
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let site = zone.on_ground(40.0, 200.0) + Vec3::Y * up;
+            let drone = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let e = super::super::drone::spawn_drone(
+                    &mut c,
+                    site,
+                    super::super::Job {
+                        kind: super::super::JobKind::Survey,
+                        site,
+                        duration: 999.0,
+                        exit: site,
+                    },
+                );
+                q.apply(app.world_mut());
+                e
+            };
+            for _ in 0..after {
+                app.update();
+            }
+            app.world_mut().get_mut::<Robot>(drone).unwrap().wrecked = true;
+            for tick in 0..90 * 16 {
+                app.update();
+                if through && tick == 0 {
+                    // The ground's collider not in yet (as in a line-up's
+                    // first frames, wrecked before it was).
+                    let ground: Vec<Entity> = app
+                        .world_mut()
+                        .query_filtered::<Entity, With<crate::world::TerrainCollider>>()
+                        .iter(app.world())
+                        .collect();
+                    for g in ground {
+                        app.world_mut().entity_mut(g).insert(ColliderDisabled);
+                    }
+                }
+            }
+            let p = app.world().get::<Transform>(drone).unwrap().translation;
+            let ground = zone.ground(p.x, p.z);
+            assert!(
+                (p.y - ground).abs() < 0.6,
+                "wrecked {up} m up (through the ground: {through}): at rest {:.2} m off it ({p:.2?})",
+                p.y - ground
+            );
+        }
     }
 
     /// How a walker at a fixed spot comes apart: its collapse seed and its

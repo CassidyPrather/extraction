@@ -52,6 +52,12 @@ pub struct AtRest {
     merged: Vec<Entity>,
 }
 
+/// On a gun not worth merging (a draw or two already), with how many
+/// leaves it had then: asked again only when that changes. It costs
+/// what a resting gun does.
+#[derive(Component)]
+pub struct RestDeclined(usize);
+
 /// Merged meshes by what went into them: guns left alike share one.
 #[derive(Resource, Default)]
 struct RestCache {
@@ -217,6 +223,40 @@ fn wake_handled(
     }
 }
 
+/// What a gun is doing, for the gauges: resting, declined (not worth
+/// it), handled, hidden, being merged, or neither yet (settling).
+#[cfg(test)]
+pub(crate) fn state_of(w: &mut World, gun: Entity) -> &'static str {
+    if w.get::<AtRest>(gun).is_some() {
+        return "resting";
+    }
+    if w.get::<RestDeclined>(gun).is_some() {
+        return "declined";
+    }
+    if w.get::<Building>(gun).is_some() {
+        return "building";
+    }
+    if w.get::<InheritedVisibility>(gun).is_some_and(|v| !v.get()) {
+        return "hidden";
+    }
+    if w.get::<crate::interact::Held>(gun).is_some()
+        || w.get::<crate::interact::Supported>(gun).is_some()
+    {
+        return "in a hand";
+    }
+    let mut at = gun;
+    for _ in 0..24 {
+        if w.get::<crate::player::Player>(at).is_some() {
+            return "on the player";
+        }
+        match w.get::<ChildOf>(at) {
+            Some(p) => at = p.parent(),
+            None => break,
+        }
+    }
+    "settling"
+}
+
 /// Whether a mesh can be merged (`world_props::for_merge` takes it):
 /// without building the merge, which generates tangents and cost a frame
 /// its 31 ms a gun when asked every time. A mesh whose data went to the
@@ -368,9 +408,7 @@ fn finish_building(
 fn rest_idle(
     mut commands: Commands,
     mut settling: Local<std::collections::HashMap<Entity, (usize, u32)>>,
-    // Guns not worth merging, by how many leaves they had then: asked
-    // again only when that changes.
-    mut declined: Local<std::collections::HashMap<Entity, usize>>,
+    declined: Query<&RestDeclined>,
     cache: Res<RestCache>,
     mesh_assets: Res<Assets<Mesh>>,
     guns: Query<
@@ -410,7 +448,6 @@ fn rest_idle(
     )>,
 ) {
     settling.retain(|e, _| guns.contains(*e));
-    declined.retain(|e, _| guns.contains(*e));
     let mut done = 0;
     for (gun, gun_gt, shown) in &guns {
         if done >= PER_FRAME {
@@ -421,7 +458,7 @@ fn rest_idle(
             continue;
         }
         let leaves = leaves_of(gun, &children, &meshes, &merged, &names);
-        if declined.get(&gun) == Some(&leaves.len()) {
+        if declined.get(gun).is_ok_and(|d| d.0 == leaves.len()) {
             continue;
         }
         let all = leaves.clone();
@@ -486,7 +523,7 @@ fn rest_idle(
         }
         // Not worth it for a gun that's a draw or two already.
         if taken.len() <= groups.len() {
-            declined.insert(gun, all.len());
+            commands.entity(gun).insert(RestDeclined(all.len()));
             continue;
         }
         let keyed: Vec<(Shade, u64, Vec<(AssetId<Mesh>, Mat4)>)> = groups
@@ -562,7 +599,11 @@ mod tests {
             .query_filtered::<Entity, With<crate::weapons::Gun>>()
             .iter(w)
             .collect();
-        let resting = w.query_filtered::<(), With<AtRest>>().iter(w).count();
+        // (A gun not worth merging is as good as resting.)
+        let resting = w
+            .query_filtered::<(), Or<(With<AtRest>, With<RestDeclined>)>>()
+            .iter(w)
+            .count();
         let mut on_player = 0;
         let mut hidden = 0;
         for g in &guns {
@@ -616,12 +657,22 @@ mod tests {
             Entity,
             &GlobalTransform,
             Option<&avian3d::prelude::LinearVelocity>,
-        ), (With<crate::weapons::Gun>, Without<AtRest>)>();
-        for (e, g, v) in q.iter(w) {
+            Has<crate::interact::Held>,
+            Has<crate::interact::Supported>,
+            &InheritedVisibility,
+            Option<&Name>,
+        ), (
+            With<crate::weapons::Gun>,
+            Without<AtRest>,
+            Without<RestDeclined>,
+        )>();
+        for (e, g, v, held, supported, shown, name) in q.iter(w) {
             println!(
-                "not at rest: {e:?} at {:.2?}, moving {:.3} m/s",
+                "not at rest: {e:?} {name:?} at {:.2?}, moving {:.3} m/s, held {held}, \
+                 supported {supported}, shown {}",
                 g.translation(),
-                v.map_or(0.0, |v| v.0.length())
+                v.map_or(0.0, |v| v.0.length()),
+                shown.get()
             );
         }
     }
@@ -636,7 +687,13 @@ mod tests {
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         settled(&mut app);
         let (guns, resting, on_player, hidden) = census(&mut app);
-        println!("{guns} guns: {resting} resting, {on_player} on the player, {hidden} hidden");
+        let declined = {
+            let w = app.world_mut();
+            w.query_filtered::<(), With<RestDeclined>>().iter(w).count()
+        };
+        println!(
+            "{guns} guns: {resting} resting ({declined} of them declined), {on_player} on the player, {hidden} hidden"
+        );
         assert!(guns > 0);
         assert!(resting > 0, "no gun rests");
         assert_eq!(

@@ -636,6 +636,23 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// When it last readied its gun with a machine on it (`threatened`).
+    readied_at: f32,
+    /// Time's short (the Surge close, or the truck's wait running down)
+    /// till then: a roof is a breath, not a hold (`TIME_SHORT_FOR`). (Run on
+    /// from a drone with time short, far from the truck, it was shot down
+    /// in the open inside 40 s.)
+    pressed_until: f32,
+    /// When it last came out from under cover for the truck.
+    hurried_at: f32,
+    /// The walker that last aimed at it (its eye is what to break line with).
+    aimer: Option<Entity>,
+    /// When it last looked whether it's still out of that walker's line.
+    line_checked: f32,
+    /// When a walker last aimed at it.
+    aimed_at: f32,
+    /// On its way to a spot out of a walker's line till then.
+    line_run_until: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
@@ -788,6 +805,10 @@ pub(super) fn direct_raid(
     minds: Query<&crate::robots::Awareness>,
     mut plans: Local<Vec<crate::sim::indoor::BuildingPlan>>,
     time: Res<Time>,
+    (spatial, eyes): (
+        avian3d::prelude::SpatialQuery,
+        Query<(&GlobalTransform, &crate::robots::Senses)>,
+    ),
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
         return;
@@ -899,6 +920,7 @@ pub(super) fn direct_raid(
     // (a flat 20 s, and it came out to be found again, every 25 s for ten
     // minutes, till the truck had gone), for two minutes at most.
     if state.roof_try.is_some_and(|(_, _, t)| now - t < 120.0)
+        && state.pressed_until <= now
         && matches!(bot.tasks.front(), Some(Task::Wait(_)))
         && view.entrances.as_deref().is_some_and(|en| {
             en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
@@ -915,7 +937,9 @@ pub(super) fn direct_raid(
     if tells.locks.read().any(|ev| on_me(ev.drone)) {
         again.push(First::DroneLock);
     }
-    if tells.aims.read().any(|ev| on_me(ev.walker)) {
+    if let Some(ev) = tells.aims.read().filter(|ev| on_me(ev.walker)).last() {
+        state.aimer = Some(ev.walker);
+        state.aimed_at = now;
         again.push(First::Aimed);
     }
     let mut chirped = false;
@@ -1247,6 +1271,8 @@ pub(super) fn direct_raid(
             && (held.is_some_and(|h| h.player == player)
                 || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
     });
+    // A machine on it: noticed, aimed at, locked on, its sweep, shot at.
+    let threatened = in_its_sights || noticed_now || fired_on;
     let moments = firsts
         .into_iter()
         .map(|f| (f, true))
@@ -1339,12 +1365,17 @@ pub(super) fn direct_raid(
                 // the truck there. Anywhere short of it, a roof still
                 // (pinned and running on in the open, three newcomers were
                 // shot down in under two minutes; under roofs, two got
-                // home).
-                let going_home = matches!(state.leg, Leg::Board)
+                // home). Its bed is the roof nearest: the truck waiting
+                // within a short run, on into it (at 21 m from the truck
+                // back at the gate, the one-handed newcomer went under the
+                // gate's shelter instead, waited out in the open beside it,
+                // and two drones shot it down 15 m behind the bed).
+                let going_home = (matches!(state.leg, Leg::Board)
+                    && matches!(raid.phase, Phase::TruckWaiting { .. })
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < 15.0);
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN));
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
@@ -1374,6 +1405,17 @@ pub(super) fn direct_raid(
                 let roof = (overhead && !going_home)
                     .then(|| under_a_roof(&world, &plans, here, &state.no_roof))
                     .flatten();
+                // "Break its line": out of its eye's sight, the nearest way
+                // (low where it stands, round the corner, behind the wall):
+                // run for a building's far side, the careful newcomer stood
+                // in its line on the way and took its rounds, raid after
+                // raid.
+                let line = (!overhead)
+                    .then(|| {
+                        let eye = walker_eye(&world, &eyes, state.aimer, here, &on_me)?;
+                        break_line(&spatial, &world, here, eye)
+                    })
+                    .flatten();
                 match roof {
                     _ if overhead && going_home => {
                         state.note(now, Kind::Learned, "a drone on it, homeward: ran on");
@@ -1383,7 +1425,19 @@ pub(super) fn direct_raid(
                         state.roof_try = Some((b, bot.failed, now));
                         tasks
                     }
-                    None => run_for_cover(&world.zone, here, from, 0.0),
+                    None => match line {
+                        Some((tasks, how)) => {
+                            state.note(now, Kind::Learned, format!("broke its line: {how}"));
+                            let run = run_to_line(&tasks, here);
+                            state.line_run_until = now + run;
+                            state.low_until = now + run + LINE_HELD;
+                            if let Some(f) = fight.as_mut() {
+                                f.flee_until = now + run;
+                            }
+                            tasks
+                        }
+                        None => run_for_cover(&world.zone, here, from, 0.0),
+                    },
                 }
             }
             // "Big one, and slow. Walk away from it": off, upright, at a
@@ -1481,6 +1535,57 @@ pub(super) fn direct_raid(
             }
         }
     }
+    // Armed, with a machine on it, and nothing up the spout: it readies the
+    // gun, a loaded magazine in from those on it (Ready). (Three of the
+    // careful newcomer's losses: dead with an empty magazine in the gun and
+    // a loaded one on it, never a round fired.) The hoarder carries on as
+    // it does.
+    let loadable = guns().any(|(g, by, packed)| {
+        by == player && !packed && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
+    }) || spare_loaded(&world, &view, player);
+    if threatened
+        && armed_now
+        && !p.hoards
+        && loadable
+        && !one_up(guns(), player)
+        && now - state.readied_at > 10.0
+    {
+        state.readied_at = now;
+        state.note(now, Kind::Learned, "a machine on it: readied the gun");
+        super::second_hour::cut_in(
+            &mut bot,
+            vec![Task::DrawGun, Task::Ready { off_safe: false }],
+        );
+    }
+    // In a walker's line with no way out of it, a round up: it shoots back.
+    // (Told "Break its line", the careful newcomer stood in it with a
+    // loaded gun and took six rounds in eighteen seconds, its trigger never
+    // pulled, six raids of eleven.)
+    let eye = walker_eye(&world, &eyes, state.aimer, here, &on_me);
+    let hidden = eye.is_some_and(|e| line_hidden(&spatial, &world, here, e));
+    // On its way to a spot out of its line (not any run for cover: a run
+    // that doesn't break its line is seven rounds in six seconds, r10).
+    let running = state.line_run_until > now;
+    if !p.reckless
+        && eye.is_some()
+        && now - state.fought_at > 8.0
+        && no_way_out(
+            &state.shots,
+            now,
+            state.aimed_at,
+            hidden,
+            running,
+            armed_now && one_up(guns(), player),
+        )
+    {
+        state.fought_at = now;
+        state.note(
+            now,
+            Kind::Learned,
+            "in its line, no way out of it: shot back",
+        );
+        super::second_hour::cut_in(&mut bot, take_it_on());
+    }
 
     // Hurt: warned, or not.
     if let Ok(h) = view.health.single() {
@@ -1576,6 +1681,80 @@ pub(super) fn direct_raid(
         bot.tasks.clear();
         bot.tasks.push_back(Task::Wait(IDLE));
         bot.restart();
+    }
+
+    // Held out of a walker's line: still out of it? (It comes round to
+    // look: low behind a car, the careful newcomer was found from the side
+    // five seconds on.) Seen again, out of it again; once a second.
+    if state.low_until > now
+        && now - state.line_checked > 1.0
+        && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == LINE_HELD)
+        && let Some(eye) = walker_eye(&world, &eyes, state.aimer, here, &on_me)
+    {
+        state.line_checked = now;
+        if !line_hidden(&spatial, &world, here, eye)
+            && let Some((tasks, how)) = break_line(&spatial, &world, here, eye)
+        {
+            state.note(now, Kind::Learned, format!("in its line again: {how}"));
+            let run = run_to_line(&tasks, here);
+            state.line_run_until = now + run;
+            state.low_until = now + run + LINE_HELD;
+            if let Some(f) = fight.as_mut() {
+                f.flee_until = now + run;
+            }
+            bot.tasks.pop_front();
+            super::second_hour::cut_in(&mut bot, tasks);
+            return;
+        }
+    }
+    // A time sense: in cover or on the job, the clock still runs. A person
+    // under a roof keeps half an eye on the time, and goes when it's short:
+    // the Surge close (the driver's warning is said once a career: told
+    // before, the careful newcomer sat at a door 17 minutes into it, and
+    // never called), or the truck there and its wait running down (held
+    // under a roof by a drone that kept finding it, the truck waited five
+    // minutes and went, and the Surge took it 28 minutes on).
+    let hiding = state.roof_try.is_some()
+        || matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s != IDLE && *s >= 10.0);
+    // A drone that has it still: out from under its roof is out under its
+    // gun (out to the truck with one on it, the careful newcomer was worn
+    // down in the open, at each try). Between its looks, then.
+    let hunted = world
+        .robots
+        .iter()
+        .any(|(e, r, _)| r.kind == crate::robots::RobotKind::Drone && !r.wrecked && on_me(e));
+    let hurry = time_short(
+        &raid.phase,
+        raid.surge_in(),
+        state.leg,
+        hiding,
+        hunted,
+        state.pressed_until > now,
+        now - state.hurried_at,
+    );
+    if hurry == Some(Hurry::Surge) {
+        state.note(now, Kind::Learned, "the Surge is close: home now");
+        state.leg = Leg::Call;
+        state.pressed_until = now + TIME_SHORT_FOR;
+        state.roof_try = None;
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.walk = None;
+        bot.restart();
+        return;
+    }
+    if hurry == Some(Hurry::Truck) {
+        state.hurried_at = now;
+        state.note(now, Kind::Learned, "the truck won't wait: out to it");
+        state.pressed_until = now + TIME_SHORT_FOR;
+        state.roof_try = None;
+        bot.tasks.clear();
+        bot.walk = None;
+        bot.tasks.extend(world.go_home(here, &raid, state.tries));
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
+        state.leg = Leg::Board;
+        return;
     }
 
     let idle_only =
@@ -1996,7 +2175,10 @@ pub(super) fn direct_raid(
                 // rather than back into the fence.
                 let side = (at - from).normalize_or_zero().perp();
                 let side = if side.dot(-from) >= 0.0 { side } else { -side };
-                let wrong = from + side * 70.0;
+                // Short of any building that lands in (walked at, the lost
+                // newcomer pinned itself to Kettle's chapel wall ten
+                // minutes a raid).
+                let wrong = outside(&world, &view, from, from + side * 70.0);
                 state.note(now, Kind::Confused, "set off the wrong way");
                 tasks.extend(route(&world, &view, from, wrong));
                 from = wrong;
@@ -2106,7 +2288,28 @@ pub(super) fn direct_raid(
             if noted {
                 state.note(now, Kind::Learned, "the place, noted: \"Now get it home\"");
                 state.leg = Leg::Call;
-            } else if close || state.tries >= 3 {
+            } else if !close && state.tries >= 3 {
+                // Not there, three walks on: caught on the way (in a
+                // building on the line: the lost newcomer stood in Kettle's
+                // chapel ten minutes, 66 m short of the cottage, and called
+                // it there). Out of the building it's in by its plan, and on
+                // again; at last, said so.
+                state.tries += 1;
+                let inside = view.entrances.as_deref().is_some_and(|en| {
+                    en.building_at(world.zone.on_ground(here.x, here.y) + Vec3::Y)
+                        .is_some()
+                });
+                if state.tries > 6 {
+                    state.note(now, Kind::Stuck, "couldn't get to the place");
+                    state.leg = Leg::Call;
+                    state.tries = 0;
+                } else if let Some((_, g)) = state.goal.clone() {
+                    if inside {
+                        tasks.extend(way_out(&world, &view, &plans, here).0);
+                    }
+                    tasks.extend(route(&world, &view, here, g));
+                }
+            } else if close {
                 // There, but not noted: about the place's middle.
                 if let Some((_, g)) = state.goal.clone() {
                     tasks.extend(route(&world, &view, here, g));
@@ -2739,6 +2942,248 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
 
+/// What the clock says to do now, under cover or on the job.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Hurry {
+    /// Home ahead of the Surge: call the truck, from wherever it is.
+    Surge,
+    /// The truck's there and its wait running down: out from cover to it.
+    Truck,
+}
+
+/// A time sense (`direct_raid`): out on the job with the Surge's warning
+/// near, or hiding while it is (once), it calls; hiding with the truck
+/// there a minute and more, out to it while no drone has it (not more
+/// than every 30 s).
+fn time_short(
+    phase: &Phase,
+    surge_in: f32,
+    leg: Leg,
+    hiding: bool,
+    hunted: bool,
+    pressed: bool,
+    since_hurried: f32,
+) -> Option<Hurry> {
+    let surge_close =
+        matches!(phase, Phase::Out) && surge_in < crate::raid::SURGE_WARNING + SURGE_MARGIN;
+    let wait_running = matches!(phase, Phase::TruckWaiting { left, .. }
+        if *left < crate::raid::TRUCK_WAIT - TRUCK_PATIENCE);
+    if surge_close
+        && (matches!(leg, Leg::Out | Leg::Place) || (leg == Leg::Call && hiding && !pressed))
+    {
+        return Some(Hurry::Surge);
+    }
+    (wait_running
+        && hiding
+        && !hunted
+        && matches!(leg, Leg::Call | Leg::Rendezvous | Leg::Board)
+        && since_hurried > 30.0)
+        .then_some(Hurry::Truck)
+}
+
+/// The eye of the walker after it: the one that last aimed, else the
+/// nearest walker with it in mind, else the nearest walker in reach (the
+/// first warning can come before any aim it's told of, or a mind that has
+/// it).
+fn walker_eye(
+    world: &World2,
+    eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
+    aimer: Option<Entity>,
+    here: Vec2,
+    on_me: &impl Fn(Entity) -> bool,
+) -> Option<Vec3> {
+    let eye = |e: Entity| eyes.get(e).ok().map(|(gt, s)| gt.transform_point(s.eye));
+    aimer.and_then(eye).or_else(|| {
+        world
+            .robots
+            .iter()
+            .filter(|(_, r, _)| r.kind == crate::robots::RobotKind::Walker && !r.wrecked)
+            .filter_map(|(e, ..)| eye(e).map(|p| (p, on_me(e))))
+            .filter(|(p, mine)| *mine || p.xz().distance(here) < WALKER_NEAR)
+            .min_by(|a, b| {
+                (!a.1, a.0.xz().distance(here))
+                    .partial_cmp(&(!b.1, b.0.xz().distance(here)))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(p, _)| p)
+    })
+}
+
+/// A standing head (m above the ground).
+const STAND_HEAD: f32 = 1.6;
+/// How far either side a fighting walker's eye is allowed for (m).
+const EYE_SWAY: f32 = 2.5;
+/// A walker this near with nobody else in mind is the one aiming (m).
+const WALKER_NEAR: f32 = 80.0;
+/// Low and still out of a walker's line this long (s): its aim lasts
+/// 1.5 s, and it comes round to look.
+const LINE_HELD: f32 = 12.0;
+/// A crouched head (m above the ground), as a walker's eye looks for it.
+const LOW_HEAD: f32 = 0.9;
+
+/// Whether to shoot back at a walker (`direct_raid`): aimed at lately, out
+/// of cover and not on the way to any, a round up, and shot at twice in a
+/// few seconds (its line couldn't be broken in time).
+fn no_way_out(
+    shots: &[f32],
+    now: f32,
+    aimed_at: f32,
+    hidden: bool,
+    running: bool,
+    ready: bool,
+) -> bool {
+    ready
+        && !hidden
+        && !running
+        && now - aimed_at < AIMED_FOR
+        && shots.iter().filter(|t| now - **t < SHOT_WINDOW).count() >= 2
+}
+
+/// A walker's aim this recent still has it in mind (s).
+const AIMED_FOR: f32 = 20.0;
+/// Two rounds at it inside this, out of cover, and it shoots back (s).
+const SHOT_WINDOW: f32 = 4.0;
+
+/// How long the run to a spot out of a walker's line takes (s): upright and
+/// at a run till there, then low (crept there, it was in the walker's line
+/// three times as long, and took its rounds on the way: first_jobs raid 5).
+/// Nothing to run to (down where it is), none.
+fn run_to_line(tasks: &[Task], here: Vec2) -> f32 {
+    match tasks.first() {
+        Some(Task::WalkTo { to, .. }) => to.distance(here) / RUN_PACE + 0.5,
+        _ => 0.0,
+    }
+}
+
+/// A run's pace on open ground (m/s), for timing one.
+const RUN_PACE: f32 = 3.0;
+
+/// A crouched head at `p` out of sight of `eye`: something solid between.
+fn line_hidden(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    p: Vec2,
+    eye: Vec3,
+) -> bool {
+    hidden_at(spatial, world, p, eye, LOW_HEAD)
+}
+
+/// A head `head` m up at `p` out of sight of `eye`.
+fn hidden_at(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    p: Vec2,
+    eye: Vec3,
+    head: f32,
+) -> bool {
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    let head = world.zone.on_ground(p.x, p.y) + Vec3::Y * head;
+    let to = head - eye;
+    let d = to.length();
+    Dir3::new(to)
+        .ok()
+        .and_then(|dir| spatial.cast_ray(eye, dir, d - 0.3, true, &walls))
+        .is_some()
+}
+
+/// Out of sight of `eye`, the nearest way: low where it is, if that does it
+/// (a wall, a bank, a car between); else the nearest spot within 12 m it
+/// can walk to where a crouched head is hidden, and still there. None:
+/// nothing near breaks the line.
+fn break_line(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    here: Vec2,
+    eye: Vec3,
+) -> Option<(Vec<Task>, &'static str)> {
+    let hidden = |p: Vec2| line_hidden(spatial, world, p, eye);
+    if hidden(here) {
+        return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
+    }
+    let nav = world.nav.as_deref().map(|n| n.0.as_ref());
+    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
+    let away = (here - eye.xz()).normalize_or(Vec2::Y);
+    // The eye a step or two either side of where it is: a walker that's
+    // fighting moves, and a spot only just out of its line now was in it
+    // again a breath later ("in its line again", twice, on Rime).
+    let side = away.perp() * EYE_SWAY;
+    let sway = [
+        eye,
+        eye + Vec3::new(side.x, 0.0, side.y),
+        eye - Vec3::new(side.x, 0.0, side.y),
+    ];
+    // Best first: hidden standing from all three, then low from all three;
+    // last, low from where it is now.
+    let ranks: [(&dyn Fn(Vec2) -> bool, &'static str); 3] = [
+        (
+            &|p| {
+                sway.iter()
+                    .all(|e| hidden_at(spatial, world, p, *e, STAND_HEAD))
+            },
+            "behind something tall",
+        ),
+        (
+            &|p| {
+                sway.iter()
+                    .all(|e| hidden_at(spatial, world, p, *e, LOW_HEAD))
+            },
+            "low behind something",
+        ),
+        (&hidden, "behind something near"),
+    ];
+    for (good, how) in ranks {
+        if let Some(p) = nearest_where(here, away, &open, nav, good) {
+            return Some((
+                vec![Task::WalkTo { to: p, within: 0.6 }, Task::Wait(LINE_HELD)],
+                how,
+            ));
+        }
+    }
+    None
+}
+
+/// The nearest walkable spot within 12 m, reached without crossing what
+/// can't be walked, where `good` holds: nearest first, and at a range those
+/// off the line from `away`'s far end before those back toward it.
+fn nearest_where(
+    here: Vec2,
+    away: Vec2,
+    open: &dyn Fn(Vec2) -> bool,
+    nav: Option<&extraction_core::nav::NavGrid>,
+    good: &dyn Fn(Vec2) -> bool,
+) -> Option<Vec2> {
+    for r in [2.0f32, 3.5, 5.0, 7.0, 9.5, 12.0] {
+        // Nearest first; at a range, those off its line before those
+        // back toward it.
+        let mut ring: Vec<Vec2> = (0..16)
+            .map(|k| here + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 16.0) * r)
+            .collect();
+        ring.sort_by(|a, b| {
+            let fa = (*a - here).normalize_or_zero().dot(away);
+            let fb = (*b - here).normalize_or_zero().dot(away);
+            fb.total_cmp(&fa)
+        });
+        if let Some(p) = ring
+            .into_iter()
+            .find(|p| open(*p) && nav.is_none_or(|n| blocked_run(n, here, *p) < 0.5) && good(*p))
+        {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Home ahead of the Surge's warning by this much (s): time to call and
+/// get to the truck.
+const SURGE_MARGIN: f32 = 180.0;
+/// Under cover with the truck there, out to it once it has waited this
+/// long (s; it waits `TRUCK_WAIT`).
+const TRUCK_PATIENCE: f32 = 60.0;
+/// Once time's short, it stays short this long (s).
+const TIME_SHORT_FOR: f32 = 600.0;
+/// The truck waiting within this, a run for its bed beats any roof (m).
+const BED_RUN: f32 = 40.0;
+
 /// Clear of walls round a building's box, m: a body (0.28) and a stride.
 const ROUND: f32 = 2.0;
 
@@ -3094,6 +3539,19 @@ fn take_it_on() -> Vec<Task> {
         Task::Ready { off_safe: true },
         Task::Engage { shots: 12 },
     ]
+}
+
+/// Something on `player` to load a gun from, besides what's in it: a
+/// loaded box magazine, a stripper clip with rounds on it, or loose rounds
+/// (box magazines only, and the careful newcomer with an SKS and two full
+/// clips read as having nothing to load).
+fn spare_loaded(world: &World2, view: &RaidView, player: Entity) -> bool {
+    world.items.iter().any(|(e, it, ..)| {
+        let def = world.catalog.get(it.kind());
+        (def.magazine.is_some() || def.category == extraction_core::items::Category::Ammo)
+            && it.rounds > 0
+            && carried(world, view, player, &def.id).contains(&e)
+    })
 }
 
 /// Whether a gun on `player`'s body has a round up (any: a rifle picked
@@ -3694,6 +4152,24 @@ fn errand_done(errand: &Errand, world: &World2) -> String {
 /// the Old farm, a little short of halfway.
 /// In a valley with no Old farm, on the way to the place the job card
 /// names (`card`), so the machine is on the newcomer's way.
+/// The loose `item` nearest the drop: where a newcomer on a fetch goes first.
+fn fetch_target(world: &World2, zone: &crate::world::Zone, item: &str) -> Option<Vec2> {
+    let drop = zone
+        .map
+        .markers
+        .iter()
+        .find(|m| m.kind == MarkerKind::Insertion)
+        .map(|m| Vec2::from(m.at))?;
+    world
+        .items
+        .iter()
+        .filter(|(e, _, _, held, sock, bag)| {
+            held.is_none() && sock.is_none() && bag.is_none() && world.id(*e) == Some(item)
+        })
+        .map(|(_, _, gt, ..)| gt.translation().xz())
+        .min_by(|a, b| a.distance(drop).total_cmp(&b.distance(drop)))
+}
+
 fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) {
     let drop = zone
         .map
@@ -3726,6 +4202,7 @@ pub(super) fn first_fight(
     world: World2,
     time: Res<Time>,
     cards: Query<&ScreenText, With<RequestCard>>,
+    progression: Option<Res<crate::progression::Progression>>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
         return;
@@ -3737,11 +4214,23 @@ pub(super) fn first_fight(
     // Put it there once the newcomer's out.
     if !fight.seeded && raid.phase == Phase::Out {
         fight.seeded = true;
+        // The place the card names; a fetch names none, so the nearest of
+        // what it asks for (off where the newcomer isn't going, Rime's first
+        // machine met nobody, and the director's walker had them instead).
         let card = cards
             .iter()
             .find_map(|c| place_on_card(&c.text, &zone))
-            .map(|(_, at)| at);
+            .map(|(_, at)| at)
+            .or_else(|| {
+                let crate::progression::Progression(p) = progression.as_deref()?;
+                let Some(extraction_core::progression::Job::Fetch { item, .. }) = p.job.as_ref()
+                else {
+                    return None;
+                };
+                fetch_target(&world, &zone, item)
+            });
         let (at, ahead) = on_the_way_to(&zone, card);
+        info!("first fight: {kind} placed at {at}, on the way to {card:?}");
         let side = ahead.perp();
         let job = |site: Vec3| crate::robots::Job {
             kind: crate::robots::JobKind::Watch,
@@ -4065,6 +4554,179 @@ mod tests {
         assert_eq!(round_sentries(&[], a, b, 3), vec![b]);
     }
 
+    /// The bot's PM against a drone held still, slightly above it, at 10,
+    /// 20 and 33 m: hits out of eight. A measurement (the coordinator's
+    /// question: seven rounds a raid at a locked-on drone, none hit), not
+    /// a gate: `cargo test ... the_bots_pm_at_a_still_drone -- --ignored
+    /// --nocapture`.
+    #[test]
+    #[ignore]
+    fn the_bots_pm_at_a_still_drone() {
+        use avian3d::prelude::{AngularVelocity, LinearVelocity};
+        let drop = |app: &mut App, id: &str, at: Vec3, rounds: Option<u32>| {
+            let catalog = app.world().resource::<crate::items::Catalog>().clone();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind(id).unwrap(),
+                        transform: Transform::from_translation(at),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            if let Some(n) = rounds {
+                let mut i = app.world_mut().get_mut::<crate::items::Item>(e).unwrap();
+                i.rounds = n;
+                i.loads.fit(n);
+            }
+            e
+        };
+        for d in [10.0f32, 20.0, 33.0] {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            #[derive(Resource, Default)]
+            struct Struck(Vec<(String, Vec3)>);
+            fn struck(
+                mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+                names: Query<&Name>,
+                parents: Query<&ChildOf>,
+                mut out: ResMut<Struck>,
+            ) {
+                for h in hits.read() {
+                    let mut e = h.entity;
+                    let mut name = format!("{e:?}");
+                    for _ in 0..4 {
+                        if let Ok(n) = names.get(e) {
+                            name = n.to_string();
+                            break;
+                        }
+                        match parents.get(e) {
+                            Ok(c) => e = c.parent(),
+                            Err(_) => break,
+                        }
+                    }
+                    out.0.push((name, h.point));
+                }
+            }
+            app.init_resource::<Struck>().add_systems(Update, struck);
+            app.finish();
+            app.cleanup();
+            for _ in 0..10 {
+                app.update();
+            }
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+            let p = app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .single(app.world())
+                .unwrap();
+            // Out of the truck (in it, every round hit its wall): in the
+            // open inside the south gate, the drone to the north.
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let me = zone.on_ground(22.0, 140.0) + Vec3::Y * 0.05;
+            let fwd = Vec3::NEG_Z;
+            {
+                let mut t = app.world_mut().get_mut::<Transform>(p).unwrap();
+                t.translation = me;
+                t.rotation = Quat::IDENTITY;
+            }
+            for _ in 0..10 {
+                app.update();
+            }
+            let gun = drop(&mut app, "pm_pistol", me + Vec3::new(0.3, 0.9, 0.0), None);
+            let mag = drop(&mut app, "pm_mag", me + Vec3::new(-0.3, 0.9, 0.0), Some(8));
+            let at = me + fwd * d + Vec3::Y * 6.0;
+            let drone = {
+                let zone = app.world().resource::<crate::world::Zone>().clone();
+                let mut queue = bevy::ecs::world::CommandQueue::default();
+                let e = {
+                    let mut c = Commands::new(&mut queue, app.world());
+                    let site = zone.on_ground(at.x, at.z);
+                    crate::robots::drone::spawn_drone(
+                        &mut c,
+                        at,
+                        crate::robots::Job {
+                            kind: crate::robots::JobKind::Watch,
+                            site,
+                            duration: f32::INFINITY,
+                            exit: site,
+                        },
+                    )
+                };
+                queue.apply(app.world_mut());
+                e
+            };
+            app.update();
+            app.world_mut()
+                .entity_mut(p)
+                .insert(crate::bot::Bot::new(vec![
+                    crate::bot::Task::Grab {
+                        item: mag,
+                        side: crate::rig::Side::Left,
+                    },
+                    crate::bot::Task::Stow(crate::rig::Side::Left),
+                    crate::bot::Task::Grab {
+                        item: gun,
+                        side: crate::rig::Side::Right,
+                    },
+                    crate::bot::Task::Ready { off_safe: true },
+                    crate::bot::Task::Engage { shots: 8 },
+                ]));
+            for _ in 0..90 * 25 {
+                if let Ok(mut e) = app.world_mut().get_entity_mut(drone) {
+                    if let Some(mut t) = e.get_mut::<Transform>() {
+                        t.translation = at;
+                        t.rotation = Quat::IDENTITY;
+                    }
+                    if let Some(mut v) = e.get_mut::<LinearVelocity>() {
+                        v.0 = Vec3::ZERO;
+                    }
+                    if let Some(mut v) = e.get_mut::<AngularVelocity>() {
+                        v.0 = Vec3::ZERO;
+                    }
+                    if let Some(mut dr) = e.get_mut::<crate::robots::drone::Drone>() {
+                        dr.gun_cooldown = 99.0;
+                    }
+                }
+                app.update();
+                if app.world().get::<crate::bot::Bot>(p).unwrap().done() {
+                    break;
+                }
+            }
+            let eye = me + Vec3::Y * 1.6;
+            println!(
+                "AIM {d} m: drone at {at:.1}, eye {eye:.1}; struck {:?}",
+                app.world()
+                    .resource::<Struck>()
+                    .0
+                    .iter()
+                    .map(|(n, p)| format!("{n} @ {p:.1}"))
+                    .collect::<Vec<_>>()
+            );
+            let bot = app.world().get::<crate::bot::Bot>(p).unwrap();
+            println!(
+                "AIM {d} m (slant {:.1} m): fired {}, hits {}, robot hits {}, log {:?}",
+                me.distance(at),
+                bot.fired,
+                bot.hits,
+                bot.robot_hits,
+                bot.log
+                    .iter()
+                    .filter(|l| l.contains("FAIL"))
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
     /// A job in another valley isn't gone after here: its place is that
     /// valley's (a Marrow job's place, walked to inside Cinder, stuck the
     /// newcomer in a corner of the works). One with no valley goes anywhere.
@@ -4143,6 +4805,107 @@ the Hollow.";
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
         );
+    }
+
+    #[test]
+    fn shot_at_in_the_open_it_shoots_back() {
+        let now = 300.0;
+        let two = [now - 3.0, now - 1.0];
+        // Aimed at, in the open, a round up, two rounds in: back at it.
+        assert!(no_way_out(&two, now, now - 5.0, false, false, true));
+        // Behind something, or on its way there: no.
+        assert!(!no_way_out(&two, now, now - 5.0, true, false, true));
+        assert!(!no_way_out(&two, now, now - 5.0, false, true, true));
+        // Nothing up the spout: no (readying comes first).
+        assert!(!no_way_out(&two, now, now - 5.0, false, false, false));
+        // One round only, or long ago: not yet.
+        assert!(!no_way_out(
+            &[now - 1.0],
+            now,
+            now - 5.0,
+            false,
+            false,
+            true
+        ));
+        assert!(!no_way_out(
+            &[now - 9.0, now - 8.0],
+            now,
+            now - 5.0,
+            false,
+            false,
+            true
+        ));
+        // No walker's aim on it lately: not this rule's.
+        assert!(!no_way_out(&two, now, now - 60.0, false, false, true));
+    }
+
+    #[test]
+    fn the_clock_gets_it_out_from_under_cover() {
+        use crate::raid::{SURGE_AFTER, SURGE_WARNING, TRUCK_WAIT};
+        let out = Phase::Out;
+        let far = SURGE_AFTER - 600.0;
+        let near = SURGE_WARNING + SURGE_MARGIN - 1.0;
+        // Hours to the Surge: on with the job, hidden or not.
+        for leg in [Leg::Out, Leg::Place, Leg::Call] {
+            assert_eq!(time_short(&out, far, leg, true, false, false, 99.0), None);
+        }
+        // The Surge near, on the job: home, whether it's hiding or not
+        // (told once a career, a second warning isn't said).
+        for leg in [Leg::Out, Leg::Place] {
+            for hiding in [false, true] {
+                assert_eq!(
+                    time_short(&out, near, leg, hiding, false, false, 99.0),
+                    Some(Hurry::Surge),
+                    "{leg:?}, hiding {hiding}"
+                );
+            }
+        }
+        // Calling already: only out from cover, and once.
+        assert_eq!(
+            time_short(&out, near, Leg::Call, true, false, false, 99.0),
+            Some(Hurry::Surge)
+        );
+        assert_eq!(
+            time_short(&out, near, Leg::Call, true, false, true, 99.0),
+            None
+        );
+        assert_eq!(
+            time_short(&out, near, Leg::Call, false, false, false, 99.0),
+            None
+        );
+        // At the camp, in the truck, home: the clock isn't its business.
+        for leg in [Leg::Camp, Leg::Kit, Leg::Paid, Leg::Done] {
+            assert_eq!(time_short(&out, near, leg, true, false, false, 99.0), None);
+        }
+        // The truck there: a minute's grace, then out from cover to it.
+        let just = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - 10.0,
+        };
+        let running = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - TRUCK_PATIENCE - 1.0,
+        };
+        for leg in [Leg::Call, Leg::Rendezvous, Leg::Board] {
+            assert_eq!(time_short(&just, far, leg, true, false, false, 99.0), None);
+            assert_eq!(
+                time_short(&running, far, leg, true, false, false, 99.0),
+                Some(Hurry::Truck),
+                "{leg:?}"
+            );
+            // Not hiding: its walk to the truck is already the way.
+            assert_eq!(
+                time_short(&running, far, leg, false, false, false, 99.0),
+                None
+            );
+            // A drone on it still: under the roof till it looks away.
+            assert_eq!(
+                time_short(&running, far, leg, true, true, false, 99.0),
+                None
+            );
+            // Not every frame: once in 30 s.
+            assert_eq!(time_short(&running, far, leg, true, false, true, 5.0), None);
+        }
     }
 }
 

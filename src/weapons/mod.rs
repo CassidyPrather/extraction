@@ -32,6 +32,7 @@ pub mod range;
 pub mod reload;
 pub mod report;
 pub mod reverb;
+pub mod sight_picture;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;
@@ -1354,7 +1355,12 @@ fn triggers(
                     gun: e,
                     shooter: held.map(|h| h.player),
                     origin,
-                    direction: zero::shot_dir(&gun, gt.rotation(), scoped),
+                    direction: zero::barrel_dir(
+                        &gun,
+                        gt.rotation(),
+                        scoped,
+                        muzzle.x - gun.layout.muzzle.x,
+                    ),
                     speed: def.muzzle_velocity,
                     damage: def.damage,
                     projectiles: def.projectiles,

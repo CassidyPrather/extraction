@@ -25,7 +25,7 @@
             tags: ["metal"],
         ),
         (
-            id: "ak74", dims: Some((0.07, 0.24, 0.943)),
+            id: "ak74", dims: Some((0.076, 0.186, 0.948)),
             name: "AK-74 rifle",
             description: "Stamped receiver, side-folding charging handle, the selector you push with your trigger finger. Safe, auto, semi — in that order.",
             category: Firearm, size: Bulky, mass: 3.3, bulk: 6.0,
@@ -38,7 +38,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "mosin", dims: Some((0.07, 0.17, 1.23)),
+            id: "mosin", dims: Some((0.095, 0.195, 1.235)),
             name: "Mosin bolt rifle",
             description: "A five-shot turn-bolt older than anyone who has carried it. Lift, pull, push, drop. Hits like a door.",
             category: Firearm, size: Bulky, mass: 4.0, bulk: 7.5,
@@ -51,7 +51,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "sks", dims: Some((0.07, 0.2, 1.05)),
+            id: "sks", dims: Some((0.072, 0.179, 1.025)),
             name: "SKS carbine",
             description: "A ten-shot self-loader with a fixed magazine and a folding bayonet. Lock the bolt back, push a clip down through the top, let it go.",
             category: Firearm, size: Bulky, mass: 3.85, bulk: 6.5,
@@ -64,7 +64,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "nagant", dims: Some((0.04, 0.18, 0.235)),
+            id: "nagant", dims: Some((0.04, 0.141, 0.235)),
             name: "Nagant revolver",
             description: "Seven shots, and the cylinder slides forward to seal the gap: quiet for a revolver. Open the gate, push the empties out one by one, thumb rounds in one by one. Slow, sure.",
             category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,
@@ -77,7 +77,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "ppsh", dims: Some((0.07, 0.25, 0.85)),
+            id: "ppsh", dims: Some((0.069, 0.211, 0.849)),
             name: "PPSh-41",
             description: "Seventy-one rounds in a drum and nine hundred a minute: it fires from an open bolt, so pull the handle back to the sear and let go. Hold it short and close.",
             category: Firearm, size: Bulky, mass: 3.6, bulk: 5.5,
@@ -90,7 +90,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "toz_double", dims: Some((0.075, 0.16, 1.16)),
+            id: "toz_double", dims: Some((0.053, 0.174, 1.157)),
             name: "Double-barrel shotgun",
             description: "Side-by-side twelve gauge. Break it, drop two in, snap it shut. Ejectors throw the empties over your shoulder.",
             category: Firearm, size: Bulky, mass: 3.2, bulk: 6.5,
@@ -103,7 +103,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "mp133", dims: Some((0.045, 0.2, 1.13)),
+            id: "mp133", dims: Some((0.041, 0.177, 1.127)),
             name: "MP-133 pump shotgun",
             description: "A Baikal pump: four shells in the tube under the barrel, thumbed in through the port underneath. Pump it back hard and forward again. A cocked hammer locks it shut: the button by the trigger guard lets it open.",
             category: Firearm, size: Bulky, mass: 3.4, bulk: 6.5,
@@ -211,7 +211,7 @@
             tags: ["metal"],
         ),
         (
-            id: "knife", dims: Some((0.022, 0.043, 0.256)), name: "Field knife",
+            id: "knife", dims: Some((0.021, 0.042, 0.255)), name: "Field knife",
             description: "A fixed blade. Thrust hard into a joint or an eye; a slow poke just scratches the paint.",
             category: Tool, size: Small, mass: 0.3, bulk: 0.25,
             melee: Some((min_speed: 1.5, damage: 40.0, blade: 0.14)),
@@ -220,7 +220,7 @@
         // Armour: the vest takes a plate in either pocket; the pocket decides
         // front or back.
         (
-            id: "vest", dims: Some((0.392, 0.458, 0.28)), name: "Plate carrier",
+            id: "vest", dims: Some((0.362, 0.458, 0.262)), name: "Plate carrier",
             description: "Two plate pockets, front and back. Let it go at your chest to wear it.",
             category: Tool, size: Large, mass: 1.4, bulk: 4.0, mount: Some(Vest),
             tags: ["fabric"],
@@ -242,13 +242,13 @@
         // Magazines and clips
         // ---------------------------------------------------------------
         (
-            id: "pm_mag", dims: Some((0.016, 0.0915, 0.03)), name: "PM magazine",
+            id: "pm_mag", dims: Some((0.015, 0.093, 0.034)), name: "PM magazine",
             category: Magazine, size: Small, mass: 0.09, bulk: 0.1,
             magazine: Some((fits: "pm", cartridge: "9x18", capacity: 8)),
             tags: ["metal"],
         ),
         (
-            id: "ak_mag", dims: Some((0.026, 0.17, 0.13)), name: "AK-74 magazine",
+            id: "ak_mag", dims: Some((0.026, 0.171, 0.128)), name: "AK-74 magazine",
             description: "Thirty rounds, plum-coloured polymer.",
             category: Magazine, size: Small, mass: 0.23, bulk: 0.35,
             magazine: Some((fits: "ak545", cartridge: "5.45x39", capacity: 30)),
@@ -262,14 +262,14 @@
         ),
 
         (
-            id: "svd_mag", dims: Some((0.03, 0.124, 0.1)), name: "SVD magazine",
+            id: "svd_mag", dims: Some((0.027, 0.126, 0.098)), name: "SVD magazine",
             description: "Ten rounds of 7.62x54R in a ribbed steel box.",
             category: Magazine, size: Small, mass: 0.21, bulk: 0.25,
             magazine: Some((fits: "svd", cartridge: "7.62x54R", capacity: 10)),
             tags: ["metal"],
         ),
         (
-            id: "rpk_mag", dims: Some((0.026, 0.27, 0.15)), name: "RPK-74 magazine",
+            id: "rpk_mag", dims: Some((0.026, 0.272, 0.149)), name: "RPK-74 magazine",
             description: "Forty-five rounds of 5.45x39, a long curve of plum polymer. Fits any AK-74.",
             category: Magazine, size: Small, mass: 0.33, bulk: 0.5,
             magazine: Some((fits: "ak545", cartridge: "5.45x39", capacity: 45)),
@@ -284,26 +284,26 @@
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 rounds (box)",
+            id: "ammo_545", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 rounds (box)",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ppsh_drum", dims: Some((0.072, 0.18, 0.127)), name: "PPSh drum",
+            id: "ppsh_drum", dims: Some((0.059, 0.177, 0.126)), name: "PPSh drum",
             description: "Seventy-one rounds on a spiral. Wind the key after filling it. The window on its side shows how many are left.",
             category: Magazine, size: Medium, mass: 1.6, bulk: 1.4,
             magazine: Some((fits: "ppsh_drum", cartridge: "7.62x25", capacity: 71)),
             tags: ["metal"],
         ),
         (
-            id: "sks_clip", dims: Some((0.014, 0.06, 0.085)), name: "Stripper clip (7.62x39)",
+            id: "sks_clip", dims: Some((0.013, 0.058, 0.084)), name: "Stripper clip (7.62x39)",
             description: "Ten rounds on a strip of spring steel, for the SKS.",
             category: Magazine, size: Tiny, mass: 0.012, bulk: 0.03,
             magazine: Some((fits: "sks", cartridge: "7.62x39", capacity: 10, stripper: true)),
             tags: ["metal"],
         ),
         (
-            id: "ammo_762x39", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 rounds (box)",
+            id: "ammo_762x39", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 rounds (box)",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20,
             tags: ["brass", "powder"],
         ),
@@ -323,7 +323,7 @@
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_12ga", dims: Some((0.07, 0.07, 0.12)), name: "12 gauge buckshot (box)",
+            id: "ammo_12ga", dims: Some((0.071, 0.07, 0.12)), name: "12 gauge buckshot (box)",
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10,
             tags: ["brass", "powder", "polymer"],
         ),
@@ -331,79 +331,79 @@
         // streak along the flight) and 12 gauge slugs. Their tips are
         // painted as on the real thing.
         (
-            id: "ammo_545_ap", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 AP rounds (box)",
+            id: "ammo_545_ap", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 AP rounds (box)",
             description: "Steel-cored 7N22, black tips. Through a plate where ball stops; a little less to flesh.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Ap,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_tracer", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 tracer rounds (box)",
+            id: "ammo_545_tracer", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 tracer rounds (box)",
             description: "7T3, green tips. Each one burns a streak you can follow to where it went.",
             category: Ammo, size: Small, mass: 0.31, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Tracer,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_9x18_repack", dims: Some((0.04, 0.03, 0.07)), name: "9x18 re-packed rounds (box)",
+            id: "ammo_9x18_repack", dims: Some((0.04, 0.029, 0.071)), name: "9x18 re-packed rounds (box)",
             description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
             category: Ammo, size: Small, mass: 0.17, bulk: 0.12, cartridge: Some("9x18"), rounds: 16, load: Repacked,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_repack", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 re-packed rounds (box)",
+            id: "ammo_545_repack", dims: Some((0.05, 0.034, 0.101)), name: "5.45x39 re-packed rounds (box)",
             description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Repacked,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_repack", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 re-packed rounds (box)",
+            id: "ammo_762x39_repack", dims: Some((0.06, 0.044, 0.031)), name: "7.62x39 re-packed rounds (box)",
             description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Repacked,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x25_repack", dims: Some((0.1, 0.037, 0.074)), name: "7.62x25 re-packed rounds (box)",
+            id: "ammo_762x25_repack", dims: Some((0.1, 0.035, 0.074)), name: "7.62x25 re-packed rounds (box)",
             description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
             category: Ammo, size: Small, mass: 0.85, bulk: 0.5, cartridge: Some("7.62x25"), rounds: 70, load: Repacked,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762r_repack", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R re-packed rounds (box)",
+            id: "ammo_762r_repack", dims: Some((0.045, 0.038, 0.091)), name: "7.62x54R re-packed rounds (box)",
             description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
             category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Repacked,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_12ga_repack", dims: Some((0.07, 0.07, 0.12)), name: "12 gauge re-packed rounds (box)",
+            id: "ammo_12ga_repack", dims: Some((0.07, 0.068, 0.121)), name: "12 gauge re-packed rounds (box)",
             description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Repacked,
             tags: ["brass", "powder", "polymer"],
         ),
         (
-            id: "ammo_545_t4", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 rounds, every fourth a tracer (box)",
+            id: "ammo_545_t4", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 rounds, every fourth a tracer (box)",
             description: "Packed as a section draws it: three ball, one tracer. Load them in order and every fourth shot shows you where they go.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, tracer_every: 4,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_us", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 subsonic rounds (box)",
+            id: "ammo_545_us", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 subsonic rounds (box)",
             description: "7U1, black and green tips: a long heavy bullet on a light charge, slower than sound. No crack down the range, and under a suppressor hardly a cough. It drops fast and hits soft.",
             category: Ammo, size: Small, mass: 0.34, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Subsonic,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_us", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 subsonic rounds (box)",
+            id: "ammo_762x39_us", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 subsonic rounds (box)",
             description: "7.62 US, black and green tips: a heavy bullet slower than sound. No crack, and under a suppressor hardly a cough. It drops fast.",
             category: Ammo, size: Small, mass: 0.4, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Subsonic,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_ap", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 AP rounds (box)",
+            id: "ammo_762x39_ap", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 AP rounds (box)",
             description: "Steel-cored BZ, black and red tips.",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Ap,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_tracer", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 tracer rounds (box)",
+            id: "ammo_762x39_tracer", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 tracer rounds (box)",
             description: "T-45, green tips.",
             category: Ammo, size: Small, mass: 0.35, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Tracer,
             tags: ["brass", "powder"],
@@ -421,7 +421,7 @@
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_12ga_slug", dims: Some((0.07, 0.07, 0.12)), name: "12 gauge slugs (box)",
+            id: "ammo_12ga_slug", dims: Some((0.071, 0.07, 0.12)), name: "12 gauge slugs (box)",
             description: "One heavy ball each instead of nine: a rifle's reach for the double, and a robot's plate.",
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Slug,
             tags: ["brass", "powder", "polymer"],
@@ -451,13 +451,13 @@
             tags: ["paper", "powder"],
         ),
         (
-            id: "bolt_bundle", dims: Some((0.041, 0.04, 0.30)), name: "Crossbow bolts (bundle)",
+            id: "bolt_bundle", dims: Some((0.041, 0.022, 0.3)), name: "Crossbow bolts (bundle)",
             description: "Five steel-rod bolts wired together, fletched with cut plastic bottle.",
             category: Ammo, size: Small, mass: 0.15, bulk: 0.4, cartridge: Some("bolt"), rounds: 5,
             tags: ["metal", "polymer"],
         ),
         (
-            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.30)), name: "Crossbow bolt",
+            id: "crossbow_bolt", dims: Some((0.025, 0.021, 0.3)), name: "Crossbow bolt",
             description: "A filed steel rod with plastic fletches. Shot, it lies where it came down: go and get it.",
             category: Ammo, size: Small, mass: 0.028, bulk: 0.08, cartridge: Some("bolt"), rounds: 1,
             tags: ["metal", "polymer"],
@@ -488,7 +488,7 @@
         (id: "shell_12ga_repack", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge re-packed shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Repacked, tags: ["brass", "powder", "polymer"]),
         (id: "round_22lr", dims: Some((0.0069, 0.0069, 0.0251)), name: ".22 round", category: Ammo, size: Tiny, mass: 0.0034, bulk: 0.001, cartridge: Some("22lr"), rounds: 1, tags: ["brass", "powder"]),
         (
-            id: "robot_ammo_belt", dims: Some((0.073, 0.079, 0.041)), name: "Robot ammunition belt",
+            id: "robot_ammo_belt", dims: Some((0.073, 0.037, 0.041)), name: "Robot ammunition belt",
             description: "Caseless slugs on a linked polymer belt. No human gun takes them; the bench can pull the powder and the metal.",
             category: Ammo, size: Small, mass: 0.6, bulk: 0.5, cartridge: Some("robot_6mm"), rounds: 40,
             tags: ["powder", "metal", "polymer"],
@@ -498,25 +498,25 @@
         // Rail attachments
         // ---------------------------------------------------------------
         (
-            id: "weapon_light", dims: Some((0.041, 0.047, 0.093)), name: "Weapon light",
+            id: "weapon_light", dims: Some((0.036, 0.038, 0.092)), name: "Weapon light",
             description: "Clamps to a rail. Takes one cell.",
             category: Attachment, size: Small, mass: 0.12, bulk: 0.1, battery_wh: 0.0, mount: Some(Rail),
             tags: ["electronics", "metal"],
         ),
         (
-            id: "laser_module", dims: Some((0.041, 0.047, 0.07)), name: "Laser module",
+            id: "laser_module", dims: Some((0.035, 0.037, 0.072)), name: "Laser module",
             description: "A red dot on the world, wherever your muzzle points.",
             category: Attachment, size: Small, mass: 0.08, bulk: 0.08, mount: Some(Rail),
             tags: ["electronics"],
         ),
         (
-            id: "pu_scope", dims: Some((0.045, 0.049, 0.271)), name: "3.5x scope",
+            id: "pu_scope", dims: Some((0.041, 0.047, 0.271)), name: "3.5x scope",
             description: "Old-pattern fixed-power sniper scope with a side mount.",
             category: Attachment, size: Medium, mass: 0.27, bulk: 0.4, mount: Some(Dovetail),
             tags: ["glass", "metal"],
         ),
         (
-            id: "pso_scope", dims: Some((0.06, 0.06, 0.36)), name: "PSO-1 scope",
+            id: "pso_scope", dims: Some((0.052, 0.057, 0.36)), name: "PSO-1 scope",
             description: "A 4x marksman's scope with a lit reticle and a long rubber eyecup. Side-mounts on a dovetail.",
             category: Attachment, size: Medium, mass: 0.6, bulk: 0.7, mount: Some(Dovetail),
             tags: ["glass", "metal"],
@@ -528,13 +528,13 @@
             tags: ["metal", "suppressor"],
         ),
         (
-            id: "can_suppressor", dims: Some((0.075, 0.075, 0.13)), name: "Can suppressor",
+            id: "can_suppressor", dims: Some((0.078, 0.082, 0.13)), name: "Can suppressor",
             description: "A food tin packed with washers and wire, clamped on a rifle's muzzle. It takes the edge off the shot for a few dozen rounds, then it's a tin with a hole in it. Fouls the gun as it goes.",
             category: Attachment, size: Small, mass: 0.3, bulk: 0.3, mount: Some(Muzzle),
             tags: ["metal", "suppressor", "homemade"],
         ),
         (
-            id: "side_rail", dims: Some((0.027, 0.013, 0.1)), name: "Side-mount rail",
+            id: "side_rail", dims: Some((0.023, 0.013, 0.1)), name: "Side-mount rail",
             description: "Bolts onto a dovetail and gives you a short rail.",
             category: Attachment, size: Small, mass: 0.15, bulk: 0.1, mount: Some(Dovetail),
             tags: ["metal"],
@@ -550,23 +550,23 @@
         // Gadgets
         // ---------------------------------------------------------------
         (
-            id: "flashlight", dims: Some((0.035, 0.035, 0.18)), name: "Flashlight",
+            id: "flashlight", dims: Some((0.036, 0.036, 0.19)), name: "Flashlight",
             category: Gadget, size: Medium, mass: 0.2, bulk: 0.2,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "power_cell", dims: Some((0.02, 0.02, 0.06)), name: "Power cell",
+            id: "power_cell", dims: Some((0.019, 0.02, 0.058)), name: "Power cell",
             description: "A rechargeable cell. Lights, radios and the clever stuff all drink from these.",
             category: Gadget, size: Tiny, mass: 0.05, bulk: 0.03, battery_wh: 10.0, mount: Some(Cell),
             tags: ["electronics"],
         ),
         (
-            id: "compass", dims: Some((0.066, 0.03, 0.057)), name: "Compass",
+            id: "compass", dims: Some((0.066, 0.031, 0.057)), name: "Compass",
             category: Gadget, size: Tiny, mass: 0.06, bulk: 0.03,
             tags: ["metal", "glass"],
         ),
         (
-            id: "map_case", dims: Some((0.32, 0.008, 0.344)), name: "Map case",
+            id: "map_case", dims: Some((0.31, 0.012, 0.322)), name: "Map case",
             description: "Your hand-drawn map of the valley, in a scuffed plastic sleeve.",
             category: Gadget, size: Small, mass: 0.1, bulk: 0.2,
         ),
@@ -577,7 +577,7 @@
             tags: ["electronics"],
         ),
         (
-            id: "cassette_player", dims: Some((0.15, 0.09, 0.04)), name: "Cassette player",
+            id: "cassette_player", dims: Some((0.154, 0.097, 0.042)), name: "Cassette player",
             description: "A portable tape recorder with chunky keys on top. Stop twice opens the door. Runs on a power cell.",
             category: Gadget, size: Small, mass: 0.55, bulk: 0.45,
             tags: ["electronics", "plastic"],
@@ -619,25 +619,25 @@
             tags: ["plastic", "tape"],
         ),
         (
-            id: "record_augustin", dims: Some((0.254, 0.004, 0.254)), name: "Record: O du lieber Augustin",
+            id: "record_augustin", dims: Some((0.254, 0.0028, 0.254)), name: "Record: O du lieber Augustin",
             description: "A ten-inch 78 in a paper sleeve gone soft: a waltz.",
             category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
             tags: ["record"],
         ),
         (
-            id: "record_entertainer", dims: Some((0.254, 0.004, 0.254)), name: "Record: The Entertainer",
+            id: "record_entertainer", dims: Some((0.254, 0.0028, 0.254)), name: "Record: The Entertainer",
             description: "A ten-inch 78 in a paper sleeve gone soft: a rag.",
             category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
             tags: ["record"],
         ),
         (
-            id: "record_susanna", dims: Some((0.254, 0.004, 0.254)), name: "Record: Oh! Susanna",
+            id: "record_susanna", dims: Some((0.254, 0.0028, 0.254)), name: "Record: Oh! Susanna",
             description: "A ten-inch 78 in a paper sleeve gone soft: a dance orchestra.",
             category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
             tags: ["record"],
         ),
         (
-            id: "binoculars", dims: Some((0.17, 0.06, 0.13)), name: "Binoculars",
+            id: "binoculars", dims: Some((0.163, 0.052, 0.129)), name: "Binoculars",
             category: Gadget, size: Medium, mass: 0.6, bulk: 0.7,
             tags: ["glass", "metal"],
         ),
@@ -648,13 +648,13 @@
             tags: ["metal", "electronics"],
         ),
         (
-            id: "work_boots", dims: Some((0.3, 0.16, 0.32)), name: "Work boots",
+            id: "work_boots", dims: Some((0.23, 0.161, 0.3)), name: "Work boots",
             description: "A pair of black leather work boots, resoled more than once, laces knotted together. Good ones.",
             category: Curio, size: Medium, mass: 1.6, bulk: 1.2,
             tags: ["leather"],
         ),
         (
-            id: "canary", dims: Some((0.16, 0.24, 0.16)), name: "Canary cage",
+            id: "canary", dims: Some((0.156, 0.24, 0.157)), name: "Canary cage",
             description: "A little brass cage with a bird-shaped flame-safety lamp in it, from the deep workings' landing. Carried, its glow goes amber, then red, as firedamp gathers near; too long in the gas and it goes out for good.",
             category: Gadget, size: Small, mass: 0.6, bulk: 0.5,
             tags: ["metal"],
@@ -672,43 +672,43 @@
             tags: ["metal", "electronics"],
         ),
         (
-            id: "lead_case", dims: Some((0.11, 0.07, 0.11)), name: "Lead-lined case",
+            id: "lead_case", dims: Some((0.113, 0.087, 0.122)), name: "Lead-lined case",
             description: "A heavy little box with a lid that seals. Whatever sits inside it, the Zone can't feel — and it can't do anything for you either.",
             category: Gadget, size: Small, mass: 2.4, bulk: 0.7,
             tags: ["metal"],
         ),
         (
-            id: "emp_grenade", dims: Some((0.065, 0.11, 0.065)), name: "EMP grenade",
+            id: "emp_grenade", dims: Some((0.069, 0.108, 0.064)), name: "EMP grenade",
             description: "Pull, throw, count. Robots nearby forget how to stand for a while.",
             category: Gadget, size: Small, mass: 0.4, bulk: 0.3,
             tags: ["electronics"],
         ),
         (
-            id: "emp_trap", dims: Some((0.08, 0.079, 0.08)), name: "EMP trap",
+            id: "emp_trap", dims: Some((0.08, 0.055, 0.08)), name: "EMP trap",
             description: "A puck you leave on the ground. The first robot to step near it regrets it.",
             category: Gadget, size: Small, mass: 0.7, bulk: 0.5,
             tags: ["electronics"],
         ),
         (
-            id: "camera_drone", dims: Some((0.2, 0.06, 0.2)), name: "Camera drone",
+            id: "camera_drone", dims: Some((0.185, 0.048, 0.185)), name: "Camera drone",
             description: "A palm-sized quadcopter. Spin it up and let go: it circles where you released it and marks the robots it sees. Its feed shows on your wrist.",
             category: Gadget, size: Medium, mass: 0.5, bulk: 1.2,
             tags: ["electronics", "polymer"],
         ),
         (
-            id: "cloak_generator", dims: Some((0.25, 0.3, 0.25)), name: "Cloak generator",
+            id: "cloak_generator", dims: Some((0.249, 0.299, 0.24)), name: "Cloak generator",
             description: "Deploy it and robots stop seeing what's inside the bubble. Drinks power.",
             category: Gadget, size: Large, mass: 3.5, bulk: 6.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "jammer", dims: Some((0.16, 0.24, 0.2)), name: "Relay jammer",
+            id: "jammer", dims: Some((0.16, 0.239, 0.207)), name: "Relay jammer",
             description: "Bench-made, all whip aerials. Switched on, the machines' relays nearby go deaf. Drinks a cell fast, and they notice the quiet.",
             category: Gadget, size: Medium, mass: 1.2, bulk: 3.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "deployable_cover", dims: Some((0.6, 0.12, 0.5)), name: "Deployable cover",
+            id: "deployable_cover", dims: Some((0.58, 0.087, 0.5)), name: "Deployable cover",
             description: "A folding ballistic panel on legs.",
             category: Gadget, size: Large, mass: 6.0, bulk: 8.0,
             tags: ["metal"],
@@ -740,11 +740,11 @@
         // Medical
         // ---------------------------------------------------------------
         (
-            id: "field_dressing", dims: Some((0.133, 0.04, 0.085)), name: "Field dressing",
+            id: "field_dressing", dims: Some((0.133, 0.039, 0.085)), name: "Field dressing",
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
-            id: "splint", dims: Some((0.062, 0.018, 0.45)), name: "Splint",
+            id: "splint", dims: Some((0.062, 0.017, 0.44)), name: "Splint",
             description: "Two slats and three straps. Bind it along a broken shin and you can walk on it.",
             category: Medical, size: Medium, mass: 0.35, bulk: 0.8,
             tags: ["wood"],
@@ -764,10 +764,10 @@
         (id: "carrot", dims: Some((0.189, 0.115, 0.126)), name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
         (id: "onion", dims: Some((0.088, 0.092, 0.083)), name: "Onion", category: Food, size: Small, mass: 0.15, bulk: 0.15, tags: ["food:Onion"]),
         (id: "canned_tomato", dims: Some((0.083, 0.126, 0.086)), name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal", "can"]),
-        (id: "flour_sack", dims: Some((0.228, 0.248, 0.185)), name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
-        (id: "rice_bag", dims: Some((0.178, 0.198, 0.133)), name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
+        (id: "flour_sack", dims: Some((0.249, 0.258, 0.183)), name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
+        (id: "rice_bag", dims: Some((0.178, 0.198, 0.135)), name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
         (id: "canned_beans", dims: Some((0.083, 0.126, 0.085)), name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal", "can"]),
-        (id: "sugar_cubes", dims: Some((0.105, 0.115, 0.09)), name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),
+        (id: "sugar_cubes", dims: Some((0.109, 0.115, 0.091)), name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),
         (id: "tea_tin", dims: Some((0.085, 0.112, 0.086)), name: "Tea tin", category: Food, size: Small, mass: 0.12, bulk: 0.2, tags: ["food:TeaLeaf", "metal"]),
         (id: "spice_jar", dims: Some((0.079, 0.091, 0.08)), name: "Spice jar", category: Food, size: Tiny, mass: 0.06, bulk: 0.05, tags: ["food:Spice", "glass"]),
         (id: "salt_packet", dims: Some((0.105, 0.113, 0.059)), name: "Salt", category: Food, size: Tiny, mass: 0.05, bulk: 0.04, tags: ["food:Salt"]),
@@ -812,7 +812,7 @@
             tags: ["steel"],
         ),
         (
-            id: "cleaning_kit", dims: Some((0.08, 0.05, 0.25)), name: "Cleaning kit",
+            id: "cleaning_kit", dims: Some((0.076, 0.045, 0.25)), name: "Cleaning kit",
             description: "Rod, brushes, patches. Takes the fouling out of a gun.",
             category: Tool, size: Medium, mass: 0.35, bulk: 0.4,
             tags: ["metal"],
@@ -822,7 +822,7 @@
             category: Tool, size: Small, mass: 0.15, bulk: 0.12,
         ),
         (
-            id: "spare_parts", dims: Some((0.111, 0.063, 0.088)), name: "Firearm spare parts",
+            id: "spare_parts", dims: Some((0.111, 0.061, 0.088)), name: "Firearm spare parts",
             description: "Springs, pins, an extractor. Brings a worn gun back toward its best.",
             category: Tool, size: Small, mass: 0.3, bulk: 0.2,
             tags: ["metal"],
@@ -833,13 +833,13 @@
             tags: ["metal"],
         ),
         (
-            id: "crowbar", dims: Some((0.03, 0.05, 0.76)), name: "Crowbar",
+            id: "crowbar", dims: Some((0.022, 0.037, 0.747)), name: "Crowbar",
             description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
             category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
             tags: ["steel"],
         ),
         (
-            id: "bolt_cutters", dims: Some((0.16, 0.04, 0.62)), name: "Bolt cutters",
+            id: "bolt_cutters", dims: Some((0.163, 0.033, 0.561)), name: "Bolt cutters",
             description: "A handle in each hand, jaws on the shackle or the wire, squeeze. Padlocks, chain-link.",
             category: Tool, size: Medium, mass: 2.1, bulk: 1.4,
             tags: ["steel"],
@@ -851,7 +851,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_sks", dims: Some((0.043, 0.131, 0.242)), name: "SKS stock",
+            id: "stock_sks", dims: Some((0.043, 0.13, 0.242)), name: "SKS stock",
             description: "The SKS's butt, unscrewed at the vice.",
             category: Material, size: Medium, mass: 0.6, bulk: 0.8,
             tags: ["wood", "gun_part"],
@@ -869,7 +869,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_ak74", dims: Some((0.046, 0.11, 0.26)), name: "AK-74 stock",
+            id: "stock_ak74", dims: Some((0.046, 0.108, 0.258)), name: "AK-74 stock",
             description: "The AK's laminated butt, off its tang screws.",
             category: Material, size: Medium, mass: 0.35, bulk: 0.8,
             tags: ["wood", "gun_part"],
@@ -881,25 +881,25 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "bolt_mosin", dims: Some((0.081, 0.034, 0.174)), name: "Mosin bolt",
+            id: "bolt_mosin", dims: Some((0.081, 0.032, 0.136)), name: "Mosin bolt",
             description: "A Mosin's whole bolt, drawn out past its stop at the vice. It goes into any Mosin's receiver, and takes its wear with it: a good one makes a worn rifle better.",
             category: Material, size: Small, mass: 0.35, bulk: 0.2,
             tags: ["steel", "gun_part"],
         ),
         (
-            id: "hacksaw", dims: Some((0.03, 0.12, 0.45)), name: "Hacksaw",
+            id: "hacksaw", dims: Some((0.026, 0.111, 0.425)), name: "Hacksaw",
             description: "A frame saw for steel. With a gun clamped in the vice, draw it back and forth across the barrel where you want it to end: a minute's work, and it doesn't grow back.",
             category: Tool, size: Medium, mass: 0.45, bulk: 0.5,
             tags: ["steel"],
         ),
         (
-            id: "spanner", dims: Some((0.04, 0.015, 0.3)), name: "Spanner",
+            id: "spanner", dims: Some((0.036, 0.013, 0.279)), name: "Spanner",
             description: "A ring spanner. Head on the bolt, swing the handle round it: a turn or two and it's out. A robot's servo packs are bolted on.",
             category: Tool, size: Small, mass: 0.5, bulk: 0.3,
             tags: ["steel"],
         ),
         (
-            id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
+            id: "fuel_can", dims: Some((0.161, 0.346, 0.299)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,
             tags: ["fuel"],
@@ -908,32 +908,32 @@
         // ---------------------------------------------------------------
         // Materials (bench inputs)
         // ---------------------------------------------------------------
-        (id: "scrap_metal", dims: Some((0.072, 0.038, 0.057)), name: "Scrap metal", category: Material, size: Small, mass: 0.4, bulk: 0.4, tags: ["metal"]),
-        (id: "electronics", dims: Some((0.064, 0.067, 0.061)), name: "Salvaged electronics", category: Material, size: Small, mass: 0.2, bulk: 0.3, tags: ["electronics"]),
+        (id: "scrap_metal", dims: Some((0.086, 0.038, 0.064)), name: "Scrap metal", category: Material, size: Small, mass: 0.4, bulk: 0.4, tags: ["metal"]),
+        (id: "electronics", dims: Some((0.064, 0.033, 0.061)), name: "Salvaged electronics", category: Material, size: Small, mass: 0.2, bulk: 0.3, tags: ["electronics"]),
         (id: "polymer", dims: Some((0.068, 0.029, 0.052)), name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
         (id: "powder", dims: Some((0.054, 0.069, 0.03)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
-        (id: "brass", dims: Some((0.051, 0.053, 0.051)), name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
+        (id: "brass", dims: Some((0.051, 0.033, 0.051)), name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
         (id: "bolt", dims: Some((0.016, 0.016, 0.07)), name: "Bolt", description: "A rusty M10 bolt with its nut run on. Worth nothing; throw it ahead of you where the air looks wrong.", category: Material, size: Tiny, mass: 0.06, bulk: 0.02, tags: ["metal"]),
         (
-            id: "bus_panel", dims: Some((0.9, 0.6, 0.03)), name: "Bus panel",
+            id: "bus_panel", dims: Some((0.9, 0.6, 0.014)), name: "Bus panel",
             description: "A side panel prised off a bus. Cream paint, a red stripe, rust.",
             category: Material, size: Bulky, mass: 6.0, bulk: 10.0,
             tags: ["metal"],
         ),
         (
-            id: "car_door", dims: Some((1.0, 0.95, 0.12)), name: "Car door",
+            id: "car_door", dims: Some((1.027, 0.965, 0.135)), name: "Car door",
             description: "A saloon's front door, the glass long gone. Good cover, for a while.",
             category: Material, size: Bulky, mass: 16.0, bulk: 20.0,
             tags: ["metal"],
         ),
         (
-            id: "car_wheel", dims: Some((0.6, 0.6, 0.18)), name: "Car wheel",
+            id: "car_wheel", dims: Some((0.591, 0.591, 0.17)), name: "Car wheel",
             description: "A road wheel off a wreck. The tyre's flat; the rim's steel.",
             category: Material, size: Bulky, mass: 9.0, bulk: 25.0,
             tags: ["metal", "polymer"],
         ),
         (
-            id: "car_bonnet", dims: Some((1.3, 1.0, 0.08)), name: "Car bonnet",
+            id: "car_bonnet", dims: Some((1.26, 1.02, 0.088)), name: "Car bonnet",
             description: "A bonnet wrenched off a wreck. A sheet of steel, a lot of rust.",
             category: Material, size: Bulky, mass: 12.0, bulk: 20.0,
             tags: ["metal"],
@@ -965,13 +965,13 @@
             tags: ["electronics"],
         ),
         (
-            id: "robot_gunpod", dims: Some((0.22, 0.25, 1.1)), name: "Robot gun pod",
+            id: "robot_gunpod", dims: Some((0.198, 0.223, 1.079)), name: "Robot gun pod",
             description: "You can carry it. You can even pull the trigger, with both hands and a prayer.",
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
         ),
         (
-            id: "robot_plate", dims: Some((0.3, 0.03, 0.28)), name: "Robot armour plate",
+            id: "robot_plate", dims: Some((0.301, 0.033, 0.314)), name: "Robot armour plate",
             description: "Pried off a wreck's hull. Hardened steel, still scorched where it was hit.",
             category: RobotPart, size: Medium, mass: 2.0, bulk: 1.5,
             tags: ["metal"],
@@ -979,37 +979,37 @@
         // One part per class, dropped by a robot's part still alive when it
         // dies (robots/wreck.rs).
         (
-            id: "drone_rotor_motor", dims: Some((0.253, 0.084, 0.251)), name: "Drone rotor motor",
+            id: "drone_rotor_motor", dims: Some((0.251, 0.082, 0.249)), name: "Drone rotor motor",
             description: "A drone's motor on its snapped struts, a curl of the duct still on it. The windings are good.",
             category: RobotPart, size: Small, mass: 0.5, bulk: 0.8,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "walker_leg_actuator", dims: Some((0.143, 0.388, 0.165)), name: "Walker knee actuator",
+            id: "walker_leg_actuator", dims: Some((0.141, 0.386, 0.163)), name: "Walker knee actuator",
             description: "A walker's knee, torn off between thigh and shin. The screw jack behind it could lift a truck.",
             category: RobotPart, size: Medium, mass: 3.5, bulk: 2.5,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "crawler_capacitor", dims: Some((0.126, 0.126, 0.284)), name: "Crawler capacitor bank",
+            id: "crawler_capacitor", dims: Some((0.124, 0.124, 0.282)), name: "Crawler capacitor bank",
             description: "The spark gun off a crawler, still on the cans that fed it. Don't touch the prongs.",
             category: RobotPart, size: Small, mass: 1.2, bulk: 1.0,
             tags: ["electronics"],
         ),
         (
-            id: "dirigible_gas_valve", dims: Some((0.37, 0.198, 0.332)), name: "Airship gas valve",
+            id: "dirigible_gas_valve", dims: Some((0.368, 0.196, 0.33)), name: "Airship gas valve",
             description: "A lift-gas valve with a scrap of the envelope still clamped under its ring.",
             category: RobotPart, size: Medium, mass: 2.0, bulk: 3.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "pylon_relay_coil", dims: Some((0.132, 0.266, 0.118)), name: "Pylon relay coil",
+            id: "pylon_relay_coil", dims: Some((0.13, 0.264, 0.116)), name: "Pylon relay coil",
             description: "Copper wound on a dark core, warm to the touch long after the pylon went quiet.",
             category: RobotPart, size: Small, mass: 1.8, bulk: 1.0,
             tags: ["electronics", "metal"],
         ),
         (
-            id: "sorter_servo_pack", dims: Some((0.352, 0.86, 0.557)), name: "Sorter servo pack",
+            id: "sorter_servo_pack", dims: Some((0.35, 0.858, 0.555)), name: "Sorter servo pack",
             description: "The Sorter's elbow, hinge and ram and all. It sorted cars by the ton; it's heavy to carry.",
             category: RobotPart, size: Bulky, mass: 9.0, bulk: 8.0,
             tags: ["electronics", "metal"],
@@ -1122,7 +1122,7 @@
         (id: "chess_piece", dims: Some((0.057, 0.068, 0.057)), name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
         // The first deep job after the ladder: the depot's ledger (`progression`).
         (
-            id: "intake_ledger", dims: Some((0.24, 0.05, 0.32)), name: "Intake ledger",
+            id: "intake_ledger", dims: Some((0.242, 0.053, 0.323)), name: "Intake ledger",
             description: "A canvas-bound ledger stencilled GATE-M INTAKE. Every line in the same machine hand: what, where from, when, which bay.",
             category: Curio, size: Small, mass: 1.0, bulk: 0.5, tags: ["paper"],
         ),
@@ -1135,7 +1135,7 @@
         // The driver's contracts (`contracts`): what he hands you for
         // them, and what one sends you for.
         (
-            id: "relay_box", dims: Some((0.16, 0.1, 0.12)), name: "Relay box",
+            id: "relay_box", dims: Some((0.159, 0.1, 0.112)), name: "Relay box",
             description: "A steel box with an aerial lead and one green lamp. Lev's soldering. Leave it where he said; it listens.",
             category: Gadget, size: Small, mass: 1.1, bulk: 0.6, tags: ["electronics", "metal"],
         ),
@@ -1145,12 +1145,12 @@
             category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
         ),
         (
-            id: "scour_key", dims: Some((0.05, 0.05, 0.62)), name: "Scour valve key",
+            id: "scour_key", dims: Some((0.049, 0.037, 0.601)), name: "Scour valve key",
             description: "A long box spanner with a T-bar, for the reservoir's scour valves. A cut chain hangs off the handle.",
             category: Tool, size: Medium, mass: 2.6, bulk: 1.2, tags: ["metal"],
         ),
         (
-            id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",
+            id: "holm_watch", dims: Some((0.036, 0.01, 0.045)), name: "Post office watch",
             description: "A plain steel watch on a worn strap. J. HOLM, 25 YEARS engraved on the back.",
             category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"],
         ),
@@ -1162,23 +1162,23 @@
         // Down the signature sites (`docs/UNDERGROUND.md`), for the
         // driver's deep contracts.
         (
-            id: "pump_log", dims: Some((0.15, 0.03, 0.21)), name: "Brabec's pump log",
+            id: "pump_log", dims: Some((0.144, 0.031, 0.203)), name: "Brabec's pump log",
             description: "A board-backed ledger, swollen with water. Levels, rain and the well, a line a day in pencil, O. BRABEC inside the cover.",
             category: Curio, size: Small, mass: 0.5, bulk: 0.25, tags: ["paper"],
         ),
         (
-            id: "deputy_lamp", dims: Some((0.1, 0.25, 0.1)), name: "Deputy's flame lamp",
+            id: "deputy_lamp", dims: Some((0.09, 0.248, 0.09)), name: "Deputy's flame lamp",
             description: "A brass safety lamp behind a gauze. The flame's cap shows the gas. A deputy's tally hangs off the hook, no name.",
             category: Curio, size: Small, mass: 0.9, bulk: 0.35, tags: ["metal"],
         ),
         (
-            id: "charging_manifest", dims: Some((0.21, 0.01, 0.3)), name: "Charging manifest",
+            id: "charging_manifest", dims: Some((0.21, 0.012, 0.302)), name: "Charging manifest",
             description: "A clipboard of the furnace's charges, shift by shift, in R. KRAL's hand. Furnace three's column runs hot for a week, and nobody's signed it.",
             category: Curio, size: Small, mass: 0.3, bulk: 0.15, tags: ["paper"],
         ),
         // What the driver's Recover jobs send you for (`progression`).
         (
-            id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",
+            id: "field_recorder", dims: Some((0.167, 0.073, 0.108)), name: "Field recorder",
             description: "A survey recorder in a grey-green case, stencilled QA-SURVEY 07. Its counter stopped on a Surge night. The driver wants what's on it.",
             category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
         ),
@@ -1191,7 +1191,7 @@
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_surplus", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 surplus rounds (box)",
+            id: "ammo_545_surplus", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 surplus rounds (box)",
             description: "A crate-opened lot, the lacquer flaking. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
             tags: ["brass", "powder"],
@@ -1199,7 +1199,7 @@
         // Throwable lights for the dark (`world::glow`): snapped or struck
         // on the Use button, then thrown, or kept in a hand.
         (
-            id: "chemlight", dims: Some((0.028, 0.028, 0.15)), name: "Chemlight",
+            id: "chemlight", dims: Some((0.028, 0.028, 0.143)), name: "Chemlight",
             description: "A green light stick in a foil wrap. Bend it till it snaps inside and shake: ten minutes of light, and not a sound.",
             category: Gadget, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["polymer"],
         ),

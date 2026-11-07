@@ -155,6 +155,51 @@ pub fn choose_start(opts: &mut LaunchOptions) {
     }
 }
 
+/// The world seed for a player's own session: the career's own, rolled
+/// for a new career or an older one that has none. Pinned runs (`--seed`,
+/// headless, tooling, sims, the yard) keep the seed they were given.
+pub fn choose_seed(opts: &mut LaunchOptions) {
+    if !opts.rolls_career_seed() {
+        return;
+    }
+    let kept = if opts.new_game {
+        None
+    } else {
+        career_path(opts)
+            .and_then(|p| read_career(&p).career)
+            .and_then(|c| c.seed)
+    };
+    opts.seed = kept.unwrap_or_else(roll_seed);
+    info!(
+        "world seed {}{}",
+        opts.seed,
+        if kept.is_some() { "" } else { " (new)" }
+    );
+}
+
+/// A fresh seed: the process's own random hasher keys, the time and the
+/// process id (never the old fixed 1).
+fn roll_seed() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    h.write_u128(now);
+    h.write_u32(std::process::id());
+    match h.finish() {
+        1 => 2,
+        s => s,
+    }
+}
+
+/// Writes the session's seed into the career when the session rolled it.
+pub(crate) fn stamp_seed(career: &mut Career, opts: &LaunchOptions) {
+    if opts.rolls_career_seed() {
+        career.seed = Some(opts.seed);
+    }
+}
+
 /// The valley the truck goes on to from the yard: the career's, or the
 /// first.
 pub fn next_valley(opts: &LaunchOptions) -> String {
@@ -351,7 +396,7 @@ fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
     commands.insert_resource(SaveSlot(slot));
 }
 
-fn load_save(
+pub(crate) fn load_save(
     mut commands: Commands,
     slot: Res<SaveSlot>,
     opts: Res<LaunchOptions>,
@@ -407,6 +452,7 @@ fn load_save(
         Career::from_game(&fresh_save(&opts.map))
     });
     career.map = opts.map.clone();
+    stamp_seed(&mut career, &opts);
     let save = career.game(&opts.map);
     commands.insert_resource(CareerState(career));
     let zone = save.zone.map == opts.map && save.zone.rolled;
@@ -727,6 +773,18 @@ pub(crate) fn put_in_bag_turned(
 }
 
 fn put_in_slot(world: &mut World, item: Entity, slot_e: Entity) {
+    // An item is in one place: one already seated stays where it is (the
+    // sim seated the hearth a save had sealed in one lead case in a second
+    // case too on the load, both cradles holding it: the save soak, Cinder
+    // seed 2, mid-reload). Seated means its socket holds it: one being
+    // moved, its old socket emptied first, goes on to the new one.
+    let seated = world
+        .get::<InSocket>(item)
+        .and_then(|s| world.get::<Socket>(s.socket))
+        .is_some_and(|s| s.occupant == Some(item));
+    if seated && world.get::<InSocket>(item).map(|s| s.socket) != Some(slot_e) {
+        return;
+    }
     let Some(mut socket) = world.get_mut::<Socket>(slot_e) else {
         return;
     };
@@ -1583,6 +1641,55 @@ pub fn reset_zone(world: &mut World) {
 mod tests {
     use super::*;
     use crate::raid::SURGE_AFTER;
+
+    /// An item in one place: seated in one lead case's cradle, it isn't
+    /// seated again in another's (the save soak, Cinder seed 2, quit
+    /// mid-reload: on the load the sim seated the hearth the save had
+    /// sealed in one case in a second case too, both cradles holding it,
+    /// and the world an item short of the save).
+    #[test]
+    fn a_seated_item_is_not_seated_again() {
+        let dir = std::env::temp_dir().join(format!("extraction-seat-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut app = app_with_save(&dir.join("save.ron"));
+        let catalog = app.world().resource::<Catalog>().clone();
+        let spawn = |app: &mut App, id: &str, x: f32| {
+            let kind = catalog.kind(id).unwrap();
+            let world = app.world_mut();
+            let e = crate::items::spawn_item(
+                &mut world.commands(),
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_xyz(x, 50.0, 0.0),
+                    condition: 1.0,
+                },
+            );
+            world.flush();
+            e
+        };
+        let a = spawn(&mut app, "lead_case", 0.0);
+        let b = spawn(&mut app, "lead_case", 2.0);
+        let hearth = spawn(&mut app, "art_hearth", 4.0);
+        // The cradles come with the cases' first frames.
+        for _ in 0..3 {
+            app.update();
+        }
+        seat_in_mount(app.world_mut(), a, hearth);
+        seat_in_mount(app.world_mut(), b, hearth);
+        let world = app.world_mut();
+        let holding: Vec<Entity> = world
+            .query::<(Entity, &Socket)>()
+            .iter(world)
+            .filter(|(_, s)| s.occupant == Some(hearth))
+            .map(|(e, _)| e)
+            .collect();
+        let at = world.get::<InSocket>(hearth).map(|s| s.socket);
+        assert_eq!(holding.len(), 1, "the hearth is held by {holding:?}");
+        assert_eq!(at, holding.first().copied());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn app_with_save(path: &std::path::Path) -> App {
         let opts = LaunchOptions {

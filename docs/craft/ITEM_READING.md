@@ -465,3 +465,262 @@ is done on the line-ups:
   stripe (yellow, red, cream) and their scorch and ash; the loose rounds
   are brass specks at 1.2 m by nature.
 
+
+### By torchlight (6 November)
+
+Most looting is done indoors in the dark by the hand torch, and the
+user once said items felt muddy. `--torchlit all` (`capture::torchlit`)
+lays every item with a model (230) on three floors in a closed dark
+room: wood, concrete, and a burnt ruin's charred planks. The game's torch
+beam is held at the eye and aimed at the item. Each is seen from an
+arm's length (0.65 m, 55 degrees down) and from 2 m (40 degrees), at the
+headset's pixels a degree. `scripts/torchlit.py` takes the item's pixels
+from a second shot with the room hidden, and measures it in its own shot
+against the floor round it:
+
+- body: the median of its pixels' CIE delta E from the floor's colour;
+- rim: its outline against the floor just outside, the upper quartile.
+
+Under about 10 an item is the floor's colour. Run it per floor and read
+the runs together:
+
+    for f in wood concrete ruin; do
+      target/fast/extraction --size 800x800 --map training_yard --no-robots \
+        --torchlit $f --capture-out target/torch_$f
+    done
+    scripts/torchlit.py target/torch_wood target/torch_concrete target/torch_ruin \
+      --json torch.json --sheet worst.jpg --worst 20
+
+![The 20 worst by torchlight, each floor and eye](../shots/items/torchlit_worst20.jpg)
+
+Three findings, by cause:
+
+1. **At arm's length the torch washes the frame out.** The floor goes
+   nearly white, even the charred planks, and black scopes, binoculars
+   and the suppressor render a pale silver. Every item loses contrast
+   and colour this way, and it is the likeliest cause of "muddy". It is
+   the eye's exposure with a torch close to a surface (`render::grade`,
+   `torch_light`), not any item: Visual design's.
+
+   ![At arm's length and at 2 m: the same items, the floor blown out up close](../shots/items/torchlit_washout.jpg)
+
+2. **Dark metal on a dark floor goes black from 2 m.** 15 of the worst
+   20 are gun finishes on the charred floor: Blued, Black (blackened
+   steel) and Steel. Examples are the PBS, both scopes, the weapon
+   light, the laser, the binoculars, the PM and SVD magazines, the
+   spanner, the Mosin's bolt and the multitool. A metal shows only its
+   specular reflection, and with the torch at the eye and the item lying
+   flat, little of it faces the eye. The finishes are Gunsmith's
+   (`crates/gunsmith/src/finish.rs`). A trial on ten of them (the material
+   swapped in the game for one run, nothing committed), delta E on the
+   charred floor from 2 m:
+
+   | item | as is | Black as a satin black paint (metallic 0, sRGB 0.06, roughness 0.45) |
+   |---|---|---|
+   | weapon light | 5.8 | 11.8 |
+   | laser module | 5.9 | 10.3 |
+   | binoculars | 5.9 | 10.7 |
+   | side rail | 8.1 | 12.3 |
+   | PBS | 4.4 | 11.1 |
+
+   It also helped on concrete, and at arm's length (weapon light 19 to
+   31). The same trial with bright Steel rougher (0.55) made the steel
+   items worse (spanner 7.0 to 5.5, Mosin bolt 7.7 to 5.3): leave Steel as
+   it is. A lighter, rougher blackened steel (metallic, sRGB 0.3, 0.6)
+   helped about half as much as the paint did.
+
+   ![Charred floor from 2 m: as it is (top), Black as satin paint (below)](../shots/items/torchlit_black_satin_trial.jpg)
+
+3. **Small and pale.** The cooking's chopped vegetables are a pale board
+   10 cm across with crumbs on it, lost on lit wood up close. A grenade's
+   pin is 0.16 degrees from 2 m, a speck by nature. The pale card ammo
+   packets sit at 9 to 12 on lit concrete at arm's length, which is the
+   wash-out again.
+
+Near-twins (size, outline and colour from 2 m on wood): most read apart
+by shape once looked at. The two that don't, from 2 m, are the RGD-5 and
+the F1 (both olive eggs; the F1's ribs show only up close), and the
+laser module and the side rail (two small black blocks).
+
+#### Fixed: the boards, the laser, the F1 (6 November)
+
+The coordinator took the three that are the models' own. Measured again
+with `scripts/torchlit.py`, the worst of each item's views:
+
+- **The cooking boards** (chopped carrot, onion, tomato; the dough's)
+  are oiled dark now, not scrubbed pale: worst 6.2-10.9, now 18.5-18.7.
+  On lit wood up close, 6-7 is now 30, and on concrete 14 is now 40.
+- **The laser module** has a wide red lens standing in its bezel and the
+  red warning label on top of its front block: on the charred floor from
+  2 m, 5.9 is now 11.1. On the twin measure it's now as far from the
+  side rail (3.02) as unrelated things are (0.27 before).
+- **The F1**'s cast segments are deeper (3.4 mm proud, not 2) with wider
+  grooves between, so it reads as a grid of blocks from 2 m and not the
+  RGD-5's smooth egg. The twin measure, which sees only size, outline and
+  mean colour, can't tell them apart either way; the picture can.
+
+![Before (top) and after (below), each in its worst light](../shots/items/torchlit_fixes_before_after.jpg)
+
+#### The PU and the PSO-1 (6 November)
+
+Once Gunsmith made the PSO-1 Black, the two scopes came near twins from
+2 m. The real PU is a slim plain tube, its drums on a round saddle; it
+had the PSO-1's squared housing here. It has the round saddle now, and
+the PSO-1's brow shield sweeps wide and high over its eyecup. Twin
+distance from 2 m (size + outline + colour, these models' finishes):
+wood 0.54 → 0.65, charred floor 0.58 → 0.72, the rise in their outlines.
+With Gunsmith's Black PSO-1 merged in, 2 m: wood 1.57 (Gunsmith measured
+1.33 before the brow shield), charred floor 1.34; the PSO-1 reads 33.7 on
+wood and 11.6 on charred floor.
+
+#### Pale, not paper-white (6 November)
+
+On Visual design's settled-eye sheet the flour sack was a blank white
+blob at arm's length and from 2 m. Measured with Visual design's
+settled-eye `--torchlit` applied locally (not merged), nothing clips,
+before or after: the wash-out was exposure, and their fix took it. So
+Paper and Enamel keep their albedo. A flat model material is held to
+enamel's (linear luminance 0.78, `no_flat_model_material_is_paper_white`),
+so nothing new comes in whiter.
+
+What the sack lacked was surface and shape. Slumped into a lumpy ball,
+it still read as a balloon at 2 m, its tie as a white cross. It stands
+now as a filled sack does (`pillow_sack` in `art/items/food.py`). It is
+a squat pillow lofted from rounded-rectangle rings, with near-flat broad
+faces and a square base settled wide with dog-ear corners. Side tucks
+and shoulder creases are geometry, and folds gather into the neck and
+flare into a puff of the same cloth. Three wraps of dark twine and two
+tails tie it off. Its stencil (МУКА, 1 СОРТ) and red stripes are on
+both broad faces. Each line sits where the cloth stands furthest out
+across its width, so no letter sinks (on the lumpy ball 1 СОРТ read
+"1 ПРТ"). The material is `Sacking`, unbleached linen with the canvas
+scan's weave.
+
+By the settled-eye torch it reads 36.1 against the floors (36.6
+before), with no pixel clipped. Detail (L* spread, worst view) is 15.0
+(8.9 before), and it is larger from 2 m (5.1° to 6.2°: a pillow's broad
+face, not a ball's). The other pale items (the hana letter, the rice
+bag, the crackers) already carry a seal, grains or docking, and are
+unchanged. The weave is too fine to read from 2 m. The stencil, the
+stripes, the twine and the outline read.
+
+![Flour sack by torchlight: the original, 0ce75fc9's slumped ball, and
+now; wood and concrete at arm's length, wood and charred floor from 2 m
+(enlarged)](../shots/items/torchlit_flour_before_after.jpg)
+
+#### An item's box is its model (6 November)
+
+An item's `dims` row is its box: its collider, its fit in a pocket or
+pouch, and where it's grabbed. 78 rows had drifted from their models as
+the models were redrawn. Among them, the vest was 3 cm too wide, the
+work boots 7 cm too wide, and the Mosin bolt 4 cm too long. The robot's
+belt of rounds had a box twice its height, and the electronics' model
+stuck out of the bottom of its box.
+
+`models::tests::every_item_box_is_its_model` holds every item with a
+model and a row to it. Each side must be within a millimetre of the
+model's, and the model must sit in the box's middle, within 2 mm. A
+failure names each item, its row and its model.
+`python3 art/items/dims.py --write` sizes the rows, and the kit centres
+a model when it's built (`_kit.recentred`, its pivots moving with it).
+
+Some items are checked differently:
+
+- Guns are left out, because their layouts place them.
+- Magazines and attachments seat by their origin, so only their size is
+  held.
+- Models whose space code places things in (a grip, a hinge, a cell's
+  bay) are centred with that code moved by the same step. `KEEPS_ORIGIN`
+  is where one would wait for that, and it's empty.
+
+Sixteen models were centred, and four `kit_cavities::ORIGIN_OFFSET`
+entries that made up for them went away.
+
+![Item boxes before (red) and after (green), over their models: vest,
+work boots, robot ammo belt, Mosin bolt, electronics, crossbow bolt
+bundle, car bonnet, scour key](../shots/items/item_boxes_before_after.png)
+
+#### The scopes at arm's length, by the settled torch (6 November)
+
+I re-shot the PU and the PSO-1 by torchlight from an arm's length
+(0.65 m, 55 degrees down), with Visual design's settled eye (3297ad2e).
+The wash-out is gone. Both render black with a soft sheen, not the pale
+silver they were, and nothing clips. They aren't twins up close. The
+PSO-1 shows its turret drum with white graduations, its side bracket and
+the rubber brow shield at its eyepiece. The PU is a slim, plain tube
+with one small knob.
+
+They stand off wood and concrete easily (body delta E 24 to 46). On a
+burnt house's charred planks they are black on black. The PSO-1 at arm's
+length sits at the edge (9.9), read by its sheen and the drum's marks.
+The PU from 2 m is the floor's colour (5.0). That holds for any black
+kit on a burnt floor; Gunsmith is trying a brighter sheen on `Black`
+for all of it.
+
+![PU (top) and PSO-1 by torchlight at 0.65 m: wood, concrete, charred
+planks](../shots/items/torchlit_scopes_arm.jpg)
+
+#### Black's sheen: no single value helps (6 November)
+
+Gunsmith tried a brighter sheen on `Black` for black kit on the charred
+floor. The test: all 116 models that wear it, `--torchlit ruin` with
+the settled eyes, Black's roughness swapped for one run each. Body delta
+E, worst views:
+
+| Item, view | 0.35 | 0.40 | 0.45 (kept) | 0.55 |
+| - | - | - | - | - |
+| PBS-1, arm's length | 3.4 | 5.0 | 10.9 | 19.1 |
+| PSO-1, arm's length | 7.4 | 9.2 | 10.3 | 12.9 |
+| Weapon light, arm's length | 10.1 | 14.6 | 16.8 | 18.3 |
+| AK-74 stock, 2 m | 16.7 | 16.9 | 23.8 | 24.7 |
+| Rotor assembly, arm's length | 8.3 | 7.1 | 5.7 | 3.3 |
+| PU, 2 m | 6.0 | 5.8 | 5.9 | 5.5 |
+| PM and SVD mags, 2 m | 5.5, 5.3 | same | same | same |
+| Views under 10 | 12 | 12 | 10 | 11 |
+
+- **Glossier is worse.** Up close the torch's highlight on smoother
+  black matches the washed-out floor, and black kit sinks into it.
+- **Rougher trades views.** At 0.55 the black-led kit gains at arm's
+  length, but other views drop: the bolt cutters by 25.5 at arm's
+  length, the side rail by 6.6 from 2 m.
+- **What stays under 10 isn't Black's.** By triangle share the PM and
+  SVD mags are 52-56% `Blued`, the PU 43% `Blued`, the multitool 70%
+  `Steel`, the bolts mostly `Steel` and the rotor 59% `Dark`. None of
+  them moves at any value of Black. The Black-led items (PBS-1 95%,
+  PSO-1 73%) already clear 10 at 0.45.
+
+So Black stays at 0.45. Chasing Blued and Steel for the charred floor
+was declined: a dark thing on charcoal is dark in life too, and the
+levers left cost other views. Don't re-run this without a new lever.
+
+#### The thirteen off their middle, centred (6 November)
+
+Thirteen models were off their box's middle because code places things
+in their space. Each is centred now, its pivots with it, and every
+place in their space moved by the same step, measured from the model
+itself:
+
+- the bolt cutters' grips and jaws (19 mm), the crowbar's grip, shaft
+  and claw, and the hacksaw's grip and blade;
+- the cassette deck's keys, well, hinge and cell bay (it's centred when
+  it's written now, like every item);
+- the cell bays of the torch, the cloak and the jammer, which shared
+  one place and have one each now, and the torch's beam;
+- the lead case's cradle, the compass's face and needle, the map in
+  the map case, and the drone's eye.
+
+Things held by those places are where they were to the pixel: the
+cutters, crowbar and hacksaw in the hand, and all thirteen lying under
+the torch. Things held free shift a little in the fist, because a free
+hold is seated on the item's box, and the boxes are the models now.
+
+Two changes come with honest boxes:
+
+- The compass's strap lies close under it. Looped 12 mm down, the
+  compass was 35 mm thick, through a hip pocket's front.
+- The map case's pencil, loop and stud sit level with its sleeve, so
+  it's under 12 mm through. Held, it's pinched by its edge as a card is,
+  not covering the hand.
+
+![Held in the left hand, before and after: the thirteen centred
+models](../shots/items/centred_held_before_after.jpg)

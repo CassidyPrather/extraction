@@ -1,7 +1,7 @@
 //! Breakable parts nobody is near are drawn merged, a cell at a time.
 //!
 //! A building's shutters, boards and crates, a wreck's panels, a window's
-//! sash leaves and a counter's drawers are each drawn on their own
+//! sash leaves, a counter's drawers and its doors are each drawn on their own
 //! (`destruction::wood::Drawn`), so a crowbar can lever one off. Marrow
 //! Creek's gate view drew about 250 of them an eye. Parts rarely change,
 //! so once every part in a 16 m cell has stood unchanged for a while,
@@ -30,6 +30,7 @@ use bevy::tasks::Task;
 use std::collections::{HashMap, HashSet};
 
 use crate::destruction::wood::{Drawn, Timber};
+use crate::world::buildings::DoorLeaf;
 
 pub struct PartRestPlugin;
 
@@ -142,12 +143,13 @@ impl Cells {
 fn wake_parts(
     mut commands: Commands,
     mut cells: ResMut<Cells>,
-    parts: Query<(Entity, &GlobalTransform, &Drawn)>,
+    parts: Query<(Entity, &GlobalTransform, Option<&Drawn>, Option<&DoorLeaf>)>,
     moved: Query<Entity, Changed<GlobalTransform>>,
     reshaped: Query<Entity, Changed<Mesh3d>>,
     regrown: Query<Entity, Changed<Children>>,
     mut gone: RemovedComponents<ChildOf>,
     mut undrawn: RemovedComponents<Drawn>,
+    mut unhung: RemovedComponents<DoorLeaf>,
     hit: Query<Entity, Changed<Timber>>,
     prised: Query<
         (Entity, &crate::destruction::hooks::Pryable),
@@ -157,28 +159,43 @@ fn wake_parts(
     mut vis: Query<&mut Visibility>,
 ) {
     let mut woken: HashSet<Entity> = HashSet::new();
+    // Why each was woken (for `EXTRACTION_PART_REST_LOG`).
+    let mut why: Vec<(Entity, &'static str)> = Vec::new();
     let part_of = |e: Entity, cells: &Cells| cells.leaf_part.get(&e).copied();
-    for e in moved.iter().chain(reshaped.iter()).chain(regrown.iter()) {
-        if let Some(p) = part_of(e, &cells) {
-            woken.insert(p);
+    for (q, reason) in [
+        (moved.iter().collect::<Vec<_>>(), "moved"),
+        (reshaped.iter().collect(), "reshaped"),
+        (regrown.iter().collect(), "children changed"),
+    ] {
+        for e in q {
+            if let Some(p) = part_of(e, &cells) {
+                woken.insert(p);
+                why.push((p, reason));
+            }
         }
     }
     for e in gone.read() {
         if let Some(p) = part_of(e, &cells) {
             woken.insert(p);
+            why.push((p, "unparented"));
         }
     }
-    woken.extend(hit.iter().filter(|e| cells.part_cell.contains_key(e)));
-    woken.extend(
-        prised
-            .iter()
-            .filter(|(e, p)| p.held > 0.0 && cells.part_cell.contains_key(e))
-            .map(|(e, _)| e),
-    );
+    for e in hit.iter().filter(|e| cells.part_cell.contains_key(e)) {
+        woken.insert(e);
+        why.push((e, "hit"));
+    }
+    for (e, _) in prised
+        .iter()
+        .filter(|(e, p)| p.held > 0.0 && cells.part_cell.contains_key(e))
+    {
+        woken.insert(e);
+        why.push((e, "prised"));
+    }
     // Gone: broken, stripped, despawned.
-    let undrawn: Vec<Entity> = undrawn.read().collect();
+    let undrawn: Vec<Entity> = undrawn.read().chain(unhung.read()).collect();
     for e in &undrawn {
         woken.insert(*e);
+        why.push((*e, "gone"));
     }
     // Hands and held things: the parts in the cells round each.
     for g in &near {
@@ -190,14 +207,44 @@ fn wake_parts(
                     continue;
                 };
                 for part in cell.quiet.keys() {
-                    if let Ok((_, pg, d)) = parts.get(*part) {
-                        let reach = NEAR + d.size.max_element() * 0.5;
+                    if let Ok((_, pg, d, door)) = parts.get(*part) {
+                        let size = d
+                            .map(|d| d.size)
+                            .or(door.map(|l| Vec3::new(l.0.width, l.0.height, 0.05)));
+                        let reach = NEAR + size.unwrap_or(Vec3::ONE).max_element() * 0.5;
                         if pg.translation().distance_squared(at) < reach * reach {
                             woken.insert(*part);
+                            why.push((*part, "near a hand"));
                         }
                     }
                 }
             }
+        }
+    }
+    // (`EXTRACTION_PART_REST_LOG=1`: what woke parts, by reason, every
+    // 300 frames: to find what keeps a cell awake.)
+    static LOG: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *LOG.get_or_init(|| std::env::var_os("EXTRACTION_PART_REST_LOG").is_some()) {
+        static TALLY: std::sync::Mutex<(u32, Vec<(String, u32)>)> =
+            std::sync::Mutex::new((0, Vec::new()));
+        let mut t = TALLY.lock().unwrap();
+        for (_, reason) in &why {
+            match t.1.iter_mut().find(|(r, _)| r == reason) {
+                Some((_, n)) => *n += 1,
+                None => t.1.push((reason.to_string(), 1)),
+            }
+        }
+        t.0 += 1;
+        if t.0 % 300 == 0 {
+            let cells_merged = cells.cells.values().filter(|c| c.rest.is_some()).count();
+            // (Printed: a gauge has no log.)
+            eprintln!(
+                "part_rest: {} of {} cells merged; wakes in 300 frames: {:?}",
+                cells_merged,
+                cells.cells.len(),
+                t.1
+            );
+            t.1.clear();
         }
     }
     for part in woken {
@@ -221,11 +268,25 @@ fn leaves_of(
     children: &Query<&Children>,
     meshes: &Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: &Query<(), With<crate::destruction::visuals::WindowGlass>>,
+    own: &Query<
+        (),
+        Or<(
+            With<crate::items::Item>,
+            With<crate::weapons::Gun>,
+            With<Drawn>,
+        )>,
+    >,
 ) -> Vec<Entity> {
     let mut out = Vec::new();
     let mut stack = vec![part];
     while let Some(e) = stack.pop() {
         if glass.contains(e) {
+            continue;
+        }
+        // Not into something with a life of its own seated on it (a gun
+        // on a shelf, a tin in a drawer, another part): its meshes are its
+        // own, and a gun's are `gun_rest`'s.
+        if e != part && own.contains(e) {
             continue;
         }
         if meshes.contains(e) {
@@ -242,10 +303,26 @@ fn leaves_of(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn rest_cells(
     mut cells: ResMut<Cells>,
-    parts: Query<(Entity, &GlobalTransform), With<Drawn>>,
+    // Breakable parts, and doors (which swing, and are pressed, as parts
+    // are) but not a powered one (its lamp's colour is its state).
+    parts: Query<
+        (Entity, &GlobalTransform),
+        (
+            Or<(With<Drawn>, With<DoorLeaf>)>,
+            Without<crate::world::underground::PowerLocked>,
+        ),
+    >,
     children: Query<&Children>,
     meshes: Query<(&Mesh3d, &MeshMaterial3d<StandardMaterial>), Without<PartRestMesh>>,
     glass: Query<(), With<crate::destruction::visuals::WindowGlass>>,
+    own: Query<
+        (),
+        Or<(
+            With<crate::items::Item>,
+            With<crate::weapons::Gun>,
+            With<Drawn>,
+        )>,
+    >,
     materials: Res<Assets<StandardMaterial>>,
     mesh_assets: Res<Assets<Mesh>>,
     leaf_info: Query<(
@@ -269,18 +346,41 @@ fn rest_cells(
         cells.cells.entry(key).or_default().quiet.insert(e, 0);
     }
     let mut started = 0;
+    // (`EXTRACTION_PART_REST_LOG`: why leaves and cells weren't merged.)
+    static SKIPS: std::sync::Mutex<(u32, Vec<(&'static str, u32)>)> =
+        std::sync::Mutex::new((0, Vec::new()));
+    let log = std::env::var_os("EXTRACTION_PART_REST_LOG").is_some();
+    let skip = |why: &'static str| {
+        if log {
+            let mut t = SKIPS.lock().unwrap();
+            match t.1.iter_mut().find(|(r, _)| *r == why) {
+                Some((_, n)) => *n += 1,
+                None => t.1.push((why, 1)),
+            }
+        }
+    };
+    if log {
+        let mut t = SKIPS.lock().unwrap();
+        t.0 += 1;
+        if t.0 % 300 == 0 {
+            eprintln!("part_rest: skipped in 300 frames: {:?}", t.1);
+            t.1.clear();
+        }
+    }
     let keys: Vec<(i32, i32)> = cells.cells.keys().copied().collect();
     for key in keys {
         let cell = cells.cells.get_mut(&key).unwrap();
         for q in cell.quiet.values_mut() {
             *q = q.saturating_add(1);
         }
-        if cell.rest.is_some()
-            || cell.building.is_some()
-            || cell.quiet.len() < MIN_PARTS
-            || cell.quiet.values().any(|q| *q < SETTLE)
-            || started >= PER_FRAME
-        {
+        if cell.rest.is_some() || cell.building.is_some() {
+            continue;
+        }
+        if cell.quiet.len() < MIN_PARTS {
+            skip("cell: too few parts");
+            continue;
+        }
+        if cell.quiet.values().any(|q| *q < SETTLE) || started >= PER_FRAME {
             continue;
         }
         // Every shown leaf, by what it shares, in the world.
@@ -288,15 +388,17 @@ fn rest_cells(
         let mut taken: Vec<(Entity, Visibility)> = Vec::new();
         let mut owners: Vec<(Entity, Entity)> = Vec::new();
         for part in cell.quiet.keys() {
-            for leaf in leaves_of(*part, &children, &meshes, &glass) {
+            for leaf in leaves_of(*part, &children, &meshes, &glass, &own) {
                 owners.push((leaf, *part));
                 let Ok((mesh, mat)) = meshes.get(leaf) else {
                     continue;
                 };
                 let Ok((gt, v, shown, range, reach, no_shadow)) = leaf_info.get(leaf) else {
+                    skip("leaf: no transform or visibility");
                     continue;
                 };
                 if !shown.get() {
+                    skip("leaf: hidden");
                     continue;
                 }
                 if materials.get(&mat.0).is_none_or(|m| {
@@ -308,12 +410,15 @@ fn rest_cells(
                             | AlphaMode::Multiply
                     )
                 }) {
+                    skip("leaf: blended");
                     continue;
                 }
                 let Some(m) = mesh_assets.get(&mesh.0) else {
+                    skip("leaf: mesh on the GPU only");
                     continue;
                 };
                 if !super::gun_rest::mergeable(m) {
+                    skip("leaf: not mergeable");
                     continue;
                 }
                 let shade = Shade {
@@ -336,6 +441,7 @@ fn rest_cells(
         }
         // Not worth it for a cell that's a few draws already.
         if taken.len() <= groups.len() + 1 {
+            skip("cell: not worth it");
             continue;
         }
         started += 1;
@@ -622,6 +728,69 @@ mod tests {
                 .unwrap()
                 .rotate_y(0.3);
         });
+    }
+
+    /// A building's doors rest with its cell's other parts (four leaves of
+    /// door drawn as one), and one swinging open wakes the cell.
+    #[test]
+    fn doors_rest_with_their_cell_and_wake_when_one_swings() {
+        let mut app = app();
+        let doors: Vec<(Entity, Entity)> = (0..4)
+            .map(|i| {
+                let (p, leaf) = part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0));
+                // A door, not a breakable part: its leaf, as `spawn_door`.
+                let w = app.world_mut();
+                w.entity_mut(p)
+                    .remove::<(Drawn, Timber, Pryable)>()
+                    .insert(DoorLeaf(crate::world::buildings::DoorDef {
+                        hinge: Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0),
+                        width: 0.9,
+                        height: 2.0,
+                        yaw: 0.0,
+                        mat: crate::render::materials::Mat::Planks,
+                    }));
+                (p, leaf)
+            })
+            .collect();
+        rest(&mut app);
+        assert_eq!(resting(&mut app), 1, "four doors of one material: one mesh");
+        for (_, leaf) in &doors {
+            assert!(!shown(&app, *leaf), "a resting door's own mesh is hidden");
+        }
+        app.world_mut()
+            .get_mut::<Transform>(doors[2].0)
+            .unwrap()
+            .rotate_y(0.3);
+        app.update();
+        assert_eq!(resting(&mut app), 0, "a door swung: merged meshes left");
+        for (_, leaf) in &doors {
+            assert!(shown(&app, *leaf), "a door left hidden");
+        }
+    }
+
+    /// Something with a life of its own seated on a part (a tin left in a
+    /// drawer) keeps its own meshes: they're not taken into the cell's.
+    #[test]
+    fn a_thing_seated_on_a_part_keeps_its_own_meshes() {
+        let mut app = app();
+        let parts: Vec<_> = (0..4)
+            .map(|i| part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0)))
+            .collect();
+        let catalog = crate::items::Catalog::load();
+        let (kind, _) = catalog.0.iter().next().expect("a kind in the catalog");
+        let (tin, tin_leaf) = part(&mut app, Vec3::ZERO);
+        app.world_mut()
+            .entity_mut(tin)
+            .remove::<(Drawn, Timber, Pryable)>()
+            .insert((
+                crate::items::Item(extraction_core::items::ItemState::fresh(
+                    &catalog.0, kind, 1.0,
+                )),
+                ChildOf(parts[0].0),
+            ));
+        rest(&mut app);
+        assert_eq!(resting(&mut app), 1, "the parts merged");
+        assert!(shown(&app, tin_leaf), "a tin in a resting drawer hidden");
     }
 
     /// A pane breaking under a resting leaf: its mesh is swapped.

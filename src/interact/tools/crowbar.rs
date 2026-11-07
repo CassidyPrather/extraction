@@ -23,9 +23,9 @@ use crate::rig::haptics::Haptic;
 
 /// In the bar's space: the handle end (+Z), where the other hand steadies
 /// it, and the claw (-Z).
-pub const GRIP: Vec3 = Vec3::new(0.0, 0.0, 0.3);
-pub const SHAFT: Vec3 = Vec3::new(0.0, 0.0, 0.0);
-pub const CLAW: Vec3 = Vec3::new(0.0, 0.012, -0.37);
+pub const GRIP: Vec3 = Vec3::new(0.0, 0.00575, 0.2965);
+pub const SHAFT: Vec3 = Vec3::new(0.0, 0.00575, -0.0035);
+pub const CLAW: Vec3 = Vec3::new(0.0, 0.01775, -0.3735);
 /// How stiff what you're prying is, N per metre the hand moves the bar
 /// round: the force at a hand is this times how far it's drawn the bar off
 /// its seated line, and its torque that force times its lever arm.

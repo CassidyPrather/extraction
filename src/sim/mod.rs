@@ -40,7 +40,7 @@ impl Plugin for SimPlugin {
             .clone()
             .unwrap_or_else(|| std::path::PathBuf::from("target/sim").join(&opts.map));
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
-            .add_systems(Startup, spawn_sim_kit)
+            .add_systems(Startup, spawn_sim_kit.after(crate::persist::load_save))
             .add_systems(PostStartup, raider::attach_raider)
             .add_systems(Update, (armour_up, seat_sim_hearth, wear_guns))
             .add_systems(
@@ -108,29 +108,65 @@ fn career_memory(
     }
 }
 
+/// The sim kit past the dev cache: what's laid by the insertion point,
+/// and what the raider picks up of it (the radio and dressings are the
+/// kit tasks', `raider::kit_tasks`). A contract's kit, a skilled raider's
+/// bolts, and a hearth: bound for Rime Fell, a career has the one "Up the
+/// fell" gave it, the way into the frost (`progression::contracts`). A
+/// hearth goes sealed in a lead case, so it costs nothing on the way up
+/// (`seat_sim_hearth`), and the case is what's picked up. (On the contract
+/// itself the hearth came in its kit, and no case was laid: it went in
+/// the pack bare, and the case it was to be picked up in wasn't there.)
+pub(crate) fn sim_kit(
+    map: &str,
+    contract: &[&'static str],
+    personality: &str,
+) -> (Vec<&'static str>, Vec<&'static str>) {
+    let mut carried: Vec<&'static str> = contract.to_vec();
+    carried.extend(harvest::kit(personality));
+    if map == "rime_fell" && !carried.contains(&"art_hearth") {
+        carried.push("art_hearth");
+    }
+    let hearth = carried.contains(&"art_hearth");
+    if hearth && !carried.contains(&"lead_case") {
+        carried.push("lead_case");
+    }
+    let mut laid = vec!["radio", "field_dressing", "field_dressing"];
+    laid.extend(&carried);
+    // The hearth goes in its case.
+    let picked = carried
+        .into_iter()
+        .filter(|id| !(hearth && *id == "art_hearth"))
+        .collect();
+    (laid, picked)
+}
+
 /// What a fresh game keeps in the truck's stash and the dev cache lacks:
 /// the radio and two dressings (and a skilled raider's bolts,
 /// `harvest::kit`), laid out by the insertion point.
+///
+/// Not when the game resumes a saved raid in this valley: the kit came
+/// with it, and a second one doubled it at every reload (the save-and-quit
+/// soak, `soak::save_fuzz`, 5 November: four bolts, two dressings and a
+/// radio more each time).
 fn spawn_sim_kit(
     mut commands: Commands,
     zone: Res<Zone>,
     catalog: Res<crate::items::Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
+    restore: Option<Res<crate::persist::Restore>>,
 ) {
+    if restore.is_some_and(|r| r.zone) {
+        return;
+    }
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };
-    let mut kit = vec!["radio", "field_dressing", "field_dressing"];
-    kit.extend(raider::contract_kit());
-    // Bound for Rime Fell, a career has the hearth "Up the fell" gave it,
-    // the way into the frost (`progression::contracts`): sealed in a lead
-    // case, so it costs nothing on the way up (`seat_sim_hearth`).
-    if opts.map == "rime_fell" && !kit.contains(&"art_hearth") {
-        kit.extend(["lead_case", "art_hearth"]);
-    }
-    kit.extend(harvest::kit(
+    let (kit, _) = sim_kit(
+        &opts.map,
+        &raider::contract_kit(),
         opts.personality.as_deref().unwrap_or("looter"),
-    ));
+    );
     for (i, id) in kit.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {
             continue;
@@ -152,6 +188,46 @@ fn spawn_sim_kit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every contract's kit, on every valley, careful or skilled: a hearth
+    /// is laid with a lead case and picked up in it, never bare; and all
+    /// that's picked up is laid (on "Up the fell" the hearth was in the
+    /// contract's kit, so no case was laid: the hearth went in the pack
+    /// bare, its heat on the raider all the way up, and the case it was to
+    /// come in wasn't there to pick up).
+    #[test]
+    fn a_sim_hearth_goes_in_its_lead_case() {
+        let mut bad = Vec::new();
+        let none: [(&str, u32); 0] = [];
+        let kits = extraction_core::contracts::CONTRACTS
+            .iter()
+            .map(|c| (c.id, c.kit))
+            .chain([("no contract", &none[..])]);
+        for (id, kit) in kits {
+            let contract: Vec<&'static str> = kit
+                .iter()
+                .flat_map(|(k, n)| std::iter::repeat_n(*k, *n as usize))
+                .collect();
+            for map in crate::test_maps() {
+                for who in ["looter", "cautious", "reckless", "skilled"] {
+                    let (laid, picked) = sim_kit(&map, &contract, who);
+                    let has = |v: &[&str], k: &str| v.iter().filter(|x| **x == k).count();
+                    let hearth = has(&laid, "art_hearth") > 0;
+                    let wrong = (hearth && has(&laid, "lead_case") == 0)
+                        || has(&picked, "art_hearth") > 0 && has(&laid, "lead_case") > 0
+                        || (hearth && has(&picked, "lead_case") == 0)
+                        || picked.iter().any(|k| has(&picked, k) > has(&laid, k))
+                        || (map == "rime_fell" && !hearth);
+                    if wrong {
+                        bad.push(format!(
+                            "{id} on {map} ({who}): laid {laid:?}, picked {picked:?}"
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
 
     /// A sim raid's first minute: the bot kits up, picks somewhere to go and
     /// sets off, and the telemetry says so.
