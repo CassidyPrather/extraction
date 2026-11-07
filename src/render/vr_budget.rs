@@ -304,6 +304,7 @@ fn holds_views_with(
         }
         if near(draws, b.draws) || near(l.tris + r.tris, b.tris) {
             println!("    guns: {}", guns(&mut app, eyes.0));
+            println!("    buildings: {}", buildings(&mut app, eyes.0));
             println!("    unnamed: {}", unnamed(&mut app, eyes.0));
         }
         let mut o = Vec::new();
@@ -408,6 +409,46 @@ fn guns(app: &mut App, eye: Entity) -> String {
         .map(|(s, g, m)| format!("{s} {g} ({m} meshes)"))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// The buildings' meshes one eye draws, by what they are: shells,
+/// windows, far stand-ins, and the rest (furniture, hero models, stains,
+/// ivy).
+fn buildings(app: &mut App, eye: Entity) -> String {
+    use bevy::camera::visibility::VisibilityRange;
+    let w = app.world_mut();
+    let seen: Vec<Entity> = w
+        .entity(eye)
+        .get::<VisibleEntities>()
+        .map(|v| v.get(std::any::TypeId::of::<Mesh3d>()).to_vec())
+        .unwrap_or_default();
+    let (near, far) = (super::lod::near_range(), super::lod::far_range());
+    let same = |r: &VisibilityRange, o: &VisibilityRange| {
+        r.end_margin == o.end_margin && r.start_margin == o.start_margin
+    };
+    let mut n = [0usize; 5];
+    for e in seen {
+        let Some(p) = w.get::<ChildOf>(e) else {
+            continue;
+        };
+        if w.get::<crate::world::buildings::Building>(p.parent())
+            .is_none()
+        {
+            continue;
+        }
+        let caster = w.get::<bevy::light::NotShadowCaster>(e).is_none();
+        let k = match w.get::<VisibilityRange>(e) {
+            Some(r) if same(r, &near) && caster => 0,
+            Some(r) if same(r, &near) => 2,
+            Some(r) if same(r, &far) => 3,
+            _ => 4,
+        };
+        n[k] += 1;
+    }
+    format!(
+        "shells {}, windows {}, stand-ins {}, other {}",
+        n[0], n[2], n[3], n[4]
+    )
 }
 
 /// What the meshes one eye draws without a named ancestor are, by mesh
