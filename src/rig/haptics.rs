@@ -138,7 +138,7 @@ pub fn handling_feel(event: &FireEvent) -> Option<HandlingFeel> {
         FireEvent::MagazineHalfSeated => Shape(MAG_HALF),
         FireEvent::BoltClosed => Shape(BOLT_HOME),
         FireEvent::BoltLocked => Shape(BOLT_CATCH),
-        FireEvent::Chambered | FireEvent::RoundLoaded => Shape(CHAMBER),
+        FireEvent::Chambered | FireEvent::RoundLoaded | FireEvent::RoundThumbed => Shape(CHAMBER),
         FireEvent::DryFire => Pulse(0.35, 0.02, 0.0),
         // The hammer stopped hard by a primer that didn't go: firmer than
         // falling on nothing.
