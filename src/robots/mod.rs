@@ -55,6 +55,7 @@ pub mod network;
 pub mod plough;
 pub mod plough_bank;
 pub mod plough_look;
+pub mod pressure;
 pub mod pylon;
 pub mod recall;
 pub mod reel;
@@ -385,6 +386,7 @@ impl Plugin for RobotsPlugin {
                 drone::DronePlugin,
                 walker::WalkerPlugin,
                 director::DirectorPlugin,
+                pressure::PressurePlugin,
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,

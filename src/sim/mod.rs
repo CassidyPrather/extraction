@@ -155,6 +155,7 @@ fn spawn_sim_kit(
     catalog: Res<crate::items::Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
     restore: Option<Res<crate::persist::Restore>>,
+    slot: Res<crate::persist::SaveSlot>,
 ) {
     if restore.is_some_and(|r| r.zone) {
         return;
@@ -162,9 +163,45 @@ fn spawn_sim_kit(
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };
+    // A game that saves has no dev cache by the insertion
+    // (`items::loot::spawn_dev_cache`), and the raider kits up from the
+    // ground: its rifle, magazines and rounds are laid with the rest.
+    if slot.0.is_some() {
+        for (i, (id, rounds)) in [
+            ("ak74", 0),
+            ("ak_mag", 30),
+            ("ak_mag", 30),
+            ("ammo_545", 30),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let Some(kind) = catalog.kind(id) else {
+                continue;
+            };
+            let x = ins.at[0] - 1.0;
+            let z = ins.at[1] - 3.0 - i as f32 * 0.8;
+            let e = crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_xyz(x, zone.ground(x, z) + 0.25, z),
+                    condition: 0.85,
+                },
+            );
+            if rounds > 0 {
+                commands.entity(e).queue(move |mut ent: EntityWorldMut| {
+                    if let Some(mut it) = ent.get_mut::<crate::items::Item>() {
+                        it.rounds = rounds;
+                    }
+                });
+            }
+        }
+    }
     let (kit, _) = sim_kit(
         &opts.map,
-        &raider::contract_kit(),
+        &raider::contract_kit(&opts),
         opts.personality.as_deref().unwrap_or("looter"),
     );
     for (i, id) in kit.iter().enumerate() {
@@ -227,6 +264,44 @@ mod tests {
             }
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// In a game that saves too: the dev cache by the insertion is laid only
+    /// where nothing's saved (`items::loot::spawn_dev_cache`), and the sim
+    /// raider kits up from the ground, so a saved game's raider had no gun,
+    /// no magazines and no rounds, stuck on the first magazine with the
+    /// radio and the contract's relay behind it, and went home at once for
+    /// want of ammunition (the save soak's raids, every one; its contract
+    /// raids never took up the relay).
+    #[test]
+    fn a_raider_kits_up_in_a_saved_game() {
+        let dir = std::env::temp_dir().join(format!("extraction-sim-saved-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let opts = LaunchOptions {
+            sim_run: Some("smoke".into()),
+            sim_out: Some(dir.clone()),
+            save: Some(dir.join("career.ron")),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..90 * 45 {
+            app.update();
+        }
+        app.world_mut().resource_mut::<telemetry::SimLog>().flush();
+        let text = std::fs::read_to_string(dir.join("smoke.jsonl")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let kit = text
+            .lines()
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
+            .find(|e| e["ev"] == "kit")
+            .unwrap_or_else(|| panic!("never kitted up:\n{text}"));
+        assert_eq!(kit["gun"], true, "picked up the AK: {kit}");
+        assert_eq!(kit["radio"], true, "and the radio: {kit}");
+        assert!(kit["rounds"].as_u64().unwrap() > 0, "and loaded it: {kit}");
     }
 
     /// A sim raid's first minute: the bot kits up, picks somewhere to go and
