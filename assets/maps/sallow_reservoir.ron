@@ -457,7 +457,7 @@
         // By the keepers' way down to the Inflow bridge.
         (at: (74.0, -180.0), radius: 1.5, stones: 3),
         // Above the old road, on the way to Sallow Head.
-        (at: (-88.7, -220.6), radius: 1.5, stones: 3),
+        (at: (-91.0, -221.0), radius: 1.5, stones: 3),
         // Down from the Draw-off tower to the Inflow bridge.
         (at: (0.6, -190.8), radius: 1.6, stones: 3),
         // Over the silt fans, on the way to the Inflow bridge.
@@ -468,6 +468,12 @@
         (at: (231.0, 56.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // Where the way crosses into hot ground: something of the place
+        // tells of it before you're in it (map_gradient).
+        (prefab: "wreck_uaz", at: (214.0, 77.3), rot: 45.0),  // into the catchwater down the East shore road
+        (prefab: "wreck_uaz", at: (167.2, -64.1), rot: 90.0),  // into the catchwater from the sorting ground
+        (prefab: "wreck_uaz", at: (-80.3, -220.5), rot: 45.0),  // into New Sallow from the causeway
+
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (2.9, 168.3), rot: 0.0),  // by the valve house, the way west to the stair
@@ -610,6 +616,10 @@
     ],
 
     markers: [
+        // Where the way crosses into hot ground: something of the place
+        // tells of it before you're in it (map_gradient). Texts: Fifth valley.
+        (kind: Sign(text: "MACHINES\nAT WORK"), at: (-247.5, -114.5), rot: 0.0, name: "New Sallow works sign"),
+        (kind: Sign(text: "SORTING\nNO ENTRY"), at: (116.0, -19.0), rot: 0.0, name: "Sorting ground stencil"),
         (kind: Insertion, at: (25.0, 262.0), rot: 0.0, name: "South gate"),
         (kind: TruckStop, at: (25.0, 300.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (31.0, 270.0), name: "South gate (fuel)"),
