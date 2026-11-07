@@ -78,6 +78,8 @@ pub enum First {
     /// A heavy's arm rising at you: slow, and it sees well, so hiding
     /// doesn't lose it; walking away does.
     Heavy,
+    /// A hound after you.
+    Hound,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -132,6 +134,7 @@ pub const ALL: &[First] = &[
     First::BrokenNoticed,
     First::Shoved,
     First::Heavy,
+    First::Hound,
 ];
 
 impl First {
@@ -162,6 +165,7 @@ impl First {
                 | First::BrokenNoticed
                 | First::Shoved
                 | First::Heavy
+                | First::Hound
         )
     }
 
@@ -244,6 +248,12 @@ impl First {
             First::Heavy => {
                 &["Truck: \"Big one, and slow. Walk away, and keep going. Don't hide.\""]
             }
+            // (It's after movement: run and it runs you down; low and still
+            // in its coil and it loses you, `hound::COIL_TIME`.)
+            First::Hound => &[
+                "Truck: \"Plant your feet and shoot. A hound: don't run, it's after movement.\"",
+                "Truck: \"Shoot when it crouches. It's about to jump.\"",
+            ],
         }
     }
 }
@@ -298,7 +308,13 @@ struct Queue {
 /// A machine that has you, by its first: what it says to do (a roof, run
 /// across, walk away) isn't "go still", and the two said together told a
 /// newcomer both at once. Heard waits for a machine that's only listening.
-const HAS_YOU: [First; 4] = [First::Sentry, First::DroneLock, First::Aimed, First::Heavy];
+const HAS_YOU: [First; 5] = [
+    First::Sentry,
+    First::DroneLock,
+    First::Aimed,
+    First::Heavy,
+    First::Hound,
+];
 
 /// How long a machine's having you holds "go still" back.
 const HAS_YOU_HOLD: f32 = 10.0;
@@ -456,6 +472,7 @@ fn robots_heard(
     mut back: MessageReader<crate::robots::search::ComingBack>,
     minds: Query<&Awareness>,
     broken: Query<(), With<crate::robots::broken::Broken>>,
+    hounds: Query<(), With<crate::robots::hound::Hound>>,
     mut shoves: MessageReader<crate::robots::broken::Shoved>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     mut m: Meet,
@@ -484,6 +501,13 @@ fn robots_heard(
         .partition(|r| broken.contains(*r));
     if !wrecks.is_empty() {
         m.meet(First::BrokenNoticed);
+    }
+    // A hound's is its own too: "go still" is right, "move off" isn't
+    // (it's after movement).
+    let (hounds, others): (Vec<Entity>, Vec<Entity>) =
+        others.into_iter().partition(|r| hounds.contains(*r));
+    if !hounds.is_empty() {
+        m.meet(First::Hound);
     }
     if !others.is_empty() {
         m.meet(First::Heard);
@@ -525,9 +549,10 @@ fn machines_on_you(
     }
 }
 
-/// A heavy raising its arm at you, close.
+/// A heavy raising its arm at you, close; a hound coiling at you.
 fn heavy_raised(
     mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
+    mut crouches: MessageReader<crate::robots::hound::HoundCrouch>,
     minds: Query<&Awareness>,
     locals: Query<Entity, With<LocalPlayer>>,
     mut m: Meet,
@@ -540,6 +565,12 @@ fn heavy_raised(
             && minds.get(ev.heavy).is_ok_and(|a| a.target == Some(me))
         {
             m.meet(First::Heavy);
+        }
+    }
+    // A hound coiling to spring at you.
+    for ev in crouches.read() {
+        if minds.get(ev.hound).is_ok_and(|a| a.target == Some(me)) {
+            m.meet(First::Hound);
         }
     }
 }
@@ -1082,6 +1113,45 @@ mod tests {
         }
     }
 
+    /// A hound that's noticed you is the hound's line ("Don't run"), not
+    /// "Move off quiet": moving is what it's after. A walker's is still
+    /// "Something heard you".
+    #[test]
+    fn a_hound_noticing_you_is_told_as_a_hound() {
+        for hound in [true, false] {
+            let mut app = App::new();
+            app.init_resource::<Firsts>()
+                .init_resource::<Queue>()
+                .add_message::<FirstMet>()
+                .add_message::<crate::robots::search::Investigating>()
+                .add_message::<crate::robots::Noticed>()
+                .add_message::<crate::robots::search::LostYou>()
+                .add_message::<crate::robots::search::ComingBack>()
+                .add_message::<crate::robots::broken::Shoved>()
+                .add_systems(Update, robots_heard);
+            let me = app
+                .world_mut()
+                .spawn((LocalPlayer, GlobalTransform::default()))
+                .id();
+            let mut robot = app.world_mut().spawn(Awareness {
+                target: Some(me),
+                ..default()
+            });
+            if hound {
+                robot.insert(crate::robots::hound::Hound);
+            }
+            let robot = robot.id();
+            app.world_mut().write_message(crate::robots::Noticed {
+                robot,
+                at: Vec3::ZERO,
+            });
+            app.update();
+            let met = app.world().resource::<Firsts>();
+            assert_eq!(met.met(First::Hound), hound, "hound {hound}");
+            assert_eq!(met.met(First::Heard), !hound, "hound {hound}");
+        }
+    }
+
     /// An urgent line's first sentence (what to do: they're written
     /// action first) is on the wrist's
     /// first page, captioned or not: nobody waits a page under fire.
@@ -1106,6 +1176,89 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// What the driver says the first time each machine is on you, by its
+    /// `spawn_*` in `robots/`: its own first, or why it has none (as
+    /// `robots::intent_roster` does for its voice), so the next machine
+    /// can't come in with nothing said about it.
+    const FIRST_CONTACT: &[(&str, Result<First, &str>)] = &[
+        ("walker", Ok(First::Aimed)),
+        ("walker_with", Ok(First::Aimed)),
+        ("walker_sized", Ok(First::Aimed)),
+        ("broken_walker", Ok(First::BrokenNoticed)),
+        ("drone", Ok(First::DroneLock)),
+        ("hound", Ok(First::Hound)),
+        ("heavy", Ok(First::Heavy)),
+        ("sentry", Ok(First::Sentry)),
+        ("crawler", Ok(First::Underground)),
+        ("warden", Ok(First::Underground)),
+        (
+            "grappler",
+            Err("no line of its own yet: 'Something heard you' when it notices"),
+        ),
+        (
+            "minelayer",
+            Err(
+                "no line of its own yet: it carries no gun; its mines' rings and red blink are the tell",
+            ),
+        ),
+        (
+            "spotter",
+            Err("no line of its own yet: no gun; 'Something heard you' when it calls"),
+        ),
+        (
+            "dirigible",
+            Err("no line of its own yet: unarmed; its grapplers are the danger"),
+        ),
+        ("mender", Err("never acts on you: it mends machines")),
+        ("plough", Err("never looks for you: it drives its lane")),
+        ("pylon", Err("a relay mast: nothing toward you")),
+        ("sorter", Err("the Depot's gantry: its own alarm says it")),
+        ("debris", Err("a wreck's pieces, not a machine")),
+    ];
+
+    /// Every machine has its first-contact line, or a reason it has none;
+    /// and each line named is a first that's said.
+    #[test]
+    fn every_machine_has_its_first_contact_line() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/robots");
+        let mut found = vec![];
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let text = std::fs::read_to_string(e.path()).unwrap();
+            for line in text.lines() {
+                if let Some(rest) = line.strip_prefix("pub fn spawn_") {
+                    let name: String = rest
+                        .chars()
+                        .take_while(|c| c.is_alphanumeric() || *c == '_')
+                        .collect();
+                    found.push(name);
+                }
+            }
+        }
+        found.sort();
+        found.dedup();
+        let missing: Vec<&String> = found
+            .iter()
+            .filter(|f| !FIRST_CONTACT.iter().any(|(r, _)| r == f))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "machines with no first-contact line in FIRST_CONTACT (give it one, or a \
+             reason): {missing:?}"
+        );
+        for (name, first) in FIRST_CONTACT {
+            if let Ok(f) = first {
+                assert!(ALL.contains(f), "{name}: {f:?} isn't in ALL");
+                assert!(f.urgent(), "{name}: {f:?} isn't said first-thing");
+            }
+        }
+        // The hound's, as the driver says it: stand, and shoot.
+        let hound = First::Hound.lines().join(" ");
+        assert!(
+            hound.contains("don't run") && hound.contains("shoot"),
+            "{hound}"
+        );
     }
 
     /// Every line fits the wrist whole, with no game words in it.

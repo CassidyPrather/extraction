@@ -529,7 +529,7 @@ fn offer_job(
         .collect();
     // `SIM_CONTRACT=<id>[:step]`: a sim bot on that contract's step, in
     // its tier (its kit lies by the insertion: `sim`).
-    if let (Some(_), Ok(v)) = (&opts.sim_run, std::env::var("SIM_CONTRACT"))
+    if let (Some(_), Some(v)) = (&opts.sim_run, opts.sim_contract.clone())
         && progression.0.done == 0
     {
         let mut it = v.split(':');

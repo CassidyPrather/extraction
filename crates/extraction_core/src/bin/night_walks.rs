@@ -31,6 +31,9 @@ const BESIDE: f32 = 4.0;
 /// Close beside the way (m): inside a torch's pool, where a worn track or
 /// an edge (a wall, a kerb, a fence) tells it from what's next to it.
 const NEAR: f32 = 2.0;
+/// How far along the way out of a kiosk its first stop may wait for the
+/// way to come round it (m).
+const ROUND_KIOSK: f32 = 12.0;
 
 /// The point `s` metres along a polyline, and the way it runs there.
 fn along(path: &[P2], s: f32) -> Option<(P2, P2)> {
@@ -112,15 +115,22 @@ fn main() {
     let height = |p: P2| walked_height(&hm, p);
     let ground = |p: P2| [p[0], height(p), p[1]];
     let fmt = |v: [f32; 3]| format!("[{:.2},{:.2},{:.2}]", v[0], v[1], v[2]);
-    let mut starts: Vec<(String, P2)> = extraction_core::map_lint::first_jobs(&map, &map_id)
-        .into_iter()
-        .map(|(what, at)| {
-            let at = surfaced(&map, &hm, &grid, &rvs, at);
-            (what, at)
-        })
-        .collect();
-    starts.extend(pole_lines(&map, &rvs));
-    for (walk, (what, at)) in starts.into_iter().enumerate() {
+    // Each walk's start, and for one out of a kiosk the way its door faces
+    // (its first stop is where the way has come round the kiosk).
+    let mut starts: Vec<(String, P2, Option<P2>)> =
+        extraction_core::map_lint::first_jobs(&map, &map_id)
+            .into_iter()
+            .map(|(what, at)| {
+                let (at, out) = surfaced(&map, &hm, &grid, &rvs, at);
+                (what, at, out)
+            })
+            .collect();
+    starts.extend(
+        pole_lines(&map, &rvs)
+            .into_iter()
+            .map(|(w, at)| (w, at, None)),
+    );
+    for (walk, (what, at, out)) in starts.into_iter().enumerate() {
         let Some((rv, to)) = rvs
             .iter()
             .min_by(|a, b| dist(a.1, at).total_cmp(&dist(b.1, at)))
@@ -138,11 +148,20 @@ fn main() {
             let Some((p, dir)) = along(&path, s) else {
                 break;
             };
-            // Look along the way 15 m on, not the way's bearing here.
-            let look = along(&path, (s + 15.0).min(length)).map_or(dir, |(q, _)| {
+            // Look along the way 15 m on, not the way's bearing here. Out of
+            // a kiosk, while that looks back over the kiosk (the way going
+            // round it), no stop yet: you turn and go round it first.
+            let on = along(&path, (s + 15.0).min(length)).map_or(dir, |(q, _)| {
                 let d = dist(p, q).max(0.1);
                 [(q[0] - p[0]) / d, (q[1] - p[1]) / d]
             });
+            if out
+                .is_some_and(|o| stop == 0 && s < ROUND_KIOSK && o[0] * on[0] + o[1] * on[1] < 0.0)
+            {
+                s += 1.0;
+                continue;
+            }
+            let look = on;
             let yaw = look[0].atan2(-look[1]).to_degrees().rem_euclid(360.0);
             let eye = [p[0], height(p) + EYE, p[1]];
             // A file name: the walk's number and the stop's.
@@ -196,14 +215,14 @@ const BELOW: f32 = 2.5;
 /// site's kiosks, its entrance or an exit, makes the shorter way home, the
 /// way to it underground (as the crow flies) and the walk on from it to
 /// the nearest rendezvous together; not the ground over the job's room,
-/// which no one stands on.
+/// which no one stands on. With it, the way that kiosk's door faces.
 fn surfaced(
     map: &MapDef,
     hm: &Heightmap,
     grid: &extraction_core::nav::NavGrid,
     rvs: &[(String, P2)],
     at: P2,
-) -> P2 {
+) -> (P2, Option<P2>) {
     use extraction_core::underground;
     let ways = extraction_core::map_lint::kiosk_ways_out(map);
     let home = |p: P2| {
@@ -224,13 +243,13 @@ fn surfaced(
         }
         let up = ways
             .iter()
-            .filter(|(id, _)| *id == site.id)
-            .filter_map(|(_, p)| home(*p).map(|h| (*p, dist(*p, at) + h)))
-            .min_by(|a, b| a.1.total_cmp(&b.1));
-        if let Some((up, _)) = up {
+            .filter(|(id, _, _)| *id == site.id)
+            .filter_map(|(_, p, o)| home(*p).map(|h| (*p, *o, dist(*p, at) + h)))
+            .min_by(|a, b| a.2.total_cmp(&b.2));
+        if let Some((up, out, _)) = up {
             eprintln!("start {at:?} is down in {}: from {up:?}", site.id);
-            return up;
+            return (up, Some(out));
         }
     }
-    at
+    (at, None)
 }
