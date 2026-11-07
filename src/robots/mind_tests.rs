@@ -7404,16 +7404,22 @@ fn no_flare_at_quiet_nor_from_the_broken_walker() {
 /// Stopping it is really possible: someone 15 m off with a pistol, aiming
 /// at the tube from its tell and then at the canister in its climb, as a
 /// person in a headset does (drone_drill's lag, jitter and cadence: where
-/// it was a quarter second ago, the canister led), stops the flare before it bursts in most
-/// tries (coordinator, #79). Reported: how many in the tell, how many in
-/// the climb.
+/// it was a quarter second ago, the canister led), stops the flare before
+/// it bursts in at least two tries of three (coordinator, #79: a 2.0 s
+/// tell, and any round in the machine spoils it). Reported: how many in
+/// the tell, how many in the climb. `FLARE_DRILL_TRIES` for a wider
+/// sample.
 #[test]
 fn aiming_at_the_tube_in_its_tell_stops_it_most_tries() {
     use super::distress::{Canister, FlareAct, FlareTube};
     use super::drone_drill::{AIM_JITTER, AIM_LAG, SHOT_EVERY, normal};
     let (mut in_tell, mut in_climb) = (0, 0);
     let mut tries = vec![];
-    for k in 0..8u64 {
+    let n: u64 = std::env::var("FLARE_DRILL_TRIES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(12);
+    for k in 0..n {
         let (mut app, player, walker, me) = failing_walker(super::pressure::Level::Stirred);
         let mut rng = extraction_core::noise::Rng::new(0xF1A2 ^ k);
         let mut told = false;
@@ -7506,9 +7512,12 @@ fn aiming_at_the_tube_in_its_tell_stops_it_most_tries() {
     }
     let stopped = in_tell + in_climb;
     eprintln!(
-        "stopped before it burst: {stopped} of 8 ({in_tell} in its tell, {in_climb} in its climb)"
+        "stopped before it burst: {stopped} of {n} ({in_tell} in its tell, {in_climb} in its climb)"
     );
-    assert!(stopped >= 5, "stopped {stopped} of 8: {tries:?}");
+    assert!(
+        3 * stopped as u64 >= 2 * n,
+        "stopped {stopped} of {n}: {tries:?}"
+    );
 }
 
 #[derive(Resource, Default)]

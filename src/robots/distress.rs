@@ -3,9 +3,9 @@
 //! the state that sends up Heavy's soot wisp and gutters its eye) may call
 //! for help, once. It's a flare you can stop:
 //!
-//! - **The tell** ([`TELL`], `visuals::MIN_LEAD`): the tube on its back
-//!   rises, its lamp ticking. Kill it, shoot the tube ([`FlareTube`]),
-//!   or EMP it, and nothing goes up.
+//! - **The tell** ([`TELL`]): the tube rises, its lamp ticking. Put a
+//!   round into it, the tube ([`FlareTube`]) or any part of it ("shoot the
+//!   one that's smoking"), kill it, or EMP it, and nothing goes up.
 //! - **The climb** ([`CLIMB`] to [`HEIGHT`]): a canister on a hissing
 //!   trail. Shoot it down and it fizzles where it falls, calling nothing.
 //! - **The burst**: a red signal star (`weapons::flares`), seen from
@@ -26,8 +26,12 @@ use super::{Awareness, Robot, RobotKind, RobotPart, Stunned};
 use crate::weapons::ballistics::Hit;
 use crate::world::{Layer, Zone};
 
-/// The tell before it fires (s): every attack's readable lead.
-pub const TELL: f32 = super::visuals::MIN_LEAD;
+/// The tell before it fires (s): longer than every attack's readable lead
+/// (`visuals::MIN_LEAD`), slow before fast: time to see the tube go up and
+/// put a round in the machine (coordinator, #79: at 1.5 s, a pistol in a
+/// headset stopped half; at 2.0 s with any round spoiling it, see the
+/// drill in `mind_tests`).
+pub const TELL: f32 = 2.0;
 /// The canister's climb (s) and how high it bursts (m above the tube).
 pub const CLIMB: f32 = 2.5;
 pub const HEIGHT: f32 = 60.0;
@@ -57,7 +61,8 @@ pub enum FlareAct {
     Burst,
     /// Shot down in its climb (`at`: where it was hit).
     Downed,
-    /// Stopped in its tell: the tube shot, the machine wrecked or stunned.
+    /// Stopped in its tell: a round in it (the tube or any part), the
+    /// machine wrecked or stunned.
     Stopped,
 }
 
@@ -84,6 +89,8 @@ pub enum Distress {
     Ready,
     /// In its tell, this long (s).
     Telling(f32),
+    /// A round struck it in its tell: the launch is spoiled.
+    Spoiled,
     /// Fired, or stopped: never again.
     Spent,
 }
@@ -196,10 +203,30 @@ fn fit_tubes(
     }
 }
 
-fn hit_tubes(mut hits: MessageReader<Hit>, mut tubes: Query<&mut FlareTube>) {
+/// Rounds on a machine in its tell: the tube takes its damage, and any
+/// round that bites, on the tube or any part of it, spoils the launch.
+fn hit_tubes(
+    mut hits: MessageReader<Hit>,
+    mut tubes: Query<&mut FlareTube>,
+    parts: Query<&RobotPart>,
+    mut machines: Query<&mut Distress>,
+) {
     for h in hits.read() {
-        if let Ok(mut t) = tubes.get_mut(h.entity) {
-            t.hp -= h.damage.max(0.0);
+        if h.damage <= 0.0 {
+            continue;
+        }
+        let robot = if let Ok(mut t) = tubes.get_mut(h.entity) {
+            t.hp -= h.damage;
+            t.robot
+        } else if let Ok(p) = parts.get(h.entity) {
+            p.robot
+        } else {
+            continue;
+        };
+        if let Ok(mut d) = machines.get_mut(robot)
+            && matches!(*d, Distress::Telling(_))
+        {
+            *d = Distress::Spoiled;
         }
     }
 }
@@ -267,6 +294,15 @@ fn tell(
                         what: FlareAct::Tell,
                     });
                 }
+            }
+            Distress::Spoiled => {
+                *d = Distress::Spent;
+                t.raised = 0.0;
+                out.write(FlareEvent {
+                    robot: e,
+                    at: tgt,
+                    what: FlareAct::Stopped,
+                });
             }
             Distress::Telling(age) => {
                 if robot.wrecked || stunned || t.hp <= 0.0 {
