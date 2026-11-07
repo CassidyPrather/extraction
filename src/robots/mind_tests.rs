@@ -6615,12 +6615,13 @@ fn a_jobs_own_hot_ground_meets_a_slow_machine_first() {
     );
 }
 
-/// A newcomer walking from a hot job (Marrow's Radio mast) straight to its
-/// rendezvous (the Bus depot, in hot ground) hears no step in the last
-/// `SURVEY_CLEAR` of the way in: the wait at the pad isn't hot, so even an
-/// account a hair under a step drains there (coordinator's ruling).
+/// A newcomer walking from a hot job (Marrow's Radio mast) straight to the
+/// rendezvous they've called the truck to (the Bus depot, in hot ground)
+/// hears no step in the last `pressure::RV_WAIT` of the way in: the wait at
+/// the called pad isn't hot, so even an account a hair under a step drains
+/// there (coordinator's ruling, #86).
 #[test]
-fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
+fn walking_in_to_a_called_hot_pad_says_no_step_at_the_wait() {
     let (mut app, player, zone) = director_app("marrow_creek", 1, 4);
     {
         let mut d = app.world_mut().resource_mut::<super::director::Director>();
@@ -6636,6 +6637,13 @@ fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
             .is_some_and(|r| r.danger >= 2),
         "the Bus depot pad's region is hot"
     );
+    let rv = zone
+        .map
+        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+        .position(|m| Vec2::from_array(m.at).distance(pad) < 1.0)
+        .expect("the Bus depot pad");
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::TruckCalled { rv, eta: 1.0e6 };
     let walk = 1.4 / 90.0;
     let steps = (from.distance(pad) / walk) as usize;
     let mut primed = false;
@@ -6643,7 +6651,7 @@ fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
     for i in 0..=steps + 90 * 5 {
         let p = from.lerp(pad, (i as f32 / steps as f32).min(1.0));
         put(&mut app, player, zone.on_ground(p.x, p.y));
-        let near = p.distance(pad) <= super::director::SURVEY_CLEAR;
+        let near = p.distance(pad) <= super::pressure::RV_WAIT;
         if near && !primed {
             // A hair under a step as you come in.
             let mut pr = app.world_mut().resource_mut::<super::pressure::Pressure>();
@@ -6864,5 +6872,231 @@ fn a_shot_nothing_hears_brings_nothing() {
             &shot
         ),
         "out of its reach (100 m x 1.2)"
+    );
+}
+
+/// A walker sent out of the Marrow Gate gets going: 60 s after it's sent
+/// to a work site across the valley it's well on its way (every walker
+/// sent from there stood 7 m out of the Gate for the whole raid, holding
+/// the director's places: Progression's wanderer r19, my first_jobs runs).
+#[test]
+fn a_walker_sent_from_the_gate_gets_going() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+    }
+    let far = zone.on_ground(0.0, 180.0);
+    for _ in 0..90 * 2 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    let gate = super::director::gate(&zone);
+    let site = zone.on_ground(40.0, -95.0);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                gate,
+                Job {
+                    kind: JobKind::Survey,
+                    site,
+                    duration: 60.0,
+                    exit: gate,
+                },
+            )
+        })
+        .unwrap();
+    let start = gate;
+    let mut trail = vec![];
+    for i in 0..90 * 60 {
+        put(&mut app, player, far);
+        app.update();
+        if i % (90 * 10) == 0 {
+            let at = app.world().get::<GlobalTransform>(w).unwrap().translation();
+            let walker = app.world().get::<super::walker::Walker>(w).unwrap();
+            let (vel, next) = (walker.velocity, walker.path.first().copied());
+            trail.push((i / 90, at, vel, next));
+        }
+    }
+    let at = app.world().get::<GlobalTransform>(w).unwrap().translation();
+    let made = start.xz().distance(site.xz()) - at.xz().distance(site.xz());
+    assert!(
+        made > 30.0,
+        "{made:.1} m of headway in 60 s from {start:.1}: {trail:#?}"
+    );
+}
+
+/// The broken walker (job 2's dead gun, the fight a newcomer is meant to
+/// win) feeds the Zone's account nothing: two minutes of it on you, in its
+/// sight, and the Zone stays quiet; an armed walker in its place stirs it
+/// (lost's job 2 went Stirred, Busy, Hunting on that fight).
+#[test]
+fn the_broken_walker_feeds_nothing() {
+    use bevy::ecs::system::RunSystemOnce;
+    let level = |broken: bool| {
+        let (mut app, player, zone) = director_app("marrow_creek", 1, 1);
+        {
+            let mut d = app.world_mut().resource_mut::<super::director::Director>();
+            d.next_job = 1.0e6;
+            d.next_logistics = 1.0e6;
+            d.broken_placed = true;
+        }
+        let me = zone.on_ground(10.0, 150.0);
+        let at = zone.on_ground(16.0, 150.0);
+        let z = zone.clone();
+        let m = app
+            .world_mut()
+            .run_system_once(move |mut c: Commands| {
+                if broken {
+                    super::broken::spawn_broken_walker(&mut c, &z, at, at)
+                } else {
+                    super::walker::spawn_walker(
+                        &mut c,
+                        &z,
+                        at,
+                        Job {
+                            kind: JobKind::Survey,
+                            site: at,
+                            duration: 1.0e6,
+                            exit: at,
+                        },
+                    )
+                }
+            })
+            .unwrap();
+        for _ in 0..90 * 120 {
+            put(&mut app, player, me);
+            if let Some(mut a) = app.world_mut().get_mut::<Awareness>(m) {
+                a.target = Some(player);
+                a.can_see_target = true;
+                a.suspicion = 1.0;
+            }
+            // (Kept up: a downed player's raid isn't out, and resets it.)
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = h.max;
+                h.bleeding = 0.0;
+                h.down = false;
+            }
+            // Its sight kept on you (as in a fight), the Zone ticks.
+            app.update();
+        }
+        app.world().resource::<super::pressure::Pressure>().level
+    };
+    assert_eq!(
+        level(true),
+        super::pressure::Level::Quiet,
+        "the broken walker"
+    );
+    assert!(
+        level(false) > super::pressure::Level::Quiet,
+        "an armed walker on you stirs it"
+    );
+}
+
+/// A step said aloud at Hunting brings something to you within its cue,
+/// even with every one of the director's places taken: the radio said the
+/// Zone is coming, and it comes (Hunting with nothing sent for 40 minutes:
+/// Progression's wanderer r19).
+#[test]
+fn a_voiced_hunting_step_brings_something_even_at_the_cap() {
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    let me = zone.on_ground(10.0, 60.0);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.broken_placed = true;
+        d.max_active = 0;
+    }
+    for _ in 0..30 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    app.world_mut()
+        .resource_mut::<super::director::Director>()
+        .max_active = 0;
+    app.world_mut().write_message(super::pressure::Stepped {
+        level: super::pressure::Level::Hunting,
+        why: super::pressure::Why::Carried,
+        at: me,
+    });
+    let mut sent = 0;
+    for _ in 0..(90.0 * (super::pressure::CUE_LEAD + 3.0)) as usize {
+        put(&mut app, player, me);
+        app.update();
+        sent = app
+            .world_mut()
+            .query::<&Job>()
+            .iter(app.world())
+            .filter(|j| j.kind == JobKind::Response && j.site.xz().distance(me.xz()) < 2.0)
+            .count();
+        if sent > 0 {
+            break;
+        }
+    }
+    assert!(sent > 0, "nothing came at Hunting with the places full");
+}
+
+/// A machine that makes no headway on its way gives the errand up and goes
+/// out; one that can't get out either is gone (`director::NO_HEADWAY`).
+#[test]
+fn a_machine_without_headway_gives_up() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.broken_placed = true;
+    }
+    let far = zone.on_ground(0.0, 180.0);
+    let at = zone.on_ground(-40.0, 20.0);
+    let site = zone.on_ground(60.0, -60.0);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                at,
+                Job {
+                    kind: JobKind::Survey,
+                    site,
+                    duration: 60.0,
+                    exit: at + Vec3::X * 300.0,
+                },
+            )
+        })
+        .unwrap();
+    // Held where it is (as against the Gate's pier).
+    let hold = |app: &mut App| {
+        put(app, player, far);
+        if let Some(mut t) = app.world_mut().get_mut::<Transform>(w) {
+            t.translation = at;
+        }
+        app.update();
+    };
+    let secs = |s: f32| (90.0 * s) as usize;
+    for _ in 0..secs(super::director::NO_HEADWAY + 3.0) {
+        hold(&mut app);
+    }
+    assert!(
+        matches!(app.world().get::<Brain>(w), Some(Brain::Leave { .. })),
+        "{:?}",
+        app.world().get::<Brain>(w)
+    );
+    for _ in 0..secs(super::director::NO_HEADWAY + 3.0) {
+        hold(&mut app);
+    }
+    assert!(
+        app.world().get_entity(w).is_err(),
+        "still here, going nowhere"
     );
 }

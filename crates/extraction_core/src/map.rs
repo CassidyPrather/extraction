@@ -450,8 +450,14 @@ pub enum MarkerKind {
     /// A sheet of paper lying on whatever is built here (a table, a floor)
     /// or on the ground: someone's note.
     Note { text: String },
-    /// A painted board on a post, facing `rot`.
-    Sign { text: String },
+    /// A painted board on a post, facing `rot`; or, with `board`, on one
+    /// of the warning boards' carriers (a gate, a hoarding, an enamel
+    /// plate, a wall, a door: `world::notes::WARNING_BOARDS`).
+    Sign {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        board: Option<String>,
+    },
     /// A computer terminal on whatever is built here, screen facing `rot`;
     /// press it for the next page.
     Terminal { pages: Vec<String> },
@@ -499,7 +505,7 @@ impl MarkerKind {
     /// pages), for checks and exports.
     pub fn text(&self) -> Option<String> {
         match self {
-            MarkerKind::Note { text } | MarkerKind::Sign { text } => Some(text.clone()),
+            MarkerKind::Note { text } | MarkerKind::Sign { text, .. } => Some(text.clone()),
             MarkerKind::Terminal { pages } => Some(pages.join("\n\n")),
             _ => None,
         }
@@ -1274,6 +1280,29 @@ pub const VALLEYS: [(&str, &str); 5] = [
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_sign_names_its_board_or_stands_on_its_post() {
+        use super::MarkerKind;
+        let post: MarkerKind = ron::from_str(r#"Sign(text: "KEEP OUT")"#).unwrap();
+        assert_eq!(
+            post,
+            MarkerKind::Sign {
+                text: "KEEP OUT".into(),
+                board: None
+            }
+        );
+        let gate: MarkerKind =
+            ron::from_str(r#"Sign(text: "NO ENTRY", board: Some("warning_gate"))"#).unwrap();
+        let MarkerKind::Sign { board, .. } = &gate else {
+            panic!()
+        };
+        assert_eq!(board.as_deref(), Some("warning_gate"));
+        // A post's sign writes back as it was read: no board.
+        assert!(!ron::to_string(&post).unwrap().contains("board"));
+        let back: MarkerKind = ron::from_str(&ron::to_string(&gate).unwrap()).unwrap();
+        assert_eq!(back, gate);
+    }
+
     /// A line of poles: one at each end, 20 m apart along its bends, and
     /// read in as `snow_pole` placements.
     #[test]
