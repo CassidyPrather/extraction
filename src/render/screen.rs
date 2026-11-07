@@ -334,16 +334,35 @@ pub fn wrap_to_fit(text: &str, size: Vec2, style: ScreenStyle) -> String {
     best.1
 }
 
+/// A panel's own ground and ink in place of its style's: a warning board
+/// painted (cream, enamel) or, with no ground, stencilled straight onto
+/// whatever it's on (the panel shows only its letters).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Ink {
+    pub ground: Option<Color>,
+    pub ink: Color,
+}
+
+#[allow(clippy::type_complexity)]
 fn build_screens(
     mut commands: Commands,
-    screens: Query<(Entity, &ScreenText, Option<&TextSource>, Option<&Name>), Added<ScreenText>>,
+    screens: Query<
+        (
+            Entity,
+            &ScreenText,
+            Option<&TextSource>,
+            Option<&Name>,
+            Option<&Ink>,
+        ),
+        Added<ScreenText>,
+    >,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut drawings: ResMut<Drawings>,
     mut paper: Local<[Option<Handle<Image>>; 2]>,
 ) {
-    for (e, screen, source, name) in &screens {
+    for (e, screen, source, name, ink) in &screens {
         if source.is_none() {
             // Every panel says what it is, so the legibility gauges can
             // measure it from where it's read (`render::legibility`).
@@ -378,6 +397,12 @@ fn build_screens(
                 true,
             ),
         };
+        let (bg, fg) = match ink {
+            Some(i) => (i.ground.unwrap_or(Color::NONE), i.ink),
+            None => (bg, fg),
+        };
+        // Stencilled: only the letters drawn, cut out of a clear sheet.
+        let stencil = ink.is_some_and(|i| i.ground.is_none());
         let mut image = Image::new_fill(
             Extent3d {
                 width: w,
@@ -408,10 +433,17 @@ fn build_screens(
             // rough one spread it into a wash over its black.
             perceptual_roughness: if emissive { 0.6 } else { 0.95 },
             reflectance: if emissive { 0.05 } else { 0.5 },
+            alpha_mode: if stencil {
+                AlphaMode::Mask(0.5)
+            } else {
+                AlphaMode::Opaque
+            },
             ..default()
         });
         // Paper and cards each their own sheet, in their own colour.
+        // (A board in its own paint is flat: no sheet under it.)
         let sheet = match screen.style {
+            _ if ink.is_some() => None,
             ScreenStyle::Paper | ScreenStyle::Sign => Some(0),
             ScreenStyle::Card => Some(1),
             _ => None,

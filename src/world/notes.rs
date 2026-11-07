@@ -111,6 +111,41 @@ pub const WARNING_BOARDS: &[WarningBoard] = &[
     },
 ];
 
+/// The warning board named `prop`, if it's one.
+pub fn warning_board(prop: &str) -> Option<&'static WarningBoard> {
+    WARNING_BOARDS.iter().find(|b| b.prop == prop)
+}
+
+/// A warning board's words, fitted to its area (`ScreenStyle::Sign`).
+pub fn warning_panel(text: &str, b: &WarningBoard) -> ScreenText {
+    ScreenText {
+        text: crate::render::screen::wrap_to_fit(text, b.area, ScreenStyle::Sign),
+        size: b.area,
+        style: ScreenStyle::Sign,
+    }
+}
+
+/// Near-black paint, a warning's letters.
+const INK: Color = Color::srgb(0.07, 0.065, 0.08);
+
+/// A board's ground and ink: painted cream and enamel take their own
+/// ground under black letters; on cast concrete and the door's grey panel
+/// the letters are stencilled straight onto the prop (no ground: the
+/// prop's own surface shows round them). Black on all: red on concrete
+/// or the grey (luminance ~0.09 against ~0.17) wouldn't clear 4:1.
+pub fn warning_ink(b: &WarningBoard) -> crate::render::screen::Ink {
+    let ground = match b.ground {
+        "Cream" => Some(Color::srgb(0.82, 0.78, 0.66)),
+        "Enamel" => Some(Color::srgb(0.88, 0.88, 0.85)),
+        _ => None,
+    };
+    crate::render::screen::Ink { ground, ink: INK }
+}
+
+/// The warning gate's hazard lamp, at its `lamp` node (m, the gate's own
+/// space): a red light and halo that find the crossing at night.
+pub const GATE_LAMP: Vec3 = Vec3::new(1.72, 1.80, 0.11);
+
 pub fn sign_panel(text: &str) -> ScreenText {
     ScreenText {
         text: crate::render::screen::wrap_to_fit(text, SIGN, ScreenStyle::Sign),
@@ -134,7 +169,13 @@ pub fn marker_panels(map: &extraction_core::map::MapDef) -> Vec<(String, ScreenT
     for m in &map.markers {
         match &m.kind {
             MarkerKind::Note { text } => out.push((format!("note {}", m.name), note_panel(text))),
-            MarkerKind::Sign { text } => out.push((format!("sign {}", m.name), sign_panel(text))),
+            MarkerKind::Sign { text, board } => out.push((
+                format!("sign {}", m.name),
+                match board.as_deref().and_then(warning_board) {
+                    Some(b) => warning_panel(text, b),
+                    None => sign_panel(text),
+                },
+            )),
             MarkerKind::Terminal { pages } => {
                 for page in 0..pages.len() {
                     let term = Terminal {
@@ -191,6 +232,74 @@ pub fn rest_height(zone: &Zone, x: f32, z: f32, reach: f32) -> f32 {
     best
 }
 
+/// A warning on its board's carrier: the prop (a blockout of its area
+/// until it's in), its words on the area's face, and the gate's lamp.
+#[allow(clippy::too_many_arguments)]
+fn spawn_warning(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    planks: Handle<StandardMaterial>,
+    b: &'static WarningBoard,
+    text: &str,
+    ground: f32,
+    at: [f32; 2],
+    yaw: Quat,
+) {
+    let top = b.centre_y + b.area.y * 0.5;
+    let root = commands
+        .spawn((
+            Name::new(format!("Warning ({})", b.prop)),
+            Transform::from_xyz(at[0], ground, at[1]).with_rotation(yaw),
+            Visibility::default(),
+            RigidBody::Static,
+            Collider::compound(vec![(
+                Vec3::new(0.0, top * 0.5, -0.05),
+                Quat::IDENTITY,
+                Collider::cuboid(b.area.x + 0.2, top, 0.12),
+            )]),
+            CollisionLayers::new(super::Layer::World, LayerMask::ALL),
+            crate::render::world_props::SwapIn::one(b.prop),
+        ))
+        .id();
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(b.area.x + 0.1, b.area.y + 0.1, 0.04))),
+        MeshMaterial3d(planks),
+        Transform::from_xyz(0.0, b.centre_y, -0.02),
+        ChildOf(root),
+        crate::render::world_props::Blockout,
+    ));
+    // The words 3 mm proud of the area's face (`text_face`, +Z).
+    commands.spawn((
+        crate::render::legibility::TextSource::Sign,
+        warning_panel(text, b),
+        warning_ink(b),
+        Transform::from_xyz(0.0, b.centre_y, 0.003),
+        Visibility::default(),
+        ChildOf(root),
+    ));
+    if b.prop == "warning_gate" {
+        commands.spawn((
+            Name::new("Warning gate lamp"),
+            PointLight {
+                color: Color::srgb(1.0, 0.12, 0.06),
+                intensity: 1500.0,
+                range: 10.0,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            crate::world::halos::Halo {
+                color: LinearRgba::rgb(4.0, 0.35, 0.18),
+                radius: 0.06,
+            },
+            crate::world::halos::HaloReach(150.0),
+            crate::world::halos::HaloAngle(0.02),
+            Transform::from_translation(GATE_LAMP + Vec3::Z * 0.04),
+            Visibility::default(),
+            ChildOf(root),
+        ));
+    }
+}
+
 fn spawn_notes(
     mut commands: Commands,
     zone: Option<Res<Zone>>,
@@ -225,8 +334,30 @@ fn spawn_notes(
                     Visibility::default(),
                 ));
             }
-            MarkerKind::Sign { text } => {
+            MarkerKind::Sign { text, board } => {
                 let ground = zone.ground(m.at[0], m.at[1]);
+                // For shots: `EXTRACTION_SIGN_TEXT` puts these words on
+                // every sign, `EXTRACTION_SIGN_BOARD` every sign on that
+                // board (a warning at 10 m, before and after).
+                let shown = std::env::var("EXTRACTION_SIGN_TEXT").ok();
+                let text = shown.as_deref().unwrap_or(text);
+                let board = std::env::var("EXTRACTION_SIGN_BOARD")
+                    .ok()
+                    .or(board.clone());
+                if let Some(b) = board.as_deref().and_then(warning_board) {
+                    let planks = mat(Mat::Planks);
+                    spawn_warning(
+                        &mut commands,
+                        &mut meshes,
+                        planks,
+                        b,
+                        text,
+                        ground,
+                        m.at,
+                        yaw,
+                    );
+                    continue;
+                }
                 let sign = commands
                     .spawn((
                         Name::new("Sign"),
@@ -260,12 +391,9 @@ fn spawn_notes(
                     ChildOf(sign),
                     crate::render::world_props::Blockout,
                 ));
-                // For shots: `EXTRACTION_SIGN_TEXT` puts these words on
-                // every sign (a warning at 10 m, before and after).
-                let shown = std::env::var("EXTRACTION_SIGN_TEXT").ok();
                 commands.spawn((
                     crate::render::legibility::TextSource::Sign,
-                    sign_panel(shown.as_deref().unwrap_or(text)),
+                    sign_panel(text),
                     Transform::from_xyz(0.0, 1.45, 0.05),
                     Visibility::default(),
                     ChildOf(sign),
@@ -491,6 +619,43 @@ mod sign_tests {
         assert_eq!(words, drawn);
         // And its letters no smaller than a page's.
         assert!(em_metres(&p) >= em_metres(&as_page(long)) - 1e-4);
+    }
+
+    #[test]
+    fn every_warning_board_reads_from_ten_metres() {
+        // A warning as it'd be written for each board.
+        for (prop, text) in [
+            ("warning_gate", "NO ENTRY - RADIATION"),
+            ("warning_hoarding", "DANGER\nRADIATION\nKEEP OUT"),
+            ("warning_enamel", "KEEP OUT"),
+            ("warning_wall", "KEEP OUT"),
+            ("warning_door", "NO ENTRY"),
+        ] {
+            let b = warning_board(prop).unwrap();
+            let p = warning_panel(text, b);
+            let r = reach(&p);
+            println!("{prop:>17}: {r:4.1} m  {:?}", p.text);
+            assert!(r >= 10.0, "{prop}: {r:.1} m\n{}", p.text);
+        }
+        // Painted boards keep a ground; cast and grey take stencils.
+        assert!(
+            warning_ink(warning_board("warning_gate").unwrap())
+                .ground
+                .is_some()
+        );
+        assert!(
+            warning_ink(warning_board("warning_wall").unwrap())
+                .ground
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn the_gate_lamp_is_where_the_gate_has_it() {
+        let path = crate::asset_root_path().join(crate::render::world_props::path("warning_gate"));
+        let lamp = crate::capture::seated::node_transform(&path, "lamp").expect("a lamp node");
+        let at = lamp.to_scale_rotation_translation().2;
+        assert!(at.distance(GATE_LAMP) < 0.01, "{at} vs {GATE_LAMP}");
     }
 
     #[test]
