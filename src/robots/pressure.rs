@@ -44,6 +44,12 @@ pub const LINGER: f32 = 1.0 / 900.0;
 /// A fast machine is sent only this long (s) after the step that allows
 /// it was said.
 pub const CUE_LEAD: f32 = 10.0;
+/// No step is said within this long (s) of the last, and each is one level
+/// (slow and strategic before fast and tactical: two steps 28 s apart was
+/// the deep end). A step's answer is sent [`CUE_LEAD`] after it's said and
+/// a drone from the Gate takes about 40 s to come; 50 s lets each step's
+/// answer arrive, and be met, before the next can be said.
+pub const STEP_GAP: f32 = 50.0;
 /// Danger at or above this is hot ground (`Region::danger`; Map design's
 /// read: 0–1 quiet edges, 2–3 hot).
 pub const HOT_DANGER: u8 = 2;
@@ -64,6 +70,15 @@ pub enum Level {
 }
 
 impl Level {
+    /// The level above (Hunting stays).
+    pub fn next(self) -> Self {
+        match self {
+            Level::Quiet => Level::Stirred,
+            Level::Stirred => Level::Busy,
+            Level::Busy | Level::Hunting => Level::Hunting,
+        }
+    }
+
     pub fn of(account: f32) -> Self {
         match account {
             a if a < 1.0 => Level::Quiet,
@@ -190,8 +205,15 @@ impl Pressure {
         let fed: f32 = parts.iter().map(|p| p.1).sum();
         self.stir = (self.stir + fed - DRAIN * dt).max(0.0);
         self.linger += LINGER * dt;
-        let level = Level::of(self.account());
+        let mut level = Level::of(self.account());
         let up = level > self.level;
+        if up {
+            // Not within the gap of the last step, and one level at a time.
+            if self.stepped_at.is_some_and(|t| now - t < STEP_GAP) {
+                return None;
+            }
+            level = level.min(self.level.next());
+        }
         // (Down it goes quietly; it was said going up.)
         self.level = level;
         if up {
@@ -273,7 +295,7 @@ fn tally_pressure(
         (Entity, &GlobalTransform, Option<&crate::anomaly::Attention>),
         With<crate::rig::LocalPlayer>,
     >,
-    robots: Query<&super::Awareness>,
+    robots: Query<(&super::Awareness, Has<super::broken::Broken>)>,
     time: Res<Time>,
     mut out: MessageWriter<Stepped>,
     progression: Option<Res<crate::progression::Progression>>,
@@ -298,12 +320,16 @@ fn tally_pressure(
     let at_job = on_job_place(&zone, place.as_deref(), at);
     // The job's own hot ground is quiet till a machine's had you there.
     let hot = hot_at(&zone, [at.x, at.z]) && !(at_job && !pressure.met_at_job);
-    let fought = robots
-        .iter()
-        .any(|a| a.target == Some(me) && a.can_see_target);
+    // The broken walker (a dead gun: the fight a newcomer is meant to win)
+    // feeds nothing: not as a fight, nor the shots at it while it's the
+    // only one on you (coordinator's ruling).
+    let on_me = |a: &super::Awareness| a.target == Some(me) && a.can_see_target;
+    let fought = robots.iter().any(|(a, broken)| !broken && on_me(a));
+    let only_broken = !fought && robots.iter().any(|(a, broken)| broken && on_me(a));
+    let shots = std::mem::take(&mut doing.shots);
     let d = Doings {
         out: in_zone,
-        shots: std::mem::take(&mut doing.shots),
+        shots: if only_broken { 0 } else { shots },
         fought,
         hot,
         into_hot: hot && !doing.was_hot,
@@ -438,6 +464,31 @@ mod tests {
         assert!(!p.fast_allowed(at + CUE_LEAD - 0.5), "fast before its cue");
         assert!(p.fast_allowed(at + CUE_LEAD + 0.5) || p.level > Level::Stirred);
         assert!(matches!(p.why, Why::Noise | Why::Fight), "{p:?}");
+    }
+
+    /// However hard it's pushed (a shot every 2 s, a fight, hot ground),
+    /// the steps come one level at a time and [`STEP_GAP`] apart (they
+    /// came 28 s apart, Stirred to Busy to Hunting in under a minute:
+    /// lost's job 2).
+    #[test]
+    fn steps_are_one_level_and_a_gap_apart() {
+        let mut p = Pressure::default();
+        let steps = run(&mut p, 240.0, |t| Doings {
+            shots: ((t * 90.0) as usize % 180 == 0) as u32,
+            fought: true,
+            hot: true,
+            ..out()
+        });
+        assert_eq!(
+            steps.first().map(|s| s.1),
+            Some(Level::Stirred),
+            "{steps:?}"
+        );
+        assert!(steps.len() >= 3, "{steps:?}");
+        for w in steps.windows(2) {
+            assert!(w[1].0 - w[0].0 >= STEP_GAP - 0.05, "{steps:?}");
+            assert_eq!(w[1].1, w[0].1.next(), "{steps:?}");
+        }
     }
 
     /// Going onto hot ground is a step sooner than anywhere else.

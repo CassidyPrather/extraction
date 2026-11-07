@@ -161,7 +161,7 @@ pub fn spawn_spotter(commands: &mut Commands, zone: &Zone, at: Vec2) -> Entity {
             Senses {
                 sight: rules::SIGHT,
                 fov_deg: rules::FOV,
-                hearing: 0.0,
+                hearing: super::senses::SIGHT_ONLY,
                 eye: EYE,
             },
             Awareness::default(),

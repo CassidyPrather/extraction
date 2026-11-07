@@ -2046,6 +2046,22 @@ fn keep_shooting_and_walkers_come_too() {
                 };
         }
         let at = zone.on_ground(100.0, 200.0);
+        // A walker within earshot to report them (`director::heard_by_any`).
+        let ear = at + Vec3::new(40.0, 0.0, 0.0);
+        app.world_mut().spawn((
+            Robot {
+                kind: super::RobotKind::Walker,
+                wrecked: false,
+            },
+            super::Senses {
+                sight: 0.0,
+                fov_deg: 90.0,
+                hearing: 1.2,
+                eye: Vec3::ZERO,
+            },
+            Transform::from_translation(ear),
+            GlobalTransform::from_translation(ear),
+        ));
         for _ in 0..shots {
             app.world_mut().write_message(super::Noise {
                 at,
@@ -6644,4 +6660,435 @@ fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
     }
     assert!(primed);
     assert!(said.is_empty(), "a step voiced on the way in: {said:?}");
+}
+
+/// A kind that only sees (`senses::SIGHT_ONLY`) never reacts to sound: a
+/// loud noise 5 m off, its eye shut, leaves it as it was, for every
+/// sight-only kind in a real valley (job 2: the broken walker out, a drone
+/// sent). The kinds that hear (a walker) still turn to the same noise.
+#[test]
+fn a_sight_only_kind_never_reacts_to_sound() {
+    use super::senses::SIGHT_ONLY;
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 1);
+    let far = zone.on_ground(0.0, 180.0);
+    put(&mut app, player, far);
+    for _ in 0..90 * 3 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    // One of each the valley may not have out yet: a drone, a relay, the
+    // broken walker, a walker (the one that hears), apart from each other.
+    let at = zone.on_ground(-40.0, 20.0) + Vec3::Y * 20.0;
+    let (pylon_at, broken_at, walker_at) = (
+        zone.on_ground(-80.0, 20.0),
+        zone.on_ground(-40.0, 60.0),
+        zone.on_ground(-80.0, 60.0),
+    );
+    let z = zone.clone();
+    app.world_mut()
+        .run_system_once(move |mut c: Commands| {
+            let job = |site: Vec3| Job {
+                kind: JobKind::Survey,
+                site,
+                duration: 600.0,
+                exit: site,
+            };
+            super::drone::spawn_drone(&mut c, at, job(at));
+            super::pylon::spawn_pylon(&mut c, pylon_at, 600.0, pylon_at);
+            super::broken::spawn_broken_walker(&mut c, &z, broken_at, broken_at);
+            super::walker::spawn_walker(&mut c, &z, walker_at, job(walker_at));
+        })
+        .unwrap();
+    for _ in 0..30 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    app.update();
+    #[allow(clippy::type_complexity)]
+    let kinds = app
+        .world_mut()
+        .run_system_once(
+            |q: Query<(
+                Entity,
+                &Robot,
+                &super::Senses,
+                (
+                    Has<super::indoor::Crawler>,
+                    Has<super::broken::Broken>,
+                    Has<super::grappler::Grappler>,
+                    Has<super::collector::Collector>,
+                    Has<super::sentry::Sentry>,
+                    Has<super::minelayer::Minelayer>,
+                    Has<super::spotter::Spotter>,
+                    Has<super::heavy::Heavy>,
+                    Has<super::hound::Hound>,
+                ),
+            )>| {
+                q.iter()
+                    .filter(|r| !r.1.wrecked)
+                    .map(|(e, r, s, (cr, br, gr, co, se, mi, sp, he, ho))| {
+                        let kind = match () {
+                            _ if cr => "crawler",
+                            _ if br => "broken walker",
+                            _ if gr => "grappler",
+                            _ if co => "collector",
+                            _ if se => "sentry",
+                            _ if mi => "minelayer",
+                            _ if sp => "spotter",
+                            _ if he => "heavy",
+                            _ if ho => "hound",
+                            _ => match r.kind {
+                                super::RobotKind::Drone => "drone",
+                                super::RobotKind::Pylon => "pylon",
+                                super::RobotKind::Dirigible => "dirigible",
+                                super::RobotKind::Sorter => "sorter",
+                                super::RobotKind::Walker => "walker",
+                            },
+                        };
+                        (e, kind, s.hearing)
+                    })
+                    .collect::<Vec<_>>()
+            },
+        )
+        .unwrap();
+    let sight_only = [
+        "broken walker",
+        "grappler",
+        "collector",
+        "sentry",
+        "minelayer",
+        "spotter",
+        "drone",
+        "pylon",
+        "dirigible",
+    ];
+    for (_, kind, hearing) in &kinds {
+        assert_eq!(
+            *hearing <= SIGHT_ONLY,
+            sight_only.contains(kind),
+            "{kind} hears at {hearing}"
+        );
+    }
+    for must in [
+        "drone",
+        "sentry",
+        "crawler",
+        "broken walker",
+        "pylon",
+        "walker",
+    ] {
+        assert!(
+            kinds.iter().any(|k| k.1 == must),
+            "no {must} in the valley to try: {:?}",
+            kinds
+                .iter()
+                .map(|k| k.1)
+                .collect::<std::collections::BTreeSet<_>>()
+        );
+    }
+    // Each one's eye shut, its mind cleared; a noise 5 m off, heard by an
+    // ordinary ear to about 12 m, so no hearing machine nearby hears it and
+    // calls it in (a call is machines telling each other, not hearing).
+    let react = |app: &mut App, e: Entity| -> f32 {
+        let Some(gt) = app.world().get::<GlobalTransform>(e) else {
+            return 0.0;
+        };
+        let here = gt.translation();
+        app.world_mut().get_mut::<super::Senses>(e).unwrap().sight = 0.0;
+        *app.world_mut().get_mut::<Awareness>(e).unwrap() = Awareness::default();
+        for _ in 0..10 {
+            put(app, player, far);
+            app.world_mut().write_message(super::Noise {
+                at: here + Vec3::X * 5.0,
+                radius: 10.0,
+                source: Some(player),
+            });
+            app.update();
+        }
+        app.world().get::<Awareness>(e).map_or(0.0, |a| a.suspicion)
+    };
+    let mut heard = vec![];
+    for (e, kind, _) in kinds.clone() {
+        let s = react(&mut app, e);
+        if sight_only.contains(&kind) {
+            assert!(s < 0.01, "{kind} heard a shot it can't see: {s}");
+        } else if kind == "walker" {
+            heard.push(s);
+        }
+    }
+    assert!(
+        heard.iter().any(|s| *s > 0.2),
+        "a walker still hears it: {heard:?}"
+    );
+}
+
+/// A noise nothing that hears is near is reported to no one: no response,
+/// no heat, no stir (`director::heard_by_any`). Near a walker, it is.
+#[test]
+fn a_shot_nothing_hears_brings_nothing() {
+    use super::director::heard_by_any;
+    let walker = Robot {
+        kind: super::RobotKind::Walker,
+        wrecked: false,
+    };
+    let drone = Robot {
+        kind: super::RobotKind::Drone,
+        wrecked: false,
+    };
+    let ears = |h: f32| super::Senses {
+        sight: 60.0,
+        fov_deg: 120.0,
+        hearing: h,
+        eye: Vec3::ZERO,
+    };
+    let (hears, sees) = (ears(1.2), ears(super::senses::SIGHT_ONLY));
+    let shot = super::Noise {
+        at: Vec3::ZERO,
+        radius: 100.0,
+        source: None,
+    };
+    let near = Vec3::new(30.0, 0.0, 0.0);
+    assert!(!heard_by_any(std::iter::empty(), &shot), "the empty");
+    assert!(
+        !heard_by_any([(&drone, &sees, near, None)].into_iter(), &shot),
+        "a drone 30 m off only sees"
+    );
+    assert!(heard_by_any(
+        [(&walker, &hears, near, None)].into_iter(),
+        &shot
+    ));
+    assert!(
+        !heard_by_any(
+            [(&walker, &hears, Vec3::new(130.0, 0.0, 0.0), None)].into_iter(),
+            &shot
+        ),
+        "out of its reach (100 m x 1.2)"
+    );
+}
+
+/// A walker sent out of the Marrow Gate gets going: 60 s after it's sent
+/// to a work site across the valley it's well on its way (every walker
+/// sent from there stood 7 m out of the Gate for the whole raid, holding
+/// the director's places: Progression's wanderer r19, my first_jobs runs).
+#[test]
+fn a_walker_sent_from_the_gate_gets_going() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+    }
+    let far = zone.on_ground(0.0, 180.0);
+    for _ in 0..90 * 2 {
+        put(&mut app, player, far);
+        app.update();
+    }
+    let gate = super::director::gate(&zone);
+    let site = zone.on_ground(40.0, -95.0);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                gate,
+                Job {
+                    kind: JobKind::Survey,
+                    site,
+                    duration: 60.0,
+                    exit: gate,
+                },
+            )
+        })
+        .unwrap();
+    let start = gate;
+    let mut trail = vec![];
+    for i in 0..90 * 60 {
+        put(&mut app, player, far);
+        app.update();
+        if i % (90 * 10) == 0 {
+            let at = app.world().get::<GlobalTransform>(w).unwrap().translation();
+            let walker = app.world().get::<super::walker::Walker>(w).unwrap();
+            let (vel, next) = (walker.velocity, walker.path.first().copied());
+            trail.push((i / 90, at, vel, next));
+        }
+    }
+    let at = app.world().get::<GlobalTransform>(w).unwrap().translation();
+    let made = start.xz().distance(site.xz()) - at.xz().distance(site.xz());
+    assert!(
+        made > 30.0,
+        "{made:.1} m of headway in 60 s from {start:.1}: {trail:#?}"
+    );
+}
+
+/// The broken walker (job 2's dead gun, the fight a newcomer is meant to
+/// win) feeds the Zone's account nothing: two minutes of it on you, in its
+/// sight, and the Zone stays quiet; an armed walker in its place stirs it
+/// (lost's job 2 went Stirred, Busy, Hunting on that fight).
+#[test]
+fn the_broken_walker_feeds_nothing() {
+    use bevy::ecs::system::RunSystemOnce;
+    let level = |broken: bool| {
+        let (mut app, player, zone) = director_app("marrow_creek", 1, 1);
+        {
+            let mut d = app.world_mut().resource_mut::<super::director::Director>();
+            d.next_job = 1.0e6;
+            d.next_logistics = 1.0e6;
+            d.broken_placed = true;
+        }
+        let me = zone.on_ground(10.0, 150.0);
+        let at = zone.on_ground(16.0, 150.0);
+        let z = zone.clone();
+        let m = app
+            .world_mut()
+            .run_system_once(move |mut c: Commands| {
+                if broken {
+                    super::broken::spawn_broken_walker(&mut c, &z, at, at)
+                } else {
+                    super::walker::spawn_walker(
+                        &mut c,
+                        &z,
+                        at,
+                        Job {
+                            kind: JobKind::Survey,
+                            site: at,
+                            duration: 1.0e6,
+                            exit: at,
+                        },
+                    )
+                }
+            })
+            .unwrap();
+        for _ in 0..90 * 120 {
+            put(&mut app, player, me);
+            if let Some(mut a) = app.world_mut().get_mut::<Awareness>(m) {
+                a.target = Some(player);
+                a.can_see_target = true;
+                a.suspicion = 1.0;
+            }
+            // (Kept up: a downed player's raid isn't out, and resets it.)
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = h.max;
+                h.bleeding = 0.0;
+                h.down = false;
+            }
+            // Its sight kept on you (as in a fight), the Zone ticks.
+            app.update();
+        }
+        app.world().resource::<super::pressure::Pressure>().level
+    };
+    assert_eq!(
+        level(true),
+        super::pressure::Level::Quiet,
+        "the broken walker"
+    );
+    assert!(
+        level(false) > super::pressure::Level::Quiet,
+        "an armed walker on you stirs it"
+    );
+}
+
+/// A step said aloud at Hunting brings something to you within its cue,
+/// even with every one of the director's places taken: the radio said the
+/// Zone is coming, and it comes (Hunting with nothing sent for 40 minutes:
+/// Progression's wanderer r19).
+#[test]
+fn a_voiced_hunting_step_brings_something_even_at_the_cap() {
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    let me = zone.on_ground(10.0, 60.0);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.broken_placed = true;
+        d.max_active = 0;
+    }
+    for _ in 0..30 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    app.world_mut()
+        .resource_mut::<super::director::Director>()
+        .max_active = 0;
+    app.world_mut().write_message(super::pressure::Stepped {
+        level: super::pressure::Level::Hunting,
+        why: super::pressure::Why::Carried,
+        at: me,
+    });
+    let mut sent = 0;
+    for _ in 0..(90.0 * (super::pressure::CUE_LEAD + 3.0)) as usize {
+        put(&mut app, player, me);
+        app.update();
+        sent = app
+            .world_mut()
+            .query::<&Job>()
+            .iter(app.world())
+            .filter(|j| j.kind == JobKind::Response && j.site.xz().distance(me.xz()) < 2.0)
+            .count();
+        if sent > 0 {
+            break;
+        }
+    }
+    assert!(sent > 0, "nothing came at Hunting with the places full");
+}
+
+/// A machine that makes no headway on its way gives the errand up and goes
+/// out; one that can't get out either is gone (`director::NO_HEADWAY`).
+#[test]
+fn a_machine_without_headway_gives_up() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 3);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+        d.broken_placed = true;
+    }
+    let far = zone.on_ground(0.0, 180.0);
+    let at = zone.on_ground(-40.0, 20.0);
+    let site = zone.on_ground(60.0, -60.0);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                at,
+                Job {
+                    kind: JobKind::Survey,
+                    site,
+                    duration: 60.0,
+                    exit: at + Vec3::X * 300.0,
+                },
+            )
+        })
+        .unwrap();
+    // Held where it is (as against the Gate's pier).
+    let hold = |app: &mut App| {
+        put(app, player, far);
+        if let Some(mut t) = app.world_mut().get_mut::<Transform>(w) {
+            t.translation = at;
+        }
+        app.update();
+    };
+    let secs = |s: f32| (90.0 * s) as usize;
+    for _ in 0..secs(super::director::NO_HEADWAY + 3.0) {
+        hold(&mut app);
+    }
+    assert!(
+        matches!(app.world().get::<Brain>(w), Some(Brain::Leave { .. })),
+        "{:?}",
+        app.world().get::<Brain>(w)
+    );
+    for _ in 0..secs(super::director::NO_HEADWAY + 3.0) {
+        hold(&mut app);
+    }
+    assert!(
+        app.world().get_entity(w).is_err(),
+        "still here, going nowhere"
+    );
 }
