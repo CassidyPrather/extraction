@@ -711,7 +711,13 @@ mod tests {
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         settled(&mut app);
         let (guns, resting, on_player, hidden) = census(&mut app);
-        println!("{guns} guns: {resting} resting, {on_player} on the player, {hidden} hidden");
+        let declined = {
+            let w = app.world_mut();
+            w.query_filtered::<(), With<RestDeclined>>().iter(w).count()
+        };
+        println!(
+            "{guns} guns: {resting} resting ({declined} of them declined), {on_player} on the player, {hidden} hidden"
+        );
         assert!(guns > 0);
         assert!(resting > 0, "no gun rests");
         assert_eq!(
