@@ -234,9 +234,9 @@ pub const FIT_REACH: f32 = 0.1;
 pub const BOLT_PAST: f32 = 0.04;
 
 /// In the hacksaw's space: the handle, and the blade's two ends.
-pub const SAW_GRIP: Vec3 = Vec3::new(0.0, -0.01, 0.16);
-pub const BLADE_A: Vec3 = Vec3::new(0.0, -0.045, 0.06);
-pub const BLADE_B: Vec3 = Vec3::new(0.0, -0.045, -0.2);
+pub const SAW_GRIP: Vec3 = Vec3::new(0.0, -0.00648, 0.16912);
+pub const BLADE_A: Vec3 = Vec3::new(0.0, -0.04148, 0.06912);
+pub const BLADE_B: Vec3 = Vec3::new(0.0, -0.04148, -0.19088);
 
 /// The stock's screw, marked for the spanner while the gun's in the vice.
 #[derive(Component, Debug)]

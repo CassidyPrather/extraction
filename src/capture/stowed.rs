@@ -284,20 +284,9 @@ mod tests {
         );
     }
 
-    /// Off their kit, waiting on a fix that isn't the thing's: each hip
-    /// pocket hangs square on a belt that curves round the hip, so the
-    /// belt runs across the pocket's inner top corner, through what stands
-    /// up out of it (a cassette, 29 mm proud). Leaning it out puts it
-    /// through the pocket's side; the pocket wants turning to the belt
-    /// (`art/kit/rig.py` and `interact::body::slot_layout`).
-    const KNOWN: &[&str] = &[
-        "tape_practice in the Pocket: through the harness",
-        "tape_hymns in the Pocket: through the harness",
-        "tape_lodge in the Pocket: through the harness",
-        "tape_duty in the Pocket: through the harness",
-        "tape_birthday in the Pocket: through the harness",
-        "tape_bells in the Pocket: through the harness",
-    ];
+    /// Off their kit, waiting on a fix that isn't the thing's (none: the
+    /// hip pockets' tapes went once the pockets turned to the belt).
+    const KNOWN: &[&str] = &[];
 
     /// Each hip pocket hangs on the belt with the belt along its back, not
     /// across it: neither goes into the other more than a millimetre (hung

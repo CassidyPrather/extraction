@@ -38,6 +38,7 @@ ACTIONS = {
     "pump back": ["gun.pump_back"],
     "pump forward": ["gun.pump_fwd"],
     "shell in": ["gun.shell_insert"],
+    "loose round thumbed in": ["gun.round_in"],
     "clip stripped in": ["gun.stripper_clip"],
     "Nagant gate opened": ["gun.gate_open"],
     "Nagant gate shut": ["gun.gate_shut"],
