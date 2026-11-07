@@ -566,7 +566,8 @@ pub fn attach_raider(
                "minutes": traits.minutes, "format": super::telemetry::FORMAT,
                "sites": sites.len(), "buildings": plans.len(),
                "objective": objective.map(|o| [round(o.x, 1), round(o.y, 1)]),
-               "assets": crate::asset_identity().data, "build": crate::asset_identity().build}),
+               "assets": crate::asset_identity().data, "build": crate::asset_identity().build,
+               "catalog": crate::asset_identity().catalog}),
     );
     info!(
         "sim: {} raider, {} sites ({} buildings planned)",
