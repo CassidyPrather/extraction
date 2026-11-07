@@ -219,7 +219,13 @@ mod tests {
             source: Some(p),
         });
         app.update();
-        !app.world().resource::<Director>().responses.is_empty()
+        // This shot's response, not another source's (a survey place, a
+        // relay's report) queued in the same tick.
+        app.world()
+            .resource::<Director>()
+            .responses
+            .iter()
+            .any(|(_, r)| r.distance(at) < 3.0)
     }
 
     #[test]
