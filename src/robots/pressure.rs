@@ -144,21 +144,36 @@ pub fn job_hot_place(
         .map(|r| r.name.clone())
 }
 
-/// Whether `at` is hot ground for the account and the director: a region
-/// of [`HOT_DANGER`] or more, but never within `director::SURVEY_CLEAR` of
-/// a rendezvous: the run in can be tense, the wait at the pad can't
-/// (coordinator's ruling; one rule here in place of pocket regions).
-pub fn hot_at(zone: &crate::world::Zone, at: [f32; 2]) -> bool {
+/// How near the pad the truck's called to the wait there is: no hot
+/// ground within it (coordinator's ruling, #86).
+pub const RV_WAIT: f32 = 25.0;
+
+/// Whether `at` is hot ground for the account: a region of [`HOT_DANGER`]
+/// or more, but not within [`RV_WAIT`] of `called`, the pad the truck's
+/// been called to (`called_pad`): the run in can be tense, the wait at the
+/// pad can't. Only that pad, only while it's called (it was every pad's
+/// `director::SURVEY_CLEAR`, called or not, and blanked 57-65% of the hot
+/// ground on the ways to the jobs). Survey drones keep off every pad's
+/// 80 m on their own (`director::survey_places`).
+pub fn hot_at(zone: &crate::world::Zone, at: [f32; 2], called: Option<[f32; 2]>) -> bool {
     zone.map
         .region_at(at)
         .is_some_and(|r| r.danger >= HOT_DANGER)
-        && zone
-            .map
-            .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
-            .all(|m| {
-                Vec2::from_array(m.at).distance(Vec2::from_array(at))
-                    > super::director::SURVEY_CLEAR
-            })
+        && called.is_none_or(|c| Vec2::from_array(c).distance(Vec2::from_array(at)) > RV_WAIT)
+}
+
+/// The pad the truck's been called to, or is waiting at: none before the
+/// call, nor for the short exfil (back to the base).
+pub fn called_pad(zone: &crate::world::Zone, phase: &crate::raid::Phase) -> Option<[f32; 2]> {
+    let rv = match *phase {
+        crate::raid::Phase::TruckCalled { rv, .. }
+        | crate::raid::Phase::TruckWaiting { rv, .. } => rv,
+        _ => return None,
+    };
+    zone.map
+        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+        .nth(rv)
+        .map(|m| m.at)
 }
 
 /// Whether `p` is on the job's hot place ([`job_hot_place`]).
@@ -319,7 +334,8 @@ fn tally_pressure(
         .and_then(|o| job_hot_place(&zone, &o.map, progression.as_deref()));
     let at_job = on_job_place(&zone, place.as_deref(), at);
     // The job's own hot ground is quiet till a machine's had you there.
-    let hot = hot_at(&zone, [at.x, at.z]) && !(at_job && !pressure.met_at_job);
+    let called = called_pad(&zone, &raid.phase);
+    let hot = hot_at(&zone, [at.x, at.z], called) && !(at_job && !pressure.met_at_job);
     // The broken walker (a dead gun: the fight a newcomer is meant to win)
     // feeds nothing: not as a fight, nor the shots at it while it's the
     // only one on you (coordinator's ruling).
@@ -352,46 +368,129 @@ fn tally_pressure(
 mod tests {
     use super::*;
 
-    /// No wait at a pad is on hot ground, in any valley: within
-    /// `SURVEY_CLEAR` of every rendezvous it's never hot, even where the
-    /// pad's region is (Marrow's Bus depot; coordinator's ruling, in place
-    /// of pocket regions).
+    const VALLEYS: [&str; 5] = [
+        "marrow_creek",
+        "kettle_pass",
+        "cinder_works",
+        "rime_fell",
+        "sallow_reservoir",
+    ];
+
+    /// Points round `c` at `r` m, sixteen of them.
+    fn ring(c: [f32; 2], r: f32) -> impl Iterator<Item = [f32; 2]> {
+        (0..16).map(move |k| {
+            let a = k as f32 * std::f32::consts::TAU / 16.0;
+            [c[0] + r * a.cos(), c[1] + r * a.sin()]
+        })
+    }
+
+    fn hot_region(zone: &crate::world::Zone, p: [f32; 2]) -> bool {
+        zone.map
+            .region_at(p)
+            .is_some_and(|r| r.danger >= HOT_DANGER)
+    }
+
+    /// The wait at the pad the truck's called to isn't hot ground: within
+    /// [`RV_WAIT`] of it, never, in any valley, even where its region is
+    /// (Marrow's Bus depot). Only that pad, only while it's called: past
+    /// 25 m, at any other pad, or with no truck called, hot ground is hot
+    /// (coordinator's ruling, #86: it was every pad's 80 m, called or not,
+    /// and blanked 57-65% of the hot ground on the way to the jobs).
     #[test]
-    fn no_rendezvous_wait_is_hot_ground() {
+    fn only_the_called_pads_wait_is_quiet() {
         let mut hot_pads = vec![];
-        for map in [
-            "marrow_creek",
-            "kettle_pass",
-            "cinder_works",
-            "rime_fell",
-            "sallow_reservoir",
-        ] {
+        for map in VALLEYS {
             let zone = crate::world::Zone::load(map);
-            for rv in zone
+            let pads: Vec<[f32; 2]> = zone
                 .map
                 .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
-            {
-                if zone
-                    .map
-                    .region_at(rv.at)
-                    .is_some_and(|r| r.danger >= HOT_DANGER)
-                {
-                    hot_pads.push(format!("{map} {}", rv.name));
-                }
-                for r in [0.0, 10.0, 20.0, 40.0, 60.0, 79.0] {
-                    for k in 0..16 {
-                        let a = k as f32 * std::f32::consts::TAU / 16.0;
-                        let p = [rv.at[0] + r * a.cos(), rv.at[1] + r * a.sin()];
-                        assert!(!hot_at(&zone, p), "{map} {} at {r} m is hot", rv.name);
+                .map(|m| m.at)
+                .collect();
+            for (i, rv) in pads.iter().enumerate() {
+                let name = format!("{map} pad {i}");
+                for r in [0.0, 5.0, 12.0, 20.0, 24.0] {
+                    for p in ring(*rv, r) {
+                        assert!(!hot_at(&zone, p, Some(*rv)), "{name} at {r} m is hot");
                     }
+                }
+                // Hot ground round it stays hot: uncalled, past the wait,
+                // or with the truck called to another pad.
+                let other = pads.iter().find(|o| *o != rv).copied();
+                for r in [0.0, 10.0, 30.0, 50.0, 79.0] {
+                    for p in ring(*rv, r).filter(|p| hot_region(&zone, *p)) {
+                        assert!(hot_at(&zone, p, None), "{name} at {r} m, uncalled");
+                        if let Some(o) = other.filter(|o| {
+                            Vec2::from_array(*o).distance(Vec2::from_array(p)) > RV_WAIT
+                        }) {
+                            assert!(hot_at(&zone, p, Some(o)), "{name} at {r} m, other called");
+                        }
+                        if r > RV_WAIT {
+                            assert!(hot_at(&zone, p, Some(*rv)), "{name} at {r} m, called");
+                        }
+                    }
+                }
+                if hot_region(&zone, *rv) {
+                    hot_pads.push(format!("{map} {i}"));
                 }
             }
         }
         // The rule has work to do: some pads are in hot regions.
-        assert!(
-            hot_pads.iter().any(|p| p == "marrow_creek Bus depot"),
-            "{hot_pads:?}"
-        );
+        assert!(!hot_pads.is_empty(), "no pad in hot ground");
+    }
+
+    /// How much of each valley's hot ground `hot_at` blanks, on its own
+    /// (before the job's place waits on `met_at_job`): none with no truck
+    /// called, and with one called, only its pad's wait, a sliver of it
+    /// (10% at most: Marrow's Bus depot, a pad in a small hot region, is
+    /// the most).
+    #[test]
+    fn hot_at_blanks_only_a_sliver_of_hot_ground() {
+        for map in VALLEYS {
+            let zone = crate::world::Zone::load(map);
+            let pads: Vec<[f32; 2]> = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+                .map(|m| m.at)
+                .collect();
+            let half = zone.map.size / 2.0;
+            let mut hot = vec![];
+            let mut x = -half;
+            while x <= half {
+                let mut z = -half;
+                while z <= half {
+                    if hot_region(&zone, [x, z]) {
+                        hot.push([x, z]);
+                    }
+                    z += 4.0;
+                }
+                x += 4.0;
+            }
+            assert!(!hot.is_empty(), "{map} has hot ground");
+            let blank = |called: Option<[f32; 2]>| {
+                hot.iter().filter(|p| !hot_at(&zone, **p, called)).count() as f32 / hot.len() as f32
+            };
+            assert_eq!(blank(None), 0.0, "{map} uncalled");
+            // The old rule: every pad's 80 m, called or not.
+            let old = hot
+                .iter()
+                .filter(|p| {
+                    pads.iter().any(|rv| {
+                        Vec2::from_array(*rv).distance(Vec2::from_array(**p))
+                            <= super::super::director::SURVEY_CLEAR
+                    })
+                })
+                .count() as f32
+                / hot.len() as f32;
+            for (i, rv) in pads.iter().enumerate() {
+                let b = blank(Some(*rv));
+                eprintln!(
+                    "{map} pad {i}: called blanks {:.1}% (every pad's 80 m: {:.1}%)",
+                    b * 100.0,
+                    old * 100.0
+                );
+                assert!(b <= 0.10, "{map} pad {i} called blanks {:.1}%", b * 100.0);
+            }
+        }
     }
 
     fn out() -> Doings {
