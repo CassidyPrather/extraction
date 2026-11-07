@@ -65,7 +65,7 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
     let mut tells: Vec<(&'static str, String, P2, f32, f32)> = Vec::new();
     for m in &map.markers {
         match &m.kind {
-            MarkerKind::Sign { text } => tells.push((
+            MarkerKind::Sign { text, .. } => tells.push((
                 "sign",
                 text.lines().next().unwrap_or("").chars().take(40).collect(),
                 m.at,
