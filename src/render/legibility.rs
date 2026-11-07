@@ -1099,6 +1099,33 @@ mod tests {
         }
     }
 
+    /// A writer's aid: how far each sign text reads from, at the must-read
+    /// floor. `SIGN_TEXTS=<file>` holds the texts, one to a block (blank
+    /// line between; `\n` in a line breaks it as in a map's RON). Prints
+    /// each as the board wraps it, its letters and the farthest it reads.
+    ///   SIGN_TEXTS=signs.txt cargo test --lib sign_reach -- --ignored --nocapture
+    #[test]
+    #[ignore = "a writer's aid: SIGN_TEXTS=<file>"]
+    fn sign_reach() {
+        let Ok(path) = std::env::var("SIGN_TEXTS") else {
+            return;
+        };
+        let file = std::fs::read_to_string(path).unwrap();
+        for block in file.split("\n\n").map(str::trim).filter(|b| !b.is_empty()) {
+            let text = block.replace("\\n", "\n");
+            let panel = crate::world::notes::sign_panel(&text);
+            let em = crate::render::screen::em_metres(&panel);
+            let h = letter_height(&panel.text, em);
+            let reach = h / MUST_READ_DEG.to_radians().tan();
+            println!(
+                "{:>5.1} m  ({:.0} mm letters)\n  {}\n",
+                reach,
+                h * 1000.0,
+                panel.text.replace('\n', "\n  ")
+            );
+        }
+    }
+
     /// Every signpost faces the way you come to it, so its words meet you
     /// rather than its back: beside a road or path (within 25 m), its face
     /// turns to the road 10 m back toward where the truck sets you down,

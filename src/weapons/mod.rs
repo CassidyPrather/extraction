@@ -40,6 +40,7 @@ pub mod stoppages;
 #[cfg(test)]
 mod strokes;
 pub mod tracers;
+pub mod trigger;
 pub mod visuals;
 pub mod wear;
 pub mod weather;
@@ -231,6 +232,7 @@ pub struct WeaponsPlugin;
 
 impl Plugin for WeaponsPlugin {
     fn build(&self, app: &mut App) {
+        trigger::log_travel();
         app.add_message::<GunEvent>()
             .add_message::<ActionGrind>()
             .add_observer(setup_gun_items)
@@ -1322,8 +1324,13 @@ fn triggers(
     catalog: Res<Catalog>,
     spatial: SpatialQuery,
     scopes: Query<&crate::gadgets::MountedOn, With<zero::Turret>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    // Per gun: its finger on a two-stage trigger's wall.
+    mut walls: Local<std::collections::HashMap<Entity, bool>>,
 ) {
     let dt = time.delta_secs();
+    walls.retain(|e, _| guns.contains(*e));
     for (e, mut gun, held, gt, item) in &mut guns {
         // Iron sights are zeroed to the bore (`zero::iron_up`); a scope on
         // it carries its own zero.
@@ -1332,7 +1339,21 @@ fn triggers(
             .and_then(|h| players.get(h.player).ok().map(|i| i.hand(h.side).trigger))
             .unwrap_or(0.0);
         gun.trigger = trigger;
-        gun.pulled = trigger_pulled(gun.pulled, trigger);
+        // Its own trigger: where it breaks (a double action's long pull
+        // with the hammer down), and a two-stage's wall felt on the way.
+        let feel = trigger::of(&catalog.get(item.kind()).id);
+        let at = trigger::break_at(&feel, &gun.firearm);
+        gun.pulled = trigger::pulled(gun.pulled, trigger, at);
+        let on = walls.entry(e).or_default();
+        if trigger::onto_wall(&feel, on, trigger) {
+            if let Some(h) = held.filter(|h| locals.contains(h.player)) {
+                haptics.write(crate::rig::haptics::Haptic {
+                    side: h.side,
+                    amplitude: trigger::WALL_TICK.0,
+                    seconds: trigger::WALL_TICK.1,
+                });
+            }
+        }
         let events = {
             let Gun {
                 firearm,
@@ -1788,12 +1809,13 @@ mod trigger_tests {
 
     /// Ticks of 1/90 s through the gun, the trigger as `trace` reads, with
     /// the pulled state as the game keeps it; the tick of each shot.
-    fn shots(g: &mut Firearm, trace: impl Iterator<Item = f32>) -> Vec<usize> {
+    fn shots(g: &mut Firearm, id: &str, trace: impl Iterator<Item = f32>) -> Vec<usize> {
+        let feel = trigger::of(id);
         let mut pulled = false;
         let mut out = Vec::new();
         let mut never = || 1.0;
         for (k, v) in trace.enumerate() {
-            pulled = trigger_pulled(pulled, v);
+            pulled = trigger::pulled(pulled, v, trigger::break_at(&feel, g));
             let ev = g.update(1.0 / 90.0, pulled, &mut never);
             if ev.iter().any(|e| matches!(e, FireEvent::Fired { .. })) {
                 out.push(k);
@@ -1824,16 +1846,19 @@ mod trigger_tests {
                 while g.fire_mode() != mode {
                     g.cycle_mode();
                 }
-                // Resting: 0.38..0.58.
-                let rest = shots(&mut g.clone(), finger(0.48, 0.1, 90));
+                // Each against its own break: resting, 0.22..0.02 under
+                // it.
+                let at = trigger::break_at(&trigger::of(id), &g);
+                let rest = shots(&mut g.clone(), id, finger(at - 0.12, 0.1, 90));
                 if !rest.is_empty() {
                     bad.push(format!(
                         "{id} {mode:?}: a resting finger fired {}",
                         rest.len()
                     ));
                 }
-                // Squeezed, wavering 0.5..0.8, for 0.4 s.
-                let held = shots(&mut g.clone(), finger(0.65, 0.15, 36));
+                // Squeezed, wavering 0.1 under it to 0.2 past it, for
+                // 0.4 s.
+                let held = shots(&mut g.clone(), id, finger(at + 0.05, 0.15, 36));
                 match mode {
                     FireMode::Auto => {
                         let gap = held.windows(2).map(|w| w[1] - w[0]).max().unwrap_or(0);
@@ -1854,10 +1879,10 @@ mod trigger_tests {
                 // Squeezed, let right off, squeezed again (a bolt or a
                 // single barrel worked between: only the repeaters).
                 if f.action == extraction_core::firearm::ActionKind::SemiAuto {
-                    let twice = finger(0.7, 0.05, 20)
+                    let twice = finger(at + 0.1, 0.05, 20)
                         .chain(finger(0.1, 0.05, 20))
-                        .chain(finger(0.7, 0.05, 20));
-                    let n = shots(&mut g.clone(), twice).len();
+                        .chain(finger(at + 0.1, 0.05, 20));
+                    let n = shots(&mut g.clone(), id, twice).len();
                     if mode == FireMode::Semi && n != 2 {
                         bad.push(format!("{id} Semi: two squeezes fired {n}"));
                     }
@@ -1865,6 +1890,79 @@ mod trigger_tests {
             }
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Where a loaded gun first fires as the finger comes slowly back
+    /// (0.005 a tick): its own break.
+    fn fires_at(g: &mut Firearm, id: &str) -> Option<f32> {
+        let feel = trigger::of(id);
+        let mut never = || 1.0;
+        let mut pulled = false;
+        (0..=200).map(|k| k as f32 * 0.005).find(|&v| {
+            pulled = trigger::pulled(pulled, v, trigger::break_at(&feel, g));
+            g.update(1.0 / 90.0, pulled, &mut never)
+                .iter()
+                .any(|e| matches!(e, FireEvent::Fired { .. }))
+        })
+    }
+
+    /// Every gun fires where its own trigger breaks, and no sooner: the
+    /// first hour's apart (a TOZ-8 at 0.45, a cocked PM at 0.55, an SKS at
+    /// 0.65, a Mosin at 0.75; every gun once broke at 0.6), and a PM off a
+    /// lowered hammer at its long double-action 0.85, single action again
+    /// once the shot has cocked it.
+    #[test]
+    fn every_gun_fires_where_its_trigger_breaks() {
+        let catalog = Catalog::load();
+        let mut bad = Vec::new();
+        for (_, def) in catalog.iter() {
+            let Some(f) = def.firearm.as_ref() else {
+                continue;
+            };
+            let id = def.id.as_str();
+            let mut g = stoppages::loaded(f, Load::Standard);
+            if !f.modes.contains(&FireMode::Semi) {
+                continue;
+            }
+            while g.fire_mode() != FireMode::Semi {
+                g.cycle_mode();
+            }
+            let want = trigger::break_at(&trigger::of(id), &g);
+            let got = fires_at(&mut g.clone(), id);
+            println!("{id:12} breaks at {want:.2}, fired at {got:?}");
+            if got.is_none_or(|v| (v - want).abs() > 0.02) {
+                bad.push(format!("{id}: breaks at {want}, fired at {got:?}"));
+            }
+        }
+        let want = [
+            ("toz8", 0.45),
+            ("pm_pistol", 0.55),
+            ("sks", 0.65),
+            ("mosin", 0.75),
+        ];
+        for (id, at) in want {
+            assert_eq!(trigger::of(id).single, at, "{id}");
+        }
+        // A PM, its hammer lowered: the long pull; then cocked by the shot.
+        let pm = catalog.iter().find(|(_, d)| d.id == "pm_pistol").unwrap().1;
+        let mut g = stoppages::loaded(pm.firearm.as_ref().unwrap(), Load::Standard);
+        while g.fire_mode() != FireMode::Semi {
+            g.cycle_mode();
+        }
+        g.hammers_cocked[0] = false;
+        let da = fires_at(&mut g, "pm_pistol");
+        assert!(
+            da.is_some_and(|v| (v - 0.85).abs() <= 0.02),
+            "double action at {da:?}"
+        );
+        let mut never = || 1.0;
+        g.update(1.0 / 90.0, false, &mut never);
+        let sa = fires_at(&mut g, "pm_pistol");
+        assert!(
+            sa.is_some_and(|v| (v - 0.55).abs() <= 0.02),
+            "then single at {sa:?}"
+        );
+        assert!(bad.is_empty(), "{bad:#?}");
     }
 }
 

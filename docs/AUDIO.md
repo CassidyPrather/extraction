@@ -905,6 +905,18 @@ the rest were moved to samples that sound where a click is heard:
 - the dud, its low-pass opened from 4 to 12 kHz, so it keeps dry fire's
   highs and stays duller than it.
 
+**Each gun its own voice** (`audio::voice`, `handling_speed`): where
+guns share a sample for the same moment, each plays it at its own speed,
+heavier lower. The PM is the reference (1.0); a Mosin's long bolt 0.85;
+an SKS's carrier 0.92; a TOZ-8's .22 parts 1.15. An SKS's bolt going
+home is a rifle's carrier (`guns/bolt_close`), not the PM's slide, and
+its 7.62x39 report is the AK's set at 0.9, deeper. A round going in sounds
+like what goes in: a clip's rattle into a Mosin or an SKS, a shell into
+a shotgun, and a loose .22 into a TOZ-8, pushed home (`gun.round_in`).
+`audio::tests::the_first_hour_guns_each_sound_their_own` holds it: for
+the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
+speed for the same moment.
+
 **A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
 what the hit did. Shrugged off, a thin tink; a wound, the impact and a
 low thud; telling (a weak spot, a part giving way), a crunch and an
