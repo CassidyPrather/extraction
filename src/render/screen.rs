@@ -401,7 +401,7 @@ fn build_screens(
             Some(i) => (i.ground.unwrap_or(Color::NONE), i.ink),
             None => (bg, fg),
         };
-        // Stencilled: only the letters drawn, cut out of a clear sheet.
+        // Stencilled: only the letters drawn, on a clear sheet.
         let stencil = ink.is_some_and(|i| i.ground.is_none());
         let mut image = Image::new_fill(
             Extent3d {
@@ -433,8 +433,11 @@ fn build_screens(
             // rough one spread it into a wash over its black.
             perceptual_roughness: if emissive { 0.6 } else { 0.95 },
             reflectance: if emissive { 0.05 } else { 0.5 },
+            // Blended, not cut: a mask's threshold, mipmapped, ate the
+            // strokes of a small stencil at 10 m (the door's NO went to
+            // dashes) and stepped its edges.
             alpha_mode: if stencil {
-                AlphaMode::Mask(0.5)
+                AlphaMode::Blend
             } else {
                 AlphaMode::Opaque
             },
