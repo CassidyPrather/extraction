@@ -6615,12 +6615,13 @@ fn a_jobs_own_hot_ground_meets_a_slow_machine_first() {
     );
 }
 
-/// A newcomer walking from a hot job (Marrow's Radio mast) straight to its
-/// rendezvous (the Bus depot, in hot ground) hears no step in the last
-/// `SURVEY_CLEAR` of the way in: the wait at the pad isn't hot, so even an
-/// account a hair under a step drains there (coordinator's ruling).
+/// A newcomer walking from a hot job (Marrow's Radio mast) straight to the
+/// rendezvous they've called the truck to (the Bus depot, in hot ground)
+/// hears no step in the last `pressure::RV_WAIT` of the way in: the wait at
+/// the called pad isn't hot, so even an account a hair under a step drains
+/// there (coordinator's ruling, #86).
 #[test]
-fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
+fn walking_in_to_a_called_hot_pad_says_no_step_at_the_wait() {
     let (mut app, player, zone) = director_app("marrow_creek", 1, 4);
     {
         let mut d = app.world_mut().resource_mut::<super::director::Director>();
@@ -6636,6 +6637,13 @@ fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
             .is_some_and(|r| r.danger >= 2),
         "the Bus depot pad's region is hot"
     );
+    let rv = zone
+        .map
+        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+        .position(|m| Vec2::from_array(m.at).distance(pad) < 1.0)
+        .expect("the Bus depot pad");
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::TruckCalled { rv, eta: 1.0e6 };
     let walk = 1.4 / 90.0;
     let steps = (from.distance(pad) / walk) as usize;
     let mut primed = false;
@@ -6643,7 +6651,7 @@ fn walking_in_to_a_hot_pad_says_no_step_in_the_last_80_m() {
     for i in 0..=steps + 90 * 5 {
         let p = from.lerp(pad, (i as f32 / steps as f32).min(1.0));
         put(&mut app, player, zone.on_ground(p.x, p.y));
-        let near = p.distance(pad) <= super::director::SURVEY_CLEAR;
+        let near = p.distance(pad) <= super::pressure::RV_WAIT;
         if near && !primed {
             // A hair under a step as you come in.
             let mut pr = app.world_mut().resource_mut::<super::pressure::Pressure>();

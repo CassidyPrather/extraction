@@ -1535,7 +1535,7 @@ fn step_zone_reset(world: &mut World) {
             // and let fall a few at a time after: hundreds of new bodies
             // settling at once was the next judder (the swept collision
             // pass 19 ms).
-            let before: std::collections::HashSet<Entity> = world
+            let before: std::collections::BTreeSet<Entity> = world
                 .query_filtered::<Entity, With<Item>>()
                 .iter(world)
                 .collect();
@@ -1643,6 +1643,154 @@ pub fn reset_zone(world: &mut World) {
 mod tests {
     use super::*;
     use crate::raid::SURGE_AFTER;
+
+    /// The same world saves to the same bytes: a busy one (bags of remains
+    /// with things in them, the stash, things lying loose) saved twice,
+    /// `career.ron` byte for byte. The remains went through a HashMap,
+    /// whose order is new with every map, so one world wrote two different
+    /// files (Progression's wanderer r14, 7 November; fa596c46), and a
+    /// replay compared by its save's hash parted where nothing had.
+    #[test]
+    fn the_same_world_saves_to_the_same_bytes() {
+        let dir = std::env::temp_dir().join(format!("extraction-bytes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("career.ron");
+        let mut app = app_with_save(&path);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let spawn = |app: &mut App, id: &str, at: Vec3| -> Entity {
+            let kind = catalog.kind(id).unwrap();
+            let world = app.world_mut();
+            let e = crate::items::spawn_item(
+                &mut world.commands(),
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at),
+                    condition: 0.8,
+                },
+            );
+            world.flush();
+            e
+        };
+        // Four bags of remains, each with its own things.
+        let kit = [
+            ["radio", "field_dressing"],
+            ["ak_mag", "ammo_545"],
+            ["regen_injector", "canned_stew"],
+            ["flashlight", "compass"],
+        ];
+        for (i, things) in kit.iter().enumerate() {
+            let at = Vec3::new(10.0 + 7.0 * i as f32, 40.0, -20.0 + 3.0 * i as f32);
+            let bag = spawn_remains(app.world_mut(), at);
+            for (k, id) in things.iter().enumerate() {
+                let e = spawn(&mut app, id, at);
+                put_in_bag(
+                    app.world_mut(),
+                    e,
+                    bag,
+                    Vec3::new(0.05 * k as f32, 0.05, 0.0),
+                );
+            }
+        }
+        // The stash.
+        let stash = app
+            .world_mut()
+            .query_filtered::<Entity, With<Stash>>()
+            .iter(app.world())
+            .next();
+        if let Some(stash) = stash {
+            for (k, id) in ["ammo_545", "field_dressing", "binoculars"]
+                .iter()
+                .enumerate()
+            {
+                let e = spawn(&mut app, id, Vec3::ZERO);
+                put_in_bag(
+                    app.world_mut(),
+                    e,
+                    stash,
+                    Vec3::new(0.1 * k as f32, 0.1, 0.0),
+                );
+            }
+        }
+        // Things lying loose.
+        for (k, id) in ["ak74", "pm_pistol", "fuel_can", "map_case"]
+            .iter()
+            .enumerate()
+        {
+            spawn(&mut app, id, Vec3::new(-30.0 + 4.0 * k as f32, 40.0, 15.0));
+        }
+        for _ in 0..3 {
+            app.update();
+        }
+        let write = |app: &mut App| -> String {
+            let s = snapshot(app.world_mut());
+            let mut career = app.world().resource::<CareerState>().0.clone();
+            career.store(&s);
+            write_career(&path, &career);
+            std::fs::read_to_string(&path).unwrap()
+        };
+        let first = write(&mut app);
+        assert!(
+            first.matches("Remains").count() + first.matches("remains").count() >= 1,
+            "the save holds the remains"
+        );
+        for n in 1..8 {
+            let again = write(&mut app);
+            if again != first {
+                let at = first
+                    .bytes()
+                    .zip(again.bytes())
+                    .position(|(a, b)| a != b)
+                    .unwrap_or(first.len().min(again.len()));
+                let from = at.saturating_sub(120);
+                panic!(
+                    "save {n} parted from the first at byte {at}:\n  first: ...{}\n  again: ...{}",
+                    &first[from..(at + 120).min(first.len())],
+                    &again[from..(at + 120).min(again.len())]
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Nothing on the save's way holds a hash-ordered collection: a
+    /// HashMap or HashSet iterates in an order new with every map, and the
+    /// remains saved through one wrote one world two ways (fa596c46). The
+    /// save's own code and every type it serializes, read as source: an
+    /// ordered map or a sorted Vec instead.
+    #[test]
+    fn the_save_holds_no_hash_ordered_collections() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let files = [
+            "src/persist.rs",
+            "crates/extraction_core/src/save.rs",
+            "crates/extraction_core/src/progression.rs",
+            "crates/extraction_core/src/zone_memory.rs",
+            "crates/extraction_core/src/safehouse.rs",
+            "crates/extraction_core/src/gunsmith.rs",
+            "crates/gunsmith/src/ammo.rs",
+            "crates/gunsmith/src/firearm.rs",
+        ];
+        let mut bad = Vec::new();
+        for f in files {
+            let text = std::fs::read_to_string(root.join(f)).unwrap_or_else(|e| panic!("{f}: {e}"));
+            // What ships, not its tests (this one names them).
+            let text = text.split("\n#[cfg(test)]").next().unwrap_or(&text);
+            for (n, line) in text.lines().enumerate() {
+                // Code, not what a comment says of it.
+                let code = line.split("//").next().unwrap_or("");
+                if code.contains("HashMap") || code.contains("HashSet") {
+                    bad.push(format!("{f}:{}: {}", n + 1, line.trim()));
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "hash-ordered on the save's way:\n{}",
+            bad.join("\n")
+        );
+    }
 
     /// An item in one place: seated in one lead case's cradle, it isn't
     /// seated again in another's (the save soak, Cinder seed 2, quit

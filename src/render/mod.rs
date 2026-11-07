@@ -11,6 +11,7 @@ pub mod clear_eyes;
 pub mod comfort;
 pub mod cpu;
 pub mod eye_projection;
+pub mod far_rest;
 pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
@@ -121,6 +122,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(part_rest::PartRestPlugin)
+        .add_plugins(far_rest::FarRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
