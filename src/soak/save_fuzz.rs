@@ -1150,13 +1150,17 @@ fn soak_quit_anywhere_in_every_valley() {
                     ) {
                         force_moment(a.world_mut(), m, &mut forced);
                     }
+                    // Just past it, not short: wound to ten seconds short,
+                    // the raider read the clock, called the truck, and was
+                    // out no longer when the Surge came (QUIT_AT=300, four
+                    // valleys of five).
                     if m == Moment::Surge {
                         let mut raid = a.world_mut().resource_mut::<Raid>();
                         if raid.phase == Phase::Out
                             && raid.clock > quit_at().max(1.0)
-                            && raid.clock < crate::raid::SURGE_AFTER - 10.0
+                            && raid.clock <= crate::raid::SURGE_AFTER
                         {
-                            raid.clock = crate::raid::SURGE_AFTER - 10.0;
+                            raid.clock = crate::raid::SURGE_AFTER + 1.0;
                         }
                     }
                     if moments_now(a.world_mut()).contains(&m) {
