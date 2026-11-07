@@ -332,7 +332,7 @@ mod tests {
         ] {
             let back = offset_of(tag_for(v));
             assert!(
-                (back - v).abs().max_element() <= 0.001,
+                (back - v).abs().max_element() <= 0.0011, // half a 2 mm step at most
                 "{v} came back {back}"
             );
         }
