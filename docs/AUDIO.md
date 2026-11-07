@@ -322,7 +322,25 @@ sounds are placed where it would be.
 from: a tick (0.1-0.15) is "this is here", a click (0.25-0.35) "that
 happened", a knock (0.4-0.6) "that took force", and only a shot or a hit
 goes past 0.6. Index controllers barely register under about 0.1 or
-10 ms, so nothing is below either. Pulses on one controller in the same
+10 ms, so nothing is below either.
+
+A shot is felt by its gun's recoil (`rig::haptics::shot_kick`): its
+strength grows with the log of the recoil, from a knock for a .22 (0.4 at
+0.25) to full for a twelve-bore (1.0 at 5), and it lasts 40 to 100 ms,
+longer for more. So the lightest rounds sit under the old 0.6 floor for
+shots: a .22 is a knock, not a kick, and every other shot is still past
+0.6. A first-hour gun's shot, in the grip hand:
+- TOZ-8 (.22): 0.40, 43 ms.
+- PM: 0.68, 52 ms.
+- SKS: 0.88, 74 ms.
+- Mosin: 0.98, 94 ms.
+
+A round with heft (`weapons::feel::heft`: an SKS, an SVD, a Mosin, a
+shotgun) also settles: a softer second beat 70 ms after the shove
+(`SHOT_SETTLE`, 0.5 times the shot). A pistol's, a .22's and a 5.45's
+shot is one beat. The supporting hand gets 0.6 of the grip's, or 0.5
+with the stock shouldered. (Every shot once sat between 0.6 and 0.82: a
+.22 felt three quarters of a Mosin.) Pulses on one controller in the same
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
 
@@ -904,6 +922,18 @@ the rest were moved to samples that sound where a click is heard:
   `physical/drop_wood`, a hard wooden slam (the dry loose 5 dB heavier);
 - the dud, its low-pass opened from 4 to 12 kHz, so it keeps dry fire's
   highs and stays duller than it.
+
+**Each gun its own voice** (`audio::voice`, `handling_speed`): where
+guns share a sample for the same moment, each plays it at its own speed,
+heavier lower. The PM is the reference (1.0); a Mosin's long bolt 0.85;
+an SKS's carrier 0.92; a TOZ-8's .22 parts 1.15. An SKS's bolt going
+home is a rifle's carrier (`guns/bolt_close`), not the PM's slide, and
+its 7.62x39 report is the AK's set at 0.9, deeper. A round going in sounds
+like what goes in: a clip's rattle into a Mosin or an SKS, a shell into
+a shotgun, and a loose .22 into a TOZ-8, pushed home (`gun.round_in`).
+`audio::tests::the_first_hour_guns_each_sound_their_own` holds it: for
+the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
+speed for the same moment.
 
 **A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
 what the hit did. Shrugged off, a thin tink; a wound, the impact and a

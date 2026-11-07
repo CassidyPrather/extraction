@@ -87,7 +87,7 @@ pub fn spawn_dirigible(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
             Senses {
                 sight: 170.0,
                 fov_deg: 300.0,
-                hearing: 0.6,
+                hearing: super::senses::SIGHT_ONLY,
                 eye: Vec3::new(0.0, -RADIUS - 0.9, -2.0),
             },
             Awareness::default(),

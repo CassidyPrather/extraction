@@ -55,6 +55,10 @@ struct ScreenView {
     /// Panel pixels, the style's largest font, its colours.
     px: Vec2,
     font: f32,
+    /// The margin a side, in ems (`margin`).
+    margin: f32,
+    /// A painted board's words: centred, in heavy strokes (`HEAVY`).
+    sign: bool,
     bg: Color,
     fg: Color,
     /// The panel's material, and whether it shows the picture as light.
@@ -71,7 +75,16 @@ struct Drawing {
     camera: Entity,
     ui: Entity,
     text: Entity,
+    /// A sign's words again, a touch off, for heavy strokes (placeholders
+    /// on other panels).
+    heavy: [Entity; 3],
 }
+
+/// How far a sign's words are drawn again, in ems, for strokes that
+/// read black from 10 m: the default face's strokes are ~0.08 em, a pixel
+/// at that range, and came out mid-grey against the board (ink at 0.41 of
+/// the ground's light, not its 0.01). Painted warnings are heavy letters.
+const HEAVY: f32 = 0.055;
 
 /// Panels' drawing entities, so a panel that goes away takes them along.
 #[derive(Resource, Default)]
@@ -90,14 +103,26 @@ fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Draw
             RenderTarget::Image(view.image.clone().into()),
         ))
         .id();
-    let font = fit_font(text, view.px, view.font);
+    let font = fit_font(text, view.px, view.font, view.margin);
     let mut text_e = Entity::PLACEHOLDER;
+    let mut heavy = [Entity::PLACEHOLDER; 3];
     let mut root = commands.spawn((
         Node {
             width: percent(100),
             height: percent(100),
-            padding: UiRect::all(px(font * 0.8)),
+            padding: UiRect::all(px(font * view.margin)),
             flex_direction: FlexDirection::Column,
+            // A sign's words in the middle of its board.
+            justify_content: if view.sign {
+                JustifyContent::Center
+            } else {
+                JustifyContent::default()
+            },
+            align_items: if view.sign {
+                AlignItems::Center
+            } else {
+                AlignItems::default()
+            },
             ..default()
         },
         UiTargetCamera(camera),
@@ -117,24 +142,53 @@ fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Draw
             ImageNode::new(paper.clone()).with_mode(NodeImageMode::Stretch),
         ));
     }
+    let words = |text: &str| {
+        (
+            Text::new(text.to_owned()),
+            TextFont {
+                font_size: FontSize::Px(font),
+                ..default()
+            },
+            TextColor(view.fg),
+            TextLayout::justify(if view.sign {
+                Justify::Center
+            } else {
+                Justify::default()
+            }),
+        )
+    };
     let ui = root
         .with_children(|ui| {
-            text_e = ui
-                .spawn((
-                    Text::new(text.to_owned()),
-                    TextFont {
-                        font_size: FontSize::Px(font),
-                        ..default()
-                    },
-                    TextColor(view.fg),
-                ))
-                .id();
+            if !view.sign {
+                text_e = ui.spawn(words(text)).id();
+                return;
+            }
+            // The words, and over them the same words a touch right, down,
+            // and both: one heavy stroke.
+            ui.spawn(Node::default()).with_children(|block| {
+                text_e = block.spawn(words(text)).id();
+                let d = font * HEAVY;
+                for (i, (x, y)) in [(d, 0.0), (0.0, d), (d, d)].into_iter().enumerate() {
+                    heavy[i] = block
+                        .spawn((
+                            words(text),
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: px(x),
+                                top: px(y),
+                                ..default()
+                            },
+                        ))
+                        .id();
+                }
+            });
         })
         .id();
     Drawing {
         camera,
         ui,
         text: text_e,
+        heavy,
     }
 }
 
@@ -187,9 +241,17 @@ pub fn wrap_lines(text: &str, columns: usize) -> String {
         .join("\n")
 }
 
+/// A style's margin a side, in ems: a page's 0.8, a painted board's
+/// narrow rim 0.4 (its few words want the width: "RADIATION" on a sign
+/// read from 9.8 m with a page's margins).
+fn margin(style: ScreenStyle) -> f32 {
+    if style == ScreenStyle::Sign { 0.4 } else { 0.8 }
+}
+
 /// The largest font (px) up to `max` at which `text` fits a `px` panel
-/// without wrapping: bounded by line count and by the longest line.
-fn fit_font(text: &str, px: Vec2, max: f32) -> f32 {
+/// without wrapping, `margin` ems a side: bounded by line count and by the
+/// longest line.
+fn fit_font(text: &str, px: Vec2, max: f32, margin: f32) -> f32 {
     let lines = text.lines().count().max(1) as f32;
     let widest = text
         .lines()
@@ -198,9 +260,9 @@ fn fit_font(text: &str, px: Vec2, max: f32) -> f32 {
         .unwrap_or(1)
         .max(1) as f32;
     // Rough metrics for the default font: line height ~1.2em, glyphs
-    // ~0.6em wide (it is monospaced); padding is 0.8em a side.
-    let by_height = px.y / (lines * 1.2 + 1.6);
-    let by_width = px.x / (widest * 0.64 + 1.6);
+    // ~0.6em wide (it is monospaced); then the margins.
+    let by_height = px.y / (lines * 1.2 + 2.0 * margin);
+    let by_width = px.x / (widest * 0.64 + 2.0 * margin);
     max.min(by_height).min(by_width).max(6.0)
 }
 
@@ -218,6 +280,9 @@ fn panel(screen: &ScreenText) -> (f32, u32, u32, f32) {
             ScreenStyle::Lcd => 6.0,
             // Paper: a short sign's words as big as a ten-line page's.
             ScreenStyle::Paper => 10.0,
+            // A board's words as big as it holds: only its height and
+            // width bound them (a line's em and its margins, `fit_font`).
+            ScreenStyle::Sign => 2.8,
             ScreenStyle::Crt => 14.0,
             ScreenStyle::Card => 4.5,
         };
@@ -228,7 +293,12 @@ fn panel(screen: &ScreenText) -> (f32, u32, u32, f32) {
 /// is fitted: what decides whether it can be read, and from how far.
 pub fn em_metres(screen: &ScreenText) -> f32 {
     let (ppm, w, h, font) = panel(screen);
-    fit_font(&screen.text, Vec2::new(w as f32, h as f32), font) / ppm
+    fit_font(
+        &screen.text,
+        Vec2::new(w as f32, h as f32),
+        font,
+        margin(screen.style),
+    ) / ppm
 }
 
 /// `text` wrapped to whichever line length gives it the biggest letters on
@@ -236,7 +306,20 @@ pub fn em_metres(screen: &ScreenText) -> f32 {
 /// narrow).
 pub fn wrap_to_fit(text: &str, size: Vec2, style: ScreenStyle) -> String {
     let mut best = (0.0, text.to_string());
-    for columns in 12..=60 {
+    // A sign tries every line down to its longest word (never cutting
+    // one): "KEEP OUT" is as big as its eight letters allow, and a long
+    // word isn't trimmed to fit a narrow wrap. Pages keep their 12.
+    let longest = text
+        .split_whitespace()
+        .map(|w| w.chars().count())
+        .max()
+        .unwrap_or(1);
+    let narrowest = if style == ScreenStyle::Sign {
+        longest.max(1)
+    } else {
+        12
+    };
+    for columns in narrowest..=60.max(longest) {
         let wrapped = wrap_lines(text, columns);
         let em = em_metres(&ScreenText {
             text: wrapped.clone(),
@@ -251,16 +334,35 @@ pub fn wrap_to_fit(text: &str, size: Vec2, style: ScreenStyle) -> String {
     best.1
 }
 
+/// A panel's own ground and ink in place of its style's: a warning board
+/// painted (cream, enamel) or, with no ground, stencilled straight onto
+/// whatever it's on (the panel shows only its letters).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Ink {
+    pub ground: Option<Color>,
+    pub ink: Color,
+}
+
+#[allow(clippy::type_complexity)]
 fn build_screens(
     mut commands: Commands,
-    screens: Query<(Entity, &ScreenText, Option<&TextSource>, Option<&Name>), Added<ScreenText>>,
+    screens: Query<
+        (
+            Entity,
+            &ScreenText,
+            Option<&TextSource>,
+            Option<&Name>,
+            Option<&Ink>,
+        ),
+        Added<ScreenText>,
+    >,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut drawings: ResMut<Drawings>,
     mut paper: Local<[Option<Handle<Image>>; 2]>,
 ) {
-    for (e, screen, source, name) in &screens {
+    for (e, screen, source, name, ink) in &screens {
         if source.is_none() {
             // Every panel says what it is, so the legibility gauges can
             // measure it from where it's read (`render::legibility`).
@@ -279,7 +381,7 @@ fn build_screens(
             ),
             // Near-black ink on pale paper: lit only by the scene, paper
             // under a grey sky came out grey on grey.
-            ScreenStyle::Paper => (
+            ScreenStyle::Paper | ScreenStyle::Sign => (
                 Color::srgb(0.84, 0.81, 0.72),
                 Color::srgb(0.07, 0.065, 0.08),
                 false,
@@ -295,6 +397,12 @@ fn build_screens(
                 true,
             ),
         };
+        let (bg, fg) = match ink {
+            Some(i) => (i.ground.unwrap_or(Color::NONE), i.ink),
+            None => (bg, fg),
+        };
+        // Stencilled: only the letters drawn, on a clear sheet.
+        let stencil = ink.is_some_and(|i| i.ground.is_none());
         let mut image = Image::new_fill(
             Extent3d {
                 width: w,
@@ -325,11 +433,21 @@ fn build_screens(
             // rough one spread it into a wash over its black.
             perceptual_roughness: if emissive { 0.6 } else { 0.95 },
             reflectance: if emissive { 0.05 } else { 0.5 },
+            // Blended, not cut: a mask's threshold, mipmapped, ate the
+            // strokes of a small stencil at 10 m (the door's NO went to
+            // dashes) and stepped its edges.
+            alpha_mode: if stencil {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Opaque
+            },
             ..default()
         });
         // Paper and cards each their own sheet, in their own colour.
+        // (A board in its own paint is flat: no sheet under it.)
         let sheet = match screen.style {
-            ScreenStyle::Paper => Some(0),
+            _ if ink.is_some() => None,
+            ScreenStyle::Paper | ScreenStyle::Sign => Some(0),
             ScreenStyle::Card => Some(1),
             _ => None,
         };
@@ -344,6 +462,8 @@ fn build_screens(
             refresh: FIRST_FRAMES,
             px: Vec2::new(w as f32, h as f32),
             font,
+            margin: margin(screen.style),
+            sign: screen.style == ScreenStyle::Sign,
             bg,
             fg,
             material: material.clone(),
@@ -372,15 +492,20 @@ fn update_screens(
     for (e, screen, mut view) in &mut screens {
         match view.drawing {
             Some(d) => {
-                if let Ok((mut t, mut f)) = texts.get_mut(d.text) {
-                    if t.0 != screen.text {
-                        view.refresh = view.refresh.max(REFRESH_FRAMES);
-                        view.generation += 1;
-                        show_target(&mut materials, &mut images, &view);
-                        t.0 = screen.text.clone();
-                        let size = FontSize::Px(fit_font(&screen.text, view.px, view.font));
-                        if f.font_size != size {
-                            f.font_size = size;
+                let changed = texts.get(d.text).is_ok_and(|(t, _)| t.0 != screen.text);
+                if changed {
+                    view.refresh = view.refresh.max(REFRESH_FRAMES);
+                    view.generation += 1;
+                    show_target(&mut materials, &mut images, &view);
+                    let size =
+                        FontSize::Px(fit_font(&screen.text, view.px, view.font, view.margin));
+                    // The words and a sign's heavy strokes alike.
+                    for e in std::iter::once(d.text).chain(d.heavy) {
+                        if let Ok((mut t, mut f)) = texts.get_mut(e) {
+                            t.0 = screen.text.clone();
+                            if f.font_size != size {
+                                f.font_size = size;
+                            }
                         }
                     }
                 }
@@ -708,6 +833,8 @@ mod tests {
             refresh: 0,
             px: Vec2::new(w as f32, h as f32),
             font: 20.0,
+            margin: 0.8,
+            sign: false,
             bg: Color::BLACK,
             fg: Color::WHITE,
             material: material.clone(),

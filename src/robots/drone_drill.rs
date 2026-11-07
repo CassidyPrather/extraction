@@ -450,6 +450,14 @@ fn drone_drill() {
     use std::io::Write;
     let path = std::env::var("SIM_DRILL_OUT").unwrap_or_else(|_| "target/drone_drill.jsonl".into());
     let mut f = std::fs::File::create(&path).unwrap();
+    // What data it ran on (`asset_identity`).
+    let id = crate::asset_identity();
+    writeln!(
+        f,
+        "{}",
+        serde_json::json!({"ev": "assets", "assets": id.data, "build": id.build})
+    )
+    .unwrap();
     let only = std::env::var("SIM_DRONE_VALLEYS").ok();
     for v in VALLEYS {
         if only.as_ref().is_some_and(|o| !o.split(',').any(|x| x == v)) {

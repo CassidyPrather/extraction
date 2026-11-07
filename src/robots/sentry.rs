@@ -229,7 +229,7 @@ pub fn spawn_sentry(
             Senses {
                 sight: rules::SIGHT,
                 fov_deg: rules::FOV,
-                hearing: 1.0,
+                hearing: super::senses::SIGHT_ONLY,
                 eye: Vec3::new(0.0, 0.05, -0.3),
             },
             Awareness::default(),
@@ -904,6 +904,76 @@ pub(crate) mod tests {
     /// it lands).
     #[derive(Resource, Default)]
     struct Hurts(f32);
+
+    /// A player who ignored the chirp, walking back and forth across its
+    /// line 12 m out in the open, survives its first damaging burst with
+    /// most of their health, and has at least 2.2 s from its first hit
+    /// before the total takes them down: time to turn and step to cover in
+    /// a headset (coordinator's bar, #85; it was 2.0 s with bursts 1.4 s
+    /// apart).
+    #[test]
+    fn walking_across_its_line_there_is_time_to_reach_cover() {
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        {
+            let mut c = vr.app.world_mut().commands();
+            spawn_sentry(
+                &mut c,
+                &zone,
+                Vec2::new(40.0, 230.0),
+                0.0,
+                160.0,
+                Vec2::new(48.0, 236.0),
+            );
+            vr.app.world_mut().flush();
+        }
+        let hp = |vr: &crate::vr_harness::Vr| {
+            let h = vr
+                .app
+                .world()
+                .get::<crate::health::Health>(vr.player)
+                .unwrap();
+            if h.down { 0.0 } else { h.hp }
+        };
+        // Walking, 1.4 m/s, x 34 to 46 and back; two ticks a stand.
+        let (mut x, mut dir) = (34.0f32, 1.0f32);
+        let mut t = 0.0f32;
+        let (mut first, mut after, mut down) = (None::<f32>, None::<f32>, None::<f32>);
+        while t < 40.0 && down.is_none() {
+            x += dir * 1.4 * 2.0 / 90.0;
+            if !(34.0..=46.0).contains(&x) {
+                dir = -dir;
+            }
+            vr.stand(zone.on_ground(x, 218.0), 0.0);
+            t += 2.0 / 90.0;
+            let h = hp(&vr);
+            if first.is_none() && h < 100.0 {
+                first = Some(t);
+            }
+            if let Some(f) = first {
+                // The first damaging burst is three rounds 0.24 s long; the
+                // next is a burst gap on.
+                if after.is_none() && t >= f + 0.6 {
+                    after = Some(h);
+                }
+                if h <= 0.0 {
+                    down = Some(t - f);
+                }
+            }
+        }
+        let first = first.expect("it hit");
+        let after = after.expect("after its first burst");
+        assert!(
+            after >= 50.0,
+            "{after:.1} hp after its first damaging burst"
+        );
+        let down = down.expect("and its bursts kept coming till down");
+        eprintln!("{after:.1} hp after its first burst; down {down:.2} s after its first hit");
+        assert!(
+            down >= 2.2,
+            "down {down:.2} s after its first hit (first at {first:.2} s)"
+        );
+    }
 
     #[test]
     fn in_its_arc_it_warns_then_fires() {

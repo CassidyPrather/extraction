@@ -155,6 +155,9 @@ pub struct LaunchOptions {
     pub sim_minutes: Option<f32>,
     /// Where sim telemetry goes (default `target/sim/<map>`).
     pub sim_out: Option<PathBuf>,
+    /// A sim bot on a contract's step: `<id>[:step]` (`SIM_CONTRACT`, read
+    /// once here, so a test sets it here and not in the environment).
+    pub sim_contract: Option<String>,
     /// Sim raids run at once.
     pub jobs: usize,
     /// Capture tooling: cinematics and sweeps (see `capture`).
@@ -213,6 +216,7 @@ impl Default for LaunchOptions {
             job: None,
             sim_minutes: None,
             sim_out: None,
+            sim_contract: std::env::var("SIM_CONTRACT").ok(),
             jobs: 2,
             capture: Default::default(),
         }
@@ -473,6 +477,16 @@ impl LaunchOptions {
         // The cage is the adit's, on Rime Fell.
         if o.scenario.as_deref() == Some(crate::world::cage::SCENARIO) && !o.map_explicit {
             o.map = "rime_fell".into();
+            o.map_explicit = true;
+        }
+        // A contract's run is its own valley's (told another, it says so).
+        if let Some(v) = o
+            .scenario
+            .as_deref()
+            .and_then(crate::progression::contracts::scenario::valley)
+            .filter(|_| !o.map_explicit)
+        {
+            o.map = v.into();
             o.map_explicit = true;
         }
         // The onboarding run is the training yard's.

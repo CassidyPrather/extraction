@@ -1,9 +1,10 @@
 # Rounds landing on every machine
 
-`sheet.jpg`: each kind alone, close, every part shot down to failing
-(`robots::wear`'s look), and a round landing in each part as the frame is
-taken (`scripts/hit_gauge.sh`, `EXTRACTION_HIT_SHOW`). One frame per kind
-alongside.
+`sheet.jpg`: a row a kind, each alone and close, from the same view and
+frame: intact, and worn, every part shot down to failing (`robots::wear`'s
+look) with a round landing in each part as the frame is taken
+(`scripts/hit_gauge.sh`, `EXTRACTION_HIT_SHOW`). `intact_<kind>.jpg` and
+`worn_<kind>.jpg` alongside.
 
 The gauge behind it is `robots::hit_gauge`
 (`cargo test --lib hit_gauge -- --ignored --nocapture`). It shoots every
@@ -19,6 +20,13 @@ write a hit. Then it counts:
 
 Last run: 114/114 parts answer a hit. Every effect and sound shows on
 frame 1 or 2 (≤ 22 ms), and all 14 kinds draw.
+
+At range (`a_hit_reads_out_to_thirty_metres`), every strike's flash spans
+at least 0.4° at the eye (`fx::flash_floor`; a shrug off armour glints).
+Heavy armour's effect at the eye, min/median px at 1080 lines over 75°,
+before → after: 42/53 → 77/86 at 10 m, 28/35 → 64/71 at 20 m, 21/27 →
+57/63 at 30 m. Every hit on the big machines is now 57 px or more, against
+the 33 px of a 0.4° square.
 
 What a hit does, by part:
 
