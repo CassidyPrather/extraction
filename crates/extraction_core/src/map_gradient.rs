@@ -28,7 +28,13 @@ pub struct Crossing {
     /// What tells of it on the approach: kind, name, how far from the
     /// nearest approach point that sees it.
     pub signals: Vec<(&'static str, String, f32)>,
+    /// The way's point [`BACK`] metres back from the line, and the way's
+    /// bearing there (a unit vector, toward the line): where a tell goes.
+    pub back: (P2, P2),
 }
+
+/// How far back from the line a tell's spot is suggested (m).
+pub const BACK: f32 = 15.0;
 
 fn danger(map: &MapDef, p: P2) -> (String, u8) {
     map.region_at(p)
@@ -119,6 +125,16 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 s += dist(pts[j], pts[j - 1]);
                 j -= 1;
             }
+            let back = {
+                let mut k = 0;
+                while k + 1 < approach.len() && dist(approach[k + 1], w[1]) < BACK {
+                    k += 1;
+                }
+                let at = approach[(k + 1).min(approach.len() - 1)];
+                let to = approach[k];
+                let d = dist(at, to).max(0.1);
+                (at, [(to[0] - at[0]) / d, (to[1] - at[1]) / d])
+            };
             let approach: Vec<P2> = approach.into_iter().step_by(3).collect();
             let mut signals = Vec::new();
             for (kind, name, at, h, reach) in &tells {
@@ -146,6 +162,7 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 from: a,
                 into: b,
                 signals,
+                back,
             });
         }
     }
@@ -204,6 +221,19 @@ mod tests {
                         .collect::<Vec<_>>()
                         .join(", ")
                 };
+                let (p, d) = c.back;
+                let side = |k: f32| [p[0] - d[1] * k, p[1] + d[0] * k];
+                let (l, r) = (side(4.0), side(-4.0));
+                let tell = format!(
+                    "{tell}  | {BACK:.0} m back ({:.1}, {:.1}): beside ({:.1}, {:.1}) or ({:.1}, {:.1}), facing {:.0}",
+                    p[0],
+                    p[1],
+                    l[0],
+                    l[1],
+                    r[0],
+                    r[1],
+                    d[0].atan2(-d[1]).to_degrees().rem_euclid(360.0)
+                );
                 let tell = format!(
                     "{tell}  | its lamps: {}",
                     if lamps.is_empty() {
