@@ -231,7 +231,7 @@ pub fn reload_steps(
             g.load_round();
             let home = g.set_bolt_travel(0.0);
             if home.contains(&FireEvent::Chambered) {
-                steps.push(("round in", vec![FireEvent::RoundLoaded]));
+                steps.push(("round in", vec![FireEvent::RoundThumbed]));
                 steps.push(("home, chambered", home));
                 let mut g = new();
                 g.set_handle_lift(1.0);
@@ -240,7 +240,7 @@ pub fn reload_steps(
             } else {
                 // A single-shot (a TOZ-8): the round goes into the chamber
                 // by hand, felt there, and the bolt only closes on it.
-                steps.push(("chambered by hand", vec![FireEvent::RoundLoaded]));
+                steps.push(("chambered by hand", vec![FireEvent::RoundThumbed]));
                 steps.push(("home", home));
             }
         }
@@ -299,7 +299,7 @@ mod tests {
                 crate::audio::handling_sound(e, Some(action), id).map(|(set, _)| {
                     format!(
                         "{set} x{:.2}",
-                        crate::audio::handling_speed(e, Some(action))
+                        crate::audio::handling_speed(e, Some(action), id)
                     )
                 })
             })

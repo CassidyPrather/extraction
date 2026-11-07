@@ -305,3 +305,40 @@ pole line: it scores 0 of 3 lost before and after.
 
 ![Snow poles at 20 m and 43 m: before (left), after (right); clear
 night, downpour, day](../shots/props/snow_pole_reflectors.jpg)
+
+## Warning boards (6 November)
+
+Where a track crosses into a hot place, a warning has to read from 10 m
+or more. Five carriers hold it (`art/props/warnings.py`):
+
+- `warning_gate`: a plank field gate across a track, a painted board
+  across it. It has a padlock on its latch, a trefoil plate on the latch
+  post, and a hazard lamp with an empty `lamp` before its red glass.
+- `warning_hoarding`: a plank hoarding on two posts, braced behind.
+- `warning_enamel`: a railway's enamel plate on a steel post, its
+  rolled rim chipped to the iron at the corners.
+- `warning_wall`: a concrete fence slab, a plain patch inside its cast
+  ribs for stencilled paint.
+- `warning_door`: a steel booth door in its frame and a stub of wall. A
+  panel of fresh flat grey paint sits over the rust-blotched leaf for
+  the stencil, because the blotches fought the words.
+
+None has its words modelled. The game draws them (`ScreenStyle::Sign`)
+at each one's empty `text_face`, on the plane of its text area, facing
+the reader on +Z. `world::notes::WARNING_BOARDS` gives each area's size,
+height and ground: 2.4 x 0.5 at 1.1 m on the gate; 2.0 x 1.2 at 1.6 m on
+the hoarding; 1.0 x 0.6 at 1.45 m on the enamel; 1.6 x 0.8 at 1.6 m on
+the wall; 1.0 x 0.6 at 1.6 m on the door. The grounds are Cream (gate,
+hoarding), Enamel, Concrete and Pebble (door).
+
+`world::notes::tests::warning_boards_keep_their_text_areas_clear` looks
+at each area square from the front on a 2 cm grid. It checks that every
+point is the area's ground, on its plane, with nothing in front of it.
+That caught a plank, wobbled by the wear jitter, standing 4 mm through
+the hoarding's paint, and a cast rib across the wall's patch. Painted
+borders are chipped by leaving gaps to the board 4 mm under, not by
+flecks laid on the paint. Faces within 3 mm of each other z-fight at a
+prop's distance (`art/check.py`).
+
+![The five by day (the model sweep's light) and at night under its lamp,
+which lights them from the side](../shots/props/warning_boards.jpg)

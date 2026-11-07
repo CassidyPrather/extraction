@@ -38,6 +38,8 @@ pub mod heavy_look;
 pub mod heavy_mind;
 pub mod hit_gauge;
 pub mod hound;
+#[cfg(test)]
+mod hound_drill;
 pub mod hound_mind;
 pub mod indoor;
 #[cfg(test)]
@@ -53,6 +55,7 @@ pub mod network;
 pub mod plough;
 pub mod plough_bank;
 pub mod plough_look;
+pub mod pressure;
 pub mod pylon;
 pub mod recall;
 pub mod reel;
@@ -71,6 +74,7 @@ pub mod squad;
 #[cfg(test)]
 mod squad_drill;
 pub mod subjects;
+pub mod tell_log;
 pub mod tracks;
 pub mod visuals;
 pub mod walker;
@@ -383,6 +387,8 @@ impl Plugin for RobotsPlugin {
                 drone::DronePlugin,
                 walker::WalkerPlugin,
                 director::DirectorPlugin,
+                pressure::PressurePlugin,
+                tell_log::TellLogPlugin,
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
@@ -411,7 +417,13 @@ impl Plugin for RobotsPlugin {
             .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
             .add_systems(
                 FixedUpdate,
-                (damage_parts, senses::door_noise, perceive, wreck_loot)
+                (
+                    damage_parts,
+                    senses::door_noise,
+                    senses::deafen_sight_only,
+                    perceive,
+                    wreck_loot,
+                )
                     .chain()
                     .after(crate::weapons::ballistics::BallisticsSystems),
             );

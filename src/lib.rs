@@ -589,6 +589,8 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     .add_plugins(PhysicsPlugins::default())
     .add_plugins(GamePlugin);
     single_threaded(&mut app);
+    // (Shared: one line. What data this run reads; `asset_identity`.)
+    info!("{}", asset_identity());
     app
 }
 
@@ -608,6 +610,106 @@ pub fn single_threaded(app: &mut App) {
     let mut schedules = app.world_mut().resource_mut::<Schedules>();
     for (_, schedule) in schedules.iter_mut() {
         schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
+    }
+}
+
+/// What the game's data is, where it's read from: a hash of every file
+/// under the asset root's `data/` and `maps/` (paths and bytes, in path
+/// order), the root, and the build. Logged by every headless run and in a
+/// sim's `start` event, so two runs say whether they read the same data:
+/// a binary reads the checkout it was built in (`asset_root`), and one
+/// binary run before and after that checkout took main played on
+/// different item boxes (`first_fight`, 6 November: 26/40, then 9/40).
+pub fn asset_identity() -> &'static AssetIdentity {
+    static ID: std::sync::OnceLock<AssetIdentity> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        let root = asset_root_path();
+        let mut files = Vec::new();
+        for dir in ["data", "maps"] {
+            let mut stack = vec![root.join(dir)];
+            while let Some(d) = stack.pop() {
+                let Ok(rd) = std::fs::read_dir(&d) else {
+                    continue;
+                };
+                for e in rd.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        stack.push(p);
+                    } else {
+                        files.push(p);
+                    }
+                }
+            }
+        }
+        files.sort();
+        // FNV-1a, 64 bits: stable across builds and platforms.
+        fn fnv(h: &mut u64, bytes: &[u8]) {
+            for b in bytes {
+                *h ^= *b as u64;
+                *h = h.wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        const BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut h = BASIS;
+        for f in &files {
+            let rel = f.strip_prefix(&root).unwrap_or(f);
+            fnv(&mut h, rel.to_string_lossy().as_bytes());
+            fnv(&mut h, &std::fs::read(f).unwrap_or_default());
+        }
+        // The catalog compiled in (`include_str!`), against the one on
+        // disk the game loads: a target dir shared with an old worktree
+        // left a binary's built-in catalog an older items.ron than its
+        // data (Onboarding, 7 November: twelve items off their models).
+        let mut built = BASIS;
+        fnv(
+            &mut built,
+            extraction_core::items::BUILTIN_CATALOG.as_bytes(),
+        );
+        let mut disk = BASIS;
+        fnv(
+            &mut disk,
+            &std::fs::read(root.join("data/items.ron")).unwrap_or_default(),
+        );
+        AssetIdentity {
+            data: format!("{h:016x}"),
+            files: files.len(),
+            root: root.display().to_string(),
+            build: report::build(),
+            catalog: format!("{built:016x}"),
+            catalog_matches: built == disk,
+        }
+    })
+}
+
+/// See [`asset_identity`].
+pub struct AssetIdentity {
+    /// The data and maps' hash.
+    pub data: String,
+    pub files: usize,
+    pub root: String,
+    pub build: &'static str,
+    /// The built-in item catalog's hash (`BUILTIN_CATALOG`), and whether
+    /// it's the root's `data/items.ron`, byte for byte.
+    pub catalog: String,
+    pub catalog_matches: bool,
+}
+
+impl std::fmt::Display for AssetIdentity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "assets: data {} ({} files) from {}; build {}; built-in catalog {} {}",
+            self.data,
+            self.files,
+            self.root,
+            self.build,
+            self.catalog,
+            if self.catalog_matches {
+                "(= data/items.ron)"
+            } else {
+                "(DIFFERS from data/items.ron: a stale build, or other data)"
+            }
+        )
     }
 }
 

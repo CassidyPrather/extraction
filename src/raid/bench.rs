@@ -54,6 +54,9 @@ pub enum ScreenStyle {
     Lcd,
     /// A sheet of paper, pencilled.
     Paper,
+    /// A painted board: paper's look, its few words as big as the board
+    /// holds (a warning read from 10 m, not a page read at arm's length).
+    Sign,
     /// A card with a few words in big letters.
     Card,
     /// A green-phosphor computer screen.

@@ -198,7 +198,7 @@ pub fn spawn_minelayer(
             Senses {
                 sight: 35.0,
                 fov_deg: 120.0,
-                hearing: 0.6,
+                hearing: super::senses::SIGHT_ONLY,
                 eye: EYE,
             },
             Awareness::default(),

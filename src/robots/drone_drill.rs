@@ -105,7 +105,7 @@ pub struct Run {
 }
 
 /// One normal draw.
-fn normal(rng: &mut Rng) -> f32 {
+pub(super) fn normal(rng: &mut Rng) -> f32 {
     let u = rng.range(1e-6, 1.0);
     let v = rng.range(0.0, std::f32::consts::TAU);
     (-2.0 * u.ln()).sqrt() * v.cos()
@@ -146,7 +146,7 @@ pub fn open_ground(app: &App, zone: &Zone) -> Vec<(Vec2, f32)> {
     out
 }
 
-fn valley_app(valley: &str) -> (App, Entity, Zone) {
+pub(super) fn valley_app(valley: &str) -> (App, Entity, Zone) {
     let mut app = crate::headless_app(
         crate::LaunchOptions {
             robots: false,
@@ -177,7 +177,7 @@ fn valley_app(valley: &str) -> (App, Entity, Zone) {
     (app, player, zone)
 }
 
-fn put(app: &mut App, player: Entity, at: Vec3, v: Vec2) {
+pub(super) fn put(app: &mut App, player: Entity, at: Vec3, v: Vec2) {
     app.world_mut()
         .get_mut::<Transform>(player)
         .unwrap()
@@ -450,6 +450,14 @@ fn drone_drill() {
     use std::io::Write;
     let path = std::env::var("SIM_DRILL_OUT").unwrap_or_else(|_| "target/drone_drill.jsonl".into());
     let mut f = std::fs::File::create(&path).unwrap();
+    // What data it ran on (`asset_identity`).
+    let id = crate::asset_identity();
+    writeln!(
+        f,
+        "{}",
+        serde_json::json!({"ev": "assets", "assets": id.data, "build": id.build})
+    )
+    .unwrap();
     let only = std::env::var("SIM_DRONE_VALLEYS").ok();
     for v in VALLEYS {
         if only.as_ref().is_some_and(|o| !o.split(',').any(|x| x == v)) {

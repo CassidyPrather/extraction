@@ -58,13 +58,29 @@ pub fn torch_beam() -> SpotLight {
     }
 }
 
+/// Where a light's beam comes from, in its space: the lens, down its -Z.
+fn lens(id: &str) -> f32 {
+    match id {
+        // The torch's model is centred on its box (`art/items/_kit.py`).
+        "flashlight" => -0.0645,
+        _ => -0.06,
+    }
+}
+
 /// Powered lights get a spotlight, pointing down the item's -Z.
 fn beams(
     mut commands: Commands,
-    devices: Query<(Entity, &Device, Has<Powered>, Option<&Children>)>,
+    devices: Query<(
+        Entity,
+        &Device,
+        Option<&crate::items::Item>,
+        Has<Powered>,
+        Option<&Children>,
+    )>,
     beams: Query<Entity, With<Beam>>,
+    catalog: Res<crate::items::Catalog>,
 ) {
-    for (e, dev, powered, children) in &devices {
+    for (e, dev, item, powered, children) in &devices {
         if dev.kind != DeviceKind::Light {
             continue;
         }
@@ -74,7 +90,11 @@ fn beams(
                 commands.entity(e).with_child((
                     Beam,
                     torch_beam(),
-                    Transform::from_xyz(0.0, 0.0, -0.06),
+                    Transform::from_xyz(
+                        0.0,
+                        0.0,
+                        lens(item.map_or("", |i| catalog.get(i.kind()).id.as_str())),
+                    ),
                 ));
             }
             (false, Some(b)) => {
@@ -272,7 +292,7 @@ fn dress_gadgets(
                     c.spawn((
                         Mesh3d(meshes.add(Cylinder::new(0.024, 0.002))),
                         MeshMaterial3d(face),
-                        Transform::from_xyz(0.0, 0.016, 0.0),
+                        Transform::from_xyz(0.0, 0.00925, 0.0),
                     ));
                     // Red to the north, dark steel to the south: a needle red
                     // end to end didn't say which end was north
@@ -280,7 +300,7 @@ fn dress_gadgets(
                     let half = meshes.add(Cuboid::new(0.004, 0.002, 0.019));
                     c.spawn((
                         Needle,
-                        Transform::from_xyz(0.0, 0.019, 0.0),
+                        Transform::from_xyz(0.0, 0.01225, 0.0),
                         Visibility::default(),
                     ))
                     .with_children(|n| {
@@ -318,7 +338,7 @@ fn dress_gadgets(
                         ),
                     ),
                     MeshMaterial3d(paper),
-                    Transform::from_xyz(0.0, 0.006, 0.0),
+                    Transform::from_xyz(-0.005, 0.00405, -0.011),
                     MapSheet,
                 ));
             }
@@ -846,7 +866,7 @@ fn drone_feeds(
             cam.is_active = on;
         }
         if on {
-            let at = gt.translation() - Vec3::Y * 0.1;
+            let at = gt.translation() - Vec3::Y * 0.094;
             // Down at the middle of its circle (straight down: north up).
             let look = d.home - at;
             let up = if look.normalize_or_zero().y < -0.98 {

@@ -11,6 +11,8 @@ pub struct DevPlugin;
 impl Plugin for DevPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FrameCount>()
+            .init_resource::<WorldIn>()
+            .add_systems(First, note_world_in)
             .add_systems(
                 Update,
                 (
@@ -35,8 +37,8 @@ impl Plugin for DevPlugin {
                     fight_for_gallery,
                     treat_for_gallery,
                     spall_for_gallery,
-                    plate_hits_for_gallery,
-                    impact_hits_for_gallery,
+                    plate_hits_for_gallery.run_if(world_in),
+                    impact_hits_for_gallery.run_if(world_in),
                     present_for_gallery,
                 )
                     .chain()
@@ -60,8 +62,59 @@ struct FrameCount {
 /// other.
 const SHOT_SETTLE: u32 = 15;
 
-fn count_frames(mut count: ResMut<FrameCount>) {
-    count.frames += 1;
+/// `--frames` counts from launch; with a gallery staged, from when the
+/// world's in ([`WorldIn`]), so a gallery's frame is an age.
+fn count_frames(mut count: ResMut<FrameCount>, opts: Res<LaunchOptions>, world: Res<WorldIn>) {
+    if opts.gallery.is_none() || world.frames.is_some() {
+        count.frames += 1;
+    }
+}
+
+/// When the world was first all in, as a screenshot waits for it (loaded,
+/// ready, near trees streamed, settled [`SHOT_SETTLE`] frames; or
+/// [`SHOT_WAIT_MAX`] waited), and frames since. Galleries that stage
+/// events at a frame (rounds fired at 60) count from it: counted from
+/// launch, a slow load (the software renderer warming its pipelines) had
+/// the rounds land minutes before the shot, their dust long gone.
+#[derive(Resource, Default)]
+pub(crate) struct WorldIn {
+    settle: ShotSettle,
+    /// Frames since the world was in; `None` till then.
+    pub(crate) frames: Option<u32>,
+}
+
+impl WorldIn {
+    /// This frame's: whether the world is all in, and whether the wait for
+    /// it is over regardless.
+    fn tick(&mut self, ready: bool, waited: bool) {
+        match &mut self.frames {
+            Some(n) => *n += 1,
+            None => {
+                if self.settle.tick(ready) || waited {
+                    self.frames = Some(0);
+                }
+            }
+        }
+    }
+}
+
+fn note_world_in(
+    mut w: ResMut<WorldIn>,
+    world: crate::render::timeline::WorldReady,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
+    time: Res<Time<Real>>,
+) {
+    if w.frames.is_some() {
+        w.tick(true, true);
+        return;
+    }
+    let ready = loaded.is_some() && world.ready_for_a_shot() && world.materials() && world.props();
+    w.tick(ready, time.elapsed_secs() >= SHOT_WAIT_MAX);
+}
+
+/// A run condition: the world's in ([`WorldIn`]).
+pub(crate) fn world_in(w: Res<WorldIn>) -> bool {
+    w.frames.is_some()
 }
 
 /// The longest a screenshot waits on the world beyond its frames, seconds
@@ -262,12 +315,35 @@ struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
 fn turn_line_up(
     mut commands: Commands,
     line_up: Option<ResMut<LineUp>>,
-    mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
+    mut placed: Query<
+        (&mut Transform, Option<&mut Position>),
+        Without<crate::robots::walker::Walker>,
+    >,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
+    mut menders: Query<&mut crate::robots::mender::Mender>,
+    mut layers: Query<(&mut crate::robots::minelayer::Minelayer, &GlobalTransform)>,
+    spotters: Query<(), With<crate::robots::spotter::Spotter>>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
+    // A mender with nothing to mend goes home after a while: not here.
+    for (e, ..) in line_up.0.iter() {
+        if let Ok(mut m) = menders.get_mut(*e) {
+            m.idle = 0.0;
+        }
+        // A minelayer done would crawl out: held about to lay, where it is.
+        if let Ok((mut m, gt)) = layers.get_mut(*e) {
+            use crate::robots::minelayer::Doing;
+            if !matches!(m.doing, Doing::Lay { .. } | Doing::Dead) {
+                m.doing = Doing::Lay {
+                    spots: vec![gt.translation().xz()],
+                    next: 0,
+                    wait: 1.0e6,
+                };
+            }
+        }
+    }
     for (e, yaw, at) in line_up.0.iter_mut() {
         if let Ok(mut w) = walkers.get_mut(*e) {
             if at.is_none() {
@@ -281,9 +357,37 @@ fn turn_line_up(
             w.path.clear();
             continue;
         }
-        if let Ok(mut t) = placed.get_mut(*e) {
+        // (A spotter holds itself over its winch, swaying on its tether:
+        // its sway is its look.)
+        if spotters.contains(*e) {
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+                *at = Some(Vec3::ZERO);
+            }
+            continue;
+        }
+        if let Ok((mut t, body)) = placed.get_mut(*e) {
+            // Held still, as a walker is: no mind to see the camera and
+            // act on it (a minelayer that saw it fled out of the frame,
+            // its body moved by the physics under the pin; a drone would
+            // go after it).
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+            }
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
+            // And its physics body, which drives the Transform when it
+            // moves itself (a plough ploughing its road, a spotter's
+            // balloon swaying on its tether).
+            if let Some(mut p) = body {
+                p.0 = at;
+            }
         }
     }
 }
@@ -504,7 +608,11 @@ fn gallery(
                 // mender, plough;
                 // `walker!broken` is a walker with its gun dead and a leg
                 // failing.
-                let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
+                // (`+hits` is the hit gauge's word, not a machine.)
+                let ids: Vec<&str> = s["robots:".len()..]
+                    .split('+')
+                    .filter(|w| *w != "hits")
+                    .collect();
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
                 let mut dead = Vec::new();
@@ -585,6 +693,8 @@ fn gallery(
                         "minelayer" => {
                             let nav = nav.as_ref().map(|n| n.0.clone());
                             match nav {
+                                // (Held laying, by `turn_line_up`: with
+                                // nothing to do it would leave at once.)
                                 Some(nav) => crate::robots::minelayer::spawn_minelayer(
                                     &mut commands,
                                     &zone,
@@ -2025,8 +2135,9 @@ fn plate_hits_for_gallery(
 /// `--gallery impact`: three rifle rounds from the camera along its line
 /// of sight, a frame apart, into whatever it looks at (the ground, a
 /// wall): what each throws up as it flies. The clock runs a sixtieth of
-/// a second a frame: the rounds land at frames 60 to 62, so `--frames 75`
-/// shows them a quarter of a second on.
+/// a second a frame: the rounds land at frames 60 to 62 (both counted
+/// from when the world's in, [`WorldIn`]), so `--frames 75` shows them a
+/// quarter of a second on.
 fn impact_hits_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -2406,6 +2517,48 @@ fn pose_body_for_gallery(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A gallery's rounds go at its frame 60 and `--frames 75` shoots 15
+    /// frames on, however long the world takes to load: both count from
+    /// when it's in. (Counted from launch, a 400-frame load had the shot
+    /// taken 340 frames after the rounds, their dust gone.)
+    #[test]
+    fn a_gallerys_frames_count_from_when_the_world_is_in() {
+        for load in [0u32, 30, 400] {
+            let mut w = WorldIn::default();
+            let (mut gallery, mut shot_frames) = (0u32, 0u32);
+            let (mut fired_at, mut shot_at) = (None, None);
+            for frame in 0..2000u32 {
+                // Not ready while loading, and once a blip in the middle.
+                let ready = frame >= load && frame != load + 5;
+                w.tick(ready, false);
+                if w.frames.is_some() {
+                    gallery += 1;
+                    shot_frames += 1;
+                }
+                if gallery == 60 && fired_at.is_none() {
+                    fired_at = Some(frame);
+                }
+                if shot_frames == 75 && shot_at.is_none() {
+                    shot_at = Some(frame);
+                }
+            }
+            let (f, s) = (fired_at.unwrap(), shot_at.unwrap());
+            assert_eq!(s - f, 15, "load {load}: rounds at {f}, shot at {s}");
+            assert!(
+                f > load + 5 + SHOT_SETTLE,
+                "load {load}: rounds at {f}, before it was in"
+            );
+        }
+        // Never ready: in all the same once the wait's over.
+        let mut w = WorldIn::default();
+        w.tick(false, false);
+        assert!(w.frames.is_none());
+        w.tick(false, true);
+        assert_eq!(w.frames, Some(0));
+        w.tick(false, false);
+        assert_eq!(w.frames, Some(1), "once in, it stays in");
+    }
 
     /// The body's gallery poses the body for its own specs, by whole
     /// word; a machine's gallery words (`heavy:down`, `sentry:down`) are

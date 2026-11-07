@@ -124,7 +124,16 @@ fn check_world(world: &mut World, when: &str) -> usize {
     }
     for (s_e, s) in world.query::<(Entity, &Socket)>().iter(world) {
         if let Some(o) = s.occupant {
-            claimed.entry(o).or_default().push(format!("socket {s_e}"));
+            // Which socket, and whose: a gun's magazine well, a body's
+            // pouch.
+            let owner = world.get::<SocketOwner>(s_e).map(|o| o.0);
+            let whose = owner
+                .and_then(|o| world.get::<Item>(o).map(|it| it.0.kind))
+                .map_or_else(|| format!("{owner:?}"), |k| format!("{k:?}"));
+            claimed
+                .entry(o)
+                .or_default()
+                .push(format!("socket {s_e} ({:?} of {whose})", s.kind));
         }
     }
     for h in world.query::<&crate::interact::Hand>().iter(world) {
@@ -136,7 +145,8 @@ fn check_world(world: &mut World, when: &str) -> usize {
     for &e in &items {
         let c = claimed.get(&e).cloned().unwrap_or_default();
         if c.len() > 1 {
-            problems.push(format!("{e} is in {} places: {c:?}", c.len()));
+            let kind = world.get::<Item>(e).map(|it| it.0.kind);
+            problems.push(format!("{e} ({kind:?}) is in {} places: {c:?}", c.len()));
         }
         let (bag, sock, held) = (
             world.get::<InBackpack>(e).map(|b| b.bag),
@@ -155,7 +165,8 @@ fn check_world(world: &mut World, when: &str) -> usize {
             }
         }
         if let Some(s) = sock {
-            if !c.iter().any(|w| w == &format!("socket {s}")) {
+            // (A claim is "socket <e> (<kind> of <owner>)".)
+            if !c.iter().any(|w| w.starts_with(&format!("socket {s} "))) {
                 problems.push(format!(
                     "{e} says it's in socket {s}, which holds something else"
                 ));
@@ -702,7 +713,14 @@ const MOMENTS: [Moment; 7] = [
 
 /// A bot raid (the smoke raider's) on `map`, saving to `path`.
 fn raid_on(path: &Path, map: &str, seed: u64) -> App {
+    raid_with(path, map, seed, None)
+}
+
+/// [`raid_on`], the raider on a contract's step (`<id>:<step>`), or on
+/// none whatever `SIM_CONTRACT` says.
+fn raid_with(path: &Path, map: &str, seed: u64, contract: Option<String>) -> App {
     let opts = LaunchOptions {
+        sim_contract: contract,
         map: map.into(),
         seed,
         save: Some(path.to_owned()),
@@ -717,6 +735,188 @@ fn raid_on(path: &Path, map: &str, seed: u64) -> App {
         app.update();
     }
     app
+}
+
+/// A reload by hand put to the bot: out on the raid and walking, a rifle
+/// and a loaded magazine laid at its feet, picked up, the magazine packed and
+/// the rifle reloaded by hand, as a player does it. Whether it was. (The
+/// soak's raid kits up from a fresh game's stash, with no rifle in it:
+/// there was never a gun to reload. And the sim raider's own reload is
+/// the gun's macro, done in a frame.)
+fn hand_reload(world: &mut World) -> bool {
+    use crate::bot::{Bot, Task};
+    let me = player(world);
+    let raid = world.resource::<Raid>();
+    if raid.phase != Phase::Out || raid.clock <= quit_at() {
+        return false;
+    }
+    let walking = world
+        .get::<Bot>(me)
+        .is_some_and(|b| b.walk.is_some() || matches!(b.tasks.front(), Some(Task::WalkTo { .. })));
+    if !walking {
+        return false;
+    }
+    let Some(feet) = world.get::<GlobalTransform>(me).map(|g| g.translation()) else {
+        return false;
+    };
+    let catalog = world.resource::<Catalog>().clone();
+    let mut spawned = Vec::new();
+    for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
+        let Some(kind) = catalog.kind(id) else {
+            return false;
+        };
+        let at = feet + Vec3::new(0.6, 0.3, 0.3 * k as f32);
+        let e = crate::items::spawn_item(
+            &mut world.commands(),
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 0.9,
+            },
+        );
+        spawned.push(e);
+    }
+    world.flush();
+    // The magazine loaded (a fresh one is empty): the reload takes the
+    // fullest in a pouch, and an empty one is no reload at all.
+    if let Some(&mag) = spawned.get(1) {
+        let def = catalog.get(catalog.kind("ak_mag").unwrap());
+        let (cap, every) = (
+            def.magazine.as_ref().map_or(30, |m| m.capacity),
+            def.tracer_every,
+        );
+        if let Some(mut it) = world.get_mut::<Item>(mag) {
+            it.0.rounds = cap;
+            it.0.loads = extraction_core::ammo::Loads::with_tracers(cap, every);
+        }
+    }
+    // The sim raider's mind lets go of the bot: it plans its walks again
+    // every few frames, and a reload put in front of them was gone the
+    // next. The quit loads a fresh game anyway.
+    world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+    let Some(mut bot) = world.get_mut::<Bot>(me) else {
+        return false;
+    };
+    let s = |x: &str| x.to_string();
+    bot.tasks.clear();
+    bot.tasks.extend([
+        Task::PickUp {
+            id: s("ak74"),
+            side: crate::rig::Side::Right,
+        },
+        Task::PickUp {
+            id: s("ak_mag"),
+            side: crate::rig::Side::Left,
+        },
+        Task::Stow(crate::rig::Side::Left),
+        Task::OneHandReload,
+    ]);
+    true
+}
+
+/// `QUIT_AT=<s>`: the raid clock the forced moments wait for (default 5
+/// s): late, say 300, the bot has looted first, and the quit carries a
+/// raid's worth of things.
+fn quit_at() -> f32 {
+    std::env::var("QUIT_AT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5.0)
+}
+
+/// The moments a raid may never come to on its own, brought about (as the
+/// Surge's clock is wound): a grab put to the bot (a dressing at its
+/// feet: mid-grab, then in hand), the truck called to the nearest
+/// rendezvous and its drive wound to two seconds (the countdown), and,
+/// once it waits there, the bot put in its bed. `done` keeps each to once.
+fn force_moment(world: &mut World, m: Moment, done: &mut bool) {
+    use crate::bot::{Bot, Task};
+    let me = player(world);
+    let (phase, clock) = {
+        let raid = world.resource::<Raid>();
+        (raid.phase.clone(), raid.clock)
+    };
+    match m {
+        Moment::MidGrab | Moment::InHand if !*done && phase == Phase::Out && clock > quit_at() => {
+            let walking = world.get::<Bot>(me).is_some_and(|b| {
+                b.walk.is_some() || matches!(b.tasks.front(), Some(Task::WalkTo { .. }))
+            });
+            let Some(root) = world.get::<GlobalTransform>(me).copied() else {
+                return;
+            };
+            if !walking {
+                return;
+            }
+            let catalog = world.resource::<Catalog>().clone();
+            let Some(kind) = catalog.kind("field_dressing") else {
+                return;
+            };
+            let at = root.translation() + root.forward().as_vec3() * 0.5 + Vec3::Y * 0.9;
+            let item = crate::items::spawn_item(
+                &mut world.commands(),
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at),
+                    condition: 1.0,
+                },
+            );
+            world.flush();
+            // (The sim raider's mind lets go: it plans again every few
+            // frames, and a grab put in front was gone the next.)
+            world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+            if let Some(mut bot) = world.get_mut::<Bot>(me) {
+                bot.tasks.clear();
+                bot.tasks.push_back(Task::Grab {
+                    item,
+                    side: crate::rig::Side::Left,
+                });
+            }
+            *done = true;
+        }
+        Moment::Countdown | Moment::InTheBed
+            if !*done && phase == Phase::Out && clock > quit_at() =>
+        {
+            let Some(here) = world
+                .get::<GlobalTransform>(me)
+                .map(|g| g.translation().xz())
+            else {
+                return;
+            };
+            let zone = world.resource::<crate::world::Zone>().clone();
+            let rv = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+                .enumerate()
+                .min_by(|a, b| {
+                    Vec2::from_array(a.1.at)
+                        .distance(here)
+                        .total_cmp(&Vec2::from_array(b.1.at).distance(here))
+                })
+                .map(|(i, _)| i);
+            if let Some(rv) = rv {
+                world.resource_mut::<Raid>().phase = Phase::TruckCalled { rv, eta: 2.0 };
+                *done = true;
+            }
+        }
+        Moment::InTheBed if *done && matches!(phase, Phase::TruckWaiting { .. }) => {
+            let truck = world
+                .query::<(&crate::raid::truck::Truck, &GlobalTransform)>()
+                .iter(world)
+                .next()
+                .map(|(_, g)| *g);
+            if let (Some(g), Some(t)) = (truck, world.get::<Transform>(me).copied()) {
+                let mut t = t;
+                t.translation = g.transform_point(Vec3::new(0.0, 1.05, 0.0));
+                world
+                    .entity_mut(me)
+                    .remove::<crate::sim::raider::Raider>()
+                    .insert(t);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Which awkward moments the raid is in this frame.
@@ -749,14 +949,14 @@ fn moments_now(world: &mut World) -> Vec<Moment> {
     if !held.is_empty() {
         now.push(Moment::InHand);
     }
-    let reloading = held.iter().any(|e| {
-        world
-            .get::<Gun>(*e)
-            .and_then(|g| g.magwell)
-            .and_then(|w| world.get::<Socket>(w))
-            .is_some_and(|s| s.occupant.is_none())
-    }) && held.iter().any(|e| world.get::<Mag>(*e).is_some());
-    if reloading {
+    // The empty magazine out and the next not yet in (the bot's reload
+    // past its first step). (A held gun's `magwell` with a magazine in
+    // the other hand never came round: the well is the gun's socket, not
+    // `Gun::magwell`, and the soak never quit mid-reload.)
+    let reloading = world
+        .get::<Bot>(me)
+        .is_some_and(|b| matches!(b.tasks.front(), Some(Task::OneHandReload)) && b.fired >= 1);
+    if reloading && phase == Phase::Out {
         now.push(Moment::MidReload);
     }
     let feet = world.get::<GlobalTransform>(me).map(|g| g.translation());
@@ -781,13 +981,19 @@ fn items_held(save: &extraction_core::save::SaveGame) -> Vec<String> {
     fn key(i: &SavedItem) -> String {
         let mut inner: Vec<String> = i.inserted.iter().map(key).collect();
         inner.sort();
+        // Its loads as the game keeps them: Standard rounds at the bottom
+        // are the same as unlisted (`Loads::fit`), and a restore trims
+        // them (Rime seed 2: a Nagant packet's fourteen listed came back
+        // eight, the same rounds).
+        let mut loads = i.loads.clone();
+        loads.fit(i.rounds);
         format!(
             "{} rounds {} condition {:.3} charge {:.2} loads {:?} gun {:?} [{}]",
             i.id,
             i.rounds,
             i.condition,
             i.charge_wh,
-            i.loads,
+            loads,
             i.gun,
             inner.join(", ")
         )
@@ -900,25 +1106,63 @@ fn soak_quit_anywhere_in_every_valley() {
             .filter(|m| m != crate::camp::TRAINING_YARD)
             .collect(),
     };
+    // `QUIT_MOMENT=Surge` (say): that moment only.
+    let only = std::env::var("QUIT_MOMENT").ok();
     let seeds: Vec<u64> = std::env::var("QUIT_SEED")
         .ok()
         .and_then(|s| s.parse().ok())
         .map_or(QUIT_SEEDS.to_vec(), |s| vec![s]);
     let mut findings = Vec::new();
     let mut covered = std::collections::HashSet::new();
+    // (valley, seed, moment): "never", or how many findings the quit had.
+    let mut table: HashMap<(String, u64, Moment), String> = HashMap::new();
     // A fresh raid for each moment, run up to it, quit and loaded once,
     // then played on: the smoke raider kits up from the truck's stash, and
     // on a raid resumed with its kit at its feet it never takes it up again.
     for map in &maps {
         for &seed in &seeds {
             for m in MOMENTS {
+                if only.as_ref().is_some_and(|o| *o != format!("{m:?}")) {
+                    continue;
+                }
                 let path = profile(&format!("quit-{map}-{seed}-{m:?}"));
                 let mut a = raid_on(&path, map, seed);
                 let mut frame = 0usize;
                 let mut hit = false;
+                let mut asked = false;
+                let mut forced = false;
                 while frame < 90 * 60 * 14 {
                     a.update();
                     frame += 1;
+                    // The Surge is an hour in, past any bot raid: once out,
+                    // the clock is wound to just short of it (as
+                    // `--surge-in` does).
+                    // The sim raider's reload is the gun's macro, done in a
+                    // frame: for that moment, once it's out with its gun in
+                    // hand and nothing else on, it reloads by hand, as a
+                    // player does (the empty one out, the next in).
+                    if m == Moment::MidReload && !asked {
+                        asked = hand_reload(a.world_mut());
+                    }
+                    if matches!(
+                        m,
+                        Moment::MidGrab | Moment::InHand | Moment::Countdown | Moment::InTheBed
+                    ) {
+                        force_moment(a.world_mut(), m, &mut forced);
+                    }
+                    // Just past it, not short: wound to ten seconds short,
+                    // the raider read the clock, called the truck, and was
+                    // out no longer when the Surge came (QUIT_AT=300, four
+                    // valleys of five).
+                    if m == Moment::Surge {
+                        let mut raid = a.world_mut().resource_mut::<Raid>();
+                        if raid.phase == Phase::Out
+                            && raid.clock > quit_at().max(1.0)
+                            && raid.clock <= crate::raid::SURGE_AFTER
+                        {
+                            raid.clock = crate::raid::SURGE_AFTER + 1.0;
+                        }
+                    }
                     if moments_now(a.world_mut()).contains(&m) {
                         hit = true;
                         break;
@@ -929,19 +1173,46 @@ fn soak_quit_anywhere_in_every_valley() {
                 }
                 if !hit {
                     println!("{map} seed {seed}: never {m:?} ({frame} frames)");
+                    table.insert((map.clone(), seed, m), "never".to_string());
                     continue;
                 }
                 let when = format!("{map} seed {seed}, {m:?} at frame {frame}");
                 println!("quit: {when}");
                 let (mut b, f) = quit_and_reload(&mut a, &path, map, seed, &when);
                 covered.insert(m);
+                // Said as found, not only at the end: a run cut short (a
+                // container restart) keeps what it found.
+                for x in &f {
+                    println!("FINDING {x}");
+                }
+                table.insert((map.clone(), seed, m), format!("{} found", f.len()));
                 findings.extend(f);
                 // And the game goes on from there, every item in one place.
                 frames(&mut b, 300, &format!("{when}, played on"));
             }
         }
     }
-    let missed: Vec<&Moment> = MOMENTS.iter().filter(|m| !covered.contains(*m)).collect();
+    // Moments by valleys, a seed at a time.
+    for &seed in &seeds {
+        println!("\nseed {seed} | {}", maps.join(" | "));
+        for m in MOMENTS {
+            let row: Vec<String> = maps
+                .iter()
+                .map(|map| {
+                    table
+                        .get(&(map.clone(), seed, m))
+                        .cloned()
+                        .unwrap_or_else(|| "-".into())
+                })
+                .collect();
+            println!("{m:?} | {}", row.join(" | "));
+        }
+    }
+    let missed: Vec<&Moment> = MOMENTS
+        .iter()
+        .filter(|m| only.as_ref().is_none_or(|o| *o == format!("{m:?}")))
+        .filter(|m| !covered.contains(*m))
+        .collect();
     assert!(
         findings.is_empty(),
         "{} findings over a quit and reload:\n{}",
@@ -952,4 +1223,330 @@ fn soak_quit_anywhere_in_every_valley() {
         missed.is_empty(),
         "never quit at {missed:?}: the soak didn't reach them"
     );
+}
+
+/// Where a contract's job stands, for a quit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum JobMoment {
+    /// Its thing on the body: a relay to plant, a thing brought (a hearth
+    /// in its lead case with it).
+    Carried,
+    /// Just done: the relay set down, the place seen.
+    Done,
+}
+
+/// Which job moments the raid is in this frame.
+fn job_moments(world: &mut World, id: &str, step: u32) -> Vec<JobMoment> {
+    use extraction_core::progression::Job;
+    let me = player(world);
+    let p = &world.resource::<crate::progression::Progression>().0;
+    let job = p.job.clone();
+    // Handed in: the contract on to its next step, or done.
+    let handed = p
+        .contract
+        .as_ref()
+        .is_none_or(|a| a.id != id || a.step > step);
+    let mut now = Vec::new();
+    let item = job_item(job.as_ref());
+    if handed
+        || matches!(
+            job,
+            Some(
+                Job::Plant { planted: true, .. }
+                    | Job::Scout { seen: true, .. }
+                    | Job::Photograph { taken: true, .. }
+            )
+        )
+    {
+        now.push(JobMoment::Done);
+    }
+    if let Some(id) = item {
+        let catalog = world.resource::<Catalog>().clone();
+        let mine: Vec<Entity> = world
+            .query::<(Entity, &Item)>()
+            .iter(world)
+            .filter(|(_, it)| catalog.get(it.0.kind).id == id)
+            .map(|(e, _)| e)
+            .collect();
+        let on_body = |world: &World, e: Entity| -> bool {
+            // Up through what holds it: a hand, a bag, a socket, to its owner.
+            let mut at = e;
+            for _ in 0..6 {
+                if world.get::<Held>(at).is_some_and(|h| h.player == me) {
+                    return true;
+                }
+                if let Some(b) = world.get::<InBackpack>(at) {
+                    at = b.bag;
+                } else if let Some(s) = world.get::<InSocket>(at) {
+                    match world.get::<SocketOwner>(s.socket) {
+                        Some(o) if o.0 == me => return true,
+                        Some(o) => at = o.0,
+                        None => return false,
+                    }
+                } else {
+                    return at == me;
+                }
+                if at == me {
+                    return true;
+                }
+            }
+            false
+        };
+        if mine.iter().any(|e| on_body(world, *e)) {
+            now.push(JobMoment::Carried);
+        }
+    }
+    now
+}
+
+/// The thing a job has on the body: what's to be brought, planted or
+/// fetched, or the camera for a photograph.
+fn job_item(job: Option<&extraction_core::progression::Job>) -> Option<String> {
+    use extraction_core::progression::Job;
+    match job? {
+        Job::Bring { item, .. } | Job::Plant { item, .. } | Job::Fetch { item, .. } => {
+            Some(item.clone())
+        }
+        Job::Photograph { .. } => Some("camera".into()),
+        _ => None,
+    }
+}
+
+/// How far [`force_job`] has gone.
+#[derive(Default)]
+struct JobForce {
+    /// The thing laid at the raider's feet, to pick up.
+    laid: bool,
+    /// The step's part done (set down, seen, taken; for a thing to bring
+    /// or fetch, put in the stash and the truck sent home).
+    done: bool,
+    /// Home with it: the card to press once at base.
+    home: bool,
+    pressed: bool,
+}
+
+/// A contract's moments the raid may never come to, brought about once
+/// it's out (as `force_moment` does the raid's): for carried, the job's
+/// thing laid at the raider's feet and picked up; for done, the step's
+/// part done as the game would see it, the relay laid by its place, the
+/// raider put at the place to see, the camera's record of its subject
+/// set, and a thing to bring or fetch put in the stash, the truck sent
+/// home and the card pressed at base.
+fn force_job(world: &mut World, m: JobMoment, f: &mut JobForce) {
+    use crate::bot::{Bot, Task};
+    use extraction_core::progression::Job;
+    let me = player(world);
+    let (phase, clock) = {
+        let raid = world.resource::<Raid>();
+        (raid.phase.clone(), raid.clock)
+    };
+    let job = world
+        .resource::<crate::progression::Progression>()
+        .0
+        .job
+        .clone();
+    let catalog = world.resource::<Catalog>().clone();
+    let Some(root) = world.get::<GlobalTransform>(me).copied() else {
+        return;
+    };
+    let spawn = |world: &mut World, id: &str, at: Vec3| -> Option<Entity> {
+        let kind = catalog.kind(id)?;
+        let e = crate::items::spawn_item(
+            &mut world.commands(),
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        );
+        world.flush();
+        Some(e)
+    };
+    let out = phase == Phase::Out && clock > quit_at();
+    match m {
+        JobMoment::Carried if out && !f.laid => {
+            let Some(id) = job_item(job.as_ref()) else {
+                return;
+            };
+            let at = root.translation() + root.forward().as_vec3() * 0.5 + Vec3::Y * 0.9;
+            if spawn(world, &id, at).is_none() {
+                return;
+            }
+            world.entity_mut(me).remove::<crate::sim::raider::Raider>();
+            if let Some(mut bot) = world.get_mut::<Bot>(me) {
+                bot.tasks.clear();
+                bot.tasks.extend([
+                    Task::PickUp {
+                        id,
+                        side: crate::rig::Side::Left,
+                    },
+                    Task::Stow(crate::rig::Side::Left),
+                ]);
+            }
+            f.laid = true;
+        }
+        JobMoment::Done if out && !f.done => {
+            let zone = world.resource::<crate::world::Zone>().clone();
+            match job.clone() {
+                Some(Job::Plant { item, at, .. }) => {
+                    let p = zone.on_ground(at[0], at[1]) + Vec3::Y * 0.3;
+                    spawn(world, &item, p);
+                }
+                Some(Job::Scout { at, .. }) => {
+                    if let Some(t) = world.get::<Transform>(me).copied() {
+                        let mut t = t;
+                        t.translation = zone.on_ground(at[0], at[1]);
+                        world.entity_mut(me).insert(t);
+                    }
+                }
+                Some(Job::Photograph { .. }) => {
+                    if let Some(Job::Photograph { taken, .. }) = &mut world
+                        .resource_mut::<crate::progression::Progression>()
+                        .0
+                        .job
+                    {
+                        *taken = true;
+                    }
+                }
+                Some(Job::Bring { ref item, .. }) | Some(Job::Fetch { ref item, .. }) => {
+                    let n = match &job {
+                        Some(Job::Fetch { n, .. }) => *n,
+                        _ => 1,
+                    };
+                    let stash = world
+                        .query_filtered::<Entity, With<Stash>>()
+                        .iter(world)
+                        .next();
+                    let Some(stash) = stash else {
+                        return;
+                    };
+                    for i in 0..n {
+                        if let Some(e) = spawn(world, item, Vec3::ZERO) {
+                            crate::persist::put_in_bag(
+                                world,
+                                e,
+                                stash,
+                                Vec3::new(0.1 * i as f32, 0.1, 0.0),
+                            );
+                        }
+                    }
+                    world.resource_mut::<Raid>().phase = Phase::Extracting { left: 0.5 };
+                    f.home = true;
+                }
+                _ => return,
+            }
+            f.done = true;
+        }
+        JobMoment::Done if f.home && !f.pressed && phase == Phase::AtBase => {
+            let card = world
+                .query_filtered::<Entity, With<crate::raid::requests::RequestCard>>()
+                .iter(world)
+                .next();
+            if let Some(card) = card {
+                world.write_message(crate::interact::InteractEvent::Pressed {
+                    item: card,
+                    player: me,
+                });
+                f.pressed = true;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A playtester quits mid-contract. For every step of every contract
+/// that lies in a valley (a fetch's and a photograph's in the contract's
+/// other steps' valley), a bot raid on that step (`SIM_CONTRACT`) is
+/// saved and loaded into a fresh game when its thing is first on the body
+/// (a relay to plant, a thing to bring, a hearth in its case with it) and
+/// again just after it's done (the relay set down, the place seen): each
+/// time every item comes back as it was (by id and state, what's inside
+/// it with it) and the career, its contract and its job, as it was.
+/// `QUIT_CONTRACT=<id>`: that contract only.
+#[test]
+#[ignore = "soak: cargo test --profile fast --lib -- --ignored soak_quit_on_every_contract_step"]
+fn soak_quit_on_every_contract_step() {
+    use extraction_core::contracts::{CONTRACTS, Step};
+    let only = std::env::var("QUIT_CONTRACT").ok();
+    let mut findings = Vec::new();
+    let mut covered: Vec<String> = Vec::new();
+    let mut missed: Vec<String> = Vec::new();
+    for c in CONTRACTS {
+        if only.as_ref().is_some_and(|o| o != c.id) {
+            continue;
+        }
+        let home = c.steps.iter().find_map(|s| match s {
+            Step::Bring { map, .. } | Step::Plant { map, .. } | Step::Scout { map, .. } => {
+                Some(*map)
+            }
+            _ => None,
+        });
+        for (k, step) in c.steps.iter().enumerate() {
+            let map = match step {
+                Step::Bring { map, .. } | Step::Plant { map, .. } | Step::Scout { map, .. } => {
+                    Some(*map)
+                }
+                _ => home,
+            };
+            let Some(map) = map else { continue };
+            let on = format!("{}:{k}", c.id);
+            let mut to_hit = vec![JobMoment::Carried, JobMoment::Done];
+            for m in to_hit.drain(..) {
+                let path = profile(&format!("contract-{}-{k}-{m:?}", c.id));
+                let mut a = raid_with(&path, map, 1, Some(on.clone()));
+                let mut forced = JobForce::default();
+                {
+                    let p = &a.world().resource::<crate::progression::Progression>().0;
+                    println!("{on} on {map}: contract {:?}, job {:?}", p.contract, p.job);
+                }
+                let mut frame = 0usize;
+                let mut hit = false;
+                while frame < 90 * 60 * 14 {
+                    a.update();
+                    frame += 1;
+                    force_job(a.world_mut(), m, &mut forced);
+                    if job_moments(a.world_mut(), c.id, k as u32).contains(&m) {
+                        hit = true;
+                        break;
+                    }
+                    if a.world().resource::<Raid>().phase == Phase::AtBase
+                        && frame > 90 * 60
+                        && !forced.home
+                    {
+                        break;
+                    }
+                }
+                let what = format!("{} step {k} ({map}) {m:?}", c.id);
+                if !hit {
+                    println!("{what}: never ({frame} frames)");
+                    missed.push(what);
+                    continue;
+                }
+                let when = format!("{what} at frame {frame}");
+                println!("quit: {when}");
+                let (mut b, f) = quit_and_reload(&mut a, &path, map, 1, &when);
+                // Said as found, not only at the end: a run cut short (a
+                // container restart) keeps what it found.
+                for x in &f {
+                    println!("FINDING {x}");
+                }
+                findings.extend(f);
+                covered.push(what);
+                frames(&mut b, 300, &format!("{when}, played on"));
+            }
+        }
+    }
+    println!(
+        "{} contract moments quit at, {} never came round",
+        covered.len(),
+        missed.len()
+    );
+    assert!(
+        findings.is_empty(),
+        "{} findings over a quit and reload:\n{}",
+        findings.len(),
+        findings.join("\n\n")
+    );
+    assert!(!covered.is_empty(), "no contract moment came round");
 }

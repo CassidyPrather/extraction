@@ -111,14 +111,35 @@ fn hands_on(
         .then_some((h.side, s.map(|s| s.side)))
 }
 
-/// A shot's kick, by the gun's recoil (`FirearmDef::recoil`: a pistol
-/// 1, an AK 2.2, a Mosin 4.5) and how it's held: (grip hand, seconds,
-/// support hand). Always in the kick band; a shouldered gun puts some of
-/// it into the shoulder instead of the hands.
+/// A shot's kick, by the gun's recoil (`FirearmDef::recoil`: a .22 0.25,
+/// a pistol 1, an SKS 2.8, a Mosin 4.5, a twelve-bore 5): (grip hand,
+/// seconds, support hand). Strength grows with the log of the recoil, from
+/// a knock for a .22 ([`SHOT_FLOOR`] at [`SHOT_LIGHT`]) to full at
+/// [`SHOT_HEAVY`]: every shot once sat in 0.6..1.0, a .22 three quarters of
+/// a Mosin. Shouldered, the stock takes some of it off the supporting hand,
+/// not the grip.
 pub fn shot_kick(recoil: f32, shouldered: bool) -> (f32, f32, f32) {
-    let a = 0.6 + 0.4 * (recoil / 5.0).clamp(0.0, 1.0);
-    let a = if shouldered { (a * 0.85).max(0.6) } else { a };
-    (a, (0.05 + 0.006 * recoil).clamp(0.05, 0.08), a * 0.6)
+    let k = ((recoil / SHOT_LIGHT).ln() / (SHOT_HEAVY / SHOT_LIGHT).ln()).clamp(0.0, 1.0);
+    let a = SHOT_FLOOR + (1.0 - SHOT_FLOOR) * k;
+    let t = (0.04 + 0.012 * recoil).clamp(0.04, 0.1);
+    let support = a * if shouldered { 0.5 } else { 0.6 };
+    (a, t, support)
+}
+
+/// The lightest recoil there is (a .22) and what it's felt as: a knock.
+pub const SHOT_LIGHT: f32 = 0.25;
+pub const SHOT_FLOOR: f32 = 0.4;
+/// The recoil felt at full strength (a twelve-bore).
+pub const SHOT_HEAVY: f32 = 5.0;
+
+/// A heavy round's settle: a softer second beat after the shove, as the
+/// gun comes back down (`weapons::feel::heft`; its scale is the shot's).
+pub const SHOT_SETTLE: super::shapes::Shape = super::shapes::Shape(&[(0.07, 0.5, 0.03)]);
+
+/// A shot's settle, if it has one: the shape's scale, for a round with any
+/// heft.
+pub fn shot_settle(recoil: f32) -> Option<f32> {
+    (crate::weapons::feel::heft(recoil) > 0.0).then(|| shot_kick(recoil, false).0)
 }
 
 /// How a gun's handling is felt (the shot aside): a shape, or a plain
@@ -138,7 +159,7 @@ pub fn handling_feel(event: &FireEvent) -> Option<HandlingFeel> {
         FireEvent::MagazineHalfSeated => Shape(MAG_HALF),
         FireEvent::BoltClosed => Shape(BOLT_HOME),
         FireEvent::BoltLocked => Shape(BOLT_CATCH),
-        FireEvent::Chambered | FireEvent::RoundLoaded => Shape(CHAMBER),
+        FireEvent::Chambered | FireEvent::RoundLoaded | FireEvent::RoundThumbed => Shape(CHAMBER),
         FireEvent::DryFire => Pulse(0.35, 0.02, 0.0),
         // The hammer stopped hard by a primer that didn't go: firmer than
         // falling on nothing.
@@ -198,6 +219,14 @@ fn gun_haptics(
             Some(HandlingFeel::Pulse(a, t, support_a)) => (a, t, support_a),
             None => match ev.event {
                 FireEvent::Fired { .. } => guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h)| {
+                    // A heavy round comes back down after it shoves.
+                    if let Some(scale) = shot_settle(g.firearm.def.recoil) {
+                        shapes.write(HapticShape {
+                            side: grip,
+                            shape: SHOT_SETTLE,
+                            scale,
+                        });
+                    }
                     shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
                 }),
                 _ => continue,
@@ -625,11 +654,75 @@ mod tests {
             assert!(t >= 0.01, "{t}");
         }
         assert!(hurt_amplitude(1.0) > CLICK.0);
-        // A shot: harder for more recoil, always a kick, never over 1.
+        // A shot: harder for more recoil, never over 1, the support hand
+        // under the grip.
         let (pistol, rifle) = (shot_kick(1.0, false), shot_kick(4.5, false));
         assert!(pistol.0 < rifle.0 && pistol.1 <= rifle.1);
         for k in [pistol, rifle, shot_kick(9.0, false), shot_kick(4.5, true)] {
-            assert!((0.6..=1.0).contains(&k.0) && k.2 < k.0, "{k:?}");
+            assert!((SHOT_FLOOR..=1.0).contains(&k.0) && k.2 < k.0, "{k:?}");
+        }
+    }
+
+    /// Every gun's shot is felt by its recoil: stronger and longer for
+    /// more, the first hour's guns apart (a TOZ-8's .22 a knock, a PM, an
+    /// SKS, a Mosin near full and longest), and a round with heft (an SKS,
+    /// a Mosin, a shotgun) a shove and then a settle; a pistol's and a
+    /// .22's one beat. (Every shot once sat in 0.6..0.82: a .22 three
+    /// quarters of a Mosin, an SKS by a PM.)
+    #[test]
+    fn every_guns_shot_is_felt_by_its_recoil() {
+        let catalog = crate::items::Catalog::load();
+        let recoil = |id: &str| {
+            catalog
+                .iter()
+                .find(|(_, d)| d.id == id)
+                .and_then(|(_, d)| d.firearm.as_ref())
+                .unwrap()
+                .recoil
+        };
+        let mut all: Vec<(f32, (f32, f32, f32))> = catalog
+            .iter()
+            .filter_map(|(_, d)| {
+                d.firearm
+                    .as_ref()
+                    .map(|f| (f.recoil, shot_kick(f.recoil, true)))
+            })
+            .collect();
+        all.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for w in all.windows(2) {
+            assert!(w[1].1.0 >= w[0].1.0 && w[1].1.1 >= w[0].1.1, "{w:?}");
+        }
+        let felt = |id: &str| shot_kick(recoil(id), true);
+        let first = ["toz8", "pm_pistol", "sks", "mosin"].map(|id| (id, felt(id)));
+        for (id, k) in &first {
+            println!(
+                "{id:10} {:.2} for {:.0} ms, settle {:?}",
+                k.0,
+                k.1 * 1000.0,
+                shot_settle(recoil(id))
+            );
+        }
+        for w in first.windows(2) {
+            assert!(
+                w[1].1.0 - w[0].1.0 >= 0.08,
+                "{} {:.2}, {} {:.2}",
+                w[0].0,
+                w[0].1.0,
+                w[1].0,
+                w[1].1.0
+            );
+        }
+        assert!(felt("toz8").0 <= 0.45, "a .22: {:?}", felt("toz8"));
+        assert!(
+            felt("mosin").0 >= 0.95 && felt("mosin").1 >= 0.09,
+            "a Mosin: {:?}",
+            felt("mosin")
+        );
+        for id in ["sks", "mosin", "mp133", "toz_double"] {
+            assert!(shot_settle(recoil(id)).is_some(), "{id} settles");
+        }
+        for id in ["toz8", "pm_pistol", "ak74"] {
+            assert!(shot_settle(recoil(id)).is_none(), "{id} is one beat");
         }
     }
 
