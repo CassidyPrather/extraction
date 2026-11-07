@@ -154,6 +154,21 @@ pub const STAND_INS: &[StandIn] = &[
         render: chute_hiss,
     },
     StandIn {
+        set: "zone/stirred",
+        variants: 2,
+        render: zone_stirred,
+    },
+    StandIn {
+        set: "zone/busy",
+        variants: 2,
+        render: zone_busy,
+    },
+    StandIn {
+        set: "zone/hunting",
+        variants: 2,
+        render: zone_hunting,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -603,7 +618,7 @@ mod tests {
             assert!(peak > 0.05 && peak <= 0.9, "{}: {peak}", s.set);
             assert!(a.iter().all(|v| v.is_finite()), "{}", s.set);
             let secs = a.len() as f32 / SR;
-            assert!((0.05..=2.0).contains(&secs), "{}: {secs}", s.set);
+            assert!((0.05..=4.0).contains(&secs), "{}: {secs}", s.set);
         }
     }
 
@@ -859,6 +874,78 @@ fn chute_hiss(rng: &mut Rng, sr: f32) -> Vec<f32> {
             let n = noise(rng);
             (body.run(n) * 1.4 + whistle.run(n) * 0.9 * (t / hold).min(1.0) + low.run(n) * 1.0)
                 * env
+        })
+        .collect()
+}
+
+/// The Zone stirred (`robots::pressure`, a step up to Stirred): far off,
+/// a machine's whine rising, as a drive spins up: a buzzy tone climbing an
+/// octave over three seconds with a slow waver, its highs gone with
+/// distance, in and out softly.
+fn zone_stirred(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 3.2;
+    let f0 = 330.0 * jitter(rng, 0.06);
+    let mut body = Bp::new(900.0, 0.8, sr);
+    let n = (secs * sr) as usize;
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let k = t / secs;
+            let f = f0 * 2f32.powf(k * k.sqrt()) * (1.0 + 0.012 * (TAU * 5.5 * t).sin());
+            ph = (ph + f / sr).fract();
+            let saw = 2.0 * ph - 1.0;
+            let env = (t / 0.6).min(1.0) * (1.0 - ((t - secs + 0.7) / 0.7).clamp(0.0, 1.0));
+            (0.4 * saw + body.run(saw)) * env
+        })
+        .collect()
+}
+
+/// The Zone busy (a step up to Busy): machine traffic on the wind, several
+/// drives at once, far and detuned against each other, beating, swelling
+/// in and settling, under a breath of the air that carries them.
+fn zone_busy(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 3.8;
+    let drives: Vec<(f32, f32)> = (0..4)
+        .map(|_| (95.0 * jitter(rng, 0.35), rng.f32() * TAU))
+        .collect();
+    let mut phs = vec![0.0f32; drives.len()];
+    let mut body = Bp::new(420.0, 0.7, sr);
+    let mut air = Bp::new(700.0, 0.5, sr);
+    let n = (secs * sr) as usize;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let mut x = 0.0;
+            for (j, &(f, wob)) in drives.iter().enumerate() {
+                let f = f * (1.0 + 0.03 * (TAU * 0.4 * t + wob).sin());
+                phs[j] = (phs[j] + f / sr).fract();
+                x += 2.0 * phs[j] - 1.0;
+            }
+            let env = (t / 1.4).min(1.0).powi(2) * (1.0 - ((t - secs + 1.2) / 1.2).clamp(0.0, 1.0));
+            (body.run(x) * 0.8 + 0.25 * air.run(noise(rng))) * env
+        })
+        .collect()
+}
+
+/// The Zone hunting (a step up to Hunting): something heavier, far off: a
+/// deep drive groaning down two notes with a rumble under it, the way a
+/// heavy machine labours up through its gears.
+fn zone_hunting(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 3.4;
+    let f0 = 74.0 * jitter(rng, 0.05);
+    let mut body = Bp::new(260.0, 0.9, sr);
+    let mut rumble = Bp::new(60.0, 0.7, sr);
+    let n = (secs * sr) as usize;
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let f = if t < secs * 0.45 { f0 * 1.335 } else { f0 };
+            ph = (ph + f * (1.0 + 0.01 * (TAU * 3.0 * t).sin()) / sr).fract();
+            let saw = 2.0 * ph - 1.0;
+            let env = (t / 0.25).min(1.0) * (1.0 - ((t - secs + 0.9) / 0.9).clamp(0.0, 1.0));
+            (body.run(saw) * 1.2 + 0.3 * saw + rumble.run(noise(rng)) * 2.0) * env
         })
         .collect()
 }

@@ -71,6 +71,7 @@ impl Plugin for MachineSoundsPlugin {
                     struck_sounds,
                     grind_sounds,
                     hiss_sounds,
+                    pressure_sounds,
                     tether_sounds,
                 ),
             );
@@ -773,6 +774,68 @@ fn hiss_sounds(
     }
 }
 
+/// The Zone's pressure stepping up (`robots::pressure::Stepped`), heard
+/// without a radio before anything it brings: from the Gate's side, where
+/// the director's machines come in (`director::gate`), [`STEP_FROM`] off
+/// toward it (or at the Gate, if that's nearer). Stirred, a far whine
+/// rising (`zone.stirred`); Busy, machine traffic on the wind
+/// (`zone.busy`); Hunting, something heavier groaning down
+/// (`zone.hunting`). Each is a one-shot: going down is silent, as the
+/// words are.
+fn pressure_sounds(
+    mut commands: Commands,
+    mut steps: MessageReader<crate::robots::pressure::Stepped>,
+    zone: Option<Res<crate::world::Zone>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for s in steps.read() {
+        let Some((set, cue)) = step_sound(s.level) else {
+            continue;
+        };
+        let gate = zone.as_deref().map_or(s.at, crate::robots::director::gate);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(step_from(s.at, gate)),
+            cue,
+            0.0,
+            1.0,
+            0.03,
+        );
+    }
+}
+
+/// A step's sound: (set, cue), none for Quiet.
+pub fn step_sound(level: crate::robots::pressure::Level) -> Option<(&'static str, &'static str)> {
+    use crate::robots::pressure::Level;
+    match level {
+        Level::Quiet => None,
+        Level::Stirred => Some(("zone/stirred", "zone.stirred")),
+        Level::Busy => Some(("zone/busy", "zone.busy")),
+        Level::Hunting => Some(("zone/hunting", "zone.hunting")),
+    }
+}
+
+/// How far toward the Gate a step is heard from (m): far enough to read
+/// as out there, near enough to be heard through rain
+/// (`scripts/audio_mix.py`'s `RANGE_TARGETS`).
+pub const STEP_FROM: f32 = 80.0;
+
+/// Where a step is heard from: toward the Gate from `you` on the level,
+/// [`STEP_FROM`] off, or at the Gate if it's nearer. Standing on the Gate,
+/// right there.
+pub fn step_from(you: Vec3, gate: Vec3) -> Vec3 {
+    let d = Vec3::new(gate.x - you.x, 0.0, gate.z - you.z);
+    let len = d.length();
+    if len < 1.0 {
+        return you;
+    }
+    you + d / len * len.min(STEP_FROM)
+}
+
 /// Whether the chute hisses now, from a minelayer's `laying_in` last frame
 /// and this: once a spot, as it stops over it (the countdown starting
 /// below `LAY_TIME`, from driving there, from not laying, or from the
@@ -1007,10 +1070,6 @@ mod tests {
         ("SiteGrid", "a nav grid"),
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
-        (
-            "Stepped",
-            "the Zone's pressure stepping up, said in the raid's line; its sound is Audio's to add (robots::pressure)",
-        ),
         ("ToggleBackpack", "flat mode's pack; opening it is heard"),
         (
             "Treated",
@@ -1248,6 +1307,31 @@ mod tests {
             .iter()
             .find(|c| c.name == "minelayer.hiss");
         assert_eq!(c.map(|c| c.set), Some("machines/chute_hiss"));
+    }
+
+    /// Each step up of the Zone's pressure has its own sound, from the
+    /// Gate's side: STEP_FROM toward it, or at the Gate when nearer; none
+    /// for Quiet. All in the mix with their sets.
+    #[test]
+    fn the_zone_stepping_up_is_heard_from_the_gate() {
+        use crate::robots::pressure::Level;
+        assert!(step_sound(Level::Quiet).is_none());
+        let sounds: Vec<_> = [Level::Stirred, Level::Busy, Level::Hunting]
+            .into_iter()
+            .map(|l| step_sound(l).expect("a step up is heard"))
+            .collect();
+        for (i, (set, cue)) in sounds.iter().enumerate() {
+            assert!(sounds[i + 1..].iter().all(|o| o.0 != *set), "{cue}");
+            let c = crate::audio_mix::MIX.iter().find(|c| c.name == *cue);
+            assert_eq!(c.map(|c| c.set), Some(*set), "{cue}");
+        }
+        let you = Vec3::new(10.0, 3.0, 0.0);
+        let far = step_from(you, Vec3::new(10.0, 50.0, -300.0));
+        assert!((far.distance(you) - STEP_FROM).abs() < 1e-3);
+        assert!(far.z < you.z && (far.x - you.x).abs() < 1e-3);
+        let near = Vec3::new(10.0, 3.0, -30.0);
+        assert!(step_from(you, near).distance(near) < 1e-3);
+        assert_eq!(step_from(you, you), you);
     }
 
     /// A grappler's hold is heard while it lasts, straining harder toward

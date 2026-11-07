@@ -993,6 +993,23 @@ groan and a hit; dazzled, its sensor stuttering and its lock clicking
 out; stunned, its servos winding down; hurt by what makes its own sound,
 a short distress note. Deafened by a hush, nothing: the hush is heard.
 
+The Zone's pressure stepping up (`robots::pressure::Stepped`) is heard
+without a radio, before anything it brings, from the Gate's side, where
+the director's machines come in (`audio_machines::pressure_sounds`).
+Each step is played 80 m toward the Gate (`STEP_FROM`), or at the Gate if
+that's nearer:
+- Stirred: a far machine's whine, rising an octave over three seconds
+  (`zone.stirred`);
+- Busy: machine traffic on the wind, several drives beating against each
+  other, swelling in and settling (`zone.busy`);
+- Hunting: something heavier, a deep drive groaning down two notes over a
+  rumble (`zone.hunting`).
+
+Each is a synthesised stand-in (`synth_foley`). Each is heard from where
+it plays, rain or not, and well past it: 231/175, 123/123 and 231/215 m
+in calm/downpour (`RANGE_TARGETS`, wants 80/80). Going down is silent, as
+the words are.
+
 A minelayer crawling grinds, its treads labouring, louder and quicker
 the faster it goes, silent standing (`audio_machines::grind_sounds`,
 `minelayer.grind`). Stopped over a spot to lay, its chute charges with a
