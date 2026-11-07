@@ -1290,11 +1290,10 @@ pub fn handling_sound(
         (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
             ("guns/shell_insert", "gun.shell_insert")
         }
-        // A single-shot takes one loose round at a time, thumbed into the
-        // chamber: a small push and seat, not a clip's rattle.
-        (FireEvent::RoundLoaded, _) if LOOSE_ONLY.contains(&item) => {
-            ("guns/shell_insert", "gun.round_in")
-        }
+        // A loose round thumbed into a rifle (a single-shot's chamber, a
+        // Mosin's or an SKS's magazine one at a time): a small push and
+        // seat, not a clip's rattle.
+        (FireEvent::RoundThumbed, _) => ("guns/shell_insert", "gun.round_in"),
         (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip"),
         (FireEvent::BoltClosed, Some(BoltAction)) => ("guns/bolt_close", "gun.bolt_close"),
         (FireEvent::BoltClosed, Some(BreakAction)) => ("guns/shotgun_close", "gun.shotgun_close"),
@@ -1350,8 +1349,6 @@ pub fn handling_sound(
 
 /// Self-loading pistols: their action closes with a slide.
 const PISTOLS: &[&str] = &["pm_pistol"];
-/// Single-shots: every round goes in loose, by hand.
-const LOOSE_ONLY: &[&str] = &["toz8"];
 
 /// How fast [`handling_sound`]'s sample (or a shot's, `Fired`) plays for
 /// `event` on `item`: the moment's speed, in the gun's own voice
@@ -1379,8 +1376,8 @@ pub fn handling_speed(
         (FireEvent::BoltLocked, Some(Revolver)) => 1.25,
         (FireEvent::BoltClosed, Some(Revolver)) => 0.85,
         (FireEvent::DryFire, Some(extraction_core::firearm::ActionKind::Crossbow)) => 0.75,
-        // A .22 pushed into the chamber: small and quick.
-        (FireEvent::RoundLoaded, _) if LOOSE_ONLY.contains(&item) => 1.3,
+        // A round pushed in by thumb: small and quick.
+        (FireEvent::RoundThumbed, _) => 1.3,
         _ => handling_speed_of(event),
     };
     moment * voice(item)
@@ -5605,6 +5602,7 @@ mod tests {
             FireEvent::BoltLocked,
             FireEvent::Chambered,
             FireEvent::RoundLoaded,
+            FireEvent::RoundThumbed,
             FireEvent::MagazineInserted,
             FireEvent::MagazineRemoved,
             FireEvent::ModeChanged(FireMode::Safe),
@@ -5623,16 +5621,29 @@ mod tests {
             }
         }
         assert!(alike.is_empty(), "{}", alike.join("\n"));
-        // What goes in: a clip into a Mosin or an SKS, a loose .22 into a
-        // TOZ-8, a shell into a shotgun.
+        // What goes in: a clip into a Mosin or an SKS, a loose round
+        // thumbed into one of them or a TOZ-8, a shell into a shotgun.
         let into = |id: &str| {
             handling_sound(&FireEvent::RoundLoaded, Some(action(id)), id)
                 .unwrap()
                 .1
         };
+        let thumbed = |id: &str| {
+            let a = action(id);
+            let f = crate::items::Catalog::load()
+                .iter()
+                .find(|(_, d)| d.id == id)
+                .and_then(|(_, d)| d.firearm.clone())
+                .unwrap();
+            let ev = crate::weapons::by_hand(&extraction_core::firearm::Firearm::new(f, 1.0));
+            handling_sound(&ev, Some(a), id).unwrap().1
+        };
         assert_eq!(into("mosin"), "gun.stripper_clip");
         assert_eq!(into("sks"), "gun.stripper_clip");
-        assert_eq!(into("toz8"), "gun.round_in");
+        assert_eq!(thumbed("mosin"), "gun.round_in");
+        assert_eq!(thumbed("sks"), "gun.round_in");
+        assert_eq!(thumbed("toz8"), "gun.round_in");
+        assert_eq!(thumbed("mp133"), "gun.shell_insert");
         assert_eq!(into("mp133"), "gun.shell_insert");
         assert_eq!(into("toz_double"), "gun.shell_insert");
         // A rifle's bolt home isn't a pistol's slide.

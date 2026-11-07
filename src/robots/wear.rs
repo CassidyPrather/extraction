@@ -361,6 +361,86 @@ fn wear(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    /// Pieces that share a material share its worn copy: one material a
+    /// band, never one a mesh (a copy each would put every mesh in a draw
+    /// group of its own, and break the merges that count on them, as a
+    /// gun's weathering once did).
+    #[test]
+    fn worn_pieces_share_their_material_copies() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Mesh>()
+            .add_message::<RobotStruck>()
+            .add_plugins(WearPlugin);
+        let (mat, other, mesh) = {
+            let w = app.world_mut();
+            let mut mats = w.resource_mut::<Assets<StandardMaterial>>();
+            let mat = mats.add(StandardMaterial::default());
+            let other = mats.add(StandardMaterial {
+                base_color: Color::srgb(0.2, 0.3, 0.4),
+                ..default()
+            });
+            let mesh = w.resource_mut::<Assets<Mesh>>().add(Cuboid::default());
+            (mat, other, mesh)
+        };
+        let robot = app.world_mut().spawn_empty().id();
+        let mut pieces = Vec::new();
+        let mut parts = Vec::new();
+        for _ in 0..3 {
+            let part = app
+                .world_mut()
+                .spawn((
+                    RobotPart {
+                        robot,
+                        role: PartRole::Armour(0),
+                        hp: 100.0,
+                        max_hp: 100.0,
+                    },
+                    Transform::default(),
+                ))
+                .id();
+            for m in [&mat, &mat, &other] {
+                pieces.push((
+                    app.world_mut()
+                        .spawn((
+                            Mesh3d(mesh.clone()),
+                            MeshMaterial3d(m.clone()),
+                            Transform::default(),
+                            ChildOf(part),
+                        ))
+                        .id(),
+                    m.id(),
+                ));
+            }
+            parts.push(part);
+        }
+        app.update();
+        for p in &parts {
+            app.world_mut().get_mut::<RobotPart>(*p).unwrap().hp = 60.0;
+        }
+        app.update();
+        app.update();
+        let now = |app: &App, e: Entity| {
+            app.world()
+                .get::<MeshMaterial3d<StandardMaterial>>(e)
+                .unwrap()
+                .0
+                .id()
+        };
+        let mut worn: HashMap<AssetId<StandardMaterial>, HashSet<AssetId<StandardMaterial>>> =
+            HashMap::new();
+        for (e, was) in &pieces {
+            let m = now(&app, *e);
+            assert_ne!(m, *was, "a hurt part's piece wears");
+            worn.entry(*was).or_default().insert(m);
+        }
+        for (was, copies) in &worn {
+            assert_eq!(copies.len(), 1, "{was:?} worn into {} copies", copies.len());
+        }
+    }
 
     /// Each band reads worse than the last: darker, rougher, its glow down.
     #[test]
