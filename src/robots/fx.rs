@@ -22,7 +22,8 @@ pub const MAX_MARKS: usize = 160;
 /// And on any one robot: a long fight's worth, each mark its own draw
 /// (Marrow's mast once drew 320 of them on one heavy).
 pub const MARKS_PER_ROBOT: usize = 24;
-/// Past this a mark (a 1.4-3.5 cm disc) is under a pixel: not drawn (m).
+/// Past this a mark (a 1.4-3.5 cm disc) is under a pixel bare-eyed: not
+/// drawn (m), unless through a scope ([`MarkReach`]).
 pub const MARKS_SEEN: f32 = 12.0;
 /// How long a wreck smoulders, seconds.
 const SMOULDER: f32 = 150.0;
@@ -32,6 +33,7 @@ pub struct RobotFxPlugin;
 impl Plugin for RobotFxPlugin {
     fn build(&self, app: &mut App) {
         crate::render::puff::add_to(app);
+        app.init_resource::<MarkReach>();
         app.add_systems(
             Update,
             (
@@ -43,6 +45,7 @@ impl Plugin for RobotFxPlugin {
                 cell_arcs,
                 hazard_bursts,
                 strike_flashes,
+                mark_reach,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -1538,12 +1541,55 @@ fn marks_to_drop(
     out
 }
 
-/// A mark is drawn only near: [`MARKS_SEEN`], faded over a metre.
-fn mark_range() -> bevy::camera::visibility::VisibilityRange {
+/// A bullet mark (its pock or its hole), for [`mark_reach`].
+#[derive(Component)]
+pub struct ShellMark;
+
+/// How far off marks are drawn now (m): [`MARKS_SEEN`], times the
+/// strongest scope being looked through. A scope is a view of its own
+/// (`gadgets::visuals`, its camera narrowed by its magnification), and a
+/// mark through a 4x scope at 30 m is the size it is bare-eyed at 7.5 m:
+/// seeing your hits land is what it's for. (The range is the mark's, not
+/// the view's, so the eyes draw them as far while it's up: only while
+/// aiming, and the scope's own pass costs more.)
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct MarkReach(pub f32);
+
+impl Default for MarkReach {
+    fn default() -> Self {
+        Self(MARKS_SEEN)
+    }
+}
+
+/// A mark is drawn only out to `reach` (m), faded over its last metre.
+fn mark_range(reach: f32) -> bevy::camera::visibility::VisibilityRange {
     bevy::camera::visibility::VisibilityRange {
         start_margin: 0.0..0.0,
-        end_margin: (MARKS_SEEN - 1.0)..MARKS_SEEN,
+        end_margin: (reach - 1.0)..reach,
         use_aabb: false,
+    }
+}
+
+/// The marks' reach, from the scopes in use: written to every mark only
+/// when it changes (a scope raised or lowered).
+fn mark_reach(
+    scopes: Query<(&Camera, &ChildOf), With<crate::render::OffscreenCamera>>,
+    optics: Query<&crate::gadgets::Optic>,
+    mut reach: ResMut<MarkReach>,
+    mut marks: Query<&mut bevy::camera::visibility::VisibilityRange, With<ShellMark>>,
+) {
+    let mag = scopes
+        .iter()
+        .filter(|(c, _)| c.is_active)
+        .filter_map(|(_, p)| optics.get(p.parent()).ok())
+        .map(|o| o.magnification)
+        .fold(1.0f32, f32::max);
+    let now = MarkReach(MARKS_SEEN * mag);
+    if *reach != now {
+        *reach = now;
+        for mut r in &mut marks {
+            *r = mark_range(now.0);
+        }
     }
 }
 
@@ -1555,6 +1601,7 @@ fn shell_marks(
     mut impacts: MessageReader<crate::weapons::impacts::Impact>,
     parts: Query<(&RobotPart, &GlobalTransform)>,
     look: Option<Res<crate::weapons::impacts::FxAssets>>,
+    reach: Res<MarkReach>,
     mut marks: Local<Marks>,
 ) {
     use crate::weapons::impacts::{DECAL_PROUD, ImpactKind};
@@ -1587,7 +1634,8 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.035 / scale)),
                 NotShadowCaster,
-                mark_range(),
+                mark_range(reach.0),
+                ShellMark,
                 ChildOf(part_e),
             ))
             .id();
@@ -1599,7 +1647,8 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.014 / scale)),
                 NotShadowCaster,
-                mark_range(),
+                mark_range(reach.0),
+                ShellMark,
                 ChildOf(part_e),
             ))
             .id();
@@ -1691,6 +1740,54 @@ fn splash_steps(
 #[cfg(test)]
 mod strike_tests {
     use super::*;
+
+    /// Marks are drawn out to [`MARKS_SEEN`], or that times the strongest
+    /// scope looked through while one is up; back again when it's down.
+    #[test]
+    fn a_scope_sees_marks_further() {
+        use bevy::camera::visibility::VisibilityRange;
+        let mut app = App::new();
+        app.init_resource::<MarkReach>()
+            .add_systems(Update, mark_reach);
+        let mark = app
+            .world_mut()
+            .spawn((ShellMark, mark_range(MARKS_SEEN)))
+            .id();
+        let optic = app
+            .world_mut()
+            .spawn(crate::gadgets::Optic {
+                magnification: 4.0,
+                eye: Vec3::ZERO,
+            })
+            .id();
+        let cam = app
+            .world_mut()
+            .spawn((
+                crate::render::OffscreenCamera,
+                Camera {
+                    is_active: false,
+                    ..default()
+                },
+                ChildOf(optic),
+            ))
+            .id();
+        let end = |app: &App| {
+            app.world()
+                .get::<VisibilityRange>(mark)
+                .unwrap()
+                .end_margin
+                .end
+        };
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN, "no scope up");
+        app.world_mut().get_mut::<Camera>(cam).unwrap().is_active = true;
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN * 4.0, "through a 4x scope");
+        assert_eq!(app.world().resource::<MarkReach>().0, MARKS_SEEN * 4.0);
+        app.world_mut().get_mut::<Camera>(cam).unwrap().is_active = false;
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN, "the scope down");
+    }
 
     /// A robot keeps its newest [`MARKS_PER_ROBOT`] marks, the oldest going
     /// first; all robots together keep [`MAX_MARKS`], the oldest anyone's.
