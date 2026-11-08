@@ -516,17 +516,7 @@ mod tests {
         use extraction_core::terrain::Heightmap;
         // (valley, into, near, the way, part of its name): waiting, and on
         // whom.
-        const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[
-            // Found by this gauge, hidden in `probe_gradient` behind another
-            // way's crossing in the same 20 m cell (it now prints each way).
-            (
-                "rime_fell",
-                "The upper slopes",
-                [-139.0, -52.0],
-                "home from The barracks",
-                "Fourth valley's board, gating",
-            ),
-        ];
+        const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[];
         let mut untold = vec![];
         let mut closed = vec![];
         for (id, text) in extraction_core::map::VALLEYS {
