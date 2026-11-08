@@ -4665,19 +4665,31 @@ fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Ta
         .filter_map(|o| Some((o, plan.path(from, o)?)))
         .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)))?;
     let mut t = Vec::new();
+    // Down a site, in legs short enough to walk inside a task's time (up
+    // the shelter's kiosk stair, 10 m at a climb, the one leg timed out,
+    // and the door at its head was pressed from the foot of it).
+    let deep = plan.levels.is_some();
+    let mut at = plan.world2(from);
+    let mut walk_to = |t: &mut Vec<Task>, to: Vec2| {
+        if deep {
+            let n = (at.distance(to) / DEEP_LEG).ceil().max(1.0) as usize;
+            for k in 1..n {
+                t.push(Task::WalkTo {
+                    to: at.lerp(to, k as f32 / n as f32),
+                    within: 0.6,
+                });
+            }
+        }
+        t.push(Task::WalkTo { to, within: 0.4 });
+        at = to;
+    };
     for stop in indoor_stops(plan, from, &path) {
         match stop {
             Stop::Door(door, before) => {
-                t.push(Task::WalkTo {
-                    to: plan.world2(before),
-                    within: 0.4,
-                });
+                walk_to(&mut t, plan.world2(before));
                 t.push(Task::OpenDoor(door));
             }
-            Stop::At(w) => t.push(Task::WalkTo {
-                to: plan.world2(w),
-                within: 0.4,
-            }),
+            Stop::At(w) => walk_to(&mut t, plan.world2(w)),
         }
     }
     if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
@@ -4685,6 +4697,10 @@ fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Ta
     }
     Some((t, plan.world2(o)))
 }
+
+/// The longest leg of a way out of a site (m): a stair's climb walks at a
+/// quarter of the pace, and a task's time is 30 s.
+const DEEP_LEG: f32 = 4.0;
 
 /// Indoors at `here`: out by the nearest door, and where that leaves it.
 /// Through the rooms by the building's plan, where it has one (straight at
