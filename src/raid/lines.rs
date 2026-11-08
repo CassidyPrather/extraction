@@ -72,6 +72,14 @@ pub const CALLED: &[&str] = &[
     "Truck: \"Heard you. {rv}, {b}. {t}.\"",
 ];
 
+/// Stepping out with the Surge too close to outrun (`HOLD_THE_DOOR`): the
+/// driver keeps you in.
+pub const HOLD_THE_DOOR: &str =
+    "Driver: \"Not now. Surge is nearly on us. We sit it out, then go.\"";
+
+/// And you do: the wait, skipped.
+pub const SAT_IT_OUT: &str = "You sit it out in the cab. It comes, and it goes.";
+
 /// A machine's distress flare climbing (`robots::distress`), the first
 /// time a raid: Lev, who can see it from the road, says what to do.
 pub const FLARE_UP: &str = "Truck: \"Flare going up. Shoot it before it pops.\"";

@@ -225,30 +225,65 @@ fn dev_surge_clock(opts: Res<crate::launch::LaunchOptions>, mut raid: ResMut<Rai
     }
 }
 
-/// Stepping out of the truck's pull-in starts the clock.
+/// Closer than this to the Surge, the driver won't let you out: you can't
+/// get anywhere and back in it.
+pub const HOLD_THE_DOOR: f32 = 3.0 * 60.0;
+
+/// "about 40 minutes", "about a minute", "under a minute": when the Surge
+/// is due, as said on stepping out.
+pub fn surge_due_words(secs: f32) -> String {
+    if secs < 60.0 {
+        return "under a minute".into();
+    }
+    match (secs / 60.0).round() as u32 {
+        1 => "about a minute".into(),
+        n => format!("about {n} minutes"),
+    }
+}
+
+/// Stepping out of the truck's pull-in starts the clock; with the Surge
+/// too close to outrun, the driver holds the door, and the raid starts
+/// once it has passed (the wait is skipped: you sit it out in the cab).
 fn leave_base(
     mut raid: ResMut<Raid>,
+    opts: Res<crate::launch::LaunchOptions>,
     // Their own poses, not the propagated ones: waking in the truck after
     // going down moves both in the same frame, and the stale global poses
     // read the player as still out where they fell (so the raid restarted
     // with you sitting in the truck).
     players: Query<&Transform, With<LocalPlayer>>,
     trucks: Query<&Transform, With<truck::Truck>>,
+    mut held: Local<bool>,
 ) {
     if raid.phase != Phase::AtBase {
+        *held = false;
         return;
     }
     let (Some(p), Some(t)) = (players.iter().next(), trucks.iter().next()) else {
         return;
     };
-    if p.translation.distance(t.translation) > 14.0 {
-        raid.phase = Phase::Out;
-        raid.raids += 1;
-        let mins = (raid.surge_in() / 60.0).max(0.0).ceil();
-        raid.say(format!(
-            "Out of the truck. The Surge is due in about {mins:.0} minutes."
-        ));
+    if p.translation.distance(t.translation) <= 14.0 {
+        return;
     }
+    // `--surge-in` asks for the Surge in the field: not held.
+    if raid.surge_in() < HOLD_THE_DOOR && opts.surge_in.is_none() {
+        if !*held {
+            *held = true;
+            raid.say(lines::HOLD_THE_DOOR);
+            raid.say(lines::SAT_IT_OUT);
+        }
+        // Skip to its passing; the Zone's reset at base (`persist`) runs,
+        // and the clock comes round to a fresh hour.
+        if raid.surge_in() > -SURGE_LENGTH {
+            raid.clock = SURGE_AFTER + SURGE_LENGTH;
+        }
+        return;
+    }
+    *held = false;
+    raid.phase = Phase::Out;
+    raid.raids += 1;
+    let due = surge_due_words(raid.surge_in());
+    raid.say(format!("Out of the truck. The Surge is due in {due}."));
 }
 
 fn rendezvous(zone: &Zone) -> Vec<(String, [f32; 2])> {
@@ -552,9 +587,9 @@ fn depart(
                 raid.clock = SURGE_AFTER + SURGE_LENGTH;
             }
             Phase::AtBase => {
-                let mins = raid.surge_in() / 60.0;
+                let due = surge_due_words(raid.surge_in());
                 raid.say(format!(
-                    "Driver: \"Surge isn't due for {mins:.0} minutes. Go on, get out there.\""
+                    "Driver: \"Surge isn't due for {due}. Go on, get out there.\""
                 ));
             }
             _ => {}
@@ -932,5 +967,73 @@ mod tests {
         raid.log.clear();
         raid.say("Driver: \"Off you go. Next: the lamp by the pen.\"");
         assert_eq!(said(&app), 1, "and again, later");
+    }
+
+    /// When the Surge is due reads as said: never "1 minutes".
+    #[test]
+    fn the_surge_is_due_in_words() {
+        assert_eq!(surge_due_words(37.0), "under a minute");
+        assert_eq!(surge_due_words(75.0), "about a minute");
+        assert_eq!(surge_due_words(150.0), "about 3 minutes");
+        assert_eq!(surge_due_words(SURGE_AFTER), "about 60 minutes");
+    }
+
+    /// A career doesn't step out into a Surge it can't outrun: with it
+    /// under HOLD_THE_DOOR away, the driver says why and the raid waits;
+    /// it starts once the Surge has passed, with the whole hour ahead.
+    #[test]
+    fn the_driver_holds_the_door_before_a_surge() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        {
+            let mut raid = app.world_mut().resource_mut::<Raid>();
+            assert_eq!(raid.phase, Phase::AtBase);
+            raid.clock = SURGE_AFTER - 37.0;
+        }
+        let truck = app
+            .world_mut()
+            .query_filtered::<&Transform, With<truck::Truck>>()
+            .iter(app.world())
+            .next()
+            .unwrap()
+            .translation;
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let raids = app.world().resource::<Raid>().raids;
+        let mut told = false;
+        let mut started = None;
+        for _ in 0..600 {
+            // Out of the truck, and staying out.
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = truck + Vec3::new(20.0, 0.0, 0.0);
+            app.update();
+            let raid = app.world().resource::<Raid>();
+            told |= raid.log.iter().any(|(l, _)| l == lines::HOLD_THE_DOOR);
+            if raid.phase == Phase::Out {
+                started = Some(raid.surge_in());
+                break;
+            }
+            assert!(raid.surge_in() > HOLD_THE_DOOR || raid.phase == Phase::AtBase);
+        }
+        assert!(told, "told why");
+        let left = started.expect("the raid starts after the Surge");
+        assert!(left > SURGE_AFTER - 60.0, "with the hour ahead: {left}");
+        assert_eq!(app.world().resource::<Raid>().raids, raids + 1, "one raid");
     }
 }
