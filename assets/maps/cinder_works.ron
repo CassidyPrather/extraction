@@ -265,10 +265,21 @@
     ],
 
     placements: [
+        // The Gate's line: machine stakes on its 60 m circle, where a key carried
+        // inside for 6 s calls a heavy; every walkable spot of the line within
+        // 25 m of one (Heavy's gate_line_is_staked).
+        (prefab: "machine_marker", at: (136.8, -132.3), rot: 0.0),
+        (prefab: "machine_marker", at: (115.5, -186.0), rot: 0.0),
+        (prefab: "machine_marker", at: (178.8, -118.6), rot: 0.0),
+        // The machines' boundary stakes, an amber pulse after dark, where a way
+        // into hot ground has nothing else lit to tell of it (map_gradient,
+        // crossings_at_night).
+        (prefab: "machine_marker", at: (60.5, -130.5), rot: 0.0),  // North sidings, the route to them and home from the slag heaps (55, -141)
         // Where a way crosses into hot ground, a wreck by it short of the line,
         // ahead of a newcomer walking up (map_gradient).
         (prefab: "wreck_uaz", at: (44.6, -128.3), rot: 22.0),  // North sidings, the route to them (54, -142)
         (prefab: "wreck_lada", at: (55.0, -62.1), rot: 145.0),  // The works, the scout's way to the chimney (67, -51)
+        (prefab: "wreck_lada", at: (11.7, 34.7), rot: 84.0),  // The works, the route to the Works yard (32, 23)
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (84.5, 9.0), rot: 0.0),

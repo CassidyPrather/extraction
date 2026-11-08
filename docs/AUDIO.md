@@ -774,14 +774,14 @@ it's seen (`heavy_sounds`, `heavy_loops`):
 | A door torn off, a bolt shot out, something loose, a plate down | `heavy.tear` (creak, strain, splintering), `heavy.bolt` (a ping), `heavy.loose`, `heavy.plate` | — |
 | Steam vented, the stall's roar as it sinks, a well holding it, a cell pulled, the fall | `heavy.vent`, `heavy.stall`, `heavy.strain`, `heavy.cell`, a boom and a groan | — |
 | Idle | `heavy.idle`: the hum, slowed to 0.55, on it | 201 m |
-| Called out of the Gate (`heavy_mind::HeavyCalled`) | `heavy.horn`: synthesised (`robot_voice::render_horn`), two long low tones a fifth apart (D1, A1), 6 s, from the Gate | 705 / 658 m |
+| Called out of the Gate (`heavy_mind::HeavyCalled`) | `heavy.horn`: synthesised (`robot_voice::render_horn`), two long low tones a fifth apart (D1, A1), 6 s, from the Gate; it reaches each valley's far corner, about 703 m off, even in a downpour | 811 / 811 m (wants 740 / 740) |
 
 Its mind speaks the robots' grammar in its own voice, the deepest
 (`VoiceKind::Heavy`, 65 Hz, a brassy saw through a 320 Hz formant, slow):
 within 1.4-3.8 LU of the other kinds for every word. Within 25 m its
 footfalls and blows are felt in both hands (Heavy's
 `heavy_look::footfall_pulse`, from a tick to just under a knock).
-Everything sudden is kept under your rifle up close (the horn 7.5 dB
+Everything sudden is kept under your rifle up close (the horn 6 dB
 down from where it first measured, for anyone standing at the Gate).
 
 ## Breaking things, and the birds

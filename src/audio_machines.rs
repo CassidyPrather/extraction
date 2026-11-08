@@ -1082,6 +1082,14 @@ mod tests {
         ),
         ("CalledOut", "the robots' call is their voice's Calling"),
         (
+            "GateQuiet",
+            "the Gate's rising call stops with it: Audio's cue, coming (heavy_mind::GateCount)",
+        ),
+        (
+            "GateWake",
+            "the Gate's rising call over its count: Audio's cue, coming (heavy_mind::GateCount)",
+        ),
+        (
             "ComingBack",
             "a machine coming back is heard by its own Investigating call (MindShift)",
         ),
