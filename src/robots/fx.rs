@@ -19,6 +19,11 @@ pub const MAX_PUFFS: usize = 64;
 pub const MAX_EMBERS: usize = 4;
 /// Bullet marks on robot shells, all robots together.
 pub const MAX_MARKS: usize = 160;
+/// And on any one robot: a long fight's worth, each mark its own draw
+/// (Marrow's mast once drew 320 of them on one heavy).
+pub const MARKS_PER_ROBOT: usize = 24;
+/// Past this a mark (a 1.4-3.5 cm disc) is under a pixel: not drawn (m).
+pub const MARKS_SEEN: f32 = 12.0;
 /// How long a wreck smoulders, seconds.
 const SMOULDER: f32 = 150.0;
 
@@ -1510,10 +1515,37 @@ fn scuff_dust(
     }
 }
 
-/// Bullet marks on robot shells, oldest first (each mark is a pock and its
-/// hole).
+/// Bullet marks on robot shells, oldest first: the robot, and the mark (a
+/// pock and its hole).
 #[derive(Default)]
-struct Marks(std::collections::VecDeque<[Entity; 2]>);
+struct Marks(std::collections::VecDeque<(Entity, [Entity; 2])>);
+
+/// Which marks go when `robot` takes a new one (already pushed): that
+/// robot's oldest past [`MARKS_PER_ROBOT`], then anyone's oldest past
+/// [`MAX_MARKS`]. Removed from `marks`; returned to be despawned.
+fn marks_to_drop(
+    marks: &mut std::collections::VecDeque<(Entity, [Entity; 2])>,
+    robot: Entity,
+) -> Vec<[Entity; 2]> {
+    let mut out = Vec::new();
+    while marks.iter().filter(|m| m.0 == robot).count() > MARKS_PER_ROBOT {
+        let i = marks.iter().position(|m| m.0 == robot).unwrap();
+        out.extend(marks.remove(i).map(|m| m.1));
+    }
+    while marks.len() > MAX_MARKS {
+        out.extend(marks.pop_front().map(|m| m.1));
+    }
+    out
+}
+
+/// A mark is drawn only near: [`MARKS_SEEN`], faded over a metre.
+fn mark_range() -> bevy::camera::visibility::VisibilityRange {
+    bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: (MARKS_SEEN - 1.0)..MARKS_SEEN,
+        use_aabb: false,
+    }
+}
 
 /// A round that strikes a robot's shell leaves a mark on it: a bright pock
 /// with a dark hole, Weapon feel's look (`weapons::impacts`), parented to
@@ -1555,6 +1587,7 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.035 / scale)),
                 NotShadowCaster,
+                mark_range(),
                 ChildOf(part_e),
             ))
             .id();
@@ -1566,16 +1599,15 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.014 / scale)),
                 NotShadowCaster,
+                mark_range(),
                 ChildOf(part_e),
             ))
             .id();
-        marks.0.push_back([pock, hole]);
-        while marks.0.len() > MAX_MARKS {
-            if let Some(old) = marks.0.pop_front() {
-                for e in old {
-                    if let Ok(mut ec) = commands.get_entity(e) {
-                        ec.despawn();
-                    }
+        marks.0.push_back((part.robot, [pock, hole]));
+        for old in marks_to_drop(&mut marks.0, part.robot) {
+            for e in old {
+                if let Ok(mut ec) = commands.get_entity(e) {
+                    ec.despawn();
                 }
             }
         }
@@ -1659,6 +1691,40 @@ fn splash_steps(
 #[cfg(test)]
 mod strike_tests {
     use super::*;
+
+    /// A robot keeps its newest [`MARKS_PER_ROBOT`] marks, the oldest going
+    /// first; all robots together keep [`MAX_MARKS`], the oldest anyone's.
+    #[test]
+    fn marks_are_kept_few_and_newest() {
+        let mut w = World::new();
+        let (a, b) = (w.spawn_empty().id(), w.spawn_empty().id());
+        let mut marks = std::collections::VecDeque::new();
+        let mut made = Vec::new();
+        for _ in 0..40 {
+            let m = [w.spawn_empty().id(), w.spawn_empty().id()];
+            made.push(m);
+            marks.push_back((a, m));
+            let gone = marks_to_drop(&mut marks, a);
+            assert!(gone.len() <= 1);
+        }
+        assert_eq!(marks.len(), MARKS_PER_ROBOT);
+        let kept: Vec<_> = marks.iter().map(|m| m.1).collect();
+        assert_eq!(kept, made[40 - MARKS_PER_ROBOT..], "the newest kept");
+        // Many robots: the global cap holds, oldest first.
+        let mut marks = std::collections::VecDeque::new();
+        let mut first = None;
+        for k in 0..(MAX_MARKS + 10) {
+            let r = if k % 2 == 0 { a } else { w.spawn_empty().id() };
+            let m = [w.spawn_empty().id(), w.spawn_empty().id()];
+            first.get_or_insert(m);
+            marks.push_back((r, m));
+            marks_to_drop(&mut marks, r);
+        }
+        assert!(marks.len() <= MAX_MARKS);
+        assert!(marks.iter().filter(|m| m.0 == a).count() <= MARKS_PER_ROBOT);
+        assert!(!marks.iter().any(|m| Some(m.1) == first));
+        let _ = b;
+    }
 
     /// Each kind of hit has its own look, and the more it mattered the
     /// louder it is: a shrug has no flash and dull streaks; a wound a small
