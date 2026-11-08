@@ -53,7 +53,20 @@ impl Plugin for FarRestPlugin {
 }
 
 /// A block's side, metres.
-pub const BLOCK: f32 = 192.0;
+pub const BLOCK: f32 = 64.0;
+
+/// The block's side in use: [`BLOCK`], or `EXTRACTION_FAR_BLOCK` (metres,
+/// 16-512) to measure another.
+fn block_side() -> f32 {
+    static SIDE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *SIDE.get_or_init(|| {
+        std::env::var("EXTRACTION_FAR_BLOCK")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|b| (16.0..=512.0).contains(b))
+            .unwrap_or(BLOCK)
+    })
+}
 /// Frames a block's stand-ins stand unchanged before it's merged.
 const SETTLE: u32 = 20;
 /// Blocks merged a frame, at most.
@@ -138,7 +151,8 @@ struct Blocks {
 }
 
 fn block_of(p: Vec3) -> (i32, i32) {
-    ((p.x / BLOCK).floor() as i32, (p.z / BLOCK).floor() as i32)
+    let b = block_side();
+    ((p.x / b).floor() as i32, (p.z / b).floor() as i32)
 }
 
 /// A far stand-in: it fades in past something nearer (its range starts
@@ -374,7 +388,8 @@ fn merge_blocks(
         if block.merged.is_some() || block.quiet < SETTLE {
             continue;
         }
-        let centre = Vec3::new((k.0 as f32 + 0.5) * BLOCK, 0.0, (k.1 as f32 + 0.5) * BLOCK);
+        let b = block_side();
+        let centre = Vec3::new((k.0 as f32 + 0.5) * b, 0.0, (k.1 as f32 + 0.5) * b);
         type Group = (
             Handle<StandardMaterial>,
             Vec<u64>,
@@ -700,16 +715,19 @@ mod tests {
     /// the block until it's settled, when it's merged again.
     #[test]
     fn a_blocks_far_stand_ins_draw_merged_only_while_each_is_whole() {
+        // (Placed within one block, whatever its side: laid out on a 192 m
+        // block and scaled to it.)
+        const IN: f32 = BLOCK / 192.0;
         let mut app = app();
         let mat = app
             .world_mut()
             .resource_mut::<Assets<StandardMaterial>>()
             .add(StandardMaterial::default());
         let ats = [
-            Vec3::new(20.0, 0.0, 30.0),
-            Vec3::new(60.0, 0.0, 40.0),
-            Vec3::new(100.0, 0.0, 150.0),
-            Vec3::new(150.0, 0.0, 90.0),
+            Vec3::new(20.0, 0.0, 30.0) * IN,
+            Vec3::new(60.0, 0.0, 40.0) * IN,
+            Vec3::new(100.0, 0.0, 150.0) * IN,
+            Vec3::new(150.0, 0.0, 90.0) * IN,
         ];
         let mut members: Vec<Entity> = ats.iter().map(|a| stand_in(&mut app, *a, &mat)).collect();
         // One turned under a parent scaled unevenly (an ivy card on a
@@ -717,7 +735,8 @@ mod tests {
         let parent = app
             .world_mut()
             .spawn((
-                Transform::from_xyz(120.0, 0.0, 120.0).with_scale(Vec3::new(3.0, 1.0, 0.5)),
+                Transform::from_translation(Vec3::new(120.0, 0.0, 120.0) * IN)
+                    .with_scale(Vec3::new(3.0, 1.0, 0.5)),
                 Visibility::default(),
             ))
             .id();
@@ -736,7 +755,7 @@ mod tests {
                 alpha_mode: AlphaMode::Blend,
                 ..default()
             });
-        let blended = stand_in(&mut app, Vec3::new(80.0, 0.0, 80.0), &haze);
+        let blended = stand_in(&mut app, Vec3::new(80.0, 0.0, 80.0) * IN, &haze);
         // And one whose mesh's data went to the GPU before it was ever seen
         // (all of them go, as `RenderAssetUsages::RENDER_WORLD` leaves
         // them; the rest were copied the frame they came): it can't be
@@ -753,7 +772,7 @@ mod tests {
                 MeshMaterial3d(mat.clone()),
                 bevy::light::NotShadowCaster,
                 crate::render::lod::far_range(),
-                Transform::from_xyz(70.0, 0.0, 100.0),
+                Transform::from_translation(Vec3::new(70.0, 0.0, 100.0) * IN),
             ))
             .id()
         };
