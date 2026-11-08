@@ -2945,7 +2945,8 @@ pub(super) fn direct_raid(
         // Below ground, in a site, with a walk planned off its floors (to
         // the truck at the ranger tower, over the shelter it was in): up
         // and out by the site's way first.
-        let below = below_in(&plans, root.translation).is_some_and(|pl| !on_its_floors(pl, *to));
+        let below = below_in(&world.zone, &plans, root.translation)
+            .is_some_and(|pl| !on_its_floors(pl, *to));
         if below || inside(here).is_some_and(|b| inside(*to) != Some(b)) {
             let (mut out, _) = way_out_at(&world, &view, &plans, root.translation);
             out.append(&mut tasks);
@@ -4581,14 +4582,25 @@ fn name_of(world: &World2, id: &str) -> String {
 /// in it, so a test by the ground's height (as indoors on the surface)
 /// never finds it.
 fn below_in<'a>(
+    zone: &crate::world::Zone,
     plans: &'a [crate::sim::indoor::BuildingPlan],
     at: Vec3,
 ) -> Option<&'a crate::sim::indoor::BuildingPlan> {
+    // Below the ground, not on it: the site's plan has its kiosk up top and
+    // the step outside its door too, and stood there, out of the shelter
+    // with the watch, the newcomer was sent back in through the door by its
+    // way out, and out again, for the rest of the raid.
+    if at.y > zone.ground(at.x, at.z) - BELOW_GROUND {
+        return None;
+    }
     let p = at + Vec3::Y * 1.0;
     plans
         .iter()
         .find(|pl| pl.levels.is_some() && pl.contains(p, 0.3))
 }
+
+/// Feet this far under the ground over them are below it, in a site (m).
+const BELOW_GROUND: f32 = 1.5;
 
 /// Whether `to` (world, on the map) is on one of `plan`'s floors, at any
 /// level: a walk there from inside it stays in it.
@@ -4616,7 +4628,7 @@ fn way_out_at(
     plans: &[crate::sim::indoor::BuildingPlan],
     at: Vec3,
 ) -> (Vec<Task>, Vec2) {
-    if let Some(plan) = below_in(plans, at)
+    if let Some(plan) = below_in(&world.zone, plans, at)
         && let Some(out) = out_of(plan, plan.to_local(at + Vec3::Y * 1.0).xz())
     {
         return out;
@@ -6302,6 +6314,7 @@ mod indoor_tests {
             )> = SystemState::new(w);
             let (b, d) = st.get(w).unwrap();
             let plans = crate::sim::indoor::plan_buildings(&b, &d);
+            let zone = crate::world::Zone::load(&map);
             for (_, building, xf) in b.iter() {
                 let Some(l) = ug::layout(&building.prefab) else {
                     continue;
@@ -6314,7 +6327,7 @@ mod indoor_tests {
                     ));
                     rooms += 1;
                     let what = format!("{map}: {} `{}` at {at:.1}", building.prefab, room.id);
-                    let Some(plan) = below_in(&plans, at) else {
+                    let Some(plan) = below_in(&zone, &plans, at) else {
                         bad.push(format!("{what}: not known to be in the site"));
                         continue;
                     };
