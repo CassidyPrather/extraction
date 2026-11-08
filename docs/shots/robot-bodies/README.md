@@ -266,3 +266,18 @@ Now a powered, intact sentry carries a steady warm-white day marker, its searchl
 Past `MARKER_HOLDS_AT` (12 m) both hold the size they look there, as an eye's glow does (`sentry_look::hold_markers`). The lamp and the cyan strips are lamps now (fogless, drawn to `visuals::LAMP_REACH`). The marker doesn't pulse, and it's white, not red, so it can't be taken for a tell (the chirp, a lock, a flare tube's tick). Unpowered or wrecked, it's dark.
 
 The shots are Cinder Works at noon, clear, the sentry at 25, 40 and 55 m: against the big slag heap (camera `60,0,-105,90,2`) and in front of the rail shed (camera on its axis, 10 m behind the sentry). Each pair is the whole view and the head close; before (left) and after (right). At 55 m the marker is a bright point on both backgrounds, where before there was a grey speck on a pole.
+
+## A flare tube you can see and shoot
+
+![a walker and a sentry 15 m off raising their flare tubes over the tell, then the canister going up](flare_tube_tell_15m.jpg)
+
+Robot minds' distress flares (#79): a failing walker or sentry that has you raises a flare tube over a 2 s tell, then fires a canister that bursts red at 60 m. Stop it by killing the machine, or by putting any round into it during the tell. The tube is the tell you read, so it has to be seen from in front, where you stand.
+
+`robots::distress_look` draws it on Robot minds' `FlareTube` (collider `TUBE_SIZE`, 0.3 × 0.6 × 0.3 m, at their mounts: a walker's behind its gun pod, a sentry's on its free left flank):
+
+- **Housing and barrel:** a squat steel housing at the collider's foot, and a barrel that rises out of it as `raised` goes 0 to 1. Raised, its top meets the collider's (`the_barrel_rises_to_the_top_of_its_collider`): on a walker, well above the gun pod's line.
+- **Tick lamp:** a red lamp on the barrel's top ticks at `TICK` (5 a second) while the machine is `Distress::Telling`. It's fog-proof, and dark otherwise.
+- **Shot:** with its `hp` gone, the barrel is drawn bent over and charred, and its lamp goes out.
+- **Canister:** a bright red cylinder trailing dark smoke (`fx::wreck_trails`), a line in the sky back to the machine that fired it. A pale trail was lost against a grey sky.
+
+The shots are `reel:flare` (a walker and a sentry 15 m off facing you, put into their tells just before the shots), noon, clear. The rows are the walker, the sentry's head, and the sky above them, at 0.2 to 2.6 s.

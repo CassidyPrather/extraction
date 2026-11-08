@@ -19,6 +19,7 @@ pub mod devices;
 pub mod director;
 pub mod dirigible;
 pub mod distress;
+pub mod distress_look;
 pub mod disturbed;
 pub mod doors;
 pub mod drone;
