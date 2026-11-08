@@ -155,6 +155,7 @@ impl Plugin for WreckPlugin {
                     spiral,
                     settle,
                     tidy_joints,
+                    reap,
                 )
                     .chain()
                     .after(super::perceive)
@@ -552,12 +553,54 @@ fn keep(ledger: &mut DebrisLedger, commands: &mut Commands, ids: &[Entity]) {
     ledger.0.extend(ids.iter().copied());
     while ledger.0.len() > MAX_DEBRIS {
         if let Some(old) = ledger.0.pop_front() {
-            // (Its joints go with it: see `unjoin`.)
+            // Not despawned here: its joints go first (`reap`).
             if let Ok(mut ec) = commands.get_entity(old) {
-                ec.despawn();
+                ec.try_insert(Doomed);
             }
         }
     }
+}
+
+/// Debris capped out of the ledger, going once its joints have gone.
+#[derive(Component)]
+struct Doomed;
+
+/// A joint must leave avian before its bodies do. A body leaving (despawned,
+/// or made static) takes itself out of its physics island, and when the
+/// last one leaves avian drops the island, though the joint still names
+/// it; the joint's own removal later finds that island's slot empty, or
+/// reused by a new island, and its joint count runs under zero (a debug
+/// assert in avian's islands; in release, a wrapped count on some other
+/// island). `unjoin`'s despawns come too late for that: they're queued from
+/// inside the body's despawn, after its island node has gone. So doomed
+/// debris drops its joints one tick and goes the next, and `settle` does
+/// the same before it makes a piece static.
+fn reap(
+    mut commands: Commands,
+    doomed: Query<Entity, With<Doomed>>,
+    joints: Query<(Entity, &WreckJoint)>,
+) {
+    for e in &doomed {
+        if !unjoin_now(&mut commands, &joints, e) {
+            commands.entity(e).try_despawn();
+        }
+    }
+}
+
+/// Despawns `body`'s joints; whether it had any.
+fn unjoin_now(
+    commands: &mut Commands,
+    joints: &Query<(Entity, &WreckJoint)>,
+    body: Entity,
+) -> bool {
+    let mut any = false;
+    for (j, wj) in joints {
+        if wj.a == body || wj.b == body {
+            commands.entity(j).try_despawn();
+            any = true;
+        }
+    }
+    any
 }
 
 /// A joint between two pieces of a wreck (avian joints are entities of
@@ -568,9 +611,10 @@ pub struct WreckJoint {
     pub b: Entity,
 }
 
-/// When a jointed body goes (despawned with a wreck, capped out of the
-/// debris, a robot leaving), its joints go first, in the same flush: avian
-/// must never hold a joint whose body is gone.
+/// When a jointed body goes some other way (a robot leaving, the Surge),
+/// its joints go with it: avian must never hold a joint whose body is gone.
+/// (Its island stays while the joint's other body is still in it, which it
+/// is: no jointed body is ever made static, see `reap`.)
 fn unjoin(
     gone: On<Remove, RigidBody>,
     joints: Query<(Entity, &WreckJoint)>,
@@ -584,6 +628,8 @@ fn unjoin(
 }
 
 /// Joints whose bodies have both come to rest (or gone) are done with.
+/// (Since `settle` drops a body's joints before making it static, this
+/// only meets joints whose bodies went another way.)
 fn tidy_joints(
     mut commands: Commands,
     joints: Query<(Entity, &WreckJoint)>,
@@ -885,6 +931,7 @@ fn settle(
     )>,
     // (Immutable: a hull's layers are replaced, not edited.)
     layered: Query<(), With<CollisionLayers>>,
+    joints: Query<(Entity, &WreckJoint)>,
     zone: Res<crate::world::Zone>,
     time: Res<Time>,
 ) {
@@ -909,6 +956,10 @@ fn settle(
         let still = s.v.length() < STILL_SPEED && s.w.length() < STILL_SPEED * 3.0;
         s.still = if still { s.still + dt } else { 0.0 };
         if (s.age > 2.0 && s.still > STILL_FOR) || s.age > SETTLE_BY {
+            // Its joints first; static next tick (see `reap`).
+            if unjoin_now(&mut commands, &joints, e) {
+                continue;
+            }
             commands
                 .entity(e)
                 .remove::<Settling>()
