@@ -28,6 +28,7 @@ pub mod map;
 pub mod map_breadcrumbs;
 pub mod map_doors;
 pub mod map_gradient;
+pub mod map_heavy;
 pub mod map_landmarks;
 pub mod map_lint;
 pub mod map_mines;
