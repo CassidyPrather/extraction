@@ -398,6 +398,11 @@ fn attach_far(
     fitted: Query<(), With<Fitted>>,
     mut wanted: Local<std::collections::HashMap<String, Option<Handle<bevy::gltf::Gltf>>>>,
 ) {
+    // (`EXTRACTION_GUN_FAR=0`: every resting gun whole, to compare.)
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *OFF.get_or_init(|| std::env::var("EXTRACTION_GUN_FAR").is_ok_and(|v| v == "0")) {
+        return;
+    }
     let (Some(catalog), Some(server), Some(gltfs), Some(gltf_meshes)) =
         (catalog, server, gltfs, gltf_meshes)
     else {
