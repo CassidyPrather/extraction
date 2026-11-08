@@ -20,7 +20,16 @@ pub struct WayLampsPlugin;
 
 impl Plugin for WayLampsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_way_lamps, band_marker_posts));
+        app.add_systems(
+            Update,
+            (
+                light_way_lamps,
+                band_marker_posts,
+                halo_machine_markers,
+                light_marker_lens,
+                swell_machine_markers,
+            ),
+        );
     }
 }
 
@@ -40,6 +49,97 @@ pub const MARKER_AMBER: LinearRgba = LinearRgba::rgb(1.0, 0.45, 0.0);
 pub const MARKER_PERIOD: f32 = 2.4;
 /// The swell's floor: never out, so it reads at any moment you look.
 pub const MARKER_LOW: f32 = 0.35;
+
+/// The marker halo's colour at full swell, its size, and how far off it
+/// shows (m): a lamp to find a crossing by from 25 m and some way past,
+/// well short of the landmarks' red, which carry across a valley.
+const MARKER_HALO: LinearRgba = LinearRgba::rgb(1.5, 0.6, 0.0);
+const MARKER_HALO_R: f32 = 0.3;
+const MARKER_HALO_REACH: f32 = 90.0;
+
+/// The one glow every marker's lens shares (all in step).
+#[derive(Component)]
+struct MarkerGlow;
+
+/// A marker's halo, swelling with its lens.
+#[derive(Component)]
+struct MarkerHalo;
+
+/// A machine marker's halo at its lamp. No light: a lamp to find, not to
+/// light the wreck or sign it stands by.
+fn halo_machine_markers(
+    mut commands: Commands,
+    markers: Query<(Entity, &Building), Added<Building>>,
+) {
+    for (e, b) in &markers {
+        if b.prefab != "machine_marker" {
+            continue;
+        }
+        commands.entity(e).with_child((
+            Name::new("Machine marker halo"),
+            MarkerHalo,
+            Transform::from_translation(crate::world::way_lamps::MARKER_LAMP_AT),
+            Visibility::default(),
+            NotShadowCaster,
+            Halo {
+                color: MARKER_HALO,
+                radius: MARKER_HALO_R,
+            },
+            HaloReach(MARKER_HALO_REACH),
+        ));
+    }
+}
+
+/// The markers' shared lens, once the model's material is in: lit (it came
+/// unlit, which shows no emissive), a dim frosted ground, its glow set
+/// against the eyes (`ToTheEye`) and swelled with the rest.
+fn light_marker_lens(
+    mut commands: Commands,
+    model_mats: Option<Res<ModelMaterials>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    glow: Query<(), With<MarkerGlow>>,
+) {
+    if !glow.is_empty() {
+        return;
+    }
+    let Some(lens) = model_mats.and_then(|m| m.cached("MarkerLens").cloned()) else {
+        return;
+    };
+    if let Some(mut m) = materials.get_mut(&lens) {
+        m.unlit = false;
+        m.base_color = Color::srgb(0.3, 0.27, 0.2);
+    }
+    commands.spawn((
+        Name::new("Machine marker glow"),
+        MarkerGlow,
+        crate::render::grade::ToTheEye {
+            material: lens,
+            emissive: MARKER_AMBER,
+        },
+    ));
+}
+
+/// Every marker's lens and halo, swelling together (`marker_pulse`).
+fn swell_machine_markers(
+    time: Res<Time>,
+    mut glow: Query<&mut crate::render::grade::ToTheEye, With<MarkerGlow>>,
+    mut halos: Query<&mut Halo, With<MarkerHalo>>,
+) {
+    let k = marker_pulse(time.elapsed_secs());
+    for mut g in &mut glow {
+        let want = MARKER_AMBER * k;
+        if (g.emissive.red - want.red).abs() > 0.005 {
+            g.emissive = want;
+        }
+    }
+    let want = MARKER_HALO * k;
+    for mut h in &mut halos {
+        // (A rewrite re-prepares the halo's material: a visible step only.)
+        if (h.color.red - want.red).abs() > 0.01 * MARKER_HALO.red {
+            h.color = want;
+        }
+    }
+}
 
 /// The marker lamp's strength at `t` seconds, `MARKER_LOW..=1`.
 pub fn marker_pulse(t: f32) -> f32 {
