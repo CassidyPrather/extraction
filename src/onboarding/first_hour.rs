@@ -2948,7 +2948,22 @@ pub(super) fn direct_raid(
         let below = below_in(&world.zone, &plans, root.translation)
             .is_some_and(|pl| !on_its_floors(pl, *to));
         if below || inside(here).is_some_and(|b| inside(*to) != Some(b)) {
-            let (mut out, _) = way_out_at(&world, &view, &plans, root.translation);
+            let (mut out, end) = way_out_at(&world, &view, &plans, root.translation);
+            if below && !out.is_empty() {
+                // The walk on from where the way out leaves it, not from
+                // below: planned from the shelter, its first leg ran from
+                // the kiosk's door straight back through the kiosk to the
+                // truck over the shelter, and the newcomer went in again.
+                let lead = tasks
+                    .iter()
+                    .take_while(|t| matches!(t, Task::WalkTo { .. }))
+                    .count();
+                if let Some(Task::WalkTo { to: dest, .. }) = lead.checked_sub(1).map(|i| &tasks[i])
+                {
+                    let dest = *dest;
+                    tasks.splice(..lead, walk(&world, end, dest));
+                }
+            }
             out.append(&mut tasks);
             tasks = out;
         }
