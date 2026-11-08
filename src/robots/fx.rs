@@ -71,6 +71,8 @@ struct FxAssets {
     /// unlit as every other puff is (`weapons`' all are): lit, a few far,
     /// small puffs of it came out as single pure-black pixels.
     soot: Handle<StandardMaterial>,
+    /// A flare canister's burning trail: signal red, as a real flare's.
+    flare_smoke: Handle<StandardMaterial>,
     /// Blue-white, for a crawler's arcs and crackle.
     arc: Handle<StandardMaterial>,
     /// Water thrown up by a foot.
@@ -133,6 +135,7 @@ fn assets(
         smoke: smoke_thin[0].clone(),
         smoke_thin,
         soot: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
+        flare_smoke: materials.add(puffs.material(Color::srgba(0.95, 0.22, 0.16, 0.45), false)),
         arc: materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
@@ -334,6 +337,14 @@ const COLUMN: Rise = Rise {
     rise: 1.6,
     wander: 0.06,
     life: 5.5,
+};
+
+/// A flare canister's trail: hanging where it was laid, slow to rise, a
+/// line to follow up to it.
+const FLARE_TRAIL: Rise = Rise {
+    rise: 0.15,
+    wander: 0.05,
+    life: 3.0,
 };
 
 /// Puffs a second off a weapon that's been shot off (and the robot still
@@ -981,11 +992,12 @@ fn zap_arcs(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn wreck_trails(
     mut commands: Commands,
-    // (A drone going down trails dark smoke; a flare canister going up, the
-    // same, a line in the sky back to the machine that fired it: a pale
-    // one was lost against a grey sky.)
+    // (A drone going down trails dark smoke. A flare canister going up
+    // trails burning red, as a real signal flare's, big enough at range to
+    // follow up to it and shoot it: a pale trail was lost against a grey
+    // sky, a dark one was thin.)
     falling: Query<
-        (Entity, &GlobalTransform),
+        (Entity, &GlobalTransform, Has<super::distress::Canister>),
         Or<(With<super::wreck::Spiral>, With<super::distress::Canister>)>,
     >,
     puffs: Query<(), With<Puff>>,
@@ -994,13 +1006,15 @@ fn wreck_trails(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut next: Local<std::collections::HashMap<Entity, f32>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut dice: Local<Dice>,
 ) {
     let dt = time.delta_secs();
     next.retain(|e, _| falling.contains(*e));
     let mut n = puffs.iter().len();
-    for (e, gt) in &falling {
+    let eye = cameras.iter().next().map(|g| g.translation());
+    for (e, gt, canister) in &falling {
         let t = next.entry(e).or_insert(0.0);
         *t -= dt;
         if *t > 0.0 || n >= MAX_PUFFS {
@@ -1008,7 +1022,21 @@ fn wreck_trails(
         }
         *t = 0.05;
         let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
-        puff(&mut commands, &a, &mut dice, gt.translation(), true, 0.35);
+        if canister {
+            let at = gt.translation();
+            let size = 0.5 * at_range(eye, at);
+            puff_rising(
+                &mut commands,
+                &a,
+                &mut dice,
+                at,
+                a.flare_smoke.clone(),
+                size,
+                FLARE_TRAIL,
+            );
+        } else {
+            puff(&mut commands, &a, &mut dice, gt.translation(), true, 0.35);
+        }
         n += 1;
     }
 }

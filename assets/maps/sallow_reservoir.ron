@@ -397,7 +397,7 @@
         (name: "Copse", seed: 118, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 158.0), (80.0, 158.0), (80.0, 198.0), (40.0, 198.0)]),
         (name: "Copse", seed: 119, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(80.0, 162.0), (120.0, 162.0), (120.0, 202.0), (80.0, 202.0)]),
         (name: "Copse", seed: 120, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-120.0, 242.0), (-80.0, 242.0), (-80.0, 282.0), (-120.0, 282.0)]),
-        (name: "Copse", seed: 121, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 238.0), (40.0, 238.0), (40.0, 278.0), (0.0, 278.0)]),
+        (name: "Copse", seed: 121, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 248.0), (40.0, 248.0), (40.0, 278.0), (0.0, 278.0)]),
         (name: "Copse", seed: 122, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 238.0), (80.0, 238.0), (80.0, 278.0), (40.0, 278.0)]),
         (name: "Copse", seed: 123, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-280.0, 160.0), (-240.0, 160.0), (-240.0, 200.0), (-280.0, 200.0)]),
         (name: "Bed scrub", seed: 124, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(0.0, 78.0), (40.0, 78.0), (40.0, 118.0), (0.0, 118.0)]),

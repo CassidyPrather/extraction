@@ -281,3 +281,10 @@ Robot minds' distress flares (#79): a failing walker or sentry that has you rais
 - **Canister:** a bright red cylinder trailing dark smoke (`fx::wreck_trails`), a line in the sky back to the machine that fired it. A pale trail was lost against a grey sky.
 
 The shots are `reel:flare` (a walker and a sentry 15 m off facing you, put into their tells just before the shots), noon, clear. The rows are the walker, the sentry's head, and the sky above them, at 0.2 to 2.6 s.
+
+![the canister climbing, and a tube shot in its tell](flare_canister_and_broken_tube.jpg)
+
+The follow-up:
+- **The canister burns.** It was a pinprick at 2.2 s, and the player has to see it to shoot it down. Its core is now a bright signal red that holds the size it looks at `CANISTER_HOLDS_AT` (6 m). Its trail is red flare smoke on the shared puff batch (`fx::FLARE_TRAIL`, sized for range by `at_range`), hanging where it was laid. Against the overcast at 15–60 m it's a red line up to a bright streak.
+- **Shot in its tell:** the barrel stays where it was hit (it doesn't sink back out of sight as `raised` falls), knocked over to one side, as seen from in front. It's charred, and its lamp is out. `reel:flare,16,6,broken` shoots the tubes out 0.6 s into the tell.
+- **Wrecks:** the tube is in `wreck::walker_salvage_dirs`, so a walker's wreck doesn't come to rest on it.

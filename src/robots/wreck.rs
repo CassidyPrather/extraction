@@ -785,14 +785,16 @@ pub fn bare_side(dirs: &[Vec3]) -> Vec3 {
 }
 
 /// What comes off a walker's wreck, as ways out of its orb: its plates,
-/// its cell, its gun pod on top, and the servo packs at the hips its legs
-/// came through on (`salvage`).
+/// its cell, its gun pod on top, its flare tube, and the servo packs at
+/// the hips its legs came through on (`salvage`).
 pub fn walker_salvage_dirs(legs: [f32; 4]) -> Vec<Vec3> {
     let mut dirs: Vec<Vec3> = (0..super::armour::WALKER_PLATES.len())
         .map(super::armour::walker_plate_dir)
         .collect();
     dirs.push(super::salvage::CELL_AT.normalize());
     dirs.push(Vec3::Y);
+    // Its flare tube, behind its gun pod (`distress`): not to lie on.
+    dirs.push(Vec3::new(0.0, 0.9, 0.3).normalize());
     for i in servo_hips(legs) {
         dirs.push(super::anim::Shape::Orb.hip(i).normalize());
     }
