@@ -58,8 +58,13 @@ pub const GATE_RADIUS: f32 = 60.0;
 /// masking model (`scripts/audio_mix.py`, `audible_range`; read 8
 /// November). The gauge `every_heavy_reads_before_it_reaches_you` holds
 /// them to the valleys and to how far it notices you.
+/// (Walls only low-pass a sound here, `audio::occlude`: the horn is D1
+/// and A1 and the hum is slowed to 0.55, so neither is muted by them.)
 pub const HORN_HEARD: (f32, f32) = (705.0, 658.0);
 pub const HUM_HEARD: (f32, f32) = (201.0, 201.0);
+/// The horn carries this much further than the furthest ground of any
+/// valley, so a map edit doesn't take a corner out of its reach at once.
+pub const HORN_MARGIN: f32 = 1.05;
 
 /// Between calm and downpour heard ranges at `rain`, as the dB go (as
 /// `senses::heard_coming`).
@@ -817,7 +822,8 @@ mod tests {
     /// Every heavy reads before it reaches you. Heavies have no posts or
     /// patrols: each is called out of its valley's Gate (`call_heavy`),
     /// so its approach starts there, and its horn has to reach every spot
-    /// you can stand in every valley, calm or in a downpour. Then, under
+    /// you can stand in every valley, calm or in a downpour, with
+    /// [`HORN_MARGIN`] to spare. Then, under
     /// every weather and hour (the storm too), it's heard coming (its
     /// footfalls, walking; its hum, standing) from further than its eye
     /// is good for, so it never notices you before you could know it's
@@ -837,7 +843,7 @@ mod tests {
             let r = map_heavy::reach(&map, &hm).unwrap_or_else(|| panic!("{id}: no Gate"));
             let (_, far) = r.furthest().unwrap();
             for (weather, rain) in [("calm", 0.0), ("downpour", 1.0)] {
-                let horn = heard_at(HORN_HEARD, rain);
+                let horn = heard_at(HORN_HEARD, rain) / HORN_MARGIN;
                 let beyond = r.beyond(horn);
                 println!(
                     "{id:<17} {weather:<8} horn {horn:3.0} m, ground to {far:3.0} m: {} of {} spots beyond",
@@ -847,7 +853,7 @@ mod tests {
                 if let Some((p, d)) = beyond.first() {
                     let (name, off) = map_heavy::near(&map, *p).unwrap_or(("?", 0.0));
                     short.push(format!(
-                        "{id} in a {weather}: {} spots beyond the horn ({horn:.0} m), the furthest {d:.0} m at ({:.0}, {:.0}), {off:.0} m from {name}",
+                        "{id} in a {weather}: {} spots beyond the horn ({horn:.0} m with its margin), the furthest {d:.0} m at ({:.0}, {:.0}), {off:.0} m from {name}",
                         beyond.len(),
                         p[0],
                         p[1]
