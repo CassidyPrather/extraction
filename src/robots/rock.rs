@@ -1,6 +1,9 @@
 //! A machine answers a hit with its body: struck, it rocks away from the
-//! round, by as much as the round did (a .22 barely nudges a heavy, a
-//! Mosin or a twelve-bore shoves it), and settles back in a few wobbles.
+//! round, by the round's momentum where it lands (a .22 barely nudges a
+//! heavy, a pistol taps it, a Mosin or a twelve-bore shoves it), and
+//! settles back in a few wobbles. Momentum's taken on a log scale, as the
+//! shot's haptic is (Weapon feel's): the guns differ, they don't just
+//! scale.
 //!
 //! Only what's drawn moves. A machine that [`Rocks`] has its meshes' world
 //! transforms turned about its pivot after transforms are propagated; its
@@ -31,10 +34,9 @@ pub struct Rocks {
     /// What it turns about, in its own space (a heavy: the ground under
     /// it; a sentry's head: itself).
     pub pivot: Vec3,
-    /// Radians a point of a round's harm turns it.
-    pub per_harm: f32,
-    /// The most one frame's hits turn it, radians.
-    pub most: f32,
+    /// Radians the hardest shove ([`punch`] 1: a Mosin's or a
+    /// twelve-bore's round close) turns it.
+    pub full: f32,
     /// How quickly it swings back (Hz), and how soon it settles (0..1, a
     /// share of critical damping).
     pub hz: f32,
@@ -91,28 +93,62 @@ fn ready(mut commands: Commands, new: Query<Entity, (Added<Rocks>, Without<Rock>
     }
 }
 
-/// A hit's push: about the axis the round turns it (from the pivot to
-/// where it struck, across the way the round went), as much as the round
-/// did, all of a frame's rounds together (a twelve-bore's pellets are one
-/// shove).
+/// Momentum (kg m/s) that hardly moves anything, and the most that
+/// counts: a .22's 0.9 is all but nothing, a Mosin's 8.3 and a twelve-
+/// bore's 12.6 a full shove (Weapon feel's numbers, at the muzzle).
+pub const LEAST_MOMENTUM: f32 = 0.8;
+pub const FULL_MOMENTUM: f32 = 13.0;
+/// A blow's or a blast's harm (they've no momentum to read) for a full
+/// shove.
+pub const FULL_HARM: f32 = 120.0;
+
+/// How hard a frame's hits shove (0 to 1): their momentum on a log
+/// scale, or, for blows and blasts, their harm.
+pub fn punch(momentum: f32, harm: f32) -> f32 {
+    if momentum > 0.0 {
+        ((momentum / LEAST_MOMENTUM).ln() / (FULL_MOMENTUM / LEAST_MOMENTUM).ln()).clamp(0.0, 1.0)
+    } else {
+        (harm / FULL_HARM).clamp(0.0, 1.0)
+    }
+}
+
+/// A frame's hits on one machine: the way they turn it (each round's
+/// axis, from the pivot to where it struck across the way it went,
+/// weighted by its momentum), their momentum, and their harm without any.
+#[derive(Default)]
+struct Push {
+    axis: Vec3,
+    momentum: f32,
+    harm: f32,
+}
+
+/// A frame's hits: all of a machine's together (a twelve-bore's nine
+/// pellets are one shove), as hard as [`punch`] says.
 fn take_hits(
     mut struck: MessageReader<RobotStruck>,
     mut machines: Query<(&Rocks, &GlobalTransform, &mut Rock)>,
 ) {
-    let mut pushes: std::collections::HashMap<Entity, Vec3> = Default::default();
+    let mut pushes: std::collections::HashMap<Entity, Push> = Default::default();
     for s in struck.read() {
         let Ok((r, gt, _)) = machines.get(s.robot) else {
             continue;
         };
         let pivot = gt.transform_point(r.pivot);
         let axis = (s.at - pivot).cross(s.dir).normalize_or_zero();
-        *pushes.entry(s.robot).or_default() += axis * r.per_harm * s.dealt.max(0.0);
+        let p = pushes.entry(s.robot).or_default();
+        if s.momentum > 0.0 {
+            p.axis += axis * s.momentum;
+            p.momentum += s.momentum;
+        } else {
+            p.axis += axis * s.dealt.max(0.0);
+            p.harm += s.dealt.max(0.0);
+        }
     }
-    for (robot, push) in pushes {
+    for (robot, p) in pushes {
         let Ok((r, _, mut rock)) = machines.get_mut(robot) else {
             continue;
         };
-        let push = push.clamp_length_max(r.most);
+        let push = p.axis.normalize_or_zero() * r.full * punch(p.momentum, p.harm);
         // A kick to its swing that peaks near `push` (damped, it loses
         // about a third on the way out).
         let w = std::f32::consts::TAU * r.hz;
@@ -120,11 +156,11 @@ fn take_hits(
     }
 }
 
-/// How far a round of `harm` swings a machine at most (radians), from the
-/// same kick and swing as a hit's.
-pub fn peak(r: &Rocks, harm: f32) -> f32 {
+/// How far a shove of `punch` swings a machine at most (radians), from
+/// the same kick and swing as a hit's.
+pub fn peak(r: &Rocks, punch: f32) -> f32 {
     let w = std::f32::consts::TAU * r.hz;
-    let (mut turn, mut spin) = (0.0f32, (r.per_harm * harm).min(r.most) * w * 1.4);
+    let (mut turn, mut spin) = (0.0f32, r.full * punch * w * 1.4);
     let (dt, mut most) = (1.0 / 90.0, 0.0f32);
     for _ in 0..180 {
         spin += (-w * w * turn - 2.0 * r.damping * w * spin) * dt;
@@ -134,20 +170,20 @@ pub fn peak(r: &Rocks, harm: f32) -> f32 {
     most
 }
 
-/// `EXTRACTION_ROCK_SHOW=<harm>`: every machine that rocks held at the
-/// most a round of that harm from the eye swings it, for a still of how
-/// far a gun's round shoves it (a pistol's 34, a Mosin's 110).
+/// `EXTRACTION_ROCK_SHOW=<momentum>`: every machine that rocks held at
+/// the most a round of that momentum from the eye swings it, for a still
+/// of how far a gun's round shoves it (a pistol's 1.9, a Mosin's 8.3).
 fn show(
     mut machines: Query<(&Rocks, &GlobalTransform, &mut Rock)>,
     eyes: Query<&GlobalTransform, With<crate::render::FreeCamera>>,
-    mut harm: Local<Option<Option<f32>>>,
+    mut momentum: Local<Option<Option<f32>>>,
 ) {
-    let harm = *harm.get_or_insert_with(|| {
+    let momentum = *momentum.get_or_insert_with(|| {
         std::env::var("EXTRACTION_ROCK_SHOW")
             .ok()
             .and_then(|v| v.parse().ok())
     });
-    let (Some(harm), Some(eye)) = (harm, eyes.iter().next()) else {
+    let (Some(momentum), Some(eye)) = (momentum, eyes.iter().next()) else {
         return;
     };
     for (r, gt, mut rock) in &mut machines {
@@ -156,7 +192,7 @@ fn show(
             .with_y(0.0)
             .normalize_or_zero();
         let axis = (gt.translation() - pivot).cross(away).normalize_or_zero();
-        rock.turn = axis * peak(r, harm);
+        rock.turn = axis * peak(r, punch(momentum, 0.0));
         rock.spin = Vec3::ZERO;
         rock.held = true;
     }
@@ -244,19 +280,18 @@ mod tests {
     fn heavy_like() -> Rocks {
         Rocks {
             pivot: Vec3::new(0.0, -2.0, 0.0),
-            per_harm: 0.0006,
-            most: 0.1,
+            full: 0.073,
             hz: 2.2,
             damping: 0.3,
         }
     }
 
-    /// Kicked by `harm`, how far it swings at most and how long until it's
-    /// still.
-    fn swing_of(r: Rocks, harm: f32) -> (f32, f32) {
+    /// Shoved by a round of `momentum`, how far it swings at most (degrees)
+    /// and how long until it's still.
+    fn swing_of(r: Rocks, momentum: f32) -> (f32, f32) {
         let mut rock = Rock::default();
         let w = std::f32::consts::TAU * r.hz;
-        rock.spin = Vec3::X * (r.per_harm * harm).min(r.most) * w * 1.4;
+        rock.spin = Vec3::X * r.full * punch(momentum, 0.0) * w * 1.4;
         let (dt, mut t, mut peak, mut still) = (1.0 / 90.0, 0.0, 0.0f32, 0.0);
         while t < 5.0 {
             let acc = -w * w * rock.turn - 2.0 * r.damping * w * rock.spin;
@@ -269,25 +304,32 @@ mod tests {
             }
             t += dt;
         }
-        (peak, still)
+        (peak.to_degrees(), still)
     }
 
-    /// The round tells: a Mosin shoves a heavy some times what a pistol
-    /// does, and a .22 hardly at all; nothing swings for long.
+    /// The round tells, by its momentum where it lands (Weapon feel's, at
+    /// the muzzle): a .22 hardly nudges a heavy, a pistol taps it, a Mosin
+    /// and a twelve-bore shove it; the guns differ, not just scale.
     #[test]
-    fn a_heavier_round_shoves_harder() {
+    fn the_round_tells_in_the_shove() {
         let r = heavy_like();
-        let (twenty_two, _) = swing_of(r, 16.0);
-        let (pistol, _) = swing_of(r, 34.0);
-        let (mosin, settles) = swing_of(r, 110.0);
-        assert!(mosin > 2.5 * pistol, "{mosin} vs {pistol}");
-        assert!(pistol > 2.0 * twenty_two, "{pistol} vs {twenty_two}");
+        let (twenty_two, _) = swing_of(r, 0.9);
+        let (pistol, _) = swing_of(r, 1.9);
+        let (sks, _) = swing_of(r, 5.8);
+        let (mosin, settles) = swing_of(r, 8.3);
+        let (buck, _) = swing_of(r, 12.6);
+        assert!(twenty_two < 0.3, ".22 {twenty_two} deg");
+        assert!((0.8..2.0).contains(&pistol), "pistol {pistol} deg");
+        assert!(sks > pistol * 1.8 && mosin > sks, "{pistol} {sks} {mosin}");
+        assert!((2.8..4.5).contains(&mosin), "Mosin {mosin} deg");
+        assert!(buck >= mosin, "twelve-bore {buck} deg");
         assert!(settles < 1.2, "still after {settles} s");
-        // About as far as it's asked, give or take the damping.
-        let asked = r.per_harm * 110.0;
-        assert!(
-            (0.7 * asked..1.3 * asked).contains(&mosin),
-            "{mosin} for {asked}"
-        );
+    }
+
+    /// A blow or a blast, with no momentum, shoves by its harm.
+    #[test]
+    fn a_blow_shoves_by_its_harm() {
+        assert_eq!(punch(0.0, 0.0), 0.0);
+        assert!(punch(0.0, 60.0) > 0.4 && punch(0.0, 500.0) == 1.0);
     }
 }

@@ -125,7 +125,7 @@ impl Plugin for SentryPlugin {
             .add_observer(cable_gone)
             .add_systems(
                 FixedUpdate,
-                (sentry_power, sentry_mind, sentry_report)
+                (knock_sentries, sentry_power, sentry_mind, sentry_report)
                     .chain()
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
@@ -249,12 +249,12 @@ pub fn spawn_sentry(
         ))
         .id();
     // Struck on its head, it snaps off-line about itself and swings back:
-    // a Mosin's round some 8 degrees (`rock`; drawn only, its aim isn't
-    // moved).
+    // a Mosin's round some 8 degrees, a pistol's 3 (`rock`, drawn). A round
+    // that does harm also knocks its gun off-line a moment
+    // (`rules::KNOCKED`, `knock_sentries`).
     commands.entity(robot).insert(super::rock::Rocks {
         pivot: Vec3::ZERO,
-        per_harm: 0.0013,
-        most: 0.2,
+        full: 0.17,
         hz: 3.0,
         damping: 0.4,
     });
@@ -365,6 +365,24 @@ pub fn cable_run(zone: &Zone, from: Vec3, to: Vec3) -> Vec<(Vec3, f32, Quat)> {
 /// The cable cut, the box wrecked, the recall: no
 /// power, and a sentry without power is a dark head sagging on its mast.
 #[allow(clippy::too_many_arguments)]
+/// A round that does it harm (not a glance off it) knocks a sentry's gun
+/// off-line a moment (`rules::KNOCKED`), at most once a burst cycle: it
+/// holds its next round and keeps its lock. Its head's snap is drawn by
+/// `rock`.
+fn knock_sentries(
+    mut struck: MessageReader<super::damage::RobotStruck>,
+    mut sentries: Query<&mut Sentry>,
+) {
+    for s in struck.read() {
+        if s.strike == super::damage::Strike::Shrug {
+            continue;
+        }
+        if let Ok(mut sentry) = sentries.get_mut(s.robot) {
+            sentry.gun.knock();
+        }
+    }
+}
+
 fn sentry_power(
     mut commands: Commands,
     mut cuts: MessageReader<crate::destruction::hooks::Cut>,

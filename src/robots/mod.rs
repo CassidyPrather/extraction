@@ -492,6 +492,7 @@ fn damage_parts(
             normal: hit.normal,
             dir: hit.velocity.normalize_or_zero(),
             dealt,
+            momentum: hit.mass_g / 1000.0 * hit.velocity.length(),
             strike: damage::strike(part.role, part.hp, part.max_hp, dealt),
         });
         if !part.alive() {

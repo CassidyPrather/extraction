@@ -236,8 +236,7 @@ pub fn spawn_plough(commands: &mut Commands, zone: &Zone, road: Vec<[f32; 2]>) -
     // a Mosin's round about 2 degrees, quick to settle (`rock`).
     commands.entity(robot).insert(super::rock::Rocks {
         pivot: Vec3::ZERO,
-        per_harm: 0.0003,
-        most: 0.06,
+        full: 0.04,
         hz: 3.0,
         damping: 0.45,
     });
