@@ -65,6 +65,45 @@ pub fn reach(map: &MapDef, hm: &Heightmap) -> Option<Reach> {
     Some(Reach { gate, ground })
 }
 
+/// Where a valley's walkable ground meets its Gate's line (`radius` m
+/// out, every 5 m round) further than `within` from any `stake` placement:
+/// the crossings the ring of stakes leaves unmarked.
+pub fn unmarked_line(
+    map: &MapDef,
+    hm: &Heightmap,
+    radius: f32,
+    stake: &str,
+    within: f32,
+) -> Vec<P2> {
+    let Some(gate) = map.markers_of(&MarkerKind::RobotGate).next().map(|m| m.at) else {
+        return Vec::new();
+    };
+    let walk = crate::map_nav::zone_grid(map, hm, crate::map_nav::MAX_SLOPE);
+    let stakes: Vec<P2> = map
+        .placements
+        .iter()
+        .filter(|p| p.prefab == stake)
+        .map(|p| p.at)
+        .collect();
+    let n = (std::f32::consts::TAU * radius / 5.0).ceil() as usize;
+    (0..n)
+        .map(|k| {
+            let a = k as f32 / n as f32 * std::f32::consts::TAU;
+            [gate[0] + a.cos() * radius, gate[1] + a.sin() * radius]
+        })
+        .filter(|p| {
+            walk.walkable(*p)
+                && hm.water_level(*p).is_none()
+                && crate::map_lint::inside_fence(map, *p)
+        })
+        .filter(|p| {
+            !stakes
+                .iter()
+                .any(|s| (s[0] - p[0]).hypot(s[1] - p[1]) <= within)
+        })
+        .collect()
+}
+
 /// The named marker nearest `p`, and how far (for saying where a spot is).
 pub fn near(map: &MapDef, p: P2) -> Option<(&str, f32)> {
     map.markers
