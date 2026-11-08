@@ -119,9 +119,9 @@ pub const OWN_LAMP_READ: f32 = 100.0;
 /// at night only when it is here, and whoever lights it in the renderer
 /// adds it here with a render test holding the two together (as
 /// `map_night::LAMP_SEATS` is held), so the gauge can't count a lamp the
-/// game doesn't light. `machine_marker`'s amber lens joins with Visual
-/// design's wiring; till then the stakes are dark.
-pub const SELF_LIT: &[(&str, f32)] = &[];
+/// game doesn't light. `machine_marker`: its orange lens and held halo
+/// (`render::way_lamps`), read from 25 m in a downpour.
+pub const SELF_LIT: &[(&str, f32)] = &[("machine_marker", 25.0)];
 /// How near a light an unlit tell must stand to be seen by it at night (m).
 pub const LIT_BY: f32 = 8.0;
 /// How far a tell seen only by a lamp beside it reads at night (m).

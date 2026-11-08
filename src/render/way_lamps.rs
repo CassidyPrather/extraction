@@ -295,38 +295,49 @@ mod marker_tests {
     }
 
     #[test]
-    fn a_machine_marker_gets_its_lamp_at_night() {
-        // Its halo at the model's lamp, swelling with the rest (what Map
-        // design's night gauge counts on: `map_gradient::SELF_LIT`).
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .add_systems(Update, halo_machine_markers);
-        let m = app
-            .world_mut()
-            .spawn((
-                Building {
-                    prefab: "machine_marker".into(),
-                },
-                Transform::default(),
-            ))
-            .id();
-        let lamp = app
-            .world_mut()
-            .spawn(Building {
-                prefab: "way_lamp".into(),
-            })
-            .id();
-        app.update();
-        let w = app.world_mut();
-        let halos: Vec<(Entity, Vec3, f32)> = w
-            .query_filtered::<(&ChildOf, &Transform, &Halo), With<MarkerHalo>>()
-            .iter(w)
-            .map(|(c, t, h)| (c.parent(), t.translation, h.radius))
-            .collect();
-        assert_eq!(halos.len(), 1, "one halo, the marker's: {halos:?}");
-        assert_eq!(halos[0].0, m);
-        assert!(halos[0].0 != lamp);
-        assert_eq!(halos[0].1, crate::world::way_lamps::MARKER_LAMP_AT);
+    fn every_self_lit_prop_gets_its_lamp_at_night() {
+        // What Map design's night gauge counts as a glow
+        // (`map_gradient::SELF_LIT`) is what the game lights: each a halo
+        // at its lamp, reaching at least as far as the gauge reads it.
+        use extraction_core::map_gradient::SELF_LIT;
+        assert!(!SELF_LIT.is_empty());
+        for &(prefab, read) in SELF_LIT {
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins)
+                .add_systems(Update, halo_machine_markers);
+            let m = app
+                .world_mut()
+                .spawn((
+                    Building {
+                        prefab: prefab.into(),
+                    },
+                    Transform::default(),
+                ))
+                .id();
+            let lamp = app
+                .world_mut()
+                .spawn(Building {
+                    prefab: "way_lamp".into(),
+                })
+                .id();
+            app.update();
+            let w = app.world_mut();
+            let halos: Vec<(Entity, Vec3, f32, f32, f32)> = w
+                .query_filtered::<(&ChildOf, &Transform, &Halo, &HaloReach, &HaloAngle), With<MarkerHalo>>()
+                .iter(w)
+                .map(|(c, t, h, r, a)| (c.parent(), t.translation, h.radius, r.0, a.0))
+                .collect();
+            assert_eq!(halos.len(), 1, "{prefab}: one halo, its own: {halos:?}");
+            let (parent, at, _, reach, angle) = halos[0];
+            assert!(parent == m && parent != lamp);
+            assert_eq!(at, crate::world::way_lamps::MARKER_LAMP_AT);
+            assert!(reach >= read, "{prefab}: halo reach {reach} < gauge {read}");
+            // Held to an angle: a disc, not a speck, where the gauge reads it.
+            assert!(
+                crate::world::halos::held_radius(MARKER_HALO_R, angle, read) / read > 0.05,
+                "{prefab}"
+            );
+        }
         // And its lens, which came unlit, glows.
         let mut lens = StandardMaterial {
             unlit: true,
