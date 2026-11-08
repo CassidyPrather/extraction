@@ -106,6 +106,10 @@ pub fn crossings_at_night(
     crossings_with(map, hm, comfy, routes, true)
 }
 
+/// How near the line a landmark's red lamp must stand, outside the hot
+/// ground it tells of, to be that place's own at night (m): a lamp on the
+/// skyline beyond is how a walker finds home, not a warning (coordinator).
+pub const OWN_LAMP: f32 = 25.0;
 /// How near a light an unlit tell must stand to be seen by it at night (m).
 pub const LIT_BY: f32 = 8.0;
 /// How far a tell seen only by a lamp beside it reads at night (m).
@@ -287,7 +291,14 @@ fn crossings_with(
                     .map(|(d, _)| d)
                     .fold(f32::INFINITY, f32::min);
                 if near.is_finite() {
-                    signals.push((*kind, name.clone(), near));
+                    // After dark a landmark's red lamp is the place's own
+                    // tell when its landmark is part of the hot place: in
+                    // the ground being entered, or by the line.
+                    let own = night
+                        && *kind == "red lamp over it"
+                        && (danger(map, *at).0 == b.0 || dist(*at, w[1]) <= OWN_LAMP);
+                    let kind = if own { "its own red lamp" } else { *kind };
+                    signals.push((kind, name.clone(), near));
                 }
             }
             signals.sort_by(|x, y| x.2.total_cmp(&y.2));
