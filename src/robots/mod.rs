@@ -18,6 +18,7 @@ pub mod damage;
 pub mod devices;
 pub mod director;
 pub mod dirigible;
+pub mod distress;
 pub mod disturbed;
 pub mod doors;
 pub mod drone;
@@ -389,6 +390,7 @@ impl Plugin for RobotsPlugin {
                 director::DirectorPlugin,
                 pressure::PressurePlugin,
                 tell_log::TellLogPlugin,
+                distress::DistressPlugin,
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
