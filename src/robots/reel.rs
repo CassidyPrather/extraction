@@ -70,6 +70,7 @@ struct StanceMark(usize);
 fn flare_tell(
     opts: Res<LaunchOptions>,
     mut flares: Query<&mut super::distress::Distress>,
+    mut tubes: Query<&mut super::distress::FlareTube>,
     mut frame: Local<u32>,
 ) {
     if opts
@@ -83,6 +84,17 @@ fn flare_tell(
     if *frame == WARMUP - 6 {
         for mut d in &mut flares {
             *d = super::distress::Distress::Telling(0.0);
+        }
+    }
+    // `reel:flare,…,broken`: its tube shot out 0.6 s into the tell.
+    if *frame == WARMUP + 12
+        && opts
+            .gallery
+            .as_deref()
+            .is_some_and(|g| g.ends_with(",broken"))
+    {
+        for mut t in &mut tubes {
+            t.hp = 0.0;
         }
     }
 }

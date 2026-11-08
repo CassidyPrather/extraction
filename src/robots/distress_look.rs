@@ -16,7 +16,10 @@ pub struct DistressLookPlugin;
 
 impl Plugin for DistressLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress_tubes, pose_tubes, dress_canisters));
+        app.add_systems(
+            Update,
+            (dress_tubes, pose_tubes, dress_canisters, hold_canisters),
+        );
     }
 }
 
@@ -37,7 +40,9 @@ struct TubeLook {
     lamp: Entity,
     lamp_mat: Handle<StandardMaterial>,
     barrel_mat: Handle<StandardMaterial>,
-    broken: bool,
+    /// Shot: how far up it was then (it stays there, bent, not sunk back
+    /// out of sight as the tube's `raised` falls).
+    broken: Option<f32>,
 }
 
 #[derive(Default)]
@@ -119,7 +124,7 @@ fn dress_tubes(
             lamp,
             lamp_mat,
             barrel_mat,
-            broken: false,
+            broken: None,
         });
     }
 }
@@ -135,8 +140,8 @@ fn pose_tubes(
 ) {
     for (tube, mut look) in &mut tubes {
         let shot = tube.hp <= 0.0;
-        if shot && !look.broken {
-            look.broken = true;
+        if shot && look.broken.is_none() {
+            look.broken = Some(tube.raised.max(0.5));
             if let Some(mut m) = materials.get_mut(&look.barrel_mat) {
                 m.base_color = Color::srgb(0.06, 0.055, 0.05);
                 m.perceptual_roughness = 0.95;
@@ -144,11 +149,12 @@ fn pose_tubes(
             }
         }
         if let Ok(mut t) = places.get_mut(look.barrel) {
-            let y = barrel_y(tube.raised);
-            let want = if look.broken {
-                // Split and bent over, back off the mount.
-                Transform::from_xyz(0.0, y - 0.05, 0.06)
-                    .with_rotation(Quat::from_rotation_x(0.75) * Quat::from_rotation_z(0.2))
+            let y = barrel_y(look.broken.unwrap_or(tube.raised));
+            let want = if look.broken.is_some() {
+                // Split and knocked over to one side, as seen from in
+                // front (bent back, it foreshortened to a stub).
+                Transform::from_xyz(0.1, y - 0.06, 0.0)
+                    .with_rotation(Quat::from_rotation_z(-0.85) * Quat::from_rotation_x(0.15))
             } else {
                 Transform::from_xyz(0.0, y, 0.0)
             };
@@ -159,7 +165,7 @@ fn pose_tubes(
         let telling = robots
             .get(tube.robot)
             .is_ok_and(|d| matches!(d, Distress::Telling(_)));
-        let on = !look.broken && telling && (time.elapsed_secs() * TICK).fract() < 0.5;
+        let on = look.broken.is_none() && telling && (time.elapsed_secs() * TICK).fract() < 0.5;
         let want = if on {
             LinearRgba::rgb(4.0, 0.06, 0.03)
         } else {
@@ -176,7 +182,7 @@ fn pose_tubes(
     }
 }
 
-/// A canister: a bright red cylinder (its trail is `fx`'s).
+/// A canister: a bright red burning core (its trail is `fx`'s).
 fn dress_canisters(
     mut commands: Commands,
     cans: Query<Entity, Added<Canister>>,
@@ -191,7 +197,7 @@ fn dress_canisters(
                     meshes.add(Cylinder::new(0.05, 0.2)),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.9, 0.08, 0.05),
-                        emissive: LinearRgba::rgb(3.0, 0.06, 0.03),
+                        emissive: LinearRgba::rgb(6.0, 0.5, 0.15),
                         // A light going up: held through fog, to be seen.
                         fog_enabled: false,
                         ..default()
@@ -200,12 +206,37 @@ fn dress_canisters(
             })
             .clone();
         commands.spawn((
+            HeldCanister,
             Mesh3d(mesh),
             MeshMaterial3d(mat),
             Transform::IDENTITY,
             NotShadowCaster,
             ChildOf(e),
         ));
+    }
+}
+
+/// Past this, a climbing canister's burning core holds the size it looks
+/// here: a flare going up has to be seen to be shot down, at 15-40 m
+/// against an overcast sky as well as a dark one.
+pub const CANISTER_HOLDS_AT: f32 = 6.0;
+
+/// A canister's burning core.
+#[derive(Component)]
+struct HeldCanister;
+
+fn hold_canisters(
+    mut cores: Query<(&mut Transform, &GlobalTransform), With<HeldCanister>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let Some(eye) = cameras.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    for (mut t, gt) in &mut cores {
+        let k = (eye.distance(gt.translation()) / CANISTER_HOLDS_AT).max(1.0);
+        if (t.scale.x - k).abs() > 0.01 * k {
+            t.scale = Vec3::splat(k);
+        }
     }
 }
 
