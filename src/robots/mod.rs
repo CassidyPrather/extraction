@@ -19,6 +19,7 @@ pub mod devices;
 pub mod director;
 pub mod dirigible;
 pub mod distress;
+pub mod distress_look;
 pub mod disturbed;
 pub mod doors;
 pub mod drone;
@@ -60,6 +61,7 @@ pub mod pressure;
 pub mod pylon;
 pub mod recall;
 pub mod reel;
+pub mod rock;
 pub mod salvage;
 pub mod search;
 pub mod senses;
@@ -416,7 +418,11 @@ impl Plugin for RobotsPlugin {
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
-            .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
+            .add_plugins((
+                hazard_look::HazardLookPlugin,
+                weak_points::WeakPointsPlugin,
+                rock::RockPlugin,
+            ))
             .add_systems(
                 FixedUpdate,
                 (
@@ -487,6 +493,7 @@ fn damage_parts(
             normal: hit.normal,
             dir: hit.velocity.normalize_or_zero(),
             dealt,
+            momentum: hit.mass_g / 1000.0 * hit.velocity.length(),
             strike: damage::strike(part.role, part.hp, part.max_hp, dealt),
         });
         if !part.alive() {

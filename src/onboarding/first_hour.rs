@@ -860,8 +860,12 @@ pub(super) fn direct_raid(
     // Running for it, as told: upright and fast.
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
     let low = fight.as_ref().is_some_and(|f| f.low_until > now);
+    // Walking off from a heavy, upright: crept, the cautious newcomer made
+    // 1.25 m/s to its hunt's 1.7, never got clear, and bled out.
+    let off_from_heavy = state.heavy.is_some();
     let creep = (p.reads || state.low_until > now || low)
         && !fleeing
+        && !off_from_heavy
         && !matches!(
             state.leg,
             Leg::Camp | Leg::Kit | Leg::Card | Leg::Board | Leg::Paid | Leg::Handed
@@ -1222,9 +1226,9 @@ pub(super) fn direct_raid(
     for ev in tells.heavies.read() {
         if ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy) {
             raised = true;
-            if state.heavy != Some(ev.heavy) {
-                state.heavy_since = now;
-            }
+            // (From its latest raise: the same heavy back after the
+            // minute and a half found it walking on, and killed it.)
+            state.heavy_since = now;
             state.heavy = Some(ev.heavy);
         }
     }
@@ -1243,9 +1247,11 @@ pub(super) fn direct_raid(
             Some(from)
                 if on_me(h) && from.distance(here) < 35.0 && now - state.heavy_since < 90.0 =>
             {
+                // (On again before the last leg's done: a steady walk, not
+                // legs and a stand, which netted 1.9 m/s to its 1.7.)
                 if now > state.walking_off_until {
-                    state.walking_off_until = now + 8.0;
-                    super::second_hour::cut_in(&mut bot, walk_away(&world, here, from));
+                    state.walking_off_until = now + 6.0;
+                    super::second_hour::cut_in(&mut bot, walk_off_heavy(&world, here, from));
                 }
             }
             _ => {
@@ -1547,7 +1553,7 @@ pub(super) fn direct_raid(
             // its hunt is 1.3 m/s to a walk's 2.4).
             First::Heavy if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 10.0);
-                walk_away(&world, here, from)
+                walk_off_heavy(&world, here, from)
             }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
@@ -1559,6 +1565,27 @@ pub(super) fn direct_raid(
                 // (Under the bot's 30 s give-up, or a frame past it is a
                 // failure.)
                 vec![Task::Wait(29.0)]
+            }
+            // Bleeding with a heavy still in reach: walking on first, the
+            // dressing once it's behind (bound beside it, the one-handed
+            // newcomer took its second blow).
+            First::Bleeding
+                if state.heavy.is_some_and(|h| {
+                    world
+                        .robot_at(h)
+                        .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
+                }) =>
+            {
+                let from = state
+                    .heavy
+                    .and_then(|h| world.robot_at(h))
+                    .map_or(here + Vec2::Y * 10.0, |g| g.xz());
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "bleeding, with a heavy in reach: on away first, then the dressing",
+                );
+                walk_off_heavy(&world, here, from)
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1677,6 +1704,14 @@ pub(super) fn direct_raid(
         // (Not twice: the first bleed's own answer, or the last, still on
         // its way; a second grab found the dressing gone.)
         && !bot.tasks.iter().any(|t| matches!(t, Task::Use(_) | Task::Grab { .. }))
+        // (Not with a heavy in reach: its blows aren't shots, so "nothing
+        // at it" was wrong, and the one-handed newcomer bound its wound
+        // beside one and took the second blow.)
+        && !state.heavy.is_some_and(|h| {
+            world
+                .robot_at(h)
+                .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
+        })
     {
         let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
             held.is_none()
@@ -3047,9 +3082,29 @@ fn under_a_roof(
     Some((tasks, d.building))
 }
 
+/// Nearer a heavy than this, a wound waits: on away first.
+const HEAVY_DRESS_CLEAR: f32 = 12.0;
+
+/// Off from a heavy, as the driver says ("walk away, and keep going"): a
+/// longer leg than [`walk_away`]'s and no stand at its end, renewed
+/// before it's done, so it's a steady walk (2.4 m/s against its hunt's
+/// 1.7) until it lets go.
+fn walk_off_heavy(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
+    let mut t = walk_away_by(world, here, from, 25.0);
+    if matches!(t.last(), Some(Task::Wait(_))) {
+        t.pop();
+    }
+    t
+}
+
 /// Away from a slow machine at `from`, at a walk, by the way round: 15 m
 /// off, and a breath to look back.
 fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
+    walk_away_by(world, here, from, 15.0)
+}
+
+/// [`walk_away`], `leg` metres off.
+fn walk_away_by(world: &World2, here: Vec2, from: Vec2, leg: f32) -> Vec<Task> {
     let away = (here - from).normalize_or(Vec2::Y);
     // Away, or turned along whatever's ahead (the fence, the map's edge):
     // the first that stays inside the fence. (Straight away every 15 m, the
@@ -3058,9 +3113,9 @@ fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
     let inside = world.zone.map.half() - world.zone.map.fence_inset.max(0.0) - 5.0;
     let to = [0.0f32, 45.0, -45.0, 90.0, -90.0]
         .into_iter()
-        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * 15.0)
+        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * leg)
         .find(|p| p.x.abs() < inside && p.y.abs() < inside)
-        .unwrap_or(here + away * 15.0);
+        .unwrap_or(here + away * leg);
     let mut t = walk(world, here, to);
     t.push(Task::Wait(2.0));
     t
@@ -5057,7 +5112,7 @@ pub(super) fn first_fight(
         take_it_on()
     } else if heavy {
         fight.flee_until = 0.0;
-        walk_away(&world, here, from)
+        walk_off_heavy(&world, here, from)
     } else if hound {
         fight.low_until = now + 30.0;
         fight.flee_until = 0.0;

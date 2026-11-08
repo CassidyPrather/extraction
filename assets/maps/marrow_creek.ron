@@ -504,7 +504,7 @@
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
         (kind: Sentry(arc: 60.0, power: Some((-133.1, -138.0))), at: (-121.0, -131.0), rot: -20.0, name: "Depot sentry"),
-        (kind: Sentry(arc: 140.0, power: Some((81.4, -58.4))), at: (71.5, -48.5), rot: -15.0, name: "Hollow sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((81.4, -58.4))), at: (71.5, -48.5), rot: -30.0, name: "Hollow sentry"),
         // A spotter over the open ground the road north crosses to the
         // depot and the yard: an alarm, not a gun, where nothing else
         // watches (map_spotter). Cut its tether at the winch, timing its

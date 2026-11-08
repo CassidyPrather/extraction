@@ -255,6 +255,9 @@ pub struct RobotStruck {
     pub dir: Vec3,
     /// What it took off the part.
     pub dealt: f32,
+    /// The round's momentum where it struck (kg m/s: its mass and its
+    /// speed there, so it falls off with range); 0 for a blow or a blast.
+    pub momentum: f32,
     pub strike: Strike,
 }
 

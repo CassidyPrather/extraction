@@ -1611,6 +1611,40 @@ each its own entity, within `robots::fx`'s caps: 106 sparks (24-vertex
 cubes, lit orange), 79 glancing sparks (grey), and 54 wound flares in
 the embers material.
 
+### A heavy, piece by piece
+
+What the eye draws of one settled heavy, every part on, from 9 m and
+from 14 m (the same: its first LOD holds to 27 m). Counted from the
+camera's own `VisibleEntities`, after `VisibilityRange` has picked an
+LOD. `hang` spawns all three of a part's LODs, so a count of every
+visible mesh comes out about three times this.
+
+| Piece | Drawn | Why that many |
+|---|---|---|
+| Hull and brow | 8 | one mesh a material |
+| Plates (3, items) | 9 | 3 a plate; they come off |
+| Cell (item) | 5 | it comes out |
+| Bolts, merged | 2 | `BoltsMerged`: one mesh a material for all 12 |
+| Bolts' weak-point rings | 12 | `weak_points`: a ring a bolt, one shared mesh and material |
+| Eye | 3 | lit, gutters |
+| Vents | 2 + 2 | lit, can be shot |
+| Knees | 3 each, 12 | posed with their leg |
+| Thighs | 2 each, 8 | posed segments |
+| Shins | 3 each, 12 | posed segments |
+| Upper arm, forearm | 3 + 3 | posed segments |
+| **Total** | **81** | |
+
+The sun's shadow: 68 of these cast in each of the flash's two cascades
+(136), and every caster is also drawn by the eye. No LOD casts that the
+eye doesn't draw, so the shadow count is twice the casters, not waste.
+
+Every limb segment is its own posed entity, already one mesh a material,
+so merging BoltsMerged's way has nothing left in them. What's rigid with
+the hull (eye, vents, knees, plates, cell) has to stay apart: it gutters,
+is shot off or comes out. Fewer draws a heavy would take fewer materials
+a segment, one atlas for Shell, Dark and Steel, which is a change to the
+model. The bar is met, so it's left: headroom to spend if it's needed.
+
 ### Overdraw counts what the GPU shades
 
 The coordinator approved the change on one condition: drop only layers the
@@ -1793,6 +1827,59 @@ runs of 3. Two more changes closed the gap.
 | gate fuel exfil 2 | 2121, 2153, 2189 | 2097, 2097, 2079 | 12.6-13.4% |
 | gate insertion 2 | 2018, 2000, 2045 | 1966, 1966, 1966 | 18.1% |
 | s01_ahead | 1890, 1924, 1896 | 1786, 1876, 1790 | 21.8-25.6% |
+
+### Correction: the fight's drone was out of view (8 November)
+
+The three runs above, and the bar they met, were measured without the
+fight's drone. The gauge's fight puts a drone 12 m ahead and 6 m up, in
+the eyes' view. But while each view settled the drone flew its watch,
+and whether it was still in view when measured depended on timing: in
+the first view of a run never, in later ones mostly. A drone in view is
+about 44 draws an eye (its rotors 24, its body 17). So the fuel exfil
+read about 2097 without it and about 2185 with it, and the runs reported
+were the ones without.
+
+The gauge now holds the fight's drone where it came, in view, through
+every view's measure (`GaugePin`). It also loads the fighters' models
+before staging the first fight. `WORST_DRONE_LOG=1` prints where the
+drone was when its view was measured, and how many of its meshes were
+seen.
+
+**With the drone in view, three runs (draws, both eyes, against 2400):**
+
+| view | runs | headroom |
+| - | - | - |
+| gate fuel exfil 2 | 2189, 2189, 2189 | 8.8% |
+| gate insertion 2 | 2072, 2070, 2056 | 13.7-14.3% |
+| s01_ahead | 1878, 1880, 1878 | 21.7-21.8% |
+
+The fuel exfil is short of the 10% bar (at most 2160) by 29 draws, both
+eyes. The drone itself is no cheaper to draw at fight range without
+losing its per-part scorch and weathering (Robot bodies). The rest is
+being looked for elsewhere in the view.
+
+### Loose magazines rest merged: the bar met with the drone in view (8 November)
+
+A magazine model shows each round it holds, three meshes a round. A gun
+lying out was already drawn merged with its seated magazine
+(`render::gun_rest`), but a magazine or clip lying on its own was not.
+That was about 100 draws an eye at the fuel exfil: a PPSh drum's 42, two
+stripper clips' 30, a PM magazine's 12, and more. `gun_rest` now rests a
+loose magazine or clip too, as one mesh per material. Its rounds change
+only in hand, and a hand wakes it, as it wakes a gun
+(`a_loose_magazine_rests_merged_and_wakes_in_hand`).
+
+**Three runs, the drone in view (draws, both eyes, against 2400):**
+
+| view | before | after | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2189, 2191, 2191 | 2023, 2027, 2025 | 15.6-15.7% |
+| gate insertion 2 | 2064, 2072, 2072 | 1966, 1982, 1974 | 17.4-18.1% |
+| s01_ahead | 1880, 1880, 1880 | 1714, 1718, 1714 | 28.4-28.6% |
+
+The fuel exfil is within the 10% bar (at most 2160), 3 runs of 3, with
+the fight's drone in view. Heavy's merged weak-point rings, on their
+branch, are another 22 draws off it.
 
 ## What's next (paused 2 November)
 

@@ -7543,3 +7543,72 @@ fn count_hits(
         out.0.push((t, what));
     }
 }
+
+/// A machine going out on a long way round, getting no nearer its way out
+/// for most of a minute (from Marrow's ridge at (-135, -12) to the Gate:
+/// east and over the District road bridge before it can turn south), is
+/// making headway, and isn't given up for stuck. Measured as the crow
+/// flies, it was, and despawned on the bridge (s84 seeds 1 and 2: "stuck
+/// going out at (-89, 21, -24)"). It gets out.
+#[test]
+fn a_machine_on_a_long_way_round_is_not_given_up() {
+    use bevy::ecs::system::RunSystemOnce;
+    let (mut app, player, zone) = director_app("marrow_creek", 1, 4);
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.next_job = 1.0e6;
+        d.next_logistics = 1.0e6;
+    }
+    let far = zone.on_ground(150.0, 150.0);
+    put(&mut app, player, far);
+    // Alone in the valley: nothing calls it aside.
+    let others: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, With<Robot>>()
+        .iter(app.world())
+        .collect();
+    for e in others {
+        app.world_mut().despawn(e);
+    }
+    let from = zone.on_ground(-135.0, -12.0) + Vec3::Y * 1.26;
+    let gate = Vec3::new(-142.0, 23.343458, -144.1);
+    let z = zone.clone();
+    let w = app
+        .world_mut()
+        .run_system_once(move |mut c: Commands| {
+            super::walker::spawn_walker(
+                &mut c,
+                &z,
+                from,
+                Job {
+                    kind: JobKind::Survey,
+                    site: from,
+                    duration: 600.0,
+                    exit: gate,
+                },
+            )
+        })
+        .unwrap();
+    app.update();
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Leave { to: gate };
+    {
+        let mut s = app.world_mut().get_mut::<super::Senses>(w).unwrap();
+        s.sight = 0.0;
+        s.hearing = 0.0;
+    }
+    let mut nearest = f32::MAX;
+    let mut at = from;
+    for _ in 0..90 * 240 {
+        put(&mut app, player, far);
+        app.update();
+        let Some(g) = app.world().get::<GlobalTransform>(w) else {
+            panic!("given up and gone at {at}, {nearest:.0} m from the Gate");
+        };
+        at = g.translation();
+        nearest = nearest.min(at.xz().distance(gate.xz()));
+        if nearest < 8.0 {
+            break;
+        }
+    }
+    assert!(nearest < 8.0, "it got out: {nearest:.1} m short");
+}
