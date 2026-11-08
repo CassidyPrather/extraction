@@ -69,6 +69,9 @@ RANGE_TARGETS = {
     # the Zone's pressure stepping up, played STEP_FROM (80 m) toward the
     # Gate (audio_machines::pressure_sounds): heard from there, rain or not
     "zone.stirred": (80, 80), "zone.busy": (80, 80), "zone.hunting": (80, 80),
+    # a distress flare's tell (the moment to stop it) and its burst, a call
+    # (audio_machines::flare_sounds)
+    "distress.tell": (30, 30), "distress.burst": (200, 120),
     # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
     "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
     "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),
