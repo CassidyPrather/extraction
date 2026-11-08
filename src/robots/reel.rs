@@ -56,13 +56,36 @@ struct EyeLevel(u8);
 
 impl Plugin for ReelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (reel, feetat_follow));
+        app.add_systems(Update, (reel, feetat_follow, flare_tell));
     }
 }
 
 /// `feetat`'s disc under a foot in stance: which foot.
 #[derive(Component)]
 struct StanceMark(usize);
+
+/// `reel:flare`: a few frames before the shots, every machine with a
+/// flare is put into its tell (Robot minds' `distress` runs it from there:
+/// the tube up over `distress::TELL`, then the canister).
+fn flare_tell(
+    opts: Res<LaunchOptions>,
+    mut flares: Query<&mut super::distress::Distress>,
+    mut frame: Local<u32>,
+) {
+    if opts
+        .gallery
+        .as_deref()
+        .is_none_or(|g| !g.starts_with("reel:flare"))
+    {
+        return;
+    }
+    *frame += 1;
+    if *frame == WARMUP - 6 {
+        for mut d in &mut flares {
+            *d = super::distress::Distress::Telling(0.0);
+        }
+    }
+}
 
 /// `reel:feetat,…,X2,Z2,DIST,HEIGHT[,door]`: the camera keeps beside the machine,
 /// DIST m off its route's line and HEIGHT m over the ground under it,
@@ -386,6 +409,23 @@ fn reel(
             "hound" => {
                 let start = eye + flat * 6.0 - right * 7.0;
                 super::hound::spawn_hound(&mut commands, &zone, start, job(start))
+            }
+            "flare" => {
+                // A walker 15 m off facing you, and a sentry beside it,
+                // each put into its flare's tell (`flare_tell`): the tube
+                // up, its lamp ticking, then the canister away.
+                let s = eye + flat * 15.0 + right * 3.0;
+                let toward = -flat;
+                super::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    s.xz(),
+                    toward.x.atan2(-toward.z),
+                    0.0,
+                    (s - flat * 3.0).xz(),
+                );
+                let at = eye + flat * 15.0 - right * 2.0;
+                spawn_walker(&mut commands, &zone, at, job(at))
             }
             "eyes" => {
                 // Three walkers and a drone, calm, suspicious and seeing
@@ -945,7 +985,7 @@ fn reel(
     }
     if frame == 5 {
         if let Ok(mut w) = walkers.get_mut(subject) {
-            if what == "zap" || what == "shot" {
+            if what == "zap" || what == "shot" || what == "flare" {
                 // Facing you.
                 w.yaw = flat.x.atan2(flat.z);
             }
@@ -980,8 +1020,8 @@ fn reel(
                     path.extend(leg(to, from));
                     path
                 }
-                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed"
-                | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
+                "wreck" | "zap" | "shot" | "flare" | "eyesfar" | "knockdown" | "strikes"
+                | "disarmed" | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
