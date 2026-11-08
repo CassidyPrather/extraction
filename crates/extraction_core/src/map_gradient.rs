@@ -114,6 +114,14 @@ pub const OWN_LAMP: f32 = 25.0;
 /// it at night (m): further, it is skyline, whatever ground it stands in
 /// (coordinator): the lamps far off are how a walker finds home.
 pub const OWN_LAMP_READ: f32 = 100.0;
+/// The placed props that light themselves after dark, as the game draws
+/// them: prefab, and how far its light reads (m). A prop counts as a glow
+/// at night only when it is here, and whoever lights it in the renderer
+/// adds it here with a render test holding the two together (as
+/// `map_night::LAMP_SEATS` is held), so the gauge can't count a lamp the
+/// game doesn't light. `machine_marker`'s amber lens joins with Visual
+/// design's wiring; till then the stakes are dark.
+pub const SELF_LIT: &[(&str, f32)] = &[];
 /// How near a light an unlit tell must stand to be seen by it at night (m).
 pub const LIT_BY: f32 = 8.0;
 /// How far a tell seen only by a lamp beside it reads at night (m).
@@ -185,8 +193,8 @@ fn crossings_with(
             "gate"
         } else if p.prefab == "machine_marker" {
             // The machines' own boundary stake: small by day, its amber
-            // lens a glow to [`LIT_READ`] after dark (Visual design).
-            if night {
+            // lens a glow after dark once it is lit ([`SELF_LIT`]).
+            if night && SELF_LIT.iter().any(|(id, _)| *id == p.prefab) {
                 glows.push(p.at);
             }
             "machine marker"
@@ -194,10 +202,9 @@ fn crossings_with(
             continue;
         };
         let f = prefab_footprint(&p.prefab);
-        let reach = if kind == "machine marker" && night {
-            LIT_READ
-        } else {
-            80.0
+        let reach = match SELF_LIT.iter().find(|(id, _)| *id == p.prefab) {
+            Some((_, r)) if night => *r,
+            _ => 80.0,
         };
         tells.push((
             kind,
