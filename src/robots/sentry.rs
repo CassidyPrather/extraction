@@ -248,6 +248,16 @@ pub fn spawn_sentry(
             RigidBody::Kinematic,
         ))
         .id();
+    // Struck on its head, it snaps off-line about itself and swings back:
+    // a Mosin's round some 8 degrees (`rock`; drawn only, its aim isn't
+    // moved).
+    commands.entity(robot).insert(super::rock::Rocks {
+        pivot: Vec3::ZERO,
+        per_harm: 0.0013,
+        most: 0.2,
+        hz: 3.0,
+        damping: 0.4,
+    });
     commands.entity(robot).with_children(|c| {
         c.spawn((
             Name::new("Sentry head"),
