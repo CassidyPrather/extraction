@@ -267,6 +267,33 @@ pub fn read(
 mod tests {
     use super::*;
 
+    /// Sallow's climb to the gauge house is a scramble by torch with a
+    /// light above you (docs/FOURTH_VALLEY.md): from its foot (the Draw-off
+    /// tower's way home, w01_02) the yard lamp up the climb is in sight
+    /// ahead. Moving the lamp off the climb, or onto its lip where the
+    /// slope hides it, fails here.
+    #[test]
+    fn the_sallow_climb_has_its_lamp_above() {
+        let text = crate::map::VALLEYS
+            .iter()
+            .find(|v| v.0 == "sallow_reservoir")
+            .unwrap()
+            .1;
+        let map = MapDef::from_ron(text).unwrap();
+        let hm = Heightmap::build(&map);
+        let (s, seen) = read(&map, &hm, "sallow_reservoir")
+            .into_iter()
+            .find(|(s, _)| s.name == "w01_02" && s.what.contains("Draw-off tower"))
+            .expect("the Draw-off tower's way home has a stop at the climb's foot");
+        assert!(
+            seen.iter()
+                .any(|l| l.0 == "yard lamp" && l.1 == "(112, 124)"),
+            "w01_02 at ({:.0}, {:.0}) sees {seen:?}, not the climb's lamp at (112, 124)",
+            s.at[0],
+            s.at[1]
+        );
+    }
+
     /// Each stop, READ (and on what) or LOST, for setting beside the night
     /// gauge's dark case: `MAP_ID=<valley> cargo test -p extraction_core
     /// probe_night -- --ignored --nocapture`.
