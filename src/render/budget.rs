@@ -733,7 +733,27 @@ impl LoadCounter<'_, '_> {
             let Some(cascades) = sun.entities.get(&view) else {
                 continue;
             };
-            for cascade in cascades {
+            for (k, cascade) in cascades.iter().enumerate() {
+                // `BUDGET_CASCADE_LOG=Heavy`: an owner's shadow draws in each
+                // cascade, and how many of them the eye draws too.
+                if let Ok(who) = std::env::var("BUDGET_CASCADE_LOG") {
+                    let drawn: HashSet<Entity> = seen
+                        .get(std::any::TypeId::of::<Mesh3d>())
+                        .iter()
+                        .copied()
+                        .collect();
+                    let mine: Vec<Entity> = cascade
+                        .entities
+                        .iter()
+                        .copied()
+                        .filter(|e| self.label(*e).starts_with(who.as_str()))
+                        .collect();
+                    eprintln!(
+                        "cascade {k}: {who} {} shadow draws, {} of them also drawn by the eye",
+                        mine.len(),
+                        mine.iter().filter(|e| drawn.contains(e)).count()
+                    );
+                }
                 for &e in &cascade.entities {
                     let Some((_, n)) = self.tris_of(e) else {
                         continue;

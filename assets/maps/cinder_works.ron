@@ -265,6 +265,10 @@
     ],
 
     placements: [
+        // Where a way crosses into hot ground, a wreck by it short of the line,
+        // ahead of a newcomer walking up (map_gradient).
+        (prefab: "wreck_uaz", at: (44.6, -128.3), rot: 22.0),  // North sidings, the route to them (54, -142)
+        (prefab: "wreck_lada", at: (55.0, -62.1), rot: 145.0),  // The works, the scout's way to the chimney (67, -51)
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (84.5, 9.0), rot: 0.0),

@@ -1358,6 +1358,12 @@ impl World2<'_, '_> {
                     )
                     // Out in the open (not on a shelf indoors)...
                     && self.entrances.building_at(gt.translation()).is_none()
+                    // ...within a hand's reach of the ground under it (on
+                    // the survey tower's deck, it was out of reach
+                    // overhead, and the pack never filled: Map design's
+                    // wreck repro)...
+                    && gt.translation().y - self.zone.ground(gt.translation().x, gt.translation().z)
+                        < crate::bot::STAND_REACH - 0.2
                     // ...and not from the edge of one: it was gone round.
                     && !self.anomalies.iter().any(|(a, agt)| {
                         agt.translation().xz().distance(gt.translation().xz()) < a.radius + 2.0
