@@ -1828,6 +1828,36 @@ runs of 3. Two more changes closed the gap.
 | gate insertion 2 | 2018, 2000, 2045 | 1966, 1966, 1966 | 18.1% |
 | s01_ahead | 1890, 1924, 1896 | 1786, 1876, 1790 | 21.8-25.6% |
 
+### Correction: the fight's drone was out of view (8 November)
+
+The three runs above, and the bar they met, were measured without the
+fight's drone. The gauge's fight puts a drone 12 m ahead and 6 m up, in
+the eyes' view. But while each view settled the drone flew its watch,
+and whether it was still in view when measured depended on timing: in
+the first view of a run never, in later ones mostly. A drone in view is
+about 44 draws an eye (its rotors 24, its body 17). So the fuel exfil
+read about 2097 without it and about 2185 with it, and the runs reported
+were the ones without.
+
+The gauge now holds the fight's drone where it came, in view, through
+every view's measure (`GaugePin`). It also loads the fighters' models
+before staging the first fight. `WORST_DRONE_LOG=1` prints where the
+drone was when its view was measured, and how many of its meshes were
+seen.
+
+**With the drone in view, three runs (draws, both eyes, against 2400):**
+
+| view | runs | headroom |
+| - | - | - |
+| gate fuel exfil 2 | 2189, 2189, 2189 | 8.8% |
+| gate insertion 2 | 2072, 2070, 2056 | 13.7-14.3% |
+| s01_ahead | 1878, 1880, 1878 | 21.7-21.8% |
+
+The fuel exfil is short of the 10% bar (at most 2160) by 29 draws, both
+eyes. The drone itself is no cheaper to draw at fight range without
+losing its per-part scorch and weathering (Robot bodies). The rest is
+being looked for elsewhere in the view.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
