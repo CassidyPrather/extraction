@@ -972,31 +972,16 @@ pub(super) fn direct_raid(
             let along = off.dot(out);
             (0.8..3.0).contains(&along) && (off - out * along).length() < 0.8
         };
+        // (Not below, in a site: its way out is the director's, by the
+        // site's plan; taken for a building's here, the walk out of the
+        // shelter was planned again every frame and never walked.)
         if let Some(b) = inside(here)
             && inside(to) != Some(b)
             && !en.doors.iter().any(|d| d.building == b && exit_step(d))
+            && below_in(&world.zone, &plans, root.translation).is_none()
         {
-            let (out, end) = way_out_at(&world, &view, &plans, root.translation);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if !out.is_empty() {
-                // Out of a site: the walk on from where the way out leaves
-                // it, not from below (from the kiosk's stair, its first leg
-                // ran from the door straight back through the kiosk to the
-                // truck over the shelter, and the newcomer went in again).
-                if below_in(&world.zone, &plans, root.translation).is_some() {
-                    let lead = bot
-                        .tasks
-                        .iter()
-                        .take_while(|t| matches!(t, Task::WalkTo { .. }))
-                        .count();
-                    if let Some(Task::WalkTo { to: dest, .. }) =
-                        lead.checked_sub(1).and_then(|i| bot.tasks.get(i)).cloned()
-                    {
-                        bot.tasks.drain(..lead);
-                        for t in walk(&world, end, dest).into_iter().rev() {
-                            bot.tasks.push_front(t);
-                        }
-                    }
-                }
                 for t in out.into_iter().rev() {
                     bot.tasks.push_front(t);
                 }
