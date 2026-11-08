@@ -52,6 +52,11 @@ pub struct Crossing {
     pub back: (P2, P2),
 }
 
+/// How far a sentry's day marker reads (m): its full sight
+/// (`rules::SIGHT`), against a slag heap or a grey building, as Robot
+/// bodies measured it; dark when it has no power.
+pub const SENTRY_READ: f32 = 55.0;
+
 /// How far back from the line a tell's spot is suggested (m).
 pub const BACK: f32 = 15.0;
 
@@ -355,5 +360,119 @@ mod edges {
                 println!("  first job {what}: {}", d(at));
             }
         }
+    }
+}
+
+/// Where a walked way first comes into a sentry's sight with its lamp
+/// not read first: not seen from that point or one before it on the way,
+/// ahead (within [`AHEAD`] of the way's heading), within [`SENTRY_READ`]
+/// and in sight. A machine must be readable at least as far out as it can
+/// see you. At a way's start (a job, a stop) the walker stands and looks
+/// round, so any heading reads there. The sightline is the sentry's own
+/// the other way, its head to the walker's eye: the lamp is on its head.
+#[derive(Clone, Debug)]
+pub struct Unread {
+    pub sentry: String,
+    pub way: String,
+    pub at: P2,
+    /// How far off it stands (m), and how far off the walker's heading
+    /// (degrees).
+    pub off: f32,
+    pub bearing: f32,
+}
+
+pub fn unread_sentries(
+    map: &MapDef,
+    hm: &Heightmap,
+    comfy: &NavGrid,
+    routes: &[Route],
+) -> Vec<Unread> {
+    let blocks = crate::map_sentry::blocks(map, hm);
+    let ways = routed_ways(map, comfy, routes);
+    let heading = |pts: &[P2], k: usize| {
+        let (q, m) = (pts[k], pts[(k + 3).min(pts.len() - 1)]);
+        let d = dist(q, m).max(0.1);
+        [(m[0] - q[0]) / d, (m[1] - q[1]) / d]
+    };
+    let mut out = Vec::new();
+    for s in crate::map_sentry::sentries(map) {
+        let lamp = (s.at, s.head(hm));
+        let reads = |q: P2, h: P2, start: bool| {
+            let d = dist(q, s.at);
+            d <= SENTRY_READ
+                && (d < 1.0
+                    || start
+                    || (h[0] * (s.at[0] - q[0]) + h[1] * (s.at[1] - q[1])) / d
+                        >= AHEAD.to_radians().cos())
+                && crate::map_sentry::clear(
+                    hm,
+                    &crate::map_sentry::near_line(&blocks, s.at, q),
+                    lamp,
+                    (q, hm.height(q) + 1.7),
+                )
+        };
+        for (way, pts) in &ways {
+            let mut seen = false;
+            for i in 0..pts.len().saturating_sub(1) {
+                let now = s.sees(map, hm, pts[i]);
+                if now && !seen && !(0..=i).any(|k| reads(pts[k], heading(pts, k), k == 0)) {
+                    let (p, h) = (pts[i], heading(pts, i));
+                    let off = dist(p, s.at).max(0.1);
+                    let c = (h[0] * (s.at[0] - p[0]) + h[1] * (s.at[1] - p[1])) / off;
+                    out.push(Unread {
+                        sentry: s.name.clone(),
+                        way: way.clone(),
+                        at: p,
+                        off,
+                        bearing: c.clamp(-1.0, 1.0).acos().to_degrees(),
+                    });
+                }
+                seen = now;
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod sentries {
+    use super::*;
+
+    /// Every sentry's lamp is read before it first sees you on a walked
+    /// way, in every valley.
+    #[test]
+    fn every_sentry_reads_before_it_sees_you() {
+        let bad: Vec<String> = std::thread::scope(|sc| {
+            let jobs: Vec<_> = crate::map::VALLEYS
+                .iter()
+                .map(|(id, text)| {
+                    sc.spawn(move || {
+                        let map = MapDef::from_ron(text).unwrap();
+                        let hm = Heightmap::build(&map);
+                        let comfy = crate::map_nav::zone_grid(
+                            &map,
+                            &hm,
+                            crate::map_lint::COMFORT_SLOPE,
+                        );
+                        let r = crate::map_lint::lint(&map, &hm);
+                        unread_sentries(&map, &hm, &comfy, &r.routes)
+                            .into_iter()
+                            .map(|u| {
+                                format!(
+                                    "{id}: {} first sees {} at ({:.0}, {:.0}), {:.0} m off and {:.0} deg off the heading, its lamp not read first",
+                                    u.sentry, u.way, u.at[0], u.at[1], u.off, u.bearing
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            jobs.into_iter().flat_map(|j| j.join().unwrap()).collect()
+        });
+        assert!(
+            bad.is_empty(),
+            "sentries that see you before you can see them:\n{}",
+            bad.join("\n")
+        );
     }
 }
