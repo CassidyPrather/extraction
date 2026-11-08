@@ -31,6 +31,22 @@ const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.8, 0.22);
 const HALO_R: f32 = 0.8;
 const HALO_REACH: f32 = 240.0;
 
+/// A machine boundary marker's lamp (`machine_marker`): hazard amber,
+/// saturated and yellower than a yard lamp's pale warm bulb, nowhere near
+/// the landmarks' red (linear; the tonemapper's via `ToTheEye`).
+pub const MARKER_AMBER: LinearRgba = LinearRgba::rgb(1.0, 0.45, 0.0);
+/// Its slow swell (s): a single cosine, under half a hertz, never a
+/// blink (VR comfort), every marker in step.
+pub const MARKER_PERIOD: f32 = 2.4;
+/// The swell's floor: never out, so it reads at any moment you look.
+pub const MARKER_LOW: f32 = 0.35;
+
+/// The marker lamp's strength at `t` seconds, `MARKER_LOW..=1`.
+pub fn marker_pulse(t: f32) -> f32 {
+    let u = 0.5 - 0.5 * (std::f32::consts::TAU * t / MARKER_PERIOD).cos();
+    MARKER_LOW + (1.0 - MARKER_LOW) * u
+}
+
 fn light_way_lamps(
     mut commands: Commands,
     lamps: Query<(Entity, &Building), Added<Building>>,
@@ -138,5 +154,57 @@ fn band_marker_posts(
                 ));
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::*;
+
+    /// Hue (degrees) and saturation of a linear colour, in sRGB.
+    fn hue_sat(c: LinearRgba) -> (f32, f32) {
+        let s = Color::from(c).to_srgba();
+        let (r, g, b) = (s.red, s.green, s.blue);
+        let (mx, mn) = (r.max(g).max(b), r.min(g).min(b));
+        let d = mx - mn;
+        let h = if d < 1e-6 {
+            0.0
+        } else if mx == r {
+            60.0 * ((g - b) / d).rem_euclid(6.0)
+        } else if mx == g {
+            60.0 * ((b - r) / d + 2.0)
+        } else {
+            60.0 * ((r - g) / d + 4.0)
+        };
+        (h, if mx > 0.0 { d / mx } else { 0.0 })
+    }
+
+    #[test]
+    fn the_marker_breathes_slowly_and_never_goes_out() {
+        assert!(1.0 / MARKER_PERIOD <= 0.5, "no faster than half a hertz");
+        let frame = 1.0 / 90.0;
+        let (mut lo, mut hi, mut step) = (1.0f32, 0.0f32, 0.0f32);
+        let mut last = marker_pulse(0.0);
+        for i in 1..(90.0 * MARKER_PERIOD * 2.0) as usize {
+            let v = marker_pulse(i as f32 * frame);
+            lo = lo.min(v);
+            hi = hi.max(v);
+            step = step.max((v - last).abs());
+            last = v;
+        }
+        assert!((lo - MARKER_LOW).abs() < 0.01 && hi > 0.99, "{lo}..{hi}");
+        // A headset frame never steps it more than 1.5%: a swell, no blink.
+        assert!(step < 0.015, "{step}");
+    }
+
+    #[test]
+    fn the_marker_is_amber_not_a_yard_lamp_nor_a_landmark() {
+        let (mh, ms) = hue_sat(MARKER_AMBER);
+        let (yh, ys) = hue_sat(BULB);
+        // Amber: between red (0) and yellow (60), well off red.
+        assert!((35.0..50.0).contains(&mh), "marker hue {mh}");
+        // A yard lamp is a pale warm white: the marker deeply saturated.
+        assert!(ms > 0.9 && ys < 0.6, "saturation {ms} vs yard {ys}");
+        assert!(mh > yh, "yellower than the yard lamp ({mh} vs {yh})");
     }
 }
