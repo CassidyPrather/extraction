@@ -313,6 +313,13 @@
         (at: (117.5, -40.0), radius: 1.6, stones: 3),
     ],
     placements: [
+        // The Gate's line: machine stakes on its 60 m circle, where a key carried
+        // inside for 6 s calls a heavy; every walkable spot of the line within
+        // 25 m of one (Heavy's gate_line_is_staked).
+        (prefab: "machine_marker", at: (-114.2, -90.9), rot: 0.0),
+        (prefab: "machine_marker", at: (-85.3, -124.4), rot: 0.0),
+        (prefab: "machine_marker", at: (-82.2, -149.1), rot: 0.0),
+        (prefab: "machine_marker", at: (-153.2, -85.2), rot: 0.0),
         // The machines' boundary stakes, an amber pulse after dark, where a way
         // into hot ground has nothing else lit to tell of it (map_gradient,
         // crossings_at_night).
