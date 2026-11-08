@@ -264,12 +264,15 @@ mod tests {
             let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
             let r = crate::map_lint::lint(&map, &hm);
             let cs = crossings(&map, &hm, &comfy, &r.routes);
-            let mut seen: Vec<(String, (i32, i32))> = Vec::new();
+            // One line per place, cell and way (two ways crossing in one
+            // cell from different directions each get a line).
+            let mut seen: Vec<(String, (i32, i32), String)> = Vec::new();
             println!("== {id}: {} crossings", cs.len());
             for c in &cs {
                 let key = (
                     c.into.0.clone(),
                     ((c.at[0] / 20.0) as i32, (c.at[1] / 20.0) as i32),
+                    c.way.clone(),
                 );
                 if seen.contains(&key) {
                     continue;

@@ -516,25 +516,7 @@ mod tests {
         use extraction_core::terrain::Heightmap;
         // (valley, into, near, the way, part of its name): waiting, and on
         // whom.
-        const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[
-            (
-                "marrow_creek",
-                "Radio mast",
-                [-69.0, -66.0],
-                "mast_relay",
-                "the jeep on the north way, waiting on Verifier's loot fix",
-            ),
-            // Found by this gauge, not shown by `probe_gradient` (it prints
-            // the first crossing of a 20 m cell; these are another way in
-            // there): Map design's to place or rule out.
-            (
-                "cinder_works",
-                "The works",
-                [32.0, 23.0],
-                "route to Works yard",
-                "Map design's",
-            ),
-        ];
+        const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[];
         let mut untold = vec![];
         let mut closed = vec![];
         for (id, text) in extraction_core::map::VALLEYS {
