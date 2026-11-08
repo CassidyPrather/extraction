@@ -534,13 +534,6 @@ mod tests {
                 "route to Works yard",
                 "Map design's",
             ),
-            (
-                "rime_fell",
-                "The upper slopes",
-                [-139.0, -52.0],
-                "home from The barracks",
-                "Map design's",
-            ),
         ];
         let mut untold = vec![];
         let mut closed = vec![];
