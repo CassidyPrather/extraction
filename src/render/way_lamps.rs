@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use crate::models::ModelMaterials;
 use crate::render::materials::MaterialLibrary;
 use crate::world::buildings::Building;
-use crate::world::halos::{Halo, HaloReach};
+use crate::world::halos::{Halo, HaloAngle, HaloReach};
 use crate::world::way_lamps::{BAND_H, BANDS, BULB_AT, MARKER_W};
 
 pub struct WayLampsPlugin;
@@ -40,10 +40,12 @@ const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.8, 0.22);
 const HALO_R: f32 = 0.8;
 const HALO_REACH: f32 = 240.0;
 
-/// A machine boundary marker's lamp (`machine_marker`): hazard amber,
-/// saturated and yellower than a yard lamp's pale warm bulb, nowhere near
-/// the landmarks' red (linear; the tonemapper's via `ToTheEye`).
-pub const MARKER_AMBER: LinearRgba = LinearRgba::rgb(1.0, 0.45, 0.0);
+/// A machine boundary marker's lamp (`machine_marker`): hazard orange,
+/// fully saturated, well redder than a yard lamp's pale warm bulb (a
+/// warning, not a shelter, in a still frame before any pulse is seen) and
+/// well yellower than the landmarks' red (linear; the tonemapper's via
+/// `ToTheEye`).
+pub const MARKER_AMBER: LinearRgba = LinearRgba::rgb(1.0, 0.18, 0.0);
 /// Its slow swell (s): a single cosine, under half a hertz, never a
 /// blink (VR comfort), every marker in step.
 pub const MARKER_PERIOD: f32 = 2.4;
@@ -53,9 +55,13 @@ pub const MARKER_LOW: f32 = 0.35;
 /// The marker halo's colour at full swell, its size, and how far off it
 /// shows (m): a lamp to find a crossing by from 25 m and some way past,
 /// well short of the landmarks' red, which carry across a valley.
-const MARKER_HALO: LinearRgba = LinearRgba::rgb(1.5, 0.6, 0.0);
+const MARKER_HALO: LinearRgba = LinearRgba::rgb(1.5, 0.27, 0.0);
 const MARKER_HALO_R: f32 = 0.3;
 const MARKER_HALO_REACH: f32 = 90.0;
+/// The least its halo spans (half-angle, rad): held, its bright core is
+/// a disc of some 0.6 degrees out to 25 m and past, not a speck to hunt
+/// for (`halos::HaloAngle`). Up close its own radius rules.
+const MARKER_HALO_ANGLE: f32 = 0.06;
 
 /// The one glow every marker's lens shares (all in step).
 #[derive(Component)]
@@ -86,6 +92,7 @@ fn halo_machine_markers(
                 radius: MARKER_HALO_R,
             },
             HaloReach(MARKER_HALO_REACH),
+            HaloAngle(MARKER_HALO_ANGLE),
         ));
     }
 }
@@ -352,10 +359,16 @@ mod marker_tests {
     fn the_marker_is_amber_not_a_yard_lamp_nor_a_landmark() {
         let (mh, ms) = hue_sat(MARKER_AMBER);
         let (yh, ys) = hue_sat(BULB);
-        // Amber: between red (0) and yellow (60), well off red.
-        assert!((35.0..50.0).contains(&mh), "marker hue {mh}");
-        // A yard lamp is a pale warm white: the marker deeply saturated.
-        assert!(ms > 0.9 && ys < 0.6, "saturation {ms} vs yard {ys}");
-        assert!(mh > yh, "yellower than the yard lamp ({mh} vs {yh})");
+        // Hazard orange: between red (0) and yellow (60), well off the
+        // landmarks' red (under 10) and the yard lamp's 37.
+        assert!((22.0..32.0).contains(&mh), "marker hue {mh}");
+        let (lh, _) = hue_sat(LinearRgba::rgb(4.0, 0.35, 0.18));
+        assert!(mh > lh + 12.0, "well off the landmarks' red ({mh} vs {lh})");
+        // A yard lamp is a pale warm white: the marker deeply saturated,
+        // and redder, so a still frame tells them apart.
+        assert!(ms > 0.95 && ys < 0.6, "saturation {ms} vs yard {ys}");
+        assert!(mh + 6.0 < yh, "redder than the yard lamp ({mh} vs {yh})");
+        let (hh, hs) = hue_sat(MARKER_HALO);
+        assert!((hh - mh).abs() < 4.0 && hs > 0.95, "halo {hh} {hs}");
     }
 }
