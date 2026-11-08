@@ -517,29 +517,14 @@ mod tests {
         // (valley, into, near, the way, part of its name): waiting, and on
         // whom.
         const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[
-            (
-                "marrow_creek",
-                "Radio mast",
-                [-69.0, -66.0],
-                "mast_relay",
-                "the jeep on the north way, waiting on Verifier's loot fix",
-            ),
-            // Found by this gauge, not shown by `probe_gradient` (it prints
-            // the first crossing of a 20 m cell; these are another way in
-            // there): Map design's to place or rule out.
-            (
-                "cinder_works",
-                "The works",
-                [32.0, 23.0],
-                "route to Works yard",
-                "Map design's",
-            ),
+            // Found by this gauge, hidden in `probe_gradient` behind another
+            // way's crossing in the same 20 m cell (it now prints each way).
             (
                 "rime_fell",
                 "The upper slopes",
                 [-139.0, -52.0],
                 "home from The barracks",
-                "Map design's",
+                "Fourth valley's board, gating",
             ),
         ];
         let mut untold = vec![];
