@@ -976,8 +976,27 @@ pub(super) fn direct_raid(
             && inside(to) != Some(b)
             && !en.doors.iter().any(|d| d.building == b && exit_step(d))
         {
-            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
+            let (out, end) = way_out_at(&world, &view, &plans, root.translation);
             if !out.is_empty() {
+                // Out of a site: the walk on from where the way out leaves
+                // it, not from below (from the kiosk's stair, its first leg
+                // ran from the door straight back through the kiosk to the
+                // truck over the shelter, and the newcomer went in again).
+                if below_in(&world.zone, &plans, root.translation).is_some() {
+                    let lead = bot
+                        .tasks
+                        .iter()
+                        .take_while(|t| matches!(t, Task::WalkTo { .. }))
+                        .count();
+                    if let Some(Task::WalkTo { to: dest, .. }) =
+                        lead.checked_sub(1).and_then(|i| bot.tasks.get(i)).cloned()
+                    {
+                        bot.tasks.drain(..lead);
+                        for t in walk(&world, end, dest).into_iter().rev() {
+                            bot.tasks.push_front(t);
+                        }
+                    }
+                }
                 for t in out.into_iter().rev() {
                     bot.tasks.push_front(t);
                 }
