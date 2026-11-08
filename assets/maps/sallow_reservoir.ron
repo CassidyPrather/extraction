@@ -480,6 +480,19 @@
         (prefab: "machine_marker", at: (-243.0, -115.0), rot: 0.0),  // into New Sallow, the Sallow Head route and home from the Fishing club
         (prefab: "machine_marker", at: (215.9, 75.7), rot: 0.0),  // onto the catchwater from the dam's east end
         (prefab: "machine_marker", at: (160.4, -55.2), rot: 0.0),  // onto the catchwater, home from the sorting ground
+        // The Gate's ring: the machines' stakes 52-68 m out, one within 25 m
+        // of every walkable spot on the 60 m circle where carrying a valley
+        // key calls a heavy (Heavy's gate_line_is_staked).
+        // Not the east arc under the fence (x 281, z -224 to -240): a 25-30
+        // degree hillside, with no footing a stake may stand on in reach.
+        (prefab: "machine_marker", at: (197.7, -182.1), rot: 0.0),
+        (prefab: "machine_marker", at: (207.5, -175.8), rot: 0.0),
+        (prefab: "machine_marker", at: (186.0, -175.5), rot: 0.0),
+        (prefab: "machine_marker", at: (165.5, -219.0), rot: 0.0),
+        (prefab: "machine_marker", at: (174.2, -264.9), rot: 0.0),
+        (prefab: "machine_marker", at: (254.6, -190.2), rot: 0.0),
+        (prefab: "machine_marker", at: (266.9, -203.9), rot: 0.0),
+        (prefab: "machine_marker", at: (266.9, -260.1), rot: 0.0),
 
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
