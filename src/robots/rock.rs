@@ -112,6 +112,29 @@ pub fn punch(momentum: f32, harm: f32) -> f32 {
     }
 }
 
+/// How much of a shove rolls it about the round's own line (so the side
+/// it struck dips), against tipping it away. Tipped straight away from the
+/// shooter, a machine hardly moves in their view: the shove is all depth.
+/// The roll is what reads from where the round came from (a heavy's at
+/// 15 m read the same struck or not without it).
+pub const ROLL: f32 = 0.8;
+
+/// The axis (unit) a round turns a machine about: away from the shooter
+/// about its pivot, rolled toward the side it struck (a round dead centre
+/// rolls it as if struck right of centre).
+pub fn axis_of(r: &Rocks, gt: &GlobalTransform, at: Vec3, dir: Vec3) -> Vec3 {
+    let pivot = gt.transform_point(r.pivot);
+    let away = (at - pivot).cross(dir).normalize_or_zero();
+    let line = dir.with_y(0.0).normalize_or_zero();
+    let right = line.cross(Vec3::Y);
+    let side = if (at - gt.translation()).dot(right) < 0.0 {
+        -1.0
+    } else {
+        1.0
+    };
+    (away + line * side * ROLL).normalize_or_zero()
+}
+
 /// A frame's hits on one machine: the way they turn it (each round's
 /// axis, from the pivot to where it struck across the way it went,
 /// weighted by its momentum), their momentum, and their harm without any.
@@ -133,8 +156,7 @@ fn take_hits(
         let Ok((r, gt, _)) = machines.get(s.robot) else {
             continue;
         };
-        let pivot = gt.transform_point(r.pivot);
-        let axis = (s.at - pivot).cross(s.dir).normalize_or_zero();
+        let axis = axis_of(r, gt, s.at, s.dir);
         let p = pushes.entry(s.robot).or_default();
         if s.momentum > 0.0 {
             p.axis += axis * s.momentum;
@@ -187,11 +209,10 @@ fn show(
         return;
     };
     for (r, gt, mut rock) in &mut machines {
-        let pivot = gt.transform_point(r.pivot);
         let away = (gt.translation() - eye.translation())
             .with_y(0.0)
             .normalize_or_zero();
-        let axis = (gt.translation() - pivot).cross(away).normalize_or_zero();
+        let axis = axis_of(r, gt, gt.translation(), away);
         rock.turn = axis * peak(r, punch(momentum, 0.0));
         rock.spin = Vec3::ZERO;
         rock.held = true;
