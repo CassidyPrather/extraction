@@ -20,7 +20,7 @@ import sys
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join, main_guard,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_lod, export_part, fillet, join, main_guard,
                     make, report, section_rect)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
 from _kit import text  # noqa: E402
@@ -391,4 +391,5 @@ empty("pt_sling_front", (-0.0172, 0.0435, PIVOT[2]))
 empty("pt_sling_rear", (-0.0205, -0.048, sz(0.218)))
 report()
 export("assets/models/guns/rpk74.glb")
+export_lod("assets/models/guns/rpk74_lod1.glb")
 export_part("static_butt", "assets/models/items/stock_rpk74.glb")

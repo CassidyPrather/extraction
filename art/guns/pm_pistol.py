@@ -11,7 +11,7 @@ import sys
 import bmesh
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, T, catmull, empty, export, fillet, join, main_guard, make, report,
+from common import (Part, RX, RY, T, catmull, empty, export, export_lod, fillet, join, main_guard, make, report,
                     section_rect)
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
@@ -322,3 +322,4 @@ empty("magwell", MAGWELL, RX(-0.216))
 
 report()
 export("assets/models/guns/pm_pistol.glb")
+export_lod("assets/models/guns/pm_pistol_lod1.glb")

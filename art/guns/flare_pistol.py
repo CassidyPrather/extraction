@@ -13,7 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, T, arc, empty, export, fillet, join, main_guard, make, report,
+from common import (Part, RX, RY, T, arc, empty, export, export_lod, fillet, join, main_guard, make, report,
                     section_circle, section_rect, catmull)
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
@@ -253,3 +253,4 @@ empty("pt_port", (0.0, BORE_Y, BREECH - 0.005))
 
 report()
 export("assets/models/guns/flare_pistol.glb")
+export_lod("assets/models/guns/flare_pistol_lod1.glb")
