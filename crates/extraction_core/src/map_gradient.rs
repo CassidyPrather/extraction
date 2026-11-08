@@ -183,16 +183,28 @@ fn crossings_with(
             "robot_gate" | "quarantine_gate" | "guard_booth"
         ) {
             "gate"
+        } else if p.prefab == "machine_marker" {
+            // The machines' own boundary stake: small by day, its amber
+            // lens a glow to [`LIT_READ`] after dark (Visual design).
+            if night {
+                glows.push(p.at);
+            }
+            "machine marker"
         } else {
             continue;
         };
         let f = prefab_footprint(&p.prefab);
+        let reach = if kind == "machine marker" && night {
+            LIT_READ
+        } else {
+            80.0
+        };
         tells.push((
             kind,
             p.prefab.clone(),
             p.at,
             h.max(1.5),
-            80.0,
+            reach,
             (h * f[0].min(f[2])).sqrt(),
         ));
     }
