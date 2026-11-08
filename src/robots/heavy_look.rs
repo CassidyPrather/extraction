@@ -606,16 +606,27 @@ fn segment(a: Vec3, b: Vec3, hinge: Vec3, nominal: f32) -> Transform {
 fn pose_limbs(
     mut commands: Commands,
     mut limbs: Query<(Entity, &Limb, &mut Transform)>,
-    heavies: Query<(&LegPoses, &Arm, &GlobalTransform)>,
+    heavies: Query<(
+        &LegPoses,
+        &Arm,
+        &GlobalTransform,
+        Option<(&super::rock::Rocks, &super::rock::Rock)>,
+    )>,
 ) {
     for (e, limb, mut t) in &mut limbs {
-        let Ok((poses, arm, gt)) = heavies.get(limb.robot) else {
+        let Ok((poses, arm, gt, rock)) = heavies.get(limb.robot) else {
             commands.entity(e).despawn();
             continue;
         };
+        // Its hips and shoulder go with its hull as it rocks; its feet and
+        // claw stay where they are.
+        let turn = rock.map_or(bevy::math::Affine3A::IDENTITY, |(r, k)| {
+            super::rock::turn_of(r, k, gt)
+        });
         *t = match limb.kind {
             LimbKind::Thigh(i) | LimbKind::Shin(i) => {
                 let [hip, knee, foot] = poses.0[i];
+                let hip = turn.transform_point3(hip);
                 let mut hinge = (knee - hip).cross(foot - knee);
                 if hinge.length_squared() < 1e-8 {
                     hinge = gt.right().as_vec3();
@@ -628,7 +639,7 @@ fn pose_limbs(
             }
             LimbKind::ArmUpper | LimbKind::ArmFore => {
                 let body = gt.compute_transform();
-                let shoulder = body.transform_point(SHOULDER);
+                let shoulder = turn.transform_point3(body.transform_point(SHOULDER));
                 let elbow = arm_elbow(&body, shoulder, arm.claw);
                 let hinge = (elbow - shoulder).cross(arm.claw - elbow);
                 let hinge = if hinge.length_squared() < 1e-8 {

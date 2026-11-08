@@ -60,6 +60,7 @@ pub mod pressure;
 pub mod pylon;
 pub mod recall;
 pub mod reel;
+pub mod rock;
 pub mod salvage;
 pub mod search;
 pub mod senses;
@@ -416,7 +417,11 @@ impl Plugin for RobotsPlugin {
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
-            .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
+            .add_plugins((
+                hazard_look::HazardLookPlugin,
+                weak_points::WeakPointsPlugin,
+                rock::RockPlugin,
+            ))
             .add_systems(
                 FixedUpdate,
                 (
