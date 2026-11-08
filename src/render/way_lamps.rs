@@ -135,11 +135,19 @@ fn light_lens(m: &mut StandardMaterial) {
 }
 
 /// Every marker's lens and halo, swelling together (`marker_pulse`).
+/// Stepped every `SWELL_EVERY` frames: each write re-prepares the shared
+/// lens for the GPU, and a slow swell's 30 steps a second are smooth to
+/// the eye (`budget`'s gauge: no shared material rewritten every frame).
 fn swell_machine_markers(
     time: Res<Time>,
+    mut frame: Local<u32>,
     mut glow: Query<&mut crate::render::grade::ToTheEye, With<MarkerGlow>>,
     mut halos: Query<&mut Halo, With<MarkerHalo>>,
 ) {
+    *frame = frame.wrapping_add(1);
+    if *frame % SWELL_EVERY != 0 {
+        return;
+    }
     let k = marker_pulse(time.elapsed_secs());
     for mut g in &mut glow {
         let want = MARKER_AMBER * k;
@@ -155,6 +163,10 @@ fn swell_machine_markers(
         }
     }
 }
+
+/// How often the swell steps (frames): a third of the frames, so a
+/// shared material is written at most that often.
+pub const SWELL_EVERY: u32 = 3;
 
 /// The marker lamp's strength at `t` seconds, `MARKER_LOW..=1`.
 pub fn marker_pulse(t: f32) -> f32 {
@@ -363,8 +375,9 @@ mod marker_tests {
             last = v;
         }
         assert!((lo - MARKER_LOW).abs() < 0.01 && hi > 0.99, "{lo}..{hi}");
-        // A headset frame never steps it more than 1.5%: a swell, no blink.
-        assert!(step < 0.015, "{step}");
+        // A step (every `SWELL_EVERY` headset frames) never moves it more
+        // than 5%: a swell, no blink.
+        assert!(step * SWELL_EVERY as f32 < 0.05, "{step}");
     }
 
     #[test]
