@@ -277,6 +277,12 @@
         (at: (4.0, -176.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // The machines' boundary stakes, an amber pulse after dark, where a way
+        // into hot ground has nothing else lit to tell of it (map_gradient,
+        // crossings_at_night).
+        (prefab: "machine_marker", at: (60.0, -80.5), rot: 56.0),  // Charcoal burners' hut, the lodge route and home from the Logging camp (78, -83)
+        (prefab: "machine_marker", at: (-73.5, -45.8), rot: 278.0),  // Kettle mine, home from Miners' Row and the Gatekeeper's cottage (-91, -41)
+        (prefab: "machine_marker", at: (-161.9, 6.7), rot: 356.0),  // Kettle mine, home from the Low farm (-167, -9)
         // Where a way crosses into hot ground, a wreck by it short of the line,
         // ahead of a newcomer walking up (map_gradient).
         (prefab: "wreck_lada", at: (-77.6, -46.0), rot: 272.0),  // Kettle mine, the route to the Mine yard and home from Miners' Row (-91, -40)

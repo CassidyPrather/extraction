@@ -265,6 +265,10 @@
     ],
 
     placements: [
+        // The machines' boundary stakes, an amber pulse after dark, where a way
+        // into hot ground has nothing else lit to tell of it (map_gradient,
+        // crossings_at_night).
+        (prefab: "machine_marker", at: (60.5, -130.5), rot: 0.0),  // North sidings, the route to them and home from the slag heaps (55, -141)
         // Where a way crosses into hot ground, a wreck by it short of the line,
         // ahead of a newcomer walking up (map_gradient).
         (prefab: "wreck_uaz", at: (44.6, -128.3), rot: 22.0),  // North sidings, the route to them (54, -142)

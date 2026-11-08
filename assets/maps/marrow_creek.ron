@@ -313,6 +313,12 @@
         (at: (117.5, -40.0), radius: 1.6, stones: 3),
     ],
     placements: [
+        // The machines' boundary stakes, an amber pulse after dark, where a way
+        // into hot ground has nothing else lit to tell of it (map_gradient,
+        // crossings_at_night).
+        (prefab: "machine_marker", at: (10.9, -71.8), rot: 347.0),  // Bus depot, the route to it (3, -86)
+        (prefab: "machine_marker", at: (109.8, -77.7), rot: 325.0),  // Rail yard, home from the Old farm (97, -89)
+        (prefab: "machine_marker", at: (-8.7, -68.5), rot: 231.0),  // Radio mast, the mast_relay way in from the east (-24, -62)
         // Where a way crosses into hot ground, something of the place tells of it
         // before you are in it (map_gradient): a wreck by the way short of the
         // line, or the relay compound's booth and its jeep at its ways in.
