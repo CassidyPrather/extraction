@@ -4134,6 +4134,165 @@ fn by_deck_ends(
 /// A waypoint this near a deck's end is at it already (m).
 const DECK_END_NEAR: f32 = 1.0;
 
+/// How far out from a doorway, either side, a walk through it lines up
+/// and comes out (m).
+const DOOR_SQUARE: f32 = 0.8;
+/// A point this near a doorway's axis (its middle, square to it) is on
+/// its line already (m): more than a stop's `DOOR_STOP_WITHIN`, so a bot
+/// at its stop is on the line and isn't sent back to it.
+const DOOR_ON_LINE: f32 = 0.45;
+/// How near its stops in front of and behind a doorway the walk comes (m).
+const DOOR_STOP_WITHIN: f32 = 0.3;
+/// A leg from this far off a doorway's middle isn't one walking through it
+/// (m): a way through a door starts by it (the plan's stop before a door,
+/// or a step aside), and a straight line from across a site that happens
+/// to cross a doorway (a walk aimed at the surface from below it) is no
+/// way through it to square.
+const DOOR_NEAR: f32 = 6.0;
+
+/// A doorway as a walk meets it: its closed leaf's line, hinge to latch
+/// (on the map), and the height of its sill.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Doorway {
+    pub a: Vec2,
+    pub b: Vec2,
+    pub y: f32,
+}
+
+/// Every door's doorway, from its leaf's closed line in its building.
+fn doorways(view: &RaidView) -> Vec<Doorway> {
+    view.leaves
+        .iter()
+        .filter_map(|(_, leaf, parent)| {
+            let (_, _, bxf) = view.buildings.get(parent.parent()).ok()?;
+            let d = &leaf.0;
+            let a = bxf.transform_point(d.hinge);
+            let axis = bxf.rotation * Quat::from_rotation_y(d.yaw) * Vec3::X;
+            let b = a + axis * d.width;
+            Some(Doorway {
+                a: a.xz(),
+                b: b.xz(),
+                y: a.y,
+            })
+        })
+        .collect()
+}
+
+/// Where the walk `p`..`q` crosses the segment `a`..`b`, as a fraction of
+/// the walk (strictly between its ends).
+fn crosses_at(p: Vec2, q: Vec2, a: Vec2, b: Vec2) -> Option<f32> {
+    let r = q - p;
+    let s = b - a;
+    let den = r.perp_dot(s);
+    if den.abs() < 1e-6 {
+        return None;
+    }
+    let t = (a - p).perp_dot(s) / den;
+    let u = (a - p).perp_dot(r) / den;
+    (t > 1e-3 && t < 1.0 - 1e-3 && (-0.05..=1.05).contains(&u)).then_some(t)
+}
+
+/// The walk `from`, then each of `pts`, through any doorway square on its
+/// line: lined up in front of its middle, through, and out square behind
+/// it, as a person goes through a door. A leg cutting a doorway's corner
+/// went by its hinge into the pocket behind the open leaf, and stood
+/// there the rest of the raid (the shelter on Marrow, cautious, seed 3
+/// job 2: door 1465, 0.6 m from its hinge, 3,200 frames). The points
+/// after `from`, with the stops put in; a leg already on a doorway's line
+/// is left as it is.
+pub(super) fn through_doorways(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec2]) -> Vec<Vec2> {
+    let mut out = Vec::with_capacity(pts.len());
+    let mut at = from;
+    for &p in pts {
+        let mut leg_from = at;
+        // (More than one doorway on a leg: each in turn, nearest first.)
+        for _ in 0..4 {
+            let Some(d) = doors
+                .iter()
+                .filter(|d| (d.y - y).abs() < 2.0)
+                .filter(|d| leg_from.distance((d.a + d.b) * 0.5) <= DOOR_NEAR)
+                .filter_map(|d| crosses_at(leg_from, p, d.a, d.b).map(|t| (t, *d)))
+                .min_by(|x, y| x.0.total_cmp(&y.0))
+                .map(|(_, d)| d)
+            else {
+                break;
+            };
+            let w = d.b - d.a;
+            let along = w.normalize_or(Vec2::X);
+            let n = along.perp();
+            let mid = (d.a + d.b) * 0.5;
+            let on = |q: Vec2| (q - mid).dot(along).abs() < DOOR_ON_LINE;
+            let side = (leg_from - mid).dot(n).signum();
+            let (front, back) = (mid + n * side * DOOR_SQUARE, mid - n * side * DOOR_SQUARE);
+            if on(leg_from) && on(p) {
+                break;
+            }
+            if !on(leg_from) {
+                out.push(front);
+            }
+            if !on(p) {
+                out.push(back);
+                leg_from = back;
+            } else {
+                break;
+            }
+        }
+        out.push(p);
+        at = p;
+    }
+    out
+}
+
+/// After the newcomer's director: every walk in its queue through a
+/// doorway square on its line (`through_doorways`), the ones an answer cut
+/// in among them too (a step aside, then on, went through a doorway by
+/// its hinge).
+pub(super) fn square_through_doorways(
+    opts: Res<LaunchOptions>,
+    mut bots: Query<(&mut Bot, &Transform), With<LocalPlayer>>,
+    view: RaidView,
+) {
+    if opts.scenario.as_deref() != Some(RAID) {
+        return;
+    }
+    let Some((mut bot, root)) = bots.iter_mut().next() else {
+        return;
+    };
+    if !bot.tasks.iter().any(|t| matches!(t, Task::WalkTo { .. })) {
+        return;
+    }
+    let doors = doorways(&view);
+    if doors.is_empty() {
+        return;
+    }
+    let y = root.translation.y;
+    let mut at = root.translation.xz();
+    let mut tasks = std::collections::VecDeque::with_capacity(bot.tasks.len() + 4);
+    let mut changed_front = false;
+    let mut changed = false;
+    for (i, t) in bot.tasks.iter().enumerate() {
+        if let Task::WalkTo { to, .. } = t {
+            let way = through_doorways(&doors, at, y, &[*to]);
+            for stop in &way[..way.len() - 1] {
+                tasks.push_back(Task::WalkTo {
+                    to: *stop,
+                    within: DOOR_STOP_WITHIN,
+                });
+                changed = true;
+                changed_front |= i == 0;
+            }
+            at = *to;
+        }
+        tasks.push_back(t.clone());
+    }
+    if changed {
+        bot.tasks = tasks;
+        if changed_front {
+            bot.restart();
+        }
+    }
+}
+
 /// A deck this little above the ground under it is one a walk steps up
 /// onto (and into its railing), not one it passes under (m).
 const DECK_STEP_UP: f32 = 1.4;
@@ -5388,6 +5547,82 @@ the Hollow.";
         // Under it, east to west, never on it: as it was.
         let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
         assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+    }
+
+    /// Through a doorway square on its line, from anywhere round it: every
+    /// leg that crosses its line does so on its axis, from a stop in front
+    /// to one behind, never by its hinge (the shelter's door 1465: in by
+    /// its hinge from a step aside, into the pocket behind the open leaf).
+    /// A leg on its line already, and one that never crosses it, as they were.
+    #[test]
+    fn a_walk_goes_through_a_doorway_square() {
+        let d = Doorway {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.9, 0.0),
+            y: 0.0,
+        };
+        let doors = [d];
+        let mid = Vec2::new(0.45, 0.0);
+        let ring: Vec<Vec2> = (0..16)
+            .map(|k| {
+                let t = k as f32 / 16.0 * std::f32::consts::TAU;
+                mid + Vec2::new(t.cos(), t.sin()) * 3.0
+            })
+            .collect();
+        let on_axis = |q: Vec2| (q.x - mid.x).abs() < DOOR_ON_LINE;
+        let mut crossings = 0;
+        for a in &ring {
+            for b in &ring {
+                let way = through_doorways(&doors, *a, 0.0, &[*b]);
+                assert_eq!(way.last(), Some(b));
+                let mut at = *a;
+                for p in &way {
+                    if crosses_at(at, *p, d.a, d.b).is_some() {
+                        crossings += 1;
+                        assert!(
+                            on_axis(at) && on_axis(*p),
+                            "{a}..{b}: leg {at}..{p} crosses off the axis in {way:?}"
+                        );
+                    }
+                    at = *p;
+                }
+                // Again from where it ends up: nothing more put in.
+                let mut at = *a;
+                let mut again = Vec::new();
+                for p in &way {
+                    again.extend(through_doorways(&doors, at, 0.0, &[*p]));
+                    at = *p;
+                }
+                assert_eq!(again, way, "{a}..{b}: not settled");
+            }
+        }
+        assert!(crossings > 0);
+        // Square through already: as it was.
+        let (front, back) = (Vec2::new(0.45, 1.0), Vec2::new(0.45, -1.0));
+        assert_eq!(through_doorways(&doors, front, 0.0, &[back]), vec![back]);
+        // Never across it: as it was.
+        let (e, w) = (Vec2::new(3.0, 1.0), Vec2::new(-3.0, 1.0));
+        assert_eq!(through_doorways(&doors, e, 0.0, &[w]), vec![w]);
+        // From across the site, a straight line through it: as it was.
+        let (far, beyond) = (Vec2::new(0.6, 15.0), Vec2::new(0.2, -15.0));
+        assert!(crosses_at(far, beyond, d.a, d.b).is_some());
+        assert_eq!(through_doorways(&doors, far, 0.0, &[beyond]), vec![beyond]);
+        // A doorway on another floor: as it was.
+        let (n, s) = (Vec2::new(0.1, 2.0), Vec2::new(0.1, -2.0));
+        assert_eq!(through_doorways(&doors, n, 5.0, &[s]), vec![s]);
+        // By its hinge from a step aside (the shelter's case): lined up
+        // in front, through, out behind.
+        // (Across its line 0.2 m from the hinge.)
+        let (from, to) = (Vec2::new(-0.3, 1.0), Vec2::new(1.2, -2.0));
+        assert!(crosses_at(from, to, d.a, d.b).is_some());
+        assert_eq!(
+            through_doorways(&doors, from, 0.0, &[to]),
+            vec![
+                Vec2::new(0.45, DOOR_SQUARE),
+                Vec2::new(0.45, -DOOR_SQUARE),
+                to
+            ]
+        );
     }
 
     /// A walk past a bridge's end, from off it to off it, keeps off its
