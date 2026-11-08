@@ -492,7 +492,39 @@ pub fn seeded_job(kind: &str, here: &str) -> Option<Job> {
             item: "canned_stew".into(),
             n: 2,
         },
+        "shelter" => return shelter_job(&map),
         _ => return None,
+    })
+}
+
+/// The job card's thing in the shelter's room farthest from any way out of
+/// it (the site with a lockdown: Marrow's bunker): down there, the
+/// newcomer has to come up through the site to get home. A regression run
+/// (`--job shelter`), so a career that no longer goes underground can't
+/// hide a walk from below that goes straight at the surface through the
+/// rock (the shelter on Marrow, seed 3 job 2).
+pub fn shelter_job(map: &str) -> Option<Job> {
+    use extraction_core::underground as ug;
+    let def = crate::world::load_map_def(map);
+    let dist = |a: [f32; 2], b: [f32; 2]| Vec2::from(a).distance(Vec2::from(b));
+    ug::placed(&def).into_iter().find_map(|p| {
+        let l = ug::layout(&p.id)?;
+        l.lockdown.as_ref()?;
+        let room = l.rooms.iter().filter(|r| !r.pit).max_by(|a, b| {
+            let out = |r: &ug::Room| {
+                l.portals
+                    .iter()
+                    .map(|q| dist(q.at, r.at))
+                    .fold(f32::MAX, f32::min)
+            };
+            out(a).total_cmp(&out(b))
+        })?;
+        Some(Job::Bring {
+            map: map.to_owned(),
+            place: "the shelter".into(),
+            item: "holm_watch".into(),
+            at: p.to_world(room.at),
+        })
     })
 }
 
@@ -5616,6 +5648,32 @@ the Hollow.";
         // Under it, east to west, never on it: as it was.
         let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
         assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+    }
+
+    /// The shelter job (`--job shelter`) puts the card's thing down in
+    /// Marrow's bunker, in a room the newcomer has to come up out of: a
+    /// regression run for the walk home from below.
+    #[test]
+    fn the_shelter_job_is_down_the_shelter() {
+        let Some(Job::Bring { map, item, at, .. }) = shelter_job("marrow_creek") else {
+            panic!("no shelter job on Marrow");
+        };
+        assert_eq!(
+            (map.as_str(), item.as_str()),
+            ("marrow_creek", "holm_watch")
+        );
+        let def = crate::world::load_map_def("marrow_creek");
+        let (site, room) = extraction_core::contracts::down_site(&def, at)
+            .unwrap_or_else(|| panic!("{at:?} isn't down a site"));
+        assert!(
+            extraction_core::underground::layout(&site).is_some_and(|l| l.lockdown.is_some()),
+            "{site}: not the shelter"
+        );
+        assert_ne!(room, "lock", "the way in's own room");
+        assert_eq!(
+            seeded_job("shelter", "marrow_creek"),
+            shelter_job("marrow_creek")
+        );
     }
 
     /// Through a doorway square on its line, from anywhere round it: every
