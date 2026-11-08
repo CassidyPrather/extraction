@@ -1119,10 +1119,9 @@ mod tests {
     }
 
     /// Each Gate's line is staked where you'd cross it: every walkable
-    /// spot of it within 25 m of a machine marker. (Map design's ring; on
-    /// once it's placed.)
+    /// spot of it within 25 m of a machine marker standing on it (Map
+    /// design's and Fourth valley's rings).
     #[test]
-    #[ignore = "the ring of machine markers is Map design's, coming"]
     fn gate_line_is_staked() {
         use extraction_core::map::{MapDef, VALLEYS};
         use extraction_core::terrain::Heightmap;
