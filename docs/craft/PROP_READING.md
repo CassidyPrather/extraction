@@ -342,3 +342,26 @@ prop's distance (`art/check.py`).
 
 ![The five by day (the model sweep's light) and at night under its lamp,
 which lights them from the side](../shots/props/warning_boards.jpg)
+
+## The machines' boundary marker (8 November)
+
+At night, crossings into hot ground told nothing: the only lamp a map
+could place was the warm `way_lamp`, which reads as shelter.
+`machine_marker` is the machines' own. It's a stake they fire into the
+ground where their working ground begins: six-sided and fluted, standing
+on three dart fins, all in the robots' pale Shell. A band of frosted lens
+runs all round its head, 1.6 m up, high enough to read over grass and
+scrub from 25 m. It's 1.74 m tall with its cap and aerial, and has two
+materials and 520 triangles.
+
+It's a building prefab (`world::way_lamps`), placed in a map as
+`(prefab: "machine_marker", at, rot)` like the way lamp. It grows no ivy.
+The lens is its own material, `MarkerLens`: frosted and unlit in the
+model, so Visual design drives its emissive with a slow amber pulse.
+Its light and halo go at `world::way_lamps::MARKER_LAMP_AT`, which is
+the model's empty `lamp`. `a_machine_marker_has_its_model_and_its_lamp_where_the_light_goes`
+holds the two together, inside the lens.
+
+![By day close up; at night by the torch close up; at night from 25 m,
+where until its lens is lit it isn't seen at all (a placement in Marrow
+Creek, for the shots only)](../shots/props/machine_marker.jpg)

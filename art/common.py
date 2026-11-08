@@ -68,6 +68,10 @@ MATERIALS = {
     "Clear": ((0.8, 0.82, 0.8), 0.0, 0.1, None),
     "Warn": ((0.9, 0.6, 0.1), 0.0, 0.4, (1.0, 0.55, 0.07)),
     "Beacon": ((1.0, 0.75, 0.4), 0.0, 0.3, (1.0, 0.6, 0.2)),
+    # The machines' boundary stake's lens (`machine_marker`): frosted and
+    # unlit; the game lights it amber (Visual design) through its own
+    # material, so pulsing it pulses no robot's trim.
+    "MarkerLens": ((0.82, 0.82, 0.8), 0.0, 0.2, None),
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
