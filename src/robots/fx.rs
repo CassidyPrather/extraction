@@ -978,9 +978,16 @@ fn zap_arcs(
 }
 
 /// A drone going down trails dark smoke.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn wreck_trails(
     mut commands: Commands,
-    falling: Query<(Entity, &GlobalTransform), With<super::wreck::Spiral>>,
+    // (A drone going down trails dark smoke; a flare canister going up, the
+    // same, a line in the sky back to the machine that fired it: a pale
+    // one was lost against a grey sky.)
+    falling: Query<
+        (Entity, &GlobalTransform),
+        Or<(With<super::wreck::Spiral>, With<super::distress::Canister>)>,
+    >,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
     soft: Res<crate::render::puff::PuffAssets>,
