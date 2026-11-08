@@ -474,6 +474,13 @@
         (prefab: "wreck_uaz", at: (167.2, -64.1), rot: 90.0),  // into the catchwater from the sorting ground
         (prefab: "wreck_uaz", at: (-80.3, -220.5), rot: 45.0),  // into New Sallow from the causeway
 
+        // The machines' boundary stakes, amber-lit, where a way crosses
+        // into hot ground with nothing of its own lit to tell it after dark
+        // (map_gradient's night rule: within 25 m of the approach, ahead).
+        (prefab: "machine_marker", at: (-243.0, -115.0), rot: 0.0),  // into New Sallow, the Sallow Head route and home from the Fishing club
+        (prefab: "machine_marker", at: (215.9, 75.7), rot: 0.0),  // onto the catchwater from the dam's east end
+        (prefab: "machine_marker", at: (160.4, -55.2), rot: 0.0),  // onto the catchwater, home from the sorting ground
+
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (2.9, 168.3), rot: 0.0),  // by the valve house, the way west to the stair

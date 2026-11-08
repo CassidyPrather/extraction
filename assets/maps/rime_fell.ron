@@ -240,6 +240,12 @@
         (prefab: "wreck_lorry", at: (66.9, 78.6), rot: 120.0),  // into Coldharbour from the funicular
         (prefab: "guard_booth", at: (222.3, 70.6), rot: 90.0),  // into the tip from the funicular
 
+        // The machines' boundary stakes, amber-lit, where a way crosses
+        // into hot ground with nothing of its own lit to tell it after dark
+        // (map_gradient's night rule: within 25 m of the approach, ahead).
+        (prefab: "machine_marker", at: (213.4, 71.4), rot: 0.0),  // into the tip, the Tip road route and home from the Valley station
+        (prefab: "machine_marker", at: (-146.0, -46.0), rot: 0.0),  // onto the upper slopes, home from the Roadmen's hut, the barracks and the galleries
+
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (-192.4, -235.9), rot: 0.0),
