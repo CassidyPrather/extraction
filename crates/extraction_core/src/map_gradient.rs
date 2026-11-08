@@ -16,6 +16,25 @@ use crate::terrain::Heightmap;
 pub const APPROACH: f32 = 60.0;
 /// The danger from which ground is hot.
 pub const HOT: u8 = 2;
+/// A tell reads when it spans this much of the eye (radians), as a cue
+/// does off the way (`map_breadcrumbs::READ_ANGLE`); not the skyline's
+/// smaller allowance: a tell is found in the frame without a caption.
+pub const READ_ANGLE: f32 = crate::map_breadcrumbs::READ_ANGLE;
+/// It must read from the approach, from this far short of the line (m)
+/// back to [`READ_FROM`]: what a newcomer sees coming up to it, not only
+/// once they're at it.
+pub const SHORT: f32 = 8.0;
+pub const READ_FROM: f32 = APPROACH;
+/// And it must be ahead, within this of the way's heading where it's
+/// read from (degrees): in the frame walking on, not over a shoulder. A
+/// tell beside the way short of the line reads from further back, where
+/// it's ahead; the heading, not a narrow window, keeps out what's only
+/// passed.
+pub const AHEAD: f32 = 35.0;
+/// How much quiet ground a way must have crossed before the line for it
+/// to be a way out of the quiet (m): the approach frame's 20 m. Less, and
+/// it's a gap between hot places, walked hot to hot.
+pub const QUIET_RUN: f32 = 20.0;
 /// How near the line a thing outside the hot ground still tells of it (m).
 pub const BY_THE_LINE: f32 = 40.0;
 
@@ -28,7 +47,18 @@ pub struct Crossing {
     /// What tells of it on the approach: kind, name, how far from the
     /// nearest approach point that sees it.
     pub signals: Vec<(&'static str, String, f32)>,
+    /// The way's point [`BACK`] metres back from the line, and the way's
+    /// bearing there (a unit vector, toward the line): where a tell goes.
+    pub back: (P2, P2),
 }
+
+/// How far a sentry's day marker reads (m): its full sight
+/// (`rules::SIGHT`), against a slag heap or a grey building, as Robot
+/// bodies measured it; dark when it has no power.
+pub const SENTRY_READ: f32 = 55.0;
+
+/// How far back from the line a tell's spot is suggested (m).
+pub const BACK: f32 = 15.0;
 
 fn danger(map: &MapDef, p: P2) -> (String, u8) {
     map.region_at(p)
@@ -61,8 +91,10 @@ fn in_sight(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> 
 pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]) -> Vec<Crossing> {
     let solids = solids(map);
     let marks = crate::map_landmarks::landmarks(map, hm);
-    // Every thing that can tell: kind, name, where, how tall, how far it carries.
-    let mut tells: Vec<(&'static str, String, P2, f32, f32)> = Vec::new();
+    // Every thing that can tell: kind, name, where, how tall, how far it
+    // carries, and how big it looks (the square root of its height times
+    // its narrowest breadth, as `map_breadcrumbs` reads a cue).
+    let mut tells: Vec<(&'static str, String, P2, f32, f32, f32)> = Vec::new();
     for m in &map.markers {
         match &m.kind {
             MarkerKind::Sign { text, .. } => tells.push((
@@ -71,11 +103,16 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 m.at,
                 1.5,
                 30.0,
+                1.1,
             )),
-            MarkerKind::Sentry { .. } => tells.push(("sentry", m.name.clone(), m.at, 2.0, 90.0)),
-            MarkerKind::RobotGate => tells.push(("robot gate", m.name.clone(), m.at, 3.0, 120.0)),
+            MarkerKind::Sentry { .. } => {
+                tells.push(("sentry", m.name.clone(), m.at, 2.0, 90.0, 1.6))
+            }
+            MarkerKind::RobotGate => {
+                tells.push(("robot gate", m.name.clone(), m.at, 3.0, 120.0, 3.0))
+            }
             MarkerKind::Anomaly { kind, .. } => {
-                tells.push(("anomaly", kind.clone(), m.at, 1.0, 40.0))
+                tells.push(("anomaly", kind.clone(), m.at, 1.0, 40.0, 2.0))
             }
             _ => {}
         }
@@ -92,14 +129,22 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
         } else {
             continue;
         };
-        tells.push((kind, p.prefab.clone(), p.at, h.max(1.5), 80.0));
+        let f = prefab_footprint(&p.prefab);
+        tells.push((
+            kind,
+            p.prefab.clone(),
+            p.at,
+            h.max(1.5),
+            80.0,
+            (h * f[0].min(f[2])).sqrt(),
+        ));
     }
     // A landmark's lamp over hot ground: red, far off.
     for l in &marks {
         for (top, y) in &l.tops {
             if danger(map, *top).1 >= HOT {
                 let h = y - hm.height(*top);
-                tells.push(("red lamp over it", l.name.clone(), *top, h, 250.0));
+                tells.push(("red lamp over it", l.name.clone(), *top, h, 250.0, 1.0));
             }
         }
     }
@@ -110,18 +155,54 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
             if !(a.1 < HOT && b.1 >= HOT) {
                 continue;
             }
-            // The approach: back along the way from the line.
+            // The approach: back along the way from the line, on quiet
+            // ground (it ends where the way was last in hot ground).
             let mut approach = Vec::new();
             let mut s = 0.0;
             let mut j = i + 1;
             while j > 0 && s <= APPROACH {
                 approach.push(pts[j]);
+                if danger(map, pts[j - 1]).1 >= HOT {
+                    break;
+                }
                 s += dist(pts[j], pts[j - 1]);
                 j -= 1;
             }
-            let approach: Vec<P2> = approach.into_iter().step_by(3).collect();
+            // A gap of quiet ground narrower than the approach frame
+            // between hot places isn't a way out of the quiet: no crossing.
+            if s < QUIET_RUN {
+                continue;
+            }
+            let back = {
+                let mut k = 0;
+                while k + 1 < approach.len() && dist(approach[k + 1], w[1]) < BACK {
+                    k += 1;
+                }
+                let at = approach[(k + 1).min(approach.len() - 1)];
+                let to = approach[k];
+                let d = dist(at, to).max(0.1);
+                (at, [(to[0] - at[0]) / d, (to[1] - at[1]) / d])
+            };
+            // Each reading point with the way's heading there (toward the
+            // line: the point before it in `approach`, or the line itself).
+            let approach: Vec<(P2, P2)> = (0..approach.len())
+                .step_by(3)
+                .map(|k| {
+                    let at = approach[k];
+                    let to = if k == 0 { w[1] } else { approach[k - 1] };
+                    let to = if dist(at, to) < 0.1 { w[1] } else { to };
+                    let d = dist(at, to).max(0.1);
+                    (at, [(to[0] - at[0]) / d, (to[1] - at[1]) / d])
+                })
+                .collect();
+            let ahead = |p: P2, h: P2, at: P2| {
+                let d = dist(p, at);
+                d < 1.0
+                    || (h[0] * (at[0] - p[0]) + h[1] * (at[1] - p[1])) / d
+                        >= AHEAD.to_radians().cos()
+            };
             let mut signals = Vec::new();
-            for (kind, name, at, h, reach) in &tells {
+            for (kind, name, at, h, reach, size) in &tells {
                 // Its own: in the hot ground being entered, or by the line.
                 let here = danger(map, *at).0 == b.0 || dist(*at, w[1]) <= BY_THE_LINE;
                 if !here {
@@ -129,8 +210,17 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 }
                 let near = approach
                     .iter()
-                    .map(|p| (dist(*p, *at), *p))
+                    .filter(|(p, h)| ahead(*p, *h, *at))
+                    .map(|(p, _)| (dist(*p, *at), *p))
                     .filter(|(d, _)| d <= reach)
+                    // Found in the frame without a caption: big enough at
+                    // its distance (the lamps aside: they glow), from a
+                    // point on the approach short of the line.
+                    .filter(|(d, p)| {
+                        *kind == "red lamp over it"
+                            || (*size / d.max(1.0) >= READ_ANGLE
+                                && (SHORT..=READ_FROM).contains(&dist(*p, w[1])))
+                    })
                     .filter(|(_, p)| in_sight(hm, &solids, *p, *at, *h))
                     .map(|(d, _)| d)
                     .fold(f32::INFINITY, f32::min);
@@ -146,6 +236,7 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 from: a,
                 into: b,
                 signals,
+                back,
             });
         }
     }
@@ -173,12 +264,15 @@ mod tests {
             let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
             let r = crate::map_lint::lint(&map, &hm);
             let cs = crossings(&map, &hm, &comfy, &r.routes);
-            let mut seen: Vec<(String, (i32, i32))> = Vec::new();
+            // One line per place, cell and way (two ways crossing in one
+            // cell from different directions each get a line).
+            let mut seen: Vec<(String, (i32, i32), String)> = Vec::new();
             println!("== {id}: {} crossings", cs.len());
             for c in &cs {
                 let key = (
                     c.into.0.clone(),
                     ((c.at[0] / 20.0) as i32, (c.at[1] / 20.0) as i32),
+                    c.way.clone(),
                 );
                 if seen.contains(&key) {
                     continue;
@@ -204,6 +298,19 @@ mod tests {
                         .collect::<Vec<_>>()
                         .join(", ")
                 };
+                let (p, d) = c.back;
+                let side = |k: f32| [p[0] - d[1] * k, p[1] + d[0] * k];
+                let (l, r) = (side(4.0), side(-4.0));
+                let tell = format!(
+                    "{tell}  | {BACK:.0} m back ({:.1}, {:.1}): beside ({:.1}, {:.1}) or ({:.1}, {:.1}), facing {:.0}",
+                    p[0],
+                    p[1],
+                    l[0],
+                    l[1],
+                    r[0],
+                    r[1],
+                    d[0].atan2(-d[1]).to_degrees().rem_euclid(360.0)
+                );
                 let tell = format!(
                     "{tell}  | its lamps: {}",
                     if lamps.is_empty() {
@@ -256,5 +363,119 @@ mod edges {
                 println!("  first job {what}: {}", d(at));
             }
         }
+    }
+}
+
+/// Where a walked way first comes into a sentry's sight with its lamp
+/// not read first: not seen from that point or one before it on the way,
+/// ahead (within [`AHEAD`] of the way's heading), within [`SENTRY_READ`]
+/// and in sight. A machine must be readable at least as far out as it can
+/// see you. At a way's start (a job, a stop) the walker stands and looks
+/// round, so any heading reads there. The sightline is the sentry's own
+/// the other way, its head to the walker's eye: the lamp is on its head.
+#[derive(Clone, Debug)]
+pub struct Unread {
+    pub sentry: String,
+    pub way: String,
+    pub at: P2,
+    /// How far off it stands (m), and how far off the walker's heading
+    /// (degrees).
+    pub off: f32,
+    pub bearing: f32,
+}
+
+pub fn unread_sentries(
+    map: &MapDef,
+    hm: &Heightmap,
+    comfy: &NavGrid,
+    routes: &[Route],
+) -> Vec<Unread> {
+    let blocks = crate::map_sentry::blocks(map, hm);
+    let ways = routed_ways(map, comfy, routes);
+    let heading = |pts: &[P2], k: usize| {
+        let (q, m) = (pts[k], pts[(k + 3).min(pts.len() - 1)]);
+        let d = dist(q, m).max(0.1);
+        [(m[0] - q[0]) / d, (m[1] - q[1]) / d]
+    };
+    let mut out = Vec::new();
+    for s in crate::map_sentry::sentries(map) {
+        let lamp = (s.at, s.head(hm));
+        let reads = |q: P2, h: P2, start: bool| {
+            let d = dist(q, s.at);
+            d <= SENTRY_READ
+                && (d < 1.0
+                    || start
+                    || (h[0] * (s.at[0] - q[0]) + h[1] * (s.at[1] - q[1])) / d
+                        >= AHEAD.to_radians().cos())
+                && crate::map_sentry::clear(
+                    hm,
+                    &crate::map_sentry::near_line(&blocks, s.at, q),
+                    lamp,
+                    (q, hm.height(q) + 1.7),
+                )
+        };
+        for (way, pts) in &ways {
+            let mut seen = false;
+            for i in 0..pts.len().saturating_sub(1) {
+                let now = s.sees(map, hm, pts[i]);
+                if now && !seen && !(0..=i).any(|k| reads(pts[k], heading(pts, k), k == 0)) {
+                    let (p, h) = (pts[i], heading(pts, i));
+                    let off = dist(p, s.at).max(0.1);
+                    let c = (h[0] * (s.at[0] - p[0]) + h[1] * (s.at[1] - p[1])) / off;
+                    out.push(Unread {
+                        sentry: s.name.clone(),
+                        way: way.clone(),
+                        at: p,
+                        off,
+                        bearing: c.clamp(-1.0, 1.0).acos().to_degrees(),
+                    });
+                }
+                seen = now;
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod sentries {
+    use super::*;
+
+    /// Every sentry's lamp is read before it first sees you on a walked
+    /// way, in every valley.
+    #[test]
+    fn every_sentry_reads_before_it_sees_you() {
+        let bad: Vec<String> = std::thread::scope(|sc| {
+            let jobs: Vec<_> = crate::map::VALLEYS
+                .iter()
+                .map(|(id, text)| {
+                    sc.spawn(move || {
+                        let map = MapDef::from_ron(text).unwrap();
+                        let hm = Heightmap::build(&map);
+                        let comfy = crate::map_nav::zone_grid(
+                            &map,
+                            &hm,
+                            crate::map_lint::COMFORT_SLOPE,
+                        );
+                        let r = crate::map_lint::lint(&map, &hm);
+                        unread_sentries(&map, &hm, &comfy, &r.routes)
+                            .into_iter()
+                            .map(|u| {
+                                format!(
+                                    "{id}: {} first sees {} at ({:.0}, {:.0}), {:.0} m off and {:.0} deg off the heading, its lamp not read first",
+                                    u.sentry, u.way, u.at[0], u.at[1], u.off, u.bearing
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            jobs.into_iter().flat_map(|j| j.join().unwrap()).collect()
+        });
+        assert!(
+            bad.is_empty(),
+            "sentries that see you before you can see them:\n{}",
+            bad.join("\n")
+        );
     }
 }

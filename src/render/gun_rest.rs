@@ -13,6 +13,11 @@
 //! again. Node names, part entities and their transforms are untouched;
 //! only the leaf meshes are hidden while the merged ones stand in.
 //!
+//! A loose magazine or clip is the same: a PPSh drum lying out is its
+//! body and every round it shows, three meshes a round (42 an eye at
+//! Marrow's fuel exfil), so it rests merged too. Its rounds change only
+//! in hand, which wakes it. One seated in a gun rests with the gun.
+//!
 //! `EXTRACTION_GUN_REST=0` leaves every gun as its parts.
 
 use bevy::camera::visibility::VisibilityRange;
@@ -89,6 +94,25 @@ fn handled(
         match parents.get(at) {
             Ok(p) => at = p.parent(),
             Err(_) => return false,
+        }
+    }
+    false
+}
+
+/// Whether a magazine sits in a gun (anywhere above it).
+fn seated(
+    mag: Entity,
+    guns: &Query<(), With<crate::weapons::Gun>>,
+    parents: &Query<&ChildOf>,
+) -> bool {
+    let mut at = mag;
+    for _ in 0..24 {
+        match parents.get(at) {
+            Ok(p) => at = p.parent(),
+            Err(_) => return false,
+        }
+        if guns.contains(at) {
+            return true;
         }
     }
     false
@@ -202,6 +226,9 @@ fn wake_handled(
         let mut wake = handled(gun, &hands, &players, &parents);
         if !wake && !rematerialled.is_empty() {
             wake = rest.leaves.iter().any(|(e, _)| rematerialled.contains(e));
+            if wake && std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+                eprintln!("gun_rest: {gun} woken: a part given a material of its own");
+            }
         }
         if !wake && reparented {
             // Something came or went: the leaves under it now aren't the
@@ -414,11 +441,12 @@ fn rest_idle(
     guns: Query<
         (Entity, &GlobalTransform, &InheritedVisibility),
         (
-            With<crate::weapons::Gun>,
+            Or<(With<crate::weapons::Gun>, With<crate::weapons::Mag>)>,
             Without<AtRest>,
             Without<Building>,
         ),
     >,
+    in_guns: Query<(), With<crate::weapons::Gun>>,
     hands: Query<
         (),
         Or<(
@@ -454,6 +482,11 @@ fn rest_idle(
             break;
         }
         if !shown.get() || handled(gun, &hands, &players, &parents) {
+            settling.remove(&gun);
+            continue;
+        }
+        // (A magazine seated in a gun rests with the gun.)
+        if !in_guns.contains(gun) && seated(gun, &in_guns, &parents) {
             settling.remove(&gun);
             continue;
         }
@@ -549,6 +582,15 @@ fn rest_idle(
             }
             commands.entity(gun).insert(RestDeclined(all.len()));
             continue;
+        }
+        if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+            let name = names.get(gun).map_or("?", |n| n.as_str());
+            eprintln!(
+                "gun_rest: {name} resting: {} leaves, {} taken in {} groups",
+                all.len(),
+                taken.len(),
+                groups.len()
+            );
         }
         let keyed: Vec<(Shade, u64, Vec<(AssetId<Mesh>, Mat4)>)> = groups
             .into_iter()
@@ -773,6 +815,102 @@ mod tests {
             0,
             "merged meshes left behind"
         );
+    }
+
+    /// A loose magazine (a drum lying out: its body and every round it
+    /// shows, three meshes a round) rests as one mesh per material, and
+    /// a hand taking it wakes it to its parts, as they were.
+    #[test]
+    fn a_loose_magazine_rests_merged_and_wakes_in_hand() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::asset::AssetPlugin::default(),
+            TransformPlugin,
+            bevy::camera::visibility::VisibilityPlugin,
+            GunRestPlugin,
+        ))
+        .init_asset::<Mesh>()
+        .init_asset::<StandardMaterial>()
+        .init_asset::<bevy::mesh::skinning::SkinnedMeshInverseBindposes>();
+        let w = app.world_mut();
+        let mesh = w
+            .resource_mut::<Assets<Mesh>>()
+            .add(Cuboid::new(0.01, 0.03, 0.01));
+        let mats: Vec<Handle<StandardMaterial>> = (0..3)
+            .map(|_| {
+                w.resource_mut::<Assets<StandardMaterial>>()
+                    .add(StandardMaterial::default())
+            })
+            .collect();
+        let mag = w
+            .spawn((
+                crate::weapons::Mag {
+                    family: "ppsh".into(),
+                    capacity: 71,
+                    height: 0.1,
+                },
+                Transform::from_xyz(2.0, 0.0, 1.0),
+                Visibility::default(),
+            ))
+            .id();
+        let mut leaves = Vec::new();
+        for n in 1..=14 {
+            let round = w
+                .spawn((
+                    Name::new(format!("round_{n}")),
+                    Transform::from_xyz(0.0, n as f32 * 0.01, 0.0),
+                    Visibility::default(),
+                    ChildOf(mag),
+                ))
+                .id();
+            for m in &mats {
+                leaves.push(
+                    w.spawn((
+                        Mesh3d(mesh.clone()),
+                        MeshMaterial3d(m.clone()),
+                        Transform::IDENTITY,
+                        Visibility::default(),
+                        ChildOf(round),
+                    ))
+                    .id(),
+                );
+            }
+        }
+        let rested = |app: &mut App| app.world().get::<AtRest>(mag).is_some();
+        for _ in 0..SETTLE * 4 {
+            app.update();
+            if rested(&mut app) {
+                break;
+            }
+        }
+        assert!(rested(&mut app), "a loose magazine rests");
+        let merged: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<(Entity, &ChildOf), With<RestMesh>>()
+            .iter(app.world())
+            .filter(|(_, c)| c.parent() == mag)
+            .map(|(e, _)| e)
+            .collect();
+        assert_eq!(merged.len(), 3, "42 meshes in 3 materials: 3 drawn");
+        assert!(
+            leaves
+                .iter()
+                .all(|l| app.world().get::<Visibility>(*l) == Some(&Visibility::Hidden)),
+            "its rounds' own meshes hidden while it rests"
+        );
+        let hand = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .entity_mut(mag)
+            .insert(crate::interact::Held {
+                player: hand,
+                hand,
+                side: crate::rig::Side::Right,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+        app.update();
+        awake(&mut app, mag, &leaves, "a magazine taken in hand");
     }
 
     /// A hand taking a resting gun, a magazine pushed into one lying on a

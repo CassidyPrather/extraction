@@ -80,6 +80,8 @@ pub enum First {
     Heavy,
     /// A hound after you.
     Hound,
+    /// A crawler charging its spark gun at you.
+    Crawler,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -135,6 +137,7 @@ pub const ALL: &[First] = &[
     First::Shoved,
     First::Heavy,
     First::Hound,
+    First::Crawler,
 ];
 
 impl First {
@@ -166,6 +169,7 @@ impl First {
                 | First::Shoved
                 | First::Heavy
                 | First::Hound
+                | First::Crawler
         )
     }
 
@@ -254,6 +258,12 @@ impl First {
                 "Truck: \"Plant your feet and shoot. A hound: don't run, it's after movement.\"",
                 "Truck: \"Shoot when it crouches. It's about to jump.\"",
             ],
+            // (Stood still for "Something heard you", or pressed on into it,
+            // five newcomers were zapped down in a shelter's dorm: back out
+            // of its line, or a few rounds and it's down.)
+            First::Crawler => {
+                &["Truck: \"Back out the way you came. Or put it down: it's charging.\""]
+            }
         }
     }
 }
@@ -308,12 +318,13 @@ struct Queue {
 /// A machine that has you, by its first: what it says to do (a roof, run
 /// across, walk away) isn't "go still", and the two said together told a
 /// newcomer both at once. Heard waits for a machine that's only listening.
-const HAS_YOU: [First; 5] = [
+const HAS_YOU: [First; 6] = [
     First::Sentry,
     First::DroneLock,
     First::Aimed,
     First::Heavy,
     First::Hound,
+    First::Crawler,
 ];
 
 /// How long a machine's having you holds "go still" back.
@@ -553,6 +564,7 @@ fn machines_on_you(
 fn heavy_raised(
     mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
     mut crouches: MessageReader<crate::robots::hound::HoundCrouch>,
+    mut charges: MessageReader<crate::robots::indoor::CrawlerCharge>,
     minds: Query<&Awareness>,
     locals: Query<Entity, With<LocalPlayer>>,
     mut m: Meet,
@@ -571,6 +583,12 @@ fn heavy_raised(
     for ev in crouches.read() {
         if minds.get(ev.hound).is_ok_and(|a| a.target == Some(me)) {
             m.meet(First::Hound);
+        }
+    }
+    // A crawler's spark gun charging at you.
+    for ev in charges.read() {
+        if minds.get(ev.crawler).is_ok_and(|a| a.target == Some(me)) {
+            m.meet(First::Crawler);
         }
     }
 }
@@ -1191,7 +1209,7 @@ mod tests {
         ("hound", Ok(First::Hound)),
         ("heavy", Ok(First::Heavy)),
         ("sentry", Ok(First::Sentry)),
-        ("crawler", Ok(First::Underground)),
+        ("crawler", Ok(First::Crawler)),
         ("warden", Ok(First::Underground)),
         (
             "grappler",

@@ -192,6 +192,7 @@ fn holds_views_with(
     }
     if fight {
         crate::render::puff::add_to(&mut app);
+        app.add_systems(Last, pin_drones);
     }
     // (The flat camera comes a few frames in.)
     for _ in 0..300 {
@@ -253,6 +254,9 @@ fn holds_views_with(
             }
         }
         let (l, r, views_drawing) = m;
+        if let Some(d) = fighters.first() {
+            drone_log(app.world(), *d);
+        }
         let od_l = super::overdraw::measure(app.world_mut(), eyes.0);
         let od_r = super::overdraw::measure(app.world_mut(), eyes.1);
         let draws = l.draws + r.draws;
@@ -304,6 +308,8 @@ fn holds_views_with(
         }
         if near(draws, b.draws) || near(l.tris + r.tris, b.tris) {
             println!("    guns: {}", guns(&mut app, eyes.0));
+            println!("    buildings: {}", buildings(&mut app, eyes.0));
+            println!("    forest: {}", forest(&mut app, eyes.0));
             println!("    unnamed: {}", unnamed(&mut app, eyes.0));
         }
         let mut o = Vec::new();
@@ -410,6 +416,122 @@ fn guns(app: &mut App, eye: Entity) -> String {
         .join(", ")
 }
 
+/// The buildings' meshes one eye draws, by what they are: shells,
+/// windows, far stand-ins, and the rest (furniture, hero models, stains,
+/// ivy).
+fn buildings(app: &mut App, eye: Entity) -> String {
+    use bevy::camera::visibility::VisibilityRange;
+    let w = app.world_mut();
+    let seen: Vec<Entity> = w
+        .entity(eye)
+        .get::<VisibleEntities>()
+        .map(|v| v.get(std::any::TypeId::of::<Mesh3d>()).to_vec())
+        .unwrap_or_default();
+    let (near, far) = (super::lod::near_range(), super::lod::far_range());
+    let same = |r: &VisibilityRange, o: &VisibilityRange| {
+        r.end_margin == o.end_margin && r.start_margin == o.start_margin
+    };
+    let mut n = [0usize; 5];
+    let mut shared = 0;
+    // Why the stand-ins drawn on their own aren't merged.
+    let mut alone: std::collections::BTreeMap<&str, usize> = Default::default();
+    let mut window_mats: std::collections::BTreeMap<String, usize> = Default::default();
+    for e in seen {
+        let Some(p) = w.get::<ChildOf>(e) else {
+            continue;
+        };
+        if w.get::<crate::world::buildings::Building>(p.parent())
+            .is_none()
+        {
+            continue;
+        }
+        let caster = w.get::<bevy::light::NotShadowCaster>(e).is_none();
+        let k = match w.get::<VisibilityRange>(e) {
+            Some(r) if same(r, &near) && caster => 0,
+            Some(r) if same(r, &near) => {
+                // Does a shell of the same building share its material?
+                let mat = w
+                    .get::<MeshMaterial3d<StandardMaterial>>(e)
+                    .map(|m| m.0.id());
+                let shares = w.get::<Children>(p.parent()).is_some_and(|kids| {
+                    kids.iter().any(|k| {
+                        k != e
+                            && w.get::<bevy::light::NotShadowCaster>(k).is_none()
+                            && w.get::<VisibilityRange>(k).is_some_and(|r| same(r, &near))
+                            && w.get::<MeshMaterial3d<StandardMaterial>>(k)
+                                .map(|m| m.0.id())
+                                == mat
+                    })
+                });
+                shared += shares as usize;
+                if let Some(m) = mat {
+                    *window_mats.entry(format!("{m:?}")).or_default() += 1;
+                }
+                2
+            }
+            Some(r) if same(r, &far) => {
+                *alone.entry(super::far_rest::state_of(w, e)).or_default() += 1;
+                3
+            }
+            _ => 4,
+        };
+        n[k] += 1;
+    }
+    format!(
+        "shells {}, windows {} ({shared} sharing their shell's material; {} window materials), \
+         stand-ins {} (drawn alone: {alone:?}), other {}",
+        n[0],
+        n[2],
+        window_mats.len(),
+        n[3],
+        n[4]
+    )
+}
+
+/// The forest's meshes one eye draws, by what they are: a chunk's near
+/// trunks (a mesh a bark) and crowns, its far stand-in, the impostors (a
+/// mesh a variant a block), and each near tree's own cards and (a
+/// spruce's) dark core.
+fn forest(app: &mut App, eye: Entity) -> String {
+    let w = app.world_mut();
+    let seen: Vec<Entity> = w
+        .entity(eye)
+        .get::<VisibleEntities>()
+        .map(|v| v.get(std::any::TypeId::of::<Mesh3d>()).to_vec())
+        .unwrap_or_default();
+    let mut by: std::collections::BTreeMap<&str, usize> = Default::default();
+    // Why the far chunks drawn on their own aren't merged.
+    let mut far: std::collections::BTreeMap<&str, usize> = Default::default();
+    for e in seen {
+        let name = |x: Entity| w.get::<Name>(x).map(|n| n.as_str().to_string());
+        let parent = w.get::<ChildOf>(e).map(|p| p.parent());
+        let kind = if w.get::<super::far_rest::FarRestMesh>(e).is_some() {
+            "merged far stand-ins (any)"
+        } else if w.get::<crate::world::trees::FarForest>(e).is_some() {
+            *far.entry(super::far_rest::state_of(w, e)).or_default() += 1;
+            "far chunks"
+        } else if name(e).as_deref() == Some("Forest impostors") {
+            "impostors"
+        } else if parent.and_then(name).as_deref() == Some("Forest chunk") {
+            if w.get::<bevy::light::NotShadowCaster>(e).is_some() {
+                "near crowns"
+            } else {
+                "near trunks"
+            }
+        } else if parent.is_some_and(|p| w.get::<crate::world::trees::Tree>(p).is_some()) {
+            if w.get::<bevy::light::NotShadowReceiver>(e).is_some() {
+                "spruce cores"
+            } else {
+                "tree cards"
+            }
+        } else {
+            continue;
+        };
+        *by.entry(kind).or_default() += 1;
+    }
+    format!("{by:?}; far chunks drawn alone: {far:?}")
+}
+
 /// What the meshes one eye draws without a named ancestor are, by mesh
 /// (its file, or its vertices) and material, most drawn first.
 fn unnamed(app: &mut App, eye: Entity) -> String {
@@ -501,8 +623,30 @@ fn lights_reaching(app: &mut App, eye: Vec3) -> usize {
 /// heavy 8-14 m out (their lamps, halos and tells), and the firefight's
 /// smoke off their wounds (`puffs::scenes`). Settled before the view is
 /// measured; what it spawned, to despawn after.
+///
+/// `WORST_HEAVY_AT=9` puts the heavy that many metres out instead of 14,
+/// standing there (a heavy at fighting range, to measure its own draws);
+/// the budget's views keep 14, walking in toward 10.
 fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
     use crate::robots::{Job, JobKind};
+    // The fighters' models, loaded before they're spawned: a part waits
+    // for its robot's model, and a drone's had come only after the first
+    // views were measured, so those had a fight without it.
+    let models: Vec<Handle<bevy::gltf::Gltf>> =
+        ["models/robots/drone.glb", "models/robots/walker.glb"]
+            .iter()
+            .map(|p| app.world().resource::<AssetServer>().load(*p))
+            .collect();
+    for _ in 0..2400 {
+        let server = app.world().resource::<AssetServer>();
+        if models
+            .iter()
+            .all(|h| server.is_loaded_with_dependencies(h.id()))
+        {
+            break;
+        }
+        app.update();
+    }
     let fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
     let side = fwd.cross(Vec3::Y);
     let w = app.world_mut();
@@ -519,14 +663,28 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
         duration: 600.0,
         exit: site + Vec3::X * 200.0,
     };
+    // (The fight's job walks the heavy toward the site, 10 m out; one put
+    // elsewhere by `WORST_HEAVY_AT` watches where it stands, so it's
+    // measured there.)
+    let heavy = on(heavy_at(), 0.0);
+    let drone_at = on(12.0, 2.0) + Vec3::Y * 6.0;
+    let heavy_job = if std::env::var_os("WORST_HEAVY_AT").is_some() {
+        Job {
+            site: heavy,
+            exit: heavy + Vec3::X * 200.0,
+            ..job()
+        }
+    } else {
+        job()
+    };
     let mut queue = bevy::ecs::world::CommandQueue::default();
-    let mut out = {
+    let mut out: Vec<Entity> = {
         let mut c = Commands::new(&mut queue, w);
         vec![
-            crate::robots::drone::spawn_drone(&mut c, on(12.0, 2.0) + Vec3::Y * 6.0, job()),
+            crate::robots::drone::spawn_drone(&mut c, drone_at, job()),
             crate::robots::walker::spawn_walker(&mut c, &zone, on(10.0, -4.0), job()),
             crate::robots::hound::spawn_hound(&mut c, &zone, on(8.0, 3.0), job()),
-            crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, on(14.0, 0.0), job()),
+            crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, heavy, heavy_job),
         ]
     };
     queue.apply(w);
@@ -536,7 +694,71 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
     for _ in 0..30 {
         app.update();
     }
+    // The drone flies its watch while the view settles, and was in the
+    // eyes' view when measured in some runs and not in others (about 44
+    // draws an eye between them): it's held where it came, overhead in
+    // view, for the whole measure (`pin_drones`).
+    app.world_mut()
+        .entity_mut(out[0])
+        .insert(GaugePin(drone_at));
+    for _ in 0..2 {
+        app.update();
+    }
     out
+}
+
+/// Where the gauge holds a fighter, every frame.
+#[derive(Component)]
+struct GaugePin(Vec3);
+
+fn pin_drones(
+    mut pinned: Query<(
+        &GaugePin,
+        &mut Transform,
+        Option<&mut avian3d::prelude::Position>,
+        Option<&mut avian3d::prelude::LinearVelocity>,
+    )>,
+) {
+    for (pin, mut t, pos, vel) in &mut pinned {
+        t.translation = pin.0;
+        if let Some(mut p) = pos {
+            p.0 = pin.0;
+        }
+        if let Some(mut v) = vel {
+            v.0 = Vec3::ZERO;
+        }
+    }
+}
+
+/// `WORST_DRONE_LOG=1`: where the fight's drone is when its view is
+/// measured, and how many of its meshes any view (an eye, the sun's
+/// cascades) sees.
+fn drone_log(w: &World, drone: Entity) {
+    if std::env::var_os("WORST_DRONE_LOG").is_none() {
+        return;
+    }
+    let at = w.get::<GlobalTransform>(drone).map(|g| g.translation());
+    let (mut meshes, mut viewed) = (0, 0);
+    let mut stack = vec![drone];
+    while let Some(e) = stack.pop() {
+        if w.get::<Mesh3d>(e).is_some() {
+            meshes += 1;
+            viewed += w.get::<ViewVisibility>(e).is_some_and(|v| v.get()) as usize;
+        }
+        if let Some(cs) = w.get::<Children>(e) {
+            stack.extend(cs.iter());
+        }
+    }
+    eprintln!("drone: at {at:?}; {meshes} meshes, {viewed} in a view");
+}
+
+/// How far out the fight's heavy stands: 14 m, or `WORST_HEAVY_AT`.
+fn heavy_at() -> f32 {
+    std::env::var("WORST_HEAVY_AT")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|d| (2.0..=60.0).contains(d))
+        .unwrap_or(14.0)
 }
 
 /// Where Map design's walk reviews live: a valley's `walk.stills`, its

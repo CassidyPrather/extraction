@@ -72,6 +72,29 @@ pub const CALLED: &[&str] = &[
     "Truck: \"Heard you. {rv}, {b}. {t}.\"",
 ];
 
+/// Stepping out with the Surge too close to outrun (`HOLD_THE_DOOR`): the
+/// driver keeps you in.
+pub const HOLD_THE_DOOR: &str =
+    "Driver: \"Not now. Surge is nearly on us. We sit it out, then go.\"";
+
+/// And you do: the wait, skipped.
+pub const SAT_IT_OUT: &str = "You sit it out in the cab. It comes, and it goes.";
+
+/// A machine's distress flare climbing (`robots::distress`), the first
+/// time a raid: Lev, who can see it from the road, says what to do.
+pub const FLARE_UP: &str = "Truck: \"Flare going up. Shoot it before it pops.\"";
+
+/// A flare burst. The director answers every burst, so each says someone
+/// is coming: never one that could be wrong.
+pub const FLARE_BURST: &[&str] = &[
+    "Truck: \"That's a flare. Something's coming to look.\"",
+    "Truck: \"Red flare. They'll come and look.\"",
+    "Truck: \"Flare's up. Something's on its way to it.\"",
+];
+
+/// You shot a flare down before it burst, the first time a raid.
+pub const FLARE_DOWNED: &str = "Truck: \"Got it. Nobody saw that one.\"";
+
 /// Called again while on the way: `{t}` is the time left, in words.
 pub const ON_THE_WAY: &[&str] = &[
     "Truck: \"Still on my way. {t}.\"",
@@ -588,7 +611,13 @@ mod tests {
         crate::raid::epilogue::STACKS_SHUT,
         crate::raid::epilogue::RELEASED,
     ];
-    const TRUCK_ONES: &[&str] = &[NO_FUEL, FIRST_SHORT_RUN, GENTLE_SHORT_RUN];
+    const TRUCK_ONES: &[&str] = &[
+        NO_FUEL,
+        FIRST_SHORT_RUN,
+        GENTLE_SHORT_RUN,
+        FLARE_UP,
+        FLARE_DOWNED,
+    ];
 
     /// Every pool of lines said over the radio or the wrist.
     fn every_pool() -> Vec<&'static [&'static str]> {
@@ -629,6 +658,7 @@ mod tests {
             ARRIVED,
             WAITING,
             LAST_CALL,
+            FLARE_BURST,
             GAVE_UP,
             SHORT_RUN,
             PULLING_OUT,

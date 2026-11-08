@@ -574,7 +574,8 @@ pub const VIEW_MAX: usize = 16;
 ///
 /// A log pile is one too: ten logs and four stakes drawn as one model, no
 /// roof, nothing inside. So is a snow pole: one 9 cm stick, painted; and
-/// a yard lamp: a post and its arm; and a marker post: one post.
+/// a yard lamp: a post and its arm; a marker post: one post; and a
+/// machine marker: one stake.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -584,6 +585,7 @@ pub const VIEW_LIGHT: &[&str] = &[
     "snow_pole",
     "way_lamp",
     "marker_post",
+    "machine_marker",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
@@ -2044,6 +2046,23 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         pct(fog2),
         worst_of(murk),
     ));
+    // The first ways home at night, stop by stop (`map_night`, held by
+    // its `every_first_way_home_reads_at_night`): how many have a light
+    // ahead to steer by without a torch.
+    {
+        let id = map.name.to_lowercase().replace(' ', "_");
+        let stops = crate::map_night::read(map, hm, &id);
+        let far: Vec<_> = stops.iter().filter(|(s, _)| s.to_rv > 25.0).collect();
+        let lit = far.iter().filter(|(_, seen)| !seen.is_empty()).count();
+        // None where no first job starts (the training yard).
+        if !stops.is_empty() {
+            r.measures.push(format!(
+            "at night {lit} of {} stops on the first ways home have a light ahead to steer by (map_night; {} at their rendezvous)",
+            far.len(),
+            stops.len() - far.len()
+        ));
+        }
+    }
 
     for (got, floor, what) in [
         (pct(night), NIGHT_ONE * 100.0, "at night a lamp in sight"),

@@ -32,6 +32,7 @@ impl Plugin for HeavyLookPlugin {
             (
                 dress_heavies,
                 unmerge_bolts.after(dress_heavies),
+                (merge_marks, unmerge_marks).chain().after(unmerge_bolts),
                 pose_limbs,
                 light_heavies,
                 gallery,
@@ -461,6 +462,134 @@ fn unmerge_bolts(
     }
 }
 
+/// A heavy's bolts' weak-point rings (`weak_points`, a ring a bolt, one
+/// mesh and one material) drawn as one mesh while every bolt is whole:
+/// twelve were 12 of a heavy's 81 draws. Each ring keeps its entity (its
+/// `Visibility` is `weak_points::mark_out`'s) and lends its mesh to
+/// `merged`, getting it back (`unmerge_marks`) the moment a bolt is
+/// hurt (its ring then wears with it) or goes, or a part of the heavy
+/// fails (its lights gutter, the rings with them).
+#[derive(Component)]
+struct MarksMerged {
+    merged: Entity,
+    marks: Vec<(Entity, Handle<Mesh>)>,
+}
+
+/// Whole, for a mark's merging: alive and not worn at all.
+fn whole(p: &RobotPart) -> bool {
+    p.alive() && super::wear::band_of(p) == 0
+}
+
+#[allow(clippy::type_complexity)]
+fn merge_marks(
+    mut commands: Commands,
+    heavies: Query<(Entity, &GlobalTransform), (With<BoltsMerged>, Without<MarksMerged>)>,
+    marks: Query<(
+        Entity,
+        &super::weak_points::WeakMark,
+        &GlobalTransform,
+        &Mesh3d,
+        &MeshMaterial3d<StandardMaterial>,
+        Option<&VisibilityRange>,
+    )>,
+    parts: Query<(&RobotPart, Option<&HeavyPart>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    for (robot, at) in &heavies {
+        let mine: Vec<_> = parts.iter().filter(|(p, _)| p.robot == robot).collect();
+        let bolts = mine
+            .iter()
+            .filter(|(_, h)| h.is_some_and(|h| matches!(h.0, Slot::Bolt { .. })))
+            .count();
+        if bolts != extraction_core::heavy::PLATES * extraction_core::heavy::BOLTS_PER_PLATE
+            || mine.iter().any(|(p, _)| super::wear::failing(p))
+        {
+            continue;
+        }
+        let rings: Vec<_> = marks
+            .iter()
+            .filter(|(_, m, ..)| {
+                parts.get(m.part).is_ok_and(|(p, h)| {
+                    p.robot == robot
+                        && whole(p)
+                        && h.is_some_and(|h| matches!(h.0, Slot::Bolt { .. }))
+                })
+            })
+            .collect();
+        if rings.len() != bolts {
+            continue;
+        }
+        let (mesh, mat) = (&rings[0].3.0, &rings[0].4.0);
+        if rings.iter().any(|r| r.3.0 != *mesh || r.4.0 != *mat) {
+            continue;
+        }
+        let Some(src) = meshes.get(mesh) else {
+            continue;
+        };
+        // Each ring where it is, in the heavy's own space.
+        let inv = at.affine().inverse();
+        let places: Vec<Transform> = rings
+            .iter()
+            .map(|r| Transform::from_matrix((inv * r.2.affine()).into()))
+            .collect();
+        let Some(m) = merged_at(src, &places) else {
+            continue;
+        };
+        let mut ec = commands.spawn((
+            Name::new("Heavy bolts' marks"),
+            Mesh3d(meshes.add(m)),
+            MeshMaterial3d(mat.clone()),
+            bevy::light::NotShadowCaster,
+            ChildOf(robot),
+        ));
+        if let Some(r) = rings[0].5 {
+            ec.insert(r.clone());
+        }
+        let merged = ec.id();
+        // (Its class too: without it, a ring with no mesh was still listed
+        // as one to draw, as a batched puff was.)
+        for r in &rings {
+            commands
+                .entity(r.0)
+                .remove::<(Mesh3d, bevy::camera::visibility::VisibilityClass)>();
+        }
+        commands.entity(robot).insert(MarksMerged {
+            merged,
+            marks: rings.iter().map(|r| (r.0, r.3.0.clone())).collect(),
+        });
+    }
+}
+
+fn unmerge_marks(
+    mut commands: Commands,
+    heavies: Query<(Entity, &MarksMerged, Has<BoltsMerged>)>,
+    parts: Query<&RobotPart>,
+    marks: Query<&super::weak_points::WeakMark>,
+) {
+    for (robot, m, bolts) in &heavies {
+        let mine_fail = parts
+            .iter()
+            .any(|p| p.robot == robot && super::wear::failing(p));
+        let hurt = m.marks.iter().any(|(e, _)| {
+            marks
+                .get(*e)
+                .map_or(true, |w| parts.get(w.part).map_or(true, |p| !whole(p)))
+        });
+        if bolts && !hurt && !mine_fail {
+            continue;
+        }
+        if let Ok(mut e) = commands.get_entity(m.merged) {
+            e.despawn();
+        }
+        for (e, mesh) in &m.marks {
+            if marks.contains(*e) {
+                commands.entity(*e).try_insert(Mesh3d(mesh.clone()));
+            }
+        }
+        commands.entity(robot).remove::<MarksMerged>();
+    }
+}
+
 /// A segment from `a` to `b` bending about `hinge`: Y down it, X along the
 /// hinge, at the body's scale (`nominal`, the model's length, stretched
 /// to the joints).
@@ -477,16 +606,27 @@ fn segment(a: Vec3, b: Vec3, hinge: Vec3, nominal: f32) -> Transform {
 fn pose_limbs(
     mut commands: Commands,
     mut limbs: Query<(Entity, &Limb, &mut Transform)>,
-    heavies: Query<(&LegPoses, &Arm, &GlobalTransform)>,
+    heavies: Query<(
+        &LegPoses,
+        &Arm,
+        &GlobalTransform,
+        Option<(&super::rock::Rocks, &super::rock::Rock)>,
+    )>,
 ) {
     for (e, limb, mut t) in &mut limbs {
-        let Ok((poses, arm, gt)) = heavies.get(limb.robot) else {
+        let Ok((poses, arm, gt, rock)) = heavies.get(limb.robot) else {
             commands.entity(e).despawn();
             continue;
         };
+        // Its hips and shoulder go with its hull as it rocks; its feet and
+        // claw stay where they are.
+        let turn = rock.map_or(bevy::math::Affine3A::IDENTITY, |(r, k)| {
+            super::rock::turn_of(r, k, gt)
+        });
         *t = match limb.kind {
             LimbKind::Thigh(i) | LimbKind::Shin(i) => {
                 let [hip, knee, foot] = poses.0[i];
+                let hip = turn.transform_point3(hip);
                 let mut hinge = (knee - hip).cross(foot - knee);
                 if hinge.length_squared() < 1e-8 {
                     hinge = gt.right().as_vec3();
@@ -499,7 +639,7 @@ fn pose_limbs(
             }
             LimbKind::ArmUpper | LimbKind::ArmFore => {
                 let body = gt.compute_transform();
-                let shoulder = body.transform_point(SHOULDER);
+                let shoulder = turn.transform_point3(body.transform_point(SHOULDER));
                 let elbow = arm_elbow(&body, shoulder, arm.claw);
                 let hinge = (elbow - shoulder).cross(arm.claw - elbow);
                 let hinge = if hinge.length_squared() < 1e-8 {
@@ -966,6 +1106,21 @@ mod tests {
         // Its first LOD's two, steel and warning paint; no bolt's own.
         assert_eq!(seen_of(&mut app, &merged), 2);
         assert_eq!(seen_of(&mut app, &holders), 0);
+        // The bolts' weak-point rings: one merged mesh, no ring of its own.
+        let rings_of = |app: &mut App, among: &[Entity]| -> usize {
+            let w = app.world_mut();
+            among
+                .iter()
+                .filter(|e| w.get::<super::super::weak_points::WeakMark>(**e).is_some())
+                .count()
+        };
+        let ring = app
+            .world()
+            .get::<MarksMerged>(robot)
+            .expect("its bolts' rings aren't merged")
+            .merged;
+        assert!(before.contains(&ring), "the merged rings aren't drawn");
+        assert_eq!(rings_of(&mut app, &before), 0);
         let bolts = extraction_core::heavy::PLATES * extraction_core::heavy::BOLTS_PER_PLATE;
         // One shot out.
         let w = app.world_mut();
@@ -998,7 +1153,13 @@ mod tests {
             app.update();
         }
         assert!(app.world().get::<BoltsMerged>(robot).is_none());
+        assert!(app.world().get::<MarksMerged>(robot).is_none());
         let now = drawn(&mut app);
+        // The other eleven bolts' rings back on their own (the shot one's
+        // went with it).
+        let rings = rings_of(&mut app, &now);
+        assert!(!now.contains(&ring));
+        assert!(rings >= bolts - 2, "{rings} rings drawn");
         let after = now.len();
         let gone: Vec<String> = before
             .iter()
@@ -1017,8 +1178,9 @@ mod tests {
         let singles = seen_of(&mut app, &holders);
         assert_eq!(
             after,
-            whole - 2 - lost + singles,
-            "{whole} then {after}, {singles} single bolt meshes, {lost} of the shot bolt's; \
+            whole - 2 - 1 - lost + singles + rings,
+            "{whole} then {after}, {singles} single bolt meshes, {rings} rings, {lost} of the \
+             shot bolt's; \
              gone {gone:?}, came {came:?}"
         );
         assert!(

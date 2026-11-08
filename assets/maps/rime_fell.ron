@@ -235,6 +235,11 @@
         (at: (-109.0, -187.0), radius: 1.8, stones: 4),
     ],
     placements: [
+        // Where the way crosses into hot ground: something of the place
+        // tells of it before you're in it (map_gradient).
+        (prefab: "wreck_lorry", at: (66.9, 78.6), rot: 120.0),  // into Coldharbour from the funicular
+        (prefab: "guard_booth", at: (222.3, 70.6), rot: 90.0),  // into the tip from the funicular
+
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (-192.4, -235.9), rot: 0.0),
@@ -388,7 +393,10 @@
     ],
 
     markers: [
-        (kind: Insertion, at: (-10.0, 266.0), rot: 0.0, name: "South gate"),
+        // Facing the way on (the first job's heading out of the Bottoms):
+        // the lower village's roofs and the water tower's lamp up ahead,
+        // not the moor to the north with nothing in it.
+        (kind: Insertion, at: (-10.0, 266.0), rot: 56.5, name: "South gate"),
         (kind: TruckStop, at: (-10.0, 296.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (-4.0, 272.0), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (-115.0, -264.0), name: "The saddle"),
@@ -429,6 +437,12 @@
         // Where the saddle track leaves the col track, square to whoever comes
         // up it (walk review: the fork showed nothing down the way to the job).
         (kind: Sign(text: "THE OBSERVATORY and THE SADDLE, left\nTHE COL, right\nPoles both ways."), at: (-1.5, -203.0), rot: 337.0, name: "Saddle fork sign"),
+        // Where the way crosses into hot ground, a board 10-12 m short of
+        // the line, beside the way, facing whoever walks up to it
+        // (map_gradient). In the roadmen's words: what the chutes do.
+        (kind: Sign(text: "SNOW\nSLIDES"), at: (-125.0, 65.5), rot: 90.0, name: "Coldharbour chutes sign"),
+        (kind: Sign(text: "CHUTES\nRUN"), at: (-140.7, -38.5), rot: 12.0, name: "Upper slopes sign"),
+        (kind: Sign(text: "CHUTES\nRUN"), at: (-152.5, -50.8), rot: 313.0, name: "Barracks way sign"),  // the way home from the barracks, 12 m short of the upper slopes (read from 15 m: map_gradient)
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
         (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),

@@ -348,10 +348,11 @@ mod tests {
         assert!(fouled > 25.0 * per * 1.5, "{fouled}");
     }
 
-    /// An SVD fired from the hand at nothing, a drone hanging 150 m down
-    /// the line and 8 m off it. Bare, it hears the report and looks back
-    /// toward the shooter; under the PBS the report doesn't reach it, only
-    /// the crack going by, and it looks for the shooter out by itself.
+    /// An SVD fired from the hand at nothing, a walker held 150 m down the
+    /// line and 8 m off it (a kind that hears: a drone only sees,
+    /// `robots::senses::SIGHT_ONLY`). Bare, it hears the report and looks
+    /// back toward the shooter; under the PBS the report doesn't reach it,
+    /// only the crack going by, and it looks for the shooter out by itself.
     #[test]
     fn the_crack_sends_a_robot_downrange_the_wrong_way() {
         let heard_at = |can: bool| -> (Vec3, Vec3) {
@@ -365,7 +366,8 @@ mod tests {
             let (muzzle, fwd) = (gt.translation(), gt.forward().as_vec3());
             let side = fwd.cross(Vec3::Y).normalize();
             let at = muzzle + fwd * 150.0 + side * 8.0;
-            let drone = {
+            let zone = r.vr.app.world().resource::<crate::world::Zone>().clone();
+            let listener = {
                 let mut commands = r.vr.app.world_mut().commands();
                 let job = crate::robots::Job {
                     kind: crate::robots::JobKind::Survey,
@@ -373,19 +375,19 @@ mod tests {
                     duration: 1.0e6,
                     exit: at,
                 };
-                crate::robots::drone::spawn_drone(&mut commands, at, job)
+                crate::robots::walker::spawn_walker(&mut commands, &zone, at, job)
             };
             r.vr.app.world_mut().flush();
             r.vr.app
                 .world_mut()
-                .entity_mut(drone)
+                .entity_mut(listener)
                 .insert((RigidBody::Static, Transform::from_translation(at)));
             r.vr.step(5);
             one_shot(&mut r);
             let aware =
                 r.vr.app
                     .world()
-                    .get::<crate::robots::Awareness>(drone)
+                    .get::<crate::robots::Awareness>(listener)
                     .unwrap();
             (aware.last_known.expect("it heard something"), muzzle)
         };

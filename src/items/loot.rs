@@ -347,7 +347,6 @@ fn spawn_marker_loot(
     seed: u64,
     raid: Option<u32>,
 ) {
-    let mut rng = Rng::new(seed ^ 0x100);
     let notes = notes_lying(zone);
     let valley = extraction_core::loot::valley_key(&zone.map.name);
     for m in &zone.map.markers {
@@ -362,6 +361,9 @@ fn spawn_marker_loot(
         } else {
             ground + Vec3::Y * (m.y + 0.1)
         };
+        // Its own stream (`place_key`): a marker added elsewhere changes
+        // nothing here.
+        let mut rng = Rng::new(seed ^ 0x100 ^ place_key(Vec3::new(m.at[0], m.y, m.at[1])));
         // A marker is a place someone meant to leave something: never bare.
         let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng).max(1);
         let drops: Vec<_> = (0..rolls)
@@ -467,6 +469,24 @@ fn better_spot(
     Some(pick[rng.below(pick.len())])
 }
 
+/// A place's own stream key: its position to the centimetre. A spot's or
+/// marker's draws come from its own stream, so a prop placed (or taken
+/// away) elsewhere in the valley doesn't change what's rolled here: from
+/// one stream walked in spot order, Map design's jeep on Marrow (its spots
+/// new in the list) reshuffled every spot's roll after it, the bot went
+/// somewhere new and second_hour turned red (7 November).
+pub(crate) fn place_key(at: Vec3) -> u64 {
+    let q = |v: f32| (v * 100.0).round() as i64 as u64;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for v in [q(at.x), q(at.y), q(at.z)] {
+        for b in v.to_le_bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h
+}
+
 fn spawn_building_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -476,7 +496,6 @@ fn spawn_building_loot(
     seed: u64,
     raid: Option<u32>,
 ) {
-    let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
     let notes = notes_lying(zone);
     let valley = extraction_core::loot::valley_key(&zone.map.name);
@@ -506,6 +525,8 @@ fn spawn_building_loot(
         );
     };
     for (j, spot) in spots.0.iter().enumerate() {
+        // This spot's own stream (`place_key`).
+        let mut rng = Rng::new(seed ^ 0xB11D ^ place_key(spot.at));
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| {
@@ -513,16 +534,23 @@ fn spawn_building_loot(
                     .roll_at(spot.table, Some(&valley), raid, catalog, &mut rng)
             })
             .collect();
-        for drop in drops {
+        for (k, drop) in drops.into_iter().enumerate() {
             n += 1;
             if placed && !sits_well(spot, catalog.get(drop.kind).size) {
-                moving.push((j, drop));
+                moving.push((j, k, drop));
             } else {
                 lay(j, drop, &mut piled, &mut rng);
             }
         }
     }
-    for (j, drop) in moving {
+    // A moved thing's own stream too: its spot's, and which of the spot's
+    // drops it was (not how many other spots moved theirs first).
+    for (j, k, drop) in moving {
+        let mut rng = Rng::new(
+            seed ^ 0xB11E
+                ^ place_key(spots.0[j].at)
+                ^ (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15),
+        );
         let size = catalog.get(drop.kind).size;
         let to = better_spot(&spots.0, spots.0[j].building, size, &piled, &mut rng).unwrap_or(j);
         lay(to, drop, &mut piled, &mut rng);
@@ -634,6 +662,125 @@ fn spawn_dev_cache(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// A prop placed in a valley doesn't change what's rolled anywhere
+    /// else in it: Marrow's building loot rolled as it is, and again with a
+    /// new building's spots put in the middle of the list (a jeep wreck
+    /// placed, as Map design did), every one of the valley's own spots has
+    /// the same things, byte for byte. From one stream walked in spot order
+    /// the new spots took draws, and every spot after them rolled anew.
+    #[test]
+    fn a_prop_placed_rolls_nothing_new_elsewhere() {
+        let opts = LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let spots: Vec<crate::world::buildings::LootSpot> = app
+            .world()
+            .resource::<crate::world::buildings::BuildingLoot>()
+            .0
+            .clone();
+        assert!(spots.len() > 50, "Marrow's spots: {}", spots.len());
+        // The new building's spots: six of the valley's own, moved a
+        // kilometre off (their things are told apart by where they land).
+        let far = Vec3::new(1000.0, 0.0, 0.0);
+        let new: Vec<_> = spots
+            .iter()
+            .step_by(spots.len() / 6)
+            .take(6)
+            .cloned()
+            .enumerate()
+            .map(|(i, mut s)| {
+                s.at += far;
+                // A building of its own, as a new prop is.
+                s.building = 100_000 + i;
+                s
+            })
+            .collect();
+        let mut with = spots.clone();
+        let mid = with.len() / 2;
+        with.splice(mid..mid, new);
+        let roll = |app: &mut App, list: Vec<crate::world::buildings::LootSpot>| -> Vec<String> {
+            let world = app.world_mut();
+            let before: std::collections::BTreeSet<Entity> = world
+                .query_filtered::<Entity, With<Item>>()
+                .iter(world)
+                .collect();
+            let opts = world.resource::<LaunchOptions>().clone();
+            let seed = cycle_seed(&opts, 0);
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            {
+                let zone = world.resource::<Zone>();
+                let loot = world.resource::<Loot>();
+                let catalog = world.resource::<Catalog>();
+                let mut commands = Commands::new_from_entities(
+                    &mut queue,
+                    world.entity_allocator(),
+                    world.entities(),
+                );
+                let spots = crate::world::buildings::BuildingLoot(list);
+                spawn_building_loot(&mut commands, zone, &spots, loot, catalog, seed, Some(3));
+            }
+            queue.apply(world);
+            let catalog = world.resource::<Catalog>().clone();
+            let mut rows: Vec<(Entity, f32, String)> = world
+                .query::<(Entity, &Item, &Transform)>()
+                .iter(world)
+                .filter(|(e, ..)| !before.contains(e))
+                .map(|(e, it, t)| {
+                    (
+                        e,
+                        t.translation.x,
+                        format!(
+                            "{} {:.3?} {:.3?} {:.3}",
+                            catalog.get(it.0.kind).id,
+                            t.translation,
+                            t.rotation,
+                            it.0.condition
+                        ),
+                    )
+                })
+                .collect();
+            for (e, ..) in &rows {
+                world.despawn(*e);
+            }
+            // The far spots' things (a kilometre off, the valley being
+            // some 400 m across) left out.
+            let mut out: Vec<String> = rows
+                .drain(..)
+                .filter(|(_, x, _)| *x < 600.0)
+                .map(|(.., r)| r)
+                .collect();
+            out.sort();
+            out
+        };
+        let alone = roll(&mut app, spots);
+        let placed = roll(&mut app, with);
+        let lost: Vec<_> = alone.iter().filter(|r| !placed.contains(r)).collect();
+        let gained: Vec<_> = placed.iter().filter(|r| !alone.contains(r)).collect();
+        assert!(
+            lost.is_empty() && gained.is_empty(),
+            "{} of the valley's {} things rolled differently with a prop placed:\n- {}\n+ {}",
+            lost.len(),
+            alone.len(),
+            lost.iter()
+                .take(5)
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n- "),
+            gained
+                .iter()
+                .take(5)
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n+ ")
+        );
+    }
     use std::collections::BTreeMap;
 
     /// The kinds lying in the zone, and how many of each.

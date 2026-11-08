@@ -66,6 +66,12 @@ RANGE_TARGETS = {
     # and stopping to lay (audio_machines::hiss_sounds): the warning (as
     # quiet; heard only 5 m off in a downpour)
     "minelayer.hiss": (30, 5),
+    # the Zone's pressure stepping up, played STEP_FROM (80 m) toward the
+    # Gate (audio_machines::pressure_sounds): heard from there, rain or not
+    "zone.stirred": (80, 80), "zone.busy": (80, 80), "zone.hunting": (80, 80),
+    # a distress flare's tell (the moment to stop it) and its burst, a call
+    # (audio_machines::flare_sounds)
+    "distress.tell": (30, 30), "distress.burst": (200, 120),
     # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
     "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
     "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),
@@ -76,7 +82,9 @@ RANGE_TARGETS = {
     "voice.calling": (200, 80), "voice.answering": (200, 80), "voice.hurt": (30, 15),
     "voice.dying": (40, 20), "voice.flanking": (30, 15), "voice.retreating": (30, 15),
     "heavy.step": (150, 60), "heavy.raise": (40, 20), "heavy.idle": (40, 15),
-    "heavy.horn": (500, 200), "sentry.chirp": (60, 30),
+    # the Gate horn reaches each valley's far corner from its Gate (~703 m,
+    # Heavy's every_heavy_reads_before_it_reaches_you), rain or not
+    "heavy.horn": (740, 740), "sentry.chirp": (60, 30),
     "walker.aim_lock": (40, 20), "harpoon.windup": (30, 15), "dirigible.engine": (200, 80), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top

@@ -56,8 +56,6 @@ const SETTLE: u32 = 30;
 /// A hand, or anything held, this close to a part (metres, from its
 /// origin, past the part's own half-size) wakes it.
 pub const NEAR: f32 = 1.5;
-/// A cell of fewer parts than this isn't worth merging.
-const MIN_PARTS: usize = 3;
 /// Cells merged a frame, at most (a valley's parts all settle at once).
 const PER_FRAME: usize = 4;
 
@@ -81,6 +79,9 @@ struct Cell {
     quiet: HashMap<Entity, u32>,
     rest: Option<Rest>,
     building: Option<Building>,
+    /// Found not worth merging (a draw or two already) as it stands:
+    /// asked again only once something in it changes.
+    declined: bool,
 }
 
 /// A merged cell: the leaves hidden (with the visibility each had) and
@@ -125,6 +126,7 @@ impl Cells {
             *q = 0;
         }
         cell.building = None;
+        cell.declined = false;
         if let Some(rest) = cell.rest.take() {
             for (e, v) in rest.leaves {
                 if let Ok(mut cur) = vis.get_mut(e) {
@@ -255,6 +257,7 @@ fn wake_parts(
         if let Some(key) = cells.part_cell.remove(&e) {
             if let Some(cell) = cells.cells.get_mut(&key) {
                 cell.quiet.remove(&e);
+                cell.declined = false;
             }
         }
         cells.leaf_part.retain(|_, p| *p != e);
@@ -343,7 +346,9 @@ fn rest_cells(
         let key = cell_of(g.translation());
         cells.part_cell.insert(e, key);
         cells.leaf_part.insert(e, e);
-        cells.cells.entry(key).or_default().quiet.insert(e, 0);
+        let cell = cells.cells.entry(key).or_default();
+        cell.quiet.insert(e, 0);
+        cell.declined = false;
     }
     let mut started = 0;
     // (`EXTRACTION_PART_REST_LOG`: why leaves and cells weren't merged.)
@@ -376,8 +381,9 @@ fn rest_cells(
         if cell.rest.is_some() || cell.building.is_some() {
             continue;
         }
-        if cell.quiet.len() < MIN_PARTS {
-            skip("cell: too few parts");
+        // (A cell is worth merging by its meshes, not its parts: a
+        // house's door or two alone in a cell are several meshes each.)
+        if cell.declined || cell.quiet.is_empty() {
             continue;
         }
         if cell.quiet.values().any(|q| *q < SETTLE) || started >= PER_FRAME {
@@ -442,6 +448,7 @@ fn rest_cells(
         // Not worth it for a cell that's a few draws already.
         if taken.len() <= groups.len() + 1 {
             skip("cell: not worth it");
+            cell.declined = true;
             continue;
         }
         started += 1;
@@ -640,6 +647,70 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1));
             app.update();
         }
+    }
+
+    /// A cell of only two parts (a house's doors, alone in their cell)
+    /// is merged when its meshes are worth it; one that isn't (a single
+    /// mesh) is let be, and asked again once a part comes.
+    #[test]
+    fn a_cell_of_few_parts_merges_by_its_meshes() {
+        let mut app = app();
+        let mut leaves = Vec::new();
+        for i in 0..2 {
+            let (p, leaf) = part(&mut app, Vec3::new(2.0 + i as f32 * 3.0, 1.0, 2.0));
+            leaves.push(leaf);
+            // Its hinges and handle: more meshes in the same planks.
+            let (mesh, mat) = {
+                let w = app.world();
+                (
+                    w.get::<Mesh3d>(leaf).unwrap().0.clone(),
+                    w.get::<MeshMaterial3d<StandardMaterial>>(leaf)
+                        .unwrap()
+                        .0
+                        .clone(),
+                )
+            };
+            for k in 0..2 {
+                leaves.push(
+                    app.world_mut()
+                        .spawn((
+                            Mesh3d(mesh.clone()),
+                            MeshMaterial3d(mat.clone()),
+                            Transform::from_xyz(0.0, k as f32 * 0.2, 0.0),
+                            ChildOf(p),
+                        ))
+                        .id(),
+                );
+            }
+        }
+        rest(&mut app);
+        assert_eq!(
+            resting(&mut app),
+            1,
+            "two parts, six meshes, one planks: one merged"
+        );
+        assert!(leaves.iter().all(|l| !shown(&app, *l)), "its parts hidden");
+        // A lone shutter in a cell of its own: one mesh, not worth it.
+        let (_, lone) = part(&mut app, Vec3::new(70.0, 1.0, 70.0));
+        rest(&mut app);
+        assert!(shown(&app, lone), "a lone mesh is let be");
+        let declined = |app: &App| {
+            app.world()
+                .resource::<Cells>()
+                .cells
+                .get(&cell_of(Vec3::new(70.0, 1.0, 70.0)))
+                .is_some_and(|c| c.declined)
+        };
+        assert!(declined(&app), "and not asked again each frame");
+        // Two more come beside it: asked again, and merged.
+        let more: Vec<Entity> = (0..2)
+            .map(|i| part(&mut app, Vec3::new(71.0 + i as f32, 1.0, 70.0)).1)
+            .collect();
+        rest(&mut app);
+        assert!(
+            !shown(&app, lone) && more.iter().all(|l| !shown(&app, *l)),
+            "merged once it's worth it"
+        );
     }
 
     /// Four shutters along a wall, settled: merged, the parts hidden.

@@ -37,12 +37,24 @@ pub const BEAM_HALF: f32 = 9.0;
 /// newcomer who froze at the chirp was hit before they moved: Robot
 /// minds' fairness runs, 1 November.)
 pub const CHIRP: f32 = 2.5;
-/// Rounds in a burst, seconds between them, and between bursts.
+/// Rounds in a burst, seconds between them, and between bursts. The gap
+/// between bursts is what a player caught in its line has to turn and step
+/// to cover: at 1.8 s, 2.3 s from its first hit to down if every round
+/// lands (at 1.4 s it was 2.0 s, too little in a headset: coordinator,
+/// #85; `robots::sentry`'s walking_across_its_line gauge).
 pub const BURST: u32 = 3;
 pub const ROUND_GAP: f32 = 0.12;
-pub const BURST_GAP: f32 = 1.4;
+pub const BURST_GAP: f32 = 1.8;
 /// Out of its sight this long and it has to chirp again.
 pub const LOSE_LOCK: f32 = 2.0;
+/// Struck on its head (a round that does harm, not a glance), it's knocked
+/// off-line this long: no round leaves it, and the countdown to its next
+/// holds. It keeps its lock (no chirp again), and its first burst is still
+/// the warning one. At most once a burst cycle (from one burst's first
+/// round to the next's), so a stream of rounds slows it, never stops it:
+/// "shoot it in the face" doesn't beat its sweep and its cable (Robot
+/// minds, agreed).
+pub const KNOCKED: f32 = 0.35;
 
 /// A noise (a thrown can landing) heard within this draws it; it holds on
 /// it this long.
@@ -135,6 +147,10 @@ pub struct Gun {
     pub unseen: f32,
     /// Bursts fired since the chirp: the first is a warning ([`Gun::warning`]).
     pub bursts: u32,
+    /// Seconds still knocked off-line ([`KNOCKED`]), and whether it's been
+    /// knocked since its last burst began.
+    pub knocked: f32,
+    pub knocked_this_cycle: bool,
 }
 
 /// What the gun does this tick.
@@ -168,6 +184,10 @@ impl Gun {
             return GunAct::Chirp;
         };
         self.warned = Some(w + dt);
+        if self.knocked > 0.0 {
+            self.knocked -= dt;
+            return GunAct::Quiet;
+        }
         self.next -= dt;
         if self.next > 0.0 {
             return GunAct::Quiet;
@@ -175,10 +195,23 @@ impl Gun {
         if self.left == 0 {
             self.left = BURST;
             self.bursts += 1;
+            self.knocked_this_cycle = false;
         }
         self.left -= 1;
         self.next = if self.left == 0 { BURST_GAP } else { ROUND_GAP };
         GunAct::Fire
+    }
+
+    /// Struck on its head by a round that did harm: knocked off-line for
+    /// [`KNOCKED`] if it has a lock and hasn't been knocked this burst
+    /// cycle. Whether it was.
+    pub fn knock(&mut self) -> bool {
+        if self.warned.is_none() || self.knocked_this_cycle {
+            return false;
+        }
+        self.knocked = KNOCKED;
+        self.knocked_this_cycle = true;
+        true
     }
 
     /// Whether the round it fires now is in its first burst since the
@@ -191,6 +224,58 @@ impl Gun {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// When each round leaves a gun that sees its target throughout,
+    /// knocked by `knock` on the ticks it says.
+    fn fire_times(knock: impl Fn(u32) -> bool, secs: f32) -> Vec<f32> {
+        let dt = 1.0 / 60.0;
+        let mut g = Gun::default();
+        let mut out = Vec::new();
+        for k in 0..(secs / dt) as u32 {
+            if knock(k) {
+                g.knock();
+            }
+            if g.step(true, dt) == GunAct::Fire {
+                out.push(k as f32 * dt);
+            }
+        }
+        out
+    }
+
+    /// Knocked off-line, it fires no sooner than it would have: every round
+    /// as late or later, and none in the knock itself.
+    #[test]
+    fn a_knocked_sentry_fires_no_sooner() {
+        let plain = fire_times(|_| false, 12.0);
+        // Knocked a second after the chirp, then once a second after.
+        let knocked = fire_times(|k| k == 60 || k % 60 == 0, 12.0);
+        assert!(!knocked.is_empty());
+        for (i, t) in knocked.iter().enumerate() {
+            assert!(
+                *t >= plain[i] - 1e-4,
+                "round {i} at {t}, unknocked {}",
+                plain[i]
+            );
+        }
+        // Its first round is still the chirp's lead away, or later.
+        assert!(knocked[0] >= CHIRP - 0.02);
+    }
+
+    /// A stream of rounds (one every tick, more than any gun) slows it but
+    /// never stops it: at most one knock a burst cycle.
+    #[test]
+    fn under_fire_it_still_gets_its_bursts_off() {
+        let secs = 20.0;
+        let plain = fire_times(|_| false, secs).len() as f32;
+        let streamed = fire_times(|_| true, secs).len() as f32;
+        let cycle = ROUND_GAP * (BURST - 1) as f32 + BURST_GAP;
+        // A cycle at most KNOCKED longer.
+        assert!(
+            streamed >= plain * cycle / (cycle + KNOCKED) - BURST as f32,
+            "{streamed} rounds under fire, {plain} without"
+        );
+        assert!(streamed < plain, "it was never knocked");
+    }
 
     /// The sweep runs end to end and back at its pace, pausing at each
     /// end, and never leaves its arc: the same every time round.
@@ -296,7 +381,8 @@ mod tests {
         let mut g = Gun::default();
         g.step(true, dt);
         let mut first = Vec::new();
-        for _ in 0..600 {
+        // Long enough for three bursts after the chirp.
+        for _ in 0..800 {
             if g.step(true, dt) == GunAct::Fire {
                 first.push(g.warning());
             }

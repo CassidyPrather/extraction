@@ -661,6 +661,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "way_lamp" => [1.2, 2.7, 0.4],
         // A marker post, banded with reflective tape (`world::way_lamps`).
         "marker_post" => [0.1, 1.3, 0.1],
+        // The machines' boundary stake, its fins 0.3 across
+        // (`world::way_lamps`).
+        "machine_marker" => [0.3, 1.74, 0.3],
         // Landmarks (src/world/buildings.rs); the headframe's back struts
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
@@ -1155,6 +1158,7 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "snow_pole"
             | "way_lamp"
             | "marker_post"
+            | "machine_marker"
             // Stepped down its slope: the map terraces the ground for it.
             | "ore_mill"
             // On the line's grade.

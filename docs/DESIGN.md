@@ -619,8 +619,14 @@ built to be got round, not shot down:
 
 - **Its sweep is learnable.** End to end at 24°/s with a pause at each end;
   **behind it is blind**: its head can't turn past its arc.
-- **It warns**: a chirp, then a second before the first round of a burst;
+- **It warns**: a chirp 2.5 s before its first round (`CHIRP`: time to
+  hear it, look and step out of its sight), and that first burst warns;
   out of sight two seconds and it has to chirp again.
+- **Its bursts leave time to move**: three rounds 0.12 s apart, then
+  1.8 s to the next burst (`BURST_GAP`). Caught in its line, that's 2.3 s
+  from its first hit to down if every round lands, enough to turn and step
+  to cover in a headset (at 1.4 s it was 2.0 s: #85, Robot minds;
+  `robots::sentry`'s walking-across-its-line gauge holds it).
 - **It's drawn**: a thrown can's clatter, a hot artifact or a mirror shard
   flying past turns it for five seconds.
 - **It runs on a cable** to a junction box behind it: bolt cutters through

@@ -397,7 +397,7 @@
         (name: "Copse", seed: 118, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 158.0), (80.0, 158.0), (80.0, 198.0), (40.0, 198.0)]),
         (name: "Copse", seed: 119, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(80.0, 162.0), (120.0, 162.0), (120.0, 202.0), (80.0, 202.0)]),
         (name: "Copse", seed: 120, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-120.0, 242.0), (-80.0, 242.0), (-80.0, 282.0), (-120.0, 282.0)]),
-        (name: "Copse", seed: 121, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 238.0), (40.0, 238.0), (40.0, 278.0), (0.0, 278.0)]),
+        (name: "Copse", seed: 121, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 248.0), (40.0, 248.0), (40.0, 278.0), (0.0, 278.0)]),
         (name: "Copse", seed: 122, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 238.0), (80.0, 238.0), (80.0, 278.0), (40.0, 278.0)]),
         (name: "Copse", seed: 123, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-280.0, 160.0), (-240.0, 160.0), (-240.0, 200.0), (-280.0, 200.0)]),
         (name: "Bed scrub", seed: 124, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(0.0, 78.0), (40.0, 78.0), (40.0, 118.0), (0.0, 118.0)]),
@@ -457,7 +457,7 @@
         // By the keepers' way down to the Inflow bridge.
         (at: (74.0, -180.0), radius: 1.5, stones: 3),
         // Above the old road, on the way to Sallow Head.
-        (at: (-88.7, -220.6), radius: 1.5, stones: 3),
+        (at: (-91.0, -221.0), radius: 1.5, stones: 3),
         // Down from the Draw-off tower to the Inflow bridge.
         (at: (0.6, -190.8), radius: 1.6, stones: 3),
         // Over the silt fans, on the way to the Inflow bridge.
@@ -468,11 +468,18 @@
         (at: (231.0, 56.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // Where the way crosses into hot ground: something of the place
+        // tells of it before you're in it (map_gradient).
+        (prefab: "wreck_uaz", at: (214.0, 77.3), rot: 45.0),  // into the catchwater down the East shore road
+        (prefab: "wreck_uaz", at: (167.2, -64.1), rot: 90.0),  // into the catchwater from the sorting ground
+        (prefab: "wreck_uaz", at: (-80.3, -220.5), rot: 45.0),  // into New Sallow from the causeway
+
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (2.9, 168.3), rot: 0.0),  // by the valve house, the way west to the stair
         (prefab: "way_lamp", at: (26.0, 156.3), rot: 0.0),  // on the face stair, by the outer wall
         (prefab: "way_lamp", at: (72.0, 120.0), rot: 0.0),  // at the foot of the climb to the gauge house, ahead along the shore
+        (prefab: "way_lamp", at: (112.0, 123.5), rot: 0.0),  // up the climb, beside the way: the light above you on the scramble (on the lip the slope hides it from the foot)
         // Marker posts, banded with reflective tape, where a hand torch's
         // pool shows nothing of the way home (scripts/night_route.sh, the
         // torch case): a stop's post stands 15 m on, beside the way (by 22 m
@@ -610,6 +617,11 @@
     ],
 
     markers: [
+        // Where the way crosses into hot ground: something of the place
+        // tells of it before you're in it (map_gradient). Texts: Fifth valley.
+        (kind: Sign(text: "MACHINES\nAT WORK"), at: (-247.5, -114.5), rot: 0.0, name: "New Sallow works sign"),
+        (kind: Sign(text: "SORTING\nNO ENTRY"), at: (116.0, -19.0), rot: 0.0, name: "Sorting ground stencil"),
+        (kind: Sign(text: "CATCHWATER\nKEEP OUT", board: Some("warning_wall")), at: (217.0, 70.0), rot: 0.0, name: "Catchwater sign"),
         (kind: Insertion, at: (25.0, 262.0), rot: 0.0, name: "South gate"),
         (kind: TruckStop, at: (25.0, 300.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (31.0, 270.0), name: "South gate (fuel)"),

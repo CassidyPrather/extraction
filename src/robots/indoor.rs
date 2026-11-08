@@ -94,16 +94,23 @@ impl NavRef<'_> {
     }
 
     /// Waypoints after the start (y is the floor's on a site, 0 outside:
-    /// walkers steer on x/z).
+    /// walkers steer on x/z). From somewhere the grid has shut (out of the
+    /// Gate, inside a wall's clearance) the first is the way out, the
+    /// nearest open ground, and it's kept: dropped, the walker made for the
+    /// next point straight through whatever shut it, and stood against the
+    /// Gate's pier for the whole raid (Progression's wanderer r19).
     pub fn path(&self, from: Vec3, to: Vec3) -> Option<Vec<Vec3>> {
+        let start = usize::from(self.walkable(from));
         match self {
             NavRef::Zone(g) => g.path([from.x, from.z], [to.x, to.z]).map(|p| {
                 p.into_iter()
-                    .skip(1)
+                    .skip(start)
                     .map(|q| Vec3::new(q[0], 0.0, q[1]))
                     .collect()
             }),
-            NavRef::Local(l) => l.path(from, to).map(|p| p.into_iter().skip(1).collect()),
+            NavRef::Local(l) => l
+                .path(from, to)
+                .map(|p| p.into_iter().skip(start).collect()),
         }
     }
 
