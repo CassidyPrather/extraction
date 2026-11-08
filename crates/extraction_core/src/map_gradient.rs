@@ -110,6 +110,10 @@ pub fn crossings_at_night(
 /// ground it tells of, to be that place's own at night (m): a lamp on the
 /// skyline beyond is how a walker finds home, not a warning (coordinator).
 pub const OWN_LAMP: f32 = 25.0;
+/// How far from the reading point a place's own red lamp still tells of
+/// it at night (m): further, it is skyline, whatever ground it stands in
+/// (coordinator): the lamps far off are how a walker finds home.
+pub const OWN_LAMP_READ: f32 = 100.0;
 /// How near a light an unlit tell must stand to be seen by it at night (m).
 pub const LIT_BY: f32 = 8.0;
 /// How far a tell seen only by a lamp beside it reads at night (m).
@@ -296,6 +300,7 @@ fn crossings_with(
                     // the ground being entered, or by the line.
                     let own = night
                         && *kind == "red lamp over it"
+                        && near <= OWN_LAMP_READ
                         && (danger(map, *at).0 == b.0 || dist(*at, w[1]) <= OWN_LAMP);
                     let kind = if own { "its own red lamp" } else { *kind };
                     signals.push((kind, name.clone(), near));
