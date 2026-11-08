@@ -658,6 +658,49 @@ mod tests {
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
+    /// The night check's lamps (`extraction_core::map_night::LAMP_SEATS`,
+    /// read off the map without the game's geometry) stand where these
+    /// put them, to 5 cm: a landmark whose building or art changes, or a
+    /// new one, fails here until its seat is measured again.
+    #[test]
+    fn every_core_lamp_seat_is_the_rendered_one() {
+        let mut bad = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for (_, text) in extraction_core::map::VALLEYS {
+            let map = extraction_core::map::MapDef::from_ron(text).unwrap();
+            for p in &map.placements {
+                let h = prefab_footprint(&p.prefab)[1];
+                if h < LANDMARK_HEIGHT || LIT.contains(&p.prefab.as_str()) {
+                    continue;
+                }
+                if !seen.insert(p.prefab.clone()) {
+                    continue;
+                }
+                let (Some(t), Some([x, z, y])) = (
+                    top_of(&p.prefab),
+                    extraction_core::map_night::lamp_seat(&p.prefab),
+                ) else {
+                    bad.push(format!(
+                        "{}: not in map_night::LAMP_SEATS (the game's lamp: {:?})",
+                        p.prefab,
+                        top_of(&p.prefab).map(|t| t + Vec3::Y * lamp_lift(&p.prefab))
+                    ));
+                    continue;
+                };
+                let lamp = t + Vec3::Y * lamp_lift(&p.prefab);
+                let across = (Vec2::new(x, z) - lamp.xz()).length();
+                if across > 0.05 || (y - lamp.y).abs() > 0.05 {
+                    bad.push(format!(
+                        "{}: the check's lamp at ({x:.1}, {z:.1}) {y:.1} m, the game's at ({:.1}, {:.1}) {:.1} m",
+                        p.prefab, lamp.x, lamp.z, lamp.y
+                    ));
+                }
+            }
+        }
+        assert!(!seen.is_empty());
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     /// Every landmark's lamp stands on its building: inside the prefab's
     /// footprint, and on something, solid or dressing, whose top is just
     /// under it there, or on its seat's bars (no lamp in the air over an

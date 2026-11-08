@@ -33,7 +33,7 @@ the 33 px of a 0.4° square:
 | heavy     | 43 224 | 10 140 | 6 088 |
 | spotter   | 10 136 |  6 536 | 2 960 |
 | minelayer |  4 580 |  1 312 | 1 472 |
-| sorter    |  9 500 |  3 364 | 2 140 |
+| sorter    | 10 600 |  3 160 | 2 140 |
 
 Every pair clears 33 px many times over. But these counts are total
 change: darkening, soot, gutter, and whatever the machine's pose or sway
@@ -53,11 +53,17 @@ What reads, by the close sheet:
   nearly under it, and the envelope hides most of its top.
 - **Minelayer:** a column of soot at all three ranges. Its pale panels
   darken only a little: the soot is what tells.
-- **Sorter:** at 10 m, a darkened arm. At 20 m, a darker gantry, and its
-  carriage band caught guttering; this still caught no soot. At 30 m,
-  soot over the carriage.
+- **Sorter:** a darkened arm at 10 m, and a darker gantry with its
+  carriage band dimmed at 20 m. Its soot now leaves the carriage's
+  side, 0.9 m out on the eye's side (`fx`, `SORTER_SOOT_OUT`), so it
+  climbs beside the bridge and under a hall's ceiling, not into them.
+  At 10 and 20 m that gives a small smudge beside the light cone and at
+  the beam. The thread is at its 0.4° floor there and sits against the
+  houses, not open sky, so the sorter's darker arm and band read before
+  its soot. At 30 m (shot before the offset), soot over the carriage.
 
-Weakest: the sorter at 20 m in this still, and a spotter right overhead.
+Weakest: the sorter's soot at 10-20 m (its darkening carries it), and a
+spotter right overhead.
 
 ## Against a dark backdrop
 
