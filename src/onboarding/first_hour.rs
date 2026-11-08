@@ -1720,14 +1720,21 @@ pub(super) fn direct_raid(
             }
             First::Anomaly => {
                 // Back the way it came, then on round.
-                let back = state
+                let away = state
                     .goal
                     .as_ref()
-                    .map_or(here, |(_, g)| here - (*g - here).normalize_or_zero() * 4.0);
-                vec![Task::WalkTo {
-                    to: back,
-                    within: 1.0,
-                }]
+                    .map_or(Vec2::ZERO, |(_, g)| -(*g - here).normalize_or_zero());
+                // Indoors, or down a site, by its plan: a step back it can
+                // take (in the shelter's generator room the step back went
+                // into the wall, and stood there the task's 30 s).
+                let at = root.translation + Vec3::Y * 1.0;
+                match plans.iter().find(|pl| pl.contains(at, 0.3)) {
+                    Some(plan) => step_back_in(plan, here, away),
+                    None => vec![Task::WalkTo {
+                        to: here + away * 4.0,
+                        within: 1.0,
+                    }],
+                }
             }
             First::Surge => {
                 state.leg = Leg::Call;
@@ -4698,6 +4705,47 @@ fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Ta
     Some((t, plan.world2(o)))
 }
 
+/// A step back from `here` along `away` inside `plan`: 4 m if its floors
+/// go that far that way and a path gets there, else 3, else 2, by the
+/// plan's rooms; none if no step back is to be had (a step back from an
+/// anomaly "checks behind it": in a room's corner, a wall).
+fn step_back_in(plan: &crate::sim::indoor::BuildingPlan, here: Vec2, away: Vec2) -> Vec<Task> {
+    if away == Vec2::ZERO {
+        return vec![];
+    }
+    let from = plan
+        .to_local(Vec3::new(here.x, plan.xf.translation.y, here.y))
+        .xz();
+    [4.0f32, 3.0, 2.0]
+        .into_iter()
+        .map(|d| here + away * d)
+        .filter(|p| on_its_floors(plan, *p))
+        .find_map(|p| {
+            let to = plan
+                .to_local(Vec3::new(p.x, plan.xf.translation.y, p.y))
+                .xz();
+            let path = plan.path(from, to)?;
+            let mut t = Vec::new();
+            for stop in indoor_stops(plan, from, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
+                        within: 0.6,
+                    }),
+                }
+            }
+            Some(t)
+        })
+        .unwrap_or_default()
+}
+
 /// The longest leg of a way out of a site (m): a stair's climb walks at a
 /// quarter of the pace, and a task's time is 30 s.
 const DEEP_LEG: f32 = 4.0;
@@ -6231,8 +6279,9 @@ the Hollow.";
 mod indoor_tests {
     use super::{
         STEEP_RUN, Stop, below_in, indoor_stops, on_its_floors, out_of, round_banks, round_boxes,
-        segment_hits_box, shot_warns, solid, steep_run,
+        segment_hits_box, shot_warns, solid, steep_run, step_back_in,
     };
+    use crate::bot::Task;
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
 
@@ -6377,6 +6426,21 @@ mod indoor_tests {
                     if !into {
                         rooms -= 1;
                         continue;
+                    }
+                    // A step back from an anomaly, any way: only ever onto
+                    // the site's floors (the generator room's wall).
+                    for k in 0..8 {
+                        let t = k as f32 / 8.0 * std::f32::consts::TAU;
+                        let away = Vec2::new(t.cos(), t.sin());
+                        for task in step_back_in(plan, at.xz(), away) {
+                            if let Task::WalkTo { to, .. } = task
+                                && !on_its_floors(plan, to)
+                            {
+                                bad.push(format!(
+                                    "{what}: a step back {away:.1} goes off its floors to {to:.1}"
+                                ));
+                            }
+                        }
                     }
                     match out_of(plan, from) {
                         None => bad.push(format!("{what}: no way out")),
