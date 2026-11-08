@@ -239,6 +239,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Eye",
     "Strange",
     "Beacon",
+    "MarkerLens",
     // World props (art/props).
     "Timber",
     "Rusty",
@@ -516,6 +517,11 @@ impl ModelMaterials {
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
+            // The machines' boundary stake's lens
+            // (`world::way_lamps::MARKER_LAMP_AT`): frosted, unlit, its own
+            // handle so `render` drives its emissive (amber, pulsed) without
+            // touching the robots' Warn trims.
+            "MarkerLens" => flat(materials, Color::srgb(0.82, 0.82, 0.8), 0.0, 0.2),
             // A robot's eye is a signal lamp: fog doesn't wash it out.
             "Eye" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.1, 0.02, 0.02),

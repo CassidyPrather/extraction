@@ -11,6 +11,13 @@ place, read from 10 m and more. Writes assets/models/props/<name>.glb:
                       patch for stencilled paint
 - `warning_door`      a steel booth door in its frame and a stub of wall, a
                       plain panel at eye height for stencilled paint
+- `machine_marker`    the machines' own boundary stake, planted where their
+                      working ground begins: a fluted steel stake fired into
+                      the ground on three fins, an amber lamp all round its
+                      head, its middle the empty `lamp`
+                      (`world::way_lamps::MARKER_LAMP_AT`). Two materials
+                      only, the robots' Shell and its lens's own
+                      MarkerLens (frosted, unlit: `render` lights it amber)
 
 Each stands on the ground at its origin and faces its reader on +Z. Its
 words aren't modelled: the game draws them (`ScreenStyle::Sign`) on a
@@ -30,7 +37,7 @@ door's is a panel of flat grey paint (Pebble) over its rust-blotched
 leaf.
 
 Materials: Timber, Planks, Cream, Red, Iron, Rusty, Steel, Enamel, Black,
-Concrete, Painted, Pebble, Yellow.
+Concrete, Painted, Pebble, Yellow, Shell, MarkerLens.
 """
 
 import math
@@ -305,6 +312,49 @@ def warning_door():
     return [p]
 
 
+# --- Machine boundary marker ------------------------------------------------------------
+
+# The lamp band's middle (`world::way_lamps::MARKER_LAMP_AT`), and the
+# head's radius round it.
+MARKER_LAMP_Y = 1.6
+MARKER_HEAD_R = 0.075
+
+
+def machine_marker():
+    """A stake the machines plant at the edge of their ground: robot-made
+    (their pale Shell, flutes and fins, no timber or paint), 1.74 m tall,
+    its lamp 1.6 m up (over grass and scrub from 25 m) in a band of
+    frosted lens all round its head, so it shows from any side."""
+    p = Part("static")
+    r = MARKER_HEAD_R
+    ly = MARKER_LAMP_Y
+    # The stake: six-sided, fired 0.3 m into the ground to a point, tapering
+    # up to the head.
+    p.lathe([(0.0, -0.3), (0.03, -0.22), (0.046, 0.0), (0.04, ly - 0.16), (0.0, ly - 0.16)],
+            "Shell", segs=6, xf=UP)
+    # Three fins at its foot, as on a dart: what steadied it as it went in.
+    for k in range(3):
+        a = 2 * math.pi * k / 3
+        fin = [(0.03, -0.06), (0.15, -0.06), (0.15, 0.06), (0.04, 0.36)]
+        p.prism(fin, -0.004, 0.004, "Shell", axis="z", xf=RY(a))
+    # A collar over the fins' tops, and flutes up the stake between them.
+    p.lathe([(0.044, 0.33), (0.058, 0.34), (0.058, 0.38), (0.044, 0.39)], "Shell", segs=6,
+            closed=False, xf=UP)
+    for k in range(3):
+        a = 2 * math.pi * (k + 0.5) / 3
+        p.box((0.014, ly - 0.62, 0.012), (0.0, (ly - 0.62) / 2 + 0.4, 0.044), "Shell",
+              bevel=0.004, segs=1, xf=RY(a))
+    # The head: a housing, the lens band all round (frosted, unlit:
+    # `render` lights it amber and pulses it), a cap and a stub aerial.
+    p.lathe([(0.0, ly - 0.17), (0.045, ly - 0.17), (r, ly - 0.12), (r, ly - 0.04),
+             (0.0, ly - 0.04)], "Shell", segs=12, xf=UP)
+    p.cyl(r - 0.004, ly - 0.04, ly + 0.04, "MarkerLens", segs=24, xf=UP)
+    p.lathe([(0.0, ly + 0.04), (r, ly + 0.04), (r, ly + 0.07), (0.05, ly + 0.1), (0.0, ly + 0.1)],
+            "Shell", segs=12, xf=UP)
+    p.cyl(0.008, ly + 0.1, ly + 0.14, "Shell", segs=8, xf=UP)
+    return [p]
+
+
 def write_with(name, build, area, extra=None):
     """Build a carrier and mark its text area's middle (and any extras)."""
     def b():
@@ -332,3 +382,11 @@ write_with("warning_hoarding", warning_hoarding, HOARDING_AREA)
 write_with("warning_enamel", warning_enamel, ENAMEL_AREA)
 write_with("warning_wall", warning_wall, WALL_AREA)
 write_with("warning_door", warning_door, DOOR_AREA)
+def machine_marker_with_lamp():
+    parts = machine_marker()
+    # Where its light goes: the lens band's middle.
+    empty("lamp", (0.0, MARKER_LAMP_Y, 0.0))
+    return parts
+
+
+prop("machine_marker", machine_marker_with_lamp)
