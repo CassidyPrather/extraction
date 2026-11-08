@@ -405,7 +405,7 @@
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
         (kind: Sentry(arc: 140.0, power: Some((178.1, -176.1))), at: (164.6, -172.5), rot: -45.0, name: "Gate sentry"),
-        (kind: Sentry(arc: 140.0, power: Some((102.1, -57.0))), at: (90.0, -50.0), rot: -30.0, name: "Chimney sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((80.1, -40.1))), at: (90.0, -50.0), rot: 135.0, name: "Chimney sentry"),
         // A spotter over the open ground the west way crosses to the fire
         // lookout: the east ways have the chimney's sentry (map_spotter).
         (kind: Spotter, at: (-119.0, -7.0), name: "Ash pit spotter"),
@@ -423,6 +423,10 @@
         (kind: Poi, at: (-34.5, 108.2), name: "Ash Row"),
         (kind: Poi, at: (-159.6, 84.0), name: "Cutter's farm"),
         (kind: Poi, at: (11.8, -17.0), name: "The works"),
+        // Where the way home from the chimney crosses into the Works yard
+        // (map_gradient): the ironworks' stencil on its fence slab, and
+        // under it, in someone else's paint, whose yard it is now.
+        (kind: Sign(text: "WORKS YARD\nTHEIRS NOW", board: Some("warning_wall")), at: (89.5, -22.5), rot: 131.0, name: "Works yard sign"),
         (kind: Poi, at: (75.7, -32.0), name: "The chimney"),
         (kind: Poi, at: (114.6, 23.0), name: "Canal pumps"),
         (kind: Poi, at: (140.0, -105.0), name: "The slag heaps"),

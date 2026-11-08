@@ -966,15 +966,23 @@ fn tells(world: &mut World, g: &mut HitGauge) {
         Option<&bevy::camera::primitives::Aabb>,
         Has<crate::render::puff::SoftPuff>,
         Option<&InheritedVisibility>,
+        Option<&super::fx::SootOf>,
     ), Or<(With<Mesh3d>, With<crate::render::puff::SoftPuff>)>>();
-    let pieces: Vec<(Entity, Vec3, f32)> = q
+    // (With whose soot it is, if it's soot: a neighbour's drifting past
+    // isn't this machine's tell.)
+    let pieces: Vec<(Entity, Vec3, f32, Option<Entity>)> = q
         .iter(world)
-        .filter(|(e, _, _, puff, vis)| {
+        .filter(|(e, _, _, puff, vis, _)| {
             !g.meshes_before.contains(e) && !(*puff && vis.is_some_and(|v| !v.get()))
         })
-        .map(|(e, gt, aabb, ..)| {
+        .map(|(e, gt, aabb, _, _, soot)| {
             let at = gt.translation();
-            (e, at, area_at(gt, aabb, eye.distance(at)))
+            (
+                e,
+                at,
+                area_at(gt, aabb, eye.distance(at)),
+                soot.map(|s| s.0),
+            )
         })
         .collect();
     for (robot, at) in robots {
@@ -992,8 +1000,10 @@ fn tells(world: &mut World, g: &mut HitGauge) {
         // the same patch of sky more than once.)
         let area: f32 = pieces
             .iter()
-            .filter(|(e, p, _)| !mine.contains(e) && p.distance(at) < 4.0)
-            .map(|(_, _, a)| *a)
+            .filter(|(e, p, _, soot)| {
+                !mine.contains(e) && p.distance(at) < 4.0 && soot.is_none_or(|r| r == robot)
+            })
+            .map(|(_, _, a, _)| *a)
             .fold(0.0, f32::max);
         g.tell_areas.entry(robot).or_default().push(area);
     }

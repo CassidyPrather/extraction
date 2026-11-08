@@ -930,7 +930,9 @@ an SKS's carrier 0.92; a TOZ-8's .22 parts 1.15. An SKS's bolt going
 home is a rifle's carrier (`guns/bolt_close`), not the PM's slide, and
 its 7.62x39 report is the AK's set at 0.9, deeper. A round going in sounds
 like what goes in: a clip's rattle into a Mosin or an SKS, a shell into
-a shotgun, and a loose .22 into a TOZ-8, pushed home (`gun.round_in`).
+a shotgun, and a loose round thumbed into any rifle, pushed home
+(`gun.round_in` on Weapon feel's `RoundThumbed`: a TOZ-8's .22, or a
+Mosin or an SKS filled a round at a time).
 `audio::tests::the_first_hour_guns_each_sound_their_own` holds it: for
 the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
 speed for the same moment.
@@ -990,6 +992,41 @@ stiffened by frost, its legs grinding; crushed at a well's heart, a metal
 groan and a hit; dazzled, its sensor stuttering and its lock clicking
 out; stunned, its servos winding down; hurt by what makes its own sound,
 a short distress note. Deafened by a hush, nothing: the hush is heard.
+
+The Zone's pressure stepping up (`robots::pressure::Stepped`) is heard
+without a radio, before anything it brings, from the Gate's side, where
+the director's machines come in (`audio_machines::pressure_sounds`).
+Each step is played 80 m toward the Gate (`STEP_FROM`), or at the Gate if
+that's nearer:
+- Stirred: a far machine's whine, rising an octave over three seconds
+  (`zone.stirred`);
+- Busy: machine traffic on the wind, several drives beating against each
+  other, swelling in and settling (`zone.busy`);
+- Hunting: something heavier, a deep drive groaning down two notes over a
+  rumble (`zone.hunting`).
+
+Each is a synthesised stand-in (`synth_foley`). Each is heard from where
+it plays, rain or not, and well past it: 231/175, 123/123 and 231/215 m
+in calm/downpour (`RANGE_TARGETS`, wants 80/80). Going down is silent, as
+the words are.
+
+A failing machine's distress flare (`robots::distress::FlareEvent`,
+`audio_machines::flare_sounds`) is heard at every moment:
+- The tell: the tube rising, a ratchet winding and a tick as it locks
+  (`distress.tell`, a stand-in). It's the moment to shoot the tube, so it
+  must read through a fight: 30 m off, at its best 0.15 s in the tell, it
+  clears walker fire at 20 m, running, and both by 6 dB
+  (`audio_gunstate.tells`), and it's heard 163 m in calm and 38 m in a
+  downpour.
+- The launch: a thump (`distress.launch`), then the canister's hiss
+  following it up (`distress.hiss`, a loop on the `Canister`, gone with
+  it).
+- The burst, 60 m up: a pop that carries, a call (`distress.burst`),
+  heard 266 m in calm and 163 m in a downpour (wants 200/120; no machine
+  ceiling, since it's meant to be heard).
+- Shot down: a fizzle where it falls (`distress.fizzle`).
+- The tube spoiled in its tell: a broken clank and a short fizzle
+  (`distress.broken`).
 
 A minelayer crawling grinds, its treads labouring, louder and quicker
 the faster it goes, silent standing (`audio_machines::grind_sounds`,
