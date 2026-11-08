@@ -218,6 +218,8 @@ pub const RECOVER_TIME: f32 = 0.9;
 pub const REACH_TIME: f32 = 0.9;
 pub const GRIP_TIME: f32 = 1.4;
 pub const WRENCH_TIME: f32 = 0.5;
+/// How far its eye is good for (m): across a field (`Senses::sight`).
+pub const SIGHT: f32 = 60.0;
 /// How far its claw reaches from the shoulder (world, m).
 pub const ARM_REACH: f32 = (UPPER + LOWER) * SIZE * 0.97;
 /// A blow hurts whoever is within this of its mark, this much at the
@@ -482,7 +484,7 @@ pub fn spawn_heavy(
             // A big slow eye up front and good ears: it sees you across a
             // field, but a wall is a wall.
             Senses {
-                sight: 60.0,
+                sight: SIGHT,
                 fov_deg: 150.0,
                 hearing: 1.5,
                 eye: EYE_AT,
