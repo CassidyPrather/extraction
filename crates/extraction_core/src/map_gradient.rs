@@ -567,3 +567,70 @@ mod sentries {
         );
     }
 }
+
+#[cfg(test)]
+mod shift_probe {
+    use crate::geom::{P2, dist};
+    use crate::map::MapDef;
+    use crate::terrain::Heightmap;
+
+    fn off(p: P2, line: &[P2]) -> f32 {
+        crate::geom::polyline_closest(line, p).0
+    }
+
+    /// How far each walked way moves with the valley's wrecks taken out,
+    /// at its worst point, and the wreck nearest there: a wreck placed as
+    /// a tell should leave the way where it was.
+    #[test]
+    #[ignore]
+    fn probe_way_shift() {
+        for (id, text) in crate::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let mut bare = map.clone();
+            bare.placements.retain(|p| !p.prefab.starts_with("wreck_"));
+            let ways = |m: &MapDef| {
+                let hm = Heightmap::build(m);
+                let comfy = crate::map_nav::zone_grid(m, &hm, crate::map_lint::COMFORT_SLOPE);
+                let r = crate::map_lint::lint(m, &hm);
+                crate::map_lint::routed_ways(m, &comfy, &r.routes)
+            };
+            let (with, without) = (ways(&map), ways(&bare));
+            let mut moved = 0;
+            for (way, pts) in &with {
+                let Some((_, b)) = without.iter().find(|(w, _)| w == way) else {
+                    continue;
+                };
+                let Some((d, at)) = pts
+                    .iter()
+                    .map(|p| (off(*p, b), *p))
+                    .max_by(|a, c| a.0.total_cmp(&c.0))
+                else {
+                    continue;
+                };
+                if d > 2.0 {
+                    moved += 1;
+                    let near = map
+                        .placements
+                        .iter()
+                        .filter(|p| p.prefab.starts_with("wreck_"))
+                        .min_by(|a, c| dist(a.at, at).total_cmp(&dist(c.at, at)))
+                        .map(|p| {
+                            format!(
+                                "{} ({:.1}, {:.1}) {:.0} m off",
+                                p.prefab,
+                                p.at[0],
+                                p.at[1],
+                                dist(p.at, at)
+                            )
+                        })
+                        .unwrap_or_default();
+                    println!(
+                        "  {id} {way}: {d:.1} m at ({:.0}, {:.0}); nearest wreck {near}",
+                        at[0], at[1]
+                    );
+                }
+            }
+            println!("== {id}: {} ways, {moved} moved over 2 m", with.len());
+        }
+    }
+}
