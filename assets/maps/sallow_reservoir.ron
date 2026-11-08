@@ -483,8 +483,6 @@
         // The Gate's ring: the machines' stakes 52-68 m out, one within 25 m
         // of every walkable spot on the 60 m circle where carrying a valley
         // key calls a heavy (Heavy's gate_line_is_staked).
-        // Not the east arc under the fence (x 281, z -224 to -240): a 25-30
-        // degree hillside, with no footing a stake may stand on in reach.
         (prefab: "machine_marker", at: (197.7, -182.1), rot: 0.0),
         (prefab: "machine_marker", at: (207.5, -175.8), rot: 0.0),
         (prefab: "machine_marker", at: (186.0, -175.5), rot: 0.0),
@@ -493,6 +491,10 @@
         (prefab: "machine_marker", at: (254.6, -190.2), rot: 0.0),
         (prefab: "machine_marker", at: (266.9, -203.9), rot: 0.0),
         (prefab: "machine_marker", at: (266.9, -260.1), rot: 0.0),
+        // The east arc under the fence, a 25-30 degree hillside: on a 26
+        // degree slope (a machine's stake may stand to MAX_SLOPE, map_lint's
+        // footing_slope).
+        (prefab: "machine_marker", at: (279.0, -225.0), rot: 0.0),
 
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
