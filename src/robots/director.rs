@@ -277,13 +277,19 @@ pub fn heard_by_any<'a>(
     })
 }
 
-/// Without headway (this much nearer its goal) for [`NO_HEADWAY`] s, a
-/// machine on its way gives the errand up and goes out by the Gate; one
-/// that can't get out either is gone. A safety net: two walkers stood 7 m
-/// out of the Marrow Gate for half an hour, holding two of the director's
-/// six places, and nothing was sent at Hunting (Progression's wanderer
-/// r19; the cause, a dropped way-out waypoint, is fixed in `NavRef::path`).
-pub const HEADWAY: f32 = 1.0;
+/// Without headway (this far from where it last made any) for
+/// [`NO_HEADWAY`] s, a machine on its way gives the errand up and goes out
+/// by the Gate; one that can't get out either is gone. A safety net: two
+/// walkers stood 7 m out of the Marrow Gate for half an hour, holding two
+/// of the director's six places, and nothing was sent at Hunting
+/// (Progression's wanderer r19; the cause, a dropped way-out waypoint, is
+/// fixed in `NavRef::path`). Ground covered, not nearer as the crow flies:
+/// a way round gets no nearer for most of a minute (Marrow's ridge to the
+/// Gate, east over the District road bridge first), and one going out that
+/// way was taken for stuck and despawned on the bridge (s84, "stuck going
+/// out at (-89, 21, -24)"). A walker on its way covers ~60 m in the time;
+/// one pressed to a wall, or rocking on the spot, not this.
+pub const HEADWAY: f32 = 3.0;
 pub const NO_HEADWAY: f32 = 45.0;
 
 #[allow(clippy::type_complexity)]
@@ -298,24 +304,24 @@ fn give_up_when_stuck(
             Without<super::collector::Collector>,
         ),
     >,
-    mut seen: Local<std::collections::HashMap<Entity, (f32, f32)>>,
+    mut seen: Local<std::collections::HashMap<Entity, (Vec2, f32)>>,
 ) {
     let now = time.elapsed_secs();
     let mut here = std::collections::HashSet::new();
     for (e, mut brain, job, gt) in &mut walkers {
-        let (to, leaving) = match *brain {
-            super::Brain::Transit { to } => (to, false),
-            super::Brain::Leave { to } => (to, true),
+        let leaving = match *brain {
+            super::Brain::Transit { .. } => false,
+            super::Brain::Leave { .. } => true,
             _ => {
                 seen.remove(&e);
                 continue;
             }
         };
         here.insert(e);
-        let d = gt.translation().xz().distance(to.xz());
-        let (best, since) = seen.entry(e).or_insert((d, now));
-        if d < *best - HEADWAY {
-            (*best, *since) = (d, now);
+        let at = gt.translation().xz();
+        let (from, since) = seen.entry(e).or_insert((at, now));
+        if at.distance(*from) >= HEADWAY {
+            (*from, *since) = (at, now);
         }
         if now - *since < NO_HEADWAY {
             continue;
