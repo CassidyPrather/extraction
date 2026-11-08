@@ -536,6 +536,25 @@ struct OwnMaterial {
     how: Ages,
     muzzle: Vec3,
     port: Vec3,
+    /// The source material's name (`ModelMaterials`: "Blued", "Wood"...).
+    name: Option<String>,
+    /// Shared by every part wearing it, its muzzle and port in the gun's
+    /// space (not a turned part's copy of its own).
+    gun_space: bool,
+}
+
+impl WeatheredLook {
+    /// The gun's own weathered copy of the material named `name` (as
+    /// `ModelMaterials` names it): for a stand-in drawn in the gun's space,
+    /// such as its far model's per-material meshes (`<id>_lod1.glb`), so
+    /// it wears the gun's grime, rust and soot. None if no part of the
+    /// gun wears it.
+    pub fn copy_named(&self, name: &str) -> Option<Handle<StandardMaterial>> {
+        self.mats
+            .iter()
+            .find(|m| m.gun_space && m.name.as_deref() == Some(name))
+            .map(|m| m.handle.clone())
+    }
 }
 
 /// The last stretch to failure, 0 to 1: from weapon feel's second line
@@ -699,10 +718,11 @@ pub fn weather_looks(
                     {
                         let (base, rough) = (orig.base_color, orig.perceptual_roughness);
                         let metallic = orig.metallic;
-                        let how = ages(
-                            model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
-                            metallic,
-                        );
+                        let name = model_mats
+                            .as_ref()
+                            .and_then(|mm| mm.name_of(m.0.id()))
+                            .map(str::to_string);
+                        let how = ages(name.as_deref(), metallic);
                         let (scale, turn, offset) = at.to_scale_rotation_translation();
                         let plain = turn.angle_between(Quat::IDENTITY) < 1e-3
                             && (scale - Vec3::ONE).abs().max_element() < 1e-3;
@@ -738,6 +758,8 @@ pub fn weather_looks(
                             how,
                             muzzle,
                             port,
+                            name,
+                            gun_space: plain,
                         });
                     }
                     if let Ok(cs) = children.get(c) {
@@ -767,6 +789,7 @@ pub fn weather_looks(
                         how,
                         muzzle,
                         port,
+                        ..
                     } = own_mat;
                     let b = base.to_linear();
                     let own = Vec3::new(b.red, b.green, b.blue);
