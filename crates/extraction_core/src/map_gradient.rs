@@ -89,12 +89,46 @@ fn in_sight(hm: &Heightmap, solids: &[Solid], from: P2, to: P2, height: f32) -> 
 }
 
 pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]) -> Vec<Crossing> {
+    crossings_with(map, hm, comfy, routes, false)
+}
+
+/// As [`crossings`], after dark: a tell counts only if it gives its own
+/// light (a sentry's searchlight, a steady anomaly's glow, a robot gate's
+/// red lamp), read as a glow within its reach, or if a light to steer by
+/// (`map_night::lights`) stands within [`LIT_BY`] of it, read as by day
+/// but no further than [`LIT_READ`].
+pub fn crossings_at_night(
+    map: &MapDef,
+    hm: &Heightmap,
+    comfy: &NavGrid,
+    routes: &[Route],
+) -> Vec<Crossing> {
+    crossings_with(map, hm, comfy, routes, true)
+}
+
+/// How near a light an unlit tell must stand to be seen by it at night (m).
+pub const LIT_BY: f32 = 8.0;
+/// How far a tell seen only by a lamp beside it reads at night (m).
+pub const LIT_READ: f32 = 25.0;
+/// The anomalies that glow steady after dark (`anomaly::visuals`); the
+/// rest show only when something is thrown in.
+pub const GLOWING: &[&str] = &["Burner", "Snare", "Well", "Frost"];
+
+fn crossings_with(
+    map: &MapDef,
+    hm: &Heightmap,
+    comfy: &NavGrid,
+    routes: &[Route],
+    night: bool,
+) -> Vec<Crossing> {
     let solids = solids(map);
     let marks = crate::map_landmarks::landmarks(map, hm);
     // Every thing that can tell: kind, name, where, how tall, how far it
     // carries, and how big it looks (the square root of its height times
     // its narrowest breadth, as `map_breadcrumbs` reads a cue).
     let mut tells: Vec<(&'static str, String, P2, f32, f32, f32)> = Vec::new();
+    // At night, the ones that give their own light (read as a glow).
+    let mut glows: Vec<P2> = Vec::new();
     for m in &map.markers {
         match &m.kind {
             MarkerKind::Sign { text, .. } => tells.push((
@@ -106,12 +140,27 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                 1.1,
             )),
             MarkerKind::Sentry { .. } => {
-                tells.push(("sentry", m.name.clone(), m.at, 2.0, 90.0, 1.6))
+                if night {
+                    glows.push(m.at);
+                }
+                let reach = if night {
+                    crate::sentry::BEAM_REACH
+                } else {
+                    90.0
+                };
+                tells.push(("sentry", m.name.clone(), m.at, 2.0, reach, 1.6))
             }
             MarkerKind::RobotGate => {
-                tells.push(("robot gate", m.name.clone(), m.at, 3.0, 120.0, 3.0))
+                if night {
+                    glows.push(m.at);
+                }
+                let reach = if night { 25.0 } else { 120.0 };
+                tells.push(("robot gate", m.name.clone(), m.at, 3.0, reach, 3.0))
             }
             MarkerKind::Anomaly { kind, .. } => {
+                if night && GLOWING.contains(&kind.as_str()) {
+                    glows.push(m.at);
+                }
                 tells.push(("anomaly", kind.clone(), m.at, 1.0, 40.0, 2.0))
             }
             _ => {}
@@ -138,6 +187,18 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
             80.0,
             (h * f[0].min(f[2])).sqrt(),
         ));
+    }
+    // After dark, an unlit tell needs a lamp beside it, and reads only as
+    // far as that shows it; one that gives its own light glows.
+    if night {
+        let lights = crate::map_night::lights(map, hm);
+        tells.retain_mut(|t| {
+            if glows.contains(&t.2) {
+                return true;
+            }
+            t.4 = t.4.min(LIT_READ);
+            lights.iter().any(|l| dist(l.at, t.2) <= LIT_BY)
+        });
     }
     // A landmark's lamp over hot ground: red, far off.
     for l in &marks {
@@ -218,6 +279,7 @@ pub fn crossings(map: &MapDef, hm: &Heightmap, comfy: &NavGrid, routes: &[Route]
                     // point on the approach short of the line.
                     .filter(|(d, p)| {
                         *kind == "red lamp over it"
+                            || glows.contains(at)
                             || (*size / d.max(1.0) >= READ_ANGLE
                                 && (SHORT..=READ_FROM).contains(&dist(*p, w[1])))
                     })
@@ -263,7 +325,11 @@ mod tests {
             let hm = Heightmap::build(&map);
             let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
             let r = crate::map_lint::lint(&map, &hm);
-            let cs = crossings(&map, &hm, &comfy, &r.routes);
+            let cs = if std::env::var("NIGHT").is_ok() {
+                crossings_at_night(&map, &hm, &comfy, &r.routes)
+            } else {
+                crossings(&map, &hm, &comfy, &r.routes)
+            };
             // One line per place, cell and way (two ways crossing in one
             // cell from different directions each get a line).
             let mut seen: Vec<(String, (i32, i32), String)> = Vec::new();
@@ -390,6 +456,21 @@ pub fn unread_sentries(
     comfy: &NavGrid,
     routes: &[Route],
 ) -> Vec<Unread> {
+    unread_sentries_at(map, hm, comfy, routes, crate::sentry::SIGHT, SENTRY_READ)
+}
+
+/// As [`unread_sentries`] at another hour: it sees no further than `sight`
+/// (`world::weather::Conditions::sight` on its 55 m: about 37 m at dawn,
+/// 33 m at dusk, 22 m at night, any weather) and its lamp reads to `read`
+/// (its searchlight's [`crate::sentry::BEAM_REACH`] from dusk to dawn).
+pub fn unread_sentries_at(
+    map: &MapDef,
+    hm: &Heightmap,
+    comfy: &NavGrid,
+    routes: &[Route],
+    sight: f32,
+    read: f32,
+) -> Vec<Unread> {
     let blocks = crate::map_sentry::blocks(map, hm);
     let ways = routed_ways(map, comfy, routes);
     let heading = |pts: &[P2], k: usize| {
@@ -402,7 +483,7 @@ pub fn unread_sentries(
         let lamp = (s.at, s.head(hm));
         let reads = |q: P2, h: P2, start: bool| {
             let d = dist(q, s.at);
-            d <= SENTRY_READ
+            d <= read
                 && (d < 1.0
                     || start
                     || (h[0] * (s.at[0] - q[0]) + h[1] * (s.at[1] - q[1])) / d
@@ -417,7 +498,7 @@ pub fn unread_sentries(
         for (way, pts) in &ways {
             let mut seen = false;
             for i in 0..pts.len().saturating_sub(1) {
-                let now = s.sees(map, hm, pts[i]);
+                let now = s.sees(map, hm, pts[i]) && dist(pts[i], s.at) <= sight;
                 if now && !seen && !(0..=i).any(|k| reads(pts[k], heading(pts, k), k == 0)) {
                     let (p, h) = (pts[i], heading(pts, i));
                     let off = dist(p, s.at).max(0.1);
@@ -458,8 +539,15 @@ mod sentries {
                             crate::map_lint::COMFORT_SLOPE,
                         );
                         let r = crate::map_lint::lint(&map, &hm);
-                        unread_sentries(&map, &hm, &comfy, &r.routes)
-                            .into_iter()
+                        let at = |sight, read| unread_sentries_at(&map, &hm, &comfy, &r.routes, sight, read);
+                        let mut all = at(crate::sentry::SIGHT, SENTRY_READ);
+                        for (hour, sight) in [("dawn", 36.9), ("dusk", 33.0), ("night", 22.0)] {
+                            for mut u in at(sight, crate::sentry::BEAM_REACH) {
+                                u.way = format!("{} (at {hour})", u.way);
+                                all.push(u);
+                            }
+                        }
+                        all.into_iter()
                             .map(|u| {
                                 format!(
                                     "{id}: {} first sees {} at ({:.0}, {:.0}), {:.0} m off and {:.0} deg off the heading, its lamp not read first",
