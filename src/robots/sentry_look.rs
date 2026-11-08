@@ -30,13 +30,66 @@ impl Plugin for SentryLookPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (dress_sentries, light_sentries, searchlights, gallery),
+            (
+                dress_sentries,
+                light_sentries,
+                searchlights,
+                gallery,
+                hold_markers,
+            ),
         );
     }
 }
 
 #[derive(Component)]
 struct Dressed;
+
+/// A powered sentry reads as far as it sees you (`rules::SIGHT`, 55 m by
+/// day), against a slag heap or a grey shed as well as the sky: its
+/// searchlight's lens burns steady (not a tell: it doesn't pulse, and it's
+/// warm white, not red), and past this distance holds the size it looks
+/// here, as an eye's glow does (`visuals::GLOW_HOLDS_AT`).
+pub const MARKER_HOLDS_AT: f32 = 12.0;
+
+/// What of a sentry is its day marker.
+#[derive(Component, Clone, Copy)]
+enum DayMarker {
+    /// Its searchlight's lens, on its brow: held to its size at
+    /// `MARKER_HOLDS_AT`. It reads in front, where the sentry looks.
+    Lens,
+    /// Its pilot lamp on top of its head (the lens's own mesh and lamp, so
+    /// no more to draw), turned to the eye: it reads from every side.
+    Pilot,
+}
+
+/// Where the pilot lamp sits on the head, local to it: on its crown.
+const PILOT: Vec3 = Vec3::new(0.0, 0.45, 0.0);
+
+fn hold_markers(
+    mut markers: Query<(&mut Transform, &GlobalTransform, &DayMarker, &ChildOf)>,
+    parents: Query<&GlobalTransform, Without<DayMarker>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let Some(eye) = cameras.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    for (mut t, gt, m, of) in &mut markers {
+        let at = gt.translation();
+        let k = (eye.distance(at) / MARKER_HOLDS_AT).max(1.0);
+        if (t.scale.x - k).abs() > 0.01 * k {
+            t.scale = Vec3::splat(k);
+        }
+        // The pilot lamp's face (its -Z, as the lens's) turned to the eye.
+        if matches!(m, DayMarker::Pilot) {
+            if let Ok(p) = parents.get(of.parent()) {
+                let world = Transform::from_translation(at)
+                    .looking_at(eye, Vec3::Y)
+                    .rotation;
+                t.rotation = p.rotation().inverse() * world;
+            }
+        }
+    }
+}
 
 /// A sentry's own lights.
 #[derive(Component)]
@@ -127,6 +180,11 @@ fn dress_sentries(
                 };
                 let mut ec =
                     commands.spawn((Mesh3d(p.mesh.clone()), MeshMaterial3d(m), ChildOf(holder)));
+                // Its searchlight's lens: the sentry's day marker, held to
+                // the size it looks at `MARKER_HOLDS_AT` (`hold_markers`).
+                if p.material.as_deref() == Some("Lamp") {
+                    ec.insert(DayMarker::Lens);
+                }
                 if name != "cable" {
                     if let Some(r) = lod_range(lod) {
                         ec.insert(r);
@@ -151,9 +209,23 @@ fn dress_sentries(
         };
         let (glow, eye, lamp) = (base_glow.clone(), base_eye.clone(), base_lamp.clone());
         let l = Lights {
-            glow: own(&glow, &mut materials),
+            glow: {
+                let g = own(&glow, &mut materials);
+                if let Some(mut m) = materials.get_mut(&g) {
+                    m.fog_enabled = false;
+                }
+                g
+            },
             eye: own(&eye, &mut materials),
-            lamp: own(&lamp, &mut materials),
+            // (A lamp: through fog as it is in clear air, and drawn as far
+            // as a robot's lamps are, `visuals::LAMP_REACH`.)
+            lamp: {
+                let l = own(&lamp, &mut materials);
+                if let Some(mut m) = materials.get_mut(&l) {
+                    m.fog_enabled = false;
+                }
+                l
+            },
             halo: materials.add(StandardMaterial {
                 base_color: Color::BLACK,
                 emissive: LinearRgba::BLACK,
@@ -182,6 +254,21 @@ fn dress_sentries(
             "lamp",
             Transform::from_translation(LAMP),
         );
+        // Its pilot lamp: the lens again, on its crown.
+        if let Some(lens) = ModelNode::find(&model, "lamp").and_then(|n| {
+            n.primitives
+                .iter()
+                .find(|p| p.material.as_deref() == Some("Lamp"))
+        }) {
+            commands.spawn((
+                DayMarker::Pilot,
+                Mesh3d(lens.mesh.clone()),
+                MeshMaterial3d(l.lamp.clone()),
+                Transform::from_translation(PILOT),
+                NotShadowCaster,
+                ChildOf(head),
+            ));
+        }
         for c in children.iter() {
             let Ok((part, pt)) = parts.get(c) else {
                 continue;

@@ -1797,6 +1797,37 @@ Found on the way:
   scaled parent moved wrong. Members now go into the block's frame by
   their full affine.
 
+### Marrow's gate within 10%: windows and guns (7 November)
+
+The bar for the worst view was 10% headroom: at most 2160 draws, both
+eyes, in 3 runs of 3. After the far merge, the fuel exfil met it in 2
+runs of 3. Two more changes closed the gap.
+
+- **Windows in their shell's own material are drawn with the shell**
+  (`buildings::fold_windows`). Where a window prop's material was the
+  shell's own, it was still a draw of its own. That was 8 of 20 at the
+  fuel exfil and 13 of 33 at the gate insertion. Those windows are now
+  in the shell's mesh and cast its shadow, which lands on their own
+  reveal or sill.
+- **A weathered gun has one material copy per source material**
+  (Gunsmith, `weapons::weather`). Each part used to get a copy of its own,
+  keyed by its frame at that moment. So `gun_rest` found about one group
+  a part and declined 1 to 8 of Marrow's 13 guns, different in each run.
+  The fuel exfil swung 2121-2229 on one binary. Each part's rest pose now
+  rides in its `MeshTag`, which the wear shader reads. `gun_rest` declines
+  none, and each gun groups the same way every run, at about 9 draws a
+  gun: by material, by whether it casts, and by small-part shadow reach.
+  `EXTRACTION_GUN_REST_LOG=1` prints every gun put to rest or declined,
+  with its parts and groups.
+
+**On main 511af01e, three runs (draws, both eyes, against 2400):**
+
+| view | after far merge | now | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2121, 2153, 2189 | 2097, 2097, 2079 | 12.6-13.4% |
+| gate insertion 2 | 2018, 2000, 2045 | 1966, 1966, 1966 | 18.1% |
+| s01_ahead | 1890, 1924, 1896 | 1786, 1876, 1790 | 21.8-25.6% |
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:

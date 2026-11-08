@@ -251,3 +251,18 @@ Robot minds' fairness frames found a drone's lock halo bright at night but faint
 By day, red added to a bright grey sky went pink. Now, in daylight (`Conditions::light` over 0.25), the halo is laid over what's behind it, blended, in the tell's red (`LOCK_RED`, unlit). Its cover follows the tell's pulse, 0.4 at a trough and 0.9 at a crest (`lock_halo_alpha`), and it's drawn up to 2.5× wider in full daylight (`LOCK_HALO_DAY`). After dark it's the additive glow it was, and the night halo carries it as before, so nothing blooms more than it did. Its glow goes to the eye through `grade::ToTheEye`, kept to its colour by `hue_safe` and held steady against the eyes' adaptation.
 
 A flat disc with a hard edge read as a sticker, not a glow. By day the halo is now a soft disc turned to the eye (`soft_disc`: full cover over the middle half, falling smoothly to nothing at the edge). It's set `LOCK_HALO_BEHIND` (0.45 m) behind the lens, away from the eye, so the drone's body stays drawn over it and its silhouette reads through the glow at 6 m. Its red count at 15 and 30 m is the hard disc's. At 6 m it's 68–81% of it, the share the drone's body now covers.
+
+## A sentry reads as far as it sees
+
+![a sentry at 25, 40 and 55 m against a slag heap and a rail shed, by day, before and after](sentry_day_marker_before_after.jpg)
+
+A machine must be readable at least as far out as it can see you. A sentry sees you out to 55 m by day (`rules::SIGHT`), but read at a glance only to about 25 m, unless it stood against the sky. Its 4.6 m mast read as a pale pole; its grey head was a few pixels against a heap or a grey shed.
+
+Now a powered, intact sentry carries a steady warm-white day marker, its searchlight's own lamp (`Lamp`, lit whenever it's powered):
+
+- **On its brow:** the lens, reading in front, where the sentry looks.
+- **On its crown:** a pilot lamp, the same mesh and lamp material, so nothing new to draw, turned to the eye. It reads from every side.
+
+Past `MARKER_HOLDS_AT` (12 m) both hold the size they look there, as an eye's glow does (`sentry_look::hold_markers`). The lamp and the cyan strips are lamps now (fogless, drawn to `visuals::LAMP_REACH`). The marker doesn't pulse, and it's white, not red, so it can't be taken for a tell (the chirp, a lock, a flare tube's tick). Unpowered or wrecked, it's dark.
+
+The shots are Cinder Works at noon, clear, the sentry at 25, 40 and 55 m: against the big slag heap (camera `60,0,-105,90,2`) and in front of the rail shed (camera on its axis, 10 m behind the sentry). Each pair is the whole view and the head close; before (left) and after (right). At 55 m the marker is a bright point on both backgrounds, where before there was a grey speck on a pole.

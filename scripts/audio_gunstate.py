@@ -66,7 +66,8 @@ def run(sets, out):
         lines.append(f"    {cue:18s} " + " ".join(f"{r:>26s}" for r in row)
                      + ("  masked (" + "; ".join(bad) + ")" if bad else ""))
     f, more = strikes(sets, mix)
-    return flags + f, lines + more
+    t, told = tells(sets, mix)
+    return flags + f + t, lines + more + told
 
 
 # A robot struck (audio_machines::struck_layers): each kind's layers, by
@@ -126,4 +127,37 @@ def strikes(sets, mix):
         flags += masked
         lines.append(f"    {kind:20s} {loud[kind]:6.1f}   {best[0]:+5.1f} dB at {best[1]:>5} Hz"
                      + ("  masked by your shot" if masked else ""))
+    return flags, lines
+
+
+# A machine's tells that must be read in a fight, at their distance: a
+# distress flare going up (audio_machines::flare_sounds; the moment to
+# shoot the tube).
+TELLS = {"distress.tell": 30.0}
+
+
+def tells(sets, mix):
+    """Each tell at its distance, landing with the fight's first shot (or
+    footfall), against each of FIGHTS: it must clear the masking by CLEAR."""
+    lines = [f"  A machine's tell in a fight (wants {CLEAR:+.0f} dB over the masking):"]
+    flags = 0
+    names = {c["name"]: c for c in mix}
+    for cue, dist in TELLS.items():
+        if cue not in names or names[cue]["set"] not in sets:
+            return 1, lines + [f"    {cue}: not in the mix or the bank"]
+        row, bad = [], []
+        for fight, layers in FIGHTS.items():
+            scene = [("wind", "loop", None, 0.0, None)] + layers + [(cue, 0.5, dist, 0.0, None)]
+            total, parts = am.render(scene, sets, mix, seconds=1.5)
+            sig = parts[f"{len(scene) - 1}:{cue}"]
+            # A tell lasts (a flare's is 2 s): judged at its best LISTEN s
+            # within it, as you'd catch it, not only its first click.
+            m, band = max((am.margin(sig, total - sig, 0.5 + k * 0.05, LISTEN)
+                           for k in range(20)), key=lambda x: x[0])
+            row.append(f"{fight}: {m:+.1f} dB at {band} Hz")
+            if m < CLEAR:
+                bad.append(fight)
+        flags += bool(bad)
+        lines.append(f"    {cue} at {dist:.0f} m: " + "; ".join(row)
+                     + (f"  masked ({', '.join(bad)})" if bad else ""))
     return flags, lines
