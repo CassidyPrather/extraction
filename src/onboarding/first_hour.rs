@@ -519,9 +519,18 @@ pub fn shelter_job(map: &str) -> Option<Job> {
             };
             out(a).total_cmp(&out(b))
         })?;
+        // Named on the card by the place nearest its way in (what the
+        // newcomer reads to go: "the shelter" is no place it can find).
+        let place = def
+            .markers
+            .iter()
+            .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
+            .min_by(|a, b| dist(a.at, p.at).total_cmp(&dist(b.at, p.at)))?
+            .name
+            .clone();
         Some(Job::Bring {
             map: map.to_owned(),
-            place: "the shelter".into(),
+            place,
             item: "holm_watch".into(),
             at: p.to_world(room.at),
         })
@@ -5673,6 +5682,16 @@ the Hollow.";
         assert_eq!(
             seeded_job("shelter", "marrow_creek"),
             shelter_job("marrow_creek")
+        );
+        // Its place one the newcomer can find on the card (a POI's name).
+        let Some(Job::Bring { place, .. }) = shelter_job("marrow_creek") else {
+            unreachable!()
+        };
+        assert!(
+            def.markers
+                .iter()
+                .any(|m| m.kind == MarkerKind::Poi && m.name == place),
+            "{place}: no such place"
         );
     }
 
