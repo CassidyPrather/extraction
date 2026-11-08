@@ -169,3 +169,11 @@ The coming-home walks live in `docs/craft/walks/home/`.
 - Re-walk after the valley moves on. Rime's 4 Nov dead stretch had come
   alive by 5 Nov (a refuge, poles, a tower), and the weakest moments had
   moved on to the stretch after it.
+- The walk's first stop looks along the route, but the player arrives
+  facing the insertion marker's `rot`, and every valley had 0: due north,
+  whatever lay there. Rime's arrival faced an empty moor while the
+  village and the water tower's lamp stood off to the right, so the
+  first frame had no subject. Judge the arrival from the marker's own
+  heading, and turn the marker to face the way on (Rime's is 56.5, the
+  first job's heading out of the Bottoms;
+  `docs/shots/fifth-valley/first_sights_before_after.jpg`).
