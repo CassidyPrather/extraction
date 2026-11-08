@@ -192,6 +192,7 @@ fn holds_views_with(
     }
     if fight {
         crate::render::puff::add_to(&mut app);
+        app.add_systems(Last, pin_drones);
     }
     // (The flat camera comes a few frames in.)
     for _ in 0..300 {
@@ -253,6 +254,9 @@ fn holds_views_with(
             }
         }
         let (l, r, views_drawing) = m;
+        if let Some(d) = fighters.first() {
+            drone_log(app.world(), *d);
+        }
         let od_l = super::overdraw::measure(app.world_mut(), eyes.0);
         let od_r = super::overdraw::measure(app.world_mut(), eyes.1);
         let draws = l.draws + r.draws;
@@ -625,6 +629,24 @@ fn lights_reaching(app: &mut App, eye: Vec3) -> usize {
 /// the budget's views keep 14, walking in toward 10.
 fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
     use crate::robots::{Job, JobKind};
+    // The fighters' models, loaded before they're spawned: a part waits
+    // for its robot's model, and a drone's had come only after the first
+    // views were measured, so those had a fight without it.
+    let models: Vec<Handle<bevy::gltf::Gltf>> =
+        ["models/robots/drone.glb", "models/robots/walker.glb"]
+            .iter()
+            .map(|p| app.world().resource::<AssetServer>().load(*p))
+            .collect();
+    for _ in 0..2400 {
+        let server = app.world().resource::<AssetServer>();
+        if models
+            .iter()
+            .all(|h| server.is_loaded_with_dependencies(h.id()))
+        {
+            break;
+        }
+        app.update();
+    }
     let fwd = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
     let side = fwd.cross(Vec3::Y);
     let w = app.world_mut();
@@ -645,6 +667,7 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
     // elsewhere by `WORST_HEAVY_AT` watches where it stands, so it's
     // measured there.)
     let heavy = on(heavy_at(), 0.0);
+    let drone_at = on(12.0, 2.0) + Vec3::Y * 6.0;
     let heavy_job = if std::env::var_os("WORST_HEAVY_AT").is_some() {
         Job {
             site: heavy,
@@ -655,10 +678,10 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
         job()
     };
     let mut queue = bevy::ecs::world::CommandQueue::default();
-    let mut out = {
+    let mut out: Vec<Entity> = {
         let mut c = Commands::new(&mut queue, w);
         vec![
-            crate::robots::drone::spawn_drone(&mut c, on(12.0, 2.0) + Vec3::Y * 6.0, job()),
+            crate::robots::drone::spawn_drone(&mut c, drone_at, job()),
             crate::robots::walker::spawn_walker(&mut c, &zone, on(10.0, -4.0), job()),
             crate::robots::hound::spawn_hound(&mut c, &zone, on(8.0, 3.0), job()),
             crate::robots::heavy::spawn_heavy(&mut c, &zone, &catalog, heavy, heavy_job),
@@ -671,7 +694,62 @@ fn fight_at(app: &mut App, eye: Vec3, fwd: Vec3) -> Vec<Entity> {
     for _ in 0..30 {
         app.update();
     }
+    // The drone flies its watch while the view settles, and was in the
+    // eyes' view when measured in some runs and not in others (about 44
+    // draws an eye between them): it's held where it came, overhead in
+    // view, for the whole measure (`pin_drones`).
+    app.world_mut()
+        .entity_mut(out[0])
+        .insert(GaugePin(drone_at));
+    for _ in 0..2 {
+        app.update();
+    }
     out
+}
+
+/// Where the gauge holds a fighter, every frame.
+#[derive(Component)]
+struct GaugePin(Vec3);
+
+fn pin_drones(
+    mut pinned: Query<(
+        &GaugePin,
+        &mut Transform,
+        Option<&mut avian3d::prelude::Position>,
+        Option<&mut avian3d::prelude::LinearVelocity>,
+    )>,
+) {
+    for (pin, mut t, pos, vel) in &mut pinned {
+        t.translation = pin.0;
+        if let Some(mut p) = pos {
+            p.0 = pin.0;
+        }
+        if let Some(mut v) = vel {
+            v.0 = Vec3::ZERO;
+        }
+    }
+}
+
+/// `WORST_DRONE_LOG=1`: where the fight's drone is when its view is
+/// measured, and how many of its meshes any view (an eye, the sun's
+/// cascades) sees.
+fn drone_log(w: &World, drone: Entity) {
+    if std::env::var_os("WORST_DRONE_LOG").is_none() {
+        return;
+    }
+    let at = w.get::<GlobalTransform>(drone).map(|g| g.translation());
+    let (mut meshes, mut viewed) = (0, 0);
+    let mut stack = vec![drone];
+    while let Some(e) = stack.pop() {
+        if w.get::<Mesh3d>(e).is_some() {
+            meshes += 1;
+            viewed += w.get::<ViewVisibility>(e).is_some_and(|v| v.get()) as usize;
+        }
+        if let Some(cs) = w.get::<Children>(e) {
+            stack.extend(cs.iter());
+        }
+    }
+    eprintln!("drone: at {at:?}; {meshes} meshes, {viewed} in a view");
 }
 
 /// How far out the fight's heavy stands: 14 m, or `WORST_HEAVY_AT`.
