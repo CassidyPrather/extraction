@@ -501,6 +501,83 @@ mod tests {
         }
     }
 
+    /// Every way on every valley that walks from quiet ground into hot
+    /// (`extraction_core::map_gradient::crossings`) tells of it from the
+    /// place itself on the approach (a sign, a wreck, a gate, a sentry, an
+    /// anomaly: not only a red lamp far off), so a newcomer stepping onto
+    /// the ground that fills the account and voices its step was told
+    /// before it. A machine seen on the way is a bonus, not the promise:
+    /// it moves, dies and is drawn away (coordinator, #82). Known gaps are
+    /// named here till they're closed, and this fails once one is (take
+    /// it off).
+    #[test]
+    fn every_quiet_to_hot_crossing_is_told_by_its_place() {
+        use extraction_core::map::MapDef;
+        use extraction_core::terrain::Heightmap;
+        // (valley, into, near, the way, part of its name): waiting, and on
+        // whom.
+        const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[
+            (
+                "marrow_creek",
+                "Radio mast",
+                [-69.0, -66.0],
+                "mast_relay",
+                "the jeep on the north way, waiting on Verifier's loot fix",
+            ),
+            // Found by this gauge, not shown by `probe_gradient` (it prints
+            // the first crossing of a 20 m cell; these are another way in
+            // there): Map design's to place or rule out.
+            (
+                "cinder_works",
+                "The works",
+                [32.0, 23.0],
+                "route to Works yard",
+                "Map design's",
+            ),
+            (
+                "rime_fell",
+                "The upper slopes",
+                [-139.0, -52.0],
+                "home from The barracks",
+                "Map design's",
+            ),
+        ];
+        let mut untold = vec![];
+        let mut closed = vec![];
+        for (id, text) in extraction_core::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let comfy = extraction_core::map_nav::zone_grid(
+                &map,
+                &hm,
+                extraction_core::map_lint::COMFORT_SLOPE,
+            );
+            let r = extraction_core::map_lint::lint(&map, &hm);
+            let cs = extraction_core::map_gradient::crossings(&map, &hm, &comfy, &r.routes);
+            let gap = |c: &extraction_core::map_gradient::Crossing| {
+                GAPS.iter().find(|g| {
+                    g.0 == id
+                        && g.1 == c.into.0
+                        && c.way.contains(g.3)
+                        && Vec2::from_array(g.2).distance(Vec2::from_array(c.at)) < 25.0
+                })
+            };
+            for c in &cs {
+                let told = c.signals.iter().any(|s| s.0 != "red lamp over it");
+                match (told, gap(c)) {
+                    (false, None) => untold.push(format!(
+                        "{id}: {} ({}) -> {} ({}) at ({:.0}, {:.0}) on {}",
+                        c.from.0, c.from.1, c.into.0, c.into.1, c.at[0], c.at[1], c.way
+                    )),
+                    (true, Some(g)) => closed.push(format!("{id} {} on {} ({})", g.1, g.3, g.4)),
+                    _ => {}
+                }
+            }
+        }
+        assert!(untold.is_empty(), "crossings nothing tells of: {untold:#?}");
+        assert!(closed.is_empty(), "told now, take it off GAPS: {closed:?}");
+    }
+
     fn out() -> Doings {
         Doings {
             out: true,
