@@ -574,7 +574,8 @@ pub const VIEW_MAX: usize = 16;
 ///
 /// A log pile is one too: ten logs and four stakes drawn as one model, no
 /// roof, nothing inside. So is a snow pole: one 9 cm stick, painted; and
-/// a yard lamp: a post and its arm; and a marker post: one post.
+/// a yard lamp: a post and its arm; a marker post: one post; and a
+/// machine marker: one stake.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -584,6 +585,7 @@ pub const VIEW_LIGHT: &[&str] = &[
     "snow_pole",
     "way_lamp",
     "marker_post",
+    "machine_marker",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
