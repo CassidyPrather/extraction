@@ -169,6 +169,16 @@ pub const STAND_INS: &[StandIn] = &[
         render: zone_hunting,
     },
     StandIn {
+        set: "distress/tell",
+        variants: 2,
+        render: distress_tell,
+    },
+    StandIn {
+        set: "distress/hiss",
+        variants: 2,
+        render: distress_hiss,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -948,6 +958,53 @@ fn zone_hunting(rng: &mut Rng, sr: f32) -> Vec<f32> {
             (body.run(saw) * 1.2 + 0.3 * saw + rumble.run(noise(rng)) * 2.0) * env
         })
         .collect()
+}
+
+/// A machine's flare tube raised (`robots::distress`, its tell): a ratchet
+/// winding it up, hard pawl clicks quickening, then a sharp tick as it
+/// locks. A tell, so bright and dry, to read through a fight.
+fn distress_tell(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 1.1;
+    let n = (secs * sr) as usize;
+    let mut pawl = Bp::new(2_600.0 * jitter(rng, 0.1), 5.0, sr);
+    let mut lock = Bp::new(4_800.0 * jitter(rng, 0.1), 7.0, sr);
+    let mut out = vec![0.0f32; n];
+    // The clicks: 9 a second quickening to 20, to 0.85 s; then the lock.
+    let mut t = 0.0f32;
+    let mut clicks = Vec::new();
+    while t < 0.85 {
+        clicks.push(t);
+        t += 1.0 / (9.0 + 13.0 * t / 0.85);
+    }
+    for (i, v) in out.iter_mut().enumerate() {
+        let t = i as f32 / sr;
+        let mut e = 0.0f32;
+        for &c in &clicks {
+            if t >= c && t < c + 0.03 {
+                e += (-(t - c) * 220.0).exp();
+            }
+        }
+        let n = noise(rng);
+        let lk = if t >= 0.92 {
+            (-(t - 0.92) * 120.0).exp()
+        } else {
+            0.0
+        };
+        *v = pawl.run(n) * e * 3.0 + lock.run(n) * lk * 5.0;
+    }
+    out
+}
+
+/// A distress canister's trail as it climbs: a rocket's hiss, a rushing
+/// band of noise with the motor's crackle in it, 2 s, looped.
+fn distress_hiss(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut rush = Bp::new(3_000.0 * jitter(rng, 0.1), 0.7, sr);
+    let mut low = Bp::new(700.0, 0.8, sr);
+    let mut crackle = grit(60.0, sr);
+    seamless(rng, sr, |rng, _| {
+        let n = noise(rng);
+        (rush.run(n) * 1.3 + low.run(n) * 0.5) * (0.6 + 0.4 * crackle(rng))
+    })
 }
 
 /// Bright, clipped notes (a square-ish tone, a click of onset, quick

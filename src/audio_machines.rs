@@ -71,10 +71,10 @@ impl Plugin for MachineSoundsPlugin {
                     struck_sounds,
                     grind_sounds,
                     hiss_sounds,
-                    pressure_sounds,
                     tether_sounds,
                 ),
-            );
+            )
+            .add_systems(Update, (pressure_sounds, flare_sounds, canister_hiss));
     }
 }
 
@@ -734,6 +734,82 @@ fn grind_sounds(
     }
 }
 
+/// A failing machine's distress flare (`robots::distress::FlareEvent`):
+/// the tube raised, a ratchet winding and a tick as it locks
+/// (`distress.tell`, a Signal: the moment to stop it); the canister away,
+/// a thump (`distress.launch`), its hiss climbing with it
+/// ([`canister_hiss`]); the burst, a pop heard far off: a call
+/// (`distress.burst`); shot down, a fizzle where it falls
+/// (`distress.fizzle`); the tube spoiled in its tell, a broken clank and
+/// a short fizzle (`distress.broken`).
+fn flare_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::robots::distress::FlareEvent>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for e in events.read() {
+        layers(&mut commands, &bank, &mut rng, e.at, flare_layers(e.what));
+    }
+}
+
+/// What each moment of a flare sounds like.
+pub fn flare_layers(what: crate::robots::distress::FlareAct) -> &'static [Layer] {
+    use crate::robots::distress::FlareAct as A;
+    match what {
+        A::Tell => &[("distress/tell", "distress.tell", 1.0)],
+        A::Launch => &[("guns/distant_shot", "distress.launch", 0.7)],
+        A::Burst => &[("explosions/grenade_sharp", "distress.burst", 1.5)],
+        A::Downed => &[(CRACKLE_SET, "distress.fizzle", 0.7)],
+        A::Stopped => &[
+            ("machines/clank", "distress.broken", 0.75),
+            (CRACKLE_SET, "distress.fizzle", 1.4),
+        ],
+    }
+}
+
+/// A distress canister's hiss, following it up (`distress.hiss`), gone
+/// with it at the burst or when it's shot down.
+#[derive(Component)]
+struct HissLoop(Entity);
+
+fn canister_hiss(
+    mut commands: Commands,
+    canisters: Query<(Entity, &GlobalTransform), With<crate::robots::distress::Canister>>,
+    mut loops: Query<(Entity, &HissLoop, &mut Transform)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (c, gt) in &canisters {
+        let at = gt.translation();
+        if let Some((_, _, mut t)) = loops.iter_mut().find(|(_, l, _)| l.0 == c) {
+            t.translation = at;
+            continue;
+        }
+        let Some(sample) = bank.pick("distress/hiss", &mut rng.0) else {
+            continue;
+        };
+        commands.spawn((
+            HissLoop(c),
+            SamplePlayer::new(sample).looping(),
+            Transform::from_translation(at),
+            sample_effects![
+                VolumeNode {
+                    volume: Volume::Decibels(crate::audio_mix::db("distress.hiss")),
+                    ..default()
+                },
+                crate::audio_mix::spatial("distress.hiss"),
+                reverb_send("distress.hiss")
+            ],
+        ));
+    }
+    for (l, h, _) in &loops {
+        if !canisters.contains(h.0) {
+            commands.entity(l).despawn();
+        }
+    }
+}
+
 /// A minelayer stopped over a spot, about to lay: its chute charging, a
 /// hiss (`minelayer.hiss`) the length of the stop (`rules::LAY_TIME`)
 /// before the mine drops with a chunk (`mine.laid`). The playtest's
@@ -1033,10 +1109,6 @@ mod tests {
         ),
         ("EnteredWell", "a first-time hint; the well is heard"),
         ("FirstMet", "the bot's report"),
-        (
-            "FlareEvent",
-            "a failing machine's distress flare (tell, launch, burst, downed, stopped); its sounds are Audio's to add (robots::distress)",
-        ),
         ("Gestured", "a gesture's start (UI)"),
         ("GoalDone", "the onboarding's step is heard (StepDone)"),
         (
@@ -1336,6 +1408,29 @@ mod tests {
         let near = Vec3::new(10.0, 3.0, -30.0);
         assert!(step_from(you, near).distance(near) < 1e-3);
         assert_eq!(step_from(you, you), you);
+    }
+
+    /// Every moment of a distress flare is heard, each its own: the tell
+    /// isn't the launch, the burst isn't a fizzle; all in the mix.
+    #[test]
+    fn a_distress_flare_is_heard_through() {
+        use crate::robots::distress::FlareAct as A;
+        let acts = [A::Tell, A::Launch, A::Burst, A::Downed, A::Stopped];
+        for (i, a) in acts.iter().enumerate() {
+            let ls = flare_layers(*a);
+            assert!(!ls.is_empty(), "{a:?} is silent");
+            for (set, cue, _) in ls {
+                let c = crate::audio_mix::MIX.iter().find(|c| c.name == *cue);
+                assert_eq!(c.map(|c| c.set), Some(*set), "{cue}");
+            }
+            for b in &acts[i + 1..] {
+                assert_ne!(flare_layers(*a), flare_layers(*b), "{a:?} and {b:?}");
+            }
+        }
+        let hiss = crate::audio_mix::MIX
+            .iter()
+            .find(|c| c.name == "distress.hiss");
+        assert_eq!(hiss.map(|c| c.set), Some("distress/hiss"));
     }
 
     /// A grappler's hold is heard while it lasts, straining harder toward
