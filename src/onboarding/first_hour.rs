@@ -4085,9 +4085,9 @@ const DOOR_SQUARE: f32 = 0.8;
 /// A point this near a doorway's axis (its middle, square to it) is on
 /// its line already (m): more than a stop's `DOOR_STOP_WITHIN`, so a bot
 /// at its stop is on the line and isn't sent back to it.
-const DOOR_ON_LINE: f32 = 0.35;
+const DOOR_ON_LINE: f32 = 0.45;
 /// How near its stops in front of and behind a doorway the walk comes (m).
-const DOOR_STOP_WITHIN: f32 = 0.2;
+const DOOR_STOP_WITHIN: f32 = 0.3;
 
 /// A doorway as a walk meets it: its closed leaf's line, hinge to latch
 /// (on the map), and the height of its sill.
