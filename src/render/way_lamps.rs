@@ -106,8 +106,7 @@ fn light_marker_lens(
         return;
     };
     if let Some(mut m) = materials.get_mut(&lens) {
-        m.unlit = false;
-        m.base_color = Color::srgb(0.3, 0.27, 0.2);
+        light_lens(&mut m);
     }
     commands.spawn((
         Name::new("Machine marker glow"),
@@ -117,6 +116,14 @@ fn light_marker_lens(
             emissive: MARKER_AMBER,
         },
     ));
+}
+
+/// A marker lens made to glow: lit (unlit shows no emissive), on a dim
+/// frosted ground, its glow first at full swell.
+fn light_lens(m: &mut StandardMaterial) {
+    m.unlit = false;
+    m.base_color = Color::srgb(0.3, 0.27, 0.2);
+    m.emissive = MARKER_AMBER;
 }
 
 /// Every marker's lens and halo, swelling together (`marker_pulse`).
@@ -277,6 +284,50 @@ mod marker_tests {
             60.0 * ((r - g) / d + 4.0)
         };
         (h, if mx > 0.0 { d / mx } else { 0.0 })
+    }
+
+    #[test]
+    fn a_machine_marker_gets_its_lamp_at_night() {
+        // Its halo at the model's lamp, swelling with the rest (what Map
+        // design's night gauge counts on: `map_gradient::SELF_LIT`).
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_systems(Update, halo_machine_markers);
+        let m = app
+            .world_mut()
+            .spawn((
+                Building {
+                    prefab: "machine_marker".into(),
+                },
+                Transform::default(),
+            ))
+            .id();
+        let lamp = app
+            .world_mut()
+            .spawn(Building {
+                prefab: "way_lamp".into(),
+            })
+            .id();
+        app.update();
+        let w = app.world_mut();
+        let halos: Vec<(Entity, Vec3, f32)> = w
+            .query_filtered::<(&ChildOf, &Transform, &Halo), With<MarkerHalo>>()
+            .iter(w)
+            .map(|(c, t, h)| (c.parent(), t.translation, h.radius))
+            .collect();
+        assert_eq!(halos.len(), 1, "one halo, the marker's: {halos:?}");
+        assert_eq!(halos[0].0, m);
+        assert!(halos[0].0 != lamp);
+        assert_eq!(halos[0].1, crate::world::way_lamps::MARKER_LAMP_AT);
+        // And its lens, which came unlit, glows.
+        let mut lens = StandardMaterial {
+            unlit: true,
+            ..default()
+        };
+        light_lens(&mut lens);
+        assert!(!lens.unlit && lens.emissive == MARKER_AMBER);
+        // Short of the landmarks' red, which carry across a valley.
+        assert!(MARKER_HALO_REACH < HALO_REACH);
     }
 
     #[test]
