@@ -53,6 +53,19 @@ pub const DOOR_STAND: f32 = 3.2;
 pub const TEAR_EVERY: f32 = 6.0;
 /// Someone this close to a Gate with a valley key threatens the depot.
 pub const GATE_RADIUS: f32 = 60.0;
+/// How far its horn from the Gate is heard (m), calm / in a downpour, and
+/// its hum (`heavy.idle`, on it, walking or standing), by the mix's
+/// masking model (`scripts/audio_mix.py`, `audible_range`; read 8
+/// November). The gauge `every_heavy_reads_before_it_reaches_you` holds
+/// them to the valleys and to how far it notices you.
+pub const HORN_HEARD: (f32, f32) = (705.0, 658.0);
+pub const HUM_HEARD: (f32, f32) = (201.0, 201.0);
+
+/// Between calm and downpour heard ranges at `rain`, as the dB go (as
+/// `senses::heard_coming`).
+pub fn heard_at(range: (f32, f32), rain: f32) -> f32 {
+    range.0 * (range.1 / range.0).powf(rain.clamp(0.0, 1.0))
+}
 
 /// The heavy's own thinking, beside the shared [`Brain`].
 #[derive(Component, Debug, Clone)]
@@ -799,5 +812,86 @@ mod tests {
             )
             .unwrap();
         assert!(checked >= 5, "checked {checked} buildings");
+    }
+
+    /// Every heavy reads before it reaches you. Heavies have no posts or
+    /// patrols: each is called out of its valley's Gate (`call_heavy`),
+    /// so its approach starts there, and its horn has to reach every spot
+    /// you can stand in every valley, calm or in a downpour. Then, under
+    /// every weather and hour (the storm too), it's heard coming (its
+    /// footfalls, walking; its hum, standing) from further than its eye
+    /// is good for, so it never notices you before you could know it's
+    /// there.
+    #[test]
+    fn every_heavy_reads_before_it_reaches_you() {
+        use super::super::heavy::SIGHT;
+        use super::super::senses::{Coming, heard_coming};
+        use crate::world::weather::{Conditions, Hour, WeatherKind};
+        use extraction_core::map::{MapDef, VALLEYS};
+        use extraction_core::map_heavy;
+        use extraction_core::terrain::Heightmap;
+        let mut short = Vec::new();
+        for (id, text) in VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let r = map_heavy::reach(&map, &hm).unwrap_or_else(|| panic!("{id}: no Gate"));
+            let (_, far) = r.furthest().unwrap();
+            for (weather, rain) in [("calm", 0.0), ("downpour", 1.0)] {
+                let horn = heard_at(HORN_HEARD, rain);
+                let beyond = r.beyond(horn);
+                println!(
+                    "{id:<17} {weather:<8} horn {horn:3.0} m, ground to {far:3.0} m: {} of {} spots beyond",
+                    beyond.len(),
+                    r.ground.len()
+                );
+                if let Some((p, d)) = beyond.first() {
+                    let (name, off) = map_heavy::near(&map, *p).unwrap_or(("?", 0.0));
+                    short.push(format!(
+                        "{id} in a {weather}: {} spots beyond the horn ({horn:.0} m), the furthest {d:.0} m at ({:.0}, {:.0}), {off:.0} m from {name}",
+                        beyond.len(),
+                        p[0],
+                        p[1]
+                    ));
+                }
+            }
+        }
+        let kinds = [
+            WeatherKind::Clearing,
+            WeatherKind::Drizzle,
+            WeatherKind::PeaSouper,
+            WeatherKind::Downpour,
+        ];
+        for kind in kinds {
+            for hour in [Hour::Dawn, Hour::Day, Hour::Dusk, Hour::Night] {
+                for storm in [false, true] {
+                    if storm && kind != WeatherKind::Downpour {
+                        continue;
+                    }
+                    for cycle in 0..8 {
+                        let mut c = Conditions::compose(kind, hour, cycle);
+                        if storm {
+                            c = c.stormy();
+                        }
+                        // How far it notices you, uncapped by how it's heard.
+                        let eye = c.sight(SIGHT);
+                        let steps = heard_coming(Coming::Heavy, c.rain);
+                        let hum = heard_at(HUM_HEARD, c.rain);
+                        if cycle == 0 {
+                            println!(
+                                "{kind:?}{} {hour:?}: notices you to {eye:2.0} m; heard walking {steps:3.0} m, standing {hum:3.0} m",
+                                if storm { " (storm)" } else { "" }
+                            );
+                        }
+                        if eye > steps.min(hum) {
+                            short.push(format!(
+                                "{kind:?} {hour:?} cycle {cycle}: it notices you to {eye:.0} m, heard only to {:.0} m",
+                                steps.min(hum)
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(short.is_empty(), "{}", short.join("\n"));
     }
 }
