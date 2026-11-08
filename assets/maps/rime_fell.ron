@@ -442,7 +442,7 @@
         // (map_gradient). In the roadmen's words: what the chutes do.
         (kind: Sign(text: "SNOW\nSLIDES"), at: (-125.0, 65.5), rot: 90.0, name: "Coldharbour chutes sign"),
         (kind: Sign(text: "CHUTES\nRUN"), at: (-140.7, -38.5), rot: 12.0, name: "Upper slopes sign"),
-        (kind: Sign(text: "CHUTES\nRUN"), at: (-155.6, -50.7), rot: 313.0, name: "Barracks way sign"),  // the way home from the barracks, 15 m short of the upper slopes
+        (kind: Sign(text: "CHUTES\nRUN"), at: (-152.5, -50.8), rot: 313.0, name: "Barracks way sign"),  // the way home from the barracks, 12 m short of the upper slopes (read from 15 m: map_gradient)
         (kind: Poi, at: (195.0, -160.0), name: "The tarn"),
         (kind: Poi, at: (-190.0, 120.0), name: "The galleries"),
         (kind: Loot(table: "tools"), at: (-195.0, 223.0), name: "Roadmen's grit store"),
