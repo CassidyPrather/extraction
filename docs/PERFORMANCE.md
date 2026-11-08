@@ -1858,6 +1858,29 @@ eyes. The drone itself is no cheaper to draw at fight range without
 losing its per-part scorch and weathering (Robot bodies). The rest is
 being looked for elsewhere in the view.
 
+### Loose magazines rest merged: the bar met with the drone in view (8 November)
+
+A magazine model shows each round it holds, three meshes a round. A gun
+lying out was already drawn merged with its seated magazine
+(`render::gun_rest`), but a magazine or clip lying on its own was not.
+That was about 100 draws an eye at the fuel exfil: a PPSh drum's 42, two
+stripper clips' 30, a PM magazine's 12, and more. `gun_rest` now rests a
+loose magazine or clip too, as one mesh per material. Its rounds change
+only in hand, and a hand wakes it, as it wakes a gun
+(`a_loose_magazine_rests_merged_and_wakes_in_hand`).
+
+**Three runs, the drone in view (draws, both eyes, against 2400):**
+
+| view | before | after | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2189, 2191, 2191 | 2023, 2027, 2025 | 15.6-15.7% |
+| gate insertion 2 | 2064, 2072, 2072 | 1966, 1982, 1974 | 17.4-18.1% |
+| s01_ahead | 1880, 1880, 1880 | 1714, 1718, 1714 | 28.4-28.6% |
+
+The fuel exfil is within the 10% bar (at most 2160), 3 runs of 3, with
+the fight's drone in view. Heavy's merged weak-point rings, on their
+branch, are another 22 draws off it.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
