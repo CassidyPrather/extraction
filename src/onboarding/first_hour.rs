@@ -1376,11 +1376,22 @@ pub(super) fn direct_raid(
             .iter()
             .find(|(_, g, by)| by.0 == player && g.firearm.live_rounds() > 0)
             .map(|(e, ..)| e);
-        let answer = if armed_now {
+        // (Armed is a round to shoot: with the slide back and no loaded
+        // spare, "shot it" was an Engage that ended at once, and the
+        // newcomer stood where it was through eight zaps.)
+        let rounds = guns()
+            .any(|(g, by, packed)| by == player && !packed && g.firearm.live_rounds() > 0)
+            || spare_loaded(&world, &view, player);
+        // (Stillness is no hiding from a machine zapping it: a wait to keep
+        // still, under way, goes.)
+        bot.tasks
+            .retain(|t| !matches!(t, Task::Wait(w) if *w >= CRAWLER_STILL));
+        let how = crawler_answer(armed_now, rounds, packed.is_some());
+        let answer = if how == CrawlerAnswer::Shoot {
             state.fought_at = now;
             state.note(now, Kind::Learned, "a crawler crackling at it: shot it");
             take_it_on()
-        } else if let Some(gun) = packed {
+        } else if let (CrawlerAnswer::Unpack, Some(gun)) = (how, packed) {
             // Its only gun in the pack (put there with the hands full after
             // a fight): out, and at it. (Backing out instead, the reckless
             // one was zapped down with a loaded gun on its back.)
@@ -1612,7 +1623,12 @@ pub(super) fn direct_raid(
             }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
-            First::ComingToLook if !p.reckless && !p.hoards => {
+            // (Not with a crawler charging at it: still, the careful
+            // newcomer stood in a shelter's generator room through eight
+            // zaps, told "keep still" by a hunter's first.)
+            First::ComingToLook
+                if !p.reckless && !p.hoards && !crawler_at_it(now, state.crawled_at) =>
+            {
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
@@ -1641,6 +1657,16 @@ pub(super) fn direct_raid(
                     "bleeding, with a heavy in reach: on away first, then the dressing",
                 );
                 walk_off_heavy(&world, here, from)
+            }
+            // Bleeding with a crawler charging at it: out of its line first
+            // (its answer's doing that), the dressing once it's behind.
+            First::Bleeding if crawler_at_it(now, state.crawled_at) => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "bleeding, with a crawler at it: out of its line first, then the dressing",
+                );
+                vec![]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1767,6 +1793,9 @@ pub(super) fn direct_raid(
                 .robot_at(h)
                 .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
         })
+        // (Nor with a crawler charging at it: bound in its line, the careful
+        // newcomer took the next zap.)
+        && !crawler_at_it(now, state.crawled_at)
     {
         let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
             held.is_none()
@@ -3338,6 +3367,38 @@ fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, runni
 /// Not answering a crawler's crackle again sooner than this (s): its zaps
 /// come every 2 s or so, and the answer takes longer.
 const CRAWLER_EVERY: f32 = 3.0;
+/// A crawler that charged at it this lately (s) is still at it: no keeping
+/// still, no dressing in its line.
+const CRAWLER_CLEAR: f32 = 5.0;
+/// A wait this long (s) is one to keep still in, and goes when a crawler
+/// charges.
+const CRAWLER_STILL: f32 = 5.0;
+
+/// A crawler charged at it lately enough to be at it still (`CRAWLER_CLEAR`).
+fn crawler_at_it(now: f32, crawled_at: f32) -> bool {
+    now - crawled_at < CRAWLER_CLEAR
+}
+
+/// What a crawler's charge gets from the newcomer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CrawlerAnswer {
+    /// A gun to hand and a round to fire (in it, or a loaded spare).
+    Shoot,
+    /// Its only loaded gun in the pack: out with it, then at it.
+    Unpack,
+    /// Nothing to shoot: back out the way it came, out of its line.
+    BackOut,
+}
+
+fn crawler_answer(armed: bool, rounds: bool, packed_loaded: bool) -> CrawlerAnswer {
+    if armed && rounds {
+        CrawlerAnswer::Shoot
+    } else if packed_loaded {
+        CrawlerAnswer::Unpack
+    } else {
+        CrawlerAnswer::BackOut
+    }
+}
 
 /// A bleed this fast is worth stopping to dress (hp/s).
 const BLEED_WORTH: f32 = 0.3;
@@ -5657,6 +5718,29 @@ the Hollow.";
         // Under it, east to west, never on it: as it was.
         let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
         assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+    }
+
+    /// A crawler's charge: shot back only with a round to fire (an empty
+    /// gun's "shot it" was an Engage that ended at once, and the careful
+    /// newcomer stood through eight zaps in the shelter's generator room);
+    /// its gun out of the pack if that's the loaded one; else out of its
+    /// line. And while one's at it, no keeping still and no dressing.
+    #[test]
+    fn a_crawler_at_it_is_answered_with_what_it_has() {
+        assert_eq!(crawler_answer(true, true, false), CrawlerAnswer::Shoot);
+        assert_eq!(crawler_answer(true, false, false), CrawlerAnswer::BackOut);
+        assert_eq!(crawler_answer(true, false, true), CrawlerAnswer::Unpack);
+        assert_eq!(crawler_answer(false, false, true), CrawlerAnswer::Unpack);
+        assert_eq!(crawler_answer(false, true, false), CrawlerAnswer::BackOut);
+        assert_eq!(crawler_answer(false, false, false), CrawlerAnswer::BackOut);
+        let now = 100.0;
+        assert!(crawler_at_it(now, now - 1.0));
+        assert!(crawler_at_it(now, now - CRAWLER_CLEAR + 0.1));
+        assert!(!crawler_at_it(now, now - CRAWLER_CLEAR - 0.1));
+        // (Never charged: the newcomer's clock starts it at zero.)
+        assert!(!crawler_at_it(now, 0.0));
+        // A wait to keep still in is one the charge clears.
+        assert!(CRAWLER_STILL <= 5.0);
     }
 
     /// The shelter job (`--job shelter`) puts the card's thing down in
