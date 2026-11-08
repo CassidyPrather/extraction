@@ -52,6 +52,11 @@ use crate::world::Zone;
 
 /// How big it is against a walker (its legs, its reach, its hull).
 pub const SIZE: f32 = 2.0;
+
+/// Radians the hardest shove rocks a heavy (`rock::Rocks`): a Mosin's
+/// round about 3.5 degrees at the most, a pistol's about 1.3, a .22's
+/// hardly.
+pub const HEAVY_ROCK: f32 = 0.073;
 /// An EMP holds it this long (a walker, twelve seconds).
 pub const EMP_STUN: f32 = 7.0;
 /// A snare's discharge drops it this long.
@@ -490,6 +495,14 @@ pub fn spawn_heavy(
             RigidBody::Kinematic,
         ))
         .id();
+    // Struck, it rocks away from the round about the ground under it
+    // (`rock`, `HEAVY_ROCK`).
+    commands.entity(robot).insert(super::rock::Rocks {
+        pivot: Vec3::new(0.0, -shape.height(), 0.0),
+        full: HEAVY_ROCK,
+        hz: 2.2,
+        damping: 0.3,
+    });
     commands.entity(robot).insert(Arm {
         state: ArmState::Rest,
         t: 0.0,
@@ -543,6 +556,9 @@ pub fn spawn_heavy(
             c.spawn((
                 Name::new(format!("Heavy knee {i}")),
                 LegPiece::Knee(i),
+                // (It rides its leg, drawn where the leg is: not rocked
+                // with the hull.)
+                super::rock::Unrocked,
                 HeavyPart(Slot::Knee(i as u8)),
                 part_bundle(
                     robot,

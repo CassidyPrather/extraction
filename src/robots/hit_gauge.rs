@@ -77,7 +77,16 @@ pub struct Row {
     pub look: usize,
     /// The part's strength after the two rounds (share).
     pub left: f32,
+    /// A machine that rocks when struck (`rock::Rocks`): how far its body
+    /// turned within the window (degrees), and from which frame.
+    pub rocks: bool,
+    pub moved: f32,
+    pub moved_at: Option<u32>,
 }
+
+/// The least a struck machine that rocks turns within the window
+/// (degrees): a gauge round shoves a heavy about a degree.
+pub const MIN_MOVED: f32 = 0.1;
 
 impl Row {
     pub fn seen(&self) -> bool {
@@ -89,8 +98,13 @@ impl Row {
     pub fn looks_damaged(&self) -> bool {
         self.look > 0
     }
+    /// Its body answered the round (a machine that rocks), or it doesn't
+    /// rock.
+    pub fn shoved(&self) -> bool {
+        !self.rocks || self.moved >= MIN_MOVED
+    }
     pub fn ok(&self) -> bool {
-        self.seen() && self.heard() && self.looks_damaged()
+        self.seen() && self.heard() && self.looks_damaged() && self.shoved()
     }
 
     pub fn line(&self) -> String {
@@ -105,7 +119,7 @@ impl Row {
             }
         };
         format!(
-            "{}\t{:?}\tfx {} (frame {})\t{:.2} deg, {:.0} px at {:.0} m\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\t{}",
+            "{}\t{:?}\tfx {} (frame {})\t{:.2} deg, {:.0} px at {:.0} m\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\tmoved {}\t{}",
             self.kind,
             self.role,
             self.fx,
@@ -120,6 +134,15 @@ impl Row {
             self.marks,
             self.look,
             self.left * 100.0,
+            if self.rocks {
+                format!(
+                    "{:.2} deg (frame {})",
+                    self.moved,
+                    self.moved_at.map_or("-".into(), |f| f.to_string())
+                )
+            } else {
+                "-".into()
+            },
             if self.ok() {
                 "ok".to_owned()
             } else {
@@ -132,6 +155,9 @@ impl Row {
                 }
                 if !self.looks_damaged() {
                     why.push("NO DAMAGED LOOK");
+                }
+                if !self.shoved() {
+                    why.push("NO SHOVE");
                 }
                 why.join(" ")
             }
@@ -590,6 +616,10 @@ fn step(world: &mut World, g: &mut HitGauge) {
         g.point = point;
         let p = world.get::<RobotPart>(part).unwrap();
         let (role, hp) = (p.role, p.hp);
+        // (Its last round's rock settled: what moves now is this one's.)
+        if let Some(mut r) = world.get_mut::<super::rock::Rock>(robot) {
+            r.settle();
+        }
         shoot(world, part, point, normal, ROUND.min(hp * 0.4));
         g.row = Some(Row {
             kind,
@@ -606,6 +636,9 @@ fn step(world: &mut World, g: &mut HitGauge) {
             marks: 0,
             look: 0,
             left: 1.0,
+            rocks: world.get::<super::rock::Rocks>(robot).is_some(),
+            moved: 0.0,
+            moved_at: None,
         });
         g.at = g.frame;
         return;
@@ -617,7 +650,14 @@ fn step(world: &mut World, g: &mut HitGauge) {
             span,
             area,
         } = since(world, g, robot);
+        let turned = world
+            .get::<super::rock::Rock>(robot)
+            .map_or(0.0, |r| r.angle().to_degrees());
         let row = g.row.as_mut().unwrap();
+        if turned >= MIN_MOVED && row.moved_at.is_none() {
+            row.moved_at = Some(t);
+        }
+        row.moved = row.moved.max(turned);
         row.span = row.span.max(span);
         row.area = row.area.max(area);
         if fx > 0 && row.fx_at.is_none() {
