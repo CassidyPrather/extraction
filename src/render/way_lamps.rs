@@ -34,9 +34,10 @@ impl Plugin for WayLampsPlugin {
 }
 
 /// The bulb as the tonemapper gets it (`render::grade::ToTheEye`), its
-/// halo's colour and size, and how far off the halo shows (m).
-const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.55, 0.18);
-const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.8, 0.22);
+/// halo's colour and size, and how far off the halo shows (m). A pale
+/// warm white, shelter: never the machine markers' saturated orange.
+const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.62, 0.32);
+const HALO: LinearRgba = LinearRgba::rgb(1.6, 1.05, 0.5);
 const HALO_R: f32 = 0.8;
 const HALO_REACH: f32 = 240.0;
 
@@ -45,7 +46,7 @@ const HALO_REACH: f32 = 240.0;
 /// warning, not a shelter, in a still frame before any pulse is seen) and
 /// well yellower than the landmarks' red (linear; the tonemapper's via
 /// `ToTheEye`).
-pub const MARKER_AMBER: LinearRgba = LinearRgba::rgb(1.0, 0.18, 0.0);
+pub const MARKER_AMBER: LinearRgba = LinearRgba::rgb(1.0, 0.15, 0.0);
 /// Its slow swell (s): a single cosine, under half a hertz, never a
 /// blink (VR comfort), every marker in step.
 pub const MARKER_PERIOD: f32 = 2.4;
@@ -55,7 +56,7 @@ pub const MARKER_LOW: f32 = 0.35;
 /// The marker halo's colour at full swell, its size, and how far off it
 /// shows (m): a lamp to find a crossing by from 25 m and some way past,
 /// well short of the landmarks' red, which carry across a valley.
-const MARKER_HALO: LinearRgba = LinearRgba::rgb(1.5, 0.27, 0.0);
+const MARKER_HALO: LinearRgba = LinearRgba::rgb(1.5, 0.22, 0.0);
 const MARKER_HALO_R: f32 = 0.3;
 const MARKER_HALO_REACH: f32 = 90.0;
 /// The least its halo spans (half-angle, rad): held, its bright core is
@@ -366,7 +367,9 @@ mod marker_tests {
         assert!(mh > lh + 12.0, "well off the landmarks' red ({mh} vs {lh})");
         // A yard lamp is a pale warm white: the marker deeply saturated,
         // and redder, so a still frame tells them apart.
-        assert!(ms > 0.95 && ys < 0.6, "saturation {ms} vs yard {ys}");
+        assert!(ms > 0.95 && ys < 0.45, "saturation {ms} vs yard {ys}");
+        let (_, hs) = hue_sat(HALO);
+        assert!(hs < 0.5, "the yard lamp's halo is pale too: {hs}");
         assert!(mh + 6.0 < yh, "redder than the yard lamp ({mh} vs {yh})");
         let (hh, hs) = hue_sat(MARKER_HALO);
         assert!((hh - mh).abs() < 4.0 && hs > 0.95, "halo {hh} {hs}");
