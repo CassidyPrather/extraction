@@ -414,6 +414,17 @@ comes back.
   `map_night`'s rule doesn't need an exception here: w01_02 already
   read in the dark on the radio mast's lamp, and now also on this one.
   Only the torch case lost the climb, and that has no fast rule.
+- **The first sights, judged by what they're for.** From the truck the
+  frame is the first decision: the dam's wall across the whole view, with
+  the road running to the face stair. Before, a copse's birch and spruce
+  up the road stood in front of the stair, so the wall read as a grey band
+  behind trees. The copse by the gate now starts 10 m further south, at
+  z 248 not 238, and the road runs clear to the wall. The crest's two
+  frames read right and are unchanged. At the viewing bay's rail the bed
+  falls away below: the old river, the church tower's lamp and the
+  draw-off tower, grey in the mist as the sightline means it to be. At
+  the tower's bridge the crest offers the way across to the tower
+  (`docs/shots/fourth-valley/vistas_before_after.jpg`).
 
 Still open, with the session that has it:
 
