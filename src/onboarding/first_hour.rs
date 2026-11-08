@@ -4088,6 +4088,12 @@ const DOOR_SQUARE: f32 = 0.8;
 const DOOR_ON_LINE: f32 = 0.45;
 /// How near its stops in front of and behind a doorway the walk comes (m).
 const DOOR_STOP_WITHIN: f32 = 0.3;
+/// A leg from this far off a doorway's middle isn't one walking through it
+/// (m): a way through a door starts by it (the plan's stop before a door,
+/// or a step aside), and a straight line from across a site that happens
+/// to cross a doorway (a walk aimed at the surface from below it) is no
+/// way through it to square.
+const DOOR_NEAR: f32 = 6.0;
 
 /// A doorway as a walk meets it: its closed leaf's line, hinge to latch
 /// (on the map), and the height of its sill.
@@ -4149,6 +4155,7 @@ pub(super) fn through_doorways(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec
             let Some(d) = doors
                 .iter()
                 .filter(|d| (d.y - y).abs() < 2.0)
+                .filter(|d| leg_from.distance((d.a + d.b) * 0.5) <= DOOR_NEAR)
                 .filter_map(|d| crosses_at(leg_from, p, d.a, d.b).map(|t| (t, *d)))
                 .min_by(|x, y| x.0.total_cmp(&y.0))
                 .map(|(_, d)| d)
@@ -5541,6 +5548,10 @@ the Hollow.";
         // Never across it: as it was.
         let (e, w) = (Vec2::new(3.0, 1.0), Vec2::new(-3.0, 1.0));
         assert_eq!(through_doorways(&doors, e, 0.0, &[w]), vec![w]);
+        // From across the site, a straight line through it: as it was.
+        let (far, beyond) = (Vec2::new(0.6, 15.0), Vec2::new(0.2, -15.0));
+        assert!(crosses_at(far, beyond, d.a, d.b).is_some());
+        assert_eq!(through_doorways(&doors, far, 0.0, &[beyond]), vec![beyond]);
         // A doorway on another floor: as it was.
         let (n, s) = (Vec2::new(0.1, 2.0), Vec2::new(0.1, -2.0));
         assert_eq!(through_doorways(&doors, n, 5.0, &[s]), vec![s]);
