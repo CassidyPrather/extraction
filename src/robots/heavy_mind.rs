@@ -60,7 +60,7 @@ pub const GATE_RADIUS: f32 = 60.0;
 /// them to the valleys and to how far it notices you.
 /// (Walls only low-pass a sound here, `audio::occlude`: the horn is D1
 /// and A1 and the hum is slowed to 0.55, so neither is muted by them.)
-pub const HORN_HEARD: (f32, f32) = (705.0, 658.0);
+pub const HORN_HEARD: (f32, f32) = (811.0, 811.0);
 pub const HUM_HEARD: (f32, f32) = (201.0, 201.0);
 /// The horn carries this much further than the furthest ground of any
 /// valley, so a map edit doesn't take a corner out of its reach at once.
