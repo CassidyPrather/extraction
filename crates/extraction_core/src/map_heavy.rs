@@ -65,9 +65,13 @@ pub fn reach(map: &MapDef, hm: &Heightmap) -> Option<Reach> {
     Some(Reach { gate, ground })
 }
 
+/// How far off the line a stake may stand and still mark it (m).
+pub const ON_LINE: f32 = 8.0;
+
 /// Where a valley's walkable ground meets its Gate's line (`radius` m
-/// out, every 5 m round) further than `within` from any `stake` placement:
-/// the crossings the ring of stakes leaves unmarked.
+/// out, every 5 m round) further than `within` from any `stake` placement
+/// standing on the line (within [`ON_LINE`] of it): the crossings the
+/// ring of stakes leaves unmarked.
 pub fn unmarked_line(
     map: &MapDef,
     hm: &Heightmap,
@@ -84,6 +88,7 @@ pub fn unmarked_line(
         .iter()
         .filter(|p| p.prefab == stake)
         .map(|p| p.at)
+        .filter(|p| ((p[0] - gate[0]).hypot(p[1] - gate[1]) - radius).abs() <= ON_LINE)
         .collect();
     let n = (std::f32::consts::TAU * radius / 5.0).ceil() as usize;
     (0..n)
