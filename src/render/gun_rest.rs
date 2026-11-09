@@ -388,6 +388,7 @@ fn attach_far(
             &mut AtRest,
             &crate::items::Item,
             Option<&crate::weapons::weather::WeatheredLook>,
+            Option<&GlobalTransform>,
         ),
         (With<crate::weapons::Gun>, Without<FarSet>),
     >,
@@ -408,7 +409,7 @@ fn attach_far(
     else {
         return;
     };
-    for (gun, mut rest, item, look) in &mut guns {
+    for (gun, mut rest, item, look, at) in &mut guns {
         let id = catalog.get(item.kind()).id.clone();
         // (Asked for once a model, and only if it's there: a missing far
         // level is no error.)
@@ -456,6 +457,16 @@ fn attach_far(
             continue;
         };
         let (near, far_range) = split_ranges(rest.range.as_ref());
+        if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+            let p = at.map_or(Vec3::ZERO, |t| t.translation());
+            eprintln!(
+                "gun_rest: {id} far level attached: {} meshes past {FAR_AT} m, at {:.1},{:.1},{:.1}",
+                far.len(),
+                p.x,
+                p.y,
+                p.z
+            );
+        }
         for m in &rest.merged {
             if !fitted.contains(*m) {
                 commands.entity(*m).try_insert(near.clone());
