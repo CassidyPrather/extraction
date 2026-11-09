@@ -1946,19 +1946,31 @@ pub(super) fn direct_raid(
             format!("half an hour gone, still at {leg:?}"),
         );
         state.leg = Leg::Done;
+        // And stops: it walked on with its errand, fell out there, woke in
+        // the truck and walked straight out of it again with nothing (the
+        // raid saved out there, no radio: Progression's careers wedged).
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
     }
     // Woken from the last one's fall (a career resumed while down): not
     // this raid's death; wait for the truck.
     if matches!(raid.phase, Phase::Down { .. }) && state.leg == Leg::Camp {
         return;
     }
-    if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
-        state.note(now, Kind::Killed, "went down");
-        state.leg = Leg::Done;
-        // That's this first hour over: nothing left of the walk.
-        bot.tasks.clear();
-        bot.tasks.push_back(Task::Wait(IDLE));
-        bot.restart();
+    if matches!(raid.phase, Phase::Down { .. }) {
+        if state.leg != Leg::Done {
+            state.note(now, Kind::Killed, "went down");
+            state.leg = Leg::Done;
+        }
+        // That's this first hour over: nothing left of the walk (down
+        // after its half hour, already Done, it kept the walk it had, and
+        // woke in the truck to walk out of it).
+        if !matches!(bot.tasks.front(), Some(Task::Wait(w)) if *w == IDLE) || bot.tasks.len() > 1 {
+            bot.tasks.clear();
+            bot.tasks.push_back(Task::Wait(IDLE));
+            bot.restart();
+        }
     }
 
     // Held out of a walker's line: still out of it? (It comes round to
