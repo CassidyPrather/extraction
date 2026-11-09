@@ -179,6 +179,16 @@ pub const STAND_INS: &[StandIn] = &[
         render: distress_hiss,
     },
     StandIn {
+        set: "gate/call",
+        variants: 1,
+        render: gate_call,
+    },
+    StandIn {
+        set: "heavy/sigh",
+        variants: 2,
+        render: heavy_sigh,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -265,6 +275,12 @@ impl Bp {
             y1: 0.0,
             y2: 0.0,
         }
+    }
+
+    /// Move its centre (a sweep), keeping what's ringing in it.
+    fn retune(&mut self, f: f32, q: f32, sr: f32) {
+        let fresh = Self::new(f, q, sr);
+        (self.b0, self.b2, self.a1, self.a2) = (fresh.b0, fresh.b2, fresh.a1, fresh.a2);
     }
 
     fn run(&mut self, x: f32) -> f32 {
@@ -1005,6 +1021,57 @@ fn distress_hiss(rng: &mut Rng, sr: f32) -> Vec<f32> {
         let n = noise(rng);
         (rush.run(n) * 1.3 + low.run(n) * 0.5) * (0.6 + 0.4 * crackle(rng))
     })
+}
+
+/// The Gate counting you (`heavy_mind::GateCount`): a machine's call, two
+/// tones a fourth apart pulsing twice a second, hard-edged and buzzy so it
+/// reads as a signal, not a voice. 2 s, looped; it's played faster and
+/// louder as the count runs (`audio_machines::gate_call_level`), so the
+/// pulses quicken and climb.
+fn gate_call(_rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let mut body = Bp::new(1_400.0, 1.2, sr);
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let beat = (t * 2.0).fract();
+            // Each half-second: the low tone, then the high, then a gap.
+            let f = if beat < 0.22 { 660.0 } else { 880.0 };
+            let gate = if beat < 0.42 { 1.0 } else { 0.0 };
+            let edge = (beat / 0.01).min(1.0) * ((0.42 - beat) / 0.01).clamp(0.0, 1.0);
+            ph = (ph + f / sr).fract();
+            let sq = if ph < 0.5 { 1.0 } else { -1.0 };
+            (0.35 * sq + body.run(sq)) * gate * edge
+        })
+        .collect()
+}
+
+/// A heavy standing down (`heavy_mind::HeavyStandDown`): a long venting
+/// sigh, pressure let go and settling: air rushing out through a band that
+/// sinks from 1.8 kHz to 400 Hz as it falls away, a low groan of the frame
+/// easing under it. Falling, where its raise's hiss rises.
+fn heavy_sigh(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 2.1 + rng.f32() * 0.3;
+    let n = (secs * sr) as usize;
+    let mut groan_ph = 0.0f32;
+    let f0 = 70.0 * jitter(rng, 0.08);
+    let mut low = Bp::new(140.0, 0.8, sr);
+    let mut rush = Bp::new(1_800.0, 0.9, sr);
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let k = t / secs;
+            if i % 64 == 0 {
+                rush.retune(1_800.0 * (400.0f32 / 1_800.0).powf(k), 0.9, sr);
+            }
+            let x = rush.run(noise(rng));
+            groan_ph = (groan_ph + f0 * (1.0 - 0.3 * k) / sr).fract();
+            let saw = 2.0 * groan_ph - 1.0;
+            let env = (t / 0.25).min(1.0) * (1.0 - k).powf(1.4);
+            (x * 1.6 + low.run(saw) * 0.8) * env
+        })
+        .collect()
 }
 
 /// Bright, clipped notes (a square-ish tone, a click of onset, quick

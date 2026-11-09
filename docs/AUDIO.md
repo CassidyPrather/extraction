@@ -1028,6 +1028,25 @@ A failing machine's distress flare (`robots::distress::FlareEvent`,
 - The tube spoiled in its tell: a broken clank and a short fizzle
   (`distress.broken`).
 
+The Gate counting a key-carrier (`heavy_mind::GateCount`, before it calls
+a heavy) calls from 6 m up its mast (`audio_machines::gate_call`): two
+buzzy tones a fourth apart pulsing twice a second (`gate.call`, a
+stand-in). As the count runs, the pulses quicken and climb (0.85x to 1.5x)
+and the call grows 6 dB louder, so the player knows they're being counted
+and how far through. It's driven from the resource, so several fixed
+ticks a frame don't matter. Its first tick is already heard past the 60 m
+line: 215 m in calm and 107 m in a downpour at its starting level (wants
+80/80). The Gate waking gives a relay's clunk (`gate.wake`). Stepped back
+out of, its call winds down (`gate.release`). Called, it cuts to the horn.
+
+A heavy letting you go (`heavy_mind::HeavyStandDown`) sighs
+(`stand_down_sounds`, `heavy.sigh`, a stand-in): a long vent, 2.1-2.4 s,
+its air sinking from 1.8 kHz to 400 Hz with a low groan easing under it,
+falling in pitch and level. It's the one sound that rewards walking away,
+so it's unlike any that means danger: its raise's hiss rises before a
+blow, and this falls. It's quiet, for the one it let go: heard 71 m in
+calm and 27 m in a downpour (wants 25/20, at most 75).
+
 A minelayer crawling grinds, its treads labouring, louder and quicker
 the faster it goes, silent standing (`audio_machines::grind_sounds`,
 `minelayer.grind`). Stopped over a spot to lay, its chute charges with a
