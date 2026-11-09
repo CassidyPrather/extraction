@@ -524,6 +524,13 @@
         (kind: Poi, at: (49.9, 156.9), name: "Gatekeeper's cottage"),
         (kind: Poi, at: (-30.0, -97.5), name: "Switchback hut"),
         (kind: Poi, at: (89.2, -103.5), name: "Charcoal hut"),
+        // Fingerposts at the Pass road's three switchback forks, facing the
+        // walker coming up from Miners' Row (walk review: 500 m of road with
+        // three forks and nothing to say which way). Places, not dangers;
+        // wording Story's.
+        (kind: Sign(text: "THE MINE and THE PASS, left\nTHE QUARRY, right"), at: (16.9, 15.1), rot: 45.0, name: "Quarry fork sign"),
+        (kind: Sign(text: "MINE YARD, left\nTHE PASS, right"), at: (-0.8, -26.3), rot: 327.0, name: "Mine fork sign"),
+        (kind: Sign(text: "HUNTING LODGE, right\nby the charcoal hut\nTHE PASS, left"), at: (35.0, -57.0), rot: 51.0, name: "Lodge fork sign"),
         (kind: ValleyKey(item: "key_kettle"), at: (146.8, -33.2), rot: 200.0, name: "Quarry blast shelter"),
         // Caches worth the detour: the low farm's workshop, the camp's tool
         // chest, the mine's shot-firer's store and stores, and a first-aid
