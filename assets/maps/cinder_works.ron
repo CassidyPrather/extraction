@@ -270,6 +270,7 @@
         // 25 m of one (Heavy's gate_line_is_staked).
         (prefab: "machine_marker", at: (136.8, -132.3), rot: 0.0),
         (prefab: "machine_marker", at: (115.5, -186.0), rot: 0.0),
+        (prefab: "machine_marker", at: (122.0, -150.0), rot: 0.0),  // the hush arc (Heavy's unmarked_line: (120, -154) between 5 m samples)
         (prefab: "machine_marker", at: (178.8, -118.6), rot: 0.0),
         // The machines' boundary stakes, an amber pulse after dark, where a way
         // into hot ground has nothing else lit to tell of it (map_gradient,

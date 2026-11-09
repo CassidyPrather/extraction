@@ -181,6 +181,36 @@ impl Zone {
 /// Reads `assets/maps/<name>.ron`, falling back to the built-in copy of
 /// Marrow Creek so tests and odd working directories still get a map.
 pub(crate) fn load_map_def(name: &str) -> MapDef {
+    let mut map = read_map_def(name);
+    // For shots: `EXTRACTION_PLACE="prefab@x,z,rot;..."` stands these
+    // prefabs in the valley too (a machine marker beside a yard lamp, at
+    // night, before any map has one).
+    if let Ok(spec) = std::env::var("EXTRACTION_PLACE") {
+        for item in spec.split(';').filter(|i| !i.trim().is_empty()) {
+            let Some((prefab, at)) = item.split_once('@') else {
+                continue;
+            };
+            let v: Vec<f32> = at
+                .split(',')
+                .filter_map(|n| n.trim().parse().ok())
+                .collect();
+            if v.len() < 2 {
+                continue;
+            }
+            map.placements.push(extraction_core::map::Placement {
+                prefab: prefab.trim().to_string(),
+                at: [v[0], v[1]],
+                rot: v.get(2).copied().unwrap_or(0.0),
+                y: 0.0,
+                absolute: false,
+                tag: String::new(),
+            });
+        }
+    }
+    map
+}
+
+fn read_map_def(name: &str) -> MapDef {
     // Tests only: no build you play can load the test field.
     #[cfg(test)]
     if name == extraction_core::map::TEST_FIELD_ID {

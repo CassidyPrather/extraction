@@ -19,6 +19,12 @@ pub const MAX_PUFFS: usize = 64;
 pub const MAX_EMBERS: usize = 4;
 /// Bullet marks on robot shells, all robots together.
 pub const MAX_MARKS: usize = 160;
+/// And on any one robot: a long fight's worth, each mark its own draw
+/// (Marrow's mast once drew 320 of them on one heavy).
+pub const MARKS_PER_ROBOT: usize = 24;
+/// Past this a mark (a 1.4-3.5 cm disc) is under a pixel bare-eyed: not
+/// drawn (m), unless through a scope ([`MarkReach`]).
+pub const MARKS_SEEN: f32 = 12.0;
 /// How long a wreck smoulders, seconds.
 const SMOULDER: f32 = 150.0;
 
@@ -27,6 +33,7 @@ pub struct RobotFxPlugin;
 impl Plugin for RobotFxPlugin {
     fn build(&self, app: &mut App) {
         crate::render::puff::add_to(app);
+        app.init_resource::<MarkReach>();
         app.add_systems(
             Update,
             (
@@ -38,6 +45,7 @@ impl Plugin for RobotFxPlugin {
                 cell_arcs,
                 hazard_bursts,
                 strike_flashes,
+                mark_reach,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -1510,10 +1518,80 @@ fn scuff_dust(
     }
 }
 
-/// Bullet marks on robot shells, oldest first (each mark is a pock and its
-/// hole).
+/// Bullet marks on robot shells, oldest first: the robot, and the mark (a
+/// pock and its hole).
 #[derive(Default)]
-struct Marks(std::collections::VecDeque<[Entity; 2]>);
+struct Marks(std::collections::VecDeque<(Entity, [Entity; 2])>);
+
+/// Which marks go when `robot` takes a new one (already pushed): that
+/// robot's oldest past [`MARKS_PER_ROBOT`], then anyone's oldest past
+/// [`MAX_MARKS`]. Removed from `marks`; returned to be despawned.
+fn marks_to_drop(
+    marks: &mut std::collections::VecDeque<(Entity, [Entity; 2])>,
+    robot: Entity,
+) -> Vec<[Entity; 2]> {
+    let mut out = Vec::new();
+    while marks.iter().filter(|m| m.0 == robot).count() > MARKS_PER_ROBOT {
+        let i = marks.iter().position(|m| m.0 == robot).unwrap();
+        out.extend(marks.remove(i).map(|m| m.1));
+    }
+    while marks.len() > MAX_MARKS {
+        out.extend(marks.pop_front().map(|m| m.1));
+    }
+    out
+}
+
+/// A bullet mark (its pock or its hole), for [`mark_reach`].
+#[derive(Component)]
+pub struct ShellMark;
+
+/// How far off marks are drawn now (m): [`MARKS_SEEN`], times the
+/// strongest scope being looked through. A scope is a view of its own
+/// (`gadgets::visuals`, its camera narrowed by its magnification), and a
+/// mark through a 4x scope at 30 m is the size it is bare-eyed at 7.5 m:
+/// seeing your hits land is what it's for. (The range is the mark's, not
+/// the view's, so the eyes draw them as far while it's up: only while
+/// aiming, and the scope's own pass costs more.)
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct MarkReach(pub f32);
+
+impl Default for MarkReach {
+    fn default() -> Self {
+        Self(MARKS_SEEN)
+    }
+}
+
+/// A mark is drawn only out to `reach` (m), faded over its last metre.
+fn mark_range(reach: f32) -> bevy::camera::visibility::VisibilityRange {
+    bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: (reach - 1.0)..reach,
+        use_aabb: false,
+    }
+}
+
+/// The marks' reach, from the scopes in use: written to every mark only
+/// when it changes (a scope raised or lowered).
+fn mark_reach(
+    scopes: Query<(&Camera, &ChildOf), With<crate::render::OffscreenCamera>>,
+    optics: Query<&crate::gadgets::Optic>,
+    mut reach: ResMut<MarkReach>,
+    mut marks: Query<&mut bevy::camera::visibility::VisibilityRange, With<ShellMark>>,
+) {
+    let mag = scopes
+        .iter()
+        .filter(|(c, _)| c.is_active)
+        .filter_map(|(_, p)| optics.get(p.parent()).ok())
+        .map(|o| o.magnification)
+        .fold(1.0f32, f32::max);
+    let now = MarkReach(MARKS_SEEN * mag);
+    if *reach != now {
+        *reach = now;
+        for mut r in &mut marks {
+            *r = mark_range(now.0);
+        }
+    }
+}
 
 /// A round that strikes a robot's shell leaves a mark on it: a bright pock
 /// with a dark hole, Weapon feel's look (`weapons::impacts`), parented to
@@ -1523,6 +1601,7 @@ fn shell_marks(
     mut impacts: MessageReader<crate::weapons::impacts::Impact>,
     parts: Query<(&RobotPart, &GlobalTransform)>,
     look: Option<Res<crate::weapons::impacts::FxAssets>>,
+    reach: Res<MarkReach>,
     mut marks: Local<Marks>,
 ) {
     use crate::weapons::impacts::{DECAL_PROUD, ImpactKind};
@@ -1555,6 +1634,8 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.035 / scale)),
                 NotShadowCaster,
+                mark_range(reach.0),
+                ShellMark,
                 ChildOf(part_e),
             ))
             .id();
@@ -1566,16 +1647,16 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.014 / scale)),
                 NotShadowCaster,
+                mark_range(reach.0),
+                ShellMark,
                 ChildOf(part_e),
             ))
             .id();
-        marks.0.push_back([pock, hole]);
-        while marks.0.len() > MAX_MARKS {
-            if let Some(old) = marks.0.pop_front() {
-                for e in old {
-                    if let Ok(mut ec) = commands.get_entity(e) {
-                        ec.despawn();
-                    }
+        marks.0.push_back((part.robot, [pock, hole]));
+        for old in marks_to_drop(&mut marks.0, part.robot) {
+            for e in old {
+                if let Ok(mut ec) = commands.get_entity(e) {
+                    ec.despawn();
                 }
             }
         }
@@ -1659,6 +1740,88 @@ fn splash_steps(
 #[cfg(test)]
 mod strike_tests {
     use super::*;
+
+    /// Marks are drawn out to [`MARKS_SEEN`], or that times the strongest
+    /// scope looked through while one is up; back again when it's down.
+    #[test]
+    fn a_scope_sees_marks_further() {
+        use bevy::camera::visibility::VisibilityRange;
+        let mut app = App::new();
+        app.init_resource::<MarkReach>()
+            .add_systems(Update, mark_reach);
+        let mark = app
+            .world_mut()
+            .spawn((ShellMark, mark_range(MARKS_SEEN)))
+            .id();
+        let optic = app
+            .world_mut()
+            .spawn(crate::gadgets::Optic {
+                magnification: 4.0,
+                eye: Vec3::ZERO,
+            })
+            .id();
+        let cam = app
+            .world_mut()
+            .spawn((
+                crate::render::OffscreenCamera,
+                Camera {
+                    is_active: false,
+                    ..default()
+                },
+                ChildOf(optic),
+            ))
+            .id();
+        let end = |app: &App| {
+            app.world()
+                .get::<VisibilityRange>(mark)
+                .unwrap()
+                .end_margin
+                .end
+        };
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN, "no scope up");
+        app.world_mut().get_mut::<Camera>(cam).unwrap().is_active = true;
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN * 4.0, "through a 4x scope");
+        assert_eq!(app.world().resource::<MarkReach>().0, MARKS_SEEN * 4.0);
+        app.world_mut().get_mut::<Camera>(cam).unwrap().is_active = false;
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN, "the scope down");
+    }
+
+    /// A robot keeps its newest [`MARKS_PER_ROBOT`] marks, the oldest going
+    /// first; all robots together keep [`MAX_MARKS`], the oldest anyone's.
+    #[test]
+    fn marks_are_kept_few_and_newest() {
+        let mut w = World::new();
+        let (a, b) = (w.spawn_empty().id(), w.spawn_empty().id());
+        let mut marks = std::collections::VecDeque::new();
+        let mut made = Vec::new();
+        for _ in 0..40 {
+            let m = [w.spawn_empty().id(), w.spawn_empty().id()];
+            made.push(m);
+            marks.push_back((a, m));
+            let gone = marks_to_drop(&mut marks, a);
+            assert!(gone.len() <= 1);
+        }
+        assert_eq!(marks.len(), MARKS_PER_ROBOT);
+        let kept: Vec<_> = marks.iter().map(|m| m.1).collect();
+        assert_eq!(kept, made[40 - MARKS_PER_ROBOT..], "the newest kept");
+        // Many robots: the global cap holds, oldest first.
+        let mut marks = std::collections::VecDeque::new();
+        let mut first = None;
+        for k in 0..(MAX_MARKS + 10) {
+            let r = if k % 2 == 0 { a } else { w.spawn_empty().id() };
+            let m = [w.spawn_empty().id(), w.spawn_empty().id()];
+            first.get_or_insert(m);
+            marks.push_back((r, m));
+            marks_to_drop(&mut marks, r);
+        }
+        assert!(marks.len() <= MAX_MARKS);
+        assert!(marks.iter().filter(|m| m.0 == a).count() <= MARKS_PER_ROBOT);
+        assert!(!marks.iter().any(|m| Some(m.1) == first));
+        let _ = b;
+    }
 
     /// Each kind of hit has its own look, and the more it mattered the
     /// louder it is: a shrug has no flash and dull streaks; a wound a small
