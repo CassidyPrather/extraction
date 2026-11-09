@@ -35,7 +35,7 @@ pub struct WearPlugin;
 impl Plugin for WearPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WornMaterials>()
-            .add_systems(Update, ((last_hits, wear).chain(), gutter));
+            .add_systems(Update, ((last_hits, redress, wear).chain(), gutter));
     }
 }
 
@@ -53,6 +53,30 @@ pub struct Worn {
     pub band: u8,
     was: Vec<(Entity, Handle<StandardMaterial>, Transform)>,
     cracks: Vec<Entity>,
+}
+
+/// Put on a part, or a machine, whose drawn pieces have just changed (its
+/// model dressed on after loading): what's worn is worn again, new pieces
+/// with it. Without it a part hit before its model was dressed kept its
+/// band but not the look: the pieces dressed on after stayed whole till
+/// its next change of band.
+#[derive(Component)]
+pub struct Redress;
+
+fn redress(
+    mut commands: Commands,
+    flagged: Query<Entity, With<Redress>>,
+    mut worn: Query<(Entity, &RobotPart, &mut Worn)>,
+) {
+    for e in &flagged {
+        commands.entity(e).try_remove::<Redress>();
+        for (p, part, mut w) in &mut worn {
+            // (Whole wears nothing: nothing to do.)
+            if (p == e || part.robot == e) && w.band != 0 {
+                w.band = u8::MAX;
+            }
+        }
+    }
 }
 
 /// Where a part was last struck (local to it) and from which side.
@@ -163,7 +187,7 @@ fn wear(
     mut commands: Commands,
     mut parts: Query<
         (Entity, &RobotPart, Option<&mut Worn>, Option<&LastHit>),
-        Or<(Changed<RobotPart>, Without<Worn>)>,
+        Or<(Changed<RobotPart>, Without<Worn>, Changed<Worn>)>,
     >,
     children: Query<&Children>,
     is_part: Query<(), With<RobotPart>>,
@@ -592,6 +616,67 @@ mod tests {
         for (was, copies) in &worn {
             assert_eq!(copies.len(), 1, "{was:?} worn into {} copies", copies.len());
         }
+    }
+
+    /// A part hit before its model was dressed: the pieces dressed on
+    /// after wear its band once the dresser says so (`Redress`), not at
+    /// its next change of band.
+    #[test]
+    fn pieces_dressed_on_after_a_hit_wear_it() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Mesh>()
+            .add_message::<RobotStruck>()
+            .add_plugins(WearPlugin);
+        let (mat, mesh) = {
+            let w = app.world_mut();
+            let mat = w
+                .resource_mut::<Assets<StandardMaterial>>()
+                .add(StandardMaterial::default());
+            let mesh = w.resource_mut::<Assets<Mesh>>().add(Cuboid::default());
+            (mat, mesh)
+        };
+        let robot = app.world_mut().spawn_empty().id();
+        let part = app
+            .world_mut()
+            .spawn((
+                RobotPart {
+                    robot,
+                    role: PartRole::Core,
+                    hp: 100.0,
+                    max_hp: 100.0,
+                },
+                Transform::default(),
+            ))
+            .id();
+        app.update();
+        // Failing, with nothing drawn yet.
+        app.world_mut().get_mut::<RobotPart>(part).unwrap().hp = 20.0;
+        app.update();
+        assert_eq!(app.world().get::<Worn>(part).unwrap().band, 2);
+        // Then dressed.
+        let piece = app
+            .world_mut()
+            .spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(mat.clone()),
+                Transform::default(),
+                ChildOf(part),
+            ))
+            .id();
+        app.world_mut().entity_mut(part).insert(Redress);
+        app.update();
+        app.update();
+        let now = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(piece)
+            .unwrap()
+            .0
+            .id();
+        assert_ne!(now, mat.id(), "the dressed piece wears the part's band");
+        assert_eq!(app.world().get::<Worn>(part).unwrap().band, 2);
+        assert!(app.world().get::<Redress>(part).is_none());
     }
 
     /// Each band reads worse than the last: darker, rougher, its glow down.
