@@ -10,12 +10,11 @@ one. `map_gradient` finds the crossings: run
 Before, 7 of Marrow's 10 crossings had nothing of the place in sight, and
 only The Hollow announced itself. After:
 
-- **Pumping station**: its polygon reaches about 100 m out over the
-  fields and the Forest path, a way home that is counted hot without
-  being hot. Cutting it to the station and its yard is agreed but held:
-  it moved the director's survey ground, and a Hush test that counts any
-  response then failed. It comes back with Robot minds' fix to that test.
-  Until then its three crossings (out in the fields) stay untold.
+- **Pumping station**: its polygon reached about 100 m out over the
+  fields and the Forest path, a way home that was counted hot without
+  being hot. It is cut to the station and its yard (after Robot minds'
+  fix to a Hush test that counted any response), and its three crossings
+  out in the fields are gone.
 - **Radio mast**, the mast_relay job's two ways in: a guard booth on the
   east way, and the relay's jeep on the north one, in the way's mouth
   where the cut ends, so it stands dark against the trees from 20 m
@@ -33,13 +32,16 @@ only The Hollow announced itself. After:
 A tell counts only if it can be found in the approach frame without a
 caption. `map_gradient` holds this: the tell must look big enough for
 its distance (as `map_breadcrumbs` reads a cue, with no skyline allowance),
-seen from the last 8 to 30 m before the line.
+ahead of the walker, from the last 60 m before the line. The full rule,
+and the night one, are in [the gradient's README](../README.md).
 - **Bus depot** and **Rail yard**: a wrecked car by the way, short of the
   line.
 - **The depot exit's landing** (the coordinator's note): two marker posts
   either side of the head of the way down, so a newcomer stepping out of
   the kiosk sees there is a way.
 
-With the shrink held, Marrow's other crossings are all told. The map lint is clean.
+Every Marrow crossing is told, by day and, with the machine stakes at the
+Bus depot, the Rail yard and the Radio mast's east way, after dark. The
+map lint is clean.
 
 `before_after.jpg`: from the approaches at day, before and after.
