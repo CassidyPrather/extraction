@@ -45,7 +45,9 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 RANGE_MOST = {"walker.step": 90,
               # a minelayer is heard as you near it (it turns tail at 30 m),
               # not across the valley
-              "minelayer.grind": 75, "minelayer.hiss": 75}
+              "minelayer.grind": 75, "minelayer.hiss": 75,
+              # a heavy's stand-down sigh is for the one it let go, not the valley
+              "heavy.sigh": 75}
 
 RANGE_TARGETS = {
     "ug.cage_bell": (35, 20), "ug.klaxon": (50, 30), "crawler.step": (15, 8), "anomaly.frost": (4, 2),
@@ -85,6 +87,9 @@ RANGE_TARGETS = {
     # the Gate horn reaches each valley's far corner from its Gate (~703 m,
     # Heavy's every_heavy_reads_before_it_reaches_you), rain or not
     "heavy.horn": (740, 740), "sentry.chirp": (60, 30),
+    # the Gate counting you, from its first tick (its start level), to past
+    # the 60 m line; a heavy letting you go, for the one it let go
+    "gate.call": (80, 80), "heavy.sigh": (25, 20),
     "walker.aim_lock": (40, 20), "harpoon.windup": (30, 15), "dirigible.engine": (200, 80), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top
