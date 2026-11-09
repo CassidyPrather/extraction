@@ -302,6 +302,14 @@
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (85.8, 187.4), rot: 0.0),
+        // A lamp beside the Quarry and Mine fork posts, its arm over the
+        // board, so they read after dark (a board needs a light within 8 m,
+        // map_gradient LIT_BY). The Lodge fork has none: its way is told
+        // after dark by the charcoal hut's window and the lodge's beacon
+        // down the lodge track, and a lamp there would stand in the frame
+        // of the lodge track's crossing stake for whoever walks home.
+        (prefab: "way_lamp", at: (12.0, 13.0), rot: 14.0),  // Quarry fork sign
+        (prefab: "way_lamp", at: (1.5, -27.6), rot: 150.0),  // Mine fork sign
         (prefab: "way_lamp", at: (-101.6, -1.1), rot: 0.0),
         (prefab: "way_lamp", at: (-137.2, -26.5), rot: 0.0),
         (prefab: "way_lamp", at: (1.0, 23.3), rot: 0.0),  // w00_05, past the mine, where nothing lit showed ahead
