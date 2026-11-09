@@ -3545,6 +3545,11 @@ fn hidden_at(
         .is_some()
 }
 
+/// Knee height over the ground, for what's in the way of a step (m).
+const KNEE: f32 = 0.5;
+/// A body's half width, kept clear past the end of a step (m).
+const BODY: f32 = 0.3;
+
 /// Out of sight of `eye`, the nearest way: low where it is, if that does it
 /// (a wall, a bank, a car between); else the nearest spot within 12 m it
 /// can walk to where a crouched head is hidden, and still there. None:
@@ -3560,7 +3565,22 @@ fn break_line(
         return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
     }
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
-    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
+    // Walkable on the grid, and walked to straight: nothing solid at knee
+    // height between, nor at the spot (the grid's cells are coarse: a spot
+    // behind a rock passed it, and the newcomer stood 1.4 m short of it
+    // against the rock for the walk's whole half minute, in the walker's
+    // line).
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    let knee = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * KNEE;
+    let reach = |p: Vec2| {
+        let to = knee(p) - knee(here);
+        Dir3::new(to).ok().is_none_or(|dir| {
+            spatial
+                .cast_ray(knee(here), dir, to.length() + BODY, true, &walls)
+                .is_none()
+        })
+    };
+    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array())) && reach(p);
     let away = (here - eye.xz()).normalize_or(Vec2::Y);
     // The eye a step or two either side of where it is: a walker that's
     // fighting moves, and a spot only just out of its line now was in it
