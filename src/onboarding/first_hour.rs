@@ -647,7 +647,7 @@ pub(super) struct Newcomer {
     heavy_since: f32,
     /// Took what the driver put on the ledge, woken in the truck.
     took_ledge: bool,
-    /// The radios it went for off its body (`radio_to_fetch`), each once.
+    /// The radios it went for off its body (`radio_to_fetch`), once a go.
     radios_tried: Vec<Entity>,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
@@ -2725,8 +2725,14 @@ pub(super) fn direct_raid(
                     // what was in the hands (`persist::apply_restore`).
                     // (Looked for only on the body, the careers wedged: "no
                     // radio", done, every run after it the same.)
-                    (None, None) => match radio_at_feet(&world, here) {
+                    (None, None) => match radio_at_feet(&world, here)
+                        .filter(|(e, _)| tries_at(&state.radios_tried, *e) < RADIO_TRIES)
+                        .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
+                    {
                         Some((e, at)) => {
+                            // (Counted: one out of reach overhead was picked
+                            // up again every 3 s till a machine came.)
+                            state.radios_tried.push(e);
                             state.note(now, Kind::Learned, "the radio at its feet, picked up");
                             tasks.extend([
                                 Task::Stow(Side::Left),
@@ -4014,8 +4020,8 @@ fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
 }
 
 /// A radio not on `player` to go and get: the nearest in its own remains,
-/// else in anyone's, else lying loose; not one of `tried` (gone for, and
-/// not got). Where it is, to go to.
+/// else in anyone's, else lying loose; not one gone for `RADIO_TRIES`
+/// times already (`tried`) and not got. Where it is, to go to.
 fn radio_to_fetch(
     world: &World2,
     player: Entity,
@@ -4023,7 +4029,7 @@ fn radio_to_fetch(
     tried: &[Entity],
 ) -> Option<(Entity, Vec3)> {
     let is_radio = |e: Entity| {
-        !tried.contains(&e)
+        tries_at(tried, e) < RADIO_TRIES
             && world
                 .items
                 .get(e)
@@ -4067,8 +4073,15 @@ fn pick_radio<T: Copy>(here: Vec2, tiers: [Vec<(T, Vec2)>; 3]) -> Option<(T, Vec
     })
 }
 
-/// Walks after a radio off its body in one raid before giving the call up.
-const RADIO_FETCHES: usize = 3;
+/// Goes after a radio off its body in one raid before giving the call up.
+const RADIO_FETCHES: usize = 4;
+/// Goes after any one radio (a walk that timed out on the way is planned
+/// again from where it stood; one out of reach is left after the second).
+const RADIO_TRIES: usize = 2;
+
+fn tries_at(tried: &[Entity], e: Entity) -> usize {
+    tried.iter().filter(|t| **t == e).count()
+}
 
 /// How far off a thing set down at a resume still counts as at its feet (m).
 const FEET_REACH: f32 = 3.0;
