@@ -2004,6 +2004,17 @@ Most views now read the same in every run, to within a few draws. The
 swing that remains is the fight around Marrow's radio mast: its mast_3 view
 went 1306-1836 draws as the drones moved.
 
+Measured further (6 runs with every owner listed): the swing is whether the
+fight's robots stand in that view's frame, not a cost that grows. When they
+do, each costs the same in every run: the heavy 104 draws an eye, a hound
+walker 51, other robot pieces 36, drones and their rotors 41, so 1808-1842
+draws in all (75-77%). When they stand outside the frame, it is 1312-1550,
+and the shadow draws are the same either way (872-884), because the robots
+are still there. A cut would have to merge each moving robot's pieces by
+bone and material, in the heavy's and robot bodies' code. At 77% with 23%
+headroom that isn't worth it yet. If more robots are staged in one view,
+start there.
+
 ### Cinder's gate held: a gun's look waits for its model (9 November)
 
 On main (eaff51ca), Cinder Works' s01_ahead swung 1598k to 1785k triangles
