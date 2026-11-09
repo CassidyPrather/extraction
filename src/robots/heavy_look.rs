@@ -737,7 +737,9 @@ fn light_heavies(
 /// `--gallery heavy[:STATE[+STATE..]][,YAW[,DIST]]`: a heavy standing in
 /// front of the `--camera`, still (its senses off). `open` has its left
 /// plate and hatch off and a knee shot out; `hot` runs it near a stall;
-/// `down` is its wreck; `walker` stands a walker beside it for scale.
+/// `down` is its wreck; `walker` stands a walker beside it for scale;
+/// `raise[NN]` holds its arm NN% up its tell (half by default:
+/// `scripts/heavy_raise.sh`).
 ///
 /// ```text
 /// scripts/shot.sh docs/shots/heavy/front.png 40,0,262,0,0 60 --gallery heavy,200
@@ -750,7 +752,7 @@ fn gallery(
     catalog: Res<crate::items::Catalog>,
     mut stage: Local<u32>,
     mut made: Local<Option<(Entity, String)>>,
-    mut heavies: Query<(&mut Heavy, &mut Robot, &Children)>,
+    mut heavies: Query<(&mut Heavy, &mut Robot, &Children, &mut Arm)>,
     parts: Query<(Entity, &HeavyPart)>,
     mut hits: MessageWriter<crate::weapons::ballistics::Hit>,
 ) {
@@ -821,10 +823,27 @@ fn gallery(
     let Some((e, state)) = made.as_ref() else {
         return;
     };
-    let Ok((mut h, mut robot, children)) = heavies.get_mut(*e) else {
+    let Ok((mut h, mut robot, children, mut arm)) = heavies.get_mut(*e) else {
         return;
     };
     let has = |s: &str| state.split('+').any(|t| t == s);
+    // `raise[NN]`: its arm held NN% of the way up its tell (half, by
+    // default), from where it rested: the blow's warning, for stills.
+    if let Some(pct) = state
+        .split('+')
+        .find_map(|t| t.strip_prefix("raise"))
+        .filter(|_| *stage >= 30)
+    {
+        let k = pct
+            .parse::<f32>()
+            .map_or(0.5, |p| p / 100.0)
+            .clamp(0.0, 0.99);
+        if arm.state != super::heavy::ArmState::Raise {
+            arm.state = super::heavy::ArmState::Raise;
+            arm.from = arm.claw;
+        }
+        arm.t = k * super::heavy::RAISE_TIME;
+    }
     if has("hot") {
         h.heat = 0.9;
     }
