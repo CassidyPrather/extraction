@@ -35,7 +35,7 @@ from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_lod, fillet, join, main_guard, make,
                     report, section_circle, section_rect)
 from _kit import ring  # noqa: E402
 from crossbow_bolts import HALF, NOCK_DEPTH, add_bolt, tube3d  # noqa: E402
@@ -457,3 +457,4 @@ print(f"  string tips (anchors) at x = +-{ANCHORS[1].x:.4f}, y {TIP_Y:.4f}, z {T
       f"{stock_y(0.25, False) - 0.0085:.4f}")
 report()
 export("assets/models/guns/crossbow.glb")
+export_lod("assets/models/guns/crossbow_lod1.glb")
