@@ -3645,6 +3645,8 @@ const BED_RUN: f32 = 40.0;
 
 /// Clear of walls round a building's box, m: a body (0.28) and a stride.
 const ROUND: f32 = 2.0;
+/// How near a box's margin an end of a stretch counts as on it (m).
+const ON_EDGE: f32 = 0.05;
 
 /// From `from` to `to` on foot, round any building in the way (the
 /// straight line through the village went into a house wall and stayed
@@ -3783,7 +3785,12 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
     let clear_of = |bx: &(Transform, Vec2), a: Vec2, b: Vec2| {
         let (la, lb) = (local(&bx.0, a), local(&bx.0, b));
         let margin = bx.1 + Vec2::splat(ROUND * 0.5);
-        let h = if within(la, margin) || within(lb, margin) {
+        // (On the margin's edge counts as in it: a way out of a building
+        // ends a margin from its wall, and from there every stretch out
+        // "entered" the margin at its first step, so no way was found and
+        // the walk went straight, through a house and into a garden.)
+        let edge = margin + Vec2::splat(ON_EDGE);
+        let h = if within(la, edge) || within(lb, edge) {
             bx.1
         } else {
             margin
@@ -6139,6 +6146,36 @@ the Hollow.";
     /// A walk past a bridge's end, from off it to off it, keeps off its
     /// deck's side where the deck is level with the ground (into its
     /// railing): round the end. Under it, over its gully: as it was.
+    #[test]
+    fn from_the_edge_of_a_box_margin_the_way_still_goes_round_the_next() {
+        use super::{ROUND, round_boxes, segment_hits_box};
+        // A tower, and a house far on past it: from just by the tower's
+        // wall, on its margin's edge (where a way out of it ends), to beyond
+        // the house.
+        let tower = (Transform::from_xyz(0.0, 0.0, 0.0), Vec2::new(3.0, 2.5));
+        let house = (Transform::from_xyz(-60.0, 0.0, -40.0), Vec2::new(4.0, 3.5));
+        let boxes = [tower, house];
+        let from = Vec2::new(3.0 + ROUND * 0.5, 1.2);
+        let to = Vec2::new(-120.0, -79.0);
+        let way = round_boxes(&boxes, from, to);
+        assert!(
+            way.len() > 1,
+            "a way round the house, not straight: {way:?}"
+        );
+        let mut at = from;
+        for p in &way {
+            let (xf, half) = &house;
+            let inv = xf.compute_affine().inverse();
+            let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+            let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+            assert!(
+                segment_hits_box(a, b, *half).is_none(),
+                "{at} -> {p} through the house"
+            );
+            at = *p;
+        }
+    }
+
     #[test]
     fn a_walk_past_a_bridge_end_goes_round_it() {
         use crate::world::bridges::Deck;
