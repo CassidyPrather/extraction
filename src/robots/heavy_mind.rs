@@ -112,6 +112,35 @@ pub struct HeavyCalled {
     pub why: Call,
 }
 
+/// The Gate woke: someone with a valley key crossed into its reach
+/// ([`GATE_RADIUS`]) and it's counting them ([`rules::counting`]); in
+/// [`rules::GATE_HOLD`] it calls a heavy. For its lamp (Visual design) and
+/// its rising call (Audio): the Gate saying you're being counted, at the
+/// line, while there's time to step back out.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct GateWake {
+    pub gate: Vec3,
+}
+
+/// The Gate went quiet: they stepped back out (`called` false), or the
+/// count ran out and it called (`called` true; [`HeavyCalled`] follows on
+/// the same tick).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct GateQuiet {
+    pub gate: Vec3,
+    pub called: bool,
+}
+
+/// The Gate's count, for whatever shows it while it lasts: `counting`
+/// from its [`GateWake`] to its [`GateQuiet`], and how far through
+/// [`rules::GATE_HOLD`] it is (0..1) for a call that rises as it goes.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+pub struct GateCount {
+    pub gate: Vec3,
+    pub counting: bool,
+    pub held: f32,
+}
+
 /// The director's book on heavies, and one waiting to walk out.
 #[derive(Resource, Debug, Default)]
 pub struct HeavyCalls {
@@ -127,7 +156,10 @@ pub struct HeavyMindPlugin;
 impl Plugin for HeavyMindPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HeavyCalled>()
+            .add_message::<GateWake>()
+            .add_message::<GateQuiet>()
             .init_resource::<HeavyCalls>()
+            .init_resource::<GateCount>()
             .add_systems(
                 FixedUpdate,
                 (
@@ -479,6 +511,9 @@ fn call_heavy(
     )>,
     heavies: Query<&Robot, With<Heavy>>,
     mut called: MessageWriter<HeavyCalled>,
+    mut wakes: MessageWriter<GateWake>,
+    mut quiets: MessageWriter<GateQuiet>,
+    mut count: ResMut<GateCount>,
     mut raid: ResMut<crate::raid::Raid>,
     time: Res<Time>,
 ) {
@@ -510,7 +545,34 @@ fn call_heavy(
         .iter()
         .max_by_key(|(_, a)| a.map_or(0, |a| a.feeling()))
         .map(|(g, _)| g.translation());
-    if let Some(why) = rules::call_step(&mut calls.book, input) {
+    let call = rules::call_step(&mut calls.book, input);
+    // The Gate counting you: awake from the line, quiet when you step out
+    // or it calls.
+    let counting = rules::counting(&calls.book, input);
+    if counting != count.counting {
+        if counting {
+            wakes.write(GateWake { gate });
+        } else {
+            quiets.write(GateQuiet {
+                gate,
+                called: call.is_some(),
+            });
+        }
+    }
+    let held = if counting {
+        (calls.book.at_gate / rules::GATE_HOLD).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let now = GateCount {
+        gate,
+        counting,
+        held,
+    };
+    if *count != now {
+        *count = now;
+    }
+    if let Some(why) = call {
         let to = match why {
             Call::Gate => spots
                 .iter()
@@ -896,6 +958,192 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+        assert!(short.is_empty(), "{}", short.join("\n"));
+    }
+
+    /// The Gate reads before it calls (a key at a Gate is the fastest way
+    /// a heavy comes: [`rules::GATE_HOLD`] after the line, the horn; then
+    /// [`rules::LEAD`] and it walks out). Walking in with a key and at a
+    /// sprint, the Gate wakes on the tick you cross its line
+    /// ([`GateWake`]); seen ([`rules::NOTICE`]) and turned from
+    /// ([`rules::TURN`]), you're back out before it calls, and it goes
+    /// quiet ([`GateQuiet`]) with nothing called. Stay, and it calls on
+    /// time, quiet as it does. (Heard as its lamp and call will hear them:
+    /// by a system in `Update`.) Its ring of stakes is
+    /// [`gate_line_is_staked`].
+    #[test]
+    fn gate_reads_before_it_calls() {
+        use crate::player::{SPRINT_SPEED, WALK_SPEED};
+        /// What the Gate said, as an `Update` system hears it: (fixed
+        /// seconds, woke or quiet, called).
+        #[derive(Resource, Default)]
+        struct Heard(Vec<(f32, bool, bool)>);
+        fn hear(
+            mut heard: ResMut<Heard>,
+            mut w: MessageReader<GateWake>,
+            mut q: MessageReader<GateQuiet>,
+            time: Res<Time<Fixed>>,
+        ) {
+            let t = time.elapsed_secs();
+            heard.0.extend(w.read().map(|_| (t, true, false)));
+            heard.0.extend(q.read().map(|q| (t, false, q.called)));
+        }
+        let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+        vr.app.init_resource::<Heard>().add_systems(Update, hear);
+        vr.app
+            .world_mut()
+            .resource_mut::<super::super::director::Director>()
+            .enabled = true;
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let gate = super::super::director::gate(&zone);
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let key = catalog.kind("key_marrow").expect("the Marrow key");
+        let player = vr.player;
+        let k = crate::items::spawn_item(
+            &mut vr.app.world_mut().commands(),
+            &catalog,
+            crate::items::SpawnItem {
+                kind: key,
+                transform: Transform::from_translation(gate + Vec3::Z * 300.0),
+                condition: 1.0,
+            },
+        );
+        vr.app.world_mut().flush();
+        vr.app
+            .world_mut()
+            .entity_mut(k)
+            .insert(crate::interact::body::InBackpack { bag: player });
+        let now =
+            |vr: &crate::vr_harness::Vr| vr.app.world().resource::<Time<Fixed>>().elapsed_secs();
+        let take = |vr: &mut crate::vr_harness::Vr| {
+            std::mem::take(&mut vr.app.world_mut().resource_mut::<Heard>().0)
+        };
+        let calls = |vr: &crate::vr_harness::Vr| vr.app.world().resource::<HeavyCalls>().log.len();
+        // In from the meadow side, straight at the Gate.
+        let out = Vec3::new(1.0, 0.0, 1.0).normalize();
+        let at = |d: f32| zone.on_ground(gate.x + out.x * d, gate.z + out.z * d);
+        // On at `speed` (m/s, toward the Gate if positive) since the last
+        // step, by the game's clock (standing steps it too), then a frame.
+        let last = std::cell::Cell::new(0.0f32);
+        let walk = |vr: &mut crate::vr_harness::Vr, d: &mut f32, speed: f32| {
+            let t = now(vr);
+            *d -= speed * (t - last.get()).clamp(0.0, 0.1);
+            last.set(t);
+            vr.stand(at(*d), 0.0);
+            vr.step(1);
+        };
+        for speed in [WALK_SPEED, SPRINT_SPEED] {
+            let mut d = GATE_RADIUS + 6.0;
+            vr.stand(at(d), 0.0);
+            vr.step(10);
+            take(&mut vr);
+            last.set(now(&vr));
+            // In to the line and over it, on till it's noticed.
+            let mut crossed = None;
+            let mut woke = None;
+            while crossed.is_none_or(|c| now(&vr) < c + rules::NOTICE) {
+                walk(&mut vr, &mut d, speed);
+                if crossed.is_none() && d < GATE_RADIUS {
+                    crossed = Some(now(&vr));
+                }
+                for (t, wake, _) in take(&mut vr) {
+                    assert!(wake, "quiet before it woke");
+                    assert!(crossed.is_some(), "woke {d:.1} m out, before the line");
+                    woke.get_or_insert(t);
+                }
+            }
+            let (c, w) = (crossed.unwrap(), woke.expect("the Gate woke"));
+            let lag = w - c;
+            let inside = GATE_RADIUS - d;
+            // Stop, turn, and walk back out the way you came.
+            let turn = now(&vr);
+            while now(&vr) < turn + rules::TURN {
+                walk(&mut vr, &mut d, 0.0);
+            }
+            let mut heard = take(&mut vr);
+            while d <= GATE_RADIUS + 0.5 {
+                walk(&mut vr, &mut d, -speed);
+                heard.extend(take(&mut vr));
+                assert!(now(&vr) < w + 30.0, "never got out");
+            }
+            vr.step(3);
+            heard.extend(take(&mut vr));
+            let back = now(&vr) - w;
+            println!(
+                "at {speed} m/s: awake {lag:.2} s after the line, {inside:.1} m in when seen; back out {back:.1} s after it woke (it calls at {})",
+                rules::GATE_HOLD
+            );
+            assert!(lag <= 0.05, "it woke {lag:.2} s after the line");
+            let quiet: Vec<bool> = heard.iter().map(|h| h.2).collect();
+            assert!(heard.iter().all(|h| !h.1), "{heard:?}");
+            assert_eq!(quiet, vec![false], "quiet as you leave, nothing called");
+            assert_eq!(calls(&vr), 0, "no heavy called at {speed} m/s");
+        }
+        // Stay, and it calls on time.
+        let mut d = GATE_RADIUS + 3.0;
+        vr.stand(at(d), 0.0);
+        vr.step(10);
+        take(&mut vr);
+        last.set(now(&vr));
+        let mut heard = Vec::new();
+        while calls(&vr) == 0 {
+            let pace = if d > GATE_RADIUS - 10.0 {
+                WALK_SPEED
+            } else {
+                0.0
+            };
+            walk(&mut vr, &mut d, pace);
+            heard.extend(take(&mut vr));
+            assert!(
+                heard.is_empty() || now(&vr) < heard[0].0 + 20.0,
+                "it never called"
+            );
+        }
+        vr.step(3);
+        heard.extend(take(&mut vr));
+        let flags: Vec<(bool, bool)> = heard.iter().map(|h| (h.1, h.2)).collect();
+        assert_eq!(
+            flags,
+            vec![(true, false), (false, true)],
+            "woke, then quiet as it called"
+        );
+        let held = heard[1].0 - heard[0].0;
+        println!("stayed: called {held:.2} s after it woke");
+        assert!(
+            (held - rules::GATE_HOLD).abs() < 0.05,
+            "called after {held:.2} s"
+        );
+        assert!(!vr.app.world().resource::<GateCount>().counting);
+    }
+
+    /// Each Gate's line is staked where you'd cross it: every walkable
+    /// spot of it within 25 m of a machine marker. (Map design's ring; on
+    /// once it's placed.)
+    #[test]
+    #[ignore = "the ring of machine markers is Map design's, coming"]
+    fn gate_line_is_staked() {
+        use extraction_core::map::{MapDef, VALLEYS};
+        use extraction_core::terrain::Heightmap;
+        let mut short = Vec::new();
+        for (id, text) in VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let bare = extraction_core::map_heavy::unmarked_line(
+                &map,
+                &hm,
+                GATE_RADIUS,
+                "machine_marker",
+                25.0,
+            );
+            if let Some(p) = bare.first() {
+                short.push(format!(
+                    "{id}: {} spots of the Gate's line unmarked, e.g. ({:.0}, {:.0})",
+                    bare.len(),
+                    p[0],
+                    p[1]
+                ));
             }
         }
         assert!(short.is_empty(), "{}", short.join("\n"));

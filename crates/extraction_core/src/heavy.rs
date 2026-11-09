@@ -247,11 +247,97 @@ pub fn call_step(book: &mut CallBook, input: CallInput) -> Option<Call> {
     call
 }
 
+// --- The Gate counting --------------------------------------------------
+
+/// How long someone takes to notice the Gate waking (s): its lamp and its
+/// call, at the line.
+pub const NOTICE: f32 = 1.5;
+/// To stop and turn back (s).
+pub const TURN: f32 = 0.5;
+
+/// Whether the Gate is counting someone now (after [`call_step`] this
+/// tick): a key inside its reach and a heavy that could be called for it.
+/// It wakes the moment this turns true (a key crosses the line), and goes
+/// quiet when it turns false (they stepped back out, or it called).
+/// Nothing counts while it couldn't call: one already out, the cooldown,
+/// the raid's last sent, or the director off, so the Gate never wakes
+/// for nothing.
+pub fn counting(book: &CallBook, input: CallInput) -> bool {
+    book.at_gate > 0.0
+        && input.enabled
+        && !input.out
+        && book.cooldown <= 0.0
+        && book.sent < PER_RAID
+}
+
+/// How long someone crossing the line at `speed` (m/s) takes to get back
+/// out once the Gate wakes: they go on [`NOTICE`] before they know, stop
+/// and turn ([`TURN`]), and walk the same way back at the same pace.
+pub fn back_out(speed: f32) -> f32 {
+    let inside = speed * NOTICE;
+    NOTICE + TURN + inside / speed.max(0.1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const ALL_ON: [bool; PLATES] = [true; PLATES];
+
+    /// The Gate wakes on the tick a key crosses, stays awake while it
+    /// counts, goes quiet when they step out (and the count starts again),
+    /// and when it calls; and it never wakes when it couldn't call. Seen
+    /// at once, there's time to step back out at a walk or a sprint
+    /// (`player::WALK_SPEED`, `SPRINT_SPEED`) before [`GATE_HOLD`].
+    #[test]
+    fn the_gate_counts_where_you_can_see_it() {
+        let tick = |book: &mut CallBook, gate: bool, enabled: bool| {
+            let input = CallInput {
+                dt: 0.1,
+                feeling: 0,
+                gate_threat: gate,
+                out: false,
+                enabled,
+            };
+            let call = call_step(book, input);
+            (counting(book, input), call)
+        };
+        let mut book = CallBook::default();
+        assert_eq!(tick(&mut book, false, true), (false, None));
+        assert_eq!(
+            tick(&mut book, true, true),
+            (true, None),
+            "awake at the line"
+        );
+        for _ in 0..20 {
+            assert_eq!(tick(&mut book, true, true), (true, None));
+        }
+        assert_eq!(tick(&mut book, false, true), (false, None), "quiet out");
+        assert_eq!(book.at_gate, 0.0, "the count starts again");
+        let mut called = None;
+        for k in 0..100 {
+            let (on, call) = tick(&mut book, true, true);
+            if call.is_some() {
+                assert!(!on, "quiet once it calls");
+                called = Some(k);
+                break;
+            }
+            assert!(on);
+        }
+        let k = called.expect("it calls") as f32 * 0.1;
+        assert!((k - GATE_HOLD).abs() < 0.15, "after {k:.1} s");
+        // Cooling down: a key at the line wakes nothing.
+        assert_eq!(tick(&mut book, true, true).0, false);
+        // The director off: nothing.
+        assert_eq!(tick(&mut CallBook::default(), true, false).0, false);
+        for speed in [2.4, 4.6] {
+            let t = back_out(speed);
+            assert!(
+                t < GATE_HOLD,
+                "at {speed} m/s it takes {t:.1} s to get back out, the Gate calls at {GATE_HOLD}"
+            );
+        }
+    }
 
     /// The hull and plates take nothing; covered weak points take nothing
     /// until their plate is off; open ones take it all.
