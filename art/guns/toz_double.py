@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_lod, export_part, fillet, join, main_guard, make,
                     report, section_rect)
 
 main_guard()
@@ -245,4 +245,5 @@ empty("pt_sling_front", (0.0, 0.006, -0.62))
 empty("pt_sling_rear", (0.0, -0.111, bz(0.25)))
 report()
 export("assets/models/guns/toz_double.glb")
+export_lod("assets/models/guns/toz_double_lod1.glb")
 export_part("static_butt", "assets/models/items/stock_toz_double.glb")

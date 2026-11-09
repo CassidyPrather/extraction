@@ -25,7 +25,7 @@ import sys
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, T, catmull, empty, export, export_part, fillet, join, main_guard, make,
+from common import (Part, RX, RY, T, catmull, empty, export, export_lod, export_part, fillet, join, main_guard, make,
                     report, section_rect)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
 from _kit import text  # noqa: E402
@@ -298,4 +298,5 @@ empty("pt_sling_front", (0.0, TUBE - 0.026, SW_F))
 empty("pt_sling_rear", (0.0, yb - 0.0135, SW_R))
 report()
 export("assets/models/guns/mp133.glb")
+export_lod("assets/models/guns/mp133_lod1.glb")
 export_part("static_butt", "assets/models/items/stock_mp133.glb")

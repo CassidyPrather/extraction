@@ -319,7 +319,7 @@ pub const CRUMB: f32 = 0.004;
 pub fn detached_findings() -> Vec<String> {
     let models: Vec<(String, String, std::path::PathBuf)> = glb::all_models()
         .into_iter()
-        .filter(|(folder, name, _)| !assembled(folder, name))
+        .filter(|(folder, name, _)| !assembled(folder, name) && !glb::is_far_level(name))
         .collect();
     // Four at a time: every model's pieces against their neighbours is the
     // suite's slowest check.

@@ -172,6 +172,17 @@ pub fn read(path: &Path) -> Result<GlbInfo, String> {
     Ok(out)
 }
 
+/// A gun's far level (`guns/<id>_lod1.glb`): the model as a resting gun
+/// is drawn past 6 m (`render::gun_rest`), its nodes named after their
+/// materials. Checks made at arm's length (pieces touching, parts that
+/// fight, moving parts the game knows) are for the model itself; the far
+/// level keeps only its own guard (`every_gun_has_its_far_stand_in`) and
+/// the checks every file gets (size, outside images).
+pub fn is_far_level(name: &str) -> bool {
+    name.rsplit_once("_lod")
+        .is_some_and(|(_, n)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// Every `.glb` under `assets/models/`, as (folder, name, path), sorted.
 pub fn all_models() -> Vec<(String, String, std::path::PathBuf)> {
     let root = crate::asset_root_path().join("models");
@@ -342,4 +353,29 @@ pub fn triangles(path: &Path) -> Result<Vec<Tri>, String> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn far_levels_are_told_from_their_models() {
+        assert!(is_far_level("ak74_lod1"));
+        assert!(is_far_level("toz_double_lod2"));
+        assert!(!is_far_level("ak74"));
+        assert!(!is_far_level("spruce_lod"));
+        assert!(!is_far_level("lodge"));
+        // Every far level on disk sits beside its model.
+        let all = all_models();
+        let far: Vec<_> = all.iter().filter(|(_, n, _)| is_far_level(n)).collect();
+        assert!(!far.is_empty(), "no far levels found");
+        for (folder, name, _) in far {
+            let model = name.rsplit_once("_lod").unwrap().0;
+            assert!(
+                all.iter().any(|(f, n, _)| f == folder && n == model),
+                "{folder}/{name}: no {model}.glb beside it"
+            );
+        }
+    }
 }

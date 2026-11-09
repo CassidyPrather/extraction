@@ -126,6 +126,11 @@ The coming-home walks live in `docs/craft/walks/home/`.
 - An arrival faces the way you came in, not the way on: the first walks'
   rendezvous looked due north into the trees, because a route's end has
   no way on, and that read as a dead end that wasn't there.
+- Stood on its point, an arrival's camera looks past the place: Marrow's
+  Rail yard looked up the truck track out of the yard, Cinder's Works yard
+  at the spoil heap beyond it. Both places read from 20 m out. The stop
+  picker now frames every arrival from 20 m out, looking at the point;
+  check a weak arrival there before changing the world.
 - A muddy arrival is often fixed by moving the point, not the scenery: the
   place's best frame tends to sit 10 to 20 m short of where its marker was
   dropped. Look for it in the stops before the arrival.
