@@ -347,6 +347,9 @@ fn holds_views_with(
         if fight && lights > LIGHTS {
             o.push(format!("{lights} lights reach it > {LIGHTS}"));
         }
+        // A gun drawn whole where its far level should be is triangles
+        // the budget only holds by luck (`gun_rest::kept_whole`).
+        o.extend(super::gun_rest::kept_whole(app.world_mut()));
         if !o.is_empty() {
             // What's in it, one eye (the other's the same).
             over.push(format!(
