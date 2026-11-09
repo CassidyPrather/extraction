@@ -40,6 +40,7 @@ pub mod map_sentry;
 pub mod map_sight;
 pub mod map_spotter;
 pub mod map_surge;
+pub mod map_vista;
 pub mod melee;
 pub mod mender;
 pub mod minelayer;

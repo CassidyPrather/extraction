@@ -259,6 +259,21 @@ impl Canopy {
     /// Whether the crowns hide a line from eye height at `from` to the
     /// point `top` metres up at `to`.
     pub fn hides(&self, hm: &Heightmap, from: P2, to: P2, top: f32) -> bool {
+        self.crowns(hm, from, to, top, CROWN_RADIUS, CROWNS_HIDE) >= CROWNS_HIDE
+    }
+
+    /// How many crowns, each `radius` wide each way, a line from eye height
+    /// at `from` to the point `top` metres up at `to` passes through,
+    /// counted up to `enough`.
+    pub fn crowns(
+        &self,
+        hm: &Heightmap,
+        from: P2,
+        to: P2,
+        top: f32,
+        radius: f32,
+        enough: usize,
+    ) -> usize {
         let eye = hm.height(from) + 1.7;
         let d = dist(from, to);
         let n = (d / 2.0).ceil().max(1.0) as usize;
@@ -276,19 +291,19 @@ impl Canopy {
                     for (at, lo, hi) in v {
                         if y > *lo
                             && y < *hi
-                            && dist(*at, q) < CROWN_RADIUS
+                            && dist(*at, q) < radius
                             && !hit.iter().any(|h| dist(*h, *at) < 0.1)
                         {
                             hit.push(*at);
-                            if hit.len() >= CROWNS_HIDE {
-                                return true;
+                            if hit.len() >= enough {
+                                return hit.len();
                             }
                         }
                     }
                 }
             }
         }
-        false
+        hit.len()
     }
 }
 
