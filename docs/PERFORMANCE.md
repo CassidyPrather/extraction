@@ -1881,6 +1881,48 @@ The fuel exfil is within the 10% bar (at most 2160), 3 runs of 3, with
 the fight's drone in view. Heavy's merged weak-point rings, on their
 branch, are another 22 draws off it.
 
+### Resting guns past 6 m drawn from their far level (9 November)
+
+A resting gun drew its full model at any distance: an AK-74 is 29,108
+triangles, and Cinder Works' gate views had 13 guns in sight. That took
+the fuel exfil to 1846k triangles, over the 1.8M budget. Gunsmith exports
+a far level for every gun, `assets/models/guns/<id>_lod1.glb`, at about
+a quarter of the triangles (the AK-74's is 7,269). It has one node per
+material, named after the material, in the gun's own space at its
+resting pose.
+
+`gun_rest` now hands a resting gun over to it. The merged near meshes
+end at 6 m and the far level starts there, cross-fading over
+5.5-6.5 m (`VisibilityRange`, `FAR_AT`). The far level wears the gun's
+own weathered materials (`WeatheredLook::copy_named`). A gun is drawn
+whole when its far level is missing, or when the far level names a
+material the gun doesn't wear. Parts fitted to the gun (a scope, a
+magazine) keep their own merged meshes at every distance. Waking the gun
+removes the far level with the rest. `EXTRACTION_GUN_FAR=0` keeps every
+resting gun whole, for comparison. With `EXTRACTION_GUN_REST_LOG` set,
+each gun logs where it lies when its far level attaches. Test:
+`gun_rest::tests::a_resting_gun_hands_over_to_its_far_level`; Gunsmith's
+guard is `models::tests::every_gun_has_its_far_stand_in`.
+
+On Marrow all 17 resting guns attach their far level. The pictures show
+two rows of guns at the insertion, far level off (top) and on (bottom):
+- row A: AK-74, Mosin, PM, TOZ double;
+- row B: crossbow, flare pistol, MP-133, Nagant, PPSh, RPK-74, SKS, SVD,
+  TOZ-8.
+
+At 6 m the only difference is the cross-fade's dither on a gun lying
+right at the hand-over. At 15 m it is 19 pixels in row A's crop and
+about ten in row B's, single glints. Gunsmith signed off on each gun from
+these. See `docs/shots/performance/gun_far_row{a,b}_{6,15}m_off_on.jpg`.
+
+**Cinder Works' gate views, far level off and on (stereo, one run):**
+
+| view | off | on |
+| - | - | - |
+| gate fuel exfil 2 | 1928 draws, 1846k triangles | 1830 draws, 1501k triangles |
+| s01_ahead | 1849 draws, 1800k triangles | 1801 draws, 1593k triangles |
+| gate insertion 2 | 1641 draws, 1570k triangles | 1585 draws, 1355k triangles |
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
