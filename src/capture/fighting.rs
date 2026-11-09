@@ -495,6 +495,9 @@ mod tests {
     fn models_dont_fight_themselves() {
         let mut bad = Vec::new();
         for (folder, name, path) in glb::all_models() {
+            if glb::is_far_level(&name) {
+                continue;
+            }
             for f in model_fights(&path) {
                 bad.push(format!(
                     "{folder}/{name}: {} ({}) vs {} ({}), {:.4} m² at ({:.3}, {:.3}, {:.3})",

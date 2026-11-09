@@ -94,6 +94,7 @@ impl Subject {
 pub fn subjects(filter: &str) -> Vec<Subject> {
     let mut out: Vec<Subject> = super::glb::all_models()
         .into_iter()
+        .filter(|(_, n, _)| !super::glb::is_far_level(n))
         .map(|(f, n, _)| Subject::Model(format!("{f}/{n}")))
         .collect();
     out.extend(

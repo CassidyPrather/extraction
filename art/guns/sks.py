@@ -27,7 +27,7 @@ import bmesh
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_lod, export_part, fillet, join, main_guard, make,
                     report, section_rect)
 from _kit import text  # noqa: E402
 
@@ -358,4 +358,5 @@ empty("pt_sling_front", (-0.0195, 0.006, FORE - 0.014))
 empty("pt_sling_rear", (-0.021, -0.062, 0.122))
 report()
 export("assets/models/guns/sks.glb")
+export_lod("assets/models/guns/sks_lod1.glb")
 export_part("static_butt", "assets/models/items/stock_sks.glb")

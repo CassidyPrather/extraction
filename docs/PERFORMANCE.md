@@ -1881,6 +1881,120 @@ The fuel exfil is within the 10% bar (at most 2160), 3 runs of 3, with
 the fight's drone in view. Heavy's merged weak-point rings, on their
 branch, are another 22 draws off it.
 
+### Resting guns past 6 m drawn from their far level (9 November)
+
+A resting gun drew its full model at any distance: an AK-74 is 29,108
+triangles, and Cinder Works' gate views had 13 guns in sight. That took
+the fuel exfil to 1846k triangles, over the 1.8M budget. Gunsmith exports
+a far level for every gun, `assets/models/guns/<id>_lod1.glb`, at about
+a quarter of the triangles (the AK-74's is 7,269). It has one node per
+material, named after the material, in the gun's own space at its
+resting pose.
+
+`gun_rest` now hands a resting gun over to it. The merged near meshes
+end at 6 m and the far level starts there, cross-fading over
+5.5-6.5 m (`VisibilityRange`, `FAR_AT`). The far level wears the gun's
+own weathered materials (`WeatheredLook::copy_named`). A gun is drawn
+whole when its far level is missing, or when the far level names a
+material the gun doesn't wear. Parts fitted to the gun (a scope, a
+magazine) keep their own merged meshes at every distance. Waking the gun
+removes the far level with the rest. `EXTRACTION_GUN_FAR=0` keeps every
+resting gun whole, for comparison. With `EXTRACTION_GUN_REST_LOG` set,
+each gun logs where it lies when its far level attaches. Test:
+`gun_rest::tests::a_resting_gun_hands_over_to_its_far_level`; Gunsmith's
+guard is `models::tests::every_gun_has_its_far_stand_in`.
+
+On Marrow all 17 resting guns attach their far level. The pictures show
+two rows of guns at the insertion, far level off (top) and on (bottom):
+- row A: AK-74, Mosin, PM, TOZ double;
+- row B: crossbow, flare pistol, MP-133, Nagant, PPSh, RPK-74, SKS, SVD,
+  TOZ-8.
+
+At 6 m the only difference is the cross-fade's dither on a gun lying
+right at the hand-over. At 15 m it is 19 pixels in row A's crop and
+about ten in row B's, single glints. Gunsmith signed off on each gun from
+these. See `docs/shots/performance/gun_far_row{a,b}_{6,15}m_off_on.jpg`.
+
+**Cinder Works' gate views, far level off and on (stereo, one run):**
+
+| view | off | on |
+| - | - | - |
+| gate fuel exfil 2 | 1928 draws, 1846k triangles | 1830 draws, 1501k triangles |
+| s01_ahead | 1849 draws, 1800k triangles | 1801 draws, 1593k triangles |
+| gate insertion 2 | 1641 draws, 1570k triangles | 1585 draws, 1355k triangles |
+
+### Five valleys within both budgets, 3 runs each (9 November)
+
+Measured on 83dc996b, which carries main, Gunsmith's far levels and the
+far-level switch above. Visual design's machine markers are part of main.
+For each valley, one full run found its five heaviest views at night, in a
+storm, in a fight. Then 3 runs measured those five plus its gate views:
+the fuel exfil, the insertion, the valley's own gate stop and s01_ahead.
+Views are listed heaviest first, for both eyes, against 2400 draws and
+1800k triangles. Every view stayed inside both budgets in every run.
+
+**Marrow Creek**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| exfil_south_gate__fuel__2 | 1987, 1989, 2017 | 1517k, 1528k, 1616k | 90% |
+| insertion_south_gate_2 | 1954, 1945, 1982 | 1461k, 1439k, 1560k | 87% |
+| poi_radio_mast_0 | 1990, 2030, 2020 | 1120k, 1124k, 1121k | 85% |
+| s01_ahead | 1666, 1684, 1662 | 1288k, 1392k, 1272k | 77% |
+| m05_spruce | 1543, 1543, 1545 | 1389k, 1389k, 1389k | 77% |
+| poi_radio_mast_3 | 1438, 1460, 1602 | 918k, 922k, 922k | 67% |
+| m01_gate | 1453, 1455, 1455 | 1158k, 1158k, 1158k | 64% |
+
+**Kettle Pass**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| exfil_south_gate__fuel__2 | 1660, 1638, 1684 | 1468k, 1453k, 1541k | 86% |
+| s23_side | 1383, 1375, 1381 | 1532k, 1505k, 1532k | 85% |
+| s22_side | 1350, 1342, 1354 | 1467k, 1439k, 1467k | 82% |
+| insertion_south_gate_2 | 1395, 1401, 1413 | 1325k, 1364k, 1393k | 77% |
+| k02_row | 1519, 1517, 1521 | 1336k, 1337k, 1337k | 74% |
+| k01_gate | 1160, 1162, 1156 | 1246k, 1246k, 1246k | 69% |
+| s01_ahead | 1380, 1406, 1414 | 1180k, 1241k, 1196k | 69% |
+
+**Cinder Works**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| s01_ahead | 1805, 1805, 1805 | 1630k, 1598k, 1621k | 91% |
+| exfil_south_gate__fuel__2 | 1854, 1834, 1864 | 1574k, 1506k, 1597k | 89% |
+| insertion_south_gate_2 | 1599, 1574, 1597 | 1400k, 1347k, 1391k | 78% |
+| c11_aerial | 1114, 1124, 1122 | 1196k, 1135k, 1220k | 68% |
+| c01_gate | 1229, 1229, 1229 | 1207k, 1207k, 1207k | 67% |
+
+**Sallow Reservoir**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| exfil_south_gate__fuel__2 | 1546, 1546, 1550 | 1318k, 1318k, 1318k | 73% |
+| s01_side | 1484, 1482, 1485 | 1284k, 1284k, 1284k | 71% |
+| insertion_south_gate_2 | 1311, 1311, 1311 | 1199k, 1199k, 1199k | 67% |
+| s01_ahead | 1282, 1280, 1282 | 1187k, 1186k, 1187k | 66% |
+| s01_gate | 996, 996, 996 | 1040k, 1040k, 1040k | 58% |
+
+**Rime Fell**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| exfil_south_gate__fuel__2 | 1456, 1426, 1446 | 1400k, 1303k, 1362k | 78% |
+| s01_ahead | 1558, 1549, 1547 | 1312k, 1293k, 1300k | 73% |
+| insertion_south_gate_2 | 1548, 1542, 1540 | 1303k, 1288k, 1303k | 72% |
+| rendezvous_the_col_0 | 946, 948, 954 | 1188k, 1188k, 1188k | 66% |
+| poi_compressor_house_1 | 1140, 1140, 1134 | 1186k, 1186k, 1185k | 66% |
+| r01_gate | 912, 912, 912 | 1073k, 1073k, 1073k | 60% |
+
+The tightest are Cinder Works' s01_ahead, at most 1630k triangles (91%),
+and Marrow's fuel exfil, at most 1616k (90%) and 2017 draws. With the far
+level off (one run, the table above), Cinder's s01_ahead and fuel exfil
+were 1800k and 1846k. Run to run the fight moves a gate view by up to
+about 150k triangles. The most draws are at Marrow's fuel exfil and radio
+mast, at most 2017 and 2030. The bar is at most 2160 draws at a fuel exfil.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
