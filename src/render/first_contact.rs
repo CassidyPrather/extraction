@@ -499,6 +499,46 @@ fn load_ceiling(map: &str, reference_ms: f64, slack: f64) -> f64 {
     units * reference_ms / 1000.0 * slack
 }
 
+/// Another load of a valley whose loads so far were (seconds, ceiling)
+/// each: only while every one was over, up to `runs` in all.
+fn load_again(loads: &[(f64, f64)], runs: usize) -> bool {
+    loads.len() < runs && loads.iter().all(|(s, c)| s > c)
+}
+
+/// The finding for a valley over its ceiling on every load, or none.
+fn loads_over(map: &str, loads: &[(f64, f64)]) -> Option<String> {
+    (!loads.is_empty() && loads.iter().all(|(s, c)| s > c)).then(|| {
+        let each: Vec<String> = loads
+            .iter()
+            .map(|(s, c)| format!("{s:.2} s of {c:.1}"))
+            .collect();
+        format!(
+            "{map}: loaded over its ceiling every time: {}",
+            each.join(", ")
+        )
+    })
+}
+
+/// A load over by a hair under a busy gate is loaded again and passes if
+/// the next is within; one over every time still fails, and one within
+/// at once isn't loaded twice.
+#[test]
+fn a_load_over_once_is_loaded_again() {
+    let once = [(5.50, 5.49)];
+    assert!(load_again(&once, 3));
+    assert_eq!(
+        loads_over("sallow_reservoir", &[(5.50, 5.49), (4.9, 5.5)]),
+        None
+    );
+    assert!(!load_again(&[(5.50, 5.49), (4.9, 5.5)], 3));
+    let every = [(6.1, 5.5), (6.0, 5.4), (6.2, 5.6)];
+    assert!(!load_again(&every, 3));
+    assert!(loads_over("sallow_reservoir", &every).is_some());
+    assert!(!load_again(&[(4.0, 5.5)], 3));
+    assert_eq!(loads_over("sallow_reservoir", &[(4.0, 5.5)]), None);
+    assert!(!load_again(&[(6.1, 5.5)], 1));
+}
+
 /// A machine half as fast (its reference twice as long) gets twice the
 /// time to load; the slack scales on top; a valley without its own
 /// ceiling takes the largest, not none.
@@ -518,7 +558,8 @@ fn a_load_ceiling_scales_with_the_machine() {
 /// within 1.2x of their steady state, worst frame against worst frame. The
 /// harness's frames jitter by more than a small hitch, so a valley over is
 /// walked again in a new game, up to `FIRST_RUNS` (3) in all, and fails
-/// only if it's over every time.
+/// only if it's over every time. A load over its ceiling is the same: loaded
+/// again against a fresh reference, failing only if over every time.
 #[test]
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
 fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
@@ -554,24 +595,36 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
         // machine as the load finds it. A median of 25: single samples
         // here ran 12.5-36 ms, medians of 9 drifted 35% apart, of 25 12%
         // (`perf::tests::reference_load_noise`).
-        let reference = crate::perf::fight::median_ms(25, crate::perf::fight::reference_load_ms);
-        let (mut app, l) = loaded_app(&map, true);
-        let budget = load_ceiling(&map, reference, slack);
-        println!(
-            "{map}: loaded in {:.2} s of {budget:.1} ({:.0} units at a reference of {reference:.2} ms; \
-             preload {:.2}, buildings {:.2}, warm {:.2}; {} frames)",
-            l.seconds(),
-            l.seconds() * 1000.0 / reference,
-            l.preload,
-            l.props,
-            l.warm,
-            l.frames
-        );
-        if l.seconds() > budget {
-            wrong.push(format!(
-                "{map}: loaded in {:.2} s, over {budget:.1}",
-                l.seconds()
-            ));
+        // A load over its ceiling is loaded again, its reference timed
+        // afresh, up to `runs` in all, and fails only if over every
+        // time: in a gate running two tests at once, the other one can
+        // be quiet while the reference is timed and busy while the
+        // valley loads (Sallow 5.50 s against 5.5, then 68 s alone and
+        // well within).
+        let mut loads: Vec<(f64, f64)> = Vec::new();
+        let mut app = loop {
+            let reference =
+                crate::perf::fight::median_ms(25, crate::perf::fight::reference_load_ms);
+            let (app, l) = loaded_app(&map, true);
+            let budget = load_ceiling(&map, reference, slack);
+            println!(
+                "{map}: load {}: {:.2} s of {budget:.1} ({:.0} units at a reference of {reference:.2} ms; \
+                 preload {:.2}, buildings {:.2}, warm {:.2}; {} frames)",
+                loads.len() + 1,
+                l.seconds(),
+                l.seconds() * 1000.0 / reference,
+                l.preload,
+                l.props,
+                l.warm,
+                l.frames
+            );
+            loads.push((l.seconds(), budget));
+            if !load_again(&loads, runs) {
+                break app;
+            }
+        };
+        if let Some(over) = loads_over(&map, &loads) {
+            wrong.push(over);
         }
         let vram = super::vram::report(&map, app.world_mut());
         if vram > super::vram::VRAM_BUDGET {

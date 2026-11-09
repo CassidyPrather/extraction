@@ -21,7 +21,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, arc, catmull, empty, export, fillet, join, main_guard,
+from common import (Part, RX, RY, RZ, T, arc, catmull, empty, export, export_lod, fillet, join, main_guard,
                     make, report, section_rect)
 
 main_guard()
@@ -249,3 +249,4 @@ for name, (z, yb) in zip(("pt_sling_front", "pt_sling_rear"), SWIVELS):
     empty(name, (0.0, yb - 0.0075 - 0.0083, z))
 report()
 export("assets/models/guns/toz8.glb")
+export_lod("assets/models/guns/toz8_lod1.glb")

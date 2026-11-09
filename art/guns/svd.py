@@ -23,7 +23,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, area2, catmull, empty, export, fillet, join, main_guard,
+from common import (Part, RX, RY, RZ, T, area2, catmull, empty, export, export_lod, fillet, join, main_guard,
                     make, report, section_rect)
 
 main_guard()
@@ -352,3 +352,4 @@ empty("pt_sling_rear", (-0.0237, -0.074, 0.222))
 empty("pt_rail", (-0.0262, 0.0652, -0.10))
 report()
 export("assets/models/guns/svd.glb")
+export_lod("assets/models/guns/svd_lod1.glb")

@@ -24,7 +24,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_lod, fillet, join, main_guard, make,
                     report, section_rect)
 from _kit import text  # noqa: E402
 
@@ -290,3 +290,4 @@ empty("pt_sling_front", (SWIVEL[0], SWIVEL[1] - 0.009, SWIVEL[2]))
 empty("pt_sling_rear", (0.0, -0.063, 0.17))
 report()
 export("assets/models/guns/ppsh.glb")
+export_lod("assets/models/guns/ppsh_lod1.glb")

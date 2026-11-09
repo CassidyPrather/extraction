@@ -38,7 +38,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_lod, fillet, join, main_guard, make,
                     report, section_rect)
 from _kit import text  # noqa: E402
 from ammo import C762X38R, cartridge  # noqa: E402
@@ -302,3 +302,4 @@ empty("pt_load_port", (0.016, gy, -0.012))
 
 report()
 export("assets/models/guns/nagant.glb")
+export_lod("assets/models/guns/nagant_lod1.glb")
