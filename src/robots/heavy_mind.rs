@@ -431,6 +431,7 @@ fn heavy_brain(
                 Some(r) if flat(pos, r) > 2.5 => {
                     intent.pace = 1.0;
                     intent.look = Some(r);
+                    intent.look_away = true;
                     Some(r)
                 }
                 _ => {
@@ -441,16 +442,12 @@ fn heavy_brain(
                         to_them.length() < KEEP_CLEAR
                             && to_home.angle_to(to_them).abs().to_degrees() < IN_THE_WAY
                     });
-                    if blocked {
-                        // Facing home, waiting for you to be on your way.
+                    if goal.is_some() {
                         intent.look = goal;
-                        None
-                    } else {
-                        if goal.is_some() {
-                            intent.look = goal;
-                        }
-                        goal
+                        intent.look_away = true;
                     }
+                    // Waiting for you to be on your way: facing home.
+                    if blocked { None } else { goal }
                 }
             }
         } else {
@@ -1288,11 +1285,15 @@ mod tests {
                 .translation = g;
         };
         let brain = |vr: &crate::vr_harness::Vr| vr.app.world().get::<Brain>(heavy).cloned();
+        // Its eye's glow as its lights draw it (1 at work).
         let eye = |vr: &crate::vr_harness::Vr| {
             let w = vr.app.world();
-            let l = w.get::<super::super::heavy_look::Lights>(heavy)?;
-            let m = w.resource::<Assets<StandardMaterial>>().get(&l.eye)?;
-            Some(m.emissive.red / 9.0)
+            let t = w.resource::<Time>().elapsed_secs();
+            Some(super::super::heavy_look::heavy_eye(
+                w.get::<HeavyMind>(heavy),
+                w.get::<Awareness>(heavy),
+                t,
+            ))
         };
         let facing_away = |vr: &crate::vr_harness::Vr, me: Vec2| {
             let w = vr.app.world();

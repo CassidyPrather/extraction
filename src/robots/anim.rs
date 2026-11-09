@@ -1229,7 +1229,12 @@ pub(crate) fn walk(
             .map(|g| g.translation() - pos);
         // The one it can see, else where its brain says to look, else
         // where it's going.
-        let face = seen.or(intent.look.map(|l| l - pos));
+        let look = intent.look.map(|l| l - pos);
+        let face = if intent.look_away && look.is_some() {
+            look
+        } else {
+            seen.or(look)
+        };
         g.recover(dt);
         g.hamper = hampered.map_or(0.0, |h| (1.0 - h.pace).clamp(0.0, 1.0));
         let drive = Drive {

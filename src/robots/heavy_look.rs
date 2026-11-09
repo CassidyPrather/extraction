@@ -105,10 +105,10 @@ enum LimbKind {
 
 /// The heavy's own lights: the vents' glow (one each), its strips and eye.
 #[derive(Component)]
-pub(crate) struct Lights {
+struct Lights {
     vents: [Handle<StandardMaterial>; 2],
     strips: Handle<StandardMaterial>,
-    pub(crate) eye: Handle<StandardMaterial>,
+    eye: Handle<StandardMaterial>,
 }
 
 /// A shell mesh of a heavy, scorched once it's down.
@@ -664,6 +664,20 @@ fn pose_limbs(
 pub const STOOD_DOWN_EYE: (f32, f32) = (0.12, 0.26);
 pub const STOOD_DOWN_HZ: f32 = 0.25;
 
+/// Its eye's glow (1 at work): stood down, [`stood_down_eye`]; else what
+/// it knows of you (`visuals::eye_mood`).
+pub fn heavy_eye(
+    mind: Option<&super::heavy_mind::HeavyMind>,
+    aware: Option<&super::Awareness>,
+    t: f32,
+) -> f32 {
+    if mind.is_some_and(|m| m.stood_down) {
+        stood_down_eye(t)
+    } else {
+        aware.map_or(1.0, |a| super::visuals::eye_mood(a, t))
+    }
+}
+
 pub fn stood_down_eye(t: f32) -> f32 {
     let (lo, hi) = STOOD_DOWN_EYE;
     lo + (hi - lo) * (0.5 + 0.5 * (std::f32::consts::TAU * STOOD_DOWN_HZ * t).sin())
@@ -737,12 +751,7 @@ fn light_heavies(
                 dark
             } else {
                 let t = time.elapsed_secs() + e.index_u32() as f32 * 0.37;
-                let mood = if mind.is_some_and(|m| m.stood_down) {
-                    stood_down_eye(t)
-                } else {
-                    aware.map_or(1.0, |a| super::visuals::eye_mood(a, t))
-                };
-                LinearRgba::rgb(9.0, 1.2, 0.6) * mood
+                LinearRgba::rgb(9.0, 1.2, 0.6) * heavy_eye(mind, aware, t)
             };
             if m.emissive != want {
                 m.emissive = want;
