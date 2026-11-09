@@ -3568,7 +3568,11 @@ fn break_line(
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
     // Walkable on the grid, and walked to straight: nothing solid at knee
     // height between, nor at the spot (the grid's cells are coarse).
-    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    // (Not the ground itself: a body-wide ball at the knee met every bump
+    // of it, no spot passed, and the newcomer, with no way out of the
+    // walker's line, shot it out and lost.)
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World])
+        .with_excluded_entities(world.terrain.iter());
     let knee = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * KNEE;
     // (A body's width, not a ray: a ray slipped past a trunk the newcomer
     // then pressed against, 1.4 m short, the same half minute.)

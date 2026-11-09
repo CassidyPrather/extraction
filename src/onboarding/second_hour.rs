@@ -1149,6 +1149,9 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    /// The ground's collider (left out of what's "in the way" of a step:
+    /// banks are `steep_run`'s).
+    pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
     pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
     /// Every building and where it stands (for the way round them).
     pub(super) buildings: Query<
