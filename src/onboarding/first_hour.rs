@@ -3566,10 +3566,7 @@ fn break_line(
     }
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
     // Walkable on the grid, and walked to straight: nothing solid at knee
-    // height between, nor at the spot (the grid's cells are coarse: a spot
-    // behind a rock passed it, and the newcomer stood 1.4 m short of it
-    // against the rock for the walk's whole half minute, in the walker's
-    // line).
+    // height between, nor at the spot (the grid's cells are coarse).
     let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
     let knee = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * KNEE;
     let reach = |p: Vec2| {
@@ -3580,7 +3577,13 @@ fn break_line(
                 .is_none()
         })
     };
-    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array())) && reach(p);
+    // (Nor up a bank: the one-handed newcomer's spot was on the creek's,
+    // 3 m up in 4, and it stood at the bank's foot the half minute.)
+    let open = |p: Vec2| {
+        nav.is_none_or(|n| n.walkable(p.to_array()))
+            && steep_run(&world.zone, here, p) <= STEEP_RUN
+            && reach(p)
+    };
     let away = (here - eye.xz()).normalize_or(Vec2::Y);
     // The eye a step or two either side of where it is: a walker that's
     // fighting moves, and a spot only just out of its line now was in it
