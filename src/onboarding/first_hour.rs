@@ -647,8 +647,8 @@ pub(super) struct Newcomer {
     heavy_since: f32,
     /// Took what the driver put on the ledge, woken in the truck.
     took_ledge: bool,
-    /// Times it went for a radio off its body (`radio_to_fetch`).
-    radio_fetches: u32,
+    /// The radios it went for off its body (`radio_to_fetch`), each once.
+    radios_tried: Vec<Entity>,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
@@ -2745,21 +2745,24 @@ pub(super) fn direct_raid(
                         // truck, so a newcomer with none goes for one
                         // (resumed with its radio in remains 130 m off, the
                         // careers wedged: "no radio", done, every run after).
-                        None => match radio_to_fetch(&world, player, here)
-                            .filter(|_| state.radio_fetches < RADIO_FETCHES)
+                        None => match radio_to_fetch(&world, player, here, &state.radios_tried)
+                            .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
                         {
                             Some((e, at)) => {
-                                state.radio_fetches += 1;
+                                state.radios_tried.push(e);
                                 state.note(
                                     now,
                                     Kind::Learned,
                                     format!(
                                         "no radio on it: went for the one {:.0} m off",
-                                        at.distance(here)
+                                        at.xz().distance(here)
                                     ),
                                 );
+                                // By the way in where it lies indoors (walked
+                                // at straight, it stood 12 m off, at the
+                                // wall between, till the grab timed out).
                                 tasks.push(Task::Stow(Side::Left));
-                                tasks.extend(walk(&world, here, at));
+                                tasks.extend(way_to(&world, &view, &plans, here, at));
                                 tasks.push(Task::Grab {
                                     item: e,
                                     side: Side::Left,
@@ -4011,13 +4014,20 @@ fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
 }
 
 /// A radio not on `player` to go and get: the nearest in its own remains,
-/// else in anyone's, else lying loose. Where it is, to walk to.
-fn radio_to_fetch(world: &World2, player: Entity, here: Vec2) -> Option<(Entity, Vec2)> {
+/// else in anyone's, else lying loose; not one of `tried` (gone for, and
+/// not got). Where it is, to go to.
+fn radio_to_fetch(
+    world: &World2,
+    player: Entity,
+    here: Vec2,
+    tried: &[Entity],
+) -> Option<(Entity, Vec3)> {
     let is_radio = |e: Entity| {
-        world
-            .items
-            .get(e)
-            .is_ok_and(|(_, it, ..)| world.catalog.get(it.kind()).id == "radio")
+        !tried.contains(&e)
+            && world
+                .items
+                .get(e)
+                .is_ok_and(|(_, it, ..)| world.catalog.get(it.kind()).id == "radio")
     };
     let own = |mine: bool| {
         world
@@ -4025,12 +4035,12 @@ fn radio_to_fetch(world: &World2, player: Entity, here: Vec2) -> Option<(Entity,
             .iter()
             .filter(|(_, _, r)| (r.owner == player) == mine)
             .flat_map(|(gt, bag, _)| {
-                let at = gt.translation().xz();
+                let at = gt.translation();
                 bag.contents
                     .iter()
                     .copied()
                     .filter(|e| is_radio(*e))
-                    .map(move |e| (e, at))
+                    .map(move |e| ((e, at), at.xz()))
             })
             .collect::<Vec<_>>()
     };
@@ -4038,16 +4048,13 @@ fn radio_to_fetch(world: &World2, player: Entity, here: Vec2) -> Option<(Entity,
         world
             .items
             .iter()
-            .filter(|(_, it, _, held, sock, bag)| {
-                held.is_none()
-                    && sock.is_none()
-                    && bag.is_none()
-                    && world.catalog.get(it.kind()).id == "radio"
+            .filter(|(e, _, _, held, sock, bag)| {
+                held.is_none() && sock.is_none() && bag.is_none() && is_radio(*e)
             })
-            .map(|(e, _, gt, ..)| (e, gt.translation().xz()))
+            .map(|(e, _, gt, ..)| ((e, gt.translation()), gt.translation().xz()))
             .collect::<Vec<_>>()
     };
-    pick_radio(here, [own(true), own(false), loose()])
+    pick_radio(here, [own(true), own(false), loose()]).map(|(t, _)| t)
 }
 
 /// The nearest of the first of `tiers` with any in it (its own remains,
