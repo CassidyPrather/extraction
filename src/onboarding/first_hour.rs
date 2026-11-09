@@ -3668,7 +3668,35 @@ fn walk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
                 (s.xf, s.half)
             }),
     );
+    boxes.extend(
+        world
+            .buildings
+            .iter()
+            .flat_map(|(b, xf)| part_boxes(&b.prefab, xf)),
+    );
     boxes
+}
+
+/// What of a prefab with a way through it can't be walked through, part by
+/// part (one box over all of it would shut the way). A quarantine gate's
+/// concrete block and post, each side of the road: the newcomer walked from
+/// the guard booth for the road, into the block, and stood there a minute
+/// at the 0.6 m between it and the booth.
+fn part_boxes(prefab: &str, xf: &Transform) -> Vec<(Transform, Vec2)> {
+    match prefab {
+        // (`buildings::quarantine_gate`: a 1.4 m block at 5.2, a post at
+        // 4.3, either side.)
+        "quarantine_gate" => [-1.0f32, 1.0]
+            .map(|side| {
+                let at = xf.transform_point(Vec3::new(side * 5.04, 0.0, 0.0));
+                (
+                    Transform::from_translation(at).with_rotation(xf.rotation),
+                    Vec2::new(0.86, 0.7),
+                )
+            })
+            .to_vec(),
+        _ => vec![],
+    }
 }
 
 /// `p`, or, inside one of `boxes` (with a body's clearance), out of it to
@@ -6855,6 +6883,38 @@ mod indoor_tests {
                 at = p;
             }
         }
+        // By the guard booth, for the road through the south gate: round
+        // the gate's block, not into it (save18's wanderer stood a minute
+        // against it at (30, 165)).
+        let mut gate = boxes.clone();
+        let mut q = w.query::<(&crate::world::buildings::Building, &Transform)>();
+        let parts: Vec<_> = q
+            .iter(w)
+            .flat_map(|(b, xf)| super::part_boxes(&b.prefab, xf))
+            .collect();
+        assert!(parts.len() >= 2, "Marrow's south gate has its blocks");
+        gate.extend(parts.iter().copied());
+        let zone = w.resource::<crate::world::Zone>();
+        let (from, to) = (Vec2::new(30.0, 165.0), Vec2::new(28.0, 153.8));
+        let mut at = from;
+        for p in round_boxes(&gate, from, to) {
+            for (xf, half) in &parts {
+                let inv = xf.compute_affine().inverse();
+                let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                assert!(
+                    segment_hits_box(a, b, *half).is_none(),
+                    "{from} -> {to}: {at} -> {p} goes into the gate's block"
+                );
+            }
+            at = p;
+        }
+        // And the road between the blocks is still a way through.
+        assert_eq!(
+            round_boxes(&parts, Vec2::new(22.0, 170.0), Vec2::new(22.0, 157.0)),
+            vec![Vec2::new(22.0, 157.0)],
+            "the road through the gate is open"
+        );
         let bank = steep_run(zone, Vec2::new(-38.1, -41.7), Vec2::new(-39.97, -45.04));
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
