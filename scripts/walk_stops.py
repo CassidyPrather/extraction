@@ -4,7 +4,7 @@ walk review (docs/craft/WALK_REVIEW.md) along its route.
 
 The route is `map_openness::probe_walk`'s: the drop to the career's first
 job, then on to the nearest rendezvous. A stop every 40 m, and at every
-fork (two roads meeting by the route), door (within 12 m), crest (a high
+fork (two roads meeting by the route), door (within 12 m; its side view from 6 m out in front of it), crest (a high
 point 1.5 m over the ground 30 m either side) and the job and the
 rendezvous; stops closer than 12 m merge, the more particular kept. Each
 gets two views at eye height: along the route, and to the side, at the
@@ -32,6 +32,8 @@ total = acc
 def at(s):
     k = min(range(len(arc)), key=lambda i: abs(arc[i] - s))
     return k
+# How far out in front of a door its side view stands (m).
+DOOR_BACK = 6.0
 def yaw_to(a, b):
     return math.degrees(math.atan2(b[0] - a[0], -(b[1] - a[1]))) % 360
 stops = []
@@ -92,10 +94,15 @@ for n, st in enumerate(merged, 1):
     else:
         ahead = pts[at(min(total, st["s"] + 15))]
         fwd = yaw_to(p, ahead) if math.dist(ahead[:2], p[:2]) > 1 else 0.0
-    side, why = None, ""
+    side, why, eye = None, "", p
     if st["kind"] == "door":
+        # A door is framed from 6 m out in front of it, looking back at it,
+        # as you come up to it: stood where the way passes, the camera had
+        # the wall edge-on or the door filling the frame (Marrow's barn).
         door = min(d["doors"], key=lambda dd: math.dist(dd["face"], p[:2]))
-        side, why = yaw_to(p, door["face"]), "the " + door["prefab"] + "'s door"
+        f, o = door["face"], door["out"]
+        eye = (f[0] + o[0] * DOOR_BACK, f[1] + o[1] * DOOR_BACK)
+        side, why = yaw_to(eye, f), "the " + door["prefab"] + "'s door"
     else:
         cands = []
         for nm, q in notable:
@@ -110,7 +117,7 @@ for n, st in enumerate(merged, 1):
             side, why = (fwd + 90) % 360, "right"
     name = f"s{n:02d}"
     lines.append(f"{name}_ahead {p[0]:.1f},0,{p[1]:.1f},{fwd:.1f},-3")
-    lines.append(f"{name}_side {p[0]:.1f},0,{p[1]:.1f},{side:.1f},-3")
+    lines.append(f"{name}_side {eye[0]:.1f},0,{eye[1]:.1f},{side:.1f},-3")
     out.append({"n": n, "name": name, "s": round(st["s"]), "kind": st["kind"], "note": st["note"], "at": [round(p[0], 1), round(p[1], 1)], "h": round(p[2], 1), "fwd": round(fwd), "side": round(side), "side_what": why})
 open(sys.argv[2], "w").write(f"# walk review: {d['map']} {d['job']} then {d['rv']}; name x,y,z,yaw,pitch.\n" + "\n".join(lines) + "\n")
 json.dump(out, open(sys.argv[3], "w"), indent=1)

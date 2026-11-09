@@ -131,6 +131,9 @@ The coming-home walks live in `docs/craft/walks/home/`.
   at the spoil heap beyond it. Both places read from 20 m out. The stop
   picker now frames every arrival from 20 m out, looking at the point;
   check a weak arrival there before changing the world.
+- A door stop's side view stands 6 m out in front of the door, looking
+  back at it. Taken from where the way passes, it had the wall edge-on or
+  the door filling the frame (Marrow's barn).
 - A muddy arrival is often fixed by moving the point, not the scenery: the
   place's best frame tends to sit 10 to 20 m short of where its marker was
   dropped. Look for it in the stops before the arrival.
