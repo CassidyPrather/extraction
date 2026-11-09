@@ -1228,7 +1228,8 @@ pub(crate) fn walk(
             .and_then(|p| targets.get(p).ok())
             .map(|g| g.translation() - pos);
         // The one it can see, else where its brain says to look, else
-        // where it's going.
+        // where it's going; `look_away` puts where its brain says first
+        // (its back to the one it can see).
         let look = intent.look.map(|l| l - pos);
         let face = if intent.look_away && look.is_some() {
             look
