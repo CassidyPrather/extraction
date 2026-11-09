@@ -15,6 +15,7 @@ pub mod far_rest;
 pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
+pub mod gate_lamp;
 pub mod gpu_lost;
 pub mod grade;
 pub mod gun_rest;
@@ -130,6 +131,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(landmarks::LandmarkLampsPlugin)
         .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(way_lamps::WayLampsPlugin)
+        .add_plugins(gate_lamp::GateLampPlugin)
         .add_plugins(reflectors::ReflectorsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
