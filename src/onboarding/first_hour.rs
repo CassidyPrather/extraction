@@ -2900,16 +2900,31 @@ pub(super) fn direct_raid(
                 })
                 .map(|(e, ..)| e)
                 .collect();
+            // And with no radio on it, the crate's: the driver's spares go
+            // there now, not on the ledge. (Woken in the truck after a fall,
+            // it stepped out with nothing, and the raid saved out there
+            // with no radio to call the truck with: the careers wedged.)
+            let mut ledge = ledge;
+            if carried(&world, &view, player, "radio").is_empty()
+                && let Some(e) = view
+                    .stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter().copied())
+                    .find(|e| world.id(*e) == Some("radio"))
+            {
+                ledge.push(e);
+            }
             if view.hatch.busy() && state.tries < 30 {
                 tasks.push(Task::Wait(1.0));
                 state.tries += 1;
             } else if let Some(&e) = ledge.first().filter(|_| state.tries < 40) {
                 let id = world.id(e).unwrap_or("?").to_owned();
-                state.note(
-                    now,
-                    Kind::Learned,
-                    format!("{id} off the ledge, from the driver"),
-                );
+                let from = if view.stash.iter().any(|b| b.contents.contains(&e)) {
+                    "out of the crate"
+                } else {
+                    "off the ledge, from the driver"
+                };
+                state.note(now, Kind::Learned, format!("{id} {from}"));
                 tasks.extend([
                     Task::Grab {
                         item: e,
