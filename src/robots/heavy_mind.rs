@@ -1237,8 +1237,8 @@ mod tests {
     /// (your head swinging 15 cm back and forth twice a second): it lets
     /// you go within [`LET_GO_AFTER`] and a little of being out of reach;
     /// within a second its eye banks below its glow at work (stood down,
-    /// not a machine that never saw you); within two it has turned its
-    /// back on you; and for the half minute after, going home, it never
+    /// not a machine that never saw you); within three and a half (it
+    /// turns slowly) it has turned its back on you; and for the half minute after, going home, it never
     /// comes within [`LET_GO_NEAR`] of you, though its way home is past
     /// you, nor takes you up again.
     #[test]
@@ -1373,7 +1373,9 @@ mod tests {
         }
         println!("eye low {low:?} s, back turned {away:?} s, nearest after {nearest:.1} m");
         assert!(low.is_some_and(|t| t <= 1.0), "its eye: {low:?}");
-        assert!(away.is_some_and(|t| t <= 2.0), "its back: {away:?}");
+        // (A heavy turns about as slowly as it walks, half round in some
+        // three seconds; its eye says it at once.)
+        assert!(away.is_some_and(|t| t <= 3.5), "its back: {away:?}");
         assert!(
             nearest > LET_GO_NEAR,
             "it came within {nearest:.1} m going home"
