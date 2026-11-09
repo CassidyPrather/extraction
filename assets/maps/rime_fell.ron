@@ -244,7 +244,8 @@
         // into hot ground with nothing of its own lit to tell it after dark
         // (map_gradient's night rule: within 25 m of the approach, ahead).
         (prefab: "machine_marker", at: (213.4, 71.4), rot: 0.0),  // into the tip, the Tip road route and home from the Valley station
-        (prefab: "machine_marker", at: (-146.0, -46.0), rot: 0.0),  // onto the upper slopes, home from the Roadmen's hut, the barracks and the galleries
+        (prefab: "machine_marker", at: (-146.0, -46.0), rot: 0.0),  // onto the upper slopes, home from the Roadmen's hut and the galleries
+        (prefab: "machine_marker", at: (-150.4, -54.4), rot: 0.0),  // onto the upper slopes, home from the barracks: 10 m short of its line at (-139, -57)
         // The Gate's ring: the machines' stakes 52-68 m out, one within 25 m
         // of every walkable spot on the 60 m circle where carrying a valley
         // key calls a heavy (Heavy's gate_line_is_staked).
