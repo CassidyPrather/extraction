@@ -66,6 +66,15 @@ pub fn tall_parts(prefab: &str) -> Vec<[f32; 3]> {
         // The stack's bleeders at the furnace (BF_SHIFT) and the stoves'
         // chimney (BF_CHIMNEY).
         "blast_furnace" => vec![[-5.7, -10.6, 33.0], [12.8, 0.9, h]],
+        // A gas holder is seen by its frame: the tops of its eight columns
+        // round a 6.35 m ring at 13.6 m (buildings.rs `gas_holder`), its
+        // middle (the tank's crown, 9.5 m) under the sky between them.
+        "gas_holder" => (0..8)
+            .map(|k| {
+                let a = (22.5 + 45.0 * k as f32).to_radians();
+                [6.35 * a.sin(), -6.35 * a.cos(), 13.6]
+            })
+            .collect(),
         _ => vec![[0.0, 0.0, h]],
     }
 }
@@ -554,7 +563,8 @@ pub const MORSE: &[Character] = &[
     ch("Mo(A) 8s", 8.0, &[(0.0, 0.5), (1.0, 2.5)]),
     ch("Mo(U) 10s", 10.0, &[(0.0, 0.5), (1.0, 1.5), (2.0, 3.5)]),
 ];
-/// As long lit as dark: the headframes', the gantry's, the funicular's.
+/// As long lit as dark: the headframes', the gantry's, the funicular's,
+/// the gas holder's.
 pub const ISOPHASE: &[Character] = &[
     ch("Iso 4s", 4.0, &[(0.0, 2.0)]),
     ch("Iso 8s", 8.0, &[(0.0, 4.0)]),
@@ -581,7 +591,7 @@ pub fn family(kind: &str) -> &'static [Character] {
         "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" | "factory_hall" => {
             MORSE
         }
-        "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
+        "headframe" | "sorting_gantry" | "funicular_upper" | "gas_holder" => ISOPHASE,
         "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASHES,
         _ => CHIMNEYS,
     }
@@ -803,6 +813,7 @@ mod tests {
             "headframe",
             "sorting_gantry",
             "funicular_upper",
+            "gas_holder",
             "dam",
             "blast_furnace",
             "ropeway_pylon",

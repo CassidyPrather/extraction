@@ -1655,7 +1655,7 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 55] = [
+pub const PREFABS: [&str; 56] = [
     "house_plank",
     "house_plank_b",
     "house_plank_c",
@@ -1685,6 +1685,7 @@ pub const PREFABS: [&str; 55] = [
     "anomaly_core",
     "factory_hall",
     "chimney",
+    "gas_holder",
     "target",
     "water_tower",
     "headframe",
@@ -1836,6 +1837,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
         }
         "chimney" => chimney(&mut b),
         "water_tower" => water_tower(&mut b),
+        "gas_holder" => gas_holder(&mut b),
         "headframe" => headframe(&mut b),
         "signal_box" => signal_box(&mut b),
         "steeple" => steeple(&mut b),
@@ -3704,6 +3706,52 @@ fn column(b: &mut Builder, shape: Shape, y0: f32, mat: Mat) {
         true,
     );
 }
+
+/// A works gas holder (Cinder's Ash Row, `art/props/gasworks.py`): a
+/// tank on a concrete plinth inside a guide-frame of eight columns,
+/// 13.6 m to their tops, 13.8 m across the plinth. Its colliders are the
+/// plinth, the tank and the columns (the bracing is open to the sky and
+/// to a thrown thing); its model, near, middle and far, fills them.
+fn gas_holder(b: &mut Builder) {
+    let from = b.geo.pieces.len();
+    b.piece(
+        Shape::Cylinder(6.9, 0.45),
+        Transform::from_xyz(0.0, 0.025, 0.0),
+        Mat::Concrete,
+        true,
+    );
+    b.piece(
+        Shape::Cylinder(5.4, 9.25),
+        Transform::from_xyz(0.0, 0.25 + 9.25 * 0.5, 0.0),
+        Mat::RustyMetal,
+        true,
+    );
+    for k in 0..GAS_HOLDER_COLUMNS {
+        let a = (22.5 + 45.0 * k as f32).to_radians();
+        b.piece(
+            Shape::Box(Vec3::new(0.4, GAS_HOLDER_TOP, 0.4)),
+            Transform::from_xyz(
+                GAS_HOLDER_RING * a.sin(),
+                GAS_HOLDER_TOP * 0.5,
+                -GAS_HOLDER_RING * a.cos(),
+            ),
+            Mat::RustyMetal,
+            true,
+        );
+    }
+    b.dress_landmark(
+        from,
+        "gas_holder",
+        Transform::IDENTITY,
+        ["gas_holder_lod1", "gas_holder_lod2"],
+    );
+}
+
+/// The gas holder's guide frame: how many columns, their ring's radius,
+/// and their tops (m) (`art/props/gasworks.py`'s N, RING, TOP).
+const GAS_HOLDER_COLUMNS: usize = 8;
+const GAS_HOLDER_RING: f32 = 6.35;
+const GAS_HOLDER_TOP: f32 = 13.6;
 
 /// A brick water tower with a steel tank, 18 m to its finial.
 fn water_tower(b: &mut Builder) {
