@@ -4068,7 +4068,7 @@ fn pick_radio<T: Copy>(here: Vec2, tiers: [Vec<(T, Vec2)>; 3]) -> Option<(T, Vec
 }
 
 /// Walks after a radio off its body in one raid before giving the call up.
-const RADIO_FETCHES: u32 = 3;
+const RADIO_FETCHES: usize = 3;
 
 /// How far off a thing set down at a resume still counts as at its feet (m).
 const FEET_REACH: f32 = 3.0;
