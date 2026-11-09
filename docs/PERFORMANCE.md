@@ -1995,6 +1995,33 @@ were 1800k and 1846k. Run to run the fight moves a gate view by up to
 about 150k triangles. The most draws are at Marrow's fuel exfil and radio
 mast, at most 2017 and 2030. The bar is at most 2160 draws at a fuel exfil.
 
+### Cinder's gate held: a gun's look waits for its model (9 November)
+
+On main (eaff51ca), Cinder Works' s01_ahead swung 1598k to 1785k triangles
+run to run, and its fuel exfil 1506k to 1720k. Everything but guns drew
+the same in every run. In the heavy runs some resting guns were drawn
+whole past 6 m, at 10-23k triangles an eye each, instead of their far
+level. gun_rest's log (`EXTRACTION_GUN_REST_LOG`) showed 1 to 8 guns a run
+"kept whole", a different few each time.
+
+The cause was `weapons::weather::weather_looks`. It makes a gun's weathered
+look once, from the meshes on the gun at the time. A gun whose model loaded
+a frame late had only its extras then (the crown, the chamber marks). Its
+look was made of those, with no material names, and was never made again.
+That gun never weathered, and its far level found none of its materials.
+Now a gun gets no look while its model is loading (`PendingGunModel`).
+Test: `a_gun_still_loading_its_model_waits_for_its_look`, which fails
+without the guard.
+
+**Cinder Works after (6 runs):**
+- s01_ahead: 1598k triangles (89%) in every run;
+- fuel exfil: 1506k (84%) in every run;
+- all 14 guns took their far level in every run.
+
+The other systems that make a look from a model's meshes were checked for
+the same race. Robot wear had a narrower form of it; Robot bodies fixed that
+with `wear::Redress`.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:
