@@ -2019,8 +2019,9 @@ without the guard.
 - all 14 guns took their far level in every run.
 
 The other systems that make a look from a model's meshes were checked for
-the same race. Robot wear had a narrower form of it; Robot bodies fixed that
-with `wear::Redress`.
+the same race. Robot wear had a narrower form of it (a part worn while its
+model was still undressed); Robot bodies' fix is `wear::Redress` (bac81dd3,
+on its way through their gate).
 
 ## What's next (paused 2 November)
 
