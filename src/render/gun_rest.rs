@@ -665,9 +665,13 @@ mod tests {
             .query_filtered::<Entity, With<crate::weapons::Gun>>()
             .iter(w)
             .collect();
-        // (A gun not worth merging is as good as resting.)
+        // (A gun not worth merging is as good as resting. Guns only: loose
+        // magazines rest too, and counted here they'd stand for guns.)
         let resting = w
-            .query_filtered::<(), Or<(With<AtRest>, With<RestDeclined>)>>()
+            .query_filtered::<(), (
+                Or<(With<AtRest>, With<RestDeclined>)>,
+                With<crate::weapons::Gun>,
+            )>()
             .iter(w)
             .count();
         let mut on_player = 0;
@@ -753,12 +757,20 @@ mod tests {
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         settled(&mut app);
         let (guns, resting, on_player, hidden) = census(&mut app);
-        let declined = {
+        let (declined, mags) = {
             let w = app.world_mut();
-            w.query_filtered::<(), With<RestDeclined>>().iter(w).count()
+            let declined = w
+                .query_filtered::<(), (With<RestDeclined>, With<crate::weapons::Gun>)>()
+                .iter(w)
+                .count();
+            let mags = w
+                .query_filtered::<(), (With<AtRest>, With<crate::weapons::Mag>)>()
+                .iter(w)
+                .count();
+            (declined, mags)
         };
         println!(
-            "{guns} guns: {resting} resting ({declined} of them declined), {on_player} on the player, {hidden} hidden"
+            "{guns} guns: {resting} resting ({declined} of them declined), {on_player} on the player, {hidden} hidden; {mags} loose magazines resting"
         );
         assert!(guns > 0);
         assert!(resting > 0, "no gun rests");
