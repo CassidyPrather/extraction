@@ -1086,6 +1086,10 @@ mod tests {
             "the Gate's rising call stops with it: Audio's cue, coming (heavy_mind::GateCount)",
         ),
         (
+            "HeavyStandDown",
+            "a heavy letting you go: its stand-down sigh is Audio's cue, coming (its look is heavy_look's)",
+        ),
+        (
             "GateWake",
             "the Gate's rising call over its count: Audio's cue, coming (heavy_mind::GateCount)",
         ),

@@ -657,6 +657,32 @@ fn pose_limbs(
     }
 }
 
+/// Stood down (it let you go, `heavy_mind`), its eye banks to a low ember
+/// breathing slowly: under its glow at work (a steady 1), and nothing like
+/// a suspicious eye's pulse (0.8 Hz, from 1) or a seeing one's (3 Hz,
+/// brighter): it has given you up, not missed you.
+pub const STOOD_DOWN_EYE: (f32, f32) = (0.12, 0.26);
+pub const STOOD_DOWN_HZ: f32 = 0.25;
+
+/// Its eye's glow (1 at work): stood down, [`stood_down_eye`]; else what
+/// it knows of you (`visuals::eye_mood`).
+pub fn heavy_eye(
+    mind: Option<&super::heavy_mind::HeavyMind>,
+    aware: Option<&super::Awareness>,
+    t: f32,
+) -> f32 {
+    if mind.is_some_and(|m| m.stood_down) {
+        stood_down_eye(t)
+    } else {
+        aware.map_or(1.0, |a| super::visuals::eye_mood(a, t))
+    }
+}
+
+pub fn stood_down_eye(t: f32) -> f32 {
+    let (lo, hi) = STOOD_DOWN_EYE;
+    lo + (hi - lo) * (0.5 + 0.5 * (std::f32::consts::TAU * STOOD_DOWN_HZ * t).sin())
+}
+
 /// The vents and the strips down its back glow cyan cold and run to
 /// orange as it heats (flaring while it stalls); a lost vent goes dark; its eye goes out when it's blinded;
 /// everything goes out when it falls. Its eye says what it knows of you
@@ -669,6 +695,7 @@ fn light_heavies(
         &Lights,
         &Children,
         Option<&super::Awareness>,
+        Option<&super::heavy_mind::HeavyMind>,
     )>,
     parts: Query<(&HeavyPart, &RobotPart)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -677,7 +704,7 @@ fn light_heavies(
     let cold = LinearRgba::rgb(0.2 * 6.0, 0.8 * 6.0, 1.0 * 6.0);
     let hot = LinearRgba::rgb(8.0, 1.4, 0.12);
     let dark = LinearRgba::BLACK;
-    for (e, h, robot, lights, children, aware) in &heavies {
+    for (e, h, robot, lights, children, aware, mind) in &heavies {
         let mut vent_alive = [true; 2];
         let mut eye_alive = true;
         for c in children.iter() {
@@ -724,8 +751,7 @@ fn light_heavies(
                 dark
             } else {
                 let t = time.elapsed_secs() + e.index_u32() as f32 * 0.37;
-                LinearRgba::rgb(9.0, 1.2, 0.6)
-                    * aware.map_or(1.0, |a| super::visuals::eye_mood(a, t))
+                LinearRgba::rgb(9.0, 1.2, 0.6) * heavy_eye(mind, aware, t)
             };
             if m.emissive != want {
                 m.emissive = want;

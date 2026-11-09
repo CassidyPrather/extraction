@@ -45,6 +45,17 @@ pub const LET_GO_RANGE: f32 = 10.0;
 pub const LET_GO_AFTER: f32 = 8.0;
 pub const LET_GO_FOR: f32 = 30.0;
 pub const LET_GO_NEAR: f32 = 6.0;
+/// How far the gap may close from its widest and the count still run (m):
+/// a step back, a sidestep, a headset's bob isn't coming back for it.
+pub const LET_GO_GIVE: f32 = 1.0;
+/// Let go of you, it first backs off this far straight away from you (m),
+/// its back to you, then heads home.
+pub const RETREAT: f32 = 15.0;
+/// Heading home while it's stood down, it holds where it is while you
+/// stand within this (m) and in its way (within [`IN_THE_WAY`] degrees of
+/// its line home): it doesn't walk past you to get there.
+pub const KEEP_CLEAR: f32 = 25.0;
+pub const IN_THE_WAY: f32 = 60.0;
 /// Between blows, s (after the arm's back at rest).
 pub const STRIKE_GAP: f32 = 1.2;
 /// A door: it stands this far out from the doorway (it's wide).
@@ -82,11 +93,19 @@ pub struct HeavyMind {
     /// Seconds before it tears at a wall again.
     pub tear_gap: f32,
     /// Seconds the one it's after has kept out of reach and walked on, and
-    /// the gap last tick.
+    /// the widest the gap has been since that count began.
     pub out_of_reach: f32,
-    pub last_gap: f32,
+    pub best_gap: f32,
     /// Seconds it'll leave someone be after letting them go.
     pub let_go: f32,
+    /// It has let someone go and stood down (until it takes someone up
+    /// again): its eye low, its back turned (`heavy_look`).
+    pub stood_down: bool,
+    /// Where it backs off to first, standing down.
+    pub retreat: Option<Vec3>,
+    /// Where the one it let go was last tick (to tell them coming back
+    /// from its own way home bringing it near).
+    pub was_at: Option<Vec3>,
 }
 
 impl Default for HeavyMind {
@@ -96,10 +115,21 @@ impl Default for HeavyMind {
             strike_gap: 0.0,
             tear_gap: 0.0,
             out_of_reach: 0.0,
-            last_gap: 0.0,
+            best_gap: 0.0,
             let_go: 0.0,
+            stood_down: false,
+            retreat: None,
+            was_at: None,
         }
     }
+}
+
+/// A heavy let someone go: walked away from and kept out of its reach, it
+/// stands down (for its sigh: Audio's cue; its look is `heavy_look`'s).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct HeavyStandDown {
+    pub heavy: Entity,
+    pub at: Vec3,
 }
 
 /// The director called a heavy (for the horn from the Gate, the radio, the
@@ -156,6 +186,7 @@ pub struct HeavyMindPlugin;
 impl Plugin for HeavyMindPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HeavyCalled>()
+            .add_message::<HeavyStandDown>()
             .add_message::<GateWake>()
             .add_message::<GateQuiet>()
             .init_resource::<HeavyCalls>()
@@ -203,6 +234,7 @@ fn heavy_brain(
     mut tears: MessageWriter<HeavyTear>,
     spatial: avian3d::prelude::SpatialQuery,
     mut breaches: MessageWriter<crate::destruction::hooks::Breach>,
+    mut stand_downs: MessageWriter<HeavyStandDown>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -237,15 +269,26 @@ fn heavy_brain(
             }
         }
         mind.let_go = (mind.let_go - dt).max(0.0);
-        // Let go of: it leaves you be unless you come back up close.
-        let near = aware
+        // Let go of: it leaves you be unless you come back up close: you,
+        // not its own way home bringing it by you.
+        let them = aware
             .target
-            .filter(|_| aware.can_see_target)
             .and_then(|p| targets.get(p).ok())
-            .is_some_and(|g| flat(pos, g.translation()) < LET_GO_NEAR);
-        if !matches!(*brain, Brain::Leave { .. }) && (mind.let_go <= 0.0 || near) {
+            .map(|g| g.translation());
+        let came_back = them.filter(|_| aware.can_see_target).is_some_and(|p| {
+            let closer = mind
+                .was_at
+                .is_some_and(|w| flat(pos, p) < flat(pos, w) - 1.0e-4);
+            flat(pos, p) < LET_GO_NEAR && closer
+        });
+        mind.was_at = them;
+        if !matches!(*brain, Brain::Leave { .. }) && (mind.let_go <= 0.0 || came_back) {
             search::react(&mut brain, aware, ENGAGE_AT);
             search::lost_sight(&mut brain, aware, PATIENCE, pos);
+            if matches!(*brain, Brain::Engage) {
+                mind.stood_down = false;
+                mind.retreat = None;
+            }
         }
         let arm_free = arm.alive && arm.state == ArmState::Rest && mind.strike_gap <= 0.0;
         if arm.state != ArmState::Rest {
@@ -310,15 +353,27 @@ fn heavy_brain(
                     (Some(tp), _) => {
                         // Walked away and kept out of reach: it lets you go.
                         let gap = flat(pos, tp);
-                        if gap > LET_GO_RANGE && gap >= mind.last_gap - 0.02 {
+                        if gap > LET_GO_RANGE && gap >= mind.best_gap - LET_GO_GIVE {
                             mind.out_of_reach += dt;
+                            mind.best_gap = mind.best_gap.max(gap);
                         } else {
                             mind.out_of_reach = 0.0;
+                            mind.best_gap = gap;
                         }
-                        mind.last_gap = gap;
                         if mind.out_of_reach >= LET_GO_AFTER {
                             mind.out_of_reach = 0.0;
+                            mind.best_gap = 0.0;
                             mind.let_go = LET_GO_FOR;
+                            mind.stood_down = true;
+                            let away =
+                                Vec3::new(pos.x - tp.x, 0.0, pos.z - tp.z).normalize_or(Vec3::X);
+                            let back = pos + away * RETREAT;
+                            mind.retreat = Some(
+                                nav.0
+                                    .nearest_walkable([back.x, back.z])
+                                    .map_or(back, |p| Vec3::new(p[0], pos.y, p[1])),
+                            );
+                            stand_downs.write(HeavyStandDown { heavy: e, at: pos });
                             search::give_up(&mut brain, &mut job);
                             continue;
                         }
@@ -368,6 +423,35 @@ fn heavy_brain(
                 Some(to)
             }
             Brain::Down => None,
+        };
+        // Stood down: its back to you, off and away first; then home, but
+        // not past you: while you're near and in its way, it holds.
+        let goal = if mind.stood_down && !matches!(*brain, Brain::Engage | Brain::Down) {
+            match mind.retreat {
+                Some(r) if flat(pos, r) > 2.5 => {
+                    intent.pace = 1.0;
+                    intent.look = Some(r);
+                    intent.look_away = true;
+                    Some(r)
+                }
+                _ => {
+                    mind.retreat = None;
+                    let blocked = goal.zip(them).is_some_and(|(home, p)| {
+                        let to_home = Vec2::new(home.x - pos.x, home.z - pos.z);
+                        let to_them = Vec2::new(p.x - pos.x, p.z - pos.z);
+                        to_them.length() < KEEP_CLEAR
+                            && to_home.angle_to(to_them).abs().to_degrees() < IN_THE_WAY
+                    });
+                    if goal.is_some() {
+                        intent.look = goal;
+                        intent.look_away = true;
+                    }
+                    // Waiting for you to be on your way: facing home.
+                    if blocked { None } else { goal }
+                }
+            }
+        } else {
+            goal
         };
         // Someone indoors: the door. Tear it off and reach in; tear at the
         // walls.
@@ -1122,7 +1206,6 @@ mod tests {
     /// spot of it within 25 m of a machine marker standing on it (Map
     /// design's and Fourth valley's rings).
     #[test]
-    #[ignore = "Cinder's hush-arc stake at (122, -150), Map design's, not on main yet"]
     fn gate_line_is_staked() {
         use extraction_core::map::{MapDef, VALLEYS};
         use extraction_core::terrain::Heightmap;
@@ -1147,5 +1230,155 @@ mod tests {
             }
         }
         assert!(short.is_empty(), "{}", short.join("\n"));
+    }
+
+    /// It lets you go, and shows it. Hunted by a heavy sent from a Gate
+    /// that lies past you, you walk away at a walk with a headset's bob
+    /// (your head swinging 15 cm back and forth twice a second): it lets
+    /// you go within [`LET_GO_AFTER`] and a little of being out of reach;
+    /// within a second its eye banks below its glow at work (stood down,
+    /// not a machine that never saw you); within three and a half (it
+    /// turns slowly) it has turned its back on you; and for the half minute after, going home, it never
+    /// comes within [`LET_GO_NEAR`] of you, though its way home is past
+    /// you, nor takes you up again.
+    #[test]
+    fn the_heavy_lets_you_go_and_shows_it() {
+        use crate::player::WALK_SPEED;
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let home = zone.on_ground(40.0, 230.0);
+        // Its Gate, far past where you'll walk to.
+        let gate = zone.on_ground(40.0, 90.0);
+        let mut at = Vec2::new(40.0, 218.0);
+        vr.stand(zone.on_ground(at.x, at.y), 0.0);
+        let heavy = {
+            let mut c = vr.app.world_mut().commands();
+            let e = super::super::heavy::spawn_heavy(
+                &mut c,
+                &zone,
+                &catalog,
+                home,
+                Job {
+                    kind: JobKind::Response,
+                    site: home,
+                    duration: HUNT_TIME,
+                    exit: gate,
+                },
+            );
+            vr.app.world_mut().flush();
+            vr.app
+                .world_mut()
+                .entity_mut(e)
+                .insert(HeavyMind::default());
+            e
+        };
+        let player = vr.player;
+        let now =
+            |vr: &crate::vr_harness::Vr| vr.app.world().resource::<Time<Fixed>>().elapsed_secs();
+        let place = |vr: &mut crate::vr_harness::Vr, p: Vec2| {
+            let g = zone.on_ground(p.x, p.y);
+            vr.app
+                .world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = g;
+        };
+        let brain = |vr: &crate::vr_harness::Vr| vr.app.world().get::<Brain>(heavy).cloned();
+        // Its eye's glow as its lights draw it (1 at work).
+        let eye = |vr: &crate::vr_harness::Vr| {
+            let w = vr.app.world();
+            let t = w.resource::<Time>().elapsed_secs();
+            Some(super::super::heavy_look::heavy_eye(
+                w.get::<HeavyMind>(heavy),
+                w.get::<Awareness>(heavy),
+                t,
+            ))
+        };
+        let facing_away = |vr: &crate::vr_harness::Vr, me: Vec2| {
+            let w = vr.app.world();
+            let wk = w.get::<super::super::walker::Walker>(heavy).unwrap();
+            let pos = w.get::<Transform>(heavy).unwrap().translation;
+            let face = Vec2::new(-wk.yaw.sin(), -wk.yaw.cos());
+            let to_me = (me - Vec2::new(pos.x, pos.z)).normalize_or_zero();
+            face.dot(to_me).clamp(-1.0, 1.0).acos().to_degrees()
+        };
+        let gap = |vr: &crate::vr_harness::Vr, me: Vec2| {
+            let pos = vr
+                .app
+                .world()
+                .get::<Transform>(heavy)
+                .map(|t| t.translation);
+            pos.map(|p| (me - Vec2::new(p.x, p.z)).length())
+        };
+        // It sees you and comes.
+        let t0 = now(&vr);
+        while !matches!(brain(&vr), Some(Brain::Engage)) {
+            vr.step(1);
+            assert!(now(&vr) < t0 + 20.0, "it never came for you");
+        }
+        // You walk away, bobbing; out of its reach at 10 m.
+        let mut out_at = None;
+        let mut let_go_at = None;
+        let mut path = at.y;
+        let start = now(&vr);
+        while let_go_at.is_none() {
+            let t = now(&vr) - start;
+            path -= WALK_SPEED / 90.0;
+            at.y = path + 0.15 * (std::f32::consts::TAU * 2.0 * t).sin();
+            place(&mut vr, at);
+            vr.step(1);
+            if out_at.is_none() && gap(&vr, at).is_some_and(|g| g > LET_GO_RANGE) {
+                out_at = Some(now(&vr));
+            }
+            if vr
+                .app
+                .world()
+                .get::<HeavyMind>(heavy)
+                .is_some_and(|m| m.stood_down)
+            {
+                let_go_at = Some(now(&vr));
+            }
+            assert!(t < 40.0, "it never let you go, walking off with a bob");
+        }
+        let took = let_go_at.unwrap() - out_at.unwrap();
+        println!("let go {took:.1} s after you were out of its reach");
+        assert!(
+            took <= LET_GO_AFTER + 2.0,
+            "it let go {took:.1} s after you were out of reach"
+        );
+        // You stop where you are and watch it. Within 1 s its eye is low;
+        // within 2 s its back is to you.
+        let let_go = let_go_at.unwrap();
+        let (mut low, mut away) = (None, None);
+        let mut nearest = f32::MAX;
+        while now(&vr) < let_go + 30.0 {
+            vr.step(1);
+            let t = now(&vr) - let_go;
+            if low.is_none() && eye(&vr).is_some_and(|e| e < 0.5) {
+                low = Some(t);
+            }
+            if away.is_none() && facing_away(&vr, at) > 120.0 {
+                away = Some(t);
+            }
+            if let Some(g) = gap(&vr, at) {
+                nearest = nearest.min(g);
+            } else {
+                break;
+            }
+            assert!(
+                !matches!(brain(&vr), Some(Brain::Engage)),
+                "it took you up again {t:.1} s after letting you go"
+            );
+        }
+        println!("eye low {low:?} s, back turned {away:?} s, nearest after {nearest:.1} m");
+        assert!(low.is_some_and(|t| t <= 1.0), "its eye: {low:?}");
+        // (A heavy turns about as slowly as it walks, half round in some
+        // three seconds; its eye says it at once.)
+        assert!(away.is_some_and(|t| t <= 3.5), "its back: {away:?}");
+        assert!(
+            nearest > LET_GO_NEAR,
+            "it came within {nearest:.1} m going home"
+        );
     }
 }
