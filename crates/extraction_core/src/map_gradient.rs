@@ -669,3 +669,68 @@ mod shift_probe {
         }
     }
 }
+
+#[cfg(test)]
+mod night {
+    use super::*;
+
+    /// Every way from quiet ground into hot is told by its place after dark
+    /// as well as by day (`crossings_at_night`): a light of its own (a
+    /// sentry's searchlight, a glowing anomaly, a lit machine stake), a
+    /// lamp beside an unlit tell, or the place's own red lamp within
+    /// [`OWN_LAMP_READ`]. Without it a way moved a few metres leaves a
+    /// crossing dark and nothing says so. Known gaps are named here till
+    /// they're closed (valley, the place, near, part of the way's name,
+    /// whose), and this fails once one is: take it off.
+    #[test]
+    fn every_quiet_to_hot_crossing_is_told_at_night() {
+        const GAPS: &[(&str, &str, P2, &str, &str)] = &[];
+        let found: Vec<(Vec<String>, Vec<String>)> = std::thread::scope(|sc| {
+            let jobs: Vec<_> = crate::map::VALLEYS
+                .iter()
+                .map(|(id, text)| {
+                    sc.spawn(move || {
+                        let map = MapDef::from_ron(text).unwrap();
+                        let hm = Heightmap::build(&map);
+                        let comfy =
+                            crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+                        let r = crate::map_lint::lint(&map, &hm);
+                        let (mut untold, mut closed) = (Vec::new(), Vec::new());
+                        for c in crossings_at_night(&map, &hm, &comfy, &r.routes) {
+                            let told = c.signals.iter().any(|s| s.0 != "red lamp over it");
+                            let gap = GAPS.iter().find(|g| {
+                                g.0 == *id
+                                    && g.1 == c.into.0
+                                    && c.way.contains(g.3)
+                                    && dist(g.2, c.at) < 25.0
+                            });
+                            match (told, gap) {
+                                (false, None) => untold.push(format!(
+                                    "{id}: {} -> {} at ({:.0}, {:.0}) on {}",
+                                    c.from.0, c.into.0, c.at[0], c.at[1], c.way
+                                )),
+                                (true, Some(g)) => {
+                                    closed.push(format!("{id} {} on {} ({})", g.1, g.3, g.4))
+                                }
+                                _ => {}
+                            }
+                        }
+                        (untold, closed)
+                    })
+                })
+                .collect();
+            jobs.into_iter().map(|j| j.join().unwrap()).collect()
+        });
+        let untold: Vec<_> = found.iter().flat_map(|f| f.0.clone()).collect();
+        let mut closed: Vec<_> = found.iter().flat_map(|f| f.1.clone()).collect();
+        closed.dedup();
+        assert!(
+            untold.is_empty(),
+            "crossings nothing tells of after dark: {untold:#?}"
+        );
+        assert!(
+            closed.is_empty(),
+            "told after dark now, take it off GAPS: {closed:?}"
+        );
+    }
+}
