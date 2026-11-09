@@ -120,6 +120,7 @@ pub const LAMP_SEATS: &[(&str, [f32; 3])] = &[
     ("survey_tower", [0.00, 0.00, 16.13]),
     ("radio_mast", [0.00, 0.00, 45.04]),
     ("water_tower", [0.00, 0.00, 18.38]),
+    ("gas_holder", [2.43, -5.87, 14.20]),
     ("robot_gate", [-8.00, -1.30, 14.46]),
     ("ropeway_station", [-1.30, 6.30, 26.20]),
     ("ropeway_pylon", [0.00, 0.00, 21.90]),
