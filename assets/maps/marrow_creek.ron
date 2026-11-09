@@ -379,6 +379,15 @@
         // farm (its door to the track, so you see in as you come up), and
         // one by the road north to the Village.
         (prefab: "shed", at: (68.0, 118.5), rot: 290.0, tag: "field_shed"),
+        // Marker posts down the farm track's field side, every 12 m: the
+        // track fades into the grass in the drizzle, and the posts carry
+        // the eye from the truck to the farm (walk review, s01).
+        (prefab: "marker_post", at: (31.1, 138.4), rot: 0.0),
+        (prefab: "marker_post", at: (40.7, 131.6), rot: 0.0),
+        (prefab: "marker_post", at: (50.1, 124.1), rot: 0.0),
+        (prefab: "marker_post", at: (57.4, 115.7), rot: 0.0),
+        (prefab: "marker_post", at: (64.6, 106.1), rot: 0.0),
+        (prefab: "marker_post", at: (73.3, 97.1), rot: 0.0),
         // The ford-keeper's hut on the ford track, south of the creek: a
         // stop on the long walk from the Old farm to the Hollow (map_openness
         // empty walks), a roof before the Hollow's guns.

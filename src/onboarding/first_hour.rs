@@ -647,6 +647,8 @@ pub(super) struct Newcomer {
     heavy_since: f32,
     /// Took what the driver put on the ledge, woken in the truck.
     took_ledge: bool,
+    /// The radios it went for off its body (`radio_to_fetch`), once a go.
+    radios_tried: Vec<Entity>,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
@@ -1944,19 +1946,31 @@ pub(super) fn direct_raid(
             format!("half an hour gone, still at {leg:?}"),
         );
         state.leg = Leg::Done;
+        // And stops: it walked on with its errand, fell out there, woke in
+        // the truck and walked straight out of it again with nothing (the
+        // raid saved out there, no radio: Progression's careers wedged).
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
     }
     // Woken from the last one's fall (a career resumed while down): not
     // this raid's death; wait for the truck.
     if matches!(raid.phase, Phase::Down { .. }) && state.leg == Leg::Camp {
         return;
     }
-    if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
-        state.note(now, Kind::Killed, "went down");
-        state.leg = Leg::Done;
-        // That's this first hour over: nothing left of the walk.
-        bot.tasks.clear();
-        bot.tasks.push_back(Task::Wait(IDLE));
-        bot.restart();
+    if matches!(raid.phase, Phase::Down { .. }) {
+        if state.leg != Leg::Done {
+            state.note(now, Kind::Killed, "went down");
+            state.leg = Leg::Done;
+        }
+        // That's this first hour over: nothing left of the walk (down
+        // after its half hour, already Done, it kept the walk it had, and
+        // woke in the truck to walk out of it).
+        if !matches!(bot.tasks.front(), Some(Task::Wait(w)) if *w == IDLE) || bot.tasks.len() > 1 {
+            bot.tasks.clear();
+            bot.tasks.push_back(Task::Wait(IDLE));
+            bot.restart();
+        }
     }
 
     // Held out of a walker's line: still out of it? (It comes round to
@@ -2723,8 +2737,14 @@ pub(super) fn direct_raid(
                     // what was in the hands (`persist::apply_restore`).
                     // (Looked for only on the body, the careers wedged: "no
                     // radio", done, every run after it the same.)
-                    (None, None) => match radio_at_feet(&world, here) {
+                    (None, None) => match radio_at_feet(&world, here)
+                        .filter(|(e, _)| tries_at(&state.radios_tried, *e) < RADIO_TRIES)
+                        .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
+                    {
                         Some((e, at)) => {
+                            // (Counted: one out of reach overhead was picked
+                            // up again every 3 s till a machine came.)
+                            state.radios_tried.push(e);
                             state.note(now, Kind::Learned, "the radio at its feet, picked up");
                             tasks.extend([
                                 Task::Stow(Side::Left),
@@ -2738,10 +2758,39 @@ pub(super) fn direct_raid(
                                 },
                             ]);
                         }
-                        None => {
-                            state.note(now, Kind::Confused, "no radio to call the truck with");
-                            state.leg = Leg::Done;
-                        }
+                        // ...or where one lies: in remains (its own first),
+                        // or loose. The radio is the only way to call the
+                        // truck, so a newcomer with none goes for one
+                        // (resumed with its radio in remains 130 m off, the
+                        // careers wedged: "no radio", done, every run after).
+                        None => match radio_to_fetch(&world, player, here, &state.radios_tried)
+                            .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
+                        {
+                            Some((e, at)) => {
+                                state.radios_tried.push(e);
+                                state.note(
+                                    now,
+                                    Kind::Learned,
+                                    format!(
+                                        "no radio on it: went for the one {:.0} m off",
+                                        at.xz().distance(here)
+                                    ),
+                                );
+                                // By the way in where it lies indoors (walked
+                                // at straight, it stood 12 m off, at the
+                                // wall between, till the grab timed out).
+                                tasks.push(Task::Stow(Side::Left));
+                                tasks.extend(way_to(&world, &view, &plans, here, at));
+                                tasks.push(Task::Grab {
+                                    item: e,
+                                    side: Side::Left,
+                                });
+                            }
+                            None => {
+                                state.note(now, Kind::Confused, "no radio to call the truck with");
+                                state.leg = Leg::Done;
+                            }
+                        },
                     },
                 }
             }
@@ -2872,16 +2921,31 @@ pub(super) fn direct_raid(
                 })
                 .map(|(e, ..)| e)
                 .collect();
+            // And with no radio on it, the crate's: the driver's spares go
+            // there now, not on the ledge. (Woken in the truck after a fall,
+            // it stepped out with nothing, and the raid saved out there
+            // with no radio to call the truck with: the careers wedged.)
+            let mut ledge = ledge;
+            if carried(&world, &view, player, "radio").is_empty()
+                && let Some(e) = view
+                    .stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter().copied())
+                    .find(|e| world.id(*e) == Some("radio"))
+            {
+                ledge.push(e);
+            }
             if view.hatch.busy() && state.tries < 30 {
                 tasks.push(Task::Wait(1.0));
                 state.tries += 1;
             } else if let Some(&e) = ledge.first().filter(|_| state.tries < 40) {
                 let id = world.id(e).unwrap_or("?").to_owned();
-                state.note(
-                    now,
-                    Kind::Learned,
-                    format!("{id} off the ledge, from the driver"),
-                );
+                let from = if view.stash.iter().any(|b| b.contents.contains(&e)) {
+                    "out of the crate"
+                } else {
+                    "off the ledge, from the driver"
+                };
+                state.note(now, Kind::Learned, format!("{id} {from}"));
                 tasks.extend([
                     Task::Grab {
                         item: e,
@@ -3965,6 +4029,70 @@ fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
         .map(|(e, _, gt, ..)| (e, gt.translation().xz()))
         .filter(|(_, at)| at.distance(here) < FEET_REACH)
         .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+}
+
+/// A radio not on `player` to go and get: the nearest in its own remains,
+/// else in anyone's, else lying loose; not one gone for `RADIO_TRIES`
+/// times already (`tried`) and not got. Where it is, to go to.
+fn radio_to_fetch(
+    world: &World2,
+    player: Entity,
+    here: Vec2,
+    tried: &[Entity],
+) -> Option<(Entity, Vec3)> {
+    let is_radio = |e: Entity| {
+        tries_at(tried, e) < RADIO_TRIES
+            && world
+                .items
+                .get(e)
+                .is_ok_and(|(_, it, ..)| world.catalog.get(it.kind()).id == "radio")
+    };
+    let own = |mine: bool| {
+        world
+            .remains_bags
+            .iter()
+            .filter(|(_, _, r)| (r.owner == player) == mine)
+            .flat_map(|(gt, bag, _)| {
+                let at = gt.translation();
+                bag.contents
+                    .iter()
+                    .copied()
+                    .filter(|e| is_radio(*e))
+                    .map(move |e| ((e, at), at.xz()))
+            })
+            .collect::<Vec<_>>()
+    };
+    let loose = || {
+        world
+            .items
+            .iter()
+            .filter(|(e, _, _, held, sock, bag)| {
+                held.is_none() && sock.is_none() && bag.is_none() && is_radio(*e)
+            })
+            .map(|(e, _, gt, ..)| ((e, gt.translation()), gt.translation().xz()))
+            .collect::<Vec<_>>()
+    };
+    pick_radio(here, [own(true), own(false), loose()]).map(|(t, _)| t)
+}
+
+/// The nearest of the first of `tiers` with any in it (its own remains,
+/// anyone's, loose): a radio of its own 300 m off before a stranger's 30 m
+/// off, as a person goes back to where they fell for their kit.
+fn pick_radio<T: Copy>(here: Vec2, tiers: [Vec<(T, Vec2)>; 3]) -> Option<(T, Vec2)> {
+    tiers.into_iter().find_map(|c| {
+        c.into_iter()
+            .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+    })
+}
+
+/// Goes after a radio off its body in one raid before giving the call up.
+const RADIO_FETCHES: usize = 4;
+/// Goes after any one radio (a walk that timed out on the way is planned
+/// again from where it stood; one out of reach is left after the second).
+const RADIO_TRIES: usize = 2;
+
+fn tries_at(tried: &[Entity], e: Entity) -> usize {
+    tried.iter().filter(|t| **t == e).count()
 }
 
 /// How far off a thing set down at a resume still counts as at its feet (m).
@@ -5820,6 +5948,36 @@ the Hollow.";
     /// newcomer stood through eight zaps in the shelter's generator room);
     /// its gun out of the pack if that's the loaded one; else out of its
     /// line. And while one's at it, no keeping still and no dressing.
+    #[test]
+    fn with_no_radio_on_it_it_goes_for_the_nearest_it_can_get() {
+        use super::pick_radio;
+        let here = Vec2::ZERO;
+        let at = |x: f32| Vec2::new(x, 0.0);
+        // Its own remains first, however far.
+        assert_eq!(
+            pick_radio(
+                here,
+                [
+                    vec![(1, at(300.0)), (2, at(130.0))],
+                    vec![(3, at(20.0))],
+                    vec![(4, at(5.0))]
+                ]
+            ),
+            Some((2, at(130.0)))
+        );
+        // Then anyone's, then loose.
+        assert_eq!(
+            pick_radio(here, [vec![], vec![(3, at(60.0))], vec![(4, at(5.0))]]),
+            Some((3, at(60.0)))
+        );
+        assert_eq!(
+            pick_radio(here, [vec![], vec![], vec![(4, at(50.0)), (5, at(-9.0))]]),
+            Some((5, at(-9.0)))
+        );
+        // None anywhere: the call is given up (the only time).
+        assert_eq!(pick_radio::<u8>(here, [vec![], vec![], vec![]]), None);
+    }
+
     #[test]
     fn a_crawler_at_it_is_answered_with_what_it_has() {
         assert_eq!(crawler_answer(true, true, false), CrawlerAnswer::Shoot);
