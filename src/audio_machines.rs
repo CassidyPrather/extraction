@@ -74,7 +74,17 @@ impl Plugin for MachineSoundsPlugin {
                     tether_sounds,
                 ),
             )
-            .add_systems(Update, (pressure_sounds, flare_sounds, canister_hiss));
+            .add_systems(
+                Update,
+                (
+                    pressure_sounds,
+                    flare_sounds,
+                    canister_hiss,
+                    gate_call,
+                    gate_edges,
+                    stand_down_sounds,
+                ),
+            );
     }
 }
 
@@ -810,6 +820,137 @@ fn canister_hiss(
     }
 }
 
+/// The Gate counting a key-carrier (`heavy_mind::GateCount`): its call,
+/// from the Gate a little up its mast, rising as the count runs
+/// ([`gate_call_level`]): the pulses quicken and climb, and it grows
+/// louder, so they know they're being counted and how far through. It
+/// stops with the count. Driven from the resource, not the messages, so
+/// several fixed ticks a frame don't matter.
+#[derive(Component)]
+struct GateCallLoop;
+
+/// The call's (dB over its cue, playback speed) `held` through the count:
+/// from its cue's level (heard at the line from the first tick) up
+/// [`GATE_CALL_RISE`] dB, and from 0.85x to 1.5x.
+pub fn gate_call_level(held: f32) -> (f32, f64) {
+    let k = held.clamp(0.0, 1.0);
+    (GATE_CALL_RISE * k, 0.85 + 0.65 * k as f64)
+}
+pub const GATE_CALL_RISE: f32 = 6.0;
+/// How high up the Gate the call comes from (m).
+pub const GATE_CALL_UP: f32 = 6.0;
+
+#[allow(clippy::type_complexity)]
+fn gate_call(
+    mut commands: Commands,
+    count: Option<Res<crate::robots::heavy_mind::GateCount>>,
+    mut loops: Query<
+        (
+            Entity,
+            &mut Transform,
+            &mut PlaybackSettings,
+            &SampleEffects,
+        ),
+        With<GateCallLoop>,
+    >,
+    mut volumes: Query<&mut VolumeNode>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    let count = count.as_deref().copied().unwrap_or_default();
+    if !count.counting {
+        for (l, ..) in &loops {
+            commands.entity(l).despawn();
+        }
+        return;
+    }
+    let (db, sp) = gate_call_level(count.held);
+    let at = count.gate + Vec3::Y * GATE_CALL_UP;
+    let volume = Volume::Decibels(crate::audio_mix::db("gate.call") + db);
+    if let Some((_, mut t, mut settings, effects)) = loops.iter_mut().next() {
+        t.translation = at;
+        if (settings.speed - sp).abs() > 0.01 {
+            settings.speed = sp;
+        }
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = volume;
+        }
+        return;
+    }
+    let Some(sample) = bank.pick("gate/call", &mut rng.0) else {
+        return;
+    };
+    commands.spawn((
+        GateCallLoop,
+        SamplePlayer::new(sample).looping(),
+        PlaybackSettings::default().with_speed(sp),
+        Transform::from_translation(at),
+        sample_effects![
+            VolumeNode {
+                volume,
+                ..default()
+            },
+            crate::audio_mix::spatial("gate.call"),
+            reverb_send("gate.call")
+        ],
+    ));
+}
+
+/// The count's edges: the Gate waking, a relay's clunk under the call's
+/// first pulse (`gate.wake`); stepped back out of, its call winding down
+/// (`gate.release`). Called, nothing here: the horn takes over on the same
+/// tick (`HeavyCalled`).
+fn gate_edges(
+    mut commands: Commands,
+    mut wakes: MessageReader<crate::robots::heavy_mind::GateWake>,
+    mut quiets: MessageReader<crate::robots::heavy_mind::GateQuiet>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    // Several fixed ticks a frame can each write one: one sound a frame.
+    if let Some(w) = wakes.read().last() {
+        let at = w.gate + Vec3::Y * GATE_CALL_UP;
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            at,
+            &[("machines/clank", "gate.wake", 1.4)],
+        );
+    }
+    if let Some(q) = quiets.read().filter(|q| !q.called).last() {
+        let at = q.gate + Vec3::Y * GATE_CALL_UP;
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            at,
+            &[("machines/servo", "gate.release", 0.7)],
+        );
+    }
+}
+
+/// A heavy letting you go (`heavy_mind::HeavyStandDown`): a long venting
+/// sigh at it, pressure let go and settling, falling in pitch and level
+/// (`heavy.sigh`): the one sound that rewards walking away, so unlike any
+/// that means danger. Its raise's hiss rises before a blow; this falls.
+fn stand_down_sounds(
+    mut commands: Commands,
+    mut downs: MessageReader<crate::robots::heavy_mind::HeavyStandDown>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for d in downs.read() {
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            d.at,
+            &[("heavy/sigh", "heavy.sigh", 1.0)],
+        );
+    }
+}
+
 /// A minelayer stopped over a spot, about to lay: its chute charging, a
 /// hiss (`minelayer.hiss`) the length of the stop (`rules::LAY_TIME`)
 /// before the mine drops with a chunk (`mine.laid`). The playtest's
@@ -1081,18 +1222,6 @@ mod tests {
             "a wall breached is heard as it Broke (destruction)",
         ),
         ("CalledOut", "the robots' call is their voice's Calling"),
-        (
-            "GateQuiet",
-            "the Gate's rising call stops with it: Audio's cue, coming (heavy_mind::GateCount)",
-        ),
-        (
-            "HeavyStandDown",
-            "a heavy letting you go: its stand-down sigh is Audio's cue, coming (its look is heavy_look's)",
-        ),
-        (
-            "GateWake",
-            "the Gate's rising call over its count: Audio's cue, coming (heavy_mind::GateCount)",
-        ),
         (
             "ComingBack",
             "a machine coming back is heard by its own Investigating call (MindShift)",
@@ -1443,6 +1572,48 @@ mod tests {
             .iter()
             .find(|c| c.name == "distress.hiss");
         assert_eq!(hiss.map(|c| c.set), Some("distress/hiss"));
+    }
+
+    /// The Gate's call rises through its count, quicker and louder, from
+    /// its cue's level (heard at the line) to GATE_CALL_RISE over it.
+    #[test]
+    fn the_gate_counts_you_rising() {
+        let (db0, sp0) = gate_call_level(0.0);
+        let (db1, sp1) = gate_call_level(1.0);
+        assert_eq!(db0, 0.0);
+        assert_eq!(db1, GATE_CALL_RISE);
+        assert!(sp1 > sp0 && sp0 > 0.5);
+        let mut last = (f32::MIN, f64::MIN);
+        for i in 0..=10 {
+            let l = gate_call_level(i as f32 / 10.0);
+            assert!(l.0 >= last.0 && l.1 > last.1, "{i}");
+            last = l;
+        }
+        assert_eq!(gate_call_level(2.0), gate_call_level(1.0));
+    }
+
+    /// A heavy standing down sighs, a sound of its own: not the Gate's
+    /// horn or call, not its raise's hiss or its vents.
+    #[test]
+    fn a_heavy_standing_down_is_its_own_sound() {
+        let set = |n: &str| {
+            crate::audio_mix::MIX
+                .iter()
+                .find(|c| c.name == n)
+                .map(|c| c.set)
+        };
+        assert_eq!(set("heavy.sigh"), Some("heavy/sigh"));
+        assert_eq!(set("gate.call"), Some("gate/call"));
+        for other in [
+            "heavy.horn",
+            "gate.call",
+            "heavy.hiss",
+            "heavy.raise",
+            "heavy.vent",
+            "heavy.stall",
+        ] {
+            assert_ne!(set("heavy.sigh"), set(other), "{other}");
+        }
     }
 
     /// A grappler's hold is heard while it lasts, straining harder toward

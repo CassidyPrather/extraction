@@ -437,6 +437,13 @@ pub const MIX: &[Cue] = &[
     cue!("heavy.stall", "anomaly/burner_roar", -6.0, 95.0, 20.0, Signal, 20.0),
     cue!("heavy.cell", "physical/switch", 0.0, 60.0, 10.0, Detail),
     cue!("heavy.idle", "machines/hum", -10.0, 70.0, 20.0, Signal, 12.0),
+    // The Gate counting a key-carrier, rising (`audio_machines::gate_call`;
+    // this is its start, it rises GATE_CALL_RISE over it), its edges, and a
+    // heavy letting you go (`stand_down_sounds`).
+    cue!("gate.call", "gate/call", -16.0, 90.0, 60.0, Signal, 30.0),
+    cue!("gate.wake", "machines/clank", -3.5, 85.0, 30.0, Action, 15.0),
+    cue!("gate.release", "machines/servo", -10.0, 75.0, 30.0, Action, 15.0),
+    cue!("heavy.sigh", "heavy/sigh", -24.0, 70.0, 18.0, Signal, 8.0),
     cue!("heavy.horn", "voice/heavy/horn", -8.5, 120.0, 300.0, Signal, 200.0),
     cue!("sentry.chirp", "machines/drone_lock", -30.0, 85.0, 20.0, Signal, 25.0),
     cue!("sentry.turn", "machines/servo", -10.0, 70.0, 15.0, Signal, 10.0),
