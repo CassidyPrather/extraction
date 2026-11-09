@@ -668,6 +668,10 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
         "headframe" => [6.0, 19.6, 15.0],
+        // A works gas holder (src/world/buildings.rs `gas_holder`): its
+        // plinth 13.8 across, its frame's top ring to 13.9 m and the lamp
+        // post on its front-right column to 14.2.
+        "gas_holder" => [13.8, 14.2, 13.8],
         "signal_box" => [8.4, 6.9, 4.2],
         "steeple" => [4.4, 19.0, 4.4],
         // A nave 10 x 14 with its steps at the west door, the bell tower
