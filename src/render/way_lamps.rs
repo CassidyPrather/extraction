@@ -377,7 +377,7 @@ mod marker_tests {
         assert!((lo - MARKER_LOW).abs() < 0.01 && hi > 0.99, "{lo}..{hi}");
         // A step (every `SWELL_EVERY` headset frames) never moves it more
         // than 5%: a swell, no blink.
-        assert!(step * SWELL_EVERY as f32 < 0.05, "{step}");
+        assert!(step * (SWELL_EVERY as f32) < 0.05, "{step}");
     }
 
     #[test]
