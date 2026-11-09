@@ -492,7 +492,48 @@ pub fn seeded_job(kind: &str, here: &str) -> Option<Job> {
             item: "canned_stew".into(),
             n: 2,
         },
+        "shelter" => return shelter_job(&map),
         _ => return None,
+    })
+}
+
+/// The job card's thing in the shelter's room farthest from any way out of
+/// it (the site with a lockdown: Marrow's bunker): down there, the
+/// newcomer has to come up through the site to get home. A regression run
+/// (`--job shelter`), so a career that no longer goes underground can't
+/// hide a walk from below that goes straight at the surface through the
+/// rock (the shelter on Marrow, seed 3 job 2).
+pub fn shelter_job(map: &str) -> Option<Job> {
+    use extraction_core::underground as ug;
+    let def = crate::world::load_map_def(map);
+    let dist = |a: [f32; 2], b: [f32; 2]| Vec2::from(a).distance(Vec2::from(b));
+    ug::placed(&def).into_iter().find_map(|p| {
+        let l = ug::layout(&p.id)?;
+        l.lockdown.as_ref()?;
+        let room = l.rooms.iter().filter(|r| !r.pit).max_by(|a, b| {
+            let out = |r: &ug::Room| {
+                l.portals
+                    .iter()
+                    .map(|q| dist(q.at, r.at))
+                    .fold(f32::MAX, f32::min)
+            };
+            out(a).total_cmp(&out(b))
+        })?;
+        // Named on the card by the place nearest its way in (what the
+        // newcomer reads to go: "the shelter" is no place it can find).
+        let place = def
+            .markers
+            .iter()
+            .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
+            .min_by(|a, b| dist(a.at, p.at).total_cmp(&dist(b.at, p.at)))?
+            .name
+            .clone();
+        Some(Job::Bring {
+            map: map.to_owned(),
+            place,
+            item: "holm_watch".into(),
+            at: p.to_world(room.at),
+        })
     })
 }
 
@@ -776,6 +817,9 @@ pub(super) struct RaidView<'w, 's> {
     robots: Query<'w, 's, crate::robots::subjects::Candidate>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
+    /// Doors held shut on an underground site's power right now (a way out
+    /// planned through one went at it for the rest of the raid).
+    power_locked: Query<'w, 's, (), With<crate::world::underground::PowerLocked>>,
 }
 
 /// The wanderer goes this share of the way to the job (the playtest: in
@@ -898,6 +942,17 @@ pub(super) fn direct_raid(
     if plans.is_empty() && !view.buildings.is_empty() {
         *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
     }
+    // Which of their doors are held shut on power now (as the raider keeps
+    // them, `spot_held`): no way out is planned through one.
+    for plan in plans.iter_mut() {
+        plan.held.clear();
+        plan.held.extend(
+            plan.doors
+                .iter()
+                .map(|d| d.entity)
+                .filter(|d| view.power_locked.contains(*d)),
+        );
+    }
     // Indoors, a walk about to start that some answer cut in (from a
     // shed, sheltered from a drone, the walk to cover went at its wall
     // for half a minute): not one to or by a door of this building (the
@@ -917,11 +972,15 @@ pub(super) fn direct_raid(
             let along = off.dot(out);
             (0.8..3.0).contains(&along) && (off - out * along).length() < 0.8
         };
+        // (Not below, in a site: its way out is the director's, by the
+        // site's plan; taken for a building's here, the walk out of the
+        // shelter was planned again every frame and never walked.)
         if let Some(b) = inside(here)
             && inside(to) != Some(b)
             && !en.doors.iter().any(|d| d.building == b && exit_step(d))
+            && below_in(&world.zone, &plans, root.translation).is_none()
         {
-            let (out, _) = way_out(&world, &view, &plans, here);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if !out.is_empty() {
                 for t in out.into_iter().rev() {
                     bot.tasks.push_front(t);
@@ -1321,11 +1380,22 @@ pub(super) fn direct_raid(
             .iter()
             .find(|(_, g, by)| by.0 == player && g.firearm.live_rounds() > 0)
             .map(|(e, ..)| e);
-        let answer = if armed_now {
+        // (Armed is a round to shoot: with the slide back and no loaded
+        // spare, "shot it" was an Engage that ended at once, and the
+        // newcomer stood where it was through eight zaps.)
+        let rounds = guns()
+            .any(|(g, by, packed)| by == player && !packed && g.firearm.live_rounds() > 0)
+            || spare_loaded(&world, &view, player);
+        // (Stillness is no hiding from a machine zapping it: a wait to keep
+        // still, under way, goes.)
+        bot.tasks
+            .retain(|t| !matches!(t, Task::Wait(w) if *w >= CRAWLER_STILL));
+        let how = crawler_answer(armed_now, rounds, packed.is_some());
+        let answer = if how == CrawlerAnswer::Shoot {
             state.fought_at = now;
             state.note(now, Kind::Learned, "a crawler crackling at it: shot it");
             take_it_on()
-        } else if let Some(gun) = packed {
+        } else if let (CrawlerAnswer::Unpack, Some(gun)) = (how, packed) {
             // Its only gun in the pack (put there with the hands full after
             // a fight): out, and at it. (Backing out instead, the reckless
             // one was zapped down with a loaded gun on its back.)
@@ -1340,7 +1410,7 @@ pub(super) fn direct_raid(
             t
         } else {
             state.note(now, Kind::Learned, "a crawler crackling at it: backed out");
-            let (out, _) = way_out(&world, &view, &plans, here);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if out.is_empty() {
                 walk_away(&world, here, from)
             } else {
@@ -1557,7 +1627,12 @@ pub(super) fn direct_raid(
             }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
-            First::ComingToLook if !p.reckless && !p.hoards => {
+            // (Not with a crawler charging at it: still, the careful
+            // newcomer stood in a shelter's generator room through eight
+            // zaps, told "keep still" by a hunter's first.)
+            First::ComingToLook
+                if !p.reckless && !p.hoards && !crawler_at_it(now, state.crawled_at) =>
+            {
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
@@ -1586,6 +1661,16 @@ pub(super) fn direct_raid(
                     "bleeding, with a heavy in reach: on away first, then the dressing",
                 );
                 walk_off_heavy(&world, here, from)
+            }
+            // Bleeding with a crawler charging at it: out of its line first
+            // (its answer's doing that), the dressing once it's behind.
+            First::Bleeding if crawler_at_it(now, state.crawled_at) => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "bleeding, with a crawler at it: out of its line first, then the dressing",
+                );
+                vec![]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1635,14 +1720,21 @@ pub(super) fn direct_raid(
             }
             First::Anomaly => {
                 // Back the way it came, then on round.
-                let back = state
+                let away = state
                     .goal
                     .as_ref()
-                    .map_or(here, |(_, g)| here - (*g - here).normalize_or_zero() * 4.0);
-                vec![Task::WalkTo {
-                    to: back,
-                    within: 1.0,
-                }]
+                    .map_or(Vec2::ZERO, |(_, g)| -(*g - here).normalize_or_zero());
+                // Indoors, or down a site, by its plan: a step back it can
+                // take (in the shelter's generator room the step back went
+                // into the wall, and stood there the task's 30 s).
+                let at = root.translation + Vec3::Y * 1.0;
+                match plans.iter().find(|pl| pl.contains(at, 0.3)) {
+                    Some(plan) => step_back_in(plan, here, away),
+                    None => vec![Task::WalkTo {
+                        to: here + away * 4.0,
+                        within: 1.0,
+                    }],
+                }
             }
             First::Surge => {
                 state.leg = Leg::Call;
@@ -1712,6 +1804,9 @@ pub(super) fn direct_raid(
                 .robot_at(h)
                 .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
         })
+        // (Nor with a crawler charging at it: bound in its line, the careful
+        // newcomer took the next zap.)
+        && !crawler_at_it(now, state.crawled_at)
     {
         let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
             held.is_none()
@@ -2309,7 +2404,7 @@ pub(super) fn direct_raid(
                         Kind::Confused,
                         format!("wandered off from {name}, and nothing said which way it was"),
                     );
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     let idle = bot.tasks.pop_back();
                     bot.tasks.extend(tasks);
@@ -2448,13 +2543,13 @@ pub(super) fn direct_raid(
                 }
                 Ok(None) => {
                     state.note(now, Kind::Learned, errand_done(&errand, &world));
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
                 Err(why) => {
                     state.note(now, Kind::Stuck, why);
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
@@ -2486,7 +2581,7 @@ pub(super) fn direct_raid(
                     state.tries = 0;
                 } else if let Some((_, g)) = state.goal.clone() {
                     if inside {
-                        tasks.extend(way_out(&world, &view, &plans, here).0);
+                        tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     }
                     tasks.extend(route(&world, &view, here, g));
                 }
@@ -2858,10 +2953,28 @@ pub(super) fn direct_raid(
     // wall, and it stood there half an hour).
     if let (Some(en), Some(Task::WalkTo { to, .. })) = (view.entrances.as_deref(), tasks.first()) {
         let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
-        if let Some(b) = inside(here)
-            && inside(*to) != Some(b)
-        {
-            let (mut out, _) = way_out(&world, &view, &plans, here);
+        // Below ground, in a site, with a walk planned off its floors (to
+        // the truck at the ranger tower, over the shelter it was in): up
+        // and out by the site's way first.
+        let below = below_in(&world.zone, &plans, root.translation)
+            .is_some_and(|pl| !on_its_floors(pl, *to));
+        if below || inside(here).is_some_and(|b| inside(*to) != Some(b)) {
+            let (mut out, end) = way_out_at(&world, &view, &plans, root.translation);
+            if below && !out.is_empty() {
+                // The walk on from where the way out leaves it, not from
+                // below: planned from the shelter, its first leg ran from
+                // the kiosk's door straight back through the kiosk to the
+                // truck over the shelter, and the newcomer went in again.
+                let lead = tasks
+                    .iter()
+                    .take_while(|t| matches!(t, Task::WalkTo { .. }))
+                    .count();
+                if let Some(Task::WalkTo { to: dest, .. }) = lead.checked_sub(1).map(|i| &tasks[i])
+                {
+                    let dest = *dest;
+                    tasks.splice(..lead, walk(&world, end, dest));
+                }
+            }
             out.append(&mut tasks);
             tasks = out;
         }
@@ -3281,6 +3394,38 @@ fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, runni
 /// Not answering a crawler's crackle again sooner than this (s): its zaps
 /// come every 2 s or so, and the answer takes longer.
 const CRAWLER_EVERY: f32 = 3.0;
+/// A crawler that charged at it this lately (s) is still at it: no keeping
+/// still, no dressing in its line.
+const CRAWLER_CLEAR: f32 = 5.0;
+/// A wait this long (s) is one to keep still in, and goes when a crawler
+/// charges.
+const CRAWLER_STILL: f32 = 5.0;
+
+/// A crawler charged at it lately enough to be at it still (`CRAWLER_CLEAR`).
+fn crawler_at_it(now: f32, crawled_at: f32) -> bool {
+    now - crawled_at < CRAWLER_CLEAR
+}
+
+/// What a crawler's charge gets from the newcomer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CrawlerAnswer {
+    /// A gun to hand and a round to fire (in it, or a loaded spare).
+    Shoot,
+    /// Its only loaded gun in the pack: out with it, then at it.
+    Unpack,
+    /// Nothing to shoot: back out the way it came, out of its line.
+    BackOut,
+}
+
+fn crawler_answer(armed: bool, rounds: bool, packed_loaded: bool) -> CrawlerAnswer {
+    if armed && rounds {
+        CrawlerAnswer::Shoot
+    } else if packed_loaded {
+        CrawlerAnswer::Unpack
+    } else {
+        CrawlerAnswer::BackOut
+    }
+}
 
 /// A bleed this fast is worth stopping to dress (hp/s).
 const BLEED_WORTH: f32 = 0.3;
@@ -4458,6 +4603,153 @@ fn name_of(world: &World2, id: &str) -> String {
         .unwrap_or_else(|| id.replace('_', " "))
 }
 
+/// The plan of the underground site the bot stands in at `at` (its feet,
+/// at their real height), if it's in one: the ground over a shelter isn't
+/// in it, so a test by the ground's height (as indoors on the surface)
+/// never finds it.
+fn below_in<'a>(
+    zone: &crate::world::Zone,
+    plans: &'a [crate::sim::indoor::BuildingPlan],
+    at: Vec3,
+) -> Option<&'a crate::sim::indoor::BuildingPlan> {
+    // Below the ground, not on it: the site's plan has its kiosk up top and
+    // the step outside its door too, and stood there, out of the shelter
+    // with the watch, the newcomer was sent back in through the door by its
+    // way out, and out again, for the rest of the raid.
+    if at.y > zone.ground(at.x, at.z) - BELOW_GROUND {
+        return None;
+    }
+    let p = at + Vec3::Y * 1.0;
+    plans
+        .iter()
+        .find(|pl| pl.levels.is_some() && pl.contains(p, 0.3))
+}
+
+/// Feet this far under the ground over them are below it, in a site (m).
+const BELOW_GROUND: f32 = 1.5;
+
+/// Whether `to` (world, on the map) is on one of `plan`'s floors, at any
+/// level: a walk there from inside it stays in it.
+fn on_its_floors(plan: &crate::sim::indoor::BuildingPlan, to: Vec2) -> bool {
+    let l = plan.to_local(Vec3::new(to.x, plan.xf.translation.y, to.y));
+    let Some((i, j)) = plan.grid.cell_of([l.x, l.z]) else {
+        return false;
+    };
+    let k = j * plan.grid.n + i;
+    !plan.outside[k]
+        && plan
+            .levels
+            .as_ref()
+            .is_none_or(|lv| lv.get(k).is_some_and(|y| !y.is_nan()))
+}
+
+/// As [`way_out`], from the bot's feet at their real height: below ground
+/// in a site, up through its rooms and out by its way to the surface
+/// (in the shelter under the ranger tower with the truck waiting overhead,
+/// the walk to it went straight at the truck through the rock, and it
+/// pressed for the bell from under the ground the rest of the raid).
+fn way_out_at(
+    world: &World2,
+    view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    at: Vec3,
+) -> (Vec<Task>, Vec2) {
+    if let Some(plan) = below_in(&world.zone, plans, at)
+        && let Some(out) = out_of(plan, plan.to_local(at + Vec3::Y * 1.0).xz())
+    {
+        return out;
+    }
+    way_out(world, view, plans, at.xz())
+}
+
+/// Through `plan`'s rooms from `from` (its space) to the nearest of its
+/// ways outside: the walk, and where it leaves the bot (world).
+fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Task>, Vec2)> {
+    let (o, path) = plan
+        .doors
+        .iter()
+        .filter_map(|d| d.outside)
+        .filter_map(|o| Some((o, plan.path(from, o)?)))
+        .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)))?;
+    let mut t = Vec::new();
+    // Down a site, in legs short enough to walk inside a task's time (up
+    // the shelter's kiosk stair, 10 m at a climb, the one leg timed out,
+    // and the door at its head was pressed from the foot of it).
+    let deep = plan.levels.is_some();
+    let mut at = plan.world2(from);
+    let mut walk_to = |t: &mut Vec<Task>, to: Vec2| {
+        if deep {
+            let n = (at.distance(to) / DEEP_LEG).ceil().max(1.0) as usize;
+            for k in 1..n {
+                t.push(Task::WalkTo {
+                    to: at.lerp(to, k as f32 / n as f32),
+                    within: 0.6,
+                });
+            }
+        }
+        t.push(Task::WalkTo { to, within: 0.4 });
+        at = to;
+    };
+    for stop in indoor_stops(plan, from, &path) {
+        match stop {
+            Stop::Door(door, before) => {
+                walk_to(&mut t, plan.world2(before));
+                t.push(Task::OpenDoor(door));
+            }
+            Stop::At(w) => walk_to(&mut t, plan.world2(w)),
+        }
+    }
+    if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+        *within = 0.6;
+    }
+    Some((t, plan.world2(o)))
+}
+
+/// A step back from `here` along `away` inside `plan`: 4 m if its floors
+/// go that far that way and a path gets there, else 3, else 2, by the
+/// plan's rooms; none if no step back is to be had (a step back from an
+/// anomaly "checks behind it": in a room's corner, a wall).
+fn step_back_in(plan: &crate::sim::indoor::BuildingPlan, here: Vec2, away: Vec2) -> Vec<Task> {
+    if away == Vec2::ZERO {
+        return vec![];
+    }
+    let from = plan
+        .to_local(Vec3::new(here.x, plan.xf.translation.y, here.y))
+        .xz();
+    [4.0f32, 3.0, 2.0]
+        .into_iter()
+        .map(|d| here + away * d)
+        .filter(|p| on_its_floors(plan, *p))
+        .find_map(|p| {
+            let to = plan
+                .to_local(Vec3::new(p.x, plan.xf.translation.y, p.y))
+                .xz();
+            let path = plan.path(from, to)?;
+            let mut t = Vec::new();
+            for stop in indoor_stops(plan, from, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
+                        within: 0.6,
+                    }),
+                }
+            }
+            Some(t)
+        })
+        .unwrap_or_default()
+}
+
+/// The longest leg of a way out of a site (m): a stair's climb walks at a
+/// quarter of the pace, and a task's time is 30 s.
+const DEEP_LEG: f32 = 4.0;
+
 /// Indoors at `here`: out by the nearest door, and where that leaves it.
 /// Through the rooms by the building's plan, where it has one (straight at
 /// the door from behind the post office's counter, the newcomer pressed
@@ -4472,36 +4764,10 @@ fn way_out(
         return (vec![], here);
     };
     let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
-    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3)) {
-        let from = plan.to_local(at).xz();
-        let way = plan
-            .doors
-            .iter()
-            .filter_map(|d| d.outside)
-            .filter_map(|o| Some((o, plan.path(from, o)?)))
-            .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)));
-        if let Some((o, path)) = way {
-            let mut t = Vec::new();
-            for stop in indoor_stops(plan, from, &path) {
-                match stop {
-                    Stop::Door(door, before) => {
-                        t.push(Task::WalkTo {
-                            to: plan.world2(before),
-                            within: 0.4,
-                        });
-                        t.push(Task::OpenDoor(door));
-                    }
-                    Stop::At(w) => t.push(Task::WalkTo {
-                        to: plan.world2(w),
-                        within: 0.4,
-                    }),
-                }
-            }
-            if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
-                *within = 0.6;
-            }
-            return (t, plan.world2(o));
-        }
+    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3))
+        && let Some(out) = out_of(plan, plan.to_local(at).xz())
+    {
+        return out;
     }
     let Some(b) = en.building_at(at) else {
         return (vec![], here);
@@ -5549,6 +5815,65 @@ the Hollow.";
         assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
     }
 
+    /// A crawler's charge: shot back only with a round to fire (an empty
+    /// gun's "shot it" was an Engage that ended at once, and the careful
+    /// newcomer stood through eight zaps in the shelter's generator room);
+    /// its gun out of the pack if that's the loaded one; else out of its
+    /// line. And while one's at it, no keeping still and no dressing.
+    #[test]
+    fn a_crawler_at_it_is_answered_with_what_it_has() {
+        assert_eq!(crawler_answer(true, true, false), CrawlerAnswer::Shoot);
+        assert_eq!(crawler_answer(true, false, false), CrawlerAnswer::BackOut);
+        assert_eq!(crawler_answer(true, false, true), CrawlerAnswer::Unpack);
+        assert_eq!(crawler_answer(false, false, true), CrawlerAnswer::Unpack);
+        assert_eq!(crawler_answer(false, true, false), CrawlerAnswer::BackOut);
+        assert_eq!(crawler_answer(false, false, false), CrawlerAnswer::BackOut);
+        let now = 100.0;
+        assert!(crawler_at_it(now, now - 1.0));
+        assert!(crawler_at_it(now, now - CRAWLER_CLEAR + 0.1));
+        assert!(!crawler_at_it(now, now - CRAWLER_CLEAR - 0.1));
+        // (Never charged: the newcomer's clock starts it at zero.)
+        assert!(!crawler_at_it(now, 0.0));
+        // A wait to keep still in is one the charge clears.
+        assert!(CRAWLER_STILL <= 5.0);
+    }
+
+    /// The shelter job (`--job shelter`) puts the card's thing down in
+    /// Marrow's bunker, in a room the newcomer has to come up out of: a
+    /// regression run for the walk home from below.
+    #[test]
+    fn the_shelter_job_is_down_the_shelter() {
+        let Some(Job::Bring { map, item, at, .. }) = shelter_job("marrow_creek") else {
+            panic!("no shelter job on Marrow");
+        };
+        assert_eq!(
+            (map.as_str(), item.as_str()),
+            ("marrow_creek", "holm_watch")
+        );
+        let def = crate::world::load_map_def("marrow_creek");
+        let (site, room) = extraction_core::contracts::down_site(&def, at)
+            .unwrap_or_else(|| panic!("{at:?} isn't down a site"));
+        assert!(
+            extraction_core::underground::layout(&site).is_some_and(|l| l.lockdown.is_some()),
+            "{site}: not the shelter"
+        );
+        assert_ne!(room, "lock", "the way in's own room");
+        assert_eq!(
+            seeded_job("shelter", "marrow_creek"),
+            shelter_job("marrow_creek")
+        );
+        // Its place one the newcomer can find on the card (a POI's name).
+        let Some(Job::Bring { place, .. }) = shelter_job("marrow_creek") else {
+            unreachable!()
+        };
+        assert!(
+            def.markers
+                .iter()
+                .any(|m| m.kind == MarkerKind::Poi && m.name == place),
+            "{place}: no such place"
+        );
+    }
+
     /// Through a doorway square on its line, from anywhere round it: every
     /// leg that crosses its line does so on its axis, from a stop in front
     /// to one behind, never by its hinge (the shelter's door 1465: in by
@@ -5953,9 +6278,10 @@ the Hollow.";
 #[cfg(test)]
 mod indoor_tests {
     use super::{
-        STEEP_RUN, Stop, indoor_stops, round_banks, round_boxes, segment_hits_box, shot_warns,
-        solid, steep_run,
+        STEEP_RUN, Stop, below_in, indoor_stops, on_its_floors, out_of, round_banks, round_boxes,
+        segment_hits_box, shot_warns, solid, steep_run, step_back_in,
     };
+    use crate::bot::Task;
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
 
@@ -6041,6 +6367,97 @@ mod indoor_tests {
             "{} of {walks} indoor walks cut through furniture:\n{}",
             cut.len(),
             cut.join("\n")
+        );
+    }
+
+    /// From any room of any underground site, on every map, a walk off
+    /// its floors (to the truck) goes up and out by the site's way first:
+    /// the bot below ground is known to be in it at its feet's height (in
+    /// the shelter under the ranger tower, the walk to the truck went
+    /// straight at it through the rock, and it pressed for the bell from
+    /// under the ground the rest of the raid).
+    #[test]
+    fn from_every_room_below_ground_the_way_out_goes_up() {
+        use extraction_core::underground as ug;
+        let mut bad = Vec::new();
+        let mut rooms = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let w = app.world_mut();
+            let mut st: SystemState<(
+                Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+                Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>,
+            )> = SystemState::new(w);
+            let (b, d) = st.get(w).unwrap();
+            let plans = crate::sim::indoor::plan_buildings(&b, &d);
+            let zone = crate::world::Zone::load(&map);
+            for (_, building, xf) in b.iter() {
+                let Some(l) = ug::layout(&building.prefab) else {
+                    continue;
+                };
+                for room in &l.rooms {
+                    let at = xf.transform_point(Vec3::new(
+                        room.at[0],
+                        l.floor_of(room) + 0.05,
+                        room.at[1],
+                    ));
+                    rooms += 1;
+                    let what = format!("{map}: {} `{}` at {at:.1}", building.prefab, room.id);
+                    let Some(plan) = below_in(&zone, &plans, at) else {
+                        bad.push(format!("{what}: not known to be in the site"));
+                        continue;
+                    };
+                    let from = plan.to_local(at + Vec3::Y * 1.0).xz();
+                    // (Shut off as it stands, by heat not vented or a door
+                    // held on power: no way in either, so not where it'd be.)
+                    let into = plan
+                        .doors
+                        .iter()
+                        .filter_map(|d| d.outside)
+                        .any(|o| plan.path(o, from).is_some());
+                    if !into {
+                        rooms -= 1;
+                        continue;
+                    }
+                    // A step back from an anomaly, any way: only ever onto
+                    // the site's floors (the generator room's wall).
+                    for k in 0..8 {
+                        let t = k as f32 / 8.0 * std::f32::consts::TAU;
+                        let away = Vec2::new(t.cos(), t.sin());
+                        for task in step_back_in(plan, at.xz(), away) {
+                            if let Task::WalkTo { to, .. } = task
+                                && !on_its_floors(plan, to)
+                            {
+                                bad.push(format!(
+                                    "{what}: a step back {away:.1} goes off its floors to {to:.1}"
+                                ));
+                            }
+                        }
+                    }
+                    match out_of(plan, from) {
+                        None => bad.push(format!("{what}: no way out")),
+                        Some((_, end)) if on_its_floors(plan, end) => {
+                            bad.push(format!("{what}: the way out ends on its floors, {end:.1}"))
+                        }
+                        Some(_) => {}
+                    }
+                }
+            }
+        }
+        assert!(rooms > 0, "no underground rooms on any map");
+        assert!(
+            bad.is_empty(),
+            "{} of {rooms} rooms below ground:\n{}",
+            bad.len(),
+            bad.join("\n")
         );
     }
 
