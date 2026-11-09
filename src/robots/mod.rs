@@ -281,6 +281,9 @@ pub struct Intent {
     pub look: Option<Vec3>,
     pub pace: f32,
     pub low: bool,
+    /// Face `look` even with someone in sight: its back turned on them (a
+    /// heavy that has let you go, `heavy_mind`).
+    pub look_away: bool,
 }
 
 impl Default for Intent {
@@ -289,6 +292,7 @@ impl Default for Intent {
             look: None,
             pace: 1.0,
             low: false,
+            look_away: false,
         }
     }
 }
