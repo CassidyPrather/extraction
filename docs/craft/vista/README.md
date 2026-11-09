@@ -20,3 +20,10 @@ left or top, after on the right or bottom.
   point and looked past it. `scripts/walk_stops.py` now frames every
   arrival from 20 m out, looking at the point. Review tooling only; the
   game is unchanged.
+- `kettle_fingerposts_night.jpg`: the same forks after dark, before and
+  after. A board needs a light near it: a way lamp 2.5-3 m from the
+  Quarry and Mine posts, on the side the board faces, its arm over the
+  board (behind the face, 0.6 m back, the board was a silhouette). The
+  Lodge fork (bottom) has none: the charcoal hut's window stands dead
+  ahead down the lodge branch, and a warm lamp there would stand in the
+  frame of the lodge track's crossing stake for whoever walks home.
