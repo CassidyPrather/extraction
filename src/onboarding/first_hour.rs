@@ -3545,8 +3545,9 @@ fn hidden_at(
         .is_some()
 }
 
-/// Knee height over the ground, for what's in the way of a step (m).
-const KNEE: f32 = 0.5;
+/// Knee height over the ground, for what's in the way of a step (m): a
+/// body-wide ball there clears the ground underfoot.
+const KNEE: f32 = 0.6;
 /// A body's half width, kept clear past the end of a step (m).
 const BODY: f32 = 0.3;
 
@@ -3569,11 +3570,21 @@ fn break_line(
     // height between, nor at the spot (the grid's cells are coarse).
     let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
     let knee = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * KNEE;
+    // (A body's width, not a ray: a ray slipped past a trunk the newcomer
+    // then pressed against, 1.4 m short, the same half minute.)
+    let body = avian3d::prelude::Collider::sphere(BODY);
     let reach = |p: Vec2| {
         let to = knee(p) - knee(here);
         Dir3::new(to).ok().is_none_or(|dir| {
             spatial
-                .cast_ray(knee(here), dir, to.length() + BODY, true, &walls)
+                .cast_shape(
+                    &body,
+                    knee(here),
+                    Quat::IDENTITY,
+                    dir,
+                    &avian3d::prelude::ShapeCastConfig::from_max_distance(to.length() + BODY),
+                    &walls,
+                )
                 .is_none()
         })
     };
