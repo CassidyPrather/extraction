@@ -143,3 +143,13 @@ placements. What went wrong placing the wrecks and stakes so far:
 
 Then the map lint (`every_valley_passes_the_map_lint`), the extraction_core
 suite, and the full gate with second_hour.
+
+## Seen at night
+
+`night_before_after.jpg`: three crossing stakes (Marrow's Bus depot
+route, Kettle mine from Miners' Row, Cinder's North sidings) and one of
+Marrow's Gate-ring stakes, at night in rain, from 10-18 m short on the
+way, before (the same build, the stakes taken out) and after. The stake
+reads as a small amber point where nothing marked the ground before: a
+mark you find, not a beacon, as meant (emissive, no point light, read to
+25 m). Kettle's sits among a few other lights on the skyline there.
