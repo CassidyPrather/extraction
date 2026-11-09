@@ -684,13 +684,7 @@ mod night {
     /// whose), and this fails once one is: take it off.
     #[test]
     fn every_quiet_to_hot_crossing_is_told_at_night() {
-        const GAPS: &[(&str, &str, P2, &str, &str)] = &[(
-            "rime_fell",
-            "The upper slopes",
-            [-139.0, -57.0],
-            "The barracks",
-            "Fourth valley's: the way moved off its stake",
-        )];
+        const GAPS: &[(&str, &str, P2, &str, &str)] = &[];
         let found: Vec<(Vec<String>, Vec<String>)> = std::thread::scope(|sc| {
             let jobs: Vec<_> = crate::map::VALLEYS
                 .iter()
