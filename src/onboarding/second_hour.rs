@@ -1138,6 +1138,16 @@ pub(super) struct World2<'w, 's> {
     pub(super) bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
     pub(super) pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     pub(super) remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
+    /// Each remains bag, where it lies, and what's in it.
+    pub(super) remains_bags: Query<
+        'w,
+        's,
+        (
+            &'static GlobalTransform,
+            &'static Backpack,
+            &'static crate::raid::Remains,
+        ),
+    >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
     /// Every building and where it stands (for the way round them).

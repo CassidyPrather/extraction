@@ -647,6 +647,8 @@ pub(super) struct Newcomer {
     heavy_since: f32,
     /// Took what the driver put on the ledge, woken in the truck.
     took_ledge: bool,
+    /// Times it went for a radio off its body (`radio_to_fetch`).
+    radio_fetches: u32,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
@@ -2738,10 +2740,36 @@ pub(super) fn direct_raid(
                                 },
                             ]);
                         }
-                        None => {
-                            state.note(now, Kind::Confused, "no radio to call the truck with");
-                            state.leg = Leg::Done;
-                        }
+                        // ...or where one lies: in remains (its own first),
+                        // or loose. The radio is the only way to call the
+                        // truck, so a newcomer with none goes for one
+                        // (resumed with its radio in remains 130 m off, the
+                        // careers wedged: "no radio", done, every run after).
+                        None => match radio_to_fetch(&world, player, here)
+                            .filter(|_| state.radio_fetches < RADIO_FETCHES)
+                        {
+                            Some((e, at)) => {
+                                state.radio_fetches += 1;
+                                state.note(
+                                    now,
+                                    Kind::Learned,
+                                    format!(
+                                        "no radio on it: went for the one {:.0} m off",
+                                        at.distance(here)
+                                    ),
+                                );
+                                tasks.push(Task::Stow(Side::Left));
+                                tasks.extend(walk(&world, here, at));
+                                tasks.push(Task::Grab {
+                                    item: e,
+                                    side: Side::Left,
+                                });
+                            }
+                            None => {
+                                state.note(now, Kind::Confused, "no radio to call the truck with");
+                                state.leg = Leg::Done;
+                            }
+                        },
                     },
                 }
             }
@@ -3966,6 +3994,59 @@ fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
         .filter(|(_, at)| at.distance(here) < FEET_REACH)
         .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
 }
+
+/// A radio not on `player` to go and get: the nearest in its own remains,
+/// else in anyone's, else lying loose. Where it is, to walk to.
+fn radio_to_fetch(world: &World2, player: Entity, here: Vec2) -> Option<(Entity, Vec2)> {
+    let is_radio = |e: Entity| {
+        world
+            .items
+            .get(e)
+            .is_ok_and(|(_, it, ..)| world.catalog.get(it.kind()).id == "radio")
+    };
+    let own = |mine: bool| {
+        world
+            .remains_bags
+            .iter()
+            .filter(|(_, _, r)| (r.owner == player) == mine)
+            .flat_map(|(gt, bag, _)| {
+                let at = gt.translation().xz();
+                bag.contents
+                    .iter()
+                    .copied()
+                    .filter(|e| is_radio(*e))
+                    .map(move |e| (e, at))
+            })
+            .collect::<Vec<_>>()
+    };
+    let loose = || {
+        world
+            .items
+            .iter()
+            .filter(|(_, it, _, held, sock, bag)| {
+                held.is_none()
+                    && sock.is_none()
+                    && bag.is_none()
+                    && world.catalog.get(it.kind()).id == "radio"
+            })
+            .map(|(e, _, gt, ..)| (e, gt.translation().xz()))
+            .collect::<Vec<_>>()
+    };
+    pick_radio(here, [own(true), own(false), loose()])
+}
+
+/// The nearest of the first of `tiers` with any in it (its own remains,
+/// anyone's, loose): a radio of its own 300 m off before a stranger's 30 m
+/// off, as a person goes back to where they fell for their kit.
+fn pick_radio<T: Copy>(here: Vec2, tiers: [Vec<(T, Vec2)>; 3]) -> Option<(T, Vec2)> {
+    tiers.into_iter().find_map(|c| {
+        c.into_iter()
+            .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+    })
+}
+
+/// Walks after a radio off its body in one raid before giving the call up.
+const RADIO_FETCHES: u32 = 3;
 
 /// How far off a thing set down at a resume still counts as at its feet (m).
 const FEET_REACH: f32 = 3.0;
@@ -5820,6 +5901,36 @@ the Hollow.";
     /// newcomer stood through eight zaps in the shelter's generator room);
     /// its gun out of the pack if that's the loaded one; else out of its
     /// line. And while one's at it, no keeping still and no dressing.
+    #[test]
+    fn with_no_radio_on_it_it_goes_for_the_nearest_it_can_get() {
+        use super::pick_radio;
+        let here = Vec2::ZERO;
+        let at = |x: f32| Vec2::new(x, 0.0);
+        // Its own remains first, however far.
+        assert_eq!(
+            pick_radio(
+                here,
+                [
+                    vec![(1, at(300.0)), (2, at(130.0))],
+                    vec![(3, at(20.0))],
+                    vec![(4, at(5.0))]
+                ]
+            ),
+            Some((2, at(130.0)))
+        );
+        // Then anyone's, then loose.
+        assert_eq!(
+            pick_radio(here, [vec![], vec![(3, at(60.0))], vec![(4, at(5.0))]]),
+            Some((3, at(60.0)))
+        );
+        assert_eq!(
+            pick_radio(here, [vec![], vec![], vec![(4, at(50.0)), (5, at(-9.0))]]),
+            Some((5, at(-9.0)))
+        );
+        // None anywhere: the call is given up (the only time).
+        assert_eq!(pick_radio::<u8>(here, [vec![], vec![], vec![]]), None);
+    }
+
     #[test]
     fn a_crawler_at_it_is_answered_with_what_it_has() {
         assert_eq!(crawler_answer(true, true, false), CrawlerAnswer::Shoot);
