@@ -216,7 +216,11 @@ fn dress_heavies(
         ModelState::Failed => {
             warn!("heavy model failed to load");
             for (e, _) in &waiting {
-                commands.entity(e).remove::<Undressed>();
+                // (Any hit taken before now worn on what it has.)
+                commands
+                    .entity(e)
+                    .remove::<Undressed>()
+                    .insert(super::wear::Redress);
             }
             return;
         }
@@ -240,7 +244,12 @@ fn dress_heavies(
     let glow = model_mats.get("Glow", &mut lib, &server, &mut materials);
     let eye = model_mats.get("Eye", &mut lib, &server, &mut materials);
     for (robot, children) in &waiting {
-        commands.entity(robot).remove::<Undressed>();
+        // Dressed now: a hit taken before (`wear` wore it on the pieces it
+        // had then) worn on these too.
+        commands
+            .entity(robot)
+            .remove::<Undressed>()
+            .insert(super::wear::Redress);
         let own = |m: &Handle<StandardMaterial>, materials: &mut Assets<StandardMaterial>| {
             let copy = materials.get(m).cloned().unwrap_or_default();
             materials.add(copy)
