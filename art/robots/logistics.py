@@ -11,9 +11,10 @@ ground with its origin 0.45 m up and hangs from the cable at (0, 0.45, 0).
 Harpoon launcher, in robot space (a walker body, src/robots/walker.rs):
 the orb is a sphere of radius 0.4 at the origin, its turret ring on top.
 
-- `launcher`  yoke on the turret ring, the launcher with a barbed harpoon
-              in its muzzle, the line reel behind, a hazard band round
-              the orb
+- `launcher`  a derrick on the turret ring: a boom leaning forward to a
+              head 3 m off the ground with the launcher on it (a barbed
+              harpoon in its muzzle), the line drum behind, a hazard band
+              round the orb
 
 Materials: Shell, Dark, Glow, Warn, Yellow, Steel.
 """
@@ -119,55 +120,80 @@ export("assets/models/robots/cargo_pod.glb")
 reset()
 ln = Part("launcher")
 R = 0.4
-# Yoke on the turret ring.
-ln.lathe([(0.0, R - 0.005), (0.09, R - 0.005), (0.085, R + 0.04), (0.0, R + 0.045)], "Dark",
-         segs=24, xf=UP)
+# A derrick, not a turret: a walker with a launcher on top had a walker's
+# outline from any side at 30 m, and with a spar on it, a hairline more
+# (docs/craft/ROBOT_READING.md, the silhouette gauge `robots::silhouette`).
+# A boom as thick as a leg rises from a slewing yoke on the turret ring,
+# leaning forward to a head 3 m up with the launcher on it; a line drum as
+# wide as the orb hangs behind it, its counterweight. Side-on: a diagonal
+# and a disc; facing you or away: a tall upright over the orb.
+# Slewing yoke on the turret ring.
+ln.lathe([(0.0, R - 0.005), (0.11, R - 0.005), (0.105, R + 0.05), (0.0, R + 0.055)], "Dark",
+         segs=16, xf=UP)
 for sx in (-1, 1):
-    ln.box((0.025, 0.12, 0.12), (sx * 0.085, R + 0.08, 0.0), "Dark", bevel=0.01, segs=1)
-ln.cyl(0.03, -0.1, 0.1, "Dark", segs=12, xf=T(0, R + 0.11, 0.0) @ ALONG_X)
-# The launcher housing: a pale shell like the walker's turret, but stubbier.
-CY = R + 0.13
-side = fillet([(0.18, CY - 0.07), (0.2, CY + 0.02), (0.13, CY + 0.08), (-0.12, CY + 0.08),
-               (-0.2, CY + 0.04), (-0.2, CY - 0.05), (-0.14, CY - 0.07)],
-              [0.02, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02], 3)
-ln.prism(side, -0.075, 0.075, "Shell", axis="x", bevel=0.018, segs=2)
+    ln.box((0.03, 0.16, 0.2), (sx * 0.1, R + 0.11, 0.08), "Dark", bevel=0.01, segs=1)
+FOOT = (0.0, R + 0.15, 0.1)
+ln.cyl(0.045, -0.13, 0.13, "Dark", segs=14, xf=T(*FOOT) @ ALONG_X, chamfer=0.006)
+# The boom: a shell box section, a teal strip down each side (the robots'
+# own glow), from its foot pin to the head.
+ANGLE = math.radians(62.0)
+LENGTH = 1.42
+DIR = (0.0, math.sin(ANGLE), -math.cos(ANGLE))
+HEAD = tuple(FOOT[i] + DIR[i] * LENGTH for i in range(3))
+boom = T(*FOOT) @ RX(-(math.pi / 2 - ANGLE))
+ln.box((0.15, LENGTH + 0.06, 0.17), (0.0, LENGTH / 2, 0.0), "Shell", bevel=0.02, segs=2, xf=boom)
 for sx in (-1, 1):
-    ln.box((0.006, 0.05, 0.2), (sx * 0.077, CY + 0.0, 0.0), "Warn", bevel=0.002, segs=1)
-# Launch tube, the harpoon in it, its barbs folded back.
-ln.tube(0.048, 0.03, -0.5, -0.18, "Dark", segs=20, xf=T(0, CY + 0.01, 0), chamfer=0.004)
+    ln.box((0.006, LENGTH - 0.3, 0.03), (sx * 0.077, LENGTH / 2, 0.0), "Glow", bevel=0.002,
+           segs=1, xf=boom)
+# The luffing ram under it, from the yoke's front to the boom's middle.
+ram0 = (0.0, R + 0.07, -0.12)
+ram1 = tuple(FOOT[i] + DIR[i] * LENGTH * 0.5 + (0.0, -0.06, -0.04)[i] for i in range(3))
+rv = [ram1[i] - ram0[i] for i in range(3)]
+rl = math.sqrt(sum(c * c for c in rv))
+ram = T(*ram0) @ RX(-math.atan2(-rv[2], rv[1]))
+ln.cyl(0.05, 0.0, rl * 0.55, "Dark", segs=12, xf=ram @ UP)
+ln.cyl(0.03, rl * 0.5, rl, "Steel", segs=10, xf=ram @ UP)
+# The launcher on the head: a pale housing like the walker's turret, the
+# tube out of its front with the barbed harpoon in it.
+hx = T(*HEAD)
+side = fillet([(0.16, -0.08), (0.2, 0.0), (0.14, 0.08), (-0.14, 0.08), (-0.22, 0.04),
+               (-0.22, -0.05), (-0.16, -0.08)], [0.02, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02], 3)
+ln.prism([(x, y + HEAD[1]) for x, y in side], -0.09, 0.09, "Shell", axis="x", bevel=0.018,
+         segs=2, xf=T(0, 0, HEAD[2]))
+ln.cyl(0.05, -0.11, 0.11, "Dark", segs=14, xf=hx @ ALONG_X, chamfer=0.006)
+for sx in (-1, 1):
+    ln.box((0.006, 0.05, 0.22), (sx * 0.092, HEAD[1], HEAD[2]), "Warn", bevel=0.002, segs=1)
+tube = T(0, HEAD[1] + 0.01, HEAD[2])
+ln.tube(0.05, 0.032, -0.5, -0.14, "Dark", segs=14, xf=tube, chamfer=0.004)
 for i in range(3):
-    ln.tube(0.054, 0.03, -0.24 - i * 0.09, -0.22 - i * 0.09, "Dark", segs=20,
-            xf=T(0, CY + 0.01, 0), chamfer=0.004)
-hx = T(0, CY + 0.01, 0)
-ln.cyl(0.012, -0.56, -0.3, "Steel", segs=10, xf=hx)
+    ln.tube(0.056, 0.032, -0.26 - i * 0.08, -0.24 - i * 0.08, "Dark", segs=14, xf=tube,
+            chamfer=0.004)
+ln.cyl(0.012, -0.56, -0.3, "Steel", segs=10, xf=tube)
 ln.lathe([(0.0, -0.66), (0.012, -0.64), (0.026, -0.585), (0.024, -0.56), (0.0, -0.56)], "Steel",
-         segs=12, xf=hx)
+         segs=12, xf=tube)
 for k in range(3):
     a = 2 * math.pi * k / 3 + 0.5
     ln.box((0.008, 0.008, 0.07), (0.0, 0.0, 0.0), "Steel",
-           xf=hx @ RZ(a) @ T(0.03, 0, -0.565) @ RY(-0.35))
-# Line reel on the back: a drum of yellow line between dark flanges.
-reel = T(0, CY + 0.02, 0.24) @ ALONG_X
-ln.cyl(0.1, -0.06, 0.06, "Yellow", segs=20, xf=reel)
-for x in (-0.07, 0.07):
-    ln.cyl(0.13, x - 0.01, x + 0.01, "Dark", segs=24, xf=reel, chamfer=0.003)
-ln.cyl(0.025, -0.1, 0.1, "Dark", segs=12, xf=reel)
-# The grapnel: a spar standing up behind the reel, its three claws spread
-# at the top. A grappler was a walker with a thin tube on top at 30 m
-# (docs/craft/ROBOT_READING.md); the spar is its silhouette.
-spar = T(0, CY + 0.06, 0.33)
-ln.cyl(0.02, 0.0, 0.5, "Dark", segs=10, xf=spar @ UP)
-ln.cyl(0.032, 0.46, 0.52, "Steel", segs=12, xf=spar @ UP)
-for k in range(3):
-    a = 2 * math.pi * k / 3
-    ln.box((0.014, 0.16, 0.014), (0.0, 0.0, 0.0), "Steel", bevel=0.004, segs=1,
-           xf=spar @ T(0, 0.55, 0) @ RY(a) @ RX(0.7) @ T(0, 0.07, 0))
-
-# The line leading from the reel to the tube.
-ln.box((0.012, 0.012, 0.3), (0.0, CY + 0.075, 0.02), "Yellow")
+           xf=tube @ RZ(a) @ T(0.03, 0, -0.565) @ RY(-0.35))
+# The line drum behind, on its own trunnions off the yoke: yellow line
+# between dark flanges, as wide as the orb is deep.
+DRUM = (0.0, R + 0.1, 0.46)
+reel = T(*DRUM) @ ALONG_X
+ln.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=reel)
+for x in (-0.17, 0.17):
+    ln.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=reel, chamfer=0.004)
+ln.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=reel)
+for sx in (-1, 1):
+    ln.box((0.03, 0.06, 0.4), (sx * 0.2, DRUM[1] - 0.02, 0.27), "Dark", bevel=0.01, segs=1)
+# The line from the drum up the boom to the launcher.
+lv = [HEAD[i] - DRUM[i] for i in range(3)]
+ll = math.sqrt(sum(c * c for c in lv))
+line = T(0, DRUM[1] + 0.2, DRUM[2]) @ RX(-math.atan2(-lv[2], lv[1]))
+ln.cyl(0.012, 0.0, ll - 0.05, "Yellow", segs=6, xf=line @ UP)
 # Hazard band round the orb.
 ln.lathe([(0.385, 0.08), (0.398, 0.085), (0.398, 0.11), (0.385, 0.115)], "Warn",
          segs=40, xf=UP, closed=True)
+print("muzzle", HEAD[0], HEAD[1] + 0.01, HEAD[2] - 0.66)
 make(ln)
 report()
 export("assets/models/robots/harpoon.glb")
