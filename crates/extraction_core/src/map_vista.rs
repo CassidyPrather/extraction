@@ -1,11 +1,11 @@
 //! The first frame: off the truck, before a step is taken, the first job's
-//! place or a landmark on the way to it stands in the frame, in sight and
-//! big enough to read. A newcomer's first look should hold somewhere to go
+//! place or a landmark stands in the frame, in sight and big enough to read. A newcomer's first look should hold somewhere to go
 //! (walk review, `docs/craft/WALK_REVIEW.md`; Kettle's Gate woods hid the
 //! Logging camp 70 m off the truck until a ride was cut through them).
 //!
-//! The frame is the way to the first job's heading at the truck, `AHEAD`
-//! either side (as `map_gradient` reads a tell). Something counts when it
+//! The frame is the heading the player arrives facing, the Insertion
+//! marker's rot (`player::spawn_local_player`), `AHEAD` either side (as
+//! `map_gradient` reads a tell). A marker is turned to face the way on. Something counts when it
 //! is within that, in sight over the ground, past the buildings and through
 //! the trees (`map_landmarks::Canopy`, at the crowns' lowest breadth:
 //! `LOW_CROWN`), and big enough for its distance: the
@@ -21,13 +21,17 @@ use crate::map_gradient::{AHEAD, READ_ANGLE};
 use crate::map_lint::{Solid, sees, solids};
 use crate::terrain::Heightmap;
 
-/// How far along the way to the first job its heading is taken (m): the
-/// way's first steps, not the truck's own facing.
-pub const HEADING_ALONG: f32 = 20.0;
+/// After dark a light reads as somewhere to go to this far (m), whatever
+/// its own reach. Measured on rendered night stills of every valley's first
+/// frame, clear and in rain (docs/craft/vista/README.md): a lamp's glow
+/// falls off with distance, and Kettle's camp chimney lamp at 89 m was the
+/// faintest that read; Cinder's gas holder lamp at 110 m, Sallow's yard
+/// lamps at 96-106 m and Rime's survey tower lamp at 128 m did not. Rain
+/// left the glows as they were in clear weather (it darkened what was
+/// round them as much), so the reach is the same in both.
+pub const NIGHT_READ: f32 = 90.0;
 /// A place's buildings: those standing this near its point (m).
 pub const PLACE_REACH: f32 = 30.0;
-/// A landmark is on the way when it stands this near it (m).
-pub const ON_THE_WAY: f32 = 60.0;
 /// Too small to be a building you'd steer for (m tall).
 const BUILDING_HEIGHT: f32 = 2.0;
 /// A spruce's crown at its widest, its lowest boughs, each way (m), narrowing
@@ -46,7 +50,7 @@ pub const CROWNS_HIDE: usize = 2;
 pub struct FirstFrame {
     pub insertion: String,
     pub at: P2,
-    /// The way's heading off the truck (degrees, 0 north, clockwise).
+    /// The heading the player arrives facing (degrees, 0 north, clockwise).
     pub heading: f32,
     pub job: String,
     /// Everything that might be steered for, and why each does or doesn't
@@ -69,19 +73,6 @@ fn bearing(from: P2, to: P2) -> f32 {
 
 fn off(a: f32, b: f32) -> f32 {
     ((a - b + 540.0).rem_euclid(360.0) - 180.0).abs()
-}
-
-/// The point `along` metres down a polyline.
-fn down(path: &[P2], along: f32) -> P2 {
-    let mut left = along;
-    for w in path.windows(2) {
-        let l = dist(w[0], w[1]);
-        if l >= left {
-            return crate::geom::lerp(w[0], w[1], left / l.max(1e-6));
-        }
-        left -= l;
-    }
-    *path.last().unwrap_or(&[0.0, 0.0])
 }
 
 /// Whether a top `top` metres above sea at `to` is in sight from eye height
@@ -119,15 +110,14 @@ fn in_sight(
         })
 }
 
-/// The truck, the way's heading off it, the first job's place and the way
-/// there, every 2 m.
+/// The truck, the heading the player arrives facing, and the first job's
+/// place.
 struct Start {
     insertion: String,
     at: P2,
     heading: f32,
     job: P2,
     place: String,
-    way: Vec<P2>,
 }
 
 fn start(id: &str, map: &MapDef, hm: &Heightmap) -> Option<Start> {
@@ -138,22 +128,17 @@ fn start(id: &str, map: &MapDef, hm: &Heightmap) -> Option<Start> {
         return None;
     };
     let comfy = crate::map_nav::zone_grid(map, hm, crate::map_lint::COMFORT_SLOPE);
-    let corners = comfy.path(ins.at, job)?;
-    let heading = bearing(ins.at, down(&corners, HEADING_ALONG));
-    // Every 2 m along it: a straight road is two corners a long way apart.
-    let mut way = Vec::new();
-    for w in corners.windows(2) {
-        let n = (dist(w[0], w[1]) / 2.0).ceil().max(1.0) as usize;
-        way.extend((0..n).map(|i| crate::geom::lerp(w[0], w[1], i as f32 / n as f32)));
-    }
-    way.extend(corners.last());
+    // A first job the truck can't walk to has no first frame.
+    comfy.path(ins.at, job)?;
+    // The player arrives facing the marker's rot (`player::spawn_local_player`):
+    // that is the first frame, whatever the way does after.
+    let heading = ins.rot.rem_euclid(360.0);
     Some(Start {
         insertion: ins.name.clone(),
         at: ins.at,
         heading,
         job,
         place,
-        way,
     })
 }
 
@@ -165,7 +150,6 @@ pub fn first_frame(id: &str, map: &MapDef, hm: &Heightmap) -> Option<FirstFrame>
         heading,
         job,
         place,
-        way,
     } = start(id, map, hm)?;
     let solids = solids(map);
     let canopy = crate::map_landmarks::Canopy::new(map, hm);
@@ -184,14 +168,9 @@ pub fn first_frame(id: &str, map: &MapDef, hm: &Heightmap) -> Option<FirstFrame>
             (h * w.min(l)).sqrt(),
         ));
     }
+    // Any landmark in the frame: the arrival is turned to face the way on
+    // (the marker's rot), so what stands in it is somewhere to go.
     for m in crate::map_landmarks::landmarks(map, hm) {
-        let near_way = m
-            .tops
-            .iter()
-            .any(|(at, _)| way.iter().any(|q| dist(*q, *at) <= ON_THE_WAY));
-        if !near_way {
-            continue;
-        }
         let size = m
             .pieces
             .iter()
@@ -273,7 +252,7 @@ pub fn first_frame_at_night(id: &str, map: &MapDef, hm: &Heightmap) -> Option<Fi
         own.push(l.at);
         let verdict = if o > AHEAD {
             "out of frame"
-        } else if d > l.reach {
+        } else if d > l.reach.min(NIGHT_READ) {
             "too far"
         } else if !in_sight(
             hm,
@@ -308,7 +287,20 @@ mod tests {
     /// is and why. Off the list in the same commit as the fix.
     const GAPS: &[(&str, &str, &str)] = &[];
     /// The same, after dark.
-    const NIGHT_GAPS: &[(&str, &str, &str)] = &[];
+    const NIGHT_GAPS: &[(&str, &str, &str)] = &[
+        (
+            "sallow_reservoir",
+            "Fourth valley",
+            "the yard lamps up the road are 96 and 106 m out, past NIGHT_READ; \
+             a warm lamp 30-50 m up the way at rot 0 is coming",
+        ),
+        (
+            "rime_fell",
+            "Fourth valley",
+            "the water tower's lamp is 120 m out, past NIGHT_READ; \
+             a warm lamp 30-50 m up the way at rot 56.5 is coming",
+        ),
+    ];
 
     #[test]
     fn every_first_frame_holds_somewhere_to_go() {

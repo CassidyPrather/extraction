@@ -42,3 +42,39 @@ left or top, after on the right or bottom.
   Kettle (the camp chimney's) and Cinder (the gas holder's) show plainly.
   Sallow's two yard lamps at about 100 m and Rime's survey tower lamp pass
   the gauge but are faint in this still, in rain.
+
+## What the first-frame gauge asks, and what it doesn't
+
+`map_vista::every_first_frame_holds_somewhere_to_go` asks that the frame the
+player arrives facing (the Insertion marker's `rot`, 35 degrees either
+side) holds somewhere to go: by day, the first job's buildings or a
+landmark, in sight and big enough; after dark, a yard lamp, a lit window or
+a landmark's red lamp within `NIGHT_READ` (90 m). It does not catch a first
+job hidden behind trees while something else stands in the frame: the
+first frame's spruce crowns are cones, wide at their lowest boughs and
+narrow at the top, so a chimney top over a wood reads (Kettle's frame
+before its ride cut reads that way, the sawmill still hidden).
+
+Each valley's marker faces the way on: Marrow 53, Kettle 58, Cinder 21
+(turned with this gauge), Rime 56.5 (Fourth valley), Sallow 0.
+
+### Night read, measured
+
+Glow over its background in rendered night stills of each first frame
+(the sum of each pixel's excess over the ring's median, more than 8 levels,
+within 6 px of the light's projected spot), clear and in rain:
+
+| Light | Distance | Clear | Rain |
+| - | - | - | - |
+| Marrow, ranger tower lamp | 69 m | 1750 | 2112 |
+| Kettle, camp chimney lamp | 89 m | 1238 | 1173 |
+| Cinder, gas holder lamp | 110 m | 402 | 485 |
+| Sallow, yard lamp | 96 m | 507 | 791 |
+| Sallow, yard lamp | 106 m | 174 | 240 |
+| Rime, survey tower lamp | 128 m | 191 | 259 |
+
+Kettle's chimney lamp is the faintest that reads (the coordinator's limit).
+The glow falls off with distance; rain changed it little (it darkens what is
+round a lamp as much as the lamp), so `NIGHT_READ` is the same in both.
+Cinder takes a yard lamp 40 m up the works road; Sallow and Rime take one
+each from Fourth valley, and are on the night gauge's GAPS until then.

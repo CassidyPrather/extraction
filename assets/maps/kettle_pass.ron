@@ -495,7 +495,8 @@
     ],
 
     markers: [
-        (kind: Insertion, at: (90.9, 202.4), rot: 0.0, name: "South gate"),
+        // The arrival faces the way on to the first job (map_vista).
+        (kind: Insertion, at: (90.9, 202.4), rot: 58.0, name: "South gate"),
         (kind: TruckStop, at: (90.9, 232.4), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (96.9, 208.4), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (9.2, -201.9), name: "The pass"),
