@@ -474,14 +474,18 @@ fn fragment(
         }
         // Height-aware blending: each layer covers the ones below it where
         // its own height wins.
-        // The road layers' cover rises more gently with their weight and
-        // more on their own stones: their edge stays ragged up close, the
-        // stones over the grass, but not a sharp line cut through it.
+        // A road layer's cover is its weight, full where it's full and none
+        // where it's none; in between its own stones carry it over the
+        // grass or let the grass through: ragged up close, but the weight
+        // (a metre and more across) sets how wide the edge is, not a
+        // sharpened line cut through it. (Its height is its texture's
+        // luminance, low on asphalt: as an offset it never covered.)
         let road_layer_i = i >= 4u;
+        let between = w[i] * (1.0 - w[i]) * 2.0;
         let cover = select(
             select(
                 clamp(w[i] * 1.6 + (l.height - 0.5) * 0.8 - 0.2, 0.0, 1.0),
-                clamp(w[i] * 1.25 + (l.height - 0.5) * 0.9 - 0.12, 0.0, 1.0),
+                clamp(w[i] + (l.height - 0.5) * 1.4 * between, 0.0, 1.0),
                 road_layer_i
             ),
             1.0,
