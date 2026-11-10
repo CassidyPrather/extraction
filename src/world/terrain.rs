@@ -638,3 +638,84 @@ mod drowned_tests {
 fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
     extraction_core::geom::smoothstep(e0, e1, x)
 }
+
+#[cfg(test)]
+mod road_edge_tests {
+    use super::*;
+    use extraction_core::terrain::{Heightmap, RoadLine};
+
+    /// A 100 m square on a 2 m grid with one straight 6 m road along z at
+    /// x = 1 (between samples), a bridge over its middle.
+    fn grid() -> Heightmap {
+        let n = 51;
+        Heightmap {
+            n,
+            cell: 2.0,
+            origin: -50.0,
+            heights: vec![0.0; n * n],
+            roads: vec![Default::default(); n * n],
+            water: vec![f32::NAN; n * n],
+            wet: vec![0.0; n * n],
+            road_lines: vec![RoadLine {
+                road: 0,
+                kind: RoadKind::Gravel,
+                width: 6.0,
+                points: (0..=80).map(|k| [1.0, -40.0 + k as f32]).collect(),
+                heights: vec![0.0; 81],
+                bridges: vec![(35.0, 45.0)],
+            }],
+            holes: vec![false; n * n],
+        }
+    }
+
+    fn sample(hm: &Heightmap, x: f32, z: f32) -> (usize, usize) {
+        (
+            ((x - hm.origin) / hm.cell) as usize,
+            ((z - hm.origin) / hm.cell) as usize,
+        )
+    }
+
+    #[test]
+    fn the_edge_is_where_the_road_ends_and_its_kind_carries_out_past_it() {
+        let hm = grid();
+        let edges = RoadEdges::of(&hm);
+        // x = 4 is the edge (1 + 3): on it, inside, outside, far off.
+        for (x, want) in [
+            (4.0, 0.0),
+            (0.0, -2.0),
+            (-2.0, 0.0),
+            (8.0, 4.0),
+            (10.0, 6.0),
+        ] {
+            let (i, j) = sample(&hm, x, -20.0);
+            let (e, kind) = edges.at(i, j);
+            assert!((e - want).abs() < 1e-3, "x {x}: {e} vs {want}");
+            assert_eq!(kind, Some(RoadKind::Gravel), "x {x}");
+        }
+        let (i, j) = sample(&hm, 30.0, -20.0);
+        assert_eq!(edges.at(i, j), (EDGE_REACH, None), "no road near");
+    }
+
+    #[test]
+    fn the_road_channel_interpolates_to_the_true_distance() {
+        // Linear in the distance: half way between two samples, the
+        // interpolated channel is the channel of the distance half way.
+        for (a, b) in [(-3.0f32, -1.0f32), (-1.0, 1.0), (0.5, 2.5), (2.0, 4.0)] {
+            let mid = 0.5 * (edge_code(a) + edge_code(b));
+            assert!((mid - edge_code(0.5 * (a + b))).abs() < 1e-6, "{a}..{b}");
+        }
+        assert_eq!(edge_code(0.0), 0.5);
+        assert_eq!(edge_code(EDGE_REACH), 0.0, "no road reads as none");
+    }
+
+    #[test]
+    fn a_bridge_deck_paints_no_ground_under_it() {
+        let hm = grid();
+        let edges = RoadEdges::of(&hm);
+        // Arc 40 is z = 0, mid-deck: the ground under it is no road.
+        let (i, j) = sample(&hm, 0.0, 0.0);
+        assert!(edges.at(i, j).0 > 1.5, "{:?}", edges.at(i, j));
+        let (i, j) = sample(&hm, 0.0, -20.0);
+        assert!(edges.at(i, j).0 < 0.0);
+    }
+}
