@@ -3750,6 +3750,16 @@ fn walk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
 /// the guard booth for the road, into the block, and stood there a minute
 /// at the 0.6 m between it and the booth.
 fn part_boxes(prefab: &str, xf: &Transform) -> Vec<(Transform, Vec2)> {
+    // An open hall walked into and through: what stands on its floor, from
+    // its own pieces (the sawmill's log stack lies inside its posts, off
+    // any grid, and the newcomer walking home from the logging camp stood
+    // against it two minutes).
+    if OPEN_HALLS.contains(&prefab) {
+        return standing_parts(prefab)
+            .into_iter()
+            .map(|(at, half)| (*xf * at, half))
+            .collect();
+    }
     match prefab {
         // (`buildings::quarantine_gate`: a 1.4 m block at 5.2, a post at
         // 4.3, either side.)
@@ -3764,6 +3774,49 @@ fn part_boxes(prefab: &str, xf: &Transform) -> Vec<(Transform, Vec2)> {
             .to_vec(),
         _ => vec![],
     }
+}
+
+/// Halls with a way in for a road, walked into and through, open inside
+/// (`extraction_core::fit`'s drive-in prefabs).
+const OPEN_HALLS: [&str; 5] = ["bus_depot", "rail_shed", "factory_hall", "sawmill", "barn"];
+
+/// A prefab's solid pieces in a body's way, knee to head (`KNEE`..1.7 m
+/// over its floor, a ball's half width either side of it), as boxes on the
+/// ground in its own space: each piece's extent, square to the prefab.
+fn standing_parts(prefab: &str) -> Vec<(Transform, Vec2)> {
+    use crate::world::buildings::Shape;
+    let Some(geo) = crate::world::buildings::prefab(prefab) else {
+        return vec![];
+    };
+    let (low, high) = (KNEE - BODY, CHEST + BODY);
+    geo.pieces
+        .iter()
+        .filter(|p| p.collide)
+        .filter_map(|p| {
+            let half = match p.shape {
+                Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+            };
+            let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+            for k in 0..8 {
+                let c = Vec3::new(
+                    if k & 1 == 0 { -half.x } else { half.x },
+                    if k & 2 == 0 { -half.y } else { half.y },
+                    if k & 4 == 0 { -half.z } else { half.z },
+                );
+                let w = p.at.transform_point(c);
+                lo = lo.min(w);
+                hi = hi.max(w);
+            }
+            (lo.y < high && hi.y > low).then(|| {
+                let mid = (lo + hi) * 0.5;
+                (
+                    Transform::from_xyz(mid.x, 0.0, mid.z),
+                    Vec2::new(hi.x - lo.x, hi.z - lo.z) * 0.5,
+                )
+            })
+        })
+        .collect()
 }
 
 /// `p`, or, inside one of `boxes` (with a body's clearance), out of it to
@@ -6267,6 +6320,35 @@ the Hollow.";
         for p in round_boxes(&boxes, out, to) {
             assert!(!through(at, p), "{at} -> {p} through the pile");
             at = p;
+        }
+    }
+
+    #[test]
+    fn a_walk_through_an_open_hall_goes_round_what_stands_in_it() {
+        use super::{part_boxes, round_boxes, segment_hits_box};
+        // The sawmill turned as on Marrow, and a walk across it the long
+        // way, over where its log stack lies (`buildings::sawmill`: six
+        // logs along x, 5 m, at -9, from -2.25 to -0.45 across).
+        let xf = Transform::from_xyz(-90.8, 0.0, 88.5)
+            .with_rotation(Quat::from_rotation_y(90f32.to_radians()));
+        let logs = (
+            xf * Transform::from_xyz(-9.0, 0.0, -1.35),
+            Vec2::new(2.5, 0.9),
+        );
+        let at = |x: f32, z: f32| xf.transform_point(Vec3::new(x, 0.0, z)).xz();
+        let (from, to) = (at(-9.0, 3.0), at(-9.0, -4.5));
+        let boxes = part_boxes("sawmill", &xf);
+        let way = round_boxes(&boxes, from, to);
+        let inv = logs.0.compute_affine().inverse();
+        let mut p = from;
+        for q in &way {
+            let a = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+            let b = inv.transform_point3(Vec3::new(q.x, 0.0, q.y)).xz();
+            assert!(
+                segment_hits_box(a, b, logs.1).is_none(),
+                "{p} -> {q} over the log stack: {way:?}"
+            );
+            p = *q;
         }
     }
 
