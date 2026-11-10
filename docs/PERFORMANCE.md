@@ -1923,97 +1923,106 @@ these. See `docs/shots/performance/gun_far_row{a,b}_{6,15}m_off_on.jpg`.
 | s01_ahead | 1849 draws, 1800k triangles | 1801 draws, 1593k triangles |
 | gate insertion 2 | 1641 draws, 1570k triangles | 1585 draws, 1355k triangles |
 
-### Five valleys within both budgets, 3 runs each (9 November, on main)
+### Five valleys within both budgets, 3 runs each (10 November, arrivals turned)
 
-Measured on main at 041f2bb4. It has every far level, the weather fix
-(a gun's look waits for its model), the far-level check in every budget
-view, Kettle's two fork lamps, and Visual design's markers and Gate lamp.
-For each valley, one full run found its five heaviest views at night, in a
-storm, in a fight. Then 3 runs measured those five plus the valley's gate
-views: the fuel exfil, the insertion, its own gate stop and s01_ahead.
-Views are listed heaviest first, for both eyes, against 2400 draws and
-1800k triangles. Every view stayed inside both budgets in every run, and
-no gun was drawn whole where its far level should be. This is the record
-to check against the headset.
+Measured on main at 8b6772a5. The arrivals now face the way to the first
+job: Marrow 53°, Kettle 58°, Cinder 21°, Rime 56.5°; Sallow stays at 0°.
+Main also has every far level, the weather fix, the far-level check in
+every budget view, and Visual design's markers and Gate lamp. For each
+valley, one full run found its five heaviest views at night, in a storm,
+in a fight. Then 3 runs measured those five plus the valley's gate views:
+the fuel exfil, the insertion, its own gate stop and s01_ahead. Views are
+listed heaviest first, for both eyes, against 2400 draws and 1800k
+triangles. Every view stayed inside both budgets in every run, and no gun
+was drawn whole where its far level should be. This is the record to
+check against the headset.
 
 **Marrow Creek**
 
 | view | draws | triangles | most of budget |
 | - | - | - | - |
-| poi_radio_mast_0 | 1986, 1930, 1964 | 1099k, 1095k, 1102k | 83% |
-| exfil_south_gate__fuel__2 | 1902, 1906, 1902 | 1336k, 1337k, 1336k | 79% |
-| insertion_south_gate_2 | 1870, 1872, 1870 | 1349k, 1350k, 1349k | 78% |
-| poi_radio_mast_3 | 1732, 1306, 1836 | 925k, 897k, 921k | 76% |
-| m05_spruce | 1438, 1437, 1438 | 1356k, 1356k, 1356k | 75% |
-| s01_ahead | 1676, 1678, 1676 | 1272k, 1272k, 1272k | 71% |
+| poi_radio_mast_0 | 1962, 1946, 1954 | 1100k, 1100k, 1097k | 82% |
+| exfil_south_gate__fuel__2 | 1900, 1904, 1904 | 1336k, 1337k, 1337k | 79% |
+| poi_radio_mast_3 | 1824, 1314, 1614 | 922k, 897k, 913k | 76% |
+| m05_spruce | 1439, 1436, 1438 | 1356k, 1356k, 1356k | 75% |
+| insertion_south_gate_2 | 1698, 1696, 1696 | 1261k, 1261k, 1261k | 71% |
+| s01_ahead | 1678, 1678, 1678 | 1272k, 1272k, 1272k | 71% |
 | m01_gate | 1405, 1405, 1405 | 1136k, 1136k, 1136k | 63% |
 
 **Kettle Pass**
 
 | view | draws | triangles | most of budget |
 | - | - | - | - |
-| s23_side | 1397, 1399, 1397 | 1507k, 1508k, 1507k | 84% |
-| s22_side | 1366, 1366, 1366 | 1442k, 1442k, 1442k | 80% |
+| s23_side | 1351, 1351, 1353 | 1507k, 1508k, 1508k | 84% |
+| s22_side | 1322, 1320, 1320 | 1443k, 1443k, 1443k | 80% |
 | exfil_south_gate__fuel__2 | 1636, 1636, 1636 | 1379k, 1379k, 1379k | 77% |
-| k02_row | 1499, 1493, 1497 | 1321k, 1322k, 1322k | 73% |
-| rendezvous_mine_yard_3 | 1124, 1124, 1124 | 1303k, 1303k, 1303k | 72% |
-| insertion_south_gate_2 | 1413, 1411, 1411 | 1299k, 1299k, 1299k | 72% |
-| k01_gate | 1180, 1180, 1180 | 1248k, 1248k, 1248k | 69% |
-| s01_ahead | 1344, 1344, 1344 | 1099k, 1099k, 1099k | 61% |
+| poi_the_quarry_2 | 1736, 1780, 1182 | 1042k, 1039k, 1020k | 74% |
+| k02_row | 1505, 1505, 1503 | 1323k, 1321k, 1322k | 74% |
+| k01_gate | 1178, 1182, 1182 | 1248k, 1248k, 1248k | 69% |
+| s01_ahead | 1346, 1348, 1346 | 1099k, 1099k, 1099k | 61% |
+| insertion_south_gate_2 | 1357, 1387, 1367 | 1097k, 1098k, 1097k | 61% |
 
 **Cinder Works**
 
 | view | draws | triangles | most of budget |
 | - | - | - | - |
-| s01_ahead | 1833, 1807, 1807 | 1606k, 1598k, 1598k | 89% |
-| exfil_south_gate__fuel__2 | 1796, 1796, 1796 | 1497k, 1497k, 1497k | 83% |
-| insertion_south_gate_2 | 1549, 1549, 1549 | 1351k, 1351k, 1351k | 75% |
-| c01_gate | 1243, 1227, 1227 | 1206k, 1206k, 1206k | 67% |
-| s02_ahead | 1121, 1115, 1121 | 1201k, 1200k, 1201k | 67% |
+| insertion_south_gate_2 | 1830, 1824, 1826 | 1613k, 1613k, 1613k | 90% |
+| s01_ahead | 1831, 1825, 1825 | 1607k, 1606k, 1606k | 89% |
+| exfil_south_gate__fuel__2 | 1812, 1810, 1816 | 1504k, 1504k, 1505k | 84% |
+| c01_gate | 1251, 1251, 1279 | 1214k, 1214k, 1216k | 68% |
+| s02_ahead | 1125, 1121, 1121 | 1204k, 1201k, 1201k | 67% |
 
 **Sallow Reservoir**
 
 | view | draws | triangles | most of budget |
 | - | - | - | - |
-| exfil_south_gate__fuel__2 | 1528, 1528, 1528 | 1312k, 1312k, 1312k | 73% |
-| s01_side | 1492, 1494, 1492 | 1284k, 1284k, 1284k | 71% |
-| insertion_south_gate_2 | 1283, 1283, 1283 | 1192k, 1192k, 1192k | 66% |
-| s01_ahead | 1251, 1251, 1251 | 1176k, 1176k, 1176k | 65% |
-| poi_the_silt_fans_0 | 1552, 1538, 1552 | 940k, 940k, 940k | 65% |
-| s01_gate | 978, 982, 980 | 1033k, 1034k, 1033k | 57% |
+| exfil_south_gate__fuel__2 | 1538, 1534, 1538 | 1316k, 1316k, 1316k | 73% |
+| s01_side | 1492, 1489, 1489 | 1286k, 1284k, 1284k | 71% |
+| insertion_south_gate_2 | 1293, 1293, 1293 | 1199k, 1199k, 1199k | 67% |
+| s01_ahead | 1264, 1264, 1264 | 1187k, 1187k, 1187k | 66% |
+| s01_gate | 978, 978, 978 | 1040k, 1040k, 1040k | 58% |
 
 **Rime Fell**
 
 | view | draws | triangles | most of budget |
 | - | - | - | - |
-| exfil_south_gate__fuel__2 | 1434, 1434, 1436 | 1303k, 1303k, 1303k | 72% |
-| s01_ahead | 1557, 1553, 1549 | 1293k, 1293k, 1292k | 72% |
-| insertion_south_gate_2 | 1546, 1540, 1538 | 1288k, 1287k, 1287k | 72% |
-| rendezvous_the_col_0 | 966, 960, 966 | 1189k, 1188k, 1188k | 66% |
-| poi_compressor_house_1 | 1078, 1082, 1082 | 1174k, 1174k, 1174k | 65% |
-| r01_gate | 918, 918, 918 | 1073k, 1073k, 1073k | 60% |
+| exfil_south_gate__fuel__2 | 1432, 1434, 1436 | 1301k, 1301k, 1301k | 72% |
+| s01_ahead | 1567, 1567, 1559 | 1296k, 1296k, 1295k | 72% |
+| insertion_south_gate_2 | 1554, 1556, 1548 | 1290k, 1290k, 1290k | 72% |
+| rendezvous_the_col_0 | 968, 968, 966 | 1189k, 1189k, 1189k | 66% |
+| poi_compressor_house_1 | 1076, 1076, 1082 | 1174k, 1174k, 1174k | 65% |
+| r01_gate | 918, 902, 902 | 1071k, 1046k, 1046k | 60% |
 
-The tightest view on triangles is Cinder Works' s01_ahead, at most 1606k
-(89%). The tightest on draws is Marrow's radio mast, at most 1986 (83%).
-At the fuel exfils the bar is 2160 draws, and the most is Marrow's 1906.
-Kettle's fuel exfil, with its fork lamps, is 1636 draws and 1379k
-triangles in every run (77%). An earlier 96% there came from a branch
-without the weather fix.
+The tightest view is Cinder Works' arrival, insertion_south_gate_2, at
+1613k triangles (90%) in every run. Turned to 21°, it now looks over the
+insertion cache's first row: the PM at 4.4 m, the AK-74 at 4.9 m, the
+Mosin at 5.3 m and the double-barrel at 6.0 m. Each draws its near level,
+as a gun within 6 m should, about 96k triangles an eye between them. At
+0° the same view was 1330-1354k (74-75%). The near guns stay; the arrival
+frame is where a player looks first. Cinder's s01_ahead is next, at 1607k
+(89%).
 
-Most views now read the same in every run, to within a few draws. The
-swing that remains is the fight around Marrow's radio mast: its mast_3 view
-went 1306-1836 draws as the drones moved.
+The most draws are at Marrow's radio mast, at most 1962 (82%). At the fuel
+exfils the bar is 2160 draws, and the most is Marrow's 1904. The fight
+still moves two views from run to run, the robots walking in and out of
+the frame: Marrow's mast_3 (1314-1824 draws) and Kettle's quarry_2
+(1182-1780 draws).
 
-Measured further (6 runs with every owner listed): the swing is whether the
-fight's robots stand in that view's frame, not a cost that grows. When they
-do, each costs the same in every run: the heavy 104 draws an eye, a hound
-walker 51, other robot pieces 36, drones and their rotors 41, so 1808-1842
-draws in all (75-77%). When they stand outside the frame, it is 1312-1550,
-and the shadow draws are the same either way (872-884), because the robots
-are still there. A cut would have to merge each moving robot's pieces by
-bone and material, in the heavy's and robot bodies' code. At 77% with 23%
-headroom that isn't worth it yet. If more robots are staged in one view,
-start there.
+Measured further at mast_3 (6 runs with every owner listed): the swing is
+whether the fight's robots stand in that view's frame, not a cost that
+grows. When they do, each costs the same in every run: the heavy 104 draws
+an eye, a hound walker 51, other robot pieces 36, drones and their rotors
+41, so 1808-1842 draws in all (75-77%). When they stand outside the frame,
+it is 1312-1550, and the shadow draws are the same either way (872-884),
+because the robots are still there. A cut would have to merge each moving
+robot's pieces by bone and material, in the heavy's and robot bodies' code.
+At 77% with 23% headroom that isn't worth it yet. If more robots are staged
+in one view, start there.
+
+A note for anyone measuring a map change: the game reads
+`assets/maps/<valley>.ron` from disk when it starts (`world::read_map_def`).
+An edit to a map has to stay in place until the measuring runs are done,
+not just until the build is.
 
 ### Cinder's gate held: a gun's look waits for its model (9 November)
 
