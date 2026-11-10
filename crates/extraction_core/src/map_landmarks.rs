@@ -268,12 +268,14 @@ impl Canopy {
     /// Whether the crowns hide a line from eye height at `from` to the
     /// point `top` metres up at `to`.
     pub fn hides(&self, hm: &Heightmap, from: P2, to: P2, top: f32) -> bool {
-        self.crowns(hm, from, to, top, CROWN_RADIUS, CROWNS_HIDE) >= CROWNS_HIDE
+        self.crowns(hm, from, to, top, CROWN_RADIUS, false, CROWNS_HIDE) >= CROWNS_HIDE
     }
 
     /// How many crowns, each `radius` wide each way, a line from eye height
     /// at `from` to the point `top` metres up at `to` passes through,
-    /// counted up to `enough`.
+    /// counted up to `enough`. A `cone` crown is `radius` wide at its base
+    /// and narrows to nothing at its top, as a spruce does.
+    #[allow(clippy::too_many_arguments)]
     pub fn crowns(
         &self,
         hm: &Heightmap,
@@ -281,6 +283,7 @@ impl Canopy {
         to: P2,
         top: f32,
         radius: f32,
+        cone: bool,
         enough: usize,
     ) -> usize {
         let eye = hm.height(from) + 1.7;
@@ -298,9 +301,14 @@ impl Canopy {
                         continue;
                     };
                     for (at, lo, hi) in v {
+                        let r = if cone {
+                            radius * (*hi - y) / (*hi - *lo).max(0.1)
+                        } else {
+                            radius
+                        };
                         if y > *lo
                             && y < *hi
-                            && dist(*at, q) < radius
+                            && dist(*at, q) < r
                             && !hit.iter().any(|h| dist(*h, *at) < 0.1)
                         {
                             hit.push(*at);
