@@ -6178,6 +6178,57 @@ the Hollow.";
     /// newcomer stood through eight zaps in the shelter's generator room);
     /// its gun out of the pack if that's the loaded one; else out of its
     /// line. And while one's at it, no keeping still and no dressing.
+    /// Where a newcomer with no radio could find one, valley by valley:
+    /// each loot spot whose table can roll one, on the ground or up a
+    /// floor (a tower's cab), and whether any is on the ground. Run with
+    /// `--ignored --nocapture` for the list.
+    #[test]
+    #[ignore = "a report: the radio spots in every valley"]
+    fn radio_spots_in_every_valley() {
+        use extraction_core::loot::{BUILTIN_LOOT, LootTables};
+        let catalog =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &catalog).unwrap();
+        let mut none_low = Vec::new();
+        for (name, text) in extraction_core::map::VALLEYS {
+            let map = extraction_core::map::MapDef::from_ron(text).unwrap();
+            let (mut low, mut high) = (Vec::new(), Vec::new());
+            for pl in &map.placements {
+                let Some(geo) = crate::world::buildings::prefab(&pl.prefab) else {
+                    continue;
+                };
+                for spot in geo.loot.iter().filter(|s| loot.can_drop(s.table, "radio")) {
+                    let floor = spot.at.y - spot.lift.unwrap_or(0.0);
+                    let at = format!(
+                        "{} at {:?} ({}, floor {:.1} m)",
+                        pl.prefab, pl.at, spot.table, floor
+                    );
+                    if floor > super::DOOR_STEPS {
+                        high.push(at);
+                    } else {
+                        low.push(at);
+                    }
+                }
+            }
+            println!(
+                "== {name}: {} on the ground, {} up a floor",
+                low.len(),
+                high.len()
+            );
+            for a in &high {
+                println!("   up:  {a}");
+            }
+            for a in &low {
+                println!("   low: {a}");
+            }
+            if low.is_empty() {
+                none_low.push(name);
+            }
+        }
+        println!("valleys with no radio spot on the ground: {none_low:?}");
+    }
+
     /// A radio up in a tower's cab, over the ground floor it stands on, is
     /// none to go for; one on a shelf is.
     #[test]
