@@ -76,5 +76,6 @@ within 6 px of the light's projected spot), clear and in rain:
 Kettle's chimney lamp is the faintest that reads (the coordinator's limit).
 The glow falls off with distance; rain changed it little (it darkens what is
 round a lamp as much as the lamp), so `NIGHT_READ` is the same in both.
-Cinder takes a yard lamp 40 m up the works road; Sallow and Rime take one
-each from Fourth valley, and are on the night gauge's GAPS until then.
+Each valley's first frame now holds a yard lamp 40 m up the way: Cinder's
+up the works road (Map design), Sallow's and Rime's from Fourth valley
+(b9f2fe32). Both GAPS lists are empty.

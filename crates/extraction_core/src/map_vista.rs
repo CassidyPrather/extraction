@@ -287,20 +287,7 @@ mod tests {
     /// is and why. Off the list in the same commit as the fix.
     const GAPS: &[(&str, &str, &str)] = &[];
     /// The same, after dark.
-    const NIGHT_GAPS: &[(&str, &str, &str)] = &[
-        (
-            "sallow_reservoir",
-            "Fourth valley",
-            "the yard lamps up the road are 96 and 106 m out, past NIGHT_READ; \
-             a warm lamp 30-50 m up the way at rot 0 is coming",
-        ),
-        (
-            "rime_fell",
-            "Fourth valley",
-            "the water tower's lamp is 120 m out, past NIGHT_READ; \
-             a warm lamp 30-50 m up the way at rot 56.5 is coming",
-        ),
-    ];
+    const NIGHT_GAPS: &[(&str, &str, &str)] = &[];
 
     #[test]
     fn every_first_frame_holds_somewhere_to_go() {
