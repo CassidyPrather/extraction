@@ -101,6 +101,8 @@ pub fn exempt(name: &str) -> bool {
         "ropeway",
         "blast_furnace",
         "headframe",
+        // Its plinth is the recipe's collider, 20 cm in the ground.
+        "gas_holder",
         "water_tower",
         "steeple",
         "signal_box",
