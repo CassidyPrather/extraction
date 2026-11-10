@@ -464,6 +464,63 @@ pub const SCENARIO: &str = "mender_weld";
 /// The same, left to it (run by name): the pylon comes back whole.
 pub const CONTROL: &str = "mender_control";
 
+/// How far ahead of the bot the hurt pylon stands (m).
+pub const SITE_AHEAD: f32 = 14.0;
+
+/// Where the scenario's pieces go, whatever way the bot arrives facing:
+/// the way ahead to the pylon (`dir`, its first 20 m walkable), the hand
+/// the mender comes in from (`side`) and from how far off (`reach`), so
+/// its whole way in, out at `reach` to the pylon, is open ground in the
+/// valley; tried nearest the facing first, either hand, square on or
+/// angled, from 60 m in to 20. (One hand, always 60 m out, put Marrow's mender over the south
+/// fence and the boundary woods once its arrival turned to 53°: it never
+/// came into view, and the bot never shot it. Map design, 10 November.)
+pub fn stage_layout(
+    at: Vec3,
+    facing: Vec3,
+    walkable: impl Fn([f32; 2]) -> bool,
+) -> (Vec3, Vec3, f32) {
+    let f = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::NEG_Z);
+    let open = |d: Vec3| {
+        (2..=20).step_by(2).all(|m| {
+            let p = at + d * m as f32;
+            walkable([p.x, p.z])
+        })
+    };
+    let dirs: Vec<Vec3> = (0..16)
+        .map(|k| {
+            // Nearest the facing first: 0, +1, -1, +2, -2...
+            let n = (k + 1) / 2;
+            let sign = if k % 2 == 1 { 1.0 } else { -1.0 };
+            Quat::from_rotation_y(sign * n as f32 * std::f32::consts::TAU / 16.0) * f
+        })
+        .filter(|d| open(*d))
+        .collect();
+    // The hands it may come in on, off the way ahead: square on first,
+    // then angled in from the bot's side (it still welds in view), then
+    // angled from beyond.
+    let hands = [90.0f32, -90.0, 120.0, -120.0, 60.0, -60.0];
+    for reach in [60.0f32, 45.0, 30.0, 20.0] {
+        for d in &dirs {
+            let site = at + *d * SITE_AHEAD;
+            for hand in hands {
+                let side = Quat::from_rotation_y(hand.to_radians()) * *d;
+                let from = site + side * reach - *d * 6.0;
+                let n = from.distance(site).ceil() as usize;
+                let way_in = (0..=n).all(|i| {
+                    let p = from.lerp(site, i as f32 / n as f32);
+                    walkable([p.x, p.z])
+                });
+                if way_in {
+                    return (*d, side, reach);
+                }
+            }
+        }
+    }
+    let d = dirs.first().copied().unwrap_or(f);
+    (d, Vec3::new(-d.z, 0.0, d.x), 60.0)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn stage_scenario(
     mut commands: Commands,
@@ -477,18 +534,8 @@ fn stage_scenario(
         if s.name != SCENARIO {
             continue;
         }
-        let f = Vec3::new(s.facing.x, 0.0, s.facing.z).normalize_or(Vec3::NEG_Z);
-        let open = |d: Vec3| {
-            (2..=20).step_by(2).all(|m| {
-                let p = s.at + d * m as f32;
-                nav.0.walkable([p.x, p.z])
-            })
-        };
-        let dir = (0..16)
-            .map(|k| Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * f)
-            .find(|d| open(*d))
-            .unwrap_or(f);
-        let site = zone.on_ground(s.at.x + dir.x * 14.0, s.at.z + dir.z * 14.0);
+        let (dir, side, reach) = stage_layout(s.at, s.facing, |p| nav.0.walkable(p));
+        let site = zone.on_ground(s.at.x + dir.x * SITE_AHEAD, s.at.z + dir.z * SITE_AHEAD);
         // A relay pylon, shot about.
         let pylon = super::pylon::spawn_pylon(&mut commands, site, 9999.0, site);
         commands.queue(move |w: &mut World| {
@@ -501,8 +548,7 @@ fn stage_scenario(
         });
         // From the side: it welds on the side it came from, in the bot's
         // clear view (not behind the pylon).
-        let side = Vec3::new(-dir.z, 0.0, dir.x);
-        let from = site + side * 60.0 - dir * 6.0 + Vec3::Y * rules::CRUISE;
+        let from = site + side * reach - dir * 6.0 + Vec3::Y * rules::CRUISE;
         let mender = spawn_mender(&mut commands, from, from);
         info!("scenario: a hurt pylon at {site:.0}, a mender on its way");
         for mut bot in &mut bots {
@@ -516,8 +562,8 @@ fn stage_scenario(
         }
         for (k, id) in ["ak74", "ak_mag"].into_iter().enumerate() {
             if let Some(kind) = catalog.kind(id) {
-                let side = Vec3::new(-dir.z, 0.0, dir.x);
-                let p = s.at + side * (0.7 + k as f32 * 0.4) - dir * 0.5;
+                let hand = Vec3::new(-dir.z, 0.0, dir.x);
+                let p = s.at + hand * (0.7 + k as f32 * 0.4) - dir * 0.5;
                 let it = crate::items::spawn_item(
                     &mut commands,
                     &catalog,
@@ -545,6 +591,49 @@ fn stage_scenario(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Whatever way a valley's arrival faces, the scenario's mender comes
+    /// in over open ground: its start, and its whole way in to the pylon,
+    /// walkable in the valley (not over a fence or the boundary woods,
+    /// where it never comes into the bot's view: Marrow at 53°, Map
+    /// design's turned arrival).
+    #[test]
+    fn the_menders_way_in_is_open_whatever_the_arrival_faces() {
+        let mut bad = vec![];
+        for (valley, _) in extraction_core::map::VALLEYS {
+            let (app, _, zone) = super::super::drone_drill::valley_app(valley);
+            let nav = &app.world().resource::<super::super::walker::Nav>().0;
+            let m = zone
+                .marker(&extraction_core::map::MarkerKind::Insertion)
+                .expect("an arrival")
+                .at;
+            let at = zone.on_ground(m[0], m[1]);
+            for k in 0..16 {
+                let facing =
+                    Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * Vec3::NEG_Z;
+                let (dir, side, reach) = stage_layout(at, facing, |p| nav.walkable(p));
+                let site = at + dir * SITE_AHEAD;
+                let from = site + side * reach - dir * 6.0;
+                let n = from.distance(site).ceil() as usize;
+                let open = (0..=n).all(|i| {
+                    let p = from.lerp(site, i as f32 / n as f32);
+                    nav.walkable([p.x, p.z])
+                });
+                if !open {
+                    bad.push(format!(
+                        "{valley} facing {}°: from ({:.0}, {:.0})",
+                        k * 360 / 16,
+                        from.x,
+                        from.z
+                    ));
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "a mender's way in over closed ground: {bad:#?}"
+        );
+    }
 
     fn world() -> (crate::vr_harness::Vr, Zone) {
         let vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
