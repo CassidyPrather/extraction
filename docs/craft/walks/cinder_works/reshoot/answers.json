@@ -1,0 +1,83 @@
+{
+ "title": "Cinder Works, re-shot from the marker's rot (21)",
+ "stops": {
+  "s01": {
+   "vista": "The blast furnace at left, the row's roofs ahead, the road straight on.",
+   "discover": "The furnace and the silos, a lamp on the works.",
+   "for": "Arriving into the works' shadow, with the row ahead.",
+   "beat": "threshold"
+  },
+  "s02": {
+   "vista": "Farm sheds both sides, the gas holder's lamp ahead.",
+   "discover": "Silos, headframe and sheds.",
+   "for": "The works laid out beside you.",
+   "beat": "reveal"
+  },
+  "s03": {
+   "vista": "The gas holder's frame at left, a row of houses.",
+   "discover": "The blast furnace.",
+   "for": "The fork, with the gas holder as the way's mark.",
+   "beat": "choice"
+  },
+  "s04": {
+   "vista": "The gas holder and Ash Row.",
+   "discover": "The furnace buildings.",
+   "for": "The job reads: houses under the gas holder.",
+   "beat": "reveal"
+  },
+  "s05": {
+   "vista": "The road on, a birch.",
+   "discover": "The damaged house's front door.",
+   "for": "A door to try.",
+   "beat": "choice"
+  },
+  "s06": {
+   "vista": "Gate rails across the road, the chimney's lamp in fog.",
+   "discover": "The same gate's rails.",
+   "for": "A threshold, but both frames are the gate.",
+   "beat": "threshold"
+  },
+  "s07": {
+   "vista": "A warehouse ahead, the chimney.",
+   "discover": "A lorry by the warehouse.",
+   "for": "Into the works.",
+   "beat": "calm"
+  },
+  "s08": {
+   "vista": "A blue wreck between brick walls, a red shed.",
+   "discover": "A brick wall at arm's length and the wreck.",
+   "for": "Tight ground; the side frame is a wall.",
+   "beat": "tension"
+  },
+  "s09": {
+   "vista": "A corridor between the rail shed and a brick hall.",
+   "discover": "The rail shed's wall with its door.",
+   "for": "Through the narrows.",
+   "beat": "threshold"
+  },
+  "s10": {
+   "vista": "The road on, the beacon faint.",
+   "discover": "The chimney and rail wagons.",
+   "for": "Out of the works.",
+   "beat": "calm"
+  },
+  "s11": {
+   "vista": "The beacon's green lamp ahead, a pump house.",
+   "discover": "The pump buildings.",
+   "for": "Home in sight.",
+   "beat": "relief"
+  },
+  "s12": {
+   "vista": "The beacon ahead, a shed.",
+   "discover": "The chimney over the yard.",
+   "for": "Arrived.",
+   "beat": "relief"
+  }
+ },
+ "notes": [
+  "The drop now faces the furnace and the row; the gas holder carries the way to the job.",
+  "Worst three: s06, both frames the Towpath gate's rails; s08's side view onto a brick wall; s07-s10, the works' walls close on both sides with little to look at but walls.",
+  "The arrival frames hold; the weakest moments are in the works, not at the start."
+ ],
+ "fixes": []
+}

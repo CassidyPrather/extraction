@@ -1,0 +1,182 @@
+[
+ {
+  "n": 1,
+  "name": "s01",
+  "s": 0,
+  "kind": "drop",
+  "note": "",
+  "at": [
+   -71.0,
+   198.7
+  ],
+  "h": 20.6,
+  "fwd": 21,
+  "side": 328,
+  "side_what": "blast_furnace (72 m)"
+ },
+ {
+  "n": 2,
+  "name": "s02",
+  "s": 40,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   -60.2,
+   159.9
+  ],
+  "h": 20.5,
+  "fwd": 16,
+  "side": 295,
+  "side_what": "blast_furnace (53 m)"
+ },
+ {
+  "n": 3,
+  "name": "s03",
+  "s": 87,
+  "kind": "fork",
+  "note": "Farm lane / Works road",
+  "at": [
+   -42.4,
+   117.2
+  ],
+  "h": 20.3,
+  "fwd": 41,
+  "side": 253,
+  "side_what": "blast_furnace (69 m)"
+ },
+ {
+  "n": 4,
+  "name": "s04",
+  "s": 99,
+  "kind": "job",
+  "note": "the career's first (Ash Row)",
+  "at": [
+   -47.7,
+   123.2
+  ],
+  "h": 20.3,
+  "fwd": 41,
+  "side": 257,
+  "side_what": "blast_furnace (63 m)"
+ },
+ {
+  "n": 5,
+  "name": "s05",
+  "s": 119,
+  "kind": "door",
+  "note": "house_plank_damaged",
+  "at": [
+   -21.9,
+   93.7
+  ],
+  "h": 20.4,
+  "fwd": 41,
+  "side": 90,
+  "side_what": "the house_plank_damaged's door"
+ },
+ {
+  "n": 6,
+  "name": "s06",
+  "s": 171,
+  "kind": "fork",
+  "note": "Towpath / Works road",
+  "at": [
+   10.0,
+   53.4
+  ],
+  "h": 19.6,
+  "fwd": 42,
+  "side": 1,
+  "side_what": "The works (70 m)"
+ },
+ {
+  "n": 7,
+  "name": "s07",
+  "s": 200,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   25.7,
+   30.0
+  ],
+  "h": 21.8,
+  "fwd": 42,
+  "side": 344,
+  "side_what": "The works (49 m)"
+ },
+ {
+  "n": 8,
+  "name": "s08",
+  "s": 240,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   59.0,
+   15.0
+  ],
+  "h": 22.2,
+  "fwd": 90,
+  "side": 20,
+  "side_what": "The chimney (50 m)"
+ },
+ {
+  "n": 9,
+  "name": "s09",
+  "s": 286,
+  "kind": "door",
+  "note": "rail_shed",
+  "at": [
+   105.0,
+   15.0
+  ],
+  "h": 21.9,
+  "fwd": 90,
+  "side": 0,
+  "side_what": "the rail_shed's door"
+ },
+ {
+  "n": 10,
+  "name": "s10",
+  "s": 307,
+  "kind": "fork",
+  "note": "Keeper's path / Yard road",
+  "at": [
+   126.0,
+   15.0
+  ],
+  "h": 21.7,
+  "fwd": 90,
+  "side": 313,
+  "side_what": "The chimney (69 m)"
+ },
+ {
+  "n": 11,
+  "name": "s11",
+  "s": 320,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   139.0,
+   15.0
+  ],
+  "h": 21.6,
+  "fwd": 80,
+  "side": 252,
+  "side_what": "Canal pumps (26 m)"
+ },
+ {
+  "n": 12,
+  "name": "s12",
+  "s": 361,
+  "kind": "rendezvous",
+  "note": "Works yard",
+  "at": [
+   159.7,
+   11.0
+  ],
+  "h": 22.0,
+  "fwd": 77,
+  "side": 255,
+  "side_what": "Canal pumps (47 m)"
+ }
+]
