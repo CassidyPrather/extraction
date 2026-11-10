@@ -1,7 +1,8 @@
 // Terrain: blends ground layers on top of the standard PBR pipeline.
 //
 // Vertex colour carries splat weights: r = mud/wet, g = rock (slope),
-// b = road, a = forest floor. uv_b.x is the road kind (1 asphalt, 2 gravel,
+// b = the nearest road's edge (`world::terrain::edge_code`: its signed
+// distance, linear, so it holds for every pixel), a = forest floor. uv_b.x is the road kind (1 asphalt, 2 gravel,
 // 3 rail ballast, 4 dirt, 5 path), uv_b.y the wetness from water.
 // Layers in the arrays: 0 grass, 1 forest floor, 2 mud, 3 rock, 4 gravel,
 // 5 asphalt, 6 dirt road.
@@ -38,6 +39,8 @@ struct TerrainParams {
     // Snow lying (world::snow), above this height.
     snow: f32,
     snow_line: f32,
+    // 1: each layer a flat colour, unlit (`--terrain-debug layers`).
+    debug: f32,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> terrain: TerrainParams;
@@ -76,6 +79,8 @@ fn packed_at(p: vec2<f32>) -> f32 {
 }
 
 const LAYER_COUNT: u32 = 7u;
+// `world::terrain::EDGE_REACH`: the road channel's range (m).
+const EDGE_REACH: f32 = 8.0;
 
 // ---------------------------------------------------------------------
 // Noise for breakup and the procedural fallback.
@@ -269,6 +274,19 @@ fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
     return l;
 }
 
+// A layer's flat colour for `--terrain-debug layers`.
+fn layer_flat(i: u32) -> vec3<f32> {
+    switch i {
+        case 0u: { return vec3<f32>(0.10, 0.55, 0.08); } // grass
+        case 1u: { return vec3<f32>(0.30, 0.16, 0.05); } // forest floor
+        case 2u: { return vec3<f32>(0.45, 0.30, 0.42); } // mud
+        case 3u: { return vec3<f32>(0.50, 0.50, 0.50); } // rock
+        case 4u: { return vec3<f32>(0.95, 0.85, 0.05); } // gravel
+        case 5u: { return vec3<f32>(0.02, 0.02, 0.02); } // asphalt
+        default: { return vec3<f32>(0.95, 0.40, 0.05); } // dirt road
+    }
+}
+
 // Puddles: the mask is `world::puddles::mask` (keep the two in step).
 fn puddle_mask(p: vec2<f32>, basin: f32, road: f32, up: f32, fill: f32) -> f32 {
     if (fill <= 0.0) {
@@ -352,9 +370,16 @@ fn fragment(
     // up a moderate slope, bare rock only where it's steepest.
     let patches = fbm(wp.xz * 0.05 + vec2<f32>(11.0, 7.0)) - 0.5;
     let rock = clamp(splat.g * 1.4 + breakup * 0.6 + patches * 0.9 - 0.2, 0.0, 1.0);
-    // A road's edge wanders (mid-scale breakup) and frays (fine): ruled by
-    // its splat alone it read as a seam along every path.
-    let road = clamp(splat.b * 1.15 + fine * 0.35 + breakup * 0.25, 0.0, 1.0);
+    // The nearest road's edge, per pixel (m; under 0 on the road). Where
+    // it lies wanders over metres and frays over decimetres; the road
+    // gives way over a metre and a half of it, and its verge (below) runs
+    // on a metre or two past. (A 1 m ramp painted on the 2 m vertex grid
+    // was a ruled seam along the triangles.)
+    let road_e = (0.5 - splat.b) * 2.0 * EDGE_REACH;
+    let ee = road_e + breakup * 1.3 + fine * 0.45;
+    var road = 1.0 - smoothstep(-0.7, 0.8, ee);
+    // A dirt road's edge is the softest: worn, not laid.
+    if (road_kind == 4u) { road = 1.0 - smoothstep(-0.9, 1.3, ee); }
     // Patches of bare earth in open grass, their edges ragged and thinning
     // out over a metre or two (a narrow threshold drew each one as a
     // hard-edged disc of litter on the grass).
@@ -374,10 +399,17 @@ fn fragment(
     w[road_layer] = road;
     // Paths are worn dirt, faint.
     if (road_kind == 5u) { w[6] = road * 0.8; }
-    // Asphalt crumbles at the edges into gravel; gravel and ballast into a
-    // verge of worn dirt before the grass.
-    if (road_kind == 1u) { w[4] = road * (1.0 - road) * 2.0; }
-    if (road_kind == 2u || road_kind == 3u) { w[6] = max(w[6], road * (1.0 - road) * 1.6); }
+    // Asphalt crumbles at its lip into gravel, then a thin worn verge;
+    // gravel and ballast into a wider verge of worn dirt, the grass
+    // taking it back in tongues (the fine noise) a metre or two out.
+    let lip = ee + fine * 0.4;
+    if (road_kind == 1u) {
+        w[4] = smoothstep(-0.9, 0.0, ee) * (1.0 - smoothstep(0.2, 1.1, lip)) * 0.9;
+        w[6] = smoothstep(0.0, 0.8, ee) * (1.0 - smoothstep(0.6, 2.0, lip + fine * 0.3)) * 0.5;
+    }
+    if (road_kind == 2u || road_kind == 3u) {
+        w[6] = max(w[6], smoothstep(-0.6, 0.4, ee) * (1.0 - smoothstep(0.5, 2.6, lip + fine * 0.3)) * 0.85);
+    }
 
     // Composite top-down: base (grass/forest), then mud, gravel/road, rock.
     var albedo = vec3<f32>(0.0);
@@ -385,6 +417,9 @@ fn fragment(
     var ao = 1.0;
     var rough = 0.9;
     var acc = 0.0;
+    // `--terrain-debug layers`: the same weights and cover, each layer one
+    // flat colour, so where one gives way to the next shows plainly.
+    var dbg = vec3<f32>(0.0);
     for (var i = 0u; i < LAYER_COUNT; i = i + 1u) {
         if (w[i] < 0.01) { continue; }
         var l: Layer;
@@ -439,12 +474,21 @@ fn fragment(
         }
         // Height-aware blending: each layer covers the ones below it where
         // its own height wins.
+        // The road layers' cover rises more gently with their weight and
+        // more on their own stones: their edge stays ragged up close, the
+        // stones over the grass, but not a sharp line cut through it.
+        let road_layer_i = i >= 4u;
         let cover = select(
-            clamp(w[i] * 1.6 + (l.height - 0.5) * 0.8 - 0.2, 0.0, 1.0),
+            select(
+                clamp(w[i] * 1.6 + (l.height - 0.5) * 0.8 - 0.2, 0.0, 1.0),
+                clamp(w[i] * 1.25 + (l.height - 0.5) * 0.9 - 0.12, 0.0, 1.0),
+                road_layer_i
+            ),
             1.0,
             acc == 0.0
         );
         albedo = mix(albedo, l.albedo, cover);
+        dbg = mix(dbg, layer_flat(i), cover);
         tn = normalize(mix(tn, l.normal, cover));
         ao = mix(ao, l.ao, cover);
         rough = mix(rough, l.rough, cover);
@@ -459,7 +503,7 @@ fn fragment(
     let m2 = vnoise(wp.xz * 0.07 + vec2<f32>(7.0, 43.0));
     // (The road's own splat, strictly: its noisy edge let the tint onto
     // the asphalt.)
-    let off_road = 1.0 - clamp(splat.b * 2.0, 0.0, 1.0);
+    let off_road = smoothstep(-0.5, 0.5, road_e);
     let open_ground = (1.0 - forest) * (1.0 - rock) * off_road;
     let straw = smoothstep(0.45, 0.75, m1 * 0.65 + m2 * 0.35);
     let lush = smoothstep(0.5, 0.8, 1.0 - (m1 * 0.55 + m2 * 0.45));
@@ -577,6 +621,9 @@ fn fragment(
         out.color = vec4<f32>(mix(out.color.rgb, refl, f * puddle * 0.9), out.color.a);
     }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
+    if (terrain.debug > 0.5) {
+        out.color = vec4<f32>(dbg, 1.0);
+    }
 #endif
     return out;
 }
