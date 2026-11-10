@@ -53,40 +53,54 @@ def measure(png):
     w, h = im.size
     px = im.load()
     ppm = px_per_m(h)
-    # The two sides' own colours: a strip at each side, the middle rows.
-    def side(x0, x1):
-        cs = [px[x, y] for y in range(h // 4, 3 * h // 4, 4) for x in range(x0, x1, 2)]
+    cx = w // 2
+
+    # A side's own colour: a strip `a`..`b` metres from the edge (the
+    # frame's centre; under 0 to the left), the middle rows.
+    def side(a, b):
+        x0, x1 = sorted((int(cx + a * ppm), int(cx + b * ppm)))
+        cs = [px[x, y] for y in range(h // 4, 3 * h // 4, 4) for x in range(max(x0, 0), min(x1, w), 2)]
         return tuple(median([c[i] for c in cs]) for i in range(3))
 
-    left, right = side(0, w // 12), side(w - w // 12, w)
-    # The grass is the green side; the road the other.
+    # The road is the side less green just in from the edge (a narrow
+    # road's far side is grass again, so not the frame's own edge).
     greenness = lambda c: c[1] - c[0]
-    road_left = greenness(left) < greenness(right)
-    road, grass = (left, right) if road_left else (right, left)
+    road_left = greenness(side(-1.6, -1.0)) < greenness(side(1.0, 1.6))
+    s = -1 if road_left else 1
+    road, grass = side(s * 1.6, s * 1.0), side(-s * 6.0, -s * 4.5)
     if dist(road, grass) < 40:
         return None
+    # Each row from 2.5 m in on the road to 6.5 m out on the grass.
+    xs = [int(cx + s * 2.5 * ppm - s * k) for k in range(int(9.0 * ppm))]
+    xs = [x for x in xs if 0 <= x < w]
+    # Each band of rows (0.6 m of road) as one profile, each column's
+    # median over the band: the grass tufts' dark blades are a few pixels
+    # here and there, and a single row read them as road.
+    band = max(int(0.6 * ppm), 8)
     widths, mids = [], []
-    for y in range(0, h, 4):
+    for y0 in range(0, h - band + 1, band // 2):
         t = []
-        for x in range(w):
-            c = px[x, y]
-            dr, dg = dist(c, road), dist(c, grass)
-            t.append(dg / (dr + dg + 1e-6))  # 1 road, 0 grass
-        if not road_left:
-            t = t[::-1]
-        # From the road side: where it stops being 90% road; from the
-        # grass side: where it stops being 90% grass.
-        a = next((x for x in range(w) if t[x] < 0.9), None)
-        b = next((x for x in range(w - 1, -1, -1) if t[x] > 0.1), None)
-        m = next((x for x in range(w) if t[x] < 0.5), None)
+        for x in xs:
+            col = []
+            for y in range(y0, y0 + band, 2):
+                c = px[x, y]
+                dr, dg = dist(c, road), dist(c, grass)
+                col.append(dg / (dr + dg + 1e-6))  # 1 road, 0 grass
+            t.append(median(col))
+        nt = len(t)
+        # Out from the road: where it stops being 90% road, and where it
+        # is first 90% grass (a patch further out isn't this edge's).
+        a = next((x for x in range(nt) if t[x] < 0.9), None)
+        b = next((x for x in range(a or 0, nt) if t[x] < 0.1), None)
+        m = next((x for x in range(nt) if t[x] < 0.5), None)
         if a is None or b is None or m is None or b < a:
             continue
-        # A row clipped by the frame tells nothing.
-        if a == 0 or b == w - 1:
+        # A profile clipped by its window tells nothing.
+        if a == 0 or b == nt - 1:
             continue
         widths.append((b - a) / ppm)
-        mids.append((y, m))
-    if len(mids) < 20:
+        mids.append((y0 + band // 2, m))
+    if len(mids) < 6:
         return None
     # The 50% line's stray from a straight fit.
     n = len(mids)
