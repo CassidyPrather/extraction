@@ -255,6 +255,11 @@
         (prefab: "machine_marker", at: (176.2, -261.7), rot: 0.0),
         (prefab: "machine_marker", at: (278.9, -271.6), rot: 0.0),
 
+        // The truck's first frame after dark: a warm lamp 40 m out along the
+        // way the arrival faces (the Insertion's rot), beside the track to the
+        // lower village, saying "this way" before anything else.
+        (prefab: "way_lamp", at: (21.4, 241.0), rot: 56.0),
+
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (-192.4, -235.9), rot: 0.0),
