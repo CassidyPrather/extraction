@@ -2756,7 +2756,7 @@ pub(super) fn direct_raid(
                     // what was in the hands (`persist::apply_restore`).
                     // (Looked for only on the body, the careers wedged: "no
                     // radio", done, every run after it the same.)
-                    (None, None) => match radio_at_feet(&world, &plans, here)
+                    (None, None) => match radio_at_feet(&world, &plans, root.translation)
                         .filter(|(e, _)| tries_at(&state.radios_tried, *e) < RADIO_TRIES)
                         .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
                     {
@@ -4186,8 +4186,10 @@ fn take_it_on() -> Vec<Task> {
 fn radio_at_feet(
     world: &World2,
     plans: &[crate::sim::indoor::BuildingPlan],
-    here: Vec2,
+    feet: Vec3,
 ) -> Option<(Entity, Vec2)> {
+    // (By the floor-plane distance alone, the one up in the tower's cab
+    // over its head was "at its feet".)
     world
         .items
         .iter()
@@ -4198,9 +4200,10 @@ fn radio_at_feet(
                 && world.catalog.get(it.kind()).id == "radio"
                 && in_reach(world, plans, gt.translation())
         })
-        .map(|(e, _, gt, ..)| (e, gt.translation().xz()))
-        .filter(|(_, at)| at.distance(here) < FEET_REACH)
-        .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+        .map(|(e, _, gt, ..)| (e, gt.translation()))
+        .filter(|(_, at)| at.distance(feet) < FEET_REACH)
+        .min_by(|a, b| a.1.distance(feet).total_cmp(&b.1.distance(feet)))
+        .map(|(e, at)| (e, at.xz()))
 }
 
 /// A radio not on `player` to go and get: the nearest in its own remains,
