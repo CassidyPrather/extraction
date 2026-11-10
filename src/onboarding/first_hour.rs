@@ -4279,11 +4279,36 @@ fn tries_at(tried: &[Entity], e: Entity) -> usize {
 /// building's (its plan's, upper floors and all where it has them), else
 /// the ground.
 fn in_reach(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], at: Vec3) -> bool {
-    match plans.iter().find(|pl| pl.contains(at, 0.3)) {
+    match plans
+        .iter()
+        .find(|pl| pl.contains(at, 0.3) && on_foot(world, pl))
+    {
         Some(plan) => plan.reachable_height(at),
         None => over_floor(at.y, world.zone.on_ground(at.x, at.z).y),
     }
 }
+
+/// Whether a body walks onto `plan`'s floor from the ground: it has
+/// floors of its own, stairs and all, or a way in at the ground's own
+/// height (steps up to a door, a sill). (The ranger tower's plan is its
+/// cab, its floor at the cab's door 6 m up: by it, the radio in the cab
+/// was within reach of the floor, and the wanderer stood under it.)
+fn on_foot(world: &World2, plan: &crate::sim::indoor::BuildingPlan) -> bool {
+    plan.levels.is_some()
+        || plan
+            .doors
+            .iter()
+            .filter_map(|d| d.outside)
+            .chain(plan.entries.iter().copied())
+            .any(|o| {
+                let w = plan.to_world(o);
+                (w.y - world.zone.on_ground(w.x, w.z).y).abs() <= DOOR_STEPS
+            })
+}
+
+/// The most a building's floor stands over the ground at its way in and
+/// is still walked onto (m): a flight of steps to a door.
+const DOOR_STEPS: f32 = 1.5;
 
 /// `y` within a standing hand's reach over a floor at `floor`.
 fn over_floor(y: f32, floor: f32) -> bool {
