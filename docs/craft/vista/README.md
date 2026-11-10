@@ -27,3 +27,11 @@ left or top, after on the right or bottom.
   Lodge fork (bottom) has none: the charcoal hut's window stands dead
   ahead down the lodge branch, and a warm lamp there would stand in the
   frame of the lodge track's crossing stake for whoever walks home.
+- `cinder_first_frame.jpg`: Cinder's first frame off the truck, before
+  and after, by day (top) and at night (bottom). Nothing at Ash Row read:
+  its houses are low and the blast furnace stands 60 degrees off the way.
+  Models' works gas holder stands at the top of the Row, 116 m out and
+  4 degrees off the way, lower in the gate's view than the works chimney
+  (Story: the chimney stays the valley's landmark). Its red landmark lamp
+  lights after dark. `map_vista::every_first_frame_holds_somewhere_to_go`
+  holds every valley's first frame to this, with no gaps.

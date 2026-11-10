@@ -218,12 +218,7 @@ mod tests {
 
     /// Valleys whose first frame is known not to read, each with whose it
     /// is and why. Off the list in the same commit as the fix.
-    const GAPS: &[(&str, &str, &str)] = &[(
-        "cinder_works",
-        "Map design",
-        "Ash Row's houses are low (the shop 3.7 m) and read under READ_ANGLE at 100 m; \
-         the blast furnace, the frame's subject by eye, stands 60 deg off the way's heading",
-    )];
+    const GAPS: &[(&str, &str, &str)] = &[];
 
     #[test]
     fn every_first_frame_holds_somewhere_to_go() {
