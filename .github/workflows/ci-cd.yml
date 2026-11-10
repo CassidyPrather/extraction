@@ -2,8 +2,9 @@ name: CI/CD
 
 on:
   push:
-    # Development branches get the same checks as main.
-    branches: [ main, 'claude/**' ]
+    # Only main: merges into it. Work branches are checked when a pull
+    # request into main is opened, not on every push.
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   release:
