@@ -42,6 +42,11 @@ left or top, after on the right or bottom.
   Kettle (the camp chimney's) and Cinder (the gas holder's) show plainly.
   Sallow's two yard lamps at about 100 m and Rime's survey tower lamp pass
   the gauge but are faint in this still, in rain.
+- `arrivals_day.jpg`, `arrivals_night.jpg`: each valley's first frame off
+  the truck at its insertion marker's `rot`, the way the player spawns
+  facing (Marrow 53, Kettle 58, Cinder 21, Sallow and Rime as set by
+  Fourth valley), by day and after dark in rain. These replace the
+  way-heading frames above as the ones the gauge judges.
 
 ## What the first-frame gauge asks, and what it doesn't
 
