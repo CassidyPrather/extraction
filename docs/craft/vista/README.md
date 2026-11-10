@@ -35,3 +35,10 @@ left or top, after on the right or bottom.
   (Story: the chimney stays the valley's landmark). Its red landmark lamp
   lights after dark. `map_vista::every_first_frame_holds_somewhere_to_go`
   holds every valley's first frame to this, with no gaps.
+- `first_frames_night.jpg`: each valley's first frame off the truck after
+  dark, along the way's heading. `every_first_frame_holds_somewhere_to_go`
+  asks for a yard lamp, a lit window or a landmark's red lamp ahead (not a
+  stake or a warning: they say danger). Marrow (the ranger tower's lamp),
+  Kettle (the camp chimney's) and Cinder (the gas holder's) show plainly.
+  Sallow's two yard lamps at about 100 m and Rime's survey tower lamp pass
+  the gauge but are faint in this still, in rain.
