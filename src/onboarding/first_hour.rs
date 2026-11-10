@@ -4367,6 +4367,16 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     // straight through it, and two newcomers stood at its wall).
     let mut way = vec![];
     let mut at = from;
+    // From inside a box (pressed against what it stands for: a log pile's
+    // box is square round round logs), out of it to its nearest side
+    // first: from in it, every stretch out "hit" it at once, no way was
+    // found, and the walk went straight on through it again (the one-
+    // handed newcomer, twice by the Old farm's pile).
+    let out = clear_of(&boxes, from);
+    if out != from {
+        way.push(out);
+        at = out;
+    }
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
         for q in round_boxes(&boxes, at, r) {
@@ -6203,6 +6213,36 @@ the Hollow.";
     /// A walk past a bridge's end, from off it to off it, keeps off its
     /// deck's side where the deck is level with the ground (into its
     /// railing): round the end. Under it, over its gully: as it was.
+    #[test]
+    fn from_inside_a_box_the_walk_steps_out_before_it_goes_round() {
+        use super::{clear_of, round_boxes, segment_hits_box};
+        // A log pile, turned as the Old farm's is, and a newcomer pressed
+        // against its logs: inside its box. To beyond it.
+        let pile = (
+            Transform::from_xyz(0.0, 0.0, 0.0).with_rotation(Quat::from_rotation_y(-2.705)),
+            Vec2::new(1.25, 3.5),
+        );
+        let boxes = [pile];
+        let from = Vec2::new(-1.0, 0.2);
+        let to = Vec2::new(60.0, -40.0);
+        let through = |a: Vec2, b: Vec2| {
+            let inv = pile.0.compute_affine().inverse();
+            let la = inv.transform_point3(Vec3::new(a.x, 0.0, a.y)).xz();
+            let lb = inv.transform_point3(Vec3::new(b.x, 0.0, b.y)).xz();
+            segment_hits_box(la, lb, pile.1).is_some()
+        };
+        // From in it, there's no way round: straight on, through it.
+        assert_eq!(round_boxes(&boxes, from, to), vec![to]);
+        // Out of it first (as `walk` now does), and round.
+        let out = clear_of(&boxes, from);
+        assert_ne!(out, from, "stepped out of the box");
+        let mut at = out;
+        for p in round_boxes(&boxes, out, to) {
+            assert!(!through(at, p), "{at} -> {p} through the pile");
+            at = p;
+        }
+    }
+
     #[test]
     fn from_the_edge_of_a_box_margin_the_way_still_goes_round_the_next() {
         use super::{ROUND, round_boxes, segment_hits_box};
