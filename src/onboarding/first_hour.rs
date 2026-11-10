@@ -2756,7 +2756,7 @@ pub(super) fn direct_raid(
                     // what was in the hands (`persist::apply_restore`).
                     // (Looked for only on the body, the careers wedged: "no
                     // radio", done, every run after it the same.)
-                    (None, None) => match radio_at_feet(&world, here)
+                    (None, None) => match radio_at_feet(&world, &plans, here)
                         .filter(|(e, _)| tries_at(&state.radios_tried, *e) < RADIO_TRIES)
                         .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
                     {
@@ -2782,34 +2782,40 @@ pub(super) fn direct_raid(
                         // truck, so a newcomer with none goes for one
                         // (resumed with its radio in remains 130 m off, the
                         // careers wedged: "no radio", done, every run after).
-                        None => match radio_to_fetch(&world, player, here, &state.radios_tried)
-                            .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
-                        {
-                            Some((e, at)) => {
-                                state.radios_tried.push(e);
-                                state.note(
-                                    now,
-                                    Kind::Learned,
-                                    format!(
-                                        "no radio on it: went for the one {:.0} m off",
-                                        at.xz().distance(here)
-                                    ),
-                                );
-                                // By the way in where it lies indoors (walked
-                                // at straight, it stood 12 m off, at the
-                                // wall between, till the grab timed out).
-                                tasks.push(Task::Stow(Side::Left));
-                                tasks.extend(way_to(&world, &view, &plans, here, at));
-                                tasks.push(Task::Grab {
-                                    item: e,
-                                    side: Side::Left,
-                                });
+                        None => {
+                            match radio_to_fetch(&world, &plans, player, here, &state.radios_tried)
+                                .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
+                            {
+                                Some((e, at)) => {
+                                    state.radios_tried.push(e);
+                                    state.note(
+                                        now,
+                                        Kind::Learned,
+                                        format!(
+                                            "no radio on it: went for the one {:.0} m off",
+                                            at.xz().distance(here)
+                                        ),
+                                    );
+                                    // By the way in where it lies indoors (walked
+                                    // at straight, it stood 12 m off, at the
+                                    // wall between, till the grab timed out).
+                                    tasks.push(Task::Stow(Side::Left));
+                                    tasks.extend(way_to(&world, &view, &plans, here, at));
+                                    tasks.push(Task::Grab {
+                                        item: e,
+                                        side: Side::Left,
+                                    });
+                                }
+                                None => {
+                                    state.note(
+                                        now,
+                                        Kind::Confused,
+                                        "no radio to call the truck with",
+                                    );
+                                    state.leg = Leg::Done;
+                                }
                             }
-                            None => {
-                                state.note(now, Kind::Confused, "no radio to call the truck with");
-                                state.leg = Leg::Done;
-                            }
-                        },
+                        }
                     },
                 }
             }
@@ -4177,15 +4183,20 @@ fn take_it_on() -> Vec<Task> {
 }
 
 /// A radio lying loose within reach of `here` (m), and where.
-fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
+fn radio_at_feet(
+    world: &World2,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    here: Vec2,
+) -> Option<(Entity, Vec2)> {
     world
         .items
         .iter()
-        .filter(|(_, it, _, held, sock, bag)| {
+        .filter(|(_, it, gt, held, sock, bag)| {
             held.is_none()
                 && sock.is_none()
                 && bag.is_none()
                 && world.catalog.get(it.kind()).id == "radio"
+                && in_reach(world, plans, gt.translation())
         })
         .map(|(e, _, gt, ..)| (e, gt.translation().xz()))
         .filter(|(_, at)| at.distance(here) < FEET_REACH)
@@ -4197,16 +4208,21 @@ fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
 /// times already (`tried`) and not got. Where it is, to go to.
 fn radio_to_fetch(
     world: &World2,
+    plans: &[crate::sim::indoor::BuildingPlan],
     player: Entity,
     here: Vec2,
     tried: &[Entity],
 ) -> Option<(Entity, Vec3)> {
+    // (One a standing hand gets from the floor under it: the nearest on
+    // Marrow from the gate was up in the ranger tower's cab, and the
+    // wanderer stood under it, then under it again, then went for one
+    // 328 m off and was killed on the way.)
     let is_radio = |e: Entity| {
         tries_at(tried, e) < RADIO_TRIES
-            && world
-                .items
-                .get(e)
-                .is_ok_and(|(_, it, ..)| world.catalog.get(it.kind()).id == "radio")
+            && world.items.get(e).is_ok_and(|(_, it, gt, ..)| {
+                world.catalog.get(it.kind()).id == "radio"
+                    && in_reach(world, plans, gt.translation())
+            })
     };
     let own = |mine: bool| {
         world
@@ -4254,6 +4270,21 @@ const RADIO_TRIES: usize = 2;
 
 fn tries_at(tried: &[Entity], e: Entity) -> usize {
     tried.iter().filter(|t| **t == e).count()
+}
+
+/// Whether a hand gets to `at` from the floor it can walk under it: a
+/// building's (its plan's, upper floors and all where it has them), else
+/// the ground.
+fn in_reach(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], at: Vec3) -> bool {
+    match plans.iter().find(|pl| pl.contains(at, 0.3)) {
+        Some(plan) => plan.reachable_height(at),
+        None => over_floor(at.y, world.zone.on_ground(at.x, at.z).y),
+    }
+}
+
+/// `y` within a standing hand's reach over a floor at `floor`.
+fn over_floor(y: f32, floor: f32) -> bool {
+    y - floor <= crate::bot::STAND_REACH
 }
 
 /// How far off a thing set down at a resume still counts as at its feet (m).
@@ -6119,6 +6150,21 @@ the Hollow.";
     /// newcomer stood through eight zaps in the shelter's generator room);
     /// its gun out of the pack if that's the loaded one; else out of its
     /// line. And while one's at it, no keeping still and no dressing.
+    /// A radio up in a tower's cab, over the ground floor it stands on, is
+    /// none to go for; one on a shelf is.
+    #[test]
+    fn a_radio_overhead_is_none_to_go_for() {
+        use super::over_floor;
+        // The ranger tower's cab, 6 m over the ground at its foot.
+        assert!(!over_floor(26.0, 20.0));
+        // A shelf's top, a table, the floor.
+        assert!(over_floor(21.8, 20.0));
+        assert!(over_floor(20.9, 20.0));
+        assert!(over_floor(20.0, 20.0));
+        // Just past a raised hand.
+        assert!(!over_floor(22.3, 20.0));
+    }
+
     #[test]
     fn with_no_radio_on_it_it_goes_for_the_nearest_it_can_get() {
         use super::pick_radio;
