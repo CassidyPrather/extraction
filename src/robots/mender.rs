@@ -475,31 +475,74 @@ pub const SITE_AHEAD: f32 = 14.0;
 /// angled, from 60 m in to 20. (One hand, always 60 m out, put Marrow's mender over the south
 /// fence and the boundary woods once its arrival turned to 53°: it never
 /// came into view, and the bot never shot it. Map design, 10 November.)
+/// A way in clear of `in_forest` is taken wherever one exists.
 pub fn stage_layout(
     at: Vec3,
     facing: Vec3,
     walkable: impl Fn([f32; 2]) -> bool,
+    in_forest: impl Fn([f32; 2]) -> bool,
 ) -> (Vec3, Vec3, f32) {
     let f = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::NEG_Z);
-    let open = |d: Vec3| {
-        (2..=20).step_by(2).all(|m| {
-            let p = at + d * m as f32;
-            walkable([p.x, p.z])
-        })
-    };
-    let dirs: Vec<Vec3> = (0..16)
+    let clear = |p: [f32; 2]| walkable(p) && !in_forest(p);
+    // Out of the woods if it can be (among the trunks the bot never sees
+    // it come: Map design's forest rule), the usual ways first, then
+    // every way; else over walkable ground.
+    search(
+        at,
+        f,
+        16,
+        &[90.0, -90.0, 120.0, -120.0, 60.0, -60.0],
+        &clear,
+    )
+    .or_else(|| {
+        let every: Vec<f32> = (-180..180).step_by(15).map(|h| h as f32).collect();
+        search(at, f, 64, &every, &clear)
+    })
+    .or_else(|| {
+        search(
+            at,
+            f,
+            16,
+            &[90.0, -90.0, 120.0, -120.0, 60.0, -60.0],
+            &walkable,
+        )
+    })
+    .unwrap_or_else(|| {
+        let d = ways_ahead(at, f, 16, &walkable)
+            .first()
+            .copied()
+            .unwrap_or(f);
+        (d, Vec3::new(-d.z, 0.0, d.x), 60.0)
+    })
+}
+
+/// `n` ways ahead, nearest the facing first (0, +1, -1, +2, -2...), each
+/// with its first 20 m open.
+fn ways_ahead(at: Vec3, f: Vec3, n: usize, open: &impl Fn([f32; 2]) -> bool) -> Vec<Vec3> {
+    (0..n)
         .map(|k| {
-            // Nearest the facing first: 0, +1, -1, +2, -2...
-            let n = (k + 1) / 2;
+            let m = (k + 1) / 2;
             let sign = if k % 2 == 1 { 1.0 } else { -1.0 };
-            Quat::from_rotation_y(sign * n as f32 * std::f32::consts::TAU / 16.0) * f
+            Quat::from_rotation_y(sign * m as f32 * std::f32::consts::TAU / n as f32) * f
         })
-        .filter(|d| open(*d))
-        .collect();
-    // The hands it may come in on, off the way ahead: square on first,
-    // then angled in from the bot's side (it still welds in view), then
-    // angled from beyond.
-    let hands = [90.0f32, -90.0, 120.0, -120.0, 60.0, -60.0];
+        .filter(|d| {
+            (2..=20).step_by(2).all(|m| {
+                let p = at + *d * m as f32;
+                open([p.x, p.z])
+            })
+        })
+        .collect()
+}
+
+/// The first layout whose whole way in, every metre, is `open`.
+fn search(
+    at: Vec3,
+    f: Vec3,
+    n: usize,
+    hands: &[f32],
+    open: &impl Fn([f32; 2]) -> bool,
+) -> Option<(Vec3, Vec3, f32)> {
+    let dirs = ways_ahead(at, f, n, open);
     for reach in [60.0f32, 45.0, 30.0, 20.0] {
         for d in &dirs {
             let site = at + *d * SITE_AHEAD;
@@ -509,16 +552,15 @@ pub fn stage_layout(
                 let n = from.distance(site).ceil() as usize;
                 let way_in = (0..=n).all(|i| {
                     let p = from.lerp(site, i as f32 / n as f32);
-                    walkable([p.x, p.z])
+                    open([p.x, p.z])
                 });
                 if way_in {
-                    return (*d, side, reach);
+                    return Some((*d, side, reach));
                 }
             }
         }
     }
-    let d = dirs.first().copied().unwrap_or(f);
-    (d, Vec3::new(-d.z, 0.0, d.x), 60.0)
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -534,7 +576,12 @@ fn stage_scenario(
         if s.name != SCENARIO {
             continue;
         }
-        let (dir, side, reach) = stage_layout(s.at, s.facing, |p| nav.0.walkable(p));
+        let (dir, side, reach) = stage_layout(
+            s.at,
+            s.facing,
+            |p| nav.0.walkable(p),
+            |p| zone.in_forest(p[0], p[1]),
+        );
         let site = zone.on_ground(s.at.x + dir.x * SITE_AHEAD, s.at.z + dir.z * SITE_AHEAD);
         // A relay pylon, shot about.
         let pylon = super::pylon::spawn_pylon(&mut commands, site, 9999.0, site);
@@ -611,7 +658,7 @@ mod tests {
             for k in 0..16 {
                 let facing =
                     Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * Vec3::NEG_Z;
-                let (dir, side, reach) = stage_layout(at, facing, |p| nav.walkable(p));
+                let (dir, side, reach) = stage_layout(at, facing, |p| nav.walkable(p), |_| false);
                 let site = at + dir * SITE_AHEAD;
                 let from = site + side * reach - dir * 6.0;
                 let n = from.distance(site).ceil() as usize;
@@ -632,6 +679,78 @@ mod tests {
         assert!(
             bad.is_empty(),
             "a mender's way in over closed ground: {bad:#?}"
+        );
+    }
+
+    /// Every metre of a mender's way in, from where it starts to the
+    /// pylon.
+    fn way_in(at: Vec3, dir: Vec3, side: Vec3, reach: f32) -> Vec<[f32; 2]> {
+        let site = at + dir * SITE_AHEAD;
+        let from = site + side * reach - dir * 6.0;
+        let n = from.distance(site).ceil() as usize;
+        (0..=n)
+            .map(|i| {
+                let p = from.lerp(site, i as f32 / n as f32);
+                [p.x, p.z]
+            })
+            .collect()
+    }
+
+    /// Where a way in clear of the woods exists, the mender takes it: in
+    /// a forest it is lost among the trunks and the bot never sees it
+    /// come (Map design's forest rule). Where none exists it still comes
+    /// over walkable ground.
+    #[test]
+    fn the_menders_way_in_keeps_out_of_the_woods_when_it_can() {
+        let mut bad = vec![];
+        let mut wooded = 0;
+        for (valley, _) in extraction_core::map::VALLEYS {
+            let (app, _, zone) = super::super::drone_drill::valley_app(valley);
+            let nav = &app.world().resource::<super::super::walker::Nav>().0;
+            let clear = |p: [f32; 2]| nav.walkable(p) && !zone.in_forest(p[0], p[1]);
+            let m = zone
+                .marker(&extraction_core::map::MarkerKind::Insertion)
+                .expect("an arrival")
+                .at;
+            let at = zone.on_ground(m[0], m[1]);
+            for k in 0..16 {
+                let facing =
+                    Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * Vec3::NEG_Z;
+                let (dir, side, reach) = stage_layout(
+                    at,
+                    facing,
+                    |p| nav.walkable(p),
+                    |p| zone.in_forest(p[0], p[1]),
+                );
+                if way_in(at, dir, side, reach).into_iter().all(clear) {
+                    continue;
+                }
+                // Was there a clear one to take? Every way it may go
+                // ahead, every hand, every reach.
+                let any_clear = (0..64).any(|a| {
+                    let d = Quat::from_rotation_y(a as f32 * std::f32::consts::TAU / 64.0)
+                        * Vec3::NEG_Z;
+                    (2..=20).step_by(2).all(|m| {
+                        let p = at + d * m as f32;
+                        clear([p.x, p.z])
+                    }) && (-180..180).step_by(15).any(|h| {
+                        let s = Quat::from_rotation_y((h as f32).to_radians()) * d;
+                        [60.0, 45.0, 30.0, 20.0]
+                            .into_iter()
+                            .any(|r| way_in(at, d, s, r).into_iter().all(clear))
+                    })
+                });
+                if any_clear {
+                    bad.push(format!("{valley} facing {}°", k * 360 / 16));
+                } else {
+                    wooded += 1;
+                }
+            }
+        }
+        eprintln!("arrivals with no way in clear of the woods: {wooded}");
+        assert!(
+            bad.is_empty(),
+            "a mender came through the woods past a clear way in: {bad:#?}"
         );
     }
 
