@@ -389,4 +389,41 @@ mod tests {
             }
         }
     }
+
+    /// Prints each valley's lights within 55 deg of the first frame's
+    /// heading after dark, with where they stand in the world (x, height
+    /// above sea, z), to find them in a still:
+    ///   cargo test -p extraction_core probe_first_frame_lights -- --ignored --nocapture
+    #[test]
+    #[ignore = "probe"]
+    fn probe_first_frame_lights() {
+        for (id, text) in crate::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let Some(f) = first_frame_at_night(id, &map, &hm) else {
+                continue;
+            };
+            println!(
+                "{id} at {:.1},{:.2},{:.1} heading {:.1}",
+                f.at[0],
+                hm.height(f.at),
+                f.at[1],
+                f.heading
+            );
+            for l in crate::map_night::lights(&map, &hm) {
+                if !STEER_BY.contains(&l.kind) || off(bearing(f.at, l.at), f.heading) > 55.0 {
+                    continue;
+                }
+                println!(
+                    "  light|{}|{}|{:.2}|{:.2}|{:.2}|{:.0}",
+                    l.kind,
+                    l.name,
+                    l.at[0],
+                    hm.height(l.at) + l.height,
+                    l.at[1],
+                    dist(f.at, l.at)
+                );
+            }
+        }
+    }
 }
