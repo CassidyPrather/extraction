@@ -326,6 +326,42 @@ fn wake_handled(
     }
 }
 
+/// Resting guns with a far level on disk (`<id>_lod1.glb`) that aren't
+/// drawn from it past [`FAR_AT`], each with why, for the budget gauges.
+/// A gun kept whole costs its full model at any distance (10-23k
+/// triangles an eye): a load race made 1-8 a valley so on 9 November, and
+/// nothing counted them. `EXTRACTION_GUN_FAR=0` keeps them whole on
+/// purpose, so then none is listed.
+#[cfg(test)]
+pub(crate) fn kept_whole(w: &mut World) -> Vec<String> {
+    if std::env::var("EXTRACTION_GUN_FAR").is_ok_and(|v| v == "0") {
+        return Vec::new();
+    }
+    let resting: Vec<(extraction_core::items::ItemKind, Option<bool>)> = w
+        .query_filtered::<(&crate::items::Item, Option<&FarSet>), (With<AtRest>, With<crate::weapons::Gun>)>()
+        .iter(w)
+        .map(|(i, f)| (i.kind(), f.map(|f| f.0)))
+        .collect();
+    let Some(catalog) = w.get_resource::<crate::items::Catalog>() else {
+        return Vec::new();
+    };
+    resting
+        .into_iter()
+        .filter_map(|(kind, far)| {
+            let id = &catalog.get(kind).id;
+            let file = crate::asset_root_path().join(format!("models/guns/{id}_lod1.glb"));
+            match far {
+                Some(true) => None,
+                _ if !file.exists() => None,
+                Some(false) => Some(format!(
+                    "{id} kept whole past {FAR_AT} m: its look names none of its far level's materials"
+                )),
+                None => Some(format!("{id} resting without its far level yet")),
+            }
+        })
+        .collect()
+}
+
 /// What a gun is doing, for the gauges: resting, declined (not worth
 /// it), handled, hidden, being merged, or neither yet (settling).
 #[cfg(test)]

@@ -290,6 +290,18 @@ pub struct ModelMaterials {
 }
 
 impl ModelMaterials {
+    /// A material taken as `name`'s, for tests that have no material
+    /// library to make it from.
+    #[cfg(test)]
+    pub fn insert_for_test(
+        &mut self,
+        name: &str,
+        h: Handle<StandardMaterial>,
+    ) -> Handle<StandardMaterial> {
+        self.cache.insert(name.to_owned(), h.clone());
+        h
+    }
+
     /// The material made for `name`, if it has been.
     pub fn cached(&self, name: &str) -> Option<&Handle<StandardMaterial>> {
         self.cache.get(name)

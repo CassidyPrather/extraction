@@ -175,7 +175,7 @@
         ),
         // The mine track up the upper slopes to the col.
         (
-            name: "Col track", kind: Dirt, width: 4.0, shoulder: 6.0, smoothing: 32.0,
+            name: "Col track", kind: Dirt, width: 4.0, shoulder: 6.0, smoothing: 36.0,
             points: [(0.0, 20.0), (10.0, -40.0), (-10.0, -90.0), (20.0, -150.0), (5.0, -200.0), (40.0, -240.0), (70.0, -262.0)],
         ),
         // Along under the summit to the observatory's saddle.
@@ -261,7 +261,13 @@
         // And by the saddle fork's sign, where the way to the job leaves the
         // col's poles: after dark the sign is a shape and the poles are gone
         // (newcomer's night walk, 6 Nov).
-        (prefab: "way_lamp", at: (-2.6, -204.6), rot: 0.0),
+        (prefab: "way_lamp", at: (-4.0, -205.2), rot: 35.0),
+        // And by the col's two fork signs, an arm turned to each board, on
+        // the side you come up to it from, close enough that its pool lights
+        // the board's face: a signpost reads at night only by a light within
+        // 8 m (map_gradient LIT_BY), and well only within 3-4 m.
+        (prefab: "way_lamp", at: (11.4, -22.0), rot: 270.0),  // the Col track sign, leaving Coldharbour
+        (prefab: "way_lamp", at: (25.2, -145.8), rot: 240.0),  // the Col fork sign, where the Gate track leaves
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).

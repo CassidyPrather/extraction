@@ -652,8 +652,18 @@ pub fn weather_looks(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
     model_mats: Option<Res<crate::models::ModelMaterials>>,
+    loading: Query<(), With<super::visuals::PendingGunModel>>,
 ) {
     for (e, gun, w, look) in &mut guns {
+        // Not while its model is still loading: its look would be made of
+        // whatever else hangs on it then (no part of the model, no name a
+        // far level can find), and a look is made once. In a valley's
+        // load a random few guns came in a frame late, and those never
+        // weathered or took their far level (`render::gun_rest`): Cinder
+        // Works' gate swung 1598k to 1785k triangles run to run.
+        if look.is_none() && loading.contains(e) {
+            continue;
+        }
         let grime = gun.firearm.grime.clamp(0.0, 1.0);
         let wet = w.wet.clamp(0.0, 1.0);
         let worn = rust_shown(gun.firearm.condition);
@@ -1092,6 +1102,76 @@ mod tests {
             assert!((got.y - want).abs() < 0.002, "mesh {k}: offset {got}");
         }
     }
+    /// A gun whose model is still loading gets no look yet: one made then
+    /// is made of whatever else hangs on it, and is never made again. Once
+    /// its parts are in, its look is theirs, each copy named for its
+    /// material, as a far level asks for it.
+    #[test]
+    fn a_gun_still_loading_its_model_waits_for_its_look() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_resource::<crate::models::ModelMaterials>()
+            .add_systems(Update, weather_looks);
+        let catalog = crate::items::Catalog::load();
+        let def = catalog
+            .iter()
+            .find(|(_, d)| d.id == "pm_pistol")
+            .map(|(_, d)| d.clone())
+            .unwrap();
+        let w = app.world_mut();
+        let stray = w
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let gun = w
+            .spawn((
+                Gun {
+                    firearm: extraction_core::firearm::Firearm::new(
+                        def.firearm.clone().unwrap(),
+                        1.0,
+                    ),
+                    layout: super::super::layout::layout("pm_pistol").unwrap(),
+                    magwell: None,
+                    trigger: 0.0,
+                    pulled: false,
+                    catch: false,
+                    dice: extraction_core::noise::Rng::new(1),
+                    mass: None,
+                },
+                Weathering::default(),
+                Transform::default(),
+                super::super::visuals::PendingGunModel(Handle::default()),
+            ))
+            .id();
+        // Something else on it already, in a material of no model's.
+        w.spawn((MeshMaterial3d(stray), Transform::default(), ChildOf(gun)));
+        app.update();
+        app.update();
+        assert!(
+            app.world().get::<WeatheredLook>(gun).is_none(),
+            "a look made while its model was loading"
+        );
+        // Its model in: the parts in the model's own named material.
+        let w = app.world_mut();
+        let blued = w.resource_scope(|w, mut mm: Mut<crate::models::ModelMaterials>| {
+            let mut mats = w.resource_mut::<Assets<StandardMaterial>>();
+            mm.insert_for_test("Blued", mats.add(StandardMaterial::default()))
+        });
+        w.entity_mut(gun)
+            .remove::<super::super::visuals::PendingGunModel>();
+        w.spawn((MeshMaterial3d(blued), Transform::default(), ChildOf(gun)));
+        app.update();
+        app.update();
+        let look = app
+            .world()
+            .get::<WeatheredLook>(gun)
+            .expect("a look once its model is in");
+        assert!(
+            look.copy_named("Blued").is_some(),
+            "its look names the model's material, as a far level asks for it"
+        );
+    }
+
     use crate::interact::GripRole;
     use crate::rig::Side;
     use crate::vr_harness::Vr;
