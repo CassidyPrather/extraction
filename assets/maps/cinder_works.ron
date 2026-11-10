@@ -286,6 +286,11 @@
         (prefab: "way_lamp", at: (84.5, 9.0), rot: 0.0),
         (prefab: "way_lamp", at: (93.3, -12.3), rot: 0.0),
         (prefab: "way_lamp", at: (-101.7, 58.0), rot: 0.0),
+        // A yard lamp 40 m up the works road from the truck, its arm over
+        // the road: the gas holder's lamp at 110 m is too faint to steer by
+        // after dark (map_vista NIGHT_READ), this is what the first frame
+        // holds at night.
+        (prefab: "way_lamp", at: (-59.5, 160.3), rot: 21.0),
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
@@ -417,7 +422,8 @@
     ],
 
     markers: [
-        (kind: Insertion, at: (-71.0, 198.7), rot: 0.0, name: "South gate"),
+        // The arrival faces the way on to the first job (map_vista).
+        (kind: Insertion, at: (-71.0, 198.7), rot: 21.0, name: "South gate"),
         (kind: TruckStop, at: (-74.4, 228.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (-65.5, 204.0), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (-113.9, -123.6), name: "Fire lookout"),

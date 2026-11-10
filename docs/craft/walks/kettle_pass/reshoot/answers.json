@@ -1,0 +1,149 @@
+{
+ "title": "Kettle Pass, re-shot from the marker's rot (58)",
+ "stops": {
+  "s01": {
+   "vista": "The logging camp's shelter on the meadow, the radio mast's red lamp above the pines.",
+   "discover": "The mast; a hut to the right at the tree line.",
+   "for": "Arriving facing the camp: somewhere to go at once.",
+   "beat": "threshold"
+  },
+  "s02": {
+   "vista": "The camp's open log shed ahead, the mast at left.",
+   "discover": "Pines and fog: nothing.",
+   "for": "Closing on the job.",
+   "beat": "calm"
+  },
+  "s03": {
+   "vista": "Under the log shed's roof: a post and stacked logs fill the frame.",
+   "discover": "The road's fork into fog.",
+   "for": "The route goes through the shelter; the fork is invisible from here.",
+   "beat": "nothing"
+  },
+  "s04": {
+   "vista": "The shelter and its stacked logs, a post by the track.",
+   "discover": "Trees and the mast in fog.",
+   "for": "The job, plainly, but it's the same shed three stops running.",
+   "beat": "reveal"
+  },
+  "s05": {
+   "vista": "The track down to a farm with a lamp.",
+   "discover": "Trees and a hut on the right.",
+   "for": "The way on shows itself: a farm below.",
+   "beat": "calm"
+  },
+  "s06": {
+   "vista": "A house and a lorry by the road.",
+   "discover": "The chimney's lamp and the camp shed behind.",
+   "for": "A breath with things to look at.",
+   "beat": "calm"
+  },
+  "s07": {
+   "vista": "The chapel and its lamp on the horizon at left, the road on.",
+   "discover": "A blue wreck and the gatekeeper's cottage.",
+   "for": "Something to step off for: the wreck and the cottage.",
+   "beat": "discovery"
+  },
+  "s08": {
+   "vista": "Bridge rails both sides, a barrier post, fog.",
+   "discover": "The same rails, closer.",
+   "for": "A threshold, but both frames are rails.",
+   "beat": "threshold"
+  },
+  "s09": {
+   "vista": "The road under a bank, lamps in the fog ahead.",
+   "discover": "The chapel across the field.",
+   "for": "The chapel's pull from the side.",
+   "beat": "calm"
+  },
+  "s10": {
+   "vista": "The road bends right.",
+   "discover": "The plank house's front: door and windows.",
+   "for": "A door by the road.",
+   "beat": "choice"
+  },
+  "s11": {
+   "vista": "A way lamp and a noticeboard on the bank, the road on.",
+   "discover": "Miners' Row's houses across the hollow.",
+   "for": "The row draws the eye off the way.",
+   "beat": "discovery"
+  },
+  "s12": {
+   "vista": "The road ahead past the fork.",
+   "discover": "Miners' Row with its lamp.",
+   "for": "The quarry turn is taken without a frame of the fingerpost.",
+   "beat": "choice"
+  },
+  "s13": {
+   "vista": "A lorry on the road, boulders.",
+   "discover": "The headframe and its lamp.",
+   "for": "The mine announces itself.",
+   "beat": "tension"
+  },
+  "s14": {
+   "vista": "The fingerpost square in the frame: MINE YARD left, THE PASS right.",
+   "discover": "The headframe.",
+   "for": "A real choice, named.",
+   "beat": "choice"
+  },
+  "s15": {
+   "vista": "The road between boulders, a hut.",
+   "discover": "Boulders.",
+   "for": "After the fork, the pass track begins.",
+   "beat": "calm"
+  },
+  "s16": {
+   "vista": "The Lodge track sign and the Switchback hut.",
+   "discover": "The road's loop.",
+   "for": "The way splits again; the sign says which.",
+   "beat": "choice"
+  },
+  "s17": {
+   "vista": "Gravel track, a log pile, a hut ahead.",
+   "discover": "Pines.",
+   "for": "Walking.",
+   "beat": "calm"
+  },
+  "s18": {
+   "vista": "A cabin at left, the track on.",
+   "discover": "Trees; the quarry is behind them.",
+   "for": "Walking, a third calm in a row.",
+   "beat": "calm"
+  },
+  "s19": {
+   "vista": "The track to a cluster of huts, a pole.",
+   "discover": "The Charcoal hut and its stove.",
+   "for": "Something to look into.",
+   "beat": "discovery"
+  },
+  "s20": {
+   "vista": "A cabin with a lamp ahead.",
+   "discover": "The track back and a hut.",
+   "for": "The lodge is close.",
+   "beat": "calm"
+  },
+  "s21": {
+   "vista": "The beacon's green lamp and the watchtower.",
+   "discover": "The log cabin's front door.",
+   "for": "Home in sight, a door beside it.",
+   "beat": "relief"
+  },
+  "s22": {
+   "vista": "The beacon and watchtower, a shed.",
+   "discover": "A boulder and the charcoal hut.",
+   "for": "Room to stand.",
+   "beat": "relief"
+  },
+  "s23": {
+   "vista": "The beacon, tower, shed and a boulder to crouch by.",
+   "discover": "The charcoal hut.",
+   "for": "Arrived.",
+   "beat": "relief"
+  }
+ },
+ "notes": [
+  "The drop now faces the camp and the mast's lamp; the old first frame looked down the track.",
+  "Worst three: s02-s04, the log shed in three frames running and s03 under its roof (the route walks through the shelter); s08, both frames bridge rails in fog; s15-s18, three calms on the lodge track with side views of pines.",
+  "The fingerpost at the mine fork (s14) is the best choice frame of the five valleys; the quarry fork's (s12) isn't in its frame from this route."
+ ],
+ "fixes": []
+}

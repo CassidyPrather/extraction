@@ -7,7 +7,8 @@ job, then on to the nearest rendezvous. A stop every 40 m, and at every
 fork (two roads meeting by the route), door (within 12 m; its side view from 6 m out in front of it), crest (a high
 point 1.5 m over the ground 30 m either side) and the job and the
 rendezvous; stops closer than 12 m merge, the more particular kept. Each
-gets two views at eye height: along the route, and to the side, at the
+gets two views at eye height: along the route (the drop's along the
+insertion marker's rot, the way the player arrives facing), and to the side, at the
 door if it's a door or else the nearest place, rendezvous or landmark
 standing 40 degrees or more off the way ahead."""
 import json, math, sys
@@ -91,6 +92,10 @@ for n, st in enumerate(merged, 1):
         k = at(max(0.0, st["s"] - 20)); p, goal = pts[k], p
     if arrival:
         fwd = yaw_to(p, goal) if math.dist(goal[:2], p[:2]) > 1 else 0.0
+    elif st["kind"] == "drop" and "ins_rot" in d:
+        # The player arrives facing the insertion marker's rot, not the
+        # route's heading: judge the first frame the way it is seen.
+        fwd = float(d["ins_rot"]) % 360
     else:
         ahead = pts[at(min(total, st["s"] + 15))]
         fwd = yaw_to(p, ahead) if math.dist(ahead[:2], p[:2]) > 1 else 0.0
