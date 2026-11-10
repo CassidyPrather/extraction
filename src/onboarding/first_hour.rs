@@ -1756,8 +1756,15 @@ pub(super) fn direct_raid(
                     _ => None,
                 })
                 .unwrap_or(here);
+            let moved = answer.iter().any(|t| matches!(t, Task::WalkTo { .. }));
             super::second_hour::cut_in(&mut bot, answer);
-            if f == First::Sentry {
+            // Any answer that walked it off its way (out of a sentry's
+            // sight, out of a walker's line, off quiet): the rest of the
+            // walk from where it's left, not the legs it had from where it
+            // was (out of the walker's line, the one-handed newcomer went
+            // on with its old legs into the Old farm's log pile, and stood
+            // there two walks' 30 s).
+            if f == First::Sentry || moved {
                 reroute_after(&mut bot, n, left_at, &world, &view);
             }
         }
@@ -1993,7 +2000,19 @@ pub(super) fn direct_raid(
                 f.flee_until = now + run;
             }
             bot.tasks.pop_front();
+            // (And the walk on from its new cover, as for any answer that
+            // moves it.)
+            let n = tasks.len();
+            let left_at = tasks
+                .iter()
+                .rev()
+                .find_map(|t| match t {
+                    Task::WalkTo { to, .. } => Some(*to),
+                    _ => None,
+                })
+                .unwrap_or(here);
             super::second_hour::cut_in(&mut bot, tasks);
+            reroute_after(&mut bot, n, left_at, &world, &view);
             return;
         }
     }
@@ -3822,6 +3841,14 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
     // box itself where an end is in the margin (a door's step, a corner).
     let clear_of = |bx: &(Transform, Vec2), a: Vec2, b: Vec2| {
         let (la, lb) = (local(&bx.0, a), local(&bx.0, b));
+        // An end in the box itself: going into it (a place in a house: the
+        // Old farm's is), so it's no bar to the stretch. (Taken as one,
+        // every stretch to the place "hit" the house at its end, no way was
+        // found, and the walk there went straight, through a log pile.)
+        // `walk` steps a start out of any box first.
+        if within(la, bx.1) || within(lb, bx.1) {
+            return true;
+        }
         let margin = bx.1 + Vec2::splat(ROUND * 0.5);
         // (On the margin's edge counts as in it: a way out of a building
         // ends a margin from its wall, and from there every stretch out
@@ -4348,6 +4375,16 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     // straight through it, and two newcomers stood at its wall).
     let mut way = vec![];
     let mut at = from;
+    // From inside a box (pressed against what it stands for: a log pile's
+    // box is square round round logs), out of it to its nearest side
+    // first: from in it, every stretch out "hit" it at once, no way was
+    // found, and the walk went straight on through it again (the one-
+    // handed newcomer, twice by the Old farm's pile).
+    let out = clear_of(&boxes, from);
+    if out != from {
+        way.push(out);
+        at = out;
+    }
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
         for q in round_boxes(&boxes, at, r) {
@@ -6184,6 +6221,47 @@ the Hollow.";
     /// A walk past a bridge's end, from off it to off it, keeps off its
     /// deck's side where the deck is level with the ground (into its
     /// railing): round the end. Under it, over its gully: as it was.
+    #[test]
+    fn from_inside_a_box_the_walk_steps_out_before_it_goes_round() {
+        use super::{clear_of, round_boxes, segment_hits_box};
+        // A log pile, turned as the Old farm's is, and a newcomer pressed
+        // against its logs: inside its box. To beyond it.
+        let pile = (
+            Transform::from_xyz(0.0, 0.0, 0.0).with_rotation(Quat::from_rotation_y(-2.705)),
+            Vec2::new(1.25, 3.5),
+        );
+        let boxes = [pile];
+        let from = Vec2::new(-1.0, 0.2);
+        let to = Vec2::new(60.0, -40.0);
+        let through = |a: Vec2, b: Vec2| {
+            let inv = pile.0.compute_affine().inverse();
+            let la = inv.transform_point3(Vec3::new(a.x, 0.0, a.y)).xz();
+            let lb = inv.transform_point3(Vec3::new(b.x, 0.0, b.y)).xz();
+            segment_hits_box(la, lb, pile.1).is_some()
+        };
+        // From in it, there's no way round: straight on, through it.
+        assert_eq!(round_boxes(&boxes, from, to), vec![to]);
+        // And to a place inside a house beyond it: still round the pile.
+        let house = (Transform::from_xyz(60.0, 0.0, -40.0), Vec2::new(4.0, 3.5));
+        let both = [pile, house];
+        let mut at = clear_of(&both, from);
+        for p in round_boxes(&both, at, Vec2::new(60.0, -40.0)) {
+            assert!(
+                !through(at, p),
+                "{at} -> {p} through the pile, to the house"
+            );
+            at = p;
+        }
+        // Out of it first (as `walk` now does), and round.
+        let out = clear_of(&boxes, from);
+        assert_ne!(out, from, "stepped out of the box");
+        let mut at = out;
+        for p in round_boxes(&boxes, out, to) {
+            assert!(!through(at, p), "{at} -> {p} through the pile");
+            at = p;
+        }
+    }
+
     #[test]
     fn from_the_edge_of_a_box_margin_the_way_still_goes_round_the_next() {
         use super::{ROUND, round_boxes, segment_hits_box};
