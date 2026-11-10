@@ -3311,18 +3311,12 @@ fn unvetted(world: &World2, here: Vec2, to: Vec2) -> bool {
     if indoors(here) || indoors(to) {
         return false;
     }
-    // Through anything the way round is planned for, not only the fence:
-    // knocked off its way (out of a walker's line), the one-handed
-    // newcomer went on with the way it had, from where it was, into a log
-    // pile on the Old farm track, and stood there two walks' worth.
-    // (Not a box an end is in or at: a door's step, a corner it's by.)
     here.distance(to) > 20.0
-        || walk_boxes(world).iter().any(|(xf, half)| {
+        || fence_boxes(&world.zone).iter().any(|(xf, half)| {
             let inv = xf.compute_affine().inverse();
             let a = inv.transform_point3(Vec3::new(here.x, 0.0, here.y)).xz();
             let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
-            let by = |l: Vec2| l.x.abs() < half.x + BODY && l.y.abs() < half.y + BODY;
-            !by(a) && !by(b) && segment_hits_box(a, b, *half).is_some()
+            segment_hits_box(a, b, *half).is_some()
         })
 }
 
