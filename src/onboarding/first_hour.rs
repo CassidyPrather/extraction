@@ -1756,8 +1756,15 @@ pub(super) fn direct_raid(
                     _ => None,
                 })
                 .unwrap_or(here);
+            let moved = answer.iter().any(|t| matches!(t, Task::WalkTo { .. }));
             super::second_hour::cut_in(&mut bot, answer);
-            if f == First::Sentry {
+            // Any answer that walked it off its way (out of a sentry's
+            // sight, out of a walker's line, off quiet): the rest of the
+            // walk from where it's left, not the legs it had from where it
+            // was (out of the walker's line, the one-handed newcomer went
+            // on with its old legs into the Old farm's log pile, and stood
+            // there two walks' 30 s).
+            if f == First::Sentry || moved {
                 reroute_after(&mut bot, n, left_at, &world, &view);
             }
         }
@@ -1993,7 +2000,19 @@ pub(super) fn direct_raid(
                 f.flee_until = now + run;
             }
             bot.tasks.pop_front();
+            // (And the walk on from its new cover, as for any answer that
+            // moves it.)
+            let n = tasks.len();
+            let left_at = tasks
+                .iter()
+                .rev()
+                .find_map(|t| match t {
+                    Task::WalkTo { to, .. } => Some(*to),
+                    _ => None,
+                })
+                .unwrap_or(here);
             super::second_hour::cut_in(&mut bot, tasks);
+            reroute_after(&mut bot, n, left_at, &world, &view);
             return;
         }
     }
