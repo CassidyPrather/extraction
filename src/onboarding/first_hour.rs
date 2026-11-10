@@ -3565,8 +3565,12 @@ fn hidden_at(
 }
 
 /// Knee height over the ground, for what's in the way of a step (m): a
-/// body-wide ball there clears the ground underfoot.
+/// body-wide sweep from there clears the ground underfoot.
 const KNEE: f32 = 0.6;
+/// Chest height over the ground (m): a body-wide sweep from the knee to
+/// here, and a body-wide end on it, reaches a standing head's height (1.7)
+/// and no higher.
+const CHEST: f32 = 1.4;
 /// A body's half width, kept clear past the end of a step (m).
 const BODY: f32 = 0.3;
 
@@ -3585,24 +3589,28 @@ fn break_line(
         return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
     }
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
-    // Walkable on the grid, and walked to straight: nothing solid at knee
-    // height between, nor at the spot (the grid's cells are coarse).
+    // Walkable on the grid, and walked to straight: nothing solid from knee
+    // to head height between, nor at the spot (the grid's cells are
+    // coarse).
     // (Not the ground itself: a body-wide ball at the knee met every bump
     // of it, no spot passed, and the newcomer, with no way out of the
     // walker's line, shot it out and lost.)
     let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World])
         .with_excluded_entities(world.terrain.iter());
-    let knee = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * KNEE;
+    let mid = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * (KNEE + CHEST) * 0.5;
     // (A body's width, not a ray: a ray slipped past a trunk the newcomer
-    // then pressed against, 1.4 m short, the same half minute.)
-    let body = avian3d::prelude::Collider::sphere(BODY);
+    // then pressed against, 1.4 m short, the same half minute. And a
+    // body's height, not a ball at the knee: the ball passed under the
+    // quarantine fence where the ground dips beneath it, and the cautious
+    // newcomer stood against the wire, 1.1 m short, the half minute.)
+    let body = avian3d::prelude::Collider::capsule(BODY, CHEST - KNEE);
     let reach = |p: Vec2| {
-        let to = knee(p) - knee(here);
+        let to = mid(p) - mid(here);
         Dir3::new(to).ok().is_none_or(|dir| {
             spatial
                 .cast_shape(
                     &body,
-                    knee(here),
+                    mid(here),
                     Quat::IDENTITY,
                     dir,
                     &avian3d::prelude::ShapeCastConfig::from_max_distance(to.length() + BODY),
