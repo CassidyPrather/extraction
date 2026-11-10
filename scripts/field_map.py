@@ -36,6 +36,7 @@ LANDMARK_MM = 5.0
 LANDMARK_NAMES = {
     "radio_mast": "mast",
     "water_tower": "water tower",
+    "gas_holder": "gas holder",
     "chimney": "chimney",
     "ranger_tower": "lookout",
     "robot_gate": "gate",
