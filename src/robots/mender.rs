@@ -484,47 +484,11 @@ fn stage_scenario(
                 nav.0.walkable([p.x, p.z])
             })
         };
-        // The mender comes in over open ground: its track, from 60 m to one
-        // side down to the pylon, clear of the woods and of anything built,
-        // whichever way the player arrives facing.
-        let in_wood = |p: Vec3| {
-            zone.map
-                .forests
-                .iter()
-                .any(|w| extraction_core::geom::point_in_polygon(&w.polygon, [p.x, p.z]))
-        };
-        // Nor through a building or a landmark (a mender started inside
-        // Marrow's chimney once and never flew out).
-        let built = |p: Vec3| {
-            zone.map.placements.iter().any(|q| {
-                let [w, h, l] = extraction_core::map::prefab_footprint(&q.prefab);
-                h > 2.0 && Vec2::new(q.at[0] - p.x, q.at[1] - p.z).length() < w.max(l) * 0.5 + 4.0
-            })
-        };
-        // How much of a track is blocked: its points in the woods or by
-        // something built.
-        let blocked = |a: Vec3, b: Vec3| {
-            (0..=12)
-                .filter(|i| {
-                    let p = a.lerp(b, *i as f32 / 12.0);
-                    in_wood(p) || built(p)
-                })
-                .count()
-        };
-        let site_of = |d: Vec3| zone.on_ground(s.at.x + d.x * 14.0, s.at.z + d.z * 14.0);
-        // Of the ways with open ground ahead, the side whose track is
-        // clearest (the first, on a tie).
-        let (dir, hand) = (0..16)
+        let dir = (0..16)
             .map(|k| Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * f)
-            .filter(|d| open(*d))
-            .flat_map(|d| [(d, 1.0), (d, -1.0)])
-            .min_by_key(|(d, hand)| {
-                let site = site_of(*d);
-                let side = Vec3::new(-d.z, 0.0, d.x) * *hand;
-                blocked(site + side * 60.0 - *d * 6.0, site)
-            })
-            .unwrap_or((f, 1.0));
-        let site = site_of(dir);
+            .find(|d| open(*d))
+            .unwrap_or(f);
+        let site = zone.on_ground(s.at.x + dir.x * 14.0, s.at.z + dir.z * 14.0);
         // A relay pylon, shot about.
         let pylon = super::pylon::spawn_pylon(&mut commands, site, 9999.0, site);
         commands.queue(move |w: &mut World| {
@@ -537,7 +501,7 @@ fn stage_scenario(
         });
         // From the side: it welds on the side it came from, in the bot's
         // clear view (not behind the pylon).
-        let side = Vec3::new(-dir.z, 0.0, dir.x) * hand;
+        let side = Vec3::new(-dir.z, 0.0, dir.x);
         let from = site + side * 60.0 - dir * 6.0 + Vec3::Y * rules::CRUISE;
         let mender = spawn_mender(&mut commands, from, from);
         info!("scenario: a hurt pylon at {site:.0}, a mender on its way");
