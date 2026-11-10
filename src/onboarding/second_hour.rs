@@ -1149,6 +1149,9 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    /// The ground's collider (left out of what's "in the way" of a step:
+    /// banks are `steep_run`'s).
+    pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
     pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
     /// Every building and where it stands (for the way round them).
     pub(super) buildings: Query<
@@ -1552,6 +1555,8 @@ impl World2<'_, '_> {
     pub(super) fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
         // The truck within this of the rendezvous is the one waiting there (m).
         const RV_NEAR: f32 = 40.0;
+        // How far off the rendezvous to wait for it to pull in (m).
+        const RV_STANDOFF: f32 = 8.0;
         match raid.phase {
             Phase::Out => match self.radio_in_hand() {
                 true => vec![Task::Use(Side::Left), Task::Wait(1.0)],
@@ -1587,7 +1592,16 @@ impl World2<'_, '_> {
                 if let Some(p) = waiting_at
                     && truck.translation().xz().distance(p) > RV_NEAR
                 {
-                    let mut t = super::first_hour::walk(self, here, p);
+                    // Near it, not on it: the truck pulls in on the spot
+                    // (walked to the spot, the newcomer was pinned against
+                    // the truck's side 2 m short of it for the walk's half
+                    // minute, at the ranger tower).
+                    let near = p + (here - p).normalize_or(Vec2::Y) * RV_STANDOFF;
+                    let mut t = if here.distance(p) > RV_STANDOFF {
+                        super::first_hour::walk(self, here, near)
+                    } else {
+                        vec![]
+                    };
                     t.push(Task::Wait(2.0));
                     return t;
                 }

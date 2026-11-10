@@ -3545,6 +3545,12 @@ fn hidden_at(
         .is_some()
 }
 
+/// Knee height over the ground, for what's in the way of a step (m): a
+/// body-wide ball there clears the ground underfoot.
+const KNEE: f32 = 0.6;
+/// A body's half width, kept clear past the end of a step (m).
+const BODY: f32 = 0.3;
+
 /// Out of sight of `eye`, the nearest way: low where it is, if that does it
 /// (a wall, a bank, a car between); else the nearest spot within 12 m it
 /// can walk to where a crouched head is hidden, and still there. None:
@@ -3560,7 +3566,39 @@ fn break_line(
         return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
     }
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
-    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
+    // Walkable on the grid, and walked to straight: nothing solid at knee
+    // height between, nor at the spot (the grid's cells are coarse).
+    // (Not the ground itself: a body-wide ball at the knee met every bump
+    // of it, no spot passed, and the newcomer, with no way out of the
+    // walker's line, shot it out and lost.)
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World])
+        .with_excluded_entities(world.terrain.iter());
+    let knee = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * KNEE;
+    // (A body's width, not a ray: a ray slipped past a trunk the newcomer
+    // then pressed against, 1.4 m short, the same half minute.)
+    let body = avian3d::prelude::Collider::sphere(BODY);
+    let reach = |p: Vec2| {
+        let to = knee(p) - knee(here);
+        Dir3::new(to).ok().is_none_or(|dir| {
+            spatial
+                .cast_shape(
+                    &body,
+                    knee(here),
+                    Quat::IDENTITY,
+                    dir,
+                    &avian3d::prelude::ShapeCastConfig::from_max_distance(to.length() + BODY),
+                    &walls,
+                )
+                .is_none()
+        })
+    };
+    // (Nor up a bank: the one-handed newcomer's spot was on the creek's,
+    // 3 m up in 4, and it stood at the bank's foot the half minute.)
+    let open = |p: Vec2| {
+        nav.is_none_or(|n| n.walkable(p.to_array()))
+            && steep_run(&world.zone, here, p) <= STEEP_RUN
+            && reach(p)
+    };
     let away = (here - eye.xz()).normalize_or(Vec2::Y);
     // The eye a step or two either side of where it is: a walker that's
     // fighting moves, and a spot only just out of its line now was in it
@@ -3645,6 +3683,8 @@ const BED_RUN: f32 = 40.0;
 
 /// Clear of walls round a building's box, m: a body (0.28) and a stride.
 const ROUND: f32 = 2.0;
+/// How near a box's margin an end of a stretch counts as on it (m).
+const ON_EDGE: f32 = 0.05;
 
 /// From `from` to `to` on foot, round any building in the way (the
 /// straight line through the village went into a house wall and stayed
@@ -3668,7 +3708,35 @@ fn walk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
                 (s.xf, s.half)
             }),
     );
+    boxes.extend(
+        world
+            .buildings
+            .iter()
+            .flat_map(|(b, xf)| part_boxes(&b.prefab, xf)),
+    );
     boxes
+}
+
+/// What of a prefab with a way through it can't be walked through, part by
+/// part (one box over all of it would shut the way). A quarantine gate's
+/// concrete block and post, each side of the road: the newcomer walked from
+/// the guard booth for the road, into the block, and stood there a minute
+/// at the 0.6 m between it and the booth.
+fn part_boxes(prefab: &str, xf: &Transform) -> Vec<(Transform, Vec2)> {
+    match prefab {
+        // (`buildings::quarantine_gate`: a 1.4 m block at 5.2, a post at
+        // 4.3, either side.)
+        "quarantine_gate" => [-1.0f32, 1.0]
+            .map(|side| {
+                let at = xf.transform_point(Vec3::new(side * 5.04, 0.0, 0.0));
+                (
+                    Transform::from_translation(at).with_rotation(xf.rotation),
+                    Vec2::new(0.86, 0.7),
+                )
+            })
+            .to_vec(),
+        _ => vec![],
+    }
 }
 
 /// `p`, or, inside one of `boxes` (with a body's clearance), out of it to
@@ -3755,7 +3823,12 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
     let clear_of = |bx: &(Transform, Vec2), a: Vec2, b: Vec2| {
         let (la, lb) = (local(&bx.0, a), local(&bx.0, b));
         let margin = bx.1 + Vec2::splat(ROUND * 0.5);
-        let h = if within(la, margin) || within(lb, margin) {
+        // (On the margin's edge counts as in it: a way out of a building
+        // ends a margin from its wall, and from there every stretch out
+        // "entered" the margin at its first step, so no way was found and
+        // the walk went straight, through a house and into a garden.)
+        let edge = margin + Vec2::splat(ON_EDGE);
+        let h = if within(la, edge) || within(lb, edge) {
             bx.1
         } else {
             margin
@@ -6112,6 +6185,36 @@ the Hollow.";
     /// deck's side where the deck is level with the ground (into its
     /// railing): round the end. Under it, over its gully: as it was.
     #[test]
+    fn from_the_edge_of_a_box_margin_the_way_still_goes_round_the_next() {
+        use super::{ROUND, round_boxes, segment_hits_box};
+        // A tower, and a house far on past it: from just by the tower's
+        // wall, on its margin's edge (where a way out of it ends), to beyond
+        // the house.
+        let tower = (Transform::from_xyz(0.0, 0.0, 0.0), Vec2::new(3.0, 2.5));
+        let house = (Transform::from_xyz(-60.0, 0.0, -40.0), Vec2::new(4.0, 3.5));
+        let boxes = [tower, house];
+        let from = Vec2::new(3.0 + ROUND * 0.5, 1.2);
+        let to = Vec2::new(-120.0, -79.0);
+        let way = round_boxes(&boxes, from, to);
+        assert!(
+            way.len() > 1,
+            "a way round the house, not straight: {way:?}"
+        );
+        let mut at = from;
+        for p in &way {
+            let (xf, half) = &house;
+            let inv = xf.compute_affine().inverse();
+            let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+            let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+            assert!(
+                segment_hits_box(a, b, *half).is_none(),
+                "{at} -> {p} through the house"
+            );
+            at = *p;
+        }
+    }
+
+    #[test]
     fn a_walk_past_a_bridge_end_goes_round_it() {
         use crate::world::bridges::Deck;
         let deck = Deck {
@@ -6855,6 +6958,38 @@ mod indoor_tests {
                 at = p;
             }
         }
+        // By the guard booth, for the road through the south gate: round
+        // the gate's block, not into it (save18's wanderer stood a minute
+        // against it at (30, 165)).
+        let mut gate = boxes.clone();
+        let mut q = w.query::<(&crate::world::buildings::Building, &Transform)>();
+        let parts: Vec<_> = q
+            .iter(w)
+            .flat_map(|(b, xf)| super::part_boxes(&b.prefab, xf))
+            .collect();
+        assert!(parts.len() >= 2, "Marrow's south gate has its blocks");
+        gate.extend(parts.iter().copied());
+        let zone = w.resource::<crate::world::Zone>();
+        let (from, to) = (Vec2::new(30.0, 165.0), Vec2::new(28.0, 153.8));
+        let mut at = from;
+        for p in round_boxes(&gate, from, to) {
+            for (xf, half) in &parts {
+                let inv = xf.compute_affine().inverse();
+                let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                assert!(
+                    segment_hits_box(a, b, *half).is_none(),
+                    "{from} -> {to}: {at} -> {p} goes into the gate's block"
+                );
+            }
+            at = p;
+        }
+        // And the road between the blocks is still a way through.
+        assert_eq!(
+            round_boxes(&parts, Vec2::new(22.0, 170.0), Vec2::new(22.0, 157.0)),
+            vec![Vec2::new(22.0, 157.0)],
+            "the road through the gate is open"
+        );
         let bank = steep_run(zone, Vec2::new(-38.1, -41.7), Vec2::new(-39.97, -45.04));
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
