@@ -274,6 +274,36 @@ fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
     return l;
 }
 
+// A road of `kind` (1 asphalt, 2 gravel, 3 rail ballast, 4 dirt, 5 path;
+// 0 none) at `ee` metres from its edge (under 0 on it; `lip` frayed a
+// little more): the gravel, asphalt and dirt layers' weights, and the road
+// itself in w. The road gives way over a metre and a half; asphalt
+// crumbles at its lip into gravel, then a thin worn verge; gravel and
+// ballast into a wider verge of worn dirt, the grass taking it back in
+// tongues a metre or two out; a dirt road's edge is the softest, worn not
+// laid; a path is faint worn dirt.
+fn road_weights(kind: u32, ee: f32, lip: f32, fine: f32) -> vec4<f32> {
+    if (kind == 0u) {
+        return vec4<f32>(0.0);
+    }
+    var road = 1.0 - smoothstep(-0.7, 0.8, ee);
+    if (kind == 4u) { road = 1.0 - smoothstep(-0.9, 1.3, ee); }
+    var w = vec3<f32>(0.0);
+    if (kind == 1u) {
+        w.y = road;
+        w.x = smoothstep(-0.9, 0.0, ee) * (1.0 - smoothstep(0.2, 1.1, lip)) * 0.9;
+        w.z = smoothstep(0.0, 0.8, ee) * (1.0 - smoothstep(0.6, 2.0, lip + fine * 0.3)) * 0.5;
+    } else if (kind == 2u || kind == 3u) {
+        w.x = road;
+        w.z = smoothstep(-0.6, 0.4, ee) * (1.0 - smoothstep(0.5, 2.6, lip + fine * 0.3)) * 0.85;
+    } else if (kind == 4u) {
+        w.z = road;
+    } else {
+        w.z = road * 0.8;
+    }
+    return vec4<f32>(w, road);
+}
+
 // A layer's flat colour for `--terrain-debug layers`.
 fn layer_flat(i: u32) -> vec3<f32> {
     switch i {
@@ -352,10 +382,10 @@ fn fragment(
     let splat = vec4<f32>(0.0);
 #endif
 #ifdef VERTEX_UVS_B
-    let road_kind = u32(round(in.uv_b.x));
+    let road_kind_f = in.uv_b.x;
     let water_wet = in.uv_b.y;
 #else
-    let road_kind = 0u;
+    let road_kind_f = 0.0;
     let water_wet = 0.0;
 #endif
 
@@ -377,9 +407,14 @@ fn fragment(
     // was a ruled seam along the triangles.)
     let road_e = (0.5 - splat.b) * 2.0 * EDGE_REACH;
     let ee = road_e + breakup * 1.3 + fine * 0.45;
-    var road = 1.0 - smoothstep(-0.7, 0.8, ee);
-    // A dirt road's edge is the softest: worn, not laid.
-    if (road_kind == 4u) { road = 1.0 - smoothstep(-0.9, 1.3, ee); }
+    let lip = ee + fine * 0.4;
+    // The kind is interpolated between vertices (where a lane meets a
+    // road): the two kinds either side of it, blended (rounded, the
+    // kinds between drew a hard-edged patch of gravel at every junction).
+    let k0 = u32(floor(road_kind_f));
+    let kf = fract(road_kind_f);
+    let rw = mix(road_weights(k0, ee, lip, fine), road_weights(min(k0 + 1u, 5u), ee, lip, fine), kf);
+    let road = rw.w;
     // Patches of bare earth in open grass, their edges ragged and thinning
     // out over a metre or two (a narrow threshold drew each one as a
     // hard-edged disc of litter on the grass).
@@ -390,26 +425,9 @@ fn fragment(
     w[1] = forest;
     w[2] = mud + bare * 0.6;
     w[3] = rock;
-    var road_layer = 6u;
-    if (road_kind == 1u) { road_layer = 5u; }
-    if (road_kind == 2u || road_kind == 3u) { road_layer = 4u; }
-    w[4] = 0.0;
-    w[5] = 0.0;
-    w[6] = 0.0;
-    w[road_layer] = road;
-    // Paths are worn dirt, faint.
-    if (road_kind == 5u) { w[6] = road * 0.8; }
-    // Asphalt crumbles at its lip into gravel, then a thin worn verge;
-    // gravel and ballast into a wider verge of worn dirt, the grass
-    // taking it back in tongues (the fine noise) a metre or two out.
-    let lip = ee + fine * 0.4;
-    if (road_kind == 1u) {
-        w[4] = smoothstep(-0.9, 0.0, ee) * (1.0 - smoothstep(0.2, 1.1, lip)) * 0.9;
-        w[6] = smoothstep(0.0, 0.8, ee) * (1.0 - smoothstep(0.6, 2.0, lip + fine * 0.3)) * 0.5;
-    }
-    if (road_kind == 2u || road_kind == 3u) {
-        w[6] = max(w[6], smoothstep(-0.6, 0.4, ee) * (1.0 - smoothstep(0.5, 2.6, lip + fine * 0.3)) * 0.85);
-    }
+    w[4] = rw.x;
+    w[5] = rw.y;
+    w[6] = rw.z;
 
     // Composite top-down: base (grass/forest), then mud, gravel/road, rock.
     var albedo = vec3<f32>(0.0);
