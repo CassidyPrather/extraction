@@ -3841,6 +3841,14 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
     // box itself where an end is in the margin (a door's step, a corner).
     let clear_of = |bx: &(Transform, Vec2), a: Vec2, b: Vec2| {
         let (la, lb) = (local(&bx.0, a), local(&bx.0, b));
+        // An end in the box itself: going into it (a place in a house: the
+        // Old farm's is), so it's no bar to the stretch. (Taken as one,
+        // every stretch to the place "hit" the house at its end, no way was
+        // found, and the walk there went straight, through a log pile.)
+        // `walk` steps a start out of any box first.
+        if within(la, bx.1) || within(lb, bx.1) {
+            return true;
+        }
         let margin = bx.1 + Vec2::splat(ROUND * 0.5);
         // (On the margin's edge counts as in it: a way out of a building
         // ends a margin from its wall, and from there every stretch out
@@ -6233,6 +6241,17 @@ the Hollow.";
         };
         // From in it, there's no way round: straight on, through it.
         assert_eq!(round_boxes(&boxes, from, to), vec![to]);
+        // And to a place inside a house beyond it: still round the pile.
+        let house = (Transform::from_xyz(60.0, 0.0, -40.0), Vec2::new(4.0, 3.5));
+        let both = [pile, house];
+        let mut at = clear_of(&both, from);
+        for p in round_boxes(&both, at, Vec2::new(60.0, -40.0)) {
+            assert!(
+                !through(at, p),
+                "{at} -> {p} through the pile, to the house"
+            );
+            at = p;
+        }
         // Out of it first (as `walk` now does), and round.
         let out = clear_of(&boxes, from);
         assert_ne!(out, from, "stepped out of the box");
