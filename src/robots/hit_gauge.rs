@@ -77,7 +77,16 @@ pub struct Row {
     pub look: usize,
     /// The part's strength after the two rounds (share).
     pub left: f32,
+    /// A machine that rocks when struck (`rock::Rocks`): how far its body
+    /// turned within the window (degrees), and from which frame.
+    pub rocks: bool,
+    pub moved: f32,
+    pub moved_at: Option<u32>,
 }
+
+/// The least a struck machine that rocks turns within the window
+/// (degrees): a gauge round shoves a heavy about a degree.
+pub const MIN_MOVED: f32 = 0.1;
 
 impl Row {
     pub fn seen(&self) -> bool {
@@ -89,8 +98,13 @@ impl Row {
     pub fn looks_damaged(&self) -> bool {
         self.look > 0
     }
+    /// Its body answered the round (a machine that rocks), or it doesn't
+    /// rock.
+    pub fn shoved(&self) -> bool {
+        !self.rocks || self.moved >= MIN_MOVED
+    }
     pub fn ok(&self) -> bool {
-        self.seen() && self.heard() && self.looks_damaged()
+        self.seen() && self.heard() && self.looks_damaged() && self.shoved()
     }
 
     pub fn line(&self) -> String {
@@ -105,7 +119,7 @@ impl Row {
             }
         };
         format!(
-            "{}\t{:?}\tfx {} (frame {})\t{:.2} deg, {:.0} px at {:.0} m\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\t{}",
+            "{}\t{:?}\tfx {} (frame {})\t{:.2} deg, {:.0} px at {:.0} m\tsound {} (frame {})\tagain fx {} sound {}\tmarks {}\tlook {}\tleft {:.0}%\tmoved {}\t{}",
             self.kind,
             self.role,
             self.fx,
@@ -120,6 +134,15 @@ impl Row {
             self.marks,
             self.look,
             self.left * 100.0,
+            if self.rocks {
+                format!(
+                    "{:.2} deg (frame {})",
+                    self.moved,
+                    self.moved_at.map_or("-".into(), |f| f.to_string())
+                )
+            } else {
+                "-".into()
+            },
             if self.ok() {
                 "ok".to_owned()
             } else {
@@ -132,6 +155,9 @@ impl Row {
                 }
                 if !self.looks_damaged() {
                     why.push("NO DAMAGED LOOK");
+                }
+                if !self.shoved() {
+                    why.push("NO SHOVE");
                 }
                 why.join(" ")
             }
@@ -162,6 +188,11 @@ pub struct HitGauge {
     placed: HashMap<Entity, Vec3>,
     /// First rounds only, for how a hit reads at range.
     pub quick: bool,
+    /// No rounds: every part left failing at once, and what its tells
+    /// show at the eye measured over [`TELL_FRAMES`] (`tells`).
+    pub tells: bool,
+    pub tell_rows: Vec<TellRow>,
+    tell_areas: HashMap<Entity, Vec<f32>>,
     pub done: bool,
 }
 
@@ -374,6 +405,15 @@ fn shoot(world: &mut World, part: Entity, point: Vec3, normal: Vec3, damage: f32
 }
 
 /// New effect pieces and sounds near the point since the round went in.
+/// A piece with no bounds of its own (one drawn whatever the frustum, so
+/// never given any: a soft puff, `render::puff`), taken as the unit quad
+/// it's drawn on, scaled.
+const UNBOUNDED: Vec3 = Vec3::new(
+    crate::render::puff::QUAD * 0.5,
+    crate::render::puff::QUAD * 0.5,
+    0.0,
+);
+
 /// Pixels a degree on the desktop view the sheets are shot at: 1080 lines
 /// over the free camera's 75 degrees (`render::desktop_fov`).
 pub const PX_PER_DEG: f32 = 1080.0 / 75.0;
@@ -406,8 +446,19 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> Seen {
         &GlobalTransform,
         Option<&bevy::camera::primitives::Aabb>,
         Has<Mesh3d>,
-    ), Or<(With<Mesh3d>, With<PointLight>)>>();
-    for (e, gt, aabb, mesh) in q.iter(world) {
+        Has<crate::render::puff::SoftPuff>,
+        Option<&InheritedVisibility>,
+    ), Or<(
+        With<Mesh3d>,
+        With<PointLight>,
+        With<crate::render::puff::SoftPuff>,
+    )>>();
+    for (e, gt, aabb, mesh, puff, vis) in q.iter(world) {
+        // A hidden puff (one `render::puff` has put out) is not seen.
+        if puff && vis.is_some_and(|v| !v.get()) {
+            continue;
+        }
+        let mesh = mesh || puff;
         if g.meshes_before.contains(&e) || mine.contains(&e) {
             continue;
         }
@@ -420,7 +471,7 @@ fn since(world: &mut World, g: &HitGauge, robot: Entity) -> Seen {
             continue;
         }
         // Its half size in the world: its bounds, scaled.
-        let half = aabb.map_or(Vec3::splat(0.01), |a| Vec3::from(a.half_extents)) * gt.scale();
+        let half = aabb.map_or(UNBOUNDED, |a| Vec3::from(a.half_extents)) * gt.scale();
         reach = reach.max(at.distance(p) + half.max_element());
         // Square to the eye: its two largest sides.
         let mut s = [half.x, half.y, half.z];
@@ -517,6 +568,10 @@ fn step(world: &mut World, g: &mut HitGauge) {
     if g.frame < STAND {
         return;
     }
+    if g.tells {
+        tells(world, g);
+        return;
+    }
     if std::env::var_os("EXTRACTION_HIT_SHOW").is_some() {
         show(world, g);
         return;
@@ -553,12 +608,18 @@ fn step(world: &mut World, g: &mut HitGauge) {
         g.look_before = look_of(world, robot, &marks);
         g.meshes_before = all_with::<Mesh3d>(world);
         g.meshes_before.extend(all_with::<PointLight>(world));
+        g.meshes_before
+            .extend(all_with::<crate::render::puff::SoftPuff>(world));
         g.sounds_before = all_with::<crate::audio::Placed>(world);
         let cam = camera_at(world);
         let (point, normal) = aim(world, part, cam);
         g.point = point;
         let p = world.get::<RobotPart>(part).unwrap();
         let (role, hp) = (p.role, p.hp);
+        // (Its last round's rock settled: what moves now is this one's.)
+        if let Some(mut r) = world.get_mut::<super::rock::Rock>(robot) {
+            r.settle();
+        }
         shoot(world, part, point, normal, ROUND.min(hp * 0.4));
         g.row = Some(Row {
             kind,
@@ -575,6 +636,9 @@ fn step(world: &mut World, g: &mut HitGauge) {
             marks: 0,
             look: 0,
             left: 1.0,
+            rocks: world.get::<super::rock::Rocks>(robot).is_some(),
+            moved: 0.0,
+            moved_at: None,
         });
         g.at = g.frame;
         return;
@@ -586,7 +650,14 @@ fn step(world: &mut World, g: &mut HitGauge) {
             span,
             area,
         } = since(world, g, robot);
+        let turned = world
+            .get::<super::rock::Rock>(robot)
+            .map_or(0.0, |r| r.angle().to_degrees());
         let row = g.row.as_mut().unwrap();
+        if turned >= MIN_MOVED && row.moved_at.is_none() {
+            row.moved_at = Some(t);
+        }
+        row.moved = row.moved.max(turned);
         row.span = row.span.max(span);
         row.area = row.area.max(area);
         if fx > 0 && row.fx_at.is_none() {
@@ -617,6 +688,8 @@ fn step(world: &mut World, g: &mut HitGauge) {
     if t == second {
         g.meshes_before = all_with::<Mesh3d>(world);
         g.meshes_before.extend(all_with::<PointLight>(world));
+        g.meshes_before
+            .extend(all_with::<crate::render::puff::SoftPuff>(world));
         g.sounds_before = all_with::<crate::audio::Placed>(world);
         let p = world.get::<RobotPart>(part).unwrap();
         let damage = (p.hp - p.max_hp * FAILING).max(1.0);
@@ -702,6 +775,10 @@ mod tests {
     /// The client in Marrow, `kinds` lined up `dist` m off, the gauge run
     /// over them to its end.
     fn run(kinds: &str, dist: f32, quick: bool) -> App {
+        run_with(kinds, dist, quick, false)
+    }
+
+    fn run_with(kinds: &str, dist: f32, quick: bool, tells: bool) -> App {
         let opts = crate::LaunchOptions {
             map: "marrow_creek".into(),
             map_explicit: true,
@@ -714,6 +791,7 @@ mod tests {
         let mut app = crate::soak::drive::client_app(opts);
         app.insert_resource(HitGauge {
             quick,
+            tells,
             ..Default::default()
         });
         for _ in 0..200_000 {
@@ -830,10 +908,166 @@ mod tests {
         }
         assert!(
             short.is_empty(),
-            "hits under {MIN_SPAN} deg:\n{}",
+            "hits under {MIN_AREA:.0} px:\n{}",
             short.join("\n")
         );
     }
+
+    /// A machine left failing tells it at fighting range, rounds or no:
+    /// something it throws off (smoke, sparks) covers [`MIN_AREA`] at the
+    /// eye at least half the time, from 10 m out to 30 m
+    /// (`HIT_GAUGE_TELL_KINDS` for others).
+    #[test]
+    #[ignore = "the whole client in a valley, three times; scripts/hit_gauge.sh"]
+    fn a_failing_machine_reads_out_to_thirty_metres() {
+        let kinds = std::env::var("HIT_GAUGE_TELL_KINDS")
+            .unwrap_or("heavy+spotter+minelayer+sorter".into());
+        let mut short = Vec::new();
+        for dist in [10.0, 20.0, 30.0] {
+            let app = run_with(&kinds, dist, false, true);
+            let g = app.world().resource::<HitGauge>();
+            assert!(g.done && !g.tell_rows.is_empty(), "no tells at {dist} m");
+            for r in &g.tell_rows {
+                println!(
+                    "{dist:>2} m {:<10} (eye {:.0} m) seen {:.0}% of frames, median {:.0} px, most {:.0} px",
+                    r.kind,
+                    r.dist,
+                    r.seen * 100.0,
+                    r.median,
+                    r.peak
+                );
+                if r.seen < 0.5 {
+                    short.push(format!("{dist} m {} seen {:.0}%", r.kind, r.seen * 100.0));
+                }
+            }
+        }
+        assert!(
+            short.is_empty(),
+            "failing machines that don't read:\n{}",
+            short.join("\n")
+        );
+    }
+}
+
+/// A machine left failing, how its tells read at the eye over
+/// [`TELL_FRAMES`]: the share of frames its largest single piece covered
+/// [`MIN_AREA`], and the median and the most that covered (pixels).
+#[derive(Clone, Debug)]
+pub struct TellRow {
+    pub kind: String,
+    pub dist: f32,
+    pub seen: f32,
+    pub median: f32,
+    pub peak: f32,
+}
+
+/// Frames a failing machine's tells settle before they're measured, and
+/// how many are measured (2 s).
+pub const TELL_SETTLE: u32 = 60;
+pub const TELL_FRAMES: u32 = 180;
+
+/// A piece's area square to an eye `d` m off (pixels, [`PX_PER_DEG`]):
+/// its bounds' two largest sides.
+fn area_at(gt: &GlobalTransform, aabb: Option<&bevy::camera::primitives::Aabb>, d: f32) -> f32 {
+    let half = aabb.map_or(UNBOUNDED, |a| Vec3::from(a.half_extents)) * gt.scale();
+    let mut s = [half.x, half.y, half.z];
+    s.sort_by(|a, b| b.total_cmp(a));
+    let deg = |m: f32| (m / d.max(0.1)).atan().to_degrees();
+    deg(2.0 * s[0]) * deg(2.0 * s[1]) * PX_PER_DEG * PX_PER_DEG
+}
+
+/// Every part left failing at once (no rounds: its own tells, not a
+/// hit's), then what's thrown off near each machine that isn't the
+/// machine, measured at the eye a frame at a time.
+fn tells(world: &mut World, g: &mut HitGauge) {
+    let t = g.frame - STAND;
+    if t == 0 {
+        for mut p in world.query::<&mut RobotPart>().iter_mut(world) {
+            p.hp = p.max_hp * FAILING;
+        }
+        g.meshes_before = all_with::<Mesh3d>(world);
+        g.meshes_before
+            .extend(all_with::<crate::render::puff::SoftPuff>(world));
+        return;
+    }
+    if t < TELL_SETTLE {
+        return;
+    }
+    let eye = camera_at(world);
+    let robots: Vec<(Entity, Vec3)> = world
+        .query_filtered::<(Entity, &GlobalTransform), With<Robot>>()
+        .iter(world)
+        .map(|(e, g)| (e, g.translation()))
+        .collect();
+    // (A batched puff has no mesh of its own: `render::puff` draws it.)
+    let mut q = world.query_filtered::<(
+        Entity,
+        &GlobalTransform,
+        Option<&bevy::camera::primitives::Aabb>,
+        Has<crate::render::puff::SoftPuff>,
+        Option<&InheritedVisibility>,
+        Option<&super::fx::SootOf>,
+    ), Or<(With<Mesh3d>, With<crate::render::puff::SoftPuff>)>>();
+    // (With whose soot it is, if it's soot: a neighbour's drifting past
+    // isn't this machine's tell.)
+    let pieces: Vec<(Entity, Vec3, f32, Option<Entity>)> = q
+        .iter(world)
+        .filter(|(e, _, _, puff, vis, _)| {
+            !g.meshes_before.contains(e) && !(*puff && vis.is_some_and(|v| !v.get()))
+        })
+        .map(|(e, gt, aabb, _, _, soot)| {
+            let at = gt.translation();
+            (
+                e,
+                at,
+                area_at(gt, aabb, eye.distance(at)),
+                soot.map(|s| s.0),
+            )
+        })
+        .collect();
+    for (robot, at) in robots {
+        let mut mine: HashSet<Entity> = subtree(world, robot).into_iter().collect();
+        let mut q = world.query::<(Entity, &RobotPart)>();
+        let parts: Vec<Entity> = q
+            .iter(world)
+            .filter(|(_, p)| p.robot == robot)
+            .map(|(e, _)| e)
+            .collect();
+        for p in parts {
+            mine.extend(subtree(world, p));
+        }
+        // (Its largest single piece: puffs overlap, so a sum would count
+        // the same patch of sky more than once.)
+        let area: f32 = pieces
+            .iter()
+            .filter(|(e, p, _, soot)| {
+                !mine.contains(e) && p.distance(at) < 4.0 && soot.is_none_or(|r| r == robot)
+            })
+            .map(|(_, _, a, _)| *a)
+            .fold(0.0, f32::max);
+        g.tell_areas.entry(robot).or_default().push(area);
+    }
+    if t < TELL_SETTLE + TELL_FRAMES {
+        return;
+    }
+    let areas = std::mem::take(&mut g.tell_areas);
+    for (robot, mut v) in areas {
+        let at = world
+            .get::<GlobalTransform>(robot)
+            .map_or(Vec3::ZERO, |g| g.translation());
+        v.sort_by(f32::total_cmp);
+        let seen = v.iter().filter(|a| **a >= MIN_AREA).count() as f32 / v.len().max(1) as f32;
+        let row = TellRow {
+            kind: kind_name(world, robot),
+            dist: eye.distance(at),
+            seen,
+            median: v[v.len() / 2],
+            peak: *v.last().unwrap_or(&0.0),
+        };
+        info!("hit gauge: tells {row:?}");
+        g.tell_rows.push(row);
+    }
+    g.done = true;
 }
 
 /// Frames into a show (`EXTRACTION_HIT_SHOW`) that its rounds start
@@ -848,6 +1082,19 @@ pub const SHOW_EVERY: u32 = 12;
 /// frame taken has the hits landing on the machines worn by them
 /// (`scripts/hit_gauge.sh`).
 fn show(world: &mut World, g: &mut HitGauge) {
+    // `EXTRACTION_HIT_SHOW=failing`: every part left failing and held
+    // there, nothing fired: how a failing machine looks, with no hit's
+    // flash in the frame.
+    if std::env::var("EXTRACTION_HIT_SHOW").is_ok_and(|v| v == "failing") {
+        if g.frame >= STAND {
+            for mut p in world.query::<&mut RobotPart>().iter_mut(world) {
+                if p.alive() {
+                    p.hp = p.hp.min(p.max_hp * FAILING);
+                }
+            }
+        }
+        return;
+    }
     let since = g.frame.saturating_sub(SHOW_HITS);
     let landing = g.frame >= SHOW_HITS && since % SHOW_EVERY == 0;
     let mending = g.frame > SHOW_HITS && since % SHOW_EVERY == 1;

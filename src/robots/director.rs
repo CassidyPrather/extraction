@@ -61,6 +61,10 @@ pub struct Director {
     /// The relays' network: jams, silent relays, distrusted ones
     /// (`network`). Reports go through `queue_report`.
     pub net: super::network::RelayNet,
+    /// Answers owed to a step said aloud (`pressure::Stepped`, Busy and
+    /// up): where they go, sent even over [`Director::max_active`] (the
+    /// radio said the Zone is coming; something does).
+    pub owed: Vec<Vec3>,
 }
 
 /// Roaming machines at once in a full valley (`REFERENCE_KM2` of ground
@@ -151,6 +155,7 @@ impl Plugin for DirectorPlugin {
                     night_visits,
                     look_again_each_raid,
                     run_director,
+                    give_up_when_stuck,
                 )
                     .chain()
                     .after(super::perceive),
@@ -202,6 +207,7 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         broken_placed: false,
         quiet: 0.0,
         net: Default::default(),
+        owed: Vec::new(),
     });
 }
 
@@ -269,6 +275,73 @@ pub fn heard_by_any<'a>(
             && at.distance(n.at) < n.radius * s.hearing
             && local.is_none_or(|l| l.contains(n.at))
     })
+}
+
+/// Without headway (this far from where it last made any) for
+/// [`NO_HEADWAY`] s, a machine on its way gives the errand up and goes out
+/// by the Gate; one that can't get out either is gone. A safety net: two
+/// walkers stood 7 m out of the Marrow Gate for half an hour, holding two
+/// of the director's six places, and nothing was sent at Hunting
+/// (Progression's wanderer r19; the cause, a dropped way-out waypoint, is
+/// fixed in `NavRef::path`). Ground covered, not nearer as the crow flies:
+/// a way round gets no nearer for most of a minute (Marrow's ridge to the
+/// Gate, east over the District road bridge first), and one going out that
+/// way was taken for stuck and despawned on the bridge (s84, "stuck going
+/// out at (-89, 21, -24)"). A walker on its way covers ~60 m in the time;
+/// one pressed to a wall, or rocking on the spot, not this.
+pub const HEADWAY: f32 = 3.0;
+pub const NO_HEADWAY: f32 = 45.0;
+
+#[allow(clippy::type_complexity)]
+fn give_up_when_stuck(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut walkers: Query<
+        (Entity, &mut super::Brain, &Job, &GlobalTransform),
+        (
+            With<super::walker::Walker>,
+            Without<super::indoor::LocalNav>,
+            Without<super::collector::Collector>,
+        ),
+    >,
+    mut seen: Local<std::collections::HashMap<Entity, (Vec2, f32)>>,
+) {
+    let now = time.elapsed_secs();
+    let mut here = std::collections::HashSet::new();
+    for (e, mut brain, job, gt) in &mut walkers {
+        let leaving = match *brain {
+            super::Brain::Transit { .. } => false,
+            super::Brain::Leave { .. } => true,
+            _ => {
+                seen.remove(&e);
+                continue;
+            }
+        };
+        here.insert(e);
+        let at = gt.translation().xz();
+        let (from, since) = seen.entry(e).or_insert((at, now));
+        if at.distance(*from) >= HEADWAY {
+            (*from, *since) = (at, now);
+        }
+        if now - *since < NO_HEADWAY {
+            continue;
+        }
+        if leaving {
+            info!(
+                "director: a machine stuck going out at {:.0} is gone",
+                gt.translation()
+            );
+            commands.entity(e).despawn();
+        } else {
+            info!(
+                "director: a machine stuck on its way at {:.0} goes out",
+                gt.translation()
+            );
+            *brain = super::Brain::Leave { to: job.exit };
+        }
+        seen.remove(&e);
+    }
+    seen.retain(|e, _| here.contains(e));
 }
 
 /// Night visits: queued as they're sent (clearing responses near them),
@@ -372,7 +445,7 @@ pub fn survey_places(zone: &Zone, hot_only: bool) -> Vec<[f32; 2]> {
                 .iter()
                 .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
         })
-        .filter(|p| !hot_only || super::pressure::hot_at(zone, *p))
+        .filter(|p| !hot_only || super::pressure::hot_at(zone, *p, None))
         .collect()
 }
 
@@ -422,6 +495,10 @@ pub(super) fn run_director(
     progression: Option<Res<crate::progression::Progression>>,
     nav: Option<Res<super::walker::Nav>>,
     opts: Option<Res<crate::launch::LaunchOptions>>,
+    (mut stepped, players): (
+        MessageReader<super::pressure::Stepped>,
+        Query<&GlobalTransform, With<crate::rig::LocalPlayer>>,
+    ),
     mut sized: Local<bool>,
 ) {
     let mind = mind.as_deref();
@@ -473,6 +550,17 @@ pub(super) fn run_director(
         director.responses.clear();
         return;
     }
+    // A step said aloud at Busy or up owes an answer: one comes to where
+    // you are once its cue has led (`pressure::CUE_LEAD`), whatever's out.
+    let here = players.iter().next().map(|g| g.translation());
+    for st in stepped.read() {
+        if st.level >= super::pressure::Level::Busy
+            && let Some(at) = here
+        {
+            director.queue_response(super::pressure::CUE_LEAD, at);
+            director.owed.push(at);
+        }
+    }
     // Responses first.
     let mut dispatch = Vec::new();
     for r in &mut director.responses {
@@ -497,7 +585,11 @@ pub(super) fn run_director(
     };
     for at in dispatch {
         let fast = fast && !held(at);
-        if active >= director.max_active {
+        let owed = director.owed.iter().position(|o| o.distance(at) < 0.5);
+        if let Some(i) = owed {
+            director.owed.swap_remove(i);
+        }
+        if active >= director.max_active && owed.is_none() {
             continue;
         }
         let job = Job {

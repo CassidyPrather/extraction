@@ -13,6 +13,11 @@
 //! again. Node names, part entities and their transforms are untouched;
 //! only the leaf meshes are hidden while the merged ones stand in.
 //!
+//! A loose magazine or clip is the same: a PPSh drum lying out is its
+//! body and every round it shows, three meshes a round (42 an eye at
+//! Marrow's fuel exfil), so it rests merged too. Its rounds change only
+//! in hand, which wakes it. One seated in a gun rests with the gun.
+//!
 //! `EXTRACTION_GUN_REST=0` leaves every gun as its parts.
 
 use bevy::camera::visibility::VisibilityRange;
@@ -27,7 +32,7 @@ impl Plugin for GunRestPlugin {
         }
         app.init_resource::<RestCache>().add_systems(
             PostUpdate,
-            (wake_handled, rest_idle, finish_building)
+            (wake_handled, rest_idle, finish_building, attach_far)
                 .chain()
                 .after(TransformSystems::Propagate)
                 .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
@@ -50,6 +55,8 @@ pub struct AtRest {
     all: Vec<Entity>,
     leaves: Vec<(Entity, Visibility)>,
     merged: Vec<Entity>,
+    /// The range its merged meshes were given (the gun's leaves').
+    range: Option<VisibilityRange>,
 }
 
 /// On a gun not worth merging (a draw or two already), with how many
@@ -84,6 +91,49 @@ fn handled(
     let mut at = gun;
     for _ in 0..24 {
         if players.contains(at) {
+            return true;
+        }
+        match parents.get(at) {
+            Ok(p) => at = p.parent(),
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
+/// Whether a magazine sits in a gun (anywhere above it).
+fn seated(
+    mag: Entity,
+    guns: &Query<(), With<crate::weapons::Gun>>,
+    parents: &Query<&ChildOf>,
+) -> bool {
+    let mut at = mag;
+    for _ in 0..24 {
+        match parents.get(at) {
+            Ok(p) => at = p.parent(),
+            Err(_) => return false,
+        }
+        if guns.contains(at) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether a leaf sits under something fitted to the gun (an item or
+/// magazine between it and the gun).
+fn fitted_to(
+    gun: Entity,
+    leaf: Entity,
+    fitted: &Query<(), Or<(With<crate::items::Item>, With<crate::weapons::Mag>)>>,
+    parents: &Query<&ChildOf>,
+) -> bool {
+    let mut at = leaf;
+    for _ in 0..24 {
+        if at == gun {
+            return false;
+        }
+        if fitted.contains(at) {
             return true;
         }
         match parents.get(at) {
@@ -155,6 +205,56 @@ struct Shade {
     mat: Handle<StandardMaterial>,
     reach: Option<u32>,
     caster: bool,
+    /// Under something fitted to the gun (a seated magazine, a scope): the
+    /// gun's far level is the gun alone, so these stay drawn past it.
+    fitted: bool,
+}
+
+/// A merged mesh of what's fitted to a resting gun (see `Shade::fitted`).
+#[derive(Component)]
+pub struct Fitted;
+
+/// On a resting gun once its far level was looked for: drawn past
+/// [`FAR_AT`] from its `<id>_lod1.glb` (true), or not (false: no far
+/// level, or a material it couldn't match).
+#[derive(Component)]
+pub struct FarSet(pub bool);
+
+/// Past this (metres) a resting gun is drawn from its far level, a
+/// quarter of its triangles (the items' `ITEM_LOD`).
+pub const FAR_AT: f32 = 6.0;
+
+/// The range a resting gun's own merged meshes keep, and its far level's,
+/// from the rest's own (`None`: drawn at any distance): they hand over at
+/// [`FAR_AT`] with a metre's crossfade.
+pub(crate) fn split_ranges(range: Option<&VisibilityRange>) -> (VisibilityRange, VisibilityRange) {
+    let swap = FAR_AT - 0.5..FAR_AT + 0.5;
+    let near = VisibilityRange {
+        start_margin: range.map_or(0.0..0.0, |r| r.start_margin.clone()),
+        end_margin: swap.clone(),
+        use_aabb: true,
+    };
+    let far = VisibilityRange {
+        start_margin: swap,
+        end_margin: range.map_or(1.0e4..1.0e4 + 1.0, |r| r.end_margin.clone()),
+        use_aabb: true,
+    };
+    (near, far)
+}
+
+/// A far level's meshes with the gun's own copy of each one's material,
+/// or nothing if any material isn't the gun's (it's drawn as it is).
+pub(crate) fn far_meshes(
+    named: &[(String, Handle<Mesh>)],
+    copy: impl Fn(&str) -> Option<Handle<StandardMaterial>>,
+) -> Option<Vec<(Handle<Mesh>, Handle<StandardMaterial>)>> {
+    if named.is_empty() {
+        return None;
+    }
+    named
+        .iter()
+        .map(|(name, mesh)| copy(name).map(|m| (mesh.clone(), m)))
+        .collect()
 }
 
 /// A merged stand-in mesh (so a rest isn't merged into the next).
@@ -202,6 +302,9 @@ fn wake_handled(
         let mut wake = handled(gun, &hands, &players, &parents);
         if !wake && !rematerialled.is_empty() {
             wake = rest.leaves.iter().any(|(e, _)| rematerialled.contains(e));
+            if wake && std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+                eprintln!("gun_rest: {gun} woken: a part given a material of its own");
+            }
         }
         if !wake && reparented {
             // Something came or went: the leaves under it now aren't the
@@ -219,8 +322,44 @@ fn wake_handled(
         for m in &rest.merged {
             commands.entity(*m).try_despawn();
         }
-        commands.entity(gun).remove::<AtRest>();
+        commands.entity(gun).remove::<(AtRest, FarSet)>();
     }
+}
+
+/// Resting guns with a far level on disk (`<id>_lod1.glb`) that aren't
+/// drawn from it past [`FAR_AT`], each with why, for the budget gauges.
+/// A gun kept whole costs its full model at any distance (10-23k
+/// triangles an eye): a load race made 1-8 a valley so on 9 November, and
+/// nothing counted them. `EXTRACTION_GUN_FAR=0` keeps them whole on
+/// purpose, so then none is listed.
+#[cfg(test)]
+pub(crate) fn kept_whole(w: &mut World) -> Vec<String> {
+    if std::env::var("EXTRACTION_GUN_FAR").is_ok_and(|v| v == "0") {
+        return Vec::new();
+    }
+    let resting: Vec<(extraction_core::items::ItemKind, Option<bool>)> = w
+        .query_filtered::<(&crate::items::Item, Option<&FarSet>), (With<AtRest>, With<crate::weapons::Gun>)>()
+        .iter(w)
+        .map(|(i, f)| (i.kind(), f.map(|f| f.0)))
+        .collect();
+    let Some(catalog) = w.get_resource::<crate::items::Catalog>() else {
+        return Vec::new();
+    };
+    resting
+        .into_iter()
+        .filter_map(|(kind, far)| {
+            let id = &catalog.get(kind).id;
+            let file = crate::asset_root_path().join(format!("models/guns/{id}_lod1.glb"));
+            match far {
+                Some(true) => None,
+                _ if !file.exists() => None,
+                Some(false) => Some(format!(
+                    "{id} kept whole past {FAR_AT} m: its look names none of its far level's materials"
+                )),
+                None => Some(format!("{id} resting without its far level yet")),
+            }
+        })
+        .collect()
 }
 
 /// What a gun is doing, for the gauges: resting, declined (not worth
@@ -271,6 +410,122 @@ pub(crate) fn mergeable(m: &Mesh) -> bool {
         && m.try_indices_option().is_ok_and(|i| i.is_some())
 }
 
+/// A resting gun's far level, once its `<id>_lod1.glb` is in: its meshes
+/// in the gun's own copies of their materials, drawn past [`FAR_AT`],
+/// and the rest's own (but what's fitted to it) drawn short of it. A gun
+/// with no far level, or one whose materials don't all match the gun's,
+/// stays as it rests.
+#[allow(clippy::type_complexity)]
+fn attach_far(
+    mut commands: Commands,
+    mut guns: Query<
+        (
+            Entity,
+            &mut AtRest,
+            &crate::items::Item,
+            Option<&crate::weapons::weather::WeatheredLook>,
+            Option<&GlobalTransform>,
+        ),
+        (With<crate::weapons::Gun>, Without<FarSet>),
+    >,
+    catalog: Option<Res<crate::items::Catalog>>,
+    server: Option<Res<AssetServer>>,
+    gltfs: Option<Res<Assets<bevy::gltf::Gltf>>>,
+    gltf_meshes: Option<Res<Assets<bevy::gltf::GltfMesh>>>,
+    fitted: Query<(), With<Fitted>>,
+    mut wanted: Local<std::collections::HashMap<String, Option<Handle<bevy::gltf::Gltf>>>>,
+) {
+    // (`EXTRACTION_GUN_FAR=0`: every resting gun whole, to compare.)
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *OFF.get_or_init(|| std::env::var("EXTRACTION_GUN_FAR").is_ok_and(|v| v == "0")) {
+        return;
+    }
+    let (Some(catalog), Some(server), Some(gltfs), Some(gltf_meshes)) =
+        (catalog, server, gltfs, gltf_meshes)
+    else {
+        return;
+    };
+    for (gun, mut rest, item, look, at) in &mut guns {
+        let id = catalog.get(item.kind()).id.clone();
+        // (Asked for once a model, and only if it's there: a missing far
+        // level is no error.)
+        let handle = wanted
+            .entry(id.clone())
+            .or_insert_with(|| {
+                let path = format!("models/guns/{id}_lod1.glb");
+                crate::asset_root_path()
+                    .join(&path)
+                    .exists()
+                    .then(|| server.load(path))
+            })
+            .clone();
+        let Some(handle) = handle else {
+            commands.entity(gun).insert(FarSet(false));
+            continue;
+        };
+        if server.load_state(&handle).is_failed() {
+            commands.entity(gun).insert(FarSet(false));
+            continue;
+        }
+        let Some(gltf) = gltfs.get(&handle) else {
+            continue;
+        };
+        let mut named: Vec<(String, Handle<Mesh>)> = Vec::new();
+        for (name, gm) in &gltf.named_meshes {
+            let Some(gm) = gltf_meshes.get(gm) else {
+                continue;
+            };
+            for p in &gm.primitives {
+                named.push((name.to_string(), p.mesh.clone()));
+            }
+        }
+        if named.len() < gltf.named_meshes.len() {
+            continue;
+        }
+        named.sort_by(|a, b| a.0.cmp(&b.0));
+        let Some(far) = far_meshes(&named, |n| look.and_then(|l| l.copy_named(n))) else {
+            if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+                eprintln!(
+                    "gun_rest: {id} kept whole: a far material it doesn't wear, or not weathered yet"
+                );
+            }
+            commands.entity(gun).insert(FarSet(false));
+            continue;
+        };
+        let (near, far_range) = split_ranges(rest.range.as_ref());
+        if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+            let p = at.map_or(Vec3::ZERO, |t| t.translation());
+            eprintln!(
+                "gun_rest: {id} far level attached: {} meshes past {FAR_AT} m, at {:.1},{:.1},{:.1}",
+                far.len(),
+                p.x,
+                p.y,
+                p.z
+            );
+        }
+        for m in &rest.merged {
+            if !fitted.contains(*m) {
+                commands.entity(*m).try_insert(near.clone());
+            }
+        }
+        for (mesh, mat) in far {
+            let e = commands
+                .spawn((
+                    Name::new("Gun at rest, far"),
+                    RestMesh,
+                    Mesh3d(mesh),
+                    MeshMaterial3d(mat),
+                    Transform::IDENTITY,
+                    far_range.clone(),
+                    ChildOf(gun),
+                ))
+                .id();
+            rest.merged.push(e);
+        }
+        commands.entity(gun).insert(FarSet(true));
+    }
+}
+
 /// A gun whose merged meshes are being built off the main thread (a
 /// merge was a 31 ms frame on it): put to rest when they're done, if it
 /// is still lying as it was.
@@ -318,6 +573,9 @@ fn put_to_rest(
         if let Some(r) = &range {
             ec.insert(r.clone());
         }
+        if shade.fitted {
+            ec.insert(Fitted);
+        }
         match shade.reach {
             Some(bits) => {
                 ec.insert(super::budget::ShadowReach(f32::from_bits(bits)));
@@ -336,6 +594,7 @@ fn put_to_rest(
         all,
         leaves: taken,
         merged: stand_ins,
+        range,
     });
 }
 
@@ -414,11 +673,12 @@ fn rest_idle(
     guns: Query<
         (Entity, &GlobalTransform, &InheritedVisibility),
         (
-            With<crate::weapons::Gun>,
+            Or<(With<crate::weapons::Gun>, With<crate::weapons::Mag>)>,
             Without<AtRest>,
             Without<Building>,
         ),
     >,
+    in_guns: Query<(), With<crate::weapons::Gun>>,
     hands: Query<
         (),
         Or<(
@@ -439,6 +699,7 @@ fn rest_idle(
     >,
     merged: Query<(), With<RestMesh>>,
     names: Query<&Name>,
+    fitted: Query<(), Or<(With<crate::items::Item>, With<crate::weapons::Mag>)>>,
     leaf_info: Query<(
         &GlobalTransform,
         &Visibility,
@@ -454,6 +715,11 @@ fn rest_idle(
             break;
         }
         if !shown.get() || handled(gun, &hands, &players, &parents) {
+            settling.remove(&gun);
+            continue;
+        }
+        // (A magazine seated in a gun rests with the gun.)
+        if !in_guns.contains(gun) && seated(gun, &in_guns, &parents) {
             settling.remove(&gun);
             continue;
         }
@@ -523,6 +789,7 @@ fn rest_idle(
                 reach: reach.map(|r| r.0.to_bits()),
                 // (A small part's flag is `ShadowReach`'s to set.)
                 caster: reach.is_some() || !no_shadow,
+                fitted: fitted_to(gun, e, &fitted, &parents),
             };
             match groups.iter_mut().find(|(k, _)| *k == shade) {
                 Some((_, l)) => l.push((mesh.0.id(), local)),
@@ -549,6 +816,15 @@ fn rest_idle(
             }
             commands.entity(gun).insert(RestDeclined(all.len()));
             continue;
+        }
+        if std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+            let name = names.get(gun).map_or("?", |n| n.as_str());
+            eprintln!(
+                "gun_rest: {name} resting: {} leaves, {} taken in {} groups",
+                all.len(),
+                taken.len(),
+                groups.len()
+            );
         }
         let keyed: Vec<(Shade, u64, Vec<(AssetId<Mesh>, Mat4)>)> = groups
             .into_iter()
@@ -623,9 +899,13 @@ mod tests {
             .query_filtered::<Entity, With<crate::weapons::Gun>>()
             .iter(w)
             .collect();
-        // (A gun not worth merging is as good as resting.)
+        // (A gun not worth merging is as good as resting. Guns only: loose
+        // magazines rest too, and counted here they'd stand for guns.)
         let resting = w
-            .query_filtered::<(), Or<(With<AtRest>, With<RestDeclined>)>>()
+            .query_filtered::<(), (
+                Or<(With<AtRest>, With<RestDeclined>)>,
+                With<crate::weapons::Gun>,
+            )>()
             .iter(w)
             .count();
         let mut on_player = 0;
@@ -711,12 +991,20 @@ mod tests {
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         settled(&mut app);
         let (guns, resting, on_player, hidden) = census(&mut app);
-        let declined = {
+        let (declined, mags) = {
             let w = app.world_mut();
-            w.query_filtered::<(), With<RestDeclined>>().iter(w).count()
+            let declined = w
+                .query_filtered::<(), (With<RestDeclined>, With<crate::weapons::Gun>)>()
+                .iter(w)
+                .count();
+            let mags = w
+                .query_filtered::<(), (With<AtRest>, With<crate::weapons::Mag>)>()
+                .iter(w)
+                .count();
+            (declined, mags)
         };
         println!(
-            "{guns} guns: {resting} resting ({declined} of them declined), {on_player} on the player, {hidden} hidden"
+            "{guns} guns: {resting} resting ({declined} of them declined), {on_player} on the player, {hidden} hidden; {mags} loose magazines resting"
         );
         assert!(guns > 0);
         assert!(resting > 0, "no gun rests");
@@ -773,6 +1061,150 @@ mod tests {
             0,
             "merged meshes left behind"
         );
+    }
+
+    /// A resting gun hands over to its far level at `FAR_AT`, a metre's
+    /// crossfade wide, keeping the rest's own start and end; and a far
+    /// level with any material the gun doesn't wear isn't used at all.
+    #[test]
+    fn a_resting_gun_hands_over_to_its_far_level() {
+        let (near, far) = split_ranges(None);
+        assert_eq!(near.start_margin, 0.0..0.0);
+        assert_eq!(near.end_margin, FAR_AT - 0.5..FAR_AT + 0.5);
+        assert_eq!(far.start_margin, near.end_margin, "no gap, no overlap");
+        assert!(
+            far.end_margin.start > 1000.0,
+            "drawn as far as the rest was"
+        );
+        let own = VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: 40.0..45.0,
+            use_aabb: true,
+        };
+        let (_, far) = split_ranges(Some(&own));
+        assert_eq!(far.end_margin, 40.0..45.0, "fades out where the rest did");
+        let mut meshes = Assets::<Mesh>::default();
+        let mut mats = Assets::<StandardMaterial>::default();
+        let (blued, wood) = (
+            mats.add(StandardMaterial::default()),
+            mats.add(StandardMaterial::default()),
+        );
+        let named = vec![
+            ("Blued".to_string(), meshes.add(Cuboid::default())),
+            ("Wood".to_string(), meshes.add(Cuboid::default())),
+        ];
+        let wears = |n: &str| match n {
+            "Blued" => Some(blued.clone()),
+            "Wood" => Some(wood.clone()),
+            _ => None,
+        };
+        let got = far_meshes(&named, wears).expect("every material its own");
+        assert!(got[0].1 == blued && got[1].1 == wood);
+        let only_blued = |n: &str| (n == "Blued").then(|| blued.clone());
+        assert!(
+            far_meshes(&named, only_blued).is_none(),
+            "one it doesn't wear: kept whole"
+        );
+        assert!(
+            far_meshes(&[], wears).is_none(),
+            "an empty far level: kept whole"
+        );
+    }
+
+    /// A loose magazine (a drum lying out: its body and every round it
+    /// shows, three meshes a round) rests as one mesh per material, and
+    /// a hand taking it wakes it to its parts, as they were.
+    #[test]
+    fn a_loose_magazine_rests_merged_and_wakes_in_hand() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::asset::AssetPlugin::default(),
+            TransformPlugin,
+            bevy::camera::visibility::VisibilityPlugin,
+            GunRestPlugin,
+        ))
+        .init_asset::<Mesh>()
+        .init_asset::<StandardMaterial>()
+        .init_asset::<bevy::mesh::skinning::SkinnedMeshInverseBindposes>();
+        let w = app.world_mut();
+        let mesh = w
+            .resource_mut::<Assets<Mesh>>()
+            .add(Cuboid::new(0.01, 0.03, 0.01));
+        let mats: Vec<Handle<StandardMaterial>> = (0..3)
+            .map(|_| {
+                w.resource_mut::<Assets<StandardMaterial>>()
+                    .add(StandardMaterial::default())
+            })
+            .collect();
+        let mag = w
+            .spawn((
+                crate::weapons::Mag {
+                    family: "ppsh".into(),
+                    capacity: 71,
+                    height: 0.1,
+                },
+                Transform::from_xyz(2.0, 0.0, 1.0),
+                Visibility::default(),
+            ))
+            .id();
+        let mut leaves = Vec::new();
+        for n in 1..=14 {
+            let round = w
+                .spawn((
+                    Name::new(format!("round_{n}")),
+                    Transform::from_xyz(0.0, n as f32 * 0.01, 0.0),
+                    Visibility::default(),
+                    ChildOf(mag),
+                ))
+                .id();
+            for m in &mats {
+                leaves.push(
+                    w.spawn((
+                        Mesh3d(mesh.clone()),
+                        MeshMaterial3d(m.clone()),
+                        Transform::IDENTITY,
+                        Visibility::default(),
+                        ChildOf(round),
+                    ))
+                    .id(),
+                );
+            }
+        }
+        let rested = |app: &mut App| app.world().get::<AtRest>(mag).is_some();
+        for _ in 0..SETTLE * 4 {
+            app.update();
+            if rested(&mut app) {
+                break;
+            }
+        }
+        assert!(rested(&mut app), "a loose magazine rests");
+        let merged: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<(Entity, &ChildOf), With<RestMesh>>()
+            .iter(app.world())
+            .filter(|(_, c)| c.parent() == mag)
+            .map(|(e, _)| e)
+            .collect();
+        assert_eq!(merged.len(), 3, "42 meshes in 3 materials: 3 drawn");
+        assert!(
+            leaves
+                .iter()
+                .all(|l| app.world().get::<Visibility>(*l) == Some(&Visibility::Hidden)),
+            "its rounds' own meshes hidden while it rests"
+        );
+        let hand = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .entity_mut(mag)
+            .insert(crate::interact::Held {
+                player: hand,
+                hand,
+                side: crate::rig::Side::Right,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+        app.update();
+        awake(&mut app, mag, &leaves, "a magazine taken in hand");
     }
 
     /// A hand taking a resting gun, a magazine pushed into one lying on a

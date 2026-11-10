@@ -556,6 +556,19 @@ pub const RV_LEVEL: f32 = 12.0;
 
 // ---- Render load -------------------------------------------------------------
 
+/// The steepest ground a placement may stand on unlevelled, degrees: the
+/// comfortable walking slope for everything, but a machine's boundary
+/// stake goes in up to the steepest a walker paths over. It's fired in on
+/// fins, and a Gate's ring has to stand on the slopes a key is carried
+/// over, not only the gentle ones (coordinator's ruling, 8 Nov: Sallow's
+/// Gate has a 25-30 degree hillside inside its ring).
+pub fn footing_slope(prefab: &str) -> f32 {
+    match prefab {
+        "machine_marker" => crate::map_nav::MAX_SLOPE,
+        _ => COMFORT_SLOPE,
+    }
+}
+
 /// Most placements within [`VIEW_RANGE`] of any point on a main route or
 /// a point of interest.
 pub const VIEW_RANGE: f32 = 150.0;
@@ -574,7 +587,8 @@ pub const VIEW_MAX: usize = 16;
 ///
 /// A log pile is one too: ten logs and four stakes drawn as one model, no
 /// roof, nothing inside. So is a snow pole: one 9 cm stick, painted; and
-/// a yard lamp: a post and its arm; and a marker post: one post.
+/// a yard lamp: a post and its arm; a marker post: one post; and a
+/// machine marker: one stake.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -584,6 +598,7 @@ pub const VIEW_LIGHT: &[&str] = &[
     "snow_pole",
     "way_lamp",
     "marker_post",
+    "machine_marker",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
@@ -2044,6 +2059,23 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         pct(fog2),
         worst_of(murk),
     ));
+    // The first ways home at night, stop by stop (`map_night`, held by
+    // its `every_first_way_home_reads_at_night`): how many have a light
+    // ahead to steer by without a torch.
+    {
+        let id = map.name.to_lowercase().replace(' ', "_");
+        let stops = crate::map_night::read(map, hm, &id);
+        let far: Vec<_> = stops.iter().filter(|(s, _)| s.to_rv > 25.0).collect();
+        let lit = far.iter().filter(|(_, seen)| !seen.is_empty()).count();
+        // None where no first job starts (the training yard).
+        if !stops.is_empty() {
+            r.measures.push(format!(
+            "at night {lit} of {} stops on the first ways home have a light ahead to steer by (map_night; {} at their rendezvous)",
+            far.len(),
+            stops.len() - far.len()
+        ));
+        }
+    }
 
     for (got, floor, what) in [
         (pct(night), NIGHT_ONE * 100.0, "at night a lamp in sight"),
@@ -3111,7 +3143,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 p.at,
             );
         }
-        if !prefab_wants_pad(&p.prefab) && hm.slope_deg(p.at) > COMFORT_SLOPE {
+        if !prefab_wants_pad(&p.prefab) && hm.slope_deg(p.at) > footing_slope(&p.prefab) {
             find(
                 &mut r,
                 Rule::Footing,
@@ -4015,6 +4047,54 @@ mod tests {
             let _ = std::fs::write(format!("{dir}/{name}_routes.json"), r.routes_json());
         }
         r
+    }
+
+    /// A machine's boundary stake stands to the walkers' steepest slope,
+    /// anything else unlevelled to the comfortable one (`footing_slope`):
+    /// on Sallow's Gate hillside, at 26 degrees, the stake is sound and a
+    /// road-mender's marker post (unlevelled too) in the same spot is a
+    /// footing finding.
+    #[test]
+    fn a_machine_stake_stands_on_the_gate_hillside_a_marker_post_cannot() {
+        assert_eq!(footing_slope("machine_marker"), crate::map_nav::MAX_SLOPE);
+        assert_eq!(footing_slope("marker_post"), COMFORT_SLOPE);
+        let text = crate::map::VALLEYS
+            .iter()
+            .find(|v| v.0 == "sallow_reservoir")
+            .unwrap()
+            .1;
+        let mut map = MapDef::from_ron(text).unwrap();
+        let at = [279.0, -225.0];
+        assert!(
+            map.placements
+                .iter()
+                .any(|p| p.prefab == "machine_marker" && p.at == at),
+            "the Gate ring's east stake"
+        );
+        let hm = Heightmap::build(&map);
+        let slope = hm.slope_deg(at);
+        assert!(
+            slope > COMFORT_SLOPE && slope <= crate::map_nav::MAX_SLOPE,
+            "{slope}"
+        );
+        let footing = |r: &Report, what: &str| {
+            r.findings.iter().any(|f| {
+                f.rule == Rule::Footing && f.what.starts_with(what) && dist(f.at, at) < 0.5
+            })
+        };
+        assert!(!footing(&lint(&map, &hm), "machine_marker"));
+        let mut post = map
+            .placements
+            .iter()
+            .find(|p| p.prefab == "machine_marker" && p.at == at)
+            .unwrap()
+            .clone();
+        post.prefab = "marker_post".into();
+        map.placements
+            .retain(|p| !(p.prefab == "machine_marker" && p.at == at));
+        map.placements.push(post);
+        let hm = Heightmap::build(&map);
+        assert!(footing(&lint(&map, &hm), "marker_post"));
     }
 
     /// Prints every unwalled edge beside the valleys' ways (`MAP_ID` for

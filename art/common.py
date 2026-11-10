@@ -68,6 +68,10 @@ MATERIALS = {
     "Clear": ((0.8, 0.82, 0.8), 0.0, 0.1, None),
     "Warn": ((0.9, 0.6, 0.1), 0.0, 0.4, (1.0, 0.55, 0.07)),
     "Beacon": ((1.0, 0.75, 0.4), 0.0, 0.3, (1.0, 0.6, 0.2)),
+    # The machines' boundary stake's lens (`machine_marker`): frosted and
+    # unlit; the game lights it amber (Visual design) through its own
+    # material, so pulsing it pulses no robot's trim.
+    "MarkerLens": ((0.82, 0.82, 0.8), 0.0, 0.2, None),
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
@@ -1061,6 +1065,125 @@ def export(rel_path, colors=False):
         use_selection=False,
     )
     print(f"wrote {rel_path} ({os.path.getsize(path) / 1024:.0f} KiB)")
+
+
+#: Gun nodes a far stand-in leaves out: shown or not by the gun's state
+#: (a revolver's rounds and cases, a crossbow's drawn string and loaded
+#: bolt). The stand-in is the gun at rest, unloaded.
+LOD_SKIP = ("cylinder_round_", "cylinder_case_", "string_drawn", "bolt_string")
+
+
+def _tris(objs):
+    total = 0
+    for o in objs:
+        o.data.calc_loop_triangles()
+        total += len(o.data.loop_triangles)
+    return total
+
+
+def export_lod(rel_path, ratio=0.25, keep_under=160, skip=LOD_SKIP):
+    """A gun's far stand-in (`<id>_lod1.glb`, `render::gun_rest` draws it
+    past a few metres): the gun at rest, about `ratio` of its triangles,
+    one mesh node per material named for it, in the gun's space.
+
+    Flat faces first lose the fans of triangles the booleans leave
+    (planar dissolve, never across a material, seam or sharp edge, so
+    nothing visible moves); then, if that's not enough, the larger parts
+    are collapsed. A part under `keep_under` triangles is kept whole: the
+    sights, pins and screws are what a gun is read by. Call it after
+    `export`; it removes what it made."""
+    src = [o for o in bpy.context.scene.objects
+           if o.type == "MESH" and not any(o.name.startswith(p) for p in skip)]
+    before = _tris(src)
+    dups = []
+    for o in src:
+        d = o.copy()
+        d.data = o.data.copy()
+        d.modifiers.clear()
+        bpy.context.scene.collection.objects.link(d)
+        dups.append(d)
+
+    def apply(obj, mod):
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    for d in dups:
+        m = d.modifiers.new("flat", "DECIMATE")
+        m.decimate_type = "DISSOLVE"
+        m.angle_limit = math.radians(5.0)
+        m.delimit = {"MATERIAL", "SEAM", "SHARP", "UV"}
+        apply(d, m)
+        # Back to triangles, to count and collapse.
+        m = d.modifiers.new("tri", "TRIANGULATE")
+        apply(d, m)
+    target = before * ratio
+    small = [d for d in dups if _tris([d]) < keep_under]
+    big = [d for d in dups if d not in small]
+    have_big = _tris(big)
+    need_big = max(target - _tris(small), 0.0)
+    if have_big > need_big > 0:
+        f = max(need_big / have_big, 0.08)
+        for d in big:
+            m = d.modifiers.new("collapse", "DECIMATE")
+            m.decimate_type = "COLLAPSE"
+            m.ratio = f
+            m.use_collapse_triangulate = True
+            apply(d, m)
+    # Smooth within 40 degrees, as `make` shades, the old split normals gone.
+    for d in dups:
+        if d.data.has_custom_normals:
+            bpy.ops.object.select_all(action="DESELECT")
+            d.select_set(True)
+            bpy.context.view_layer.objects.active = d
+            bpy.ops.mesh.customdata_custom_splitnormals_clear()
+        d.data.shade_smooth()
+        d.data.set_sharp_from_angle(angle=math.radians(40.0))
+    # One object, then one per material, each named for its material.
+    bpy.ops.object.select_all(action="DESELECT")
+    for d in dups:
+        d.select_set(True)
+    bpy.context.view_layer.objects.active = dups[0]
+    bpy.ops.object.join()
+    joined = bpy.context.view_layer.objects.active
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.separate(type="MATERIAL")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    parts = [o for o in bpy.context.selected_objects if o.type == "MESH"]
+    if joined not in parts:
+        parts.append(joined)
+    out = []
+    for o in parts:
+        used = {p.material_index for p in o.data.polygons}
+        if not o.data.polygons or len(used) != 1:
+            continue
+        mat = o.material_slots[used.pop()].material
+        # Only its own material in its slots.
+        o.data.materials.clear()
+        o.data.materials.append(mat)
+        for p in o.data.polygons:
+            p.material_index = 0
+        o.name = mat.name
+        o.data.name = mat.name
+        out.append(o)
+    after = _tris(out)
+    print(f"  lod1: {before} -> {after} tris ({100 * after / max(before, 1):.0f}%), "
+          f"{len(out)} materials")
+    path = os.path.join(REPO, rel_path)
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in out:
+        o.select_set(True)
+    bpy.ops.export_scene.gltf(
+        filepath=path, export_format="GLB", export_yup=True, export_apply=True,
+        export_texcoords=True, export_normals=True, export_tangents=True,
+        export_materials="EXPORT", export_cameras=False, export_lights=False,
+        export_animations=False, export_extras=False, use_selection=True)
+    print(f"wrote {rel_path} ({os.path.getsize(path) / 1024:.0f} KiB)")
+    for o in parts:
+        bpy.data.objects.remove(o)
 
 
 def export_part(name, rel_path):

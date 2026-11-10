@@ -11,9 +11,11 @@ pub mod clear_eyes;
 pub mod comfort;
 pub mod cpu;
 pub mod eye_projection;
+pub mod far_rest;
 pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
+pub mod gate_lamp;
 pub mod gpu_lost;
 pub mod grade;
 pub mod gun_rest;
@@ -121,6 +123,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(part_rest::PartRestPlugin)
+        .add_plugins(far_rest::FarRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
@@ -128,6 +131,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(landmarks::LandmarkLampsPlugin)
         .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(way_lamps::WayLampsPlugin)
+        .add_plugins(gate_lamp::GateLampPlugin)
         .add_plugins(reflectors::ReflectorsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()

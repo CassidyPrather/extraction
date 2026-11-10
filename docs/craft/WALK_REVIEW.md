@@ -126,6 +126,14 @@ The coming-home walks live in `docs/craft/walks/home/`.
 - An arrival faces the way you came in, not the way on: the first walks'
   rendezvous looked due north into the trees, because a route's end has
   no way on, and that read as a dead end that wasn't there.
+- Stood on its point, an arrival's camera looks past the place: Marrow's
+  Rail yard looked up the truck track out of the yard, Cinder's Works yard
+  at the spoil heap beyond it. Both places read from 20 m out. The stop
+  picker now frames every arrival from 20 m out, looking at the point;
+  check a weak arrival there before changing the world.
+- A door stop's side view stands 6 m out in front of the door, looking
+  back at it. Taken from where the way passes, it had the wall edge-on or
+  the door filling the frame (Marrow's barn).
 - A muddy arrival is often fixed by moving the point, not the scenery: the
   place's best frame tends to sit 10 to 20 m short of where its marker was
   dropped. Look for it in the stops before the arrival.
@@ -169,3 +177,11 @@ The coming-home walks live in `docs/craft/walks/home/`.
 - Re-walk after the valley moves on. Rime's 4 Nov dead stretch had come
   alive by 5 Nov (a refuge, poles, a tower), and the weakest moments had
   moved on to the stretch after it.
+- The walk's first stop looks along the route, but the player arrives
+  facing the insertion marker's `rot`, and every valley had 0: due north,
+  whatever lay there. Rime's arrival faced an empty moor while the
+  village and the water tower's lamp stood off to the right, so the
+  first frame had no subject. Judge the arrival from the marker's own
+  heading, and turn the marker to face the way on (Rime's is 56.5, the
+  first job's heading out of the Bottoms;
+  `docs/shots/fifth-valley/first_sights_before_after.jpg`).

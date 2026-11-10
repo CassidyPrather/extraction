@@ -317,6 +317,19 @@ pub const MIX: &[Cue] = &[
     cue!("mine.flee", "machines/servo", -8.0, 75.0, 10.0, Detail, 5.0),
     // A minelayer crawling (`audio_machines::grind_sounds`), heard to 30 m.
     cue!("minelayer.grind", "drag/metal", -22.0, 75.0, 15.0, Signal, 5.0),
+    // The Zone's pressure stepping up (`audio_machines::pressure_sounds`),
+    // heard from the Gate's side, STEP_FROM off.
+    cue!("zone.stirred", "zone/stirred", -18.0, 85.0, 80.0, Signal, 40.0),
+    cue!("zone.busy", "zone/busy", -9.5, 85.0, 80.0, Signal, 40.0),
+    cue!("zone.hunting", "zone/hunting", -22.0, 95.0, 80.0, Signal, 40.0),
+    // A failing machine's distress flare (`audio_machines::flare_sounds`):
+    // the tell, read through a fight at 30 m; the burst, a call heard far.
+    cue!("distress.tell", "distress/tell", -4.5, 80.0, 30.0, Signal, 10.0),
+    cue!("distress.launch", "guns/distant_shot", -6.0, 110.0, 20.0, Action, 15.0),
+    cue!("distress.hiss", "distress/hiss", -12.0, 85.0, 30.0, Action, 20.0),
+    cue!("distress.burst", "explosions/grenade_sharp", -4.0, 140.0, 60.0, Signal, 60.0),
+    cue!("distress.fizzle", "device/crackle", -8.0, 75.0, 10.0, Action, 6.0),
+    cue!("distress.broken", "machines/clank", -4.0, 85.0, 15.0, Action, 8.0),
     // Its chute charging as it stops to lay (`audio_machines::hiss_sounds`).
     cue!("minelayer.hiss", "machines/chute_hiss", -23.0, 75.0, 10.0, Signal, 5.0),
     cue!("mender.called", "machines/servo", -10.0, 70.0, 8.0, Detail, 4.0),
@@ -424,7 +437,14 @@ pub const MIX: &[Cue] = &[
     cue!("heavy.stall", "anomaly/burner_roar", -6.0, 95.0, 20.0, Signal, 20.0),
     cue!("heavy.cell", "physical/switch", 0.0, 60.0, 10.0, Detail),
     cue!("heavy.idle", "machines/hum", -10.0, 70.0, 20.0, Signal, 12.0),
-    cue!("heavy.horn", "voice/heavy/horn", -10.0, 120.0, 300.0, Signal, 200.0),
+    // The Gate counting a key-carrier, rising (`audio_machines::gate_call`;
+    // this is its start, it rises GATE_CALL_RISE over it), its edges, and a
+    // heavy letting you go (`stand_down_sounds`).
+    cue!("gate.call", "gate/call", -16.0, 90.0, 60.0, Signal, 30.0),
+    cue!("gate.wake", "machines/clank", -3.5, 85.0, 30.0, Action, 15.0),
+    cue!("gate.release", "machines/servo", -10.0, 75.0, 30.0, Action, 15.0),
+    cue!("heavy.sigh", "heavy/sigh", -24.0, 70.0, 18.0, Signal, 8.0),
+    cue!("heavy.horn", "voice/heavy/horn", -8.5, 120.0, 300.0, Signal, 200.0),
     cue!("sentry.chirp", "machines/drone_lock", -30.0, 85.0, 20.0, Signal, 25.0),
     cue!("sentry.turn", "machines/servo", -10.0, 70.0, 15.0, Signal, 10.0),
     cue!("walker.aim", "machines/clank", -6.0, 85.0, 25.0, Signal, 10.0),

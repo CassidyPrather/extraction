@@ -28,6 +28,9 @@ pub const SCENARIO: &str = "second_hour";
 /// The last task while the run goes on: the director adds each step's
 /// tasks ahead of it.
 const IDLE: f32 = 4.5;
+/// An anomaly this near the ground's height over it is out where a walk
+/// reaches it (m; one under a building's floor or a site's roof isn't).
+const PROBE_ABOVE_GROUND: f32 = 3.0;
 
 pub fn opening() -> Vec<Task> {
     vec![
@@ -1135,7 +1138,20 @@ pub(super) struct World2<'w, 's> {
     pub(super) bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
     pub(super) pressables: Query<'w, 's, (Entity, &'static Pressable)>,
     pub(super) remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
+    /// Each remains bag, where it lies, and what's in it.
+    pub(super) remains_bags: Query<
+        'w,
+        's,
+        (
+            &'static GlobalTransform,
+            &'static Backpack,
+            &'static crate::raid::Remains,
+        ),
+    >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    /// The ground's collider (left out of what's "in the way" of a step:
+    /// banks are `steep_run`'s).
+    pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
     pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
     /// Every building and where it stands (for the way round them).
     pub(super) buildings: Query<
@@ -1326,6 +1342,10 @@ impl World2<'_, '_> {
             .iter()
             .filter(|(a, _)| a.kind != extraction_core::anomaly::AnomalyKind::Burner)
             .map(|(_, gt)| gt.translation())
+            // One out on the ground, where a walk reaches it (Marrow's
+            // shelter's snare, a storey under the village, was the nearest:
+            // walked over, never met, and the second hour's Anomaly missed).
+            .filter(|p| (p.y - self.zone.ground(p.x, p.z)).abs() < PROBE_ABOVE_GROUND)
             .min_by(|a, b| a.xz().distance(near).total_cmp(&b.xz().distance(near)))
     }
 
@@ -1351,6 +1371,12 @@ impl World2<'_, '_> {
                     )
                     // Out in the open (not on a shelf indoors)...
                     && self.entrances.building_at(gt.translation()).is_none()
+                    // ...within a hand's reach of the ground under it (on
+                    // the survey tower's deck, it was out of reach
+                    // overhead, and the pack never filled: Map design's
+                    // wreck repro)...
+                    && gt.translation().y - self.zone.ground(gt.translation().x, gt.translation().z)
+                        < crate::bot::STAND_REACH - 0.2
                     // ...and not from the edge of one: it was gone round.
                     && !self.anomalies.iter().any(|(a, agt)| {
                         agt.translation().xz().distance(gt.translation().xz()) < a.radius + 2.0
@@ -1529,6 +1555,8 @@ impl World2<'_, '_> {
     pub(super) fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
         // The truck within this of the rendezvous is the one waiting there (m).
         const RV_NEAR: f32 = 40.0;
+        // How far off the rendezvous to wait for it to pull in (m).
+        const RV_STANDOFF: f32 = 8.0;
         match raid.phase {
             Phase::Out => match self.radio_in_hand() {
                 true => vec![Task::Use(Side::Left), Task::Wait(1.0)],
@@ -1564,7 +1592,16 @@ impl World2<'_, '_> {
                 if let Some(p) = waiting_at
                     && truck.translation().xz().distance(p) > RV_NEAR
                 {
-                    let mut t = super::first_hour::walk(self, here, p);
+                    // Near it, not on it: the truck pulls in on the spot
+                    // (walked to the spot, the newcomer was pinned against
+                    // the truck's side 2 m short of it for the walk's half
+                    // minute, at the ranger tower).
+                    let near = p + (here - p).normalize_or(Vec2::Y) * RV_STANDOFF;
+                    let mut t = if here.distance(p) > RV_STANDOFF {
+                        super::first_hour::walk(self, here, near)
+                    } else {
+                        vec![]
+                    };
                     t.push(Task::Wait(2.0));
                     return t;
                 }

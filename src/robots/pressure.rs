@@ -44,6 +44,12 @@ pub const LINGER: f32 = 1.0 / 900.0;
 /// A fast machine is sent only this long (s) after the step that allows
 /// it was said.
 pub const CUE_LEAD: f32 = 10.0;
+/// No step is said within this long (s) of the last, and each is one level
+/// (slow and strategic before fast and tactical: two steps 28 s apart was
+/// the deep end). A step's answer is sent [`CUE_LEAD`] after it's said and
+/// a drone from the Gate takes about 40 s to come; 50 s lets each step's
+/// answer arrive, and be met, before the next can be said.
+pub const STEP_GAP: f32 = 50.0;
 /// Danger at or above this is hot ground (`Region::danger`; Map design's
 /// read: 0–1 quiet edges, 2–3 hot).
 pub const HOT_DANGER: u8 = 2;
@@ -64,6 +70,15 @@ pub enum Level {
 }
 
 impl Level {
+    /// The level above (Hunting stays).
+    pub fn next(self) -> Self {
+        match self {
+            Level::Quiet => Level::Stirred,
+            Level::Stirred => Level::Busy,
+            Level::Busy | Level::Hunting => Level::Hunting,
+        }
+    }
+
     pub fn of(account: f32) -> Self {
         match account {
             a if a < 1.0 => Level::Quiet,
@@ -81,6 +96,8 @@ pub struct Doings {
     pub out: bool,
     /// Reported shots this tick.
     pub shots: u32,
+    /// Distress flares burst this tick (`distress::STIR` each).
+    pub flares: u32,
     /// A machine has you this tick.
     pub fought: bool,
     /// On hot ground this tick, and whether you just went in.
@@ -129,21 +146,36 @@ pub fn job_hot_place(
         .map(|r| r.name.clone())
 }
 
-/// Whether `at` is hot ground for the account and the director: a region
-/// of [`HOT_DANGER`] or more, but never within `director::SURVEY_CLEAR` of
-/// a rendezvous: the run in can be tense, the wait at the pad can't
-/// (coordinator's ruling; one rule here in place of pocket regions).
-pub fn hot_at(zone: &crate::world::Zone, at: [f32; 2]) -> bool {
+/// How near the pad the truck's called to the wait there is: no hot
+/// ground within it (coordinator's ruling, #86).
+pub const RV_WAIT: f32 = 25.0;
+
+/// Whether `at` is hot ground for the account: a region of [`HOT_DANGER`]
+/// or more, but not within [`RV_WAIT`] of `called`, the pad the truck's
+/// been called to (`called_pad`): the run in can be tense, the wait at the
+/// pad can't. Only that pad, only while it's called (it was every pad's
+/// `director::SURVEY_CLEAR`, called or not, and blanked 57-65% of the hot
+/// ground on the ways to the jobs). Survey drones keep off every pad's
+/// 80 m on their own (`director::survey_places`).
+pub fn hot_at(zone: &crate::world::Zone, at: [f32; 2], called: Option<[f32; 2]>) -> bool {
     zone.map
         .region_at(at)
         .is_some_and(|r| r.danger >= HOT_DANGER)
-        && zone
-            .map
-            .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
-            .all(|m| {
-                Vec2::from_array(m.at).distance(Vec2::from_array(at))
-                    > super::director::SURVEY_CLEAR
-            })
+        && called.is_none_or(|c| Vec2::from_array(c).distance(Vec2::from_array(at)) > RV_WAIT)
+}
+
+/// The pad the truck's been called to, or is waiting at: none before the
+/// call, nor for the short exfil (back to the base).
+pub fn called_pad(zone: &crate::world::Zone, phase: &crate::raid::Phase) -> Option<[f32; 2]> {
+    let rv = match *phase {
+        crate::raid::Phase::TruckCalled { rv, .. }
+        | crate::raid::Phase::TruckWaiting { rv, .. } => rv,
+        _ => return None,
+    };
+    zone.map
+        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+        .nth(rv)
+        .map(|m| m.at)
 }
 
 /// Whether `p` is on the job's hot place ([`job_hot_place`]).
@@ -179,7 +211,10 @@ impl Pressure {
             return None;
         }
         let parts = [
-            (Why::Noise, SHOT * d.shots as f32),
+            (
+                Why::Noise,
+                SHOT * d.shots as f32 + super::distress::STIR * d.flares as f32,
+            ),
             (Why::Fight, if d.fought { FIGHTING * dt } else { 0.0 }),
             (
                 Why::Ground,
@@ -190,8 +225,15 @@ impl Pressure {
         let fed: f32 = parts.iter().map(|p| p.1).sum();
         self.stir = (self.stir + fed - DRAIN * dt).max(0.0);
         self.linger += LINGER * dt;
-        let level = Level::of(self.account());
+        let mut level = Level::of(self.account());
         let up = level > self.level;
+        if up {
+            // Not within the gap of the last step, and one level at a time.
+            if self.stepped_at.is_some_and(|t| now - t < STEP_GAP) {
+                return None;
+            }
+            level = level.min(self.level.next());
+        }
         // (Down it goes quietly; it was said going up.)
         self.level = level;
         if up {
@@ -260,6 +302,8 @@ impl Plugin for PressurePlugin {
 #[derive(Resource, Debug, Default)]
 pub struct Doing {
     pub shots: u32,
+    /// Distress flares that burst this tick (`distress`).
+    pub flares: u32,
     pub was_hot: bool,
 }
 
@@ -273,7 +317,7 @@ fn tally_pressure(
         (Entity, &GlobalTransform, Option<&crate::anomaly::Attention>),
         With<crate::rig::LocalPlayer>,
     >,
-    robots: Query<&super::Awareness>,
+    robots: Query<(&super::Awareness, Has<super::broken::Broken>)>,
     time: Res<Time>,
     mut out: MessageWriter<Stepped>,
     progression: Option<Res<crate::progression::Progression>>,
@@ -297,13 +341,19 @@ fn tally_pressure(
         .and_then(|o| job_hot_place(&zone, &o.map, progression.as_deref()));
     let at_job = on_job_place(&zone, place.as_deref(), at);
     // The job's own hot ground is quiet till a machine's had you there.
-    let hot = hot_at(&zone, [at.x, at.z]) && !(at_job && !pressure.met_at_job);
-    let fought = robots
-        .iter()
-        .any(|a| a.target == Some(me) && a.can_see_target);
+    let called = called_pad(&zone, &raid.phase);
+    let hot = hot_at(&zone, [at.x, at.z], called) && !(at_job && !pressure.met_at_job);
+    // The broken walker (a dead gun: the fight a newcomer is meant to win)
+    // feeds nothing: not as a fight, nor the shots at it while it's the
+    // only one on you (coordinator's ruling).
+    let on_me = |a: &super::Awareness| a.target == Some(me) && a.can_see_target;
+    let fought = robots.iter().any(|(a, broken)| !broken && on_me(a));
+    let only_broken = !fought && robots.iter().any(|(a, broken)| broken && on_me(a));
+    let shots = std::mem::take(&mut doing.shots);
     let d = Doings {
         out: in_zone,
-        shots: std::mem::take(&mut doing.shots),
+        shots: if only_broken { 0 } else { shots },
+        flares: std::mem::take(&mut doing.flares),
         fought,
         hot,
         into_hot: hot && !doing.was_hot,
@@ -326,46 +376,181 @@ fn tally_pressure(
 mod tests {
     use super::*;
 
-    /// No wait at a pad is on hot ground, in any valley: within
-    /// `SURVEY_CLEAR` of every rendezvous it's never hot, even where the
-    /// pad's region is (Marrow's Bus depot; coordinator's ruling, in place
-    /// of pocket regions).
+    const VALLEYS: [&str; 5] = [
+        "marrow_creek",
+        "kettle_pass",
+        "cinder_works",
+        "rime_fell",
+        "sallow_reservoir",
+    ];
+
+    /// Points round `c` at `r` m, sixteen of them.
+    fn ring(c: [f32; 2], r: f32) -> impl Iterator<Item = [f32; 2]> {
+        (0..16).map(move |k| {
+            let a = k as f32 * std::f32::consts::TAU / 16.0;
+            [c[0] + r * a.cos(), c[1] + r * a.sin()]
+        })
+    }
+
+    fn hot_region(zone: &crate::world::Zone, p: [f32; 2]) -> bool {
+        zone.map
+            .region_at(p)
+            .is_some_and(|r| r.danger >= HOT_DANGER)
+    }
+
+    /// The wait at the pad the truck's called to isn't hot ground: within
+    /// [`RV_WAIT`] of it, never, in any valley, even where its region is
+    /// (Marrow's Bus depot). Only that pad, only while it's called: past
+    /// 25 m, at any other pad, or with no truck called, hot ground is hot
+    /// (coordinator's ruling, #86: it was every pad's 80 m, called or not,
+    /// and blanked 57-65% of the hot ground on the way to the jobs).
     #[test]
-    fn no_rendezvous_wait_is_hot_ground() {
+    fn only_the_called_pads_wait_is_quiet() {
         let mut hot_pads = vec![];
-        for map in [
-            "marrow_creek",
-            "kettle_pass",
-            "cinder_works",
-            "rime_fell",
-            "sallow_reservoir",
-        ] {
+        for map in VALLEYS {
             let zone = crate::world::Zone::load(map);
-            for rv in zone
+            let pads: Vec<[f32; 2]> = zone
                 .map
                 .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
-            {
-                if zone
-                    .map
-                    .region_at(rv.at)
-                    .is_some_and(|r| r.danger >= HOT_DANGER)
-                {
-                    hot_pads.push(format!("{map} {}", rv.name));
-                }
-                for r in [0.0, 10.0, 20.0, 40.0, 60.0, 79.0] {
-                    for k in 0..16 {
-                        let a = k as f32 * std::f32::consts::TAU / 16.0;
-                        let p = [rv.at[0] + r * a.cos(), rv.at[1] + r * a.sin()];
-                        assert!(!hot_at(&zone, p), "{map} {} at {r} m is hot", rv.name);
+                .map(|m| m.at)
+                .collect();
+            for (i, rv) in pads.iter().enumerate() {
+                let name = format!("{map} pad {i}");
+                for r in [0.0, 5.0, 12.0, 20.0, 24.0] {
+                    for p in ring(*rv, r) {
+                        assert!(!hot_at(&zone, p, Some(*rv)), "{name} at {r} m is hot");
                     }
+                }
+                // Hot ground round it stays hot: uncalled, past the wait,
+                // or with the truck called to another pad.
+                let other = pads.iter().find(|o| *o != rv).copied();
+                for r in [0.0, 10.0, 30.0, 50.0, 79.0] {
+                    for p in ring(*rv, r).filter(|p| hot_region(&zone, *p)) {
+                        assert!(hot_at(&zone, p, None), "{name} at {r} m, uncalled");
+                        if let Some(o) = other.filter(|o| {
+                            Vec2::from_array(*o).distance(Vec2::from_array(p)) > RV_WAIT
+                        }) {
+                            assert!(hot_at(&zone, p, Some(o)), "{name} at {r} m, other called");
+                        }
+                        if r > RV_WAIT {
+                            assert!(hot_at(&zone, p, Some(*rv)), "{name} at {r} m, called");
+                        }
+                    }
+                }
+                if hot_region(&zone, *rv) {
+                    hot_pads.push(format!("{map} {i}"));
                 }
             }
         }
         // The rule has work to do: some pads are in hot regions.
-        assert!(
-            hot_pads.iter().any(|p| p == "marrow_creek Bus depot"),
-            "{hot_pads:?}"
-        );
+        assert!(!hot_pads.is_empty(), "no pad in hot ground");
+    }
+
+    /// How much of each valley's hot ground `hot_at` blanks, on its own
+    /// (before the job's place waits on `met_at_job`): none with no truck
+    /// called, and with one called, only its pad's wait, a sliver of it
+    /// (10% at most: Marrow's Bus depot, a pad in a small hot region, is
+    /// the most).
+    #[test]
+    fn hot_at_blanks_only_a_sliver_of_hot_ground() {
+        for map in VALLEYS {
+            let zone = crate::world::Zone::load(map);
+            let pads: Vec<[f32; 2]> = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+                .map(|m| m.at)
+                .collect();
+            let half = zone.map.size / 2.0;
+            let mut hot = vec![];
+            let mut x = -half;
+            while x <= half {
+                let mut z = -half;
+                while z <= half {
+                    if hot_region(&zone, [x, z]) {
+                        hot.push([x, z]);
+                    }
+                    z += 4.0;
+                }
+                x += 4.0;
+            }
+            assert!(!hot.is_empty(), "{map} has hot ground");
+            let blank = |called: Option<[f32; 2]>| {
+                hot.iter().filter(|p| !hot_at(&zone, **p, called)).count() as f32 / hot.len() as f32
+            };
+            assert_eq!(blank(None), 0.0, "{map} uncalled");
+            // The old rule: every pad's 80 m, called or not.
+            let old = hot
+                .iter()
+                .filter(|p| {
+                    pads.iter().any(|rv| {
+                        Vec2::from_array(*rv).distance(Vec2::from_array(**p))
+                            <= super::super::director::SURVEY_CLEAR
+                    })
+                })
+                .count() as f32
+                / hot.len() as f32;
+            for (i, rv) in pads.iter().enumerate() {
+                let b = blank(Some(*rv));
+                eprintln!(
+                    "{map} pad {i}: called blanks {:.1}% (every pad's 80 m: {:.1}%)",
+                    b * 100.0,
+                    old * 100.0
+                );
+                assert!(b <= 0.10, "{map} pad {i} called blanks {:.1}%", b * 100.0);
+            }
+        }
+    }
+
+    /// Every way on every valley that walks from quiet ground into hot
+    /// (`extraction_core::map_gradient::crossings`) tells of it from the
+    /// place itself on the approach (a sign, a wreck, a gate, a sentry, an
+    /// anomaly: not only a red lamp far off), so a newcomer stepping onto
+    /// the ground that fills the account and voices its step was told
+    /// before it. A machine seen on the way is a bonus, not the promise:
+    /// it moves, dies and is drawn away (coordinator, #82). Known gaps are
+    /// named here till they're closed, and this fails once one is (take
+    /// it off).
+    #[test]
+    fn every_quiet_to_hot_crossing_is_told_by_its_place() {
+        use extraction_core::map::MapDef;
+        use extraction_core::terrain::Heightmap;
+        // (valley, into, near, the way, part of its name): waiting, and on
+        // whom.
+        const GAPS: &[(&str, &str, [f32; 2], &str, &str)] = &[];
+        let mut untold = vec![];
+        let mut closed = vec![];
+        for (id, text) in extraction_core::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let comfy = extraction_core::map_nav::zone_grid(
+                &map,
+                &hm,
+                extraction_core::map_lint::COMFORT_SLOPE,
+            );
+            let r = extraction_core::map_lint::lint(&map, &hm);
+            let cs = extraction_core::map_gradient::crossings(&map, &hm, &comfy, &r.routes);
+            let gap = |c: &extraction_core::map_gradient::Crossing| {
+                GAPS.iter().find(|g| {
+                    g.0 == id
+                        && g.1 == c.into.0
+                        && c.way.contains(g.3)
+                        && Vec2::from_array(g.2).distance(Vec2::from_array(c.at)) < 25.0
+                })
+            };
+            for c in &cs {
+                let told = c.signals.iter().any(|s| s.0 != "red lamp over it");
+                match (told, gap(c)) {
+                    (false, None) => untold.push(format!(
+                        "{id}: {} ({}) -> {} ({}) at ({:.0}, {:.0}) on {}",
+                        c.from.0, c.from.1, c.into.0, c.into.1, c.at[0], c.at[1], c.way
+                    )),
+                    (true, Some(g)) => closed.push(format!("{id} {} on {} ({})", g.1, g.3, g.4)),
+                    _ => {}
+                }
+            }
+        }
+        assert!(untold.is_empty(), "crossings nothing tells of: {untold:#?}");
+        assert!(closed.is_empty(), "told now, take it off GAPS: {closed:?}");
     }
 
     fn out() -> Doings {
@@ -438,6 +623,31 @@ mod tests {
         assert!(!p.fast_allowed(at + CUE_LEAD - 0.5), "fast before its cue");
         assert!(p.fast_allowed(at + CUE_LEAD + 0.5) || p.level > Level::Stirred);
         assert!(matches!(p.why, Why::Noise | Why::Fight), "{p:?}");
+    }
+
+    /// However hard it's pushed (a shot every 2 s, a fight, hot ground),
+    /// the steps come one level at a time and [`STEP_GAP`] apart (they
+    /// came 28 s apart, Stirred to Busy to Hunting in under a minute:
+    /// lost's job 2).
+    #[test]
+    fn steps_are_one_level_and_a_gap_apart() {
+        let mut p = Pressure::default();
+        let steps = run(&mut p, 240.0, |t| Doings {
+            shots: ((t * 90.0) as usize % 180 == 0) as u32,
+            fought: true,
+            hot: true,
+            ..out()
+        });
+        assert_eq!(
+            steps.first().map(|s| s.1),
+            Some(Level::Stirred),
+            "{steps:?}"
+        );
+        assert!(steps.len() >= 3, "{steps:?}");
+        for w in steps.windows(2) {
+            assert!(w[1].0 - w[0].0 >= STEP_GAP - 0.05, "{steps:?}");
+            assert_eq!(w[1].1, w[0].1.next(), "{steps:?}");
+        }
     }
 
     /// Going onto hot ground is a step sooner than anywhere else.

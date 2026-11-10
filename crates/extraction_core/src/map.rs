@@ -450,8 +450,14 @@ pub enum MarkerKind {
     /// A sheet of paper lying on whatever is built here (a table, a floor)
     /// or on the ground: someone's note.
     Note { text: String },
-    /// A painted board on a post, facing `rot`.
-    Sign { text: String },
+    /// A painted board on a post, facing `rot`; or, with `board`, on one
+    /// of the warning boards' carriers (a gate, a hoarding, an enamel
+    /// plate, a wall, a door: `world::notes::WARNING_BOARDS`).
+    Sign {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        board: Option<String>,
+    },
     /// A computer terminal on whatever is built here, screen facing `rot`;
     /// press it for the next page.
     Terminal { pages: Vec<String> },
@@ -499,7 +505,7 @@ impl MarkerKind {
     /// pages), for checks and exports.
     pub fn text(&self) -> Option<String> {
         match self {
-            MarkerKind::Note { text } | MarkerKind::Sign { text } => Some(text.clone()),
+            MarkerKind::Note { text } | MarkerKind::Sign { text, .. } => Some(text.clone()),
             MarkerKind::Terminal { pages } => Some(pages.join("\n\n")),
             _ => None,
         }
@@ -655,10 +661,17 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "way_lamp" => [1.2, 2.7, 0.4],
         // A marker post, banded with reflective tape (`world::way_lamps`).
         "marker_post" => [0.1, 1.3, 0.1],
+        // The machines' boundary stake, its fins 0.3 across
+        // (`world::way_lamps`).
+        "machine_marker" => [0.3, 1.74, 0.3],
         // Landmarks (src/world/buildings.rs); the headframe's back struts
         // reach 7 m behind its shaft.
         "water_tower" => [6.0, 18.2, 6.0],
         "headframe" => [6.0, 19.6, 15.0],
+        // A works gas holder (src/world/buildings.rs `gas_holder`): its
+        // plinth 13.8 across, its frame's top ring to 13.9 m and the lamp
+        // post on its front-right column to 14.2.
+        "gas_holder" => [13.8, 14.2, 13.8],
         "signal_box" => [8.4, 6.9, 4.2],
         "steeple" => [4.4, 19.0, 4.4],
         // A nave 10 x 14 with its steps at the west door, the bell tower
@@ -1149,6 +1162,7 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "snow_pole"
             | "way_lamp"
             | "marker_post"
+            | "machine_marker"
             // Stepped down its slope: the map terraces the ground for it.
             | "ore_mill"
             // On the line's grade.
@@ -1274,6 +1288,29 @@ pub const VALLEYS: [(&str, &str); 5] = [
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_sign_names_its_board_or_stands_on_its_post() {
+        use super::MarkerKind;
+        let post: MarkerKind = ron::from_str(r#"Sign(text: "KEEP OUT")"#).unwrap();
+        assert_eq!(
+            post,
+            MarkerKind::Sign {
+                text: "KEEP OUT".into(),
+                board: None
+            }
+        );
+        let gate: MarkerKind =
+            ron::from_str(r#"Sign(text: "NO ENTRY", board: Some("warning_gate"))"#).unwrap();
+        let MarkerKind::Sign { board, .. } = &gate else {
+            panic!()
+        };
+        assert_eq!(board.as_deref(), Some("warning_gate"));
+        // A post's sign writes back as it was read: no board.
+        assert!(!ron::to_string(&post).unwrap().contains("board"));
+        let back: MarkerKind = ron::from_str(&ron::to_string(&gate).unwrap()).unwrap();
+        assert_eq!(back, gate);
+    }
+
     /// A line of poles: one at each end, 20 m apart along its bends, and
     /// read in as `snow_pole` placements.
     #[test]

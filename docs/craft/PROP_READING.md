@@ -342,3 +342,62 @@ prop's distance (`art/check.py`).
 
 ![The five by day (the model sweep's light) and at night under its lamp,
 which lights them from the side](../shots/props/warning_boards.jpg)
+
+## The machines' boundary marker (8 November)
+
+At night, crossings into hot ground told nothing: the only lamp a map
+could place was the warm `way_lamp`, which reads as shelter.
+`machine_marker` is the machines' own. It's a stake they fire into the
+ground where their working ground begins: six-sided and fluted, standing
+on three dart fins, all in the robots' pale Shell. A band of frosted lens
+runs all round its head, 1.6 m up, high enough to read over grass and
+scrub from 25 m. It's 1.74 m tall with its cap and aerial, and has two
+materials and 520 triangles.
+
+It's a building prefab (`world::way_lamps`), placed in a map as
+`(prefab: "machine_marker", at, rot)` like the way lamp. It grows no ivy.
+The lens is its own material, `MarkerLens`: frosted and unlit in the
+model, so Visual design drives its emissive with a slow amber pulse.
+Its light and halo go at `world::way_lamps::MARKER_LAMP_AT`, which is
+the model's empty `lamp`. `a_machine_marker_has_its_model_and_its_lamp_where_the_light_goes`
+holds the two together, inside the lens.
+
+![By day close up; at night by the torch close up; at night from 25 m,
+where until its lens is lit it isn't seen at all (a placement in Marrow
+Creek, for the shots only)](../shots/props/machine_marker.jpg)
+
+## The works gas holder (9 November)
+
+Cinder's Ash Row gets a landmark to tell it by from the truck: a small
+works gas holder (`gas_holder`, `art/props/gasworks.py`).
+
+- **What it is:** a dented, rust-blotched tank in a concrete plinth,
+  inside a guide-frame of eight columns. The columns are braced in two
+  tiers, with girder rings at mid-height and round the top.
+- **What reads:** the frame against the sky, so its members are thick
+  enough to show at 100 m (columns 0.4 m, braces 0.16 m).
+- **The fire's marks:** soot runs down the tank, and one column is bent
+  at its top tier, dragging the ring out.
+- **Size:** 13.9 m to the ring, 13.8 m across the plinth. A short post
+  on the front-right column rises to 14.2 m, under the 14.5 m cap. The
+  game's landmark lamp stands on that post, its one highest point, so
+  the lamp isn't hanging over the tank on a ring of level tops. The
+  model has no lamp or glow of its own.
+- **Levels:**
+  - level 0: 2,792 triangles;
+  - level 1: 1,232 (no rollers, soot or dents);
+  - level 2: 536 (tank, columns and top ring), for past
+    `lod::FAR_BUILDING`.
+- **The prefab** (`world::buildings`) collides on its plinth, tank and
+  columns.
+- **For the maps:**
+  - the footprint is 13.8 × 14.2 × 13.8;
+  - its tall parts are the eight column tops (`map_landmarks`);
+  - its lamp family is isophase, like the other works frames;
+  - its lamp seat is measured off the game (`map_night::LAMP_SEATS`).
+
+From Cinder's south gate it sits 107 m off, at a spot near Ash Row used
+for these shots only. It sits under the works chimney and the furnace.
+
+![Cinder's south gate by day and at night, the gas holder 107 m off,
+boxed and enlarged](../shots/props/gas_holder_105m.jpg)

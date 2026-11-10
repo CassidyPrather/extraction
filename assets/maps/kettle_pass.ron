@@ -206,7 +206,10 @@
         (
             name: "Gate woods", seed: 47, density: 1.2, undergrowth: 0.5,
             mix: [(Spruce, 0.5), (Pine, 0.4), (Birch, 0.1)],
-            polygon: [(106.8, 203.3), (215.9, 207.3), (217.8, 200.7), (117.2, 142.9), (108.8, 151.8)],
+            // A ride cut through toward the Logging camp's sawmill, so the
+            // first frame off the truck has the camp in it (walk review).
+            polygon: [(106.8, 203.3), (215.9, 207.3), (217.8, 200.7), (117.2, 142.9), (108.8, 151.8),
+                      (108.2, 190.0), (150.0, 177.5), (150.0, 186.5), (107.5, 198.0)],
         ),
         (
             name: "East bank", seed: 48, density: 1.0, undergrowth: 0.5,
@@ -277,9 +280,36 @@
         (at: (4.0, -176.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // The Gate's line: machine stakes on its 60 m circle, where a key carried
+        // inside for 6 s calls a heavy; every walkable spot of the line within
+        // 25 m of one (Heavy's gate_line_is_staked).
+        (prefab: "machine_marker", at: (-186.5, -128.2), rot: 0.0),
+        (prefab: "machine_marker", at: (-121.5, -193.2), rot: 0.0),
+        (prefab: "machine_marker", at: (-143.9, -141.6), rot: 0.0),
+        // The machines' boundary stakes, an amber pulse after dark, where a way
+        // into hot ground has nothing else lit to tell of it (map_gradient,
+        // crossings_at_night).
+        (prefab: "machine_marker", at: (60.0, -80.5), rot: 56.0),  // Charcoal burners' hut, the lodge route and home from the Logging camp (78, -83)
+        (prefab: "machine_marker", at: (-73.5, -45.8), rot: 278.0),  // Kettle mine, home from Miners' Row and the Gatekeeper's cottage (-91, -41)
+        (prefab: "machine_marker", at: (-161.9, 6.7), rot: 356.0),  // Kettle mine, home from the Low farm (-167, -9)
+        // Where a way crosses into hot ground, a wreck by it short of the line,
+        // ahead of a newcomer walking up (map_gradient).
+        (prefab: "wreck_lada", at: (-77.6, -46.0), rot: 272.0),  // Kettle mine, the route to the Mine yard and home from Miners' Row (-91, -40)
+        (prefab: "wreck_uaz", at: (62.0, -77.8), rot: 56.0),  // Charcoal burners' hut, the route to the Hunting lodge (78, -83)
+        (prefab: "wreck_uaz", at: (-97.4, 4.8), rot: 71.0),  // Kettle mine, home from the Weir cottage (-109, -10)
+        (prefab: "wreck_lada", at: (-171.3, 7.9), rot: 85.0),  // Kettle mine, home from the Low farm (-167, -9)
+        (prefab: "wreck_uaz", at: (178.4, -97.1), rot: 354.0),  // Hunting lodge, home from the quarry (173, -113)
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (85.8, 187.4), rot: 0.0),
+        // A lamp beside the Quarry and Mine fork posts, its arm over the
+        // board, so they read after dark (a board needs a light within 8 m,
+        // map_gradient LIT_BY). The Lodge fork has none: its way is told
+        // after dark by the charcoal hut's window and the lodge's beacon
+        // down the lodge track, and a lamp there would stand in the frame
+        // of the lodge track's crossing stake for whoever walks home.
+        (prefab: "way_lamp", at: (12.0, 14.3), rot: 344.0),  // Quarry fork sign, in front of its face
+        (prefab: "way_lamp", at: (1.2, -24.3), rot: 225.0),  // Mine fork sign, clear of the lorry
         (prefab: "way_lamp", at: (-101.6, -1.1), rot: 0.0),
         (prefab: "way_lamp", at: (-137.2, -26.5), rot: 0.0),
         (prefab: "way_lamp", at: (1.0, 23.3), rot: 0.0),  // w00_05, past the mine, where nothing lit showed ahead
@@ -465,7 +495,8 @@
     ],
 
     markers: [
-        (kind: Insertion, at: (90.9, 202.4), rot: 0.0, name: "South gate"),
+        // The arrival faces the way on to the first job (map_vista).
+        (kind: Insertion, at: (90.9, 202.4), rot: 58.0, name: "South gate"),
         (kind: TruckStop, at: (90.9, 232.4), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (96.9, 208.4), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (9.2, -201.9), name: "The pass"),
@@ -502,6 +533,14 @@
         (kind: Poi, at: (49.9, 156.9), name: "Gatekeeper's cottage"),
         (kind: Poi, at: (-30.0, -97.5), name: "Switchback hut"),
         (kind: Poi, at: (89.2, -103.5), name: "Charcoal hut"),
+        // Fingerposts at the Pass road's three switchback forks, facing the
+        // walker coming up from Miners' Row (walk review: 500 m of road with
+        // three forks and nothing to say which way). Places, not dangers;
+        // wording Story's, cut to read from 6.5 m (sign_reach): each stands
+        // where the walked line passes 5-6 m short of it, its face to there.
+        (kind: Sign(text: "THE PASS, left\nTHE QUARRY, right"), at: (14.4, 13.6), rot: 13.0, name: "Quarry fork sign"),
+        (kind: Sign(text: "MINE YARD, left\nTHE PASS, right"), at: (-0.8, -26.3), rot: 349.0, name: "Mine fork sign"),
+        (kind: Sign(text: "HUNTING LODGE, right\nTHE PASS, left"), at: (35.0, -57.0), rot: 89.0, name: "Lodge fork sign"),
         (kind: ValleyKey(item: "key_kettle"), at: (146.8, -33.2), rot: 200.0, name: "Quarry blast shelter"),
         // Caches worth the detour: the low farm's workshop, the camp's tool
         // chest, the mine's shot-firer's store and stores, and a first-aid

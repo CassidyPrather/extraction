@@ -265,11 +265,32 @@
     ],
 
     placements: [
+        // The Gate's line: machine stakes on its 60 m circle, where a key carried
+        // inside for 6 s calls a heavy; every walkable spot of the line within
+        // 25 m of one (Heavy's gate_line_is_staked).
+        (prefab: "machine_marker", at: (136.8, -132.3), rot: 0.0),
+        (prefab: "machine_marker", at: (115.5, -186.0), rot: 0.0),
+        (prefab: "machine_marker", at: (122.0, -150.0), rot: 0.0),  // the hush arc (Heavy's unmarked_line: (120, -154) between 5 m samples)
+        (prefab: "machine_marker", at: (178.8, -118.6), rot: 0.0),
+        // The machines' boundary stakes, an amber pulse after dark, where a way
+        // into hot ground has nothing else lit to tell of it (map_gradient,
+        // crossings_at_night).
+        (prefab: "machine_marker", at: (60.5, -130.5), rot: 0.0),  // North sidings, the route to them and home from the slag heaps (55, -141)
+        // Where a way crosses into hot ground, a wreck by it short of the line,
+        // ahead of a newcomer walking up (map_gradient).
+        (prefab: "wreck_uaz", at: (44.6, -128.3), rot: 22.0),  // North sidings, the route to them (54, -142)
+        (prefab: "wreck_lada", at: (55.0, -62.1), rot: 145.0),  // The works, the scout's way to the chimney (67, -51)
+        (prefab: "wreck_lada", at: (11.7, 34.7), rot: 84.0),  // The works, the route to the Works yard (32, 23)
         // Yard lamps where a first job's way home can't be told after
         // dark without a torch (scripts/night_route.sh, the dark case).
         (prefab: "way_lamp", at: (84.5, 9.0), rot: 0.0),
         (prefab: "way_lamp", at: (93.3, -12.3), rot: 0.0),
         (prefab: "way_lamp", at: (-101.7, 58.0), rot: 0.0),
+        // A yard lamp 40 m up the works road from the truck, its arm over
+        // the road: the gas holder's lamp at 110 m is too faint to steer by
+        // after dark (map_vista NIGHT_READ), this is what the first frame
+        // holds at night.
+        (prefab: "way_lamp", at: (-59.5, 160.3), rot: 21.0),
 
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
@@ -300,6 +321,12 @@
 
         // Ash Row: the workers' houses, either side of the works road. Long
         // since picked over; the works themselves are another matter.
+        // The works' gas holder at the top of the Row, its front to the
+        // gate: off the truck the Row's houses are low and the furnace stands
+        // off to the left; the holder is ahead, where the way goes
+        // (map_vista). Lower in the gate's view than the works chimney, which
+        // stays the valley's landmark (Story).
+        (prefab: "gas_holder", at: (-37.1, 87.8), rot: 197.0),
         (prefab: "house_plank_burnt", at: (-46.1, 99.0), rot: 90.0),
         (prefab: "house_brick_damaged", at: (-38.5, 153.0), rot: 270.0),
         (prefab: "house_brick", at: (-73.0, 120.6), rot: 90.0, tag: "foreman"),
@@ -395,7 +422,8 @@
     ],
 
     markers: [
-        (kind: Insertion, at: (-71.0, 198.7), rot: 0.0, name: "South gate"),
+        // The arrival faces the way on to the first job (map_vista).
+        (kind: Insertion, at: (-71.0, 198.7), rot: 21.0, name: "South gate"),
         (kind: TruckStop, at: (-74.4, 228.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (-65.5, 204.0), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (-113.9, -123.6), name: "Fire lookout"),
@@ -405,7 +433,7 @@
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
         (kind: Sentry(arc: 140.0, power: Some((178.1, -176.1))), at: (164.6, -172.5), rot: -45.0, name: "Gate sentry"),
-        (kind: Sentry(arc: 140.0, power: Some((102.1, -57.0))), at: (90.0, -50.0), rot: -30.0, name: "Chimney sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((80.1, -40.1))), at: (90.0, -50.0), rot: 135.0, name: "Chimney sentry"),
         // A spotter over the open ground the west way crosses to the fire
         // lookout: the east ways have the chimney's sentry (map_spotter).
         (kind: Spotter, at: (-119.0, -7.0), name: "Ash pit spotter"),
@@ -423,6 +451,10 @@
         (kind: Poi, at: (-34.5, 108.2), name: "Ash Row"),
         (kind: Poi, at: (-159.6, 84.0), name: "Cutter's farm"),
         (kind: Poi, at: (11.8, -17.0), name: "The works"),
+        // Where the way home from the chimney crosses into the Works yard
+        // (map_gradient): the ironworks' stencil on its fence slab, and
+        // under it, in someone else's paint, whose yard it is now.
+        (kind: Sign(text: "WORKS YARD\nTHEIRS NOW", board: Some("warning_wall")), at: (89.5, -22.5), rot: 131.0, name: "Works yard sign"),
         (kind: Poi, at: (75.7, -32.0), name: "The chimney"),
         (kind: Poi, at: (114.6, 23.0), name: "Canal pumps"),
         (kind: Poi, at: (140.0, -105.0), name: "The slag heaps"),

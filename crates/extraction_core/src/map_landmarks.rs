@@ -66,6 +66,15 @@ pub fn tall_parts(prefab: &str) -> Vec<[f32; 3]> {
         // The stack's bleeders at the furnace (BF_SHIFT) and the stoves'
         // chimney (BF_CHIMNEY).
         "blast_furnace" => vec![[-5.7, -10.6, 33.0], [12.8, 0.9, h]],
+        // A gas holder is seen by its frame: the tops of its eight columns
+        // round a 6.35 m ring at 13.6 m (buildings.rs `gas_holder`), its
+        // middle (the tank's crown, 9.5 m) under the sky between them.
+        "gas_holder" => (0..8)
+            .map(|k| {
+                let a = (22.5 + 45.0 * k as f32).to_radians();
+                [6.35 * a.sin(), -6.35 * a.cos(), 13.6]
+            })
+            .collect(),
         _ => vec![[0.0, 0.0, h]],
     }
 }
@@ -259,6 +268,24 @@ impl Canopy {
     /// Whether the crowns hide a line from eye height at `from` to the
     /// point `top` metres up at `to`.
     pub fn hides(&self, hm: &Heightmap, from: P2, to: P2, top: f32) -> bool {
+        self.crowns(hm, from, to, top, CROWN_RADIUS, false, CROWNS_HIDE) >= CROWNS_HIDE
+    }
+
+    /// How many crowns, each `radius` wide each way, a line from eye height
+    /// at `from` to the point `top` metres up at `to` passes through,
+    /// counted up to `enough`. A `cone` crown is `radius` wide at its base
+    /// and narrows to nothing at its top, as a spruce does.
+    #[allow(clippy::too_many_arguments)]
+    pub fn crowns(
+        &self,
+        hm: &Heightmap,
+        from: P2,
+        to: P2,
+        top: f32,
+        radius: f32,
+        cone: bool,
+        enough: usize,
+    ) -> usize {
         let eye = hm.height(from) + 1.7;
         let d = dist(from, to);
         let n = (d / 2.0).ceil().max(1.0) as usize;
@@ -274,21 +301,26 @@ impl Canopy {
                         continue;
                     };
                     for (at, lo, hi) in v {
+                        let r = if cone {
+                            radius * (*hi - y) / (*hi - *lo).max(0.1)
+                        } else {
+                            radius
+                        };
                         if y > *lo
                             && y < *hi
-                            && dist(*at, q) < CROWN_RADIUS
+                            && dist(*at, q) < r
                             && !hit.iter().any(|h| dist(*h, *at) < 0.1)
                         {
                             hit.push(*at);
-                            if hit.len() >= CROWNS_HIDE {
-                                return true;
+                            if hit.len() >= enough {
+                                return hit.len();
                             }
                         }
                     }
                 }
             }
         }
-        false
+        hit.len()
     }
 }
 
@@ -554,7 +586,8 @@ pub const MORSE: &[Character] = &[
     ch("Mo(A) 8s", 8.0, &[(0.0, 0.5), (1.0, 2.5)]),
     ch("Mo(U) 10s", 10.0, &[(0.0, 0.5), (1.0, 1.5), (2.0, 3.5)]),
 ];
-/// As long lit as dark: the headframes', the gantry's, the funicular's.
+/// As long lit as dark: the headframes', the gantry's, the funicular's,
+/// the gas holder's.
 pub const ISOPHASE: &[Character] = &[
     ch("Iso 4s", 4.0, &[(0.0, 2.0)]),
     ch("Iso 8s", 8.0, &[(0.0, 4.0)]),
@@ -581,7 +614,7 @@ pub fn family(kind: &str) -> &'static [Character] {
         "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" | "factory_hall" => {
             MORSE
         }
-        "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
+        "headframe" | "sorting_gantry" | "funicular_upper" | "gas_holder" => ISOPHASE,
         "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASHES,
         _ => CHIMNEYS,
     }
@@ -803,6 +836,7 @@ mod tests {
             "headframe",
             "sorting_gantry",
             "funicular_upper",
+            "gas_holder",
             "dam",
             "blast_furnace",
             "ropeway_pylon",

@@ -491,6 +491,14 @@ mod models {
             if path.extension().is_none_or(|e| e != "glb") {
                 continue;
             }
+            // A far level's nodes are its materials, drawn by gun_rest
+            // (`models::tests::every_gun_has_its_far_stand_in`).
+            if path
+                .file_stem()
+                .is_some_and(|s| crate::capture::glb::is_far_level(&s.to_string_lossy()))
+            {
+                continue;
+            }
             let bytes = std::fs::read(&path).unwrap();
             // glTF binary: a 12-byte header, then the JSON chunk.
             let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;

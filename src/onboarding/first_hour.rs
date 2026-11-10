@@ -492,7 +492,48 @@ pub fn seeded_job(kind: &str, here: &str) -> Option<Job> {
             item: "canned_stew".into(),
             n: 2,
         },
+        "shelter" => return shelter_job(&map),
         _ => return None,
+    })
+}
+
+/// The job card's thing in the shelter's room farthest from any way out of
+/// it (the site with a lockdown: Marrow's bunker): down there, the
+/// newcomer has to come up through the site to get home. A regression run
+/// (`--job shelter`), so a career that no longer goes underground can't
+/// hide a walk from below that goes straight at the surface through the
+/// rock (the shelter on Marrow, seed 3 job 2).
+pub fn shelter_job(map: &str) -> Option<Job> {
+    use extraction_core::underground as ug;
+    let def = crate::world::load_map_def(map);
+    let dist = |a: [f32; 2], b: [f32; 2]| Vec2::from(a).distance(Vec2::from(b));
+    ug::placed(&def).into_iter().find_map(|p| {
+        let l = ug::layout(&p.id)?;
+        l.lockdown.as_ref()?;
+        let room = l.rooms.iter().filter(|r| !r.pit).max_by(|a, b| {
+            let out = |r: &ug::Room| {
+                l.portals
+                    .iter()
+                    .map(|q| dist(q.at, r.at))
+                    .fold(f32::MAX, f32::min)
+            };
+            out(a).total_cmp(&out(b))
+        })?;
+        // Named on the card by the place nearest its way in (what the
+        // newcomer reads to go: "the shelter" is no place it can find).
+        let place = def
+            .markers
+            .iter()
+            .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
+            .min_by(|a, b| dist(a.at, p.at).total_cmp(&dist(b.at, p.at)))?
+            .name
+            .clone();
+        Some(Job::Bring {
+            map: map.to_owned(),
+            place,
+            item: "holm_watch".into(),
+            at: p.to_world(room.at),
+        })
     })
 }
 
@@ -606,6 +647,8 @@ pub(super) struct Newcomer {
     heavy_since: f32,
     /// Took what the driver put on the ledge, woken in the truck.
     took_ledge: bool,
+    /// The radios it went for off its body (`radio_to_fetch`), once a go.
+    radios_tried: Vec<Entity>,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
@@ -776,6 +819,9 @@ pub(super) struct RaidView<'w, 's> {
     robots: Query<'w, 's, crate::robots::subjects::Candidate>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
+    /// Doors held shut on an underground site's power right now (a way out
+    /// planned through one went at it for the rest of the raid).
+    power_locked: Query<'w, 's, (), With<crate::world::underground::PowerLocked>>,
 }
 
 /// The wanderer goes this share of the way to the job (the playtest: in
@@ -860,8 +906,12 @@ pub(super) fn direct_raid(
     // Running for it, as told: upright and fast.
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
     let low = fight.as_ref().is_some_and(|f| f.low_until > now);
+    // Walking off from a heavy, upright: crept, the cautious newcomer made
+    // 1.25 m/s to its hunt's 1.7, never got clear, and bled out.
+    let off_from_heavy = state.heavy.is_some();
     let creep = (p.reads || state.low_until > now || low)
         && !fleeing
+        && !off_from_heavy
         && !matches!(
             state.leg,
             Leg::Camp | Leg::Kit | Leg::Card | Leg::Board | Leg::Paid | Leg::Handed
@@ -894,6 +944,17 @@ pub(super) fn direct_raid(
     if plans.is_empty() && !view.buildings.is_empty() {
         *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
     }
+    // Which of their doors are held shut on power now (as the raider keeps
+    // them, `spot_held`): no way out is planned through one.
+    for plan in plans.iter_mut() {
+        plan.held.clear();
+        plan.held.extend(
+            plan.doors
+                .iter()
+                .map(|d| d.entity)
+                .filter(|d| view.power_locked.contains(*d)),
+        );
+    }
     // Indoors, a walk about to start that some answer cut in (from a
     // shed, sheltered from a drone, the walk to cover went at its wall
     // for half a minute): not one to or by a door of this building (the
@@ -913,11 +974,15 @@ pub(super) fn direct_raid(
             let along = off.dot(out);
             (0.8..3.0).contains(&along) && (off - out * along).length() < 0.8
         };
+        // (Not below, in a site: its way out is the director's, by the
+        // site's plan; taken for a building's here, the walk out of the
+        // shelter was planned again every frame and never walked.)
         if let Some(b) = inside(here)
             && inside(to) != Some(b)
             && !en.doors.iter().any(|d| d.building == b && exit_step(d))
+            && below_in(&world.zone, &plans, root.translation).is_none()
         {
-            let (out, _) = way_out(&world, &view, &plans, here);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if !out.is_empty() {
                 for t in out.into_iter().rev() {
                     bot.tasks.push_front(t);
@@ -1222,9 +1287,9 @@ pub(super) fn direct_raid(
     for ev in tells.heavies.read() {
         if ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy) {
             raised = true;
-            if state.heavy != Some(ev.heavy) {
-                state.heavy_since = now;
-            }
+            // (From its latest raise: the same heavy back after the
+            // minute and a half found it walking on, and killed it.)
+            state.heavy_since = now;
             state.heavy = Some(ev.heavy);
         }
     }
@@ -1243,9 +1308,11 @@ pub(super) fn direct_raid(
             Some(from)
                 if on_me(h) && from.distance(here) < 35.0 && now - state.heavy_since < 90.0 =>
             {
+                // (On again before the last leg's done: a steady walk, not
+                // legs and a stand, which netted 1.9 m/s to its 1.7.)
                 if now > state.walking_off_until {
-                    state.walking_off_until = now + 8.0;
-                    super::second_hour::cut_in(&mut bot, walk_away(&world, here, from));
+                    state.walking_off_until = now + 6.0;
+                    super::second_hour::cut_in(&mut bot, walk_off_heavy(&world, here, from));
                 }
             }
             _ => {
@@ -1315,11 +1382,22 @@ pub(super) fn direct_raid(
             .iter()
             .find(|(_, g, by)| by.0 == player && g.firearm.live_rounds() > 0)
             .map(|(e, ..)| e);
-        let answer = if armed_now {
+        // (Armed is a round to shoot: with the slide back and no loaded
+        // spare, "shot it" was an Engage that ended at once, and the
+        // newcomer stood where it was through eight zaps.)
+        let rounds = guns()
+            .any(|(g, by, packed)| by == player && !packed && g.firearm.live_rounds() > 0)
+            || spare_loaded(&world, &view, player);
+        // (Stillness is no hiding from a machine zapping it: a wait to keep
+        // still, under way, goes.)
+        bot.tasks
+            .retain(|t| !matches!(t, Task::Wait(w) if *w >= CRAWLER_STILL));
+        let how = crawler_answer(armed_now, rounds, packed.is_some());
+        let answer = if how == CrawlerAnswer::Shoot {
             state.fought_at = now;
             state.note(now, Kind::Learned, "a crawler crackling at it: shot it");
             take_it_on()
-        } else if let Some(gun) = packed {
+        } else if let (CrawlerAnswer::Unpack, Some(gun)) = (how, packed) {
             // Its only gun in the pack (put there with the hands full after
             // a fight): out, and at it. (Backing out instead, the reckless
             // one was zapped down with a loaded gun on its back.)
@@ -1334,7 +1412,7 @@ pub(super) fn direct_raid(
             t
         } else {
             state.note(now, Kind::Learned, "a crawler crackling at it: backed out");
-            let (out, _) = way_out(&world, &view, &plans, here);
+            let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if out.is_empty() {
                 walk_away(&world, here, from)
             } else {
@@ -1404,7 +1482,12 @@ pub(super) fn direct_raid(
             // burst and a sentry's sweep alike): out in the open after a
             // warning, a burst every 2 s wore them down. No roof near:
             // low across its line.
-            First::Sentry if !p.reckless && !p.hoards => {
+            // (The hoarder too: walking on through its chirp it was shot
+            // down. Not yet the reckless one: sent for the nearest roof by
+            // the way round, it crossed the sweep and went down where
+            // walking on got it home, first_fight's sentry; its own answer
+            // is to come.)
+            First::Sentry if !p.reckless => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
                 match under_a_roof(&world, &plans, here, &state.no_roof) {
                     Some((tasks, b)) => {
@@ -1542,11 +1625,16 @@ pub(super) fn direct_raid(
             // its hunt is 1.3 m/s to a walk's 2.4).
             First::Heavy if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 10.0);
-                walk_away(&world, here, from)
+                walk_off_heavy(&world, here, from)
             }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
-            First::ComingToLook if !p.reckless && !p.hoards => {
+            // (Not with a crawler charging at it: still, the careful
+            // newcomer stood in a shelter's generator room through eight
+            // zaps, told "keep still" by a hunter's first.)
+            First::ComingToLook
+                if !p.reckless && !p.hoards && !crawler_at_it(now, state.crawled_at) =>
+            {
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
@@ -1554,6 +1642,37 @@ pub(super) fn direct_raid(
                 // (Under the bot's 30 s give-up, or a frame past it is a
                 // failure.)
                 vec![Task::Wait(29.0)]
+            }
+            // Bleeding with a heavy still in reach: walking on first, the
+            // dressing once it's behind (bound beside it, the one-handed
+            // newcomer took its second blow).
+            First::Bleeding
+                if state.heavy.is_some_and(|h| {
+                    world
+                        .robot_at(h)
+                        .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
+                }) =>
+            {
+                let from = state
+                    .heavy
+                    .and_then(|h| world.robot_at(h))
+                    .map_or(here + Vec2::Y * 10.0, |g| g.xz());
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "bleeding, with a heavy in reach: on away first, then the dressing",
+                );
+                walk_off_heavy(&world, here, from)
+            }
+            // Bleeding with a crawler charging at it: out of its line first
+            // (its answer's doing that), the dressing once it's behind.
+            First::Bleeding if crawler_at_it(now, state.crawled_at) => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "bleeding, with a crawler at it: out of its line first, then the dressing",
+                );
+                vec![]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1603,14 +1722,21 @@ pub(super) fn direct_raid(
             }
             First::Anomaly => {
                 // Back the way it came, then on round.
-                let back = state
+                let away = state
                     .goal
                     .as_ref()
-                    .map_or(here, |(_, g)| here - (*g - here).normalize_or_zero() * 4.0);
-                vec![Task::WalkTo {
-                    to: back,
-                    within: 1.0,
-                }]
+                    .map_or(Vec2::ZERO, |(_, g)| -(*g - here).normalize_or_zero());
+                // Indoors, or down a site, by its plan: a step back it can
+                // take (in the shelter's generator room the step back went
+                // into the wall, and stood there the task's 30 s).
+                let at = root.translation + Vec3::Y * 1.0;
+                match plans.iter().find(|pl| pl.contains(at, 0.3)) {
+                    Some(plan) => step_back_in(plan, here, away),
+                    None => vec![Task::WalkTo {
+                        to: here + away * 4.0,
+                        within: 1.0,
+                    }],
+                }
             }
             First::Surge => {
                 state.leg = Leg::Call;
@@ -1630,8 +1756,15 @@ pub(super) fn direct_raid(
                     _ => None,
                 })
                 .unwrap_or(here);
+            let moved = answer.iter().any(|t| matches!(t, Task::WalkTo { .. }));
             super::second_hour::cut_in(&mut bot, answer);
-            if f == First::Sentry {
+            // Any answer that walked it off its way (out of a sentry's
+            // sight, out of a walker's line, off quiet): the rest of the
+            // walk from where it's left, not the legs it had from where it
+            // was (out of the walker's line, the one-handed newcomer went
+            // on with its old legs into the Old farm's log pile, and stood
+            // there two walks' 30 s).
+            if f == First::Sentry || moved {
                 reroute_after(&mut bot, n, left_at, &world, &view);
             }
         }
@@ -1672,6 +1805,17 @@ pub(super) fn direct_raid(
         // (Not twice: the first bleed's own answer, or the last, still on
         // its way; a second grab found the dressing gone.)
         && !bot.tasks.iter().any(|t| matches!(t, Task::Use(_) | Task::Grab { .. }))
+        // (Not with a heavy in reach: its blows aren't shots, so "nothing
+        // at it" was wrong, and the one-handed newcomer bound its wound
+        // beside one and took the second blow.)
+        && !state.heavy.is_some_and(|h| {
+            world
+                .robot_at(h)
+                .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
+        })
+        // (Nor with a crawler charging at it: bound in its line, the careful
+        // newcomer took the next zap.)
+        && !crawler_at_it(now, state.crawled_at)
     {
         let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
             held.is_none()
@@ -1809,19 +1953,31 @@ pub(super) fn direct_raid(
             format!("half an hour gone, still at {leg:?}"),
         );
         state.leg = Leg::Done;
+        // And stops: it walked on with its errand, fell out there, woke in
+        // the truck and walked straight out of it again with nothing (the
+        // raid saved out there, no radio: Progression's careers wedged).
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
     }
     // Woken from the last one's fall (a career resumed while down): not
     // this raid's death; wait for the truck.
     if matches!(raid.phase, Phase::Down { .. }) && state.leg == Leg::Camp {
         return;
     }
-    if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
-        state.note(now, Kind::Killed, "went down");
-        state.leg = Leg::Done;
-        // That's this first hour over: nothing left of the walk.
-        bot.tasks.clear();
-        bot.tasks.push_back(Task::Wait(IDLE));
-        bot.restart();
+    if matches!(raid.phase, Phase::Down { .. }) {
+        if state.leg != Leg::Done {
+            state.note(now, Kind::Killed, "went down");
+            state.leg = Leg::Done;
+        }
+        // That's this first hour over: nothing left of the walk (down
+        // after its half hour, already Done, it kept the walk it had, and
+        // woke in the truck to walk out of it).
+        if !matches!(bot.tasks.front(), Some(Task::Wait(w)) if *w == IDLE) || bot.tasks.len() > 1 {
+            bot.tasks.clear();
+            bot.tasks.push_back(Task::Wait(IDLE));
+            bot.restart();
+        }
     }
 
     // Held out of a walker's line: still out of it? (It comes round to
@@ -1844,7 +2000,19 @@ pub(super) fn direct_raid(
                 f.flee_until = now + run;
             }
             bot.tasks.pop_front();
+            // (And the walk on from its new cover, as for any answer that
+            // moves it.)
+            let n = tasks.len();
+            let left_at = tasks
+                .iter()
+                .rev()
+                .find_map(|t| match t {
+                    Task::WalkTo { to, .. } => Some(*to),
+                    _ => None,
+                })
+                .unwrap_or(here);
             super::second_hour::cut_in(&mut bot, tasks);
+            reroute_after(&mut bot, n, left_at, &world, &view);
             return;
         }
     }
@@ -2269,7 +2437,7 @@ pub(super) fn direct_raid(
                         Kind::Confused,
                         format!("wandered off from {name}, and nothing said which way it was"),
                     );
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     let idle = bot.tasks.pop_back();
                     bot.tasks.extend(tasks);
@@ -2408,13 +2576,13 @@ pub(super) fn direct_raid(
                 }
                 Ok(None) => {
                     state.note(now, Kind::Learned, errand_done(&errand, &world));
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
                 Err(why) => {
                     state.note(now, Kind::Stuck, why);
-                    tasks.extend(way_out(&world, &view, &plans, here).0);
+                    tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
@@ -2446,7 +2614,7 @@ pub(super) fn direct_raid(
                     state.tries = 0;
                 } else if let Some((_, g)) = state.goal.clone() {
                     if inside {
-                        tasks.extend(way_out(&world, &view, &plans, here).0);
+                        tasks.extend(way_out_at(&world, &view, &plans, root.translation).0);
                     }
                     tasks.extend(route(&world, &view, here, g));
                 }
@@ -2588,8 +2756,14 @@ pub(super) fn direct_raid(
                     // what was in the hands (`persist::apply_restore`).
                     // (Looked for only on the body, the careers wedged: "no
                     // radio", done, every run after it the same.)
-                    (None, None) => match radio_at_feet(&world, here) {
+                    (None, None) => match radio_at_feet(&world, here)
+                        .filter(|(e, _)| tries_at(&state.radios_tried, *e) < RADIO_TRIES)
+                        .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
+                    {
                         Some((e, at)) => {
+                            // (Counted: one out of reach overhead was picked
+                            // up again every 3 s till a machine came.)
+                            state.radios_tried.push(e);
                             state.note(now, Kind::Learned, "the radio at its feet, picked up");
                             tasks.extend([
                                 Task::Stow(Side::Left),
@@ -2603,10 +2777,39 @@ pub(super) fn direct_raid(
                                 },
                             ]);
                         }
-                        None => {
-                            state.note(now, Kind::Confused, "no radio to call the truck with");
-                            state.leg = Leg::Done;
-                        }
+                        // ...or where one lies: in remains (its own first),
+                        // or loose. The radio is the only way to call the
+                        // truck, so a newcomer with none goes for one
+                        // (resumed with its radio in remains 130 m off, the
+                        // careers wedged: "no radio", done, every run after).
+                        None => match radio_to_fetch(&world, player, here, &state.radios_tried)
+                            .filter(|_| state.radios_tried.len() < RADIO_FETCHES)
+                        {
+                            Some((e, at)) => {
+                                state.radios_tried.push(e);
+                                state.note(
+                                    now,
+                                    Kind::Learned,
+                                    format!(
+                                        "no radio on it: went for the one {:.0} m off",
+                                        at.xz().distance(here)
+                                    ),
+                                );
+                                // By the way in where it lies indoors (walked
+                                // at straight, it stood 12 m off, at the
+                                // wall between, till the grab timed out).
+                                tasks.push(Task::Stow(Side::Left));
+                                tasks.extend(way_to(&world, &view, &plans, here, at));
+                                tasks.push(Task::Grab {
+                                    item: e,
+                                    side: Side::Left,
+                                });
+                            }
+                            None => {
+                                state.note(now, Kind::Confused, "no radio to call the truck with");
+                                state.leg = Leg::Done;
+                            }
+                        },
                     },
                 }
             }
@@ -2737,16 +2940,31 @@ pub(super) fn direct_raid(
                 })
                 .map(|(e, ..)| e)
                 .collect();
+            // And with no radio on it, the crate's: the driver's spares go
+            // there now, not on the ledge. (Woken in the truck after a fall,
+            // it stepped out with nothing, and the raid saved out there
+            // with no radio to call the truck with: the careers wedged.)
+            let mut ledge = ledge;
+            if carried(&world, &view, player, "radio").is_empty()
+                && let Some(e) = view
+                    .stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter().copied())
+                    .find(|e| world.id(*e) == Some("radio"))
+            {
+                ledge.push(e);
+            }
             if view.hatch.busy() && state.tries < 30 {
                 tasks.push(Task::Wait(1.0));
                 state.tries += 1;
             } else if let Some(&e) = ledge.first().filter(|_| state.tries < 40) {
                 let id = world.id(e).unwrap_or("?").to_owned();
-                state.note(
-                    now,
-                    Kind::Learned,
-                    format!("{id} off the ledge, from the driver"),
-                );
+                let from = if view.stash.iter().any(|b| b.contents.contains(&e)) {
+                    "out of the crate"
+                } else {
+                    "off the ledge, from the driver"
+                };
+                state.note(now, Kind::Learned, format!("{id} {from}"));
                 tasks.extend([
                     Task::Grab {
                         item: e,
@@ -2818,10 +3036,28 @@ pub(super) fn direct_raid(
     // wall, and it stood there half an hour).
     if let (Some(en), Some(Task::WalkTo { to, .. })) = (view.entrances.as_deref(), tasks.first()) {
         let inside = |p: Vec2| en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y * 1.0);
-        if let Some(b) = inside(here)
-            && inside(*to) != Some(b)
-        {
-            let (mut out, _) = way_out(&world, &view, &plans, here);
+        // Below ground, in a site, with a walk planned off its floors (to
+        // the truck at the ranger tower, over the shelter it was in): up
+        // and out by the site's way first.
+        let below = below_in(&world.zone, &plans, root.translation)
+            .is_some_and(|pl| !on_its_floors(pl, *to));
+        if below || inside(here).is_some_and(|b| inside(*to) != Some(b)) {
+            let (mut out, end) = way_out_at(&world, &view, &plans, root.translation);
+            if below && !out.is_empty() {
+                // The walk on from where the way out leaves it, not from
+                // below: planned from the shelter, its first leg ran from
+                // the kiosk's door straight back through the kiosk to the
+                // truck over the shelter, and the newcomer went in again.
+                let lead = tasks
+                    .iter()
+                    .take_while(|t| matches!(t, Task::WalkTo { .. }))
+                    .count();
+                if let Some(Task::WalkTo { to: dest, .. }) = lead.checked_sub(1).map(|i| &tasks[i])
+                {
+                    let dest = *dest;
+                    tasks.splice(..lead, walk(&world, end, dest));
+                }
+            }
             out.append(&mut tasks);
             tasks = out;
         }
@@ -3042,9 +3278,29 @@ fn under_a_roof(
     Some((tasks, d.building))
 }
 
+/// Nearer a heavy than this, a wound waits: on away first.
+const HEAVY_DRESS_CLEAR: f32 = 12.0;
+
+/// Off from a heavy, as the driver says ("walk away, and keep going"): a
+/// longer leg than [`walk_away`]'s and no stand at its end, renewed
+/// before it's done, so it's a steady walk (2.4 m/s against its hunt's
+/// 1.7) until it lets go.
+fn walk_off_heavy(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
+    let mut t = walk_away_by(world, here, from, 25.0);
+    if matches!(t.last(), Some(Task::Wait(_))) {
+        t.pop();
+    }
+    t
+}
+
 /// Away from a slow machine at `from`, at a walk, by the way round: 15 m
 /// off, and a breath to look back.
 fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
+    walk_away_by(world, here, from, 15.0)
+}
+
+/// [`walk_away`], `leg` metres off.
+fn walk_away_by(world: &World2, here: Vec2, from: Vec2, leg: f32) -> Vec<Task> {
     let away = (here - from).normalize_or(Vec2::Y);
     // Away, or turned along whatever's ahead (the fence, the map's edge):
     // the first that stays inside the fence. (Straight away every 15 m, the
@@ -3053,9 +3309,9 @@ fn walk_away(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
     let inside = world.zone.map.half() - world.zone.map.fence_inset.max(0.0) - 5.0;
     let to = [0.0f32, 45.0, -45.0, 90.0, -90.0]
         .into_iter()
-        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * 15.0)
+        .map(|deg| here + Vec2::from_angle(deg.to_radians()).rotate(away) * leg)
         .find(|p| p.x.abs() < inside && p.y.abs() < inside)
-        .unwrap_or(here + away * 15.0);
+        .unwrap_or(here + away * leg);
     let mut t = walk(world, here, to);
     t.push(Task::Wait(2.0));
     t
@@ -3221,6 +3477,38 @@ fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, runni
 /// Not answering a crawler's crackle again sooner than this (s): its zaps
 /// come every 2 s or so, and the answer takes longer.
 const CRAWLER_EVERY: f32 = 3.0;
+/// A crawler that charged at it this lately (s) is still at it: no keeping
+/// still, no dressing in its line.
+const CRAWLER_CLEAR: f32 = 5.0;
+/// A wait this long (s) is one to keep still in, and goes when a crawler
+/// charges.
+const CRAWLER_STILL: f32 = 5.0;
+
+/// A crawler charged at it lately enough to be at it still (`CRAWLER_CLEAR`).
+fn crawler_at_it(now: f32, crawled_at: f32) -> bool {
+    now - crawled_at < CRAWLER_CLEAR
+}
+
+/// What a crawler's charge gets from the newcomer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CrawlerAnswer {
+    /// A gun to hand and a round to fire (in it, or a loaded spare).
+    Shoot,
+    /// Its only loaded gun in the pack: out with it, then at it.
+    Unpack,
+    /// Nothing to shoot: back out the way it came, out of its line.
+    BackOut,
+}
+
+fn crawler_answer(armed: bool, rounds: bool, packed_loaded: bool) -> CrawlerAnswer {
+    if armed && rounds {
+        CrawlerAnswer::Shoot
+    } else if packed_loaded {
+        CrawlerAnswer::Unpack
+    } else {
+        CrawlerAnswer::BackOut
+    }
+}
 
 /// A bleed this fast is worth stopping to dress (hp/s).
 const BLEED_WORTH: f32 = 0.3;
@@ -3276,6 +3564,16 @@ fn hidden_at(
         .is_some()
 }
 
+/// Knee height over the ground, for what's in the way of a step (m): a
+/// body-wide sweep from there clears the ground underfoot.
+const KNEE: f32 = 0.6;
+/// Chest height over the ground (m): a body-wide sweep from the knee to
+/// here, and a body-wide end on it, reaches a standing head's height (1.7)
+/// and no higher.
+const CHEST: f32 = 1.4;
+/// A body's half width, kept clear past the end of a step (m).
+const BODY: f32 = 0.3;
+
 /// Out of sight of `eye`, the nearest way: low where it is, if that does it
 /// (a wall, a bank, a car between); else the nearest spot within 12 m it
 /// can walk to where a crouched head is hidden, and still there. None:
@@ -3291,7 +3589,43 @@ fn break_line(
         return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
     }
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
-    let open = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
+    // Walkable on the grid, and walked to straight: nothing solid from knee
+    // to head height between, nor at the spot (the grid's cells are
+    // coarse).
+    // (Not the ground itself: a body-wide ball at the knee met every bump
+    // of it, no spot passed, and the newcomer, with no way out of the
+    // walker's line, shot it out and lost.)
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World])
+        .with_excluded_entities(world.terrain.iter());
+    let mid = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * (KNEE + CHEST) * 0.5;
+    // (A body's width, not a ray: a ray slipped past a trunk the newcomer
+    // then pressed against, 1.4 m short, the same half minute. And a
+    // body's height, not a ball at the knee: the ball passed under the
+    // quarantine fence where the ground dips beneath it, and the cautious
+    // newcomer stood against the wire, 1.1 m short, the half minute.)
+    let body = avian3d::prelude::Collider::capsule(BODY, CHEST - KNEE);
+    let reach = |p: Vec2| {
+        let to = mid(p) - mid(here);
+        Dir3::new(to).ok().is_none_or(|dir| {
+            spatial
+                .cast_shape(
+                    &body,
+                    mid(here),
+                    Quat::IDENTITY,
+                    dir,
+                    &avian3d::prelude::ShapeCastConfig::from_max_distance(to.length() + BODY),
+                    &walls,
+                )
+                .is_none()
+        })
+    };
+    // (Nor up a bank: the one-handed newcomer's spot was on the creek's,
+    // 3 m up in 4, and it stood at the bank's foot the half minute.)
+    let open = |p: Vec2| {
+        nav.is_none_or(|n| n.walkable(p.to_array()))
+            && steep_run(&world.zone, here, p) <= STEEP_RUN
+            && reach(p)
+    };
     let away = (here - eye.xz()).normalize_or(Vec2::Y);
     // The eye a step or two either side of where it is: a walker that's
     // fighting moves, and a spot only just out of its line now was in it
@@ -3376,6 +3710,8 @@ const BED_RUN: f32 = 40.0;
 
 /// Clear of walls round a building's box, m: a body (0.28) and a stride.
 const ROUND: f32 = 2.0;
+/// How near a box's margin an end of a stretch counts as on it (m).
+const ON_EDGE: f32 = 0.05;
 
 /// From `from` to `to` on foot, round any building in the way (the
 /// straight line through the village went into a house wall and stayed
@@ -3399,7 +3735,88 @@ fn walk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
                 (s.xf, s.half)
             }),
     );
+    boxes.extend(
+        world
+            .buildings
+            .iter()
+            .flat_map(|(b, xf)| part_boxes(&b.prefab, xf)),
+    );
     boxes
+}
+
+/// What of a prefab with a way through it can't be walked through, part by
+/// part (one box over all of it would shut the way). A quarantine gate's
+/// concrete block and post, each side of the road: the newcomer walked from
+/// the guard booth for the road, into the block, and stood there a minute
+/// at the 0.6 m between it and the booth.
+fn part_boxes(prefab: &str, xf: &Transform) -> Vec<(Transform, Vec2)> {
+    // An open hall walked into and through: what stands on its floor, from
+    // its own pieces (the sawmill's log stack lies inside its posts, off
+    // any grid, and the newcomer walking home from the logging camp stood
+    // against it two minutes).
+    if OPEN_HALLS.contains(&prefab) {
+        return standing_parts(prefab)
+            .into_iter()
+            .map(|(at, half)| (*xf * at, half))
+            .collect();
+    }
+    match prefab {
+        // (`buildings::quarantine_gate`: a 1.4 m block at 5.2, a post at
+        // 4.3, either side.)
+        "quarantine_gate" => [-1.0f32, 1.0]
+            .map(|side| {
+                let at = xf.transform_point(Vec3::new(side * 5.04, 0.0, 0.0));
+                (
+                    Transform::from_translation(at).with_rotation(xf.rotation),
+                    Vec2::new(0.86, 0.7),
+                )
+            })
+            .to_vec(),
+        _ => vec![],
+    }
+}
+
+/// Halls with a way in for a road, walked into and through, open inside
+/// (`extraction_core::fit`'s drive-in prefabs).
+const OPEN_HALLS: [&str; 5] = ["bus_depot", "rail_shed", "factory_hall", "sawmill", "barn"];
+
+/// A prefab's solid pieces in a body's way, knee to head (`KNEE`..1.7 m
+/// over its floor, a ball's half width either side of it), as boxes on the
+/// ground in its own space: each piece's extent, square to the prefab.
+fn standing_parts(prefab: &str) -> Vec<(Transform, Vec2)> {
+    use crate::world::buildings::Shape;
+    let Some(geo) = crate::world::buildings::prefab(prefab) else {
+        return vec![];
+    };
+    let (low, high) = (KNEE - BODY, CHEST + BODY);
+    geo.pieces
+        .iter()
+        .filter(|p| p.collide)
+        .filter_map(|p| {
+            let half = match p.shape {
+                Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+            };
+            let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+            for k in 0..8 {
+                let c = Vec3::new(
+                    if k & 1 == 0 { -half.x } else { half.x },
+                    if k & 2 == 0 { -half.y } else { half.y },
+                    if k & 4 == 0 { -half.z } else { half.z },
+                );
+                let w = p.at.transform_point(c);
+                lo = lo.min(w);
+                hi = hi.max(w);
+            }
+            (lo.y < high && hi.y > low).then(|| {
+                let mid = (lo + hi) * 0.5;
+                (
+                    Transform::from_xyz(mid.x, 0.0, mid.z),
+                    Vec2::new(hi.x - lo.x, hi.z - lo.z) * 0.5,
+                )
+            })
+        })
+        .collect()
 }
 
 /// `p`, or, inside one of `boxes` (with a body's clearance), out of it to
@@ -3485,8 +3902,21 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
     // box itself where an end is in the margin (a door's step, a corner).
     let clear_of = |bx: &(Transform, Vec2), a: Vec2, b: Vec2| {
         let (la, lb) = (local(&bx.0, a), local(&bx.0, b));
+        // An end in the box itself: going into it (a place in a house: the
+        // Old farm's is), so it's no bar to the stretch. (Taken as one,
+        // every stretch to the place "hit" the house at its end, no way was
+        // found, and the walk there went straight, through a log pile.)
+        // `walk` steps a start out of any box first.
+        if within(la, bx.1) || within(lb, bx.1) {
+            return true;
+        }
         let margin = bx.1 + Vec2::splat(ROUND * 0.5);
-        let h = if within(la, margin) || within(lb, margin) {
+        // (On the margin's edge counts as in it: a way out of a building
+        // ends a margin from its wall, and from there every stretch out
+        // "entered" the margin at its first step, so no way was found and
+        // the walk went straight, through a house and into a garden.)
+        let edge = margin + Vec2::splat(ON_EDGE);
+        let h = if within(la, edge) || within(lb, edge) {
             bx.1
         } else {
             margin
@@ -3762,6 +4192,70 @@ fn radio_at_feet(world: &World2, here: Vec2) -> Option<(Entity, Vec2)> {
         .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
 }
 
+/// A radio not on `player` to go and get: the nearest in its own remains,
+/// else in anyone's, else lying loose; not one gone for `RADIO_TRIES`
+/// times already (`tried`) and not got. Where it is, to go to.
+fn radio_to_fetch(
+    world: &World2,
+    player: Entity,
+    here: Vec2,
+    tried: &[Entity],
+) -> Option<(Entity, Vec3)> {
+    let is_radio = |e: Entity| {
+        tries_at(tried, e) < RADIO_TRIES
+            && world
+                .items
+                .get(e)
+                .is_ok_and(|(_, it, ..)| world.catalog.get(it.kind()).id == "radio")
+    };
+    let own = |mine: bool| {
+        world
+            .remains_bags
+            .iter()
+            .filter(|(_, _, r)| (r.owner == player) == mine)
+            .flat_map(|(gt, bag, _)| {
+                let at = gt.translation();
+                bag.contents
+                    .iter()
+                    .copied()
+                    .filter(|e| is_radio(*e))
+                    .map(move |e| ((e, at), at.xz()))
+            })
+            .collect::<Vec<_>>()
+    };
+    let loose = || {
+        world
+            .items
+            .iter()
+            .filter(|(e, _, _, held, sock, bag)| {
+                held.is_none() && sock.is_none() && bag.is_none() && is_radio(*e)
+            })
+            .map(|(e, _, gt, ..)| ((e, gt.translation()), gt.translation().xz()))
+            .collect::<Vec<_>>()
+    };
+    pick_radio(here, [own(true), own(false), loose()]).map(|(t, _)| t)
+}
+
+/// The nearest of the first of `tiers` with any in it (its own remains,
+/// anyone's, loose): a radio of its own 300 m off before a stranger's 30 m
+/// off, as a person goes back to where they fell for their kit.
+fn pick_radio<T: Copy>(here: Vec2, tiers: [Vec<(T, Vec2)>; 3]) -> Option<(T, Vec2)> {
+    tiers.into_iter().find_map(|c| {
+        c.into_iter()
+            .min_by(|a, b| a.1.distance(here).total_cmp(&b.1.distance(here)))
+    })
+}
+
+/// Goes after a radio off its body in one raid before giving the call up.
+const RADIO_FETCHES: usize = 4;
+/// Goes after any one radio (a walk that timed out on the way is planned
+/// again from where it stood; one out of reach is left after the second).
+const RADIO_TRIES: usize = 2;
+
+fn tries_at(tried: &[Entity], e: Entity) -> usize {
+    tried.iter().filter(|t| **t == e).count()
+}
+
 /// How far off a thing set down at a resume still counts as at its feet (m).
 const FEET_REACH: f32 = 3.0;
 
@@ -3923,20 +4417,440 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
         }
         at = p;
     }
+    // A bridge's deck only by its ends: the grid's flat, and joined the
+    // gully under Marrow's Forest path footbridge to the deck over it; the
+    // newcomer walked the gully floor to the deck's far end and stood under
+    // its abutment, 2 m below it, till the walk gave up (Map design).
+    let decks: Vec<(crate::world::bridges::Deck, [Vec2; 2])> =
+        crate::world::bridges::decks(&world.zone)
+            .into_iter()
+            .map(|d| {
+                let [a, b] = d.ground_ends(&world.zone);
+                (d, [a.xz(), b.xz()])
+            })
+            .collect();
+    let pts = by_deck_ends(&decks, from, pts);
     // The grid's waypoints and a bank's sidestep know nothing of buildings:
     // each out of any it lands in (bar the end), and each stretch round any
     // in its way (from by the pump house, a waypoint past it was walked to
     // straight through it, and two newcomers stood at its wall).
-    let mut t = vec![];
+    let mut way = vec![];
     let mut at = from;
+    // From inside a box (pressed against what it stands for: a log pile's
+    // box is square round round logs), out of it to its nearest side
+    // first: from in it, every stretch out "hit" it at once, no way was
+    // found, and the walk went straight on through it again (the one-
+    // handed newcomer, twice by the Old farm's pile).
+    let out = clear_of(&boxes, from);
+    if out != from {
+        way.push(out);
+        at = out;
+    }
     for r in pts {
         let r = if r == to { r } else { clear_of(&boxes, r) };
         for q in round_boxes(&boxes, at, r) {
-            t.extend(world.legs(at, q));
+            way.push(q);
             at = q;
         }
     }
+    // Then off the decks' sides, the way as it'll be walked: round a house
+    // by the District bridge's north end, the way cut the deck's corner
+    // (Map design's wreck repro), where the waypoints before it hadn't.
+    let way = round_deck_sides(&decks, from, way, &|p: Vec2| world.zone.ground(p.x, p.y));
+    let mut t = vec![];
+    let mut at = from;
+    for q in way {
+        t.extend(world.legs(at, q));
+        at = q;
+    }
     t
+}
+
+/// The bridges: decks joined end to end (a bridge over a bend is two or
+/// more) as one, each with its outer ends (those joined to no other deck):
+/// where it meets the ground, and a point out from that along the deck's
+/// line, to line up from (a footbridge is 1.6 m wide: come at its end on
+/// the slant and the first step is off its side, into the gully under
+/// it). Per deck, its bridge's index; per bridge, its ends as (ground end,
+/// lined-up approach).
+#[allow(clippy::type_complexity)]
+fn bridges_of(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+) -> (Vec<usize>, Vec<Vec<(Vec2, Vec2)>>) {
+    let n = decks.len();
+    let ends = |i: usize| [decks[i].0.a, decks[i].0.b];
+    let joined = |i: usize, k: usize| {
+        (0..n).any(|j| j != i && ends(j).iter().any(|e| e.distance(ends(i)[k]) < DECK_JOIN))
+    };
+    // Bridge of each deck: joined ones share the lowest index's.
+    let mut of: Vec<usize> = (0..n).collect();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for i in 0..n {
+            for j in 0..n {
+                let touch = ends(i)
+                    .iter()
+                    .any(|a| ends(j).iter().any(|b| a.distance(*b) < DECK_JOIN));
+                if i != j && touch && of[j] < of[i] {
+                    of[i] = of[j];
+                    changed = true;
+                }
+            }
+        }
+    }
+    let mut outer: Vec<Vec<(Vec2, Vec2)>> = vec![vec![]; n];
+    for i in 0..n {
+        for k in 0..2 {
+            if !joined(i, k) {
+                let out = (ends(i)[k] - ends(i)[1 - k]).normalize_or(Vec2::X);
+                let ground = decks[i].1[k];
+                outer[of[i]].push((ground, ground + out * DECK_LINE_UP));
+            }
+        }
+    }
+    (of, outer)
+}
+
+/// How far out from a bridge's end it lines up to step on (m).
+const DECK_LINE_UP: f32 = 3.0;
+
+/// Deck ends this near one another are one bridge's (m).
+const DECK_JOIN: f32 = 1.5;
+
+/// `pts`, walked from `from`, on and off each bridge only at its ends (its
+/// outer decks' ground ends, `bridges_of`): a point on a bridge reached
+/// from off it goes by the end nearer where it comes from, and one off it
+/// reached from the bridge by the end nearer where it's going. Along a
+/// bridge, deck to deck over a bend, straight on; a walk under one, never
+/// on it, is left as it is.
+fn by_deck_ends(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    from: Vec2,
+    pts: Vec<Vec2>,
+) -> Vec<Vec2> {
+    let (of, ends) = bridges_of(decks);
+    let on = |p: Vec2| {
+        decks
+            .iter()
+            .position(|(d, _)| d.holds(p, 0.0))
+            .map(|i| of[i])
+    };
+    let nearer = |b: usize, p: Vec2| {
+        ends[b]
+            .iter()
+            .copied()
+            .min_by(|x, y| x.0.distance(p).total_cmp(&y.0.distance(p)))
+    };
+    let mut out = Vec::with_capacity(pts.len() + 2);
+    let mut at = from;
+    for p in pts {
+        let (was, is) = (on(at), on(p));
+        if was != is {
+            // Off one bridge (by the end toward where it's going), then on
+            // another (by the end toward where it comes from).
+            // (Off: its end, then out along its line; on: lined up
+            // first, then its end.)
+            if let Some((e, line)) = was.and_then(|b| nearer(b, p))
+                && e.distance(at) > DECK_END_NEAR
+                && e.distance(p) > DECK_END_NEAR
+            {
+                out.push(e);
+                out.push(line);
+                at = line;
+            }
+            if let Some((e, line)) = is.and_then(|b| nearer(b, at))
+                && e.distance(at) > DECK_END_NEAR
+                && e.distance(p) > DECK_END_NEAR
+            {
+                if line.distance(at) > DECK_END_NEAR {
+                    out.push(line);
+                }
+                out.push(e);
+            }
+        }
+        out.push(p);
+        at = p;
+    }
+    out
+}
+
+/// A waypoint this near a deck's end is at it already (m).
+const DECK_END_NEAR: f32 = 1.0;
+
+/// How far out from a doorway, either side, a walk through it lines up
+/// and comes out (m).
+const DOOR_SQUARE: f32 = 0.8;
+/// A point this near a doorway's axis (its middle, square to it) is on
+/// its line already (m): more than a stop's `DOOR_STOP_WITHIN`, so a bot
+/// at its stop is on the line and isn't sent back to it.
+const DOOR_ON_LINE: f32 = 0.45;
+/// How near its stops in front of and behind a doorway the walk comes (m).
+const DOOR_STOP_WITHIN: f32 = 0.3;
+/// A leg from this far off a doorway's middle isn't one walking through it
+/// (m): a way through a door starts by it (the plan's stop before a door,
+/// or a step aside), and a straight line from across a site that happens
+/// to cross a doorway (a walk aimed at the surface from below it) is no
+/// way through it to square.
+const DOOR_NEAR: f32 = 6.0;
+
+/// A doorway as a walk meets it: its closed leaf's line, hinge to latch
+/// (on the map), and the height of its sill.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Doorway {
+    pub a: Vec2,
+    pub b: Vec2,
+    pub y: f32,
+}
+
+/// Every door's doorway, from its leaf's closed line in its building.
+fn doorways(view: &RaidView) -> Vec<Doorway> {
+    view.leaves
+        .iter()
+        .filter_map(|(_, leaf, parent)| {
+            let (_, _, bxf) = view.buildings.get(parent.parent()).ok()?;
+            let d = &leaf.0;
+            let a = bxf.transform_point(d.hinge);
+            let axis = bxf.rotation * Quat::from_rotation_y(d.yaw) * Vec3::X;
+            let b = a + axis * d.width;
+            Some(Doorway {
+                a: a.xz(),
+                b: b.xz(),
+                y: a.y,
+            })
+        })
+        .collect()
+}
+
+/// Where the walk `p`..`q` crosses the segment `a`..`b`, as a fraction of
+/// the walk (strictly between its ends).
+fn crosses_at(p: Vec2, q: Vec2, a: Vec2, b: Vec2) -> Option<f32> {
+    let r = q - p;
+    let s = b - a;
+    let den = r.perp_dot(s);
+    if den.abs() < 1e-6 {
+        return None;
+    }
+    let t = (a - p).perp_dot(s) / den;
+    let u = (a - p).perp_dot(r) / den;
+    (t > 1e-3 && t < 1.0 - 1e-3 && (-0.05..=1.05).contains(&u)).then_some(t)
+}
+
+/// The walk `from`, then each of `pts`, through any doorway square on its
+/// line: lined up in front of its middle, through, and out square behind
+/// it, as a person goes through a door. A leg cutting a doorway's corner
+/// went by its hinge into the pocket behind the open leaf, and stood
+/// there the rest of the raid (the shelter on Marrow, cautious, seed 3
+/// job 2: door 1465, 0.6 m from its hinge, 3,200 frames). The points
+/// after `from`, with the stops put in; a leg already on a doorway's line
+/// is left as it is.
+pub(super) fn through_doorways(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec2]) -> Vec<Vec2> {
+    let mut out = Vec::with_capacity(pts.len());
+    let mut at = from;
+    for &p in pts {
+        let mut leg_from = at;
+        // (More than one doorway on a leg: each in turn, nearest first.)
+        for _ in 0..4 {
+            let Some(d) = doors
+                .iter()
+                .filter(|d| (d.y - y).abs() < 2.0)
+                .filter(|d| leg_from.distance((d.a + d.b) * 0.5) <= DOOR_NEAR)
+                .filter_map(|d| crosses_at(leg_from, p, d.a, d.b).map(|t| (t, *d)))
+                .min_by(|x, y| x.0.total_cmp(&y.0))
+                .map(|(_, d)| d)
+            else {
+                break;
+            };
+            let w = d.b - d.a;
+            let along = w.normalize_or(Vec2::X);
+            let n = along.perp();
+            let mid = (d.a + d.b) * 0.5;
+            let on = |q: Vec2| (q - mid).dot(along).abs() < DOOR_ON_LINE;
+            let side = (leg_from - mid).dot(n).signum();
+            let (front, back) = (mid + n * side * DOOR_SQUARE, mid - n * side * DOOR_SQUARE);
+            if on(leg_from) && on(p) {
+                break;
+            }
+            if !on(leg_from) {
+                out.push(front);
+            }
+            if !on(p) {
+                out.push(back);
+                leg_from = back;
+            } else {
+                break;
+            }
+        }
+        out.push(p);
+        at = p;
+    }
+    out
+}
+
+/// After the newcomer's director: every walk in its queue through a
+/// doorway square on its line (`through_doorways`), the ones an answer cut
+/// in among them too (a step aside, then on, went through a doorway by
+/// its hinge).
+pub(super) fn square_through_doorways(
+    opts: Res<LaunchOptions>,
+    mut bots: Query<(&mut Bot, &Transform), With<LocalPlayer>>,
+    view: RaidView,
+) {
+    if opts.scenario.as_deref() != Some(RAID) {
+        return;
+    }
+    let Some((mut bot, root)) = bots.iter_mut().next() else {
+        return;
+    };
+    if !bot.tasks.iter().any(|t| matches!(t, Task::WalkTo { .. })) {
+        return;
+    }
+    let doors = doorways(&view);
+    if doors.is_empty() {
+        return;
+    }
+    let y = root.translation.y;
+    let mut at = root.translation.xz();
+    let mut tasks = std::collections::VecDeque::with_capacity(bot.tasks.len() + 4);
+    let mut changed_front = false;
+    let mut changed = false;
+    for (i, t) in bot.tasks.iter().enumerate() {
+        if let Task::WalkTo { to, .. } = t {
+            let way = through_doorways(&doors, at, y, &[*to]);
+            for stop in &way[..way.len() - 1] {
+                tasks.push_back(Task::WalkTo {
+                    to: *stop,
+                    within: DOOR_STOP_WITHIN,
+                });
+                changed = true;
+                changed_front |= i == 0;
+            }
+            at = *to;
+        }
+        tasks.push_back(t.clone());
+    }
+    if changed {
+        bot.tasks = tasks;
+        if changed_front {
+            bot.restart();
+        }
+    }
+}
+
+/// A deck this little above the ground under it is one a walk steps up
+/// onto (and into its railing), not one it passes under (m).
+const DECK_STEP_UP: f32 = 1.4;
+/// How far out from a deck's side a walk round its end keeps (m).
+const DECK_SIDE_CLEAR: f32 = 1.2;
+
+/// Whether the straight walk `a`..`b` meets a deck's side: over its
+/// footprint (a capsule's width either side) where the deck is within a
+/// step of the ground, so the walk goes up on it and into its railing
+/// (from the road north of the District bridge, a leg to the bank west of
+/// it cut the deck's corner, and the newcomer stood against the railing
+/// for the rest of the raid). Under a deck over its gully: clear.
+fn meets_deck_side(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    a: Vec2,
+    b: Vec2,
+    ground: &dyn Fn(Vec2) -> f32,
+) -> bool {
+    let n = (a.distance(b) / 0.25).ceil().max(1.0) as usize;
+    (0..=n).map(|k| a.lerp(b, k as f32 / n as f32)).any(|q| {
+        decks
+            .iter()
+            .any(|(d, _)| d.holds(q, 0.35) && d.y_at(q) - ground(q) < DECK_STEP_UP)
+    })
+}
+
+/// The walk's legs from off every bridge to off every bridge kept off
+/// their decks' sides (`meets_deck_side`): round the outside of the
+/// nearer end of the deck in the way, by its line-up point or beside its
+/// ground end, whichever clears and is shortest. On and off a bridge by
+/// its ends (`by_deck_ends`) is left as it is, and so is a leg no way
+/// round clears.
+fn round_deck_sides(
+    decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
+    from: Vec2,
+    pts: Vec<Vec2>,
+    ground: &dyn Fn(Vec2) -> f32,
+) -> Vec<Vec2> {
+    if decks.is_empty() {
+        return pts;
+    }
+    let (of, ends) = bridges_of(decks);
+    let off = |p: Vec2| !decks.iter().any(|(d, _)| d.holds(p, 0.0));
+    // The legs `by_deck_ends` lays to an end from its line-up point (and
+    // back): along the deck's line, and on or off by the end.
+    let is_end_leg = |a: Vec2, b: Vec2| {
+        ends.iter().flatten().any(|(e, l)| {
+            (a.distance(*e) < 0.05 && b.distance(*l) < 0.05)
+                || (a.distance(*l) < 0.05 && b.distance(*e) < 0.05)
+        })
+    };
+    let meets = |a: Vec2, b: Vec2, i: usize| meets_deck_side(&decks[i..=i], a, b, ground);
+    // Ways round bridge `k`: each outer end's line-up point, and beside its
+    // ground end and its line-up point, either side, clear of the railing.
+    let round_of = |k: usize| -> Vec<Vec2> {
+        let mut r = Vec::new();
+        for (e, l) in &ends[k] {
+            let Some((d, _)) = decks
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| of[*i] == k)
+                .map(|(_, d)| d)
+                .min_by(|x, y| {
+                    x.0.end_near(*e)
+                        .distance(*e)
+                        .total_cmp(&y.0.end_near(*e).distance(*e))
+                })
+            else {
+                continue;
+            };
+            let side = (d.b - d.a).perp().normalize_or(Vec2::X) * (d.width * 0.5 + DECK_SIDE_CLEAR);
+            let out = (*l - *e).normalize_or(Vec2::X);
+            r.push(*l);
+            for s in [side, -side] {
+                r.push(*e + out + s);
+                r.push(*l + s);
+            }
+        }
+        r
+    };
+    let mut out = Vec::with_capacity(pts.len());
+    let mut at = from;
+    for p in pts {
+        let hit: Vec<usize> = (0..decks.len()).filter(|i| meets(at, p, *i)).collect();
+        if off(at) && off(p) && !is_end_leg(at, p) && !hit.is_empty() {
+            let clear = |x: Vec2, y: Vec2| !meets_deck_side(decks, x, y, ground);
+            let mut round: Vec<Vec2> = Vec::new();
+            for i in &hit {
+                round.extend(round_of(of[*i]));
+            }
+            round.dedup_by(|a, b| a.distance(*b) < 0.05);
+            // One stop round, else two (round the end, then along the
+            // side): the shortest that clears.
+            let one = round
+                .iter()
+                .filter(|c| clear(at, **c) && clear(**c, p))
+                .map(|c| (at.distance(*c) + c.distance(p), vec![*c]));
+            let two = round.iter().flat_map(|c| {
+                round
+                    .iter()
+                    .filter(move |k| k.distance(*c) > 0.05)
+                    .map(move |k| (*c, *k))
+            });
+            let two = two
+                .filter(|(c, k)| clear(at, *c) && clear(*c, *k) && clear(*k, p))
+                .map(|(c, k)| (at.distance(c) + c.distance(k) + k.distance(p), vec![c, k]));
+            if let Some((_, via)) = one.chain(two).min_by(|x, y| x.0.total_cmp(&y.0)) {
+                out.extend(via);
+            }
+        }
+        out.push(p);
+        at = p;
+    }
+    out
 }
 
 /// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
@@ -3988,6 +4902,153 @@ fn name_of(world: &World2, id: &str) -> String {
         .unwrap_or_else(|| id.replace('_', " "))
 }
 
+/// The plan of the underground site the bot stands in at `at` (its feet,
+/// at their real height), if it's in one: the ground over a shelter isn't
+/// in it, so a test by the ground's height (as indoors on the surface)
+/// never finds it.
+fn below_in<'a>(
+    zone: &crate::world::Zone,
+    plans: &'a [crate::sim::indoor::BuildingPlan],
+    at: Vec3,
+) -> Option<&'a crate::sim::indoor::BuildingPlan> {
+    // Below the ground, not on it: the site's plan has its kiosk up top and
+    // the step outside its door too, and stood there, out of the shelter
+    // with the watch, the newcomer was sent back in through the door by its
+    // way out, and out again, for the rest of the raid.
+    if at.y > zone.ground(at.x, at.z) - BELOW_GROUND {
+        return None;
+    }
+    let p = at + Vec3::Y * 1.0;
+    plans
+        .iter()
+        .find(|pl| pl.levels.is_some() && pl.contains(p, 0.3))
+}
+
+/// Feet this far under the ground over them are below it, in a site (m).
+const BELOW_GROUND: f32 = 1.5;
+
+/// Whether `to` (world, on the map) is on one of `plan`'s floors, at any
+/// level: a walk there from inside it stays in it.
+fn on_its_floors(plan: &crate::sim::indoor::BuildingPlan, to: Vec2) -> bool {
+    let l = plan.to_local(Vec3::new(to.x, plan.xf.translation.y, to.y));
+    let Some((i, j)) = plan.grid.cell_of([l.x, l.z]) else {
+        return false;
+    };
+    let k = j * plan.grid.n + i;
+    !plan.outside[k]
+        && plan
+            .levels
+            .as_ref()
+            .is_none_or(|lv| lv.get(k).is_some_and(|y| !y.is_nan()))
+}
+
+/// As [`way_out`], from the bot's feet at their real height: below ground
+/// in a site, up through its rooms and out by its way to the surface
+/// (in the shelter under the ranger tower with the truck waiting overhead,
+/// the walk to it went straight at the truck through the rock, and it
+/// pressed for the bell from under the ground the rest of the raid).
+fn way_out_at(
+    world: &World2,
+    view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    at: Vec3,
+) -> (Vec<Task>, Vec2) {
+    if let Some(plan) = below_in(&world.zone, plans, at)
+        && let Some(out) = out_of(plan, plan.to_local(at + Vec3::Y * 1.0).xz())
+    {
+        return out;
+    }
+    way_out(world, view, plans, at.xz())
+}
+
+/// Through `plan`'s rooms from `from` (its space) to the nearest of its
+/// ways outside: the walk, and where it leaves the bot (world).
+fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Task>, Vec2)> {
+    let (o, path) = plan
+        .doors
+        .iter()
+        .filter_map(|d| d.outside)
+        .filter_map(|o| Some((o, plan.path(from, o)?)))
+        .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)))?;
+    let mut t = Vec::new();
+    // Down a site, in legs short enough to walk inside a task's time (up
+    // the shelter's kiosk stair, 10 m at a climb, the one leg timed out,
+    // and the door at its head was pressed from the foot of it).
+    let deep = plan.levels.is_some();
+    let mut at = plan.world2(from);
+    let mut walk_to = |t: &mut Vec<Task>, to: Vec2| {
+        if deep {
+            let n = (at.distance(to) / DEEP_LEG).ceil().max(1.0) as usize;
+            for k in 1..n {
+                t.push(Task::WalkTo {
+                    to: at.lerp(to, k as f32 / n as f32),
+                    within: 0.6,
+                });
+            }
+        }
+        t.push(Task::WalkTo { to, within: 0.4 });
+        at = to;
+    };
+    for stop in indoor_stops(plan, from, &path) {
+        match stop {
+            Stop::Door(door, before) => {
+                walk_to(&mut t, plan.world2(before));
+                t.push(Task::OpenDoor(door));
+            }
+            Stop::At(w) => walk_to(&mut t, plan.world2(w)),
+        }
+    }
+    if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+        *within = 0.6;
+    }
+    Some((t, plan.world2(o)))
+}
+
+/// A step back from `here` along `away` inside `plan`: 4 m if its floors
+/// go that far that way and a path gets there, else 3, else 2, by the
+/// plan's rooms; none if no step back is to be had (a step back from an
+/// anomaly "checks behind it": in a room's corner, a wall).
+fn step_back_in(plan: &crate::sim::indoor::BuildingPlan, here: Vec2, away: Vec2) -> Vec<Task> {
+    if away == Vec2::ZERO {
+        return vec![];
+    }
+    let from = plan
+        .to_local(Vec3::new(here.x, plan.xf.translation.y, here.y))
+        .xz();
+    [4.0f32, 3.0, 2.0]
+        .into_iter()
+        .map(|d| here + away * d)
+        .filter(|p| on_its_floors(plan, *p))
+        .find_map(|p| {
+            let to = plan
+                .to_local(Vec3::new(p.x, plan.xf.translation.y, p.y))
+                .xz();
+            let path = plan.path(from, to)?;
+            let mut t = Vec::new();
+            for stop in indoor_stops(plan, from, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
+                        within: 0.6,
+                    }),
+                }
+            }
+            Some(t)
+        })
+        .unwrap_or_default()
+}
+
+/// The longest leg of a way out of a site (m): a stair's climb walks at a
+/// quarter of the pace, and a task's time is 30 s.
+const DEEP_LEG: f32 = 4.0;
+
 /// Indoors at `here`: out by the nearest door, and where that leaves it.
 /// Through the rooms by the building's plan, where it has one (straight at
 /// the door from behind the post office's counter, the newcomer pressed
@@ -4002,36 +5063,10 @@ fn way_out(
         return (vec![], here);
     };
     let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
-    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3)) {
-        let from = plan.to_local(at).xz();
-        let way = plan
-            .doors
-            .iter()
-            .filter_map(|d| d.outside)
-            .filter_map(|o| Some((o, plan.path(from, o)?)))
-            .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)));
-        if let Some((o, path)) = way {
-            let mut t = Vec::new();
-            for stop in indoor_stops(plan, from, &path) {
-                match stop {
-                    Stop::Door(door, before) => {
-                        t.push(Task::WalkTo {
-                            to: plan.world2(before),
-                            within: 0.4,
-                        });
-                        t.push(Task::OpenDoor(door));
-                    }
-                    Stop::At(w) => t.push(Task::WalkTo {
-                        to: plan.world2(w),
-                        within: 0.4,
-                    }),
-                }
-            }
-            if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
-                *within = 0.6;
-            }
-            return (t, plan.world2(o));
-        }
+    if let Some(plan) = plans.iter().find(|pl| pl.contains(at, 0.3))
+        && let Some(out) = out_of(plan, plan.to_local(at).xz())
+    {
+        return out;
     }
     let Some(b) = en.building_at(at) else {
         return (vec![], here);
@@ -4642,7 +5677,7 @@ pub(super) fn first_fight(
         take_it_on()
     } else if heavy {
         fight.flee_until = 0.0;
-        walk_away(&world, here, from)
+        walk_off_heavy(&world, here, from)
     } else if hound {
         fight.low_until = now + 30.0;
         fight.flee_until = 0.0;
@@ -5037,6 +6072,495 @@ the Hollow.";
         );
     }
 
+    /// A deck point is reached by the deck's own ends: from the gully under
+    /// it (by the end nearer), from either end (straight on), and off it to
+    /// the ground below (by the end nearer there). A walk under the bridge,
+    /// never on it, is left alone.
+    #[test]
+    fn a_bridge_deck_is_walked_on_and_off_only_at_its_ends() {
+        use crate::world::bridges::Deck;
+        let deck = Deck {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.0, 20.0),
+            ya: 18.0,
+            yb: 18.0,
+            width: 2.0,
+        };
+        let ends = [Vec2::new(0.0, -2.0), Vec2::new(0.0, 22.0)];
+        let decks = [(deck, ends)];
+        // Lined up out along its line from each end.
+        let line = [
+            Vec2::new(0.0, -2.0 - DECK_LINE_UP),
+            Vec2::new(0.0, 22.0 + DECK_LINE_UP),
+        ];
+        let mid = Vec2::new(0.0, 12.0);
+        // Up from the gully east of it, nearer the far end: lined up, on.
+        let gully = Vec2::new(8.0, 16.0);
+        assert_eq!(
+            by_deck_ends(&decks, gully, vec![mid]),
+            vec![line[1], ends[1], mid]
+        );
+        // Along it from either end: straight on.
+        assert_eq!(by_deck_ends(&decks, ends[0], vec![mid]), vec![mid]);
+        assert_eq!(by_deck_ends(&decks, ends[1], vec![mid]), vec![mid]);
+        // Off it, down to the gully by the near end, out along its line.
+        let below = Vec2::new(6.0, 3.0);
+        assert_eq!(
+            by_deck_ends(&decks, mid, vec![below]),
+            vec![ends[0], line[0], below]
+        );
+        // Under it, east to west, never on it: as it was.
+        let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
+        assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+    }
+
+    /// A crawler's charge: shot back only with a round to fire (an empty
+    /// gun's "shot it" was an Engage that ended at once, and the careful
+    /// newcomer stood through eight zaps in the shelter's generator room);
+    /// its gun out of the pack if that's the loaded one; else out of its
+    /// line. And while one's at it, no keeping still and no dressing.
+    #[test]
+    fn with_no_radio_on_it_it_goes_for_the_nearest_it_can_get() {
+        use super::pick_radio;
+        let here = Vec2::ZERO;
+        let at = |x: f32| Vec2::new(x, 0.0);
+        // Its own remains first, however far.
+        assert_eq!(
+            pick_radio(
+                here,
+                [
+                    vec![(1, at(300.0)), (2, at(130.0))],
+                    vec![(3, at(20.0))],
+                    vec![(4, at(5.0))]
+                ]
+            ),
+            Some((2, at(130.0)))
+        );
+        // Then anyone's, then loose.
+        assert_eq!(
+            pick_radio(here, [vec![], vec![(3, at(60.0))], vec![(4, at(5.0))]]),
+            Some((3, at(60.0)))
+        );
+        assert_eq!(
+            pick_radio(here, [vec![], vec![], vec![(4, at(50.0)), (5, at(-9.0))]]),
+            Some((5, at(-9.0)))
+        );
+        // None anywhere: the call is given up (the only time).
+        assert_eq!(pick_radio::<u8>(here, [vec![], vec![], vec![]]), None);
+    }
+
+    #[test]
+    fn a_crawler_at_it_is_answered_with_what_it_has() {
+        assert_eq!(crawler_answer(true, true, false), CrawlerAnswer::Shoot);
+        assert_eq!(crawler_answer(true, false, false), CrawlerAnswer::BackOut);
+        assert_eq!(crawler_answer(true, false, true), CrawlerAnswer::Unpack);
+        assert_eq!(crawler_answer(false, false, true), CrawlerAnswer::Unpack);
+        assert_eq!(crawler_answer(false, true, false), CrawlerAnswer::BackOut);
+        assert_eq!(crawler_answer(false, false, false), CrawlerAnswer::BackOut);
+        let now = 100.0;
+        assert!(crawler_at_it(now, now - 1.0));
+        assert!(crawler_at_it(now, now - CRAWLER_CLEAR + 0.1));
+        assert!(!crawler_at_it(now, now - CRAWLER_CLEAR - 0.1));
+        // (Never charged: the newcomer's clock starts it at zero.)
+        assert!(!crawler_at_it(now, 0.0));
+        // A wait to keep still in is one the charge clears.
+        assert!(CRAWLER_STILL <= 5.0);
+    }
+
+    /// The shelter job (`--job shelter`) puts the card's thing down in
+    /// Marrow's bunker, in a room the newcomer has to come up out of: a
+    /// regression run for the walk home from below.
+    #[test]
+    fn the_shelter_job_is_down_the_shelter() {
+        let Some(Job::Bring { map, item, at, .. }) = shelter_job("marrow_creek") else {
+            panic!("no shelter job on Marrow");
+        };
+        assert_eq!(
+            (map.as_str(), item.as_str()),
+            ("marrow_creek", "holm_watch")
+        );
+        let def = crate::world::load_map_def("marrow_creek");
+        let (site, room) = extraction_core::contracts::down_site(&def, at)
+            .unwrap_or_else(|| panic!("{at:?} isn't down a site"));
+        assert!(
+            extraction_core::underground::layout(&site).is_some_and(|l| l.lockdown.is_some()),
+            "{site}: not the shelter"
+        );
+        assert_ne!(room, "lock", "the way in's own room");
+        assert_eq!(
+            seeded_job("shelter", "marrow_creek"),
+            shelter_job("marrow_creek")
+        );
+        // Its place one the newcomer can find on the card (a POI's name).
+        let Some(Job::Bring { place, .. }) = shelter_job("marrow_creek") else {
+            unreachable!()
+        };
+        assert!(
+            def.markers
+                .iter()
+                .any(|m| m.kind == MarkerKind::Poi && m.name == place),
+            "{place}: no such place"
+        );
+    }
+
+    /// Through a doorway square on its line, from anywhere round it: every
+    /// leg that crosses its line does so on its axis, from a stop in front
+    /// to one behind, never by its hinge (the shelter's door 1465: in by
+    /// its hinge from a step aside, into the pocket behind the open leaf).
+    /// A leg on its line already, and one that never crosses it, as they were.
+    #[test]
+    fn a_walk_goes_through_a_doorway_square() {
+        let d = Doorway {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.9, 0.0),
+            y: 0.0,
+        };
+        let doors = [d];
+        let mid = Vec2::new(0.45, 0.0);
+        let ring: Vec<Vec2> = (0..16)
+            .map(|k| {
+                let t = k as f32 / 16.0 * std::f32::consts::TAU;
+                mid + Vec2::new(t.cos(), t.sin()) * 3.0
+            })
+            .collect();
+        let on_axis = |q: Vec2| (q.x - mid.x).abs() < DOOR_ON_LINE;
+        let mut crossings = 0;
+        for a in &ring {
+            for b in &ring {
+                let way = through_doorways(&doors, *a, 0.0, &[*b]);
+                assert_eq!(way.last(), Some(b));
+                let mut at = *a;
+                for p in &way {
+                    if crosses_at(at, *p, d.a, d.b).is_some() {
+                        crossings += 1;
+                        assert!(
+                            on_axis(at) && on_axis(*p),
+                            "{a}..{b}: leg {at}..{p} crosses off the axis in {way:?}"
+                        );
+                    }
+                    at = *p;
+                }
+                // Again from where it ends up: nothing more put in.
+                let mut at = *a;
+                let mut again = Vec::new();
+                for p in &way {
+                    again.extend(through_doorways(&doors, at, 0.0, &[*p]));
+                    at = *p;
+                }
+                assert_eq!(again, way, "{a}..{b}: not settled");
+            }
+        }
+        assert!(crossings > 0);
+        // Square through already: as it was.
+        let (front, back) = (Vec2::new(0.45, 1.0), Vec2::new(0.45, -1.0));
+        assert_eq!(through_doorways(&doors, front, 0.0, &[back]), vec![back]);
+        // Never across it: as it was.
+        let (e, w) = (Vec2::new(3.0, 1.0), Vec2::new(-3.0, 1.0));
+        assert_eq!(through_doorways(&doors, e, 0.0, &[w]), vec![w]);
+        // From across the site, a straight line through it: as it was.
+        let (far, beyond) = (Vec2::new(0.6, 15.0), Vec2::new(0.2, -15.0));
+        assert!(crosses_at(far, beyond, d.a, d.b).is_some());
+        assert_eq!(through_doorways(&doors, far, 0.0, &[beyond]), vec![beyond]);
+        // A doorway on another floor: as it was.
+        let (n, s) = (Vec2::new(0.1, 2.0), Vec2::new(0.1, -2.0));
+        assert_eq!(through_doorways(&doors, n, 5.0, &[s]), vec![s]);
+        // By its hinge from a step aside (the shelter's case): lined up
+        // in front, through, out behind.
+        // (Across its line 0.2 m from the hinge.)
+        let (from, to) = (Vec2::new(-0.3, 1.0), Vec2::new(1.2, -2.0));
+        assert!(crosses_at(from, to, d.a, d.b).is_some());
+        assert_eq!(
+            through_doorways(&doors, from, 0.0, &[to]),
+            vec![
+                Vec2::new(0.45, DOOR_SQUARE),
+                Vec2::new(0.45, -DOOR_SQUARE),
+                to
+            ]
+        );
+    }
+
+    /// A walk past a bridge's end, from off it to off it, keeps off its
+    /// deck's side where the deck is level with the ground (into its
+    /// railing): round the end. Under it, over its gully: as it was.
+    #[test]
+    fn from_inside_a_box_the_walk_steps_out_before_it_goes_round() {
+        use super::{clear_of, round_boxes, segment_hits_box};
+        // A log pile, turned as the Old farm's is, and a newcomer pressed
+        // against its logs: inside its box. To beyond it.
+        let pile = (
+            Transform::from_xyz(0.0, 0.0, 0.0).with_rotation(Quat::from_rotation_y(-2.705)),
+            Vec2::new(1.25, 3.5),
+        );
+        let boxes = [pile];
+        let from = Vec2::new(-1.0, 0.2);
+        let to = Vec2::new(60.0, -40.0);
+        let through = |a: Vec2, b: Vec2| {
+            let inv = pile.0.compute_affine().inverse();
+            let la = inv.transform_point3(Vec3::new(a.x, 0.0, a.y)).xz();
+            let lb = inv.transform_point3(Vec3::new(b.x, 0.0, b.y)).xz();
+            segment_hits_box(la, lb, pile.1).is_some()
+        };
+        // From in it, there's no way round: straight on, through it.
+        assert_eq!(round_boxes(&boxes, from, to), vec![to]);
+        // And to a place inside a house beyond it: still round the pile.
+        let house = (Transform::from_xyz(60.0, 0.0, -40.0), Vec2::new(4.0, 3.5));
+        let both = [pile, house];
+        let mut at = clear_of(&both, from);
+        for p in round_boxes(&both, at, Vec2::new(60.0, -40.0)) {
+            assert!(
+                !through(at, p),
+                "{at} -> {p} through the pile, to the house"
+            );
+            at = p;
+        }
+        // Out of it first (as `walk` now does), and round.
+        let out = clear_of(&boxes, from);
+        assert_ne!(out, from, "stepped out of the box");
+        let mut at = out;
+        for p in round_boxes(&boxes, out, to) {
+            assert!(!through(at, p), "{at} -> {p} through the pile");
+            at = p;
+        }
+    }
+
+    #[test]
+    fn a_walk_through_an_open_hall_goes_round_what_stands_in_it() {
+        use super::{part_boxes, round_boxes, segment_hits_box};
+        // The sawmill turned as on Marrow, and a walk across it the long
+        // way, over where its log stack lies (`buildings::sawmill`: six
+        // logs along x, 5 m, at -9, from -2.25 to -0.45 across).
+        let xf = Transform::from_xyz(-90.8, 0.0, 88.5)
+            .with_rotation(Quat::from_rotation_y(90f32.to_radians()));
+        let logs = (
+            xf * Transform::from_xyz(-9.0, 0.0, -1.35),
+            Vec2::new(2.5, 0.9),
+        );
+        let at = |x: f32, z: f32| xf.transform_point(Vec3::new(x, 0.0, z)).xz();
+        let (from, to) = (at(-9.0, 3.0), at(-9.0, -4.5));
+        let boxes = part_boxes("sawmill", &xf);
+        let way = round_boxes(&boxes, from, to);
+        let inv = logs.0.compute_affine().inverse();
+        let mut p = from;
+        for q in &way {
+            let a = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+            let b = inv.transform_point3(Vec3::new(q.x, 0.0, q.y)).xz();
+            assert!(
+                segment_hits_box(a, b, logs.1).is_none(),
+                "{p} -> {q} over the log stack: {way:?}"
+            );
+            p = *q;
+        }
+    }
+
+    #[test]
+    fn from_the_edge_of_a_box_margin_the_way_still_goes_round_the_next() {
+        use super::{ROUND, round_boxes, segment_hits_box};
+        // A tower, and a house far on past it: from just by the tower's
+        // wall, on its margin's edge (where a way out of it ends), to beyond
+        // the house.
+        let tower = (Transform::from_xyz(0.0, 0.0, 0.0), Vec2::new(3.0, 2.5));
+        let house = (Transform::from_xyz(-60.0, 0.0, -40.0), Vec2::new(4.0, 3.5));
+        let boxes = [tower, house];
+        let from = Vec2::new(3.0 + ROUND * 0.5, 1.2);
+        let to = Vec2::new(-120.0, -79.0);
+        let way = round_boxes(&boxes, from, to);
+        assert!(
+            way.len() > 1,
+            "a way round the house, not straight: {way:?}"
+        );
+        let mut at = from;
+        for p in &way {
+            let (xf, half) = &house;
+            let inv = xf.compute_affine().inverse();
+            let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+            let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+            assert!(
+                segment_hits_box(a, b, *half).is_none(),
+                "{at} -> {p} through the house"
+            );
+            at = *p;
+        }
+    }
+
+    #[test]
+    fn a_walk_past_a_bridge_end_goes_round_it() {
+        use crate::world::bridges::Deck;
+        let deck = Deck {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.0, 20.0),
+            ya: 18.0,
+            yb: 18.0,
+            width: 7.0,
+        };
+        let decks = [(deck, [Vec2::new(0.0, 0.0), Vec2::new(0.0, 20.0)])];
+        // Level with the deck by its ends; a gully 8 m down between.
+        let ground = |p: Vec2| if p.y < 4.0 || p.y > 16.0 { 18.0 } else { 10.0 };
+        // From the road north-east of its end to the bank west of it,
+        // straight across its corner.
+        let (from, to) = (Vec2::new(5.0, -4.0), Vec2::new(-6.0, 3.0));
+        assert!(meets_deck_side(&decks, from, to, &ground));
+        let way = round_deck_sides(&decks, from, vec![to], &ground);
+        assert_eq!(way.last(), Some(&to));
+        assert!(way.len() > 1, "{way:?}");
+        let mut at = from;
+        for p in &way {
+            assert!(
+                !meets_deck_side(&decks, at, *p, &ground),
+                "{at}..{p} in {way:?}"
+            );
+            at = *p;
+        }
+        // Under it, east to west over the gully: as it was.
+        let (e, w) = (Vec2::new(8.0, 10.0), Vec2::new(-8.0, 10.0));
+        assert!(!meets_deck_side(&decks, e, w, &ground));
+        assert_eq!(round_deck_sides(&decks, e, vec![w], &ground), vec![w]);
+        // On and off by its end, along its line: as it was.
+        assert_eq!(
+            round_deck_sides(
+                &decks,
+                Vec2::new(0.0, -3.0),
+                vec![Vec2::new(0.0, 0.0)],
+                &ground
+            ),
+            vec![Vec2::new(0.0, 0.0)]
+        );
+    }
+
+    /// Every bridge in every valley: a walk between any two points round
+    /// its ends (off it) never goes up on a deck's side; and on Marrow, the
+    /// leg past the District road bridge's north end that cut its corner
+    /// (Map design's wreck repro) goes round.
+    #[test]
+    fn walks_past_every_bridge_end_keep_off_its_sides() {
+        use crate::world::bridges;
+        let mut bad = Vec::new();
+        let mut legs = 0;
+        for map in crate::test_maps() {
+            let zone = crate::world::Zone::load(&map);
+            let decks: Vec<_> = bridges::decks(&zone)
+                .into_iter()
+                .map(|d| {
+                    let [a, b] = d.ground_ends(&zone);
+                    (d, [a.xz(), b.xz()])
+                })
+                .collect();
+            let ground = |p: Vec2| zone.ground(p.x, p.y);
+            if map == "marrow_creek" {
+                let (a, b) = (
+                    Vec2::new(7.304625, -2.495706),
+                    Vec2::new(-0.6695702, -12.451674),
+                );
+                assert!(
+                    meets_deck_side(&decks, a, b, &ground),
+                    "the District bridge leg should cut the deck's corner"
+                );
+                {
+                    let way = round_deck_sides(&decks, a, vec![b], &ground);
+                    let mut at = a;
+                    for p in &way {
+                        if meets_deck_side(&decks, at, *p, &ground) {
+                            bad.push(format!("{map}: District bridge leg {at}..{p} in {way:?}"));
+                        }
+                        at = *p;
+                    }
+                }
+            }
+            let (_, ends) = bridges_of(&decks);
+            for bridge in &ends {
+                for (e, _) in bridge {
+                    let ring: Vec<Vec2> = (0..12)
+                        .map(|k| {
+                            let t = k as f32 / 12.0 * std::f32::consts::TAU;
+                            *e + Vec2::new(t.cos(), t.sin()) * 9.0
+                        })
+                        .filter(|p| !decks.iter().any(|(d, _)| d.holds(*p, 0.5)))
+                        .collect();
+                    for a in &ring {
+                        for b in &ring {
+                            if a == b {
+                                continue;
+                            }
+                            legs += 1;
+                            let way = round_deck_sides(&decks, *a, vec![*b], &ground);
+                            let mut at = *a;
+                            for p in &way {
+                                if meets_deck_side(&decks, at, *p, &ground) {
+                                    bad.push(format!("{map}: {a}..{b}: leg {at}..{p}"));
+                                    break;
+                                }
+                                at = *p;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(legs > 0);
+        assert!(
+            bad.is_empty(),
+            "{} of {legs} walks past bridge ends on a deck's side:\n{}",
+            bad.len(),
+            bad.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
+        );
+    }
+
+    /// Every bridge in every valley: a deck's middle reached from the
+    /// ground beside it goes by one of its ends, and from each end straight
+    /// on along it.
+    #[test]
+    fn every_bridge_is_walked_onto_by_its_ends() {
+        use crate::world::bridges;
+        for map in crate::test_maps() {
+            let zone = crate::world::Zone::load(&map);
+            let decks: Vec<_> = bridges::decks(&zone)
+                .into_iter()
+                .map(|d| {
+                    let [a, b] = d.ground_ends(&zone);
+                    (d, [a.xz(), b.xz()])
+                })
+                .collect();
+            let (of, ends) = bridges_of(&decks);
+            for (i, (d, _)) in decks.iter().enumerate() {
+                let outer = &ends[of[i]];
+                assert!(
+                    !outer.is_empty(),
+                    "{map}: a bridge with no ends at {:?}",
+                    d.a
+                );
+                let mid = (d.a + d.b) * 0.5;
+                let side = (d.b - d.a).perp().normalize_or(Vec2::X) * (d.width + 6.0);
+                // (Its middle at one of the bridge's ends already: straight on.)
+                let at_end = outer.iter().any(|(e, _)| e.distance(mid) <= DECK_END_NEAR);
+                for beside in [mid + side, mid - side] {
+                    // (Beside it on another deck of the same bridge: along it.)
+                    if decks
+                        .iter()
+                        .position(|(d, _)| d.holds(beside, 0.0))
+                        .map(|j| of[j])
+                        == Some(of[i])
+                    {
+                        continue;
+                    }
+                    let way = by_deck_ends(&decks, beside, vec![mid]);
+                    // Lined up out on its line, then its end, then on.
+                    let by_an_end = way.len() == 3
+                        && outer.iter().any(|(e, l)| way[0] == *l && way[1] == *e)
+                        && way[2] == mid;
+                    assert!(
+                        by_an_end || (at_end && way == vec![mid]),
+                        "{map}: deck {:?}..{:?} from {beside:?}: {way:?}",
+                        d.a,
+                        d.b
+                    );
+                }
+                for (end, _) in outer {
+                    let way = by_deck_ends(&decks, *end, vec![mid]);
+                    assert_eq!(way, vec![mid], "{map}: from its end {end:?}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn a_careers_raids_go_to_the_valley_asked() {
         let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -5183,9 +6707,10 @@ the Hollow.";
 #[cfg(test)]
 mod indoor_tests {
     use super::{
-        STEEP_RUN, Stop, indoor_stops, round_banks, round_boxes, segment_hits_box, shot_warns,
-        solid, steep_run,
+        STEEP_RUN, Stop, below_in, indoor_stops, on_its_floors, out_of, round_banks, round_boxes,
+        segment_hits_box, shot_warns, solid, steep_run, step_back_in,
     };
+    use crate::bot::Task;
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
 
@@ -5271,6 +6796,97 @@ mod indoor_tests {
             "{} of {walks} indoor walks cut through furniture:\n{}",
             cut.len(),
             cut.join("\n")
+        );
+    }
+
+    /// From any room of any underground site, on every map, a walk off
+    /// its floors (to the truck) goes up and out by the site's way first:
+    /// the bot below ground is known to be in it at its feet's height (in
+    /// the shelter under the ranger tower, the walk to the truck went
+    /// straight at it through the rock, and it pressed for the bell from
+    /// under the ground the rest of the raid).
+    #[test]
+    fn from_every_room_below_ground_the_way_out_goes_up() {
+        use extraction_core::underground as ug;
+        let mut bad = Vec::new();
+        let mut rooms = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let w = app.world_mut();
+            let mut st: SystemState<(
+                Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+                Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>,
+            )> = SystemState::new(w);
+            let (b, d) = st.get(w).unwrap();
+            let plans = crate::sim::indoor::plan_buildings(&b, &d);
+            let zone = crate::world::Zone::load(&map);
+            for (_, building, xf) in b.iter() {
+                let Some(l) = ug::layout(&building.prefab) else {
+                    continue;
+                };
+                for room in &l.rooms {
+                    let at = xf.transform_point(Vec3::new(
+                        room.at[0],
+                        l.floor_of(room) + 0.05,
+                        room.at[1],
+                    ));
+                    rooms += 1;
+                    let what = format!("{map}: {} `{}` at {at:.1}", building.prefab, room.id);
+                    let Some(plan) = below_in(&zone, &plans, at) else {
+                        bad.push(format!("{what}: not known to be in the site"));
+                        continue;
+                    };
+                    let from = plan.to_local(at + Vec3::Y * 1.0).xz();
+                    // (Shut off as it stands, by heat not vented or a door
+                    // held on power: no way in either, so not where it'd be.)
+                    let into = plan
+                        .doors
+                        .iter()
+                        .filter_map(|d| d.outside)
+                        .any(|o| plan.path(o, from).is_some());
+                    if !into {
+                        rooms -= 1;
+                        continue;
+                    }
+                    // A step back from an anomaly, any way: only ever onto
+                    // the site's floors (the generator room's wall).
+                    for k in 0..8 {
+                        let t = k as f32 / 8.0 * std::f32::consts::TAU;
+                        let away = Vec2::new(t.cos(), t.sin());
+                        for task in step_back_in(plan, at.xz(), away) {
+                            if let Task::WalkTo { to, .. } = task
+                                && !on_its_floors(plan, to)
+                            {
+                                bad.push(format!(
+                                    "{what}: a step back {away:.1} goes off its floors to {to:.1}"
+                                ));
+                            }
+                        }
+                    }
+                    match out_of(plan, from) {
+                        None => bad.push(format!("{what}: no way out")),
+                        Some((_, end)) if on_its_floors(plan, end) => {
+                            bad.push(format!("{what}: the way out ends on its floors, {end:.1}"))
+                        }
+                        Some(_) => {}
+                    }
+                }
+            }
+        }
+        assert!(rooms > 0, "no underground rooms on any map");
+        assert!(
+            bad.is_empty(),
+            "{} of {rooms} rooms below ground:\n{}",
+            bad.len(),
+            bad.join("\n")
         );
     }
 
@@ -5510,6 +7126,38 @@ mod indoor_tests {
                 at = p;
             }
         }
+        // By the guard booth, for the road through the south gate: round
+        // the gate's block, not into it (save18's wanderer stood a minute
+        // against it at (30, 165)).
+        let mut gate = boxes.clone();
+        let mut q = w.query::<(&crate::world::buildings::Building, &Transform)>();
+        let parts: Vec<_> = q
+            .iter(w)
+            .flat_map(|(b, xf)| super::part_boxes(&b.prefab, xf))
+            .collect();
+        assert!(parts.len() >= 2, "Marrow's south gate has its blocks");
+        gate.extend(parts.iter().copied());
+        let zone = w.resource::<crate::world::Zone>();
+        let (from, to) = (Vec2::new(30.0, 165.0), Vec2::new(28.0, 153.8));
+        let mut at = from;
+        for p in round_boxes(&gate, from, to) {
+            for (xf, half) in &parts {
+                let inv = xf.compute_affine().inverse();
+                let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                assert!(
+                    segment_hits_box(a, b, *half).is_none(),
+                    "{from} -> {to}: {at} -> {p} goes into the gate's block"
+                );
+            }
+            at = p;
+        }
+        // And the road between the blocks is still a way through.
+        assert_eq!(
+            round_boxes(&parts, Vec2::new(22.0, 170.0), Vec2::new(22.0, 157.0)),
+            vec![Vec2::new(22.0, 157.0)],
+            "the road through the gate is open"
+        );
         let bank = steep_run(zone, Vec2::new(-38.1, -41.7), Vec2::new(-39.97, -45.04));
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));

@@ -774,14 +774,14 @@ it's seen (`heavy_sounds`, `heavy_loops`):
 | A door torn off, a bolt shot out, something loose, a plate down | `heavy.tear` (creak, strain, splintering), `heavy.bolt` (a ping), `heavy.loose`, `heavy.plate` | — |
 | Steam vented, the stall's roar as it sinks, a well holding it, a cell pulled, the fall | `heavy.vent`, `heavy.stall`, `heavy.strain`, `heavy.cell`, a boom and a groan | — |
 | Idle | `heavy.idle`: the hum, slowed to 0.55, on it | 201 m |
-| Called out of the Gate (`heavy_mind::HeavyCalled`) | `heavy.horn`: synthesised (`robot_voice::render_horn`), two long low tones a fifth apart (D1, A1), 6 s, from the Gate | 705 / 658 m |
+| Called out of the Gate (`heavy_mind::HeavyCalled`) | `heavy.horn`: synthesised (`robot_voice::render_horn`), two long low tones a fifth apart (D1, A1), 6 s, from the Gate; it reaches each valley's far corner, about 703 m off, even in a downpour | 811 / 811 m (wants 740 / 740) |
 
 Its mind speaks the robots' grammar in its own voice, the deepest
 (`VoiceKind::Heavy`, 65 Hz, a brassy saw through a 320 Hz formant, slow):
 within 1.4-3.8 LU of the other kinds for every word. Within 25 m its
 footfalls and blows are felt in both hands (Heavy's
 `heavy_look::footfall_pulse`, from a tick to just under a knock).
-Everything sudden is kept under your rifle up close (the horn 7.5 dB
+Everything sudden is kept under your rifle up close (the horn 6 dB
 down from where it first measured, for anyone standing at the Gate).
 
 ## Breaking things, and the birds
@@ -930,7 +930,9 @@ an SKS's carrier 0.92; a TOZ-8's .22 parts 1.15. An SKS's bolt going
 home is a rifle's carrier (`guns/bolt_close`), not the PM's slide, and
 its 7.62x39 report is the AK's set at 0.9, deeper. A round going in sounds
 like what goes in: a clip's rattle into a Mosin or an SKS, a shell into
-a shotgun, and a loose .22 into a TOZ-8, pushed home (`gun.round_in`).
+a shotgun, and a loose round thumbed into any rifle, pushed home
+(`gun.round_in` on Weapon feel's `RoundThumbed`: a TOZ-8's .22, or a
+Mosin or an SKS filled a round at a time).
 `audio::tests::the_first_hour_guns_each_sound_their_own` holds it: for
 the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
 speed for the same moment.
@@ -990,6 +992,60 @@ stiffened by frost, its legs grinding; crushed at a well's heart, a metal
 groan and a hit; dazzled, its sensor stuttering and its lock clicking
 out; stunned, its servos winding down; hurt by what makes its own sound,
 a short distress note. Deafened by a hush, nothing: the hush is heard.
+
+The Zone's pressure stepping up (`robots::pressure::Stepped`) is heard
+without a radio, before anything it brings, from the Gate's side, where
+the director's machines come in (`audio_machines::pressure_sounds`).
+Each step is played 80 m toward the Gate (`STEP_FROM`), or at the Gate if
+that's nearer:
+- Stirred: a far machine's whine, rising an octave over three seconds
+  (`zone.stirred`);
+- Busy: machine traffic on the wind, several drives beating against each
+  other, swelling in and settling (`zone.busy`);
+- Hunting: something heavier, a deep drive groaning down two notes over a
+  rumble (`zone.hunting`).
+
+Each is a synthesised stand-in (`synth_foley`). Each is heard from where
+it plays, rain or not, and well past it: 231/175, 123/123 and 231/215 m
+in calm/downpour (`RANGE_TARGETS`, wants 80/80). Going down is silent, as
+the words are.
+
+A failing machine's distress flare (`robots::distress::FlareEvent`,
+`audio_machines::flare_sounds`) is heard at every moment:
+- The tell: the tube rising, a ratchet winding and a tick as it locks
+  (`distress.tell`, a stand-in). It's the moment to shoot the tube, so it
+  must read through a fight: 30 m off, at its best 0.15 s in the tell, it
+  clears walker fire at 20 m, running, and both by 6 dB
+  (`audio_gunstate.tells`), and it's heard 163 m in calm and 38 m in a
+  downpour.
+- The launch: a thump (`distress.launch`), then the canister's hiss
+  following it up (`distress.hiss`, a loop on the `Canister`, gone with
+  it).
+- The burst, 60 m up: a pop that carries, a call (`distress.burst`),
+  heard 266 m in calm and 163 m in a downpour (wants 200/120; no machine
+  ceiling, since it's meant to be heard).
+- Shot down: a fizzle where it falls (`distress.fizzle`).
+- The tube spoiled in its tell: a broken clank and a short fizzle
+  (`distress.broken`).
+
+The Gate counting a key-carrier (`heavy_mind::GateCount`, before it calls
+a heavy) calls from 6 m up its mast (`audio_machines::gate_call`): two
+buzzy tones a fourth apart pulsing twice a second (`gate.call`, a
+stand-in). As the count runs, the pulses quicken and climb (0.85x to 1.5x)
+and the call grows 6 dB louder, so the player knows they're being counted
+and how far through. It's driven from the resource, so several fixed
+ticks a frame don't matter. Its first tick is already heard past the 60 m
+line: 215 m in calm and 107 m in a downpour at its starting level (wants
+80/80). The Gate waking gives a relay's clunk (`gate.wake`). Stepped back
+out of, its call winds down (`gate.release`). Called, it cuts to the horn.
+
+A heavy letting you go (`heavy_mind::HeavyStandDown`) sighs
+(`stand_down_sounds`, `heavy.sigh`, a stand-in): a long vent, 2.1-2.4 s,
+its air sinking from 1.8 kHz to 400 Hz with a low groan easing under it,
+falling in pitch and level. It's the one sound that rewards walking away,
+so it's unlike any that means danger: its raise's hiss rises before a
+blow, and this falls. It's quiet, for the one it let go: heard 71 m in
+calm and 27 m in a downpour (wants 25/20, at most 75).
 
 A minelayer crawling grinds, its treads labouring, louder and quicker
 the faster it goes, silent standing (`audio_machines::grind_sounds`,

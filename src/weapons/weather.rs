@@ -536,6 +536,25 @@ struct OwnMaterial {
     how: Ages,
     muzzle: Vec3,
     port: Vec3,
+    /// The source material's name (`ModelMaterials`: "Blued", "Wood"...).
+    name: Option<String>,
+    /// Shared by every part wearing it, its muzzle and port in the gun's
+    /// space (not a turned part's copy of its own).
+    gun_space: bool,
+}
+
+impl WeatheredLook {
+    /// The gun's own weathered copy of the material named `name` (as
+    /// `ModelMaterials` names it): for a stand-in drawn in the gun's space,
+    /// such as its far model's per-material meshes (`<id>_lod1.glb`), so
+    /// it wears the gun's grime, rust and soot. None if no part of the
+    /// gun wears it.
+    pub fn copy_named(&self, name: &str) -> Option<Handle<StandardMaterial>> {
+        self.mats
+            .iter()
+            .find(|m| m.gun_space && m.name.as_deref() == Some(name))
+            .map(|m| m.handle.clone())
+    }
 }
 
 /// The last stretch to failure, 0 to 1: from weapon feel's second line
@@ -619,6 +638,7 @@ pub fn weather_looks(
     mut guns: Query<(Entity, &Gun, &Weathering, Option<&mut WeatheredLook>)>,
     children: Query<&Children>,
     transforms: Query<&Transform>,
+    parts: Query<&super::visuals::GunPart>,
     meshes: Query<&MeshMaterial3d<StandardMaterial>>,
     skip: Query<
         (),
@@ -632,8 +652,18 @@ pub fn weather_looks(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
     model_mats: Option<Res<crate::models::ModelMaterials>>,
+    loading: Query<(), With<super::visuals::PendingGunModel>>,
 ) {
     for (e, gun, w, look) in &mut guns {
+        // Not while its model is still loading: its look would be made of
+        // whatever else hangs on it then (no part of the model, no name a
+        // far level can find), and a look is made once. In a valley's
+        // load a random few guns came in a frame late, and those never
+        // weathered or took their far level (`render::gun_rest`): Cinder
+        // Works' gate swung 1598k to 1785k triangles run to run.
+        if look.is_none() && loading.contains(e) {
+            continue;
+        }
         let grime = gun.firearm.grime.clamp(0.0, 1.0);
         let wet = w.wet.clamp(0.0, 1.0);
         let worn = rust_shown(gun.firearm.condition);
@@ -653,26 +683,33 @@ pub fn weather_looks(
                 // marks *these* (`render::held_light`), and its look still
                 // changes in the hand (cleaned at the bench, wiped, worn).
                 let mut mats = Vec::new();
-                // One copy for each of its materials in each frame its parts
-                // sit in: parts that shared a material share its copy again
-                // (`render::gun_rest` merges a resting gun by material; a
-                // copy for every mesh left it nothing to merge, and declined
-                // most guns), and the wear's muzzle and port, in that
-                // frame, hold for each of them.
+                // One copy for each of its materials, shared by every part
+                // that wears it (`render::gun_rest` merges a resting gun by
+                // material: a copy for every mesh left it nothing to merge,
+                // and declined most guns). The wear's muzzle and port are in
+                // the gun's space, and each part's place in the gun, at rest,
+                // goes in its `MeshTag` for the shader to take off
+                // (`render::wear::tag_for`). A part turned or scaled in its
+                // rest pose (none is yet) gets a copy of its own, its points
+                // in its own space.
                 let mut made: HashMap<
-                    (AssetId<StandardMaterial>, [i32; 12]),
+                    (AssetId<StandardMaterial>, Option<[i32; 12]>),
                     Handle<StandardMaterial>,
                 > = HashMap::new();
                 let frame = |a: &Affine3A| {
                     let c = a.to_cols_array();
                     std::array::from_fn(|i| (c[i] * 1e4).round() as i32)
                 };
-                // Each with where it sits in the gun, for its muzzle and port.
+                // Each with where it sits in the gun at rest (a moving part's
+                // `GunPart::rest`, not wherever it is just now).
                 let place = |c: Entity, up: Affine3A| {
-                    up * transforms
+                    let local = parts
                         .get(c)
+                        .map(|p| p.rest)
+                        .or_else(|_| transforms.get(c).copied())
                         .map(|t| t.compute_affine())
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    up * local
                 };
                 let mut stack: Vec<(Entity, Affine3A)> = children
                     .get(e)
@@ -691,16 +728,37 @@ pub fn weather_looks(
                     {
                         let (base, rough) = (orig.base_color, orig.perceptual_roughness);
                         let metallic = orig.metallic;
-                        let how = ages(
-                            model_mats.as_ref().and_then(|mm| mm.name_of(m.0.id())),
-                            metallic,
-                        );
+                        let name = model_mats
+                            .as_ref()
+                            .and_then(|mm| mm.name_of(m.0.id()))
+                            .map(str::to_string);
+                        let how = ages(name.as_deref(), metallic);
+                        let (scale, turn, offset) = at.to_scale_rotation_translation();
+                        let plain = turn.angle_between(Quat::IDENTITY) < 1e-3
+                            && (scale - Vec3::ONE).abs().max_element() < 1e-3;
+                        let (key, muzzle, port, tag) = if plain {
+                            (
+                                None,
+                                gun.layout.muzzle,
+                                gun.layout.port,
+                                crate::render::wear::tag_for(offset),
+                            )
+                        } else {
+                            let inv = at.inverse();
+                            (
+                                Some(frame(&at)),
+                                inv.transform_point3(gun.layout.muzzle),
+                                inv.transform_point3(gun.layout.port),
+                                0,
+                            )
+                        };
                         let own = made
-                            .entry((m.0.id(), frame(&at)))
+                            .entry((m.0.id(), key))
                             .or_insert_with(|| materials.add(orig))
                             .clone();
-                        commands.entity(c).insert(MeshMaterial3d(own.clone()));
-                        let inv = at.inverse();
+                        commands
+                            .entity(c)
+                            .insert((MeshMaterial3d(own.clone()), bevy::mesh::MeshTag(tag)));
                         mats.push(OwnMaterial {
                             mesh: c,
                             handle: own,
@@ -708,8 +766,10 @@ pub fn weather_looks(
                             rough,
                             metallic,
                             how,
-                            muzzle: inv.transform_point3(gun.layout.muzzle),
-                            port: inv.transform_point3(gun.layout.port),
+                            muzzle,
+                            port,
+                            name,
+                            gun_space: plain,
                         });
                     }
                     if let Ok(cs) = children.get(c) {
@@ -739,6 +799,7 @@ pub fn weather_looks(
                         how,
                         muzzle,
                         port,
+                        ..
                     } = own_mat;
                     let b = base.to_linear();
                     let own = Vec3::new(b.red, b.green, b.blue);
@@ -1026,14 +1087,91 @@ mod tests {
             !copies.contains(&blued.id()),
             "its own copies, not the shared ones"
         );
-        // Two materials in two frames.
+        // One a material, however many frames.
         assert_eq!(
             copies.len(),
-            4,
-            "{} copies for 6 meshes: one each leaves gun_rest nothing to merge",
+            2,
+            "{} copies for 6 meshes in 2 materials: gun_rest merges by material",
             copies.len()
         );
+        // Each part's place in the gun is in its tag, for the wear.
+        for (k, e) in meshes.iter().enumerate() {
+            let tag = w.get::<bevy::mesh::MeshTag>(*e).expect("a tag").0;
+            let want = if k < 3 { 0.0 } else { 0.06 };
+            let got = crate::render::wear::offset_of(tag);
+            assert!((got.y - want).abs() < 0.002, "mesh {k}: offset {got}");
+        }
     }
+    /// A gun whose model is still loading gets no look yet: one made then
+    /// is made of whatever else hangs on it, and is never made again. Once
+    /// its parts are in, its look is theirs, each copy named for its
+    /// material, as a far level asks for it.
+    #[test]
+    fn a_gun_still_loading_its_model_waits_for_its_look() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_resource::<crate::models::ModelMaterials>()
+            .add_systems(Update, weather_looks);
+        let catalog = crate::items::Catalog::load();
+        let def = catalog
+            .iter()
+            .find(|(_, d)| d.id == "pm_pistol")
+            .map(|(_, d)| d.clone())
+            .unwrap();
+        let w = app.world_mut();
+        let stray = w
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let gun = w
+            .spawn((
+                Gun {
+                    firearm: extraction_core::firearm::Firearm::new(
+                        def.firearm.clone().unwrap(),
+                        1.0,
+                    ),
+                    layout: super::super::layout::layout("pm_pistol").unwrap(),
+                    magwell: None,
+                    trigger: 0.0,
+                    pulled: false,
+                    catch: false,
+                    dice: extraction_core::noise::Rng::new(1),
+                    mass: None,
+                },
+                Weathering::default(),
+                Transform::default(),
+                super::super::visuals::PendingGunModel(Handle::default()),
+            ))
+            .id();
+        // Something else on it already, in a material of no model's.
+        w.spawn((MeshMaterial3d(stray), Transform::default(), ChildOf(gun)));
+        app.update();
+        app.update();
+        assert!(
+            app.world().get::<WeatheredLook>(gun).is_none(),
+            "a look made while its model was loading"
+        );
+        // Its model in: the parts in the model's own named material.
+        let w = app.world_mut();
+        let blued = w.resource_scope(|w, mut mm: Mut<crate::models::ModelMaterials>| {
+            let mut mats = w.resource_mut::<Assets<StandardMaterial>>();
+            mm.insert_for_test("Blued", mats.add(StandardMaterial::default()))
+        });
+        w.entity_mut(gun)
+            .remove::<super::super::visuals::PendingGunModel>();
+        w.spawn((MeshMaterial3d(blued), Transform::default(), ChildOf(gun)));
+        app.update();
+        app.update();
+        let look = app
+            .world()
+            .get::<WeatheredLook>(gun)
+            .expect("a look once its model is in");
+        assert!(
+            look.copy_named("Blued").is_some(),
+            "its look names the model's material, as a far level asks for it"
+        );
+    }
+
     use crate::interact::GripRole;
     use crate::rig::Side;
     use crate::vr_harness::Vr;

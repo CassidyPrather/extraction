@@ -82,7 +82,7 @@ pub struct GunPart {
 
 /// A gun whose model file is still loading.
 #[derive(Component)]
-struct PendingGunModel(Handle<Gltf>);
+pub struct PendingGunModel(pub(crate) Handle<Gltf>);
 
 /// Where the gun's model seats a magazine (its `magwell` empty), in gun
 /// space.

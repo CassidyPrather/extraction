@@ -154,6 +154,41 @@ pub const STAND_INS: &[StandIn] = &[
         render: chute_hiss,
     },
     StandIn {
+        set: "zone/stirred",
+        variants: 2,
+        render: zone_stirred,
+    },
+    StandIn {
+        set: "zone/busy",
+        variants: 2,
+        render: zone_busy,
+    },
+    StandIn {
+        set: "zone/hunting",
+        variants: 2,
+        render: zone_hunting,
+    },
+    StandIn {
+        set: "distress/tell",
+        variants: 2,
+        render: distress_tell,
+    },
+    StandIn {
+        set: "distress/hiss",
+        variants: 2,
+        render: distress_hiss,
+    },
+    StandIn {
+        set: "gate/call",
+        variants: 1,
+        render: gate_call,
+    },
+    StandIn {
+        set: "heavy/sigh",
+        variants: 2,
+        render: heavy_sigh,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -240,6 +275,12 @@ impl Bp {
             y1: 0.0,
             y2: 0.0,
         }
+    }
+
+    /// Move its centre (a sweep), keeping what's ringing in it.
+    fn retune(&mut self, f: f32, q: f32, sr: f32) {
+        let fresh = Self::new(f, q, sr);
+        (self.b0, self.b2, self.a1, self.a2) = (fresh.b0, fresh.b2, fresh.a1, fresh.a2);
     }
 
     fn run(&mut self, x: f32) -> f32 {
@@ -603,7 +644,7 @@ mod tests {
             assert!(peak > 0.05 && peak <= 0.9, "{}: {peak}", s.set);
             assert!(a.iter().all(|v| v.is_finite()), "{}", s.set);
             let secs = a.len() as f32 / SR;
-            assert!((0.05..=2.0).contains(&secs), "{}: {secs}", s.set);
+            assert!((0.05..=4.0).contains(&secs), "{}: {secs}", s.set);
         }
     }
 
@@ -859,6 +900,176 @@ fn chute_hiss(rng: &mut Rng, sr: f32) -> Vec<f32> {
             let n = noise(rng);
             (body.run(n) * 1.4 + whistle.run(n) * 0.9 * (t / hold).min(1.0) + low.run(n) * 1.0)
                 * env
+        })
+        .collect()
+}
+
+/// The Zone stirred (`robots::pressure`, a step up to Stirred): far off,
+/// a machine's whine rising, as a drive spins up: a buzzy tone climbing an
+/// octave over three seconds with a slow waver, its highs gone with
+/// distance, in and out softly.
+fn zone_stirred(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 3.2;
+    let f0 = 330.0 * jitter(rng, 0.06);
+    let mut body = Bp::new(900.0, 0.8, sr);
+    let n = (secs * sr) as usize;
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let k = t / secs;
+            let f = f0 * 2f32.powf(k * k.sqrt()) * (1.0 + 0.012 * (TAU * 5.5 * t).sin());
+            ph = (ph + f / sr).fract();
+            let saw = 2.0 * ph - 1.0;
+            let env = (t / 0.6).min(1.0) * (1.0 - ((t - secs + 0.7) / 0.7).clamp(0.0, 1.0));
+            (0.4 * saw + body.run(saw)) * env
+        })
+        .collect()
+}
+
+/// The Zone busy (a step up to Busy): machine traffic on the wind, several
+/// drives at once, far and detuned against each other, beating, swelling
+/// in and settling, under a breath of the air that carries them.
+fn zone_busy(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 3.8;
+    let drives: Vec<(f32, f32)> = (0..4)
+        .map(|_| (95.0 * jitter(rng, 0.35), rng.f32() * TAU))
+        .collect();
+    let mut phs = vec![0.0f32; drives.len()];
+    let mut body = Bp::new(420.0, 0.7, sr);
+    let mut air = Bp::new(700.0, 0.5, sr);
+    let n = (secs * sr) as usize;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let mut x = 0.0;
+            for (j, &(f, wob)) in drives.iter().enumerate() {
+                let f = f * (1.0 + 0.03 * (TAU * 0.4 * t + wob).sin());
+                phs[j] = (phs[j] + f / sr).fract();
+                x += 2.0 * phs[j] - 1.0;
+            }
+            let env = (t / 1.4).min(1.0).powi(2) * (1.0 - ((t - secs + 1.2) / 1.2).clamp(0.0, 1.0));
+            (body.run(x) * 0.8 + 0.25 * air.run(noise(rng))) * env
+        })
+        .collect()
+}
+
+/// The Zone hunting (a step up to Hunting): something heavier, far off: a
+/// deep drive groaning down two notes with a rumble under it, the way a
+/// heavy machine labours up through its gears.
+fn zone_hunting(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 3.4;
+    let f0 = 74.0 * jitter(rng, 0.05);
+    let mut body = Bp::new(260.0, 0.9, sr);
+    let mut rumble = Bp::new(60.0, 0.7, sr);
+    let n = (secs * sr) as usize;
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let f = if t < secs * 0.45 { f0 * 1.335 } else { f0 };
+            ph = (ph + f * (1.0 + 0.01 * (TAU * 3.0 * t).sin()) / sr).fract();
+            let saw = 2.0 * ph - 1.0;
+            let env = (t / 0.25).min(1.0) * (1.0 - ((t - secs + 0.9) / 0.9).clamp(0.0, 1.0));
+            (body.run(saw) * 1.2 + 0.3 * saw + rumble.run(noise(rng)) * 2.0) * env
+        })
+        .collect()
+}
+
+/// A machine's flare tube raised (`robots::distress`, its tell): a ratchet
+/// winding it up, hard pawl clicks quickening, then a sharp tick as it
+/// locks. A tell, so bright and dry, to read through a fight.
+fn distress_tell(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 1.1;
+    let n = (secs * sr) as usize;
+    let mut pawl = Bp::new(2_600.0 * jitter(rng, 0.1), 5.0, sr);
+    let mut lock = Bp::new(4_800.0 * jitter(rng, 0.1), 7.0, sr);
+    let mut out = vec![0.0f32; n];
+    // The clicks: 9 a second quickening to 20, to 0.85 s; then the lock.
+    let mut t = 0.0f32;
+    let mut clicks = Vec::new();
+    while t < 0.85 {
+        clicks.push(t);
+        t += 1.0 / (9.0 + 13.0 * t / 0.85);
+    }
+    for (i, v) in out.iter_mut().enumerate() {
+        let t = i as f32 / sr;
+        let mut e = 0.0f32;
+        for &c in &clicks {
+            if t >= c && t < c + 0.03 {
+                e += (-(t - c) * 220.0).exp();
+            }
+        }
+        let n = noise(rng);
+        let lk = if t >= 0.92 {
+            (-(t - 0.92) * 120.0).exp()
+        } else {
+            0.0
+        };
+        *v = pawl.run(n) * e * 3.0 + lock.run(n) * lk * 5.0;
+    }
+    out
+}
+
+/// A distress canister's trail as it climbs: a rocket's hiss, a rushing
+/// band of noise with the motor's crackle in it, 2 s, looped.
+fn distress_hiss(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut rush = Bp::new(3_000.0 * jitter(rng, 0.1), 0.7, sr);
+    let mut low = Bp::new(700.0, 0.8, sr);
+    let mut crackle = grit(60.0, sr);
+    seamless(rng, sr, |rng, _| {
+        let n = noise(rng);
+        (rush.run(n) * 1.3 + low.run(n) * 0.5) * (0.6 + 0.4 * crackle(rng))
+    })
+}
+
+/// The Gate counting you (`heavy_mind::GateCount`): a machine's call, two
+/// tones a fourth apart pulsing twice a second, hard-edged and buzzy so it
+/// reads as a signal, not a voice. 2 s, looped; it's played faster and
+/// louder as the count runs (`audio_machines::gate_call_level`), so the
+/// pulses quicken and climb.
+fn gate_call(_rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let mut body = Bp::new(1_400.0, 1.2, sr);
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let beat = (t * 2.0).fract();
+            // Each half-second: the low tone, then the high, then a gap.
+            let f = if beat < 0.22 { 660.0 } else { 880.0 };
+            let gate = if beat < 0.42 { 1.0 } else { 0.0 };
+            let edge = (beat / 0.01).min(1.0) * ((0.42 - beat) / 0.01).clamp(0.0, 1.0);
+            ph = (ph + f / sr).fract();
+            let sq = if ph < 0.5 { 1.0 } else { -1.0 };
+            (0.35 * sq + body.run(sq)) * gate * edge
+        })
+        .collect()
+}
+
+/// A heavy standing down (`heavy_mind::HeavyStandDown`): a long venting
+/// sigh, pressure let go and settling: air rushing out through a band that
+/// sinks from 1.8 kHz to 400 Hz as it falls away, a low groan of the frame
+/// easing under it. Falling, where its raise's hiss rises.
+fn heavy_sigh(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 2.1 + rng.f32() * 0.3;
+    let n = (secs * sr) as usize;
+    let mut groan_ph = 0.0f32;
+    let f0 = 70.0 * jitter(rng, 0.08);
+    let mut low = Bp::new(140.0, 0.8, sr);
+    let mut rush = Bp::new(1_800.0, 0.9, sr);
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let k = t / secs;
+            if i % 64 == 0 {
+                rush.retune(1_800.0 * (400.0f32 / 1_800.0).powf(k), 0.9, sr);
+            }
+            let x = rush.run(noise(rng));
+            groan_ph = (groan_ph + f0 * (1.0 - 0.3 * k) / sr).fract();
+            let saw = 2.0 * groan_ph - 1.0;
+            let env = (t / 0.25).min(1.0) * (1.0 - k).powf(1.4);
+            (x * 1.6 + low.run(saw) * 0.8) * env
         })
         .collect()
 }

@@ -161,6 +161,13 @@ impl Plugin for ImpactPlugin {
     }
 }
 
+/// A thing that isn't a robot's part, an item or the world, but is struck
+/// as metal: a spark and a metal ping, and no mark left (it moves, or
+/// flies: a robot's flare canister and its tube, `robots::distress`).
+/// Anything else unknown is struck as soil, a dust puff and a mark.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct StruckMetal;
+
 /// Every hit, classed.
 #[allow(clippy::too_many_arguments)]
 fn classify_hits(
@@ -172,6 +179,7 @@ fn classify_hits(
     items: Query<(), With<crate::items::Item>>,
     bodies: Query<(), With<crate::player::BodyCollider>>,
     built: Query<(&GlobalTransform, &Surfaces)>,
+    metal: Query<(), With<StruckMetal>>,
 ) {
     for h in hits.read() {
         let made_of = built
@@ -183,7 +191,7 @@ fn classify_hits(
             (ImpactKind::Body, false)
         } else if part.is_some() {
             (ImpactKind::Robot, false)
-        } else if items.contains(h.entity) {
+        } else if items.contains(h.entity) || metal.contains(h.entity) {
             (ImpactKind::Metal, false)
         } else if trees.contains(h.entity) {
             (ImpactKind::Wood, true)
@@ -1194,6 +1202,52 @@ mod tests {
         ] {
             assert!(recipe(k).iter().map(|s| s.n).sum::<usize>() > 0, "{k:?}");
         }
+    }
+
+    /// A hit on a thing marked [`StruckMetal`] (a flare canister in the
+    /// air) is a metal one, a spark and a ping, with no mark left hanging
+    /// where it was; an unmarked one is soil, a dust puff and a mark.
+    #[test]
+    fn a_struck_metal_thing_sparks_and_leaves_no_mark() {
+        use crate::weapons::ballistics::Hit;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<Hit>()
+            .add_message::<Impact>()
+            .add_systems(Update, classify_hits);
+        let canister = app
+            .world_mut()
+            .spawn((Transform::IDENTITY, StruckMetal))
+            .id();
+        let bare = app.world_mut().spawn(Transform::IDENTITY).id();
+        for entity in [canister, bare] {
+            app.world_mut().write_message(Hit {
+                entity,
+                point: Vec3::Y * 30.0,
+                normal: Vec3::Z,
+                velocity: Vec3::NEG_Z * 300.0,
+                damage: 30.0,
+                shooter: None,
+                mass_g: 6.0,
+                load: Default::default(),
+                blow: None,
+            });
+        }
+        app.update();
+        let seen: Vec<Impact> = app
+            .world_mut()
+            .resource_mut::<Messages<Impact>>()
+            .drain()
+            .collect();
+        let of = |e| {
+            seen.iter()
+                .find(|i| i.entity == Some(e))
+                .expect("an impact")
+        };
+        assert_eq!(of(canister).kind, ImpactKind::Metal, "{:?}", of(canister));
+        assert!(!of(canister).decal, "no mark in the air");
+        assert_eq!(of(bare).kind, ImpactKind::Soil);
+        assert!(of(bare).decal);
     }
 
     /// A round that hurts a robot shows it, differently by part; one off a

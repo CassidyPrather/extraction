@@ -38,6 +38,7 @@ impl Plugin for RobotVisualsPlugin {
                 super::plough_look::PloughLookPlugin,
                 super::hit_gauge::HitGaugePlugin,
                 super::wear::WearPlugin,
+                super::distress_look::DistressLookPlugin,
             ))
             .add_systems(
                 Update,
@@ -341,7 +342,11 @@ fn dress_parts(
                 cache.last().unwrap().1.as_ref()
             }
         };
-        commands.entity(e).remove::<Undressed>();
+        // (Hit before it was dressed: worn again, its new pieces too.)
+        commands
+            .entity(e)
+            .remove::<Undressed>()
+            .insert(super::wear::Redress);
         // A dirigible's gondola plates: plain slabs, with a dark rim.
         if robot.kind == RobotKind::Dirigible && matches!(part.role, PartRole::Armour(_)) {
             commands.spawn((

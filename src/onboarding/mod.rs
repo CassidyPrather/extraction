@@ -746,6 +746,7 @@ impl Plugin for OnboardingPlugin {
                     first_hour::seed_job,
                     first_hour::first_fight,
                     first_hour::direct_raid,
+                    first_hour::square_through_doorways,
                 )
                     .chain(),
             )

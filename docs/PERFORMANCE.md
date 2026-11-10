@@ -1611,6 +1611,40 @@ each its own entity, within `robots::fx`'s caps: 106 sparks (24-vertex
 cubes, lit orange), 79 glancing sparks (grey), and 54 wound flares in
 the embers material.
 
+### A heavy, piece by piece
+
+What the eye draws of one settled heavy, every part on, from 9 m and
+from 14 m (the same: its first LOD holds to 27 m). Counted from the
+camera's own `VisibleEntities`, after `VisibilityRange` has picked an
+LOD. `hang` spawns all three of a part's LODs, so a count of every
+visible mesh comes out about three times this.
+
+| Piece | Drawn | Why that many |
+|---|---|---|
+| Hull and brow | 8 | one mesh a material |
+| Plates (3, items) | 9 | 3 a plate; they come off |
+| Cell (item) | 5 | it comes out |
+| Bolts, merged | 2 | `BoltsMerged`: one mesh a material for all 12 |
+| Bolts' weak-point rings | 12 | `weak_points`: a ring a bolt, one shared mesh and material |
+| Eye | 3 | lit, gutters |
+| Vents | 2 + 2 | lit, can be shot |
+| Knees | 3 each, 12 | posed with their leg |
+| Thighs | 2 each, 8 | posed segments |
+| Shins | 3 each, 12 | posed segments |
+| Upper arm, forearm | 3 + 3 | posed segments |
+| **Total** | **81** | |
+
+The sun's shadow: 68 of these cast in each of the flash's two cascades
+(136), and every caster is also drawn by the eye. No LOD casts that the
+eye doesn't draw, so the shadow count is twice the casters, not waste.
+
+Every limb segment is its own posed entity, already one mesh a material,
+so merging BoltsMerged's way has nothing left in them. What's rigid with
+the hull (eye, vents, knees, plates, cell) has to stay apart: it gutters,
+is shot off or comes out. Fewer draws a heavy would take fewer materials
+a segment, one atlas for Shell, Dark and Steel, which is a change to the
+model. The bar is met, so it's left: headroom to spend if it's needed.
+
 ### Overdraw counts what the GPU shades
 
 The coordinator approved the change on one condition: drop only layers the
@@ -1709,6 +1743,305 @@ Found on the way:
   rounds landed minutes before the shot and their dust was gone. With
   a gallery staged, `--frames` and those clocks start once the world is
   in.
+
+### Far stand-ins, a block a draw (7 November)
+
+Past 120 m a building is one stand-in mesh (`lod::StandIn`), and past the
+forest's far LOD so is a chunk's trees, all in one shared material. Each
+is still a draw. At Marrow's south gate that was 47 buildings' and 18
+chunks' draws an eye. `render::far_rest` merges every far stand-in in a
+192 m block that shares a material and vertex layout into one mesh, and
+hides theirs. The merged mesh is shown only while every stand-in in it is
+drawn whole for every eye: inside its own `VisibilityRange`, clear of
+both crossfades. When one isn't, the block draws its stand-ins again and
+is merged afresh from those that are. The same happens when one moves,
+comes, goes or has its mesh changed. Blended stand-ins are left alone.
+
+Stand-in meshes live on the GPU alone (`RenderAssetUsages::RENDER_WORLD`),
+so their data is gone from the main world once drawn. Each is copied the
+frame it comes, before extraction takes it. At Marrow that is 357 meshes,
+about 23 MiB. A stand-in never seen readable draws as itself.
+`EXTRACTION_FAR_REST=0` turns the merge off. `EXTRACTION_FAR_REST_LOG=1`
+prints what is shown merged and the size of the copies.
+
+**Marrow, three runs each (draws, both eyes, against 2400):**
+
+| view | before | after | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2263-2287 | 2121, 2153, 2189 | 9-12% |
+| gate insertion 2 | | 2018, 2000, 2045 | 15-17% |
+| s01_ahead | | 1890, 1924, 1896 | 20-21% |
+
+At the fuel exfil, building stand-ins went from 47 an eye to 5, and far
+chunks from 18 to 4, with about 11 merged meshes in their place.
+
+**What is drawn is the same.**
+- `a_blocks_far_stand_ins_draw_merged_only_while_each_is_whole` checks
+  the merged mesh holds exactly the hidden stand-ins' triangles. It does
+  this from far off, in one stand-in's crossfade, near, after a move and
+  after a despawn, with a sheared member and GPU-only members.
+- The ignored `gauge_every_far_stand_in_draws_merged_as_its_own` checks
+  every valley's merged blocks triangle for triangle, then rasterises
+  each member's view both ways. In all five valleys it finds 0 blocks
+  unlike and 0 pixels differing (95-190 stand-ins a valley).
+- In the game, at the fuel exfil (`--camera 28,0,154.5,0,0`, Marrow,
+  clearing, 11:00), 109 stand-ins are drawn in 11 merged meshes.
+  Against the same shot unmerged, the largest difference is 4 out of
+  255, and 4 pixels of 1.44M differ by more than 2.
+
+Found on the way:
+- **A puff batched kept its visibility class.** The visibility pass
+  listed it as a mesh to draw each frame, though nothing was. It is now
+  removed with the mesh.
+- **`Mesh::transformed_by` drops shear.** A stand-in under an unevenly
+  scaled parent moved wrong. Members now go into the block's frame by
+  their full affine.
+
+### Marrow's gate within 10%: windows and guns (7 November)
+
+The bar for the worst view was 10% headroom: at most 2160 draws, both
+eyes, in 3 runs of 3. After the far merge, the fuel exfil met it in 2
+runs of 3. Two more changes closed the gap.
+
+- **Windows in their shell's own material are drawn with the shell**
+  (`buildings::fold_windows`). Where a window prop's material was the
+  shell's own, it was still a draw of its own. That was 8 of 20 at the
+  fuel exfil and 13 of 33 at the gate insertion. Those windows are now
+  in the shell's mesh and cast its shadow, which lands on their own
+  reveal or sill.
+- **A weathered gun has one material copy per source material**
+  (Gunsmith, `weapons::weather`). Each part used to get a copy of its own,
+  keyed by its frame at that moment. So `gun_rest` found about one group
+  a part and declined 1 to 8 of Marrow's 13 guns, different in each run.
+  The fuel exfil swung 2121-2229 on one binary. Each part's rest pose now
+  rides in its `MeshTag`, which the wear shader reads. `gun_rest` declines
+  none, and each gun groups the same way every run, at about 9 draws a
+  gun: by material, by whether it casts, and by small-part shadow reach.
+  `EXTRACTION_GUN_REST_LOG=1` prints every gun put to rest or declined,
+  with its parts and groups.
+
+**On main 511af01e, three runs (draws, both eyes, against 2400):**
+
+| view | after far merge | now | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2121, 2153, 2189 | 2097, 2097, 2079 | 12.6-13.4% |
+| gate insertion 2 | 2018, 2000, 2045 | 1966, 1966, 1966 | 18.1% |
+| s01_ahead | 1890, 1924, 1896 | 1786, 1876, 1790 | 21.8-25.6% |
+
+### Correction: the fight's drone was out of view (8 November)
+
+The three runs above, and the bar they met, were measured without the
+fight's drone. The gauge's fight puts a drone 12 m ahead and 6 m up, in
+the eyes' view. But while each view settled the drone flew its watch,
+and whether it was still in view when measured depended on timing: in
+the first view of a run never, in later ones mostly. A drone in view is
+about 44 draws an eye (its rotors 24, its body 17). So the fuel exfil
+read about 2097 without it and about 2185 with it, and the runs reported
+were the ones without.
+
+The gauge now holds the fight's drone where it came, in view, through
+every view's measure (`GaugePin`). It also loads the fighters' models
+before staging the first fight. `WORST_DRONE_LOG=1` prints where the
+drone was when its view was measured, and how many of its meshes were
+seen.
+
+**With the drone in view, three runs (draws, both eyes, against 2400):**
+
+| view | runs | headroom |
+| - | - | - |
+| gate fuel exfil 2 | 2189, 2189, 2189 | 8.8% |
+| gate insertion 2 | 2072, 2070, 2056 | 13.7-14.3% |
+| s01_ahead | 1878, 1880, 1878 | 21.7-21.8% |
+
+The fuel exfil is short of the 10% bar (at most 2160) by 29 draws, both
+eyes. The drone itself is no cheaper to draw at fight range without
+losing its per-part scorch and weathering (Robot bodies). The rest is
+being looked for elsewhere in the view.
+
+### Loose magazines rest merged: the bar met with the drone in view (8 November)
+
+A magazine model shows each round it holds, three meshes a round. A gun
+lying out was already drawn merged with its seated magazine
+(`render::gun_rest`), but a magazine or clip lying on its own was not.
+That was about 100 draws an eye at the fuel exfil: a PPSh drum's 42, two
+stripper clips' 30, a PM magazine's 12, and more. `gun_rest` now rests a
+loose magazine or clip too, as one mesh per material. Its rounds change
+only in hand, and a hand wakes it, as it wakes a gun
+(`a_loose_magazine_rests_merged_and_wakes_in_hand`).
+
+**Three runs, the drone in view (draws, both eyes, against 2400):**
+
+| view | before | after | headroom |
+| - | - | - | - |
+| gate fuel exfil 2 | 2189, 2191, 2191 | 2023, 2027, 2025 | 15.6-15.7% |
+| gate insertion 2 | 2064, 2072, 2072 | 1966, 1982, 1974 | 17.4-18.1% |
+| s01_ahead | 1880, 1880, 1880 | 1714, 1718, 1714 | 28.4-28.6% |
+
+The fuel exfil is within the 10% bar (at most 2160), 3 runs of 3, with
+the fight's drone in view. Heavy's merged weak-point rings, on their
+branch, are another 22 draws off it.
+
+### Resting guns past 6 m drawn from their far level (9 November)
+
+A resting gun drew its full model at any distance: an AK-74 is 29,108
+triangles, and Cinder Works' gate views had 13 guns in sight. That took
+the fuel exfil to 1846k triangles, over the 1.8M budget. Gunsmith exports
+a far level for every gun, `assets/models/guns/<id>_lod1.glb`, at about
+a quarter of the triangles (the AK-74's is 7,269). It has one node per
+material, named after the material, in the gun's own space at its
+resting pose.
+
+`gun_rest` now hands a resting gun over to it. The merged near meshes
+end at 6 m and the far level starts there, cross-fading over
+5.5-6.5 m (`VisibilityRange`, `FAR_AT`). The far level wears the gun's
+own weathered materials (`WeatheredLook::copy_named`). A gun is drawn
+whole when its far level is missing, or when the far level names a
+material the gun doesn't wear. Parts fitted to the gun (a scope, a
+magazine) keep their own merged meshes at every distance. Waking the gun
+removes the far level with the rest. `EXTRACTION_GUN_FAR=0` keeps every
+resting gun whole, for comparison. With `EXTRACTION_GUN_REST_LOG` set,
+each gun logs where it lies when its far level attaches. Test:
+`gun_rest::tests::a_resting_gun_hands_over_to_its_far_level`; Gunsmith's
+guard is `models::tests::every_gun_has_its_far_stand_in`.
+
+On Marrow all 17 resting guns attach their far level. The pictures show
+two rows of guns at the insertion, far level off (top) and on (bottom):
+- row A: AK-74, Mosin, PM, TOZ double;
+- row B: crossbow, flare pistol, MP-133, Nagant, PPSh, RPK-74, SKS, SVD,
+  TOZ-8.
+
+At 6 m the only difference is the cross-fade's dither on a gun lying
+right at the hand-over. At 15 m it is 19 pixels in row A's crop and
+about ten in row B's, single glints. Gunsmith signed off on each gun from
+these. See `docs/shots/performance/gun_far_row{a,b}_{6,15}m_off_on.jpg`.
+
+**Cinder Works' gate views, far level off and on (stereo, one run):**
+
+| view | off | on |
+| - | - | - |
+| gate fuel exfil 2 | 1928 draws, 1846k triangles | 1830 draws, 1501k triangles |
+| s01_ahead | 1849 draws, 1800k triangles | 1801 draws, 1593k triangles |
+| gate insertion 2 | 1641 draws, 1570k triangles | 1585 draws, 1355k triangles |
+
+### Five valleys within both budgets, 3 runs each (9 November, on main)
+
+Measured on main at 041f2bb4. It has every far level, the weather fix
+(a gun's look waits for its model), the far-level check in every budget
+view, Kettle's two fork lamps, and Visual design's markers and Gate lamp.
+For each valley, one full run found its five heaviest views at night, in a
+storm, in a fight. Then 3 runs measured those five plus the valley's gate
+views: the fuel exfil, the insertion, its own gate stop and s01_ahead.
+Views are listed heaviest first, for both eyes, against 2400 draws and
+1800k triangles. Every view stayed inside both budgets in every run, and
+no gun was drawn whole where its far level should be. This is the record
+to check against the headset.
+
+**Marrow Creek**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| poi_radio_mast_0 | 1986, 1930, 1964 | 1099k, 1095k, 1102k | 83% |
+| exfil_south_gate__fuel__2 | 1902, 1906, 1902 | 1336k, 1337k, 1336k | 79% |
+| insertion_south_gate_2 | 1870, 1872, 1870 | 1349k, 1350k, 1349k | 78% |
+| poi_radio_mast_3 | 1732, 1306, 1836 | 925k, 897k, 921k | 76% |
+| m05_spruce | 1438, 1437, 1438 | 1356k, 1356k, 1356k | 75% |
+| s01_ahead | 1676, 1678, 1676 | 1272k, 1272k, 1272k | 71% |
+| m01_gate | 1405, 1405, 1405 | 1136k, 1136k, 1136k | 63% |
+
+**Kettle Pass**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| s23_side | 1397, 1399, 1397 | 1507k, 1508k, 1507k | 84% |
+| s22_side | 1366, 1366, 1366 | 1442k, 1442k, 1442k | 80% |
+| exfil_south_gate__fuel__2 | 1636, 1636, 1636 | 1379k, 1379k, 1379k | 77% |
+| k02_row | 1499, 1493, 1497 | 1321k, 1322k, 1322k | 73% |
+| rendezvous_mine_yard_3 | 1124, 1124, 1124 | 1303k, 1303k, 1303k | 72% |
+| insertion_south_gate_2 | 1413, 1411, 1411 | 1299k, 1299k, 1299k | 72% |
+| k01_gate | 1180, 1180, 1180 | 1248k, 1248k, 1248k | 69% |
+| s01_ahead | 1344, 1344, 1344 | 1099k, 1099k, 1099k | 61% |
+
+**Cinder Works**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| s01_ahead | 1833, 1807, 1807 | 1606k, 1598k, 1598k | 89% |
+| exfil_south_gate__fuel__2 | 1796, 1796, 1796 | 1497k, 1497k, 1497k | 83% |
+| insertion_south_gate_2 | 1549, 1549, 1549 | 1351k, 1351k, 1351k | 75% |
+| c01_gate | 1243, 1227, 1227 | 1206k, 1206k, 1206k | 67% |
+| s02_ahead | 1121, 1115, 1121 | 1201k, 1200k, 1201k | 67% |
+
+**Sallow Reservoir**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| exfil_south_gate__fuel__2 | 1528, 1528, 1528 | 1312k, 1312k, 1312k | 73% |
+| s01_side | 1492, 1494, 1492 | 1284k, 1284k, 1284k | 71% |
+| insertion_south_gate_2 | 1283, 1283, 1283 | 1192k, 1192k, 1192k | 66% |
+| s01_ahead | 1251, 1251, 1251 | 1176k, 1176k, 1176k | 65% |
+| poi_the_silt_fans_0 | 1552, 1538, 1552 | 940k, 940k, 940k | 65% |
+| s01_gate | 978, 982, 980 | 1033k, 1034k, 1033k | 57% |
+
+**Rime Fell**
+
+| view | draws | triangles | most of budget |
+| - | - | - | - |
+| exfil_south_gate__fuel__2 | 1434, 1434, 1436 | 1303k, 1303k, 1303k | 72% |
+| s01_ahead | 1557, 1553, 1549 | 1293k, 1293k, 1292k | 72% |
+| insertion_south_gate_2 | 1546, 1540, 1538 | 1288k, 1287k, 1287k | 72% |
+| rendezvous_the_col_0 | 966, 960, 966 | 1189k, 1188k, 1188k | 66% |
+| poi_compressor_house_1 | 1078, 1082, 1082 | 1174k, 1174k, 1174k | 65% |
+| r01_gate | 918, 918, 918 | 1073k, 1073k, 1073k | 60% |
+
+The tightest view on triangles is Cinder Works' s01_ahead, at most 1606k
+(89%). The tightest on draws is Marrow's radio mast, at most 1986 (83%).
+At the fuel exfils the bar is 2160 draws, and the most is Marrow's 1906.
+Kettle's fuel exfil, with its fork lamps, is 1636 draws and 1379k
+triangles in every run (77%). An earlier 96% there came from a branch
+without the weather fix.
+
+Most views now read the same in every run, to within a few draws. The
+swing that remains is the fight around Marrow's radio mast: its mast_3 view
+went 1306-1836 draws as the drones moved.
+
+Measured further (6 runs with every owner listed): the swing is whether the
+fight's robots stand in that view's frame, not a cost that grows. When they
+do, each costs the same in every run: the heavy 104 draws an eye, a hound
+walker 51, other robot pieces 36, drones and their rotors 41, so 1808-1842
+draws in all (75-77%). When they stand outside the frame, it is 1312-1550,
+and the shadow draws are the same either way (872-884), because the robots
+are still there. A cut would have to merge each moving robot's pieces by
+bone and material, in the heavy's and robot bodies' code. At 77% with 23%
+headroom that isn't worth it yet. If more robots are staged in one view,
+start there.
+
+### Cinder's gate held: a gun's look waits for its model (9 November)
+
+On main (eaff51ca), Cinder Works' s01_ahead swung 1598k to 1785k triangles
+run to run, and its fuel exfil 1506k to 1720k. Everything but guns drew
+the same in every run. In the heavy runs some resting guns were drawn
+whole past 6 m, at 10-23k triangles an eye each, instead of their far
+level. gun_rest's log (`EXTRACTION_GUN_REST_LOG`) showed 1 to 8 guns a run
+"kept whole", a different few each time.
+
+The cause was `weapons::weather::weather_looks`. It makes a gun's weathered
+look once, from the meshes on the gun at the time. A gun whose model loaded
+a frame late had only its extras then (the crown, the chamber marks). Its
+look was made of those, with no material names, and was never made again.
+That gun never weathered, and its far level found none of its materials.
+Now a gun gets no look while its model is loading (`PendingGunModel`).
+Test: `a_gun_still_loading_its_model_waits_for_its_look`, which fails
+without the guard.
+
+**Cinder Works after (6 runs):**
+- s01_ahead: 1598k triangles (89%) in every run;
+- fuel exfil: 1506k (84%) in every run;
+- all 14 guns took their far level in every run.
+
+The other systems that make a look from a model's meshes were checked for
+the same race. Robot wear had a narrower form of it (a part worn while its
+model was still undressed); Robot bodies' fix is `wear::Redress` (bac81dd3,
+on its way through their gate).
 
 ## What's next (paused 2 November)
 

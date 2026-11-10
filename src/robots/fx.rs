@@ -19,6 +19,12 @@ pub const MAX_PUFFS: usize = 64;
 pub const MAX_EMBERS: usize = 4;
 /// Bullet marks on robot shells, all robots together.
 pub const MAX_MARKS: usize = 160;
+/// And on any one robot: a long fight's worth, each mark its own draw
+/// (Marrow's mast once drew 320 of them on one heavy).
+pub const MARKS_PER_ROBOT: usize = 24;
+/// Past this a mark (a 1.4-3.5 cm disc) is under a pixel bare-eyed: not
+/// drawn (m), unless through a scope ([`MarkReach`]).
+pub const MARKS_SEEN: f32 = 12.0;
 /// How long a wreck smoulders, seconds.
 const SMOULDER: f32 = 150.0;
 
@@ -27,6 +33,7 @@ pub struct RobotFxPlugin;
 impl Plugin for RobotFxPlugin {
     fn build(&self, app: &mut App) {
         crate::render::puff::add_to(app);
+        app.init_resource::<MarkReach>();
         app.add_systems(
             Update,
             (
@@ -38,6 +45,7 @@ impl Plugin for RobotFxPlugin {
                 cell_arcs,
                 hazard_bursts,
                 strike_flashes,
+                mark_reach,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -71,6 +79,8 @@ struct FxAssets {
     /// unlit as every other puff is (`weapons`' all are): lit, a few far,
     /// small puffs of it came out as single pure-black pixels.
     soot: Handle<StandardMaterial>,
+    /// A flare canister's burning trail: signal red, as a real flare's.
+    flare_smoke: Handle<StandardMaterial>,
     /// Blue-white, for a crawler's arcs and crackle.
     arc: Handle<StandardMaterial>,
     /// Water thrown up by a foot.
@@ -133,6 +143,7 @@ fn assets(
         smoke: smoke_thin[0].clone(),
         smoke_thin,
         soot: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
+        flare_smoke: materials.add(puffs.material(Color::srgba(0.95, 0.22, 0.16, 0.45), false)),
         arc: materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
@@ -336,6 +347,14 @@ const COLUMN: Rise = Rise {
     life: 5.5,
 };
 
+/// A flare canister's trail: hanging where it was laid, slow to rise, a
+/// line to follow up to it.
+const FLARE_TRAIL: Rise = Rise {
+    rise: 0.15,
+    wander: 0.05,
+    life: 3.0,
+};
+
 /// Puffs a second off a weapon that's been shot off (and the robot still
 /// standing): the column's density.
 const DEAD_GUN_SMOKE: f32 = 2.5;
@@ -347,10 +366,22 @@ fn climbs(r: Rise) -> f32 {
     r.rise * (1.0 - (-0.3 * r.life).exp()) / 0.3
 }
 
-fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: bool, size: f32) {
+fn puff(
+    commands: &mut Commands,
+    a: &FxAssets,
+    dice: &mut Dice,
+    at: Vec3,
+    dark: bool,
+    size: f32,
+) -> Entity {
     let mat = if dark { &a.soot } else { &a.smoke };
-    puff_rising(commands, a, dice, at, mat.clone(), size, WISP);
+    puff_rising(commands, a, dice, at, mat.clone(), size, WISP)
 }
+
+/// A failing machine's soot, and whose: the hit gauge counts a machine's
+/// own soot, not a neighbour's drifting past it.
+#[derive(Component)]
+pub struct SootOf(pub Entity);
 
 #[allow(clippy::too_many_arguments)]
 fn puff_rising(
@@ -361,22 +392,24 @@ fn puff_rising(
     mat: Handle<StandardMaterial>,
     size: f32,
     r: Rise,
-) {
+) -> Entity {
     let max = r.life * (0.8 + dice.f() * 0.4);
-    commands.spawn((
-        Puff {
-            vel: Vec3::Y * r.rise * (0.8 + dice.f() * 0.4) + dice.signed() * r.wander,
-            life: max,
-            max,
-            size,
-        },
-        Mesh3d(a.puff.clone()),
-        crate::render::puff::SoftPuff,
-        bevy::camera::visibility::NoFrustumCulling,
-        MeshMaterial3d(mat),
-        Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
-        NotShadowCaster,
-    ));
+    commands
+        .spawn((
+            Puff {
+                vel: Vec3::Y * r.rise * (0.8 + dice.f() * 0.4) + dice.signed() * r.wander,
+                life: max,
+                max,
+                size,
+            },
+            Mesh3d(a.puff.clone()),
+            crate::render::puff::SoftPuff,
+            bevy::camera::visibility::NoFrustumCulling,
+            MeshMaterial3d(mat),
+            Transform::from_translation(at).with_scale(Vec3::splat(size * 0.3)),
+            NotShadowCaster,
+        ))
+        .id()
 }
 
 /// A hurt part shows it (`damage::tell`): sparks, smoke and coolant off
@@ -384,8 +417,14 @@ fn puff_rising(
 /// tick together.
 fn sputter(
     mut commands: Commands,
-    parts: Query<(Entity, &RobotPart, &GlobalTransform)>,
+    parts: Query<(
+        Entity,
+        &RobotPart,
+        &GlobalTransform,
+        Option<&avian3d::prelude::ColliderAabb>,
+    )>,
     robots: Query<&Robot>,
+    sorters: Query<&super::sorter::Sorter>,
     sparks: Query<(), With<Spark>>,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
@@ -393,6 +432,7 @@ fn sputter(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut counts: Local<std::collections::HashMap<Entity, Vec3>>,
+    mut wisps: Local<std::collections::HashMap<Entity, f32>>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut dice: Local<Dice>,
@@ -402,10 +442,27 @@ fn sputter(
     let (mut n_sparks, mut n_puffs) = (sparks.iter().len(), puffs.iter().len());
     let mut a = None;
     counts.retain(|e, _| parts.contains(*e));
-    for (e, part, gt) in &parts {
+    // Each machine's most nearly gone part still going, and where.
+    let mut failing: std::collections::HashMap<Entity, (f32, Vec3)> = Default::default();
+    for (e, part, gt, bounds) in &parts {
         // A wreck smoulders instead (`smoulder`).
         if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
+        }
+        let share = part.hp / part.max_hp.max(1.0);
+        if super::wear::failing(part) {
+            let worst = failing.entry(part.robot).or_insert((f32::MAX, Vec3::ZERO));
+            // Its top: soot let out of a part's middle would rise inside it
+            // (a spotter's envelope is 2.8 m across) and fade unseen.
+            let mut at = gt.translation();
+            if let Some(b) = bounds.filter(|b| b.max.is_finite()) {
+                at.y = at.y.max(b.max.y);
+            }
+            // Of two as near gone, the higher: its soot clears more cover
+            // (a spotter's envelope, not its winch in the grass).
+            if share < worst.0 || (share == worst.0 && at.y > worst.1.y) {
+                *worst = (share, at);
+            }
         }
         let mut tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
         // A gun shot off sends up a column, every robot's alike.
@@ -466,6 +523,55 @@ fn sputter(
             }
         }
     }
+    // A machine with a part failing sends up a thread of soot from it,
+    // whatever the part (a plate's sparks and an eye's spit are too small
+    // to tell at 30 m): one a machine, never smaller at the eye than
+    // [`wisp_floor`], on the shared puff batch (no mesh of its own, no
+    // shadow).
+    wisps.retain(|r, _| failing.contains_key(r));
+    for (robot, (_, mut at)) in failing {
+        // A sorter's carriage hangs right under its bridge (and that under
+        // the ceiling): its soot leaves the carriage's side, off the rails'
+        // way and toward the eye, so it climbs beside the bridge, not into
+        // it.
+        if let Ok(s) = sorters.get(robot) {
+            let mut side = s.hall.rotation * Vec3::X;
+            if eye.is_some_and(|e| (e - at).dot(side) < 0.0) {
+                side = -side;
+            }
+            at += side * SORTER_SOOT_OUT;
+        }
+        let c = wisps.entry(robot).or_insert_with(|| dice.f());
+        *c += WISP_RATE * dt * (0.7 + 0.6 * dice.f());
+        if *c < 1.0 || n_puffs >= MAX_PUFFS {
+            continue;
+        }
+        *c -= 1.0;
+        let a = a.get_or_insert_with(|| {
+            assets(&mut commands, &existing, &soft, &mut meshes, &mut materials)
+        });
+        let d = eye.map_or(0.0, |e| e.distance(at));
+        let size = (0.3 * at_range(eye, at).sqrt()).max(wisp_floor(d));
+        // Soot, not pale smoke: grey on an overcast sky is a big puff no
+        // one sees.
+        let soot = puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, true, size);
+        commands.entity(soot).insert(SootOf(robot));
+        n_puffs += 1;
+    }
+}
+
+/// How far out from a sorter carriage's middle its soot leaves (m): past
+/// its 0.7 m half width, clear of the bridge over it.
+const SORTER_SOOT_OUT: f32 = 0.9;
+
+/// Wisps a second from a machine with a part failing.
+pub const WISP_RATE: f32 = 1.4;
+
+/// A failing machine's wisp's least size `d` m from the eye: a puff is
+/// born at a third of it and swells, so this keeps it [`MIN_SPAN_DEG`]
+/// across from its first moments.
+pub fn wisp_floor(d: f32) -> f32 {
+    3.0 * flash_floor(d)
 }
 
 /// Whether `part` is a weapon that's been shot off.
@@ -891,22 +997,32 @@ fn zap_arcs(
 }
 
 /// A drone going down trails dark smoke.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn wreck_trails(
     mut commands: Commands,
-    falling: Query<(Entity, &GlobalTransform), With<super::wreck::Spiral>>,
+    // (A drone going down trails dark smoke. A flare canister going up
+    // trails burning red, as a real signal flare's, big enough at range to
+    // follow up to it and shoot it: a pale trail was lost against a grey
+    // sky, a dark one was thin.)
+    falling: Query<
+        (Entity, &GlobalTransform, Has<super::distress::Canister>),
+        Or<(With<super::wreck::Spiral>, With<super::distress::Canister>)>,
+    >,
     puffs: Query<(), With<Puff>>,
     existing: Option<Res<FxAssets>>,
     soft: Res<crate::render::puff::PuffAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut next: Local<std::collections::HashMap<Entity, f32>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut dice: Local<Dice>,
 ) {
     let dt = time.delta_secs();
     next.retain(|e, _| falling.contains(*e));
     let mut n = puffs.iter().len();
-    for (e, gt) in &falling {
+    let eye = cameras.iter().next().map(|g| g.translation());
+    for (e, gt, canister) in &falling {
         let t = next.entry(e).or_insert(0.0);
         *t -= dt;
         if *t > 0.0 || n >= MAX_PUFFS {
@@ -914,7 +1030,21 @@ fn wreck_trails(
         }
         *t = 0.05;
         let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
-        puff(&mut commands, &a, &mut dice, gt.translation(), true, 0.35);
+        if canister {
+            let at = gt.translation();
+            let size = 0.5 * at_range(eye, at);
+            puff_rising(
+                &mut commands,
+                &a,
+                &mut dice,
+                at,
+                a.flare_smoke.clone(),
+                size,
+                FLARE_TRAIL,
+            );
+        } else {
+            puff(&mut commands, &a, &mut dice, gt.translation(), true, 0.35);
+        }
         n += 1;
     }
 }
@@ -1388,10 +1518,80 @@ fn scuff_dust(
     }
 }
 
-/// Bullet marks on robot shells, oldest first (each mark is a pock and its
-/// hole).
+/// Bullet marks on robot shells, oldest first: the robot, and the mark (a
+/// pock and its hole).
 #[derive(Default)]
-struct Marks(std::collections::VecDeque<[Entity; 2]>);
+struct Marks(std::collections::VecDeque<(Entity, [Entity; 2])>);
+
+/// Which marks go when `robot` takes a new one (already pushed): that
+/// robot's oldest past [`MARKS_PER_ROBOT`], then anyone's oldest past
+/// [`MAX_MARKS`]. Removed from `marks`; returned to be despawned.
+fn marks_to_drop(
+    marks: &mut std::collections::VecDeque<(Entity, [Entity; 2])>,
+    robot: Entity,
+) -> Vec<[Entity; 2]> {
+    let mut out = Vec::new();
+    while marks.iter().filter(|m| m.0 == robot).count() > MARKS_PER_ROBOT {
+        let i = marks.iter().position(|m| m.0 == robot).unwrap();
+        out.extend(marks.remove(i).map(|m| m.1));
+    }
+    while marks.len() > MAX_MARKS {
+        out.extend(marks.pop_front().map(|m| m.1));
+    }
+    out
+}
+
+/// A bullet mark (its pock or its hole), for [`mark_reach`].
+#[derive(Component)]
+pub struct ShellMark;
+
+/// How far off marks are drawn now (m): [`MARKS_SEEN`], times the
+/// strongest scope being looked through. A scope is a view of its own
+/// (`gadgets::visuals`, its camera narrowed by its magnification), and a
+/// mark through a 4x scope at 30 m is the size it is bare-eyed at 7.5 m:
+/// seeing your hits land is what it's for. (The range is the mark's, not
+/// the view's, so the eyes draw them as far while it's up: only while
+/// aiming, and the scope's own pass costs more.)
+#[derive(Resource, Clone, Copy, Debug, PartialEq)]
+pub struct MarkReach(pub f32);
+
+impl Default for MarkReach {
+    fn default() -> Self {
+        Self(MARKS_SEEN)
+    }
+}
+
+/// A mark is drawn only out to `reach` (m), faded over its last metre.
+fn mark_range(reach: f32) -> bevy::camera::visibility::VisibilityRange {
+    bevy::camera::visibility::VisibilityRange {
+        start_margin: 0.0..0.0,
+        end_margin: (reach - 1.0)..reach,
+        use_aabb: false,
+    }
+}
+
+/// The marks' reach, from the scopes in use: written to every mark only
+/// when it changes (a scope raised or lowered).
+fn mark_reach(
+    scopes: Query<(&Camera, &ChildOf), With<crate::render::OffscreenCamera>>,
+    optics: Query<&crate::gadgets::Optic>,
+    mut reach: ResMut<MarkReach>,
+    mut marks: Query<&mut bevy::camera::visibility::VisibilityRange, With<ShellMark>>,
+) {
+    let mag = scopes
+        .iter()
+        .filter(|(c, _)| c.is_active)
+        .filter_map(|(_, p)| optics.get(p.parent()).ok())
+        .map(|o| o.magnification)
+        .fold(1.0f32, f32::max);
+    let now = MarkReach(MARKS_SEEN * mag);
+    if *reach != now {
+        *reach = now;
+        for mut r in &mut marks {
+            *r = mark_range(now.0);
+        }
+    }
+}
 
 /// A round that strikes a robot's shell leaves a mark on it: a bright pock
 /// with a dark hole, Weapon feel's look (`weapons::impacts`), parented to
@@ -1401,6 +1601,7 @@ fn shell_marks(
     mut impacts: MessageReader<crate::weapons::impacts::Impact>,
     parts: Query<(&RobotPart, &GlobalTransform)>,
     look: Option<Res<crate::weapons::impacts::FxAssets>>,
+    reach: Res<MarkReach>,
     mut marks: Local<Marks>,
 ) {
     use crate::weapons::impacts::{DECAL_PROUD, ImpactKind};
@@ -1433,6 +1634,8 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.035 / scale)),
                 NotShadowCaster,
+                mark_range(reach.0),
+                ShellMark,
                 ChildOf(part_e),
             ))
             .id();
@@ -1444,16 +1647,16 @@ fn shell_marks(
                     .with_rotation(local_rot)
                     .with_scale(Vec3::splat(0.014 / scale)),
                 NotShadowCaster,
+                mark_range(reach.0),
+                ShellMark,
                 ChildOf(part_e),
             ))
             .id();
-        marks.0.push_back([pock, hole]);
-        while marks.0.len() > MAX_MARKS {
-            if let Some(old) = marks.0.pop_front() {
-                for e in old {
-                    if let Ok(mut ec) = commands.get_entity(e) {
-                        ec.despawn();
-                    }
+        marks.0.push_back((part.robot, [pock, hole]));
+        for old in marks_to_drop(&mut marks.0, part.robot) {
+            for e in old {
+                if let Ok(mut ec) = commands.get_entity(e) {
+                    ec.despawn();
                 }
             }
         }
@@ -1537,6 +1740,88 @@ fn splash_steps(
 #[cfg(test)]
 mod strike_tests {
     use super::*;
+
+    /// Marks are drawn out to [`MARKS_SEEN`], or that times the strongest
+    /// scope looked through while one is up; back again when it's down.
+    #[test]
+    fn a_scope_sees_marks_further() {
+        use bevy::camera::visibility::VisibilityRange;
+        let mut app = App::new();
+        app.init_resource::<MarkReach>()
+            .add_systems(Update, mark_reach);
+        let mark = app
+            .world_mut()
+            .spawn((ShellMark, mark_range(MARKS_SEEN)))
+            .id();
+        let optic = app
+            .world_mut()
+            .spawn(crate::gadgets::Optic {
+                magnification: 4.0,
+                eye: Vec3::ZERO,
+            })
+            .id();
+        let cam = app
+            .world_mut()
+            .spawn((
+                crate::render::OffscreenCamera,
+                Camera {
+                    is_active: false,
+                    ..default()
+                },
+                ChildOf(optic),
+            ))
+            .id();
+        let end = |app: &App| {
+            app.world()
+                .get::<VisibilityRange>(mark)
+                .unwrap()
+                .end_margin
+                .end
+        };
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN, "no scope up");
+        app.world_mut().get_mut::<Camera>(cam).unwrap().is_active = true;
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN * 4.0, "through a 4x scope");
+        assert_eq!(app.world().resource::<MarkReach>().0, MARKS_SEEN * 4.0);
+        app.world_mut().get_mut::<Camera>(cam).unwrap().is_active = false;
+        app.update();
+        assert_eq!(end(&app), MARKS_SEEN, "the scope down");
+    }
+
+    /// A robot keeps its newest [`MARKS_PER_ROBOT`] marks, the oldest going
+    /// first; all robots together keep [`MAX_MARKS`], the oldest anyone's.
+    #[test]
+    fn marks_are_kept_few_and_newest() {
+        let mut w = World::new();
+        let (a, b) = (w.spawn_empty().id(), w.spawn_empty().id());
+        let mut marks = std::collections::VecDeque::new();
+        let mut made = Vec::new();
+        for _ in 0..40 {
+            let m = [w.spawn_empty().id(), w.spawn_empty().id()];
+            made.push(m);
+            marks.push_back((a, m));
+            let gone = marks_to_drop(&mut marks, a);
+            assert!(gone.len() <= 1);
+        }
+        assert_eq!(marks.len(), MARKS_PER_ROBOT);
+        let kept: Vec<_> = marks.iter().map(|m| m.1).collect();
+        assert_eq!(kept, made[40 - MARKS_PER_ROBOT..], "the newest kept");
+        // Many robots: the global cap holds, oldest first.
+        let mut marks = std::collections::VecDeque::new();
+        let mut first = None;
+        for k in 0..(MAX_MARKS + 10) {
+            let r = if k % 2 == 0 { a } else { w.spawn_empty().id() };
+            let m = [w.spawn_empty().id(), w.spawn_empty().id()];
+            first.get_or_insert(m);
+            marks.push_back((r, m));
+            marks_to_drop(&mut marks, r);
+        }
+        assert!(marks.len() <= MAX_MARKS);
+        assert!(marks.iter().filter(|m| m.0 == a).count() <= MARKS_PER_ROBOT);
+        assert!(!marks.iter().any(|m| Some(m.1) == first));
+        let _ = b;
+    }
 
     /// Each kind of hit has its own look, and the more it mattered the
     /// louder it is: a shrug has no flash and dull streaks; a wound a small

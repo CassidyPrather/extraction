@@ -239,6 +239,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Eye",
     "Strange",
     "Beacon",
+    "MarkerLens",
     // World props (art/props).
     "Timber",
     "Rusty",
@@ -289,6 +290,18 @@ pub struct ModelMaterials {
 }
 
 impl ModelMaterials {
+    /// A material taken as `name`'s, for tests that have no material
+    /// library to make it from.
+    #[cfg(test)]
+    pub fn insert_for_test(
+        &mut self,
+        name: &str,
+        h: Handle<StandardMaterial>,
+    ) -> Handle<StandardMaterial> {
+        self.cache.insert(name.to_owned(), h.clone());
+        h
+    }
+
     /// The material made for `name`, if it has been.
     pub fn cached(&self, name: &str) -> Option<&Handle<StandardMaterial>> {
         self.cache.get(name)
@@ -516,6 +529,11 @@ impl ModelMaterials {
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
+            // The machines' boundary stake's lens
+            // (`world::way_lamps::MARKER_LAMP_AT`): frosted, unlit, its own
+            // handle so `render` drives its emissive (amber, pulsed) without
+            // touching the robots' Warn trims.
+            "MarkerLens" => flat(materials, Color::srgb(0.82, 0.82, 0.8), 0.0, 0.2),
             // A robot's eye is a signal lamp: fog doesn't wash it out.
             "Eye" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.1, 0.02, 0.02),
@@ -1033,6 +1051,114 @@ mod tests {
             "gun boxes that aren't their models:\n{}",
             bad.join("\n")
         );
+    }
+
+    /// Every gun has its far stand-in (`<id>_lod1.glb`, `art/common.py`'s
+    /// `export_lod`): one mesh node for each material the gun wears at rest,
+    /// named for it, in the gun's space (no node transform), each with
+    /// positions, normals, UVs and indices, and at most 35% of the gun's
+    /// triangles. `render::gun_rest` draws it past a few metres in the
+    /// gun's own weathered copies, found by those names.
+    #[test]
+    fn every_gun_has_its_far_stand_in() {
+        use extraction_core::items::{BUILTIN_CATALOG, Category, ItemCatalog};
+        // What the stand-in leaves out: shown by the gun's state.
+        const STATEFUL: &[&str] = &[
+            "cylinder_round_",
+            "cylinder_case_",
+            "string_drawn",
+            "bolt_string",
+        ];
+        fn gltf(path: &Path) -> serde_json::Value {
+            let bytes = std::fs::read(path).unwrap();
+            let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+            serde_json::from_slice(&bytes[20..20 + len]).unwrap()
+        }
+        fn tris(j: &serde_json::Value) -> u64 {
+            j["meshes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|m| m["primitives"].as_array().unwrap().iter())
+                .map(|p| {
+                    j["accessors"][p["indices"].as_u64().unwrap() as usize]["count"]
+                        .as_u64()
+                        .unwrap()
+                        / 3
+                })
+                .sum()
+        }
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let root = crate::asset_root_path().join("models").join("guns");
+        let mut bad = Vec::new();
+        for (_, def) in cat.iter() {
+            if def.category != Category::Firearm {
+                continue;
+            }
+            let id = &def.id;
+            let far_path = root.join(format!("{id}_lod1.glb"));
+            if !far_path.exists() {
+                bad.push(format!("{id}: no {id}_lod1.glb"));
+                continue;
+            }
+            let (near, far) = (gltf(&root.join(format!("{id}.glb"))), gltf(&far_path));
+            let mats = |j: &serde_json::Value, i: u64| {
+                j["materials"][i as usize]["name"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string()
+            };
+            let mut worn = std::collections::BTreeSet::new();
+            for n in near["nodes"].as_array().unwrap() {
+                let Some(m) = n["mesh"].as_u64() else {
+                    continue;
+                };
+                let name = n["name"].as_str().unwrap_or("");
+                if STATEFUL.iter().any(|s| name.starts_with(s)) {
+                    continue;
+                }
+                for p in near["meshes"][m as usize]["primitives"].as_array().unwrap() {
+                    worn.insert(mats(&near, p["material"].as_u64().unwrap()));
+                }
+            }
+            let mut nodes = std::collections::BTreeSet::new();
+            for n in far["nodes"].as_array().unwrap() {
+                let Some(m) = n["mesh"].as_u64() else {
+                    continue;
+                };
+                let name = n["name"].as_str().unwrap_or("").to_string();
+                if !n["translation"].is_null() || !n["rotation"].is_null() || !n["scale"].is_null()
+                {
+                    bad.push(format!("{id}_lod1: {name} is moved off the gun's space"));
+                }
+                for p in far["meshes"][m as usize]["primitives"].as_array().unwrap() {
+                    let a = &p["attributes"];
+                    if a["POSITION"].is_null()
+                        || a["NORMAL"].is_null()
+                        || a["TEXCOORD_0"].is_null()
+                        || p["indices"].is_null()
+                    {
+                        bad.push(format!(
+                            "{id}_lod1: {name} lacks positions, normals, UVs or indices"
+                        ));
+                    }
+                    if mats(&far, p["material"].as_u64().unwrap_or(u64::MAX)) != name {
+                        bad.push(format!("{id}_lod1: {name} isn't named for its material"));
+                    }
+                }
+                nodes.insert(name);
+            }
+            if nodes != worn {
+                bad.push(format!(
+                    "{id}_lod1: materials {nodes:?}, the gun wears {worn:?}"
+                ));
+            }
+            let (t_near, t_far) = (tris(&near), tris(&far));
+            if t_far * 100 > t_near * 35 {
+                bad.push(format!("{id}_lod1: {t_far} triangles of {t_near}"));
+            }
+        }
+        assert!(bad.is_empty(), "guns' far stand-ins:\n{}", bad.join("\n"));
     }
 
     /// The art kit's preview palette names the same materials as the game.

@@ -18,6 +18,8 @@ pub mod damage;
 pub mod devices;
 pub mod director;
 pub mod dirigible;
+pub mod distress;
+pub mod distress_look;
 pub mod disturbed;
 pub mod doors;
 pub mod drone;
@@ -59,6 +61,7 @@ pub mod pressure;
 pub mod pylon;
 pub mod recall;
 pub mod reel;
+pub mod rock;
 pub mod salvage;
 pub mod search;
 pub mod senses;
@@ -278,6 +281,9 @@ pub struct Intent {
     pub look: Option<Vec3>,
     pub pace: f32,
     pub low: bool,
+    /// Face `look` even with someone in sight: its back turned on them (a
+    /// heavy that has let you go, `heavy_mind`).
+    pub look_away: bool,
 }
 
 impl Default for Intent {
@@ -286,6 +292,7 @@ impl Default for Intent {
             look: None,
             pace: 1.0,
             low: false,
+            look_away: false,
         }
     }
 }
@@ -389,6 +396,7 @@ impl Plugin for RobotsPlugin {
                 director::DirectorPlugin,
                 pressure::PressurePlugin,
                 tell_log::TellLogPlugin,
+                distress::DistressPlugin,
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
@@ -414,7 +422,11 @@ impl Plugin for RobotsPlugin {
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
-            .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
+            .add_plugins((
+                hazard_look::HazardLookPlugin,
+                weak_points::WeakPointsPlugin,
+                rock::RockPlugin,
+            ))
             .add_systems(
                 FixedUpdate,
                 (
@@ -485,6 +497,7 @@ fn damage_parts(
             normal: hit.normal,
             dir: hit.velocity.normalize_or_zero(),
             dealt,
+            momentum: hit.mass_g / 1000.0 * hit.velocity.length(),
             strike: damage::strike(part.role, part.hp, part.max_hp, dealt),
         });
         if !part.alive() {

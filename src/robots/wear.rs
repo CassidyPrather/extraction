@@ -14,7 +14,7 @@
 //! dirigible's fabric each go their own way. `hit_gauge` holds every part
 //! of every machine to it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
@@ -35,7 +35,7 @@ pub struct WearPlugin;
 impl Plugin for WearPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WornMaterials>()
-            .add_systems(Update, (last_hits, wear).chain());
+            .add_systems(Update, ((last_hits, redress, wear).chain(), gutter));
     }
 }
 
@@ -55,6 +55,30 @@ pub struct Worn {
     cracks: Vec<Entity>,
 }
 
+/// Put on a part, or a machine, whose drawn pieces have just changed (its
+/// model dressed on after loading): what's worn is worn again, new pieces
+/// with it. Without it a part hit before its model was dressed kept its
+/// band but not the look: the pieces dressed on after stayed whole till
+/// its next change of band.
+#[derive(Component)]
+pub struct Redress;
+
+fn redress(
+    mut commands: Commands,
+    flagged: Query<Entity, With<Redress>>,
+    mut worn: Query<(Entity, &RobotPart, &mut Worn)>,
+) {
+    for e in &flagged {
+        commands.entity(e).try_remove::<Redress>();
+        for (p, part, mut w) in &mut worn {
+            // (Whole wears nothing: nothing to do.)
+            if (p == e || part.robot == e) && w.band != 0 {
+                w.band = u8::MAX;
+            }
+        }
+    }
+}
+
 /// Where a part was last struck (local to it) and from which side.
 #[derive(Component, Clone, Copy)]
 struct LastHit {
@@ -65,6 +89,13 @@ struct LastHit {
 /// The worn copy of each material for each band.
 #[derive(Resource, Default)]
 struct WornMaterials(HashMap<(AssetId<StandardMaterial>, u8), Handle<StandardMaterial>>);
+
+/// A part still going but failing: what sends up a machine's soot
+/// (`fx::sputter`), gutters its lights ([`gutter`]) and may set off its
+/// flare. One test for all three, so they can't drift apart.
+pub fn failing(part: &RobotPart) -> bool {
+    part.alive() && Band::of(part.hp / part.max_hp.max(1e-3)) == Band::Failing
+}
 
 /// A band's number: 0 whole, 1 hurt, 2 failing (and gone: what's left of
 /// a dead part is failing to look at).
@@ -156,7 +187,7 @@ fn wear(
     mut commands: Commands,
     mut parts: Query<
         (Entity, &RobotPart, Option<&mut Worn>, Option<&LastHit>),
-        Or<(Changed<RobotPart>, Without<Worn>)>,
+        Or<(Changed<RobotPart>, Without<Worn>, Changed<Worn>)>,
     >,
     children: Query<&Children>,
     is_part: Query<(), With<RobotPart>>,
@@ -358,10 +389,155 @@ fn wear(
     }
 }
 
+/// A machine with a part failing gutters: what's lit of it (its eye, its
+/// lamps) drops out for a moment now and then, irregularly, and comes back
+/// no brighter than it was. It never brightens or pulses, as a machine's
+/// warning does (a lock, an aim, a chirp): it reads as broken, not as
+/// charging. For the machines that dress themselves (`heavy::OwnLook`) and
+/// the sorter; the rest gutter a hurt eye in `visuals`. Each lit piece
+/// swaps to a dark copy of its own material (shared a material, as
+/// [`worn`]'s are) and back, so a machine beside it with the same
+/// material isn't touched.
+#[derive(Component)]
+struct Guttered {
+    robot: Entity,
+    lit: Handle<StandardMaterial>,
+}
+
+/// How long a gutter's drop-outs and the light between them last (s).
+const OUT: (f32, f32) = (0.06, 0.22);
+const BETWEEN: (f32, f32) = (0.15, 1.1);
+/// A dropped-out light's glow, of its own.
+const DIM: f32 = 0.06;
+
+/// `EXTRACTION_GUTTER=out`, read once.
+struct HeldOut(bool);
+
+impl Default for HeldOut {
+    fn default() -> Self {
+        Self(std::env::var("EXTRACTION_GUTTER").is_ok_and(|v| v == "out"))
+    }
+}
+
+#[derive(Default)]
+struct GutterState {
+    out: bool,
+    left: f32,
+    seed: u64,
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn gutter(
+    mut commands: Commands,
+    parts: Query<&RobotPart>,
+    robots: Query<
+        (Entity, &super::Robot),
+        Or<(With<super::heavy::OwnLook>, With<super::sorter::Sorter>)>,
+    >,
+    children: Query<&Children>,
+    mats: Query<&MeshMaterial3d<StandardMaterial>, With<Mesh3d>>,
+    guttered: Query<(Entity, &Guttered)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: ResMut<WornMaterials>,
+    mut states: Local<HashMap<Entity, GutterState>>,
+    held: Local<HeldOut>,
+    time: Res<Time>,
+) {
+    let held = &held.0;
+    let dt = time.delta_secs();
+    let failing: HashSet<Entity> = parts
+        .iter()
+        .filter(|p| failing(p))
+        .map(|p| p.robot)
+        .collect();
+    // Back as it was, where a machine's mended or wrecked (a wreck's
+    // lights go out its own way).
+    let live = |r: Entity| robots.get(r).is_ok_and(|(_, rb)| !rb.wrecked) && failing.contains(&r);
+    states.retain(|r, _| live(*r));
+    for (robot, _) in &robots {
+        if !live(robot) {
+            continue;
+        }
+        let st = states.entry(robot).or_insert_with(|| GutterState {
+            seed: robot.to_bits().wrapping_mul(0x9E37_79B9_7F4A_7C15),
+            left: 0.4,
+            ..default()
+        });
+        st.left -= dt;
+        if st.left > 0.0 {
+            continue;
+        }
+        // `EXTRACTION_GUTTER=out`: held out, for a still of how a light
+        // that's dropped out looks (a still catches one about a frame in
+        // five).
+        st.out = !st.out || *held;
+        st.seed = st
+            .seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1);
+        let k = (st.seed >> 40) as f32 / (1u64 << 24) as f32;
+        let (lo, hi) = if st.out { OUT } else { BETWEEN };
+        st.left = lo + (hi - lo) * k;
+        // Its lit pieces, under it.
+        let mut stack = vec![robot];
+        while let Some(e) = stack.pop() {
+            if let Ok(c) = children.get(e) {
+                stack.extend(c.iter());
+            }
+            let Ok(m) = mats.get(e) else {
+                continue;
+            };
+            if st.out {
+                let Some(orig) = materials.get(&m.0).cloned() else {
+                    continue;
+                };
+                if !lit(&orig) || guttered.contains(e) {
+                    continue;
+                }
+                let key = (m.0.id(), GUTTER_BAND);
+                let dark = match made.0.get(&key) {
+                    Some(h) => h.clone(),
+                    None => {
+                        let mut d = orig.clone();
+                        d.emissive = orig.emissive * DIM;
+                        let h = materials.add(d);
+                        made.0.insert(key, h.clone());
+                        h
+                    }
+                };
+                commands.entity(e).try_insert((
+                    Guttered {
+                        robot,
+                        lit: m.0.clone(),
+                    },
+                    MeshMaterial3d(dark),
+                ));
+            } else if let Ok((_, g)) = guttered.get(e) {
+                commands
+                    .entity(e)
+                    .try_insert(MeshMaterial3d(g.lit.clone()))
+                    .remove::<Guttered>();
+            }
+        }
+    }
+    // A machine no longer failing (mended, or wrecked: a wreck's lights
+    // go out its own way) gets its lights back.
+    for (e, g) in &guttered {
+        if !live(g.robot) {
+            commands
+                .entity(e)
+                .try_insert(MeshMaterial3d(g.lit.clone()))
+                .remove::<Guttered>();
+        }
+    }
+}
+
+/// [`WornMaterials`]' key for a guttered light's dark copy.
+const GUTTER_BAND: u8 = 9;
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     /// Pieces that share a material share its worn copy: one material a
     /// band, never one a mesh (a copy each would put every mesh in a draw
@@ -440,6 +616,67 @@ mod tests {
         for (was, copies) in &worn {
             assert_eq!(copies.len(), 1, "{was:?} worn into {} copies", copies.len());
         }
+    }
+
+    /// A part hit before its model was dressed: the pieces dressed on
+    /// after wear its band once the dresser says so (`Redress`), not at
+    /// its next change of band.
+    #[test]
+    fn pieces_dressed_on_after_a_hit_wear_it() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .init_asset::<Mesh>()
+            .add_message::<RobotStruck>()
+            .add_plugins(WearPlugin);
+        let (mat, mesh) = {
+            let w = app.world_mut();
+            let mat = w
+                .resource_mut::<Assets<StandardMaterial>>()
+                .add(StandardMaterial::default());
+            let mesh = w.resource_mut::<Assets<Mesh>>().add(Cuboid::default());
+            (mat, mesh)
+        };
+        let robot = app.world_mut().spawn_empty().id();
+        let part = app
+            .world_mut()
+            .spawn((
+                RobotPart {
+                    robot,
+                    role: PartRole::Core,
+                    hp: 100.0,
+                    max_hp: 100.0,
+                },
+                Transform::default(),
+            ))
+            .id();
+        app.update();
+        // Failing, with nothing drawn yet.
+        app.world_mut().get_mut::<RobotPart>(part).unwrap().hp = 20.0;
+        app.update();
+        assert_eq!(app.world().get::<Worn>(part).unwrap().band, 2);
+        // Then dressed.
+        let piece = app
+            .world_mut()
+            .spawn((
+                Mesh3d(mesh),
+                MeshMaterial3d(mat.clone()),
+                Transform::default(),
+                ChildOf(part),
+            ))
+            .id();
+        app.world_mut().entity_mut(part).insert(Redress);
+        app.update();
+        app.update();
+        let now = app
+            .world()
+            .get::<MeshMaterial3d<StandardMaterial>>(piece)
+            .unwrap()
+            .0
+            .id();
+        assert_ne!(now, mat.id(), "the dressed piece wears the part's band");
+        assert_eq!(app.world().get::<Worn>(part).unwrap().band, 2);
+        assert!(app.world().get::<Redress>(part).is_none());
     }
 
     /// Each band reads worse than the last: darker, rougher, its glow down.
