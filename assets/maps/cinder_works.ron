@@ -320,9 +320,8 @@
         // gate: off the truck the Row's houses are low and the furnace stands
         // off to the left; the holder is ahead, where the way goes
         // (map_vista). Lower in the gate's view than the works chimney, which
-        // stays the valley's landmark (Story). Raised 0.18 m: its plinth
-        // reaches 0.2 m under its origin (capture::footing).
-        (prefab: "gas_holder", at: (-37.1, 87.8), rot: 197.0, y: 0.18),
+        // stays the valley's landmark (Story).
+        (prefab: "gas_holder", at: (-37.1, 87.8), rot: 197.0),
         (prefab: "house_plank_burnt", at: (-46.1, 99.0), rot: 90.0),
         (prefab: "house_brick_damaged", at: (-38.5, 153.0), rot: 270.0),
         (prefab: "house_brick", at: (-73.0, 120.6), rot: 90.0, tag: "foreman"),
