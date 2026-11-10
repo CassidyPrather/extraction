@@ -154,15 +154,14 @@ ram = T(*ram0) @ RX(-math.atan2(-rv[2], rv[1]))
 ln.cyl(0.05, 0.0, rl * 0.55, "Dark", segs=12, xf=ram @ UP)
 ln.cyl(0.03, rl * 0.5, rl, "Steel", segs=10, xf=ram @ UP)
 # The launcher on the head: a pale housing like the walker's turret, the
-# tube out of its front with the barbed harpoon in it.
+# tube out of its front with the barbed harpoon in it. (No warning stripes
+# up here: they glow, and alone 3 m up they bloomed like a lamp.)
 hx = T(*HEAD)
 side = fillet([(0.16, -0.08), (0.2, 0.0), (0.14, 0.08), (-0.14, 0.08), (-0.22, 0.04),
                (-0.22, -0.05), (-0.16, -0.08)], [0.02, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02], 3)
 ln.prism([(x, y + HEAD[1]) for x, y in side], -0.09, 0.09, "Shell", axis="x", bevel=0.018,
          segs=2, xf=T(0, 0, HEAD[2]))
 ln.cyl(0.05, -0.11, 0.11, "Dark", segs=14, xf=hx @ ALONG_X, chamfer=0.006)
-for sx in (-1, 1):
-    ln.box((0.006, 0.05, 0.22), (sx * 0.092, HEAD[1], HEAD[2]), "Warn", bevel=0.002, segs=1)
 tube = T(0, HEAD[1] + 0.01, HEAD[2])
 ln.tube(0.05, 0.032, -0.5, -0.14, "Dark", segs=14, xf=tube, chamfer=0.004)
 for i in range(3):
@@ -185,11 +184,13 @@ for x in (-0.17, 0.17):
 ln.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=reel)
 for sx in (-1, 1):
     ln.box((0.03, 0.06, 0.4), (sx * 0.2, DRUM[1] - 0.02, 0.27), "Dark", bevel=0.01, segs=1)
-# The line from the drum up the boom to the launcher.
+# The line from the drum up the boom to the launcher: steel, not the
+# drum's yellow (a robot's yellow and warning paint glow its own teal,
+# `weak_points::paint`: a lit line up there bloomed into a lamp).
 lv = [HEAD[i] - DRUM[i] for i in range(3)]
 ll = math.sqrt(sum(c * c for c in lv))
 line = T(0, DRUM[1] + 0.2, DRUM[2]) @ RX(-math.atan2(-lv[2], lv[1]))
-ln.cyl(0.012, 0.0, ll - 0.05, "Yellow", segs=6, xf=line @ UP)
+ln.cyl(0.012, 0.0, ll - 0.05, "Steel", segs=6, xf=line @ UP)
 # Hazard band round the orb.
 ln.lathe([(0.385, 0.08), (0.398, 0.085), (0.398, 0.11), (0.385, 0.115)], "Warn",
          segs=40, xf=UP, closed=True)
