@@ -32,6 +32,7 @@ pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod grappler_armour;
 pub mod grip;
 pub mod hazard_look;
 pub mod hazards;
@@ -400,6 +401,7 @@ impl Plugin for RobotsPlugin {
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
+                grappler_armour::GrapplerArmourPlugin,
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
                 (
