@@ -499,6 +499,11 @@
         // (map_lint FIRST_RUN) on the tight valley's ground: the farms' and
         // the village's wood, stacked by the ways.
         (prefab: "log_pile", at: (28.3, 128.5), rot: 155.0),
+        // Cover off the drop: a newcomer breaking west off the district road
+        // from a walker in the first fight found nothing within 12 m to get
+        // behind (Onboarding, first_fight_walker); a pile lying north-south
+        // between the road and the boundary woods.
+        (prefab: "log_pile", at: (8.0, 146.5), rot: 0.0),
         (prefab: "log_pile", at: (48.0, 118.0), rot: 336.0),
         (prefab: "log_pile", at: (59.0, 101.0), rot: 180.0),
         (prefab: "log_pile", at: (7.3, 110.5), rot: 113.0),
@@ -516,7 +521,8 @@
     ],
 
     markers: [
-        (kind: Insertion, at: (22.0, 148.5), rot: 0.0, name: "South gate"),
+        // The arrival faces the way on to the first job (map_vista).
+        (kind: Insertion, at: (22.0, 148.5), rot: 53.0, name: "South gate"),
         (kind: TruckStop, at: (22.0, 178.5), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (28.0, 154.5), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (13.8, -147.0), name: "Bus depot"),

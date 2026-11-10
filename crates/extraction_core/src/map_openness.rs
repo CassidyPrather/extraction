@@ -597,7 +597,8 @@ mod probe_walk {
         let map = MapDef::from_ron(text).unwrap();
         let hm = Heightmap::build(&map);
         let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
-        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+        let ins_m = map.markers_of(&MarkerKind::Insertion).next().unwrap();
+        let (ins, ins_rot) = (ins_m.at, ins_m.rot);
         let (job, at) = crate::map_lint::first_jobs(&map, &id)
             .into_iter()
             .next()
@@ -613,7 +614,7 @@ mod probe_walk {
                 .collect::<Vec<_>>()
         };
         let out = json!({
-            "map": id,
+            "map": id, "ins_rot": ins_rot,
             "job": job, "job_at": at, "rv": rv.name, "rv_at": rv.at,
             "to_job": pts(&leg(ins, at)),
             "to_rv": pts(&leg(at, rv.at)),

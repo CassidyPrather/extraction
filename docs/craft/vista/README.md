@@ -35,3 +35,52 @@ left or top, after on the right or bottom.
   (Story: the chimney stays the valley's landmark). Its red landmark lamp
   lights after dark. `map_vista::every_first_frame_holds_somewhere_to_go`
   holds every valley's first frame to this, with no gaps.
+- `first_frames_night.jpg`: each valley's first frame off the truck after
+  dark, along the way's heading. `every_first_frame_holds_somewhere_to_go`
+  asks for a yard lamp, a lit window or a landmark's red lamp ahead (not a
+  stake or a warning: they say danger). Marrow (the ranger tower's lamp),
+  Kettle (the camp chimney's) and Cinder (the gas holder's) show plainly.
+  Sallow's two yard lamps at about 100 m and Rime's survey tower lamp pass
+  the gauge but are faint in this still, in rain.
+- `arrivals_day.jpg`, `arrivals_night.jpg`: each valley's first frame off
+  the truck at its insertion marker's `rot`, the way the player spawns
+  facing (Marrow 53, Kettle 58, Cinder 21, Sallow and Rime as set by
+  Fourth valley), by day and after dark in rain. These replace the
+  way-heading frames above as the ones the gauge judges.
+
+## What the first-frame gauge asks, and what it doesn't
+
+`map_vista::every_first_frame_holds_somewhere_to_go` asks that the frame the
+player arrives facing (the Insertion marker's `rot`, 35 degrees either
+side) holds somewhere to go: by day, the first job's buildings or a
+landmark, in sight and big enough; after dark, a yard lamp, a lit window or
+a landmark's red lamp within `NIGHT_READ` (90 m). It does not catch a first
+job hidden behind trees while something else stands in the frame: the
+first frame's spruce crowns are cones, wide at their lowest boughs and
+narrow at the top, so a chimney top over a wood reads (Kettle's frame
+before its ride cut reads that way, the sawmill still hidden).
+
+Each valley's marker faces the way on: Marrow 53, Kettle 58, Cinder 21
+(turned with this gauge), Rime 56.5 (Fourth valley), Sallow 0.
+
+### Night read, measured
+
+Glow over its background in rendered night stills of each first frame
+(the sum of each pixel's excess over the ring's median, more than 8 levels,
+within 6 px of the light's projected spot), clear and in rain:
+
+| Light | Distance | Clear | Rain |
+| - | - | - | - |
+| Marrow, ranger tower lamp | 69 m | 1750 | 2112 |
+| Kettle, camp chimney lamp | 89 m | 1238 | 1173 |
+| Cinder, gas holder lamp | 110 m | 402 | 485 |
+| Sallow, yard lamp | 96 m | 507 | 791 |
+| Sallow, yard lamp | 106 m | 174 | 240 |
+| Rime, survey tower lamp | 128 m | 191 | 259 |
+
+Kettle's chimney lamp is the faintest that reads (the coordinator's limit).
+The glow falls off with distance; rain changed it little (it darkens what is
+round a lamp as much as the lamp), so `NIGHT_READ` is the same in both.
+Each valley's first frame now holds a yard lamp 40 m up the way: Cinder's
+up the works road (Map design), Sallow's and Rime's from Fourth valley
+(b9f2fe32). Both GAPS lists are empty.

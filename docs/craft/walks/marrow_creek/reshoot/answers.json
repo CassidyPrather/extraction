@@ -1,0 +1,77 @@
+{
+ "title": "Marrow Creek, re-shot from the marker's rot (53)",
+ "stops": {
+  "s01": {
+   "vista": "Farm roofs low across the meadow under a pine edge, the ranger tower's red lamp above them.",
+   "discover": "The lamp on the tower; to the side, the truck yard's kiosk up the bank.",
+   "for": "Arriving with somewhere to go: the farm is the whole frame.",
+   "beat": "threshold"
+  },
+  "s02": {
+   "vista": "The farmhouse and a shed on the track ahead, the tower to the right.",
+   "discover": "The tower and its lamp, now near.",
+   "for": "The farm grows as you walk; nothing to fear yet.",
+   "beat": "calm"
+  },
+  "s03": {
+   "vista": "The shed's side wall close on the right, the farm beyond.",
+   "discover": "The shed's door, the tower standing behind it.",
+   "for": "A first door to try on the way.",
+   "beat": "choice"
+  },
+  "s04": {
+   "vista": "The barn and farmhouse with a car by them, a lamp far left.",
+   "discover": "Tree line, the tower faint, a cabin on the right.",
+   "for": "The job reads as a place: you are here.",
+   "beat": "reveal"
+  },
+  "s05": {
+   "vista": "The barn's wall fills the left half; a lane runs along it into fog.",
+   "discover": "The barn's open door, dark inside.",
+   "for": "Going in or on; the wall ahead says little.",
+   "beat": "choice"
+  },
+  "s06": {
+   "vista": "The second barn wall edge-on again, a window.",
+   "discover": "The farmhouse front: door and two shuttered windows.",
+   "for": "Repeats the stop before; the house door is the better frame.",
+   "beat": "nothing"
+  },
+  "s07": {
+   "vista": "Open moor with boulders, a stake and lamp on the rise.",
+   "discover": "The Hollow: boulders and a dark mouth in the bank.",
+   "for": "The farm is behind; the country opens and something lives in the bank.",
+   "beat": "tension"
+  },
+  "s08": {
+   "vista": "The track over a rise past a pole, fog beyond.",
+   "discover": "A mast with wires and boulders on the hollow's floor.",
+   "for": "A breath between the hollow and the crest.",
+   "beat": "calm"
+  },
+  "s09": {
+   "vista": "The water tower with its lamp at left, a roof between banks.",
+   "discover": "The bank and a pine, close; the tower is ahead, not here.",
+   "for": "The yard shows itself from the crest.",
+   "beat": "reveal"
+  },
+  "s10": {
+   "vista": "The rail shed's red wall at left, the water tower's lamp, a figure by the track.",
+   "discover": "Inside the shed's open end: a dark wall.",
+   "for": "The yard's edge; the side frame has no subject.",
+   "beat": "threshold"
+  },
+  "s11": {
+   "vista": "The beacon's green lamp ahead against the tree line.",
+   "discover": "A red shed wall at arm's length.",
+   "for": "Home is there: the beacon and room to stand.",
+   "beat": "relief"
+  }
+ },
+ "notes": [
+  "The drop now faces the farm and the tower's lamp: the first frame has a subject, where the old one looked along the track.",
+  "Worst three: s05-s06, two stops in a row with the barn wall edge-on ahead (the route skims the barn); s09's side view into the bank (the water tower is already ahead); s10-s11's side views onto red shed walls at arm's length.",
+  "Nothing new is dead: the walk alternates through the hollow and the crest as before."
+ ],
+ "fixes": []
+}
