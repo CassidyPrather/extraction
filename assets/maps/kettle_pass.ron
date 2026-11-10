@@ -110,7 +110,7 @@
         // Along the beck to the logging camp.
         (
             name: "Camp road", kind: Gravel, width: 5.0,
-            points: [(96.4, 198.8), (107.1, 187.1), (122.5, 178.1), (149.0, 175.7)],
+            points: [(96.4, 198.8), (107.1, 187.1), (122.5, 178.1), (147.5, 168.0)],
         ),
         // Off the switchbacks, across the slope to the lodge.
         (
@@ -121,7 +121,7 @@
         // bank to the quarry. The far side of the valley from the road.
         (
             name: "Camp ford", kind: Dirt, width: 3.5, smoothing: 10.0,
-            points: [(149.0, 175.7), (147.5, 145.5), (152.5, 122.5), (150.0, 105.0), (138.8, 60.0),
+            points: [(147.5, 168.0), (147.5, 145.5), (152.5, 122.5), (150.0, 105.0), (138.8, 60.0),
                      (127.5, 23.6), (123.8, -2.2)],
         ),
         // The quarry haul road.
@@ -316,7 +316,7 @@
         // Marker posts, banded with reflective tape, where a hand torch's
         // pool shows nothing of the way home (scripts/night_route.sh, the
         // torch case): a stop's post stands 15 m on, beside the way.
-        (prefab: "marker_post", at: (141.8, 172.1), rot: 0.0),  // w00_00, out of the logging camp
+        (prefab: "marker_post", at: (142.5, 174.5), rot: 0.0),  // w00_00, out of the logging camp
         (prefab: "marker_post", at: (42.8, 113.4), rot: 0.0),  // w00_03
         (prefab: "marker_post", at: (-102.2, 10.0), rot: 0.0),  // w02_02, on the way's side of the mine office boulders
         (prefab: "marker_post", at: (16.4, -3.5), rot: 0.0),  // w00_06, off the Pass road's edge
