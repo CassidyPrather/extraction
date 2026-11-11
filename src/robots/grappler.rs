@@ -380,7 +380,9 @@ mod tests {
             g.xz().distance(f.xz())
         };
         let mut bit = None;
-        for _ in 0..90 * 20 {
+        // (Long enough for several throws: a throw lands 7 in 10, by the
+        // grappler's seed, and a test mustn't hang on one coming up.)
+        for _ in 0..90 * 60 {
             app.update();
             if app.world().get::<Tethered>(player).is_some() {
                 bit = Some(gap(&app));
@@ -455,7 +457,8 @@ mod tests {
             },
         );
         let mut speared = false;
-        for _ in 0..90 * 20 {
+        // (Several throws: one may miss, by its seed.)
+        for _ in 0..90 * 60 {
             app.update();
             if app.world().get::<Tethered>(player).is_some() {
                 speared = true;
