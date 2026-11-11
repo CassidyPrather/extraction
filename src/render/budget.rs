@@ -1126,6 +1126,64 @@ pub(crate) mod tests {
         HEAVY.read().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// Set in a timed test's own process ([`ran_alone`]).
+    const ALONE: &str = "EXTRACTION_TIMED_ALONE";
+
+    /// Whether this timed test has just run in a process of its own (true:
+    /// its verdict is asserted, so return). Bevy builds its task pools once
+    /// a process, for the first app, and every later app shares them: a
+    /// timed test after one built for another (`busy_scene`'s one thread,
+    /// or the game's every core) times its work on pools it didn't ask
+    /// for. In a gate's gauge run, after the CPU gauges' one thread,
+    /// Sallow Reservoir loaded in 5.9-6.3 s against a ceiling of 5.4; it
+    /// loaded in 3.9 s when run on its own. Its own process builds them as
+    /// it asks. Here when no pools are built yet, or in that process.
+    pub(crate) fn ran_alone() -> bool {
+        if std::env::var_os(ALONE).is_some() || bevy::tasks::ComputeTaskPool::try_get().is_none() {
+            return false;
+        }
+        let name = std::thread::current()
+            .name()
+            .expect("a test's thread is named after it")
+            .to_owned();
+        let out = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                name.as_str(),
+                "--exact",
+                "--include-ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(ALONE, "1")
+            .output()
+            .expect("the test binary, again");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        print!("{stdout}");
+        eprint!("{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            stdout.contains("running 1 test"),
+            "{name}: not run in its own process"
+        );
+        assert!(out.status.success(), "{name}, in its own process (above)");
+        true
+    }
+
+    /// A timed test after pools built for another runs again in a process
+    /// of its own, which builds none until it asks.
+    #[test]
+    fn a_timed_test_runs_on_pools_of_its_own() {
+        if std::env::var_os(ALONE).is_some() {
+            assert!(
+                bevy::tasks::ComputeTaskPool::try_get().is_none(),
+                "its own process starts with no pools"
+            );
+            return;
+        }
+        bevy::tasks::ComputeTaskPool::get_or_init(bevy::tasks::TaskPool::new);
+        let _one_at_a_time = heavy();
+        assert!(ran_alone(), "pools built for another: its own process");
+    }
+
     fn client(map: &str) -> App {
         client_in(
             map,
@@ -2164,6 +2222,9 @@ pub(crate) mod tests {
     fn gauge_head_test_is_cheap() {
         use avian3d::prelude::*;
         let _one_at_a_time = heavy();
+        if ran_alone() {
+            return;
+        }
         let mut app = busy_scene("marrow_creek");
         app.update();
         let w = app.world_mut();
@@ -2383,6 +2444,9 @@ pub(crate) mod tests {
         use bevy::log::tracing_subscriber::layer::SubscriberExt;
         const SYSTEM_SHARE: f64 = 0.02;
         let _one_at_a_time = heavy();
+        if ran_alone() {
+            return;
+        }
         let times = SystemTimes::default();
         let subscriber = bevy::log::tracing_subscriber::registry().with(times.clone());
         bevy::log::tracing::subscriber::set_global_default(subscriber).unwrap();
@@ -2439,6 +2503,9 @@ pub(crate) mod tests {
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_a_busy_moment_holds_the_cpu_budget() {
         let _one_at_a_time = heavy();
+        if ran_alone() {
+            return;
+        }
         let stats = busy_moment("marrow_creek");
         let reference = REFERENCE.with(|r| {
             let mut v = r.borrow().clone();

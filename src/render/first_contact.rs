@@ -564,6 +564,9 @@ fn a_load_ceiling_scales_with_the_machine() {
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
 fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
     let _one_at_a_time = heavy();
+    if super::budget::tests::ran_alone() {
+        return;
+    }
     // What ships, or nothing: the originals' loads and memory aren't the
     // game's.
     let unbaked = super::textures::unbaked();

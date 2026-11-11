@@ -426,6 +426,9 @@ pub(crate) mod tests {
     #[ignore = "wall-clock timing"]
     fn startup_frames() {
         let _one_at_a_time = heavy();
+        if super::super::budget::tests::ran_alone() {
+            return;
+        }
         if std::env::var_os("SPIKE_PROFILE").is_some() {
             use bevy::log::tracing_subscriber::layer::SubscriberExt;
             let times = PROFILE.get_or_init(SystemTimes::default).clone();
