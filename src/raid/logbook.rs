@@ -16,6 +16,37 @@ use crate::robots::{PartDestroyed, PartRole, Robot, RobotKind};
 
 /// The line for a raid lost to bleeding.
 pub const BLED_OUT: &str = "Bled out. Carry two dressings.";
+/// The line for a raid lost to the Surge.
+pub const SURGE_CAUGHT: &str = "Caught by the Surge. Be home before it.";
+
+/// What put you down, when it's knowable: said on the card with one plain
+/// line of what would have helped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cause {
+    /// Still bleeding, nothing hit or fell for [`BLED_AFTER`] seconds.
+    Bled,
+    /// A machine's hit in the last [`BLED_AFTER`] seconds, by name.
+    Machine(&'static str),
+    /// Out in the Surge.
+    Surge,
+}
+
+impl Cause {
+    pub fn line(self) -> String {
+        match self {
+            Cause::Bled => BLED_OUT.to_owned(),
+            Cause::Surge => SURGE_CAUGHT.to_owned(),
+            Cause::Machine(name) => {
+                let a = if name.starts_with(['a', 'e', 'i', 'o', 'u']) {
+                    "an"
+                } else {
+                    "a"
+                };
+                format!("Killed by {a} {name}. Break its line sooner.")
+            }
+        }
+    }
+}
 
 /// How the last raid went.
 #[derive(Clone, Debug, PartialEq)]
@@ -33,9 +64,8 @@ pub struct RaidEntry {
     pub nights: u32,
     /// A leg broken out there: splinted or not, at the end.
     pub leg: Option<bool>,
-    /// Down from bleeding: nothing had hit for [`BLED_AFTER`] seconds and
-    /// the wound was still open (not in the Surge).
-    pub bled_out: bool,
+    /// What put you down, when it's knowable (a raid lost).
+    pub cause: Option<Cause>,
 }
 
 /// Seconds since the last hit or fall for a death to be the bleeding's.
@@ -51,6 +81,9 @@ pub struct Logbook {
     pub written: Option<String>,
     /// Turned to the career page.
     pub career: bool,
+    /// The last time you were hurt (seconds, `Time::elapsed`), and the
+    /// machine that did it, if one did.
+    last_hurt: Option<(f32, Option<&'static str>)>,
 }
 
 #[derive(Component)]
@@ -65,6 +98,7 @@ impl Plugin for LogbookPlugin {
             (
                 spawn_card,
                 tally_wrecks,
+                note_hurts,
                 write_entries,
                 turn_page,
                 card_text,
@@ -117,6 +151,29 @@ fn robot_name(kind: RobotKind, grappler: bool, collector: bool) -> &'static str 
     }
 }
 
+/// Who last hurt you, and when (for what put you down).
+fn note_hurts(
+    mut hurts: MessageReader<crate::health::Hurt>,
+    me: Query<Entity, With<LocalPlayer>>,
+    robots: Query<(
+        &Robot,
+        Has<crate::robots::grappler::Grappler>,
+        Has<crate::robots::collector::Collector>,
+    )>,
+    time: Res<Time>,
+    mut book: ResMut<Logbook>,
+) {
+    for h in hurts.read() {
+        if !me.contains(h.player) {
+            continue;
+        }
+        let by =
+            h.by.and_then(|b| robots.get(b).ok())
+                .map(|(r, g, c)| robot_name(r.kind, g, c));
+        book.last_hurt = Some((time.elapsed_secs(), by));
+    }
+}
+
 fn tally_wrecks(
     mut destroyed: MessageReader<PartDestroyed>,
     robots: Query<(
@@ -153,6 +210,7 @@ fn write_entries(
     catalog: Res<Catalog>,
     house: Option<Res<crate::progression::safehouse::Safehouse>>,
     mut was: Local<Option<std::mem::Discriminant<Phase>>>,
+    time: Res<Time>,
 ) {
     let now = std::mem::discriminant(&raid.phase);
     let before = was.replace(now);
@@ -163,6 +221,7 @@ fn write_entries(
     if before == Some(back) && raid.phase == Phase::Out {
         book.wrecked.clear();
         book.started = raid.clock;
+        book.last_hurt = None;
         return;
     }
     let home = matches!(raid.phase, Phase::Extracting { .. });
@@ -194,12 +253,34 @@ fn write_entries(
         artifacts,
         nights: house.map_or(0, |h| h.nights_out),
         leg: fracture.map(|f| f.splinted),
-        bled_out: !home
-            && !raid.surging()
-            && health.is_some_and(|h| h.bleeding > 0.0 && h.since_hit >= BLED_AFTER),
+        cause: (!home)
+            .then(|| cause(&raid, health, book.last_hurt, time.elapsed_secs()))
+            .flatten(),
     };
     book.written = Some(entry_text(&entry));
     book.last = Some(entry);
+}
+
+/// What put you down: the Surge, a machine's recent hit, or an open wound
+/// with nothing else for a while. Anything else isn't named (gas, a fall,
+/// an anomaly: no line rather than a wrong one).
+fn cause(
+    raid: &Raid,
+    health: Option<&crate::health::Health>,
+    last_hurt: Option<(f32, Option<&'static str>)>,
+    now: f32,
+) -> Option<Cause> {
+    if raid.surging() {
+        return Some(Cause::Surge);
+    }
+    if let Some((at, Some(name))) = last_hurt {
+        if now - at <= BLED_AFTER {
+            return Some(Cause::Machine(name));
+        }
+    }
+    health
+        .filter(|h| h.bleeding > 0.0 && h.since_hit >= BLED_AFTER)
+        .map(|_| Cause::Bled)
 }
 
 /// "3 drones, 1 walker".
@@ -240,8 +321,8 @@ fn entry_text(e: &RaidEntry) -> String {
         Some(false) => lines.push("Broke a leg".to_owned()),
         None => {}
     }
-    if e.bled_out {
-        lines.push(BLED_OUT.to_owned());
+    if let Some(c) = e.cause {
+        lines.push(c.line());
     }
     lines.push(format!("Wrecked {}", wreck_list(&e.wrecked)));
     if e.home {
@@ -479,13 +560,21 @@ mod tests {
         assert!(!home.contains("Still on the card"), "{home}");
     }
 
-    /// Down from bleeding (nothing hit for a while, the wound still open):
-    /// the logbook says so, and what would have saved it (Marrow's first
-    /// fight: the one dressing on the first wound, the second wound bled
-    /// out in 15 s). Down to a hit, it doesn't.
+    /// What put you down is named, with one plain line of what would have
+    /// helped: bleeding (nothing hit for a while, the wound open; Marrow's
+    /// first fight: the one dressing on the first wound, the second wound
+    /// bled out in 15 s), a machine's hit, the Surge. Anything else isn't
+    /// named.
     #[test]
-    fn a_raid_lost_to_bleeding_says_so() {
-        let lost = |bleeding: f32, since_hit: f32| {
+    fn a_raid_lost_names_what_put_you_down() {
+        #[derive(Clone, Copy)]
+        enum How {
+            Bled,
+            Shot,
+            Surge,
+            Clean,
+        }
+        let lost = |how: How| {
             let opts = crate::LaunchOptions {
                 robots: false,
                 ..Default::default()
@@ -508,6 +597,33 @@ mod tests {
                 .iter(app.world())
                 .next()
                 .expect("a player");
+            if let How::Shot = how {
+                let mut queue = bevy::ecs::world::CommandQueue::default();
+                let drone = {
+                    let mut c = Commands::new(&mut queue, app.world());
+                    crate::robots::drone::spawn_drone(
+                        &mut c,
+                        Vec3::new(0.0, 80.0, 0.0),
+                        crate::robots::Job {
+                            kind: crate::robots::JobKind::Watch,
+                            site: Vec3::ZERO,
+                            duration: 999.0,
+                            exit: Vec3::ZERO,
+                        },
+                    )
+                };
+                queue.apply(app.world_mut());
+                app.world_mut().write_message(crate::health::Hurt {
+                    player,
+                    amount: 14.0,
+                    from: Vec3::ZERO,
+                    by: Some(drone),
+                });
+                app.update();
+            }
+            if let How::Surge = how {
+                app.world_mut().resource_mut::<Raid>().clock = crate::raid::SURGE_AFTER + 10.0;
+            }
             {
                 let mut h = app
                     .world_mut()
@@ -515,18 +631,31 @@ mod tests {
                     .unwrap();
                 h.hp = 0.0;
                 h.down = true;
-                h.bleeding = bleeding;
-                h.since_hit = since_hit;
+                h.bleeding = if let How::Clean = how { 0.0 } else { 2.2 };
+                h.since_hit = if let How::Bled | How::Clean = how {
+                    14.0
+                } else {
+                    0.5
+                };
             }
             app.world_mut().resource_mut::<Raid>().phase = Phase::Down { left: 6.0 };
             app.update();
             app.world().resource::<Logbook>().written.clone().unwrap()
         };
-        let bled = lost(2.2, 14.0);
+        let bled = lost(How::Bled);
         assert!(bled.contains(BLED_OUT), "{bled}");
-        let shot = lost(2.2, 0.0);
+        let shot = lost(How::Shot);
+        assert!(shot.contains("Killed by a drone."), "{shot}");
         assert!(!shot.contains(BLED_OUT), "a hit took it: {shot}");
-        let clean = lost(0.0, 14.0);
-        assert!(!clean.contains(BLED_OUT), "not bleeding: {clean}");
+        let surge = lost(How::Surge);
+        assert!(surge.contains(SURGE_CAUGHT), "{surge}");
+        let clean = lost(How::Clean);
+        for line in [BLED_OUT, SURGE_CAUGHT, "Killed by"] {
+            assert!(!clean.contains(line), "nothing knowable: {clean}");
+        }
+        assert_eq!(
+            Cause::Machine("airship").line(),
+            "Killed by an airship. Break its line sooner."
+        );
     }
 }
