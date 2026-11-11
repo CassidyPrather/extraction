@@ -649,6 +649,8 @@ pub(super) struct Newcomer {
     took_ledge: bool,
     /// The radios it went for off its body (`radio_to_fetch`), once a go.
     radios_tried: Vec<Entity>,
+    /// The dressings it went for by its way (`by_the_way`), once each.
+    dressings_tried: Vec<Entity>,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
@@ -1840,6 +1842,53 @@ pub(super) fn direct_raid(
                     Task::Use(Side::Left),
                 ],
             );
+        }
+    }
+    // A dressing lying by its way, none on it: picked up, as anyone would
+    // (the careful and the one-handed newcomers won the first fight on
+    // Marrow and bled out after it, their one dressing on the first wound).
+    // Out on the job only, clear of any fight, and each once.
+    if raid.phase == Phase::Out
+        && world.alive(player)
+        && now - state.fought_at > CLEAR_TO_PICK
+        && now - state.aimed_at > CLEAR_TO_PICK
+        && state.shots.iter().all(|t| now - t > CLEAR_TO_PICK)
+        && state.line_run_until <= now
+        && state.heavy.is_none()
+        && state.hound.is_none()
+        && !bot.tasks.iter().any(|t| {
+            matches!(
+                t,
+                Task::Use(_) | Task::Grab { .. } | Task::GrabFromHere { .. }
+            )
+        })
+        && carried(&world, &view, player, "field_dressing").is_empty()
+    {
+        let loose = world
+            .items
+            .iter()
+            .filter(|(e, it, _, held, sock, bag)| {
+                held.is_none()
+                    && sock.is_none()
+                    && bag.is_none()
+                    && world.catalog.get(it.kind()).id == "field_dressing"
+                    && !view.stash.iter().any(|b| b.contents.contains(e))
+            })
+            .map(|(e, _, gt, ..)| (e, gt.translation()));
+        if let Some((e, at)) = by_the_way(here, loose, &state.dressings_tried, |at| {
+            in_reach(&world, &plans, at)
+        }) {
+            state.dressings_tried.push(e);
+            state.note(now, Kind::Learned, "a dressing by the way, picked up");
+            let mut t = way_to(&world, &view, &plans, here, at);
+            t.extend([
+                Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                },
+                Task::Stow(Side::Right),
+            ]);
+            super::second_hour::cut_in(&mut bot, t);
         }
     }
     // In a walker's line with no way out of it, a round up: it shoots back.
@@ -4247,6 +4296,24 @@ fn radio_at_feet(
 /// A radio not on `player` to go and get: the nearest in its own remains,
 /// else in anyone's, else lying loose; not one gone for `RADIO_TRIES`
 /// times already (`tried`) and not got. Where it is, to go to.
+/// How long clear of a fight before it stops for a dressing by its way (s).
+const CLEAR_TO_PICK: f32 = 15.0;
+/// How far off its way a dressing's worth the steps (m).
+const BY_THE_WAY: f32 = 6.0;
+/// The nearest of `found` within [`BY_THE_WAY`] of `here` that it hasn't
+/// tried and a hand gets to (`reach`): a thing it passes, not one it goes
+/// looking for.
+fn by_the_way(
+    here: Vec2,
+    found: impl Iterator<Item = (Entity, Vec3)>,
+    tried: &[Entity],
+    reach: impl Fn(Vec3) -> bool,
+) -> Option<(Entity, Vec3)> {
+    found
+        .filter(|(e, at)| !tried.contains(e) && at.xz().distance(here) < BY_THE_WAY && reach(*at))
+        .min_by(|a, b| a.1.xz().distance(here).total_cmp(&b.1.xz().distance(here)))
+}
+
 fn radio_to_fetch(
     world: &World2,
     plans: &[crate::sim::indoor::BuildingPlan],
@@ -6280,6 +6347,27 @@ the Hollow.";
         assert!(over_floor(20.0, 20.0));
         // Just past a raised hand.
         assert!(!over_floor(22.3, 20.0));
+    }
+
+    /// A dressing it passes is picked up: the nearest a hand gets to, a few
+    /// steps off its way, each once; none it'd have to go looking for.
+    #[test]
+    fn a_dressing_by_its_way_is_picked_up_once() {
+        use super::{BY_THE_WAY, by_the_way};
+        let e = |i: u32| Entity::from_raw_u32(i).unwrap();
+        let here = Vec2::ZERO;
+        let found = [
+            (e(1), Vec3::new(4.0, 0.0, 0.0)),
+            (e(2), Vec3::new(0.0, 0.0, 2.5)),
+            // Over a raised hand (a shelf up a tower).
+            (e(3), Vec3::new(1.0, 6.0, 0.0)),
+            (e(4), Vec3::new(BY_THE_WAY + 1.0, 0.0, 0.0)),
+        ];
+        let reach = |at: Vec3| at.y < 2.0;
+        let pick = |tried: &[Entity]| by_the_way(here, found.into_iter(), tried, reach);
+        assert_eq!(pick(&[]).map(|p| p.0), Some(e(2)));
+        assert_eq!(pick(&[e(2)]).map(|p| p.0), Some(e(1)));
+        assert_eq!(pick(&[e(1), e(2)]), None);
     }
 
     #[test]
