@@ -3533,10 +3533,16 @@ const SHOT_WINDOW: f32 = 4.0;
 /// three times as long, and took its rounds on the way: first_jobs raid 5).
 /// Nothing to run to (down where it is), none.
 fn run_to_line(tasks: &[Task], here: Vec2) -> f32 {
-    match tasks.first() {
-        Some(Task::WalkTo { to, .. }) => to.distance(here) / RUN_PACE + 0.5,
-        _ => 0.0,
+    let mut at = here;
+    let mut run = 0.0;
+    for t in tasks {
+        let Task::WalkTo { to, .. } = t else {
+            break;
+        };
+        run += at.distance(*to);
+        at = *to;
     }
+    if run > 0.0 { run / RUN_PACE + 0.5 } else { 0.0 }
 }
 
 /// A run's pace on open ground (m/s), for timing one.
@@ -3610,13 +3616,13 @@ fn break_line(
     // quarantine fence where the ground dips beneath it, and the cautious
     // newcomer stood against the wire, 1.1 m short, the half minute.)
     let body = avian3d::prelude::Collider::capsule(BODY, CHEST - KNEE);
-    let reach = |p: Vec2| {
-        let to = mid(p) - mid(here);
+    let reach = |a: Vec2, p: Vec2| {
+        let to = mid(p) - mid(a);
         Dir3::new(to).ok().is_none_or(|dir| {
             spatial
                 .cast_shape(
                     &body,
-                    mid(here),
+                    mid(a),
                     Quat::IDENTITY,
                     dir,
                     &avian3d::prelude::ShapeCastConfig::from_max_distance(to.length() + BODY),
@@ -3627,10 +3633,10 @@ fn break_line(
     };
     // (Nor up a bank: the one-handed newcomer's spot was on the creek's,
     // 3 m up in 4, and it stood at the bank's foot the half minute.)
-    let open = |p: Vec2| {
-        nav.is_none_or(|n| n.walkable(p.to_array()))
-            && steep_run(&world.zone, here, p) <= STEEP_RUN
-            && reach(p)
+    let open = |a: Vec2, p: Vec2| {
+        nav.is_none_or(|n| n.walkable(p.to_array()) && blocked_run(n, a, p) < 0.5)
+            && steep_run(&world.zone, a, p) <= STEEP_RUN
+            && reach(a, p)
     };
     let away = (here - eye.xz()).normalize_or(Vec2::Y);
     // The eye a step or two either side of where it is: a walker that's
@@ -3662,26 +3668,33 @@ fn break_line(
         (&hidden, "behind something near"),
     ];
     for (good, how) in ranks {
-        if let Some(p) = nearest_where(here, away, &open, nav, good) {
-            return Some((
-                vec![Task::WalkTo { to: p, within: 0.6 }, Task::Wait(LINE_HELD)],
-                how,
-            ));
+        if let Some(way) = nearest_where(here, away, &open, good) {
+            let n = way.len();
+            let mut t: Vec<Task> = way
+                .into_iter()
+                .enumerate()
+                .map(|(k, to)| Task::WalkTo {
+                    to,
+                    within: if k + 1 == n { 0.6 } else { 0.8 },
+                })
+                .collect();
+            t.push(Task::Wait(LINE_HELD));
+            return Some((t, how));
         }
     }
     None
 }
 
-/// The nearest walkable spot within 12 m, reached without crossing what
-/// can't be walked, where `good` holds: nearest first, and at a range those
-/// off the line from `away`'s far end before those back toward it.
+/// The nearest walkable spot within 12 m where `good` holds, and the way
+/// to it (`open` from one point to the next: straight, or round one corner
+/// where straight won't do): nearest first, and at a range those off the
+/// line from `away`'s far end before those back toward it.
 fn nearest_where(
     here: Vec2,
     away: Vec2,
-    open: &dyn Fn(Vec2) -> bool,
-    nav: Option<&extraction_core::nav::NavGrid>,
+    open: &dyn Fn(Vec2, Vec2) -> bool,
     good: &dyn Fn(Vec2) -> bool,
-) -> Option<Vec2> {
+) -> Option<Vec<Vec2>> {
     for r in [2.0f32, 3.5, 5.0, 7.0, 9.5, 12.0] {
         // Nearest first; at a range, those off its line before those
         // back toward it.
@@ -3693,14 +3706,39 @@ fn nearest_where(
             let fb = (*b - here).normalize_or_zero().dot(away);
             fb.total_cmp(&fa)
         });
-        if let Some(p) = ring
+        if let Some(way) = ring
             .into_iter()
-            .find(|p| open(*p) && nav.is_none_or(|n| blocked_run(n, here, *p) < 0.5) && good(*p))
+            .filter(|p| good(*p))
+            .find_map(|p| way_round(here, p, open))
         {
-            return Some(p);
+            return Some(way);
         }
     }
     None
+}
+
+/// From `here` to `p` by `open` legs: straight, or else round one corner a
+/// stride or two off either end (round the very thing it's crouched by: the
+/// cautious newcomer stood on the walker's side of a log pile with the far
+/// side 4.8 m off, and the straight way there went through the pile).
+/// The shortest such way; none if neither does it.
+fn way_round(here: Vec2, p: Vec2, open: &dyn Fn(Vec2, Vec2) -> bool) -> Option<Vec<Vec2>> {
+    if open(here, p) {
+        return Some(vec![p]);
+    }
+    let around = |c: Vec2| {
+        [1.5f32, 2.5, 3.5].into_iter().flat_map(move |r| {
+            (0..16).map(move |k| c + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 16.0) * r)
+        })
+    };
+    let mut corners: Vec<Vec2> = around(here).chain(around(p)).collect();
+    corners.sort_by(|a, b| {
+        (here.distance(*a) + a.distance(p)).total_cmp(&(here.distance(*b) + b.distance(p)))
+    });
+    corners
+        .into_iter()
+        .find(|q| open(here, *q) && open(*q, p))
+        .map(|q| vec![q, p])
 }
 
 /// Home ahead of the Surge's warning by this much (s): time to call and
@@ -6178,6 +6216,57 @@ the Hollow.";
     /// newcomer stood through eight zaps in the shelter's generator room);
     /// its gun out of the pack if that's the loaded one; else out of its
     /// line. And while one's at it, no keeping still and no dressing.
+    /// Where a newcomer with no radio could find one, valley by valley:
+    /// each loot spot whose table can roll one, on the ground or up a
+    /// floor (a tower's cab), and whether any is on the ground. Run with
+    /// `--ignored --nocapture` for the list.
+    #[test]
+    #[ignore = "a report: the radio spots in every valley"]
+    fn radio_spots_in_every_valley() {
+        use extraction_core::loot::{BUILTIN_LOOT, LootTables};
+        let catalog =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &catalog).unwrap();
+        let mut none_low = Vec::new();
+        for (name, text) in extraction_core::map::VALLEYS {
+            let map = extraction_core::map::MapDef::from_ron(text).unwrap();
+            let (mut low, mut high) = (Vec::new(), Vec::new());
+            for pl in &map.placements {
+                let Some(geo) = crate::world::buildings::prefab(&pl.prefab) else {
+                    continue;
+                };
+                for spot in geo.loot.iter().filter(|s| loot.can_drop(s.table, "radio")) {
+                    let floor = spot.at.y - spot.lift.unwrap_or(0.0);
+                    let at = format!(
+                        "{} at {:?} ({}, floor {:.1} m)",
+                        pl.prefab, pl.at, spot.table, floor
+                    );
+                    if floor > super::DOOR_STEPS {
+                        high.push(at);
+                    } else {
+                        low.push(at);
+                    }
+                }
+            }
+            println!(
+                "== {name}: {} on the ground, {} up a floor",
+                low.len(),
+                high.len()
+            );
+            for a in &high {
+                println!("   up:  {a}");
+            }
+            for a in &low {
+                println!("   low: {a}");
+            }
+            if low.is_empty() {
+                none_low.push(name);
+            }
+        }
+        println!("valleys with no radio spot on the ground: {none_low:?}");
+    }
+
     /// A radio up in a tower's cab, over the ground floor it stands on, is
     /// none to go for; one on a shelf is.
     #[test]
@@ -6394,6 +6483,38 @@ the Hollow.";
         for p in round_boxes(&boxes, out, to) {
             assert!(!through(at, p), "{at} -> {p} through the pile");
             at = p;
+        }
+    }
+
+    /// Crouched on a walker's side of a log pile, the cover behind its far
+    /// side is reached round the pile's end, not through it (Marrow's
+    /// first fight: the pile at (8, 146.5), the newcomer at (10.8, 145.8),
+    /// the walker 3.8 m east).
+    #[test]
+    fn cover_behind_what_it_crouches_by_is_reached_round_it() {
+        use super::{nearest_where, segment_hits_box};
+        let pile = (Vec2::new(8.0, 146.5), Vec2::new(1.25 + 0.3, 3.5 + 0.3));
+        let through = |a: Vec2, b: Vec2| segment_hits_box(a - pile.0, b - pile.0, pile.1).is_some();
+        let open = |a: Vec2, b: Vec2| !through(a, b);
+        let here = Vec2::new(10.8, 145.8);
+        let eye = Vec2::new(14.6, 145.0);
+        // Hidden: the pile itself between it and the eye, and the eye a
+        // step either side (`EYE_SWAY`), as `break_line` asks.
+        let sight = (pile.0, Vec2::new(1.25, 3.5));
+        let side = (here - eye).normalize().perp() * super::EYE_SWAY;
+        let good = |p: Vec2| {
+            [eye, eye + side, eye - side]
+                .iter()
+                .all(|e| segment_hits_box(*e - sight.0, p - sight.0, sight.1).is_some())
+        };
+        let away = (here - eye).normalize();
+        let way = nearest_where(here, away, &open, &good).expect("cover round the pile");
+        let end = *way.last().unwrap();
+        assert!(end.x < 8.0 - 1.25, "behind the pile's far side: {way:?}");
+        let mut at = here;
+        for q in &way {
+            assert!(!through(at, *q), "{at} -> {q} through the pile: {way:?}");
+            at = *q;
         }
     }
 
