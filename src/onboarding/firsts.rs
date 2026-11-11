@@ -1204,6 +1204,10 @@ mod tests {
         ("walker", Ok(First::Aimed)),
         ("walker_with", Ok(First::Aimed)),
         ("walker_sized", Ok(First::Aimed)),
+        (
+            "walker_shaped",
+            Err("a walker in another body: the grappler's and the crawler's, named under theirs"),
+        ),
         ("broken_walker", Ok(First::BrokenNoticed)),
         ("drone", Ok(First::DroneLock)),
         ("hound", Ok(First::Hound)),
