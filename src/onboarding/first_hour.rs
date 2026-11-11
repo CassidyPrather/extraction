@@ -2004,7 +2004,7 @@ pub(super) fn direct_raid(
         && state.routed != Some(to)
     {
         state.routed = Some(to);
-        if let Some(way) = routed_leg(&world, here, to, within) {
+        if let Some(way) = routed_leg(&world, root.translation, to, within) {
             bot.tasks.pop_front();
             for t in way.into_iter().rev() {
                 bot.tasks.push_front(t);
@@ -3433,9 +3433,18 @@ fn crossed(boxes: &[(Transform, Vec2)], a: Vec2, b: Vec2) -> Option<Vec2> {
 /// `to`, straight through something `walk` goes round (a building, a
 /// solid, an open hall's wall, the fence), `walk`'s way there instead, its
 /// last leg as near as the leg asked; `None` to walk it as it is (clear,
-/// a sidestep round a body, or no clear way round found).
-fn routed_leg(world: &World2, here: Vec2, to: Vec2, within: f32) -> Option<Vec<Task>> {
+/// a sidestep round a body, or no clear way round found). What `walk` goes
+/// round stands on the ground: in a building or under it, the leg is the
+/// indoor plan's, and walked as it is. (The lost newcomer, in the post
+/// office's cellar, had a leg under the post office's wall put round it
+/// above: out to the cellar's wall, and stuck there.)
+fn routed_leg(world: &World2, feet: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    let here = feet.xz();
     if within == crate::bot::SIDESTEP || here.distance(to) < 0.5 {
+        return None;
+    }
+    let below = feet.y < world.zone.on_ground(here.x, here.y).y - 1.5;
+    if below || world.entrances.building_at(feet + Vec3::Y * 0.5).is_some() {
         return None;
     }
     let boxes = walk_boxes(world);
@@ -7596,7 +7605,8 @@ mod indoor_tests {
                 let Task::WalkTo { to, within } = t else {
                     continue;
                 };
-                if choke && let Some(way) = routed_leg(&world, at, to, within) {
+                let feet = world.zone.on_ground(at.x, at.y);
+                if choke && let Some(way) = routed_leg(&world, feet, to, within) {
                     for t in way.into_iter().rev() {
                         q.push_front(t);
                     }
@@ -7686,5 +7696,39 @@ mod indoor_tests {
             raw.values().sum::<usize>() > 0,
             "no producer handed out a leg through a box: the check is untested"
         );
+    }
+
+    /// A leg under a building, or in one, is the indoor plan's: walked as
+    /// it is. The lost newcomer in the post office's cellar on Marrow, a
+    /// step under its wall, had it put round the post office above, out
+    /// to the cellar's wall (`Vec2(-19.5, 72.9)`), and stood there till the
+    /// walk timed out.
+    #[test]
+    fn a_leg_under_the_ground_is_not_routed_round_what_stands_on_it() {
+        use super::{crossed, routed_leg, walk_boxes};
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut st: SystemState<super::World2> = SystemState::new(w);
+        let world = st.get(w).unwrap();
+        let (at, to) = (Vec2::new(-17.550154, 67.138695), Vec2::new(-17.325, 66.125));
+        let ground = world.zone.on_ground(at.x, at.y);
+        let cellar = Vec3::new(at.x, 12.29, at.y);
+        assert!(cellar.y < ground.y - 1.5, "the cellar under {ground}");
+        assert!(
+            crossed(&walk_boxes(&world), at, to).is_some(),
+            "drawn on the ground, the leg goes through the post office"
+        );
+        let way = routed_leg(&world, cellar, to, 0.4);
+        assert!(way.is_none(), "in the cellar, put round above: {way:?}");
     }
 }
