@@ -14,6 +14,7 @@ and their origins (each the spawn offset of its part):
 - `plate`   (0, 0, -0.4)       an armour plate over the orb, facing -Z (the game turns it)
 - `hound_body`, `hound_head`   the hound (see below)
 - `panel`   a loose shell panel for wrecks, origin at its middle (on the orb's surface)
+- `crawler_core` (0, 0, 0)   a crawler's shell in place of the orb: low, wide, flat-topped
 
 Leg segments have their bend axis along X (the game points X along the
 normal of the leg's plane) so knees hinge the right way.
@@ -242,7 +243,45 @@ panel = Part("panel", origin=(0.0, R * math.sin(math.radians(PANEL_LAT)),
 panel.lathe(lat_arc(R - 0.016, R + 0.004, PANEL_LAT - 16, PANEL_LAT + 16, 6), "Shell", segs=7,
             xf=UP, start=70, sweep=40, closed=True)
 
-for p in (core, sensor, turret, upper, lower, panel, emitter, plate, hb, head):
+# --- The crawler's shell (src/robots/indoor.rs: a walker at 0.6) ----------------------
+# A walker small was a walker in outline (`robots::silhouette`): the
+# crawler's core is its own, low, wide and flat-topped, a beetle's back
+# where the walker has a ball and a turret. Pale above, dark below, the
+# cyan ring round its rim. As deep front to back as the orb at the eye's
+# height (the visor and the spark gun stay where they are on it), wider
+# across. Collider (Robot bodies'): cylinder r 0.45, h 0.5 at y -0.02.
+crawler = Part("crawler_core")
+CR, CY0, TOP, BELLY = 0.41, -0.02, 0.25, -0.31
+WIDE = S(1.2, 1.0, 1.0)
+
+
+def crawler_profile(lo, hi, n):
+    out = []
+    for i in range(n + 1):
+        y = lo + (hi - lo) * i / n
+        if y >= CY0:
+            t = min((y - CY0) / (TOP - CY0), 1.0)
+            r = CR * (1.0 - t ** 4) ** 0.25
+        else:
+            t = min((CY0 - y) / (CY0 - BELLY), 1.0)
+            r = CR * math.sqrt(max(1.0 - t * t, 0.0))
+        out.append((r, y))
+    return out
+
+
+upper_shell = crawler_profile(CY0, TOP, 10)
+crawler.lathe([(0.0, TOP)] + list(reversed(upper_shell)), "Shell", segs=32, xf=WIDE @ UP)
+crawler.lathe([(0.0, BELLY)] + crawler_profile(BELLY, CY0, 8)[1:], "Dark", segs=32,
+              xf=WIDE @ UP)
+# (Its faces 4 mm or more off the orb's ring and shell, which share the
+# file: `capture::fighting` holds a model's nodes apart.)
+crawler.lathe([(CR + 0.016, CY0 - 0.022), (CR + 0.016, CY0 + 0.022), (CR + 0.005, CY0 + 0.022),
+               (CR + 0.005, CY0 - 0.022)], "Glow", segs=40, xf=WIDE @ UP, closed=True)
+# A dark lid inset on its flat top.
+crawler.lathe([(0.0, TOP + 0.004), (0.22, TOP + 0.004), (0.24, TOP - 0.01), (0.0, TOP - 0.01)],
+              "Dark", segs=24, xf=WIDE @ UP)
+
+for p in (core, sensor, turret, upper, lower, panel, emitter, plate, hb, head, crawler):
     make(p)
 report()
 export("assets/models/robots/walker.glb")

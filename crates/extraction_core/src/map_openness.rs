@@ -596,7 +596,37 @@ mod probe_walk {
         let text = crate::map::VALLEYS.iter().find(|v| v.0 == id).unwrap().1;
         let map = MapDef::from_ron(text).unwrap();
         let hm = Heightmap::build(&map);
-        let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+        let mut comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+        // A newcomer keeps to the tracks: open ground costs twice a road,
+        // and a road is a lane the walk follows, so the route bends with
+        // the track rather than cutting a chord past a barn wall.
+        comfy.scale_cost_in(
+            &[
+                [-2000.0, -2000.0],
+                [2000.0, -2000.0],
+                [2000.0, 2000.0],
+                [-2000.0, 2000.0],
+            ],
+            2.0,
+        );
+        for rl in &hm.road_lines {
+            let half = (rl.width * 0.5).max(1.0);
+            for w in rl.points.windows(2) {
+                let (a, b) = (w[0], w[1]);
+                let len = crate::geom::dist(a, b).max(1e-3);
+                let (nx, ny) = (-(b[1] - a[1]) / len * half, (b[0] - a[0]) / len * half);
+                comfy.scale_cost_in(
+                    &[
+                        [a[0] + nx, a[1] + ny],
+                        [b[0] + nx, b[1] + ny],
+                        [b[0] - nx, b[1] - ny],
+                        [a[0] - nx, a[1] - ny],
+                    ],
+                    0.5,
+                );
+            }
+            comfy.lanes.push(rl.points.clone());
+        }
         let ins_m = map.markers_of(&MarkerKind::Insertion).next().unwrap();
         let (ins, ins_rot) = (ins_m.at, ins_m.rot);
         let (job, at) = crate::map_lint::first_jobs(&map, &id)

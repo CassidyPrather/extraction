@@ -55,6 +55,10 @@ pub struct Harpoon {
     pub hit: bool,
 }
 
+/// The launcher's muzzle, robot space: on its derrick's head, 3 m off
+/// the ground (`art/robots/logistics.py`); the line leaves from it.
+pub const MUZZLE: Vec3 = Vec3::new(0.0, 1.81, -1.23);
+
 pub const TETHER_RANGE: f32 = 22.0;
 pub const TETHER_TIME: f32 = 4.0;
 /// Walk speed while tethered.
