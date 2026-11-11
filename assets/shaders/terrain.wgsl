@@ -626,10 +626,10 @@ fn fragment(
             // middle, its soft edge fading into the fresh snow, so it still
             // reads as a way (all white, a snowed-in valley's lanes were
             // gone from a few metres off).
-            let trod = road * s * 0.85 * (1.0 - packed);
-            if (trod > 0.0) {
-                albedo = mix(albedo, vec3<f32>(0.56, 0.59, 0.64) * (0.93 + 0.12 * fine), trod);
-                rough = mix(rough, 0.6, trod);
+            let driven = road * s * 0.85 * (1.0 - packed);
+            if (driven > 0.0) {
+                albedo = mix(albedo, vec3<f32>(0.56, 0.59, 0.64) * (0.93 + 0.12 * fine), driven);
+                rough = mix(rough, 0.6, driven);
             }
         }
     }
