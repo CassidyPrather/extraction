@@ -3634,6 +3634,24 @@ const KNEE: f32 = 0.6;
 const CHEST: f32 = 1.4;
 /// A body's half width, kept clear past the end of a step (m).
 const BODY: f32 = 0.3;
+/// Room kept past a body's half width round a spot it's sent to stand at
+/// (m): pressed against a wreck's side, the one-handed newcomer never got
+/// within reach of its spot beside Marrow's lorry (16.13, 139.43) and
+/// stood the half minute.
+const PRESSED: f32 = 0.15;
+
+/// Whether a body stood at `p` keeps clear of every footprint in `boxes`
+/// by its half width and [`PRESSED`]: not inside one, nor pressed to it.
+fn room_to_stand(boxes: &[(Transform, Vec2)], p: Vec2) -> bool {
+    let m = BODY + PRESSED;
+    boxes.iter().all(|(xf, half)| {
+        let l =
+            xf.compute_affine()
+                .inverse()
+                .transform_point3(Vec3::new(p.x, xf.translation.y, p.y));
+        l.x.abs() >= half.x + m || l.z.abs() >= half.y + m
+    })
+}
 
 /// Out of sight of `eye`, the nearest way: low where it is, if that does it
 /// (a wall, a bank, a car between); else the nearest spot within 12 m it
@@ -3682,8 +3700,15 @@ fn break_line(
     };
     // (Nor up a bank: the one-handed newcomer's spot was on the creek's,
     // 3 m up in 4, and it stood at the bank's foot the half minute.)
+    // (Nor up against a footprint: every wreck, building and solid in
+    // reach, a body's width and a hand clear.)
+    let near: Vec<_> = walk_boxes(world)
+        .into_iter()
+        .filter(|(xf, half)| xf.translation.xz().distance(here) < 16.0 + half.length())
+        .collect();
     let open = |a: Vec2, p: Vec2| {
-        nav.is_none_or(|n| n.walkable(p.to_array()) && blocked_run(n, a, p) < 0.5)
+        room_to_stand(&near, p)
+            && nav.is_none_or(|n| n.walkable(p.to_array()) && blocked_run(n, a, p) < 0.5)
             && steep_run(&world.zone, a, p) <= STEEP_RUN
             && reach(a, p)
     };
@@ -6604,6 +6629,75 @@ the Hollow.";
             assert!(!through(at, *q), "{at} -> {q} through the pile: {way:?}");
             at = *q;
         }
+    }
+
+    /// Every wreck in every valley: a newcomer by it, a machine's eye
+    /// across it, the spot out of its line it's sent to has room to stand,
+    /// never pressed to the wreck's side. (And without the room kept, some
+    /// were: the test bites.)
+    #[test]
+    fn line_break_spots_by_every_wreck_have_room_to_stand() {
+        use super::{BODY, nearest_where, room_to_stand, segment_hits_box};
+        let (mut wrecks, mut cases, mut pressed_before) = (0, 0, 0);
+        let mut bad = Vec::new();
+        for map in crate::test_maps() {
+            let zone = crate::world::Zone::load(&map);
+            for pl in zone
+                .map
+                .placements
+                .iter()
+                .filter(|p| p.prefab.starts_with("wreck_"))
+            {
+                wrecks += 1;
+                let xf = crate::world::buildings::placement_transform(&zone, pl);
+                let shell = crate::robots::doors::Shell::of(Entity::PLACEHOLDER, &pl.prefab, xf);
+                let boxes = [(shell.xf, shell.half)];
+                let inv = shell.xf.compute_affine().inverse();
+                let local = |q: Vec2| {
+                    inv.transform_point3(Vec3::new(q.x, shell.xf.translation.y, q.y))
+                        .xz()
+                };
+                let world_at = |l: Vec2| shell.xf.transform_point(Vec3::new(l.x, 0.0, l.y)).xz();
+                let wide = shell.half + Vec2::splat(BODY);
+                let through =
+                    |a: Vec2, b: Vec2| segment_hits_box(local(a), local(b), wide).is_some();
+                // Each side: the eye 12 m out from it, the newcomer
+                // 1.5 m out on the same side, a little off its middle.
+                for dir in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {
+                    let reach = shell.half.dot(dir.abs());
+                    let eye = world_at(dir * (reach + 12.0));
+                    let here = world_at(dir * (reach + 1.5) + dir.perp() * 0.7);
+                    let good =
+                        |p: Vec2| segment_hits_box(local(eye), local(p), shell.half).is_some();
+                    let away = (here - eye).normalize_or(Vec2::X);
+                    let before = |a: Vec2, b: Vec2| !through(a, b);
+                    let after = |a: Vec2, b: Vec2| room_to_stand(&boxes, b) && !through(a, b);
+                    cases += 1;
+                    if let Some(w) = nearest_where(here, away, &before, &good) {
+                        if !room_to_stand(&boxes, *w.last().unwrap()) {
+                            pressed_before += 1;
+                        }
+                    }
+                    if let Some(w) = nearest_where(here, away, &after, &good) {
+                        for q in &w {
+                            if !room_to_stand(&boxes, *q) {
+                                bad.push(format!("{map} {} at {:?}: {q}", pl.prefab, pl.at));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(wrecks > 20, "found the wrecks: {wrecks}");
+        assert!(
+            bad.is_empty(),
+            "spots pressed to a wreck ({} of {cases}): {bad:#?}",
+            bad.len()
+        );
+        assert!(
+            pressed_before > 0,
+            "without the room kept, none were pressed: the test doesn't bite"
+        );
     }
 
     #[test]
