@@ -937,6 +937,26 @@ Mosin or an SKS filled a round at a time).
 the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
 speed for the same moment.
 
+**Your heart while you bleed** (`audio_kit::heartbeat`): bleeding made no
+sound, so a newcomer watching neither the wrist nor the screen's edge could
+bleed out in about 15 s after a fight. Now, once a bleed is more than a
+graze (over 0.1 HP/s), your heart beats in your head: a lub-dub, two soft
+low thumps (`body.heartbeat`, a stand-in). It beats at once, then every
+1.0 s at a light bleed, quickening to 0.45 s at 2 HP/s and over, and
+growing 12 dB louder. It stops when the bleed is dressed or clots, or when
+you go down. Each beat is a `Heartbeat` message, and the hands' pulse
+(Hands') answers the same one, so sound and haptics keep one rhythm.
+`audio_gunstate.heartbeat` gauges it beat by beat:
+- at its worst it's 18.6 dB over the wind, and at its lightest 6.6 (wants
+  6 and 3);
+- under combat, every machine's tell still clears its masking with it
+  beating at its worst, losing at most 1.5 dB (the Gate horn +35.5 to
+  +34.0; the sentry's chirp, the drone's lock and the flare's tell
+  unchanged).
+
+The range check, which averages loudness over time, reads a sparse thump
+as nothing; the per-beat gauge is its measure.
+
 **A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
 what the hit did. Shrugged off, a thin tink; a wound, the impact and a
 low thud; telling (a weak spot, a part giving way), a crunch and an

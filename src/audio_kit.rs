@@ -37,6 +37,8 @@ impl Plugin for KitSoundsPlugin {
             .add_message::<ActionGrind>()
             .add_message::<Lit>()
             .add_message::<crate::weapons::gunsmith::Worked>()
+            .add_message::<Heartbeat>()
+            .add_systems(Update, (heartbeat, heartbeat_sounds).chain())
             .add_systems(
                 Update,
                 (
@@ -54,6 +56,86 @@ impl Plugin for KitSoundsPlugin {
                     gunsmith_sounds,
                 ),
             );
+    }
+}
+
+/// One beat of a bleeding player's heart: heard here (`body.heartbeat`)
+/// and felt in the hands off the same message (`rig::haptics`, Hands'),
+/// so sound and pulse keep one rhythm. `level` 0..1: how hard you're
+/// bleeding.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct Heartbeat {
+    pub level: f32,
+}
+
+/// A bleed at or under this (HP a second) isn't heard: a graze clotting.
+pub const BLEED_HEARD: f32 = 0.1;
+/// A bleed this hard (HP a second) beats fastest and loudest.
+pub const BLEED_FULL: f32 = 2.0;
+/// The beat's period (s), from a light bleed to [`BLEED_FULL`]: 60 a
+/// minute to about 133.
+pub const BEAT_SLOW: f32 = 1.0;
+pub const BEAT_FAST: f32 = 0.45;
+/// How far under its cue a light bleed's beat sits (dB).
+pub const BEAT_QUIET_DB: f32 = -12.0;
+
+/// A bleed's beat: (period s, level 0..1), none when it isn't heard.
+pub fn bleed_beat(bleeding: f32) -> Option<(f32, f32)> {
+    if bleeding <= BLEED_HEARD {
+        return None;
+    }
+    let k = ((bleeding - BLEED_HEARD) / (BLEED_FULL - BLEED_HEARD)).clamp(0.0, 1.0);
+    Some((BEAT_SLOW + (BEAT_FAST - BEAT_SLOW) * k, k))
+}
+
+/// The local player's heart while they bleed: a beat as soon as it's
+/// heard, then one a period, quicker and harder as the bleed is worse;
+/// none once it's dressed, clotted under [`BLEED_HEARD`], or they're down.
+/// A newcomer looking at neither the wrist nor the screen's edge hears it.
+fn heartbeat(
+    players: Query<&crate::health::Health, With<crate::rig::LocalPlayer>>,
+    time: Res<Time>,
+    mut since: Local<Option<f32>>,
+    mut beats: MessageWriter<Heartbeat>,
+) {
+    let beat = players
+        .iter()
+        .next()
+        .filter(|h| !h.down)
+        .and_then(|h| bleed_beat(h.bleeding));
+    let Some((period, level)) = beat else {
+        *since = None;
+        return;
+    };
+    let t = since.map_or(period, |t| t + time.delta_secs());
+    if t >= period {
+        beats.write(Heartbeat { level });
+        *since = Some(0.0);
+    } else {
+        *since = Some(t);
+    }
+}
+
+/// Each beat heard in your head, not out in the world: quiet at a light
+/// bleed, [`BEAT_QUIET_DB`] under its cue, up to the cue at the worst.
+fn heartbeat_sounds(
+    mut commands: Commands,
+    mut beats: MessageReader<Heartbeat>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    if let Some(b) = beats.read().last() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "body/heartbeat",
+            None,
+            "body.heartbeat",
+            BEAT_QUIET_DB * (1.0 - b.level),
+            1.0 + 0.12 * b.level as f64,
+            0.02,
+        );
     }
 }
 
@@ -765,6 +847,73 @@ mod tests {
         assert!((grind_db(0.0) + 20.0).abs() < 1e-4);
     }
 
+    /// A bleed is heard once it's more than a graze, quicker and harder the
+    /// worse it is, and not at all once dressed or clotted.
+    #[test]
+    fn a_bleed_beats_quicker_the_worse() {
+        assert!(bleed_beat(0.0).is_none());
+        assert!(bleed_beat(BLEED_HEARD).is_none());
+        let (slow, quiet) = bleed_beat(0.2).unwrap();
+        let (fast, loud) = bleed_beat(BLEED_FULL).unwrap();
+        assert!(slow > fast && quiet < loud);
+        assert_eq!(bleed_beat(3.0), bleed_beat(BLEED_FULL));
+        assert!((fast - BEAT_FAST).abs() < 1e-6 && (loud - 1.0).abs() < 1e-6);
+        assert!(slow <= BEAT_SLOW);
+    }
+
+    /// In the world: bleeding hard, the local player's heart beats at once
+    /// and then every BEAT_FAST; dressed (bleeding 0), it stops; down, too.
+    #[test]
+    fn the_heart_beats_while_you_bleed() {
+        use crate::health::Health;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(50),
+            ))
+            .add_message::<Heartbeat>()
+            .add_systems(Update, heartbeat);
+        let p = app
+            .world_mut()
+            .spawn((
+                Health {
+                    bleeding: BLEED_FULL,
+                    ..default()
+                },
+                crate::rig::LocalPlayer,
+            ))
+            .id();
+        let mut beats = 0;
+        // Each update is 50 ms on.
+        let step = |app: &mut App| -> usize {
+            app.update();
+            let mut m = app.world_mut().resource_mut::<Messages<Heartbeat>>();
+            let n = m.drain().count();
+            n
+        };
+        beats += step(&mut app);
+        assert_eq!(beats, 1, "a beat at once");
+        for _ in 0..90 {
+            beats += step(&mut app);
+        }
+        // 4.5 s at BEAT_FAST: about ten more.
+        assert!((9..=11).contains(&(beats - 1)), "{beats}");
+        app.world_mut().get_mut::<Health>(p).unwrap().bleeding = 0.0;
+        let mut after = 0;
+        for _ in 0..40 {
+            after += step(&mut app);
+        }
+        assert_eq!(after, 0, "dressed, it stops");
+        let mut h = app.world_mut().get_mut::<Health>(p).unwrap();
+        h.bleeding = BLEED_FULL;
+        h.down = true;
+        let mut down = 0;
+        for _ in 0..40 {
+            down += step(&mut app);
+        }
+        assert_eq!(down, 0, "down, it stops");
+    }
+
     /// A drag is the cue's level at a full haul, softer and lower slower.
     #[test]
     fn drags_are_louder_the_faster() {
@@ -786,6 +935,7 @@ mod tests {
             ("physical/handle_metal", "bipod.swing"),
             ("physical/drop_metal", "gun.bump"),
             ("physical/handle_metal", "gun.grind"),
+            ("body/heartbeat", "body.heartbeat"),
             ("physical/handle_plastic", "glow.snap"),
             ("physical/zip", "glow.strike"),
             ("anomaly/burner_roar", "glow.burn"),
