@@ -287,7 +287,7 @@ fn road_weights(kind: u32, ee: f32, lip: f32, fine: f32) -> vec4<f32> {
         return vec4<f32>(0.0);
     }
     var road = 1.0 - smoothstep(-0.7, 0.8, ee);
-    if (kind == 4u) { road = 1.0 - smoothstep(-1.0, 1.8, ee); }
+    if (kind == 4u) { road = 1.0 - smoothstep(-1.2, 2.4, ee); }
     var w = vec3<f32>(0.0);
     if (kind == 1u) {
         w.y = road;
@@ -406,9 +406,9 @@ fn fragment(
     // on a metre or two past. (A 1 m ramp painted on the 2 m vertex grid
     // was a ruled seam along the triangles.)
     let road_e = (0.5 - splat.b) * 2.0 * EDGE_REACH;
-    // And over tens of metres it meanders half a metre either way: a long
+    // And over metres to tens of metres it meanders most of a metre either way: a long
     // edge of fine noise alone still ran straight as a rule.
-    let meander = (fbm(wp.xz * 0.12 + vec2<f32>(17.0, 29.0)) - 0.5) * 1.6;
+    let meander = (fbm(wp.xz * 0.18 + vec2<f32>(17.0, 29.0)) - 0.5) * 2.2;
     let ee = road_e + breakup * 1.3 + fine * 0.45 + meander;
     let lip = ee + fine * 0.4;
     // The kind is interpolated between vertices (where a lane meets a
