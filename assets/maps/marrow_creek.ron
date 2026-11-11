@@ -403,7 +403,7 @@
 
         // The old farm.
         (prefab: "farmhouse", at: (109.0, 80.0), rot: 270.0),
-        (prefab: "barn", at: (84.0, 64.8), rot: 0.0),
+        (prefab: "barn", at: (80.0, 64.8), rot: 0.0),  // 4 m off the Ford track: a building with its door as you pass, not a wall edge
         (prefab: "shed", at: (114.0, 99.8), rot: 90.0),
 
         // Village: houses along the district road, south of the bridge.
