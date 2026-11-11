@@ -1061,20 +1061,23 @@ fn run_tasks(
                 } else {
                     bot.progress.1 += dt;
                 }
-                // A live machine stood on the way (a blinded crawler still
-                // searching, say) is no wall: finish it if the gun's in
-                // hand, and go round it, close to the spot or not.
+                // A machine on the way is no wall: one still up (a blinded
+                // crawler searching, say) finished if the gun's in hand, and
+                // either, up or a wreck, gone round, close to the spot or not.
+                // (A walker downed onto the way to a spot picked before it
+                // fell: one-handed stood against its orb and plates the half
+                // minute, beside Marrow's lorry.)
                 if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP {
                     let body = robots
                         .iter()
-                        .filter(|(_, r, _)| !r.wrecked)
-                        .map(|(_, _, gt)| gt.translation())
-                        .filter(|p| p.xz().distance(pos) < BODY_IN_THE_WAY)
-                        .min_by(|a, b| a.xz().distance(pos).total_cmp(&b.xz().distance(pos)));
-                    if let Some(body) = body {
-                        let armed = hand(gun_side)
-                            .and_then(|h| h.holding)
-                            .is_some_and(|e| guns.get(e).is_ok());
+                        .map(|(_, r, gt)| (gt.translation(), r.wrecked))
+                        .filter(|(p, _)| p.xz().distance(pos) < BODY_IN_THE_WAY)
+                        .min_by(|a, b| a.0.xz().distance(pos).total_cmp(&b.0.xz().distance(pos)));
+                    if let Some((body, wrecked)) = body {
+                        let armed = !wrecked
+                            && hand(gun_side)
+                                .and_then(|h| h.holding)
+                                .is_some_and(|e| guns.get(e).is_ok());
                         bot.sidesteps += 1;
                         bot.tasks.push_front(Task::WalkTo {
                             to: round_body(pos, to, body.xz()),
@@ -1083,14 +1086,17 @@ fn run_tasks(
                         if armed {
                             bot.tasks.push_front(Task::Fire { at: body, shots: 3 });
                         }
-                        // (What anyone stood there would know: it's up,
-                        // it's against them, and whether their gun's in
-                        // hand. Not how hurt it is.)
+                        // (What anyone stood there would know: whether it's
+                        // up or a wreck, it's against them, and whether
+                        // their gun's in hand. Not how hurt it is.)
                         bot.note(format!(
-                            "a machine in the way at {:.1?}, up and {:.1} m off, the walk stalled: {}",
+                            "a machine in the way at {:.1?}, {} and {:.1} m off, the walk stalled: {}",
                             body.xz(),
+                            if wrecked { "a wreck" } else { "up" },
                             body.xz().distance(pos),
-                            if armed {
+                            if wrecked {
+                                "round it"
+                            } else if armed {
                                 "gun in hand, so shot it, then round it"
                             } else {
                                 "no gun in hand, so round it"
