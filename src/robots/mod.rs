@@ -68,6 +68,7 @@ pub mod senses;
 pub mod sentry;
 pub mod sentry_look;
 pub mod signs;
+pub mod silhouette;
 pub mod sorter;
 pub mod sorter_look;
 pub mod sorter_mind;

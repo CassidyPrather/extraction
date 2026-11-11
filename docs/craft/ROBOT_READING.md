@@ -160,6 +160,42 @@ longer culled by the render budget's size fade).
 - **30 m**: the same, sharper; facing still reads from the walker's brow
   and eye.
 
+### Silhouettes first (10 November)
+
+The user, on the family line-up: "the round-bodied walkers barely changed
+at all". The brow and the spar were detail; the walker and the grappler
+were one shape, a pale ball on four splayed legs.
+
+- **A gauge, so it can't come back** (`robots::silhouette`,
+  `no_two_machines_share_an_outline`): each line-up machine, dressed and
+  standing as the game draws it, cast as a solid mask from the six
+  views (30 and 60 m; facing you, side-on, away) at the headset's 14.3 px
+  a degree, a pixel on if more than half covered (a spar under half a
+  pixel isn't in the outline). Each pair is fitted one on the other
+  (scaled to one height by their bodies, softened 2 px, slid and scaled
+  for the most overlap) and held to an IoU of 0.7, in every view and on
+  the mean. `EXTRACTION_SILHOUETTE_OUT=DIR` writes the sheet and table.
+- **The grappler is a derrick**: a shell boom from the turret ring leaning
+  forward to the launcher's head 3 m up, a line drum behind as its
+  counterweight (`art/robots/logistics.py`; Robot bodies armoured the
+  boom). Side-on a diagonal and a disc; walker/grappler 0.81 to 0.40 on
+  the mean. Head-on it is still an orb on the walker's splay with a mast
+  over it (0.68 in that view): part 2 gives it a winch body, a wide low
+  box on a broad low stance, and the crawler a carapace wider than its
+  tucked legs.
+- **The crawler** has its own low flat shell (`crawler_core`); alone it
+  moved walker/crawler at 30 m only 0.80 to 0.72: legs are most of these
+  outlines.
+- The green glow behind the grappler's head in some frames is a light in
+  the training yard beyond the line-up, on and off from frame to frame
+  (it's in the before frames too, at the same pixel), not the grappler's.
+
+![silhouettes, before and after](../shots/robots/silhouettes_before_after.png)
+![fog, before](../shots/robots/family_fog_colour_silhouette_before.jpg)
+![fog, after](../shots/robots/family_fog_colour_silhouette_after.jpg)
+![drizzle, before](../shots/robots/family_drizzle_colour_silhouette_before.jpg)
+![drizzle, after](../shots/robots/family_drizzle_colour_silhouette_after.jpg)
+
 ## What a robot leaves behind (4 November)
 
 Can a player tell, by looking, what comes off a wreck and what it is?
