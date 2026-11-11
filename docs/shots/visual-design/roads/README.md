@@ -96,3 +96,28 @@ Both read soft in their sheets.
 "Not measured" means the gauge found no road-to-grass edge to measure in that frame. Sallow 5 reads over 4 m in both: its frame takes in more than the one edge.
 
 **Cost.** Performance measured cd79b418 against main: Cinder's arrival view was −3% (noise) and Kettle's s23_side −12%. Draws and triangles are identical. Ground with no road near now skips the road blend.
+
+## Dirt lanes from the eye
+
+`lanes_standing.png` shows every valley's dirt lanes from eye height, standing on the lane and looking along it, now (main, left) against after (right).
+
+With soft edges, a dirt lane at the grass's own value read as one ground with the field. Two changes fix that:
+
+- **A packed, paler middle.** The dirt brightens toward the middle (×1.3–1.45), only from 0.3 m in from the edge, so the edge stays as soft as it was.
+- **Snowed roads read as slush.** Under snow (Rime Fell's lanes, any first snow), a road is grey slush with the ground showing in its ruts. All white, the lanes were gone from a few metres off.
+
+The lane against the grass (or snow) either side, as a luminance contrast:
+
+| valley, lane | 10 m | 20 m | 40 m |
+|---|---|---|---|
+| Marrow, Farm lane | +12% → +54% | +11% → +31% | (over the brow) |
+| Marrow, Farm track | +5% → +30% | +9% → +34% | +7% → +5% |
+| Kettle, Camp ford (to the ford) | +35% → +44% | (in the water) | (in the water) |
+| Kettle, Camp ford | +35% → +97% | +7% → +51% | −5% → +17% |
+| Cinder, Farm lane | +60% → +118% | +47% → +45% | (on the bend) |
+| Sallow, Back lane over the silt | +195% → +334% | +147% → +244% | +85% → +87% |
+| Sallow, Back lane | +97% → +138% | +28% → +28% | +12% → +13% |
+| Rime, Col track, under snow | +5% → −22% | +2% → −17% | 0% → −3% |
+| Rime, Compressor lane, under snow | 0% → −39% | +49% → −11% | (on the building) |
+
+On Rime a minus is the lane darker than the snow. A cell in brackets is where that distance isn't on the lane: past a brow, a bend, the ford or a building. For those, the pictures carry it.
