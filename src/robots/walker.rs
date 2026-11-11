@@ -21,7 +21,7 @@ use crate::weapons::ballistics::Shot;
 use crate::world::Zone;
 
 pub use super::anim::solve_knee;
-use super::anim::{BODY_HEIGHT, LEGS, rest_offset};
+use super::anim::{BODY_HEIGHT, LEGS, Shape};
 
 pub const UPPER: f32 = 0.8;
 pub const LOWER: f32 = 0.95;
@@ -434,10 +434,38 @@ pub fn spawn_walker_sized(
     size: f32,
     floor: Option<f32>,
 ) -> Entity {
+    spawn_walker_shaped(
+        commands,
+        zone,
+        at,
+        job,
+        armed,
+        core_hp,
+        size,
+        floor,
+        Shape::Orb,
+    )
+}
+
+/// [`spawn_walker_sized`] with a body of its own (`anim::Shape`): the
+/// grappler's winch box, the crawler's carapace. Its stance, its legs'
+/// length and its core's hit volume ([`super::body_shells`]) come with it.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_walker_shaped(
+    commands: &mut Commands,
+    zone: &Zone,
+    at: Vec3,
+    job: Job,
+    armed: bool,
+    core_hp: f32,
+    size: f32,
+    floor: Option<f32>,
+    shape: Shape,
+) -> Entity {
     let floor = |x: f32, z: f32| floor.unwrap_or_else(|| zone.ground(x, z));
-    let pos = Vec3::new(at.x, floor(at.x, at.z) + BODY_HEIGHT * size, at.z);
+    let pos = Vec3::new(at.x, floor(at.x, at.z) + shape.height() * size, at.z);
     let feet = std::array::from_fn(|i| {
-        let p = pos + rest_offset(i) * size;
+        let p = pos + shape.rest(i) * size;
         let f = Vec3::new(p.x, floor(p.x, p.z), p.z);
         Foot {
             planted: f,
@@ -486,7 +514,7 @@ pub fn spawn_walker_sized(
             Brain::Transit { to: job.site },
             job,
             Transform::from_translation(pos).with_scale(Vec3::splat(size)),
-            super::anim::Gait::sized(size),
+            super::anim::Gait::shaped(size, shape),
             Visibility::default(),
             RigidBody::Kinematic,
         ))
@@ -498,7 +526,7 @@ pub fn spawn_walker_sized(
                 robot,
                 PartRole::Core,
                 core_hp,
-                Collider::sphere(0.4),
+                super::body_shells::core(shape),
                 Transform::IDENTITY,
             ),
         ));
@@ -533,7 +561,7 @@ pub fn spawn_walker_sized(
                     robot,
                     PartRole::Leg(i as u8),
                     35.0,
-                    Collider::capsule(0.06, LOWER),
+                    Collider::capsule(0.06, LOWER * shape.legs()),
                     Transform::IDENTITY,
                 ),
             ));

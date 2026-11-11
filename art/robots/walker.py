@@ -14,6 +14,9 @@ and their origins (each the spawn offset of its part):
 - `plate`   (0, 0, -0.4)       an armour plate over the orb, facing -Z (the game turns it)
 - `hound_body`, `hound_head`   the hound (see below)
 - `panel`   a loose shell panel for wrecks, origin at its middle (on the orb's surface)
+- `crawler_core` (0, 0, 0)   a crawler's shell in place of the orb: low, wide, flat-topped
+- `grappler_core` (0, 0, 0)  a grappler's winch body in place of the orb: a wide low box
+- `plate_flat` (0, 0, -0.9)  a flat armour plate for the box-bodied, facing -Z like `plate`
 
 Leg segments have their bend axis along X (the game points X along the
 normal of the leg's plane) so knees hinge the right way.
@@ -242,7 +245,90 @@ panel = Part("panel", origin=(0.0, R * math.sin(math.radians(PANEL_LAT)),
 panel.lathe(lat_arc(R - 0.016, R + 0.004, PANEL_LAT - 16, PANEL_LAT + 16, 6), "Shell", segs=7,
             xf=UP, start=70, sweep=40, closed=True)
 
-for p in (core, sensor, turret, upper, lower, panel, emitter, plate, hb, head):
+# --- The crawler's shell (src/robots/indoor.rs: a walker at 0.6) ----------------------
+# A walker small was a walker in outline (`robots::silhouette`): the
+# crawler's core is its own, low, wide and flat-topped, a beetle's back
+# where the walker has a ball and a turret, wider than its legs' span
+# (they tuck under it: Robot bodies' Shape::Crawler). Pale above, dark
+# below, the cyan ring round its rim. As deep front to back as the orb at
+# the eye's height (the visor and the spark gun stay where they are on
+# it), 1.7 times as wide across. Collider (Robot bodies'): a cuboid.
+crawler = Part("crawler_core")
+CR, CY0, TOP, BELLY = 0.41, -0.02, 0.25, -0.31
+WIDE = S(1.7, 1.0, 1.0)
+
+
+def crawler_profile(lo, hi, n):
+    out = []
+    for i in range(n + 1):
+        y = lo + (hi - lo) * i / n
+        if y >= CY0:
+            t = min((y - CY0) / (TOP - CY0), 1.0)
+            r = CR * (1.0 - t ** 4) ** 0.25
+        else:
+            t = min((CY0 - y) / (CY0 - BELLY), 1.0)
+            r = CR * math.sqrt(max(1.0 - t * t, 0.0))
+        out.append((r, y))
+    return out
+
+
+upper_shell = crawler_profile(CY0, TOP, 10)
+crawler.lathe([(0.0, TOP)] + list(reversed(upper_shell)), "Shell", segs=32, xf=WIDE @ UP)
+crawler.lathe([(0.0, BELLY)] + crawler_profile(BELLY, CY0, 8)[1:], "Dark", segs=32,
+              xf=WIDE @ UP)
+# (Its faces 4 mm or more off the orb's ring and shell, which share the
+# file: `capture::fighting` holds a model's nodes apart.)
+crawler.lathe([(CR + 0.016, CY0 - 0.022), (CR + 0.016, CY0 + 0.022), (CR + 0.005, CY0 + 0.022),
+               (CR + 0.005, CY0 - 0.022)], "Glow", segs=40, xf=WIDE @ UP, closed=True)
+# A dark lid inset on its flat top.
+crawler.lathe([(0.0, TOP + 0.004), (0.22, TOP + 0.004), (0.24, TOP - 0.01), (0.0, TOP - 0.01)],
+              "Dark", segs=24, xf=WIDE @ UP)
+
+# --- The grappler's winch body (src/robots/grappler.rs) ------------------------------------
+# A grappler was a walker's orb with a mast on it, and head-on a walker
+# still (`robots::silhouette`): its core is a winch, a wide low box, its
+# legs out from its corners on a broad stance (Robot bodies'
+# Shape::Grappler); the derrick (harpoon.glb) stands on its back. Front
+# face at z -0.36: the visor at (0, 0.12, -0.36) stands proud of it.
+# Collider (Robot bodies'): cuboid 1.10 x 0.55 x 0.78 at (0, -0.025, 0.03).
+winch = Part("grappler_core")
+GX, GY0, GY1, GZ0, GZ1 = 0.55, -0.30, 0.25, -0.36, 0.42
+GZM = (GZ0 + GZ1) / 2
+# Pale housing over a dark chassis.
+winch.box((2 * GX, GY1 + 0.17, GZ1 - GZ0), (0.0, (GY1 - 0.17) / 2, GZM), "Shell", bevel=0.06,
+          segs=3)
+winch.box((2 * GX - 0.08, 0.2, GZ1 - GZ0 - 0.08), (0.0, GY0 + 0.1, GZM), "Dark", bevel=0.03,
+          segs=2)
+# The cyan strip round its waist (the orb's ring), 5 mm proud.
+for sz, z in ((1, GZ0 - 0.005), (1, GZ1 + 0.005)):
+    winch.box((2 * GX - 0.16, 0.035, 0.006), (0.0, -0.05, z), "Glow", bevel=0.002, segs=1)
+for sx in (-1, 1):
+    winch.box((0.006, 0.035, GZ1 - GZ0 - 0.16), (sx * (GX + 0.005), -0.05, GZM), "Glow",
+              bevel=0.002, segs=1)
+# Dark side panels and a dark face round the visor.
+for sx in (-1, 1):
+    winch.box((0.012, 0.18, 0.46), (sx * (GX + 0.004), 0.1, GZM), "Dark", bevel=0.01, segs=1)
+winch.box((0.5, 0.2, 0.012), (0.0, 0.12, GZ0 - 0.004), "Dark", bevel=0.01, segs=1)
+# Hip sockets at its lower corners, where the legs come out.
+for sx in (-1, 1):
+    for sz in (-1, 1):
+        winch.sphere(0.075, (sx * 0.42, -0.18, sz * 0.26), "Dark", segs=16, rings=8)
+
+# --- A flat plate, for the box-bodied (grappler, crawler) -------------------------------
+# The walker's plate is curved to the orb; on a box a plate lies flat on a
+# face. A 0.30 x 0.28 slab 3 cm thick, a dark rim and four bolts, facing
+# -Z like `plate` (the game turns it the same way, src/robots/visuals.rs
+# `plate_turn`, from its node's direction). Its node sits well clear of
+# the others in the file (z -0.9) for `capture::fighting`.
+flat = Part("plate_flat", origin=(0.0, 0.0, -0.9))
+flat.box((0.30, 0.28, 0.03), (0.0, 0.0, -0.9), "Shell", bevel=0.008, segs=2)
+flat.box((0.32, 0.30, 0.02), (0.0, 0.0, -0.893), "Dark", bevel=0.006, segs=1)
+for bx in (-0.12, 0.12):
+    for by in (-0.11, 0.11):
+        flat.sphere(0.009, (bx, by, -0.917), "Dark", segs=10, rings=5)
+
+for p in (core, sensor, turret, upper, lower, panel, emitter, plate, hb, head, crawler, winch,
+          flat):
     make(p)
 report()
 export("assets/models/robots/walker.glb")

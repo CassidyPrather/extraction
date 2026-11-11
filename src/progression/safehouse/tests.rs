@@ -307,6 +307,7 @@ fn an_expedition_counts_only_after_a_night_out() {
         artifacts: Vec::new(),
         nights,
         leg: None,
+        cause: None,
     };
     app.world_mut()
         .resource_mut::<crate::raid::logbook::Logbook>()

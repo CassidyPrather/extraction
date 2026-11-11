@@ -46,6 +46,8 @@ pub struct TerrainParams {
     /// Snow lying, 0..1, above `snow_line` (m; `world::snow`).
     pub snow: f32,
     pub snow_line: f32,
+    /// 1 for `--terrain-debug layers`: each layer a flat colour, unlit.
+    pub debug: f32,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -140,6 +142,7 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
                 rain: 0.0,
                 snow: 0.0,
                 snow_line: crate::render::fog::NO_SNOW,
+                debug: 0.0,
             },
             albedo: load("albedo", true),
             normal: load("normal", false),
