@@ -62,12 +62,35 @@ def measure(png):
         cs = [px[x, y] for y in range(h // 4, 3 * h // 4, 4) for x in range(max(x0, 0), min(x1, w), 2)]
         return tuple(median([c[i] for c in cs]) for i in range(3))
 
-    # The road is the side less green just in from the edge (a narrow
-    # road's far side is grass again, so not the frame's own edge).
+    # The grass: the greener of the two far strips (a narrow road's far
+    # side is grass again). The road: the side, and the colour, of the
+    # column within 2.5 m of the edge least like the grass (where the
+    # edge wanders, a fixed strip a metre in can be verge, not road).
     greenness = lambda c: c[1] - c[0]
-    road_left = greenness(side(-1.6, -1.0)) < greenness(side(1.0, 1.6))
-    s = -1 if road_left else 1
-    road, grass = side(s * 1.6, s * 1.0), side(-s * 6.0, -s * 4.5)
+    def column(x):
+        col = [px[x, y] for y in range(h // 4, 3 * h // 4, 4)]
+        return tuple(median([q[i] for q in col]) for i in range(3))
+
+    # The greenest column 3.5-6.5 m out either side (a strip there can be
+    # a narrow road's other verge).
+    far = [
+        column(int(cx + s * k))
+        for s in (-1, 1)
+        for k in range(int(3.5 * ppm), int(6.5 * ppm), max(int(0.1 * ppm), 1))
+        if 0 <= int(cx + s * k) < w
+    ]
+    grass = max(far, key=greenness)
+    best = None
+    for s in (-1, 1):
+        for k in range(int(0.3 * ppm), int(2.5 * ppm), max(int(0.1 * ppm), 1)):
+            x = int(cx + s * k)
+            if not 0 <= x < w:
+                continue
+            c = column(x)
+            d = dist(c, grass)
+            if best is None or d > best[0]:
+                best = (d, s, c)
+    _, s, road = best
     if dist(road, grass) < 40:
         return None
     # Each row from 2.5 m in on the road to 6.5 m out on the grass.
@@ -79,19 +102,27 @@ def measure(png):
     band = max(int(0.6 * ppm), 8)
     widths, mids = [], []
     for y0 in range(0, h - band + 1, band // 2):
-        t = []
+        # Per column: how much like the road it is, and how much like the
+        # grass, each on its own (a verge's own colour, a gravel lip's
+        # yellow, is neither: nearer one or the other, it still isn't it).
+        span = dist(road, grass)
+        t, rn, gn = [], [], []
         for x in xs:
-            col = []
+            ct, cr, cg = [], [], []
             for y in range(y0, y0 + band, 2):
                 c = px[x, y]
                 dr, dg = dist(c, road), dist(c, grass)
-                col.append(dg / (dr + dg + 1e-6))  # 1 road, 0 grass
-            t.append(median(col))
+                ct.append(dg / (dr + dg + 1e-6))
+                cr.append(1.0 - dr / span)
+                cg.append(1.0 - dg / span)
+            t.append(median(ct))
+            rn.append(median(cr))
+            gn.append(median(cg))
         nt = len(t)
         # Out from the road: where it stops being 90% road, and where it
         # is first 90% grass (a patch further out isn't this edge's).
-        a = next((x for x in range(nt) if t[x] < 0.9), None)
-        b = next((x for x in range(a or 0, nt) if t[x] < 0.1), None)
+        a = next((x for x in range(nt) if rn[x] < 0.9), None)
+        b = next((x for x in range(a or 0, nt) if gn[x] >= 0.9), None)
         m = next((x for x in range(nt) if t[x] < 0.5), None)
         if a is None or b is None or m is None or b < a:
             continue
