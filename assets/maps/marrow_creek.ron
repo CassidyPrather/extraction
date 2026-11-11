@@ -499,11 +499,14 @@
         // (map_lint FIRST_RUN) on the tight valley's ground: the farms' and
         // the village's wood, stacked by the ways.
         (prefab: "log_pile", at: (28.3, 128.5), rot: 155.0),
-        // Cover off the drop: a newcomer breaking west off the district road
-        // from a walker in the first fight found nothing within 12 m to get
-        // behind (Onboarding, first_fight_walker); a pile lying north-south
-        // between the road and the boundary woods.
-        (prefab: "log_pile", at: (8.0, 146.5), rot: 0.0),
+        // First-fight cover: a lorry wreck standing north-south on the brow
+        // west of the road. Taller than a running newcomer's head (a log
+        // pile, 1.6 m, never broke a walker's line to someone running, so
+        // its last-seen spot was the hide spot itself); the line breaks as
+        // they drop off the brow behind it, about 5 m short of its lee at
+        // (9.2, 135.5), and the old way west to (5.07, 143.14) stays open
+        // (Onboarding, first_fight_walker, ab35).
+        (prefab: "wreck_lorry", at: (13.5, 136.0), rot: 0.0),
         (prefab: "log_pile", at: (48.0, 118.0), rot: 336.0),
         (prefab: "log_pile", at: (59.0, 101.0), rot: 180.0),
         (prefab: "log_pile", at: (7.3, 110.5), rot: 113.0),
