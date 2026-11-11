@@ -332,7 +332,8 @@ pub fn spawn_crawler(
     };
     // A small walker standing on the site's floor (`at.y`), not on the
     // terrain over it.
-    let e = super::walker::spawn_walker_sized(
+    // Its carapace on short legs (`anim::Shape::Crawler`).
+    let e = super::walker::spawn_walker_shaped(
         commands,
         zone,
         at,
@@ -341,6 +342,7 @@ pub fn spawn_crawler(
         CRAWLER_HP,
         CRAWLER_SIZE,
         Some(at.y),
+        super::anim::Shape::Crawler,
     );
     commands
         .entity(e)

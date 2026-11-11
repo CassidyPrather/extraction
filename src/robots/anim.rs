@@ -76,7 +76,19 @@ pub enum Shape {
     /// The heavy's hull on four long legs at its corners (`heavy`): slow,
     /// long-stepping, every footfall a weight.
     Heavy,
+    /// The grappler's winch body: a wide low box, hips at its lower
+    /// corners, on a wide splay (an outdoor machine: no doorways), its
+    /// derrick over it (Models' `grappler_core`).
+    Grappler,
+    /// The crawler's carapace: low, wide and flat, on short legs tucked
+    /// under its rim (Models' `crawler_core`). Narrower afoot than a
+    /// walker: it goes through doors.
+    Crawler,
 }
+
+/// The grappler's hips (robot space at size 1): the winch box's lower
+/// corners, where Models' sockets are.
+pub const GRAPPLER_HIP: Vec3 = Vec3::new(0.42, -0.18, 0.26);
 
 impl Shape {
     /// Where leg `i`'s hip is on the body (robot space, at size 1).
@@ -85,6 +97,11 @@ impl Shape {
             Shape::Orb => hip_offset(i),
             Shape::Hound => quadrant(i) * Vec3::new(0.2, 1.0, 0.42) - Vec3::Y * 0.06,
             Shape::Heavy => quadrant(i) * Vec3::new(0.36, 1.0, 0.45) - Vec3::Y * 0.2,
+            Shape::Grappler => {
+                quadrant(i) * Vec3::new(GRAPPLER_HIP.x, 0.0, GRAPPLER_HIP.z)
+                    + Vec3::Y * GRAPPLER_HIP.y
+            }
+            Shape::Crawler => hip_offset(i),
         }
     }
     /// Where foot `i` rests, standing (robot space, at size 1).
@@ -93,6 +110,8 @@ impl Shape {
             Shape::Orb => rest_offset(i),
             Shape::Hound => quadrant(i) * Vec3::new(0.42, 0.0, 0.62),
             Shape::Heavy => quadrant(i) * Vec3::new(0.9, 0.0, 0.9),
+            Shape::Grappler => rest_offset(i) * 1.35,
+            Shape::Crawler => rest_offset(i) * 0.75,
         }
     }
     /// How high the body rides, at size 1.
@@ -101,13 +120,23 @@ impl Shape {
             Shape::Orb => BODY_HEIGHT,
             Shape::Hound => 0.95,
             Shape::Heavy => 1.35,
+            Shape::Grappler => 0.85,
+            Shape::Crawler => BODY_HEIGHT * 0.55,
+        }
+    }
+    /// Its legs' length against a walker's (`walker::UPPER`, `LOWER`):
+    /// the crawler's are short, tucked under its rim.
+    pub fn legs(self) -> f32 {
+        match self {
+            Shape::Crawler => 0.6,
+            _ => 1.0,
         }
     }
     /// Speed at `Intent::pace` 1 against a walker's, acceleration and
     /// turning likewise.
     fn pace(self) -> (f32, f32, f32) {
         match self {
-            Shape::Orb => (1.0, 1.0, 1.0),
+            Shape::Orb | Shape::Grappler | Shape::Crawler => (1.0, 1.0, 1.0),
             // ~2 m/s at a lope; pace 2.25 runs it at 4.5.
             Shape::Hound => (1.41, 3.2, 2.2),
             // ~1.3 m/s at size 2: you can outwalk it, just.
@@ -117,7 +146,7 @@ impl Shape {
     /// The most `Intent::pace` it can take (a hound runs flat out at 2.25).
     pub fn max_pace(self) -> f32 {
         match self {
-            Shape::Orb => 1.6,
+            Shape::Orb | Shape::Grappler | Shape::Crawler => 1.6,
             Shape::Hound => 2.3,
             Shape::Heavy => 1.4,
         }
@@ -304,6 +333,15 @@ impl Gait {
     pub fn sized(size: f32) -> Self {
         Self {
             size,
+            ..Default::default()
+        }
+    }
+
+    /// A walker-legged body of `shape`, `size` times a walker's.
+    pub fn shaped(size: f32, shape: Shape) -> Self {
+        Self {
+            size,
+            shape,
             ..Default::default()
         }
     }
@@ -550,7 +588,7 @@ pub fn step_walker_walled(
             Shape::Hound => 0.7,
             // (Long, slow swings: each leg a crane's arm.)
             Shape::Heavy => 1.9,
-            Shape::Orb => 1.0,
+            Shape::Orb | Shape::Grappler | Shape::Crawler => 1.0,
         }
         // Held back, each step a labour.
         * (1.0 + HAMPER_STRIDE * g.hamper);
@@ -672,7 +710,7 @@ pub fn step_walker_walled(
         // A foot dragged out near the end of its reach goes now, whatever
         // its neighbours are doing (turning hard at a run can leave one
         // behind otherwise).
-        let reach = (UPPER + LOWER) * s;
+        let reach = (UPPER + LOWER) * s * g.shape.legs();
         let stretched = |i: usize, w: &Walker| {
             let hip = t.transform_point(g.shape.hip(i));
             w.feet[i].alive && w.feet[i].t >= 1.0 && hip.distance(w.feet[i].planted) > reach * 0.85
@@ -918,7 +956,7 @@ pub fn step_walker_walled(
         let h = g.shape.hip(i);
         let hip = t.transform_point(h);
         let hang = hip + rot * (Vec3::new(h.x, 0.0, h.z).normalize_or_zero() * 0.4 * s)
-            - Vec3::Y * (UPPER + LOWER) * 0.85 * s;
+            - Vec3::Y * (UPPER + LOWER) * 0.85 * s * g.shape.legs();
         if g.dangle[i] == Vec3::ZERO || g.dangle[i].distance(hang) > 2.5 {
             g.dangle[i] = hang;
         }
@@ -1139,7 +1177,7 @@ pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
             g.dangle[i]
         };
         let out = (hip - t.translation).normalize_or(Vec3::X);
-        let knee = solve_knee_sized(hip, foot, out + Vec3::Y * 0.8, g.size);
+        let knee = solve_knee_sized(hip, foot, out + Vec3::Y * 0.8, g.size * g.shape.legs());
         [hip, knee, foot]
     })
 }
@@ -1364,7 +1402,8 @@ pub(crate) fn walk(
             let c = clear(*hip, *knee);
             if Vec2::new(c.x - knee.x, c.z - knee.z).length() > 0.01 {
                 let inward = Vec3::new(middle.x - hip.x, 0.0, middle.z - hip.z).normalize_or_zero();
-                *knee = solve_knee_sized(*hip, *foot, inward + Vec3::Y * 0.3, size);
+                *knee =
+                    solve_knee_sized(*hip, *foot, inward + Vec3::Y * 0.3, size * g.shape.legs());
             }
         }
         // Leg colliders follow the lower segments (local to the root).

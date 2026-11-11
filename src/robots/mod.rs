@@ -12,9 +12,9 @@
 
 pub mod anim;
 pub mod armour;
+pub mod body_shells;
 pub mod broken;
 pub mod collector;
-pub mod crawler_shell;
 pub mod damage;
 pub mod devices;
 pub mod director;
@@ -402,10 +402,7 @@ impl Plugin for RobotsPlugin {
                 collector::CollectorPlugin,
                 dirigible::DirigiblePlugin,
                 grappler::GrapplerPlugin,
-                (
-                    grappler_armour::GrapplerArmourPlugin,
-                    crawler_shell::CrawlerShellPlugin,
-                ),
+                grappler_armour::GrapplerArmourPlugin,
                 doors::DoorsPlugin,
                 pylon::PylonPlugin,
                 (

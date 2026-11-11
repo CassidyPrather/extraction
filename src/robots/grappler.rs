@@ -12,7 +12,6 @@
 
 use bevy::prelude::*;
 
-use super::walker::spawn_walker_with;
 use super::{Awareness, Brain, Job, PartRole, Robot, RobotPart};
 use crate::player::Player;
 use crate::world::Zone;
@@ -89,7 +88,18 @@ impl Plugin for GrapplerPlugin {
 }
 
 pub fn spawn_grappler(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) -> Entity {
-    let e = spawn_walker_with(commands, zone, at, job, false, 110.0);
+    // Its winch body (`anim::Shape::Grappler`), not the walker's orb.
+    let e = super::walker::spawn_walker_shaped(
+        commands,
+        zone,
+        at,
+        job,
+        false,
+        110.0,
+        1.0,
+        None,
+        super::anim::Shape::Grappler,
+    );
     commands.entity(e).insert((
         Name::new("Grappler"),
         Grappler {

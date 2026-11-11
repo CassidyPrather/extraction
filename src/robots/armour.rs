@@ -9,6 +9,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
+use super::anim::{Gait, Shape};
 use super::wreck::{Debris, Piece, spawn_debris};
 use super::{PartDestroyed, PartRole, Robot, RobotKind, part_bundle};
 
@@ -46,7 +47,11 @@ pub fn walker_plate_dir(i: usize) -> Vec3 {
 }
 
 /// The plate's place on its robot (local to the root).
-fn plate_transform(kind: RobotKind, i: usize) -> Transform {
+fn plate_transform(kind: RobotKind, shape: Option<Shape>, i: usize) -> Transform {
+    // A box body's plates lie flat on its faces (`body_shells`).
+    if let Some(t) = shape.and_then(|s| super::body_shells::plate(s, i)) {
+        return t;
+    }
     match kind {
         RobotKind::Sorter => {
             // Either side of the carriage, facing out (the model's plate is
@@ -110,7 +115,7 @@ fn hang_plates(
         Option<&mut Hanging>,
     )>,
     // (Only the plates fitted here: other machines' armour is their own.)
-    robots: Query<(&Robot, &GlobalTransform), With<Plated>>,
+    robots: Query<(&Robot, &GlobalTransform, Option<&Gait>), With<Plated>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -121,7 +126,7 @@ fn hang_plates(
         if !part.alive() || part.hp / part.max_hp.max(1.0) >= HANGING_BELOW {
             continue;
         }
-        let Ok((robot, body)) = robots.get(part.robot) else {
+        let Ok((robot, body, gait)) = robots.get(part.robot) else {
             continue;
         };
         let fitted = match robot.kind {
@@ -132,7 +137,7 @@ fn hang_plates(
         if !fitted || robot.wrecked {
             continue;
         }
-        let base = plate_transform(robot.kind, i as usize);
+        let base = plate_transform(robot.kind, gait.map(|g| g.shape), i as usize);
         let rot = body.rotation() * base.rotation;
         let Some(mut h) = hanging else {
             let bolt = [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
@@ -178,11 +183,12 @@ fn fit_plates(
             &Robot,
             Has<super::hound::Hound>,
             Has<super::heavy::Heavy>,
+            Option<&Gait>,
         ),
         Added<Robot>,
     >,
 ) {
-    for (e, robot, hound, heavy) in &robots {
+    for (e, robot, hound, heavy, gait) in &robots {
         // (A hound's body is all legs and speed; the heavy's plates are
         // its own, on bolts: `heavy`.)
         if hound || heavy {
@@ -213,7 +219,7 @@ fn fit_plates(
                         PartRole::Armour(i as u8),
                         hp,
                         collider.clone(),
-                        plate_transform(robot.kind, i),
+                        plate_transform(robot.kind, gait.map(|g| g.shape), i),
                     ),
                 ));
             }
