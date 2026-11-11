@@ -18,6 +18,9 @@
 //! with a softer settle after a heavy round ([`SHOT_SETTLE`]); it comes
 //! with the gun's report, so a .22's isn't taken for a knock.
 //!
+//! Bleeding is a heartbeat on the watch wrist, faster and harder the
+//! faster you bleed ([`bleed_beat`]), under a hit's buzz.
+//!
 //! Taking something up is felt by its weight: a tin is a tick, a rifle a
 //! knock. Pulses on one controller in the same frame merge into one (the
 //! runtime plays only the last it was given), so a shot isn't cut short by
@@ -74,6 +77,7 @@ impl Plugin for HapticsPlugin {
                     hand_haptics,
                     button_haptics,
                     hurt_haptics,
+                    bleed_haptics,
                     step_haptics,
                     grenade_haptics,
                     machine_tick,
@@ -498,8 +502,9 @@ fn button_haptics(
 }
 
 /// Any harm to the local player shakes both hands, harder for more: a
-/// bullet, a fall, an anomaly, the Surge. Steady harm (bleeding, standing
-/// in a burner) pulses no faster than four times a second.
+/// bullet, a fall, an anomaly, the Surge. Steady harm (standing in a
+/// burner) pulses no faster than four times a second. (Bleeding is felt
+/// as its own heartbeat: `bleed_haptics`.)
 fn hurt_haptics(
     players: Query<&crate::health::Health, With<LocalPlayer>>,
     time: Res<Time>,
@@ -515,7 +520,7 @@ fn hurt_haptics(
     let (hp, since) = (h.hp, h.since_hit);
     if let Some((was_hp, was_since)) = *last {
         // A new hit restarts `since_hit` (steady harm keeps it near zero);
-        // bleeding only drains.
+        // bleeding's drain isn't a hit (`bleed_haptics` beats for it).
         if since < was_since || (since < 0.1 && hp < was_hp) {
             *owed += (was_hp - hp).max(0.5);
         }
@@ -528,6 +533,71 @@ fn hurt_haptics(
         }
         *owed = 0.0;
         *quiet = 0.25;
+    }
+}
+
+/// Bleeding (hp a second, `health::Health::bleeding`) felt at its
+/// faintest and slowest, and at its hardest and fastest.
+pub const BLEED_FELT: f32 = 0.5;
+pub const BLEED_HARD: f32 = 2.0;
+
+/// A heartbeat: a beat, and a softer one after it (lub, dub). Played at
+/// [`bleed_beat`]'s strength, it stays under a hit's buzz, which is in
+/// both hands, longer and stronger, and apart from the machine's tick
+/// (one 12 ms whisper) and the aegis's fizz (a steady tremor).
+pub const HEARTBEAT: super::shapes::Shape =
+    super::shapes::Shape(&[(0.0, 1.0, 0.045), (0.18, 0.65, 0.035)]);
+
+/// How bleeding `rate` hp/s is felt: the heartbeat's strength and how
+/// long from one to the next (s), or nothing once it's stopped. Slow and
+/// faint (0.18, every 1.4 s) at [`BLEED_FELT`] and under it till it
+/// clots, faster and harder to 0.4 every 0.55 s at [`BLEED_HARD`] and
+/// over: a heart speeding up.
+pub fn bleed_beat(rate: f32) -> Option<(f32, f32)> {
+    if rate < crate::interact::wounds::STILL {
+        return None;
+    }
+    let k = ((rate - BLEED_FELT) / (BLEED_HARD - BLEED_FELT)).clamp(0.0, 1.0);
+    Some((0.18 + 0.22 * k, 1.4 - 0.85 * k))
+}
+
+/// While you bleed, a heartbeat on the watch wrist (the off hand, as the
+/// machine's tick), by how fast you bleed (`bleed_beat`): bleeding
+/// otherwise only drains, and a newcomer looking elsewhere after a fight
+/// bled out without knowing. Stops when it's dressed or clots; not felt
+/// down. Off with the comfort setting `bleed_pulse`.
+fn bleed_haptics(
+    players: Query<&crate::health::Health, With<LocalPlayer>>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    time: Res<Time>,
+    mut next: Local<Option<f32>>,
+    mut shapes: MessageWriter<super::shapes::HapticShape>,
+) {
+    let on = comfort.as_deref().is_none_or(|c| c.bleed_pulse);
+    let beat = players
+        .iter()
+        .next()
+        .filter(|h| !h.down && on)
+        .and_then(|h| bleed_beat(h.bleeding));
+    let Some((scale, period)) = beat else {
+        *next = None;
+        return;
+    };
+    let now = time.elapsed_secs();
+    // The first a beat after it starts (the hit that opened it is felt
+    // as a hit); a faster bleed brings the next one sooner.
+    let due = next.get_or_insert(now + period);
+    *due = due.min(now + period);
+    if now >= *due {
+        let wrist = comfort
+            .as_deref()
+            .map_or(Side::Left, |c| c.gun_side().other());
+        shapes.write(super::shapes::HapticShape {
+            side: wrist,
+            shape: HEARTBEAT,
+            scale,
+        });
+        *due = now + period;
     }
 }
 
@@ -612,6 +682,117 @@ mod tests {
             .find(|h| h.side == Side::Left)
             .expect("left hand");
         assert!(right.amplitude > left.amplitude);
+    }
+
+    /// Bleeding is felt: a heartbeat on the off hand's wrist (two beats,
+    /// the second softer), slow and faint at half a hit point a second,
+    /// faster and harder at two and more; under a hit's buzz, never both
+    /// hands at once; it stops when the bleeding's dressed, and isn't
+    /// felt down or with the comfort setting off. (Nothing was: a
+    /// newcomer looking elsewhere after a fight bled out in about 15 s
+    /// without knowing.)
+    #[test]
+    fn bleeding_is_felt_as_a_heartbeat_by_its_rate() {
+        // Beats felt over `secs` of bleeding `rate` hp/s: (when, side,
+        // amplitude) of each pulse.
+        fn felt_bleeding(
+            rate: f32,
+            secs: f32,
+            setup: impl Fn(&mut App, Entity),
+        ) -> Vec<(f32, Side, f32)> {
+            let mut app = crate::headless_app(Default::default(), false);
+            app.init_resource::<Felt>().add_systems(Last, feel);
+            app.finish();
+            app.cleanup();
+            for _ in 0..3 {
+                app.update();
+            }
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            setup(&mut app, player);
+            app.world_mut().resource_mut::<Felt>().0.clear();
+            let start = app.world().resource::<Time>().elapsed_secs();
+            let mut out = Vec::new();
+            while app.world().resource::<Time>().elapsed_secs() - start < secs {
+                if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                    // Held at the rate, and alive, for the length of it.
+                    h.bleeding = rate;
+                    h.hp = h.hp.max(50.0);
+                }
+                app.update();
+                let now = app.world().resource::<Time>().elapsed_secs() - start;
+                for p in app.world_mut().resource_mut::<Felt>().0.drain(..) {
+                    out.push((now, p.side, p.amplitude));
+                }
+            }
+            out
+        }
+        let wrist = crate::rig::comfort::Comfort::default().gun_side().other();
+        // The beats: the first pulse of each pair (pulses more than 0.3 s
+        // after the last).
+        let beats = |felt: &[(f32, Side, f32)]| {
+            let mut b: Vec<(f32, f32)> = Vec::new();
+            for (t, _, a) in felt {
+                if b.last().is_none_or(|(l, _)| t - l > 0.3) {
+                    b.push((*t, *a));
+                }
+            }
+            b
+        };
+        let none = |_: &mut App, _: Entity| {};
+        let slow = felt_bleeding(BLEED_FELT, 8.0, none);
+        let fast = felt_bleeding(BLEED_HARD, 8.0, none);
+        for (rate, felt) in [(BLEED_FELT, &slow), (BLEED_HARD, &fast)] {
+            assert!(!felt.is_empty(), "bleeding {rate} hp/s: nothing felt");
+            for (_, side, a) in felt {
+                assert_eq!(*side, wrist, "{rate} hp/s: off the wrist");
+                assert!(
+                    *a >= 0.1 && *a < hurt_amplitude(0.0),
+                    "{rate} hp/s: {a}, a hit's buzz starts at {}",
+                    hurt_amplitude(0.0)
+                );
+            }
+            // Two beats each time (lub, dub), the second softer.
+            let pairs = felt.windows(2).filter(|w| {
+                let dt = w[1].0 - w[0].0;
+                (0.1..0.3).contains(&dt) && w[1].2 < w[0].2
+            });
+            assert!(pairs.count() >= 2, "{rate} hp/s: no lub-dub in {felt:?}");
+        }
+        let (bs, bf) = (beats(&slow), beats(&fast));
+        let period = |b: &[(f32, f32)]| (b.last().unwrap().0 - b[0].0) / (b.len() - 1) as f32;
+        println!(
+            "{BLEED_FELT} hp/s: a beat every {:.2} s at {:.2}; {BLEED_HARD} hp/s: every {:.2} s at {:.2}",
+            period(&bs),
+            bs[0].1,
+            period(&bf),
+            bf[0].1
+        );
+        assert!(bs.len() >= 4 && bf.len() > bs.len() + 3, "{bs:?} {bf:?}");
+        assert!(period(&bs) > 1.0 && period(&bf) < 0.7, "{bs:?} {bf:?}");
+        assert!(bf[0].1 > bs[0].1 + 0.1, "harder for more: {bs:?} {bf:?}");
+        // Dressed (no bleeding), down, or the setting off: nothing.
+        assert!(
+            felt_bleeding(0.0, 3.0, none).is_empty(),
+            "dressed, still felt"
+        );
+        let down = felt_bleeding(BLEED_HARD, 3.0, |app, p| {
+            app.world_mut()
+                .get_mut::<crate::health::Health>(p)
+                .unwrap()
+                .down = true;
+        });
+        assert!(down.is_empty(), "down, still felt: {down:?}");
+        let off = felt_bleeding(BLEED_HARD, 3.0, |app, _| {
+            let mut c = crate::rig::comfort::Comfort::default();
+            c.bleed_pulse = false;
+            app.insert_resource(c);
+        });
+        assert!(off.is_empty(), "the setting off, still felt: {off:?}");
     }
 
     /// Harm that isn't a bullet (a fall, a burner) is felt too, and steady
