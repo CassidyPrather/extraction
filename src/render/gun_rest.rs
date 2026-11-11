@@ -242,6 +242,12 @@ pub(crate) fn split_ranges(range: Option<&VisibilityRange>) -> (VisibilityRange,
     (near, far)
 }
 
+/// Whether a merged mesh is a far level's: drawn only past the hand-over
+/// (`split_ranges`), where a near one stops.
+pub(crate) fn is_far_mesh(range: Option<&VisibilityRange>) -> bool {
+    range.is_some_and(|r| r.start_margin.start >= FAR_AT - 0.5)
+}
+
 /// A far level's meshes with the gun's own copy of each one's material,
 /// or nothing if any material isn't the gun's (it's drawn as it is).
 pub(crate) fn far_meshes(
@@ -1014,22 +1020,51 @@ mod tests {
             "every gun lying in the valley rests"
         );
         // Resting, a gun's own leaves are hidden and its merged meshes
-        // stand in: fewer of them than the leaves.
+        // stand in: fewer of them than the leaves. An eye draws one set at
+        // a time, its near meshes or (past `FAR_AT`) its far level's, so
+        // each set is counted alone.
         let w = app.world_mut();
-        let rest: Vec<(Entity, usize, usize)> = w
+        let rest: Vec<(Entity, usize, Vec<Entity>)> = w
             .query::<(Entity, &AtRest)>()
             .iter(w)
-            .map(|(e, r)| (e, r.leaves.len(), r.merged.len()))
+            .map(|(e, r)| (e, r.leaves.len(), r.merged.clone()))
             .collect();
-        for (gun, leaves, merged) in &rest {
-            assert!(
-                merged < leaves,
-                "{gun:?}: {merged} merged for {leaves} leaves"
-            );
-        }
+        let rest: Vec<(Entity, usize, usize)> = rest
+            .into_iter()
+            .map(|(gun, leaves, merged)| {
+                let far = merged
+                    .iter()
+                    .filter(|m| is_far_mesh(w.get::<VisibilityRange>(**m)))
+                    .count();
+                let near = merged.len() - far;
+                assert!(
+                    near < leaves && far < leaves,
+                    "{gun:?}: {near} near and {far} far merged for {leaves} leaves"
+                );
+                (gun, leaves, near)
+            })
+            .collect();
         let (took, merged): (usize, usize) =
             rest.iter().fold((0, 0), |a, r| (a.0 + r.1, a.1 + r.2));
         println!("resting guns: {took} leaf meshes drawn as {merged}");
+    }
+
+    /// A merged mesh is told near from far by its range: the near set
+    /// ends at the hand-over, the far set starts there.
+    #[test]
+    fn near_and_far_meshes_are_told_apart_by_their_range() {
+        let (near, far) = split_ranges(None);
+        assert!(!is_far_mesh(Some(&near)));
+        assert!(is_far_mesh(Some(&far)));
+        assert!(!is_far_mesh(None));
+        let own = VisibilityRange {
+            start_margin: 0.0..0.0,
+            end_margin: 40.0..45.0,
+            use_aabb: false,
+        };
+        let (near, far) = split_ranges(Some(&own));
+        assert!(!is_far_mesh(Some(&near)));
+        assert!(is_far_mesh(Some(&far)));
     }
 
     fn a_resting_gun(app: &mut App) -> (Entity, Vec<Entity>) {
