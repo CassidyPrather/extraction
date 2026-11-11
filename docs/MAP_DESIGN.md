@@ -248,6 +248,19 @@ for you.
 - Cover comes in clumps, with a gap you choose to cross between them:
   copses, walls, log piles, rock fields, the next house. A bend in a road
   is cover from the far end of it.
+- **Cover you crouch behind isn't cover you break a line with.** A robot
+  sees you by a ray from its eye to your head (`robots::senses`), about
+  1.7 m up while you run. Low cover (a log pile at 1.6 m, a car wreck, a
+  boulder) hides you only once you're down behind it, so a walker that
+  watched you run there searches exactly where you are: the last-seen
+  spot is the hide spot. To break its line while you're still running,
+  so it searches where you were and not where you are, cover has to be
+  taller than about 1.8 m (a lorry wreck at 2.2 m, a shed, a wall, a
+  bank), or the ground has to drop you below its eye. Marrow's first
+  fight: a log pile off the drop left the walker finding newcomers 2-3 s
+  after they hid; a lorry wreck on the brow breaks the line about 5 m
+  short of its lee (rays from Onboarding's walker eyes over the real
+  terrain, then first fight v walker 34/40 home against 32/40).
 
 ## Breadcrumbs
 
