@@ -3656,14 +3656,8 @@ fn break_line(
     // (Not the ground itself: a body-wide ball at the knee met every bump
     // of it, no spot passed, and the newcomer, with no way out of the
     // walker's line, shot it out and lost.)
-    // (And what's left of a machine: a walker's wreck lies on the Robot
-    // layer, and the one-handed newcomer, its spot just past the walker it
-    // had downed, stood against the orb and plates the half minute.)
-    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([
-        crate::world::Layer::World,
-        crate::world::Layer::Robot,
-    ])
-    .with_excluded_entities(world.terrain.iter());
+    let walls = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World])
+        .with_excluded_entities(world.terrain.iter());
     let mid = |q: Vec2| world.zone.on_ground(q.x, q.y) + Vec3::Y * (KNEE + CHEST) * 0.5;
     // (A body's width, not a ray: a ray slipped past a trunk the newcomer
     // then pressed against, 1.4 m short, the same half minute. And a
