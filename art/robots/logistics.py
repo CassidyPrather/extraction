@@ -9,12 +9,15 @@ ground with its origin 0.45 m up and hangs from the cable at (0, 0.45, 0).
          the lifting eye the cable hooks into; a glowing band round it
 
 Harpoon launcher, in robot space (a walker body, src/robots/walker.rs):
-the orb is a sphere of radius 0.4 at the origin, its turret ring on top.
+the grappler's winch body (walker.py `grappler_core`) is a box round the
+origin, its top at y 0.25.
 
-- `launcher`  a derrick on the turret ring: a boom leaning forward to a
-              head 3 m off the ground with the launcher on it (a barbed
-              harpoon in its muzzle), the line drum behind, a hazard band
-              round the orb
+- `pedestal`  a pedestal off the winch body's top, the slewing yoke on it,
+              the boom's foot pin, and the line drum behind
+- `launcher`  the derrick's boom, origin at its foot pin (what it folds
+              about on a wreck): leaning forward to a head 3 m off the
+              ground with the launcher on it (a barbed harpoon in its
+              muzzle), its ram and its line
 
 Materials: Shell, Dark, Glow, Warn, Yellow, Steel.
 """
@@ -118,8 +121,14 @@ export("assets/models/robots/cargo_pod.glb")
 # Harpoon launcher
 # =============================================================================
 reset()
-ln = Part("launcher")
 R = 0.4
+# The boom's foot pin: the launcher node's origin, what it folds about on
+# a wreck (Robot bodies' `grappler_armour::Folds`).
+FOOT = (0.0, R + 0.15, 0.1)
+# What stands: the pedestal, the yoke and the drum. What folds on a wreck:
+# the boom and all on it.
+pd = Part("pedestal")
+ln = Part("launcher", origin=FOOT)
 # A derrick, not a turret: a walker with a launcher on top had a walker's
 # outline from any side at 30 m, and with a spar on it, a hairline more
 # (docs/craft/ROBOT_READING.md, the silhouette gauge `robots::silhouette`).
@@ -127,13 +136,15 @@ R = 0.4
 # leaning forward to a head 3 m up with the launcher on it; a line drum as
 # wide as the orb hangs behind it, its counterweight. Side-on: a diagonal
 # and a disc; facing you or away: a tall upright over the orb.
-# Slewing yoke on the turret ring.
-ln.lathe([(0.0, R - 0.005), (0.11, R - 0.005), (0.105, R + 0.05), (0.0, R + 0.055)], "Dark",
+# A pedestal up from the winch body's top (walker.py `grappler_core`) to
+# the slewing yoke.
+pd.cyl(0.12, 0.23, R, "Dark", segs=16, xf=UP, chamfer=0.01)
+# Slewing yoke on the pedestal.
+pd.lathe([(0.0, R - 0.005), (0.11, R - 0.005), (0.105, R + 0.05), (0.0, R + 0.055)], "Dark",
          segs=16, xf=UP)
 for sx in (-1, 1):
-    ln.box((0.03, 0.16, 0.2), (sx * 0.1, R + 0.11, 0.08), "Dark", bevel=0.01, segs=1)
-FOOT = (0.0, R + 0.15, 0.1)
-ln.cyl(0.045, -0.13, 0.13, "Dark", segs=14, xf=T(*FOOT) @ ALONG_X, chamfer=0.006)
+    pd.box((0.03, 0.16, 0.2), (sx * 0.1, R + 0.11, 0.08), "Dark", bevel=0.01, segs=1)
+pd.cyl(0.045, -0.13, 0.13, "Dark", segs=14, xf=T(*FOOT) @ ALONG_X, chamfer=0.006)
 # The boom: a shell box section, a teal strip down each side (the robots'
 # own glow), from its foot pin to the head.
 ANGLE = math.radians(62.0)
@@ -178,12 +189,12 @@ for k in range(3):
 # between dark flanges, as wide as the orb is deep.
 DRUM = (0.0, R + 0.1, 0.46)
 reel = T(*DRUM) @ ALONG_X
-ln.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=reel)
+pd.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=reel)
 for x in (-0.17, 0.17):
-    ln.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=reel, chamfer=0.004)
-ln.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=reel)
+    pd.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=reel, chamfer=0.004)
+pd.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=reel)
 for sx in (-1, 1):
-    ln.box((0.03, 0.06, 0.4), (sx * 0.2, DRUM[1] - 0.02, 0.27), "Dark", bevel=0.01, segs=1)
+    pd.box((0.03, 0.06, 0.4), (sx * 0.2, DRUM[1] - 0.02, 0.27), "Dark", bevel=0.01, segs=1)
 # The line from the drum up the boom to the launcher: steel, not the
 # drum's yellow (a robot's yellow and warning paint glow its own teal,
 # `weak_points::paint`: a lit line up there bloomed into a lamp).
@@ -191,10 +202,8 @@ lv = [HEAD[i] - DRUM[i] for i in range(3)]
 ll = math.sqrt(sum(c * c for c in lv))
 line = T(0, DRUM[1] + 0.2, DRUM[2]) @ RX(-math.atan2(-lv[2], lv[1]))
 ln.cyl(0.012, 0.0, ll - 0.05, "Steel", segs=6, xf=line @ UP)
-# Hazard band round the orb.
-ln.lathe([(0.385, 0.08), (0.398, 0.085), (0.398, 0.11), (0.385, 0.115)], "Warn",
-         segs=40, xf=UP, closed=True)
 print("muzzle", HEAD[0], HEAD[1] + 0.01, HEAD[2] - 0.66)
+make(pd)
 make(ln)
 report()
 export("assets/models/robots/harpoon.glb")

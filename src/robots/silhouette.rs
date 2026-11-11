@@ -13,9 +13,10 @@
 //! don't count, [`Mask::body`]), standing on one floor, softened a little
 //! ([`SOFTEN`]: the eye takes in a shape at range, not its pixels) and
 //! fitted, one slid and scaled against the other ([`FIT_SCALES`],
-//! [`FIT_SLIDE`]) for the most they overlap (IoU). A pair's score is the
-//! mean of its six views; two machines over [`CEILING`] are twins in
-//! outline whatever their paint or detail says. (The walker and the
+//! [`FIT_SLIDE`]) for the most they overlap (IoU). Two machines over
+//! [`CEILING`] in any one view, or on the mean of the views, are twins in
+//! outline whatever their paint or detail says. A machine is scored only
+//! as far off as it's met ([`reach`]: the crawler, indoors, at 30 m). (The walker and the
 //! grappler, a walker with a launcher on top, scored 0.81; the next pair,
 //! the walker and the crawler, its small indoor cousin, 0.55.)
 //!
@@ -37,6 +38,18 @@ pub const TURNS: [(&str, f32); 3] = [
     ("facing away", 180.0),
 ];
 pub const DISTANCES: [f32; 2] = [30.0, 60.0];
+
+/// The farthest a machine is met (m): where it's seen, it's scored. The
+/// crawler is the indoor machine, met down corridors and round corners,
+/// never across a field: at 60 m its legs are under half a pixel and a
+/// low flat body is all that's left, a drone's outline, at a range it
+/// never stands at.
+pub fn reach(name: &str) -> f32 {
+    match name {
+        "crawler" => 30.0,
+        _ => 60.0,
+    }
+}
 /// The headset's pixels a degree (`ROBOT_READING.md`).
 pub const PX_PER_DEG: f32 = 14.3;
 /// A mask's height once scaled (px).
@@ -181,7 +194,7 @@ pub fn cast(tris: &[[Vec3; 3]], centre: Vec3, turn: f32, dist: f32) -> Mask {
 
 /// A normalised mask's height (px): room over [`HEIGHT`] for the larger
 /// of a fit's scales ([`FIT_SCALES`]).
-pub const CANVAS: usize = HEIGHT * 3 / 2;
+pub const CANVAS: usize = HEIGHT * 2;
 
 /// `m` cropped to its body ([`Mask::body`]), scaled to `k` times
 /// [`HEIGHT`], standing on the floor of a [`WIDTH`] x [`CANVAS`] mask in
@@ -210,8 +223,11 @@ pub fn normalised(m: &Mask, k: f32) -> Mask {
 
 /// The scales one machine's outline is tried at against another's, and
 /// how far across (px) it's slid: two machines are twins if some fit of
-/// one on the other overlaps (a turret a little taller is not a new shape).
-pub const FIT_SCALES: [f32; 9] = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2];
+/// one on the other overlaps (a turret a little taller is not a new shape,
+/// and a pole on top doesn't hide the same body under it).
+pub const FIT_SCALES: [f32; 17] = [
+    0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.18, 1.25, 1.33, 1.43, 1.54, 1.67,
+];
 pub const FIT_SLIDE: isize = 2;
 
 /// How far (px, at [`HEIGHT`]) a mask is softened before two are held
@@ -293,41 +309,51 @@ pub fn fit(a: &Mask, b: &Mask) -> f32 {
 /// One machine's views as cast, in the order of [`DISTANCES`] then
 /// [`TURNS`].
 pub struct Views {
-    pub cast: Vec<Mask>,
+    /// `None` past the machine's [`reach`].
+    pub cast: Vec<Option<Mask>>,
 }
 
 /// Every view of a machine whose drawn triangles at each distance are
-/// `tris(dist)` (a far LOD for the far view), standing at `centre`.
-pub fn views(tris: impl Fn(f32) -> Vec<[Vec3; 3]>, centre: Vec3) -> Views {
+/// `tris(dist)` (a far LOD for the far view), standing at `centre`, out
+/// to `reach` m.
+pub fn views(tris: impl Fn(f32) -> Vec<[Vec3; 3]>, centre: Vec3, reach: f32) -> Views {
     let mut cast_ = Vec::new();
     for d in DISTANCES {
-        let t = tris(d);
+        let t = (d <= reach).then(|| tris(d));
         for (_, turn) in TURNS {
-            cast_.push(cast(&t, centre, turn.to_radians(), d));
+            cast_.push(t.as_ref().map(|t| cast(t, centre, turn.to_radians(), d)));
         }
     }
     Views { cast: cast_ }
 }
 
-/// Two machines' overlap view by view ([`fit`]).
-pub fn per_view(a: &Views, b: &Views) -> Vec<f32> {
-    a.cast.iter().zip(&b.cast).map(|(p, q)| fit(p, q)).collect()
+/// Two machines' overlap view by view ([`fit`]), where both are met.
+pub fn per_view(a: &Views, b: &Views) -> Vec<Option<f32>> {
+    a.cast
+        .iter()
+        .zip(&b.cast)
+        .map(|(p, q)| Some(fit(p.as_ref()?, q.as_ref()?)))
+        .collect()
 }
 
-/// Two machines' overlap, the mean of their views.
+/// Two machines' overlap, the mean of the views both are met in.
 pub fn score(a: &Views, b: &Views) -> f32 {
-    let v = per_view(a, b);
+    let v: Vec<f32> = per_view(a, b).into_iter().flatten().collect();
     v.iter().sum::<f32>() / v.len().max(1) as f32
 }
 
-/// Every pair over [`CEILING`]: (a, b, score).
-pub fn twins<'a>(family: &'a [(String, Views)]) -> Vec<(&'a str, &'a str, f32)> {
+/// Every pair over [`CEILING`] on the mean of its views, or in any one
+/// view (a player meets a machine head-on or going away as often as
+/// side-on: one view twinned is a twin): (a, b, mean, worst view).
+pub fn twins<'a>(family: &'a [(String, Views)]) -> Vec<(&'a str, &'a str, f32, f32)> {
     let mut out = Vec::new();
     for (i, (a, va)) in family.iter().enumerate() {
         for (b, vb) in &family[i + 1..] {
-            let s = score(va, vb);
-            if s > CEILING {
-                out.push((a.as_str(), b.as_str(), s));
+            let v: Vec<f32> = per_view(va, vb).into_iter().flatten().collect();
+            let mean = v.iter().sum::<f32>() / v.len().max(1) as f32;
+            let worst = v.iter().copied().fold(0.0, f32::max);
+            if mean > CEILING || worst > CEILING {
+                out.push((a.as_str(), b.as_str(), mean, worst));
             }
         }
     }
@@ -339,13 +365,13 @@ pub fn twins<'a>(family: &'a [(String, Views)]) -> Vec<(&'a str, &'a str, f32)> 
 pub fn sheet(family: &[(String, Views)]) -> Vec<u8> {
     let cell_w = family
         .iter()
-        .flat_map(|(_, v)| v.cast.iter().map(|m| m.w))
+        .flat_map(|(_, v)| v.cast.iter().flatten().map(|m| m.w))
         .max()
         .unwrap_or(1)
         + 8;
     let cell_h = family
         .iter()
-        .flat_map(|(_, v)| v.cast.iter().map(|m| m.h))
+        .flat_map(|(_, v)| v.cast.iter().flatten().map(|m| m.h))
         .max()
         .unwrap_or(1)
         + 8;
@@ -354,6 +380,7 @@ pub fn sheet(family: &[(String, Views)]) -> Vec<u8> {
     let mut px = vec![255u8; w * h];
     for (r, (_, v)) in family.iter().enumerate() {
         for (c, m) in v.cast.iter().enumerate() {
+            let Some(m) = m else { continue };
             // Standing on the cell's floor, in its middle.
             let ox = c * cell_w + (cell_w - m.w) / 2;
             let oy = r * cell_h + cell_h - 4 - m.h;
@@ -378,7 +405,10 @@ pub fn norm_sheet(family: &[(String, Views)]) -> Vec<u8> {
     let (w, h) = ((WIDTH + 4) * cols, (CANVAS + 4) * family.len());
     let mut px = vec![255u8; w * h];
     for (r, (_, v)) in family.iter().enumerate() {
-        for (c, m) in v.cast.iter().map(|m| normalised(m, 1.0)).enumerate() {
+        for (c, m) in v.cast.iter().enumerate() {
+            let Some(m) = m.as_ref().map(|m| normalised(m, 1.0)) else {
+                continue;
+            };
             for y in 0..m.h {
                 for x in 0..m.w {
                     if m.get(x, y) {
@@ -399,12 +429,11 @@ pub fn table(family: &[(String, Views)]) -> String {
     for (i, (a, va)) in family.iter().enumerate() {
         for (b, vb) in &family[i + 1..] {
             let v = per_view(va, vb);
-            let per: Vec<String> = v.iter().map(|x| format!("{x:.2}")).collect();
-            rows.push((
-                v.iter().sum::<f32>() / v.len().max(1) as f32,
-                format!("{a}\t{b}"),
-                per.join(" "),
-            ));
+            let per: Vec<String> = v
+                .iter()
+                .map(|x| x.map_or("-".into(), |x| format!("{x:.2}")))
+                .collect();
+            rows.push((score(va, vb), format!("{a}\t{b}"), per.join(" ")));
         }
     }
     rows.sort_by(|x, y| y.0.total_cmp(&x.0));
@@ -434,11 +463,11 @@ mod tests {
     #[test]
     fn a_shape_is_its_own_twin_and_a_hairline_is_no_outline() {
         let block = square(Vec2::new(-0.5, 0.0), Vec2::new(0.5, 2.0));
-        let a = views(|_| block.clone(), Vec3::ZERO);
+        let a = views(|_| block.clone(), Vec3::ZERO, 60.0);
         assert!((score(&a, &a) - 1.0).abs() < 1e-6);
         // The same block twice the size: the same outline.
         let big = square(Vec2::new(-1.0, 0.0), Vec2::new(1.0, 4.0));
-        let b = views(|_| big.clone(), Vec3::ZERO);
+        let b = views(|_| big.clone(), Vec3::ZERO, 60.0);
         assert!(score(&a, &b) > 0.9, "{}", score(&a, &b));
         // A mast 1 cm across on top of it is not in its outline at 30 m.
         let mut masted = block.clone();
@@ -453,7 +482,7 @@ mod tests {
         );
         // A wide slab is not the block.
         let slab = square(Vec2::new(-2.0, 0.0), Vec2::new(2.0, 1.0));
-        let c = views(|_| slab.clone(), Vec3::ZERO);
+        let c = views(|_| slab.clone(), Vec3::ZERO, 60.0);
         assert!(score(&a, &c) < 0.5, "{}", score(&a, &c));
     }
 
@@ -598,7 +627,10 @@ mod tests {
                         (lo.min(*p), hi.max(*p))
                     });
                 let centre = Vec3::new((lo.x + hi.x) * 0.5, at.y, (lo.z + hi.z) * 0.5);
-                (name.to_string(), views(|d| drawn(world, e, d), centre))
+                (
+                    name.to_string(),
+                    views(|d| drawn(world, e, d), centre, reach(name)),
+                )
             })
             .collect()
     }

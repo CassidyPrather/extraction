@@ -658,7 +658,9 @@ fn gallery(
                             job(at),
                         ),
                         "crawler" => {
-                            let e = crate::robots::walker::spawn_walker_sized(
+                            // (In the crawler's own stance, as
+                            // `indoor::spawn_crawler` stands one.)
+                            let e = crate::robots::walker::spawn_walker_shaped(
                                 &mut commands,
                                 &zone,
                                 at + Vec3::Y,
@@ -667,6 +669,7 @@ fn gallery(
                                 40.0,
                                 crate::robots::indoor::CRAWLER_SIZE,
                                 None,
+                                crate::robots::anim::Shape::Crawler,
                             );
                             commands
                                 .entity(e)

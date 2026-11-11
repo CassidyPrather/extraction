@@ -1,6 +1,6 @@
 //! Feet that hold the ground: a gauge. Every legged machine (`anim::walk`
-//! drives them all: the walker, the crawler, the hound, the heavy; the
-//! grappler and the collector are walkers in body) is walked over each
+//! drives them all: the walker, the crawler, the grappler, the hound, the
+//! heavy; the collector is a walker in body) is walked over each
 //! valley's own ground, where it's hardest: its steepest walkable slopes,
 //! in and out of its doors (their steps), across its ruins' rubble, down
 //! its banks to the water, and along Sallow's dam. Four things are held:
@@ -62,7 +62,7 @@ pub const VALLEYS: [&str; 5] = [
 ];
 
 /// The legged machines.
-pub const KINDS: [&str; 4] = ["walker", "crawler", "hound", "heavy"];
+pub const KINDS: [&str; 5] = ["walker", "crawler", "grappler", "hound", "heavy"];
 
 /// A way over hard ground: what it is, and its points.
 #[derive(Clone, Debug)]
@@ -372,7 +372,7 @@ pub fn gauge(map: &str, secs: f32) -> (Report, Vec<Route>) {
             for kind in KINDS {
                 let e = match kind {
                     "walker" => super::walker::spawn_walker(&mut c, &zone, at, job.clone()),
-                    "crawler" => super::walker::spawn_walker_sized(
+                    "crawler" => super::walker::spawn_walker_shaped(
                         &mut c,
                         &zone,
                         at,
@@ -381,7 +381,9 @@ pub fn gauge(map: &str, secs: f32) -> (Report, Vec<Route>) {
                         40.0,
                         super::indoor::CRAWLER_SIZE,
                         None,
+                        super::anim::Shape::Crawler,
                     ),
+                    "grappler" => super::grappler::spawn_grappler(&mut c, &zone, at, job.clone()),
                     "hound" => super::hound::spawn_hound(&mut c, &zone, at, job.clone()),
                     _ => super::heavy::spawn_heavy(&mut c, &zone, &catalog, at, job.clone()),
                 };
