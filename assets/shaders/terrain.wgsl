@@ -282,6 +282,14 @@ fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
 // ballast into a wider verge of worn dirt, the grass taking it back in
 // tongues a metre or two out; a dirt road's edge is the softest, worn not
 // laid; a path is faint worn dirt.
+// A dirt road's trodden verge, as mud (layer 2) over the grass, at `lip`.
+fn dirt_verge(kind: u32, ee: f32, lip: f32) -> f32 {
+    if (kind != 4u) {
+        return 0.0;
+    }
+    return smoothstep(-0.2, 0.8, ee) * (1.0 - smoothstep(0.9, 2.6, lip)) * 0.55;
+}
+
 fn road_weights(kind: u32, ee: f32, lip: f32, fine: f32) -> vec4<f32> {
     if (kind == 0u) {
         return vec4<f32>(0.0);
@@ -426,7 +434,9 @@ fn fragment(
 
     w[0] = (1.0 - forest) * (1.0 - bare);
     w[1] = forest;
-    w[2] = mud + bare * 0.6;
+    let k1 = min(k0 + 1u, 5u);
+    let trod = mix(dirt_verge(k0, ee, lip), dirt_verge(k1, ee, lip), kf);
+    w[2] = max(mud + bare * 0.6, trod);
     w[3] = rock;
     w[4] = rw.x;
     w[5] = rw.y;
