@@ -189,6 +189,11 @@ pub const STAND_INS: &[StandIn] = &[
         render: heavy_sigh,
     },
     StandIn {
+        set: "body/heartbeat",
+        variants: 2,
+        render: heartbeat,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -1070,6 +1075,36 @@ fn heavy_sigh(rng: &mut Rng, sr: f32) -> Vec<f32> {
             let saw = 2.0 * groan_ph - 1.0;
             let env = (t / 0.25).min(1.0) * (1.0 - k).powf(1.4);
             (x * 1.6 + low.run(saw) * 0.8) * env
+        })
+        .collect()
+}
+
+/// Your own heart, felt as much as heard (a bleed: `audio_kit::heartbeat`):
+/// a lub-dub, two soft low thumps 0.17 s apart, the second lighter, each a
+/// falling tone with a muffled knock at its start. Low and short, so it
+/// sits under a fight's sounds without hiding a machine's tell.
+fn heartbeat(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (0.45 * sr) as usize;
+    let f0 = 72.0 * jitter(rng, 0.05);
+    let mut knock = Bp::new(260.0, 1.2, sr);
+    let thump = |t: f32, ph: &mut f32, sr: f32| -> f32 {
+        if t < 0.0 {
+            return 0.0;
+        }
+        let f = f0 * (1.0 - 0.35 * (t / 0.1).min(1.0));
+        *ph = (*ph + f / sr).fract();
+        (TAU * *ph).sin() * (t / 0.006).min(1.0) * (-t * 22.0).exp()
+    };
+    let (mut ph1, mut ph2) = (0.0f32, 0.0f32);
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let tick = if t < 0.02 || (0.17..0.19).contains(&t) {
+                knock.run(noise(rng)) * 0.25
+            } else {
+                knock.run(0.0) * 0.25
+            };
+            thump(t, &mut ph1, sr) + 0.65 * thump(t - 0.17, &mut ph2, sr) + tick
         })
         .collect()
 }
