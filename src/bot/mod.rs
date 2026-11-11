@@ -1083,10 +1083,18 @@ fn run_tasks(
                         if armed {
                             bot.tasks.push_front(Task::Fire { at: body, shots: 3 });
                         }
+                        // (What anyone stood there would know: it's up,
+                        // it's against them, and whether their gun's in
+                        // hand. Not how hurt it is.)
                         bot.note(format!(
-                            "a machine in the way at {:.1?}: {}round it",
+                            "a machine in the way at {:.1?}, up and {:.1} m off, the walk stalled: {}",
                             body.xz(),
-                            if armed { "shot it, then " } else { "" }
+                            body.xz().distance(pos),
+                            if armed {
+                                "gun in hand, so shot it, then round it"
+                            } else {
+                                "no gun in hand, so round it"
+                            }
                         ));
                         bot.restart();
                         continue;
