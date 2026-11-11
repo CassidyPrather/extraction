@@ -301,6 +301,9 @@ pub struct Bot {
     /// Clearing a stoppage mid-string (`clear_stoppage`).
     clearing: bool,
     pub look: Vec3,
+    /// Where its eye was last frame (world): what a throw's lob is
+    /// worked out from.
+    pub eye: Vec3,
     pub walk: Option<Vec2>,
     pub aim: bool,
     pub trigger: bool,
@@ -350,6 +353,7 @@ impl Bot {
             tasks: tasks.into(),
             elapsed: 0.0,
             fired: 0,
+            eye: Vec3::ZERO,
             clearing: false,
             look: Vec3::NEG_Z,
             walk: None,
@@ -473,7 +477,7 @@ impl Plugin for BotPlugin {
 fn drive_bots(
     mut bots: Query<
         (
-            &Bot,
+            &mut Bot,
             &mut RigInput,
             &mut Transform,
             &crate::weapons::AimHint,
@@ -488,7 +492,7 @@ fn drive_bots(
 ) {
     let gun_side = comfort.as_ref().map_or(Side::Right, |c| c.gun_side());
     let seated = comfort.as_ref().is_some_and(|c| c.seated);
-    for (bot, mut input, mut root, hint, children, seat) in &mut bots {
+    for (mut bot, mut input, mut root, hint, children, seat) in &mut bots {
         let supporting = children.iter().any(|c| {
             hands
                 .get(c)
@@ -519,6 +523,7 @@ fn drive_bots(
             0.0,
         );
         let world_eye = root.translation + eye + Vec3::Y * lift;
+        bot.eye = world_eye;
         let to = (bot.look - world_eye).normalize_or(Vec3::NEG_Z);
         // Turn the body toward the target's bearing, smoothly.
         let target_yaw = (-to.x).atan2(-to.z);
@@ -552,9 +557,9 @@ fn drive_bots(
         };
         input.sprint = bot.sprint && bot.walk.is_some();
         for side in Side::BOTH {
-            let offset = Vec3::new(0.2 * side.sign(), -0.32, -0.38);
+            let offset = HAND_AT + Vec3::X * 0.2 * side.sign();
             let pose = Transform::from_translation(eye + head_rot * offset)
-                .with_rotation(head_rot * Quat::from_rotation_x(-0.3));
+                .with_rotation(head_rot * Quat::from_rotation_x(-HAND_TILT));
             let hand = input.hand_mut(side);
             hand.pose = pose;
             hand.tracked = true;
@@ -598,6 +603,59 @@ fn drive_bots(
                     .with_rotation(right_pose.rotation);
         }
     }
+}
+
+/// Where a bot holds a hand, head space (the right; the left mirrors x).
+const HAND_AT: Vec3 = Vec3::new(0.0, -0.32, -0.38);
+/// How far a held hand points below the eye line (rad).
+const HAND_TILT: f32 = 0.3;
+/// A throw's rise off the level (rad): a lob, coming down onto the spot.
+const LOB: f32 = 0.7;
+/// Seconds to come round and face a throw before letting go (the body
+/// turns at 6/s toward the look: under 1% off by then).
+const THROW_TURN: f32 = 1.0;
+
+/// A live machine this near a stalled walk is what it's up against.
+const BODY_IN_THE_WAY: f32 = 1.5;
+
+/// Where to step to get past a body stood between `pos` and `to`: beside
+/// it, square to the way on, on the side the bot already leans to (so it
+/// never crosses in front of it), clear by more than a body and a bot.
+fn round_body(pos: Vec2, to: Vec2, body: Vec2) -> Vec2 {
+    let ahead = (to - pos).normalize_or(Vec2::X);
+    let side = if (pos - body).dot(ahead.perp()) >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    body + ahead.perp() * side * 1.4
+}
+
+/// A throw from an eye at `eye` to land at `at`: where to look (so the
+/// hand, [`HAND_TILT`] under the eye line, points up the arc) and how hard
+/// to throw (m/s, along the hand). Steeper where the spot is too far above
+/// the hand for the lob.
+fn lob(eye: Vec3, at: Vec3) -> (Vec3, f32) {
+    const G: f32 = 9.81;
+    let flat = Vec2::new(at.x - eye.x, at.z - eye.z);
+    let dir = flat.normalize_or(Vec2::NEG_Y);
+    let mut best = None;
+    for rise in [LOB, LOB + 0.2, LOB + 0.4] {
+        let pitch = rise + HAND_TILT;
+        let hand = Quat::from_rotation_x(pitch) * HAND_AT;
+        // Out from the eye along the facing (-z is forward), up by its y.
+        let dx = flat.length() + hand.z;
+        let dy = at.y - (eye.y + hand.y);
+        let denom = 2.0 * rise.cos().powi(2) * (dx * rise.tan() - dy);
+        if denom > 0.05 && dx > 0.1 {
+            best = Some((pitch, (G * dx * dx / denom).sqrt()));
+            break;
+        }
+    }
+    // Nothing to lob onto (at the feet, or high above): let it fall.
+    let (pitch, speed) = best.unwrap_or((LOB + HAND_TILT, 0.0));
+    let look = Vec3::new(dir.x * pitch.cos(), pitch.sin(), dir.y * pitch.cos());
+    (eye + look * 5.0, speed.min(crate::interact::MAX_THROW))
 }
 
 fn count_hits(
@@ -1002,6 +1060,51 @@ fn run_tasks(
                     bot.progress = (d, 0.0);
                 } else {
                     bot.progress.1 += dt;
+                }
+                // A machine on the way is no wall: one still up (a blinded
+                // crawler searching, say) finished if the gun's in hand, and
+                // either, up or a wreck, gone round, close to the spot or not.
+                // (A walker downed onto the way to a spot picked before it
+                // fell: one-handed stood against its orb and plates the half
+                // minute, beside Marrow's lorry.)
+                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP {
+                    let body = robots
+                        .iter()
+                        .map(|(_, r, gt)| (gt.translation(), r.wrecked))
+                        .filter(|(p, _)| p.xz().distance(pos) < BODY_IN_THE_WAY)
+                        .min_by(|a, b| a.0.xz().distance(pos).total_cmp(&b.0.xz().distance(pos)));
+                    if let Some((body, wrecked)) = body {
+                        let armed = !wrecked
+                            && hand(gun_side)
+                                .and_then(|h| h.holding)
+                                .is_some_and(|e| guns.get(e).is_ok());
+                        bot.sidesteps += 1;
+                        bot.tasks.push_front(Task::WalkTo {
+                            to: round_body(pos, to, body.xz()),
+                            within: SIDESTEP,
+                        });
+                        if armed {
+                            bot.tasks.push_front(Task::Fire { at: body, shots: 3 });
+                        }
+                        // (What anyone stood there would know: whether it's
+                        // up or a wreck, it's against them, and whether
+                        // their gun's in hand. Not how hurt it is.)
+                        bot.note(format!(
+                            "a machine in the way at {:.1?}, {} and {:.1} m off, the walk stalled: {}",
+                            body.xz(),
+                            if wrecked { "a wreck" } else { "up" },
+                            body.xz().distance(pos),
+                            if wrecked {
+                                "round it"
+                            } else if armed {
+                                "gun in hand, so shot it, then round it"
+                            } else {
+                                "no gun in hand, so round it"
+                            }
+                        ));
+                        bot.restart();
+                        continue;
+                    }
                 }
                 // (Not when lining up close: indoors, a step aside put it
                 // in a corner.)
@@ -1706,14 +1809,15 @@ fn run_tasks(
             }
             Task::Throw { side, at } => {
                 bot.walk = None;
-                // Lob it: aim a little above the point, by distance.
-                let d = Vec2::new(at.x - pos.x, at.z - pos.y).length();
-                bot.look = at + Vec3::Y * (0.15 * d);
-                if bot.elapsed > 0.4 {
+                // Lobbed to land on it: the hand turned up the arc, and let
+                // go once the body has come round to face it.
+                let (look, speed) = lob(bot.eye, at);
+                bot.look = look;
+                if bot.elapsed > THROW_TURN {
                     actions.write(HandAction::Release {
                         player,
                         side,
-                        throw: (2.5 + d * 0.7).min(12.0),
+                        throw: speed,
                     });
                     bot.next();
                 }
@@ -1919,6 +2023,84 @@ fn run_tasks(
 
 #[cfg(test)]
 mod tests {
+
+    /// Thrown as `drive_bots` holds the hand (placed and pointed off the
+    /// head, turned to face it), at `lob`'s speed, it comes down on the
+    /// spot: near and far, below and above the hand. (The second hour's
+    /// bolt, thrown with a guessed speed along a hand pointed 0.3 rad
+    /// under the eye, fell 3.8 m out of a 7.2 m throw and short of the
+    /// lift.)
+    /// A walk stalled on a live machine steps beside it, clear of it, on
+    /// the side the bot is already on, and no further back than it was.
+    #[test]
+    fn a_body_in_the_way_is_gone_round() {
+        // The shelter stall: bot at (-17.28,63.95) for (-16.83,63.63), the
+        // blinded crawler at (-16.9,64.2); and others either side.
+        for (pos, to, body) in [
+            (
+                Vec2::new(-17.28, 63.95),
+                Vec2::new(-16.83, 63.63),
+                Vec2::new(-16.9, 64.2),
+            ),
+            (
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 3.0),
+                Vec2::new(0.2, 1.0),
+            ),
+            (
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 3.0),
+                Vec2::new(-0.2, 1.0),
+            ),
+            (
+                Vec2::new(0.0, 0.0),
+                Vec2::new(5.0, 0.0),
+                Vec2::new(0.8, 0.0),
+            ),
+        ] {
+            let step = round_body(pos, to, body);
+            assert!(step.distance(body) > 1.2, "{pos} {to} {body}: {step}");
+            let ahead = (to - pos).normalize();
+            let lean = (pos - body).dot(ahead.perp());
+            if lean.abs() > 0.05 {
+                assert!(
+                    (step - body).dot(ahead.perp()) * lean > 0.0,
+                    "crossed: {step}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_lob_lands_where_it_was_thrown() {
+        let eye = Vec3::new(3.0, 1.68, -2.0);
+        for (d, y, bearing) in [
+            (3.0_f32, 0.0_f32, 0.3_f32),
+            (7.2, 0.0, 2.0),
+            (7.2, -1.0, -1.2),
+            (12.0, 0.5, 4.0),
+            (5.0, 2.5, 0.0),
+        ] {
+            let at = eye + Vec3::new(bearing.sin() * d, y - eye.y, -bearing.cos() * d);
+            let (look, speed) = lob(eye, at);
+            let to = (look - eye).normalize();
+            let yaw = (-to.x).atan2(-to.z);
+            let head = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(to.y.asin());
+            let mut p = eye + head * HAND_AT;
+            let mut v = head * Quat::from_rotation_x(-HAND_TILT) * Vec3::NEG_Z * speed;
+            let dt = 1.0 / 600.0;
+            // Down past the spot's height, falling.
+            while !(v.y < 0.0 && p.y <= at.y) {
+                v.y -= 9.81 * dt;
+                p += v * dt;
+            }
+            let miss = p.xz().distance(at.xz());
+            assert!(
+                miss < 0.15,
+                "{d} m out, {y} m up: landed {miss:.2} m off ({speed:.1} m/s)"
+            );
+        }
+    }
     use super::*;
 
     /// A walk to the far side of an anomaly goes round it; one that keeps

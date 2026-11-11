@@ -67,7 +67,8 @@ def run(sets, out):
                      + ("  masked (" + "; ".join(bad) + ")" if bad else ""))
     f, more = strikes(sets, mix)
     t, told = tells(sets, mix)
-    return flags + f + t, lines + more + told
+    h, heart = heartbeat(sets, mix)
+    return flags + f + t + h, lines + more + told + heart
 
 
 # A robot struck (audio_machines::struck_layers): each kind's layers, by
@@ -160,4 +161,58 @@ def tells(sets, mix):
         flags += bool(bad)
         lines.append(f"    {cue} at {dist:.0f} m: " + "; ".join(row)
                      + (f"  masked ({', '.join(bad)})" if bad else ""))
+    return flags, lines
+
+
+# Your heart while you bleed (audio_kit::heartbeat), at its worst (its
+# cue's level, a beat every BEAT_FAST s): heard over the wind by CLEAR, so
+# a newcomer bleeding out notices, and at its lightest (BEAT_QUIET_DB under)
+# still by HEART_LIGHT; and under combat, every machine's tell still
+# clearing its masking by CLEAR while it beats, losing at most HEART_COST dB.
+HEART = "body.heartbeat"
+BEAT_FAST = 0.45  # audio_kit::BEAT_FAST
+BEAT_QUIET_DB = -12.0  # audio_kit::BEAT_QUIET_DB
+HEART_LIGHT = 3.0
+HEART_COST = 2.0
+UNDER_HEART = {"heavy.horn": 300.0, "sentry.chirp": 30.0, "drone.lock": 30.0,
+               "distress.tell": 30.0}
+
+
+def heartbeat(sets, mix):
+    """The bleed's heartbeat: heard over the wind by CLEAR, and each tell's
+    margin with it beating no more than HEART_COST under its margin without."""
+    names = {c["name"]: c for c in mix}
+    if HEART not in names or names[HEART]["set"] not in sets:
+        return 1, [f"  {HEART}: not in the mix or the bank"]
+    wind = [("wind", "loop", None, 0.0, None)]
+    heart = [(HEART, 0.5, None, 0.0, BEAT_FAST)]
+
+    def over_wind(extra):
+        total, parts = am.render(wind + [(HEART, 0.5, None, extra, BEAT_FAST)], sets, mix,
+                                 seconds=2.0)
+        sig = parts[f"1:{HEART}"]
+        return max((am.margin(sig, total - sig, 0.5 + k * 0.05, LISTEN) for k in range(10)),
+                   key=lambda m: m[0])
+    heard, band = over_wind(0.0)
+    light, _ = over_wind(BEAT_QUIET_DB)
+    flags = int(heard < CLEAR) + int(light < HEART_LIGHT)
+    lines = [f"  Your heart bleeding: at its worst {heard:+.1f} dB over the wind at {band} Hz"
+             f" (wants {CLEAR:+.0f}), at its lightest {light:+.1f} (wants {HEART_LIGHT:+.0f})"
+             + (" (!)" if heard < CLEAR or light < HEART_LIGHT else ""),
+             f"    a machine's tell with it beating (wants {CLEAR:+.0f}, losing at most"
+             f" {HEART_COST:.0f} dB):"]
+    for cue, dist in UNDER_HEART.items():
+        if cue not in names or names[cue]["set"] not in sets:
+            continue
+        def best(scene):
+            total, parts = am.render(scene, sets, mix, seconds=2.0)
+            i = len(scene) - 1
+            sig = parts[f"{i}:{cue}"]
+            return max(am.margin(sig, total - sig, 0.5 + k * 0.05, LISTEN)[0] for k in range(20))
+        alone = best(wind + [(cue, 0.5, dist, 0.0, None)])
+        beating = best(wind + heart + [(cue, 0.5, dist, 0.0, None)])
+        bad = beating < CLEAR or alone - beating > HEART_COST
+        flags += bad
+        lines.append(f"    {cue:16s} at {dist:.0f} m: {alone:+.1f} -> {beating:+.1f} dB"
+                     + ("  (!)" if bad else ""))
     return flags, lines

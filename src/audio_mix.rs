@@ -292,6 +292,9 @@ pub const MIX: &[Cue] = &[
     cue!("ug.breath_mains", "machines/hum", -12.2, 38.0, 3.0, Detail, 1.5),
     cue!("ug.breath_water", "ambience/creek", -10.3, 42.0, 3.0, Detail, 1.5),
     cue!("ug.breath_draught", "ambience/wind_works", -14.5, 40.0, 3.0, Detail, 1.5),
+    // Your heart while you bleed (`audio_kit::heartbeat`), in your head: a
+    // Signal (your state, as the gun's are), gauged by audio_gunstate.heartbeat.
+    cue!("body.heartbeat", "body/heartbeat", -36.0, 55.0, 0.5, Signal),
     cue!("ug.breath_hiss", "machines/radio_static", -13.0, 30.0, 3.0, Detail, 1.5),
     cue!("ug.breath_buzz", "anomaly/snare_buzz", -0.7, 35.0, 3.0, Detail, 1.5),
     cue!("ug.breath_roar", "anomaly/burner_roar", 0.1, 45.0, 3.0, Detail, 1.5),

@@ -120,6 +120,14 @@ fn finish_dressing(
             let holder = commands
                 .spawn((node.transform, Visibility::default(), ChildOf(e)))
                 .id();
+            // The derrick's boom (its origin its foot pin) folds back along
+            // the hull when the grappler's wrecked; the pedestal and drum
+            // stand (`grappler_armour::Folds`).
+            if node.name == "launcher" {
+                commands
+                    .entity(holder)
+                    .insert(crate::robots::grappler_armour::Folds);
+            }
             spawn_primitives(&mut commands, holder, node, &mut mat);
         }
     }
@@ -304,7 +312,8 @@ fn tether_lines(
         let Ok(rgt) = robots.get(teth.by) else {
             continue;
         };
-        let a = rgt.translation() + Vec3::Y * 0.5;
+        // From the launcher's muzzle on its derrick.
+        let a = rgt.transform_point(crate::robots::grappler::MUZZLE);
         let b = pgt.translation() + Vec3::Y * 1.1;
         let len = a.distance(b).max(0.01);
         *t = Transform::from_translation((a + b) * 0.5)

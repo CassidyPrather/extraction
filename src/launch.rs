@@ -3,6 +3,7 @@
 //! ```text
 //! extraction [--flat] [--mirror] [--headset] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch] [--torch-dip DEG]]]
+//!            [--terrain-debug layers]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --report [--data-dir DIR]
@@ -64,6 +65,11 @@ pub struct LaunchOptions {
     /// `--torch-dip DEG`, which lights it): a hand holds a torch on the
     /// ground a few metres ahead while the eye looks further on.
     pub torch_dip: f32,
+    /// `--terrain-debug layers`: every ground layer drawn as one flat
+    /// colour (grass green, forest brown, mud, rock grey, gravel yellow,
+    /// asphalt black, dirt orange) with the same weights and cover, unlit
+    /// and unfogged, so the seams between them show plainly.
+    pub terrain_debug: bool,
     /// The local player is driven by the bot brain.
     pub bot: bool,
     /// Run a scripted bot scenario (see `bot::scenarios`); exits when done.
@@ -181,6 +187,7 @@ impl Default for LaunchOptions {
             camera: None,
             torch: false,
             torch_dip: 0.0,
+            terrain_debug: false,
             tour: None,
             tour_only: None,
             tour_views: None,
@@ -412,6 +419,7 @@ impl LaunchOptions {
                     o.torch = true;
                     o.torch_dip = val().parse::<f32>().unwrap_or(0.0).clamp(0.0, 60.0);
                 }
+                "--terrain-debug" => o.terrain_debug = val() == "layers",
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {

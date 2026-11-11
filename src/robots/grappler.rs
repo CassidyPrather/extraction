@@ -12,7 +12,6 @@
 
 use bevy::prelude::*;
 
-use super::walker::spawn_walker_with;
 use super::{Awareness, Brain, Job, PartRole, Robot, RobotPart};
 use crate::player::Player;
 use crate::world::Zone;
@@ -55,6 +54,10 @@ pub struct Harpoon {
     pub hit: bool,
 }
 
+/// The launcher's muzzle, robot space: on its derrick's head, 3 m off
+/// the ground (`art/robots/logistics.py`); the line leaves from it.
+pub const MUZZLE: Vec3 = Vec3::new(0.0, 1.81, -1.23);
+
 pub const TETHER_RANGE: f32 = 22.0;
 pub const TETHER_TIME: f32 = 4.0;
 /// Walk speed while tethered.
@@ -89,7 +92,18 @@ impl Plugin for GrapplerPlugin {
 }
 
 pub fn spawn_grappler(commands: &mut Commands, zone: &Zone, at: Vec3, job: Job) -> Entity {
-    let e = spawn_walker_with(commands, zone, at, job, false, 110.0);
+    // Its winch body (`anim::Shape::Grappler`), not the walker's orb.
+    let e = super::walker::spawn_walker_shaped(
+        commands,
+        zone,
+        at,
+        job,
+        false,
+        110.0,
+        1.0,
+        None,
+        super::anim::Shape::Grappler,
+    );
     commands.entity(e).insert((
         Name::new("Grappler"),
         Grappler {
@@ -370,7 +384,9 @@ mod tests {
             g.xz().distance(f.xz())
         };
         let mut bit = None;
-        for _ in 0..90 * 20 {
+        // (Long enough for several throws: a throw lands 7 in 10, by the
+        // grappler's seed, and a test mustn't hang on one coming up.)
+        for _ in 0..90 * 60 {
             app.update();
             if app.world().get::<Tethered>(player).is_some() {
                 bit = Some(gap(&app));
@@ -445,7 +461,8 @@ mod tests {
             },
         );
         let mut speared = false;
-        for _ in 0..90 * 20 {
+        // (Several throws: one may miss, by its seed.)
+        for _ in 0..90 * 60 {
             app.update();
             if app.world().get::<Tethered>(player).is_some() {
                 speared = true;

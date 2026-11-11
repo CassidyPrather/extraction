@@ -680,15 +680,65 @@ fn worn(guns: Query<(&Gun, &Held)>, locals: Query<(), With<LocalPlayer>>, mut m:
 }
 
 /// Hit, and bleeding: the wrist's "BLEED" is easy to miss, and a wound
-/// doesn't stop on its own.
-fn bleeding(locals: Query<&crate::health::Health, With<LocalPlayer>>, mut m: Meet) {
-    if m.met(First::Bleeding) {
+/// doesn't stop on its own. Bleeding badly with no dressing on you, the
+/// driver says so, once a raid (the careful newcomer won its first fight,
+/// its one dressing on the first wound, and bled out after it with nothing
+/// said: the first time's line is once a career).
+fn bleeding(
+    locals: Query<(Entity, &crate::health::Health), With<LocalPlayer>>,
+    items: Query<(
+        &crate::items::Item,
+        Option<&crate::anomaly::artifacts::CarriedBy>,
+    )>,
+    packs: Query<&crate::interact::body::Backpack>,
+    catalog: Res<crate::items::Catalog>,
+    raid: Res<Raid>,
+    mut said_badly: Local<bool>,
+    mut m: Meet,
+) {
+    if raid.phase == Phase::AtBase {
+        *said_badly = false;
         return;
     }
-    if locals.iter().any(|h| !h.down && h.bleeding > BLEEDING) {
+    let Some((me, h)) = locals.iter().next() else {
+        return;
+    };
+    if h.down {
+        return;
+    }
+    let is_dressing = |e: Entity| {
+        items
+            .get(e)
+            .is_ok_and(|(it, _)| catalog.get(it.kind()).id == "field_dressing")
+    };
+    // On you: in a hand, a pouch, or the pack on your back.
+    let dressed = || {
+        items.iter().any(|(it, by)| {
+            by.is_some_and(|b| b.0 == me) && catalog.get(it.kind()).id == "field_dressing"
+        }) || packs
+            .iter()
+            .any(|b| b.owner == me && b.carried && b.contents.iter().any(|e| is_dressing(*e)))
+    };
+    if h.bleeding > BLEEDING_BADLY && !dressed() {
+        if !*said_badly {
+            *said_badly = true;
+            m.queue.lines.push_back(BLEEDING_BADLY_LINE.into());
+        }
+        // ("Dressing on, now" with none to put on is no help.)
+        return;
+    }
+    if !m.met(First::Bleeding) && h.bleeding > BLEEDING {
         m.meet(First::Bleeding);
     }
 }
+
+/// Bleeding faster than this (HP a second) with no dressing on you is
+/// worth a word every raid: it kills in well under a minute.
+const BLEEDING_BADLY: f32 = 1.0;
+
+/// What the driver says then (once a raid).
+pub const BLEEDING_BADLY_LINE: &str =
+    "Truck: \"You're bleeding badly, nothing to bind it. Get to the truck.\"";
 
 /// The detector, a thrown thing, a fold: how you find anomalies, and
 /// what one did to you.
@@ -1204,6 +1254,10 @@ mod tests {
         ("walker", Ok(First::Aimed)),
         ("walker_with", Ok(First::Aimed)),
         ("walker_sized", Ok(First::Aimed)),
+        (
+            "walker_shaped",
+            Err("a walker in another body: the grappler's and the crawler's, named under theirs"),
+        ),
         ("broken_walker", Ok(First::BrokenNoticed)),
         ("drone", Ok(First::DroneLock)),
         ("hound", Ok(First::Hound)),
@@ -1922,6 +1976,105 @@ mod tests {
         let want = fill(First::Death.lines()[1], in_crate, 2);
         assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The driver's bleeding-badly line, said or waiting its turn.
+    fn said_badly(app: &App) -> usize {
+        let spoken = app.world().resource::<Spoken>().0.iter();
+        let queued = app.world().resource::<Queue>().lines.iter();
+        spoken
+            .chain(queued)
+            .filter(|l| *l == BLEEDING_BADLY_LINE)
+            .count()
+    }
+
+    fn bleed(app: &mut App, rate: f32) {
+        let mut q = app
+            .world_mut()
+            .query_filtered::<&mut crate::health::Health, With<LocalPlayer>>();
+        for mut h in q.iter_mut(app.world_mut()) {
+            h.bleeding = rate;
+        }
+    }
+
+    /// Out, bleeding badly with no dressing on you: "nothing to bind it",
+    /// once a raid, and again the next raid; not with a dressing on you,
+    /// nor bleeding slowly. It fits the wrist.
+    #[test]
+    fn bleeding_badly_with_nothing_to_bind_it_is_said_once_a_raid() {
+        let n = crate::render::screen::wrap(BLEEDING_BADLY_LINE, 26, usize::MAX).len();
+        assert!(n <= 3, "{n} lines: {BLEEDING_BADLY_LINE}");
+        let mut app = app();
+        drop_dressings(&mut app);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        bleed(&mut app, 0.5);
+        for _ in 0..10 {
+            app.update();
+        }
+        assert_eq!(said_badly(&app), 0, "a slow bleed: not this line");
+        bleed(&mut app, 2.0);
+        for _ in 0..30 {
+            app.update();
+            bleed(&mut app, 2.0);
+        }
+        assert_eq!(said_badly(&app), 1, "bleeding badly: said, once");
+        // Home and out again: said again.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        app.update();
+        drop_dressings(&mut app);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..10 {
+            app.update();
+            bleed(&mut app, 2.0);
+        }
+        assert_eq!(said_badly(&app), 2, "the next raid: said again");
+    }
+
+    /// A dressing on you (in the pack): no "nothing to bind it".
+    #[test]
+    fn bleeding_badly_with_a_dressing_on_you_is_not_nothing_to_bind_it() {
+        let mut app = app();
+        drop_dressings(&mut app);
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .expect("a player");
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == me && b.carried)
+            .map(|(e, _)| e)
+            .expect("a pack");
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("field_dressing").unwrap();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let e = {
+            let mut commands = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::default(),
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(e);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..30 {
+            app.update();
+            bleed(&mut app, 2.0);
+        }
+        assert_eq!(said_badly(&app), 0);
     }
 
     /// Every field dressing in the world.

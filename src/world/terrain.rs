@@ -129,13 +129,18 @@ fn spawn_terrain_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<TerrainMaterial>>,
     asset_server: Res<AssetServer>,
+    launch: Option<Res<crate::launch::LaunchOptions>>,
 ) {
     let mut material = terrain_material(&asset_server);
     if zone.map.ash > 0.0 {
         material.extension.params.burnt = 1.0;
     }
+    if launch.is_some_and(|l| l.terrain_debug) {
+        material.extension.params.debug = 1.0;
+    }
     let material = materials.add(material);
     let canopy = Canopy::of(&zone);
+    let edges = RoadEdges::of(&zone.hm);
     let hm = &zone.hm;
     let cells = hm.n - 1;
     let step = (CHUNK as f32 / hm.cell).round() as usize;
@@ -154,10 +159,10 @@ fn spawn_terrain_meshes(
     // The chunks' meshes on every core (each is its own); spawned after.
     let built: Vec<Vec<Mesh>> = bevy::tasks::ComputeTaskPool::get().scope(|scope| {
         for &(i0, j0, i1, j1) in &spans {
-            let (zone, canopy) = (&zone, &canopy);
+            let (zone, canopy, edges) = (&zone, &canopy, &edges);
             scope.spawn(async move {
                 LODS.iter()
-                    .map(|(spacing, _)| chunk_mesh(zone, canopy, i0, j0, i1, j1, *spacing))
+                    .map(|(spacing, _)| chunk_mesh(zone, canopy, edges, i0, j0, i1, j1, *spacing))
                     .collect()
             });
         }
@@ -286,9 +291,87 @@ impl Canopy {
     }
 }
 
+/// How far from a road's edge the ground's road channel reaches (m): the
+/// edge's wander and its verge lie well inside it.
+pub const EDGE_REACH: f32 = 8.0;
+
+/// A road edge's signed distance (m; under 0 on the road) as the terrain's
+/// road channel (vertex colour b): linear, so it interpolates true, 0.5 at
+/// the edge, 0 at `EDGE_REACH` out and past (no road), 1 as far in.
+/// `terrain.wgsl` reads it back (`road_edge`).
+pub fn edge_code(e: f32) -> f32 {
+    (0.5 - e / (2.0 * EDGE_REACH)).clamp(0.0, 1.0)
+}
+
+/// For each heightmap sample, its signed distance to the nearest road's
+/// edge (m; under 0 on it, `EDGE_REACH` where there's none near) and that
+/// road's kind. From the roads' own centrelines (`RoadLine`), segment by
+/// segment; bridge decks paint no ground.
+pub struct RoadEdges {
+    n: usize,
+    edge: Vec<f32>,
+    kind: Vec<Option<RoadKind>>,
+}
+
+impl RoadEdges {
+    pub fn of(hm: &extraction_core::terrain::Heightmap) -> Self {
+        let n = hm.n;
+        let mut edge = vec![EDGE_REACH; n * n];
+        let mut kind = vec![None; n * n];
+        let cell = |x: f32| ((x - hm.origin) / hm.cell).clamp(0.0, (n - 1) as f32);
+        for rl in &hm.road_lines {
+            let half = rl.width * 0.5;
+            let reach = half + EDGE_REACH;
+            let mut s = 0.0;
+            for w in rl.points.windows(2) {
+                let (a, b) = (w[0], w[1]);
+                let len = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                let mid = s + len * 0.5;
+                s += len;
+                if rl.bridges.iter().any(|(lo, hi)| mid >= *lo && mid <= *hi) {
+                    continue;
+                }
+                let (x0, x1) = (a[0].min(b[0]) - reach, a[0].max(b[0]) + reach);
+                let (z0, z1) = (a[1].min(b[1]) - reach, a[1].max(b[1]) + reach);
+                for j in cell(z0).floor() as usize..=cell(z1).ceil() as usize {
+                    for i in cell(x0).floor() as usize..=cell(x1).ceil() as usize {
+                        let p = hm.pos(i, j);
+                        let e = seg_dist(p, a, b) - half;
+                        let k = j * n + i;
+                        if e < edge[k] {
+                            edge[k] = e;
+                            kind[k] = Some(rl.kind);
+                        }
+                    }
+                }
+            }
+        }
+        Self { n, edge, kind }
+    }
+
+    pub fn at(&self, i: usize, j: usize) -> (f32, Option<RoadKind>) {
+        let k = j * self.n + i;
+        (self.edge[k], self.kind[k])
+    }
+}
+
+fn seg_dist(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
+    let (ab, ap) = ([b[0] - a[0], b[1] - a[1]], [p[0] - a[0], p[1] - a[1]]);
+    let l2 = ab[0] * ab[0] + ab[1] * ab[1];
+    let t = if l2 > 0.0 {
+        ((ap[0] * ab[0] + ap[1] * ab[1]) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let (dx, dz) = (ap[0] - ab[0] * t, ap[1] - ab[1] * t);
+    (dx * dx + dz * dz).sqrt()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn chunk_mesh(
     zone: &Zone,
     canopy: &Canopy,
+    edges: &RoadEdges,
     i0: usize,
     j0: usize,
     i1: usize,
@@ -319,22 +402,27 @@ fn chunk_mesh(
             normals.push(hm.normal(p));
             // World-space UVs in metres; the shader scales per layer.
             uvs.push([p[0], p[1]]);
-            // Coarse vertices take the strongest road paint around them,
-            // so a road doesn't break up into patches far off.
-            let mut road = hm.roads[hm.idx(i, j)];
+            // The road channel is the distance to the nearest road's edge
+            // (`RoadEdges`), not its paint: a distance is near enough
+            // linear across a cell that, interpolated, the shader has it
+            // for every pixel, and draws the edge and its verge there (the
+            // paint, a ramp a metre wide on a 2 m grid, drew a seam along
+            // the triangles). Coarse vertices take the nearest edge round
+            // them, so a road doesn't break up into patches far off.
+            let (mut e, mut kind) = edges.at(i, j);
             if spacing > 1 {
                 let r = spacing / 2;
                 for jj in j.saturating_sub(r)..=(j + r).min(hm.n - 1) {
                     for ii in i.saturating_sub(r)..=(i + r).min(hm.n - 1) {
-                        let q = hm.roads[hm.idx(ii, jj)];
-                        if q.weight > road.weight {
-                            road = q;
+                        let q = edges.at(ii, jj);
+                        if q.0 < e {
+                            (e, kind) = q;
                         }
                     }
                 }
             }
-            let road_w = road.weight as f32 / 255.0;
-            let kind = match road.kind {
+            let road_w = edge_code(e);
+            let kind = match kind {
                 Some(RoadKind::Asphalt) => 1.0,
                 Some(RoadKind::Gravel) => 2.0,
                 Some(RoadKind::Rail) => 3.0,
@@ -457,7 +545,16 @@ mod tangent_tests {
     #[test]
     fn analytic_tangents_match_generated_ones_inside_a_chunk() {
         let zone = Zone::load("marrow_creek");
-        let mut mesh = chunk_mesh(&zone, &Canopy::of(&zone), 64, 64, 128, 128, 1);
+        let mut mesh = chunk_mesh(
+            &zone,
+            &Canopy::of(&zone),
+            &RoadEdges::of(&zone.hm),
+            64,
+            64,
+            128,
+            128,
+            1,
+        );
         let ours: Vec<[f32; 4]> = match mesh.attribute(Mesh::ATTRIBUTE_TANGENT) {
             Some(bevy::mesh::VertexAttributeValues::Float32x4(v)) => v.clone(),
             _ => panic!("tangents"),
@@ -540,4 +637,116 @@ mod drowned_tests {
 
 fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
     extraction_core::geom::smoothstep(e0, e1, x)
+}
+
+#[cfg(test)]
+mod road_edge_tests {
+    use super::*;
+    use extraction_core::terrain::{Heightmap, RoadLine};
+
+    /// A 100 m square on a 2 m grid with one straight 6 m road along z at
+    /// x = 1 (between samples), a bridge over its middle.
+    fn grid() -> Heightmap {
+        let n = 51;
+        Heightmap {
+            n,
+            cell: 2.0,
+            origin: -50.0,
+            heights: vec![0.0; n * n],
+            roads: vec![Default::default(); n * n],
+            water: vec![f32::NAN; n * n],
+            wet: vec![0.0; n * n],
+            road_lines: vec![RoadLine {
+                road: 0,
+                kind: RoadKind::Gravel,
+                width: 6.0,
+                points: (0..=80).map(|k| [1.0, -40.0 + k as f32]).collect(),
+                heights: vec![0.0; 81],
+                bridges: vec![(35.0, 45.0)],
+            }],
+            holes: vec![false; n * n],
+        }
+    }
+
+    fn sample(hm: &Heightmap, x: f32, z: f32) -> (usize, usize) {
+        (
+            ((x - hm.origin) / hm.cell) as usize,
+            ((z - hm.origin) / hm.cell) as usize,
+        )
+    }
+
+    #[test]
+    fn the_edge_is_where_the_road_ends_and_its_kind_carries_out_past_it() {
+        let hm = grid();
+        let edges = RoadEdges::of(&hm);
+        // x = 4 is the edge (1 + 3): on it, inside, outside, far off.
+        for (x, want) in [
+            (4.0, 0.0),
+            (0.0, -2.0),
+            (-2.0, 0.0),
+            (8.0, 4.0),
+            (10.0, 6.0),
+        ] {
+            let (i, j) = sample(&hm, x, -20.0);
+            let (e, kind) = edges.at(i, j);
+            assert!((e - want).abs() < 1e-3, "x {x}: {e} vs {want}");
+            assert_eq!(kind, Some(RoadKind::Gravel), "x {x}");
+        }
+        let (i, j) = sample(&hm, 30.0, -20.0);
+        assert_eq!(edges.at(i, j), (EDGE_REACH, None), "no road near");
+    }
+
+    #[test]
+    fn the_road_channel_interpolates_to_the_true_distance() {
+        // Linear in the distance: half way between two samples, the
+        // interpolated channel is the channel of the distance half way.
+        for (a, b) in [(-3.0f32, -1.0f32), (-1.0, 1.0), (0.5, 2.5), (2.0, 4.0)] {
+            let mid = 0.5 * (edge_code(a) + edge_code(b));
+            assert!((mid - edge_code(0.5 * (a + b))).abs() < 1e-6, "{a}..{b}");
+        }
+        assert_eq!(edge_code(0.0), 0.5);
+        assert_eq!(edge_code(EDGE_REACH), 0.0, "no road reads as none");
+    }
+
+    #[test]
+    fn a_bridge_deck_paints_no_ground_under_it() {
+        let hm = grid();
+        let edges = RoadEdges::of(&hm);
+        // Arc 40 is z = 0, mid-deck: the ground under it is no road.
+        let (i, j) = sample(&hm, 0.0, 0.0);
+        assert!(edges.at(i, j).0 > 1.5, "{:?}", edges.at(i, j));
+        let (i, j) = sample(&hm, 0.0, -20.0);
+        assert!(edges.at(i, j).0 < 0.0);
+    }
+}
+
+#[cfg(test)]
+mod road_edge_timing {
+    use super::*;
+
+    /// How long each valley's edge grid takes to build (it's built once,
+    /// at load): `cargo test --lib -- --ignored gauge_road_edges_build_time`.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_road_edges_build_time() {
+        for m in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let map = crate::world::load_map_def(m);
+            let hm = extraction_core::terrain::Heightmap::build(&map);
+            let t = std::time::Instant::now();
+            let edges = RoadEdges::of(&hm);
+            let ms = t.elapsed().as_secs_f64() * 1e3;
+            let near = edges.edge.iter().filter(|e| **e < EDGE_REACH).count();
+            println!(
+                "{m}: {ms:.1} ms, {} roads, {near} samples near one",
+                hm.road_lines.len()
+            );
+            assert!(ms < 100.0, "{m}: the edge grid took {ms:.0} ms");
+        }
+    }
 }
