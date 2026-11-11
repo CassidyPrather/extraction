@@ -597,6 +597,7 @@ fn fragment(
     // Snow (world::snow): above the line, with a ragged edge; thin first,
     // in patches, the grass and stones through it, then lying all over the
     // flatter ground (roads too). It fills the puddles.
+    let bare_ground = albedo;
     if (terrain.snow > 0.002) {
         let edge = (fbm(wp.xz * 0.03) - 0.5) * 9.0;
         let above = smoothstep(terrain.snow_line - 3.0, terrain.snow_line + 4.0, wp.y + edge);
@@ -628,7 +629,10 @@ fn fragment(
             // gone from a few metres off).
             let driven = road * s * 0.85 * (1.0 - packed);
             if (driven > 0.0) {
-                albedo = mix(albedo, vec3<f32>(0.56, 0.59, 0.64) * (0.93 + 0.12 * fine), driven);
+                // Grey slush, the ground showing in the ruts: a few tenths
+                // darker than the fresh snow either side.
+                let slush = mix(vec3<f32>(0.42, 0.44, 0.48), bare_ground * 1.2, 0.3) * (0.92 + 0.14 * fine);
+                albedo = mix(albedo, slush, driven);
                 rough = mix(rough, 0.6, driven);
             }
         }
