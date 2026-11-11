@@ -344,28 +344,29 @@ with the stock shouldered. (Every shot once sat between 0.6 and 0.82: a
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
 
-Bleeding is felt as a heartbeat on the watch wrist (the off hand), for
-as long as it bleeds (`rig::haptics::bleed_haptics`, comfort
-`bleed_pulse`, `--no-bleed-pulse`): a beat and a softer one 0.18 s after
-it (`HEARTBEAT`: 45 ms, then 0.65 of it for 35 ms), faster and harder the
-faster you bleed (`bleed_beat`). It used to only drain: a newcomer
-looking elsewhere after a fight could bleed out in about 15 s without
-knowing.
+Bleeding is felt as a heartbeat in both hands on every beat of the
+bleed's one clock (`audio_kit::heartbeat`, the `Heartbeat` message, the
+same beat the sound plays: Audio's), so it's felt and heard as one. Each
+beat is `rig::haptics::HEARTBEAT`, a 45 ms tap and one at 0.65 of it for
+35 ms, 0.17 s after it (the sound's lub-dub), at
+`heartbeat_scale(level)` = 0.18 + 0.22 times the beat's level. It used to
+only drain: a newcomer looking elsewhere after a fight could bleed out in
+about 15 s without knowing. Off with the comfort setting `bleed_pulse`
+(`--no-bleed-pulse`); the sound goes on.
 
-| Bleeding | Heartbeat | Every |
-|---|---|---|
-| under 0.5 hp/s, till it clots | 0.18 | 1.4 s |
-| 0.5 hp/s | 0.18 | 1.4 s |
-| 1 hp/s | 0.25 | 1.12 s |
-| 1.5 hp/s | 0.33 | 0.83 s |
-| 2 hp/s and over | 0.40 | 0.55 s |
+| Bleeding | Level | Felt | Every |
+|---|---|---|---|
+| 0.2 hp/s | 0.05 | 0.19 | 0.97 s |
+| 0.5 hp/s | 0.21 | 0.23 | 0.88 s |
+| 1 hp/s | 0.47 | 0.28 | 0.74 s |
+| 1.5 hp/s | 0.74 | 0.34 | 0.59 s |
+| 2 hp/s and over | 1.00 | 0.40 | 0.45 s |
 
-It stops when the bleeding's dressed or has clotted (under 0.01 hp/s),
-and isn't felt down. The first beat comes a beat after the bleeding
-starts, so the hit that opened it is felt as a hit. It's kept apart
-from the other tells: a hit's buzz is in both hands, 0.1 s and 0.45 or
-more; the machine's tick is one 12 ms whisper; the aegis's fizz is a
-steady tremor in both hands.
+It starts over 0.1 hp/s (`BLEED_HEARD`), with a beat at once, and stops
+when the bleeding's dressed or has clotted to 0.1, and while you're down.
+It's kept apart from the other tells: a hit's buzz is 0.45 or more for
+0.1 s; the machine's tick is one 12 ms whisper on the wrist; the aegis's
+fizz is a steady tremor in both hands.
 
 **Haptic shapes** (`src/rig/shapes.rs`). A few pulses in a pattern, for
 things the hand should tell apart without looking. Each pulse is on the
