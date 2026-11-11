@@ -1470,10 +1470,10 @@ impl World2<'_, '_> {
                 &Collider::capsule(0.3, 1.0),
                 feet + Vec3::Y * 0.95,
                 Quat::IDENTITY,
-                &SpatialQueryFilter::from_mask([crate::world::Layer::World]),
+                &SpatialQueryFilter::from_mask([crate::world::Layer::World])
+                    .with_excluded_entities(self.terrain.iter()),
             )
-            .into_iter()
-            .all(|e| self.terrain.contains(e))
+            .is_empty()
     }
 
     pub(super) fn nearest_anomaly(&self, near: Vec2) -> Option<(&crate::anomaly::Anomaly, Vec3)> {
