@@ -550,7 +550,10 @@ fn fresh_save(map: &str) -> SaveGame {
         // Clear of the map case (under it at (-0.2, -0.4), it was hidden).
         item("ammo_9x18", 16, [0.2, 0.05, 0.12]),
         radio,
+        // Two (one went on Marrow's first wound, and the second wound
+        // bled out in 15 s): the second on the first.
         item("field_dressing", 0, [0.2, 0.05, 0.3]),
+        item("field_dressing", 0, [0.2, 0.095, 0.3]),
         item("canned_stew", 0, [-0.25, 0.05, 0.4]),
         item("cleaning_kit", 0, [0.0, 0.05, -0.1]),
         item("map_case", 0, [-0.3, 0.05, -0.3]),
@@ -1839,6 +1842,22 @@ mod tests {
         assert_eq!(holding.len(), 1, "the hearth is held by {holding:?}");
         assert_eq!(at, holding.first().copied());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A new game's crate holds two dressings, apart (one went on Marrow's
+    /// first wound, and the second wound bled out in 15 s).
+    #[test]
+    fn a_new_game_has_two_dressings() {
+        let s = fresh_save("marrow_creek");
+        let at: Vec<[f32; 3]> = s
+            .stash
+            .iter()
+            .filter(|i| i.id == "field_dressing")
+            .map(|i| i.local)
+            .collect();
+        assert_eq!(at.len(), 2, "two dressings: {at:?}");
+        let gap = Vec3::from_array(at[0]).distance(Vec3::from_array(at[1]));
+        assert!(gap > 0.03, "not in one place: {at:?}");
     }
 
     /// The same world saves to the same bytes: remains come out in one

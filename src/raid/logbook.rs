@@ -14,6 +14,9 @@ use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::rig::LocalPlayer;
 use crate::robots::{PartDestroyed, PartRole, Robot, RobotKind};
 
+/// The line for a raid lost to bleeding.
+pub const BLED_OUT: &str = "Bled out. Carry two dressings.";
+
 /// How the last raid went.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RaidEntry {
@@ -30,7 +33,13 @@ pub struct RaidEntry {
     pub nights: u32,
     /// A leg broken out there: splinted or not, at the end.
     pub leg: Option<bool>,
+    /// Down from bleeding: nothing had hit for [`BLED_AFTER`] seconds and
+    /// the wound was still open (not in the Surge).
+    pub bled_out: bool,
 }
+
+/// Seconds since the last hit or fall for a death to be the bleeding's.
+pub const BLED_AFTER: f32 = 2.0;
 
 #[derive(Resource, Default, Debug)]
 pub struct Logbook {
@@ -132,7 +141,14 @@ fn tally_wrecks(
 fn write_entries(
     raid: Res<Raid>,
     mut book: ResMut<Logbook>,
-    players: Query<(Entity, Option<&crate::interact::wounds::Fracture>), With<LocalPlayer>>,
+    players: Query<
+        (
+            Entity,
+            Option<&crate::interact::wounds::Fracture>,
+            Option<&crate::health::Health>,
+        ),
+        With<LocalPlayer>,
+    >,
     carried: Query<(&Item, &CarriedBy)>,
     catalog: Res<Catalog>,
     house: Option<Res<crate::progression::safehouse::Safehouse>>,
@@ -153,7 +169,7 @@ fn write_entries(
     if !home && !matches!(raid.phase, Phase::Down { .. }) {
         return;
     }
-    let Some((player, fracture)) = players.iter().next() else {
+    let Some((player, fracture, health)) = players.iter().next() else {
         return;
     };
     let mut items = 0;
@@ -178,6 +194,9 @@ fn write_entries(
         artifacts,
         nights: house.map_or(0, |h| h.nights_out),
         leg: fracture.map(|f| f.splinted),
+        bled_out: !home
+            && !raid.surging()
+            && health.is_some_and(|h| h.bleeding > 0.0 && h.since_hit >= BLED_AFTER),
     };
     book.written = Some(entry_text(&entry));
     book.last = Some(entry);
@@ -220,6 +239,9 @@ fn entry_text(e: &RaidEntry) -> String {
         Some(true) => lines.push("Broke a leg, splinted".to_owned()),
         Some(false) => lines.push("Broke a leg".to_owned()),
         None => {}
+    }
+    if e.bled_out {
+        lines.push(BLED_OUT.to_owned());
     }
     lines.push(format!("Wrecked {}", wreck_list(&e.wrecked)));
     if e.home {
@@ -455,5 +477,56 @@ mod tests {
             Some("RAID 3: HOME, 2 MIN Wrecked nothing Brought home 16 things".into());
         let home = text(&mut app);
         assert!(!home.contains("Still on the card"), "{home}");
+    }
+
+    /// Down from bleeding (nothing hit for a while, the wound still open):
+    /// the logbook says so, and what would have saved it (Marrow's first
+    /// fight: the one dressing on the first wound, the second wound bled
+    /// out in 15 s). Down to a hit, it doesn't.
+    #[test]
+    fn a_raid_lost_to_bleeding_says_so() {
+        let lost = |bleeding: f32, since_hit: f32| {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..3 {
+                app.update();
+            }
+            {
+                let mut raid = app.world_mut().resource_mut::<Raid>();
+                raid.phase = Phase::Out;
+                raid.raids += 1;
+            }
+            app.update();
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .expect("a player");
+            {
+                let mut h = app
+                    .world_mut()
+                    .get_mut::<crate::health::Health>(player)
+                    .unwrap();
+                h.hp = 0.0;
+                h.down = true;
+                h.bleeding = bleeding;
+                h.since_hit = since_hit;
+            }
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Down { left: 6.0 };
+            app.update();
+            app.world().resource::<Logbook>().written.clone().unwrap()
+        };
+        let bled = lost(2.2, 14.0);
+        assert!(bled.contains(BLED_OUT), "{bled}");
+        let shot = lost(2.2, 0.0);
+        assert!(!shot.contains(BLED_OUT), "a hit took it: {shot}");
+        let clean = lost(0.0, 14.0);
+        assert!(!clean.contains(BLED_OUT), "not bleeding: {clean}");
     }
 }
