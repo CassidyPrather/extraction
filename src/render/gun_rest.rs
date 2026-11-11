@@ -244,6 +244,7 @@ pub(crate) fn split_ranges(range: Option<&VisibilityRange>) -> (VisibilityRange,
 
 /// Whether a merged mesh is a far level's: drawn only past the hand-over
 /// (`split_ranges`), where a near one stops.
+#[cfg(test)]
 pub(crate) fn is_far_mesh(range: Option<&VisibilityRange>) -> bool {
     range.is_some_and(|r| r.start_margin.start >= FAR_AT - 0.5)
 }
