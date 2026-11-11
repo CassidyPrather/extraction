@@ -656,6 +656,8 @@ pub(super) struct Newcomer {
     spare_gun: bool,
     /// The walk last looked at as it came up (`unvetted`): once each.
     vetted: Option<Vec2>,
+    /// The walk last put through `routed_leg` as it came up: once each.
+    routed: Option<Vec2>,
     /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
@@ -1992,6 +1994,23 @@ pub(super) fn direct_raid(
             bot.tasks.pop_front();
         }
         bot.restart();
+    }
+    // Every walk, as it comes up, from where the newcomer is (not where it
+    // was planned from): straight through something `walk` goes round, it's
+    // `walk`'s way to the same place instead. (The wanderer, handed a leg
+    // through the rail shed's south wall, slid along it 40 s till the walk
+    // timed out: wherever a leg comes from, it's made here.)
+    if let Some(&Task::WalkTo { to, within }) = bot.tasks.front()
+        && state.routed != Some(to)
+    {
+        state.routed = Some(to);
+        if let Some(way) = routed_leg(&world, here, to, within) {
+            bot.tasks.pop_front();
+            for t in way.into_iter().rev() {
+                bot.tasks.push_front(t);
+            }
+            bot.restart();
+        }
     }
     // A first raid that runs on past half an hour has lost its way.
     if now > 1800.0 && state.leg != Leg::Done {
@@ -3392,6 +3411,59 @@ fn unvetted(world: &World2, here: Vec2, to: Vec2) -> bool {
             let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
             segment_hits_box(a, b, *half).is_some()
         })
+}
+
+/// The first of `boxes` a straight walk `a`..`b` goes through (its
+/// centre), if any. A box an end is in is no bar: that's a way into it or
+/// out of it (a building's plan, a door's step).
+fn crossed(boxes: &[(Transform, Vec2)], a: Vec2, b: Vec2) -> Option<Vec2> {
+    boxes.iter().find_map(|(xf, half)| {
+        let inv = xf.compute_affine().inverse();
+        let la = inv.transform_point3(Vec3::new(a.x, 0.0, a.y)).xz();
+        let lb = inv.transform_point3(Vec3::new(b.x, 0.0, b.y)).xz();
+        // (On its edge counts: a way out of a box, or a spot by its side.)
+        let edge = *half + Vec2::splat(ON_EDGE);
+        let inside = |l: Vec2| l.x.abs() < edge.x && l.y.abs() < edge.y;
+        (!inside(la) && !inside(lb) && segment_hits_box(la, lb, *half).is_some())
+            .then(|| xf.translation.xz())
+    })
+}
+
+/// The one way a walk leg comes to the newcomer's feet: from `here` to
+/// `to`, straight through something `walk` goes round (a building, a
+/// solid, an open hall's wall, the fence), `walk`'s way there instead, its
+/// last leg as near as the leg asked; `None` to walk it as it is (clear,
+/// a sidestep round a body, or no clear way round found).
+fn routed_leg(world: &World2, here: Vec2, to: Vec2, within: f32) -> Option<Vec<Task>> {
+    if within == crate::bot::SIDESTEP || here.distance(to) < 0.5 {
+        return None;
+    }
+    let boxes = walk_boxes(world);
+    crossed(&boxes, here, to)?;
+    let clear_way = |to: Vec2| {
+        let mut way = walk(world, here, to);
+        match way.last_mut() {
+            Some(Task::WalkTo { to: end, within: w }) if end.distance(to) < 0.1 => *w = within,
+            _ => return None,
+        }
+        let mut at = here;
+        for t in &way {
+            if let Task::WalkTo { to: p, .. } = t {
+                if crossed(&boxes, at, *p).is_some() {
+                    return None;
+                }
+                at = *p;
+            }
+        }
+        Some(way)
+    };
+    // No clear way to the spot itself: it's in something (cover picked 6 m
+    // past a building's middle, on the rail shed's far wall). Out of that
+    // to its nearest side, and there.
+    clear_way(to).or_else(|| {
+        let out = clear_of(&boxes, to);
+        (out != to).then(|| clear_way(out)).flatten()
+    })
 }
 
 /// Into cover from a machine at `from`: round the far side of the nearest
@@ -7476,5 +7548,143 @@ mod indoor_tests {
         // Long ago: no longer the same fight.
         assert!(!shot_warns(&[60.0], 100.0, 30.0));
         assert!(!shot_warns(&[], 100.0, 30.0));
+    }
+
+    /// Every walk leg comes to the newcomer's feet through `routed_leg`,
+    /// whatever handed it out: the way there (`route`), a wanderer's road
+    /// (`by_road`), off from a machine (`walk_away`, `walk_off_heavy`), into
+    /// cover (`run_for_cover`), out of a machine's line (`break_line`), to a
+    /// thing to fetch (`way_to`), and a walk planned from somewhere it no
+    /// longer is (the wanderer's, through the rail shed's south wall). Past
+    /// every building on Marrow, from each side to the far one: as walked,
+    /// no leg goes through what `walk` goes round. And without it, some
+    /// would (the check bites).
+    #[test]
+    fn every_walk_leg_comes_to_the_feet_routed() {
+        use super::{
+            break_line, by_road, crossed, route, routed_leg, run_for_cover, walk, walk_away,
+            walk_boxes, walk_off_heavy, way_to,
+        };
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut st: SystemState<(
+            super::World2,
+            super::RaidView,
+            avian3d::prelude::SpatialQuery,
+        )> = SystemState::new(w);
+        let (world, view, spatial) = st.get(w).unwrap();
+        let plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
+        let boxes = walk_boxes(&world);
+        // Each leg as the runner meets it, from where the last one ended:
+        // through `routed_leg` (`choke`), or as handed out.
+        let as_walked = |here: Vec2, tasks: Vec<Task>, choke: bool| {
+            let mut q: std::collections::VecDeque<Task> = tasks.into();
+            let (mut at, mut legs, mut n) = (here, vec![], 0);
+            while let Some(t) = q.pop_front() {
+                n += 1;
+                assert!(n < 5000, "from {here}: the legs never end");
+                let Task::WalkTo { to, within } = t else {
+                    continue;
+                };
+                if choke && let Some(way) = routed_leg(&world, at, to, within) {
+                    for t in way.into_iter().rev() {
+                        q.push_front(t);
+                    }
+                    continue;
+                }
+                legs.push((at, to));
+                at = to;
+            }
+            legs
+        };
+        let shells: Vec<(Transform, Vec2)> = view
+            .entrances
+            .as_deref()
+            .expect("Marrow's doors")
+            .shells
+            .iter()
+            .map(|s| (s.xf, s.half))
+            .collect();
+        assert!(shells.len() > 10, "{} buildings on Marrow", shells.len());
+        let inside = world.zone.map.half() - 10.0;
+        let mut raw: std::collections::BTreeMap<&str, usize> = Default::default();
+        let mut through = vec![];
+        for (k, (xf, half)) in shells.iter().enumerate() {
+            let c = xf.translation.xz();
+            for side in [Vec2::X, -Vec2::X, Vec2::Y, -Vec2::Y] {
+                let dir = xf.rotation.mul_vec3(Vec3::new(side.x, 0.0, side.y)).xz();
+                let reach = half.length();
+                let (here, to) = (c + dir * (reach + 3.0), c - dir * (reach + 12.0));
+                let edge = |p: Vec2| p.x.abs() < inside && p.y.abs() < inside;
+                if !edge(here) || !edge(to) || crossed(&boxes, here, here).is_some() {
+                    continue;
+                }
+                // The machine behind it, on its far side from the building.
+                let machine = here + dir * 15.0;
+                let eye = world.zone.on_ground(machine.x, machine.y) + Vec3::Y * 1.6;
+                let p3 = world.zone.on_ground(to.x, to.y);
+                let elsewhere = c + dir.perp() * (reach + 12.0);
+                let mut made: Vec<(&str, Vec<Task>)> = vec![
+                    ("route", route(&world, &view, here, to)),
+                    (
+                        "by_road",
+                        by_road(&world, &view, here, to, to + Vec2::splat(500.0)),
+                    ),
+                    ("walk_away", walk_away(&world, here, machine)),
+                    ("walk_off_heavy", walk_off_heavy(&world, here, machine)),
+                    (
+                        "run_for_cover",
+                        run_for_cover(&world.zone, here, machine, 0.0),
+                    ),
+                    (
+                        "run_for_cover, seen",
+                        run_for_cover(&world.zone, here, machine, 10.0),
+                    ),
+                    ("way_to", way_to(&world, &view, &plans, here, p3)),
+                    // Planned from round the corner, walked from here.
+                    ("planned elsewhere", walk(&world, elsewhere, to)),
+                ];
+                if k % 3 == 0
+                    && let Some((t, _)) = break_line(&spatial, &world, here, eye)
+                {
+                    made.push(("break_line", t));
+                }
+                for (by, tasks) in made {
+                    let bad = |legs: &[(Vec2, Vec2)]| {
+                        legs.iter()
+                            .filter_map(|(a, b)| crossed(&boxes, *a, *b).map(|x| (*a, *b, x)))
+                            .collect::<Vec<_>>()
+                    };
+                    *raw.entry(by).or_default() +=
+                        bad(&as_walked(here, tasks.clone(), false)).len();
+                    for (a, b, x) in bad(&as_walked(here, tasks, true)) {
+                        through.push(format!(
+                            "{by} from {here}: {a} -> {b} through the box at {x}"
+                        ));
+                    }
+                }
+            }
+        }
+        eprintln!("legs through a box as handed out: {raw:?}");
+        assert!(
+            through.is_empty(),
+            "{} legs walked through a box:\n{}",
+            through.len(),
+            through.join("\n")
+        );
+        assert!(
+            raw.values().sum::<usize>() > 0,
+            "no producer handed out a leg through a box: the check is untested"
+        );
     }
 }
