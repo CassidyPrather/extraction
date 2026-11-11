@@ -719,3 +719,34 @@ mod road_edge_tests {
         assert!(edges.at(i, j).0 < 0.0);
     }
 }
+
+#[cfg(test)]
+mod road_edge_timing {
+    use super::*;
+
+    /// How long each valley's edge grid takes to build (it's built once,
+    /// at load): `cargo test --lib -- --ignored gauge_road_edges_build_time`.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_road_edges_build_time() {
+        for m in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let map = crate::world::load_map_def(m);
+            let hm = extraction_core::terrain::Heightmap::build(&map);
+            let t = std::time::Instant::now();
+            let edges = RoadEdges::of(&hm);
+            let ms = t.elapsed().as_secs_f64() * 1e3;
+            let near = edges.edge.iter().filter(|e| **e < EDGE_REACH).count();
+            println!(
+                "{m}: {ms:.1} ms, {} roads, {near} samples near one",
+                hm.road_lines.len()
+            );
+            assert!(ms < 100.0, "{m}: the edge grid took {ms:.0} ms");
+        }
+    }
+}

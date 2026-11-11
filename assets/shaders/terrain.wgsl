@@ -488,6 +488,14 @@ fn fragment(
             // metre across, their hollows shaded and greener, their crowns
             // pale with dead thatch; it carries on past where the tufts
             // fade out, so the far field keeps the near one's grain.
+            // A worn lane's middle is packed dry and pale: it reads as a
+            // way from tens of metres. (The dirt at the grass's own value
+            // made the lane one ground with the field once its edge went
+            // soft.) Only well in from the edge, so the edge stays soft.
+            if (i == 6u) {
+                let body = 1.0 - smoothstep(-1.8, -0.3, ee);
+                l.albedo = l.albedo * mix(vec3<f32>(1.0), vec3<f32>(1.45, 1.38, 1.3), body);
+            }
             if (i == 0u) {
                 let tq = wp.xz + vec2<f32>(23.0, 5.0);
                 let tuss = vnoise(tq * 1.7) * 0.55 + vnoise(tq * 3.6) * 0.45;
@@ -589,6 +597,7 @@ fn fragment(
     // Snow (world::snow): above the line, with a ragged edge; thin first,
     // in patches, the grass and stones through it, then lying all over the
     // flatter ground (roads too). It fills the puddles.
+    let bare_ground = albedo;
     if (terrain.snow > 0.002) {
         let edge = (fbm(wp.xz * 0.03) - 0.5) * 9.0;
         let above = smoothstep(terrain.snow_line - 3.0, terrain.snow_line + 4.0, wp.y + edge);
@@ -613,6 +622,18 @@ fn fragment(
                 albedo = mix(albedo, vec3<f32>(0.56, 0.59, 0.64) * (0.95 + 0.1 * fine), packed);
                 rough = mix(rough, 0.55, packed);
                 tn = normalize(mix(tn, vec3<f32>(0.0, 0.0, 1.0), packed));
+            }
+            // A road under snow is trodden and driven: packed grey down its
+            // middle, its soft edge fading into the fresh snow, so it still
+            // reads as a way (all white, a snowed-in valley's lanes were
+            // gone from a few metres off).
+            let driven = road * s * 0.85 * (1.0 - packed);
+            if (driven > 0.0) {
+                // Grey slush, the ground showing in the ruts: a few tenths
+                // darker than the fresh snow either side.
+                let slush = mix(vec3<f32>(0.42, 0.44, 0.48), bare_ground * 1.2, 0.3) * (0.92 + 0.14 * fine);
+                albedo = mix(albedo, slush, driven);
+                rough = mix(rough, 0.6, driven);
             }
         }
     }
