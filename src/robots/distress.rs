@@ -166,6 +166,9 @@ fn fit_tubes(
             Without<Distress>,
             Without<super::broken::Broken>,
             Without<super::indoor::LocalNav>,
+            // (Keyed on what it is too, not only how it finds its way: a
+            // crawler spawned bare, as the gallery's, has no LocalNav.)
+            Without<super::indoor::Crawler>,
             Without<super::grappler::Grappler>,
             Without<super::collector::Collector>,
         ),

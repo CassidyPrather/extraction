@@ -40,6 +40,13 @@ const ROSTER: &[(&str, Option<&str>)] = &[
         Some("a walker at another size: walker_brain, tried as the walker"),
     ),
     (
+        "walker_shaped",
+        Some(
+            "a walker in another body (the grappler's winch box, the crawler's carapace): \
+             walker_brain, tried as the grappler and the crawler",
+        ),
+    ),
+    (
         "crawler",
         Some("indoors only, on walker_brain (tried as the walker): its zap's windup is its tell"),
     ),
