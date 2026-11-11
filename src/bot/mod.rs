@@ -615,6 +615,22 @@ const LOB: f32 = 0.7;
 /// turns at 6/s toward the look: under 1% off by then).
 const THROW_TURN: f32 = 1.0;
 
+/// A live machine this near a stalled walk is what it's up against.
+const BODY_IN_THE_WAY: f32 = 1.5;
+
+/// Where to step to get past a body stood between `pos` and `to`: beside
+/// it, square to the way on, on the side the bot already leans to (so it
+/// never crosses in front of it), clear by more than a body and a bot.
+fn round_body(pos: Vec2, to: Vec2, body: Vec2) -> Vec2 {
+    let ahead = (to - pos).normalize_or(Vec2::X);
+    let side = if (pos - body).dot(ahead.perp()) >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+    body + ahead.perp() * side * 1.4
+}
+
 /// A throw from an eye at `eye` to land at `at`: where to look (so the
 /// hand, [`HAND_TILT`] under the eye line, points up the arc) and how hard
 /// to throw (m/s, along the hand). Steeper where the spot is too far above
@@ -1044,6 +1060,37 @@ fn run_tasks(
                     bot.progress = (d, 0.0);
                 } else {
                     bot.progress.1 += dt;
+                }
+                // A live machine stood on the way (a blinded crawler still
+                // searching, say) is no wall: finish it if the gun's in
+                // hand, and go round it, close to the spot or not.
+                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP {
+                    let body = robots
+                        .iter()
+                        .filter(|(_, r, _)| !r.wrecked)
+                        .map(|(_, _, gt)| gt.translation())
+                        .filter(|p| p.xz().distance(pos) < BODY_IN_THE_WAY)
+                        .min_by(|a, b| a.xz().distance(pos).total_cmp(&b.xz().distance(pos)));
+                    if let Some(body) = body {
+                        let armed = hand(gun_side)
+                            .and_then(|h| h.holding)
+                            .is_some_and(|e| guns.get(e).is_ok());
+                        bot.sidesteps += 1;
+                        bot.tasks.push_front(Task::WalkTo {
+                            to: round_body(pos, to, body.xz()),
+                            within: SIDESTEP,
+                        });
+                        if armed {
+                            bot.tasks.push_front(Task::Fire { at: body, shots: 3 });
+                        }
+                        bot.note(format!(
+                            "a machine in the way at {:.1?}: {}round it",
+                            body.xz(),
+                            if armed { "shot it, then " } else { "" }
+                        ));
+                        bot.restart();
+                        continue;
+                    }
                 }
                 // (Not when lining up close: indoors, a step aside put it
                 // in a corner.)
@@ -1969,6 +2016,47 @@ mod tests {
     /// bolt, thrown with a guessed speed along a hand pointed 0.3 rad
     /// under the eye, fell 3.8 m out of a 7.2 m throw and short of the
     /// lift.)
+    /// A walk stalled on a live machine steps beside it, clear of it, on
+    /// the side the bot is already on, and no further back than it was.
+    #[test]
+    fn a_body_in_the_way_is_gone_round() {
+        // The shelter stall: bot at (-17.28,63.95) for (-16.83,63.63), the
+        // blinded crawler at (-16.9,64.2); and others either side.
+        for (pos, to, body) in [
+            (
+                Vec2::new(-17.28, 63.95),
+                Vec2::new(-16.83, 63.63),
+                Vec2::new(-16.9, 64.2),
+            ),
+            (
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 3.0),
+                Vec2::new(0.2, 1.0),
+            ),
+            (
+                Vec2::new(0.0, 0.0),
+                Vec2::new(0.0, 3.0),
+                Vec2::new(-0.2, 1.0),
+            ),
+            (
+                Vec2::new(0.0, 0.0),
+                Vec2::new(5.0, 0.0),
+                Vec2::new(0.8, 0.0),
+            ),
+        ] {
+            let step = round_body(pos, to, body);
+            assert!(step.distance(body) > 1.2, "{pos} {to} {body}: {step}");
+            let ahead = (to - pos).normalize();
+            let lean = (pos - body).dot(ahead.perp());
+            if lean.abs() > 0.05 {
+                assert!(
+                    (step - body).dot(ahead.perp()) * lean > 0.0,
+                    "crossed: {step}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn a_lob_lands_where_it_was_thrown() {
         let eye = Vec3::new(3.0, 1.68, -2.0);
