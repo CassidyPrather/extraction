@@ -66,6 +66,9 @@ pub struct Comfort {
     /// A faint tick on the wrist when a machine nearby turns certain of
     /// you (`rig::haptics`).
     pub machine_tick: bool,
+    /// A heartbeat on the wrist while you bleed, faster and harder the
+    /// faster you bleed (`rig::haptics`).
+    pub bleed_pulse: bool,
     /// Iron sights: the front post goes soft as the eye comes down behind
     /// them, focused on the target (`weapons::optics`).
     pub post_blur: bool,
@@ -111,6 +114,7 @@ impl Default for Comfort {
             one_handed: false,
             captions: true,
             machine_tick: true,
+            bleed_pulse: true,
             post_blur: true,
             body: false,
             msaa: 4,
@@ -416,6 +420,7 @@ impl Comfort {
                 "--one-handed" => c.one_handed = true,
                 "--no-captions" => c.captions = false,
                 "--no-machine-tick" => c.machine_tick = false,
+                "--no-bleed-pulse" => c.bleed_pulse = false,
                 "--no-post-blur" => c.post_blur = false,
                 "--no-body" => c.body = false,
                 "--body" => c.body = true,

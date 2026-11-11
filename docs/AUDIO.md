@@ -344,6 +344,29 @@ with the stock shouldered. (Every shot once sat between 0.6 and 0.82: a
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
 
+Bleeding is felt as a heartbeat on the watch wrist (the off hand), for
+as long as it bleeds (`rig::haptics::bleed_haptics`, comfort
+`bleed_pulse`, `--no-bleed-pulse`): a beat and a softer one 0.18 s after
+it (`HEARTBEAT`: 45 ms, then 0.65 of it for 35 ms), faster and harder the
+faster you bleed (`bleed_beat`). It used to only drain: a newcomer
+looking elsewhere after a fight could bleed out in about 15 s without
+knowing.
+
+| Bleeding | Heartbeat | Every |
+|---|---|---|
+| under 0.5 hp/s, till it clots | 0.18 | 1.4 s |
+| 0.5 hp/s | 0.18 | 1.4 s |
+| 1 hp/s | 0.25 | 1.12 s |
+| 1.5 hp/s | 0.33 | 0.83 s |
+| 2 hp/s and over | 0.40 | 0.55 s |
+
+It stops when the bleeding's dressed or has clotted (under 0.01 hp/s),
+and isn't felt down. The first beat comes a beat after the bleeding
+starts, so the hit that opened it is felt as a hit. It's kept apart
+from the other tells: a hit's buzz is in both hands, 0.1 s and 0.45 or
+more; the machine's tick is one 12 ms whisper; the aegis's fizz is a
+steady tremor in both hands.
+
 **Haptic shapes** (`src/rig/shapes.rs`). A few pulses in a pattern, for
 things the hand should tell apart without looking. Each pulse is on the
 scale above. An empty hand meeting something (`interact::touch`, the

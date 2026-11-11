@@ -304,7 +304,8 @@ fn tether_lines(
         let Ok(rgt) = robots.get(teth.by) else {
             continue;
         };
-        let a = rgt.translation() + Vec3::Y * 0.5;
+        // From the launcher's muzzle on its derrick.
+        let a = rgt.transform_point(crate::robots::grappler::MUZZLE);
         let b = pgt.translation() + Vec3::Y * 1.1;
         let len = a.distance(b).max(0.01);
         *t = Transform::from_translation((a + b) * 0.5)

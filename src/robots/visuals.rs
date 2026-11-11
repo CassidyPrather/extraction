@@ -303,6 +303,7 @@ fn dress_parts(
     mut materials: ResMut<Assets<StandardMaterial>>,
     existing: Option<Res<RobotMats>>,
     hounds: Query<(), With<super::hound::Hound>>,
+    crawlers: Query<(), With<super::indoor::Crawler>>,
 ) {
     if parts.is_empty() {
         return;
@@ -380,11 +381,15 @@ fn dress_parts(
             robot_material(name, &m, &mut model_mats, &mut lib, &server, &mut materials)
         };
         let hound = hounds.contains(part.robot);
+        // (A crawler's shell is its own, low and wide: a walker small was
+        // a walker in outline, `robots::silhouette`.)
+        let crawler = crawlers.contains(part.robot);
         let node_name = match (robot.kind, part.role) {
             (RobotKind::Sorter, PartRole::Core) => "carriage",
             (RobotKind::Sorter, PartRole::Sensor) => "head",
             (_, PartRole::Core) if hound => "hound_body",
             (_, PartRole::Sensor) if hound => "hound_head",
+            (_, PartRole::Core) if crawler => "crawler_core",
             (_, PartRole::Core) => "core",
             (_, PartRole::Sensor) => "sensor",
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
