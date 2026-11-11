@@ -29,6 +29,9 @@ pub struct KitSoundsPlugin;
 
 impl Plugin for KitSoundsPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<HeartbeatPlugin>() {
+            app.add_plugins(HeartbeatPlugin);
+        }
         // (Touch registers it too; this keeps the reader valid in apps
         // without the hands.)
         app.add_message::<HandStruck>()
@@ -37,8 +40,7 @@ impl Plugin for KitSoundsPlugin {
             .add_message::<ActionGrind>()
             .add_message::<Lit>()
             .add_message::<crate::weapons::gunsmith::Worked>()
-            .add_message::<Heartbeat>()
-            .add_systems(Update, (heartbeat, heartbeat_sounds).chain())
+            .add_systems(Update, heartbeat_sounds.after(heartbeat))
             .add_systems(
                 Update,
                 (
@@ -56,6 +58,19 @@ impl Plugin for KitSoundsPlugin {
                     gunsmith_sounds,
                 ),
             );
+    }
+}
+
+/// The bleed's one clock (`Heartbeat`, [`heartbeat`]), apart from any
+/// sound, so a headless app (Hands' haptic tests) keeps the same rhythm:
+/// added by the kit's sounds, or by whatever else wants the beat (add it
+/// guarded with `is_plugin_added`).
+pub struct HeartbeatPlugin;
+
+impl Plugin for HeartbeatPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_message::<Heartbeat>()
+            .add_systems(Update, heartbeat);
     }
 }
 
@@ -92,7 +107,7 @@ pub fn bleed_beat(bleeding: f32) -> Option<(f32, f32)> {
 /// heard, then one a period, quicker and harder as the bleed is worse;
 /// none once it's dressed, clotted under [`BLEED_HEARD`], or they're down.
 /// A newcomer looking at neither the wrist nor the screen's edge hears it.
-fn heartbeat(
+pub fn heartbeat(
     players: Query<&crate::health::Health, With<crate::rig::LocalPlayer>>,
     time: Res<Time>,
     mut since: Local<Option<f32>>,
@@ -871,8 +886,7 @@ mod tests {
             .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
                 std::time::Duration::from_millis(50),
             ))
-            .add_message::<Heartbeat>()
-            .add_systems(Update, heartbeat);
+            .add_plugins(HeartbeatPlugin);
         let p = app
             .world_mut()
             .spawn((
