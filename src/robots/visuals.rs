@@ -304,6 +304,7 @@ fn dress_parts(
     existing: Option<Res<RobotMats>>,
     hounds: Query<(), With<super::hound::Hound>>,
     crawlers: Query<(), With<super::indoor::Crawler>>,
+    grapplers: Query<(), With<super::grappler::Grappler>>,
 ) {
     if parts.is_empty() {
         return;
@@ -384,17 +385,21 @@ fn dress_parts(
         // (A crawler's shell is its own, low and wide: a walker small was
         // a walker in outline, `robots::silhouette`.)
         let crawler = crawlers.contains(part.robot);
+        // (And a grappler's a winch, a wide low box.)
+        let grappler = grapplers.contains(part.robot);
         let node_name = match (robot.kind, part.role) {
             (RobotKind::Sorter, PartRole::Core) => "carriage",
             (RobotKind::Sorter, PartRole::Sensor) => "head",
             (_, PartRole::Core) if hound => "hound_body",
             (_, PartRole::Sensor) if hound => "hound_head",
             (_, PartRole::Core) if crawler => "crawler_core",
+            (_, PartRole::Core) if grappler => "grappler_core",
             (_, PartRole::Core) => "core",
             (_, PartRole::Sensor) => "sensor",
             (RobotKind::Drone, PartRole::Weapon) if gun => "gun",
             (RobotKind::Walker, PartRole::Weapon) if turret => "turret",
             (RobotKind::Walker, PartRole::Weapon) if emitter => "emitter",
+            (RobotKind::Walker, PartRole::Armour(_)) if grappler || crawler => "plate_flat",
             (RobotKind::Walker, PartRole::Armour(_)) => "plate",
             (RobotKind::Sorter, PartRole::Armour(_)) => "plate",
             (RobotKind::Sorter, PartRole::Leg(_)) => "arm_upper",
@@ -904,8 +909,11 @@ fn pose_leg_visuals(
             commands.entity(e).despawn();
             continue;
         };
-        // Thickness with the body's size; length from the joints.
-        let w = gait.map_or(1.0, |g| g.size);
+        // Thickness with the body's size and partly its legs' (a crawler's
+        // are 0.6 of a walker's: in proportion they were under a pixel
+        // across at 30 m, `robots::silhouette`; a little stocky, they
+        // show); length from the joints.
+        let w = gait.map_or(1.0, |g| g.size * g.shape.legs().sqrt());
         let [hip, knee, foot] = p.0[seg.leg];
         let (a, b) = if seg.lower { (knee, foot) } else { (hip, knee) };
         let len = a.distance(b).max(0.01);

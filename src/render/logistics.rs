@@ -120,6 +120,14 @@ fn finish_dressing(
             let holder = commands
                 .spawn((node.transform, Visibility::default(), ChildOf(e)))
                 .id();
+            // The derrick's boom (its origin its foot pin) folds back along
+            // the hull when the grappler's wrecked; the pedestal and drum
+            // stand (`grappler_armour::Folds`).
+            if node.name == "launcher" {
+                commands
+                    .entity(holder)
+                    .insert(crate::robots::grappler_armour::Folds);
+            }
             spawn_primitives(&mut commands, holder, node, &mut mat);
         }
     }

@@ -251,6 +251,8 @@ fn break_up(
         let seed = seed.map_or(0, |s| s.low());
         // A smaller body (a crawler) breaks into smaller, lighter pieces.
         let size = gait.map_or(1.0, |g| g.size);
+        // (A crawler's legs are short: `Shape::legs`.)
+        let legs_k = gait.map_or(1.0, |g| g.shape.legs());
         let (m3, m5) = (size.powi(3), size.powi(5));
         let mut spawned: Vec<Entity> = Vec::new();
         let mut spawn =
@@ -274,8 +276,8 @@ fn break_up(
                         .normalize_or(Vec3::X);
                     let mut ids = [Entity::PLACEHOLDER; 2];
                     for (k, (a, b, len, piece, mass)) in [
-                        (hip, knee, UPPER, Piece::LegUpper, 7.0),
-                        (knee, foot, LOWER, Piece::LegLower, 5.0),
+                        (hip, knee, UPPER * legs_k, Piece::LegUpper, 7.0),
+                        (knee, foot, LOWER * legs_k, Piece::LegLower, 5.0),
                     ]
                     .into_iter()
                     .enumerate()
@@ -833,16 +835,16 @@ pub fn bare_side(dirs: &[Vec3]) -> Vec3 {
 /// What comes off a walker's wreck, as ways out of its orb: its plates,
 /// its cell, its gun pod on top, its flare tube, and the servo packs at
 /// the hips its legs came through on (`salvage`).
-pub fn walker_salvage_dirs(legs: [f32; 4]) -> Vec<Vec3> {
+pub fn walker_salvage_dirs(legs: [f32; 4], shape: super::anim::Shape) -> Vec<Vec3> {
     let mut dirs: Vec<Vec3> = (0..super::armour::WALKER_PLATES.len())
-        .map(super::armour::walker_plate_dir)
+        .map(|i| super::body_shells::plate_dir(shape, i))
         .collect();
     dirs.push(super::salvage::CELL_AT.normalize());
     dirs.push(Vec3::Y);
     // Its flare tube, behind its gun pod (`distress`): not to lie on.
     dirs.push(Vec3::new(0.0, 0.9, 0.3).normalize());
     for i in servo_hips(legs) {
-        dirs.push(super::anim::Shape::Orb.hip(i).normalize());
+        dirs.push(shape.hip(i).normalize());
     }
     dirs
 }
@@ -890,7 +892,10 @@ fn roll_to_rest(
         let bare = if drone {
             Vec3::Y
         } else if let Some(legs) = legs {
-            bare_side(&walker_salvage_dirs(legs.0))
+            bare_side(&walker_salvage_dirs(
+                legs.0,
+                gait.map_or(super::anim::Shape::Orb, |g| g.shape),
+            ))
         } else {
             continue;
         };
