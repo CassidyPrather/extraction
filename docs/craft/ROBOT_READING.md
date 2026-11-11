@@ -196,6 +196,35 @@ were one shape, a pale ball on four splayed legs.
 ![drizzle, before](../shots/robots/family_drizzle_colour_silhouette_before.jpg)
 ![drizzle, after](../shots/robots/family_drizzle_colour_silhouette_after.jpg)
 
+### Silhouettes, part 2: every view (11 November)
+
+Part 1 parted the grappler from the walker side-on only; head-on it was
+still the walker's orb and splay with a mast over it. The gauge now
+fails a pair over 0.7 in any one view as well as on the mean, fits over
+a wider range of scales (a mast doesn't hide the body under it), and
+scores a machine only as far off as it's met (`silhouette::reach`: the
+crawler indoors, to 30 m; at 60 m its legs are under half a pixel and a
+flat body is a drone's outline, at a range it's never at).
+
+- **The grappler is a winch**: a wide low box (`grappler_core`) on Robot
+  bodies' broad low `Shape::Grappler`, the derrick on a pedestal on its
+  back. Walker/grappler 0.42, 0.46 head-on (0.68 under the same rules
+  before). When it's wrecked its boom folds back along the hull
+  (`grappler_armour::Folds` on the `launcher` node).
+- **The crawler is a carapace** 1.7 times the orb's width on
+  `Shape::Crawler` (low, legs at 0.6 tucked under it); its legs drawn a
+  little stocky so they show at 30 m. Walker/crawler 0.24 (was 0.72).
+- **The walker keeps the orb.** The worst pair now is walker/heavy, 0.53
+  (0.58 in its worst view), as it was: the heavy's size sets it apart in
+  play.
+- The wrecked grappler (below, middle) lies on its side with the boom
+  folded; a short stub of it still stands off the hull.
+
+![silhouettes, part 2](../shots/robots/silhouettes_part2_before_after.png)
+![fog, part 2](../shots/robots/family_fog_colour_silhouette_part2.jpg)
+![drizzle, part 2](../shots/robots/family_drizzle_colour_silhouette_part2.jpg)
+![a grappler, a wrecked grappler and a crawler, fog, 8 m](../shots/robots/grappler_wreck_fold.jpg)
+
 ## What a robot leaves behind (4 November)
 
 Can a player tell, by looking, what comes off a wreck and what it is?
