@@ -488,6 +488,14 @@ fn fragment(
             // metre across, their hollows shaded and greener, their crowns
             // pale with dead thatch; it carries on past where the tufts
             // fade out, so the far field keeps the near one's grain.
+            // A worn lane's middle is packed dry and pale: it reads as a
+            // way from tens of metres. (The dirt at the grass's own value
+            // made the lane one ground with the field once its edge went
+            // soft.) Only well in from the edge, so the edge stays soft.
+            if (i == 6u) {
+                let body = 1.0 - smoothstep(-1.8, -0.3, ee);
+                l.albedo = l.albedo * mix(vec3<f32>(1.0), vec3<f32>(1.45, 1.38, 1.3), body);
+            }
             if (i == 0u) {
                 let tq = wp.xz + vec2<f32>(23.0, 5.0);
                 let tuss = vnoise(tq * 1.7) * 0.55 + vnoise(tq * 3.6) * 0.45;
