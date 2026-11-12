@@ -717,9 +717,10 @@ pub(super) struct Newcomer {
     line_checked: f32,
     /// When a walker last aimed at it.
     aimed_at: f32,
-    /// Where it last stood in that walker's line (as it saw it from
-    /// there), and the walker's eye height: where it'll come to look.
-    seen_last: Option<(Vec2, f32)>,
+    /// Where it stood in that walker's line (as it saw it from there),
+    /// each a couple of metres on from the last, and the walker's eye
+    /// height: where it'll come to look.
+    seen_trail: Vec<(Vec2, f32)>,
     /// When it last put a dressing on.
     dressed_at: f32,
     /// When it last answered a crawler's crackle.
@@ -1052,7 +1053,7 @@ pub(super) fn direct_raid(
         state.aimed_at = now;
         again.push(First::Aimed);
     }
-    // Where it last was in the aiming walker's sight (it could see the
+    // Where it was in the aiming walker's sight (it could see the
     // walker from there): where the walker will come to look.
     if now - state.aimed_at < SEEN_LAST_FOR
         && let Some(eye) = state.aimer.and_then(|w| eye_of(&eyes, w))
@@ -1064,8 +1065,19 @@ pub(super) fn direct_raid(
         };
         if !hidden_at(&spatial, &world, here, eye, head) {
             let up = eye.y - world.zone.on_ground(eye.x, eye.z).y;
-            state.seen_last = Some((here, up));
+            if state
+                .seen_trail
+                .last()
+                .is_none_or(|(p, _)| p.distance(here) > SEEN_STEP)
+            {
+                if state.seen_trail.len() >= SEEN_KEPT {
+                    state.seen_trail.remove(0);
+                }
+                state.seen_trail.push((here, up));
+            }
         }
+    } else if now - state.aimed_at >= SEEN_LAST_FOR {
+        state.seen_trail.clear();
     }
     let mut chirped = false;
     for ev in tells.sentries.read() {
@@ -1687,14 +1699,16 @@ pub(super) fn direct_raid(
                 // where it was: crouched where it had run to, the wanderer
                 // was in plain view from the walker's search 18 m off, and
                 // was found, shot and bled out.
-                // What it knows: where the walker last saw it (it comes to
-                // look there), and the walker's eye where it can see it.
+                // What it knows: where the walker saw it (it comes to look
+                // there: the first sighting as much as the last; held out
+                // of the last, the wanderer was found from the first), and
+                // the walker's eye where it can see it.
                 let walker = the_walker(&world, &eyes, state.aimer, here, &on_me);
                 let mut looks: Vec<Vec3> = state
-                    .seen_last
-                    .filter(|_| now - state.aimed_at < SEEN_LAST_FOR)
-                    .map(|(at, up)| world.zone.on_ground(at.x, at.y) + Vec3::Y * up)
-                    .into_iter()
+                    .seen_trail
+                    .iter()
+                    .rev()
+                    .map(|(at, up)| world.zone.on_ground(at.x, at.y) + Vec3::Y * *up)
                     .collect();
                 if let Some(eye) = walker.and_then(|w| eye_of(&eyes, w))
                     && !hidden_at(&spatial, &world, here, eye, STAND_HEAD)
@@ -3803,6 +3817,10 @@ const LOW_HEAD: f32 = 0.9;
 /// How long after a walker's aim where it last saw it still counts as
 /// where it'll come to look.
 const SEEN_LAST_FOR: f32 = 90.0;
+/// How far on from the last a spot it was seen at is kept (m).
+const SEEN_STEP: f32 = 3.0;
+/// How many it keeps.
+const SEEN_KEPT: usize = 8;
 
 /// Whether to shoot back at a walker (`direct_raid`): aimed at lately, out
 /// of cover and not on the way to any, a round up, and shot at twice in a
