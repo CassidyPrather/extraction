@@ -1656,25 +1656,6 @@ pub(super) fn direct_raid(
                             }
                             tasks
                         }
-                        // Nothing within 30 m out of a walker's view: said,
-                        // and off away from it (not to a building's far
-                        // side taken on trust: that's where the wanderer
-                        // crouched in the open).
-                        None if !overhead => {
-                            state.note(
-                                now,
-                                Kind::Learned,
-                                "no cover from it within 30 m: away from it",
-                            );
-                            let away = (here - from).normalize_or(Vec2::Y);
-                            vec![
-                                Task::WalkTo {
-                                    to: here + away * 25.0,
-                                    within: 2.0,
-                                },
-                                Task::Wait(10.0),
-                            ]
-                        }
                         None => run_for_cover(&world.zone, here, from, 0.0),
                     },
                 }
@@ -1748,7 +1729,7 @@ pub(super) fn direct_raid(
                 // failure.)
                 let hold = Task::Wait(29.0);
                 match seen
-                    .then(|| break_line_from(&spatial, &world, here, &looks))
+                    .then(|| break_line_from(&spatial, &world, here, &looks, true))
                     .flatten()
                 {
                     Some((mut tasks, how)) => {
@@ -4007,16 +3988,17 @@ fn break_line(
     here: Vec2,
     eye: Vec3,
 ) -> Option<(Vec<Task>, &'static str)> {
-    break_line_from(spatial, world, here, &[eye])
+    break_line_from(spatial, world, here, &[eye], false)
 }
 
 /// [`break_line`], out of every one of `eyes`' lines (the first the one
-/// it goes away from).
+/// it goes away from); `wide`, further off where nothing near will do.
 fn break_line_from(
     spatial: &avian3d::prelude::SpatialQuery,
     world: &World2,
     here: Vec2,
     eyes: &[Vec3],
+    wide: bool,
 ) -> Option<(Vec<Task>, &'static str)> {
     let eye = *eyes.first()?;
     let hidden = |p: Vec2| eyes.iter().all(|e| line_hidden(spatial, world, p, *e));
@@ -4114,6 +4096,11 @@ fn break_line_from(
     // too, but only a spot out of every one of its views (run to a
     // building's far side unlooked, the wanderer crouched in the open in
     // the view of where the walker came to look, and was shot down).
+    // Not under its aim: run 30 m across its eye, three newcomers who'd
+    // have come home were shot down on the way.
+    if !wide {
+        return None;
+    }
     let mut t = wide_cover(world, here, &hidden)?;
     t.push(Task::Wait(LINE_HELD));
     Some((t, "out of its view, further off"))
