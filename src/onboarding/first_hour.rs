@@ -895,7 +895,11 @@ pub(super) fn direct_raid(
     time: Res<Time>,
     (spatial, eyes): (
         avian3d::prelude::SpatialQuery,
-        Query<(&GlobalTransform, &crate::robots::Senses)>,
+        Query<(
+            &GlobalTransform,
+            &crate::robots::Senses,
+            Option<&crate::robots::Brain>,
+        )>,
     ),
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
@@ -1665,10 +1669,42 @@ pub(super) fn direct_raid(
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
-                state.low_until = now + 30.0;
+                // Behind it from where it's coming to look, not only from
+                // where it was: crouched where it had run to, the wanderer
+                // was in plain view from the walker's search 18 m off, and
+                // was found, shot and bled out.
+                let walker = the_walker(&world, &eyes, state.aimer, here, &on_me);
+                let looks: Vec<Vec3> = walker
+                    .into_iter()
+                    .flat_map(|w| [look_eye(&world, &eyes, w), eye_of(&eyes, w)])
+                    .flatten()
+                    .collect();
+                let seen_from = looks
+                    .iter()
+                    .find(|e| !line_hidden(&spatial, &world, here, **e))
+                    .copied();
                 // (Under the bot's 30 s give-up, or a frame past it is a
                 // failure.)
-                vec![Task::Wait(29.0)]
+                let hold = Task::Wait(29.0);
+                match seen_from.and_then(|e| break_line(&spatial, &world, here, e)) {
+                    Some((mut tasks, how)) => {
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            format!("coming to look, and in its view from there: {how}"),
+                        );
+                        if let Some(last) = tasks.last_mut() {
+                            *last = hold;
+                        }
+                        let run = run_to_line(&tasks, here);
+                        state.low_until = now + run + 30.0;
+                        tasks
+                    }
+                    None => {
+                        state.low_until = now + 30.0;
+                        vec![hold]
+                    }
+                }
             }
             // Bleeding with a heavy still in reach: walking on first, the
             // dressing once it's behind (bound beside it, the one-handed
@@ -3692,26 +3728,68 @@ fn bleed_answer(leg: Leg, phase: &Phase) -> Option<BleedGo> {
 /// it).
 fn walker_eye(
     world: &World2,
-    eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
+    eyes: &Eyes,
     aimer: Option<Entity>,
     here: Vec2,
     on_me: &impl Fn(Entity) -> bool,
 ) -> Option<Vec3> {
-    let eye = |e: Entity| eyes.get(e).ok().map(|(gt, s)| gt.transform_point(s.eye));
-    aimer.and_then(eye).or_else(|| {
+    the_walker(world, eyes, aimer, here, on_me).and_then(|e| eye_of(eyes, e))
+}
+
+/// The robots' eyes, and what they're minded to do.
+type Eyes<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static GlobalTransform,
+        &'static crate::robots::Senses,
+        Option<&'static crate::robots::Brain>,
+    ),
+>;
+
+fn eye_of(eyes: &Eyes, e: Entity) -> Option<Vec3> {
+    eyes.get(e).ok().map(|(gt, s, _)| gt.transform_point(s.eye))
+}
+
+/// The walker that has it in mind: the one that aimed, else the nearest
+/// on it (or near).
+fn the_walker(
+    world: &World2,
+    eyes: &Eyes,
+    aimer: Option<Entity>,
+    here: Vec2,
+    on_me: &impl Fn(Entity) -> bool,
+) -> Option<Entity> {
+    aimer.filter(|e| eye_of(eyes, *e).is_some()).or_else(|| {
         world
             .robots
             .iter()
             .filter(|(_, r, _)| r.kind == crate::robots::RobotKind::Walker && !r.wrecked)
-            .filter_map(|(e, ..)| eye(e).map(|p| (p, on_me(e))))
-            .filter(|(p, mine)| *mine || p.xz().distance(here) < WALKER_NEAR)
+            .filter_map(|(e, ..)| eye_of(eyes, e).map(|p| (e, p, on_me(e))))
+            .filter(|(_, p, mine)| *mine || p.xz().distance(here) < WALKER_NEAR)
             .min_by(|a, b| {
-                (!a.1, a.0.xz().distance(here))
-                    .partial_cmp(&(!b.1, b.0.xz().distance(here)))
+                (!a.2, a.1.xz().distance(here))
+                    .partial_cmp(&(!b.2, b.1.xz().distance(here)))
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
-            .map(|(p, _)| p)
+            .map(|(e, ..)| e)
     })
+}
+
+/// Where a walker coming to look will look from: the eye it'll have at
+/// the spot it's going to (its look or search), at the height it carries
+/// its eye now. None while it isn't coming.
+fn look_eye(world: &World2, eyes: &Eyes, walker: Entity) -> Option<Vec3> {
+    let (gt, s, brain) = eyes.get(walker).ok()?;
+    let at = match brain? {
+        crate::robots::Brain::Investigate { at, .. } | crate::robots::Brain::Search { at, .. } => {
+            *at
+        }
+        _ => return None,
+    };
+    let eye = gt.transform_point(s.eye);
+    let up = eye.y - world.zone.on_ground(eye.x, eye.z).y;
+    Some(world.zone.on_ground(at.x, at.z) + Vec3::Y * up)
 }
 
 /// A standing head (m above the ground).
