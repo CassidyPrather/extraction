@@ -5351,7 +5351,9 @@ fn tower_legs(b: &mut Builder) -> f32 {
         }
         // Stringers either side of the flight, their top edge along the
         // treads' undersides, from below the first step to the last one:
-        // nothing stands proud of a tread or the landing to trip on.
+        // nothing stands proud of a tread or the landing to trip on. The
+        // treads housed 1 cm into them: what holds a flight up (in two
+        // lanes there's no flight under one for it to rest on).
         let (first, last) = (-1.6, -1.6 + (steps - 1) as f32 * 3.2 / steps as f32);
         let slope = (per - per / steps as f32) / (last - first);
         let cos = (1.0 + slope * slope).sqrt().recip();
@@ -5364,7 +5366,7 @@ fn tower_legs(b: &mut Builder) -> f32 {
         );
         let along = bb - a;
         let tilt = Quat::from_rotation_x(-(along.y).atan2(along.z));
-        for x in [lane(k) - 0.49, lane(k) + 0.49] {
+        for x in [lane(k) - 0.47, lane(k) + 0.47] {
             b.piece(
                 Shape::Box(Vec3::new(0.06, 0.22, along.length())),
                 Transform::from_translation(Vec3::new(x, (a.y + bb.y) * 0.5, (a.z + bb.z) * 0.5))
@@ -5373,8 +5375,9 @@ fn tower_legs(b: &mut Builder) -> f32 {
                 false,
             );
         }
-        // Between the stringers' inner faces (0.9 wide, it stood 1 cm off
-        // each): the top one its flight's lane; the others both lanes.
+        // A tread's width and 1 cm each side (0.9 wide, it stood 1 cm off
+        // the stringers): the top one its flight's lane; the others both
+        // lanes.
         let (lx0, lx1) = if k + 1 < flights {
             (TOWER_LANE - 0.46, TOWER_LANE_OUT + 0.46)
         } else {
