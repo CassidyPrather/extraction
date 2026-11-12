@@ -4611,9 +4611,11 @@ fn tries_at(tried: &[Entity], e: Entity) -> usize {
 fn in_reach(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], at: Vec3) -> bool {
     match plans
         .iter()
-        .find(|pl| pl.contains(at, 0.3) && (on_foot(world, pl) || stairs_to(pl).is_some()))
+        .find(|pl| pl.contains(at, 0.3) && (on_foot(world, pl) || stairs_up(pl, at).is_some()))
     {
-        Some(plan) => plan.reachable_height(at),
+        Some(plan) => {
+            (on_foot(world, plan) && plan.reachable_height(at)) || stairs_up(plan, at).is_some()
+        }
         None => over_floor(at.y, world.zone.on_ground(at.x, at.z).y),
     }
 }
@@ -4640,18 +4642,12 @@ fn on_foot(world: &World2, plan: &crate::sim::indoor::BuildingPlan) -> bool {
 /// is still walked onto (m): a flight of steps to a door.
 const DOOR_STEPS: f32 = 1.5;
 
-/// The way up to `plan`'s floor by its own outside stairs (a tower's cab),
-/// world points from the foot on the ground to the head, if it has one
-/// whose head is at one of its ways in.
-fn stairs_to(plan: &crate::sim::indoor::BuildingPlan) -> Option<Vec<Vec3>> {
+/// The way up by `plan`'s own outside stairs to the floor `at` lies on
+/// (a tower's cab or its open platform), world points from the foot on
+/// the ground to the head: one whose head is a standing hand's reach under
+/// `at`, near it.
+fn stairs_up(plan: &crate::sim::indoor::BuildingPlan, at: Vec3) -> Option<Vec<Vec3>> {
     let geo = crate::world::buildings::prefab(&plan.name)?;
-    let ins: Vec<Vec3> = plan
-        .doors
-        .iter()
-        .filter_map(|d| d.outside)
-        .chain(plan.entries.iter().copied())
-        .map(|o| plan.to_world(o))
-        .collect();
     geo.stairs
         .iter()
         .map(|w| {
@@ -4660,14 +4656,19 @@ fn stairs_to(plan: &crate::sim::indoor::BuildingPlan) -> Option<Vec<Vec3>> {
                 .collect::<Vec<_>>()
         })
         .find(|w| {
-            w.last()
-                .is_some_and(|h| ins.iter().any(|i| i.distance(*h) < STAIR_HEAD))
+            w.last().is_some_and(|h| {
+                (-STAIR_HEAD_Y..=crate::bot::STAND_REACH).contains(&(at.y - h.y))
+                    && h.xz().distance(at.xz()) < STAIR_HEAD
+            })
         })
 }
 
-/// How near a way in a stair's head arrives (m): the tower's top landing
-/// is beside the cab's door, not in it.
-const STAIR_HEAD: f32 = 2.0;
+/// How far across from a stair's head its floor's things lie (m): a
+/// tower's cab, 4 m square, beside its top landing.
+const STAIR_HEAD: f32 = 6.0;
+/// How far under a stair's head its floor may lie (m): the cab's deck a
+/// step over the landing, a thing on its boards.
+const STAIR_HEAD_Y: f32 = 0.5;
 
 /// The `within` of a leg up or down a building's outside stairs: walked as
 /// it is (`routed_leg` leaves it be), since a stair's flights run under
@@ -4689,17 +4690,17 @@ fn stair_legs<'a>(stairs: impl Iterator<Item = &'a Vec3>) -> impl Iterator<Item 
 fn way_down(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], p: Vec3) -> Vec<Task> {
     let Some((plan, stairs)) = plans
         .iter()
-        .filter(|pl| pl.contains(p, 0.3) && !on_foot(world, pl))
-        .find_map(|pl| Some((pl, stairs_to(pl)?)))
+        .filter(|pl| pl.contains(p, 0.3))
+        .find_map(|pl| Some((pl, stairs_up(pl, p)?)))
     else {
         return vec![];
     };
-    let Some((mut t, _)) = out_of(plan, plan.to_local(p).xz()) else {
-        return vec![];
+    // Out of a cab's rooms to its door first (an open platform: straight
+    // to the stairs' head).
+    let mut t = match out_of(plan, plan.to_local(p).xz()).filter(|_| !on_foot(world, plan)) {
+        Some((t, _)) => t,
+        None => vec![],
     };
-    if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
-        *within = ON_STAIRS;
-    }
     t.extend(stair_legs(stairs.iter().rev()));
     // Off the foot of them, a stride out: on the ground, walked as any.
     if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
@@ -5645,7 +5646,7 @@ fn way_to(
             // Up its stairs where it's a floor only they get to (a tower's
             // cab: routed to under its door, the newcomer stood on the
             // ground under the radio in it).
-            match stairs_to(plan).filter(|_| !on_foot(world, plan)) {
+            match stairs_up(plan, p).filter(|_| !on_foot(world, plan)) {
                 Some(up) => {
                     t.extend(route(world, view, here, up[0].xz()));
                     t.extend(stair_legs(up[1..].iter()));
@@ -5673,6 +5674,22 @@ fn way_to(
             }
             return t;
         }
+    }
+    // Up an open platform's stairs (a survey tower's: its plan is the
+    // ground round its legs), and across it to the thing.
+    if let Some(up) = plans
+        .iter()
+        .filter(|pl| pl.contains(p, 0.3))
+        .find_map(|pl| stairs_up(pl, p))
+    {
+        t.extend(route(world, view, here, up[0].xz()));
+        t.extend(stair_legs(up[1..].iter()));
+        // (To beside it: it lies on a table.)
+        t.push(Task::WalkTo {
+            to: p.xz(),
+            within: 0.9,
+        });
+        return t;
     }
     let door = view.entrances.as_deref().and_then(|en| {
         let b = en.building_at(p)?;
