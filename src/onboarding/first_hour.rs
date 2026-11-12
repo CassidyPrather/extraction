@@ -3752,7 +3752,7 @@ fn bleed_answer(leg: Leg, phase: &Phase) -> Option<BleedGo> {
 /// it).
 fn walker_eye(
     world: &World2,
-    eyes: &Eyes,
+    eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
     aimer: Option<Entity>,
     here: Vec2,
     on_me: &impl Fn(Entity) -> bool,
@@ -3760,10 +3760,7 @@ fn walker_eye(
     the_walker(world, eyes, aimer, here, on_me).and_then(|e| eye_of(eyes, e))
 }
 
-/// The robots' eyes.
-type Eyes<'w, 's> = Query<'w, 's, (&'static GlobalTransform, &'static crate::robots::Senses)>;
-
-fn eye_of(eyes: &Eyes, e: Entity) -> Option<Vec3> {
+fn eye_of(eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>, e: Entity) -> Option<Vec3> {
     eyes.get(e).ok().map(|(gt, s)| gt.transform_point(s.eye))
 }
 
@@ -3771,7 +3768,7 @@ fn eye_of(eyes: &Eyes, e: Entity) -> Option<Vec3> {
 /// on it (or near).
 fn the_walker(
     world: &World2,
-    eyes: &Eyes,
+    eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
     aimer: Option<Entity>,
     here: Vec2,
     on_me: &impl Fn(Entity) -> bool,
