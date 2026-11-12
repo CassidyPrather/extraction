@@ -641,12 +641,10 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "mast_hut" => [5.0, 3.0, 4.0],
         "rail_shed" => [20.0, 10.3, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
-        // Its stair's middle flight in a lane of its own on +X, out to
-        // 3.91 (`buildings::tower_legs`: in one lane, no one got up it).
-        "ranger_tower" => [7.9, 12.7, 5.0],
+        "ranger_tower" => [6.0, 12.7, 5.0],
         // The ranger tower's legs and stair, open on top under its survey
         // mast and beacon.
-        "survey_tower" => [7.9, 16.6, 5.0],
+        "survey_tower" => [6.0, 16.6, 5.0],
         // Kit's car wrecks (`art/vehicles/wrecks.py`).
         "wreck_lada" => [1.8, 1.45, 4.3],
         "wreck_uaz" => [1.9, 2.0, 4.1],
