@@ -795,6 +795,47 @@ mod first_job_tests {
             "some hot ground to fly over"
         );
     }
+
+    /// In every valley, its first job's place (a career's, or one's first
+    /// job on moving there) is a quiet edge, so no survey drone is sent
+    /// over it till you've made the Zone busy: the job-1 easing is the
+    /// ground's, not Marrow's. (Only the map is read: the heightmap's
+    /// Marrow's.)
+    #[test]
+    fn every_valleys_first_job_is_left_alone_till_its_busy() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let hm = app.world().resource::<Zone>().hm.clone();
+        let mut scouts = 0;
+        for (id, map) in crate::progression::contract_valleys() {
+            let zone = Zone::new(std::sync::Arc::new(map.clone()), hm.clone());
+            let Some(extraction_core::progression::Job::Scout { place, at, .. }) =
+                extraction_core::progression::first_job(id, map)
+            else {
+                // A fetch home: no place out there to fly over.
+                continue;
+            };
+            scouts += 1;
+            assert!(
+                !survey_places(&zone, true).contains(&at),
+                "{id}: a survey drone may fly over {place} {at:?}, its first job, while only stirred"
+            );
+            assert!(
+                survey_places(&zone, false).contains(&at),
+                "{id}: {place} {at:?} not a survey place at all (the test reads nothing)"
+            );
+        }
+        assert!(scouts >= 3, "only {scouts} valleys with a first look round");
+    }
 }
 
 #[cfg(test)]
