@@ -7872,6 +7872,9 @@ mod indoor_tests {
     /// cab's door and the newcomer stood on the ground under the radio.)
     #[test]
     fn a_tower_cab_is_fetched_from_up_its_stairs() {
+        // Room over a stair's tread a standing body walks up (m): the
+        // player's 1.75 m capsule, and a head's swing.
+        const HEADROOM: f32 = 2.0;
         use super::{in_reach, way_down, way_to};
         use crate::bot::Bot;
         use crate::rig::{LocalPlayer, Side};
@@ -7896,8 +7899,12 @@ mod indoor_tests {
         // the walk, and a loose thing to put there.
         let towers = {
             let w = app.world_mut();
-            let mut st: SystemState<(super::World2, super::RaidView)> = SystemState::new(w);
-            let (world, view) = st.get(w).unwrap();
+            let mut st: SystemState<(
+                super::World2,
+                super::RaidView,
+                avian3d::prelude::SpatialQuery,
+            )> = SystemState::new(w);
+            let (world, view, spatial) = st.get(w).unwrap();
             let plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
             let mut loose = world
                 .items
@@ -7912,6 +7919,40 @@ mod indoor_tests {
                 .filter(|p| p.name == "ranger_tower" || p.name == "survey_tower")
             {
                 let geo = crate::world::buildings::prefab(&plan.name).unwrap();
+                // A standing body clears every flight: along the walked
+                // line from the stairs' foot, 2 m over the tread or landing
+                // underfoot (in one lane, the first flight's top ran 0.2 m
+                // under the second's foot).
+                for w in &geo.stairs {
+                    let line: Vec<Vec3> = w.iter().map(|q| plan.xf.transform_point(*q)).collect();
+                    for leg in line.windows(2).skip(1) {
+                        for i in 0..=24 {
+                            let p = leg[0].lerp(leg[1], i as f32 / 24.0);
+                            let filter = avian3d::prelude::SpatialQueryFilter::default();
+                            let Some(down) = spatial.cast_ray(
+                                p + Vec3::Y * 0.6,
+                                Dir3::NEG_Y,
+                                1.4,
+                                true,
+                                &filter,
+                            ) else {
+                                continue;
+                            };
+                            let floor = p + Vec3::Y * (0.6 - down.distance + 0.02);
+                            let room = spatial
+                                .cast_ray(floor, Dir3::Y, 3.0, true, &filter)
+                                .map_or(3.0, |h| h.distance);
+                            assert!(
+                                room >= HEADROOM,
+                                "{} at {:.0?}: {room:.2} m over the stair at {:.2?} \
+                                 (a standing body needs {HEADROOM})",
+                                plan.name,
+                                plan.xf.translation.xz(),
+                                plan.to_local(floor)
+                            );
+                        }
+                    }
+                }
                 let spot = geo.loot.iter().find(|s| s.table == "gadgets").unwrap();
                 let p = plan.xf.transform_point(spot.at + Vec3::Y * 0.05);
                 assert!(

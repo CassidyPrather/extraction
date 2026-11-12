@@ -5291,6 +5291,11 @@ fn survey_tower(b: &mut Builder) {
     b.table(Vec3::new(-0.9, deck, 1.1), 0.0, Some("gadgets"));
 }
 
+/// The lane (x) of the ranger tower's first and last flights, beside its
+/// legs, and of its middle one, outside them.
+const TOWER_LANE: f32 = 2.5;
+const TOWER_LANE_OUT: f32 = 3.45;
+
 /// The ranger tower's four legs, its stair in three flights up the +X
 /// side and its platform: the platform's top, less its boards.
 fn tower_legs(b: &mut Builder) -> f32 {
@@ -5305,15 +5310,31 @@ fn tower_legs(b: &mut Builder) -> f32 {
     // Switchback stairs on the outside: three flights.
     let flights = 3;
     let per = top / flights as f32;
+    // Each flight runs along z, turning back on the next; the middle one in
+    // a lane of its own outside the others, so no flight runs under the
+    // next (in one lane, the first flight's top ran 0.2 m under the
+    // second's foot: no one got up, standing or crouched). The landings
+    // between span both lanes.
+    let lane = |k: usize| {
+        if k % 2 == 0 {
+            TOWER_LANE
+        } else {
+            TOWER_LANE_OUT
+        }
+    };
     // Their walk: lined up a stride off the foot of the first flight, then
-    // its foot, landing by landing (each flight runs along z at x 2.5, the
-    // next turning back over it). (Come at from the side, a body slid off
-    // the first tread's end and walked beside the flight on the ground.)
-    let mut way = vec![Vec3::new(2.5, 0.0, -3.4), Vec3::new(2.5, 0.0, -2.2)];
-    way.extend((0..flights).map(|k| {
+    // its foot, landing by landing, across each to the next flight's lane.
+    // (Come at from the side, a body slid off the first tread's end and
+    // walked beside the flight on the ground.)
+    let mut way = vec![Vec3::new(lane(0), 0.0, -3.4), Vec3::new(lane(0), 0.0, -2.2)];
+    for k in 0..flights {
         let side = if k % 2 == 0 { 1.0 } else { -1.0 };
-        Vec3::new(2.5, per * (k + 1) as f32, side * 1.9)
-    }));
+        let y = per * (k + 1) as f32;
+        way.push(Vec3::new(lane(k), y, side * 1.9));
+        if k + 1 < flights {
+            way.push(Vec3::new(lane(k + 1), y, side * 1.9));
+        }
+    }
     b.geo.stairs.push(way);
     for k in 0..flights {
         let y0 = per * k as f32;
@@ -5324,7 +5345,7 @@ fn tower_legs(b: &mut Builder) -> f32 {
             let z = side * (-1.6 + s as f32 * 3.2 / steps as f32);
             b.bx(
                 Vec3::new(0.9, 0.06, 0.32),
-                Vec3::new(2.5, y - 0.03, z),
+                Vec3::new(lane(k), y - 0.03, z),
                 Mat::Planks,
             );
         }
@@ -5343,7 +5364,7 @@ fn tower_legs(b: &mut Builder) -> f32 {
         );
         let along = bb - a;
         let tilt = Quat::from_rotation_x(-(along.y).atan2(along.z));
-        for x in [2.01, 2.99] {
+        for x in [lane(k) - 0.49, lane(k) + 0.49] {
             b.piece(
                 Shape::Box(Vec3::new(0.06, 0.22, along.length())),
                 Transform::from_translation(Vec3::new(x, (a.y + bb.y) * 0.5, (a.z + bb.z) * 0.5))
@@ -5353,10 +5374,15 @@ fn tower_legs(b: &mut Builder) -> f32 {
             );
         }
         // Between the stringers' inner faces (0.9 wide, it stood 1 cm off
-        // each).
+        // each): the top one its flight's lane; the others both lanes.
+        let (lx0, lx1) = if k + 1 < flights {
+            (TOWER_LANE - 0.46, TOWER_LANE_OUT + 0.46)
+        } else {
+            (lane(k) - 0.46, lane(k) + 0.46)
+        };
         b.bx(
-            Vec3::new(0.92, 0.08, 1.0),
-            Vec3::new(2.5, y0 + per - 0.04, side * 1.9),
+            Vec3::new(lx1 - lx0, 0.08, 1.0),
+            Vec3::new((lx0 + lx1) * 0.5, y0 + per - 0.04, side * 1.9),
             Mat::Planks,
         );
         // The landing on two posts, tied back to the leg; the top landing,
@@ -5364,7 +5390,7 @@ fn tower_legs(b: &mut Builder) -> f32 {
         // from the leg instead.
         let hi = y0 + per - 0.08;
         if k < 2 {
-            for x in [2.1, 2.9] {
+            for x in [lx0 + 0.06, lx1 - 0.06] {
                 b.bx(
                     Vec3::new(0.12, hi, 0.12),
                     Vec3::new(x, hi * 0.5, side * 2.3),
@@ -5393,9 +5419,11 @@ fn tower_legs(b: &mut Builder) -> f32 {
         } else {
             y0 + per - 0.14
         };
+        // From the leg to the landing's far edge.
+        let (t0, t1) = (1.65, lx1 - 0.05);
         b.piece(
-            Shape::Box(Vec3::new(1.3, 0.12, 0.12)),
-            Transform::from_xyz(2.3, tie, side * 1.8),
+            Shape::Box(Vec3::new(t1 - t0, 0.12, 0.12)),
+            Transform::from_xyz((t0 + t1) * 0.5, tie, side * 1.8),
             Mat::Timber,
             false,
         );
