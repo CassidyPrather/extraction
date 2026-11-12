@@ -326,6 +326,14 @@ impl Comfort {
         }
     }
 
+    pub fn bleed_pulse_label(&self) -> String {
+        if self.bleed_pulse {
+            "HEARTBEAT\non the wrist".into()
+        } else {
+            "HEARTBEAT\nOFF".into()
+        }
+    }
+
     pub fn steady_aim_label(&self) -> String {
         if self.steady_aim {
             "STEADY AIM\ntwo hands, a stock".into()
