@@ -723,8 +723,6 @@ pub(super) struct Newcomer {
     seen_trail: Vec<(Vec2, f32)>,
     /// When a walker last had it in its line.
     seen_at: f32,
-    /// When it last kept still for a walker close by.
-    kept_still_at: f32,
     /// When it last put a dressing on.
     dressed_at: f32,
     /// When it last answered a crawler's crackle.
@@ -2344,29 +2342,6 @@ pub(super) fn direct_raid(
     if !idle_only || bot.elapsed < 0.5 {
         return;
     }
-    // A walker that's had it in its line lately still close enough to
-    // hear: still and low, not up and on (the wanderer, hidden
-    // from its search, set off back to the job as it walked past 10 m
-    // off, was seen at once, and worn down).
-    if !p.reckless
-        && !p.hoards
-        && now - state.seen_at < SEEN_LAST_FOR
-        && let Some(eye) = the_walker(&world, &eyes, state.aimer, here, &on_me)
-            .and_then(|w| eye_of(&eyes, w))
-            .filter(|e| e.xz().distance(here) < HEARD_CLOSE)
-    {
-        // (Out of its view or not: walked on 12 m in front of it, the
-        // wanderer was seen at once; still and low, a searching walker
-        // passes over what isn't plainly in its view.)
-        let _ = eye;
-        if now - state.kept_still_at > SEEN_LAST_FOR {
-            state.note(now, Kind::Learned, "a walker close by: kept still");
-        }
-        state.kept_still_at = now;
-        state.low_until = state.low_until.max(now + 5.0);
-        super::second_hour::cut_in(&mut bot, vec![Task::Wait(5.0)]);
-        return;
-    }
     // Reckless: a machine in reach is a fight (once a minute at most).
     // (With a gun to hand: in a hand or on the body, not at the bottom of
     // the pack; the last fall may have left it out there.)
@@ -3883,8 +3858,6 @@ const LOW_HEAD: f32 = 0.9;
 const SEEN_LAST_FOR: f32 = 90.0;
 /// How far on from the last a spot it was seen at is kept (m).
 const SEEN_STEP: f32 = 3.0;
-/// A walker this near is heard (m).
-const HEARD_CLOSE: f32 = 20.0;
 /// How near a walker has to be for being in its line to count (m).
 const SEEN_REACH: f32 = 80.0;
 /// How many it keeps.
