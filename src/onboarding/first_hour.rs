@@ -721,6 +721,8 @@ pub(super) struct Newcomer {
     /// each a couple of metres on from the last, and the walker's eye
     /// height: where it'll come to look.
     seen_trail: Vec<(Vec2, f32)>,
+    /// When a walker last had it in its line.
+    seen_at: f32,
     /// When it last put a dressing on.
     dressed_at: f32,
     /// When it last answered a crawler's crackle.
@@ -1055,8 +1057,11 @@ pub(super) fn direct_raid(
     }
     // Where it was in the aiming walker's sight (it could see the
     // walker from there): where the walker will come to look.
-    if now - state.aimed_at < SEEN_LAST_FOR
-        && let Some(eye) = state.aimer.and_then(|w| eye_of(&eyes, w))
+    // (From the first look, not the aim: the walker that found the
+    // wanderer searched from where it first saw it, before it aimed.)
+    if let Some(eye) = the_walker(&world, &eyes, state.aimer, here, &on_me)
+        .and_then(|w| eye_of(&eyes, w))
+        .filter(|e| e.xz().distance(here) < SEEN_REACH)
     {
         let head = if state.low_until > now {
             LOW_HEAD
@@ -1065,6 +1070,7 @@ pub(super) fn direct_raid(
         };
         if !hidden_at(&spatial, &world, here, eye, head) {
             let up = eye.y - world.zone.on_ground(eye.x, eye.z).y;
+            state.seen_at = now;
             if state
                 .seen_trail
                 .last()
@@ -1076,7 +1082,8 @@ pub(super) fn direct_raid(
                 state.seen_trail.push((here, up));
             }
         }
-    } else if now - state.aimed_at >= SEEN_LAST_FOR {
+    }
+    if now - state.seen_at >= SEEN_LAST_FOR {
         state.seen_trail.clear();
     }
     let mut chirped = false;
@@ -1739,6 +1746,15 @@ pub(super) fn direct_raid(
                         tasks
                     }
                     None => {
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            format!(
+                                "coming to look: out of its view from the {} spots it saw me at{}, held",
+                                looks.len(),
+                                if seen { " (no way out of it)" } else { "" }
+                            ),
+                        );
                         state.low_until = now + 30.0;
                         vec![hold]
                     }
@@ -3819,6 +3835,8 @@ const LOW_HEAD: f32 = 0.9;
 const SEEN_LAST_FOR: f32 = 90.0;
 /// How far on from the last a spot it was seen at is kept (m).
 const SEEN_STEP: f32 = 3.0;
+/// How near a walker has to be for being in its line to count (m).
+const SEEN_REACH: f32 = 80.0;
 /// How many it keeps.
 const SEEN_KEPT: usize = 8;
 
