@@ -708,6 +708,9 @@ pub(super) struct Newcomer {
     /// what the bleed gave it then (s to bleed out; None: it eases first).
     bleed_heard: usize,
     bled: Option<(f32, Option<f32>)>,
+    /// The job dropped for it (still out on it when told): home unpaid,
+    /// as it should be.
+    bled_off: bool,
     /// The walker that last aimed at it (its eye is what to break line with).
     aimer: Option<Entity>,
     /// When it last looked whether it's still out of that walker's line.
@@ -2123,6 +2126,11 @@ pub(super) fn direct_raid(
             .ok()
             .and_then(|h| bleeds_out_in(h.hp, h.bleeding));
         state.bled = Some((now, left));
+        if matches!(state.leg, Leg::Out | Leg::Place)
+            && bleed_answer(state.leg, &raid.phase).is_some()
+        {
+            state.bled_off = true;
+        }
         let gave = left.map_or("it eases before it's out".into(), |t| {
             format!("out in {t:.0} s")
         });
@@ -3072,6 +3080,14 @@ pub(super) fn direct_raid(
                     now,
                     Kind::Learned,
                     "home, the job given up: unpaid, as it should be",
+                );
+                state.leg = Leg::Done;
+            } else if state.tries >= 3 && state.bled_off {
+                // Gone home bleeding, as the driver said: not done either.
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "home, the job dropped for the bleed: unpaid, as it should be",
                 );
                 state.leg = Leg::Done;
             } else if state.tries >= 3 {
