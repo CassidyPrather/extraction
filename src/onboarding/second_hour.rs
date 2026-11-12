@@ -649,8 +649,11 @@ pub(super) fn direct(
                             .iter()
                             .any(|(a, agt)| agt.translation().xz().distance(p) < a.radius + 3.0)
                     };
-                    let spot = (4..30)
-                        .map(|k| here + away * k as f32)
+                    // As near its feet as that allows: from 4 m out, a
+                    // wall or wreck between could stand in the way, and
+                    // every grab walked into it till it timed out.
+                    let spot = (2..60)
+                        .map(|k| here + away * (k as f32 * 0.5))
                         .find(|p| clear(*p))
                         .unwrap_or(here + away * 4.0);
                     let at = Vec3::new(spot.x, world.zone.ground(spot.x, spot.y), spot.y);
