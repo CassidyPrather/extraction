@@ -8032,7 +8032,13 @@ mod indoor_tests {
                 "{name}: up at the cab ({top:.1} m over the ground; the walk: {planned:#?}; its log: {:#?})",
                 bot.log
             );
-            assert!(held_up, "{name}: what's on the cab's table taken");
+            assert!(
+                held_up,
+                "{name}: what's on the cab's table taken (the walk: {planned:#?}; its log: {:#?}; \
+                 the thing at {:.1?})",
+                bot.log,
+                app.world().get::<Transform>(e).unwrap().translation
+            );
             assert!(
                 at.xz().distance(foot) < 1.0 && (at.y - zone.on_ground(at.x, at.z).y).abs() < 0.6,
                 "{name}: back down at the stairs' foot ({:.1?}, {:.1} m over the ground)",
