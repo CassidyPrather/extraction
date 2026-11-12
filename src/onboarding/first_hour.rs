@@ -7899,9 +7899,26 @@ mod indoor_tests {
                 let p = plan.xf.transform_point(spot.at + Vec3::Y * 0.05);
                 assert!(
                     in_reach(&world, &plans, p),
-                    "{} at {:.0?}: its cab's table is in reach by its stairs",
+                    "{} at {:.0?}: its cab's table ({:.1?}) is in reach by its stairs \
+                     (in its plan: {}; floor {:.2}; ways in {:.1?}; stairs {:.1?})",
                     plan.name,
-                    plan.xf.translation.xz()
+                    plan.xf.translation.xz(),
+                    p,
+                    plan.contains(p, 0.3),
+                    plan.floor,
+                    plan.doors
+                        .iter()
+                        .filter_map(|d| d.outside)
+                        .chain(plan.entries.iter().copied())
+                        .map(|o| plan.to_world(o))
+                        .collect::<Vec<_>>(),
+                    geo.stairs
+                        .iter()
+                        .map(|w| w
+                            .iter()
+                            .map(|q| plan.xf.transform_point(*q))
+                            .collect::<Vec<_>>())
+                        .collect::<Vec<_>>()
                 );
                 let start = plan.xf.transform_point(Vec3::new(-7.0, 0.0, 0.0)).xz();
                 let mut tasks = way_to(&world, &view, &plans, start, p);
