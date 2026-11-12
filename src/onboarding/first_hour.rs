@@ -4698,7 +4698,13 @@ fn way_down(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], p: Vec3)
     // Out of a cab's rooms to its door first (an open platform: straight
     // to the stairs' head).
     let mut t = match out_of(plan, plan.to_local(p).xz()).filter(|_| !on_foot(world, plan)) {
-        Some((t, _)) => t,
+        // To its door, not the stride out past it (off the landing's edge).
+        Some((mut t, o)) => {
+            if matches!(t.last(), Some(Task::WalkTo { to, .. }) if to.distance(o) < 0.1) {
+                t.pop();
+            }
+            t
+        }
         None => vec![],
     };
     t.extend(stair_legs(stairs.iter().rev()));
@@ -5647,13 +5653,12 @@ fn way_to(
             // cab: routed to under its door, the newcomer stood on the
             // ground under the radio in it).
             match stairs_up(plan, p).filter(|_| !on_foot(world, plan)) {
+                // From the stairs' head straight to its door (the plan's
+                // way in is a stride out from it, past the landing's edge:
+                // walked to, the newcomer stepped off the tower).
                 Some(up) => {
                     t.extend(route(world, view, here, up[0].xz()));
                     t.extend(stair_legs(up[1..].iter()));
-                    t.push(Task::WalkTo {
-                        to: plan.world2(o),
-                        within: ON_STAIRS,
-                    });
                 }
                 None => t.extend(route(world, view, here, plan.world2(o))),
             }
