@@ -594,6 +594,10 @@ pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
         // The face stair's walls (world::dam::stair_wall): along the
         // stair and the landing's south side, and the landing's east side.
         "dam_face" => &[([79.0, 10.6], [66.5, 1.5]), ([144.0, 5.55], [1.5, 3.55])],
+        // The towers' switchback stair in two lanes (world::buildings::
+        // tower_legs): the outer lane at x 3.45 and its landings reach
+        // x 3.91, the stringers 3.97, past the legs' footprint (x 3.0).
+        "ranger_tower" | "survey_tower" => &[([3.485, 0.0], [0.485, 2.4])],
         _ => &[],
     }
 }
