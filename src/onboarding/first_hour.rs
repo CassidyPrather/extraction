@@ -7964,6 +7964,7 @@ mod indoor_tests {
                 .unwrap()
                 .translation = zone.on_ground(start.x, start.y) + Vec3::Y * 0.05;
             app.update();
+            let planned: Vec<String> = tasks.iter().map(|t| format!("{t:?}")).collect();
             app.world_mut().entity_mut(player).insert(Bot::new(tasks));
             let (mut top, mut held_up) = (f32::NEG_INFINITY, false);
             for _ in 0..90 * 150 {
@@ -7987,7 +7988,8 @@ mod indoor_tests {
             );
             assert!(
                 top > 8.5,
-                "{name}: up at the cab ({top:.1} m over the ground)"
+                "{name}: up at the cab ({top:.1} m over the ground; the walk: {planned:#?}; its log: {:#?})",
+                bot.log
             );
             assert!(held_up, "{name}: what's on the cab's table taken");
             assert!(
