@@ -723,6 +723,8 @@ pub(super) struct Newcomer {
     seen_trail: Vec<(Vec2, f32)>,
     /// When a walker last had it in its line.
     seen_at: f32,
+    /// When it last kept still for a walker close by.
+    kept_still_at: f32,
     /// When it last put a dressing on.
     dressed_at: f32,
     /// When it last answered a crawler's crackle.
@@ -1656,6 +1658,25 @@ pub(super) fn direct_raid(
                             }
                             tasks
                         }
+                        // Nothing within 30 m out of a walker's view: said,
+                        // and off away from it (not to a building's far
+                        // side taken on trust: that's where the wanderer
+                        // crouched in the open).
+                        None if !overhead => {
+                            state.note(
+                                now,
+                                Kind::Learned,
+                                "no cover from it within 30 m: away from it",
+                            );
+                            let away = (here - from).normalize_or(Vec2::Y);
+                            vec![
+                                Task::WalkTo {
+                                    to: here + away * 25.0,
+                                    within: 2.0,
+                                },
+                                Task::Wait(10.0),
+                            ]
+                        }
                         None => run_for_cover(&world.zone, here, from, 0.0),
                     },
                 }
@@ -1750,9 +1771,13 @@ pub(super) fn direct_raid(
                             now,
                             Kind::Learned,
                             format!(
-                                "coming to look: out of its view from the {} spots it saw me at{}, held",
+                                "coming to look: {} from the {} spots it saw me at, held",
+                                if seen {
+                                    "no cover within 30 m out of its view"
+                                } else {
+                                    "out of its view"
+                                },
                                 looks.len(),
-                                if seen { " (no way out of it)" } else { "" }
                             ),
                         );
                         state.low_until = now + 30.0;
@@ -2317,6 +2342,30 @@ pub(super) fn direct_raid(
     let idle_only =
         bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
     if !idle_only || bot.elapsed < 0.5 {
+        return;
+    }
+    // Hidden from a walker that's had it in its line lately and is still
+    // close enough to hear: still, not up and on (the wanderer, hidden
+    // from its search, set off back to the job as it walked past 10 m
+    // off, was seen at once, and worn down).
+    if !p.reckless
+        && !p.hoards
+        && now - state.seen_at < SEEN_LAST_FOR
+        && let Some(eye) = the_walker(&world, &eyes, state.aimer, here, &on_me)
+            .and_then(|w| eye_of(&eyes, w))
+            .filter(|e| e.xz().distance(here) < HEARD_CLOSE)
+        && line_hidden(&spatial, &world, here, eye)
+    {
+        if now - state.kept_still_at > SEEN_LAST_FOR {
+            state.note(
+                now,
+                Kind::Learned,
+                "a walker close by, still out of its view: kept still",
+            );
+        }
+        state.kept_still_at = now;
+        state.low_until = state.low_until.max(now + 5.0);
+        super::second_hour::cut_in(&mut bot, vec![Task::Wait(5.0)]);
         return;
     }
     // Reckless: a machine in reach is a fight (once a minute at most).
@@ -3835,6 +3884,8 @@ const LOW_HEAD: f32 = 0.9;
 const SEEN_LAST_FOR: f32 = 90.0;
 /// How far on from the last a spot it was seen at is kept (m).
 const SEEN_STEP: f32 = 3.0;
+/// A walker this near is heard (m).
+const HEARD_CLOSE: f32 = 20.0;
 /// How near a walker has to be for being in its line to count (m).
 const SEEN_REACH: f32 = 80.0;
 /// How many it keeps.
@@ -4087,7 +4138,71 @@ fn break_line_from(
             return Some((t, how));
         }
     }
-    None
+    // Nothing that near: further off, to 30 m, the far sides of buildings
+    // too, but only a spot out of every one of its views (run to a
+    // building's far side unlooked, the wanderer crouched in the open in
+    // the view of where the walker came to look, and was shot down).
+    let mut t = wide_cover(world, here, &hidden)?;
+    t.push(Task::Wait(LINE_HELD));
+    Some((t, "out of its view, further off"))
+}
+
+/// How far the wider look for cover goes (m).
+const WIDE_COVER: f32 = 30.0;
+
+/// The nearest spot within [`WIDE_COVER`] where `hidden` holds, by the way
+/// walked there (round buildings, `walk`): rings out from `here` and round
+/// each building near. The walk to it, or None.
+fn wide_cover(world: &World2, here: Vec2, hidden: &dyn Fn(Vec2) -> bool) -> Option<Vec<Task>> {
+    let rings = [15.0f32, 18.0, 22.0, 26.0, WIDE_COVER]
+        .into_iter()
+        .flat_map(|r| {
+            (0..24)
+                .map(move |k| here + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 24.0) * r)
+        });
+    let sides = world
+        .zone
+        .map
+        .placements
+        .iter()
+        .filter(|b| Vec2::from(b.at).distance(here) < WIDE_COVER + 10.0)
+        .flat_map(|b| {
+            let foot = extraction_core::map::prefab_footprint(&b.prefab);
+            let r = 0.5 * Vec2::new(foot[0], foot[2]).length() + 1.5;
+            let c = Vec2::from(b.at);
+            (0..12).map(move |k| c + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 12.0) * r)
+        });
+    let nav = world.nav.as_deref().map(|n| n.0.as_ref());
+    let mut spots: Vec<Vec2> = rings
+        .chain(sides)
+        .filter(|p| p.distance(here) <= WIDE_COVER)
+        .filter(|p| nav.is_none_or(|n| n.walkable(p.to_array())))
+        .filter(|p| {
+            world
+                .entrances
+                .building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y)
+                .is_none()
+        })
+        .collect();
+    spots.sort_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+    let walked = |t: &[Task]| {
+        let mut at = here;
+        let mut len = 0.0;
+        for task in t {
+            if let Task::WalkTo { to, .. } = task {
+                len += at.distance(*to);
+                at = *to;
+            }
+        }
+        len
+    };
+    spots
+        .into_iter()
+        .filter(|p| hidden(*p))
+        .take(6)
+        .map(|p| walk(world, here, p))
+        .filter(|t| !t.is_empty())
+        .min_by(|a, b| walked(a).total_cmp(&walked(b)))
 }
 
 /// The nearest walkable spot within 12 m where `good` holds, and the way
@@ -7062,6 +7177,39 @@ the Hollow.";
         let mut at = here;
         for q in &way {
             assert!(!through(at, *q), "{at} -> {q} through the pile: {way:?}");
+            at = *q;
+        }
+    }
+
+    /// Told a walker's coming to look, in its view from where it saw it
+    /// (the first sighting and the last, 20 m apart, as the shelter
+    /// wanderer's): cover 8 m off, and it goes behind it from both, not
+    /// to a spot hidden only from the last (where the wanderer held, and
+    /// was found from the first).
+    #[test]
+    fn coming_to_look_it_hides_from_every_spot_it_was_seen_at() {
+        use super::{nearest_where, segment_hits_box};
+        // A shed, 4 x 3 m, just west; it crouches east of it.
+        let shed = (Vec2::new(-3.0, 0.0), Vec2::new(2.0, 1.5));
+        let through = |a: Vec2, b: Vec2| segment_hits_box(a - shed.0, b - shed.0, shed.1).is_some();
+        let open = |a: Vec2, b: Vec2| !through(a, b);
+        let here = Vec2::ZERO;
+        // Where it was seen: first 15 m south-south-west, last 12 m west.
+        let (first, last) = (Vec2::new(-6.0, -14.0), Vec2::new(-12.0, 0.0));
+        let hidden_from = |e: Vec2, p: Vec2| through(e, p);
+        // Out of the last's view where it is (so, held, as the wanderer
+        // did), but in the first's (where the walker came to look from).
+        assert!(hidden_from(last, here) && !hidden_from(first, here));
+        // From both: it moves, to a spot neither sees.
+        let both = |p: Vec2| hidden_from(first, p) && hidden_from(last, p);
+        assert!(!both(here));
+        let away = (here - last).normalize();
+        let way = nearest_where(here, away, &open, &both).expect("cover from both");
+        let end = *way.last().unwrap();
+        assert!(both(end), "{end} out of both views: {way:?}");
+        let mut at = here;
+        for q in &way {
+            assert!(!through(at, *q), "{at} -> {q} through the shed: {way:?}");
             at = *q;
         }
     }
