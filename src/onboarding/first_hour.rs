@@ -717,6 +717,9 @@ pub(super) struct Newcomer {
     line_checked: f32,
     /// When a walker last aimed at it.
     aimed_at: f32,
+    /// Where it last stood in that walker's line (as it saw it from
+    /// there), and the walker's eye height: where it'll come to look.
+    seen_last: Option<(Vec2, f32)>,
     /// When it last put a dressing on.
     dressed_at: f32,
     /// When it last answered a crawler's crackle.
@@ -895,11 +898,7 @@ pub(super) fn direct_raid(
     time: Res<Time>,
     (spatial, eyes): (
         avian3d::prelude::SpatialQuery,
-        Query<(
-            &GlobalTransform,
-            &crate::robots::Senses,
-            Option<&crate::robots::Brain>,
-        )>,
+        Query<(&GlobalTransform, &crate::robots::Senses)>,
     ),
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
@@ -1052,6 +1051,21 @@ pub(super) fn direct_raid(
         state.aimer = Some(ev.walker);
         state.aimed_at = now;
         again.push(First::Aimed);
+    }
+    // Where it last was in the aiming walker's sight (it could see the
+    // walker from there): where the walker will come to look.
+    if now - state.aimed_at < SEEN_LAST_FOR
+        && let Some(eye) = state.aimer.and_then(|w| eye_of(&eyes, w))
+    {
+        let head = if state.low_until > now {
+            LOW_HEAD
+        } else {
+            STAND_HEAD
+        };
+        if !hidden_at(&spatial, &world, here, eye, head) {
+            let up = eye.y - world.zone.on_ground(eye.x, eye.z).y;
+            state.seen_last = Some((here, up));
+        }
     }
     let mut chirped = false;
     for ev in tells.sentries.read() {
@@ -1673,20 +1687,30 @@ pub(super) fn direct_raid(
                 // where it was: crouched where it had run to, the wanderer
                 // was in plain view from the walker's search 18 m off, and
                 // was found, shot and bled out.
+                // What it knows: where the walker last saw it (it comes to
+                // look there), and the walker's eye where it can see it.
                 let walker = the_walker(&world, &eyes, state.aimer, here, &on_me);
-                let looks: Vec<Vec3> = walker
+                let mut looks: Vec<Vec3> = state
+                    .seen_last
+                    .filter(|_| now - state.aimed_at < SEEN_LAST_FOR)
+                    .map(|(at, up)| world.zone.on_ground(at.x, at.y) + Vec3::Y * up)
                     .into_iter()
-                    .flat_map(|w| [look_eye(&world, &eyes, w), eye_of(&eyes, w)])
-                    .flatten()
                     .collect();
-                let seen_from = looks
+                if let Some(eye) = walker.and_then(|w| eye_of(&eyes, w))
+                    && !hidden_at(&spatial, &world, here, eye, STAND_HEAD)
+                {
+                    looks.push(eye);
+                }
+                let seen = looks
                     .iter()
-                    .find(|e| !line_hidden(&spatial, &world, here, **e))
-                    .copied();
+                    .any(|e| !line_hidden(&spatial, &world, here, *e));
                 // (Under the bot's 30 s give-up, or a frame past it is a
                 // failure.)
                 let hold = Task::Wait(29.0);
-                match seen_from.and_then(|e| break_line(&spatial, &world, here, e)) {
+                match seen
+                    .then(|| break_line_from(&spatial, &world, here, &looks))
+                    .flatten()
+                {
                     Some((mut tasks, how)) => {
                         state.note(
                             now,
@@ -3736,19 +3760,11 @@ fn walker_eye(
     the_walker(world, eyes, aimer, here, on_me).and_then(|e| eye_of(eyes, e))
 }
 
-/// The robots' eyes, and what they're minded to do.
-type Eyes<'w, 's> = Query<
-    'w,
-    's,
-    (
-        &'static GlobalTransform,
-        &'static crate::robots::Senses,
-        Option<&'static crate::robots::Brain>,
-    ),
->;
+/// The robots' eyes.
+type Eyes<'w, 's> = Query<'w, 's, (&'static GlobalTransform, &'static crate::robots::Senses)>;
 
 fn eye_of(eyes: &Eyes, e: Entity) -> Option<Vec3> {
-    eyes.get(e).ok().map(|(gt, s, _)| gt.transform_point(s.eye))
+    eyes.get(e).ok().map(|(gt, s)| gt.transform_point(s.eye))
 }
 
 /// The walker that has it in mind: the one that aimed, else the nearest
@@ -3776,22 +3792,6 @@ fn the_walker(
     })
 }
 
-/// Where a walker coming to look will look from: the eye it'll have at
-/// the spot it's going to (its look or search), at the height it carries
-/// its eye now. None while it isn't coming.
-fn look_eye(world: &World2, eyes: &Eyes, walker: Entity) -> Option<Vec3> {
-    let (gt, s, brain) = eyes.get(walker).ok()?;
-    let at = match brain? {
-        crate::robots::Brain::Investigate { at, .. } | crate::robots::Brain::Search { at, .. } => {
-            *at
-        }
-        _ => return None,
-    };
-    let eye = gt.transform_point(s.eye);
-    let up = eye.y - world.zone.on_ground(eye.x, eye.z).y;
-    Some(world.zone.on_ground(at.x, at.z) + Vec3::Y * up)
-}
-
 /// A standing head (m above the ground).
 const STAND_HEAD: f32 = 1.6;
 /// How far either side a fighting walker's eye is allowed for (m).
@@ -3803,6 +3803,9 @@ const WALKER_NEAR: f32 = 80.0;
 const LINE_HELD: f32 = 12.0;
 /// A crouched head (m above the ground), as a walker's eye looks for it.
 const LOW_HEAD: f32 = 0.9;
+/// How long after a walker's aim where it last saw it still counts as
+/// where it'll come to look.
+const SEEN_LAST_FOR: f32 = 90.0;
 
 /// Whether to shoot back at a walker (`direct_raid`): aimed at lately, out
 /// of cover and not on the way to any, a round up, and shot at twice in a
@@ -3948,7 +3951,19 @@ fn break_line(
     here: Vec2,
     eye: Vec3,
 ) -> Option<(Vec<Task>, &'static str)> {
-    let hidden = |p: Vec2| line_hidden(spatial, world, p, eye);
+    break_line_from(spatial, world, here, &[eye])
+}
+
+/// [`break_line`], out of every one of `eyes`' lines (the first the one
+/// it goes away from).
+fn break_line_from(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    here: Vec2,
+    eyes: &[Vec3],
+) -> Option<(Vec<Task>, &'static str)> {
+    let eye = *eyes.first()?;
+    let hidden = |p: Vec2| eyes.iter().all(|e| line_hidden(spatial, world, p, *e));
     if hidden(here) {
         return Some((vec![Task::Wait(LINE_HELD)], "down where it was"));
     }
@@ -3995,11 +4010,16 @@ fn break_line(
     // fighting moves, and a spot only just out of its line now was in it
     // again a breath later ("in its line again", twice, on Rime).
     let side = away.perp() * EYE_SWAY;
-    let sway = [
-        eye,
-        eye + Vec3::new(side.x, 0.0, side.y),
-        eye - Vec3::new(side.x, 0.0, side.y),
-    ];
+    let sway: Vec<Vec3> = eyes
+        .iter()
+        .flat_map(|e| {
+            [
+                *e,
+                *e + Vec3::new(side.x, 0.0, side.y),
+                *e - Vec3::new(side.x, 0.0, side.y),
+            ]
+        })
+        .collect();
     // Best first: hidden standing from all three, then low from all three;
     // last, low from where it is now.
     let ranks: [(&dyn Fn(Vec2) -> bool, &'static str); 3] = [
