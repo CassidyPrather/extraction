@@ -121,6 +121,12 @@ pub struct Geo {
     pub entrances: Vec<extraction_core::map::Entrance>,
     /// Ladders climbed with the hands (`interact::hand_climb`).
     pub ladders: Vec<crate::interact::hand_climb::Ladder>,
+    /// Stairs up outside to a raised floor walked onto by them (a tower's
+    /// cab): each a walk, building-local, from its foot on the ground,
+    /// landing by landing, to its head at that floor's way in. A body
+    /// walks up them leg by leg as it walks the ground (bots: a tower's
+    /// cab is only reached this way).
+    pub stairs: Vec<Vec<Vec3>>,
     /// Where the sky comes in through what's left of a roof (a ruin's
     /// hole): each opening's centre at the eaves, building-local, and its
     /// half extents along x and z. For the sun's shafts (`shafts`).
@@ -5299,6 +5305,14 @@ fn tower_legs(b: &mut Builder) -> f32 {
     // Switchback stairs on the outside: three flights.
     let flights = 3;
     let per = top / flights as f32;
+    // Their walk: from the foot of the first flight, landing by landing
+    // (each flight runs along z at x 2.5, the next turning back over it).
+    let mut way = vec![Vec3::new(2.5, 0.0, -2.4)];
+    way.extend((0..flights).map(|k| {
+        let side = if k % 2 == 0 { 1.0 } else { -1.0 };
+        Vec3::new(2.5, per * (k + 1) as f32, side * 1.9)
+    }));
+    b.geo.stairs.push(way);
     for k in 0..flights {
         let y0 = per * k as f32;
         let steps = (per / 0.2).ceil() as usize;

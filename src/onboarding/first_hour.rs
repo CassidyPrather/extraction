@@ -1900,8 +1900,9 @@ pub(super) fn direct_raid(
                     && !view.stash.iter().any(|b| b.contents.contains(e))
             })
             .map(|(e, _, gt, ..)| (e, gt.translation()));
+        // (Not up a tower's stairs: a thing it passes, not a climb.)
         if let Some((e, at)) = by_the_way(here, loose, &state.dressings_tried, |at| {
-            in_reach(&world, &plans, at)
+            in_reach(&world, &plans, at) && way_down(&world, &plans, at).is_empty()
         }) {
             state.dressings_tried.push(e);
             state.note(now, Kind::Learned, "a dressing by the way, picked up");
@@ -2964,6 +2965,7 @@ pub(super) fn direct_raid(
                                         item: e,
                                         side: Side::Left,
                                     });
+                                    tasks.extend(way_down(&world, &plans, at));
                                 }
                                 None => {
                                     state.note(
@@ -3545,7 +3547,7 @@ fn crossed(boxes: &[(Transform, Vec2)], a: Vec2, b: Vec2) -> Option<Vec2> {
 /// above: out to the cellar's wall, and stuck there.)
 fn routed_leg(world: &World2, feet: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let here = feet.xz();
-    if within == crate::bot::SIDESTEP || here.distance(to) < 0.5 {
+    if within == crate::bot::SIDESTEP || within == ON_STAIRS || here.distance(to) < 0.5 {
         return None;
     }
     let below = feet.y < world.zone.on_ground(here.x, here.y).y - 1.5;
@@ -4609,7 +4611,7 @@ fn tries_at(tried: &[Entity], e: Entity) -> usize {
 fn in_reach(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], at: Vec3) -> bool {
     match plans
         .iter()
-        .find(|pl| pl.contains(at, 0.3) && on_foot(world, pl))
+        .find(|pl| pl.contains(at, 0.3) && (on_foot(world, pl) || stairs_to(pl).is_some()))
     {
         Some(plan) => plan.reachable_height(at),
         None => over_floor(at.y, world.zone.on_ground(at.x, at.z).y),
@@ -4637,6 +4639,74 @@ fn on_foot(world: &World2, plan: &crate::sim::indoor::BuildingPlan) -> bool {
 /// The most a building's floor stands over the ground at its way in and
 /// is still walked onto (m): a flight of steps to a door.
 const DOOR_STEPS: f32 = 1.5;
+
+/// The way up to `plan`'s floor by its own outside stairs (a tower's cab),
+/// world points from the foot on the ground to the head, if it has one
+/// whose head is at one of its ways in.
+fn stairs_to(plan: &crate::sim::indoor::BuildingPlan) -> Option<Vec<Vec3>> {
+    let geo = crate::world::buildings::prefab(&plan.name)?;
+    let ins: Vec<Vec3> = plan
+        .doors
+        .iter()
+        .filter_map(|d| d.outside)
+        .chain(plan.entries.iter().copied())
+        .map(|o| plan.to_world(o))
+        .collect();
+    geo.stairs
+        .iter()
+        .map(|w| {
+            w.iter()
+                .map(|p| plan.xf.transform_point(*p))
+                .collect::<Vec<_>>()
+        })
+        .find(|w| {
+            w.last()
+                .is_some_and(|h| ins.iter().any(|i| i.distance(*h) < STAIR_HEAD))
+        })
+}
+
+/// How near a way in a stair's head arrives (m): the tower's top landing
+/// is beside the cab's door, not in it.
+const STAIR_HEAD: f32 = 2.0;
+
+/// The `within` of a leg up or down a building's outside stairs: walked as
+/// it is (`routed_leg` leaves it be), since a stair's flights run under
+/// the floor they climb to, in the building's footprint.
+const ON_STAIRS: f32 = 0.35;
+
+/// Up or down `stairs` (world points, foot first), leg by leg: each
+/// landing in turn.
+fn stair_legs<'a>(stairs: impl Iterator<Item = &'a Vec3>) -> impl Iterator<Item = Task> {
+    stairs.map(|p| Task::WalkTo {
+        to: p.xz(),
+        within: ON_STAIRS,
+    })
+}
+
+/// Back down from `p` where it's up a building's outside stairs (a radio
+/// got from a tower's cab): out of its floor's rooms to the stairs' head,
+/// and down them to the ground. None where it isn't.
+fn way_down(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], p: Vec3) -> Vec<Task> {
+    let Some((plan, stairs)) = plans
+        .iter()
+        .filter(|pl| pl.contains(p, 0.3) && !on_foot(world, pl))
+        .find_map(|pl| Some((pl, stairs_to(pl)?)))
+    else {
+        return vec![];
+    };
+    let Some((mut t, _)) = out_of(plan, plan.to_local(p).xz()) else {
+        return vec![];
+    };
+    if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+        *within = ON_STAIRS;
+    }
+    t.extend(stair_legs(stairs.iter().rev()));
+    // Off the foot of them, a stride out: on the ground, walked as any.
+    if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
+        *within = 0.6;
+    }
+    t
+}
 
 /// `y` within a standing hand's reach over a floor at `floor`.
 fn over_floor(y: f32, floor: f32) -> bool {
@@ -5572,7 +5642,20 @@ fn way_to(
             .filter_map(|d| d.outside)
             .min_by(|a, b| a.distance(goal).total_cmp(&b.distance(goal)));
         if let Some((o, path)) = entry.and_then(|o| Some((o, plan.path(o, goal)?))) {
-            t.extend(route(world, view, here, plan.world2(o)));
+            // Up its stairs where it's a floor only they get to (a tower's
+            // cab: routed to under its door, the newcomer stood on the
+            // ground under the radio in it).
+            match stairs_to(plan).filter(|_| !on_foot(world, plan)) {
+                Some(up) => {
+                    t.extend(route(world, view, here, up[0].xz()));
+                    t.extend(stair_legs(up[1..].iter()));
+                    t.push(Task::WalkTo {
+                        to: plan.world2(o),
+                        within: ON_STAIRS,
+                    });
+                }
+                None => t.extend(route(world, view, here, plan.world2(o))),
+            }
             for stop in indoor_stops(plan, o, &path) {
                 match stop {
                     Stop::Door(door, before) => {
@@ -5670,6 +5753,7 @@ fn errand_tasks(
                 Task::Stow(Side::Right),
                 Task::Wait(0.5),
             ]);
+            t.extend(way_down(world, plans, p));
             Ok(Some((t, Some(e))))
         }
         Errand::Leave { item, at } => {
@@ -7761,6 +7845,125 @@ mod indoor_tests {
         // Long ago: no longer the same fight.
         assert!(!shot_warns(&[60.0], 100.0, 30.0));
         assert!(!shot_warns(&[], 100.0, 30.0));
+    }
+
+    /// A thing up in a tower's cab is fetched up its stairs and brought
+    /// down them: on Marrow, each tower's cab (two ranger towers, the
+    /// survey tower), from the ground beside it, the bot walks up the
+    /// three flights, takes what's on the cab's table, and is back on the
+    /// ground at the stairs' foot. (Before, `way_to` routed to under the
+    /// cab's door and the newcomer stood on the ground under the radio.)
+    #[test]
+    fn a_tower_cab_is_fetched_from_up_its_stairs() {
+        use super::{in_reach, way_down, way_to};
+        use crate::bot::Bot;
+        use crate::rig::{LocalPlayer, Side};
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // Each tower: where its table's thing lies, where the bot starts,
+        // the walk, and a loose thing to put there.
+        let towers = {
+            let w = app.world_mut();
+            let mut st: SystemState<(super::World2, super::RaidView)> = SystemState::new(w);
+            let (world, view) = st.get(w).unwrap();
+            let plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
+            let mut loose = world
+                .items
+                .iter()
+                .filter(|(_, _, _, held, sock, bag)| {
+                    held.is_none() && sock.is_none() && bag.is_none()
+                })
+                .map(|(e, ..)| e);
+            let mut towers = Vec::new();
+            for plan in plans
+                .iter()
+                .filter(|p| p.name == "ranger_tower" || p.name == "survey_tower")
+            {
+                let geo = crate::world::buildings::prefab(&plan.name).unwrap();
+                let spot = geo.loot.iter().find(|s| s.table == "gadgets").unwrap();
+                let p = plan.xf.transform_point(spot.at + Vec3::Y * 0.05);
+                assert!(
+                    in_reach(&world, &plans, p),
+                    "{} at {:.0?}: its cab's table is in reach by its stairs",
+                    plan.name,
+                    plan.xf.translation.xz()
+                );
+                let start = plan.xf.transform_point(Vec3::new(-7.0, 0.0, 0.0)).xz();
+                let mut tasks = way_to(&world, &view, &plans, start, p);
+                let e = loose.next().unwrap();
+                tasks.push(Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                });
+                let down = way_down(&world, &plans, p);
+                assert!(!down.is_empty(), "{}: a way back down", plan.name);
+                let foot = match down.last() {
+                    Some(Task::WalkTo { to, .. }) => *to,
+                    _ => unreachable!(),
+                };
+                tasks.extend(down);
+                towers.push((plan.name.clone(), p, start, tasks, e, foot));
+            }
+            towers
+        };
+        assert_eq!(towers.len(), 3, "Marrow's three towers");
+        for (name, p, start, tasks, e, foot) in towers {
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            app.world_mut().get_mut::<Transform>(e).unwrap().translation = p;
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = zone.on_ground(start.x, start.y) + Vec3::Y * 0.05;
+            app.update();
+            app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+            let (mut top, mut held_up) = (f32::NEG_INFINITY, false);
+            for _ in 0..90 * 150 {
+                app.update();
+                let at = app.world().get::<Transform>(player).unwrap().translation;
+                top = top.max(at.y - zone.on_ground(at.x, at.z).y);
+                held_up |= app
+                    .world()
+                    .get::<crate::interact::Held>(e)
+                    .is_some_and(|h| h.player == player);
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    break;
+                }
+            }
+            let at = app.world().get::<Transform>(player).unwrap().translation;
+            let bot = app.world().get::<Bot>(player).unwrap();
+            assert!(
+                bot.done(),
+                "{name}: the walk up and down ends (left: {:?})",
+                bot.tasks.front()
+            );
+            assert!(
+                top > 8.5,
+                "{name}: up at the cab ({top:.1} m over the ground)"
+            );
+            assert!(held_up, "{name}: what's on the cab's table taken");
+            assert!(
+                at.xz().distance(foot) < 1.0 && (at.y - zone.on_ground(at.x, at.z).y).abs() < 0.6,
+                "{name}: back down at the stairs' foot ({:.1?}, {:.1} m over the ground)",
+                at.xz(),
+                at.y - zone.on_ground(at.x, at.z).y
+            );
+            app.world_mut().entity_mut(player).remove::<Bot>();
+        }
     }
 
     /// Every walk leg comes to the newcomer's feet through `routed_leg`,
