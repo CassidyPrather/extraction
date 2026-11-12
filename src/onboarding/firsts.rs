@@ -65,6 +65,9 @@ pub enum First {
     /// Home from a raid, off again to the truck's tail with finds still in
     /// the pack: what's on you goes at a fall, the stash keeps.
     StashFinds,
+    /// Home with an empty stripper clip and a box of its rounds to hand:
+    /// they fill by hand, and a raid's no place to find that out.
+    EmptyClips,
     /// A machine that was shooting at you lost you, and is coming to where
     /// it last saw you, or back past you once it's given up
     /// (`robots::search::ComingBack`): a moving shape behind low cover is
@@ -132,6 +135,7 @@ pub const ALL: &[First] = &[
     First::Hush,
     First::Payday,
     First::StashFinds,
+    First::EmptyClips,
     First::ComingToLook,
     First::BrokenNoticed,
     First::Shoved,
@@ -236,6 +240,7 @@ impl First {
             // the card wouldn't pay it.)
             First::Payday => &[PAYDAY_NOT_YET, "{verdict}"],
             First::StashFinds => &[STASH_FINDS],
+            First::EmptyClips => &[EMPTY_CLIPS],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
@@ -897,6 +902,28 @@ pub fn spare_for(name: &str) -> String {
 pub const STASH_FINDS: &str =
     "Driver: \"Stash what you found. What's on you is gone if you fall.\"";
 
+/// Home with an empty stripper clip and a box of its rounds (Progression's
+/// wording: they fill by hand from the box, as the yard's magazines do).
+pub const EMPTY_CLIPS: &str = "Driver: \"Empty clips. Strip a box into them before you go.\"";
+
+/// Whether, of what's to hand (each thing's catalog entry and the rounds
+/// in it), a stripper clip is empty and a box of its cartridge isn't.
+fn empty_clip_to_fill<'a>(
+    to_hand: impl Iterator<Item = (&'a extraction_core::items::ItemDef, u32)> + Clone,
+) -> bool {
+    to_hand.clone().any(|(d, n)| {
+        d.magazine.as_ref().is_some_and(|m| {
+            m.stripper
+                && n == 0
+                && to_hand.clone().any(|(a, r)| {
+                    a.category == extraction_core::items::Category::Ammo
+                        && r > 0
+                        && a.cartridge.as_deref() == Some(m.cartridge.as_str())
+                })
+        })
+    })
+}
+
 /// What counts as a find to stash: what's brought home for its worth, not
 /// the kit taken out.
 fn a_find(c: extraction_core::items::Category) -> bool {
@@ -958,6 +985,21 @@ fn spare_radio(
         });
         if at_tail && finds {
             m.meet(First::StashFinds);
+        }
+    }
+    // An empty stripper clip on you or in the crate, a box of its rounds
+    // with it: fill them now (once a career).
+    if !m.met(First::EmptyClips)
+        && *home_for >= SPARE_AFTER
+        && let Some((me, _)) = locals.iter().next()
+    {
+        let crate_has = |e: Entity| stash.iter().any(|(_, b)| b.contents.contains(&e));
+        let to_hand = items
+            .iter()
+            .filter(|(e, _, by, _)| by.is_some_and(|b| b.0 == me) || crate_has(*e))
+            .map(|(_, it, ..)| (catalog.get(it.kind()), it.rounds));
+        if empty_clip_to_fill(to_hand) {
+            m.meet(First::EmptyClips);
         }
     }
     // (What's on its way through the hatch already counts, once it's down.)
@@ -1350,6 +1392,44 @@ mod tests {
         }
         let keys: BTreeSet<String> = ALL.iter().map(|f| f.key()).collect();
         assert_eq!(keys.len(), ALL.len(), "every moment has its own key");
+    }
+
+    /// "Empty clips" is for an empty stripper clip with a box of its own
+    /// rounds to hand: not a full one, not a box of another cartridge, not
+    /// an empty box, not a box magazine.
+    #[test]
+    fn empty_clips_want_a_box_of_their_rounds() {
+        let cat =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        let d = |id: &str| cat.get(cat.expect(id));
+        let fires = |have: &[(&str, u32)]| {
+            let v: Vec<_> = have.iter().map(|(id, n)| (d(id), *n)).collect();
+            empty_clip_to_fill(v.iter().map(|(d, n)| (*d, *n)))
+        };
+        assert!(fires(&[("sks_clip", 0), ("ammo_762x39", 20)]));
+        assert!(fires(&[
+            ("mosin_clip", 0),
+            ("mosin_clip", 5),
+            ("ammo_762r", 3)
+        ]));
+        assert!(
+            !fires(&[("sks_clip", 10), ("ammo_762x39", 20)]),
+            "a full clip"
+        );
+        assert!(
+            !fires(&[("sks_clip", 0), ("ammo_545", 30)]),
+            "another cartridge"
+        );
+        assert!(
+            !fires(&[("sks_clip", 0), ("ammo_762x39", 0)]),
+            "an empty box"
+        );
+        assert!(!fires(&[("sks_clip", 0)]), "no box");
+        assert!(
+            !fires(&[("pm_mag", 0), ("ammo_9x18", 16)]),
+            "a box magazine"
+        );
     }
 
     fn app() -> App {
