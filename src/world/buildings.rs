@@ -5305,9 +5305,11 @@ fn tower_legs(b: &mut Builder) -> f32 {
     // Switchback stairs on the outside: three flights.
     let flights = 3;
     let per = top / flights as f32;
-    // Their walk: from the foot of the first flight, landing by landing
-    // (each flight runs along z at x 2.5, the next turning back over it).
-    let mut way = vec![Vec3::new(2.5, 0.0, -2.4)];
+    // Their walk: lined up a stride off the foot of the first flight, then
+    // its foot, landing by landing (each flight runs along z at x 2.5, the
+    // next turning back over it). (Come at from the side, a body slid off
+    // the first tread's end and walked beside the flight on the ground.)
+    let mut way = vec![Vec3::new(2.5, 0.0, -3.4), Vec3::new(2.5, 0.0, -2.2)];
     way.extend((0..flights).map(|k| {
         let side = if k % 2 == 0 { 1.0 } else { -1.0 };
         Vec3::new(2.5, per * (k + 1) as f32, side * 1.9)
