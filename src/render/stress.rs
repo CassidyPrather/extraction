@@ -594,7 +594,7 @@ mod tests {
     use std::time::Instant;
 
     use super::super::budget::tests::{
-        SystemTimes, as_the_game_runs, client_threads, heavy, settle,
+        SystemTimes, as_the_game_runs, client_threads, heavy, ran_alone, settle,
     };
     use super::StressRun;
     use crate::perf::fight::reference_ms;
@@ -845,6 +845,9 @@ mod tests {
     #[ignore = "diagnosis"]
     fn transforms_static_on_off() {
         let _one_at_a_time = heavy();
+        if ran_alone() {
+            return;
+        }
         let names = [
             "mark_dirty_trees",
             "propagate_parent_transforms",
@@ -946,6 +949,9 @@ mod tests {
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_every_valley_holds_its_worst_minute() {
         let _one_at_a_time = heavy();
+        if ran_alone() {
+            return;
+        }
         let budget = super::super::vr_budget::budget();
         let mut wrong = Vec::new();
         for map in maps() {
