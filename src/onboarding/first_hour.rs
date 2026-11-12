@@ -2344,8 +2344,8 @@ pub(super) fn direct_raid(
     if !idle_only || bot.elapsed < 0.5 {
         return;
     }
-    // Hidden from a walker that's had it in its line lately and is still
-    // close enough to hear: still, not up and on (the wanderer, hidden
+    // A walker that's had it in its line lately still close enough to
+    // hear: still and low, not up and on (the wanderer, hidden
     // from its search, set off back to the job as it walked past 10 m
     // off, was seen at once, and worn down).
     if !p.reckless
@@ -2354,14 +2354,13 @@ pub(super) fn direct_raid(
         && let Some(eye) = the_walker(&world, &eyes, state.aimer, here, &on_me)
             .and_then(|w| eye_of(&eyes, w))
             .filter(|e| e.xz().distance(here) < HEARD_CLOSE)
-        && line_hidden(&spatial, &world, here, eye)
     {
+        // (Out of its view or not: walked on 12 m in front of it, the
+        // wanderer was seen at once; still and low, a searching walker
+        // passes over what isn't plainly in its view.)
+        let _ = eye;
         if now - state.kept_still_at > SEEN_LAST_FOR {
-            state.note(
-                now,
-                Kind::Learned,
-                "a walker close by, still out of its view: kept still",
-            );
+            state.note(now, Kind::Learned, "a walker close by: kept still");
         }
         state.kept_still_at = now;
         state.low_until = state.low_until.max(now + 5.0);
