@@ -703,6 +703,14 @@ pub(super) struct Newcomer {
     pressed_until: f32,
     /// When it last came out from under cover for the truck.
     hurried_at: f32,
+    /// The driver's "bleeding badly ... Get to the truck": how many times
+    /// it has been answered (once a raid), and the last answer's time with
+    /// what the bleed gave it then (s to bleed out; None: it eases first).
+    bleed_heard: usize,
+    bled: Option<(f32, Option<f32>)>,
+    /// The job dropped for it (still out on it when told): home unpaid,
+    /// as it should be.
+    bled_off: bool,
     /// The walker that last aimed at it (its eye is what to break line with).
     aimer: Option<Entity>,
     /// When it last looked whether it's still out of that walker's line.
@@ -734,6 +742,21 @@ impl Newcomer {
         let what = what.into();
         info!("first hour: {now:.0}s {kind:?}: {what}");
         self.moments.push((now, kind, what));
+    }
+
+    /// After "bleeding badly": how long from the line to `how` (in the
+    /// truck, or down), against what the bleed gave it then. Once.
+    fn note_bled(&mut self, now: f32, how: &str) {
+        if let Some((at, left)) = self.bled.take() {
+            let gave = left.map_or("it was easing before it was out".into(), |t| {
+                format!("{t:.0} s to bleed out")
+            });
+            self.note(
+                now,
+                Kind::Learned,
+                format!("bled: {how} {:.0} s after the line ({gave})", now - at),
+            );
+        }
     }
 }
 
@@ -2036,6 +2059,7 @@ pub(super) fn direct_raid(
     if matches!(raid.phase, Phase::Down { .. }) {
         if state.leg != Leg::Done {
             state.note(now, Kind::Killed, "went down");
+            state.note_bled(now, "down");
             state.leg = Leg::Done;
         }
         // That's this first hour over: nothing left of the walk (down
@@ -2082,6 +2106,71 @@ pub(super) fn direct_raid(
             super::second_hour::cut_in(&mut bot, tasks);
             reroute_after(&mut bot, n, left_at, &world, &view);
             return;
+        }
+    }
+    // "You're bleeding badly, nothing to bind it. Get to the truck." A
+    // person told that goes: the job's off, the truck's called now, from
+    // where it stands (one-handed v the walker heard it at 97 s, walked on
+    // to the farm and back to the gate as the card said, and was in the
+    // truck at 292 s).
+    let told = state
+        .heard
+        .iter()
+        .filter(|l| *l == super::firsts::BLEEDING_BADLY_LINE)
+        .count();
+    if told > state.bleed_heard {
+        state.bleed_heard = told;
+        let left = view
+            .health
+            .single()
+            .ok()
+            .and_then(|h| bleeds_out_in(h.hp, h.bleeding));
+        state.bled = Some((now, left));
+        if matches!(state.leg, Leg::Out | Leg::Place)
+            && bleed_answer(state.leg, &raid.phase).is_some()
+        {
+            state.bled_off = true;
+        }
+        let gave = left.map_or("it eases before it's out".into(), |t| {
+            format!("out in {t:.0} s")
+        });
+        match bleed_answer(state.leg, &raid.phase) {
+            Some(BleedGo::ToTruck) => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    format!("bleeding badly: out to the truck ({gave})"),
+                );
+                state.roof_try = None;
+                bot.tasks.clear();
+                bot.walk = None;
+                bot.tasks.extend(world.go_home(here, &raid, state.tries));
+                bot.tasks.push_back(Task::Wait(IDLE));
+                bot.restart();
+                state.leg = Leg::Board;
+                return;
+            }
+            Some(BleedGo::Call) => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    format!("bleeding badly: called the truck from here ({gave})"),
+                );
+                state.leg = Leg::Call;
+                // (Not back to the gate first: there's no time for it.)
+                state.at_gate = true;
+                state.roof_try = None;
+                bot.tasks.clear();
+                bot.tasks.push_back(Task::Wait(IDLE));
+                bot.walk = None;
+                bot.restart();
+                return;
+            }
+            None => state.note(
+                now,
+                Kind::Learned,
+                format!("bleeding badly: already on its way to the truck ({gave})"),
+            ),
         }
     }
     // A time sense: in cover or on the job, the clock still runs. A person
@@ -2150,6 +2239,8 @@ pub(super) fn direct_raid(
     if p.reckless
         && armed
         && now - state.fought_at > 60.0
+        // (Bleeding badly, it's home it wants, not a fight.)
+        && state.bled.is_none()
         && matches!(state.leg, Leg::Place | Leg::Rendezvous | Leg::Call)
         && world
             .nearest_robot(here)
@@ -2903,6 +2994,7 @@ pub(super) fn direct_raid(
         Leg::Board => match raid.phase {
             Phase::Extracting { .. } | Phase::AtBase => {
                 state.note(now, Kind::Learned, "in the truck and away");
+                state.note_bled(now, "in the truck");
                 state.leg = Leg::Paid;
                 state.tries = 0;
             }
@@ -2988,6 +3080,14 @@ pub(super) fn direct_raid(
                     now,
                     Kind::Learned,
                     "home, the job given up: unpaid, as it should be",
+                );
+                state.leg = Leg::Done;
+            } else if state.tries >= 3 && state.bled_off {
+                // Gone home bleeding, as the driver said: not done either.
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "home, the job dropped for the bleed: unpaid, as it should be",
                 );
                 state.leg = Leg::Done;
             } else if state.tries >= 3 {
@@ -3545,6 +3645,43 @@ fn time_short(
         && matches!(leg, Leg::Call | Leg::Rendezvous | Leg::Board)
         && since_hurried > 30.0)
         .then_some(Hurry::Truck)
+}
+
+/// How a bleed eases by itself (HP a second, each second: `health`).
+const BLEED_EASES: f32 = 0.02;
+
+/// Seconds till `hp` is bled away at `rate` HP a second, the rate easing
+/// by `BLEED_EASES` each second; None if it stops first. (Health lost
+/// by t is rate·t − ½·BLEED_EASES·t².)
+fn bleeds_out_in(hp: f32, rate: f32) -> Option<f32> {
+    if hp <= 0.0 {
+        return Some(0.0);
+    }
+    let disc = rate * rate - 2.0 * BLEED_EASES * hp;
+    (rate > 0.0 && disc >= 0.0).then(|| (rate - disc.sqrt()) / BLEED_EASES)
+}
+
+/// What "bleeding badly ... Get to the truck" means from where it is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum BleedGo {
+    /// The truck's at the rendezvous: to it, now.
+    ToTruck,
+    /// Call it from here (off the job; not back to the gate first).
+    Call,
+}
+
+fn bleed_answer(leg: Leg, phase: &Phase) -> Option<BleedGo> {
+    let truck_there = matches!(phase, Phase::TruckWaiting { .. });
+    match leg {
+        Leg::Out | Leg::Place | Leg::Call | Leg::Rendezvous if truck_there => {
+            Some(BleedGo::ToTruck)
+        }
+        Leg::Out | Leg::Place => Some(BleedGo::Call),
+        // Called already, but still out on its way back to the gate or
+        // under a roof: from here, now.
+        Leg::Call if matches!(phase, Phase::Out) => Some(BleedGo::Call),
+        _ => None,
+    }
 }
 
 /// The eye of the walker after it: the one that last aimed, else the
@@ -7070,6 +7207,68 @@ the Hollow.";
             // Not every frame: once in 30 s.
             assert_eq!(time_short(&running, far, leg, true, false, true, 5.0), None);
         }
+    }
+
+    /// "Bleeding badly ... Get to the truck": off the job, the truck called
+    /// from where it stands; the truck there, to it; already boarding or at
+    /// the camp, nothing new.
+    #[test]
+    fn bleeding_badly_goes_for_the_truck() {
+        let there = Phase::TruckWaiting { rv: 0, left: 60.0 };
+        let called = Phase::TruckCalled { rv: 0, eta: 60.0 };
+        for leg in [Leg::Out, Leg::Place] {
+            assert_eq!(
+                bleed_answer(leg, &Phase::Out),
+                Some(BleedGo::Call),
+                "{leg:?}"
+            );
+        }
+        // Called, but still out (on its way back to the gate, or under a
+        // roof): from here, now.
+        assert_eq!(bleed_answer(Leg::Call, &Phase::Out), Some(BleedGo::Call));
+        for leg in [Leg::Out, Leg::Place, Leg::Call, Leg::Rendezvous] {
+            assert_eq!(bleed_answer(leg, &there), Some(BleedGo::ToTruck), "{leg:?}");
+        }
+        assert_eq!(bleed_answer(Leg::Rendezvous, &called), None);
+        assert_eq!(bleed_answer(Leg::Board, &there), None);
+        for leg in [Leg::Camp, Leg::Kit, Leg::Card, Leg::Paid, Leg::Done] {
+            assert_eq!(bleed_answer(leg, &Phase::Out), None, "{leg:?}");
+        }
+    }
+
+    /// Time to bleed out, against the game's own bleed stepped second by
+    /// second (`health`: hp less the rate, the rate easing).
+    #[test]
+    fn bleeds_out_in_matches_the_bleed() {
+        let step = |mut hp: f32, mut rate: f32| {
+            let dt = 0.001;
+            let mut t = 0.0;
+            while rate > 0.0 && t < 1000.0 {
+                hp -= rate * dt;
+                rate = (rate - BLEED_EASES * dt).max(0.0);
+                t += dt;
+                if hp <= 0.0 {
+                    return Some(t);
+                }
+            }
+            None
+        };
+        for (hp, rate) in [
+            (65.0, 1.5),
+            (40.0, 1.1),
+            (80.0, 3.0),
+            (20.0, 1.0),
+            (30.0, 1.0),
+        ] {
+            match (bleeds_out_in(hp, rate), step(hp, rate)) {
+                (Some(a), Some(b)) => assert!((a - b).abs() < 0.1, "{hp} {rate}: {a} v {b}"),
+                (a, b) => assert_eq!(a.is_some(), b.is_some(), "{hp} {rate}: {a:?} v {b:?}"),
+            }
+        }
+        // 1 HP a second eases off after 25 HP: 30 is never bled away.
+        assert_eq!(bleeds_out_in(30.0, 1.0), None);
+        assert!(bleeds_out_in(20.0, 1.0).is_some());
+        assert_eq!(bleeds_out_in(50.0, 0.0), None);
     }
 }
 
