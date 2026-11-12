@@ -80,7 +80,7 @@ fn column_width(across: usize) -> f32 {
 }
 
 /// How close your head comes, and how long you look, to have read a note.
-const READ_REACH: f32 = 1.4;
+pub const READ_REACH: f32 = 1.4;
 const READ_CONE_DEG: f32 = 35.0;
 const READ_TIME: f32 = 1.0;
 

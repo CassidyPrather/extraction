@@ -89,6 +89,29 @@ impl LootTables {
         self.tables.contains_key(name)
     }
 
+    /// Whether table `name` can drop item `id`, itself or by a table it
+    /// rolls on.
+    pub fn can_drop(&self, name: &str, id: &str) -> bool {
+        let mut seen = std::collections::HashSet::new();
+        let mut todo = vec![name];
+        while let Some(n) = todo.pop() {
+            if !seen.insert(n) {
+                continue;
+            }
+            let Some(t) = self.tables.get(n) else {
+                continue;
+            };
+            for e in &t.entries {
+                match e {
+                    Entry::Item { id: i, .. } if i == id => return true,
+                    Entry::Table { name, .. } => todo.push(name),
+                    _ => {}
+                }
+            }
+        }
+        false
+    }
+
     pub fn names(&self) -> impl Iterator<Item = &String> {
         self.tables.keys()
     }

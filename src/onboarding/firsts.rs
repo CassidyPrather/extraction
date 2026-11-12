@@ -65,6 +65,9 @@ pub enum First {
     /// Home from a raid, off again to the truck's tail with finds still in
     /// the pack: what's on you goes at a fall, the stash keeps.
     StashFinds,
+    /// Home with an empty stripper clip and a box of its rounds to hand:
+    /// they fill by hand, and a raid's no place to find that out.
+    EmptyClips,
     /// A machine that was shooting at you lost you, and is coming to where
     /// it last saw you, or back past you once it's given up
     /// (`robots::search::ComingBack`): a moving shape behind low cover is
@@ -132,6 +135,7 @@ pub const ALL: &[First] = &[
     First::Hush,
     First::Payday,
     First::StashFinds,
+    First::EmptyClips,
     First::ComingToLook,
     First::BrokenNoticed,
     First::Shoved,
@@ -236,6 +240,7 @@ impl First {
             // the card wouldn't pay it.)
             First::Payday => &[PAYDAY_NOT_YET, "{verdict}"],
             First::StashFinds => &[STASH_FINDS],
+            First::EmptyClips => &[EMPTY_CLIPS],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
@@ -680,15 +685,65 @@ fn worn(guns: Query<(&Gun, &Held)>, locals: Query<(), With<LocalPlayer>>, mut m:
 }
 
 /// Hit, and bleeding: the wrist's "BLEED" is easy to miss, and a wound
-/// doesn't stop on its own.
-fn bleeding(locals: Query<&crate::health::Health, With<LocalPlayer>>, mut m: Meet) {
-    if m.met(First::Bleeding) {
+/// doesn't stop on its own. Bleeding badly with no dressing on you, the
+/// driver says so, once a raid (the careful newcomer won its first fight,
+/// its one dressing on the first wound, and bled out after it with nothing
+/// said: the first time's line is once a career).
+fn bleeding(
+    locals: Query<(Entity, &crate::health::Health), With<LocalPlayer>>,
+    items: Query<(
+        &crate::items::Item,
+        Option<&crate::anomaly::artifacts::CarriedBy>,
+    )>,
+    packs: Query<&crate::interact::body::Backpack>,
+    catalog: Res<crate::items::Catalog>,
+    raid: Res<Raid>,
+    mut said_badly: Local<bool>,
+    mut m: Meet,
+) {
+    if raid.phase == Phase::AtBase {
+        *said_badly = false;
         return;
     }
-    if locals.iter().any(|h| !h.down && h.bleeding > BLEEDING) {
+    let Some((me, h)) = locals.iter().next() else {
+        return;
+    };
+    if h.down {
+        return;
+    }
+    let is_dressing = |e: Entity| {
+        items
+            .get(e)
+            .is_ok_and(|(it, _)| catalog.get(it.kind()).id == "field_dressing")
+    };
+    // On you: in a hand, a pouch, or the pack on your back.
+    let dressed = || {
+        items.iter().any(|(it, by)| {
+            by.is_some_and(|b| b.0 == me) && catalog.get(it.kind()).id == "field_dressing"
+        }) || packs
+            .iter()
+            .any(|b| b.owner == me && b.carried && b.contents.iter().any(|e| is_dressing(*e)))
+    };
+    if h.bleeding > BLEEDING_BADLY && !dressed() {
+        if !*said_badly {
+            *said_badly = true;
+            m.queue.lines.push_back(BLEEDING_BADLY_LINE.into());
+        }
+        // ("Dressing on, now" with none to put on is no help.)
+        return;
+    }
+    if !m.met(First::Bleeding) && h.bleeding > BLEEDING {
         m.meet(First::Bleeding);
     }
 }
+
+/// Bleeding faster than this (HP a second) with no dressing on you is
+/// worth a word every raid: it kills in well under a minute.
+const BLEEDING_BADLY: f32 = 1.0;
+
+/// What the driver says then (once a raid).
+pub const BLEEDING_BADLY_LINE: &str =
+    "Truck: \"You're bleeding badly, nothing to bind it. Get to the truck.\"";
 
 /// The detector, a thrown thing, a fold: how you find anomalies, and
 /// what one did to you.
@@ -847,6 +902,28 @@ pub fn spare_for(name: &str) -> String {
 pub const STASH_FINDS: &str =
     "Driver: \"Stash what you found. What's on you is gone if you fall.\"";
 
+/// Home with an empty stripper clip and a box of its rounds (Progression's
+/// wording: they fill by hand from the box, as the yard's magazines do).
+pub const EMPTY_CLIPS: &str = "Driver: \"Empty clips. Strip a box into them before you go.\"";
+
+/// Whether, of what's to hand (each thing's catalog entry and the rounds
+/// in it), a stripper clip is empty and a box of its cartridge isn't.
+fn empty_clip_to_fill<'a>(
+    to_hand: impl Iterator<Item = (&'a extraction_core::items::ItemDef, u32)> + Clone,
+) -> bool {
+    to_hand.clone().any(|(d, n)| {
+        d.magazine.as_ref().is_some_and(|m| {
+            m.stripper
+                && n == 0
+                && to_hand.clone().any(|(a, r)| {
+                    a.category == extraction_core::items::Category::Ammo
+                        && r > 0
+                        && a.cartridge.as_deref() == Some(m.cartridge.as_str())
+                })
+        })
+    })
+}
+
 /// What counts as a find to stash: what's brought home for its worth, not
 /// the kit taken out.
 fn a_find(c: extraction_core::items::Category) -> bool {
@@ -908,6 +985,21 @@ fn spare_radio(
         });
         if at_tail && finds {
             m.meet(First::StashFinds);
+        }
+    }
+    // An empty stripper clip on you or in the crate, a box of its rounds
+    // with it: fill them now (once a career).
+    if !m.met(First::EmptyClips)
+        && *home_for >= SPARE_AFTER
+        && let Some((me, _)) = locals.iter().next()
+    {
+        let crate_has = |e: Entity| stash.iter().any(|(_, b)| b.contents.contains(&e));
+        let to_hand = items
+            .iter()
+            .filter(|(e, _, by, _)| by.is_some_and(|b| b.0 == me) || crate_has(*e))
+            .map(|(_, it, ..)| (catalog.get(it.kind()), it.rounds));
+        if empty_clip_to_fill(to_hand) {
+            m.meet(First::EmptyClips);
         }
     }
     // (What's on its way through the hatch already counts, once it's down.)
@@ -1300,6 +1392,44 @@ mod tests {
         }
         let keys: BTreeSet<String> = ALL.iter().map(|f| f.key()).collect();
         assert_eq!(keys.len(), ALL.len(), "every moment has its own key");
+    }
+
+    /// "Empty clips" is for an empty stripper clip with a box of its own
+    /// rounds to hand: not a full one, not a box of another cartridge, not
+    /// an empty box, not a box magazine.
+    #[test]
+    fn empty_clips_want_a_box_of_their_rounds() {
+        let cat =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        let d = |id: &str| cat.get(cat.expect(id));
+        let fires = |have: &[(&str, u32)]| {
+            let v: Vec<_> = have.iter().map(|(id, n)| (d(id), *n)).collect();
+            empty_clip_to_fill(v.iter().map(|(d, n)| (*d, *n)))
+        };
+        assert!(fires(&[("sks_clip", 0), ("ammo_762x39", 20)]));
+        assert!(fires(&[
+            ("mosin_clip", 0),
+            ("mosin_clip", 5),
+            ("ammo_762r", 3)
+        ]));
+        assert!(
+            !fires(&[("sks_clip", 10), ("ammo_762x39", 20)]),
+            "a full clip"
+        );
+        assert!(
+            !fires(&[("sks_clip", 0), ("ammo_545", 30)]),
+            "another cartridge"
+        );
+        assert!(
+            !fires(&[("sks_clip", 0), ("ammo_762x39", 0)]),
+            "an empty box"
+        );
+        assert!(!fires(&[("sks_clip", 0)]), "no box");
+        assert!(
+            !fires(&[("pm_mag", 0), ("ammo_9x18", 16)]),
+            "a box magazine"
+        );
     }
 
     fn app() -> App {
@@ -1922,6 +2052,105 @@ mod tests {
         let want = fill(First::Death.lines()[1], in_crate, 2);
         assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The driver's bleeding-badly line, said or waiting its turn.
+    fn said_badly(app: &App) -> usize {
+        let spoken = app.world().resource::<Spoken>().0.iter();
+        let queued = app.world().resource::<Queue>().lines.iter();
+        spoken
+            .chain(queued)
+            .filter(|l| *l == BLEEDING_BADLY_LINE)
+            .count()
+    }
+
+    fn bleed(app: &mut App, rate: f32) {
+        let mut q = app
+            .world_mut()
+            .query_filtered::<&mut crate::health::Health, With<LocalPlayer>>();
+        for mut h in q.iter_mut(app.world_mut()) {
+            h.bleeding = rate;
+        }
+    }
+
+    /// Out, bleeding badly with no dressing on you: "nothing to bind it",
+    /// once a raid, and again the next raid; not with a dressing on you,
+    /// nor bleeding slowly. It fits the wrist.
+    #[test]
+    fn bleeding_badly_with_nothing_to_bind_it_is_said_once_a_raid() {
+        let n = crate::render::screen::wrap(BLEEDING_BADLY_LINE, 26, usize::MAX).len();
+        assert!(n <= 3, "{n} lines: {BLEEDING_BADLY_LINE}");
+        let mut app = app();
+        drop_dressings(&mut app);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        bleed(&mut app, 0.5);
+        for _ in 0..10 {
+            app.update();
+        }
+        assert_eq!(said_badly(&app), 0, "a slow bleed: not this line");
+        bleed(&mut app, 2.0);
+        for _ in 0..30 {
+            app.update();
+            bleed(&mut app, 2.0);
+        }
+        assert_eq!(said_badly(&app), 1, "bleeding badly: said, once");
+        // Home and out again: said again.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        app.update();
+        drop_dressings(&mut app);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..10 {
+            app.update();
+            bleed(&mut app, 2.0);
+        }
+        assert_eq!(said_badly(&app), 2, "the next raid: said again");
+    }
+
+    /// A dressing on you (in the pack): no "nothing to bind it".
+    #[test]
+    fn bleeding_badly_with_a_dressing_on_you_is_not_nothing_to_bind_it() {
+        let mut app = app();
+        drop_dressings(&mut app);
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .expect("a player");
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == me && b.carried)
+            .map(|(e, _)| e)
+            .expect("a pack");
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("field_dressing").unwrap();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let e = {
+            let mut commands = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::default(),
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(e);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..30 {
+            app.update();
+            bleed(&mut app, 2.0);
+        }
+        assert_eq!(said_badly(&app), 0);
     }
 
     /// Every field dressing in the world.

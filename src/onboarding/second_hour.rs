@@ -31,6 +31,19 @@ const IDLE: f32 = 4.5;
 /// An anomaly this near the ground's height over it is out where a walk
 /// reaches it (m; one under a building's floor or a site's roof isn't).
 const PROBE_ABOVE_GROUND: f32 = 3.0;
+/// An anomaly's event this near where the thing was thrown is its answer
+/// (m: a snare's or a lift's reach round its heart).
+const ANSWERED_NEAR: f32 = 6.0;
+/// A walker's round, as one lands (hp): the wound set up when none came.
+const STAGED_WOUND: f32 = 14.0;
+/// A note this near is walked to and read (m: Marrow's survey table is
+/// 42 m on from the lift the bolt is thrown at).
+const NOTE_WALK: f32 = 60.0;
+/// How far off a note to stand to read it (m, on the ground): clear of
+/// the table or crate it lies on, and the body's own width.
+const NOTE_STAND: [f32; 2] = [0.75, 0.9];
+/// The bot's eye standing (`bot::drive`'s 1.68).
+const STAND_EYE: f32 = 1.68;
 
 pub fn opening() -> Vec<Task> {
     vec![
@@ -45,6 +58,7 @@ enum Step {
     Kit,
     Shoot,
     Anomaly,
+    Note,
     Pack,
     Surge,
     Home1,
@@ -99,6 +113,10 @@ pub struct Run {
     topped_up: bool,
     /// A gun given for that shot, the last fall having taken its own.
     rearmed: bool,
+    /// The kit's bolts taken (the crate holds them for anomalies).
+    bolts: bool,
+    /// The anomaly something was thrown at, for its moment's check.
+    probed: Option<Vec3>,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -110,7 +128,7 @@ pub(super) fn direct(
     mut met: MessageReader<FirstMet>,
     firsts: Res<Firsts>,
     mut raid: ResMut<Raid>,
-    world: World2,
+    mut world: World2,
     time: Res<Time>,
     mut run: Local<Run>,
     mut commands: Commands,
@@ -191,23 +209,35 @@ pub(super) fn direct(
                     }],
                 )
             }
-            First::Anomaly => match world.throwable(here) {
-                Some((item, at)) => (
-                    "throw something in first",
-                    vec![
-                        Task::Release(Side::Left),
-                        Task::Grab {
-                            item,
-                            side: Side::Left,
-                        },
-                        Task::Throw {
-                            side: Side::Left,
-                            at,
-                        },
-                        Task::Wait(1.5),
-                    ],
-                ),
-                None => ("(nothing to throw)", vec![]),
+            First::Anomaly => match world.throwable(here, player) {
+                Some((item, at)) => {
+                    run.probed = Some(at);
+                    // Thrown from here, not walked on into (the rest of
+                    // the walk to the anomaly's heart, after the throw,
+                    // took the bot into it: zapped and bleeding, and its
+                    // own body what set it off).
+                    bot.tasks.retain(|t| !matches!(t, Task::WalkTo { .. }));
+                    (
+                        "throw something in first",
+                        vec![
+                            Task::Release(Side::Left),
+                            Task::Grab {
+                                item,
+                                side: Side::Left,
+                            },
+                            Task::Throw {
+                                side: Side::Left,
+                                at,
+                            },
+                            Task::Wait(1.5),
+                        ],
+                    )
+                }
+                None => {
+                    // Nor walked into with nothing to throw.
+                    bot.tasks.retain(|t| !matches!(t, Task::WalkTo { .. }));
+                    ("(nothing to throw)", vec![])
+                }
             },
             First::PackFull => ("leave the worst of it", vec![Task::Release(Side::Left)]),
             First::Surge => match world.radio(here) {
@@ -380,7 +410,11 @@ pub(super) fn direct(
             First::Jam(_) => world.gun_clear(player).unwrap_or(false),
             First::Worn => true,
             First::Anomaly if r.response == "go round it" => !world.inside_anomaly(here),
-            First::Anomaly => world.anomaly_answered().unwrap_or(false),
+            // Only what the thrown thing set off, at the anomaly it was
+            // thrown at: nothing thrown, nothing answered (any anomaly's
+            // event anywhere counted, and a run that threw nothing scored
+            // "yes" where something nearby went off by itself).
+            First::Anomaly => run.probed.is_some_and(|at| world.anomaly_answered_at(at)),
             // The hand that held what wouldn't go in (one-handed: the one).
             First::PackFull => world
                 .hand_empty(if world.one_handed() {
@@ -501,6 +535,22 @@ pub(super) fn direct(
             advance(&mut run, Step::Shoot);
         }
         Step::Kit => {
+            // The crate's bolts with the kit, as the first hour's newcomer
+            // takes them (`first_hour::KIT`): something to throw where the
+            // air's wrong. (Without them the anomaly's moment had nothing
+            // to throw, every run.)
+            if !run.bolts {
+                run.bolts = true;
+                for b in world.drop_items(&mut commands, root.translation, &["bolt", "bolt"]) {
+                    tasks.extend([
+                        GrabFromHere {
+                            item: b,
+                            side: Side::Left,
+                        },
+                        Stow(Side::Left),
+                    ]);
+                }
+            }
             tasks.extend([
                 PickUp {
                     id: "ak74".into(),
@@ -537,15 +587,35 @@ pub(super) fn direct(
         }
         Step::Anomaly => match world.anomaly_to_probe(here) {
             Some(target) if !firsts.met(First::Anomaly) && run.tries < 2 => {
-                let from = here;
-                let d = from.distance(target.xz());
-                let legs = (d / 12.0).ceil().max(1.0) as usize;
-                for k in 1..=legs {
-                    tasks.push(WalkTo {
-                        to: from.lerp(target.xz(), k as f32 / legs as f32),
+                tasks.extend(legs(here, target.xz(), 12.0, 1.0));
+                run.tries += 1;
+            }
+            _ => advance(&mut run, Step::Note),
+        },
+        Step::Note => match world.note_to_read(here, &opts.map) {
+            // A note pinned out here, read: stood by it, looked at. (It was
+            // read in passing on the walk on into the anomaly, which a throw
+            // from where it was met no longer takes.)
+            Some((stand, note)) if !firsts.met(First::NotePinned) && run.tries < 2 => {
+                // Walked as the first hour walks (round what's in the
+                // way: the straight line stuck halfway), then the last
+                // step to where it reads.
+                tasks.extend(routed(
+                    &world,
+                    here,
+                    vec![WalkTo {
+                        to: stand,
                         within: 1.0,
-                    });
-                }
+                    }],
+                ));
+                tasks.extend([
+                    WalkTo {
+                        to: stand,
+                        within: 0.3,
+                    },
+                    LookAt(note),
+                    Wait(2.0),
+                ]);
                 run.tries += 1;
             }
             _ => advance(&mut run, Step::Pack),
@@ -828,6 +898,15 @@ pub(super) fn direct(
         Step::Lamed => {
             let leg = run.walker.and_then(|w| world.leg_of(w, root.translation));
             if firsts.met(First::Lamed) || run.tries >= 25 {
+                // No wound by now (the walker never hit it): one set up, as
+                // the drills set things up, for the bleeding's moment. (It
+                // used to come from the walker's shot as the bot broke its
+                // line; reaching cover unhit, it never came.)
+                if !firsts.met(First::Bleeding) && world.alive(player) {
+                    world.wound(&mut commands, player);
+                    bot.log
+                        .push("  (staged: a wound, the walker never having hit)".into());
+                }
                 // Not left about for the walk back for its kit.
                 if let Some(w) = run.walker {
                     commands.entity(w).try_despawn();
@@ -981,6 +1060,17 @@ pub(super) fn direct(
 /// roof, a few strides or more) by the routed way (`first_hour::walk`):
 /// the answers' own straight walks ("move off low", out round the house)
 /// went into a garden's fence. Walks indoors, by a door, are as they were.
+/// A straight walk from `from` to `to` in legs no longer than `leg`.
+fn legs(from: Vec2, to: Vec2, leg: f32, within: f32) -> Vec<Task> {
+    let n = (from.distance(to) / leg).ceil().max(1.0) as usize;
+    (1..=n)
+        .map(|k| Task::WalkTo {
+            to: from.lerp(to, k as f32 / n as f32),
+            within,
+        })
+        .collect()
+}
+
 fn routed(world: &World2, here: Vec2, tasks: Vec<Task>) -> Vec<Task> {
     // (At chest height over the ground there: a shell's box is from its
     // floor up.)
@@ -1174,6 +1264,9 @@ pub(super) struct World2<'w, 's> {
     /// The machines' walking grid: round what isn't a building with doors
     /// (a blast furnace's stoves, a wall, a slag heap).
     pub(super) nav: Option<Res<'w, crate::robots::walker::Nav>>,
+    pub(super) staged: Option<Res<'w, crate::world::scenes::Staged>>,
+    pub(super) notes_read: Res<'w, crate::raid::board::NotesRead>,
+    pub(super) spatial: avian3d::prelude::SpatialQuery<'w, 's>,
 }
 
 /// The truck's footprint, truck-local xz: its centre and half size (the
@@ -1288,24 +1381,36 @@ impl World2<'_, '_> {
 
     /// Something loose within a few metres to throw, and where to throw it:
     /// at the nearest anomaly that answers a thrown thing (not a burner).
-    pub(super) fn throwable(&self, near: Vec2) -> Option<(Entity, Vec3)> {
+    pub(super) fn throwable(&self, near: Vec2, player: Entity) -> Option<(Entity, Vec3)> {
         let target = self.anomaly_to_probe(near)?;
-        let item = self
+        // A bolt on it first: what the crate holds them for.
+        let bolt = self
             .items
             .iter()
-            .filter(|(_, it, gt, held, sock, bag)| {
+            .find(|(_, it, _, held, sock, _)| {
                 held.is_none()
-                    && sock.is_none()
-                    && bag.is_none()
-                    && gt.translation().xz().distance(near) < 6.0
-                    && !matches!(
-                        self.catalog.get(it.kind()).category,
-                        extraction_core::items::Category::Artifact
-                            | extraction_core::items::Category::Firearm
-                    )
+                    && self.catalog.get(it.kind()).id == "bolt"
+                    && sock.is_some_and(|s| self.owners.get(s.socket).is_ok_and(|o| o.0 == player))
             })
-            .map(|(e, ..)| e)
-            .next()
+            .map(|(e, ..)| e);
+        let item = bolt
+            .or_else(|| {
+                self.items
+                    .iter()
+                    .filter(|(_, it, gt, held, sock, bag)| {
+                        held.is_none()
+                            && sock.is_none()
+                            && bag.is_none()
+                            && gt.translation().xz().distance(near) < 6.0
+                            && !matches!(
+                                self.catalog.get(it.kind()).category,
+                                extraction_core::items::Category::Artifact
+                                    | extraction_core::items::Category::Firearm
+                            )
+                    })
+                    .map(|(e, ..)| e)
+                    .next()
+            })
             .or_else(|| {
                 // Or whatever's in the pack.
                 self.bags
@@ -1314,6 +1419,61 @@ impl World2<'_, '_> {
                     .and_then(|(b, _)| b.contents.first().copied())
             })?;
         Some((item, target + Vec3::Y * 0.5))
+    }
+
+    /// The nearest note out here not yet read, within a short walk, and
+    /// where to stand to read it: near enough for the eye
+    /// (`board::reading`), and clear of every anomaly's reach (one is
+    /// pinned at a snare's stake).
+    pub(super) fn note_to_read(&self, near: Vec2, map: &str) -> Option<(Vec2, Vec3)> {
+        let staged = self.staged.as_deref()?;
+        crate::raid::board::readable_here(&self.zone, map, staged)
+            .into_iter()
+            .filter(|(id, at)| {
+                !self.notes_read.0.contains(id) && at.xz().distance(near) < NOTE_WALK
+            })
+            .filter_map(|(_, at)| {
+                // Round the note, the side facing the bot first.
+                let toward = (near - at.xz()).normalize_or(Vec2::Y);
+                NOTE_STAND
+                    .into_iter()
+                    .flat_map(|r| {
+                        (0..16).map(move |k| {
+                            let turn =
+                                (k as f32 / 2.0).ceil() * if k % 2 == 0 { 1.0 } else { -1.0 };
+                            at.xz()
+                                + Vec2::from_angle(turn * std::f32::consts::TAU / 16.0)
+                                    .rotate(toward)
+                                    * r
+                        })
+                    })
+                    .find(|p| {
+                        let ground = self.zone.ground(p.x, p.y);
+                        let eye = Vec3::new(p.x, ground + STAND_EYE, p.y);
+                        eye.distance(at) < crate::raid::board::READ_REACH - 0.15
+                            && !self.anomalies.iter().any(|(a, agt)| {
+                                agt.translation().xz().distance(*p) < a.radius + 1.0
+                            })
+                            && self.room_to_stand(Vec3::new(p.x, ground, p.y))
+                    })
+                    .map(|p| (p, at))
+            })
+            .min_by(|a, b| a.0.distance(near).total_cmp(&b.0.distance(near)))
+    }
+
+    /// Whether a body fits standing at `feet`: nothing of the world's in
+    /// the way (the table the note's on, its chair) but the ground.
+    pub(super) fn room_to_stand(&self, feet: Vec3) -> bool {
+        use avian3d::prelude::*;
+        self.spatial
+            .shape_intersections(
+                &Collider::capsule(0.3, 1.0),
+                feet + Vec3::Y * 0.95,
+                Quat::IDENTITY,
+                &SpatialQueryFilter::from_mask([crate::world::Layer::World])
+                    .with_excluded_entities(self.terrain.iter()),
+            )
+            .is_empty()
     }
 
     pub(super) fn nearest_anomaly(&self, near: Vec2) -> Option<(&crate::anomaly::Anomaly, Vec3)> {
@@ -1349,10 +1509,14 @@ impl World2<'_, '_> {
             .min_by(|a, b| a.xz().distance(near).total_cmp(&b.xz().distance(near)))
     }
 
-    pub(super) fn anomaly_answered(&self) -> Option<bool> {
-        // (Read by the director each frame: any lift popping or snare
-        // discharging since the throw.)
-        Some(!self.anomaly_events.is_empty())
+    /// The anomaly at `at` went off (a lift popping, a snare
+    /// discharging), as the thrown thing would set it: read each frame
+    /// while the throw's moment waits. (Not the Surge's blooms.)
+    pub(super) fn anomaly_answered_at(&mut self, at: Vec3) -> bool {
+        self.anomaly_events.read().any(|e| {
+            e.what != crate::anomaly::AnomalyAct::Bloom
+                && e.at.xz().distance(at.xz()) < ANSWERED_NEAR
+        })
     }
 
     pub(super) fn bulky_near(&self, near: Vec2, tried: &[Entity]) -> Option<Entity> {
@@ -1506,6 +1670,18 @@ impl World2<'_, '_> {
 
     pub(super) fn alive(&self, player: Entity) -> bool {
         self.health.get(player).is_ok_and(|h| !h.down)
+    }
+
+    /// A walker's hit, as it lands (`health::take_hits`): health off, and
+    /// the bleed a hit that size starts.
+    pub(super) fn wound(&self, commands: &mut Commands, player: Entity) {
+        commands.entity(player).queue(|mut e: EntityWorldMut| {
+            if let Some(mut h) = e.get_mut::<crate::health::Health>() {
+                h.hp -= STAGED_WOUND;
+                h.since_hit = 0.0;
+                h.bleeding = (h.bleeding + STAGED_WOUND * 0.04).min(3.0);
+            }
+        });
     }
 
     pub(super) fn fall(&self, commands: &mut Commands, player: Entity) {
