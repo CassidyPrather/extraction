@@ -3415,7 +3415,11 @@ fn unvetted(world: &World2, here: Vec2, to: Vec2) -> bool {
 
 /// The first of `boxes` a straight walk `a`..`b` goes through (its
 /// centre), if any. A box an end is in is no bar: that's a way into it or
-/// out of it (a building's plan, a door's step).
+/// out of it (a building's plan, a door's step). Nor is a corner it cuts
+/// by less than a body's half-width: a body grazes it and goes on (a dash
+/// into cover by the lorry wreck on the Marrow farm, 0.2 m into its corner,
+/// put round the corner instead was three times as long, out in the
+/// walker's line, and the one-handed newcomer was shot).
 fn crossed(boxes: &[(Transform, Vec2)], a: Vec2, b: Vec2) -> Option<Vec2> {
     boxes.iter().find_map(|(xf, half)| {
         let inv = xf.compute_affine().inverse();
@@ -3424,7 +3428,8 @@ fn crossed(boxes: &[(Transform, Vec2)], a: Vec2, b: Vec2) -> Option<Vec2> {
         // (On its edge counts: a way out of a box, or a spot by its side.)
         let edge = *half + Vec2::splat(ON_EDGE);
         let inside = |l: Vec2| l.x.abs() < edge.x && l.y.abs() < edge.y;
-        (!inside(la) && !inside(lb) && segment_hits_box(la, lb, *half).is_some())
+        let deep = (*half - Vec2::splat(BODY)).max(Vec2::splat(0.01));
+        (!inside(la) && !inside(lb) && segment_hits_box(la, lb, deep).is_some())
             .then(|| xf.translation.xz())
     })
 }
@@ -7702,7 +7707,8 @@ mod indoor_tests {
     /// it is. The lost newcomer in the post office's cellar on Marrow, a
     /// step under its wall, had it put round the post office above, out
     /// to the cellar's wall (`Vec2(-19.5, 72.9)`), and stood there till the
-    /// walk timed out.
+    /// walk timed out. (That step only grazed the wall's corner, and now
+    /// isn't through it: here, one from there right under the post office.)
     #[test]
     fn a_leg_under_the_ground_is_not_routed_round_what_stands_on_it() {
         use super::{crossed, routed_leg, walk_boxes};
@@ -7720,7 +7726,8 @@ mod indoor_tests {
         let w = app.world_mut();
         let mut st: SystemState<super::World2> = SystemState::new(w);
         let world = st.get(w).unwrap();
-        let (at, to) = (Vec2::new(-17.550154, 67.138695), Vec2::new(-17.325, 66.125));
+        // (Under the post office from side to side, at the cellar's floor.)
+        let (at, to) = (Vec2::new(-20.2, 72.0), Vec2::new(-20.2, 55.0));
         let ground = world.zone.on_ground(at.x, at.y);
         let cellar = Vec3::new(at.x, 12.29, at.y);
         assert!(cellar.y < ground.y - 1.5, "the cellar under {ground}");
@@ -7730,5 +7737,33 @@ mod indoor_tests {
         );
         let way = routed_leg(&world, cellar, to, 0.4);
         assert!(way.is_none(), "in the cellar, put round above: {way:?}");
+    }
+
+    /// A dash that cuts a corner by less than a body's half-width isn't
+    /// through it: the lorry wreck on the Marrow farm (2.6 m by 7 m), and
+    /// the one-handed newcomer's four dashes into cover by it from the
+    /// walker, 0.2 to 0.25 m into a corner each. Put round the corner, the
+    /// first was 3.1 m made 9, in the walker's line. A step through the
+    /// wreck's middle, or a long walk through its side, still is.
+    #[test]
+    fn a_corner_grazed_is_not_crossed() {
+        use super::crossed;
+        let wreck = [(Transform::from_xyz(13.5, 0.0, 136.0), Vec2::new(1.3, 3.5))];
+        let v = |x: f32, y: f32| Vec2::new(x, y);
+        for (a, b) in [
+            (v(11.792, 138.691), v(13.601, 141.244)),
+            (v(11.734, 138.668), v(13.543, 141.221)),
+            (v(16.575, 139.228), v(13.082, 140.044)),
+            (v(12.611, 140.098), v(11.407, 135.479)),
+        ] {
+            assert_eq!(crossed(&wreck, a, b), None, "{a} -> {b}, grazing a corner");
+        }
+        for (a, b) in [
+            (v(10.0, 136.0), v(17.0, 136.0)),
+            (v(13.5, 128.0), v(13.5, 144.0)),
+            (v(11.0, 138.5), v(16.0, 138.5)),
+        ] {
+            assert!(crossed(&wreck, a, b).is_some(), "{a} -> {b}, through it");
+        }
     }
 }
