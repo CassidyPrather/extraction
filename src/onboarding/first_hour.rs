@@ -4595,10 +4595,16 @@ fn round_buildings(world: &World2, from: Vec2, to: Vec2) -> Vec<Vec2> {
 }
 
 /// What a walk goes round: the fence, the buildings
-/// (an underground site's kiosk among them) and the solids.
+/// (an underground site's kiosks among them, its exits' too) and the
+/// solids.
 fn walk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
     let mut boxes: Vec<(Transform, Vec2)> = fence_boxes(&world.zone);
     boxes.extend(world.entrances.shells.iter().map(|s| (s.xf, s.half)));
+    // A site's shell is its entrance kiosk's only: an exit's kiosk, tens
+    // of metres off, is walls up top as well (the pump wells' outfall
+    // stair: a leg from cover past it went in by its door and down the
+    // stair, and the lost newcomer was stuck under its cover).
+    boxes.extend(kiosk_boxes(world));
     boxes.extend(
         world
             .buildings
@@ -4616,6 +4622,28 @@ fn walk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
             .flat_map(|(b, xf)| part_boxes(&b.prefab, xf)),
     );
     boxes
+}
+
+/// Every underground site's kiosk not already a building's shell (its
+/// exits'), as a box to walk round.
+fn kiosk_boxes(world: &World2) -> Vec<(Transform, Vec2)> {
+    let half = Vec2::from(extraction_core::underground::SHELL_HALF);
+    extraction_core::underground::kiosks(&world.zone.map)
+        .into_iter()
+        .map(|(c, rot)| (Vec2::from(c), rot))
+        .filter(|(c, _)| {
+            world
+                .entrances
+                .shells
+                .iter()
+                .all(|s| s.xf.translation.xz().distance(*c) > 1.0)
+        })
+        .map(|(c, rot)| {
+            let xf = Transform::from_translation(world.zone.on_ground(c.x, c.y))
+                .with_rotation(Quat::from_rotation_y(-rot.to_radians()));
+            (xf, half)
+        })
+        .collect()
 }
 
 /// What of a prefab with a way through it can't be walked through, part by
