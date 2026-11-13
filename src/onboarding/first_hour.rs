@@ -4259,9 +4259,12 @@ const CREEP_PACE: f32 = crate::player::CROUCH_SPEED;
 const CREEP_SEEN_START: f32 = 4.0;
 /// How often a creep's way is checked for being out of view (m).
 const CREEP_STEP: f32 = 2.0;
-/// How many eyes a creep's way is checked from, along the hunter's way to
-/// where it last saw it (ends included, less one).
-const CREEP_WATCH: usize = 4;
+/// How often (m) along the hunter's way to where it last saw it a
+/// creep's way is checked from.
+const CREEP_WATCH: f32 = 5.0;
+/// A walker's walking pace (m/s): how far on its way it can be by the
+/// time the creep is at each point of it.
+const HUNTER_PACE: f32 = crate::robots::anim::SPEED;
 
 /// Hunted: a walker that has aimed at it, then again after losing it,
 /// inside [`HUNT_WINDOW`]. Its eye where it last aimed from.
@@ -4309,12 +4312,18 @@ fn creep_away(
 ) -> Option<Vec<Task>> {
     let from = hunter.xz();
     let start = here.distance(from);
-    // Where it will look from, on its way to where it last saw it.
+    // Where it may look from, on its way to where it last saw it: each
+    // eye with how far along that way it is.
     let up = hunter.y - world.zone.on_ground(from.x, from.y).y;
-    let watch: Vec<Vec3> = (0..=CREEP_WATCH)
+    let way = from.distance(seen);
+    let n = (way / CREEP_WATCH).ceil().max(1.0) as usize;
+    let watch: Vec<(f32, Vec3)> = (0..=n)
         .map(|k| {
-            let p = from.lerp(seen, k as f32 / CREEP_WATCH as f32);
-            world.zone.on_ground(p.x, p.y) + Vec3::Y * up
+            let p = from.lerp(seen, k as f32 / n as f32);
+            (
+                way * k as f32 / n as f32,
+                world.zone.on_ground(p.x, p.y) + Vec3::Y * up,
+            )
         })
         .collect();
     let feet = world.zone.on_ground(here.x, here.y) + Vec3::Y;
@@ -4333,7 +4342,7 @@ fn creep_away(
     };
     outs.into_iter()
         .filter_map(|(mut t, at, len)| {
-            let rest = creep_from(spatial, world, at, from, start, eyes, &watch)?;
+            let rest = creep_from(spatial, world, at, from, start, eyes, &watch, len)?;
             let total = len + walked_len(&rest, at);
             t.extend(rest);
             Some((t, total))
@@ -4351,7 +4360,8 @@ fn creep_from(
     from: Vec2,
     start: f32,
     eyes: &[Vec3],
-    watch: &[Vec3],
+    watch: &[(f32, Vec3)],
+    ahead: f32,
 ) -> Option<Vec<Task>> {
     let far_enough = start.max(CREEP_NEAR - CREEP_GAIN) + CREEP_GAIN;
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
@@ -4391,25 +4401,29 @@ fn creep_from(
                 _ => true,
             })
         })
-        .filter(|t| walk_hidden(spatial, world, here, t, watch))
+        .filter(|t| walk_hidden(spatial, world, here, t, watch, ahead))
         .min_by(|a, b| walked_len(a, here).total_cmp(&walked_len(b, here)))
 }
 
 /// Past its first [`CREEP_SEEN_START`] m, a walk's legs out of view of
-/// the walker hunting it from anywhere on its way from where it last
-/// aimed to where it last saw it (`watch`; a crouched head every
-/// [`CREEP_STEP`] m). (Hidden only at its end, or only from where the
-/// walker aimed, the lost newcomer's creep was glimpsed by it on its way
-/// to look: it followed, found it, and shot.)
+/// the walker hunting it, from anywhere on its way from where it last
+/// aimed to where it last saw it (`watch`, each eye with how far along)
+/// that it can have walked to by the time the creep is there (`ahead` m
+/// already crept; a crouched head every [`CREEP_STEP`] m). (Hidden only at
+/// its end, or only from where the walker aimed, the lost newcomer's creep
+/// was glimpsed by it on its way to look: it followed, found it, and shot.
+/// Checked from all of that way at once, the wanderer had no creep left
+/// from a walker 60 m off: it can't be near before the creep is gone.)
 fn walk_hidden(
     spatial: &avian3d::prelude::SpatialQuery,
     world: &World2,
     here: Vec2,
     tasks: &[Task],
-    watch: &[Vec3],
+    watch: &[(f32, Vec3)],
+    ahead: f32,
 ) -> bool {
     let mut at = here;
-    let mut gone = 0.0;
+    let mut gone = ahead;
     for t in tasks {
         let Task::WalkTo { to, .. } = t else { continue };
         let len = at.distance(*to);
@@ -4420,7 +4434,13 @@ fn walk_hidden(
                 continue;
             }
             let p = at.lerp(*to, k as f32 / steps as f32);
-            if !watch.iter().all(|e| line_hidden(spatial, world, p, *e)) {
+            // Only from as far on its way as it can have walked by then.
+            let by = d / CREEP_PACE * HUNTER_PACE;
+            if !watch
+                .iter()
+                .filter(|(along, _)| *along <= by)
+                .all(|(_, e)| line_hidden(spatial, world, p, *e))
+            {
                 return false;
             }
         }
