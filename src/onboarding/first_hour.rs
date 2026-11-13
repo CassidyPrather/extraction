@@ -1013,10 +1013,27 @@ pub(super) fn direct_raid(
         // (Not below, in a site: its way out is the director's, by the
         // site's plan; taken for a building's here, the walk out of the
         // shelter was planned again every frame and never walked.)
+        // (Nor a walk straight out through an opening its plan has, a bay
+        // without a leaf: creeping out of the rail shed's bay, away from a
+        // walker, the wanderer was turned round to its one door, on the
+        // walker's side, and found there.)
+        let straight_out = || {
+            let feet = root.translation + Vec3::Y;
+            plans
+                .iter()
+                .find(|pl| pl.contains(feet, 0.3))
+                .is_some_and(|pl| {
+                    let a = pl.to_local(feet).xz();
+                    let b = pl.to_local(world.zone.on_ground(to.x, to.y) + Vec3::Y).xz();
+                    pl.path(a, b)
+                        .is_some_and(|w| path_len(a, &w) <= a.distance(b) + STRAIGHT_OUT)
+                })
+        };
         if let Some(b) = inside(here)
             && inside(to) != Some(b)
             && !en.doors.iter().any(|d| d.building == b && exit_step(d))
             && below_in(&world.zone, &plans, root.translation).is_none()
+            && !straight_out()
         {
             let (out, _) = way_out_at(&world, &view, &plans, root.translation);
             if !out.is_empty() {
@@ -5887,6 +5904,10 @@ fn open_ways_out(
         })
         .collect()
 }
+
+/// A walk out of a building whose plan's way is no more than this longer
+/// than straight is a straight one out through an opening (m).
+const STRAIGHT_OUT: f32 = 0.5;
 
 /// How far past a building's walls a way out of it comes out (m).
 const OUT_PAST: f32 = 1.5;
