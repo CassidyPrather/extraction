@@ -1679,13 +1679,64 @@ pub(super) fn direct_raid(
                         tasks
                     }
                     None => match line {
-                        Some((tasks, how)) => {
-                            state.note(now, Kind::Learned, format!("broke its line: {how}"));
+                        Some((mut tasks, how)) => {
+                            // Hunted (the same walker on it again inside
+                            // 20 s): out of its line, then on away, low,
+                            // out of its hearing and its views. (Breaking
+                            // its line on the spot each time it came round,
+                            // the wanderer was found again inside 40 s, and
+                            // shot.)
+                            let end = tasks
+                                .iter()
+                                .rev()
+                                .find_map(|t| match t {
+                                    Task::WalkTo { to, .. } => Some(*to),
+                                    _ => None,
+                                })
+                                .unwrap_or(here);
+                            let crept = hunted(&state.aims, now).and_then(|eye| {
+                                let mut eyes_on: Vec<Vec3> = state
+                                    .seen_trail
+                                    .iter()
+                                    .map(|(at, up)| {
+                                        world.zone.on_ground(at.x, at.y) + Vec3::Y * *up
+                                    })
+                                    .collect();
+                                eyes_on.push(eye);
+                                creep_away(&spatial, &world, &plans, end, eye.xz(), &eyes_on)
+                            });
+                            if matches!(crept, Some(_))
+                                && matches!(tasks.last(), Some(Task::Wait(_)))
+                            {
+                                tasks.pop();
+                            }
                             let run = run_to_line(&tasks, here);
                             state.line_run_until = now + run;
-                            state.low_until = now + run + LINE_HELD;
                             if let Some(f) = fight.as_mut() {
                                 f.flee_until = now + run;
+                            }
+                            match crept {
+                                Some(creep) => {
+                                    let far = walked_len(&creep, end);
+                                    state.note(
+                                        now,
+                                        Kind::Learned,
+                                        format!(
+                                            "hunted: broke its line ({how}), then crept away out of its view and hearing, {far:.0} m"
+                                        ),
+                                    );
+                                    state.low_until = now + run + far / CREEP_PACE + 31.0;
+                                    tasks.extend(creep);
+                                    tasks.push(Task::Wait(29.0));
+                                }
+                                None => {
+                                    state.note(
+                                        now,
+                                        Kind::Learned,
+                                        format!("broke its line: {how}"),
+                                    );
+                                    state.low_until = now + run + LINE_HELD;
+                                }
                             }
                             tasks
                         }
