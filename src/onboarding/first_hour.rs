@@ -1729,7 +1729,7 @@ pub(super) fn direct_raid(
                 // failure.)
                 let hold = Task::Wait(29.0);
                 match seen
-                    .then(|| break_line_from(&spatial, &world, here, &looks, false))
+                    .then(|| break_line_from(&spatial, &world, here, &looks, true))
                     .flatten()
                 {
                     Some((mut tasks, how)) => {
