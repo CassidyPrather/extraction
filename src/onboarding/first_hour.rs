@@ -703,6 +703,8 @@ pub(super) struct Newcomer {
     pressed_until: f32,
     /// When it last came out from under cover for the truck.
     hurried_at: f32,
+    /// The truck waited for, and not pulled in yet (`truck_still_away`).
+    truck_away: bool,
     /// The driver's "bleeding badly ... Get to the truck": how many times
     /// it has been answered (once a raid), and the last answer's time with
     /// what the bleed gave it then (s to bleed out; None: it eases first).
@@ -1059,9 +1061,11 @@ pub(super) fn direct_raid(
     // walker from there): where the walker will come to look.
     // (From the first look, not the aim: the walker that found the
     // wanderer searched from where it first saw it, before it aimed.)
-    if let Some(eye) = the_walker(&world, &eyes, state.aimer, here, &on_me)
-        .and_then(|w| eye_of(&eyes, w))
-        .filter(|e| e.xz().distance(here) < SEEN_REACH)
+    if let Some(eye) = the_walker_of(&world, &eyes, state.aimer, here, &on_me, &|e| {
+        by_eye(&view, e)
+    })
+    .and_then(|w| eye_of(&eyes, w))
+    .filter(|e| e.xz().distance(here) < SEEN_REACH)
     {
         let head = if state.low_until > now {
             LOW_HEAD
@@ -1710,7 +1714,9 @@ pub(super) fn direct_raid(
                 // there: the first sighting as much as the last; held out
                 // of the last, the wanderer was found from the first), and
                 // the walker's eye where it can see it.
-                let walker = the_walker(&world, &eyes, state.aimer, here, &on_me);
+                let walker = the_walker_of(&world, &eyes, state.aimer, here, &on_me, &|e| {
+                    by_eye(&view, e)
+                });
                 let mut looks: Vec<Vec3> = state
                     .seen_trail
                     .iter()
@@ -2317,6 +2323,20 @@ pub(super) fn direct_raid(
         state.leg = Leg::Board;
         return;
     }
+
+    // Off to wait near the rendezvous, and the truck pulls in meanwhile:
+    // round to its back now (walked on to the spot to wait at, the lost
+    // one stood half a minute against the truck parked on it).
+    let away = world.truck_still_away(&raid);
+    if state.leg == Leg::Board && state.truck_away && !away {
+        state.note(now, Kind::Learned, "the truck pulled in: round to its back");
+        bot.tasks.clear();
+        bot.walk = None;
+        bot.tasks.extend(world.go_home(here, &raid, state.tries));
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
+    }
+    state.truck_away = away;
 
     let idle_only =
         bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
@@ -3807,20 +3827,45 @@ fn the_walker(
     here: Vec2,
     on_me: &impl Fn(Entity) -> bool,
 ) -> Option<Entity> {
-    aimer.filter(|e| eye_of(eyes, *e).is_some()).or_else(|| {
-        world
-            .robots
-            .iter()
-            .filter(|(_, r, _)| r.kind == crate::robots::RobotKind::Walker && !r.wrecked)
-            .filter_map(|(e, ..)| eye_of(eyes, e).map(|p| (e, p, on_me(e))))
-            .filter(|(_, p, mine)| *mine || p.xz().distance(here) < WALKER_NEAR)
-            .min_by(|a, b| {
-                (!a.2, a.1.xz().distance(here))
-                    .partial_cmp(&(!b.2, b.1.xz().distance(here)))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .map(|(e, ..)| e)
-    })
+    the_walker_of(world, eyes, aimer, here, on_me, &|_| true)
+}
+
+/// A walker that hunts by eye: not a hound, a crawler or a grappler, each
+/// a walker's legs under another mind (a hound goes for what moves: moved
+/// out of its sight when it came to look, the lost one was bitten down).
+fn by_eye(view: &RaidView, e: Entity) -> bool {
+    view.robots
+        .get(e)
+        .map_or(true, |c| !c.hound && !c.crawler && !c.grappler)
+}
+
+/// `the_walker`, of those `keep` keeps.
+fn the_walker_of(
+    world: &World2,
+    eyes: &Query<(&GlobalTransform, &crate::robots::Senses)>,
+    aimer: Option<Entity>,
+    here: Vec2,
+    on_me: &impl Fn(Entity) -> bool,
+    keep: &dyn Fn(Entity) -> bool,
+) -> Option<Entity> {
+    aimer
+        .filter(|e| keep(*e) && eye_of(eyes, *e).is_some())
+        .or_else(|| {
+            world
+                .robots
+                .iter()
+                .filter(|(e, r, _)| {
+                    r.kind == crate::robots::RobotKind::Walker && !r.wrecked && keep(*e)
+                })
+                .filter_map(|(e, ..)| eye_of(eyes, e).map(|p| (e, p, on_me(e))))
+                .filter(|(_, p, mine)| *mine || p.xz().distance(here) < WALKER_NEAR)
+                .min_by(|a, b| {
+                    (!a.2, a.1.xz().distance(here))
+                        .partial_cmp(&(!b.2, b.1.xz().distance(here)))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(e, ..)| e)
+        })
 }
 
 /// A standing head (m above the ground).
