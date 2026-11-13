@@ -1703,7 +1703,7 @@ pub(super) fn direct_raid(
                                     })
                                     .collect();
                                 eyes_on.push(eye);
-                                creep_away(&spatial, &world, &plans, end, eye.xz(), &eyes_on)
+                                creep_away(&spatial, &world, &plans, end, eye, &eyes_on)
                             });
                             if matches!(crept, Some(_))
                                 && matches!(tasks.last(), Some(Task::Wait(_)))
@@ -1822,7 +1822,7 @@ pub(super) fn direct_raid(
                 let crept = hunted(&state.aims, now).and_then(|from| {
                     let mut eyes_on = looks.clone();
                     eyes_on.push(from);
-                    creep_away(&spatial, &world, &plans, here, from.xz(), &eyes_on)
+                    creep_away(&spatial, &world, &plans, here, from, &eyes_on)
                 });
                 if let Some(mut tasks) = crept {
                     let run = walked_len(&tasks, here);
@@ -4300,9 +4300,10 @@ fn creep_away(
     world: &World2,
     plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
-    from: Vec2,
+    hunter: Vec3,
     eyes: &[Vec3],
 ) -> Option<Vec<Task>> {
+    let from = hunter.xz();
     let start = here.distance(from);
     let feet = world.zone.on_ground(here.x, here.y) + Vec3::Y;
     let outs: Vec<(Vec<Task>, Vec2, f32)> = match plans.iter().find(|pl| pl.contains(feet, 0.3)) {
@@ -4320,7 +4321,7 @@ fn creep_away(
     };
     outs.into_iter()
         .filter_map(|(mut t, at, len)| {
-            let rest = creep_from(spatial, world, at, from, start, eyes)?;
+            let rest = creep_from(spatial, world, at, hunter, start, eyes)?;
             let total = len + walked_len(&rest, at);
             t.extend(rest);
             Some((t, total))
@@ -4335,10 +4336,11 @@ fn creep_from(
     spatial: &avian3d::prelude::SpatialQuery,
     world: &World2,
     here: Vec2,
-    from: Vec2,
+    hunter: Vec3,
     start: f32,
     eyes: &[Vec3],
 ) -> Option<Vec<Task>> {
+    let from = hunter.xz();
     let far_enough = start.max(CREEP_NEAR - CREEP_GAIN) + CREEP_GAIN;
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
     let mut spots: Vec<Vec2> = [CREEP_NEAR, 23.0, 26.0, CREEP_FAR]
@@ -4377,12 +4379,13 @@ fn creep_from(
                 _ => true,
             })
         })
-        .filter(|t| walk_hidden(spatial, world, here, t, eyes))
+        .filter(|t| walk_hidden(spatial, world, here, t, hunter))
         .min_by(|a, b| walked_len(a, here).total_cmp(&walked_len(b, here)))
 }
 
 /// Past its first [`CREEP_SEEN_START`] m, a walk's legs out of view of
-/// every one of `eyes` (a crouched head every [`CREEP_STEP`] m). (Hidden
+/// the walker hunting it, from where it last aimed (`hunter`; a crouched
+/// head every [`CREEP_STEP`] m). (Hidden
 /// only at its end, the lost newcomer's creep crossed a walker's view on
 /// the way: it was glimpsed, looked for where it went, and found.)
 fn walk_hidden(
@@ -4390,7 +4393,7 @@ fn walk_hidden(
     world: &World2,
     here: Vec2,
     tasks: &[Task],
-    eyes: &[Vec3],
+    hunter: Vec3,
 ) -> bool {
     let mut at = here;
     let mut gone = 0.0;
@@ -4404,7 +4407,7 @@ fn walk_hidden(
                 continue;
             }
             let p = at.lerp(*to, k as f32 / steps as f32);
-            if !eyes.iter().all(|e| line_hidden(spatial, world, p, *e)) {
+            if !line_hidden(spatial, world, p, hunter) {
                 return false;
             }
         }
