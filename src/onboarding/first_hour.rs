@@ -3643,6 +3643,9 @@ fn crossed(boxes: &[(Transform, Vec2)], a: Vec2, b: Vec2) -> Option<Vec2> {
 /// indoor plan's, and walked as it is. (The lost newcomer, in the post
 /// office's cellar, had a leg under the post office's wall put round it
 /// above: out to the cellar's wall, and stuck there.)
+/// A leg ending this near the truck's middle is one up into it (m).
+const TRUCK_REACH: f32 = 4.5;
+
 fn routed_leg(world: &World2, feet: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let here = feet.xz();
     if within == crate::bot::SIDESTEP || within == ON_STAIRS || here.distance(to) < 0.5 {
@@ -3650,6 +3653,17 @@ fn routed_leg(world: &World2, feet: Vec3, to: Vec2, within: f32) -> Option<Vec<T
     }
     let below = feet.y < world.zone.on_ground(here.x, here.y).y - 1.5;
     if below || world.entrances.building_at(feet + Vec3::Y * 0.5).is_some() {
+        return None;
+    }
+    // Up into the truck: its steps are planned round it already (`go_home`).
+    // (Parked at the rail yard over a box of the yard's, the step up its
+    // ramp was sent round that box, and the lost one stood against the
+    // truck's side, 1.5 m from its bed, for the walk's half minute.)
+    if world
+        .trucks
+        .iter()
+        .any(|t| t.translation().xz().distance(to) < TRUCK_REACH)
+    {
         return None;
     }
     let boxes = walk_boxes(world);
@@ -4161,10 +4175,14 @@ fn wide_cover(world: &World2, here: Vec2, hidden: &dyn Fn(Vec2) -> bool) -> Opti
             (0..12).map(move |k| c + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 12.0) * r)
         });
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
+    // (Not pressed against something solid: a spot by a wreck's side the
+    // wanderer walked at, 0.9 m short, through two of the walk's timeouts.)
+    let boxes = walk_boxes(world);
     let mut spots: Vec<Vec2> = rings
         .chain(sides)
         .filter(|p| p.distance(here) <= WIDE_COVER)
         .filter(|p| nav.is_none_or(|n| n.walkable(p.to_array())))
+        .filter(|p| clear_of(&boxes, *p) == *p)
         .filter(|p| {
             world
                 .entrances
