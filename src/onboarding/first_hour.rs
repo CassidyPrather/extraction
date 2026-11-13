@@ -4234,10 +4234,16 @@ fn creep_away(
     let start = here.distance(from);
     let feet = world.zone.on_ground(here.x, here.y) + Vec3::Y;
     let outs: Vec<(Vec<Task>, Vec2, f32)> = match plans.iter().find(|pl| pl.contains(feet, 0.3)) {
-        Some(plan) => ways_out(plan, plan.to_local(feet).xz())
-            .into_iter()
-            .filter(|(_, o, _)| o.distance(from) >= start - 3.0)
-            .collect(),
+        Some(plan) => {
+            let mut outs: Vec<_> = open_ways_out(plan, plan.to_local(feet).xz())
+                .into_iter()
+                .filter(|(_, o, _)| o.distance(from) >= start - 3.0)
+                .collect();
+            // (The nearest few: each is a search out of doors.)
+            outs.sort_by(|a, b| a.2.total_cmp(&b.2));
+            outs.truncate(4);
+            outs
+        }
         None => vec![(vec![], here, 0.0)],
     };
     outs.into_iter()
@@ -5846,6 +5852,46 @@ fn ways_out(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Vec<(Vec<Tas
         })
         .collect()
 }
+
+/// Through `plan`'s rooms from `from` (its space) to just outside it all
+/// round, by any way out a body walks through (a door, or an open hall's
+/// bay: its plan's doors are only those with a leaf, and the rail shed's
+/// one door was on the walker's side): the walk, where it leaves the bot
+/// (world), and how far it is.
+fn open_ways_out(
+    plan: &crate::sim::indoor::BuildingPlan,
+    from: Vec2,
+) -> Vec<(Vec<Task>, Vec2, f32)> {
+    let edge = plan.half + Vec2::splat(OUT_PAST);
+    let along = |a: Vec2, b: Vec2| {
+        let n = (a.distance(b) / OUT_EVERY).ceil().max(1.0) as usize;
+        (0..n).map(move |k| a.lerp(b, k as f32 / n as f32))
+    };
+    let corners = [
+        Vec2::new(-edge.x, -edge.y),
+        Vec2::new(edge.x, -edge.y),
+        Vec2::new(edge.x, edge.y),
+        Vec2::new(-edge.x, edge.y),
+    ];
+    (0..4)
+        .flat_map(|k| along(corners[k], corners[(k + 1) % 4]))
+        .filter(|p| {
+            plan.grid
+                .cell_of(p.to_array())
+                .is_some_and(|(i, j)| plan.outside[j * plan.grid.n + i])
+        })
+        .filter_map(|p| {
+            let path = plan.path(from, p)?;
+            let len = path_len(from, &path);
+            Some((walk_out(plan, from, &path), plan.world2(p), len))
+        })
+        .collect()
+}
+
+/// How far past a building's walls a way out of it comes out (m).
+const OUT_PAST: f32 = 1.5;
+/// How far apart the spots round it are looked at (m).
+const OUT_EVERY: f32 = 2.0;
 
 /// The walk through `plan`'s rooms from `from` along `path` (its space).
 fn walk_out(plan: &crate::sim::indoor::BuildingPlan, from: Vec2, path: &[Vec2]) -> Vec<Task> {
