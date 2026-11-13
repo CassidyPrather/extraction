@@ -1696,17 +1696,19 @@ pub(super) fn direct_raid(
                                     _ => None,
                                 })
                                 .unwrap_or(here);
-                            let crept = hunted(&state.aims, now).and_then(|eye| {
-                                let mut eyes_on: Vec<Vec3> = state
-                                    .seen_trail
-                                    .iter()
-                                    .map(|(at, up)| {
-                                        world.zone.on_ground(at.x, at.y) + Vec3::Y * *up
-                                    })
-                                    .collect();
-                                eyes_on.push(eye);
-                                creep_away(&spatial, &world, &plans, end, eye.xz(), &eyes_on)
-                            });
+                            let crept = hunted(&state.aims, now)
+                                .filter(|_| under_walls(&world, &plans, root.translation + Vec3::Y))
+                                .and_then(|eye| {
+                                    let mut eyes_on: Vec<Vec3> = state
+                                        .seen_trail
+                                        .iter()
+                                        .map(|(at, up)| {
+                                            world.zone.on_ground(at.x, at.y) + Vec3::Y * *up
+                                        })
+                                        .collect();
+                                    eyes_on.push(eye);
+                                    creep_away(&spatial, &world, &plans, end, eye.xz(), &eyes_on)
+                                });
                             if matches!(crept, Some(_))
                                 && matches!(tasks.last(), Some(Task::Wait(_)))
                             {
@@ -1823,11 +1825,13 @@ pub(super) fn direct_raid(
                 // still there. (Held out of view near where it searched,
                 // the wanderer was walked back toward its search to the
                 // rail shed's far side, found there again and shot.)
-                let crept = hunted(&state.aims, now).and_then(|from| {
-                    let mut eyes_on = looks.clone();
-                    eyes_on.push(from);
-                    creep_away(&spatial, &world, &plans, here, from.xz(), &eyes_on)
-                });
+                let crept = hunted(&state.aims, now)
+                    .filter(|_| under_walls(&world, &plans, root.translation + Vec3::Y))
+                    .and_then(|from| {
+                        let mut eyes_on = looks.clone();
+                        eyes_on.push(from);
+                        creep_away(&spatial, &world, &plans, here, from.xz(), &eyes_on)
+                    });
                 if let Some(mut tasks) = crept {
                     let run = walked_len(&tasks, here);
                     state.note(
@@ -4323,6 +4327,23 @@ fn hunted(aims: &[(Entity, Vec3, f32)], now: f32) -> Option<Vec3> {
         .rev()
         .find(|(w, _, t)| now - t < HUNT_WINDOW && recent(*w) >= 2)
         .map(|(_, eye, _)| *eye)
+}
+
+/// Whether `feet` are inside walls: a building's (its plan or its shell)
+/// or a kiosk's (`kiosk_boxes`). Only from there does a hunted newcomer
+/// creep away ([`creep_away`]). Indoors, hunted, you're cornered, and the
+/// walls are a way out of its sight: out of the far side, unseen. In the
+/// open, moving draws the eye: low behind cover and still is the better
+/// answer, and the line break stands. (Crept away across open ground, the
+/// lost newcomer was glimpsed on the way, followed and shot; held where it
+/// froze, it was beside where the walker came to look, and shot.)
+fn under_walls(world: &World2, plans: &[crate::sim::indoor::BuildingPlan], feet: Vec3) -> bool {
+    plans.iter().any(|pl| pl.contains(feet, 0.3))
+        || world.entrances.building_at(feet - Vec3::Y * 0.5).is_some()
+        || kiosk_boxes(world).iter().any(|(xf, half)| {
+            let l = xf.compute_affine().inverse().transform_point3(feet);
+            l.x.abs() < half.x && l.z.abs() < half.y
+        })
 }
 
 /// The walker [`hunted`] names.
