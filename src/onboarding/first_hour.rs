@@ -4255,6 +4255,10 @@ const CREEP_FAR: f32 = 30.0;
 const CREEP_GAIN: f32 = 12.0;
 /// A crouched walk's pace (m/s), for timing one.
 const CREEP_PACE: f32 = crate::player::CROUCH_SPEED;
+/// How far a creep may go in view at its start (m): out from where it was.
+const CREEP_SEEN_START: f32 = 4.0;
+/// How often a creep's way is checked for being out of view (m).
+const CREEP_STEP: f32 = 2.0;
 
 /// Hunted: a walker that has aimed at it, then again after losing it,
 /// inside [`HUNT_WINDOW`]. Its eye where it last aimed from.
@@ -4373,7 +4377,41 @@ fn creep_from(
                 _ => true,
             })
         })
+        .filter(|t| walk_hidden(spatial, world, here, t, eyes))
         .min_by(|a, b| walked_len(a, here).total_cmp(&walked_len(b, here)))
+}
+
+/// Past its first [`CREEP_SEEN_START`] m, a walk's legs out of view of
+/// every one of `eyes` (a crouched head every [`CREEP_STEP`] m). (Hidden
+/// only at its end, the lost newcomer's creep crossed a walker's view on
+/// the way: it was glimpsed, looked for where it went, and found.)
+fn walk_hidden(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    here: Vec2,
+    tasks: &[Task],
+    eyes: &[Vec3],
+) -> bool {
+    let mut at = here;
+    let mut gone = 0.0;
+    for t in tasks {
+        let Task::WalkTo { to, .. } = t else { continue };
+        let len = at.distance(*to);
+        let steps = (len / CREEP_STEP).ceil().max(1.0) as usize;
+        for k in 1..=steps {
+            let d = gone + len * k as f32 / steps as f32;
+            if d < CREEP_SEEN_START {
+                continue;
+            }
+            let p = at.lerp(*to, k as f32 / steps as f32);
+            if !eyes.iter().all(|e| line_hidden(spatial, world, p, *e)) {
+                return false;
+            }
+        }
+        gone += len;
+        at = *to;
+    }
+    true
 }
 
 /// The nearest spot within [`WIDE_COVER`] where `hidden` holds, by the way
