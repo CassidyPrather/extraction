@@ -5621,15 +5621,13 @@ pub(super) struct Doorway {
     pub a: Vec2,
     pub b: Vec2,
     pub y: f32,
-    /// Its door (none in a test's).
-    pub door: Option<Entity>,
 }
 
 /// Every door's doorway, from its leaf's closed line in its building.
 fn doorways(view: &RaidView) -> Vec<Doorway> {
     view.leaves
         .iter()
-        .filter_map(|(door, leaf, parent)| {
+        .filter_map(|(_, leaf, parent)| {
             let (_, _, bxf) = view.buildings.get(parent.parent()).ok()?;
             let d = &leaf.0;
             let a = bxf.transform_point(d.hinge);
@@ -5639,7 +5637,6 @@ fn doorways(view: &RaidView) -> Vec<Doorway> {
                 a: a.xz(),
                 b: b.xz(),
                 y: a.y,
-                door: Some(door),
             })
         })
         .collect()
@@ -5740,29 +5737,11 @@ pub(super) fn square_through_doorways(
     for (i, t) in bot.tasks.iter().enumerate() {
         if let Task::WalkTo { to, .. } = t {
             let way = through_doorways(&doors, at, y, &[*to]);
-            let mut from = at;
             for stop in &way[..way.len() - 1] {
                 tasks.push_back(Task::WalkTo {
                     to: *stop,
                     within: DOOR_STOP_WITHIN,
                 });
-                // In front of its door: open it (one shut leaves nothing
-                // to walk through; a walk cut in from cover went to the
-                // lost newcomer's shut door at (-83, 51) and stood against
-                // it for the rest of the raid). Open, nothing to do.
-                if let Some(door) = doors
-                    .iter()
-                    .filter(|d| (d.y - y).abs() < 2.0)
-                    .find(|d| {
-                        let mid = (d.a + d.b) * 0.5;
-                        stop.distance(mid) < DOOR_SQUARE + 0.05
-                            && from.distance(mid) > stop.distance(mid)
-                    })
-                    .and_then(|d| d.door)
-                {
-                    tasks.push_back(Task::OpenDoor(door));
-                }
-                from = *stop;
                 changed = true;
                 changed_front |= i == 0;
             }
@@ -7460,7 +7439,6 @@ the Hollow.";
             a: Vec2::new(0.0, 0.0),
             b: Vec2::new(0.9, 0.0),
             y: 0.0,
-            door: None,
         };
         let doors = [d];
         let mid = Vec2::new(0.45, 0.0);
