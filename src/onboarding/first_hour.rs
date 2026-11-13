@@ -703,8 +703,6 @@ pub(super) struct Newcomer {
     pressed_until: f32,
     /// When it last came out from under cover for the truck.
     hurried_at: f32,
-    /// The truck waited for, and not pulled in yet (`truck_still_away`).
-    truck_away: bool,
     /// The driver's "bleeding badly ... Get to the truck": how many times
     /// it has been answered (once a raid), and the last answer's time with
     /// what the bleed gave it then (s to bleed out; None: it eases first).
@@ -2323,20 +2321,6 @@ pub(super) fn direct_raid(
         state.leg = Leg::Board;
         return;
     }
-
-    // Off to wait near the rendezvous, and the truck pulls in meanwhile:
-    // round to its back now (walked on to the spot to wait at, the lost
-    // one stood half a minute against the truck parked on it).
-    let away = world.truck_still_away(&raid);
-    if state.leg == Leg::Board && state.truck_away && !away {
-        state.note(now, Kind::Learned, "the truck pulled in: round to its back");
-        bot.tasks.clear();
-        bot.walk = None;
-        bot.tasks.extend(world.go_home(here, &raid, state.tries));
-        bot.tasks.push_back(Task::Wait(IDLE));
-        bot.restart();
-    }
-    state.truck_away = away;
 
     let idle_only =
         bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);

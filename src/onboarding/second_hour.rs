@@ -1731,34 +1731,9 @@ impl World2<'_, '_> {
 
     /// Home: radio called (by the Surge step); wait for the truck, walk to
     /// it, ring.
-    /// Where the truck waits for rendezvous `rv` (none for the short way
-    /// out, where it waits at base).
-    fn rendezvous(&self, rv: usize) -> Option<Vec2> {
-        (rv != crate::raid::SHORT_EXFIL)
-            .then(|| {
-                self.zone
-                    .map
-                    .markers_of(&MarkerKind::Rendezvous)
-                    .nth(rv)
-                    .map(|m| Vec2::from(m.at))
-            })
-            .flatten()
-    }
-
-    /// Waiting at a rendezvous, and not pulled in there yet (`go_home` has
-    /// the newcomer wait near the spot, not on it).
-    pub(super) fn truck_still_away(&self, raid: &Raid) -> bool {
-        let Phase::TruckWaiting { rv, .. } = raid.phase else {
-            return false;
-        };
-        let Some(truck) = self.trucks.iter().next() else {
-            return false;
-        };
-        self.rendezvous(rv)
-            .is_some_and(|p| truck.translation().xz().distance(p) > RV_NEAR)
-    }
-
     pub(super) fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
+        // The truck within this of the rendezvous is the one waiting there (m).
+        const RV_NEAR: f32 = 40.0;
         // How far off the rendezvous to wait for it to pull in (m).
         const RV_STANDOFF: f32 = 8.0;
         match raid.phase {
@@ -1784,7 +1759,15 @@ impl World2<'_, '_> {
                 // `truck::UNSEEN_FOR` after it says so: till then it's
                 // still at base. To the rendezvous, and wait for it (it
                 // went back to the base truck, 250 m, and was left there).
-                let waiting_at = self.rendezvous(rv);
+                let waiting_at = (rv != crate::raid::SHORT_EXFIL)
+                    .then(|| {
+                        self.zone
+                            .map
+                            .markers_of(&MarkerKind::Rendezvous)
+                            .nth(rv)
+                            .map(|m| Vec2::from(m.at))
+                    })
+                    .flatten();
                 if let Some(p) = waiting_at
                     && truck.translation().xz().distance(p) > RV_NEAR
                 {
@@ -2103,6 +2086,3 @@ impl World2<'_, '_> {
         })
     }
 }
-
-/// The truck within this of the rendezvous is the one waiting there (m).
-const RV_NEAR: f32 = 40.0;
