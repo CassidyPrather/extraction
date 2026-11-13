@@ -1754,7 +1754,7 @@ pub(super) fn direct_raid(
                 let crept = hunted(&state.aims, now).and_then(|from| {
                     let mut eyes_on = looks.clone();
                     eyes_on.push(from);
-                    creep_away(&spatial, &world, here, from.xz(), &eyes_on)
+                    creep_away(&spatial, &world, &plans, here, from.xz(), &eyes_on)
                 });
                 if let Some(mut tasks) = crept {
                     let run = walked_len(&tasks, here);
@@ -4218,16 +4218,49 @@ fn walked_len(tasks: &[Task], here: Vec2) -> f32 {
 /// Away from a walker hunting it (last seen aiming from `from`): a spot
 /// [`CREEP_NEAR`]..[`CREEP_FAR`] m off, [`CREEP_GAIN`] m further from it
 /// than here, out of view of every one of `eyes` (a crouched head), and a
-/// way there (`walk`, round buildings) that never closes on it. The
-/// shortest such walk, or None.
+/// way there (`walk`, round buildings) that never closes on it. In a
+/// building (`plans`), out first by a way that doesn't close on it either
+/// (in the rail shed, the wanderer's straight legs out were squared
+/// through its one door, on the walker's side, and it was found in it).
+/// The shortest such walk, or None.
 fn creep_away(
     spatial: &avian3d::prelude::SpatialQuery,
     world: &World2,
+    plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
     from: Vec2,
     eyes: &[Vec3],
 ) -> Option<Vec<Task>> {
     let start = here.distance(from);
+    let feet = world.zone.on_ground(here.x, here.y) + Vec3::Y;
+    let outs: Vec<(Vec<Task>, Vec2, f32)> = match plans.iter().find(|pl| pl.contains(feet, 0.3)) {
+        Some(plan) => ways_out(plan, plan.to_local(feet).xz())
+            .into_iter()
+            .filter(|(_, o, _)| o.distance(from) >= start - 3.0)
+            .collect(),
+        None => vec![(vec![], here, 0.0)],
+    };
+    outs.into_iter()
+        .filter_map(|(mut t, at, len)| {
+            let rest = creep_from(spatial, world, at, from, start, eyes)?;
+            let total = len + walked_len(&rest, at);
+            t.extend(rest);
+            Some((t, total))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(t, _)| t)
+}
+
+/// [`creep_away`]'s walk out of doors from `here`, for one that started
+/// `start` m from the walker.
+fn creep_from(
+    spatial: &avian3d::prelude::SpatialQuery,
+    world: &World2,
+    here: Vec2,
+    from: Vec2,
+    start: f32,
+    eyes: &[Vec3],
+) -> Option<Vec<Task>> {
     let far_enough = start.max(CREEP_NEAR - CREEP_GAIN) + CREEP_GAIN;
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
     let mut spots: Vec<Vec2> = [CREEP_NEAR, 23.0, 26.0, CREEP_FAR]
@@ -5793,12 +5826,29 @@ fn way_out_at(
 /// Through `plan`'s rooms from `from` (its space) to the nearest of its
 /// ways outside: the walk, and where it leaves the bot (world).
 fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Task>, Vec2)> {
-    let (o, path) = plan
-        .doors
+    ways_out(plan, from)
+        .into_iter()
+        .min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(t, o, _)| (t, o))
+}
+
+/// Through `plan`'s rooms from `from` (its space) to each of its ways
+/// outside that a path reaches: the walk, where it leaves the bot (world),
+/// and how far it is.
+fn ways_out(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Vec<(Vec<Task>, Vec2, f32)> {
+    plan.doors
         .iter()
         .filter_map(|d| d.outside)
-        .filter_map(|o| Some((o, plan.path(from, o)?)))
-        .min_by(|a, b| path_len(from, &a.1).total_cmp(&path_len(from, &b.1)))?;
+        .filter_map(|o| {
+            let path = plan.path(from, o)?;
+            let len = path_len(from, &path);
+            Some((walk_out(plan, from, &path), plan.world2(o), len))
+        })
+        .collect()
+}
+
+/// The walk through `plan`'s rooms from `from` along `path` (its space).
+fn walk_out(plan: &crate::sim::indoor::BuildingPlan, from: Vec2, path: &[Vec2]) -> Vec<Task> {
     let mut t = Vec::new();
     // Down a site, in legs short enough to walk inside a task's time (up
     // the shelter's kiosk stair, 10 m at a climb, the one leg timed out,
@@ -5818,7 +5868,7 @@ fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Ta
         t.push(Task::WalkTo { to, within: 0.4 });
         at = to;
     };
-    for stop in indoor_stops(plan, from, &path) {
+    for stop in indoor_stops(plan, from, path) {
         match stop {
             Stop::Door(door, before) => {
                 walk_to(&mut t, plan.world2(before));
@@ -5830,7 +5880,7 @@ fn out_of(plan: &crate::sim::indoor::BuildingPlan, from: Vec2) -> Option<(Vec<Ta
     if let Some(Task::WalkTo { within, .. }) = t.last_mut() {
         *within = 0.6;
     }
-    Some((t, plan.world2(o)))
+    t
 }
 
 /// A step back from `here` along `away` inside `plan`: 4 m if its floors
