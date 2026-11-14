@@ -2571,9 +2571,16 @@ pub(super) fn direct_raid(
                 Kind::Learned,
                 "camp: \"Your kit is in the crate in the truck\"",
             );
-            // Round to the tailgate and up into the bed.
-            tasks.extend(route(&world, &view, here, at_truck(0.0, 4.0)));
-            for (x, z) in [(0.05, 0.3), (-0.2, -0.6)] {
+            // Round to the tailgate and up into the bed: square behind the
+            // steps first, then up them on their line, as home is boarded
+            // (`go_home`). (From Sallow's camp, a metre off the line, it
+            // went at the steps aslant and stood at their side every raid.)
+            let mut way = route(&world, &view, here, at_truck(0.0, 4.0));
+            if let Some(Task::WalkTo { within, .. }) = way.last_mut() {
+                *within = 0.5;
+            }
+            tasks.extend(way);
+            for (x, z) in [(0.05, 2.9), (0.05, 0.3), (-0.2, -0.6)] {
                 tasks.push(Task::WalkTo {
                     to: at_truck(x, z),
                     within: 0.3,
