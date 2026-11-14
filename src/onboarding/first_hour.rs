@@ -5420,17 +5420,21 @@ fn round_sentries(sentries: &[Vec2], a: Vec2, b: Vec2, depth: u32) -> Vec<Vec2> 
     out
 }
 
+/// A `WalkTo` this tight is a stop the walk must make on its way, not a
+/// leg's end (m): round to a truck's back and up its ramp, a doorway's
+/// front and back.
+const PRECISE_STOP: f32 = 0.5;
+
 /// The walk queued after the first `n` tasks (the run of `WalkTo`s next),
 /// planned again from `from` by `route`: what it was set on before a
-/// sentry chirped walked back across its sweep.
+/// sentry chirped walked back across its sweep. Planned to the run's
+/// first precise stop ([`PRECISE_STOP`]) and kept as it was from there:
+/// to the end of the run, a walk round to a truck's back, up its ramp and
+/// on to the cord came out as a walk straight at the cord, into the
+/// truck's side (Marrow's rail yard, from the north: stood there till the
+/// walk's half minute ran out).
 fn reroute_after(bot: &mut Bot, n: usize, from: Vec2, world: &World2, view: &RaidView) {
-    let mut end = n;
-    let mut last = None;
-    while let Some(Task::WalkTo { to, within }) = bot.tasks.get(end) {
-        last = Some((*to, *within));
-        end += 1;
-    }
-    let Some((dest, within)) = last else {
+    let Some((end, dest, within)) = reroute_span(&bot.tasks, n) else {
         return;
     };
     let mut t = route(world, view, from, dest);
@@ -5441,6 +5445,22 @@ fn reroute_after(bot: &mut Bot, n: usize, from: Vec2, world: &World2, view: &Rai
     let rest: Vec<Task> = bot.tasks.drain(n..).skip(end - n).collect();
     bot.tasks.extend(t);
     bot.tasks.extend(rest);
+}
+
+/// The part of the walk queued after the first `n` tasks that
+/// [`reroute_after`] plans again: the end of it (as an index) and where
+/// and how near it ends, at the first precise stop or the run's end.
+fn reroute_span(tasks: &std::collections::VecDeque<Task>, n: usize) -> Option<(usize, Vec2, f32)> {
+    let mut end = n;
+    let mut last = None;
+    while let Some(Task::WalkTo { to, within }) = tasks.get(end) {
+        last = Some((*to, *within));
+        end += 1;
+        if *within <= PRECISE_STOP {
+            break;
+        }
+    }
+    last.map(|(to, within)| (end, to, within))
 }
 
 /// The way on foot outdoors from `from` to `to`, as `legs`: round the
@@ -6872,6 +6892,35 @@ pub(super) fn first_fight(
 
 #[cfg(test)]
 mod tests {
+    /// Planned again after a cut-in, a walk to a truck keeps its way
+    /// round to the back and up the ramp: only the way to the first
+    /// precise stop is planned again (to the run's end, it was a walk
+    /// straight at the bell cord, into the truck's side).
+    #[test]
+    fn a_rerouted_walk_keeps_its_precise_stops() {
+        let w = |x: f32, within: f32| Task::WalkTo {
+            to: Vec2::new(x, 0.0),
+            within,
+        };
+        let tasks: std::collections::VecDeque<Task> = vec![
+            Task::Wait(12.0),
+            w(10.0, 2.0),
+            w(20.0, 1.0),
+            w(24.0, 0.5),
+            w(25.0, 0.3),
+            w(27.0, 0.3),
+            Task::Wait(1.0),
+        ]
+        .into();
+        let (end, to, within) = reroute_span(&tasks, 1).expect("a walk");
+        assert_eq!((end, to, within), (4, Vec2::new(24.0, 0.0), 0.5));
+        // A walk of legs alone: to its end, as before.
+        let legs: std::collections::VecDeque<Task> =
+            vec![w(10.0, 2.0), w(20.0, 1.0), Task::Wait(1.0)].into();
+        assert_eq!(reroute_span(&legs, 0), Some((2, Vec2::new(20.0, 0.0), 1.0)));
+        assert_eq!(reroute_span(&legs, 2), None);
+    }
+
     use super::*;
 
     /// To the truck's steps from all round it (and from against its side,
