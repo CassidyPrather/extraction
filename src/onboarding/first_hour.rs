@@ -230,8 +230,20 @@ pub fn run_chain(chain: &Chain) -> AppExit {
         let mut ok = true;
         let stages = std::iter::once((YARD, vec![])).chain(
             // As the cord would open it: on to the next valley; then a raid
-            // a job.
-            (0..chain.raids).map(|_| (RAID, vec!["--map".to_string(), map.clone()])),
+            // a job, each in the valley the career's headed for, as the
+            // game opens itself again (a card in another valley: the route
+            // card turned, the bell rung, the next raid there).
+            (0..chain.raids).map(|i| {
+                let first = i == 0;
+                (
+                    RAID,
+                    if first {
+                        vec!["--map".to_string(), map.clone()]
+                    } else {
+                        vec![]
+                    },
+                )
+            }),
         );
         for (n, (stage, extra)) in stages.enumerate() {
             let mut cmd = std::process::Command::new(&exe);
@@ -451,6 +463,9 @@ enum Leg {
     Card,
     Out,
     Place,
+    /// The card's place is in another valley: the route card turned to
+    /// it, and the bell rung.
+    Route,
     Call,
     Rendezvous,
     Board,
@@ -829,6 +844,8 @@ pub(super) struct RaidView<'w, 's> {
     sentries: Local<'s, Vec<Vec2>>,
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
+    /// The truck's route card ("NEXT DRIVE ...").
+    route: Query<'w, 's, (Entity, &'static ScreenText), With<crate::raid::route::RouteCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     hatch: Res<'w, crate::raid::lev::Handovers>,
     /// What the driver's firsts said, filled (for the report: a line's
@@ -975,6 +992,10 @@ pub(super) fn direct_raid(
         if !state.showing.contains(l) {
             state.heard.push(l.clone());
             state.said_at = now;
+            // The bell rung for the card's valley: the driver's off there.
+            if state.leg == Leg::Done && l.contains("Long drive") {
+                state.note(now, Kind::Learned, DRIVEN);
+            }
         }
     }
     state.showing = showing;
@@ -2554,9 +2575,16 @@ pub(super) fn direct_raid(
                 Kind::Learned,
                 "camp: \"Your kit is in the crate in the truck\"",
             );
-            // Round to the tailgate and up into the bed.
-            tasks.extend(route(&world, &view, here, at_truck(0.0, 4.0)));
-            for (x, z) in [(0.05, 0.3), (-0.2, -0.6)] {
+            // Round to the tailgate and up into the bed: square behind the
+            // steps first, then up them on their line, as home is boarded
+            // (`go_home`). (From Sallow's camp, a metre off the line, it
+            // went at the steps aslant and stood at their side every raid.)
+            let mut way = route(&world, &view, here, at_truck(0.0, 4.0));
+            if let Some(Task::WalkTo { within, .. }) = way.last_mut() {
+                *within = 0.5;
+            }
+            tasks.extend(way);
+            for (x, z) in [(0.05, 2.9), (0.05, 0.3), (-0.2, -0.6)] {
                 tasks.push(Task::WalkTo {
                     to: at_truck(x, z),
                     within: 0.3,
@@ -2767,12 +2795,53 @@ pub(super) fn direct_raid(
                     }
                     state.leg = Leg::Place;
                 }
+                None if !view.route.is_empty() && raid.phase == Phase::AtBase => {
+                    // Maybe another valley's: the route card on the wall
+                    // says where the truck goes next.
+                    state.tries = 0;
+                    state.leg = Leg::Route;
+                }
                 None => {
                     state.note(
                         now,
                         Kind::Confused,
                         format!("no place I can find on the card: {text:?}"),
                     );
+                    state.leg = Leg::Call;
+                }
+            }
+        }
+        Leg::Route => {
+            let route = view.route.iter().next().map(|(e, c)| (e, c.text.clone()));
+            let bell = world
+                .pressables
+                .iter()
+                .find(|(_, p)| **p == crate::raid::truck::Pressable::BellPull)
+                .map(|(e, _)| e);
+            match (route, bell) {
+                (Some((_, shown)), Some(bell))
+                    if let Some(to) = card_drives_to(&state.card, &shown) =>
+                {
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        format!("the card's job is in {to}: turned the route card to it, and rang the bell"),
+                    );
+                    tasks.extend([Task::Press(bell), Task::Wait(3.0)]);
+                    state.leg = Leg::Done;
+                }
+                (Some((card, _)), Some(_)) if state.tries < 6 => {
+                    tasks.extend([Task::Press(card), Task::Wait(1.0)]);
+                    state.tries += 1;
+                }
+                _ => {
+                    let card = state.card.clone();
+                    state.note(
+                        now,
+                        Kind::Confused,
+                        format!("no place I can find on the card: {card:?}"),
+                    );
+                    state.tries = 0;
                     state.leg = Leg::Call;
                 }
             }
@@ -3090,8 +3159,22 @@ pub(super) fn direct_raid(
                 state.leg = Leg::Board;
             } else if raid.phase == Phase::AtBase {
                 // Still by the truck: out first (the radio's for the Zone).
-                let away = here + (here - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
-                tasks.extend(route(&world, &view, here, away));
+                // From the bed that's down over the tailgate, not through
+                // the canvas (Kettle, an out-of-valley card: it walked at
+                // the bed's side from 50 s on and never got off).
+                let from = if in_truck_bed(truck.as_ref(), here) {
+                    for (x, z) in [(0.05, 1.2), (0.0, 4.0)] {
+                        tasks.push(Task::WalkTo {
+                            to: at_truck(x, z),
+                            within: 0.5,
+                        });
+                    }
+                    at_truck(0.0, 4.0)
+                } else {
+                    here
+                };
+                let away = from + (from - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
+                tasks.extend(route(&world, &view, from, away));
             } else if let Phase::TruckCalled { .. } | Phase::TruckWaiting { .. } = raid.phase {
                 // What it said: a name, maybe a way.
                 // The truck's last word on where.
@@ -3508,6 +3591,10 @@ pub(super) fn direct_raid(
 
 /// The newcomer's table, in the bot's log: it passes when it got home and
 /// nothing hurt it unwarned, stalled it or killed it.
+/// What the newcomer notes when the driver takes the truck to the card's
+/// valley (the route card turned, the bell rung).
+const DRIVEN: &str = "the driver's off to the card's valley: a long drive";
+
 fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
     bot.log.push(format!("newcomer: {}", p.name));
     bot.log.push("| t | What | Moment |".into());
@@ -3534,9 +3621,16 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
             .into(),
     );
     let home = moments.iter().any(|(_, _, w)| w == "in the truck and away");
+    // Or off to the valley on the card, as the driver said: the raid's
+    // there (the next stage opens in it).
+    let driven = moments.iter().any(|(_, _, w)| w == DRIVEN);
     if home && bad == 0 {
         bot.passed += 1;
         bot.log.push(format!("PASS {} got home", p.name));
+    } else if driven && bad == 0 {
+        bot.passed += 1;
+        bot.log
+            .push(format!("PASS {} off to the card's valley", p.name));
     } else {
         bot.failed += 1;
         bot.log.push(format!(
@@ -5433,6 +5527,36 @@ const PRECISE_STOP: f32 = 0.5;
 /// on to the cord came out as a walk straight at the cord, into the
 /// truck's side (Marrow's rail yard, from the north: stood there till the
 /// walk's half minute ran out).
+/// The valley the route card shows (`route`: "NEXT DRIVE\nMARROW
+/// CREEK\n(ring the bell to go)"), when it's another valley's and the job
+/// card (`card`) says its job is in it ("... In Marrow Creek ...").
+fn card_drives_to(card: &str, route: &str) -> Option<String> {
+    let mut lines = route.lines();
+    let name = lines.nth(1)?.trim();
+    if name.is_empty() || !lines.any(|l| l.contains("ring the bell")) {
+        return None;
+    }
+    let card = card
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_uppercase();
+    card.contains(&format!("IN {name}"))
+        .then(|| name.to_owned())
+}
+
+/// Whether `at` stands over the truck (`truck`'s pose): in its bed, where
+/// the way off is the tailgate.
+fn in_truck_bed(truck: Option<&Transform>, at: Vec2) -> bool {
+    truck.is_some_and(|t| {
+        let l =
+            t.compute_affine()
+                .inverse()
+                .transform_point3(Vec3::new(at.x, t.translation.y, at.y));
+        l.x.abs() < 1.3 && (-5.0..2.5).contains(&l.z)
+    })
+}
+
 fn reroute_after(bot: &mut Bot, n: usize, from: Vec2, world: &World2, view: &RaidView) {
     let Some((end, dest, within)) = reroute_span(&bot.tasks, n) else {
         return;
@@ -6892,6 +7016,33 @@ pub(super) fn first_fight(
 
 #[cfg(test)]
 mod tests {
+    /// A job in another valley: the route card turned till it shows that
+    /// valley, then the bell (Kettle raid 3, the post counter "In Marrow
+    /// Creek": no place on Kettle's map, and it froze).
+    #[test]
+    fn a_card_in_another_valley_drives_there() {
+        let card = "CONTRACT: THE POST COUNTER -\n1 OF 1\nFor the Holm boy.\nThe post\noffice.\nIn Marrow\nCreek, by the bridge.";
+        let go = "NEXT DRIVE\nMARROW CREEK\n(ring the bell to go)";
+        assert_eq!(card_drives_to(card, go).as_deref(), Some("MARROW CREEK"));
+        let here = "NEXT DRIVE\nMARROW CREEK\n(here again)";
+        assert_eq!(card_drives_to(card, here), None, "already there");
+        let other = "NEXT DRIVE\nCINDER WORKS\n(ring the bell to go)";
+        assert_eq!(card_drives_to(card, other), None, "not the card's");
+        assert_eq!(card_drives_to("", go), None);
+    }
+
+    /// A body over the truck is in its bed (its way off is the tailgate).
+    #[test]
+    fn the_bed_is_told_from_the_ground_round_the_truck() {
+        let t = Transform::from_xyz(90.9, 14.3, 232.4).with_rotation(Quat::from_rotation_y(0.7));
+        let at = |x: f32, z: f32| t.transform_point(Vec3::new(x, 0.0, z)).xz();
+        assert!(in_truck_bed(Some(&t), at(0.3, 0.6)), "where a raid starts");
+        assert!(in_truck_bed(Some(&t), at(0.8, 1.5)), "by the crate");
+        assert!(!in_truck_bed(Some(&t), at(0.0, 4.0)), "behind the tailgate");
+        assert!(!in_truck_bed(Some(&t), at(2.5, 0.0)), "beside it");
+        assert!(!in_truck_bed(None, at(0.3, 0.6)), "no truck");
+    }
+
     /// Planned again after a cut-in, a walk to a truck keeps its way
     /// round to the back and up the ramp: only the way to the first
     /// precise stop is planned again (to the run's end, it was a walk
