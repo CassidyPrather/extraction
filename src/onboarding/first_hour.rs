@@ -3228,8 +3228,11 @@ pub(super) fn direct_raid(
                 };
                 state.rv = rv;
                 if let Some(rv) = rv {
-                    // Near it, to wait: not on the spot itself.
-                    let near = rv + (here - rv).normalize_or(Vec2::Y) * 8.0;
+                    // Near it, to wait: not on the spot itself. Drones
+                    // circling a place in sight of it: under the roof or
+                    // in the lee the rendezvous has for that.
+                    let near = wait_point(&world.zone.map, rv)
+                        .unwrap_or_else(|| rv + (here - rv).normalize_or(Vec2::Y) * 8.0);
                     tasks.extend(route(&world, &view, here, near));
                 }
                 state.leg = Leg::Rendezvous;
@@ -5158,6 +5161,16 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
         }
     }
     best
+}
+
+/// Where to wait for the truck at the rendezvous `rv` when the drones
+/// surveying a place nearby can see it: under the shelter's roof, or in its
+/// lee away from that place (`map_lint::wait_shelter`, as raiders wait).
+fn wait_point(map: &extraction_core::map::MapDef, rv: Vec2) -> Option<Vec2> {
+    let at = rv.to_array();
+    let (poi, _) = extraction_core::map_lint::watched_by(map, at)?;
+    let from = map.markers_of(&MarkerKind::Poi).find(|m| m.name == poi)?.at;
+    extraction_core::map_lint::wait_shelter(map, at, from).map(|(_, _, p)| Vec2::from_array(p))
 }
 
 /// This many drone locks in a row, cover taken each time and found again
@@ -7713,6 +7726,41 @@ the Hollow.";
     /// The shelter job (`--job shelter`) puts the card's thing down in
     /// Marrow's bunker, in a room the newcomer has to come up out of: a
     /// regression run for the walk home from below.
+    #[test]
+    fn it_waits_for_the_truck_where_raiders_do() {
+        // Every rendezvous a survey drone can see has its wait point (the
+        // same one `map_lint::wait_shelter` gives raiders); the rest none.
+        let mut watched = 0;
+        for name in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "rime_fell",
+            "sallow_reservoir",
+        ] {
+            let def = crate::world::load_map_def(name);
+            for m in def.markers_of(&MarkerKind::Rendezvous) {
+                let rv = Vec2::from(m.at);
+                let seen = extraction_core::map_lint::watched_by(&def, m.at).is_some();
+                let at = wait_point(&def, rv);
+                if !seen {
+                    assert_eq!(at, None, "{name} {}: unwatched", m.name);
+                    continue;
+                }
+                watched += 1;
+                let at =
+                    at.unwrap_or_else(|| panic!("{name} {}: watched, nowhere to wait", m.name));
+                assert!(
+                    at.distance(rv) <= extraction_core::map_lint::WAIT_COVER + 30.0,
+                    "{name} {}: waits {:.0} m off",
+                    m.name,
+                    at.distance(rv)
+                );
+            }
+        }
+        assert!(watched > 0, "no watched rendezvous in any valley");
+    }
+
     #[test]
     fn the_shelter_job_is_down_the_shelter() {
         let Some(Job::Bring { map, item, at, .. }) = shelter_job("marrow_creek") else {
