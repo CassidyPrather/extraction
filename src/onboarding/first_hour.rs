@@ -753,6 +753,9 @@ pub(super) struct Newcomer {
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
     relocks: Vec<f32>,
+    /// The lock tone, last heard: when, and where the drone was (looked
+    /// up at as it sounded).
+    lock_heard: Option<(f32, Vec2)>,
     /// Pinned by one: it calls from where it is, not the gate.
     pinned: bool,
     /// Racked at the driver's "one up the spout".
@@ -1092,7 +1095,9 @@ pub(super) fn direct_raid(
         bot.elapsed = bot.elapsed.min(1.0);
     }
     let mut again: Vec<First> = vec![];
-    if tells.locks.read().any(|ev| on_me(ev.drone)) {
+    if let Some(ev) = tells.locks.read().filter(|ev| on_me(ev.drone)).last() {
+        let at = world.robot_at(ev.drone).map_or(here, |p| p.xz());
+        state.lock_heard = Some((now, at));
         again.push(First::DroneLock);
     }
     if let Some(ev) = tells.aims.read().filter(|ev| on_me(ev.walker)).last() {
@@ -3228,14 +3233,13 @@ pub(super) fn direct_raid(
                 };
                 state.rv = rv;
                 if let Some(rv) = rv {
-                    // Near it, to wait: not on the spot itself. Drones
-                    // circling a place in sight of it, and the truck still
-                    // on its way: under the roof or in the lee the
-                    // rendezvous has for that. Already there: to it.
+                    // Near it, to wait: not on the spot itself. A drone's
+                    // lock heard lately, and the truck still on its way:
+                    // under the roof by it, or in its lee from where that
+                    // drone was. Already there: to it.
                     let coming = matches!(raid.phase, Phase::TruckCalled { .. });
-                    let near = coming
-                        .then(|| wait_point(&world.zone.map, rv))
-                        .flatten()
+                    let near = drone_lately(state.lock_heard, coming, now)
+                        .and_then(|drone| wait_point(&world.zone.map, rv, drone))
                         .unwrap_or_else(|| rv + (here - rv).normalize_or(Vec2::Y) * 8.0);
                     tasks.extend(route(&world, &view, here, near));
                 }
@@ -5167,14 +5171,21 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
     best
 }
 
-/// Where to wait for the truck at the rendezvous `rv` when the drones
-/// surveying a place nearby can see it: under the shelter's roof, or in its
-/// lee away from that place (`map_lint::wait_shelter`, as raiders wait).
-fn wait_point(map: &extraction_core::map::MapDef, rv: Vec2) -> Option<Vec2> {
-    let at = rv.to_array();
-    let (poi, _) = extraction_core::map_lint::watched_by(map, at)?;
-    let from = map.markers_of(&MarkerKind::Poi).find(|m| m.name == poi)?.at;
-    extraction_core::map_lint::wait_shelter(map, at, from).map(|(_, _, p)| Vec2::from_array(p))
+/// Where the drone was whose lock it heard lately (within `RELOCK_GAP`),
+/// with the truck still on its way: what it waits out of sight of. Only
+/// the tone and a look up at it, nothing of the drone's own mind.
+fn drone_lately(heard: Option<(f32, Vec2)>, coming: bool, now: f32) -> Option<Vec2> {
+    heard
+        .filter(|(t, _)| coming && now - t < RELOCK_GAP)
+        .map(|(_, at)| at)
+}
+
+/// Where to wait for the truck at the rendezvous `rv` with a drone about
+/// (its lock heard, from `drone`): under the shelter's roof, or in its lee
+/// away from the drone (`map_lint::wait_shelter`, as raiders wait).
+fn wait_point(map: &extraction_core::map::MapDef, rv: Vec2, drone: Vec2) -> Option<Vec2> {
+    extraction_core::map_lint::wait_shelter(map, rv.to_array(), drone.to_array())
+        .map(|(_, _, p)| Vec2::from_array(p))
 }
 
 /// This many drone locks in a row, cover taken each time and found again
@@ -7732,9 +7743,23 @@ the Hollow.";
     /// regression run for the walk home from below.
     #[test]
     fn it_waits_for_the_truck_where_raiders_do() {
-        // Every rendezvous a survey drone can see has its wait point (the
-        // same one `map_lint::wait_shelter` gives raiders); the rest none.
-        let mut watched = 0;
+        // Only a lock heard lately, with the truck still coming.
+        let d = Vec2::new(5.0, 40.0);
+        assert_eq!(drone_lately(Some((100.0, d)), true, 150.0), Some(d));
+        assert_eq!(
+            drone_lately(Some((100.0, d)), false, 150.0),
+            None,
+            "truck there"
+        );
+        assert_eq!(
+            drone_lately(Some((100.0, d)), true, 100.0 + RELOCK_GAP),
+            None,
+            "long ago"
+        );
+        assert_eq!(drone_lately(None, true, 150.0), None, "never heard");
+        // Every rendezvous with cover by it gives the point raiders wait at
+        // (`map_lint::wait_shelter`), near it.
+        let mut sheltered = 0;
         for name in [
             "marrow_creek",
             "kettle_pass",
@@ -7745,24 +7770,23 @@ the Hollow.";
             let def = crate::world::load_map_def(name);
             for m in def.markers_of(&MarkerKind::Rendezvous) {
                 let rv = Vec2::from(m.at);
-                let seen = extraction_core::map_lint::watched_by(&def, m.at).is_some();
-                let at = wait_point(&def, rv);
-                if !seen {
-                    assert_eq!(at, None, "{name} {}: unwatched", m.name);
-                    continue;
+                let drone = rv + Vec2::new(30.0, 30.0);
+                let want = extraction_core::map_lint::wait_shelter(&def, m.at, drone.to_array())
+                    .map(|(_, _, p)| Vec2::from_array(p));
+                let at = wait_point(&def, rv, drone);
+                assert_eq!(at, want, "{name} {}", m.name);
+                if let Some(at) = at {
+                    sheltered += 1;
+                    assert!(
+                        at.distance(rv) <= extraction_core::map_lint::WAIT_COVER + 30.0,
+                        "{name} {}: waits {:.0} m off",
+                        m.name,
+                        at.distance(rv)
+                    );
                 }
-                watched += 1;
-                let at =
-                    at.unwrap_or_else(|| panic!("{name} {}: watched, nowhere to wait", m.name));
-                assert!(
-                    at.distance(rv) <= extraction_core::map_lint::WAIT_COVER + 30.0,
-                    "{name} {}: waits {:.0} m off",
-                    m.name,
-                    at.distance(rv)
-                );
             }
         }
-        assert!(watched > 0, "no watched rendezvous in any valley");
+        assert!(sheltered > 0, "no rendezvous with cover in any valley");
     }
 
     #[test]
