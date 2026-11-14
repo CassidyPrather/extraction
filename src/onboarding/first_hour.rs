@@ -3229,9 +3229,13 @@ pub(super) fn direct_raid(
                 state.rv = rv;
                 if let Some(rv) = rv {
                     // Near it, to wait: not on the spot itself. Drones
-                    // circling a place in sight of it: under the roof or
-                    // in the lee the rendezvous has for that.
-                    let near = wait_point(&world.zone.map, rv)
+                    // circling a place in sight of it, and the truck still
+                    // on its way: under the roof or in the lee the
+                    // rendezvous has for that. Already there: to it.
+                    let coming = matches!(raid.phase, Phase::TruckCalled { .. });
+                    let near = coming
+                        .then(|| wait_point(&world.zone.map, rv))
+                        .flatten()
                         .unwrap_or_else(|| rv + (here - rv).normalize_or(Vec2::Y) * 8.0);
                     tasks.extend(route(&world, &view, here, near));
                 }
