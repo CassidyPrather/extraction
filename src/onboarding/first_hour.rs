@@ -992,6 +992,10 @@ pub(super) fn direct_raid(
         if !state.showing.contains(l) {
             state.heard.push(l.clone());
             state.said_at = now;
+            // The bell rung for the card's valley: the driver's off there.
+            if state.leg == Leg::Done && l.contains("Long drive") {
+                state.note(now, Kind::Learned, DRIVEN);
+            }
         }
     }
     state.showing = showing;
@@ -3587,6 +3591,10 @@ pub(super) fn direct_raid(
 
 /// The newcomer's table, in the bot's log: it passes when it got home and
 /// nothing hurt it unwarned, stalled it or killed it.
+/// What the newcomer notes when the driver takes the truck to the card's
+/// valley (the route card turned, the bell rung).
+const DRIVEN: &str = "the driver's off to the card's valley: a long drive";
+
 fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
     bot.log.push(format!("newcomer: {}", p.name));
     bot.log.push("| t | What | Moment |".into());
@@ -3613,9 +3621,16 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
             .into(),
     );
     let home = moments.iter().any(|(_, _, w)| w == "in the truck and away");
+    // Or off to the valley on the card, as the driver said: the raid's
+    // there (the next stage opens in it).
+    let driven = moments.iter().any(|(_, _, w)| w == DRIVEN);
     if home && bad == 0 {
         bot.passed += 1;
         bot.log.push(format!("PASS {} got home", p.name));
+    } else if driven && bad == 0 {
+        bot.passed += 1;
+        bot.log
+            .push(format!("PASS {} off to the card's valley", p.name));
     } else {
         bot.failed += 1;
         bot.log.push(format!(
