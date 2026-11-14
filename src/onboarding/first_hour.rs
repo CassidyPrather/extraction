@@ -869,6 +869,8 @@ pub(super) struct RaidView<'w, 's> {
             &'static ChildOf,
         ),
     >,
+    // Whether each leaf is shut, as it's seen to be.
+    door_state: Query<'w, 's, &'static crate::world::buildings::Door>,
     bags: Query<'w, 's, &'static Backpack>,
     entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
     robots: Query<'w, 's, crate::robots::subjects::Candidate>,
@@ -5808,19 +5810,30 @@ const DOOR_STOP_WITHIN: f32 = 0.3;
 const DOOR_NEAR: f32 = 6.0;
 
 /// A doorway as a walk meets it: its closed leaf's line, hinge to latch
-/// (on the map), and the height of its sill.
+/// (on the map), the height of its sill, its door, and whether that's
+/// shut.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Doorway {
     pub a: Vec2,
     pub b: Vec2,
     pub y: f32,
+    pub door: Entity,
+    pub shut: bool,
+}
+
+/// A stop on a walk through doorways: a place, or a shut door to open
+/// from where the walk stands.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum DoorStop {
+    At(Vec2),
+    Open(Entity),
 }
 
 /// Every door's doorway, from its leaf's closed line in its building.
 fn doorways(view: &RaidView) -> Vec<Doorway> {
     view.leaves
         .iter()
-        .filter_map(|(_, leaf, parent)| {
+        .filter_map(|(door, leaf, parent)| {
             let (_, _, bxf) = view.buildings.get(parent.parent()).ok()?;
             let d = &leaf.0;
             let a = bxf.transform_point(d.hinge);
@@ -5830,6 +5843,8 @@ fn doorways(view: &RaidView) -> Vec<Doorway> {
                 a: a.xz(),
                 b: b.xz(),
                 y: a.y,
+                door,
+                shut: view.door_state.get(door).is_ok_and(|s| !s.open),
             })
         })
         .collect()
@@ -5857,7 +5872,23 @@ fn crosses_at(p: Vec2, q: Vec2, a: Vec2, b: Vec2) -> Option<f32> {
 /// job 2: door 1465, 0.6 m from its hinge, 3,200 frames). The points
 /// after `from`, with the stops put in; a leg already on a doorway's line
 /// is left as it is.
+#[cfg(test)]
 pub(super) fn through_doorways(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec2]) -> Vec<Vec2> {
+    door_stops(doors, from, y, pts)
+        .into_iter()
+        .filter_map(|s| match s {
+            DoorStop::At(p) => Some(p),
+            DoorStop::Open(_) => None,
+        })
+        .collect()
+}
+
+/// `through_doorways`, with a shut door opened from in front of it before
+/// the walk goes through (the fallback way in to Sallow's pump station
+/// opened its front door only; lined up on the office's shut door, the
+/// newcomer walked into it for the rest of the raid, the gun oil on the
+/// table behind it).
+pub(super) fn door_stops(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec2]) -> Vec<DoorStop> {
     let mut out = Vec::with_capacity(pts.len());
     let mut at = from;
     for &p in pts {
@@ -5881,20 +5912,20 @@ pub(super) fn through_doorways(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec
             let on = |q: Vec2| (q - mid).dot(along).abs() < DOOR_ON_LINE;
             let side = (leg_from - mid).dot(n).signum();
             let (front, back) = (mid + n * side * DOOR_SQUARE, mid - n * side * DOOR_SQUARE);
-            if on(leg_from) && on(p) {
-                break;
-            }
             if !on(leg_from) {
-                out.push(front);
+                out.push(DoorStop::At(front));
+            }
+            if d.shut {
+                out.push(DoorStop::Open(d.door));
             }
             if !on(p) {
-                out.push(back);
+                out.push(DoorStop::At(back));
                 leg_from = back;
             } else {
                 break;
             }
         }
-        out.push(p);
+        out.push(DoorStop::At(p));
         at = p;
     }
     out
@@ -5929,12 +5960,23 @@ pub(super) fn square_through_doorways(
     let mut changed = false;
     for (i, t) in bot.tasks.iter().enumerate() {
         if let Task::WalkTo { to, .. } = t {
-            let way = through_doorways(&doors, at, y, &[*to]);
+            let way = door_stops(&doors, at, y, &[*to]);
             for stop in &way[..way.len() - 1] {
-                tasks.push_back(Task::WalkTo {
-                    to: *stop,
-                    within: DOOR_STOP_WITHIN,
-                });
+                let task = match *stop {
+                    DoorStop::At(p) => Task::WalkTo {
+                        to: p,
+                        within: DOOR_STOP_WITHIN,
+                    },
+                    // (Not again where it's opened just before: the
+                    // plan's own way through it, or this one's.)
+                    DoorStop::Open(d) => {
+                        if matches!(tasks.back(), Some(Task::OpenDoor(e)) if *e == d) {
+                            continue;
+                        }
+                        Task::OpenDoor(d)
+                    }
+                };
+                tasks.push_back(task);
                 changed = true;
                 changed_front |= i == 0;
             }
@@ -7688,6 +7730,8 @@ the Hollow.";
             a: Vec2::new(0.0, 0.0),
             b: Vec2::new(0.9, 0.0),
             y: 0.0,
+            door: Entity::PLACEHOLDER,
+            shut: false,
         };
         let doors = [d];
         let mid = Vec2::new(0.45, 0.0);
@@ -7751,6 +7795,48 @@ the Hollow.";
                 to
             ]
         );
+    }
+
+    /// A shut door on the walk's line is opened from in front of it before
+    /// the walk goes through (Sallow's pump station: lined up on the
+    /// office's shut door, the newcomer walked into it for the rest of the
+    /// raid). An open one, and one on a leg that never crosses it, as they
+    /// were.
+    #[test]
+    fn a_shut_door_on_the_way_is_opened_first() {
+        let door = Entity::from_raw_u32(7).unwrap();
+        let d = Doorway {
+            a: Vec2::new(0.0, 0.0),
+            b: Vec2::new(0.9, 0.0),
+            y: 0.0,
+            door,
+            shut: true,
+        };
+        let (from, to) = (Vec2::new(-0.3, 1.0), Vec2::new(1.2, -2.0));
+        assert_eq!(
+            door_stops(&[d], from, 0.0, &[to]),
+            vec![
+                DoorStop::At(Vec2::new(0.45, DOOR_SQUARE)),
+                DoorStop::Open(door),
+                DoorStop::At(Vec2::new(0.45, -DOOR_SQUARE)),
+                DoorStop::At(to),
+            ]
+        );
+        // Lined up already: opened where it stands, then through.
+        let (front, back) = (Vec2::new(0.45, 1.0), Vec2::new(0.45, -1.0));
+        assert_eq!(
+            door_stops(&[d], front, 0.0, &[back]),
+            vec![DoorStop::Open(door), DoorStop::At(back)]
+        );
+        // Open: through without stopping to press it.
+        let open = Doorway { shut: false, ..d };
+        assert_eq!(
+            door_stops(&[open], front, 0.0, &[back]),
+            vec![DoorStop::At(back)]
+        );
+        // Never across it: as it was.
+        let (e, w) = (Vec2::new(3.0, 1.0), Vec2::new(-3.0, 1.0));
+        assert_eq!(door_stops(&[d], e, 0.0, &[w]), vec![DoorStop::At(w)]);
     }
 
     /// A walk past a bridge's end, from off it to off it, keeps off its
