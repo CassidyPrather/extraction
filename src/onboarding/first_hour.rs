@@ -1653,7 +1653,14 @@ pub(super) fn direct_raid(
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < BED_RUN));
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN))
+                    // Pinned, and the truck there for it: no roof keeps
+                    // that drone off, and the truck won't wait (back under
+                    // its roof at each lock on the way out to it, the
+                    // wanderer watched the truck come and go, seed 20).
+                    || (state.pinned
+                        && matches!(state.leg, Leg::Rendezvous | Leg::Board)
+                        && matches!(raid.phase, Phase::TruckWaiting { .. }));
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
@@ -1671,6 +1678,11 @@ pub(super) fn direct_raid(
                         state.note(now, Kind::Learned, "pinned by a drone: home from here");
                         state.relocks.clear();
                         state.leg = Leg::Call;
+                        // Not on with the walk it had after: out from under
+                        // the roof that way, it was found again at each
+                        // try, pinned or not, till shot down (seed 20).
+                        bot.tasks.clear();
+                        bot.tasks.push_back(Task::Wait(IDLE));
                     }
                 }
                 // On its way home from it (pinned, or the truck waiting):
