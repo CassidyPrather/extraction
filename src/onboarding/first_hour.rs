@@ -1077,7 +1077,7 @@ pub(super) fn direct_raid(
     // Under a roof from a drone: the wait held while any drone still has it
     // (a flat 20 s, and it came out to be found again, every 25 s for ten
     // minutes, till the truck had gone), for two minutes at most.
-    if state.roof_try.is_some_and(|(_, _, t)| now - t < 120.0)
+    if state.roof_try.is_some_and(|(_, _, t)| now - t < ROOF_HOLD)
         && state.pressed_until <= now
         && matches!(bot.tasks.front(), Some(Task::Wait(_)))
         && view.entrances.as_deref().is_some_and(|en| {
@@ -1653,16 +1653,21 @@ pub(super) fn direct_raid(
                     && world
                         .trucks
                         .iter()
-                        .any(|t| t.translation().xz().distance(here) < BED_RUN));
+                        .any(|t| t.translation().xz().distance(here) < BED_RUN))
+                    // Pinned, and the truck there for it: no roof keeps
+                    // that drone off, and the truck won't wait (back under
+                    // its roof at each lock on the way out to it, the
+                    // wanderer watched the truck come and go, seed 20).
+                    || (state.pinned
+                        && matches!(state.leg, Leg::Rendezvous | Leg::Board)
+                        && matches!(raid.phase, Phase::TruckWaiting { .. }));
                 // Pinned: a drone that keeps finding it however often it
                 // goes under a roof (re-locked every 23 s for 20 minutes at
                 // the post office, worn down and killed, three raids). A
                 // person gives the job up: home from here, after this one
                 // in cover.
                 if overhead {
-                    state.relocks.retain(|t| now - t < PINNED_FOR);
-                    state.relocks.push(now);
-                    if state.relocks.len() >= PINNED_AFTER
+                    if found_again(&mut state.relocks, now) >= PINNED_AFTER
                         && !matches!(state.leg, Leg::Rendezvous | Leg::Board | Leg::Done)
                         && !state.pinned
                     {
@@ -1673,6 +1678,11 @@ pub(super) fn direct_raid(
                         state.note(now, Kind::Learned, "pinned by a drone: home from here");
                         state.relocks.clear();
                         state.leg = Leg::Call;
+                        // Not on with the walk it had after: out from under
+                        // the roof that way, it was found again at each
+                        // try, pinned or not, till shot down (seed 20).
+                        bot.tasks.clear();
+                        bot.tasks.push_back(Task::Wait(IDLE));
                     }
                 }
                 // On its way home from it (pinned, or the truck waiting):
@@ -5150,10 +5160,27 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
     best
 }
 
-/// This many drone locks within `PINNED_FOR` (s), cover taken each time:
-/// pinned, and home.
+/// This many drone locks in a row, cover taken each time and found again
+/// on coming out (each within `RELOCK_GAP` of the last): pinned, and home.
 const PINNED_AFTER: usize = 3;
-const PINNED_FOR: f32 = 120.0;
+/// Under a roof from a drone, held at most this long (s) while it still
+/// has it.
+const ROOF_HOLD: f32 = 120.0;
+/// A lock this soon after the last is the same drone finding it again (s):
+/// the hold under the roof, and a minute out from it. (Counted within two
+/// minutes flat, the wanderer was found every 148 s coming out from the
+/// same roof, held the full two minutes each time, for 25 minutes: never
+/// three inside the window, never pinned.)
+const RELOCK_GAP: f32 = ROOF_HOLD + 60.0;
+
+/// A drone's lock heard now: how many in a row it's been found by.
+fn found_again(relocks: &mut Vec<f32>, now: f32) -> usize {
+    if relocks.last().is_some_and(|t| now - t > RELOCK_GAP) {
+        relocks.clear();
+    }
+    relocks.push(now);
+    relocks.len()
+}
 
 /// A round in flight is this long at most (s): a shot this recent may be
 /// the one that hit, and warns of nothing.
@@ -7802,6 +7829,27 @@ the Hollow.";
     /// office's shut door, the newcomer walked into it for the rest of the
     /// raid). An open one, and one on a leg that never crosses it, as they
     /// were.
+    #[test]
+    fn a_drone_finding_it_at_each_roof_pins_it() {
+        // Found every 148 s coming out from under the same roof (seed 20's
+        // wanderer): the third is pinned.
+        let mut r = vec![];
+        assert_eq!(found_again(&mut r, 299.0), 1);
+        assert_eq!(found_again(&mut r, 448.0), 2);
+        assert_eq!(found_again(&mut r, 596.0), PINNED_AFTER);
+        // Every 23 s (the post office): pinned as soon.
+        let mut r = vec![];
+        for t in [0.0, 23.0] {
+            found_again(&mut r, t);
+        }
+        assert_eq!(found_again(&mut r, 46.0), PINNED_AFTER);
+        // Long apart: a new drone each time, not one that has it.
+        let mut r = vec![];
+        for t in [0.0, 300.0] {
+            assert_eq!(found_again(&mut r, t), 1);
+        }
+    }
+
     #[test]
     fn a_shut_door_on_the_way_is_opened_first() {
         let door = Entity::from_raw_u32(7).unwrap();
