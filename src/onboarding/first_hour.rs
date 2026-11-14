@@ -5872,6 +5872,7 @@ fn crosses_at(p: Vec2, q: Vec2, a: Vec2, b: Vec2) -> Option<f32> {
 /// job 2: door 1465, 0.6 m from its hinge, 3,200 frames). The points
 /// after `from`, with the stops put in; a leg already on a doorway's line
 /// is left as it is.
+#[cfg(test)]
 pub(super) fn through_doorways(doors: &[Doorway], from: Vec2, y: f32, pts: &[Vec2]) -> Vec<Vec2> {
     door_stops(doors, from, y, pts)
         .into_iter()
