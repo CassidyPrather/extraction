@@ -146,7 +146,7 @@ pub const CONTRACTS: &[Contract] = &[
         name: "The mast relay",
         giver: "Lev",
         says: &[
-            "I want to hear them talk. Put this up the radio mast for me.",
+            "I want to hear them talk. Put this up the radio mast for me. The mast's their ground: the first one there comes slow, alone, to look. Then the rest know.",
             "",
         ],
         offered: Offered::Tier { tier: 1, at: 0 },
@@ -197,7 +197,7 @@ pub const CONTRACTS: &[Contract] = &[
         name: "Hajek's tin",
         giver: "Vera Hajkova",
         says: &[
-            "His sister wants what he kept. Mirek, at the charcoal hut. He stayed.",
+            "His sister wants what he kept. Mirek, at the charcoal hut. He stayed. The hut's their ground: the first one comes slow, alone, to look. Then the rest know.",
             "If he walked down, he'd have passed the weir. Look in there.",
         ],
         offered: Offered::Tier { tier: 2, at: 0 },
@@ -227,7 +227,7 @@ pub const CONTRACTS: &[Contract] = &[
         giver: "the town paper",
         says: &[
             "A man from the town paper. Nobody believes it out there. He wants one, side on. Take the camera.",
-            "",
+            "The works are their ground: the first one there comes slow, alone, to look. Then the rest know.",
         ],
         offered: Offered::Tier { tier: 3, at: 0 },
         raided_all: false,
@@ -252,7 +252,7 @@ pub const CONTRACTS: &[Contract] = &[
         name: "The overflow",
         giver: "Lev",
         says: &[
-            "The depot's intake goes somewhere past the gate. Put a relay on it.",
+            "The depot's intake goes somewhere past the gate. Put a relay on it. The Gate's their ground, where they come from. Don't count on being alone there.",
             "",
         ],
         offered: Offered::Deep { trust: 3 },
@@ -310,7 +310,7 @@ pub const CONTRACTS: &[Contract] = &[
         name: "Up the fell",
         giver: "Lev",
         says: &[
-            "There's a weather station on top of Rime Fell. Put a relay in it. Take the stone: it's cold up there, and colder in the frost.",
+            "There's a weather station on top of Rime Fell. Put a relay in it. Take the stone: it's cold up there, and colder in the frost. The top's their ground: the first one comes slow, alone, to look. Then the rest know.",
         ],
         offered: Offered::Deep { trust: 6 },
         raided_all: false,
@@ -331,7 +331,10 @@ pub const CONTRACTS: &[Contract] = &[
         id: "the_heavy",
         name: "The heavy",
         giver: "the town paper",
-        says: &["Now he wants the big one. Get close. Get home.", ""],
+        says: &[
+            "Now he wants the big one. Get close. Get home.",
+            "The wood's their ground: the first one there comes slow, alone, to look. Then the rest know.",
+        ],
         offered: Offered::Deep { trust: 5 },
         raided_all: false,
         after: &[],
@@ -626,6 +629,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A step that sends you onto their ground (a region of danger 2 and
+    /// more, the game's `robots::pressure::HOT_DANGER`) says so on its card,
+    /// in the driver's words: told, not hidden (coordinator's ruling). What
+    /// it says is what the machines do there (`robots::pressure::
+    /// job_hot_place`): the first one to find you there is slow and alone,
+    /// come to look; after it, the place is as hot as any.
+    #[test]
+    fn a_step_onto_their_ground_says_so() {
+        let v = valleys();
+        let vs: Vec<Valley> = v.iter().map(|(id, map)| Valley { id, map }).collect();
+        let mut hot = vec![];
+        for c in CONTRACTS {
+            for (i, s) in c.steps.iter().enumerate() {
+                let Some((map, at)) = step_job(s, &vs)
+                    .as_ref()
+                    .and_then(|j| j.mark().map(|(m, at)| (m.to_string(), at)))
+                else {
+                    continue;
+                };
+                let valley = &v.iter().find(|(id, _)| *id == map).unwrap().1;
+                if valley.region_at(at).is_some_and(|r| r.danger >= 2) {
+                    hot.push(c.id);
+                    assert!(
+                        c.says[i].contains("their ground"),
+                        "{} step {i}: onto their ground, and its card doesn't say: {:?}",
+                        c.id,
+                        c.says[i]
+                    );
+                }
+            }
+        }
+        // (The five first jobs that go there on purpose, and the overflow's
+        // relay at the Gate: where they're sent out from, and stand, so its
+        // line promises no slow first one.)
+        hot.sort();
+        assert_eq!(
+            hot,
+            [
+                "hajek_tin",
+                "mast_relay",
+                "the_heavy",
+                "the_overflow",
+                "up_the_fell",
+                "walker_portrait"
+            ],
+            "the jobs onto their ground"
+        );
     }
 
     /// The deep contracts' things are down their sites, in the rooms the
