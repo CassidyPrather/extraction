@@ -252,7 +252,7 @@ pub const CONTRACTS: &[Contract] = &[
         name: "The overflow",
         giver: "Lev",
         says: &[
-            "The depot's intake goes somewhere past the gate. Put a relay on it. The Gate's their ground: the first one comes slow, alone, to look. Then the rest know.",
+            "The depot's intake goes somewhere past the gate. Put a relay on it. The Gate's their ground, where they come from. Don't count on being alone there.",
             "",
         ],
         offered: Offered::Deep { trust: 3 },
@@ -663,7 +663,8 @@ mod tests {
             }
         }
         // (The five first jobs that go there on purpose, and the overflow's
-        // relay at the Gate.)
+        // relay at the Gate: where they're sent out from, and stand, so its
+        // line promises no slow first one.)
         hot.sort();
         assert_eq!(
             hot,
