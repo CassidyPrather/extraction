@@ -1224,6 +1224,10 @@ pub(super) struct World2<'w, 's> {
             &'static crate::robots::Brain,
         ),
     >,
+    /// Laid mines: each sits in a ring of dark turned earth, and blinks
+    /// red within `minelayer::WAKE` of you.
+    pub(super) mines:
+        Query<'w, 's, &'static GlobalTransform, With<crate::robots::minelayer::LaidMine>>,
     /// Broken walkers (`robots::broken`), and whether each is wrecked.
     pub(super) broken:
         Query<'w, 's, &'static crate::robots::Robot, With<crate::robots::broken::Broken>>,
