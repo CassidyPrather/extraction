@@ -7316,6 +7316,9 @@ fn fetch_target(world: &World2, zone: &crate::world::Zone, item: &str) -> Option
         .min_by(|a, b| a.distance(drop).total_cmp(&b.distance(drop)))
 }
 
+/// (The card's place first: a career resumed on a later job meets it on
+/// that job's way, not on the first job's to the Old farm. The first
+/// job's card names the Old farm, so a fresh career's is where it was.)
 fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) {
     let drop = zone
         .map
@@ -7323,13 +7326,14 @@ fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) 
         .iter()
         .find(|m| m.kind == MarkerKind::Insertion)
         .map_or(Vec2::ZERO, |m| Vec2::from(m.at));
-    let farm = zone
-        .map
-        .markers
-        .iter()
-        .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
-        .map(|m| Vec2::from(m.at))
-        .or(card)
+    let farm = card
+        .or_else(|| {
+            zone.map
+                .markers
+                .iter()
+                .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
+                .map(|m| Vec2::from(m.at))
+        })
         .unwrap_or(drop + Vec2::new(100.0, -100.0));
     let at = drop.lerp(farm, 0.45);
     (at, (farm - drop).normalize_or(Vec2::NEG_Y))
