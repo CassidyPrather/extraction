@@ -2622,7 +2622,16 @@ pub(super) fn direct_raid(
                 .iter()
                 .rev()
                 .filter(|l| l.contains("That's the job") || l.starts_with("The job: "))
-                .find_map(|l| place_on_card(l, &world.zone));
+                .find_map(|l| place_on_card(l, &world.zone))
+                // Or nothing said yet: the card it read before it stopped
+                // (on the truck's wall all the while), its place in this
+                // valley.
+                .or_else(|| {
+                    let job = view.progression.as_ref()?.0.job.as_ref()?;
+                    let (map, at) = job.mark()?;
+                    (map == opts.map).then_some(())?;
+                    Some((job.place_name()?, Vec2::from(at)))
+                });
             match told {
                 Some((name, at)) if !called => {
                     state.note(
@@ -2638,8 +2647,6 @@ pub(super) fn direct_raid(
                     state.goal = Some((name, at));
                     state.leg = Leg::Out;
                 }
-                // (A moment for the driver to say it.)
-                None if !called && now < RESUME_TOLD => tasks.push(Task::Wait(1.0)),
                 _ => {
                     state.note(
                         now,
@@ -5445,10 +5452,6 @@ fn radio_at_feet(
 /// A radio not on `player` to go and get: the nearest in its own remains,
 /// else in anyone's, else lying loose; not one gone for `RADIO_TRIES`
 /// times already (`tried`) and not got. Where it is, to go to.
-/// How long a resumed raid waits for the driver to say where the job is
-/// before it goes home without it (s).
-const RESUME_TOLD: f32 = 10.0;
-
 /// How long clear of a fight before it stops for a dressing by its way (s).
 const CLEAR_TO_PICK: f32 = 15.0;
 /// How far off its way a dressing's worth the steps (m).
