@@ -728,6 +728,9 @@ pub(super) struct Newcomer {
     /// The job dropped for it (still out on it when told): home unpaid,
     /// as it should be.
     bled_off: bool,
+    /// Home with the job left undone, and why ("at the resume", "for the
+    /// Surge"): the card's right not to pay.
+    left_job: Option<&'static str>,
     /// The walker that last aimed at it (its eye is what to break line with).
     aimer: Option<Entity>,
     /// When it last looked whether it's still out of that walker's line.
@@ -2531,6 +2534,7 @@ pub(super) fn direct_raid(
     );
     if hurry == Some(Hurry::Surge) {
         state.note(now, Kind::Learned, "the Surge is close: home now");
+        state.left_job.get_or_insert("for the Surge");
         state.leg = Leg::Call;
         state.pressed_until = now + TIME_SHORT_FOR;
         state.roof_try = None;
@@ -2603,17 +2607,56 @@ pub(super) fn direct_raid(
         // ended mid-raid): not at the camp, and no kit in the crate. Home
         // from here (it went to the crate for a radio that was out there
         // with it, and told no one).
+        // Not called yet, and the driver (or, with no radio, the wrist's
+        // own note: "The job: ...") says where the job is ("The weir
+        // cottage's north-west, 190 m. That's the job."): on with it, as
+        // anyone back where they were would be (home without it, the card
+        // wouldn't pay, and it stood pressing it: save13, lost, Kettle).
         Leg::Camp if !matches!(raid.phase, Phase::AtBase | Phase::Down { .. }) => {
-            state.note(
-                now,
-                Kind::Learned,
-                "back where it was out there: home from here",
+            let called = matches!(
+                raid.phase,
+                Phase::TruckWaiting { .. } | Phase::TruckCalled { .. }
             );
-            state.leg = match raid.phase {
-                Phase::TruckWaiting { .. } => Leg::Rendezvous,
-                Phase::TruckCalled { .. } => Leg::Rendezvous,
-                _ => Leg::Call,
-            };
+            let told = state
+                .heard
+                .iter()
+                .rev()
+                .filter(|l| l.contains("That's the job") || l.starts_with("The job: "))
+                .find_map(|l| place_on_card(l, &world.zone))
+                // Or nothing said yet: the card it read before it stopped
+                // (on the truck's wall all the while), its place in this
+                // valley.
+                .or_else(|| {
+                    let job = view.progression.as_ref()?.0.job.as_ref()?;
+                    let (map, at) = job.mark()?;
+                    (map == opts.map).then_some(())?;
+                    Some((job.place_name()?, Vec2::from(at)))
+                });
+            match told {
+                Some((name, at)) if !called => {
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        format!("back where it was out there: on with the job, {name}"),
+                    );
+                    state.errand = view
+                        .progression
+                        .as_ref()
+                        .and_then(|p| p.0.job.as_ref())
+                        .and_then(|j| errand_here(j, &opts.map));
+                    state.goal = Some((name, at));
+                    state.leg = Leg::Out;
+                }
+                _ => {
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        "back where it was out there: home from here",
+                    );
+                    state.left_job = Some("at the resume");
+                    state.leg = if called { Leg::Rendezvous } else { Leg::Call };
+                }
+            }
         }
         Leg::Camp => {
             if p.reads {
@@ -3482,6 +3525,17 @@ pub(super) fn direct_raid(
                     now,
                     Kind::Learned,
                     "home, the job dropped for the bleed: unpaid, as it should be",
+                );
+                state.leg = Leg::Done;
+            } else if state.tries >= 3
+                && let Some(why) = state.left_job
+            {
+                // Home with the job left (back out there with the truck on
+                // its way; the Surge close): the card's right not to pay.
+                state.note(
+                    now,
+                    Kind::Learned,
+                    format!("home, the job left {why}: unpaid, as it should be"),
                 );
                 state.leg = Leg::Done;
             } else if state.tries >= 3 {
