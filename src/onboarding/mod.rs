@@ -31,6 +31,7 @@ pub mod first_hour;
 pub mod firsts;
 pub mod hints;
 pub mod second_hour;
+pub mod steps;
 pub mod visuals;
 
 use avian3d::prelude::*;
