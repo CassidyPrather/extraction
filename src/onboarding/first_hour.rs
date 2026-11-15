@@ -1729,18 +1729,48 @@ pub(super) fn direct_raid(
                                     _ => None,
                                 })
                                 .unwrap_or(here);
+                            // Or broken the way round, in the open: the
+                            // walker comes to look where it last saw it, so
+                            // on, low, out of its sight every metre (on
+                            // reaching cover there, the wanderer was seen
+                            // again twelve times in a minute, the walker
+                            // round the shed after it).
+                            let routed = how == ROUTED_HOW;
                             let crept = hunted(&state.aims, now)
                                 .filter(|_| under_walls(&world, &plans, root.translation + Vec3::Y))
-                                .and_then(|eye| {
-                                    let mut eyes_on: Vec<Vec3> = state
-                                        .seen_trail
-                                        .iter()
-                                        .map(|(at, up)| {
-                                            world.zone.on_ground(at.x, at.y) + Vec3::Y * *up
+                                .or_else(|| {
+                                    routed
+                                        .then(|| {
+                                            walker_eye(&world, &eyes, state.aimer, here, &on_me)
                                         })
-                                        .collect();
+                                        .flatten()
+                                })
+                                .and_then(|eye| {
+                                    // (After a routed break: out of where
+                                    // it last saw it, every metre; the
+                                    // trail of where it was seen before is
+                                    // the hunt's.)
+                                    let mut eyes_on: Vec<Vec3> = if routed {
+                                        vec![]
+                                    } else {
+                                        state
+                                            .seen_trail
+                                            .iter()
+                                            .map(|(at, up)| {
+                                                world.zone.on_ground(at.x, at.y) + Vec3::Y * *up
+                                            })
+                                            .collect()
+                                    };
                                     eyes_on.push(eye);
-                                    creep_away(&spatial, &world, &plans, end, eye.xz(), &eyes_on)
+                                    creep_away(
+                                        &spatial,
+                                        &world,
+                                        &plans,
+                                        end,
+                                        eye.xz(),
+                                        &eyes_on,
+                                        routed,
+                                    )
                                 });
                             if matches!(crept, Some(_))
                                 && matches!(tasks.last(), Some(Task::Wait(_)))
@@ -1759,7 +1789,8 @@ pub(super) fn direct_raid(
                                         now,
                                         Kind::Learned,
                                         format!(
-                                            "hunted: broke its line ({how}), then crept away out of its view and hearing, {far:.0} m"
+                                            "{}broke its line ({how}), then crept away out of its view and hearing, {far:.0} m",
+                                            if routed { "" } else { "hunted: " }
                                         ),
                                     );
                                     state.low_until = now + run + far / CREEP_PACE + 31.0;
@@ -1863,7 +1894,7 @@ pub(super) fn direct_raid(
                     .and_then(|from| {
                         let mut eyes_on = looks.clone();
                         eyes_on.push(from);
-                        creep_away(&spatial, &world, &plans, here, from.xz(), &eyes_on)
+                        creep_away(&spatial, &world, &plans, here, from.xz(), &eyes_on, false)
                     });
                 if let Some(mut tasks) = crept {
                     let run = walked_len(&tasks, here);
@@ -4396,10 +4427,10 @@ fn break_line_from(
     // run or one corner off: the wanderer stood and shot it out, and was
     // shot down, six raids of twenty).
     let walled = |p: Vec2| nav.is_none_or(|n| n.walkable(p.to_array()));
-    for (good, how) in ranks {
+    for (good, _) in ranks {
         if let Some(mut t) = routed_cover(world, here, away, &|p| good(p) && walled(p), &hidden) {
             t.push(Task::Wait(LINE_HELD));
-            return Some((t, how));
+            return Some((t, ROUTED_HOW));
         }
     }
     // Nothing that near: further off, to 30 m, the far sides of buildings
@@ -4415,6 +4446,10 @@ fn break_line_from(
     t.push(Task::Wait(LINE_HELD));
     Some((t, "out of its view, further off"))
 }
+
+/// How a routed break to cover reads (`routed_cover`): after one, on away
+/// low out of its sight and hearing (`creep_away`, every metre hidden).
+const ROUTED_HOW: &str = "the way round, out of its sight";
 
 /// The longest a routed way to cover may be (m), and how much longer than
 /// the straight line to it.
@@ -4474,8 +4509,14 @@ fn routed_cover(
 /// Whether a way (from `here`) is anywhere in sight, past its first leg,
 /// at metre steps: `hidden` false.
 fn routed_in_sight(way: &[Task], here: Vec2, hidden: &dyn Fn(Vec2) -> bool) -> bool {
+    in_sight_on(way, here, hidden, true)
+}
+
+/// Whether a way (from `here`) is anywhere in sight at metre steps
+/// (`hidden` false), past its first leg if `skip_first`.
+fn in_sight_on(way: &[Task], here: Vec2, hidden: &dyn Fn(Vec2) -> bool, skip_first: bool) -> bool {
     let mut at = here;
-    let mut first = true;
+    let mut first = skip_first;
     for t in way {
         let Task::WalkTo { to, .. } = t else {
             continue;
@@ -4598,6 +4639,7 @@ fn creep_away(
     here: Vec2,
     from: Vec2,
     eyes: &[Vec3],
+    every_metre: bool,
 ) -> Option<Vec<Task>> {
     let start = here.distance(from);
     let feet = world.zone.on_ground(here.x, here.y) + Vec3::Y;
@@ -4616,7 +4658,7 @@ fn creep_away(
     };
     outs.into_iter()
         .filter_map(|(mut t, at, len)| {
-            let rest = creep_from(spatial, world, at, from, start, eyes)?;
+            let rest = creep_from(spatial, world, at, from, start, eyes, every_metre)?;
             let total = len + walked_len(&rest, at);
             t.extend(rest);
             Some((t, total))
@@ -4634,6 +4676,7 @@ fn creep_from(
     from: Vec2,
     start: f32,
     eyes: &[Vec3],
+    every_metre: bool,
 ) -> Option<Vec<Task>> {
     let far_enough = start.max(CREEP_NEAR - CREEP_GAIN) + CREEP_GAIN;
     let nav = world.nav.as_deref().map(|n| n.0.as_ref());
@@ -4672,6 +4715,17 @@ fn creep_from(
                 Task::WalkTo { to, .. } => to.distance(from) >= start - 3.0,
                 _ => true,
             })
+        })
+        // (After a routed break in the open: out of every one of its views
+        // the whole way, not just at the end.)
+        .filter(|t| {
+            !every_metre
+                || !in_sight_on(
+                    t,
+                    here,
+                    &|p| eyes.iter().all(|e| line_hidden(spatial, world, p, *e)),
+                    false,
+                )
         })
         .min_by(|a, b| walked_len(a, here).total_cmp(&walked_len(b, here)))
 }
@@ -7825,6 +7879,14 @@ the Hollow.";
         ));
         // A single leg: the first, in its line already.
         assert!(!routed_in_sight(&[leg(-1.0, 0.0)], here, &hidden));
+        // A creep after it: every metre, its first leg too.
+        assert!(in_sight_on(&[leg(-1.0, 0.0)], here, &hidden, false));
+        assert!(!in_sight_on(
+            &[leg(-3.0, 0.0), leg(-3.0, 9.0)],
+            Vec2::new(-1.0, 0.0),
+            &hidden,
+            false
+        ));
     }
 
     #[test]
