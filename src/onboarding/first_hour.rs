@@ -776,6 +776,9 @@ pub(super) struct Newcomer {
     /// Told to watch its feet (`First::Minelayer`): it steps round a mine
     /// it sees blinking.
     mines_told: bool,
+    /// Walkers it saw lamed (a leg shot off in front of it): "it can't
+    /// follow", so away from one is away for good.
+    lamed: Vec<Entity>,
     /// On its way to a spot out of a walker's line till then.
     line_run_until: f32,
     /// When machines after it fired at it, the last half minute.
@@ -1119,6 +1122,11 @@ pub(super) fn direct_raid(
             .any(|(e, r, _)| r.kind == crate::robots::RobotKind::Drone && !r.wrecked && on_me(e))
     {
         bot.elapsed = bot.elapsed.min(1.0);
+    }
+    for ev in tells.lamings.read() {
+        if saw_lamed(ev.role, ev.at, here) && !state.lamed.contains(&ev.robot) {
+            state.lamed.push(ev.robot);
+        }
     }
     let mut again: Vec<First> = vec![];
     if tells.locks.read().any(|ev| on_me(ev.drone)) {
@@ -1656,6 +1664,15 @@ pub(super) fn direct_raid(
                 format!("{f:?} again: as the driver said before"),
             );
         }
+        // The walker it lamed, for "it can't follow" (not the reckless one:
+        // it takes a lamed walker on).
+        let lame_eye = match f {
+            First::Lamed => state.lamed.last().copied(),
+            First::Aimed => state.aimer.filter(|w| state.lamed.contains(w)),
+            _ => None,
+        }
+        .filter(|_| !p.reckless)
+        .and_then(|w| eye_of(&eyes, w));
         let answer: Vec<Task> = match f {
             // (Out first: the jammed gun may be back on the hip by now.)
             First::Jam(_) => vec![
@@ -1716,6 +1733,59 @@ pub(super) fn direct_raid(
             // machine in range" look, half a minute and more, and a drone
             // has you down in thirty seconds: twelve raids running, not a
             // round fired).
+            // "Get out of its sight. You've lamed it; it can't follow": away
+            // from the one it lamed, and from one it lamed aiming at it
+            // again, out of its sight every metre if there's a way, else
+            // straight off. (Low behind cover 20 m from a lamed walker,
+            // the wanderer was aimed at again, edged nearer it, and was
+            // shot down from where it stood, seed 19.)
+            First::Lamed | First::Aimed if lame_eye.is_some() => {
+                let eye = lame_eye.unwrap_or(Vec3::ZERO);
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = now + 12.0;
+                }
+                // (Out of the sight of any other walker it saw aiming at it
+                // lately too, from where it saw it: out of the lamed one's
+                // alone, the wanderer crept into a whole one's, seed 19.)
+                let mut seen_by = vec![eye];
+                let mut others: Vec<(Entity, Vec3, f32)> = state
+                    .aims
+                    .iter()
+                    .filter(|(w, _, t)| now - t < HUNT_WINDOW && !state.lamed.contains(w))
+                    .copied()
+                    .collect();
+                others.sort_by(|a, b| b.2.total_cmp(&a.2));
+                let mut met: Vec<Entity> = vec![];
+                for (w, at, _) in others {
+                    if !met.contains(&w) {
+                        met.push(w);
+                        seen_by.push(at);
+                    }
+                }
+                match creep_away(&spatial, &world, &plans, here, eye.xz(), &seen_by, true) {
+                    Some(t) => {
+                        let far = walked_len(&t, here);
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            format!("lamed, it can't follow: away out of its sight, {far:.0} m"),
+                        );
+                        state.low_until = now + far / CREEP_PACE + 5.0;
+                        state.line_run_until = now + far / CREEP_PACE;
+                        t
+                    }
+                    None => {
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            format!("lamed, it can't follow: off from it, {LAME_OFF:.0} m"),
+                        );
+                        let t = walk_away_by(&world, here, eye.xz(), LAME_OFF);
+                        state.line_run_until = now + walked_len(&t, here) / 2.0;
+                        t
+                    }
+                }
+            }
             First::DroneLock | First::Aimed if p.reckless && armed_now => {
                 state.fought_at = now;
                 state.note(now, Kind::Learned, "shot back at it");
@@ -3978,6 +4048,8 @@ pub(super) struct Tells<'w, 's> {
     /// Rounds fired (each heard, the crack and the tracer, hit or miss).
     shots: MessageReader<'w, 's, crate::weapons::ballistics::Shot>,
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
+    /// A machine's part shot off: a walker's leg going is seen.
+    lamings: MessageReader<'w, 's, crate::robots::PartDestroyed>,
 }
 
 /// Something above you, or a sentry's sweep on you: in under a roof,
@@ -4827,6 +4899,17 @@ const CREEP_FAR: f32 = 30.0;
 const CREEP_GAIN: f32 = 12.0;
 /// A crouched walk's pace (m/s), for timing one.
 const CREEP_PACE: f32 = crate::player::CROUCH_SPEED;
+/// A walker's leg going this near (m) is seen go.
+const LAME_SEEN: f32 = 60.0;
+/// A part shot off at `at` that it saw lame a walker: a leg, near enough
+/// to see go.
+fn saw_lamed(role: crate::robots::PartRole, at: Vec3, here: Vec2) -> bool {
+    matches!(role, crate::robots::PartRole::Leg(_)) && at.xz().distance(here) < LAME_SEEN
+}
+
+/// How far off (m) from a lamed walker, with no way out of its sight: out
+/// past where it limps to look.
+const LAME_OFF: f32 = 30.0;
 /// How often (s) a creep looks back at the walker it's creeping from.
 const CREEP_CHECK: f32 = 0.5;
 
@@ -7549,6 +7632,31 @@ pub(super) fn first_fight(
 
 #[cfg(test)]
 mod tests {
+    /// "You've lamed it": only a leg it was near enough to see go.
+    #[test]
+    fn a_walker_is_lamed_when_it_sees_the_leg_go() {
+        use crate::robots::PartRole;
+        use bevy::prelude::{Vec2, Vec3};
+        let here = Vec2::ZERO;
+        assert!(super::saw_lamed(
+            PartRole::Leg(2),
+            Vec3::new(20.0, 3.0, 0.0),
+            here
+        ));
+        assert!(
+            !super::saw_lamed(PartRole::Sensor, Vec3::new(20.0, 3.0, 0.0), here),
+            "an eye shot out isn't a leg"
+        );
+        assert!(
+            !super::saw_lamed(
+                PartRole::Leg(0),
+                Vec3::new(0.0, 0.0, super::LAME_SEEN + 1.0),
+                here
+            ),
+            "too far off to see go"
+        );
+    }
+
     /// A job in another valley: the route card turned till it shows that
     /// valley, then the bell (Kettle raid 3, the post counter "In Marrow
     /// Creek": no place on Kettle's map, and it froze).
