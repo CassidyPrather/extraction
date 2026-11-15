@@ -16,7 +16,7 @@ pub fn said(level: Level, why: Why) -> &'static str {
             "Go careful: you're on their ground. A whine's rising at the Gate."
         }
         (Level::Stirred, Why::Carried) => {
-            "Move off, quiet. What you carry draws them: a whine at the Gate."
+            "Get it home. What you carry draws them: a whine at the Gate."
         }
         (Level::Stirred, Why::Noise | Why::Fight) => {
             "Move off, quiet. They heard that: a whine's rising at the Gate."
