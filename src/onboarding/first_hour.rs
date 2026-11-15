@@ -134,9 +134,26 @@ pub fn current(opts: &LaunchOptions) -> Option<&'static Persona> {
 pub const FIGHT: &str = "first_fight";
 /// The machines a first fight can be with.
 /// (`broken`: the broken walker a career's second job meets, `robots::broken`.)
-pub const ENCOUNTERS: [&str; 8] = [
-    "walker", "drone", "hush", "sentry", "night", "broken", "hound", "heavy",
+/// (The last four: answered by the bot's own answer to the driver's
+/// first-contact line, not the fight's.)
+pub const ENCOUNTERS: [&str; 12] = [
+    "walker",
+    "drone",
+    "hush",
+    "sentry",
+    "night",
+    "broken",
+    "hound",
+    "heavy",
+    "grappler",
+    "spotter",
+    "minelayer",
+    "dirigible",
 ];
+
+/// The encounters the bot answers as the driver's line says, unaided by
+/// the fight's own answer.
+const OWN_ANSWER: [&str; 4] = ["grappler", "spotter", "minelayer", "dirigible"];
 
 /// What a first-hour or first-fight `--scenario` asks for: the newcomers,
 /// and the encounters (none: the plain first hour, yard and raid).
@@ -750,6 +767,15 @@ pub(super) struct Newcomer {
     dressed_at: f32,
     /// When it last answered a crawler's crackle.
     crawled_at: f32,
+    /// The grappler it saw wind up a throw at it, last.
+    grappler: Option<Entity>,
+    /// When it last took on a grappler whose line was in it.
+    speared_at: f32,
+    /// The spotter it saw swing its eye onto it, last.
+    spotter: Option<Entity>,
+    /// Told to watch its feet (`First::Minelayer`): it steps round a mine
+    /// it sees blinking.
+    mines_told: bool,
     /// On its way to a spot out of a walker's line till then.
     line_run_until: f32,
     /// When machines after it fired at it, the last half minute.
@@ -1446,7 +1472,37 @@ pub(super) fn direct_raid(
             }
         }
     }
-    let wound = tells.harpoons.read().any(|ev| ev.to == player);
+    let mut wound = false;
+    for ev in tells.harpoons.read() {
+        if ev.to == player {
+            wound = true;
+            state.grappler = Some(ev.from);
+        }
+    }
+    for ev in tells.spotters.read() {
+        if ev.what == crate::robots::spotter::SpotterAct::Fixing && on_me(ev.spotter) {
+            state.spotter = Some(ev.spotter);
+        }
+    }
+    // "A red blink's one near you": told, it steps round a mine it sees
+    // blinking that its next leg would cross, and on.
+    if state.mines_told
+        && let Some(Task::WalkTo { to, within }) = bot.tasks.front().cloned()
+        && let Some(round) = round_mines(&world, here, to)
+    {
+        state.note(
+            now,
+            Kind::Learned,
+            "a mine blinking on its way: stepped round it",
+        );
+        let mut t: Vec<Task> = round
+            .into_iter()
+            .map(|p| Task::WalkTo { to: p, within: 1.5 })
+            .collect();
+        t.push(Task::WalkTo { to, within });
+        bot.tasks.pop_front();
+        super::second_hour::cut_in(&mut bot, t);
+    }
     // A machine still firing at it, hit or miss: one fight, heard all
     // through (a drone's bursts 1.8 s apart never let it re-lock).
     // (Not the round that hits: only those before it, `shot_warns`.)
@@ -1479,7 +1535,14 @@ pub(super) fn direct_raid(
         || firsts.iter().chain(&again).any(|f| {
             matches!(
                 f,
-                First::Sentry | First::DroneLock | First::Aimed | First::Heavy | First::Hound
+                First::Sentry
+                    | First::DroneLock
+                    | First::Aimed
+                    | First::Heavy
+                    | First::Hound
+                    | First::Grappler
+                    | First::Spotter
+                    | First::Dirigible
             )
         });
     // A gun to hand (in a hand, or on the body), for the reckless to shoot
@@ -1491,6 +1554,29 @@ pub(super) fn direct_raid(
     });
     // A machine on it: noticed, aimed at, locked on, its sweep, shot at.
     let threatened = in_its_sights || noticed_now || fired_on;
+    // "Speared? Shoot it: the line drops": a harpoon's line in it and a
+    // gun to hand, at the grappler, whenever it's speared (not only as the
+    // line's said: speared a breath after it, off past its throw, the
+    // careful newcomer walked against the haul for five minutes and never
+    // got to the job).
+    if !tells.speared.is_empty()
+        && armed_now
+        && state.grappler.is_some()
+        && now - state.speared_at > SPEARED_EVERY
+        && world.alive(player)
+    {
+        state.speared_at = now;
+        state.fought_at = now;
+        if let Some(f) = fight.as_mut() {
+            f.flee_until = 0.0;
+        }
+        state.note(
+            now,
+            Kind::Learned,
+            "speared by a grappler: shot it, as the driver said",
+        );
+        super::second_hour::cut_in(&mut bot, take_it_on());
+    }
     // A crawler charging at it: armed, it shoots it (it goes down to a few
     // rounds); with nothing to shoot, it backs out the way it came, out of
     // its line. (No answer at all, the newcomers stood in its line, or
@@ -1822,6 +1908,85 @@ pub(super) fn direct_raid(
                         None => run_for_cover(&world.zone, here, from, 0.0),
                     },
                 }
+            }
+            // "Keep out of its throw. Speared? Shoot it: the line drops":
+            // with its line in it and a gun to hand, at it (wrecked or
+            // stunned, its line snaps); otherwise off, past its throw.
+            First::Grappler => {
+                let from = state.grappler.and_then(|g| world.robot_at(g)).map_or_else(
+                    || world.nearest_robot(here).unwrap_or(here + Vec2::Y),
+                    |g| g.xz(),
+                );
+                if !tells.speared.is_empty() && armed_now {
+                    // (At it already: speared, above.)
+                    vec![]
+                } else {
+                    let off = grappler_off(here.distance(from));
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        format!("a grappler's throw: off past its reach, {off:.0} m"),
+                    );
+                    walk_away_by(&world, here, from, off)
+                }
+            }
+            // "Out of its eye, now. Under it, it's blind": under a roof if
+            // there's one to hand, else in under it.
+            // (Not the reckless one: sent for the nearest roof by the way
+            // round, it stood at the door, first_fight's spotter, as it did
+            // for the sentry. In under it instead.)
+            First::Spotter => match (!p.reckless)
+                .then(|| under_a_roof(&world, &plans, here, &state.no_roof))
+                .flatten()
+            {
+                Some((tasks, b)) => {
+                    state.roof_try = Some((b, bot.failed, now));
+                    state.note(now, Kind::Learned, "a spotter's eye on it: under a roof");
+                    tasks
+                }
+                None => {
+                    let above = state
+                        .spotter
+                        .and_then(|e| world.robot_at(e))
+                        .map_or(here, |p| p.xz());
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        "a spotter's eye on it: in under it, where it's blind",
+                    );
+                    walk(&world, here, above)
+                }
+            },
+            // "Under cover. It doesn't shoot, but it sends for those that
+            // do": under a roof if there's one to hand, else low behind
+            // what's near, away from it.
+            First::Dirigible => {
+                let from = world
+                    .robots
+                    .iter()
+                    .filter(|(_, r, _)| r.kind == crate::robots::RobotKind::Dirigible && !r.wrecked)
+                    .filter_map(|(e, ..)| world.robot_at(e))
+                    .map(|p| p.xz())
+                    .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)))
+                    .unwrap_or(here + Vec2::Y * 20.0);
+                match under_a_roof(&world, &plans, here, &state.no_roof) {
+                    Some((tasks, b)) => {
+                        state.roof_try = Some((b, bot.failed, now));
+                        state.note(now, Kind::Learned, "a dirigible sees it: under a roof");
+                        tasks
+                    }
+                    None => {
+                        state.note(now, Kind::Learned, "a dirigible sees it: to cover");
+                        state.low_until = now + 25.0;
+                        run_for_cover(&world.zone, here, from, 1.0)
+                    }
+                }
+            }
+            // "Watch your feet": from here on it steps round a mine it sees
+            // blinking (`round_mines`), and goes on with what it was doing.
+            First::Minelayer => {
+                state.mines_told = true;
+                vec![]
             }
             // "Plant your feet and shoot. A hound: don't run": stopped where
             // it is, at it, for those who'd take a machine on. The rest stay
@@ -3806,6 +3971,10 @@ pub(super) struct Tells<'w, 's> {
     heavies: MessageReader<'w, 's, crate::robots::heavy::HeavyEvent>,
     /// A grappler winding up a throw.
     harpoons: MessageReader<'w, 's, crate::robots::grappler::HarpoonWindup>,
+    /// A spotter's eye swinging onto it (its beacon quickens).
+    spotters: MessageReader<'w, 's, crate::robots::spotter::SpotterEvent>,
+    /// A harpoon's line in it: it feels the pull.
+    speared: Query<'w, 's, (), (With<LocalPlayer>, With<crate::robots::grappler::Tethered>)>,
     /// Rounds fired (each heard, the crack and the tracer, hit or miss).
     shots: MessageReader<'w, 's, crate::weapons::ballistics::Shot>,
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
@@ -3924,6 +4093,56 @@ fn walk_off_heavy(world: &World2, here: Vec2, from: Vec2) -> Vec<Task> {
         t.pop();
     }
     t
+}
+
+/// How far a newcomer walks off from a grappler `d` m away: out past its
+/// throw (`grappler::TETHER_RANGE`), with a margin, and at least a leg.
+fn grappler_off(d: f32) -> f32 {
+    (crate::robots::grappler::TETHER_RANGE + GRAPPLER_MARGIN - d).max(GRAPPLER_MARGIN)
+}
+
+/// How long, at least, between two goes at a grappler whose line is in it
+/// (s): a fight's twelve rounds.
+const SPEARED_EVERY: f32 = 8.0;
+
+/// How far past a grappler's throw a newcomer keeps (m).
+const GRAPPLER_MARGIN: f32 = 6.0;
+
+/// How wide a berth a newcomer gives a mine it's seen blinking (m): its
+/// plate, a body and a stride.
+const MINE_BERTH: f32 = 1.2;
+
+/// The way round the mines blinking near `here` (within
+/// `minelayer::WAKE`: what it can see), when the leg to `to` would cross
+/// one: round those it sees, and round the buildings and fences as every
+/// walk is (straight to a turn off the mines, the newcomers walked into
+/// what was in the way there and stood). The waypoints before `to`.
+fn round_mines(world: &World2, here: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
+    let wake = extraction_core::minelayer::WAKE;
+    let seen: Vec<Vec3> = world
+        .mines
+        .iter()
+        .map(|g| g.translation())
+        .filter(|m| m.xz().distance(here) <= wake)
+        .collect();
+    if !seen.iter().any(|m| seg_dist(here, to, m.xz()) < MINE_BERTH) {
+        return None;
+    }
+    let mut boxes = walk_boxes(world);
+    boxes.extend(
+        seen.iter()
+            .map(|m| (Transform::from_translation(*m), Vec2::splat(MINE_BERTH))),
+    );
+    let mut way = round_boxes(&boxes, here, to);
+    way.pop();
+    (!way.is_empty()).then_some(way)
+}
+
+/// How near the stretch `a`-`b` passes `p` (m).
+fn seg_dist(a: Vec2, b: Vec2, p: Vec2) -> f32 {
+    let ab = b - a;
+    let t = ((p - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+    p.distance(a + ab * t)
 }
 
 /// Away from a slow machine at `from`, at a walk, by the way round: 15 m
@@ -7159,6 +7378,39 @@ pub(super) fn first_fight(
                 );
                 p
             }
+            // Off the way, inside its throw of it.
+            "grappler" => {
+                let p = at + side * 16.0;
+                let site = zone.on_ground(p.x, p.y);
+                crate::robots::grappler::spawn_grappler(&mut commands, &zone, site, job(site));
+                p
+            }
+            // Up off to the side of the way, watching over it.
+            "spotter" => {
+                let p = at + side * 25.0;
+                crate::robots::spotter::spawn_spotter(&mut commands, &zone, p);
+                p
+            }
+            // A row of mines across the way, as one it's laid.
+            "minelayer" => {
+                for k in -2..=2 {
+                    let m = at + side * (k as f32 * 1.4);
+                    let site = zone.on_ground(m.x, m.y);
+                    crate::robots::minelayer::lay_mine(&mut commands, site, k as f32 * 0.7);
+                }
+                at
+            }
+            // Over a work site off the way, lowering its pod.
+            "dirigible" => {
+                let p = at + side * 30.0;
+                let site = zone.on_ground(p.x, p.y);
+                crate::robots::dirigible::spawn_dirigible(
+                    &mut commands,
+                    site + Vec3::Y * 26.0,
+                    job(site),
+                );
+                p
+            }
             _ => at,
         };
         info!(
@@ -7198,6 +7450,11 @@ pub(super) fn first_fight(
     for _ in tells.harpoons.read() {
         came.push("a grappler winding up (the reel)");
     }
+    for s in tells.spotters.read() {
+        if s.what == crate::robots::spotter::SpotterAct::Fixing {
+            came.push("a spotter's eye swinging on (its beacon quickens)");
+        }
+    }
     if !tells.hushed.is_empty() {
         came.push("inside a hush (the sound goes dull)");
     }
@@ -7229,6 +7486,10 @@ pub(super) fn first_fight(
         return;
     };
     fight.reacted = true;
+    // Its own answer to the driver's line is the one under test.
+    if OWN_ANSWER.contains(&kind) {
+        return;
+    }
     let here = root.translation.xz();
     let from = fight.machine.as_ref().map_or(here, |(_, at)| *at);
     let away = (here - from).normalize_or(Vec2::Y);
