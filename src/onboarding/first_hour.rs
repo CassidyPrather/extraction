@@ -1747,11 +1747,17 @@ pub(super) fn direct_raid(
                                 })
                                 .and_then(|eye| {
                                     // (After a routed break: out of where
-                                    // it last saw it, every metre; the
+                                    // the walker is, every metre; the
                                     // trail of where it was seen before is
                                     // the hunt's.)
+                                    // (And out of the spot it was seen at,
+                                    // from its eye height there: a hunting
+                                    // walker comes to look where it last saw
+                                    // it, and on the wanderer saw it creeping
+                                    // from there.)
                                     let mut eyes_on: Vec<Vec3> = if routed {
-                                        vec![]
+                                        let up = eye.y - world.zone.on_ground(eye.x, eye.z).y;
+                                        vec![world.zone.on_ground(here.x, here.y) + Vec3::Y * up]
                                     } else {
                                         state
                                             .seen_trail
