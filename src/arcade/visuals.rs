@@ -1,5 +1,5 @@
 //! What the arcade adds to see and hear: each gate's lamp on its post
-//! (dark, or burning red from a wave's call until its machines are in),
+//! (dark, or burning red from a wave's call until it's cleared),
 //! and the siren at that gate as the wave is called.
 
 use bevy::prelude::*;
@@ -60,7 +60,7 @@ fn build_lamps(
             ChildOf(e),
         ));
         let dark = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.25, 0.08, 0.06),
+            base_color: Color::srgb(0.1, 0.1, 0.1),
             perceptual_roughness: 0.4,
             ..default()
         });

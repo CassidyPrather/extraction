@@ -107,7 +107,8 @@ pub struct WaveMachine {
     pub kind: Machine,
 }
 
-/// A gate's lamp: lit from the call until its wave's machines are in.
+/// A gate's lamp: lit from the call until its wave is cleared (where
+/// they're coming from, then where they came from).
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct GateLamp {
     pub gate: usize,
@@ -290,7 +291,7 @@ fn clear_wave(
 
 fn light_lamps(arcade: Res<Arcade>, mut lamps: Query<&mut GateLamp>) {
     let lit = match arcade.phase {
-        RunPhase::Warning { wave, .. } => Some(gate(wave)),
+        RunPhase::Warning { wave, .. } | RunPhase::Fighting { wave } => Some(gate(wave)),
         _ => None,
     };
     for mut l in &mut lamps {

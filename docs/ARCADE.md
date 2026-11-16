@@ -31,7 +31,7 @@ ARCADE card, next to TRAINING YARD.
   - START AT WAVE 1/4/7;
   - turning, vignette and sound, as on the truck's board.
 - **Waves** (`arcade::waves`): nothing comes until you press CALL WAVE.
-  The board names the machines and the gate. That gate's lamp burns red and
+  The board names the machines and the gate. That gate's lamp burns red until the wave is cleared, and
   the machines' siren sounds from it. Ten seconds later the machines come
   through it.
   - Each machine is spawned as the director sends one, as a response to
