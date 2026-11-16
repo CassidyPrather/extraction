@@ -320,24 +320,32 @@ pub fn off_the_line(eye: Vec3, line: Vec3, at: Vec3) -> Vec3 {
     eye + (line * clear.cos() + away * clear.sin()) * d
 }
 
-/// How far below the eye line (degrees) the caption sits, given what's
-/// held as seen from its anchor: each thing's outline (its least and most
-/// degrees right and below), and the caption's angular half width and
-/// half height. `CAPTION_DOWN` if that's clear by `CAPTION_CLEAR`; else
-/// the nearest clear spot up to `CAPTION_HIGHEST`, else down to
-/// `CAPTION_LOWEST`; else above it, as high as the eye line; if none is
-/// clear, the least crowded of them.
-pub fn caption_down(held: &[(Vec2, Vec2)], half: Vec2) -> f32 {
-    // How far (degrees) the caption at `down` is from clearing everything
-    // held: 0 when it does.
-    let short = |down: f32| {
+/// Where the caption sits (degrees right of the anchor, degrees below
+/// its eye line), given what's held as seen from the anchor: each thing's
+/// outline (its least and most degrees right and below), and the
+/// caption's angular half width and half height.
+///
+/// `CAPTION_DOWN`, if that's clear by `CAPTION_CLEAR`; else the nearest
+/// clear spot up to `CAPTION_HIGHEST`, else down to `CAPTION_LOWEST`,
+/// else above, as high as the eye line. A thing raised to look at can
+/// fill all of that (a pistol from muzzle to cuff): then the same again,
+/// slid sideways away from it, up to `CAPTION_ASIDE`. Nothing clear: the
+/// least crowded of them all. Never hidden behind what you hold if
+/// anywhere isn't.
+pub fn caption_place(held: &[(Vec2, Vec2)], half: Vec2) -> Vec2 {
+    // How far (degrees) the caption at `at` is from clearing everything
+    // held: 0 when it does, and more the deeper it's in.
+    let short = |at: Vec2| {
         held.iter()
             .map(|(lo, hi)| {
-                let dx = (lo.x - half.x).max(-half.x - hi.x).max(0.0);
-                let dy = (lo.y - (down + half.y))
-                    .max((down - half.y) - hi.y)
-                    .max(0.0);
-                (CAPTION_CLEAR - (dx * dx + dy * dy).sqrt()).max(0.0)
+                let gx = (lo.x - (at.x + half.x)).max((at.x - half.x) - hi.x);
+                let gy = (lo.y - (at.y + half.y)).max((at.y - half.y) - hi.y);
+                let gap = if gx >= 0.0 && gy >= 0.0 {
+                    (gx * gx + gy * gy).sqrt()
+                } else {
+                    gx.max(gy)
+                };
+                (CAPTION_CLEAR - gap).max(0.0)
             })
             .fold(0.0, f32::max)
     };
@@ -347,25 +355,32 @@ pub fn caption_down(held: &[(Vec2, Vec2)], half: Vec2) -> f32 {
     let downs = (1..)
         .map(|i| CAPTION_DOWN + 0.5 * i as f32)
         .take_while(|d| *d <= CAPTION_LOWEST);
-    // Last, above what's held as far as the eye line: never hidden
-    // behind it (a pistol raised to look at fills the whole range).
     let over = (1..)
         .map(|i| CAPTION_HIGHEST - 0.5 * i as f32)
         .take_while(|d| *d >= 0.0);
-    let tries: Vec<f32> = ups.chain(downs).chain(over).collect();
-    // The nearest clear spot, up first; none clear, the least crowded.
+    let downs: Vec<f32> = ups.chain(downs).chain(over).collect();
+    // Aside, away from what's held: from where its middle is.
+    let mid = held.iter().map(|(lo, hi)| (lo.x + hi.x) * 0.5).sum::<f32>();
+    let away = if mid > 0.0 { -1.0 } else { 1.0 };
+    let asides = std::iter::once(0.0).chain((1..=(CAPTION_ASIDE as i32)).map(|k| away * k as f32));
+    let tries: Vec<Vec2> = asides
+        .flat_map(|x| downs.iter().map(move |d| Vec2::new(x, *d)))
+        .collect();
     tries
         .iter()
         .copied()
-        .find(|d| short(*d) == 0.0)
+        .find(|t| short(*t) == 0.0)
         .unwrap_or_else(|| {
             tries
                 .iter()
                 .copied()
                 .min_by(|a, b| short(*a).total_cmp(&short(*b)))
-                .unwrap_or(CAPTION_DOWN)
+                .unwrap_or(Vec2::new(0.0, CAPTION_DOWN))
         })
 }
+
+/// How far (degrees) the caption may slide aside off what's held.
+pub const CAPTION_ASIDE: f32 = 20.0;
 
 /// What a glove adds round a thing held (m), and a glove's own reach
 /// from its middle, cuff and all.
@@ -701,8 +716,26 @@ fn show_caption(
         let r = (GLOVE / d).atan().to_degrees();
         things.push((c - r, c + r));
     }
-    let down = caption_down(&things, half);
-    let rot = Quat::from_euler(EulerRot::YXZ, lock.yaw, lock.pitch - down.to_radians(), 0.0);
+    let place_at = caption_place(&things, half);
+    let down = place_at.y;
+    if lines
+        .now
+        .as_ref()
+        .is_some_and(|l| (l.shown / 0.5).floor() != ((l.shown - dt) / 0.5).floor())
+    {
+        debug!(
+            "said: caption {place_at:?} (right, below) (anchor {:.1}, {:.1}); half {half:?}; held {:?}; gloves {}; things {things:?}",
+            lock.yaw.to_degrees(),
+            lock.pitch.to_degrees(),
+            hands.iter().map(|h| h.1.translation).collect::<Vec<_>>(),
+            gloves.len()
+        );
+    }
+    // In the anchor's own frame (level, no roll), turned aside and down
+    // from its middle: square to the view, facing the eye.
+    let rot = Quat::from_euler(EulerRot::YXZ, lock.yaw, lock.pitch, 0.0)
+        * Quat::from_rotation_y(-place_at.x.to_radians())
+        * Quat::from_rotation_x(-down.to_radians());
     let at = anchor_eye + rot * Vec3::NEG_Z * CAPTION_AT;
     let alpha = lines.alpha();
     let g = glow(adapt.as_ref().map_or(0.0, |a| a.stops));
@@ -1012,26 +1045,34 @@ mod tests {
     fn the_caption_keeps_clear_of_what_is_held() {
         let circle = |c: Vec2, r: f32| (c - r, c + r);
         let half = Vec2::new(13.0, 4.0);
-        assert_eq!(caption_down(&[], half), CAPTION_DOWN);
+        let down = |held: &[(Vec2, Vec2)]| {
+            let p = caption_place(held, half);
+            assert_eq!(p.x, 0.0, "up or down first, not aside: {p:?}");
+            p.y
+        };
+        assert_eq!(down(&[]), CAPTION_DOWN);
         // A pistol's muzzle just under it, middle of the view.
-        let d = caption_down(&[circle(Vec2::new(2.0, 18.0), 3.0)], half);
+        let d = down(&[circle(Vec2::new(2.0, 18.0), 3.0)]);
         assert!(d < CAPTION_DOWN && d >= CAPTION_HIGHEST, "up: {d}");
         // Something right where it would sit and up to the eye line: down.
-        let d = caption_down(&[circle(Vec2::new(0.0, 8.0), 4.0)], half);
+        let d = down(&[circle(Vec2::new(0.0, 8.0), 4.0)]);
         assert!(d > CAPTION_DOWN && d <= CAPTION_LOWEST, "down: {d}");
         // Nothing clears it from 6 to 20 degrees down: above it, toward
         // the eye line, never behind it.
-        let d = caption_down(&[circle(Vec2::new(5.0, 14.0), 2.5)], half);
+        let d = down(&[circle(Vec2::new(5.0, 14.0), 2.5)]);
         assert!((0.0..CAPTION_HIGHEST).contains(&d), "above it: {d}");
+        // A pistol raised to look at, held right: muzzle over the eye line
+        // to the cuff far below. Up and down won't clear it: aside, left.
+        let raised = [(Vec2::new(3.0, -6.0), Vec2::new(25.0, 27.0))];
+        let p = caption_place(&raised, half);
+        assert!(p.x < 0.0 && p.x >= -CAPTION_ASIDE, "aside, away: {p:?}");
+        assert!(
+            p.x + half.x <= raised[0].0.x - CAPTION_CLEAR + 1e-3,
+            "clear of it: {p:?}"
+        );
         // Nothing clears it anywhere: the least crowded spot, in range.
-        let d = caption_down(&[circle(Vec2::new(0.0, 10.0), 12.0)], half);
-        assert!((0.0..=CAPTION_LOWEST).contains(&d), "{d}");
-        // A spot that clears keeps CAPTION_CLEAR.
-        let (lo, hi) = circle(Vec2::new(5.0, 15.0), 1.0);
-        let d = caption_down(&[(lo, hi)], half);
-        let dx = (lo.x - half.x).max(-half.x - hi.x).max(0.0);
-        let dy = (lo.y - (d + half.y)).max((d - half.y) - hi.y).max(0.0);
-        assert!((dx * dx + dy * dy).sqrt() >= CAPTION_CLEAR, "{d}");
+        let p = caption_place(&[circle(Vec2::new(0.0, 10.0), 40.0)], half);
+        assert!((0.0..=CAPTION_LOWEST).contains(&p.y) && p.x.abs() <= CAPTION_ASIDE);
     }
 
     /// Its letters come out at their size whatever the line, and over the
