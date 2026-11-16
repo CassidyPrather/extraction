@@ -1271,6 +1271,10 @@ mod tests {
         ("Investigating", "a mind's turn: heard in its voice"),
         ("JobDone", "the card's chime (UI)"),
         ("LostYou", "a mind's turn: heard in its voice"),
+        (
+            "MastTell",
+            "the busy mast's tell (#94): excused until Audio's mast whine",
+        ),
         ("MeetFirst", "a first-time line"),
         ("NightVisit", "the walkers sent are heard walking"),
         (
@@ -1288,6 +1292,10 @@ mod tests {
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
         ("ToggleBackpack", "flat mode's pack; opening it is heard"),
+        (
+            "Transmitted",
+            "the pressure account's copy of a transceiver press; the press is heard",
+        ),
         (
             "Treated",
             "telemetry's note of a dressing or injector used; the use is heard",
