@@ -119,7 +119,7 @@ impl Plugin for DistressPlugin {
             .init_resource::<FlaresSaid>()
             .add_systems(
                 Update,
-                (fit_tubes, hit_tubes, tell, climb, hit_canisters).chain(),
+                (fit_tubes, hit_tubes, tell, climb, hit_canisters, signals).chain(),
             );
     }
 }
@@ -416,6 +416,45 @@ fn climb(
     }
 }
 
+/// A red star you fired, once it's lit, has been noticed by the Zone (it
+/// already brings what sees it: `weapons::flares`).
+#[derive(Component)]
+pub struct Signalled;
+
+/// A red star you fire is a distress signal like a machine's (#94): seen
+/// across the valley, it stirs the account by a burst's worth ([`STIR`],
+/// as `Why::Noise`) and owes an answer to the ground under it,
+/// `pressure::CUE_LEAD` after it lights. The same rule wherever it's
+/// fired: an alternate extract opens on it, and this is its price.
+/// (A machine's own burst is its shooter's, and counted in `climb`.)
+pub fn signals(
+    mut commands: Commands,
+    stars: Query<(Entity, &crate::weapons::flares::Flare, &GlobalTransform), Without<Signalled>>,
+    machines: Query<(), With<Robot>>,
+    zone: Option<Res<Zone>>,
+    mut director: Option<ResMut<super::director::Director>>,
+    mut doing: Option<ResMut<super::pressure::Doing>>,
+) {
+    for (e, f, gt) in &stars {
+        if f.star != crate::weapons::flares::Star::Red || !f.burning() {
+            continue;
+        }
+        commands.entity(e).insert(Signalled);
+        if f.shooter.is_some_and(|s| machines.contains(s)) {
+            continue;
+        }
+        let at = gt.translation();
+        let ground = zone.as_deref().map_or(at, |z| z.on_ground(at.x, at.z));
+        if let Some(d) = director.as_deref_mut() {
+            d.queue_response(super::pressure::CUE_LEAD, ground);
+            d.owed.push(ground);
+        }
+        if let Some(d) = doing.as_deref_mut() {
+            d.flares += 1;
+        }
+    }
+}
+
 fn hit_canisters(
     mut commands: Commands,
     mut hits: MessageReader<Hit>,
@@ -444,5 +483,70 @@ fn hit_canisters(
                 r.say(crate::raid::lines::FLARE_DOWNED);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::weapons::flares::{Flare, Star};
+    use bevy::ecs::system::RunSystemOnce;
+
+    fn director() -> super::super::director::Director {
+        super::super::director::Director {
+            enabled: true,
+            rng: super::super::director::raid_rng(1, 0),
+            next_job: 25.0,
+            responses: Vec::new(),
+            response_cooldown: 0.0,
+            max_active: 6,
+            next_logistics: 150.0,
+            chatter: Vec::new(),
+            visits: Vec::new(),
+            heat: 0.0,
+            heat_gap: 0.0,
+            broken_placed: false,
+            quiet: 0.0,
+            net: Default::default(),
+            owed: Vec::new(),
+        }
+    }
+
+    /// A red star you fire stirs it by a burst's worth and owes an answer
+    /// under it, once, as it lights; a white one doesn't, nor a machine's
+    /// own burst (counted where it bursts).
+    #[test]
+    fn your_red_star_stirs_like_a_distress_burst() {
+        let mut app = App::new();
+        app.init_resource::<super::super::pressure::Doing>()
+            .insert_resource(director());
+        let w = app.world_mut();
+        let machine = w
+            .spawn(Robot {
+                kind: RobotKind::Walker,
+                wrecked: false,
+            })
+            .id();
+        let at = |x: f32| GlobalTransform::from_translation(Vec3::new(x, 60.0, 0.0));
+        w.spawn((Flare::lit(Star::White, Vec3::ZERO, None), at(0.0)));
+        w.spawn((Flare::lit(Star::Red, Vec3::ZERO, Some(machine)), at(10.0)));
+        let fired = w
+            .spawn((Flare::lit(Star::Red, Vec3::ZERO, None), at(20.0)))
+            .id();
+        for _ in 0..3 {
+            app.world_mut().run_system_once(signals).unwrap();
+        }
+        let w = app.world();
+        assert_eq!(w.resource::<super::super::pressure::Doing>().flares, 1);
+        let d = w.resource::<super::super::director::Director>();
+        assert_eq!(d.owed.len(), 1, "one answer owed: {:?}", d.owed);
+        assert!(
+            (d.owed[0].x - 20.0).abs() < 0.01,
+            "under your star: {:?}",
+            d.owed
+        );
+        assert_eq!(d.responses.len(), 1);
+        assert!((d.responses[0].0 - super::super::pressure::CUE_LEAD).abs() < 1e-6);
+        assert!(w.entity(fired).contains::<Signalled>());
     }
 }
