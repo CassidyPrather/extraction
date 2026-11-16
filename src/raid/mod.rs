@@ -1015,7 +1015,7 @@ mod tests {
             app.update();
             take(&mut app);
         }
-        let mut step = |app: &mut App, f: &dyn Fn(&mut Raid)| {
+        let step = |app: &mut App, f: &dyn Fn(&mut Raid)| {
             f(&mut app.world_mut().resource_mut::<Raid>());
             app.update();
             app.update();

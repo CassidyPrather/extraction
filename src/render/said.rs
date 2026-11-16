@@ -325,30 +325,38 @@ pub fn off_the_line(eye: Vec3, line: Vec3, at: Vec3) -> Vec3 {
 /// below) and angular radius, and the caption's angular half width and
 /// half height. `CAPTION_DOWN` if that's clear by `CAPTION_CLEAR`; else
 /// the nearest clear spot up to `CAPTION_HIGHEST`, else down to
-/// `CAPTION_LOWEST`; `CAPTION_DOWN` if none is.
+/// `CAPTION_LOWEST`; if none is, the least crowded of them.
 pub fn caption_down(held: &[(Vec2, f32)], half: Vec2) -> f32 {
-    let clear = |down: f32| {
-        held.iter().all(|(c, r)| {
-            let dx = (c.x.abs() - half.x).max(0.0);
-            let dy = ((c.y - down).abs() - half.y).max(0.0);
-            (dx * dx + dy * dy).sqrt() >= r + CAPTION_CLEAR
-        })
+    // How far (degrees) the caption at `down` is from clearing everything
+    // held: 0 when it does.
+    let short = |down: f32| {
+        held.iter()
+            .map(|(c, r)| {
+                let dx = (c.x.abs() - half.x).max(0.0);
+                let dy = ((c.y - down).abs() - half.y).max(0.0);
+                (r + CAPTION_CLEAR - (dx * dx + dy * dy).sqrt()).max(0.0)
+            })
+            .fold(0.0, f32::max)
     };
-    let mut d = CAPTION_DOWN;
-    while d >= CAPTION_HIGHEST {
-        if clear(d) {
-            return d;
-        }
-        d -= 0.5;
-    }
-    let mut d = CAPTION_DOWN + 0.5;
-    while d <= CAPTION_LOWEST {
-        if clear(d) {
-            return d;
-        }
-        d += 0.5;
-    }
-    CAPTION_DOWN
+    let ups = (0..)
+        .map(|i| CAPTION_DOWN - 0.5 * i as f32)
+        .take_while(|d| *d >= CAPTION_HIGHEST);
+    let downs = (1..)
+        .map(|i| CAPTION_DOWN + 0.5 * i as f32)
+        .take_while(|d| *d <= CAPTION_LOWEST);
+    let tries: Vec<f32> = ups.chain(downs).collect();
+    // The nearest clear spot, up first; none clear, the least crowded.
+    tries
+        .iter()
+        .copied()
+        .find(|d| short(*d) == 0.0)
+        .unwrap_or_else(|| {
+            tries
+                .iter()
+                .copied()
+                .min_by(|a, b| short(*a).total_cmp(&short(*b)))
+                .unwrap_or(CAPTION_DOWN)
+        })
 }
 
 /// A panel's light for the eye's adaptation: a screen's own by day, as
@@ -950,8 +958,12 @@ mod tests {
         // Something right where it would sit and up to the eye line: down.
         let d = caption_down(&[(Vec2::new(0.0, 8.0), 4.0)], half);
         assert!(d > CAPTION_DOWN && d <= CAPTION_LOWEST, "down: {d}");
-        // Whatever it is, each clear spot keeps CAPTION_CLEAR.
-        let held = [(Vec2::new(5.0, 14.0), 2.5)];
+        // Nothing clears it in range: as far from it as it can be.
+        let d = caption_down(&[(Vec2::new(5.0, 14.0), 2.5)], half);
+        assert!((CAPTION_HIGHEST..=CAPTION_LOWEST).contains(&d));
+        assert!(d == CAPTION_HIGHEST, "the far end from it: {d}");
+        // A spot that clears keeps CAPTION_CLEAR.
+        let held = [(Vec2::new(5.0, 15.0), 1.0)];
         let d = caption_down(&held, half);
         let dx = (held[0].0.x.abs() - half.x).max(0.0);
         let dy = ((held[0].0.y - d).abs() - half.y).max(0.0);
