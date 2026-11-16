@@ -224,7 +224,20 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
             ),
             2 => {
                 if let Some(spots) = world.get_resource::<crate::world::buildings::BuildingLoot>() {
-                    spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed, raid);
+                    #[cfg(test)]
+                    let cluster = world.get_resource::<OldPiles>().is_none();
+                    #[cfg(not(test))]
+                    let cluster = true;
+                    spawn_building_loot(
+                        &mut commands,
+                        zone,
+                        spots,
+                        loot,
+                        catalog,
+                        seed,
+                        raid,
+                        cluster,
+                    );
                 }
             }
             _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map, &|id| {
@@ -397,6 +410,35 @@ pub fn building_roll(i: usize) -> Vec3 {
     )
 }
 
+/// Where a first raid's small thing lies on its spot, the `i`th laid
+/// there: a tidy cluster, a hand's width apart, all on the board. In a
+/// pile (`building_roll`) the 9x18 box, matches, bolt and cell climbed on
+/// each other and read as one muddy heap.
+pub fn cluster_roll(i: usize) -> Vec3 {
+    const SLOTS: [(f32, f32); 4] = [(-0.5, -0.5), (0.5, 0.5), (0.5, -0.5), (-0.5, 0.5)];
+    let (x, z) = SLOTS[i % SLOTS.len()];
+    Vec3::new(
+        x * CLUSTER_GAP,
+        0.04 + (i / SLOTS.len()) as f32 * 0.06,
+        z * CLUSTER_GAP,
+    )
+}
+
+/// Between neighbours in a first raid's cluster (m, centre to centre).
+pub const CLUSTER_GAP: f32 = 0.12;
+
+/// Lays a first raid's small things in the old climbing pile, for a test
+/// to compare against the cluster.
+#[cfg(test)]
+#[derive(Resource)]
+pub(crate) struct OldPiles;
+
+/// The building loot spot a thing was laid at (by index), for a test: a
+/// tall pile's top is nearer the board above than its own.
+#[cfg(test)]
+#[derive(Component)]
+pub(crate) struct LaidAt(pub usize);
+
 /// Where a loot marker's `i`th roll lands, from its base.
 pub fn marker_roll(i: usize) -> Vec3 {
     Vec3::new(
@@ -487,6 +529,7 @@ pub(crate) fn place_key(at: Vec3) -> u64 {
     h
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_building_loot(
     commands: &mut Commands,
     zone: &Zone,
@@ -495,6 +538,7 @@ fn spawn_building_loot(
     catalog: &Catalog,
     seed: u64,
     raid: Option<u32>,
+    cluster: bool,
 ) {
     let mut n = 0;
     let notes = notes_lying(zone);
@@ -512,8 +556,19 @@ fn spawn_building_loot(
         let pile = piled.entry(to).or_default();
         let i = *pile;
         *pile += 1;
-        let at = clear_of_notes(spots.0[to].at + building_roll(i), &notes);
-        spawn_found(
+        // On a first raid a small thing joins its spot's cluster; the rest
+        // (and every later raid's) pile as rolled.
+        let small = matches!(
+            catalog.get(drop.kind).size,
+            extraction_core::items::SizeClass::Tiny | extraction_core::items::SizeClass::Small
+        );
+        let off = if cluster && placed && small {
+            cluster_roll(i)
+        } else {
+            building_roll(i)
+        };
+        let at = clear_of_notes(spots.0[to].at + off, &notes);
+        let _e = spawn_found(
             commands,
             catalog,
             SpawnItem {
@@ -523,6 +578,8 @@ fn spawn_building_loot(
                 condition: drop.condition,
             },
         );
+        #[cfg(test)]
+        commands.entity(_e).insert(LaidAt(to));
     };
     for (j, spot) in spots.0.iter().enumerate() {
         // This spot's own stream (`place_key`).
@@ -724,7 +781,16 @@ pub(crate) mod tests {
                     world.entities(),
                 );
                 let spots = crate::world::buildings::BuildingLoot(list);
-                spawn_building_loot(&mut commands, zone, &spots, loot, catalog, seed, Some(3));
+                spawn_building_loot(
+                    &mut commands,
+                    zone,
+                    &spots,
+                    loot,
+                    catalog,
+                    seed,
+                    Some(3),
+                    true,
+                );
             }
             queue.apply(world);
             let catalog = world.resource::<Catalog>().clone();
@@ -798,10 +864,15 @@ pub(crate) mod tests {
     /// (`roll_zone_loot`: markers, scenes, buildings, tapes, artifacts),
     /// with nothing else lying about.
     pub(crate) fn rolled_on(app: &mut App, r: u32) -> BTreeMap<String, u32> {
+        rolled_on_map(app, "marrow_creek", r)
+    }
+
+    /// [`rolled_on`] in valley `map` (the app's own).
+    fn rolled_on_map(app: &mut App, map: &str, r: u32) -> BTreeMap<String, u32> {
         app.world_mut()
             .resource_mut::<crate::progression::Progression>()
             .0
-            .raids_by_map = vec![("marrow_creek".into(), r)];
+            .raids_by_map = vec![(map.into(), r)];
         let items: Vec<Entity> = app
             .world_mut()
             .query_filtered::<Entity, With<Item>>()
@@ -818,11 +889,16 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn career_app() -> App {
-        let save = std::env::temp_dir().join(format!("loot_career_{}.ron", std::process::id()));
+        career_app_on("marrow_creek")
+    }
+
+    fn career_app_on(map: &str) -> App {
+        let save =
+            std::env::temp_dir().join(format!("loot_career_{map}_{}.ron", std::process::id()));
         let _ = std::fs::remove_file(&save);
         let opts = crate::LaunchOptions {
             robots: false,
-            map: "marrow_creek".into(),
+            map: map.into(),
             save: Some(save),
             ..Default::default()
         };
@@ -959,6 +1035,88 @@ pub(crate) mod tests {
                 badly.len(),
                 laid.len()
             );
+        }
+    }
+
+    /// What lies at each building loot spot: its kinds and how many of
+    /// each, and where its small things lie.
+    #[allow(clippy::type_complexity)]
+    fn by_spot(
+        app: &mut App,
+        spots: &[crate::world::buildings::LootSpot],
+    ) -> (Vec<BTreeMap<String, u32>>, Vec<Vec<Vec3>>) {
+        use extraction_core::items::SizeClass;
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut kinds = vec![BTreeMap::new(); spots.len()];
+        let mut small = vec![Vec::new(); spots.len()];
+        let mut q = app
+            .world_mut()
+            .query::<(&Item, &GlobalTransform, &LaidAt)>();
+        for (item, gt, laid) in q.iter(app.world()) {
+            let (at, k) = (gt.translation(), laid.0);
+            let def = cat.0.get(item.kind);
+            *kinds[k].entry(def.id.clone()).or_default() += 1;
+            if matches!(def.size, SizeClass::Tiny | SizeClass::Small) {
+                small[k].push(at);
+            }
+        }
+        (kinds, small)
+    }
+
+    /// A first raid's small things lie as a tidy cluster on their spot,
+    /// not a climbing pile (Progression: the 9x18 box, matches, bolt and
+    /// cell read as one heap), and only where they lie changes: in
+    /// Marrow's and Kettle's first two raids every spot holds the same
+    /// kinds, as many of each, as in the pile. A spot's small things lie
+    /// side by side on the board, a hand's width apart. The raid after
+    /// is laid as before.
+    #[test]
+    fn a_first_raids_small_things_lie_as_a_cluster() {
+        for map in ["marrow_creek", "kettle_pass"] {
+            let mut app = career_app_on(map);
+            let spots = app
+                .world()
+                .resource::<crate::world::buildings::BuildingLoot>()
+                .0
+                .clone();
+            let mut clusters = 0;
+            for r in 0..=PLACED_RAIDS {
+                app.world_mut().insert_resource(OldPiles);
+                rolled_on_map(&mut app, map, r);
+                let (pile, pile_at) = by_spot(&mut app, &spots);
+                app.world_mut().remove_resource::<OldPiles>();
+                rolled_on_map(&mut app, map, r);
+                let (laid, laid_at) = by_spot(&mut app, &spots);
+                for k in 0..spots.len() {
+                    assert_eq!(pile[k], laid[k], "{map} raid {r}: spot {:?}", spots[k].at);
+                }
+                if r == PLACED_RAIDS {
+                    assert_eq!(pile_at, laid_at, "{map} raid {r}: laid otherwise");
+                    continue;
+                }
+                for (k, at) in laid_at.iter().enumerate() {
+                    if at.len() < 2 || at.len() > 4 {
+                        continue;
+                    }
+                    clusters += 1;
+                    for (a, p) in at.iter().enumerate() {
+                        for q in &at[a + 1..] {
+                            assert!(
+                                (p.y - q.y).abs() < 0.02,
+                                "{map} raid {r}: spot {:?}: stacked {p} {q}",
+                                spots[k].at
+                            );
+                            let d = p.xz().distance(q.xz());
+                            assert!(
+                                d > CLUSTER_GAP * 0.9 && d < CLUSTER_GAP * 1.5,
+                                "{map} raid {r}: spot {:?}: {d:.3} m apart",
+                                spots[k].at
+                            );
+                        }
+                    }
+                }
+            }
+            assert!(clusters > 5, "{map}: only {clusters} clusters");
         }
     }
 
