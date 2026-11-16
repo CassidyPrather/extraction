@@ -1493,7 +1493,9 @@ pub(super) fn direct_raid(
         }
     }
     // "A red blink's one near you": told, it steps round a mine it sees
-    // blinking that its next leg would cross, and on.
+    // blinking that its next leg would cross, and on. (Told in a session
+    // before this one, it still knows: a player remembers.)
+    state.mines_told |= told_of_mines(&tells.firsts);
     if state.mines_told
         && let Some(Task::WalkTo { to, within }) = bot.tasks.front().cloned()
         && let Some(round) = round_mines(&world, here, to)
@@ -4050,6 +4052,8 @@ pub(super) struct Tells<'w, 's> {
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
     /// A machine's part shot off: a walker's leg going is seen.
     lamings: MessageReader<'w, 's, crate::robots::PartDestroyed>,
+    /// What it's been told before, this session or one it's resumed.
+    firsts: Res<'w, super::firsts::Firsts>,
 }
 
 /// Something above you, or a sentry's sweep on you: in under a roof,
@@ -4179,6 +4183,12 @@ const SPEARED_EVERY: f32 = 8.0;
 
 /// How far past a grappler's throw a newcomer keeps (m).
 const GRAPPLER_MARGIN: f32 = 6.0;
+
+/// Whether it's been told to watch its feet (`First::Minelayer`), in
+/// this session or in one its career was saved from.
+fn told_of_mines(firsts: &super::firsts::Firsts) -> bool {
+    firsts.met(First::Minelayer)
+}
 
 /// How wide a berth a newcomer gives a mine it's seen blinking (m): its
 /// plate, a body and a stride.
@@ -7306,6 +7316,9 @@ fn fetch_target(world: &World2, zone: &crate::world::Zone, item: &str) -> Option
         .min_by(|a, b| a.distance(drop).total_cmp(&b.distance(drop)))
 }
 
+/// (The card's place first: a career resumed on a later job meets it on
+/// that job's way, not on the first job's to the Old farm. The first
+/// job's card names the Old farm, so a fresh career's is where it was.)
 fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) {
     let drop = zone
         .map
@@ -7313,13 +7326,14 @@ fn on_the_way_to(zone: &crate::world::Zone, card: Option<Vec2>) -> (Vec2, Vec2) 
         .iter()
         .find(|m| m.kind == MarkerKind::Insertion)
         .map_or(Vec2::ZERO, |m| Vec2::from(m.at));
-    let farm = zone
-        .map
-        .markers
-        .iter()
-        .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
-        .map(|m| Vec2::from(m.at))
-        .or(card)
+    let farm = card
+        .or_else(|| {
+            zone.map
+                .markers
+                .iter()
+                .find(|m| m.kind == MarkerKind::Poi && m.name == "Old farm")
+                .map(|m| Vec2::from(m.at))
+        })
         .unwrap_or(drop + Vec2::new(100.0, -100.0));
     let at = drop.lerp(farm, 0.45);
     (at, (farm - drop).normalize_or(Vec2::NEG_Y))
@@ -7632,6 +7646,22 @@ pub(super) fn first_fight(
 
 #[cfg(test)]
 mod tests {
+    /// Told to watch its feet in a session its career was saved from, a
+    /// newcomer resumed still steps round the mines it sees blinking: the
+    /// saved firsts, loaded as a save loads them, are what it knows.
+    #[test]
+    fn it_remembers_the_minelayer_from_a_saved_career() {
+        use super::super::firsts::{First, Firsts};
+        use super::told_of_mines;
+        let loaded = |keys: Vec<String>| Firsts(keys.into_iter().collect());
+        assert!(!told_of_mines(&loaded(vec![])));
+        assert!(!told_of_mines(&loaded(vec![First::Hound.key()])));
+        assert!(told_of_mines(&loaded(vec![
+            First::Hound.key(),
+            First::Minelayer.key(),
+        ])));
+    }
+
     /// "You've lamed it": only a leg it was near enough to see go.
     #[test]
     fn a_walker_is_lamed_when_it_sees_the_leg_go() {
