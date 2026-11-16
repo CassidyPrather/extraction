@@ -41,10 +41,12 @@
     ],
 
     placements: [
-        // The cover, in the middle of the ground.
-        (prefab: "house_brick", at: (0.0, -14.0), rot: 0.0),
+        // The cover, in the middle of the ground: clear of the lines from
+        // the gates to the bench (a walker sent at you came round the
+        // house's corner and stuck there).
+        (prefab: "house_brick", at: (15.0, -22.0), rot: 0.0),
         (prefab: "guard_booth", at: (-17.0, -6.0), rot: 0.0),
-        (prefab: "boxcar", at: (19.0, -18.0), rot: 80.0),
+        (prefab: "boxcar", at: (-21.0, -24.0), rot: 80.0),
         (prefab: "wreck_lada", at: (-10.0, 5.0), rot: 30.0),
         (prefab: "wreck_uaz", at: (11.0, 3.0), rot: 340.0),
         (prefab: "log_pile", at: (-7.0, 14.0), rot: 90.0),
@@ -63,7 +65,7 @@
         (kind: TruckStop, at: (0.0, 53.0), rot: 0.0, name: "Arcade stop"),
         (kind: Rendezvous, at: (0.0, 41.0), name: "Arcade stop"),
         (kind: RobotGate, at: (0.0, -56.0), rot: 0.0, name: "North gate"),
-        (kind: Poi, at: (0.0, -14.0), name: "The house"),
+        (kind: Poi, at: (15.0, -22.0), name: "The house"),
     ],
 
     regions: [

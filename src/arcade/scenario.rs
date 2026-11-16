@@ -136,12 +136,24 @@ fn drive(
                 bot.tasks.extend([
                     Log("arcade smoke: engaging".into()),
                     Engage { shots: 30 },
-                    Wait(2.0),
+                    Wait(1.0),
+                    // A wound from the walker bleeds: dressed, as anyone
+                    // would after the fight.
+                    PickUp {
+                        id: "field_dressing".into(),
+                        side: Side::Left,
+                    },
+                    Use(Side::Left),
+                    Wait(1.0),
+                    // On the body first: the reload takes the fullest
+                    // magazine you carry.
                     PickUp {
                         id: "ak_mag".into(),
                         side: Side::Left,
                     },
+                    Stow(Side::Left),
                     Gun(MacroKind::Reload),
+                    Wait(1.0),
                     Engage { shots: 30 },
                 ]);
                 bot.tasks.extend(hold());

@@ -83,9 +83,11 @@ pub struct RunStats {
 
 impl RunStats {
     /// The summary's text: the same numbers as the jsonl's lines.
-    pub fn summary(&self, wave: u32, score: u32, t: f32) -> String {
+    /// `down`: the run ended with you down (else a RESTART ended it).
+    pub fn summary(&self, wave: u32, score: u32, t: f32, down: bool) -> String {
+        let end = if down { "down" } else { "restarted" };
         let mut s = format!(
-            "Waves cleared {}, down on wave {wave}\nScore {score}, time {}:{:02}\n",
+            "Waves cleared {}, {end} on wave {wave}\nScore {score}, time {}:{:02}\n",
             self.waves_cleared,
             t as u32 / 60,
             t as u32 % 60
@@ -282,7 +284,12 @@ fn note(
     }
     // What the guns did.
     for ev in guns.read() {
-        let gun = ev.item.clone();
+        // The gun's own id (a seated magazine's event names none).
+        let gun = items
+            .get(ev.gun)
+            .map(|it| catalog.get(it.0.kind).id.clone())
+            .unwrap_or_else(|_| ev.item.clone());
+        debug!("arcade: {gun} {:?}", ev.event);
         match &ev.event {
             FireEvent::Fired { .. } => {
                 rec.stats.guns.entry(gun.clone()).or_default().shots += 1;
@@ -431,7 +438,9 @@ fn close_run(
                "cause": rec.stats.cause}),
     );
     log.flush();
-    let summary = rec.stats.summary(wave, arcade.score, arcade.run_t);
+    let summary = rec
+        .stats
+        .summary(wave, arcade.score, arcade.run_t, !restarted);
     if let Some(p) = rec.summary_path.clone() {
         if let Err(e) = std::fs::write(&p, &summary) {
             warn!("arcade: can't write {}: {e}", p.display());
@@ -507,7 +516,7 @@ mod tests {
         s.items.insert("field_dressing".into(), 1);
         s.cause = Some("walker".into());
         s.waves_cleared = 2;
-        let text = s.summary(3, 450, 125.0);
+        let text = s.summary(3, 450, 125.0, true);
         assert!(text.contains("Waves cleared 2, down on wave 3"), "{text}");
         assert!(text.contains("Score 450, time 2:05"), "{text}");
         assert!(text.contains("ak74"), "{text}");

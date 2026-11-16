@@ -197,6 +197,7 @@ fn set_up(
     zone: Res<Zone>,
     mut arcade: ResMut<Arcade>,
     players: Query<(), With<LocalPlayer>>,
+    opts: Res<crate::launch::LaunchOptions>,
 ) {
     if arcade.bench.is_some() || players.is_empty() {
         return;
@@ -204,7 +205,12 @@ fn set_up(
     let bench = bench_pose(&zone);
     arcade.bench = Some(bench);
     arcade.stand = Some(bench * Transform::from_translation(STAND));
-    arcade.hold = 30;
+    // A screenshot's camera places itself.
+    arcade.hold = if opts.camera.is_some() { 0 } else { 30 };
+    // The ground starts swept: a session that saves nothing gets the dev
+    // cache by its insertion point (`items::loot`), which is the bench's;
+    // the bench lays its own kit.
+    arcade.reset = Reset::Sweep;
     for i in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, i);
         let table = commands
@@ -524,7 +530,13 @@ fn sweep(world: &mut World) {
             a.score = 0;
             a.run_t = 0.0;
             a.summary = None;
-            a.hold = 10;
+            if world
+                .resource::<crate::launch::LaunchOptions>()
+                .camera
+                .is_none()
+            {
+                world.resource_mut::<Arcade>().hold = 10;
+            }
             world.resource_mut::<Laid>().0 = false;
             info!("arcade: restart, {n} things swept");
         }
@@ -589,6 +601,11 @@ fn lay_tables(world: &mut World) {
     }
     world.resource_mut::<Laid>().0 = true;
     info!("arcade: {n} things laid on the bench");
+    // Shots only: `EXTRACTION_ARCADE_CALL=1` calls a wave once the bench is
+    // laid, so a screenshot shows the board's warning and the gate's lamp.
+    if std::env::var("EXTRACTION_ARCADE_CALL").is_ok_and(|v| v == "1") {
+        world.write_message(WaveCalled);
+    }
 }
 
 fn saved(id: &str, rounds: u32) -> SavedItem {
