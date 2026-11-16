@@ -367,8 +367,10 @@ pub fn caption_down(held: &[(Vec2, Vec2)], half: Vec2) -> f32 {
         })
 }
 
-/// What a glove adds round a thing held (m).
+/// What a glove adds round a thing held (m), and a glove's own reach
+/// from its middle, cuff and all.
 const FIST: f32 = 0.05;
+const GLOVE: f32 = 0.12;
 
 /// A panel's light for the eye's adaptation: a screen's own by day, as
 /// much less as the eyes open, so the slate stays near black.
@@ -558,11 +560,17 @@ fn show_caption(
     catalog: Res<crate::items::Catalog>,
     mut panels: Query<&mut Transform, Or<(With<CaptionPanel>, With<UrgentBar>)>>,
     hold: Option<Res<HoldForShot>>,
+    gloves: Query<(&GlobalTransform, &InheritedVisibility), With<crate::render::props::HandVisual>>,
 ) {
     let dt = time.delta_secs();
     let Some(eye) = the_eye(&free, &heads, &locals) else {
         return;
     };
+    let gloves: Vec<GlobalTransform> = gloves
+        .iter()
+        .filter(|(g, v)| v.get() && g.translation().distance(eye.translation()) < 1.5)
+        .map(|(g, _)| *g)
+        .collect();
     let (yaw, pitch) = yaw_pitch(eye.rotation());
     lock.step(yaw, pitch, dt);
     // Looked at: the caption's middle within `GAZE_CONE` of the gaze.
@@ -662,7 +670,7 @@ fn show_caption(
     );
     // Each thing's outline as seen, below the anchor's eye line, grown by
     // the glove round it.
-    let things: Vec<(Vec2, Vec2)> = hands
+    let mut things: Vec<(Vec2, Vec2)> = hands
         .iter()
         .map(|(_, place, h, _)| {
             let mut lo = Vec2::splat(f32::INFINITY);
@@ -683,6 +691,16 @@ fn show_caption(
             (lo - fist, hi + fist)
         })
         .collect();
+    // And the gloves themselves, holding or not, as drawn: a glove with
+    // its cuff is bigger than the thing in it, and hangs below it.
+    for g in &gloves {
+        let at = g.translation();
+        let d = at.distance(anchor_eye).max(0.05);
+        let c = seen(anchor_eye, lock.yaw, at);
+        let c = Vec2::new(c.x, c.y + lock.pitch.to_degrees());
+        let r = (GLOVE / d).atan().to_degrees();
+        things.push((c - r, c + r));
+    }
     let down = caption_down(&things, half);
     let rot = Quat::from_euler(EulerRot::YXZ, lock.yaw, lock.pitch - down.to_radians(), 0.0);
     let at = anchor_eye + rot * Vec3::NEG_Z * CAPTION_AT;
