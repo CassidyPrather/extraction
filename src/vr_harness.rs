@@ -5504,6 +5504,318 @@ mod body {
         }
     }
 
+    /// Where a thing let go goes is what `interact::stow::StowTarget` says
+    /// beforehand (what the pocket spheres show): for one thing of each
+    /// kind the stow tells apart (size, magazine family, gun, mount, what
+    /// each slot and the pack make of it), held at each slot's middle,
+    /// just inside its catch and just outside, at a sling's shoulder, and
+    /// in and out of the open pack; one pouch already full.
+    #[test]
+    fn a_thing_let_go_goes_where_the_stow_says() {
+        use crate::interact::stow::{StowQuery, StowTarget};
+        use bevy::ecs::system::SystemState;
+        let (mut vr, feet) = standing();
+        let player = vr.player;
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let empty_pack = crate::interact::body::Backpack {
+            owner: player,
+            open: true,
+            model: extraction_core::inventory::Backpack::default(),
+            contents: Vec::new(),
+            carried: true,
+            half: crate::interact::body::BACKPACK_HALF_EXTENTS,
+        };
+        let kinds = [
+            SlotKind::Holster,
+            SlotKind::Pouch,
+            SlotKind::Pocket,
+            SlotKind::Mount,
+            SlotKind::Sling,
+            SlotKind::Vest,
+            SlotKind::Head,
+        ];
+        // One of each kind the stow tells apart.
+        let mut seen = std::collections::HashSet::new();
+        let mut ids = Vec::new();
+        for (_, d) in catalog.iter() {
+            let is_gun = d.firearm.is_some();
+            let family = d.magazine.as_ref().map(|m| m.fits.clone());
+            let takes: Vec<bool> = kinds
+                .iter()
+                .map(|k| {
+                    let kind = SocketKind::Body(*k);
+                    crate::interact::accepts_item(
+                        &kind,
+                        d.size,
+                        family.as_deref(),
+                        is_gun,
+                        d.fits_mount(),
+                    ) && crate::interact::fits_body_slot(&kind, d)
+                })
+                .collect();
+            let room = empty_pack.fits(0.0, d.size, d.bulk);
+            let key = (
+                format!("{:?}", d.size),
+                family,
+                is_gun,
+                d.fits_mount(),
+                takes,
+                room,
+            );
+            if seen.insert(key) {
+                ids.push(d.id.clone());
+            }
+        }
+        let side = Side::Right;
+        let hand_at = feet + Vec3::new(0.25, 1.0, -0.4);
+        let grab = |vr: &mut Vr, id: &str| -> Option<Entity> {
+            let e = vr.spawn(id, Transform::from_translation(hand_at));
+            if vr
+                .app
+                .world()
+                .get::<crate::interact::carry::Bulky>(e)
+                .is_some()
+            {
+                vr.app.world_mut().despawn(e);
+                return None;
+            }
+            vr.app.world_mut().entity_mut(e).insert(RigidBody::Static);
+            vr.hand(side, hand_at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(side, 1.0);
+            vr.step(4);
+            (vr.hand_state(side).holding == Some(e)).then_some(e)
+        };
+        // Hold it with its middle at `to`.
+        let hold_at = |vr: &mut Vr, item: Entity, to: Vec3| {
+            for _ in 0..3 {
+                let hand = vr.hand_state(side).world.translation;
+                let at = vr
+                    .app
+                    .world()
+                    .get::<GlobalTransform>(item)
+                    .unwrap()
+                    .translation();
+                vr.move_hand(side, hand + (to - at));
+                vr.step(3);
+            }
+        };
+        let outcome = |vr: &mut Vr, item: Entity| -> StowTarget {
+            let w = vr.app.world();
+            if let Some(s) = w.get::<crate::interact::InSocket>(item) {
+                return StowTarget::Socket(s.socket);
+            }
+            if let Some(b) = w.get::<crate::interact::body::InBackpack>(item) {
+                return StowTarget::Pack(b.bag);
+            }
+            if vr.hand_state(side).holding == Some(item) {
+                return StowTarget::Refused { pack_full: None };
+            }
+            StowTarget::Drop { pack_full: None }
+        };
+        let same = |a: StowTarget, b: StowTarget| match (a, b) {
+            (StowTarget::Refused { .. }, StowTarget::Refused { .. })
+            | (StowTarget::Drop { .. }, StowTarget::Drop { .. }) => true,
+            _ => a == b,
+        };
+        let slots = |vr: &mut Vr| -> Vec<(Entity, SlotKind, GlobalTransform, f32, Vec3)> {
+            let mut q =
+                vr.app
+                    .world_mut()
+                    .query::<(Entity, &BodySlot, &Socket, &GlobalTransform, &Transform)>();
+            q.iter(vr.app.world())
+                .filter_map(|(e, _, s, g, local)| match s.kind {
+                    SocketKind::Body(k) => Some((
+                        e,
+                        k,
+                        *g,
+                        s.radius,
+                        g.transform_point(crate::interact::body::sling_shoulder(local.translation)),
+                    )),
+                    _ => None,
+                })
+                .collect()
+        };
+        // One pouch full: a magazine let go into it.
+        let pouch = slots(&mut vr)
+            .into_iter()
+            .find(|(_, k, ..)| *k == SlotKind::Pouch)
+            .unwrap();
+        let mag = grab(&mut vr, "pm_mag").expect("a magazine in hand");
+        hold_at(&mut vr, mag, pouch.2.translation());
+        vr.grip(side, 0.0);
+        vr.step(4);
+        assert_eq!(
+            outcome(&mut vr, mag),
+            StowTarget::Socket(pouch.0),
+            "the first pouch"
+        );
+        let mut tried = 0;
+        let mut skipped = 0;
+        let mut stowed_in = std::collections::BTreeSet::new();
+        let mut wrong = Vec::new();
+        let mut check = |vr: &mut Vr, id: &str, to: Vec3, what: &str| {
+            let Some(item) = grab(vr, id) else {
+                return;
+            };
+            if what.starts_with("hand") {
+                vr.move_hand(side, to);
+                vr.step(6);
+            } else {
+                hold_at(vr, item, to);
+            }
+            // Still in the hand, so where it's let go is where it was.
+            vr.step(10);
+            let at = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(item)
+                .unwrap()
+                .translation();
+            // Where a hand can't take it (into the head, through the
+            // back), it isn't let go there.
+            // Pressed against the body (into the head, through the back),
+            // it's pushed about as it's held: no one place it's let go.
+            vr.step(1);
+            let still = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(item)
+                .unwrap()
+                .translation();
+            let reached = at.distance(still) < 0.01;
+            let mut state: SystemState<StowQuery> = SystemState::new(vr.app.world_mut());
+            let said = state
+                .get(vr.app.world())
+                .unwrap()
+                .target(item)
+                .expect("held");
+            vr.grip(side, 0.0);
+            // The frame it's let go (not later: dropped into an open
+            // pack, it's put in as it comes to rest, `body::settle`).
+            vr.step(1);
+            let got = outcome(vr, item);
+            vr.step(3);
+            if reached {
+                tried += 1;
+                if let StowTarget::Socket(e) = got
+                    && let Some(SocketKind::Body(k)) =
+                        vr.app.world().get::<Socket>(e).map(|s| s.kind.clone())
+                {
+                    stowed_in.insert(format!("{k:?}"));
+                }
+                if matches!(got, StowTarget::Pack(_)) {
+                    stowed_in.insert("pack".into());
+                }
+            } else {
+                skipped += 1;
+            }
+            if reached && !same(said, got) {
+                let kind_of = |t: StowTarget| match t {
+                    StowTarget::Socket(e) => vr
+                        .app
+                        .world()
+                        .get::<Socket>(e)
+                        .map(|s| format!("{:?}", s.kind))
+                        .unwrap_or_default(),
+                    _ => String::new(),
+                };
+                wrong.push(format!(
+                    "{id} {what}: said {said:?} {}, went {got:?} {} (at {at:.2}, hand {:.2})",
+                    kind_of(said),
+                    kind_of(got),
+                    vr.hand_state(side).world.translation
+                ));
+            }
+            // Out of the way: out of its socket or pack, gone.
+            let w = vr.app.world_mut();
+            let mut sockets = w.query::<&mut Socket>();
+            for mut s in sockets.iter_mut(w) {
+                if s.occupant == Some(item) {
+                    s.occupant = None;
+                }
+            }
+            let mut packs = w.query::<&mut crate::interact::body::Backpack>();
+            for mut b in packs.iter_mut(w) {
+                b.contents.retain(|c| *c != item);
+            }
+            if vr.hand_state(side).holding == Some(item) {
+                vr.grip(side, 0.0);
+                vr.move_hand(side, hand_at + Vec3::Y * 0.5);
+                vr.step(2);
+            }
+            vr.app.world_mut().despawn(item);
+            vr.step(2);
+        };
+        for id in &ids {
+            for (_, kind, g, radius, shoulder) in slots(&mut vr) {
+                if kind == SlotKind::Sling {
+                    check(&mut vr, id, shoulder, "Sling shoulder");
+                    check(&mut vr, id, shoulder, "hand at the sling's shoulder");
+                }
+                let out = g.rotation() * Vec3::NEG_Z;
+                let mid = g.translation();
+                check(&mut vr, id, mid, &format!("{kind:?} middle"));
+                check(
+                    &mut vr,
+                    id,
+                    mid + out * radius * 0.6,
+                    &format!("{kind:?} inside"),
+                );
+                check(
+                    &mut vr,
+                    id,
+                    mid + out * radius * 1.3,
+                    &format!("{kind:?} outside"),
+                );
+            }
+        }
+        // The pack, open and hanging in front.
+        vr.app
+            .world_mut()
+            .write_message(crate::interact::body::ToggleBackpack { player });
+        vr.step(20);
+        let (bag, bag_g) = {
+            let mut q =
+                vr.app
+                    .world_mut()
+                    .query::<(Entity, &crate::interact::body::Backpack, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(_, b, _)| b.owner == player)
+                .map(|(e, b, g)| {
+                    assert!(b.open, "the pack open");
+                    (e, *g)
+                })
+                .unwrap()
+        };
+        let _ = bag;
+        for id in &ids {
+            let mid = bag_g.translation();
+            check(&mut vr, id, mid, "pack middle");
+            check(&mut vr, id, mid + Vec3::Y * 0.6, "above the pack");
+        }
+        eprintln!(
+            "{} kinds, {tried} let go, {skipped} out of reach; stowed in {stowed_in:?}",
+            ids.len()
+        );
+        // Every kind of slot, and the pack, took something.
+        for k in [
+            "Holster", "Pouch", "Pocket", "Mount", "Sling", "Vest", "Head", "pack",
+        ] {
+            assert!(
+                stowed_in.contains(k),
+                "nothing went into a {k}: {stowed_in:?}"
+            );
+        }
+        assert!(tried > ids.len() * 20, "only {tried} tried");
+        assert!(
+            wrong.is_empty(),
+            "{} of {tried} wrong:\n{}",
+            wrong.len(),
+            wrong.join("\n")
+        );
+    }
+
     /// The holster is on the gun hand's hip and the pockets on the thighs'
     /// fronts, where the drawn body has them: reaching down to them, the
     /// arm stays outside the body all the way.
