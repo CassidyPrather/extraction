@@ -321,20 +321,23 @@ pub fn off_the_line(eye: Vec3, line: Vec3, at: Vec3) -> Vec3 {
 }
 
 /// How far below the eye line (degrees) the caption sits, given what's
-/// held as seen from its anchor: each thing's (degrees right, degrees
-/// below) and angular radius, and the caption's angular half width and
+/// held as seen from its anchor: each thing's outline (its least and most
+/// degrees right and below), and the caption's angular half width and
 /// half height. `CAPTION_DOWN` if that's clear by `CAPTION_CLEAR`; else
 /// the nearest clear spot up to `CAPTION_HIGHEST`, else down to
-/// `CAPTION_LOWEST`; if none is, the least crowded of them.
-pub fn caption_down(held: &[(Vec2, f32)], half: Vec2) -> f32 {
+/// `CAPTION_LOWEST`; else above it, as high as the eye line; if none is
+/// clear, the least crowded of them.
+pub fn caption_down(held: &[(Vec2, Vec2)], half: Vec2) -> f32 {
     // How far (degrees) the caption at `down` is from clearing everything
     // held: 0 when it does.
     let short = |down: f32| {
         held.iter()
-            .map(|(c, r)| {
-                let dx = (c.x.abs() - half.x).max(0.0);
-                let dy = ((c.y - down).abs() - half.y).max(0.0);
-                (r + CAPTION_CLEAR - (dx * dx + dy * dy).sqrt()).max(0.0)
+            .map(|(lo, hi)| {
+                let dx = (lo.x - half.x).max(-half.x - hi.x).max(0.0);
+                let dy = (lo.y - (down + half.y))
+                    .max((down - half.y) - hi.y)
+                    .max(0.0);
+                (CAPTION_CLEAR - (dx * dx + dy * dy).sqrt()).max(0.0)
             })
             .fold(0.0, f32::max)
     };
@@ -344,7 +347,12 @@ pub fn caption_down(held: &[(Vec2, f32)], half: Vec2) -> f32 {
     let downs = (1..)
         .map(|i| CAPTION_DOWN + 0.5 * i as f32)
         .take_while(|d| *d <= CAPTION_LOWEST);
-    let tries: Vec<f32> = ups.chain(downs).collect();
+    // Last, above what's held as far as the eye line: never hidden
+    // behind it (a pistol raised to look at fills the whole range).
+    let over = (1..)
+        .map(|i| CAPTION_HIGHEST - 0.5 * i as f32)
+        .take_while(|d| *d >= 0.0);
+    let tries: Vec<f32> = ups.chain(downs).chain(over).collect();
     // The nearest clear spot, up first; none clear, the least crowded.
     tries
         .iter()
@@ -358,6 +366,9 @@ pub fn caption_down(held: &[(Vec2, f32)], half: Vec2) -> f32 {
                 .unwrap_or(CAPTION_DOWN)
         })
 }
+
+/// What a glove adds round a thing held (m).
+const FIST: f32 = 0.05;
 
 /// A panel's light for the eye's adaptation: a screen's own by day, as
 /// much less as the eyes open, so the slate stays near black.
@@ -382,6 +393,12 @@ pub struct Callout {
     /// Faded by the sights, 0..=1 (1: shows).
     pub sights: f32,
 }
+
+/// Screenshots (`dev`): lines stay up, however slowly the frames come
+/// (a software render's few a second would read a line out before the
+/// picture's taken).
+#[derive(Resource, Default)]
+pub struct HoldForShot;
 
 /// A thing a dev pose has in hand (screenshots): counted as held by the
 /// local player in that hand.
@@ -423,7 +440,7 @@ fn in_hand(
     held: &HeldQuery,
     locals: &Query<Entity, With<crate::rig::LocalPlayer>>,
     catalog: &crate::items::Catalog,
-) -> Vec<(Entity, Vec3, Vec3, crate::rig::Side)> {
+) -> Vec<(Entity, Transform, Vec3, crate::rig::Side)> {
     let me = locals.iter().next();
     held.iter()
         .filter_map(|(e, g, item, h, posed)| {
@@ -433,7 +450,7 @@ fn in_hand(
                 _ => return None,
             };
             let half = Vec3::from(catalog.get(item.kind()).size_m()) * 0.5;
-            Some((e, g.translation(), half, side))
+            Some((e, g.compute_transform(), half, side))
         })
         .collect()
 }
@@ -540,6 +557,7 @@ fn show_caption(
     held: HeldQuery,
     catalog: Res<crate::items::Catalog>,
     mut panels: Query<&mut Transform, Or<(With<CaptionPanel>, With<UrgentBar>)>>,
+    hold: Option<Res<HoldForShot>>,
 ) {
     let dt = time.delta_secs();
     let Some(eye) = the_eye(&free, &heads, &locals) else {
@@ -556,6 +574,11 @@ fn show_caption(
             (t.translation - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians()
         });
     lines.tick(dt, gazed);
+    if hold.is_some() {
+        if let Some(l) = &mut lines.now {
+            l.time = l.time.max(l.shown + 10.0);
+        }
+    }
     let want = lines
         .now
         .as_ref()
@@ -613,6 +636,7 @@ fn show_caption(
                     ))
                     .id()
             });
+            debug!("said: caption {key}");
             *showing = Some((p, bar, key));
         }
     }
@@ -636,14 +660,27 @@ fn show_caption(
         (size.x * 0.5 / CAPTION_AT).atan().to_degrees(),
         (size.y * 0.5 / CAPTION_AT).atan().to_degrees(),
     );
-    let things: Vec<(Vec2, f32)> = hands
+    // Each thing's outline as seen, below the anchor's eye line, grown by
+    // the glove round it.
+    let things: Vec<(Vec2, Vec2)> = hands
         .iter()
-        .map(|(_, at, h, _)| {
-            let d = at.distance(anchor_eye).max(0.05);
-            let c = seen(anchor_eye, lock.yaw, *at);
-            // Relative to the anchor's pitch: below the anchor's eye line.
-            let c = Vec2::new(c.x, c.y + lock.pitch.to_degrees());
-            (c, (h.length() / d).atan().to_degrees())
+        .map(|(_, place, h, _)| {
+            let mut lo = Vec2::splat(f32::INFINITY);
+            let mut hi = Vec2::splat(f32::NEG_INFINITY);
+            for i in 0..8 {
+                let corner = Vec3::new(
+                    if i & 1 == 0 { -h.x } else { h.x },
+                    if i & 2 == 0 { -h.y } else { h.y },
+                    if i & 4 == 0 { -h.z } else { h.z },
+                );
+                let c = seen(anchor_eye, lock.yaw, place.transform_point(corner));
+                let c = Vec2::new(c.x, c.y + lock.pitch.to_degrees());
+                lo = lo.min(c);
+                hi = hi.max(c);
+            }
+            let d = place.translation.distance(anchor_eye).max(0.05);
+            let fist = (FIST / d).atan().to_degrees();
+            (lo - fist, hi + fist)
         })
         .collect();
     let down = caption_down(&things, half);
@@ -676,6 +713,7 @@ fn show_callouts(
     held: HeldQuery,
     catalog: Res<crate::items::Catalog>,
     guns: Query<(&crate::weapons::Gun, &GlobalTransform)>,
+    hold: Option<Res<HoldForShot>>,
 ) {
     let dt = time.delta_secs();
     let Some(eye) = the_eye(&free, &heads, &locals) else {
@@ -698,7 +736,7 @@ fn show_callouts(
         })
         .collect();
     for (e, mut c, mut t, screen) in &mut callouts {
-        let Some(&(item, at, half, side)) = hands.iter().find(|h| h.0 == c.item) else {
+        let Some(&(item, place, half, side)) = hands.iter().find(|h| h.0 == c.item) else {
             // Put down or put away: its line goes with it.
             commands.entity(e).despawn();
             continue;
@@ -727,6 +765,7 @@ fn show_callouts(
         // Beside it on the hand's outer side, clear of its bounds.
         let out = right * side.sign();
         let reach = half.x.max(half.y).max(half.z);
+        let at = place.translation;
         let mut goal = at + out * (reach + CALLOUT_GAP + size.x * 0.5);
         // Off every gun's sight line; the gun at the eye fades its own.
         let mut at_sights = false;
@@ -748,6 +787,9 @@ fn show_callouts(
             (c.sights + dt / SIGHT_FADE).min(1.0)
         };
         c.line.shown += dt;
+        if hold.is_some() {
+            c.line.time = c.line.time.max(c.line.shown + 10.0);
+        }
         let gazed = (now - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians();
         if gazed {
             c.line.time = c
@@ -950,24 +992,28 @@ mod tests {
     /// nothing in the way it sits at `CAPTION_DOWN`.
     #[test]
     fn the_caption_keeps_clear_of_what_is_held() {
+        let circle = |c: Vec2, r: f32| (c - r, c + r);
         let half = Vec2::new(13.0, 4.0);
         assert_eq!(caption_down(&[], half), CAPTION_DOWN);
         // A pistol's muzzle just under it, middle of the view.
-        let d = caption_down(&[(Vec2::new(2.0, 18.0), 3.0)], half);
+        let d = caption_down(&[circle(Vec2::new(2.0, 18.0), 3.0)], half);
         assert!(d < CAPTION_DOWN && d >= CAPTION_HIGHEST, "up: {d}");
         // Something right where it would sit and up to the eye line: down.
-        let d = caption_down(&[(Vec2::new(0.0, 8.0), 4.0)], half);
+        let d = caption_down(&[circle(Vec2::new(0.0, 8.0), 4.0)], half);
         assert!(d > CAPTION_DOWN && d <= CAPTION_LOWEST, "down: {d}");
-        // Nothing clears it in range: as far from it as it can be.
-        let d = caption_down(&[(Vec2::new(5.0, 14.0), 2.5)], half);
-        assert!((CAPTION_HIGHEST..=CAPTION_LOWEST).contains(&d));
-        assert!(d == CAPTION_HIGHEST, "the far end from it: {d}");
+        // Nothing clears it from 6 to 20 degrees down: above it, toward
+        // the eye line, never behind it.
+        let d = caption_down(&[circle(Vec2::new(5.0, 14.0), 2.5)], half);
+        assert!((0.0..CAPTION_HIGHEST).contains(&d), "above it: {d}");
+        // Nothing clears it anywhere: the least crowded spot, in range.
+        let d = caption_down(&[circle(Vec2::new(0.0, 10.0), 12.0)], half);
+        assert!((0.0..=CAPTION_LOWEST).contains(&d), "{d}");
         // A spot that clears keeps CAPTION_CLEAR.
-        let held = [(Vec2::new(5.0, 15.0), 1.0)];
-        let d = caption_down(&held, half);
-        let dx = (held[0].0.x.abs() - half.x).max(0.0);
-        let dy = ((held[0].0.y - d).abs() - half.y).max(0.0);
-        assert!((dx * dx + dy * dy).sqrt() >= held[0].1 + CAPTION_CLEAR);
+        let (lo, hi) = circle(Vec2::new(5.0, 15.0), 1.0);
+        let d = caption_down(&[(lo, hi)], half);
+        let dx = (lo.x - half.x).max(-half.x - hi.x).max(0.0);
+        let dy = (lo.y - (d + half.y)).max((d - half.y) - hi.y).max(0.0);
+        assert!((dx * dx + dy * dy).sqrt() >= CAPTION_CLEAR, "{d}");
     }
 
     /// Its letters come out at their size whatever the line, and over the

@@ -349,6 +349,7 @@ fn say_for_gallery(
     posed: Query<(Entity, &crate::render::said::Posed)>,
     mut frames: Local<u32>,
     mut said: Local<bool>,
+    mut commands: Commands,
 ) {
     if *said || opts.gallery.is_none() {
         return;
@@ -370,6 +371,7 @@ fn say_for_gallery(
         return;
     }
     *said = true;
+    commands.insert_resource(crate::render::said::HoldForShot);
     use crate::raid::Show;
     for (k, v) in lines {
         let show = match k.as_str() {
@@ -380,6 +382,7 @@ fn say_for_gallery(
             _ => None,
         };
         if let Some(show) = show {
+            info!("gallery: told {show:?}: {v}");
             raid.tell(v.replace('|', "\n"), show);
         }
     }
