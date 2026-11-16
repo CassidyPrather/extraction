@@ -1542,6 +1542,21 @@ fn setup(
             ) {
                 commands.entity(e).insert(Placed::HouseFind);
             }
+            // A torch by it, its cell in: met indoors, where it's for, not
+            // first in the truck's crate with six other things new at once.
+            let torch = spawn(
+                &mut commands,
+                "flashlight",
+                Transform::from_xyz(at.x + 0.16, floor + size.y + 0.04, at.z),
+            );
+            let cell = spawn(
+                &mut commands,
+                "power_cell",
+                Transform::from_xyz(at.x + 0.16, floor + size.y + 0.1, at.z),
+            );
+            if let (Some(torch), Some(cell)) = (torch, cell) {
+                commands.queue(move |w: &mut World| crate::persist::seat_in_mount(w, torch, cell));
+            }
         }
     }
 
@@ -1594,6 +1609,42 @@ fn setup(
         &mut commands,
         "radio",
         Transform::from_translation(at + Vec3::Y * (size.y + 0.05)),
+    );
+    // And the way home and to the first job: the map the card rings its
+    // place on, and a compass. Here, not first in the truck's crate.
+    spawn(
+        &mut commands,
+        "map_case",
+        Transform::from_translation(at + Vec3::new(-0.15, size.y + 0.02, 0.0)),
+    );
+    spawn(
+        &mut commands,
+        "compass",
+        Transform::from_translation(at + Vec3::new(0.2, size.y + 0.03, 0.0)),
+    );
+
+    // First aid: a tin on a crate by the lamp, for its board's "Eat when
+    // you're slow". In front of the board, off the track's line.
+    let size = Vec3::new(0.45, 0.7, 0.4);
+    let aid = STATIONS[station_of(Goal::Wrist)].at;
+    let at = ground(&zone, [aid[0] + 1.0, aid[1] - 1.5]);
+    commands.spawn((
+        Name::new("Tin crate"),
+        Prop::Crate(size),
+        Transform::from_translation(at),
+        Visibility::default(),
+        RigidBody::Static,
+        Collider::compound(vec![(
+            Vec3::Y * size.y * 0.5,
+            Quat::IDENTITY,
+            Collider::cuboid(size.x, size.y, size.z),
+        )]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+    ));
+    spawn(
+        &mut commands,
+        "canned_stew",
+        Transform::from_translation(at + Vec3::Y * (size.y + 0.06)),
     );
 
     // The shimmer: one burner where you can see it from the track, its
@@ -1663,7 +1714,21 @@ fn setup(
                 at + Vec3::new(-0.12 + k as f32 * 0.12, size.y + 0.04, 0.0),
             ),
         );
+        // Bolts beside them, to throw the same way: what a raid's kit
+        // holds for it.
+        spawn(
+            &mut commands,
+            "bolt",
+            Transform::from_translation(at + Vec3::new(-0.1 + k as f32 * 0.1, size.y + 0.03, 0.14)),
+        );
     }
+    // And a detector: picked up, it ticks at the snare and the burner as
+    // at any anomaly out there (`anomaly::detector::detectors`).
+    spawn(
+        &mut commands,
+        "detector",
+        Transform::from_translation(at + Vec3::new(0.0, size.y + 0.04, -0.14)),
+    );
     commands.spawn((
         Name::new("Training burner"),
         Shimmer,
@@ -2442,6 +2507,90 @@ mod tests {
                 st.at
             );
         }
+    }
+
+    /// Each starter kind the truck's crate holds back for a station lies
+    /// loose at that station too, so it's met there, where it's for, and
+    /// not first in the crate with six other new things at once (the
+    /// census: seven new kinds in a second as the truck came back). The
+    /// torch has its cell in.
+    #[test]
+    fn the_crates_held_back_kit_is_met_at_its_station() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: super::TRAINING_YARD.into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let stashed: Vec<Entity> = w
+            .query_filtered::<&crate::interact::body::Backpack, With<Stash>>()
+            .iter(w)
+            .flat_map(|b| b.contents.clone())
+            .collect();
+        let catalog = w.resource::<Catalog>().clone();
+        let loose: Vec<(String, Vec2, bool)> = w
+            .query::<(
+                Entity,
+                &Item,
+                &GlobalTransform,
+                Option<&crate::interact::InSocket>,
+            )>()
+            .iter(w)
+            .filter(|(e, ..)| !stashed.contains(e))
+            .map(|(_, it, gt, sock)| {
+                (
+                    catalog.get(it.kind()).id.clone(),
+                    gt.translation().xz(),
+                    sock.is_some(),
+                )
+            })
+            .collect();
+        let house_find = w
+            .query::<(&Placed, &GlobalTransform)>()
+            .iter(w)
+            .find(|(p, _)| **p == Placed::HouseFind)
+            .map(|(_, gt)| gt.translation().xz())
+            .expect("the house's find");
+        for id in [
+            "flashlight",
+            "power_cell",
+            "canned_stew",
+            "detector",
+            "bolt",
+            "map_case",
+            "compass",
+        ] {
+            let st = &STATIONS[stash_station(id).expect("held back for a station")];
+            // The house's is by its find, in the house, not by the post out
+            // on the track (21 m off).
+            let at = if st.goals.contains(&Goal::Search) {
+                house_find
+            } else {
+                Vec2::from(st.at)
+            };
+            let near = loose
+                .iter()
+                .filter(|(k, ..)| k == id)
+                .map(|(_, p, _)| p.distance(at))
+                .fold(f32::MAX, f32::min);
+            assert!(
+                near < 10.0,
+                "{id}: nearest loose one {near:.1} m from {}",
+                st.title
+            );
+        }
+        assert!(
+            loose
+                .iter()
+                .any(|(k, _, seated)| k == "power_cell" && *seated),
+            "the house torch's cell isn't in it"
+        );
     }
 
     /// Every station in scripts/onboarding_shots.sh is one the yard has,
