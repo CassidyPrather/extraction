@@ -15,6 +15,11 @@ use crate::rig::{RigHand, RigInput};
 use crate::weapons::Gun;
 
 /// Use the item in a hand.
+/// A signal flare's star leaves the hand this fast, straight up: it
+/// climbs about 60 m (`flares::star_step`), as a machine's distress
+/// canister bursts (`robots::distress::HEIGHT`).
+pub const SIGNAL_FLARE_SPEED: f32 = 52.0;
+
 #[derive(Message, Clone, Copy, Debug)]
 pub struct UseItem {
     pub player: Entity,
@@ -108,6 +113,7 @@ fn use_items(
     on_limb: Query<&crate::interact::first_aid::OnLimb>,
     wounds: Query<&crate::interact::wounds::Wounds>,
     mut treated: MessageWriter<Treated>,
+    at: Query<&GlobalTransform>,
 ) {
     for u in uses.read() {
         let Ok(item) = items.get(u.item) else {
@@ -116,6 +122,20 @@ fn use_items(
         let def = catalog.get(item.kind());
         let mut consume = false;
         match def.id.as_str() {
+            // Pull the cord: a red star straight up out of the hand, and
+            // the tube's spent (#94).
+            "signal_flare" => {
+                if let Ok(gt) = at.get(u.item) {
+                    use crate::weapons::flares::{Flare, Star};
+                    commands.spawn((
+                        Name::new("Flare"),
+                        Flare::lit(Star::Red, Vec3::Y * SIGNAL_FLARE_SPEED, Some(u.player)),
+                        Transform::from_translation(gt.translation() + Vec3::Y * 0.15),
+                        Visibility::default(),
+                    ));
+                    consume = true;
+                }
+            }
             "radio" => {
                 radio.write(RadioCall {
                     player: u.player,
@@ -197,5 +217,73 @@ fn use_items(
             }
             commands.entity(u.item).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::weapons::flares::{Flare, Star, star_step};
+
+    /// A signal flare's star climbs about as high as a machine's distress
+    /// canister bursts: seen across the valley, not lost in the trees.
+    #[test]
+    fn a_signal_flares_star_climbs_about_sixty_metres() {
+        let dt = 1.0 / 64.0;
+        let (mut y, mut v) = (0.0, Vec3::Y * SIGNAL_FLARE_SPEED);
+        while v.y > 0.0 {
+            v = star_step(v, dt);
+            y += v.y * dt;
+        }
+        assert!((55.0..65.0).contains(&y), "{y} m");
+    }
+
+    /// Used, a signal flare sends a red star up and the tube's gone.
+    #[test]
+    fn a_signal_flare_goes_up_red_and_is_spent() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let catalog = app.world().resource::<Catalog>().clone();
+        let at = app.world().get::<Transform>(player).unwrap().translation + Vec3::Y;
+        let item = {
+            let world = app.world_mut();
+            let e = crate::items::spawn_item(
+                &mut world.commands(),
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind("signal_flare").expect("in the catalog"),
+                    transform: Transform::from_translation(at),
+                    condition: 1.0,
+                },
+            );
+            world.flush();
+            e
+        };
+        app.update();
+        app.world_mut().write_message(UseItem { player, item });
+        app.update();
+        app.update();
+        let stars: Vec<(Star, Vec3)> = app
+            .world_mut()
+            .query::<&Flare>()
+            .iter(app.world())
+            .map(|f| (f.star, f.velocity))
+            .collect();
+        assert_eq!(stars.len(), 1, "{stars:?}");
+        assert_eq!(stars[0].0, Star::Red);
+        assert!(stars[0].1.y > 30.0, "going up: {stars:?}");
+        assert!(app.world().get_entity(item).is_err(), "the tube's spent");
     }
 }
