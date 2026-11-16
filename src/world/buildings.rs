@@ -3871,6 +3871,27 @@ const MR_WHEEL: (f32, f32, f32) = (2.4, 2.55, 43.0);
 /// floor, the walls' top.
 const MR_PIT: (f32, f32) = (-3.0, 0.22);
 const MR_CURB: f32 = -1.3;
+/// The wheel house's doorway, in its -X wall: how far in from the +Z
+/// end its sides are (m).
+const MR_DOOR: (f32, f32) = (1.65, 0.25);
+
+/// The mill race's wheel house in the prefab's space (`mill_race`): its
+/// walls' footprint (middle, half size), and its doorway's middle on the
+/// dry floor inside (clear of the millwright's chest) and on the ground
+/// a stride outside.
+pub(crate) fn wheel_house() -> (Vec3, Vec2, Vec3, Vec3) {
+    let (wr, _, wz) = MR_WHEEL;
+    let ((px0, px1), pz) = (MR_PIT, wr + 0.5);
+    let (x0, x1) = (px0 - 0.4, px1 + 0.4);
+    let (z0, z1) = (wz - pz - 0.4, wz + pz + 0.4);
+    let door = wz + pz - (MR_DOOR.0 + MR_DOOR.1) * 0.5 + MR_SHIFT;
+    (
+        Vec3::new((x0 + x1) * 0.5, 0.0, (z0 + z1) * 0.5 + MR_SHIFT),
+        Vec2::new((x1 - x0) * 0.5, (z1 - z0) * 0.5),
+        Vec3::new(-2.0, 0.0, door),
+        Vec3::new(x0 - 1.2, 0.0, door),
+    )
+}
 const MR_FLOOR: f32 = 0.05;
 const MR_WALL_TOP: f32 = 1.6;
 
@@ -4041,7 +4062,7 @@ fn mill_race(b: &mut Builder) {
         Mat::Concrete,
     );
     let (wh, wy0) = (MR_WALL_TOP - fl, (MR_WALL_TOP + fl) * 0.5);
-    let (door0, door1) = (wz + pz - 1.65, wz + pz - 0.25);
+    let (door0, door1) = (wz + pz - MR_DOOR.0, wz + pz - MR_DOOR.1);
     for (z0, z1) in [(wz - pz - 0.4, door0), (door1, wz + pz + 0.4)] {
         b.bx(
             Vec3::new(0.4, wh, z1 - z0),
