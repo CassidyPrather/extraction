@@ -597,7 +597,7 @@ fn depart(
     }
 }
 
-fn downed(
+pub(crate) fn downed(
     mut events: MessageReader<Downed>,
     mut raid: ResMut<Raid>,
     locals: Query<(), With<LocalPlayer>>,

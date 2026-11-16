@@ -1,0 +1,73 @@
+// The Arcade — a fenced fighting ground for `--arcade` (src/arcade).
+//
+// Not a valley: the truck never drives here, nothing is looted or kept.
+// A clearing about 50 m across inside a tight fence, cover set out in it
+// from the valleys' own pieces (a brick house, a guard booth, two car
+// wrecks, a boxcar, log piles). The bench stands at the south edge; the
+// machines come through one of three gates in the fence, north, east and
+// west, each with a lamp that lights before they do (`arcade::waves`).
+//
+// Coordinates: [x, z] metres, origin at centre, x east, +z south.
+(
+    name: "The Arcade",
+    description: "A fenced fighting ground. Waves of machines, called from the bench.",
+    size: 160.0,
+    cell: 1.0,
+    base_height: 12.0,
+    noise: (seed: 47, amplitude: 0.5, scale: 80.0, octaves: 3, detail: 0.2),
+    rim: (width: 26.0, height: 6.0),
+    fence_inset: 22.0,
+
+    features: [],
+
+    roads: [
+        // The truck's way in from the south, to the bench.
+        (
+            name: "Arcade track", kind: Gravel, width: 4.0, smoothing: 8.0,
+            points: [(0.0, 56.0), (0.0, 44.0), (0.0, 30.0)],
+        ),
+    ],
+
+    forests: [
+        (name: "North belt", seed: 11, density: 0.9, undergrowth: 0.4,
+         mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
+         polygon: [(-78.0, -62.0), (78.0, -62.0), (78.0, -78.0), (-78.0, -78.0)]),
+        (name: "West belt", seed: 12, density: 0.9, undergrowth: 0.4,
+         mix: [(Spruce, 0.5), (Birch, 0.5)],
+         polygon: [(-78.0, -62.0), (-64.0, -62.0), (-64.0, 62.0), (-78.0, 62.0)]),
+        (name: "East belt", seed: 13, density: 0.9, undergrowth: 0.4,
+         mix: [(Pine, 0.6), (Birch, 0.4)],
+         polygon: [(64.0, -62.0), (78.0, -62.0), (78.0, 62.0), (64.0, 62.0)]),
+    ],
+
+    placements: [
+        // The cover, in the middle of the ground.
+        (prefab: "house_brick", at: (0.0, -14.0), rot: 0.0),
+        (prefab: "guard_booth", at: (-17.0, -6.0), rot: 0.0),
+        (prefab: "boxcar", at: (19.0, -18.0), rot: 80.0),
+        (prefab: "wreck_lada", at: (-10.0, 5.0), rot: 30.0),
+        (prefab: "wreck_uaz", at: (11.0, 3.0), rot: 340.0),
+        (prefab: "log_pile", at: (-7.0, 14.0), rot: 90.0),
+        (prefab: "log_pile", at: (7.0, 15.0), rot: 0.0),
+        // The machines' three gates (their lamps are the arcade's own:
+        // `arcade::visuals`).
+        (prefab: "robot_gate", at: (0.0, -52.0), rot: 0.0),
+        (prefab: "robot_gate", at: (52.0, -4.0), rot: 90.0),
+        (prefab: "robot_gate", at: (-52.0, -4.0), rot: 270.0),
+        // The wait by the truck's stop.
+        (prefab: "log_pile", at: (9.5, 47.0), rot: 0.0, tag: "wait_arcade_stop"),
+    ],
+
+    markers: [
+        (kind: Insertion, at: (0.0, 27.0), rot: 0.0, name: "Bench"),
+        (kind: TruckStop, at: (0.0, 53.0), rot: 0.0, name: "Arcade stop"),
+        (kind: Rendezvous, at: (0.0, 41.0), name: "Arcade stop"),
+        (kind: RobotGate, at: (0.0, -56.0), rot: 0.0, name: "North gate"),
+        (kind: Poi, at: (0.0, -14.0), name: "The house"),
+    ],
+
+    regions: [
+        // Nothing to find: what's here is what the bench lays out.
+        (name: "Arcade", danger: 0, loot: Some(0.0), polygon: [(-80.0, -80.0), (80.0, -80.0), (80.0, 80.0), (-80.0, 80.0)]),
+    ],
+)
