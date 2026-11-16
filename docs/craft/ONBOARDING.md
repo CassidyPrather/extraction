@@ -76,6 +76,9 @@ notes it), at the step that teaches it, not before.
 - **First raid's houses:** a starter set (food, a dressing, the pistol's
   rounds, light, bolts, scrap). Marrow's houses: 17 kinds on raid 0 (was 52).
   Then families a few at a time, raid by raid (`from_raid` in `loot.ron`).
+  On raids 0-1 the small things on a spot lie as a tidy cluster, a hand's
+  width apart on the board (`loot::cluster_roll`), not a climbing pile that
+  hid one behind another; the rolls and spots are unchanged.
 - **Say what it's for.** A kind you can't place is what "muddy" was, more
   than the count. The first time one of a family is in your hand out there,
   the driver says one line on what it does (`onboarding::pickups`): once a
