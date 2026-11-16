@@ -148,7 +148,7 @@ fn press_cards(
                 ComfortCard::Handed => comfort.left_handed = !comfort.left_handed,
                 ComfortCard::Seated => comfort.seated = !comfort.seated,
                 ComfortCard::OneHanded => comfort.one_handed = !comfort.one_handed,
-                ComfortCard::Captions => comfort.captions = !comfort.captions,
+                ComfortCard::Captions => comfort.next_captions(),
                 ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
                 ComfortCard::BleedPulse => comfort.bleed_pulse = !comfort.bleed_pulse,
                 ComfortCard::Body => comfort.body = !comfort.body,
@@ -324,13 +324,14 @@ mod tests {
             ComfortCard::Body => c.body,
             // Steadying starts on.
             ComfortCard::SteadyAim => !c.steady_aim,
-            _ => !c.captions,
+            // In view by default; a press puts them on the wrist only.
+            _ => !c.captions_in_view,
         };
         for (which, on_word) in [
             (ComfortCard::Handed, "left"),
             (ComfortCard::Seated, "seated"),
             (ComfortCard::OneHanded, "one"),
-            (ComfortCard::Captions, "off"),
+            (ComfortCard::Captions, "wrist"),
             (ComfortCard::Body, "shown"),
             (ComfortCard::SteadyAim, "off"),
         ] {

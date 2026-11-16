@@ -189,7 +189,9 @@ fn shoot(
         rect: [lo.x, lo.y, hi.x - lo.x, hi.y - lo.y],
         dark: matches!(
             screen.style,
-            crate::raid::bench::ScreenStyle::Lcd | crate::raid::bench::ScreenStyle::Crt
+            crate::raid::bench::ScreenStyle::Lcd
+                | crate::raid::bench::ScreenStyle::Crt
+                | crate::raid::bench::ScreenStyle::Slate
         ),
         centre: centre.to_array(),
         eye: want.translation.to_array(),

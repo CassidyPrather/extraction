@@ -45,6 +45,7 @@ pub mod puff;
 pub mod readback;
 pub mod reflectors;
 pub mod rv_beacons;
+pub mod said;
 pub mod screen;
 pub mod sky_light;
 pub mod sound_meshes;
@@ -89,6 +90,7 @@ impl Plugin for RenderPlugin {
         app.add_plugins(sky_light::SkyLightPlugin);
         app.add_plugins(held_light::HeldLightPlugin);
         app.add_plugins(wear::GunWearPlugin);
+        app.add_plugins(said::SaidPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
