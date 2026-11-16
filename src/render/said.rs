@@ -379,6 +379,12 @@ pub fn caption_place(held: &[(Vec2, Vec2)], half: Vec2) -> Vec2 {
         })
 }
 
+/// The eye at a gun's sights, as the gun's handling has it (the post
+/// blur and the sight fix go by the same).
+fn at_the_sights(h: &crate::weapons::feel::Handling) -> bool {
+    h.at_eye > 0.5
+}
+
 /// How far (degrees) the caption may slide aside off what's held.
 pub const CAPTION_ASIDE: f32 = 20.0;
 
@@ -576,6 +582,11 @@ fn show_caption(
     mut panels: Query<&mut Transform, Or<(With<CaptionPanel>, With<UrgentBar>)>>,
     hold: Option<Res<HoldForShot>>,
     gloves: Query<(&GlobalTransform, &InheritedVisibility), With<crate::render::props::HandVisual>>,
+    guns: Query<(
+        &crate::weapons::Gun,
+        &GlobalTransform,
+        &crate::weapons::feel::Handling,
+    )>,
 ) {
     let dt = time.delta_secs();
     let Some(eye) = the_eye(&free, &heads, &locals) else {
@@ -706,6 +717,19 @@ fn show_caption(
             (lo - fist, hi + fist)
         })
         .collect();
+    // A gun at the eye: its sight picture, `SIGHT_CLEAR` round where
+    // it points, as a callout keeps off it.
+    for (e, ..) in &hands {
+        if let Ok((gun, gt, handling)) = guns.get(*e) {
+            if at_the_sights(handling) {
+                let line = gt.rotation() * gun.layout.sight.rotation * Vec3::NEG_Z;
+                let c = seen(anchor_eye, lock.yaw, anchor_eye + line);
+                let c = Vec2::new(c.x, c.y + lock.pitch.to_degrees());
+                let r = SIGHT_CLEAR - CAPTION_CLEAR;
+                things.push((c - r, c + r));
+            }
+        }
+    }
     // And the gloves themselves, holding or not, as drawn: a glove with
     // its cuff is bigger than the thing in it, and hangs below it.
     for g in &gloves {
@@ -763,7 +787,11 @@ fn show_callouts(
     locals: Query<Entity, With<crate::rig::LocalPlayer>>,
     held: HeldQuery,
     catalog: Res<crate::items::Catalog>,
-    guns: Query<(&crate::weapons::Gun, &GlobalTransform)>,
+    guns: Query<(
+        &crate::weapons::Gun,
+        &GlobalTransform,
+        &crate::weapons::feel::Handling,
+    )>,
     hold: Option<Res<HoldForShot>>,
 ) {
     let dt = time.delta_secs();
@@ -780,10 +808,9 @@ fn show_callouts(
     let sights: Vec<(Entity, Vec3, bool)> = hands
         .iter()
         .filter_map(|(e, ..)| {
-            let (gun, gt) = guns.get(*e).ok()?;
-            let at_eye = gt.affine().inverse().transform_point3(eye.translation());
+            let (gun, gt, handling) = guns.get(*e).ok()?;
             let line = gt.rotation() * gun.layout.sight.rotation * Vec3::NEG_Z;
-            Some((*e, line, crate::weapons::feel::at_sights(gun, at_eye)))
+            Some((*e, line, at_the_sights(handling)))
         })
         .collect();
     for (e, mut c, mut t, screen) in &mut callouts {
