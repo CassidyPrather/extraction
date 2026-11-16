@@ -579,8 +579,12 @@ fn show_caption(
     locals: Query<Entity, With<crate::rig::LocalPlayer>>,
     held: HeldQuery,
     catalog: Res<crate::items::Catalog>,
-    mut panels: Query<&mut Transform, Or<(With<CaptionPanel>, With<UrgentBar>)>>,
+    mut panels: Query<
+        &mut Transform,
+        (Or<(With<CaptionPanel>, With<UrgentBar>)>, Without<Callout>),
+    >,
     hold: Option<Res<HoldForShot>>,
+    callouts: Query<(&GlobalTransform, &ScreenText, &PanelLight), With<Callout>>,
     gloves: Query<(&GlobalTransform, &InheritedVisibility), With<crate::render::props::HandVisual>>,
     guns: Query<(
         &crate::weapons::Gun,
@@ -717,6 +721,27 @@ fn show_caption(
             (lo - fist, hi + fist)
         })
         .collect();
+    // The callouts showing: two panels of words over each other read as
+    // neither.
+    for (g, screen, light) in &callouts {
+        if light.alpha < 0.05 {
+            continue;
+        }
+        let (h, place) = (screen.size * 0.5, g.compute_transform());
+        let mut lo = Vec2::splat(f32::INFINITY);
+        let mut hi = Vec2::splat(f32::NEG_INFINITY);
+        for (x, y) in [(-h.x, -h.y), (h.x, -h.y), (-h.x, h.y), (h.x, h.y)] {
+            let c = seen(
+                anchor_eye,
+                lock.yaw,
+                place.transform_point(Vec3::new(x, y, 0.0)),
+            );
+            let c = Vec2::new(c.x, c.y + lock.pitch.to_degrees());
+            lo = lo.min(c);
+            hi = hi.max(c);
+        }
+        things.push((lo, hi));
+    }
     // A gun at the eye: its sight picture, `SIGHT_CLEAR` round where
     // it points, as a callout keeps off it.
     for (e, ..) in &hands {
