@@ -131,6 +131,14 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
             }
         }
     }
+    // A yard gate's doorway is open to the grid (the leaf is the yard's to
+    // shut): the fence runs either side, with their clearance, leave a gap
+    // narrower than the cell can be trusted to fall in, so open it through.
+    for p in map.placements.iter().filter(|p| p.prefab == "yard_gate") {
+        let (sn, c) = p.rot.to_radians().sin_cos();
+        let at = |z: f32| [p.at[0] - z * sn, p.at[1] + z * c];
+        g.open_line(at(-3.0), at(3.0), 1);
+    }
     g
 }
 
