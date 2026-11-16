@@ -264,21 +264,10 @@ pub struct Stepped {
     pub at: Vec3,
 }
 
-/// What's said at a step up, by what moved it (Onboarding's words to
-/// own; these say what each step means).
+/// What's said at a step up, by what moved it: Onboarding's words
+/// (`onboarding::steps`), what to do first.
 pub fn stepped(level: Level, why: Why) -> &'static str {
-    match (level, why) {
-        (Level::Quiet, _) => "",
-        (Level::Stirred, Why::Time) => {
-            "Someone's been about too long. A whine from the Gate's side, rising."
-        }
-        (Level::Stirred, Why::Ground) => {
-            "You're on their ground now. A whine from the Gate's side, rising."
-        }
-        (Level::Stirred, _) => "They heard that. A whine from the Gate's side, rising.",
-        (Level::Busy, _) => "Machine traffic on the wind, all of it this way.",
-        (Level::Hunting, _) => "The whole Zone is looking at you.",
-    }
+    crate::onboarding::steps::said(level, why)
 }
 
 pub struct PressurePlugin;

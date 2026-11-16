@@ -2,7 +2,8 @@
 //! and when (the designer: "bombarded with too many item types at once").
 //! A kind is counted the first time one lies within [`NEAR`] of the player
 //! anywhere but on them: loose, on a shelf, in a crate, in a case. Each is
-//! logged once, `census: <t> s <kind> (<n> kinds)`, for a bot run to read.
+//! logged once, `census: <t> s <kind> (<n> kinds)`, for a bot run to read;
+//! and the first time one's in its hand, `census held: <t> s <kind>`.
 
 use bevy::prelude::*;
 
@@ -83,6 +84,7 @@ pub fn census(
     catalog: Res<Catalog>,
     time: Res<Time>,
     mut seen: Local<Vec<String>>,
+    mut held_seen: Local<Vec<String>>,
     mut every: Local<f32>,
 ) {
     *every += time.delta_secs();
@@ -99,10 +101,14 @@ pub fn census(
         let mine = held.is_some()
             || sock.is_some_and(|s| owners.get(s.socket).is_ok_and(|o| o.0 == me))
             || bag.is_some_and(|b| bags.get(b.bag).is_ok_and(|b| b.owner == me && b.carried));
+        let id = &catalog.get(item.kind()).id;
+        if held.is_some() && !held_seen.contains(id) {
+            held_seen.push(id.clone());
+            info!("census held: {:.0} s {id}", time.elapsed_secs());
+        }
         if mine || gt.translation().distance(at) > NEAR {
             continue;
         }
-        let id = &catalog.get(item.kind()).id;
         if !seen.contains(id) {
             seen.push(id.clone());
             info!(

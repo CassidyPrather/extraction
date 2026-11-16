@@ -65,6 +65,9 @@ pub enum First {
     /// Home from a raid, off again to the truck's tail with finds still in
     /// the pack: what's on you goes at a fall, the stash keeps.
     StashFinds,
+    /// Home with an empty stripper clip and a box of its rounds to hand:
+    /// they fill by hand, and a raid's no place to find that out.
+    EmptyClips,
     /// A machine that was shooting at you lost you, and is coming to where
     /// it last saw you, or back past you once it's given up
     /// (`robots::search::ComingBack`): a moving shape behind low cover is
@@ -82,6 +85,17 @@ pub enum First {
     Hound,
     /// A crawler charging its spark gun at you.
     Crawler,
+    /// A minelayer in sight, or one of its mines blinking near you: watch
+    /// your feet.
+    Minelayer,
+    /// A grappler's harpoon thrown at you, hit or miss.
+    Grappler,
+    /// A spotter's eye swinging onto you: it's building a fix to call the
+    /// rest.
+    Spotter,
+    /// A dirigible that sees you, or you near its lowered pod: it sends
+    /// for those that shoot.
+    Dirigible,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -132,12 +146,17 @@ pub const ALL: &[First] = &[
     First::Hush,
     First::Payday,
     First::StashFinds,
+    First::EmptyClips,
     First::ComingToLook,
     First::BrokenNoticed,
     First::Shoved,
     First::Heavy,
     First::Hound,
     First::Crawler,
+    First::Minelayer,
+    First::Grappler,
+    First::Spotter,
+    First::Dirigible,
 ];
 
 impl First {
@@ -170,6 +189,10 @@ impl First {
                 | First::Heavy
                 | First::Hound
                 | First::Crawler
+                | First::Minelayer
+                | First::Grappler
+                | First::Spotter
+                | First::Dirigible
         )
     }
 
@@ -236,6 +259,7 @@ impl First {
             // the card wouldn't pay it.)
             First::Payday => &[PAYDAY_NOT_YET, "{verdict}"],
             First::StashFinds => &[STASH_FINDS],
+            First::EmptyClips => &[EMPTY_CLIPS],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
@@ -263,6 +287,28 @@ impl First {
             // of its line, or a few rounds and it's down.)
             First::Crawler => {
                 &["Truck: \"Back out the way you came. Or put it down: it's charging.\""]
+            }
+            // (Its mines sit in rings of dark turned earth and blink red
+            // within `minelayer::WAKE` of you; seen, it turns tail and drops
+            // one behind it. Disarming is a later lesson.)
+            First::Minelayer => &[
+                "Truck: \"Watch your feet. It sows mines in rings of turned earth.\"",
+                "Truck: \"A red blink's one near you. Don't walk in its tracks.\"",
+            ],
+            // (Its line reaches `grappler::TETHER_RANGE`; it snaps when the
+            // grappler's wrecked or stunned, and hauls you to its friends.)
+            First::Grappler => {
+                &["Truck: \"Keep out of its throw. Speared? Shoot it: the line drops.\""]
+            }
+            // (A full fix sends a response to where you stood; straight
+            // under it, it can't see.)
+            First::Spotter => {
+                &["Truck: \"Out of its eye, now. It calls the rest. Under it, it's blind.\""]
+            }
+            // (Unarmed, but it reports what it sees, and grapplers guard its
+            // pod.)
+            First::Dirigible => {
+                &["Truck: \"Under cover. It doesn't shoot, but it sends for those that do.\""]
             }
         }
     }
@@ -318,13 +364,16 @@ struct Queue {
 /// A machine that has you, by its first: what it says to do (a roof, run
 /// across, walk away) isn't "go still", and the two said together told a
 /// newcomer both at once. Heard waits for a machine that's only listening.
-const HAS_YOU: [First; 6] = [
+const HAS_YOU: [First; 9] = [
     First::Sentry,
     First::DroneLock,
     First::Aimed,
     First::Heavy,
     First::Hound,
     First::Crawler,
+    First::Grappler,
+    First::Spotter,
+    First::Dirigible,
 ];
 
 /// How long a machine's having you holds "go still" back.
@@ -560,18 +609,52 @@ fn machines_on_you(
     }
 }
 
-/// A heavy raising its arm at you, close; a hound coiling at you.
+/// A heavy raising its arm at you, close; a hound coiling at you; a
+/// crawler charging; and the unarmed ones and the grappler, each on what
+/// tells a player it's there (`logistics_on_you`).
+#[allow(clippy::too_many_arguments)]
 fn heavy_raised(
     mut events: MessageReader<crate::robots::heavy::HeavyEvent>,
     mut crouches: MessageReader<crate::robots::hound::HoundCrouch>,
     mut charges: MessageReader<crate::robots::indoor::CrawlerCharge>,
+    mut harpoons: MessageReader<crate::robots::grappler::Harpoon>,
+    mut spotters: MessageReader<crate::robots::spotter::SpotterEvent>,
     minds: Query<&Awareness>,
-    locals: Query<Entity, With<LocalPlayer>>,
+    watchers: Query<
+        (&Awareness, Has<crate::robots::minelayer::Minelayer>),
+        Or<(
+            With<crate::robots::minelayer::Minelayer>,
+            With<crate::robots::dirigible::Dirigible>,
+        )>,
+    >,
+    mines: Query<&Transform, With<crate::robots::minelayer::LaidMine>>,
+    pods: Query<&GlobalTransform, With<crate::robots::dirigible::CargoPod>>,
+    locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     mut m: Meet,
 ) {
-    let Some(me) = locals.iter().next() else {
+    let Some((me, at)) = locals.iter().next() else {
         return;
     };
+    let at = at.translation();
+    for f in logistics_on_you(
+        me,
+        at,
+        harpoons.read().map(|h| h.to),
+        spotters
+            .read()
+            .filter(|s| {
+                s.what == crate::robots::spotter::SpotterAct::Fixing
+                    && minds.get(s.spotter).is_ok_and(|a| a.target == Some(me))
+            })
+            .count(),
+        watchers
+            .iter()
+            .map(|(a, layer)| (a.target == Some(me) && a.can_see_target, layer)),
+        mines.iter().map(|t| t.translation),
+        pods.iter().map(|p| p.translation()),
+    ) {
+        m.meet(f);
+    }
     for ev in events.read() {
         if ev.what == crate::robots::heavy::HeavyAct::Raise
             && minds.get(ev.heavy).is_ok_and(|a| a.target == Some(me))
@@ -591,6 +674,55 @@ fn heavy_raised(
             m.meet(First::Crawler);
         }
     }
+}
+
+/// How near a lowered cargo pod counts as at it: its grapplers' claim on
+/// the ground round it (`grappler::CLAIM`).
+const POD_NEAR: f32 = crate::robots::grappler::CLAIM;
+
+/// The minelayer's, the grappler's, the spotter's and the dirigible's
+/// firsts, from what's happening to you: a harpoon thrown at you; a
+/// spotter's eye fixing on you; a minelayer or a dirigible that sees you
+/// (`(sees you, is a minelayer)`); a mine blinking near you (within
+/// `minelayer::WAKE`); a dirigible's pod lowered near you.
+fn logistics_on_you(
+    me: Entity,
+    at: Vec3,
+    harpooned: impl Iterator<Item = Entity>,
+    fixing: usize,
+    watching: impl Iterator<Item = (bool, bool)>,
+    mines: impl Iterator<Item = Vec3>,
+    pods: impl Iterator<Item = Vec3>,
+) -> Vec<First> {
+    let flat = |p: Vec3| p.xz().distance(at.xz());
+    let mut out = vec![];
+    let (mut layer, mut ship) = (false, false);
+    for (sees, is_layer) in watching {
+        if sees {
+            if is_layer {
+                layer = true;
+            } else {
+                ship = true;
+            }
+        }
+    }
+    if layer
+        || mines
+            .into_iter()
+            .any(|p| flat(p) <= extraction_core::minelayer::WAKE)
+    {
+        out.push(First::Minelayer);
+    }
+    if harpooned.into_iter().any(|to| to == me) {
+        out.push(First::Grappler);
+    }
+    if fixing > 0 {
+        out.push(First::Spotter);
+    }
+    if ship || pods.into_iter().any(|p| flat(p) <= POD_NEAR) {
+        out.push(First::Dirigible);
+    }
+    out
 }
 
 fn drone_locks(
@@ -897,6 +1029,28 @@ pub fn spare_for(name: &str) -> String {
 pub const STASH_FINDS: &str =
     "Driver: \"Stash what you found. What's on you is gone if you fall.\"";
 
+/// Home with an empty stripper clip and a box of its rounds (Progression's
+/// wording: they fill by hand from the box, as the yard's magazines do).
+pub const EMPTY_CLIPS: &str = "Driver: \"Empty clips. Strip a box into them before you go.\"";
+
+/// Whether, of what's to hand (each thing's catalog entry and the rounds
+/// in it), a stripper clip is empty and a box of its cartridge isn't.
+fn empty_clip_to_fill<'a>(
+    to_hand: impl Iterator<Item = (&'a extraction_core::items::ItemDef, u32)> + Clone,
+) -> bool {
+    to_hand.clone().any(|(d, n)| {
+        d.magazine.as_ref().is_some_and(|m| {
+            m.stripper
+                && n == 0
+                && to_hand.clone().any(|(a, r)| {
+                    a.category == extraction_core::items::Category::Ammo
+                        && r > 0
+                        && a.cartridge.as_deref() == Some(m.cartridge.as_str())
+                })
+        })
+    })
+}
+
 /// What counts as a find to stash: what's brought home for its worth, not
 /// the kit taken out.
 fn a_find(c: extraction_core::items::Category) -> bool {
@@ -958,6 +1112,21 @@ fn spare_radio(
         });
         if at_tail && finds {
             m.meet(First::StashFinds);
+        }
+    }
+    // An empty stripper clip on you or in the crate, a box of its rounds
+    // with it: fill them now (once a career).
+    if !m.met(First::EmptyClips)
+        && *home_for >= SPARE_AFTER
+        && let Some((me, _)) = locals.iter().next()
+    {
+        let crate_has = |e: Entity| stash.iter().any(|(_, b)| b.contents.contains(&e));
+        let to_hand = items
+            .iter()
+            .filter(|(e, _, by, _)| by.is_some_and(|b| b.0 == me) || crate_has(*e))
+            .map(|(_, it, ..)| (catalog.get(it.kind()), it.rounds));
+        if empty_clip_to_fill(to_hand) {
+            m.meet(First::EmptyClips);
         }
     }
     // (What's on its way through the hatch already counts, once it's down.)
@@ -1265,24 +1434,10 @@ mod tests {
         ("sentry", Ok(First::Sentry)),
         ("crawler", Ok(First::Crawler)),
         ("warden", Ok(First::Underground)),
-        (
-            "grappler",
-            Err("no line of its own yet: 'Something heard you' when it notices"),
-        ),
-        (
-            "minelayer",
-            Err(
-                "no line of its own yet: it carries no gun; its mines' rings and red blink are the tell",
-            ),
-        ),
-        (
-            "spotter",
-            Err("no line of its own yet: no gun; 'Something heard you' when it calls"),
-        ),
-        (
-            "dirigible",
-            Err("no line of its own yet: unarmed; its grapplers are the danger"),
-        ),
+        ("grappler", Ok(First::Grappler)),
+        ("minelayer", Ok(First::Minelayer)),
+        ("spotter", Ok(First::Spotter)),
+        ("dirigible", Ok(First::Dirigible)),
         ("mender", Err("never acts on you: it mends machines")),
         ("plough", Err("never looks for you: it drives its lane")),
         ("pylon", Err("a relay mast: nothing toward you")),
@@ -1333,6 +1488,128 @@ mod tests {
         );
     }
 
+    /// Each of the four is told on what tells a player it's there, and
+    /// not on what doesn't: a harpoon at someone else, a mine a step past
+    /// its blink, a pod off past its grapplers' claim, a minelayer or a
+    /// dirigible looking at nothing.
+    #[test]
+    fn the_unarmed_ones_and_the_grappler_are_told_on_their_tell() {
+        let me = Entity::from_raw_u32(7).unwrap();
+        let other = Entity::from_raw_u32(8).unwrap();
+        let at = Vec3::new(10.0, 2.0, -4.0);
+        let wake = extraction_core::minelayer::WAKE;
+        let told = |harpoon: &[Entity],
+                    fixing: usize,
+                    watching: &[(bool, bool)],
+                    mines: &[Vec3],
+                    pods: &[Vec3]| {
+            logistics_on_you(
+                me,
+                at,
+                harpoon.iter().copied(),
+                fixing,
+                watching.iter().copied(),
+                mines.iter().copied(),
+                pods.iter().copied(),
+            )
+        };
+        assert!(told(&[], 0, &[], &[], &[]).is_empty());
+        // A grappler: its harpoon at you, hit or miss; not at another.
+        assert_eq!(told(&[me], 0, &[], &[], &[]), [First::Grappler]);
+        assert!(told(&[other], 0, &[], &[], &[]).is_empty());
+        // A spotter fixing on you.
+        assert_eq!(told(&[], 1, &[], &[], &[]), [First::Spotter]);
+        // A minelayer that sees you; or a mine near enough to blink
+        // (height aside: a mine on a bank below is as near).
+        assert_eq!(told(&[], 0, &[(true, true)], &[], &[]), [First::Minelayer]);
+        assert!(told(&[], 0, &[(false, true)], &[], &[]).is_empty());
+        let near = at + Vec3::new(wake - 0.2, -1.5, 0.0);
+        let far = at + Vec3::new(wake + 0.5, 0.0, 0.0);
+        assert_eq!(told(&[], 0, &[], &[near], &[]), [First::Minelayer]);
+        assert!(told(&[], 0, &[], &[far], &[]).is_empty());
+        // A dirigible that sees you, or its pod lowered near you.
+        assert_eq!(told(&[], 0, &[(true, false)], &[], &[]), [First::Dirigible]);
+        assert!(told(&[], 0, &[(false, false)], &[], &[]).is_empty());
+        let pod = at + Vec3::new(0.0, 0.0, POD_NEAR - 1.0);
+        let pod_far = at + Vec3::new(0.0, 0.0, POD_NEAR + 1.0);
+        assert_eq!(told(&[], 0, &[], &[], &[pod]), [First::Dirigible]);
+        assert!(told(&[], 0, &[], &[], &[pod_far]).is_empty());
+    }
+
+    /// In the game, each is met through the firsts' own system, from its
+    /// robot's own message or component; and each holds "go still" back
+    /// but the minelayer's (nothing's after you: watch where you step).
+    #[test]
+    fn each_is_met_in_the_game_and_holds_go_still_back() {
+        use crate::robots::{dirigible, grappler, minelayer, spotter};
+        for f in [
+            First::Grappler,
+            First::Spotter,
+            First::Minelayer,
+            First::Dirigible,
+        ] {
+            let mut app = App::new();
+            app.init_resource::<Firsts>()
+                .init_resource::<Queue>()
+                .add_message::<FirstMet>()
+                .add_message::<crate::robots::heavy::HeavyEvent>()
+                .add_message::<crate::robots::hound::HoundCrouch>()
+                .add_message::<crate::robots::indoor::CrawlerCharge>()
+                .add_message::<grappler::Harpoon>()
+                .add_message::<spotter::SpotterEvent>()
+                .add_systems(Update, heavy_raised);
+            let me = app
+                .world_mut()
+                .spawn((LocalPlayer, GlobalTransform::default()))
+                .id();
+            let seeing = Awareness {
+                target: Some(me),
+                can_see_target: true,
+                ..default()
+            };
+            match f {
+                First::Grappler => {
+                    let from = app.world_mut().spawn_empty().id();
+                    app.world_mut().write_message(grappler::Harpoon {
+                        from,
+                        to: me,
+                        hit: false,
+                    });
+                }
+                First::Spotter => {
+                    let spotter = app.world_mut().spawn(seeing).id();
+                    app.world_mut().write_message(spotter::SpotterEvent {
+                        spotter,
+                        at: Vec3::Y * 30.0,
+                        what: spotter::SpotterAct::Fixing,
+                    });
+                }
+                First::Minelayer => {
+                    app.world_mut().spawn((
+                        minelayer::LaidMine {
+                            mine: Default::default(),
+                            disarm: Default::default(),
+                            phase: 0.0,
+                        },
+                        Transform::from_xyz(3.0, 0.0, 2.0),
+                    ));
+                }
+                _ => {
+                    let carrier = app.world_mut().spawn_empty().id();
+                    app.world_mut().spawn((
+                        dirigible::CargoPod { carrier },
+                        GlobalTransform::from_translation(Vec3::X * 5.0),
+                    ));
+                }
+            }
+            app.update();
+            let met = app.world().resource::<Firsts>();
+            assert!(met.met(f), "{f:?} not met");
+            let held = app.world().resource::<Queue>().has_you > 0.0;
+            assert_eq!(held, f != First::Minelayer, "{f:?}: go still held {held}");
+        }
+    }
+
     /// Every line fits the wrist whole, with no game words in it.
     #[test]
     fn every_first_line_fits_and_speaks_plainly() {
@@ -1354,6 +1631,44 @@ mod tests {
         }
         let keys: BTreeSet<String> = ALL.iter().map(|f| f.key()).collect();
         assert_eq!(keys.len(), ALL.len(), "every moment has its own key");
+    }
+
+    /// "Empty clips" is for an empty stripper clip with a box of its own
+    /// rounds to hand: not a full one, not a box of another cartridge, not
+    /// an empty box, not a box magazine.
+    #[test]
+    fn empty_clips_want_a_box_of_their_rounds() {
+        let cat =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        let d = |id: &str| cat.get(cat.expect(id));
+        let fires = |have: &[(&str, u32)]| {
+            let v: Vec<_> = have.iter().map(|(id, n)| (d(id), *n)).collect();
+            empty_clip_to_fill(v.iter().map(|(d, n)| (*d, *n)))
+        };
+        assert!(fires(&[("sks_clip", 0), ("ammo_762x39", 20)]));
+        assert!(fires(&[
+            ("mosin_clip", 0),
+            ("mosin_clip", 5),
+            ("ammo_762r", 3)
+        ]));
+        assert!(
+            !fires(&[("sks_clip", 10), ("ammo_762x39", 20)]),
+            "a full clip"
+        );
+        assert!(
+            !fires(&[("sks_clip", 0), ("ammo_545", 30)]),
+            "another cartridge"
+        );
+        assert!(
+            !fires(&[("sks_clip", 0), ("ammo_762x39", 0)]),
+            "an empty box"
+        );
+        assert!(!fires(&[("sks_clip", 0)]), "no box");
+        assert!(
+            !fires(&[("pm_mag", 0), ("ammo_9x18", 16)]),
+            "a box magazine"
+        );
     }
 
     fn app() -> App {

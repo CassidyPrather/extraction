@@ -899,10 +899,14 @@ mod tests {
         }
     }
 
+    /// Shells on legs: nothing to tear under them, between the ground
+    /// and the cab (the ranger and survey towers).
+    const OPEN_UNDER: &[&str] = &["ranger_tower", "survey_tower"];
+
     /// On every building with a door: from the door, someone in the middle
     /// of it, the tear lands on a wall between them (not in the doorway),
     /// inside the wall's thickness (a wall face just outside it), at chest
-    /// height, pulling outward.
+    /// height, pulling outward. Not under a shell on legs (`OPEN_UNDER`).
     #[test]
     fn it_tears_at_the_wall_between_you() {
         use bevy::ecs::system::RunSystemOnce;
@@ -920,6 +924,7 @@ mod tests {
             .world_mut()
             .run_system_once(
                 |entrances: Res<super::super::doors::Entrances>,
+                 buildings: Query<&crate::world::buildings::Building>,
                  spatial: avian3d::prelude::SpatialQuery| {
                     let mut checked = 0;
                     let filter = avian3d::prelude::SpatialQueryFilter::from_mask([
@@ -935,6 +940,18 @@ mod tests {
                         };
                         let target = shell.xf.translation + Vec3::Y * 0.2;
                         let heavy = door.mid + door.out * DOOR_STAND;
+                        let open_under = buildings
+                            .get(shell.building)
+                            .is_ok_and(|b| OPEN_UNDER.contains(&b.prefab.as_str()));
+                        if open_under {
+                            // No wall there: a wall put in later shows up.
+                            assert!(
+                                tear_point(shell, target, heavy, &spatial).is_none(),
+                                "a tear point under {:?}, on legs",
+                                shell.building
+                            );
+                            continue;
+                        }
                         let Some((at, out)) = tear_point(shell, target, heavy, &spatial) else {
                             panic!("no tear point on {:?}", shell.building);
                         };

@@ -33,6 +33,8 @@ pub enum ComfortCard {
     Captions,
     /// The wrist's tick when a machine nearby turns certain of you.
     MachineTick,
+    /// The wrist's heartbeat while you bleed.
+    BleedPulse,
     Climb,
     /// Your body drawn under you, or not.
     Body,
@@ -79,6 +81,10 @@ pub const CARDS: &[(ComfortCard, f32, f32)] = &[
     (ComfortCard::HoldRate, 1.26, -0.15),
     // And under that, the gun's steadying.
     (ComfortCard::SteadyAim, 1.08, -0.15),
+    // And at the column's foot, the wrist's other warning: the heartbeat
+    // while you bleed (by the tick it's a wrist thing; low, as the seated
+    // reach the score card below the captions).
+    (ComfortCard::BleedPulse, 0.90, -0.15),
     // Past the stash's end, a fifth column: the row that was over
     // the stash, where the rack's brace (once fitted) hid it. Under the
     // driver's note (1.47 m and up, z 0.12 to 0.48), over the second
@@ -144,6 +150,7 @@ fn press_cards(
                 ComfortCard::OneHanded => comfort.one_handed = !comfort.one_handed,
                 ComfortCard::Captions => comfort.captions = !comfort.captions,
                 ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
+                ComfortCard::BleedPulse => comfort.bleed_pulse = !comfort.bleed_pulse,
                 ComfortCard::Body => comfort.body = !comfort.body,
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
                 ComfortCard::Smoothing => comfort.next_msaa(),
@@ -183,6 +190,7 @@ fn card_text(
             ComfortCard::OneHanded => comfort.one_handed_label(),
             ComfortCard::Captions => comfort.captions_label(),
             ComfortCard::MachineTick => comfort.machine_tick_label(),
+            ComfortCard::BleedPulse => comfort.bleed_pulse_label(),
             ComfortCard::Body => comfort.body_label(),
             ComfortCard::Climb => comfort.climb_label(),
             ComfortCard::Smoothing => comfort.msaa_label(),
@@ -344,8 +352,8 @@ mod tests {
         }
     }
 
-    /// The binaural, score and warning-tick cards each switch their
-    /// setting, and say so.
+    /// The binaural, score, warning-tick and heartbeat cards each switch
+    /// their setting, and say so.
     #[test]
     fn the_audio_cards_switch_binaural_and_the_score() {
         let mut app = crate::headless_app(Default::default(), false);
@@ -366,6 +374,7 @@ mod tests {
             (ComfortCard::Binaural, "STEREO"),
             (ComfortCard::Score, "OFF"),
             (ComfortCard::MachineTick, "OFF"),
+            (ComfortCard::BleedPulse, "OFF"),
         ] {
             let card = app
                 .world_mut()
@@ -379,6 +388,7 @@ mod tests {
                 match which {
                     ComfortCard::Binaural => c.binaural,
                     ComfortCard::Score => c.score,
+                    ComfortCard::BleedPulse => c.bleed_pulse,
                     _ => c.machine_tick,
                 }
             };
