@@ -1361,7 +1361,12 @@ fn picked_up(
         && m.queue.quiet <= 0.0
         && m.queue.has_you <= 0.0
         && health.bleeding <= BLEEDING
-        && !minds.iter().any(|a| a.target == Some(me));
+        // (One that has noticed you, not any that tracks you: a glimpse or a
+        // sound sets its target till its search gives up, which out there
+        // is most of a raid, and the first jobs' finds went unnamed.)
+        && !minds
+            .iter()
+            .any(|a| a.target == Some(me) && a.suspicion >= crate::robots::NOTICED);
     if calm && *said < PICKED_A_RAID && !waiting.is_empty() {
         let f = waiting.remove(0);
         if m.meet(First::Picked(f)) {
@@ -2643,6 +2648,16 @@ mod tests {
         assert_eq!(said(&app, Family::GunCare), 0, "said at the truck");
         // Out: said once; another of its family, not again.
         phase(&mut app, Phase::Out);
+        // A machine that only tracks you (it heard something once) doesn't
+        // hold it back; one that has noticed you does.
+        let tracks = app
+            .world_mut()
+            .spawn(crate::robots::Awareness {
+                target: Some(me),
+                suspicion: 0.2,
+                ..Default::default()
+            })
+            .id();
         // Something else being said: it waits its turn.
         app.world_mut()
             .resource_mut::<Queue>()
@@ -2666,8 +2681,22 @@ mod tests {
         hold(&mut app, "cleaning_kit");
         wait(&mut app);
         assert_eq!(said(&app, Family::GunCare), 1, "said twice");
+        app.world_mut().despawn(tracks);
+        let noticed = app
+            .world_mut()
+            .spawn(crate::robots::Awareness {
+                target: Some(me),
+                suspicion: crate::robots::NOTICED,
+                ..Default::default()
+            })
+            .id();
+        hold(&mut app, "matches");
+        wait(&mut app);
+        assert_eq!(said(&app, Family::Matches), 0, "said with a machine on you");
+        app.world_mut().despawn(noticed);
+        wait(&mut app);
         // Three a raid: the fourth waits.
-        for id in ["matches", "knife", "door_wedge"] {
+        for id in ["knife", "door_wedge"] {
             hold(&mut app, id);
             wait(&mut app);
         }
