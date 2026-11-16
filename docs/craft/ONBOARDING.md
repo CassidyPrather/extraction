@@ -69,9 +69,21 @@ notes it), at the step that teaches it, not before.
   impressions.
 - **Yard:** at most ~3 kinds in sight before the station that uses them. Now
   3 at the start, then about one a station, 15 in all (was 13 at once, 19 in
-  all).
+  all). What the truck's crate holds back is met loose at its own station
+  (the torch by the house find, the stew at first aid, the detector and
+  bolts on the shimmer's crate, the map and compass by the radio): the
+  yard's end brings 2 new kinds, not 7 at once.
 - **First raid's houses:** a starter set (food, a dressing, the pistol's
   rounds, light, bolts, scrap). Marrow's houses: 17 kinds on raid 0 (was 52).
+  Then families a few at a time, raid by raid (`from_raid` in `loot.ron`).
+- **Say what it's for.** A kind you can't place is what "muddy" was, more
+  than the count. The first time one of a family is in your hand out there,
+  the driver says one line on what it does (`onboarding::pickups`): once a
+  career, when it's calm, at most three a raid. Food, guns, their
+  magazines and what the yard taught need none. A new kind that can turn
+  up before raid 6 gets a family with a line, or a place on the obvious
+  list (a test fails until it does), and each line says only what the code
+  does (a test checks the code that does it names the kind).
 - **Enemies:** the first machine you meet shouldn't be able to kill you
   (the broken walker on job 2), and every hit comes after a tell.
 
