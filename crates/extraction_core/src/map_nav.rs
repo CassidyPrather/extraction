@@ -25,6 +25,11 @@ pub fn zone_grid(map: &MapDef, hm: &Heightmap, max_slope: f32) -> NavGrid {
         .iter()
         .filter(|p| !crate::underground::is_site(&p.prefab))
     {
+        // A yard gate is a doorway, its leaf shut or open as the yard says:
+        // the fence runs either side (from its posts out) block, it doesn't.
+        if p.prefab == "yard_gate" {
+            continue;
+        }
         let f = prefab_footprint(&p.prefab);
         // Anything thinner than a cell (a garden fence's 0.2 m) needs the
         // clearance to reach half a cell, or the grid's cell centres fall

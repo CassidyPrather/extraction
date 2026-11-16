@@ -47,6 +47,7 @@ pub mod water;
 pub mod way_lamps;
 pub mod weather;
 pub mod workings;
+pub mod yard;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -267,6 +268,7 @@ impl Plugin for WorldPlugin {
             underground::UndergroundPlugin,
             roadworks::RoadworksPlugin,
             cold::ColdPlugin,
+            yard::YardPlugin,
         ))
         .add_systems(PreStartup, init_zone)
         .add_systems(

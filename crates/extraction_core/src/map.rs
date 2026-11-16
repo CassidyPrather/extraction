@@ -589,6 +589,12 @@ pub fn prefab_shell(id: &str) -> &str {
 /// footprint (the lint doesn't count them as standing anywhere), but the
 /// nav grid blocks them: nothing walks through a wall it can't see. The
 /// prefab's own tests check these agree with what it builds.
+/// A fence run: thin, waist high, stood on its lowest ground rather than
+/// levelled for, and never a wall a route may pass close by.
+pub fn is_fence(id: &str) -> bool {
+    matches!(id, "fence_garden" | "yard_fence" | "yard_fence_2")
+}
+
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
     match prefab_shell(id) {
         // The face stair's walls (world::dam::stair_wall): along the
@@ -683,6 +689,13 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "chapel" => [10.4, 19.0, 23.0],
         // A garden fence's run: four panels between five posts.
         "fence_garden" => [8.5, 1.3, 0.2],
+        // The training yard's bays (`world::yard`): bare timber rails,
+        // waist high, in 6 m runs and 2 m fillers (end posts to end posts,
+        // which the next run shares); and a gate filling 4 m of the line,
+        // its 3 m leaf hung between its posts.
+        "yard_fence" => [6.12, 1.35, 0.12],
+        "yard_fence_2" => [2.12, 1.35, 0.12],
+        "yard_gate" => [4.0, 1.5, 0.16],
         // Hero landmarks: a valley's one unmistakable silhouette.
         "mill_race" => [7.8, 28.5, 54.6],
         // A mine's aerial ropeway: the upper station (its ropes run out
@@ -1162,6 +1175,9 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "boxcar"
             | "target"
             | "fence_garden"
+            | "yard_fence"
+            | "yard_fence_2"
+            | "yard_gate"
             // A pole stands in the snow as it lies; so does a lamp post.
             | "snow_pole"
             | "way_lamp"

@@ -163,9 +163,13 @@ fn vigour(seed: u64) -> f32 {
 /// boxcar), which isn't a wall for it to climb (what grows at its feet is
 /// `reclaim`'s), nor on a marker post, whose tape a road-mender keeps clear
 /// (`world::way_lamps`: ivy smothered its bands), nor on a machine marker,
-/// which the machines keep clean.
+/// which the machines keep clean, nor on the training yard's fences and
+/// gates (`world::yard`): bare rails, kept so, the next bay seen through.
 pub fn grow_on(id: &str, geo: &Geo, occ: &Occluders, seed: u64, north: Vec3) -> Growth {
-    if extraction_core::map::prefab_is_vehicle(id) || id == "marker_post" || id == "machine_marker"
+    if extraction_core::map::prefab_is_vehicle(id)
+        || id == "marker_post"
+        || id == "machine_marker"
+        || id.starts_with("yard_")
     {
         return Growth::default();
     }
