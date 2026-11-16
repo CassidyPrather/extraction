@@ -554,13 +554,15 @@ fn fresh_save(map: &str) -> SaveGame {
         // bled out in 15 s): the second on the first.
         item("field_dressing", 0, [0.2, 0.05, 0.3]),
         item("field_dressing", 0, [0.2, 0.095, 0.3]),
-        item("canned_stew", 0, [-0.25, 0.05, 0.4]),
+        // Off the near wall (at 0.4, from where you stand it hid behind it).
+        item("canned_stew", 0, [-0.25, 0.05, 0.2]),
         item("cleaning_kit", 0, [0.0, 0.05, -0.1]),
         item("map_case", 0, [-0.3, 0.05, -0.3]),
         item("compass", 0, [0.3, 0.05, 0.0]),
         // To find anomalies before they find you: the clicker, and bolts
         // to throw where the air looks wrong.
-        item("detector", 0, [0.12, 0.05, 0.42]),
+        // Off the near wall too, and clear of the dressings.
+        item("detector", 0, [0.12, 0.05, 0.17]),
         item("bolt", 0, [-0.1, 0.05, 0.1]),
         item("bolt", 0, [-0.05, 0.05, 0.1]),
         item("bolt", 0, [0.0, 0.05, 0.1]),
