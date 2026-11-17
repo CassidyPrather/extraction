@@ -263,6 +263,34 @@ fn dress_lamps(
 #[derive(Component)]
 struct LampPool(Entity);
 
+/// A beam and a pool with no lamp, at `at`, for the warm-up shelf
+/// (`render::warmup`) to build their pipeline before the first dirigible
+/// or spotter comes into view.
+pub(crate) fn decoy(world: &mut World, at: Vec3) -> Entity {
+    let mesh = world.resource_mut::<Assets<Mesh>>().add(cone());
+    let material = world
+        .resource_mut::<Assets<SearchMaterial>>()
+        .add(SearchMaterial {
+            params: SearchParams {
+                light: PALE.extend(1.0),
+                rim: RIM.extend(1.0),
+                shape: Vec4::new(0.0, 10.0, 1.0, 1.0),
+                axis: Vec3::NEG_Y.extend(0.0),
+                origin: at.extend(0.13),
+            },
+        });
+    world
+        .spawn((
+            Name::new("Warm-up searchlight"),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::from_translation(at) * beam_transform(0.13, 10.0),
+            NotShadowCaster,
+            NotShadowReceiver,
+        ))
+        .id()
+}
+
 /// Past this a lamp's lens and rim hold the size they look here: which
 /// way it looks has to read at 50-100 m, by day.
 pub const HEAD_HOLDS_AT: f32 = 15.0;
