@@ -1,6 +1,7 @@
 //! Items in the world: the catalog as a resource, spawning physical items,
 //! and their placeholder visuals.
 
+pub mod handled;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
@@ -53,6 +54,7 @@ impl Plugin for ItemsPlugin {
             impacts::ImpactPlugin,
             lost::LostItemsPlugin,
             rest::RestPlugin,
+            handled::HandledPlugin,
         ));
     }
 }
