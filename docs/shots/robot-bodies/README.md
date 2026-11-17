@@ -288,3 +288,17 @@ The follow-up:
 - **The canister burns.** It was a pinprick at 2.2 s, and the player has to see it to shoot it down. Its core is now a bright signal red that holds the size it looks at `CANISTER_HOLDS_AT` (6 m). Its trail is red flare smoke on the shared puff batch (`fx::FLARE_TRAIL`, sized for range by `at_range`), hanging where it was laid. Against the overcast at 15–60 m it's a red line up to a bright streak.
 - **Shot in its tell:** the barrel stays where it was hit (it doesn't sink back out of sight as `raised` falls), knocked over to one side, as seen from in front. It's charred, and its lamp is out. `reel:flare,16,6,broken` shoots the tubes out 0.6 s into the tell.
 - **Wrecks:** the tube is in `wreck::walker_salvage_dirs`, so a walker's wreck doesn't come to rest on it.
+
+## Searchlights (#99)
+
+The dirigible and the spotter used to see a long way all round, and nothing showed it ("the blimp 'seeing a long way' reads awkward"). Now each carries searchlights that sweep the ground slowly, and what a beam lights is what it sees (`robots::searchlight`; Robot minds' senses read `Beam` and `searchlight::lights`).
+
+| Picture | What it shows |
+|---|---|
+| [`99_body_day.png`](../../robots/workers_2/99_body_day.png) | `reel:search,4,40` by day, clearing, from the ground (camera `40,0,262,0,8`, 1920x1080), frame 0: a dirigible 30 m up and 45 m out (two lamps, fore and aft) and a spotter on its tether to the right (one lamp on its eye). Pale haze shafts down to the field, a pool where one lands with its orange-red warning rim, the lamp heads (lens and red rim, held at their 15 m size so they read at range) |
+| [`99_body_dusk.png`](../../robots/workers_2/99_body_dusk.png) | The same at dusk, frame 2: the forward beams steered (`Beam::steer`) along a line on the ground toward the camera, crossing in front of you; set on something, a beam takes a faint red cast and its rims brighten. Cold light, never warm: the warning is in the rims |
+
+- **The sweep.** A slow figure-eight over the lamp's watch arc (26 s; ±46° and a nod near and far); the dirigible's two lamps half a sweep apart. A mind turns a lamp at `STEER_RATE` (0.45 rad/s), at most 0.7: the swing toward you is the tell.
+- **Where it lands.** One ray a tick down each beam (World): it stops on the ground, a roof or a tree, and what's behind a wall it lands on is dark.
+- **Shot out.** A lamp is a part (`PartRole::Lamp`, 45 hp): shot out, its beam is dark and what it lit isn't seen. Off too when its machine is wrecked, sinking, loose or stunned.
+- **By day and night.** The haze is blended, not added (`shaders/searchlight.wgsl`), so it reads lighter than a lit field; standing inside a beam it thins to glare round you. No light is cast (frame budget): the pool is the lit ground.

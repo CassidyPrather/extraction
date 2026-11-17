@@ -178,7 +178,7 @@ impl Traits {
             Category::Magazine | Category::Ammo | Category::Gadget => 4.0,
             Category::Tool | Category::RobotPart | Category::Attachment => 3.0,
             Category::Material | Category::Curio => 2.0,
-            Category::Food => 1.5,
+            Category::Junk => 1.5,
         };
         match (self.name, def.category) {
             ("hunter", Category::Artifact) => v * 3.0,
