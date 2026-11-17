@@ -208,7 +208,9 @@ fn rod(b: &mut Builder, from: Vec3, to: Vec3, w: f32, mat: Mat, collide: bool) {
 
 /// A ladder's rails and rungs against a wall, standing out toward `out`
 /// from the line at `x`/`z`, from `y0` to `y1`; climbed with the hands
-/// from `y0 + 0.3` to `y1 - 1.0`, which puts you at `over`.
+/// from `y0 + 0.3` to `y1 - 1.0`, which puts you at `over`. Its rungs stop
+/// where the climb does (a rung over it would look a handhold and be
+/// none); its rails run on up to the landing.
 fn ladder(b: &mut Builder, at: Vec2, out: Vec3, y0: f32, y1: f32, over: Vec3) {
     let side = Vec3::new(out.z, 0.0, -out.x) * 0.2;
     let foot = Vec3::new(at.x, y0, at.y);
@@ -221,7 +223,7 @@ fn ladder(b: &mut Builder, at: Vec2, out: Vec3, y0: f32, y1: f32, over: Vec3) {
         );
     }
     let mut y = y0 + 0.3;
-    while y < y1 - 0.05 {
+    while y <= y1 - 1.0 + 1e-3 {
         let w = if out.x.abs() > 0.5 {
             Vec3::new(0.03, 0.03, 0.4)
         } else {

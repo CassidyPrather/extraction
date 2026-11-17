@@ -357,6 +357,258 @@ pub fn loot_sights() -> Vec<LootSight> {
     out
 }
 
+/// Something in the world a hand takes hold of, and what shows where:
+/// all in its grab collider's space.
+#[derive(Clone, Debug)]
+pub struct Handle {
+    /// What it is and where it's made.
+    pub what: String,
+    /// The collider a hand's reach must touch (`GrabPoint::free`): half
+    /// extents about the origin.
+    pub grip: Vec3,
+    /// Points on what shows itself to be taken hold of (a handle, a rung,
+    /// a wheel's rim, a lever's grip); empty if nothing does.
+    pub shown: Vec<Vec3>,
+    /// Its reflectance and that of what it's on, if known.
+    pub albedo: Option<(f32, f32)>,
+}
+
+impl Handle {
+    /// How far past the hand's reach of its collider the furthest of what
+    /// shows lies (0: all of it within reach).
+    pub fn out_of_reach(&self) -> f32 {
+        let reach = crate::interact::GRAB_REACH;
+        self.shown
+            .iter()
+            .map(|p| (p.abs() - self.grip).max(Vec3::ZERO).length())
+            .fold(0.0, f32::max)
+            - reach
+    }
+
+    /// Its least extent, and the next (what's seen of it across).
+    pub fn sizes(&self) -> (f32, f32) {
+        let Some((lo, hi)) = bounds(self.shown.iter().copied()) else {
+            return (0.0, 0.0);
+        };
+        let mut d = (hi - lo).to_array();
+        d.sort_by(f32::total_cmp);
+        (d[0], d[1])
+    }
+}
+
+/// A hand takes hold of something this thick or more (a gloved hand
+/// round a bar, m).
+pub const HANDLE_THICK: f32 = 0.02;
+/// What a handle is seen from (m).
+pub const HANDLE_SEEN_FROM: f32 = 2.0;
+
+/// Points on a shape where it stands: a box's corners, a cylinder's two
+/// rims.
+fn shape_points(shape: Shape, at: bevy::prelude::Transform) -> Vec<Vec3> {
+    match shape {
+        Shape::Cylinder(r, h) => (0..32)
+            .map(|k| {
+                let a = (k % 16) as f32 / 16.0 * std::f32::consts::TAU;
+                let y = if k < 16 { -h * 0.5 } else { h * 0.5 };
+                at.transform_point(Vec3::new(r * a.cos(), y, r * a.sin()))
+            })
+            .collect(),
+        _ => piece_corners(&buildings::Piece {
+            shape,
+            at,
+            mat: crate::render::materials::Mat::DarkMetal,
+            collide: false,
+        })
+        .to_vec(),
+    }
+}
+
+/// Points of a model's triangles in `mats` within `lo..hi` (model space),
+/// moved by `xf`.
+fn model_points(
+    model: &str,
+    mats: &[&str],
+    lo: Vec3,
+    hi: Vec3,
+    node: Option<&str>,
+    xf: bevy::prelude::Transform,
+) -> Vec<Vec3> {
+    let path = crate::asset_root_path().join(format!("models/props/{model}.glb"));
+    glb::triangles(&path)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|t| mats.contains(&t.material.as_str()) && node.is_none_or(|n| t.node == n))
+        .flat_map(|t| t.p)
+        .filter(|p| p.cmpge(lo).all() && p.cmple(hi).all())
+        .map(|p| xf.transform_point(p))
+        .collect()
+}
+
+/// A material's reflectance in a model (its base colour's luminance).
+fn model_albedo(model: &str, mat: &str) -> Option<f32> {
+    let path = crate::asset_root_path().join(format!("models/props/{model}.glb"));
+    let j = glb::json(&path).ok()?;
+    let m = j["materials"]
+        .as_array()?
+        .iter()
+        .find(|m| m["name"] == mat)?;
+    let c = m["pbrMetallicRoughness"]["baseColorFactor"].as_array()?;
+    let f = |i: usize| c.get(i).and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
+    Some(0.2126 * f(0) + 0.7152 * f(1) + 0.0722 * f(2))
+}
+
+/// Every kind of thing in the world a hand takes hold of whose drawing is
+/// the world's (buildings, sites, their props): its collider and what
+/// shows where it's taken hold of. (The truck's, the bench's, the camp's
+/// and the gramophone's are drawn by their own code.)
+pub fn handles() -> Vec<Handle> {
+    use crate::render::materials::Mat;
+    use bevy::prelude::Transform;
+    let mut out = Vec::new();
+    let mat_albedo = |m: Mat| luminance(m.info().2);
+    // A building's door: its leaf's collider (hinge space, `spawn_door`)
+    // and its model's handle and latch, at the latch edge, hand height.
+    let (w, h) = (0.9, 2.0);
+    for (model, metal, face) in [
+        ("door_leaf", false, "Planks"),
+        ("door_metal", true, "Painted"),
+    ] {
+        let mats: &[&str] = if metal { &["Iron", "Brass"] } else { &["Iron"] };
+        let scale = Transform::from_scale(Vec3::new(w / 0.91, h / 2.03, 1.0));
+        let centre = Vec3::new(w * 0.5, h * 0.5 + 0.01, 0.0);
+        let shown = model_points(
+            model,
+            mats,
+            Vec3::new(0.91 - 0.25, 0.8, -1.0),
+            Vec3::new(1.0, 1.3, 1.0),
+            None,
+            scale,
+        )
+        .into_iter()
+        .map(|p| p - centre)
+        .collect();
+        out.push(Handle {
+            what: format!("door ({model}), world::buildings::spawn_door"),
+            grip: Vec3::new(w * 0.5, h * 0.5, 0.025),
+            shown,
+            albedo: model_albedo(model, mats[0]).zip(model_albedo(model, face)),
+        });
+    }
+    // A vent's or the crane's lever (`furnace::lever_bundle`): the
+    // cellar_vent model's arm, from its wall.
+    let lever = model_points(
+        "cellar_vent",
+        &["Blued", "Iron", "Steel"],
+        Vec3::splat(-5.0),
+        Vec3::splat(5.0),
+        Some("lever"),
+        Transform::from_translation(crate::world::furnace::LEVER_WALL),
+    );
+    out.push(Handle {
+        what: "vent and crane levers (cellar_vent), world::furnace::lever_bundle".into(),
+        grip: crate::world::furnace::LEVER_BOX * 0.5,
+        shown: lever,
+        albedo: model_albedo("cellar_vent", "Blued").zip(model_albedo("cellar_vent", "Cast")),
+    });
+    // A breaker's switch (`underground::switch_pose`): on its cabinet's
+    // face, 1.2 up and 0.26 out from its middle; what of the cabinet's
+    // metal fittings stands in reach of it.
+    let cabinet = Transform::from_xyz(0.0, -1.2, 0.26);
+    let half =
+        crate::world::underground::POWER_BOX * 0.5 + Vec3::splat(crate::interact::GRAB_REACH);
+    let shown: Vec<Vec3> = model_points(
+        "switch_cabinet",
+        &["Iron", "Zinc"],
+        Vec3::splat(-5.0),
+        Vec3::splat(5.0),
+        None,
+        cabinet,
+    )
+    .into_iter()
+    .filter(|p| p.abs().cmple(half).all())
+    .collect();
+    out.push(Handle {
+        what: "breaker (switch_cabinet), world::underground::switch_pose".into(),
+        grip: crate::world::underground::POWER_BOX * 0.5,
+        shown,
+        albedo: model_albedo("switch_cabinet", "Iron")
+            .zip(model_albedo("switch_cabinet", "Painted")),
+    });
+    // A drain's valve wheel's rim and hand pump's handle.
+    for (kind, name, part) in [
+        (
+            extraction_core::underground::DrainKind::Valve,
+            "drain valve wheel",
+            0,
+        ),
+        (
+            extraction_core::underground::DrainKind::Pump,
+            "drain hand pump",
+            1,
+        ),
+    ] {
+        let parts = crate::world::underground::drain_parts(kind);
+        let (shape, at, mat, _) = parts[part];
+        out.push(Handle {
+            what: format!("{name}, world::underground::drain_parts"),
+            grip: crate::world::underground::DRAIN_BOX * 0.5,
+            shown: shape_points(shape, at),
+            albedo: Some((mat_albedo(mat), mat_albedo(Mat::Concrete))),
+        });
+    }
+    // Every prefab's ladders: their rungs in their climb's box
+    // (`hand_climb::Ladder::bundle`).
+    for id in buildings::PREFABS {
+        let Some(geo) = buildings::prefab(id) else {
+            continue;
+        };
+        for (k, l) in geo.ladders.iter().enumerate() {
+            let up = (l.top - l.bottom).normalize_or(Vec3::Y);
+            let len = l.bottom.distance(l.top);
+            let centre = (l.bottom + l.top) * 0.5 + l.out * 0.08;
+            let frame = Transform::from_translation(centre).looking_to(-l.out, up);
+            let inv = frame.compute_affine().inverse();
+            let rungs: Vec<Vec3> = geo
+                .pieces
+                .iter()
+                .filter_map(|p| {
+                    let Shape::Box(size) = p.shape else {
+                        return None;
+                    };
+                    let c = inv.transform_point3(p.at.translation);
+                    let span = p.at.rotation * size;
+                    let thin = size.min_element() <= 0.06;
+                    let across = span.abs().max_element() >= l.width * 0.8
+                        && span.abs().max_element() <= l.width + 0.2;
+                    (thin
+                        && across
+                        && c.x.abs() < 0.1
+                        && c.z.abs() < 0.3
+                        && c.y.abs() < len * 0.5 + 2.0)
+                        .then(|| {
+                            shape_points(p.shape, p.at)
+                                .into_iter()
+                                .map(|q| inv.transform_point3(q))
+                                .collect::<Vec<_>>()
+                        })
+                })
+                .flatten()
+                .collect();
+            if rungs.is_empty() {
+                // (Drawn by a model: the water tower's, the pylon's.)
+                continue;
+            }
+            out.push(Handle {
+                what: format!("{id} ladder {k}"),
+                grip: Vec3::new(l.width * 0.5 + 0.06, len * 0.5 + 0.05, 0.13),
+                shown: rungs,
+                albedo: None,
+            });
+        }
+    }
+    out
+}
+
 /// Images a model expects next to it (embedded ones are fine).
 pub fn outside_images() -> Vec<String> {
     glb::all_models()
@@ -595,6 +847,94 @@ mod tests {
         assert!(
             bad.is_empty(),
             "loot that doesn't stand out:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// Everything in the world a hand takes hold of shows where, and all
+    /// of what shows is within the hand's reach of what it grips: a handle
+    /// past its collider looks a grip and isn't one (`handles`; prints
+    /// every one with `-- --nocapture`).
+    #[test]
+    fn every_handle_is_in_reach() {
+        let all = handles();
+        assert!(all.len() > 5, "only {} handles", all.len());
+        let mut bad = Vec::new();
+        for h in &all {
+            let (thin, _) = h.sizes();
+            println!(
+                "{:<70} {:4} points, {:+.3} m past reach, {:.3} m thick",
+                h.what,
+                h.shown.len(),
+                h.out_of_reach(),
+                thin
+            );
+            if h.shown.is_empty() {
+                bad.push(format!("{}: nothing shows where to take hold", h.what));
+            } else if h.out_of_reach() > 0.0 {
+                bad.push(format!(
+                    "{}: shows a grip {:.2} m past the hand's reach of it",
+                    h.what,
+                    h.out_of_reach()
+                ));
+            } else if thin < HANDLE_THICK - 1e-3 {
+                bad.push(format!(
+                    "{}: {:.3} m thick, under {HANDLE_THICK}",
+                    h.what, thin
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "handles that don't show where they're used:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// Every handle reads against what it's on from where you'd reach for
+    /// it, 2 m, in the gauge's darkest light: scored as loot is
+    /// (`loot_seen_floor`), and big enough across to make out.
+    #[test]
+    fn every_handle_reads() {
+        use crate::world::weather::{Conditions, Hour, WeatherKind};
+        let dark = [
+            Conditions::compose(WeatherKind::Drizzle, Hour::Day, 1),
+            Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 1),
+            Conditions::compose(WeatherKind::Downpour, Hour::Day, 1),
+        ]
+        .iter()
+        .map(crate::render::grade::indoor_seen)
+        .fold(f32::INFINITY, f32::min);
+        let across = 2.0
+            * HANDLE_SEEN_FROM
+            * (crate::render::legibility::INCIDENTAL_DEG.to_radians() * 0.5).tan();
+        let mut bad = Vec::new();
+        for h in handles() {
+            let (_, wide) = h.sizes();
+            if let Some((a, on)) = h.albedo {
+                let seen = dark * (a - on).abs();
+                println!(
+                    "{:<70} {a:.3} on {on:.3}: seen {seen:.4}, {wide:.3} m across",
+                    h.what
+                );
+                if seen < loot_seen_floor() {
+                    bad.push(format!(
+                        "{}: {a:.3} on {on:.3} reads {seen:.4}, under {:.4}",
+                        h.what,
+                        loot_seen_floor()
+                    ));
+                }
+            }
+            if !h.shown.is_empty() && wide < across {
+                bad.push(format!(
+                    "{}: {wide:.3} m across, under {across:.3} at {HANDLE_SEEN_FROM} m",
+                    h.what
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "handles that don't read:\n{}",
             bad.join("\n")
         );
     }
