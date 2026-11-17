@@ -32,7 +32,10 @@ pub struct SearchlightLookPlugin;
 impl Plugin for SearchlightLookPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<SearchMaterial>::default())
-            .add_systems(Update, ((dress_lamps, light_lamps).chain(), drop_pools));
+            .add_systems(
+                Update,
+                ((dress_lamps, light_lamps).chain(), drop_pools, hold_heads),
+            );
     }
 }
 
@@ -197,12 +200,14 @@ fn dress_lamps(
                 MeshMaterial3d(lens.clone()),
                 Transform::from_xyz(0.0, 0.0, -0.005).with_rotation(along),
                 NotShadowCaster,
+                HeldHead(Vec3::new(0.0, 0.0, -0.005)),
             ));
             c.spawn((
                 Mesh3d(s.ring.clone()),
                 MeshMaterial3d(rim.clone()),
                 Transform::from_xyz(0.0, 0.0, -0.01).with_rotation(along),
                 NotShadowCaster,
+                HeldHead(Vec3::new(0.0, 0.0, -0.01)),
             ));
         });
         let params = |pool: bool| SearchParams {
@@ -257,6 +262,32 @@ fn dress_lamps(
 /// with it.
 #[derive(Component)]
 struct LampPool(Entity);
+
+/// Past this a lamp's lens and rim hold the size they look here: which
+/// way it looks has to read at 50-100 m, by day.
+pub const HEAD_HOLDS_AT: f32 = 15.0;
+
+/// A lamp's lens or rim (held at its size past [`HEAD_HOLDS_AT`]), and its
+/// place on the lamp.
+#[derive(Component)]
+struct HeldHead(Vec3);
+
+fn hold_heads(
+    mut heads: Query<(&mut Transform, &GlobalTransform, &HeldHead)>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let Some(eye) = cameras.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    for (mut t, gt, h) in &mut heads {
+        let k = (eye.distance(gt.translation()) / HEAD_HOLDS_AT).max(1.0);
+        if (t.scale.x - k).abs() > 0.01 * k {
+            t.scale = Vec3::splat(k);
+            // (Out in front of the drum as it grows.)
+            t.translation = h.0 * k;
+        }
+    }
+}
 
 /// A pool whose lamp has gone (its machine despawned) goes too.
 fn drop_pools(
