@@ -10,7 +10,7 @@
 //! - **The pool.** Where it lands, a pale patch with a warning rim
 //!   crawling round it: what it's watching, on the ground.
 //! - **On you.** Set on something (`Beam::target`), the beam goes
-//!   from pale to amber and the rim brightens: it has seen, or means to.
+//!   takes a red cast and the rims brighten: it has seen, or means to.
 //!
 //! Never warm: the user's rule for lit tells is warning, not shelter.
 
@@ -36,9 +36,11 @@ impl Plugin for SearchlightLookPlugin {
     }
 }
 
-/// The beam's pale light (linear), and amber when it's on something.
+/// The beam's pale light (linear), and with a red cast when it's on
+/// something (the warning is the rims: the beam stays a cold light, never
+/// a warm one).
 pub const PALE: Vec3 = Vec3::new(0.85, 0.92, 1.0);
-pub const ON_YOU: Vec3 = Vec3::new(1.0, 0.55, 0.18);
+pub const ON_YOU: Vec3 = Vec3::new(1.0, 0.8, 0.78);
 /// The warning rim, on the lamp and round the pool.
 pub const RIM: Vec3 = Vec3::new(1.0, 0.28, 0.06);
 /// The lamp drum's radius and depth (m).
@@ -56,6 +58,8 @@ pub struct SearchParams {
     pub shape: Vec4,
     /// xyz: the way it throws (world).
     pub axis: Vec4,
+    /// xyz: the lamp (world); w: tan of the half-angle.
+    pub origin: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -206,6 +210,7 @@ fn dress_lamps(
             rim: RIM.extend(if pool { 1.0 } else { 0.0 }),
             shape: Vec4::new(if pool { 1.0 } else { 0.0 }, l.reach, 1.0, 1.0),
             axis: Vec3::NEG_Y.extend(0.0),
+            origin: Vec4::new(0.0, 0.0, 0.0, l.half_angle.tan()),
         };
         let beam_mat = searches.add(SearchMaterial {
             params: params(false),
@@ -355,6 +360,7 @@ fn light_lamps(
                 rim: RIM.extend(if pool { rim } else { 0.0 }),
                 shape: Vec4::new(if pool { 1.0 } else { 0.0 }, l.landed, day, air),
                 axis: dir.extend(0.0),
+                origin: from.extend(l.half_angle.tan()),
             };
             let Some(m) = searches.get(mat) else {
                 continue;
@@ -363,7 +369,8 @@ fn light_lamps(
             let changed = (p.light - want.light).length() > 0.01
                 || (p.rim - want.rim).length() > 0.01
                 || (p.shape - want.shape).length() > 0.02
-                || (p.axis - want.axis).length() > 0.003;
+                || (p.axis - want.axis).length() > 0.003
+                || (p.origin - want.origin).length() > 0.02;
             if changed {
                 if let Some(mut m) = searches.get_mut(mat) {
                     m.params = want;

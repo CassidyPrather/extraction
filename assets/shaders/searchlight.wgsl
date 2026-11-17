@@ -28,6 +28,8 @@ struct SearchParams {
     shape: vec4<f32>,
     // xyz: the way it throws (world).
     axis: vec4<f32>,
+    // xyz: the lamp (world); w: tan of the half-angle.
+    origin: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> p: SearchParams;
@@ -51,10 +53,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // A tight beam thins slowly: still a shaft where it lands.
         let thin = 1.0 - 0.55 * along;
         let near = smoothstep(0.5, 4.0, dist);
-        let k = clamp(path * ends * thin * near * far * p.light.w * p.shape.w, 0.0, 1.0);
+        // Standing in it: from inside, a beam is glare round you, not a
+        // wall of haze across the view.
+        let cam = view.world_position - p.origin.xyz;
+        let c_along = dot(cam, p.axis.xyz);
+        let c_off = length(cam - p.axis.xyz * c_along);
+        let inside = select(1.0, 0.3, c_along > 0.0 && c_off < c_along * p.origin.w * 1.1);
+        let k = clamp(path * ends * thin * near * far * inside * p.light.w * p.shape.w, 0.0, 1.0);
         // By day a pale, milky shaft (it must show over a lit field); by
         // night less of it is needed, and it's brighter.
-        let a = k * mix(0.55, 0.4, day);
+        let a = k * mix(0.42, 0.22, day);
         // Display brightness, not scene light: exposure is the scene's,
         // and a beam by day must still read lighter than what's behind it.
         let glow = mix(2.4, 1.6, day);
