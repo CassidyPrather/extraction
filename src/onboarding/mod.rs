@@ -47,7 +47,7 @@ use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::raid::truck::{FLOOR, Pressable, Stash, Truck, base_pose};
-use crate::raid::{Phase, RadioCall, Raid};
+use crate::raid::{Phase, RadioCall, Raid, Show};
 use crate::rig::haptics::{Haptic, StepDone};
 use crate::rig::{LocalPlayer, RigDriver, Side};
 use crate::weapons::ballistics::Hit;
@@ -2135,7 +2135,7 @@ fn watch_duck(
     let low = head.y - zone.ground(head.x, head.z) < BEAM_CLEAR - 0.05;
     if under && low {
         ob.ducked = true;
-        raid.say(DUCK_LINE);
+        raid.tell(DUCK_LINE, Show::View);
         steps.write(StepDone {
             at: None,
             station: false,
@@ -2200,7 +2200,7 @@ fn press_cards(
                 ob.done.clear();
                 ob.skipped.clear();
                 ob.sent_to = None;
-                raid.say(START_OVER_LINE);
+                raid.tell(START_OVER_LINE, Show::View);
             }
             _ => {}
         }
@@ -2249,7 +2249,7 @@ fn announce(
     if ob.age > 1.5 && (!ob.greeted || (unstarted && ob.greeted_flat != flat)) {
         ob.greeted = true;
         ob.greeted_flat = flat;
-        raid.say(if flat { GREET_FLAT } else { GREET_VR });
+        raid.tell(if flat { GREET_FLAT } else { GREET_VR }, Show::View);
     }
     for d in done.read() {
         steps.write(StepDone {
@@ -2259,7 +2259,7 @@ fn announce(
         // What the throw did, and what it's for (the playtest: "it
         // definitely got zapped. I don't know what that did.").
         if d.goal == Goal::Probe {
-            raid.say(SPENT_LINE);
+            raid.tell(SPENT_LINE, Show::View);
         }
         if !d.station_done {
             continue;
@@ -2272,7 +2272,7 @@ fn announce(
             Some(_) => continue,
             None => ALL_DONE_LINE.to_string(),
         };
-        raid.say(line);
+        raid.tell(line, Show::View);
     }
 }
 
@@ -2401,7 +2401,7 @@ fn warn_near_anomalies(
     });
     if near && *quiet <= 0.0 {
         *quiet = 5.0;
-        raid.say(TOO_CLOSE_LINE);
+        raid.tell(TOO_CLOSE_LINE, Show::View);
         // A knock, not a kick: kicks are for shots and hits
         // (`rig::haptics`).
         for side in Side::BOTH {
@@ -2444,14 +2444,14 @@ fn out_of_the_truck(
     // something, said once (nobody in the playtest found it).
     if let Some(next) = ob.current().filter(|n| ob.sent_to != Some(*n)) {
         ob.sent_to = Some(next);
-        raid.say(format!(
-            "Driver: \"Off you go. Next: {}.\"",
-            STATIONS[next].where_
-        ));
+        raid.tell(
+            format!("Driver: \"Off you go. Next: {}.\"", STATIONS[next].where_),
+            Show::View,
+        );
     } else if !ob.told_mark {
         ob.told_mark = true;
         let flat = driver.flat().unwrap_or(false);
-        raid.say(if flat { MARK_LINE_FLAT } else { MARK_LINE_VR });
+        raid.tell(if flat { MARK_LINE_FLAT } else { MARK_LINE_VR }, Show::View);
     }
 }
 
