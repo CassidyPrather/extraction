@@ -295,7 +295,7 @@ The dirigible and the spotter used to see a long way all round, and nothing show
 
 | Picture | What it shows |
 |---|---|
-| [`99_body_day.png`](../../robots/workers_2/99_body_day.png) | `reel:search,4,40` by day, clearing, from the ground (camera `40,0,262,0,8`, 1920x1080), frame 0: a dirigible 30 m up and 45 m out (two lamps, fore and aft) and a spotter on its tether to the right (one lamp on its eye). Pale haze shafts down to the field, a pool where one lands with its orange-red warning rim, the lamp heads (lens and red rim, held at their 15 m size so they read at range) |
+| [`99_body_day.png`](../../robots/workers_2/99_body_day.png) | `reel:search,4,40` by day, clearing, from the ground (camera `40,0,262,0,8`, 1920x1080), frame 0: a dirigible 30 m up and 45 m out (two lamps, fore and aft) and a spotter on its tether to the right (one lamp on its eye). Pale haze shafts down to the field, a pool where one lands with its orange-red warning rim, the lamp heads (lens and red rim, held at their 25 m size so they read at range) |
 | [`99_body_dusk.png`](../../robots/workers_2/99_body_dusk.png) | The same at dusk, frame 2: the forward beams steered (`Beam::steer`) along a line on the ground toward the camera, crossing in front of you; set on something, a beam takes a faint red cast and its rims brighten. Cold light, never warm: the warning is in the rims |
 
 - **The sweep.** A slow figure-eight over the lamp's watch arc (26 s; ±46° and a nod near and far); the dirigible's two lamps half a sweep apart. A mind turns a lamp at `STEER_RATE` (0.45 rad/s), at most 0.7: the swing toward you is the tell.
