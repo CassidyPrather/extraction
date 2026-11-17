@@ -1,9 +1,11 @@
 //! What the arcade adds to see and hear: each gate's lamp on its post
 //! (dark, or burning red from a wave's call until it's cleared),
-//! and the siren at that gate as the wave is called.
+//! the siren at that gate as the wave is called, and the range's frames,
+//! plates and firing line.
 
 use bevy::prelude::*;
 
+use super::range::{BAR, CHAIN, PLATE, RangeFrame, RangeLine, RangePlate, SIGN_AT, THICK};
 use super::waves::{GateLamp, Siren};
 use crate::launch::LaunchOptions;
 use crate::render::materials::{Mat, MaterialLibrary, metric_box};
@@ -33,6 +35,7 @@ impl Plugin for ArcadeVisualsPlugin {
             return;
         }
         app.add_systems(Update, (build_lamps, show_lamps).chain())
+            .add_systems(Update, build_range)
             .add_systems(
                 Update,
                 siren.run_if(
@@ -114,6 +117,76 @@ fn show_lamps(
         if let Ok(mut p) = lights.get_mut(parts.light) {
             p.intensity = if l.lit { LAMP_LUMENS } else { 0.0 };
         }
+    }
+}
+
+/// The range's frames (two posts and a bar), its plates (painted steel,
+/// on two chains) and the beam laid at the firing line.
+fn build_range(
+    mut commands: Commands,
+    frames: Query<Entity, Added<RangeFrame>>,
+    plates: Query<Entity, Added<RangePlate>>,
+    lines: Query<Entity, Added<RangeLine>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    let timber = lib.get(Mat::Timber, &server, &mut materials);
+    let iron = lib.get(Mat::DarkMetal, &server, &mut materials);
+    // Frames stand across the lane: local X is across, -Z downrange.
+    let span = PLATE.x * 0.5 + 0.45;
+    for e in &frames {
+        for side in [-1.0, 1.0] {
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(Vec3::new(0.1, BAR + 0.1, 0.1)))),
+                MeshMaterial3d(timber.clone()),
+                Transform::from_xyz(side * span, (BAR + 0.1) * 0.5, 0.0),
+                ChildOf(e),
+            ));
+        }
+        commands.spawn((
+            Mesh3d(meshes.add(metric_box(Vec3::new(span * 2.0 + 0.1, 0.1, 0.1)))),
+            MeshMaterial3d(timber.clone()),
+            Transform::from_xyz(0.0, BAR + 0.05, 0.0),
+            ChildOf(e),
+        ));
+    }
+    for e in &plates {
+        let paint = materials.add(StandardMaterial {
+            // High-visibility orange, as range steel is painted: it reads
+            // at 50 m through haze.
+            base_color: Color::srgb(0.95, 0.42, 0.08),
+            metallic: 0.2,
+            perceptual_roughness: 0.55,
+            ..default()
+        });
+        commands.entity(e).insert((
+            Mesh3d(meshes.add(metric_box(Vec3::new(PLATE.x, PLATE.y, THICK)))),
+            MeshMaterial3d(paint),
+        ));
+        for side in [-1.0, 1.0] {
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(Vec3::new(0.012, CHAIN, 0.012)))),
+                MeshMaterial3d(iron.clone()),
+                Transform::from_xyz(side * PLATE.x * 0.33, PLATE.y * 0.5 + CHAIN * 0.5, 0.0),
+                ChildOf(e),
+            ));
+        }
+    }
+    for e in &lines {
+        commands.spawn((
+            Mesh3d(meshes.add(metric_box(Vec3::new(2.4, 0.12, 0.16)))),
+            MeshMaterial3d(timber.clone()),
+            Transform::from_xyz(0.0, 0.06, 0.0),
+            ChildOf(e),
+        ));
+        commands.spawn((
+            Mesh3d(meshes.add(metric_box(Vec3::new(0.08, SIGN_AT, 0.08)))),
+            MeshMaterial3d(timber.clone()),
+            Transform::from_xyz(1.5, SIGN_AT * 0.5, 0.0),
+            ChildOf(e),
+        ));
     }
 }
 

@@ -34,6 +34,7 @@ pub mod roadworks;
 pub mod rocks;
 pub mod scenes;
 pub mod shafts;
+pub mod siren_mast;
 pub mod sky;
 pub mod snow;
 pub mod storm;
@@ -47,6 +48,7 @@ pub mod water;
 pub mod way_lamps;
 pub mod weather;
 pub mod workings;
+pub mod yard;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -267,6 +269,7 @@ impl Plugin for WorldPlugin {
             underground::UndergroundPlugin,
             roadworks::RoadworksPlugin,
             cold::ColdPlugin,
+            yard::YardPlugin,
         ))
         .add_systems(PreStartup, init_zone)
         .add_systems(
@@ -415,7 +418,11 @@ impl Plugin for WorldVisualsPlugin {
             storm::StormPlugin,
             snow::SnowVisualsPlugin,
         ))
-        .add_plugins((roadworks::RoadworksVisualsPlugin, cues::CuesPlugin));
+        .add_plugins((
+            roadworks::RoadworksVisualsPlugin,
+            cues::CuesPlugin,
+            siren_mast::SirenMastPlugin,
+        ));
     }
 }
 

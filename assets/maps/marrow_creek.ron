@@ -531,6 +531,15 @@
         (kind: Rendezvous, at: (13.8, -147.0), name: "Bus depot"),
         (kind: Rendezvous, at: (122.0, -125.0), name: "Rail yard"),
         (kind: Rendezvous, at: (-108.0, -50.0), name: "Ranger tower"),
+        // The radio set at each pickup, on the wall of its shed (the short exfil's
+        // on the guard booth), facing the pad (#94, `map_extract`).
+        (kind: FieldSet(pad: "Bus depot"), at: (23.57, -139.89), rot: 126.0),
+        (kind: FieldSet(pad: "Rail yard"), at: (132.12, -124.32), rot: 43.0),
+        (kind: FieldSet(pad: "Ranger tower"), at: (-118.57, -45.43), rot: 225.0),
+        (kind: FieldSet(pad: "short"), at: (29.80, 162.18), rot: 180.0),
+        // Where the truck pulls in for a flare fired from the vantage (#94).
+        (kind: FlareStop(vantage: (142.0, -94.8)), at: (158.0, -172.0), name: "the track's dead end"),
+        (kind: FlareStop(vantage: (-54.0, -78.8)), at: (-54.0, -84.0), name: "the mast road's end"),
         (kind: RobotGate, at: (-142.0, -144.1), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).

@@ -466,7 +466,7 @@ fn press_camp(
             let now = time.elapsed_secs();
             if now > state.cord_until {
                 state.cord_until = now + 6.0;
-                raid.say(YARD_CORD_LINE);
+                raid.tell(YARD_CORD_LINE, crate::raid::Show::View);
                 yard_bell = false;
             }
         }

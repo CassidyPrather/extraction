@@ -183,10 +183,16 @@
             name: "Saddle track", kind: Dirt, width: 3.5, smoothing: 40.0,
             points: [(5.0, -200.0), (-30.0, -235.0), (-70.0, -258.0), (-126.0, -264.0)],
         ),
-        // The observatory path, up from the saddle.
+        // The observatory track, on from the saddle under the summit to the
+        // flare stop at its end (#94): wide enough for the truck.
+        (
+            name: "Observatory track", kind: Dirt, width: 3.5, smoothing: 70.0,
+            points: [(-126.0, -264.0), (-150.0, -262.0), (-185.0, -250.0)],
+        ),
+        // The observatory path, up from the track's end.
         (
             name: "Observatory path", kind: Path, width: 1.8, shoulder: 1.5, smoothing: 50.0,
-            points: [(-126.0, -264.0), (-150.0, -262.0), (-185.0, -250.0), (-204.0, -226.0)],
+            points: [(-185.0, -250.0), (-204.0, -226.0)],
         ),
         // The old miners' path: straight up the west side from the
         // switchbacks' top over the upper slopes to the saddle.
@@ -428,6 +434,15 @@
         (kind: Rendezvous, at: (-115.0, -264.0), name: "The saddle"),
         (kind: Rendezvous, at: (70.0, -262.0), name: "The col"),
         (kind: Rendezvous, at: (238.0, -28.0), name: "Tip road"),
+        // The radio set at each pickup, on the wall of its shed (the short exfil's
+        // on the guard booth), facing the pad (#94, `map_extract`).
+        (kind: FieldSet(pad: "The saddle"), at: (-106.29, -267.78), rot: 66.0),
+        (kind: FieldSet(pad: "The col"), at: (79.13, -259.59), rot: 105.0),
+        (kind: FieldSet(pad: "Tip road"), at: (247.99, -27.13), rot: 95.0),
+        (kind: FieldSet(pad: "short"), at: (0.00, 283.68), rot: 180.0),
+        // Where the truck pulls in for a flare fired from the vantage (#94).
+        (kind: FlareStop(vantage: (60.0, -170.0)), at: (150.0, -220.0), name: "the tarn track"),
+        (kind: FlareStop(vantage: (-208.0, -210.0)), at: (-185.0, -250.0), name: "the observatory"),
         (kind: RobotGate, at: (235.0, -242.0), rot: 320.0, name: "The Gate"),
         (kind: Sentry(arc: 90.0, power: Some((250.9, -251.9))), at: (241.0, -242.0), rot: -15.0, name: "Gate sentry"),
         (kind: ArtifactField, at: (195.0, -160.0), name: "The tarn"),

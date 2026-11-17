@@ -479,6 +479,15 @@ pub enum MarkerKind {
     /// A spotter's winch (`robots::spotter`): a balloon on a tether over
     /// it, watching the ground round about and calling in the others.
     Spotter,
+    /// Where a pickup's transceiver set hangs: on a wall face of the
+    /// shed or hut by `pad` (a rendezvous's name, or `"short"` for the
+    /// short exfil), at ground level, its front (`rot`) facing out from
+    /// the wall toward the pad (`map_extract`).
+    FieldSet { pad: String },
+    /// A flare-alternate pickup: the truck parks here (a level pad) and
+    /// the flare is fired from `vantage`, within `map_extract::FLARE_REACH`
+    /// and in clear sight of the stop.
+    FlareStop { vantage: P2 },
 }
 
 fn sentry_arc() -> f32 {
@@ -589,6 +598,12 @@ pub fn prefab_shell(id: &str) -> &str {
 /// footprint (the lint doesn't count them as standing anywhere), but the
 /// nav grid blocks them: nothing walks through a wall it can't see. The
 /// prefab's own tests check these agree with what it builds.
+/// A fence run: thin, waist high, stood on its lowest ground rather than
+/// levelled for, and never a wall a route may pass close by.
+pub fn is_fence(id: &str) -> bool {
+    matches!(id, "fence_garden" | "yard_fence" | "yard_fence_2")
+}
+
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
     match prefab_shell(id) {
         // The face stair's walls (world::dam::stair_wall): along the
@@ -642,6 +657,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "anomaly_core" => [10.0, 3.1, 10.0],
         "bus_depot" => [30.0, 11.1, 18.0],
         "radio_mast" => [2.0, 45.0, 2.0],
+        // Its plinth; the cage up top overhangs it, out of reach.
+        "siren_mast" => [0.9, crate::siren_mast::HEIGHT, 0.9],
         "mast_hut" => [5.0, 3.0, 4.0],
         "rail_shed" => [20.0, 10.3, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
@@ -683,6 +700,13 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "chapel" => [10.4, 19.0, 23.0],
         // A garden fence's run: four panels between five posts.
         "fence_garden" => [8.5, 1.3, 0.2],
+        // The training yard's bays (`world::yard`): bare timber rails,
+        // waist high, in 6 m runs and 2 m fillers (end posts to end posts,
+        // which the next run shares); and a gate filling 4 m of the line,
+        // its 3 m leaf hung between its posts.
+        "yard_fence" => [6.12, 1.35, 0.12],
+        "yard_fence_2" => [2.12, 1.35, 0.12],
+        "yard_gate" => [4.0, 1.5, 0.16],
         // Hero landmarks: a valley's one unmistakable silhouette.
         "mill_race" => [7.8, 28.5, 54.6],
         // A mine's aerial ropeway: the upper station (its ropes run out
@@ -1159,9 +1183,13 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "anomaly_core"
             | "quarantine_gate"
             | "radio_mast"
+            | "siren_mast"
             | "boxcar"
             | "target"
             | "fence_garden"
+            | "yard_fence"
+            | "yard_fence_2"
+            | "yard_gate"
             // A pole stands in the snow as it lies; so does a lamp post.
             | "snow_pole"
             | "way_lamp"
@@ -1239,6 +1267,16 @@ impl MapDef {
         for m in self.markers_of(&MarkerKind::Rendezvous) {
             out.push((
                 format!("the rendezvous {}", m.name),
+                m.at,
+                yaw_to(m.at, [0.0, 0.0]),
+            ));
+        }
+        // A flare stop turns like a rendezvous: bed to the valley's middle.
+        for m in self.markers_of(&MarkerKind::FlareStop {
+            vantage: [0.0, 0.0],
+        }) {
+            out.push((
+                format!("the flare stop {}", m.name),
                 m.at,
                 yaw_to(m.at, [0.0, 0.0]),
             ));
