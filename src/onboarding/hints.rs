@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use extraction_core::firearm::{Event as FireEvent, FireMode};
 
 use crate::interact::Held;
-use crate::raid::{Phase, RadioCall, Raid};
+use crate::raid::{Phase, RadioCall, Raid, Show};
 use crate::rig::{LocalPlayer, RigDriver, RigInput};
 use crate::weapons::{Gun, GunEvent};
 
@@ -81,7 +81,7 @@ impl Hints {
         }
         e.0 += 1;
         e.1 = now;
-        raid.say(hint.line(flat));
+        raid.tell(hint.line(flat), Show::View);
         true
     }
 
@@ -257,6 +257,7 @@ fn one_up(
     players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
     guns: Query<(
+        Entity,
         &Gun,
         &crate::anomaly::artifacts::CarriedBy,
         Has<crate::interact::body::InBackpack>,
@@ -293,16 +294,16 @@ fn one_up(
     said.0 = true;
     // Every gun on you (two pistols: the first found was the empty one,
     // and the advice was for it, not the one drawn).
-    let mine: Vec<&Gun> = guns
+    let mine: Vec<(Entity, &Gun)> = guns
         .iter()
-        .filter(|(_, by, packed)| by.0 == me && !packed)
-        .map(|(g, ..)| g)
+        .filter(|(_, _, by, packed)| by.0 == me && !packed)
+        .map(|(e, g, ..)| (e, g))
         .collect();
     let gun = mine.first().copied();
     let empty = !mine.is_empty()
         && mine
             .iter()
-            .all(|g| g.firearm.chambers.iter().all(|c| c.is_none()));
+            .all(|(_, g)| g.firearm.chambers.iter().all(|c| c.is_none()));
     info!(
         "off the truck: {}",
         match (gun.is_some(), empty) {
@@ -317,16 +318,16 @@ fn one_up(
     // the crate.
     let in_gun = mine
         .iter()
-        .any(|g| g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0));
+        .any(|(_, g)| g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0));
     // (One that fits it: an AK's magazine on you is no help to the PM, and
     // "Mag in" sent the newcomer out with none it could use.)
     let fits = |m: &crate::weapons::Mag| {
         mine.iter()
-            .any(|g| g.firearm.def.magazine_family.as_deref() == Some(m.family.as_str()))
+            .any(|(_, g)| g.firearm.def.magazine_family.as_deref() == Some(m.family.as_str()))
     };
     // (Not one seated in a gun: the loaded pistol down in the pack had its
     // magazine counted as a spare, and "Mag in" had nothing to put in.)
-    let wells: Vec<Entity> = guns.iter().filter_map(|(g, ..)| g.magwell).collect();
+    let wells: Vec<Entity> = guns.iter().filter_map(|(_, g, ..)| g.magwell).collect();
     let spare = mags.iter().any(|(it, by, m, sock)| {
         it.rounds > 0
             && fits(m)
@@ -334,7 +335,7 @@ fn one_up(
             && !sock.is_some_and(|s| wells.contains(&s.socket))
     });
     // A loaded gun of your own, packed away.
-    let packed = guns.iter().any(|(g, by, packed)| {
+    let packed = guns.iter().any(|(_, g, by, packed)| {
         by.0 == me && packed && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
     });
     let in_crate = stash.iter().flat_map(|b| b.contents.iter()).any(|e| {
@@ -345,12 +346,15 @@ fn one_up(
         })
     });
     if empty {
-        raid.say(match (in_gun, spare, packed, in_crate) {
-            (true, ..) => ONE_UP,
-            (false, true, ..) => MAG_IN,
-            (false, false, true, _) => IN_PACK,
-            (false, false, false, true) => LOAD_UP,
-            (false, false, false, false) => NO_ROUNDS,
-        });
+        // Beside the gun when it's in your hand: it's about the gun.
+        let show = gun.map_or(Show::View, |(e, _)| Show::Item(e));
+        let (line, show) = match (in_gun, spare, packed, in_crate) {
+            (true, ..) => (ONE_UP, show),
+            (false, true, ..) => (MAG_IN, show),
+            (false, false, true, _) => (IN_PACK, show),
+            (false, false, false, true) => (LOAD_UP, show),
+            (false, false, false, false) => (NO_ROUNDS, Show::View),
+        };
+        raid.tell(line, show);
     }
 }

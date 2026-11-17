@@ -417,6 +417,9 @@ mod tests {
     fn a_turned_chapel_can_be_walked_up_to() {
         for rot in [0.0, 75.0, 165.0, 255.0, 345.0] {
             let mut map = MapDef::from_ron(TRAINING_YARD).unwrap();
+            // Out on the yard's open ground, past its bays' fences: the
+            // bays aside, so it's the chapel's own blocked cells in its way.
+            map.placements.retain(|p| !p.prefab.starts_with("yard_"));
             map.placements.push(Placement {
                 prefab: "chapel".into(),
                 at: [-45.0, 30.0],

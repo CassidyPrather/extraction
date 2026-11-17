@@ -21,7 +21,7 @@ use crate::anomaly::Anomaly;
 use crate::camp::TRAINING_YARD;
 use crate::interact::{Held, InteractEvent};
 use crate::launch::LaunchOptions;
-use crate::raid::{Phase, Raid, SURGE_WARNING};
+use crate::raid::{Phase, Raid, SURGE_WARNING, Show};
 use crate::rig::LocalPlayer;
 use crate::robots::{Awareness, PartDestroyed, PartRole};
 use crate::weapons::{Gun, GunEvent};
@@ -187,6 +187,16 @@ impl First {
     /// Its name in the save.
     pub fn key(self) -> String {
         format!("{self:?}")
+    }
+
+    /// Where its lines show besides the wrist: danger now holds the view
+    /// for its reading time; the rest are captions to act on.
+    pub fn show(self) -> Show {
+        if self.urgent() {
+            Show::Urgent
+        } else {
+            Show::View
+        }
     }
 
     /// Danger, now: what to do comes first in its line, so it's on the
@@ -374,7 +384,8 @@ pub struct MeetFirst(pub First);
 /// Lines waiting their turn on the wrist.
 #[derive(Resource, Default)]
 struct Queue {
-    lines: VecDeque<String>,
+    /// Each line with where it shows besides the wrist (`Raid::tell`).
+    lines: VecDeque<(String, Show)>,
     /// Each first's lines as filled, till the speaker passes them on to
     /// `Spoken` (kept here, not in a resource of their own: one more on
     /// every first's system reordered the schedule, and a physics soak
@@ -465,6 +476,7 @@ fn meet(
     queue: &mut Queue,
     out: &mut MessageWriter<FirstMet>,
     fill: &dyn Fn(&str) -> String,
+    show: Option<Show>,
 ) -> bool {
     if f == First::Heard && queue.has_you > 0.0 {
         return false;
@@ -478,7 +490,7 @@ fn meet(
         // to learn.
         let heard: Vec<String> = First::Heard.lines().iter().map(|l| l.to_string()).collect();
         let before = queue.lines.len();
-        queue.lines.retain(|l| !heard.contains(l));
+        queue.lines.retain(|(l, _)| !heard.contains(l));
         if queue.lines.len() < before {
             firsts.0.remove(&First::Heard.key());
         }
@@ -487,22 +499,27 @@ fn meet(
         queue.filled.push((l, fill(l)));
     }
     info!("first time: {f:?}");
+    let show = show.unwrap_or(f.show());
     if f.urgent() {
         // Danger now: said at once, ahead of anything waiting (a walker's
         // aim came the same moment as "heard", and five seconds behind it
         // was after the shot).
         for l in f.lines().iter().rev().map(|l| fill(l)) {
             if !l.is_empty() {
-                queue.lines.push_front(l);
+                queue.lines.push_front((l, show));
             }
         }
         let since = SPACING - queue.quiet;
         queue.quiet = queue.quiet.min((URGENT_SPACING - since).max(0.0));
     } else {
         // (A line filled to nothing isn't said.)
-        queue
-            .lines
-            .extend(f.lines().iter().map(|l| fill(l)).filter(|l| !l.is_empty()));
+        queue.lines.extend(
+            f.lines()
+                .iter()
+                .map(|l| fill(l))
+                .filter(|l| !l.is_empty())
+                .map(|l| (l, show)),
+        );
     }
     out.write(FirstMet(f));
     true
@@ -517,13 +534,38 @@ struct Meet<'w> {
 
 impl Meet<'_> {
     fn meet(&mut self, f: First) -> bool {
-        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, &|l| {
-            l.to_string()
-        })
+        meet(
+            f,
+            &mut self.firsts,
+            &mut self.queue,
+            &mut self.out,
+            &|l| l.to_string(),
+            None,
+        )
+    }
+
+    /// As `meet`, its lines shown beside `item` (in the view if it's not
+    /// in a hand by then).
+    fn meet_beside(&mut self, f: First, item: Entity) -> bool {
+        meet(
+            f,
+            &mut self.firsts,
+            &mut self.queue,
+            &mut self.out,
+            &|l| l.to_string(),
+            Some(Show::Item(item)),
+        )
     }
 
     fn meet_filled(&mut self, f: First, fill: &dyn Fn(&str) -> String) -> bool {
-        meet(f, &mut self.firsts, &mut self.queue, &mut self.out, fill)
+        meet(
+            f,
+            &mut self.firsts,
+            &mut self.queue,
+            &mut self.out,
+            fill,
+            None,
+        )
     }
 
     fn met(&self, f: First) -> bool {
@@ -880,7 +922,9 @@ fn bleeding(
     if h.bleeding > BLEEDING_BADLY && !dressed() {
         if !*said_badly {
             *said_badly = true;
-            m.queue.lines.push_back(BLEEDING_BADLY_LINE.into());
+            m.queue
+                .lines
+                .push_back((BLEEDING_BADLY_LINE.into(), Show::Urgent));
         }
         // ("Dressing on, now" with none to put on is no help.)
         return;
@@ -1189,7 +1233,7 @@ fn spare_radio(
     let mut give: Vec<(String, f32)> = vec![];
     if !have("radio") {
         give.push(("radio".into(), 0.8));
-        m.queue.lines.push_back(SPARE_RADIO.into());
+        m.queue.lines.push_back((SPARE_RADIO.into(), Show::View));
     }
     // No gun anywhere of yours (in the yard, the kit is the yard's own).
     let armed = items.iter().any(|(e, it, by, gt)| {
@@ -1203,13 +1247,13 @@ fn spare_radio(
         for (id, condition) in [("pm_pistol", 0.75), ("pm_mag", 0.75), ("ammo_9x18", 1.0)] {
             give.push((id.into(), condition));
         }
-        m.queue.lines.push_back(SPARE_GUN.into());
+        m.queue.lines.push_back((SPARE_GUN.into(), Show::View));
     }
     // No dressing anywhere of yours (the first used, none stashed): one,
     // and never a second while it lies there unused.
     if !have("field_dressing") && opts.map != crate::camp::TRAINING_YARD {
         give.push(("field_dressing".into(), 1.0));
-        m.queue.lines.push_back(SPARE_DRESSING.into());
+        m.queue.lines.push_back((SPARE_DRESSING.into(), Show::View));
     }
     if let Some(id) = wanted.filter(|id| !have(id)) {
         let name = catalog
@@ -1217,7 +1261,7 @@ fn spare_radio(
             .map(|k| catalog.get(k).name.to_lowercase())
             .unwrap_or_else(|| id.replace('_', " "));
         give.push((id, 1.0));
-        m.queue.lines.push_back(spare_for(&name));
+        m.queue.lines.push_back((spare_for(&name), Show::View));
     }
     let Some((crate_e, mut bag)) = stash.iter_mut().next() else {
         return;
@@ -1323,12 +1367,12 @@ pub const PICKED_A_RAID: usize = 3;
 /// after you, no bleed), and no more than [`PICKED_A_RAID`] a raid.
 #[allow(clippy::too_many_arguments)]
 fn picked_up(
-    held: Query<(&crate::items::Item, &Held)>,
+    held: Query<(Entity, &crate::items::Item, &Held)>,
     locals: Query<(Entity, &crate::health::Health), With<LocalPlayer>>,
     minds: Query<&Awareness>,
     catalog: Res<crate::items::Catalog>,
     raid: Res<Raid>,
-    mut waiting: Local<Vec<Family>>,
+    mut waiting: Local<Vec<(Family, Entity)>>,
     mut said: Local<usize>,
     mut m: Meet,
 ) {
@@ -1345,16 +1389,16 @@ fn picked_up(
     let Some((me, health)) = locals.iter().next() else {
         return;
     };
-    for (item, h) in &held {
+    for (e, item, h) in &held {
         if h.player != me {
             continue;
         }
         let def = catalog.get(item.kind());
         if let Some(f) = super::pickups::family(def)
             && !m.met(First::Picked(f))
-            && !waiting.contains(&f)
+            && !waiting.iter().any(|(w, _)| *w == f)
         {
-            waiting.push(f);
+            waiting.push((f, e));
         }
     }
     let calm = m.queue.lines.is_empty()
@@ -1368,8 +1412,8 @@ fn picked_up(
             .iter()
             .any(|a| a.target == Some(me) && a.suspicion >= crate::robots::NOTICED);
     if calm && *said < PICKED_A_RAID && !waiting.is_empty() {
-        let f = waiting.remove(0);
-        if m.meet(First::Picked(f)) {
+        let (f, e) = waiting.remove(0);
+        if m.meet_beside(First::Picked(f), e) {
             *said += 1;
         }
     }
@@ -1395,10 +1439,10 @@ fn speak(
     if queue.quiet > 0.0 {
         return;
     }
-    if let Some(line) = queue.lines.pop_front() {
+    if let Some((line, show)) = queue.lines.pop_front() {
         spoken.0.push(line.clone());
         spoken.1.push(time.elapsed_secs());
-        raid.say(line);
+        raid.tell(line, show);
         queue.quiet = SPACING;
     }
 }
@@ -1427,7 +1471,7 @@ mod tests {
             }
             st.apply(app.world_mut());
             let q = app.world().resource::<Queue>();
-            let says = |f: First| q.lines.iter().any(|l| f.lines().contains(&l.as_str()));
+            let says = |f: First| q.lines.iter().any(|(l, _)| f.lines().contains(&l.as_str()));
             assert!(!says(First::Heard), "{order:?}: {:?}", q.lines);
             assert!(says(First::Sentry), "{order:?}: {:?}", q.lines);
             assert!(
@@ -1435,6 +1479,40 @@ mod tests {
                 "{order:?}"
             );
         }
+    }
+
+    /// A first's lines are queued for the view, not the wrist alone (#90,
+    /// `render::said`; `speak` tells each as queued): danger now as
+    /// urgent, the rest as captions, and a find's line beside the thing in
+    /// your hand.
+    #[test]
+    fn a_firsts_lines_are_told_for_the_view() {
+        use bevy::ecs::system::SystemState;
+        let mut app = App::new();
+        app.init_resource::<Firsts>()
+            .init_resource::<Queue>()
+            .add_message::<FirstMet>();
+        let thing = app.world_mut().spawn_empty().id();
+        let mut st: SystemState<Meet> = SystemState::new(app.world_mut());
+        {
+            let mut m = st.get_mut(app.world_mut()).unwrap();
+            assert!(m.meet(First::Surge));
+            assert!(m.meet(First::Detector));
+            assert!(m.meet_beside(First::Picked(Family::GunCare), thing));
+        }
+        st.apply(app.world_mut());
+        let q = app.world().resource::<Queue>();
+        let at = |f: First| {
+            let l = f.lines()[0];
+            q.lines
+                .iter()
+                .find(|(t, _)| t == l)
+                .map(|(_, s)| *s)
+                .unwrap_or_else(|| panic!("{f:?} not queued: {:?}", q.lines))
+        };
+        assert_eq!(at(First::Surge), Show::Urgent);
+        assert_eq!(at(First::Detector), Show::View);
+        assert_eq!(at(First::Picked(Family::GunCare)), Show::Item(thing));
     }
 
     /// A hound that's noticed you is the hound's line ("Don't run"), not
@@ -2383,7 +2461,7 @@ mod tests {
     /// The driver's bleeding-badly line, said or waiting its turn.
     fn said_badly(app: &App) -> usize {
         let spoken = app.world().resource::<Spoken>().0.iter();
-        let queued = app.world().resource::<Queue>().lines.iter();
+        let queued = app.world().resource::<Queue>().lines.iter().map(|(l, _)| l);
         spoken
             .chain(queued)
             .filter(|l| *l == BLEEDING_BADLY_LINE)
@@ -2516,7 +2594,7 @@ mod tests {
     /// The driver's dressing line, said or waiting its turn to be.
     fn said_dressing(app: &App) -> usize {
         let spoken = app.world().resource::<Spoken>().0.iter();
-        let queued = app.world().resource::<Queue>().lines.iter();
+        let queued = app.world().resource::<Queue>().lines.iter().map(|(l, _)| l);
         spoken
             .chain(queued)
             .filter(|l| *l == SPARE_DRESSING)
@@ -2662,7 +2740,7 @@ mod tests {
         app.world_mut()
             .resource_mut::<Queue>()
             .lines
-            .push_back("Truck: \"Busy.\"".into());
+            .push_back(("Truck: \"Busy.\"".into(), Show::View));
         hold(&mut app, "gun_oil");
         let spoken = app.world().resource::<Spoken>().0.clone();
         assert!(
