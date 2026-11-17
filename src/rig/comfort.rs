@@ -8,7 +8,7 @@
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
 //! `--finger-grab`, `--no-steady-aim`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
-//! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
+//! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--wrist-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto), `--msaa 4|2|0`,
 //! `--a2c 1|0` (soft or hard leaves), `--hold-rate 1|0`.
 
@@ -63,6 +63,10 @@ pub struct Comfort {
     /// What's said (the driver, the radio, the machines) shown on the
     /// wrist with who's speaking and from where.
     pub captions: bool,
+    /// With `captions`, what needs acting on now also shown in the lower
+    /// view, and a line about a thing in hand beside it (`render::said`);
+    /// off, on the wrist only.
+    pub captions_in_view: bool,
     /// A faint tick on the wrist when a machine nearby turns certain of
     /// you (`rig::haptics`).
     pub machine_tick: bool,
@@ -118,6 +122,7 @@ impl Default for Comfort {
             seated: false,
             one_handed: false,
             captions: true,
+            captions_in_view: true,
             machine_tick: true,
             bleed_pulse: true,
             pocket_spheres: true,
@@ -300,11 +305,27 @@ impl Comfort {
     }
 
     pub fn captions_label(&self) -> String {
-        if self.captions {
-            "CAPTIONS\non the wrist".into()
-        } else {
+        if !self.captions {
             "CAPTIONS\noff".into()
+        } else if self.captions_in_view {
+            "CAPTIONS\nin view".into()
+        } else {
+            "CAPTIONS\non the wrist".into()
         }
+    }
+
+    /// Captions and callouts in the view (`render::said`).
+    pub fn in_view(&self) -> bool {
+        self.captions && self.captions_in_view
+    }
+
+    /// The Captions card's next setting: in view, the wrist only, off.
+    pub fn next_captions(&mut self) {
+        (self.captions, self.captions_in_view) = match (self.captions, self.captions_in_view) {
+            (true, true) => (true, false),
+            (true, false) => (false, false),
+            (false, _) => (true, true),
+        };
     }
 
     /// The gun hand.
@@ -441,6 +462,7 @@ impl Comfort {
                 "--seated" => c.seated = true,
                 "--one-handed" => c.one_handed = true,
                 "--no-captions" => c.captions = false,
+                "--wrist-captions" => c.captions_in_view = false,
                 "--no-machine-tick" => c.machine_tick = false,
                 "--no-bleed-pulse" => c.bleed_pulse = false,
                 "--no-pocket-spheres" => c.pocket_spheres = false,

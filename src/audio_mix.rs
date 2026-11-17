@@ -443,6 +443,8 @@ pub const MIX: &[Cue] = &[
     // The Gate counting a key-carrier, rising (`audio_machines::gate_call`;
     // this is its start, it rises GATE_CALL_RISE over it), its edges, and a
     // heavy letting you go (`stand_down_sounds`).
+    // A busy mast's tell before the machines' answer (`audio_machines::mast_sounds`).
+    cue!("mast.tell", "mast/tell", -14.0, 100.0, 120.0, Signal, 60.0),
     cue!("gate.call", "gate/call", -16.0, 90.0, 60.0, Signal, 30.0),
     cue!("gate.wake", "machines/clank", -3.5, 85.0, 30.0, Action, 15.0),
     cue!("gate.release", "machines/servo", -10.0, 75.0, 30.0, Action, 15.0),

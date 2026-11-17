@@ -373,6 +373,22 @@ mod tests {
         assert_eq!(house_kinds(None).len(), house_kinds(Some(99)).len());
     }
 
+    /// #94: a signal's a self-contained flare, from raid 4; the flare gun
+    /// and its 26 mm stars don't turn up any more (a save that has them
+    /// keeps them).
+    #[test]
+    fn signal_flares_from_raid_four_and_no_flare_gun() {
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        let names: Vec<String> = loot.names().cloned().collect();
+        let soonest = |id: &str| names.iter().filter_map(|t| loot.first_raid(t, id)).min();
+        assert_eq!(soonest("signal_flare"), Some(4));
+        for id in ["flare_pistol", "flare_white", "flare_red", "flare_green"] {
+            assert_eq!(soonest(id), None, "{id} still rolls");
+        }
+        assert!(cat.kind("flare_pistol").is_some(), "kept for old saves");
+    }
+
     /// What the driver's first jobs ask for can be found by then
     /// (`progression::WANTS`): the odd jobs' from the first raids, the
     /// errands' radio and electronics by the third.

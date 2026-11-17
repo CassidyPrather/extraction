@@ -25,6 +25,7 @@ impl Plugin for DevPlugin {
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
+                    say_for_gallery,
                     camera_over_ground,
                 ),
             )
@@ -245,11 +246,14 @@ fn sights_to_the_eye(
     zone: Option<Res<crate::world::Zone>>,
     catalog: Res<crate::items::Catalog>,
     mut guns: Query<(
+        Entity,
         &crate::weapons::Gun,
         &crate::items::Item,
         &mut Transform,
         &mut crate::weapons::feel::Handling,
     )>,
+    mut commands: Commands,
+    mut posed: Local<bool>,
     mut cams: Query<
         &mut Transform,
         (
@@ -290,15 +294,102 @@ fn sights_to_the_eye(
     }
     // The gallery's gun only: one lying in the zone would come to the eye
     // too, over it.
-    for (gun, item, mut tf, mut handling) in &mut guns {
+    for (e, gun, item, mut tf, mut handling) in &mut guns {
         if catalog.get(item.kind()).id != id {
             continue;
+        }
+        if !*posed {
+            *posed = true;
+            commands
+                .entity(e)
+                .insert(crate::render::said::Posed(crate::rig::Side::Right));
+            // `EXTRACTION_SAY` with a `left=` line: the gun's magazine
+            // held up in the other hand, just right of the sight line, for
+            // its line (the callout keeps `said::SIGHT_CLEAR` off it).
+            if say_lines().iter().any(|(k, _)| k == "left") {
+                let fwd = look * Vec3::NEG_Z;
+                let right = look * Vec3::X;
+                let at = eye + fwd * 0.42 + right * 0.05 - look * Vec3::Y * 0.06;
+                if let Some(kind) = catalog.kind("pm_mag") {
+                    let m = crate::items::spawn_item(
+                        &mut commands,
+                        &catalog,
+                        crate::items::SpawnItem {
+                            kind,
+                            transform: Transform::from_translation(at).with_rotation(look),
+                            condition: 1.0,
+                        },
+                    );
+                    commands.entity(m).insert((
+                        RigidBody::Static,
+                        crate::render::said::Posed(crate::rig::Side::Left),
+                    ));
+                }
+            }
         }
         let line = gun.layout.sight.rotation;
         let rot = look * line.inverse();
         let at_eye = crate::weapons::sight_picture::weld_eye(gun);
         *tf = Transform::from_translation(eye - rot * at_eye).with_rotation(rot);
         handling.at_eye = 1.0;
+    }
+}
+
+/// `EXTRACTION_SAY`: lines told in a gallery pose, for screenshots of
+/// what's said in view (`render::said`): `;`-separated `item=` (the thing
+/// in the right hand), `left=` (the left's), `view=` and `urgent=`.
+fn say_lines() -> Vec<(String, String)> {
+    std::env::var("EXTRACTION_SAY")
+        .unwrap_or_default()
+        .split(';')
+        .filter_map(|e| e.split_once('='))
+        .map(|(k, v)| (k.trim().to_string(), v.to_string()))
+        .collect()
+}
+
+/// Tells `EXTRACTION_SAY`'s lines once the pose's things are in hand.
+fn say_for_gallery(
+    opts: Res<LaunchOptions>,
+    mut raid: ResMut<crate::raid::Raid>,
+    posed: Query<(Entity, &crate::render::said::Posed)>,
+    mut frames: Local<u32>,
+    mut said: Local<bool>,
+    mut commands: Commands,
+) {
+    if *said || opts.gallery.is_none() {
+        return;
+    }
+    let lines = say_lines();
+    if lines.is_empty() {
+        *said = true;
+        return;
+    }
+    let hand = |side: crate::rig::Side| posed.iter().find(|(_, p)| p.0 == side).map(|(e, _)| e);
+    let wants_left = lines.iter().any(|(k, _)| k == "left");
+    let ready = hand(crate::rig::Side::Right).is_some()
+        && (!wants_left || hand(crate::rig::Side::Left).is_some());
+    if !ready && lines.iter().any(|(k, _)| k == "item" || k == "left") {
+        return;
+    }
+    *frames += 1;
+    if *frames < 20 {
+        return;
+    }
+    *said = true;
+    commands.insert_resource(crate::render::said::HoldForShot);
+    use crate::raid::Show;
+    for (k, v) in lines {
+        let show = match k.as_str() {
+            "item" => hand(crate::rig::Side::Right).map(Show::Item),
+            "left" => hand(crate::rig::Side::Left).map(Show::Item),
+            "view" => Some(Show::View),
+            "urgent" => Some(Show::Urgent),
+            _ => None,
+        };
+        if let Some(show) = show {
+            info!("gallery: told {show:?}: {v}");
+            raid.tell(v.replace('|', "\n"), show);
+        }
     }
 }
 
@@ -1378,7 +1469,9 @@ fn first_person_hands(
     if let Some(primary) = point(GripRole::Primary) {
         let item_at =
             Transform::from_matrix(level.to_matrix() * primary.local.to_matrix().inverse());
-        commands.entity(item).insert(view(item_at));
+        commands
+            .entity(item)
+            .insert((view(item_at), crate::render::said::Posed(Side::Right)));
         let mut curl = hold_curl(Some(GripRole::Primary), trigger, 0.0);
         if let Ok(gun) = guns.get(item) {
             curl[0] = crate::render::props::gun_index_curl(Side::Right, &gun.layout, trigger);
@@ -1467,7 +1560,9 @@ fn first_person_hands(
         }
         let in_hand = crate::render::hold::taken(Side::Left, half);
         let seat = crate::render::hold::seat(Side::Left, half, in_hand);
-        commands.entity(item).insert(view(hand * in_hand));
+        commands
+            .entity(item)
+            .insert((view(hand * in_hand), crate::render::said::Posed(Side::Left)));
         let h = glove(&mut commands, Side::Left, hand * seat.glove(), seat.curl);
         commands.entity(h).queue(move |mut e: EntityWorldMut| {
             if let Some(mut v) = e.get_mut::<crate::render::props::HandVisual>() {
