@@ -19,7 +19,7 @@
 #   wrong fails there.
 
 yard_start | 4 | How clear was it what to do first? | --map training_yard
-searchlights | 3 | How well could you read where the searchlights were looking? | --map marrow_creek --hour dusk --weather clearing --no-robots --camera 40,0,262,0,8 --gallery reel:search,4,40
+searchlights | 3 | How well could you read where the searchlights were looking? | --map marrow_creek --hour dusk --weather clearing --no-robots --camera 40,0,262,0,35 --gallery dirigible,50
 
 # Waiting on a staging line from its owner:
 # ammo_boxes | 3 | How easy are the new ammo boxes to tell apart? | (Weapon feel / Armoury)
