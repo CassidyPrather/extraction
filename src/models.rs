@@ -198,6 +198,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Wood",
     "Polymer",
     "Shell",
+    "ShellBelly",
     "Steel",
     "Bakelite",
     "Black",
@@ -341,6 +342,12 @@ impl ModelMaterials {
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
+            // A robot's underside: the shell scan a shade darker, without
+            // the shell's own faint glow (`robots::visuals`), so the
+            // dirigible's belly stands off the overcast from below (#99).
+            "ShellBelly" => derive(Mat::RobotShell, &|m| {
+                m.base_color = Color::srgb(0.42, 0.43, 0.44);
+            }),
             // Bright steel: the gun-metal scan's relief, without its dark albedo.
             "Steel" => derive(Mat::GunMetal, &|m| {
                 m.base_color_texture = None;
