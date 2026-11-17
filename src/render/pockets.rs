@@ -22,6 +22,16 @@ use extraction_core::items::ItemKind;
 
 /// An icon's size across, in its sphere's radii.
 pub const ICON_ACROSS: f32 = 1.3;
+/// A part further than this from its thing's origin isn't its (m).
+const PART_REACH: f32 = 0.6;
+
+/// A mesh under a thing, and its own visibility.
+type IconPart = (
+    &'static Mesh3d,
+    &'static GlobalTransform,
+    Option<&'static Visibility>,
+);
+
 /// An icon's alpha, from its sphere's (up to this).
 pub const ICON_ALPHA: f32 = 0.9;
 /// How far an icon sways either way (rad), and how fast (rad/s).
@@ -139,7 +149,7 @@ fn build_icon(
     occupant: Entity,
     meshes: &Assets<Mesh>,
     children: &Query<&Children>,
-    parts: &Query<(&Mesh3d, &GlobalTransform), Without<PocketSphere>>,
+    parts: &Query<IconPart, Without<PocketSphere>>,
     globals: &Query<&GlobalTransform>,
 ) -> Option<(Mesh, Vec3, f32, Quat)> {
     let base = globals.get(occupant).ok()?.affine().inverse();
@@ -151,10 +161,19 @@ fn build_icon(
         if let Ok(c) = children.get(e) {
             stack.extend(c.iter());
         }
-        let Ok((m, g)) = parts.get(e) else {
+        let Ok((m, g, vis)) = parts.get(e) else {
             continue;
         };
-        let mesh = meshes.get(&m.0)?;
+        // Not a part kept hidden (the thing itself is: stowed,
+        // `render::kit` hides it).
+        if e != occupant && vis == Some(&Visibility::Hidden) {
+            continue;
+        }
+        // A part drawn from the render world only (a sight's reticle, a
+        // compass's face) is left out: the rest is the shape.
+        let Some(mesh) = meshes.get(&m.0) else {
+            continue;
+        };
         if mesh.primitive_topology() != PrimitiveTopology::TriangleList {
             continue;
         }
@@ -165,6 +184,11 @@ fn build_icon(
             continue;
         };
         let to = base * g.affine();
+        // Nor one left somewhere else (a far stand-in at the world's
+        // origin).
+        if Vec3::from(to.translation).length() > PART_REACH {
+            continue;
+        }
         let start = positions.len() as u32;
         positions.extend(
             p.iter()
@@ -216,7 +240,7 @@ fn icons(
     mut icon_tags: Query<&mut MeshTag, (With<IconTag>, Without<PocketSphere>)>,
     items: Query<&Item>,
     children: Query<&Children>,
-    parts: Query<(&Mesh3d, &GlobalTransform), Without<PocketSphere>>,
+    parts: Query<IconPart, Without<PocketSphere>>,
     globals: Query<&GlobalTransform>,
     locals: Query<(&GlobalTransform, &crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
     time: Res<Time>,

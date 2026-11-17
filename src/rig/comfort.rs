@@ -340,6 +340,14 @@ impl Comfort {
         }
     }
 
+    pub fn pocket_spheres_label(&self) -> String {
+        if self.pocket_spheres {
+            "POCKETS\nspheres".into()
+        } else {
+            "POCKETS\nPOUCHES drawn".into()
+        }
+    }
+
     pub fn steady_aim_label(&self) -> String {
         if self.steady_aim {
             "STEADY AIM\ntwo hands, a stock".into()

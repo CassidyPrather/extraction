@@ -40,9 +40,14 @@ impl Plugin for DevPlugin {
                     plate_hits_for_gallery.run_if(world_in),
                     impact_hits_for_gallery.run_if(world_in),
                     present_for_gallery,
+                    pockets_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
+            )
+            .add_systems(
+                PostUpdate,
+                pockets_gallery_eye.before(bevy::transform::TransformSystems::Propagate),
             );
     }
 }
@@ -2646,5 +2651,198 @@ mod gallery_word_tests {
                 );
             }
         }
+    }
+}
+
+/// `--gallery kit+pockets[+STATE][+pistol][+hip][+lefty]`: the pocket
+/// spheres (`interact::pockets`) at the eye, shown in flat mode for the
+/// picture, over the kit (`kit`). STATE, a thing in the gun hand (a PM
+/// magazine; `pistol`, a PM, the holster emptied for it): `far` out in
+/// front, `near` 25 cm off an empty pouch, `hover` in it (or at the
+/// holster), `full` at a full one, `load` (one-handed) the pistol's well at
+/// a pouched magazine. Without one, nothing held. `hip` looks at the gun
+/// hand's hip (`lefty`: the left hand, with `--left-handed`). The eye is
+/// the chest's, looking down; the pack's hidden (here it hung in front of
+/// the belt and hid it).
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn pockets_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    mut in_flat: ResMut<crate::interact::pockets::PocketsInFlat>,
+    mut players: Query<
+        (Entity, &GlobalTransform, &mut crate::rig::RigInput),
+        With<crate::rig::LocalPlayer>,
+    >,
+    mut slots: Query<(
+        &crate::interact::body::BodySlot,
+        &GlobalTransform,
+        &mut crate::interact::Socket,
+    )>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    if !gallery_word(spec, "pockets") {
+        return;
+    }
+    if !in_flat.0 {
+        in_flat.0 = true;
+    }
+    let Some((player, root, mut input)) = players.iter_mut().next() else {
+        return;
+    };
+    let w = |x| gallery_word(spec, x);
+    let thing = ["far", "near", "hover", "full", "load"].into_iter().any(w);
+    state.0 += 1;
+    let f = state.0;
+    let side = if w("lefty") { Side::Left } else { Side::Right };
+    let sx = side.sign();
+    let pistol = w("pistol");
+    // The holster emptied for the pistol in hand (not for a reload).
+    if f == 26 && pistol && !w("load") {
+        for (s, _, mut sock) in &mut slots {
+            if s.0 == 2
+                && let Some(o) = sock.occupant.take()
+            {
+                commands.entity(o).despawn();
+            }
+        }
+    }
+    let far = Vec3::new(0.22 * sx, 1.15, -0.42);
+    if f == 28 && thing {
+        let id = catalog.kind(if pistol { "pm_pistol" } else { "pm_mag" });
+        state.1 = id.map(|kind| {
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: root.compute_transform() * Transform::from_translation(far),
+                    condition: 1.0,
+                },
+            )
+        });
+    }
+    // The kit's fill: pouches 3, 4 (AK), 6 (PM), 5 empty; the holster 2.
+    let target = if pistol && !w("load") {
+        2
+    } else if w("full") || w("load") {
+        6
+    } else {
+        5
+    };
+    let slot_at = slots
+        .iter()
+        .find(|(s, ..)| s.0 == target)
+        .map(|(_, g, _)| root.affine().inverse().transform_point3(g.translation()));
+    let at = if !thing {
+        Vec3::new(0.3 * sx, 0.85, 0.05)
+    } else if f < 45 || w("far") {
+        far
+    } else if let Some(s) = slot_at {
+        if w("near") {
+            s + Vec3::new(0.06 * sx, 0.12, -0.2)
+        } else if w("load") {
+            s + Vec3::new(0.0, 0.08, -0.07)
+        } else if target == 2 {
+            s + Vec3::new(0.02 * sx, 0.06, -0.02)
+        } else {
+            s + Vec3::new(0.0, 0.035, -0.045)
+        }
+    } else {
+        return;
+    };
+    let h = input.hand_mut(side);
+    h.pose = Transform::from_translation(at).looking_to(Vec3::new(0.0, -0.4, -1.0), Vec3::Y);
+    h.tracked = true;
+    let other = input.hand_mut(side.other());
+    other.pose = Transform::from_xyz(-0.3 * sx, 0.85, 0.05);
+    other.tracked = true;
+    if (29..=40).contains(&f)
+        && let Some(item) = state.1
+    {
+        actions.write(crate::interact::HandAction::Grab {
+            player,
+            side,
+            item,
+            point: None,
+        });
+    }
+}
+
+/// The camera for `kit+pockets`: the chest's eye, looking down at the
+/// pouches (or the hip), a headset's 100° across.
+#[allow(clippy::type_complexity)]
+fn pockets_gallery_eye(
+    opts: Res<LaunchOptions>,
+    torsos: Query<(&GlobalTransform, &ChildOf), With<crate::interact::body::Torso>>,
+    locals: Query<Entity, With<crate::rig::LocalPlayer>>,
+    slots: Query<
+        (&crate::interact::Socket, &GlobalTransform),
+        With<crate::interact::body::BodySlot>,
+    >,
+    mut packs: Query<&mut Visibility, With<crate::interact::body::Backpack>>,
+    mut cams: Query<(&mut Transform, &mut Projection), With<crate::render::FreeCamera>>,
+) {
+    use crate::interact::SocketKind;
+    use extraction_core::inventory::SlotKind;
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    if !gallery_word(spec, "pockets") {
+        return;
+    }
+    let Some(me) = locals.iter().next() else {
+        return;
+    };
+    let Some((torso, _)) = torsos.iter().find(|(_, p)| p.parent() == me) else {
+        return;
+    };
+    for mut v in &mut packs {
+        v.set_if_neq(Visibility::Hidden);
+    }
+    let inv = torso.affine().inverse();
+    let (sum, n) = slots
+        .iter()
+        .filter(|(s, _)| s.kind == SocketKind::Body(SlotKind::Pouch))
+        .fold((Vec3::ZERO, 0.0), |(a, n), (_, g)| {
+            (a + g.translation(), n + 1.0)
+        });
+    let mut target = if n > 0.0 {
+        sum / n
+    } else {
+        torso.translation()
+    };
+    if gallery_word(spec, "hip") {
+        let kind = if gallery_word(spec, "pistol") {
+            SlotKind::Holster
+        } else {
+            SlotKind::Pocket
+        };
+        let x = if gallery_word(spec, "lefty") {
+            -1.0
+        } else {
+            1.0
+        };
+        if let Some((_, g)) = slots.iter().find(|(s, g)| {
+            s.kind == SocketKind::Body(kind) && inv.transform_point3(g.translation()).x * x > 0.0
+        }) {
+            target = g.translation();
+        }
+    }
+    let Ok((mut ct, mut proj)) = cams.single_mut() else {
+        return;
+    };
+    let eye = torso.transform_point(Vec3::new(0.0, 0.40, 0.04));
+    let fwd = torso.rotation() * Vec3::NEG_Z;
+    *ct = Transform::from_translation(eye).looking_at(target, fwd);
+    if let Projection::Perspective(p) = &mut *proj {
+        // 100° across a 16:9 view.
+        p.fov = 68f32.to_radians();
+        p.near = 0.02;
     }
 }

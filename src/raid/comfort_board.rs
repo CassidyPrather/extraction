@@ -35,6 +35,8 @@ pub enum ComfortCard {
     MachineTick,
     /// The wrist's heartbeat while you bleed.
     BleedPulse,
+    /// Your slots as spheres, or the pouches drawn.
+    PocketSpheres,
     Climb,
     /// Your body drawn under you, or not.
     Body,
@@ -85,6 +87,9 @@ pub const CARDS: &[(ComfortCard, f32, f32)] = &[
     // while you bleed (by the tick it's a wrist thing; low, as the seated
     // reach the score card below the captions).
     (ComfortCard::BleedPulse, 0.90, -0.15),
+    // And under it, how your pouches and pockets look (spheres, or drawn):
+    // the 'how you play' column's foot is behind the stash rack.
+    (ComfortCard::PocketSpheres, 0.72, -0.15),
     // Past the stash's end, a fifth column: the row that was over
     // the stash, where the rack's brace (once fitted) hid it. Under the
     // driver's note (1.47 m and up, z 0.12 to 0.48), over the second
@@ -151,6 +156,7 @@ fn press_cards(
                 ComfortCard::Captions => comfort.captions = !comfort.captions,
                 ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
                 ComfortCard::BleedPulse => comfort.bleed_pulse = !comfort.bleed_pulse,
+                ComfortCard::PocketSpheres => comfort.pocket_spheres = !comfort.pocket_spheres,
                 ComfortCard::Body => comfort.body = !comfort.body,
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
                 ComfortCard::Smoothing => comfort.next_msaa(),
@@ -191,6 +197,7 @@ fn card_text(
             ComfortCard::Captions => comfort.captions_label(),
             ComfortCard::MachineTick => comfort.machine_tick_label(),
             ComfortCard::BleedPulse => comfort.bleed_pulse_label(),
+            ComfortCard::PocketSpheres => comfort.pocket_spheres_label(),
             ComfortCard::Body => comfort.body_label(),
             ComfortCard::Climb => comfort.climb_label(),
             ComfortCard::Smoothing => comfort.msaa_label(),
@@ -375,6 +382,7 @@ mod tests {
             (ComfortCard::Score, "OFF"),
             (ComfortCard::MachineTick, "OFF"),
             (ComfortCard::BleedPulse, "OFF"),
+            (ComfortCard::PocketSpheres, "POUCHES"),
         ] {
             let card = app
                 .world_mut()
@@ -389,6 +397,7 @@ mod tests {
                     ComfortCard::Binaural => c.binaural,
                     ComfortCard::Score => c.score,
                     ComfortCard::BleedPulse => c.bleed_pulse,
+                    ComfortCard::PocketSpheres => c.pocket_spheres,
                     _ => c.machine_tick,
                 }
             };
