@@ -2200,15 +2200,15 @@ struct BearBlips {
 const BEAR_BLIPS: usize = 16;
 /// The screen's face (the disc), the radius it maps its range to, and its
 /// centre, item space: 66 mm across the Bear's 70 mm top.
-const SCREEN_FACE: f32 = 0.033;
-const SCREEN_R: f32 = 0.031;
+pub(crate) const SCREEN_FACE: f32 = 0.033;
+pub(crate) const SCREEN_R: f32 = 0.031;
 const SCREEN_AT: Vec3 = Vec3::new(0.0, 0.0245, 0.03);
 /// A ring's line, and the smallest ring (to the line's middle), metres on
 /// the screen: read held up at 0.4 m (as the wrist is), the line is 0.37
 /// degrees and the smallest ring's hole 0.49, over the incidental floor
 /// (`render::legibility::INCIDENTAL_DEG`). (A stone's dot was 2.2 mm.)
-const RING_LINE: f32 = 0.0026;
-const RING_MIN_R: f32 = 0.003;
+pub(crate) const RING_LINE: f32 = 0.0026;
+pub(crate) const RING_MIN_R: f32 = 0.003;
 /// Outline sizes from the smallest to the screen's own.
 const RING_SIZES: usize = 10;
 
