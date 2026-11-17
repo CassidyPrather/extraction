@@ -175,6 +175,12 @@ def boxed(body, slots, band_at, band_mat, seal_at, seal_mat, mix):
         parts.append(band)
     hatch = Part("band_mix")
     for size, at in band_at:
+        # Out past the type's band (never both at once): its thin side
+        # moved off the box by its own thickness.
+        thin = min(range(3), key=lambda a: size[a])
+        at = list(at)
+        at[thin] += math.copysign(size[thin], at[thin] or 1.0)
+        at = tuple(at)
         # Stripes across its length: black, green, blue.
         k = max(range(3), key=lambda a: size[a])
         n = 9
@@ -327,7 +333,7 @@ def ammo_545(band=None):
     text(p, "5.45", 0.011, "Black", T(-0.0005, 0.0175, 0.013) @ ON_TOP, depth=0.0004)
     text(p, "5.45", 0.009, "Black", T(0.0, 0.0, sz / 2 - 0.0005), depth=0.0004)
     return boxed(p, slots, ring_band(0.049, 0.034, 0.0, -0.0155, 0.008), band,
-                 [((0.0495, 0.0345, 0.0235), (0.0, 0.0, -0.0378))], "Olive",
+                 [((0.0495, 0.0345, 0.0205), (0.0, 0.0, -0.03925))], "Olive",
                  (0.007, T(0.0, 0.0175, 0.04) @ ON_TOP))
 
 
