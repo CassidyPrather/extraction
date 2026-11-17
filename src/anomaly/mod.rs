@@ -1187,19 +1187,32 @@ mod tests {
         // Facing +X (the body turned; the head looks along it).
         app.world_mut().get_mut::<Transform>(p).unwrap().rotation =
             Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+        // (Settled there first: a moved body's world position is a frame
+        // behind, and a pop with nobody in it just resets.)
+        for _ in 0..3 {
+            app.update();
+        }
+        let start = pos(&app, p);
         let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
         app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
-        let mut thrown = None;
-        for _ in 0..30 {
+        let mut top = start;
+        for _ in 0..60 {
             app.update();
-            let v = app.world().get::<Body>(p).unwrap().velocity;
-            if v.y > 5.0 {
-                thrown = Some(v);
-                break;
+            let now = pos(&app, p);
+            if now.y > top.y {
+                top = now;
             }
         }
-        let v = thrown.expect("the pop threw you");
-        assert!(v.x > 3.0 && v.z.abs() < 1.0, "the way you face: {v:?}");
+        assert!(
+            top.y - start.y > 2.0,
+            "the pop threw you up ({:.2} m)",
+            top.y - start.y
+        );
+        let moved = pos(&app, p) - start;
+        assert!(
+            moved.x > 2.0 && moved.z.abs() < 1.5,
+            "the way you face: {moved:?}"
+        );
         assert_eq!(
             app.world().get::<crate::health::Health>(p).unwrap().hp,
             hp,
