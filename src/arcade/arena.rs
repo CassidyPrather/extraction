@@ -222,10 +222,6 @@ fn set_up(
     arcade.stand = Some(bench * Transform::from_translation(STAND));
     // A screenshot's camera places itself.
     arcade.hold = if opts.camera.is_some() { 0 } else { 30 };
-    // The ground starts swept: a session that saves nothing gets the dev
-    // cache by its insertion point (`items::loot`), which is the bench's;
-    // the bench lays its own kit.
-    arcade.reset = Reset::Sweep;
     for i in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, i);
         let table = commands
