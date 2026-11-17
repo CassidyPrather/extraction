@@ -397,6 +397,10 @@ mod complete {
     use extraction_core::ammo::Load;
     use extraction_core::items::{Category, ItemCatalog, SizeClass};
 
+    /// Guns kept for the saves that hold them, no longer found: the flare
+    /// pistol and its stars, since the hand-fired signal flare (#94).
+    const RETIRED: &[&str] = &["flare_pistol"];
+
     #[test]
     fn every_gun_has_everything_a_gun_needs() {
         let cat = ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG).unwrap();
@@ -423,8 +427,12 @@ mod complete {
             if def.size == SizeClass::Bulky && super::super::sling::known_swivels(id).is_none() {
                 lacks("its sling swivels from the model (sling::known_swivels)");
             }
-            if !loot.mentions(id) {
+            let retired = RETIRED.contains(&id);
+            if !retired && !loot.mentions(id) {
                 lacks("a place in the loot");
+            }
+            if retired && loot.mentions(id) {
+                lacks("no place in the loot: it's retired (RETIRED)");
             }
             if !cache.contains(&format!("(\"{id}\", ")) {
                 lacks("a place in the dev cache");
@@ -450,7 +458,7 @@ mod complete {
                     && matches!(d.category, Category::Ammo | Category::Magazine)
                     && loot.mentions(&d.id)
             });
-            if !found {
+            if !found && !retired {
                 lacks("its ammunition in the loot");
             }
             if let Some(family) = &f.magazine_family {

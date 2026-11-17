@@ -21,6 +21,9 @@ pub fn said(level: Level, why: Why) -> &'static str {
         (Level::Stirred, Why::Noise | Why::Fight) => {
             "Move off, quiet. They heard that: a whine's rising at the Gate."
         }
+        (Level::Stirred, Why::Transmit) => {
+            "Move off the mast. They heard your call: a whine at the Gate."
+        }
         (Level::Busy, _) => "Keep moving. Machine traffic on the wind, all of it this way.",
         (Level::Hunting, _) => "Get out now. The whole Zone is looking for you.",
     }
@@ -31,7 +34,14 @@ mod tests {
     use super::*;
 
     const LEVELS: [Level; 3] = [Level::Stirred, Level::Busy, Level::Hunting];
-    const WHYS: [Why; 5] = [Why::Time, Why::Noise, Why::Fight, Why::Ground, Why::Carried];
+    const WHYS: [Why; 6] = [
+        Why::Time,
+        Why::Noise,
+        Why::Fight,
+        Why::Ground,
+        Why::Carried,
+        Why::Transmit,
+    ];
 
     /// Every step up says something, fits the wrist whole (three lines of
     /// 26, as the firsts), with no game words, and says what to do before
@@ -86,5 +96,6 @@ mod tests {
         for why in [Why::Noise, Why::Fight] {
             assert!(said(Level::Stirred, why).contains("heard"), "{why:?}");
         }
+        assert!(said(Level::Stirred, Why::Transmit).contains("call"));
     }
 }
