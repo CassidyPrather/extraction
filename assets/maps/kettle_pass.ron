@@ -505,6 +505,15 @@
         (kind: Rendezvous, at: (9.2, -201.9), name: "The pass"),
         (kind: Rendezvous, at: (-155.9, -17.5), name: "Mine yard"),
         (kind: Rendezvous, at: (176.1, -169.2), name: "Hunting lodge"),
+        // The radio set at each pickup, on the wall of its shed (the short exfil's
+        // on the guard booth), facing the pad (#94, `map_extract`).
+        (kind: FieldSet(pad: "The pass"), at: (17.38, -201.15), rot: 92.0),
+        (kind: FieldSet(pad: "Mine yard"), at: (-154.40, -26.48), rot: 0.0),
+        (kind: FieldSet(pad: "Hunting lodge"), at: (183.03, -162.27), rot: 135.0),
+        (kind: FieldSet(pad: "short"), at: (98.70, 216.08), rot: 180.0),
+        // Where the truck pulls in for a flare fired from the vantage (#94).
+        (kind: FlareStop(vantage: (186.0, -34.0)), at: (97.0, -18.0), name: "the quarry road's end"),
+        (kind: FlareStop(vantage: (-74.2, 115.5)), at: (-125.8, 140.8), name: "the low farm"),
         (kind: RobotGate, at: (-187.5, -191.2), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).

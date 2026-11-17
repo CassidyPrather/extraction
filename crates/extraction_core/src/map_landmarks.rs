@@ -156,11 +156,21 @@ impl Landmark {
     }
 }
 
-/// Every landmark on the map: placements at least `LANDMARK_HEIGHT` tall,
-/// pieces of one kind within [`JOIN`] joined into one.
+/// Tall prefabs that carry a lamp of their own and get no landmark lamp:
+/// Sallow's siren mast, its amber lamp the alarm's (`siren_mast`).
+pub const OWN_LAMP: &[&str] = &[crate::siren_mast::PREFAB];
+
+/// Whether a placement is a landmark: at least `LANDMARK_HEIGHT` tall and
+/// not lit by a lamp of its own ([`OWN_LAMP`]).
+pub fn is_landmark(prefab: &str) -> bool {
+    prefab_footprint(prefab)[1] >= LANDMARK_HEIGHT && !OWN_LAMP.contains(&prefab)
+}
+
+/// Every landmark on the map ([`is_landmark`]), pieces of one kind within
+/// [`JOIN`] joined into one.
 pub fn landmarks(map: &MapDef, hm: &Heightmap) -> Vec<Landmark> {
     let tall: Vec<usize> = (0..map.placements.len())
-        .filter(|i| prefab_footprint(&map.placements[*i].prefab)[1] >= LANDMARK_HEIGHT)
+        .filter(|i| is_landmark(&map.placements[*i].prefab))
         .collect();
     let outline: Vec<Vec<P2>> = tall
         .iter()

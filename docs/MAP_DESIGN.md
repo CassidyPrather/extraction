@@ -134,6 +134,15 @@ A good map makes the crossing a decision.
 - The truck appears on the rendezvous marker and parks with its bed to
   the map centre: nothing is placed within 8 m of it (`TRUCK_ROOM`), and
   the ground there is no steeper than 12° (`RV_LEVEL`).
+- Every pickup has its radio set on a wall within 30 m of the truck
+  (`FieldSet` markers, `map_extract::SET_REACH`). Every valley has two
+  flare stops: a dead-end truck stand, plus a vantage within 150 m to
+  fire the flare from (`FlareStop`, `FLARE_REACH`). The truck is levelled
+  there the same way as at a rendezvous.
+- Sallow's Gauge house has a siren mast (`siren_mast`, tagged
+  `gauge_horn`). By day the mast is the tell: it stands clear over the
+  catchwater cutting. Its amber lamp only reads from dusk on, so nothing
+  should count on the lamp in daylight.
 - To every rendezvous there are **two ways**: block a 60 m wide corridor
   along the main route (all but its first and last 90 m) and there is
   still a comfortable walk there, at most 1.6 times as long

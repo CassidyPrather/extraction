@@ -587,8 +587,9 @@ pub const VIEW_MAX: usize = 16;
 ///
 /// A log pile is one too: ten logs and four stakes drawn as one model, no
 /// roof, nothing inside. So is a snow pole: one 9 cm stick, painted; and
-/// a yard lamp: a post and its arm; a marker post: one post; and a
-/// machine marker: one stake.
+/// a yard lamp: a post and its arm; a marker post: one post; a machine
+/// marker: one stake; and a siren mast: a pole, its ladder and cage, a
+/// horn and a lamp.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -602,6 +603,7 @@ pub const VIEW_LIGHT: &[&str] = &[
     "yard_fence",
     "yard_fence_2",
     "yard_gate",
+    "siren_mast",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
@@ -4382,7 +4384,7 @@ mod tests {
             let map = MapDef::from_ron(text).unwrap();
             for p in &map.placements {
                 let base = crate::map::prefab_base(&p.prefab);
-                if prefab_footprint(&p.prefab)[1] >= LANDMARK_HEIGHT
+                if crate::map_landmarks::is_landmark(&p.prefab)
                     && !src.contains(&format!("    \"{base}\": \""))
                 {
                     unnamed.push(format!("{name}: {base}"));
