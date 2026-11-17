@@ -178,6 +178,30 @@ impl RunStats {
 
     /// The summary's text: the same numbers as the jsonl's lines.
     /// `down`: the run ended with you down (else a RESTART ended it).
+    /// The run's ending, short, for the board's sheet: what took you
+    /// down, what you took down, and where the rest is (the guns' numbers
+    /// on the gun card, all of it in the summary file).
+    pub fn board(&self, wave: u32, score: u32, t: f32, down: bool) -> String {
+        let end = if down { "down" } else { "restarted" };
+        let mut s = format!(
+            "Waves cleared {}, {end} on wave {wave}\nScore {score}, time {}:{:02}\n",
+            self.waves_cleared,
+            t as u32 / 60,
+            t as u32 % 60
+        );
+        if let Some(c) = &self.cause {
+            s += &format!("Taken down by: {c}\n");
+        }
+        if !self.machines.is_empty() {
+            s += "\nYou took down:\n";
+            for (m, k) in &self.machines {
+                s += &format!(" {m} {}, {} median\n", k.kills, secs(median(&k.ttk)));
+            }
+        }
+        s += "\nThe guns' numbers are on the gun card.\nEvery number is in the run's\nsummary file.\n";
+        s
+    }
+
     pub fn summary(&self, wave: u32, score: u32, t: f32, down: bool) -> String {
         let end = if down { "down" } else { "restarted" };
         let mut s = format!(
@@ -339,15 +363,26 @@ pub fn take_in(bests: &mut Bests, run: &RunStats) {
     }
 }
 
-/// The board's gun card: each gun used this run, its numbers against its
-/// best before this run.
-pub fn gun_card(title: &str, run: &RunStats, bests: &Bests) -> String {
+/// The most guns the gun card lists: more and its letters would fall
+/// under the legibility floor from where it's read (`render::legibility`).
+/// The rest are named on a line; the summary has them all.
+pub const CARD_GUNS: usize = 3;
+
+/// The board's gun card: each gun used this run (up to [`CARD_GUNS`],
+/// `first` among them if it was used), its numbers against its best before
+/// this run. Its lines are kept short enough to read at the board.
+pub fn gun_card(title: &str, run: &RunStats, bests: &Bests, first: Option<&str>) -> String {
     let mut s = format!("GUN CARD\n{title}\n");
-    let used = run.used();
+    let mut used = run.used();
     if used.is_empty() {
         s += "\nNo shots yet.\nThe range is east of the bench:\nplates at 10, 25 and 50 m.\n";
         return s;
     }
+    if let Some(i) = first.and_then(|f| used.iter().position(|g| g == f)) {
+        let g = used.remove(i);
+        used.insert(0, g);
+    }
+    let rest = used.split_off(used.len().min(CARD_GUNS));
     for g in used {
         let st = &run.guns[&g];
         let b = bests.get(&g).cloned().unwrap_or_default();
@@ -364,7 +399,7 @@ pub fn gun_card(title: &str, run: &RunStats, bests: &Bests) -> String {
         let n1 = |v: f32| format!("{v:.1}");
         let sec = |v: f32| format!("{v:.1} s");
         s += &format!(
-            "\n{}  {} shots, {} hit\n acc {}\n",
+            "\n{} {} shots, {} hit\n acc {}\n",
             g.to_uppercase(),
             st.shots,
             st.hits,
@@ -372,17 +407,25 @@ pub fn gun_card(title: &str, run: &RunStats, bests: &Bests) -> String {
         );
         if st.kills > 0 {
             s += &format!(
-                " to kill {} shots, {} hits\n ttk {}\n",
+                " shots to kill {}\n hits to kill {}\n ttk {}\n",
                 n1(st.shots_to_kill().unwrap_or(0.0)),
                 vs(st.hits_to_kill(), b.hits_to_kill, false, &n1),
                 vs(median(&st.ttk), b.ttk, false, &sec)
             );
         }
+        let mut handling = Vec::new();
         if !st.reload_cost.is_empty() {
-            s += &format!(
-                " reload {}\n",
+            handling.push(format!(
+                "reload {}",
                 vs(st.reload_median(), b.reload, false, &sec)
-            );
+            ));
+        }
+        if st.stoppages > 0 {
+            let n = st.stoppages;
+            handling.push(format!("{n} stoppage{}", if n == 1 { "" } else { "s" }));
+        }
+        if !handling.is_empty() {
+            s += &format!(" {}\n", handling.join(", "));
         }
         let cells = |a: [(u32, u32); 3], names: [&str; 3]| {
             a.iter()
@@ -400,10 +443,50 @@ pub fn gun_card(title: &str, run: &RunStats, bests: &Bests) -> String {
         if !range.is_empty() {
             s += &format!(" range {range}\n");
         }
-        if st.stoppages > 0 {
-            s += &format!(" stoppages {}\n", st.stoppages);
-        }
     }
+    if !rest.is_empty() {
+        s += &format!("\nalso fired: {}\n", rest.join(", ").to_uppercase());
+    }
+    s
+}
+
+/// The fullest the gun card gets: [`CARD_GUNS`] guns and more fired, every
+/// line there, every number at its widest, and a best to beat.
+#[cfg(test)]
+pub fn fullest_card() -> String {
+    let guns = ["mp133", "mosin", "ppsh", "ak74", "sks", "pm"];
+    let mut run = RunStats::default();
+    let mut bests = Bests::new();
+    for g in guns {
+        run.guns.insert(
+            g.into(),
+            GunStats {
+                shots: 1999,
+                hits: 1888,
+                stoppages: 99,
+                kills: 99,
+                kill_shots: 1999,
+                kill_hits: 1888,
+                ttk: vec![111.0],
+                fight: [(10, 1), (10, 1), (10, 1)],
+                range: [(10, 1), (10, 1), (10, 1)],
+                reload_cost: vec![(111.0, true)],
+                ..Default::default()
+            },
+        );
+        bests.insert(
+            g.into(),
+            GunBest {
+                accuracy: Some(0.999),
+                hits_to_kill: Some(1.5),
+                ttk: Some(99.5),
+                reload: Some(99.5),
+            },
+        );
+        run.picked.push(g.into());
+    }
+    let mut s = String::from("HOW DID THE MP133 FEEL?\n1 poor ... 5 great. SKIP to pass.\n\n");
+    s += &gun_card("last run: restarted on wave 99", &run, &bests, None);
     s
 }
 
@@ -497,8 +580,8 @@ mod tests {
         run.picked = vec!["ppsh".into(), "ak74".into()];
         assert_eq!(run.used(), vec!["ak74".to_string()], "only guns that fired");
         let mut bests = Bests::new();
-        let card = gun_card("wave 1 cleared", &run, &bests);
-        assert!(card.contains("AK74  20 shots, 5 hit"), "{card}");
+        let card = gun_card("wave 1 cleared", &run, &bests, None);
+        assert!(card.contains("AK74 20 shots, 5 hit"), "{card}");
         assert!(card.contains("acc 25%\n"), "{card}");
         assert!(!card.contains("PPSH"), "{card}");
         bests.insert(
@@ -510,11 +593,17 @@ mod tests {
                 reload: Some(2.0),
             },
         );
-        let card = gun_card("wave 1 cleared", &run, &bests);
+        let card = gun_card("wave 1 cleared", &run, &bests, None);
         assert!(card.contains("acc 25% (best 50%)"), "{card}");
-        assert!(card.contains("2.0 NEW BEST"), "fewer hits to kill: {card}");
+        assert!(
+            card.contains("hits to kill 2.0 NEW BEST"),
+            "fewer hits to kill: {card}"
+        );
         assert!(card.contains("ttk 3.5 s NEW BEST"), "{card}");
-        assert!(card.contains("reload 3.5 s (best 2.0 s)"), "{card}");
+        assert!(
+            card.contains("reload 3.5 s (best 2.0 s), 1 stoppage\n"),
+            "{card}"
+        );
         assert!(card.contains("range 10m 0%"), "{card}");
         take_in(&mut bests, &run);
         let b = &bests["ak74"];
@@ -523,8 +612,24 @@ mod tests {
         assert_eq!(b.ttk, Some(3.5));
         assert_eq!(b.reload, Some(2.0));
         assert!(
-            gun_card("x", &RunStats::default(), &bests).contains("No shots yet"),
+            gun_card("x", &RunStats::default(), &bests, None).contains("No shots yet"),
             "an empty run says where to shoot"
         );
+        // More guns than the card lists: the one asked about comes first,
+        // the rest are named.
+        let full = fullest_card();
+        assert_eq!(full.matches(" shots, ").count(), CARD_GUNS, "{full}");
+        assert!(full.contains("also fired: AK74, SKS, PM\n"), "{full}");
+        let mut many = RunStats::default();
+        for g in ["a", "b", "c", "d"] {
+            many.guns.insert(g.into(), ak());
+            many.picked.push(g.into());
+        }
+        let card = gun_card("x", &many, &Bests::new(), Some("d"));
+        assert!(
+            card.find("\nD ").unwrap() < card.find("\nA ").unwrap(),
+            "{card}"
+        );
+        assert!(card.contains("also fired: C\n"), "{card}");
     }
 }
