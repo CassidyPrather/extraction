@@ -573,6 +573,21 @@ fn fresh_save(map: &str) -> SaveGame {
 /// Spawns one saved item (and what's seated in it) with physics on, at
 /// `at`. Returns `None` for ids the catalog no longer knows.
 pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
+    // A kind retired since the save: what it became, fresh, where it lay.
+    if let Some(now) = extraction_core::save::retired_as(&saved.id) {
+        let fresh = SavedItem {
+            id: now.to_string(),
+            condition: saved.condition,
+            rounds: 0,
+            charge_wh: 0.0,
+            local: saved.local,
+            turn: saved.turn,
+            gun: None,
+            inserted: Vec::new(),
+            loads: Default::default(),
+        };
+        return restore_item(world, &fresh, at);
+    }
     let catalog = world.resource::<Catalog>().clone();
     let Some(kind) = catalog.kind(&saved.id) else {
         warn!("save: unknown item {:?}, skipped", saved.id);
@@ -1860,6 +1875,40 @@ mod tests {
         assert_eq!(at.len(), 2, "two dressings: {at:?}");
         let gap = Vec3::from_array(at[0]).distance(Vec3::from_array(at[1]));
         assert!(gap > 0.03, "not in one place: {at:?}");
+    }
+
+    /// A save from before the flare pistol was retired loads: its red
+    /// cartridge is a signal flare, its white one brass, the pistol scrap
+    /// (`save::RETIRED`), where each lay.
+    #[test]
+    fn a_retired_kind_in_an_old_save_loads_as_what_it_became() {
+        let path = temp_save("retired.ron");
+        let mut app = app_with_save(&path);
+        let world = app.world_mut();
+        for (old, now) in [
+            ("flare_red", "signal_flare"),
+            ("flare_white", "brass"),
+            ("flare_pistol", "scrap_metal"),
+        ] {
+            let saved = SavedItem {
+                id: old.into(),
+                condition: 0.7,
+                rounds: 1,
+                charge_wh: 0.0,
+                local: [0.0; 3],
+                turn: [0.0, 0.0, 0.0, 1.0],
+                gun: None,
+                inserted: Vec::new(),
+                loads: Default::default(),
+            };
+            let at = Transform::from_xyz(3.0, 40.0, 7.0);
+            let e = restore_item(world, &saved, at).expect(old);
+            let catalog = world.resource::<Catalog>().clone();
+            let kind = world.get::<crate::items::Item>(e).unwrap().kind();
+            assert_eq!(catalog.get(kind).id, now, "{old}");
+            let t = world.get::<Transform>(e).unwrap().translation;
+            assert!(t.distance(at.translation) < 0.01, "{old} moved to {t}");
+        }
     }
 
     /// The same world saves to the same bytes: remains come out in one

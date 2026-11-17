@@ -196,6 +196,25 @@ impl Memorial {
     }
 }
 
+/// Kinds retired from the game, and what one in an old save becomes:
+/// the flare pistol and its 26 mm cartridges, since the hand-fired signal
+/// flare (#94). A red star is still a red star; the others are their
+/// brass, and the pistol scrap.
+pub const RETIRED: &[(&str, &str)] = &[
+    ("flare_pistol", "scrap_metal"),
+    ("flare_red", "signal_flare"),
+    ("flare_white", "brass"),
+    ("flare_green", "brass"),
+];
+
+/// What a retired kind becomes ([`RETIRED`]), if `id` is one.
+pub fn retired_as(id: &str) -> Option<&'static str> {
+    RETIRED
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map(|(_, now)| *now)
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SavedItem {
     pub id: String,
@@ -614,6 +633,35 @@ impl SaveGame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each retired kind becomes one the game has and hasn't retired, and
+    /// nothing hands out a retired kind any more: not the loot, not a
+    /// recipe.
+    #[test]
+    fn retired_kinds_become_live_ones_and_nothing_makes_them() {
+        use crate::fabrication::{Make, RECIPES};
+        use crate::items::{BUILTIN_CATALOG, ItemCatalog};
+        use crate::loot::{BUILTIN_LOOT, LootTables};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        for (old, now) in RETIRED {
+            assert!(cat.kind(now).is_some(), "{old} becomes {now}: no such kind");
+            assert!(
+                retired_as(now).is_none(),
+                "{old} becomes {now}, itself retired"
+            );
+            assert!(!loot.mentions(old), "{old} is still in the loot");
+            for r in RECIPES {
+                if let Make::Items(makes) = r.makes {
+                    assert!(
+                        makes.iter().all(|(id, _)| id != old),
+                        "{} still makes {old}",
+                        r.id
+                    );
+                }
+            }
+        }
+    }
 
     fn item(id: &str) -> SavedItem {
         SavedItem {

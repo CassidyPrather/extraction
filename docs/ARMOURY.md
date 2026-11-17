@@ -130,8 +130,11 @@ lies burning.
   put in another.
 - The cartridges are told apart by touch in the dark: the white wad is
   smooth, the red has one bump, the green two.
-- The bench (with the vice) packs two white stars from powder, brass and
-  polymer (`pack_flare`). The signals come only as found.
+- Retired (#94): the hand-fired signal flare (`signal_flare`) took its
+  place. Neither the pistol nor its cartridges are found or made any more,
+  and in an old save they load as what they became (`save::RETIRED`): a
+  red cartridge as a signal flare, a white or green one as brass, the
+  pistol as scrap.
 
 ### RPK-74 (`rpk74`)
 
