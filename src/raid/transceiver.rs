@@ -82,9 +82,10 @@ impl PadKind {
     }
 }
 
-/// Whether the mast's tell has a sound yet (Audio's whine). Until it has,
-/// a busy pad's call is only its weight.
-pub const MAST_WHINE_HEARD: bool = false;
+/// Whether the mast's tell has a sound (Audio's whine, `mast.tell`). It
+/// has: a busy pad's call is told at the mast, then answered. (Off again
+/// would leave a busy pad its weight alone.)
+pub const MAST_WHINE_HEARD: bool = true;
 
 /// The dam's alarm horn, on the Gauge house (Sallow Reservoir), and how
 /// high it's mounted.
@@ -477,6 +478,56 @@ mod tests {
         });
         app.update();
         assert_eq!(heard(&mut app), 1, "out");
+    }
+
+    /// A busy pad's call is told: pressed out there, its set sends
+    /// `busy`, and the mast gives its tell (`MastTell`, the whine) before
+    /// any answer.
+    #[test]
+    fn a_busy_pads_call_is_told_at_its_mast() {
+        use crate::robots::pressure::MastTell;
+        let mut app = app();
+        let me = player(&mut app);
+        let (set, at) = app
+            .world_mut()
+            .query::<(Entity, &Transceiver, &GlobalTransform)>()
+            .iter(app.world())
+            .find(|(_, t, _)| t.kind == PadKind::Busy)
+            .map(|(e, _, g)| (e, g.translation()))
+            .expect("the default valley has a busy pad");
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let mut sent = app
+            .world()
+            .resource::<Messages<Transmitted>>()
+            .get_cursor_current();
+        let mut told = app
+            .world()
+            .resource::<Messages<MastTell>>()
+            .get_cursor_current();
+        app.world_mut().write_message(InteractEvent::Pressed {
+            item: set,
+            player: me,
+        });
+        let (mut busy, mut tell) = (false, None);
+        for _ in 0..30 {
+            app.update();
+            let w = app.world();
+            busy |= sent
+                .read(w.resource::<Messages<Transmitted>>())
+                .any(|t| t.busy);
+            if let Some(t) = told.read(w.resource::<Messages<MastTell>>()).last() {
+                tell = Some(t.at);
+            }
+            if busy && tell.is_some() {
+                break;
+            }
+        }
+        assert!(busy, "the call wasn't sent as busy");
+        let tell = tell.expect("no tell at the mast");
+        assert!(
+            tell.distance(at) < 0.01,
+            "told at {tell}, the set's at {at}"
+        );
     }
 
     /// The gate's set is the short run: on a gentle job, free.
