@@ -54,9 +54,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let k = clamp(path * ends * thin * near * far * p.light.w * p.shape.w, 0.0, 1.0);
         // By day a pale, milky shaft (it must show over a lit field); by
         // night less of it is needed, and it's brighter.
-        let a = k * mix(0.55, 0.35, day);
-        let glow = mix(3.0, 1.4, day);
-        return vec4<f32>(p.light.rgb * glow * view.exposure, a);
+        let a = k * mix(0.55, 0.4, day);
+        // Display brightness, not scene light: exposure is the scene's,
+        // and a beam by day must still read lighter than what's behind it.
+        let glow = mix(2.4, 1.6, day);
+        return vec4<f32>(p.light.rgb * glow, a);
     }
     // The pool: soft middle, a warning rim near the edge.
     let r = length(in.uv * 2.0 - vec2<f32>(1.0, 1.0));
@@ -68,7 +70,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let lit = middle * mix(0.55, 0.35, day) * p.light.w;
     let warn = rim * crawl * p.rim.w * mix(0.9, 0.75, day);
     let alpha = clamp(lit + warn, 0.0, 0.95) * far;
-    let col = (p.light.rgb * lit * mix(3.0, 1.6, day) + p.rim.rgb * warn * mix(4.0, 2.2, day))
+    let col = (p.light.rgb * lit * mix(2.6, 1.7, day) + p.rim.rgb * warn * mix(3.0, 2.0, day))
         / max(lit + warn, 1e-3);
-    return vec4<f32>(col * view.exposure, alpha);
+    return vec4<f32>(col, alpha);
 }

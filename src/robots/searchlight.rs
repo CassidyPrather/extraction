@@ -38,6 +38,9 @@ impl Plugin for SearchlightPlugin {
     }
 }
 
+/// What a lamp takes: a few rounds (it's armoured glass in a steel drum).
+pub const LAMP_HP: f32 = 45.0;
+
 /// How fast a steered lamp turns by default (rad/s): slow enough to see
 /// it coming, and the fastest any mind may turn it.
 pub const STEER_RATE: f32 = 0.45;
@@ -186,22 +189,36 @@ fn fit_searchlights(
     spotters: Query<Entity, Added<Spotter>>,
 ) {
     for e in &dirigibles {
-        for l in dirigible_lamps(e) {
-            spawn_lamp(&mut commands, l);
+        for (i, l) in dirigible_lamps(e).into_iter().enumerate() {
+            spawn_lamp(&mut commands, l, i as u8);
         }
     }
     for e in &spotters {
-        spawn_lamp(&mut commands, spotter_lamp(e));
+        spawn_lamp(&mut commands, spotter_lamp(e), 0);
     }
 }
 
-fn spawn_lamp(commands: &mut Commands, l: Beam) {
+/// A lamp is a part of its machine (`PartRole::Lamp`): you can shoot it
+/// out. Its drum is what's hit.
+fn spawn_lamp(commands: &mut Commands, l: Beam, i: u8) {
     let t = Transform::from_translation(l.mount).with_rotation(l.local_rotation());
+    let robot = l.robot;
     commands.spawn((
         Name::new("Searchlight"),
-        t,
+        super::part_bundle(
+            robot,
+            super::PartRole::Lamp(i),
+            LAMP_HP,
+            // (Its drum, along the throw: the cylinder turned onto Z.)
+            Collider::compound(vec![(
+                Vec3::Z * 0.2,
+                Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                Collider::cylinder(0.34, 0.5),
+            )]),
+            t,
+        ),
         Visibility::default(),
-        ChildOf(l.robot),
+        ChildOf(robot),
         l,
     ));
 }
@@ -210,7 +227,7 @@ fn spawn_lamp(commands: &mut Commands, l: Beam) {
 /// it lands.
 #[allow(clippy::type_complexity)]
 fn sweep_searchlights(
-    mut lamps: Query<(&mut Beam, &mut Transform)>,
+    mut lamps: Query<(&mut Beam, &mut Transform, Option<&super::RobotPart>)>,
     robots: Query<(
         &GlobalTransform,
         &super::Robot,
@@ -223,11 +240,12 @@ fn sweep_searchlights(
 ) {
     let dt = time.delta_secs();
     let world = SpatialQueryFilter::from_mask([Layer::World]);
-    for (mut l, mut t) in &mut lamps {
+    for (mut l, mut t, part) in &mut lamps {
         let Ok((root, robot, dirigible, spotter, stunned)) = robots.get(l.robot) else {
             continue;
         };
         let up = !robot.wrecked
+            && part.is_none_or(|p| p.alive())
             && !stunned
             && !dirigible.is_some_and(|d| d.sinking)
             && !spotter.is_some_and(|s| s.float != Float::Aloft);
