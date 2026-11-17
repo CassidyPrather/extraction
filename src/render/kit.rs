@@ -3,6 +3,12 @@
 //! chest mount, each slot's flap closed while it's empty and open while
 //! something's in it; and the backpack, its lid open while it hangs open.
 //!
+//! Your own slots' pieces (and the harness and belt) aren't drawn while
+//! the pocket spheres stand in for them (`interact::pockets::PocketsShown`,
+//! the comfort setting): only hidden, so the setting brings them back;
+//! nor is what's stowed in them (its sphere's icon is). Worn armour is
+//! drawn either way.
+//!
 //! Only the look: slot positions, seats and snap radii are gameplay
 //! (`interact::body`) and stay as they are. Until the models load, or if
 //! they don't, the slots and the pack keep their boxes. Everything here
@@ -44,7 +50,7 @@ impl Plugin for KitVisualsPlugin {
             (
                 (dress_slots, dress_pack, mark_torsos),
                 wear_kit,
-                (open_flaps, open_lids, own_helmet_shadow_only),
+                (open_flaps, hide_stowed, open_lids, own_helmet_shadow_only),
             )
                 .chain(),
         )
@@ -114,6 +120,15 @@ fn piece(kind: SlotKind) -> Option<&'static str> {
 struct Undressed {
     boxes: Vec<Entity>,
 }
+
+/// A slot's own piece (or its box): hidden while the spheres stand in.
+#[derive(Component)]
+struct SlotLook;
+
+/// Something stowed in your own slot, hidden while the spheres stand in
+/// (its sphere draws it small).
+#[derive(Component)]
+struct HiddenInSlot;
 
 /// Which flap a child is: shown while its slot (or bag) is empty
 /// (closed) or full (open).
@@ -197,6 +212,7 @@ fn dress_slots(
                 Mesh3d(meshes.add(Cuboid::from_size(size))),
                 MeshMaterial3d(m),
                 Transform::from_xyz(0.0, -0.04, 0.0),
+                SlotLook,
                 ChildOf(e),
             ))
             .id();
@@ -377,14 +393,17 @@ fn wear_kit(
         let Some(body) = ModelNode::find(rig, name) else {
             continue;
         };
-        hang(&mut commands, e, body, None);
+        let at = hang(&mut commands, e, body, None);
+        commands.entity(at).insert(SlotLook);
         let closed = format!("{name}_flap_closed");
         let open = format!("{name}_flap_open");
         if let Some(n) = ModelNode::find(rig, &closed) {
-            hang(&mut commands, e, n, Some(false));
+            let at = hang(&mut commands, e, n, Some(false));
+            commands.entity(at).insert(SlotLook);
         }
         if let Some(n) = rig_open.as_deref().and_then(|r| ModelNode::find(r, &open)) {
-            hang(&mut commands, e, n, Some(true));
+            let at = hang(&mut commands, e, n, Some(true));
+            commands.entity(at).insert(SlotLook);
         }
         for b in &undressed.boxes {
             commands.entity(*b).despawn();
@@ -418,11 +437,17 @@ fn show_worn(
     worn: Query<&Worn>,
     mut pieces: Query<(&WornBy, &mut Visibility)>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    spheres: Option<Res<crate::interact::pockets::PocketsShown>>,
+    locals: Query<(), With<LocalPlayer>>,
 ) {
     let body = comfort.as_deref().is_none_or(|c| c.body);
+    let spheres = spheres.is_some_and(|s| s.0);
     for (by, mut v) in &mut pieces {
         let w = worn.get(by.player).copied().unwrap_or_default();
-        v.set_if_neq(if by.piece.shown(&w, body) {
+        // The harness and its belt are the pouches' (gone with them).
+        let belt = matches!(by.piece, WornPiece::Harness | WornPiece::Panel);
+        let shown = by.piece.shown(&w, body) && !(belt && spheres && locals.contains(by.player));
+        v.set_if_neq(if shown {
             Visibility::Inherited
         } else {
             Visibility::Hidden
@@ -462,20 +487,65 @@ fn own_helmet_shadow_only(
 
 /// A slot's flap is shut while it's empty and thrown open while it holds
 /// something.
+/// Your own (with the spheres standing in, none of it shows).
 fn open_flaps(
-    slots: Query<(&Socket, &Children), With<BodySlot>>,
-    mut flaps: Query<(&Flap, &mut Visibility)>,
+    slots: Query<(&Socket, &Children, &crate::interact::SocketOwner), With<BodySlot>>,
+    mut looks: Query<(Option<&Flap>, &mut Visibility), With<SlotLook>>,
+    locals: Query<(), With<LocalPlayer>>,
+    spheres: Option<Res<crate::interact::pockets::PocketsShown>>,
 ) {
-    for (socket, children) in &slots {
+    let spheres = spheres.is_some_and(|s| s.0);
+    for (socket, children, owner) in &slots {
         let full = socket.occupant.is_some();
+        let hidden = spheres && locals.contains(owner.0);
         for c in children.iter() {
-            if let Ok((flap, mut v)) = flaps.get_mut(c) {
-                v.set_if_neq(if flap.open == full {
+            if let Ok((flap, mut v)) = looks.get_mut(c) {
+                let show = !hidden && flap.is_none_or(|f| f.open == full);
+                v.set_if_neq(if show {
                     Visibility::Inherited
                 } else {
                     Visibility::Hidden
                 });
             }
+        }
+    }
+}
+
+/// What's in your own slots isn't drawn while the spheres stand in (each
+/// sphere draws its own small); taken out, or the spheres off, it is.
+/// (Worn armour is the vest's and the helmet's to show, `show_worn`.)
+#[allow(clippy::type_complexity)]
+fn hide_stowed(
+    mut commands: Commands,
+    spheres: Option<Res<crate::interact::pockets::PocketsShown>>,
+    slots: Query<(&Socket, &crate::interact::SocketOwner), With<BodySlot>>,
+    locals: Query<(), With<LocalPlayer>>,
+    mut stowed: Query<(Entity, &crate::interact::InSocket, &mut Visibility), Without<HiddenInSlot>>,
+    mut hidden: Query<
+        (Entity, Option<&crate::interact::InSocket>, &mut Visibility),
+        With<HiddenInSlot>,
+    >,
+) {
+    let on = spheres.is_some_and(|s| s.0);
+    let mine = |socket: Entity| {
+        slots.get(socket).is_ok_and(|(s, o)| {
+            locals.contains(o.0)
+                && !matches!(s.kind, SocketKind::Body(SlotKind::Vest | SlotKind::Head))
+        })
+    };
+    for (e, in_socket, mut v) in &mut hidden {
+        if !on || !in_socket.is_some_and(|s| mine(s.socket)) {
+            v.set_if_neq(Visibility::Inherited);
+            commands.entity(e).remove::<HiddenInSlot>();
+        }
+    }
+    if !on {
+        return;
+    }
+    for (e, in_socket, mut v) in &mut stowed {
+        if mine(in_socket.socket) {
+            v.set_if_neq(Visibility::Hidden);
+            commands.entity(e).insert(HiddenInSlot);
         }
     }
 }

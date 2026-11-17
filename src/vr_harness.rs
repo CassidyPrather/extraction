@@ -5504,6 +5504,593 @@ mod body {
         }
     }
 
+    /// The pocket spheres (`interact::pockets`), in place of the drawn
+    /// pouches: every slot but the worn ones shows, faint, at rest; a
+    /// magazine held, none is bright till it's at a pouch, and the one
+    /// that's bright is the one it goes in, let go; then that one shows
+    /// what's in it, and an empty hand at it brightens it; held again at
+    /// it, full, it isn't bright. Flat mode and the setting off: none,
+    /// and the pouches are drawn.
+    #[test]
+    fn the_bright_pocket_sphere_is_where_it_goes() {
+        use crate::interact::pockets::{PocketSphere, PocketsShown};
+        type S = (Option<Entity>, f32, bool, Option<Entity>);
+        let (mut vr, _) = standing();
+        let side = Side::Right;
+        let spheres = |vr: &mut Vr| -> Vec<S> {
+            vr.step(12);
+            let mut q = vr.app.world_mut().query::<&PocketSphere>();
+            q.iter(vr.app.world())
+                .map(|s| (s.slot, s.look.alpha, s.hover, s.holds))
+                .collect()
+        };
+        let shown = |s: &[S]| s.iter().filter(|x| x.1 > 0.05).count();
+        let of = |s: &[S], slot: Entity| *s.iter().find(|x| x.0 == Some(slot)).unwrap();
+        let all = spheres(&mut vr);
+        // A sphere a body slot (twelve) and the pack's.
+        assert_eq!(all.len(), 13, "spheres: {all:?}");
+        // At rest: every slot but the vest and the helmet, faint.
+        assert_eq!(shown(&all), 10, "at rest: {all:?}");
+        assert!(all.iter().all(|x| !x.2 && x.1 < 0.2), "faint: {all:?}");
+        assert!(vr.app.world().resource::<PocketsShown>().0);
+        let pouches: Vec<(Entity, Vec3)> = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &BodySlot, &Socket, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, _, s, _)| s.kind == SocketKind::Body(SlotKind::Pouch))
+                .map(|(e, _, _, g)| (e, g.translation()))
+                .collect()
+        };
+        let at = vr.feet() + Vec3::new(0.25, 1.0, -0.4);
+        let take = |vr: &mut Vr| {
+            let m = vr.spawn("pm_mag", Transform::from_translation(at));
+            vr.app.world_mut().entity_mut(m).insert(RigidBody::Static);
+            vr.hand(side, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(side, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(side).holding, Some(m));
+            m
+        };
+        let to = |vr: &mut Vr, item: Entity, p: Vec3| {
+            for _ in 0..3 {
+                let hand = vr.hand_state(side).world.translation;
+                let at = vr
+                    .app
+                    .world()
+                    .get::<GlobalTransform>(item)
+                    .unwrap()
+                    .translation();
+                vr.move_hand(side, hand + (p - at));
+                vr.step(3);
+            }
+        };
+        let first = take(&mut vr);
+        let held = spheres(&mut vr);
+        assert!(
+            held.iter().all(|x| !x.2),
+            "held out in front, none bright: {held:?}"
+        );
+        to(&mut vr, first, pouches[0].1);
+        let at_pouch = spheres(&mut vr);
+        let bright: Vec<_> = at_pouch.iter().filter(|s| s.2).collect();
+        assert_eq!(bright.len(), 1, "one bright: {at_pouch:?}");
+        assert_eq!(bright[0].0, Some(pouches[0].0), "the pouch it's at");
+        assert!(of(&at_pouch, pouches[0].0).1 > 0.3, "bright: {at_pouch:?}");
+        vr.grip(side, 0.0);
+        vr.step(4);
+        let on = vr.app.world().get::<crate::interact::InSocket>(first);
+        assert_eq!(
+            on.map(|s| s.socket),
+            Some(pouches[0].0),
+            "let go, it's in that one"
+        );
+        // Empty-handed and away: it shows what's in it; the hand at it,
+        // brighter.
+        vr.move_hand(side, at);
+        // (Eased down from bright.)
+        vr.step(60);
+        let away = spheres(&mut vr);
+        let full = of(&away, pouches[0].0);
+        assert_eq!(full.3, Some(first), "what's in it: {full:?}");
+        assert_eq!(shown(&away), 10, "every slot still: {away:?}");
+        vr.move_hand(side, pouches[0].1 + Vec3::new(0.0, 0.05, -0.1));
+        let near = of(&spheres(&mut vr), pouches[0].0);
+        assert!(
+            near.1 > full.1 + 0.02,
+            "brighter with the hand at it: {near:?} {full:?}"
+        );
+        // Another magazine at the full pouch: not bright.
+        vr.move_hand(side, at);
+        vr.step(4);
+        let second = take(&mut vr);
+        to(&mut vr, second, pouches[0].1);
+        let f = of(&spheres(&mut vr), pouches[0].0);
+        assert!(
+            f.1 > 0.01 && !f.2 && f.3 == Some(first),
+            "full, not bright: {f:?}"
+        );
+        // The setting off, and flat mode: none, and the pouches drawn.
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .pocket_spheres = false;
+        let off = spheres(&mut vr);
+        assert_eq!(shown(&off), 0, "setting off: {off:?}");
+        assert!(!vr.app.world().resource::<PocketsShown>().0);
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .pocket_spheres = true;
+        assert!(shown(&spheres(&mut vr)) > 0);
+        vr.app.insert_resource(crate::rig::RigDriver::Flat);
+        let flat = spheres(&mut vr);
+        assert_eq!(shown(&flat), 0, "flat mode: {flat:?}");
+        assert!(!vr.app.world().resource::<PocketsShown>().0);
+    }
+
+    /// Seated (`Comfort::seated`, the view and the hands lifted to a
+    /// standing eye): each pocket sphere rides its slot up with the body,
+    /// and something its slot takes, brought to its sphere, lights that
+    /// one and no other, as standing. Left there, it goes in.
+    #[test]
+    fn seated_each_pocket_sphere_lights_as_standing() {
+        use crate::interact::pockets::PocketSphere;
+        // One thing each slot takes (by id: the same each run).
+        let for_slot = |catalog: &Catalog, k: SlotKind| -> String {
+            let mut defs: Vec<_> = catalog.iter().map(|(_, d)| d).collect();
+            defs.sort_by(|a, b| a.id.cmp(&b.id));
+            let kind = SocketKind::Body(k);
+            defs.iter()
+                .find(|d| {
+                    let family = d.magazine.as_ref().map(|m| m.fits.clone());
+                    crate::interact::accepts_item(
+                        &kind,
+                        d.size,
+                        family.as_deref(),
+                        d.firearm.is_some(),
+                        d.fits_mount(),
+                    ) && crate::interact::fits_body_slot(&kind, d)
+                })
+                .map(|d| d.id.clone())
+                .unwrap_or_else(|| panic!("nothing a {k:?} takes"))
+        };
+        let side = Side::Right;
+        // Per slot (by index): its kind, empty before, whether its own
+        // sphere lit, how many lit, and whether the thing went in.
+        type Row = (usize, SlotKind, bool, bool, usize, bool);
+        let run = |seated: bool| -> (Vec<Row>, f32) {
+            let mut vr = Vr::new("training_yard");
+            let feet = vr
+                .app
+                .world()
+                .resource::<crate::world::Zone>()
+                .on_ground(OPEN.x, OPEN.z);
+            vr.stand(feet, 0.0);
+            // The head once, raw (the lift adds only what it hasn't), and
+            // only then seated: a standing head in the seat's window would
+            // read as sitting up for its few seconds.
+            vr.head(Vec3::new(0.0, if seated { 1.2 } else { 1.65 }, 0.0));
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .seated = seated;
+            for s in [Side::Left, Side::Right] {
+                vr.hand_local(s, Vec3::new(0.25 * s.sign(), 0.95, -0.1), 0.0);
+            }
+            vr.step(90 * 3);
+            let lifted = vr.app.world().get::<RigInput>(vr.player).unwrap().lifted;
+            let mut slots: Vec<(usize, Entity, SlotKind)> = {
+                let mut q = vr.app.world_mut().query::<(Entity, &BodySlot, &Socket)>();
+                q.iter(vr.app.world())
+                    .filter_map(|(e, b, s)| match s.kind {
+                        SocketKind::Body(k) if !matches!(k, SlotKind::Vest | SlotKind::Head) => {
+                            Some((b.0, e, k))
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            };
+            slots.sort_by_key(|s| s.0);
+            let spheres = |vr: &mut Vr| -> Vec<(Option<Entity>, bool, Option<Entity>, Vec3)> {
+                let mut q = vr
+                    .app
+                    .world_mut()
+                    .query::<(&PocketSphere, &GlobalTransform)>();
+                q.iter(vr.app.world())
+                    .map(|(s, g)| (s.slot, s.hover, s.holds, g.translation()))
+                    .collect()
+            };
+            let away = feet + Vec3::new(0.25, 1.0, -0.4);
+            let mut rows = Vec::new();
+            for (index, slot, kind) in slots {
+                let catalog = vr.app.world().resource::<Catalog>().clone();
+                let id = for_slot(&catalog, kind);
+                vr.move_hand(side, away);
+                vr.step(4);
+                let now = spheres(&mut vr);
+                let mine = *now.iter().find(|s| s.0 == Some(slot)).unwrap();
+                let empty = mine.2.is_none();
+                let item = vr.spawn(&id, Transform::from_translation(away));
+                vr.app
+                    .world_mut()
+                    .entity_mut(item)
+                    .insert(RigidBody::Static);
+                vr.hand(side, away, Quat::IDENTITY, 0.0, 0.0);
+                vr.step(2);
+                vr.grip(side, 1.0);
+                vr.step(4);
+                assert_eq!(
+                    vr.hand_state(side).holding,
+                    Some(item),
+                    "seated {seated}: holding {id}"
+                );
+                // The thing to its sphere (where the sphere is now, lifted).
+                for _ in 0..3 {
+                    let want = spheres(&mut vr)
+                        .iter()
+                        .find(|s| s.0 == Some(slot))
+                        .unwrap()
+                        .3;
+                    let hand = vr.hand_state(side).world.translation;
+                    let at = vr
+                        .app
+                        .world()
+                        .get::<GlobalTransform>(item)
+                        .unwrap()
+                        .translation();
+                    vr.move_hand(side, hand + (want - at));
+                    vr.step(3);
+                }
+                vr.step(12);
+                let lit = spheres(&mut vr);
+                let own = lit.iter().any(|s| s.0 == Some(slot) && s.1);
+                let count = lit.iter().filter(|s| s.1).count();
+                vr.grip(side, 0.0);
+                vr.step(4);
+                let went_in = vr
+                    .app
+                    .world()
+                    .get::<crate::interact::InSocket>(item)
+                    .is_some_and(|s| s.socket == slot);
+                rows.push((index, kind, empty, own, count, went_in));
+            }
+            (rows, lifted)
+        };
+        let (standing, flat) = run(false);
+        let (seated, lifted) = run(true);
+        assert!(flat.abs() < 1e-3, "standing: not lifted ({flat})");
+        assert!(
+            (lifted - (crate::rig::seated::STAND_EYE - 1.2)).abs() < 0.02,
+            "seated: lifted to a standing eye ({lifted})"
+        );
+        assert!(!standing.is_empty());
+        // Every empty slot: its own sphere and no other, and it goes in.
+        for (index, kind, empty, own, count, went_in) in &seated {
+            if *empty {
+                assert!(
+                    *own && *count == 1 && *went_in,
+                    "seated, slot {index} ({kind:?}): own {own}, lit {count}, in {went_in}"
+                );
+            }
+        }
+        assert_eq!(seated, standing, "seated the same as standing");
+    }
+
+    /// Where a thing let go goes is what `interact::stow::StowTarget` says
+    /// beforehand (what the pocket spheres show): for one thing of each
+    /// kind the stow tells apart (size, magazine family, gun, mount, what
+    /// each slot and the pack make of it), held at each slot's middle,
+    /// just inside its catch and just outside, at a sling's shoulder, and
+    /// in and out of the open pack; one pouch already full.
+    #[test]
+    fn a_thing_let_go_goes_where_the_stow_says() {
+        use crate::interact::stow::{StowQuery, StowTarget};
+        use bevy::ecs::system::SystemState;
+        let (mut vr, feet) = standing();
+        let player = vr.player;
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let empty_pack = crate::interact::body::Backpack {
+            owner: player,
+            open: true,
+            model: extraction_core::inventory::Backpack::default(),
+            contents: Vec::new(),
+            carried: true,
+            half: crate::interact::body::BACKPACK_HALF_EXTENTS,
+        };
+        let kinds = [
+            SlotKind::Holster,
+            SlotKind::Pouch,
+            SlotKind::Pocket,
+            SlotKind::Mount,
+            SlotKind::Sling,
+            SlotKind::Vest,
+            SlotKind::Head,
+        ];
+        // One of each kind the stow tells apart.
+        let mut seen = std::collections::HashSet::new();
+        let mut ids = Vec::new();
+        for (_, d) in catalog.iter() {
+            let is_gun = d.firearm.is_some();
+            let family = d.magazine.as_ref().map(|m| m.fits.clone());
+            let takes: Vec<bool> = kinds
+                .iter()
+                .map(|k| {
+                    let kind = SocketKind::Body(*k);
+                    crate::interact::accepts_item(
+                        &kind,
+                        d.size,
+                        family.as_deref(),
+                        is_gun,
+                        d.fits_mount(),
+                    ) && crate::interact::fits_body_slot(&kind, d)
+                })
+                .collect();
+            let room = empty_pack.fits(0.0, d.size, d.bulk);
+            let key = (
+                format!("{:?}", d.size),
+                family,
+                is_gun,
+                d.fits_mount(),
+                takes,
+                room,
+            );
+            if seen.insert(key) {
+                ids.push(d.id.clone());
+            }
+        }
+        let side = Side::Right;
+        let hand_at = feet + Vec3::new(0.25, 1.0, -0.4);
+        let grab = |vr: &mut Vr, id: &str| -> Option<Entity> {
+            let e = vr.spawn(id, Transform::from_translation(hand_at));
+            if vr
+                .app
+                .world()
+                .get::<crate::interact::carry::Bulky>(e)
+                .is_some()
+            {
+                vr.app.world_mut().despawn(e);
+                return None;
+            }
+            vr.app.world_mut().entity_mut(e).insert(RigidBody::Static);
+            vr.hand(side, hand_at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(side, 1.0);
+            vr.step(4);
+            (vr.hand_state(side).holding == Some(e)).then_some(e)
+        };
+        // Hold it with its middle at `to`.
+        let hold_at = |vr: &mut Vr, item: Entity, to: Vec3| {
+            for _ in 0..3 {
+                let hand = vr.hand_state(side).world.translation;
+                let at = vr
+                    .app
+                    .world()
+                    .get::<GlobalTransform>(item)
+                    .unwrap()
+                    .translation();
+                vr.move_hand(side, hand + (to - at));
+                vr.step(3);
+            }
+        };
+        let outcome = |vr: &mut Vr, item: Entity| -> StowTarget {
+            let w = vr.app.world();
+            if let Some(s) = w.get::<crate::interact::InSocket>(item) {
+                return StowTarget::Socket(s.socket);
+            }
+            if let Some(b) = w.get::<crate::interact::body::InBackpack>(item) {
+                return StowTarget::Pack(b.bag);
+            }
+            if vr.hand_state(side).holding == Some(item) {
+                return StowTarget::Refused { pack_full: None };
+            }
+            StowTarget::Drop { pack_full: None }
+        };
+        let same = |a: StowTarget, b: StowTarget| match (a, b) {
+            (StowTarget::Refused { .. }, StowTarget::Refused { .. })
+            | (StowTarget::Drop { .. }, StowTarget::Drop { .. }) => true,
+            _ => a == b,
+        };
+        let slots = |vr: &mut Vr| -> Vec<(Entity, SlotKind, GlobalTransform, f32, Vec3)> {
+            let mut q =
+                vr.app
+                    .world_mut()
+                    .query::<(Entity, &BodySlot, &Socket, &GlobalTransform, &Transform)>();
+            q.iter(vr.app.world())
+                .filter_map(|(e, _, s, g, local)| match s.kind {
+                    SocketKind::Body(k) => Some((
+                        e,
+                        k,
+                        *g,
+                        s.radius,
+                        g.transform_point(crate::interact::body::sling_shoulder(local.translation)),
+                    )),
+                    _ => None,
+                })
+                .collect()
+        };
+        // One pouch full: a magazine let go into it.
+        let pouch = slots(&mut vr)
+            .into_iter()
+            .find(|(_, k, ..)| *k == SlotKind::Pouch)
+            .unwrap();
+        let mag = grab(&mut vr, "pm_mag").expect("a magazine in hand");
+        hold_at(&mut vr, mag, pouch.2.translation());
+        vr.grip(side, 0.0);
+        vr.step(4);
+        assert_eq!(
+            outcome(&mut vr, mag),
+            StowTarget::Socket(pouch.0),
+            "the first pouch"
+        );
+        let mut tried = 0;
+        let mut skipped = 0;
+        let mut stowed_in = std::collections::BTreeSet::new();
+        let mut wrong = Vec::new();
+        let mut check = |vr: &mut Vr, id: &str, to: Vec3, what: &str| {
+            let Some(item) = grab(vr, id) else {
+                return;
+            };
+            if what.starts_with("hand") {
+                vr.move_hand(side, to);
+                vr.step(6);
+            } else {
+                hold_at(vr, item, to);
+            }
+            // Still in the hand, so where it's let go is where it was.
+            vr.step(10);
+            let at = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(item)
+                .unwrap()
+                .translation();
+            // Where a hand can't take it (into the head, through the
+            // back), it isn't let go there.
+            // Pressed against the body (into the head, through the back),
+            // it's pushed about as it's held: no one place it's let go.
+            vr.step(1);
+            let still = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(item)
+                .unwrap()
+                .translation();
+            let reached = at.distance(still) < 0.01;
+            let mut state: SystemState<StowQuery> = SystemState::new(vr.app.world_mut());
+            let said = state
+                .get(vr.app.world())
+                .unwrap()
+                .target(item)
+                .expect("held");
+            vr.grip(side, 0.0);
+            // The frame it's let go (not later: dropped into an open
+            // pack, it's put in as it comes to rest, `body::settle`).
+            vr.step(1);
+            let got = outcome(vr, item);
+            vr.step(3);
+            if reached {
+                tried += 1;
+                if let StowTarget::Socket(e) = got
+                    && let Some(SocketKind::Body(k)) =
+                        vr.app.world().get::<Socket>(e).map(|s| s.kind.clone())
+                {
+                    stowed_in.insert(format!("{k:?}"));
+                }
+                if matches!(got, StowTarget::Pack(_)) {
+                    stowed_in.insert("pack".into());
+                }
+            } else {
+                skipped += 1;
+            }
+            if reached && !same(said, got) {
+                let kind_of = |t: StowTarget| match t {
+                    StowTarget::Socket(e) => vr
+                        .app
+                        .world()
+                        .get::<Socket>(e)
+                        .map(|s| format!("{:?}", s.kind))
+                        .unwrap_or_default(),
+                    _ => String::new(),
+                };
+                wrong.push(format!(
+                    "{id} {what}: said {said:?} {}, went {got:?} {} (at {at:.2}, hand {:.2})",
+                    kind_of(said),
+                    kind_of(got),
+                    vr.hand_state(side).world.translation
+                ));
+            }
+            // Out of the way: out of its socket or pack, gone.
+            let w = vr.app.world_mut();
+            let mut sockets = w.query::<&mut Socket>();
+            for mut s in sockets.iter_mut(w) {
+                if s.occupant == Some(item) {
+                    s.occupant = None;
+                }
+            }
+            let mut packs = w.query::<&mut crate::interact::body::Backpack>();
+            for mut b in packs.iter_mut(w) {
+                b.contents.retain(|c| *c != item);
+            }
+            if vr.hand_state(side).holding == Some(item) {
+                vr.grip(side, 0.0);
+                vr.move_hand(side, hand_at + Vec3::Y * 0.5);
+                vr.step(2);
+            }
+            vr.app.world_mut().despawn(item);
+            vr.step(2);
+        };
+        for id in &ids {
+            for (_, kind, g, radius, shoulder) in slots(&mut vr) {
+                if kind == SlotKind::Sling {
+                    check(&mut vr, id, shoulder, "Sling shoulder");
+                    check(&mut vr, id, shoulder, "hand at the sling's shoulder");
+                }
+                let out = g.rotation() * Vec3::NEG_Z;
+                let mid = g.translation();
+                check(&mut vr, id, mid, &format!("{kind:?} middle"));
+                check(
+                    &mut vr,
+                    id,
+                    mid + out * radius * 0.6,
+                    &format!("{kind:?} inside"),
+                );
+                check(
+                    &mut vr,
+                    id,
+                    mid + out * radius * 1.3,
+                    &format!("{kind:?} outside"),
+                );
+            }
+        }
+        // The pack, open and hanging in front.
+        vr.app
+            .world_mut()
+            .write_message(crate::interact::body::ToggleBackpack { player });
+        vr.step(20);
+        let (bag, bag_g) = {
+            let mut q =
+                vr.app
+                    .world_mut()
+                    .query::<(Entity, &crate::interact::body::Backpack, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(_, b, _)| b.owner == player)
+                .map(|(e, b, g)| {
+                    assert!(b.open, "the pack open");
+                    (e, *g)
+                })
+                .unwrap()
+        };
+        let _ = bag;
+        for id in &ids {
+            let mid = bag_g.translation();
+            check(&mut vr, id, mid, "pack middle");
+            check(&mut vr, id, mid + Vec3::Y * 0.6, "above the pack");
+        }
+        eprintln!(
+            "{} kinds, {tried} let go, {skipped} out of reach; stowed in {stowed_in:?}",
+            ids.len()
+        );
+        // Every kind of slot, and the pack, took something.
+        for k in [
+            "Holster", "Pouch", "Pocket", "Mount", "Sling", "Vest", "Head", "pack",
+        ] {
+            assert!(
+                stowed_in.contains(k),
+                "nothing went into a {k}: {stowed_in:?}"
+            );
+        }
+        assert!(tried > ids.len() * 20, "only {tried} tried");
+        assert!(
+            wrong.is_empty(),
+            "{} of {tried} wrong:\n{}",
+            wrong.len(),
+            wrong.join("\n")
+        );
+    }
+
     /// The holster is on the gun hand's hip and the pockets on the thighs'
     /// fronts, where the drawn body has them: reaching down to them, the
     /// arm stays outside the body all the way.

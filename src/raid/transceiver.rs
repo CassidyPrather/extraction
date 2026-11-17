@@ -6,17 +6,24 @@
 //! the truck to that pad (`RadioCall { pad }`), not to the one nearest the
 //! caller: you call from where you'll wait.
 //!
-//! (Map design moves each onto its pad's wait-cover shed wall; a set at
-//! the dam's gauge house trips the alarm, `robots`. Neither yet.)
+//! A call is heard (`robots::pressure::Transmitted`): each pad has a
+//! weight ([`PadKind`]). A calm pad's call stirs the machines little; a
+//! busy pad, where they're at work in sight, gets a tell at the mast and
+//! an answer to it; the Gauge house's set sounds the dam's alarm horn
+//! across the valley.
+//!
+//! (Map design moves each onto its pad's wait-cover shed wall, and puts
+//! the horn on its siren mast. Not yet.)
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
 use extraction_core::map_landmarks::beacon_at;
 
-use super::{RadioCall, SHORT_EXFIL};
+use super::{Phase, RadioCall, Raid, SHORT_EXFIL};
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::raid::truck::Pressable;
+use crate::robots::pressure::Transmitted;
 use crate::world::{Layer, Zone};
 
 /// A fixed field set: which pad it calls the truck to (a rendezvous's
@@ -24,7 +31,66 @@ use crate::world::{Layer, Zone};
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Transceiver {
     pub pad: usize,
+    pub kind: PadKind,
 }
+
+/// What a call from a pad's set costs (#94, the pads Map design surveyed):
+/// how near machines at work are.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PadKind {
+    /// Nothing at work near it.
+    Calm,
+    /// Something within earshot, not in sight.
+    Between,
+    /// Machines at work in sight of the pad: a tell, then an answer.
+    Busy,
+    /// Sallow's Gauge house: the set's wired to the dam's alarm horn.
+    Horn,
+    /// The gate's short run.
+    Short,
+}
+
+impl PadKind {
+    /// A rendezvous's kind, by its name.
+    pub fn of(name: &str) -> Self {
+        match name {
+            "Rail yard" | "Hunting lodge" | "Fire lookout" | "Sallow Head" | "The saddle" => {
+                Self::Calm
+            }
+            "Ranger tower" | "Mine yard" | "North sidings" | "Tip road" => Self::Busy,
+            "Gauge house" => Self::Horn,
+            _ => Self::Between,
+        }
+    }
+
+    /// What a call stirs the machines' account by.
+    pub fn stir(self) -> f32 {
+        match self {
+            Self::Short => 0.1,
+            Self::Calm => 0.2,
+            Self::Between => 0.35,
+            Self::Busy => 0.6,
+            Self::Horn => 1.0,
+        }
+    }
+
+    /// Whether the mast gives a tell before an answer. Not until the
+    /// tell can be heard ([`MAST_WHINE_HEARD`]): an unheard tell is no
+    /// warning. The horn is its own tell.
+    pub fn busy(self) -> bool {
+        MAST_WHINE_HEARD && matches!(self, Self::Busy | Self::Horn)
+    }
+}
+
+/// Whether the mast's tell has a sound (Audio's whine, `mast.tell`). It
+/// has: a busy pad's call is told at the mast, then answered. (Off again
+/// would leave a busy pad its weight alone.)
+pub const MAST_WHINE_HEARD: bool = true;
+
+/// The dam's alarm horn, on the Gauge house (Sallow Reservoir), and how
+/// high it's mounted.
+pub const GAUGE_HORN: [f32; 2] = [245.0, -70.0];
+const HORN_UP: f32 = 8.0;
 
 /// The set's box (m): a field set bolted on, its face to you.
 const SIZE: Vec3 = Vec3::new(0.32, 0.26, 0.14);
@@ -40,7 +106,8 @@ pub struct TransceiverPlugin;
 
 impl Plugin for TransceiverPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_sets, press.before(super::radio_calls)));
+        app.add_message::<Transmitted>()
+            .add_systems(Update, (spawn_sets, press.before(super::radio_calls)));
     }
 }
 
@@ -57,12 +124,16 @@ pub fn sets(zone: &Zone) -> Vec<(Transceiver, Vec3, f32)> {
         let at = beacon_at(rv.at);
         let (f, yaw) = face(at);
         let foot = zone.on_ground(at[0], at[1]) + f * (POLE_R + SIZE.z * 0.5);
-        out.push((Transceiver { pad: i }, foot, yaw));
+        let kind = PadKind::of(&rv.name);
+        out.push((Transceiver { pad: i, kind }, foot, yaw));
     }
     for m in zone.map.markers_of(&MarkerKind::ShortExfil) {
         let (_, yaw) = face(m.at);
         out.push((
-            Transceiver { pad: SHORT_EXFIL },
+            Transceiver {
+                pad: SHORT_EXFIL,
+                kind: PadKind::Short,
+            },
             zone.on_ground(m.at[0], m.at[1]),
             yaw,
         ));
@@ -179,22 +250,50 @@ impl Looks {
     }
 }
 
-/// Pressed: the truck, to this set's pad.
+/// Pressed: the truck, to this set's pad; and, out in the valley, the
+/// call is heard.
 fn press(
     mut events: MessageReader<InteractEvent>,
-    sets: Query<&Transceiver>,
+    sets: Query<(&Transceiver, &GlobalTransform)>,
+    raid: Option<Res<Raid>>,
+    zone: Option<Res<Zone>>,
     mut calls: MessageWriter<RadioCall>,
+    mut heard: MessageWriter<Transmitted>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, player } = ev else {
             continue;
         };
-        if let Ok(set) = sets.get(*item) {
-            calls.write(RadioCall {
-                player: *player,
-                pad: Some(set.pad),
-            });
+        let Ok((set, at)) = sets.get(*item) else {
+            continue;
+        };
+        calls.write(RadioCall {
+            player: *player,
+            pad: Some(set.pad),
+        });
+        let out = raid.as_ref().is_some_and(|r| {
+            matches!(
+                r.phase,
+                Phase::Out | Phase::TruckCalled { .. } | Phase::TruckWaiting { .. }
+            )
+        });
+        if out {
+            heard.write(transmitted(set.kind, at.translation(), zone.as_deref()));
         }
+    }
+}
+
+/// What a call from a set of this kind, here, is to the machines.
+pub fn transmitted(kind: PadKind, at: Vec3, zone: Option<&Zone>) -> Transmitted {
+    let horn = (kind == PadKind::Horn)
+        .then_some(zone)
+        .flatten()
+        .map(|z| z.on_ground(GAUGE_HORN[0], GAUGE_HORN[1]) + Vec3::Y * HORN_UP);
+    Transmitted {
+        at,
+        stir: kind.stir(),
+        busy: kind.busy(),
+        horn,
     }
 }
 
@@ -283,6 +382,151 @@ mod tests {
             ),
             "{:?}",
             app.world().resource::<Raid>().phase
+        );
+    }
+
+    /// Every pad name the weights know is a rendezvous in some valley, and
+    /// every valley has a calm pad: a rename can't silently make a pad
+    /// "between", and there's always a quiet way home.
+    #[test]
+    fn the_pad_weights_name_real_pads() {
+        let named = [
+            "Rail yard",
+            "Hunting lodge",
+            "Fire lookout",
+            "Sallow Head",
+            "The saddle",
+            "Ranger tower",
+            "Mine yard",
+            "North sidings",
+            "Tip road",
+            "Gauge house",
+        ];
+        let mut seen = Vec::new();
+        for valley in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let text = std::fs::read_to_string(
+                crate::asset_root_path().join(format!("maps/{valley}.ron")),
+            )
+            .unwrap();
+            let map = extraction_core::map::MapDef::from_ron(&text).unwrap();
+            let kinds: Vec<PadKind> = map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| {
+                    seen.push(m.name.clone());
+                    PadKind::of(&m.name)
+                })
+                .collect();
+            assert!(kinds.contains(&PadKind::Calm), "{valley}: no calm pad");
+        }
+        for n in named {
+            assert!(seen.iter().any(|s| s == n), "no rendezvous named {n}");
+        }
+    }
+
+    /// A call from a set is heard by its pad's weight: the Gauge house
+    /// sounds the horn; a busy pad gives no tell until the tell can be
+    /// heard; a calm one stirs little.
+    #[test]
+    fn a_call_is_heard_by_its_pads_weight() {
+        let gauge = transmitted(PadKind::Horn, Vec3::ZERO, None);
+        assert_eq!((gauge.stir, gauge.horn), (1.0, None));
+        let busy = transmitted(PadKind::Busy, Vec3::ZERO, None);
+        assert_eq!((busy.stir, busy.busy), (0.6, MAST_WHINE_HEARD));
+        let calm = transmitted(PadKind::Calm, Vec3::ZERO, None);
+        assert!(calm.stir < busy.stir && !calm.busy && calm.horn.is_none());
+        let short = transmitted(PadKind::Short, Vec3::ZERO, None);
+        assert!(short.stir < calm.stir);
+    }
+
+    /// Pressed out in the valley, a set's call is heard (one
+    /// `Transmitted`, at the set); pressed at base, nothing is.
+    #[test]
+    fn a_press_out_there_is_heard_and_one_at_base_is_not() {
+        let mut app = app();
+        let me = player(&mut app);
+        let set = app
+            .world_mut()
+            .query::<(Entity, &Transceiver)>()
+            .iter(app.world())
+            .find(|(_, t)| t.pad == 0)
+            .map(|(e, _)| e)
+            .unwrap();
+        let heard = |app: &mut App| {
+            app.world_mut()
+                .resource_mut::<Messages<Transmitted>>()
+                .drain()
+                .count()
+        };
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        heard(&mut app);
+        app.world_mut().write_message(InteractEvent::Pressed {
+            item: set,
+            player: me,
+        });
+        app.update();
+        assert_eq!(heard(&mut app), 0, "at base");
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.world_mut().write_message(InteractEvent::Pressed {
+            item: set,
+            player: me,
+        });
+        app.update();
+        assert_eq!(heard(&mut app), 1, "out");
+    }
+
+    /// A busy pad's call is told: pressed out there, its set sends
+    /// `busy`, and the mast gives its tell (`MastTell`, the whine) before
+    /// any answer.
+    #[test]
+    fn a_busy_pads_call_is_told_at_its_mast() {
+        use crate::robots::pressure::MastTell;
+        let mut app = app();
+        let me = player(&mut app);
+        let (set, at) = app
+            .world_mut()
+            .query::<(Entity, &Transceiver, &GlobalTransform)>()
+            .iter(app.world())
+            .find(|(_, t, _)| t.kind == PadKind::Busy)
+            .map(|(e, _, g)| (e, g.translation()))
+            .expect("the default valley has a busy pad");
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let mut sent = app
+            .world()
+            .resource::<Messages<Transmitted>>()
+            .get_cursor_current();
+        let mut told = app
+            .world()
+            .resource::<Messages<MastTell>>()
+            .get_cursor_current();
+        app.world_mut().write_message(InteractEvent::Pressed {
+            item: set,
+            player: me,
+        });
+        let (mut busy, mut tell) = (false, None);
+        for _ in 0..30 {
+            app.update();
+            let w = app.world();
+            busy |= sent
+                .read(w.resource::<Messages<Transmitted>>())
+                .any(|t| t.busy);
+            if let Some(t) = told.read(w.resource::<Messages<MastTell>>()).last() {
+                tell = Some(t.at);
+            }
+            if busy && tell.is_some() {
+                break;
+            }
+        }
+        assert!(busy, "the call wasn't sent as busy");
+        let tell = tell.expect("no tell at the mast");
+        assert!(
+            tell.distance(at) < 0.01,
+            "told at {tell}, the set's at {at}"
         );
     }
 

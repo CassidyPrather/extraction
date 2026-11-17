@@ -21,7 +21,7 @@ use crate::interact::body::Backpack;
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::raid::truck::{FLOOR, Stash, Truck};
-use crate::raid::{Phase, Raid};
+use crate::raid::{Phase, Raid, Show};
 use crate::rig::LocalPlayer;
 use crate::world::{Layer, Zone};
 
@@ -872,7 +872,10 @@ fn nudge(
     let d = here.distance(Vec2::from_array(mark));
     if drift.0.update(d, raid.clock) {
         let way = crate::raid::lines::way(here.to_array(), mark);
-        raid.say(lines::job_this_way(&job_place(job), &way, has("radio")));
+        raid.tell(
+            lines::job_this_way(&job_place(job), &way, has("radio")),
+            Show::View,
+        );
     }
 }
 
@@ -933,13 +936,17 @@ fn restate_after_fall(
                 extraction_core::progression::another_way(&zone.map, &m.memory, drop, mark)
             });
         match another {
-            Some((via, at)) => {
-                raid.say(lines::another_way(&via, &crate::raid::lines::way(drop, at)))
-            }
-            None => raid.say(lines::job_waiting(&place, Some(&way))),
+            Some((via, at)) => raid.tell(
+                lines::another_way(&via, &crate::raid::lines::way(drop, at)),
+                Show::View,
+            ),
+            None => raid.tell(lines::job_waiting(&place, Some(&way)), Show::View),
         }
     } else {
-        raid.say(lines::job_waiting(&place, Some(&valley_name(map))));
+        raid.tell(
+            lines::job_waiting(&place, Some(&valley_name(map))),
+            Show::View,
+        );
     }
 }
 
@@ -1040,7 +1047,7 @@ fn tailgate(
         missing.push((name, place));
     }
     if !missing.is_empty() {
-        raid.say(lines::not_carrying(&missing));
+        raid.tell(lines::not_carrying(&missing), Show::View);
     }
 }
 
@@ -1081,7 +1088,7 @@ fn aerial_warning(
             .any(|(i, by)| by.0 == p && catalog.get(i.kind()).id == "radio")
     });
     if carried {
-        raid.say(lines::AERIAL_SURGE);
+        raid.tell(lines::AERIAL_SURGE, Show::Urgent);
     }
 }
 

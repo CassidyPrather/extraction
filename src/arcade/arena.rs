@@ -29,28 +29,43 @@ pub enum ArcadeCard {
     Restart,
     /// Which wave a fresh run starts at.
     StartAt,
+    /// The answer to "how did it feel?": 1 to 5, or 0 to skip the gun.
+    Feel(u8),
 }
 
 /// The board's sheet: the run, the ladder, the last run's summary.
 #[derive(Component)]
 pub struct ArcadeSheet;
 
+/// The gun board's sheet: the gun card, and the question after a run.
+#[derive(Component)]
+pub struct GunCardSheet;
+
 /// The kit the bench lays out (`laid` once per run).
 #[derive(Resource, Default)]
 pub struct Laid(pub bool);
+
+/// The feel cards' words, 1 to 5.
+pub const FEEL_WORDS: [&str; 5] = ["poor", "lacking", "fine", "good", "great"];
 
 /// The waves a fresh run may start at (START AT's turns).
 pub const STARTS: [u32; 3] = [1, 4, 7];
 
 /// The bench's frame (local -Z toward the fight) and the tables' places
 /// on it: (x, z, yaw).
-pub const TABLES: [(f32, f32, f32); 4] = [
+pub const TABLES: [(f32, f32, f32); 5] = [
     (-2.2, 0.0, 0.0),
     (-0.75, 0.0, 0.0),
     (0.75, 0.0, 0.0),
     // The board's table, forward and turned toward where you stand.
     (2.9, 0.9, 0.6),
+    // The gun board's, as far the other side.
+    (-4.35, 0.9, 0.6),
 ];
+
+/// The wave board's table and the gun board's.
+pub const BOARD_TABLE: usize = 3;
+pub const GUN_TABLE: usize = 4;
 
 /// Where you stand at the bench, its frame.
 pub const STAND: Vec3 = Vec3::new(0.0, 0.0, 1.2);
@@ -125,7 +140,7 @@ impl Plugin for ArenaPlugin {
             )
             .add_systems(
                 Update,
-                (press_cards, sheet_text, card_text)
+                (press_cards, sheet_text, gun_card_text, card_text)
                     .chain()
                     .in_set(ArcadeSystems::Play),
             )
@@ -207,10 +222,6 @@ fn set_up(
     arcade.stand = Some(bench * Transform::from_translation(STAND));
     // A screenshot's camera places itself.
     arcade.hold = if opts.camera.is_some() { 0 } else { 30 };
-    // The ground starts swept: a session that saves nothing gets the dev
-    // cache by its insertion point (`items::loot`), which is the bench's;
-    // the bench lays its own kit.
-    arcade.reset = Reset::Sweep;
     for i in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, i);
         let table = commands
@@ -228,8 +239,11 @@ fn set_up(
             Transform::from_xyz(0.0, TABLE.y - 0.02, 0.0),
             ChildOf(table),
         ));
-        if i == TABLES.len() - 1 {
+        if i == BOARD_TABLE {
             board(&mut commands, table);
+        }
+        if i == GUN_TABLE {
+            gun_board(&mut commands, table);
         }
     }
     for (g, (name, _, lamp)) in GATES.iter().enumerate() {
@@ -318,6 +332,43 @@ fn board(commands: &mut Commands, table: Entity) {
     }
 }
 
+/// The gun board on its table: the card on the left, the answers to
+/// "how did it feel?" down the right.
+fn gun_board(commands: &mut Commands, table: Entity) {
+    let board = commands
+        .spawn((
+            Name::new("Arcade gun board"),
+            crate::camp::board_pose(),
+            Visibility::default(),
+            CampProps::Board,
+            ChildOf(table),
+        ))
+        .id();
+    let z = 0.016;
+    commands.spawn((
+        Name::new("Arcade gun card"),
+        GunCardSheet,
+        ScreenText {
+            text: String::new(),
+            size: Vec2::new(0.66, 0.82),
+            style: ScreenStyle::Paper,
+        },
+        TextSource::StationBoard,
+        Transform::from_xyz(-0.24, 0.0, z),
+        Visibility::default(),
+        ChildOf(board),
+    ));
+    for n in 0..=5u8 {
+        // 5 at the top, SKIP at the foot.
+        let row = if n == 0 { 5.0 } else { (5 - n) as f32 };
+        commands.spawn((
+            card(ArcadeCard::Feel(n), Vec2::new(0.4, 0.09)),
+            Transform::from_xyz(0.35, 0.3 - row * 0.115, z),
+            ChildOf(board),
+        ));
+    }
+}
+
 /// Stands the player at the bench for a few frames (after set-up, and
 /// after a reset): a physics body has its pose set there too.
 #[allow(clippy::type_complexity)]
@@ -359,6 +410,7 @@ fn press_cards(
     mut events: MessageReader<InteractEvent>,
     cards: Query<&ArcadeCard>,
     mut arcade: ResMut<Arcade>,
+    mut feel: ResMut<super::record::Feel>,
     mut calls: MessageWriter<WaveCalled>,
 ) {
     for ev in events.read() {
@@ -387,6 +439,7 @@ fn press_cards(
                     arcade.start_at = STARTS[(i + 1) % STARTS.len()];
                 }
             }
+            ArcadeCard::Feel(n) => feel.answer(*n),
         }
     }
 }
@@ -453,7 +506,26 @@ fn sheet_text(arcade: Res<Arcade>, mut sheets: Query<&mut ScreenText, With<Arcad
     }
 }
 
-fn card_text(arcade: Res<Arcade>, mut cards: Query<(&ArcadeCard, &mut ScreenText)>) {
+fn gun_card_text(
+    arcade: Res<Arcade>,
+    rec: Res<super::record::Recording>,
+    bests: Res<super::record::GunBests>,
+    feel: Res<super::record::Feel>,
+    mut sheets: Query<&mut ScreenText, With<GunCardSheet>>,
+) {
+    let text = super::record::card(&arcade, &rec, &bests, &feel);
+    for mut s in &mut sheets {
+        if s.text != text {
+            s.text = text.clone();
+        }
+    }
+}
+
+fn card_text(
+    arcade: Res<Arcade>,
+    feel: Res<super::record::Feel>,
+    mut cards: Query<(&ArcadeCard, &mut ScreenText)>,
+) {
     for (c, mut s) in &mut cards {
         let text = match c {
             ArcadeCard::Call => match arcade.phase {
@@ -465,6 +537,10 @@ fn card_text(arcade: Res<Arcade>, mut cards: Query<(&ArcadeCard, &mut ScreenText
             },
             ArcadeCard::Restart => "RESTART".to_string(),
             ArcadeCard::StartAt => format!("START AT WAVE {}", arcade.start_at),
+            // Blank until there's a question.
+            ArcadeCard::Feel(_) if feel.gun().is_none() => String::new(),
+            ArcadeCard::Feel(0) => "SKIP".to_string(),
+            ArcadeCard::Feel(n) => format!("{n}  {}", FEEL_WORDS[*n as usize - 1]),
         };
         if s.text != text {
             s.text = text;
@@ -583,10 +659,10 @@ fn lay_tables(world: &mut World) {
     let mut n = 0;
     for t in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, t);
-        let list: &[Kit] = if t < KIT_TABLES {
-            kit(t)
-        } else {
-            &BOARD_TABLE_KIT
+        let list: &[Kit] = match t {
+            t if t < KIT_TABLES => kit(t),
+            BOARD_TABLE => &BOARD_TABLE_KIT,
+            _ => &[],
         };
         for (id, rounds, inserted, [x, z], l) in list.iter().copied() {
             let at = pose * Transform::from_xyz(x, TABLE.y + 0.06, z).with_rotation(lie(l));

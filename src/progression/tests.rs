@@ -1283,3 +1283,26 @@ fn each_raid_rolls_its_own_director_and_replays_the_same() {
         "the same save and raid count replay"
     );
 }
+
+/// What a job asks you to act on (which way, that it's waiting, what you
+/// aren't carrying) is captioned in the view, not only on the wrist, and
+/// the aerial's Surge warning is urgent (#90). Said on the wrist alone,
+/// a newcomer missed them.
+#[test]
+fn what_a_job_asks_of_you_is_told_for_the_view() {
+    let src = include_str!("mod.rs");
+    let flat: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
+    for line in ["job_this_way", "another_way", "job_waiting", "not_carrying"] {
+        assert!(
+            !flat.contains(&format!("say(lines::{line}(")),
+            "{line}: said on the wrist only"
+        );
+        let told = flat.matches(&format!("tell( lines::{line}(")).count()
+            + flat.matches(&format!("tell(lines::{line}(")).count();
+        assert!(told > 0, "{line}: not told");
+    }
+    assert!(!flat.contains("say(lines::AERIAL_SURGE)"));
+    assert!(flat.contains("tell(lines::AERIAL_SURGE, Show::Urgent)"));
+    let views = flat.matches("Show::View").count();
+    assert!(views >= 5, "{views} lines for the view");
+}
