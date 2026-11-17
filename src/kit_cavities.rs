@@ -53,8 +53,8 @@ pub const HOLSTER: Cavity = Cavity {
 pub const HOLSTER_BACK_MOUTH: f32 = -0.042;
 
 /// The chest mount: a webbing sleeve on the left strap, open top and
-/// bottom. The radio slides down into it, thin side out; a chemlight or a
-/// compass hangs in it (so `floor` is only the sleeve's foot).
+/// bottom. The radio slides down into it, thin side out; a compass hangs
+/// in it (so `floor` is only the sleeve's foot).
 pub const MOUNT: Cavity = Cavity {
     floor: Vec3::new(0.0, -0.08, -0.015),
     half: Vec3::new(0.036, 0.055, 0.025),

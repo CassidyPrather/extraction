@@ -664,7 +664,6 @@ fn spawn_dev_cache(
         ("canned_stew", 0),
         ("art_featherstone", 0),
         ("side_rail", 0),
-        ("weapon_light", 0),
         ("laser_module", 0),
         ("pu_scope", 0),
         ("power_cell", 0),

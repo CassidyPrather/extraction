@@ -15,8 +15,10 @@ use serde::{Deserialize, Serialize};
 /// What a round is loaded with.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Load {
-    /// Ball (full metal jacket); in 12 gauge, buckshot.
+    /// Ball (full metal jacket); in 12 gauge, buckshot. Saves from before
+    /// old surplus ball was dropped read it as this.
     #[default]
+    #[serde(alias = "Surplus")]
     Standard,
     /// Armour-piercing: a hardened steel core.
     Ap,
@@ -32,9 +34,6 @@ pub enum Load {
     SignalRed,
     /// A 26 mm signal star, green.
     SignalGreen,
-    /// Old surplus ball: tired primers and powder that misfire and
-    /// hang-fire now and then.
-    Surplus,
     /// Ball that's been wet: the primer or the powder damp. Misfires and
     /// hang-fires far more. Restored at the bench, it's good again.
     Damp,
@@ -48,10 +47,7 @@ impl Load {
     /// A round of this load can get damp (a plain primer and a crimp; the
     /// AP's, tracers', slugs' and stars' are sealed).
     pub fn spoils(self) -> bool {
-        matches!(
-            self,
-            Load::Standard | Load::Surplus | Load::Repacked | Load::Subsonic
-        )
+        matches!(self, Load::Standard | Load::Repacked | Load::Subsonic)
     }
 
     /// The muzzle speed of this load from a gun whose ball leaves at

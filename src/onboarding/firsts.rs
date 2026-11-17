@@ -163,7 +163,6 @@ pub const ALL: &[First] = &[
     First::Dirigible,
     First::Picked(Family::GunCare),
     First::Picked(Family::CleaningRod),
-    First::Picked(Family::Lights),
     First::Picked(Family::Matches),
     First::Picked(Family::Salvage),
     First::Picked(Family::MachineParts),

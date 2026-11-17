@@ -46,7 +46,7 @@ checklist for the next one.
 7. **Feel and sound**: recoil and case size (`feel.rs`), the sling's
    swivels (`sling.rs`), the shot's cue (`audio.rs`), how far robots hear
    it (`report` in the catalog).
-8. **Bench and loot**: re-pack and repair recipes
+8. **Bench and loot**: AP re-packs and repair recipes
    (`extraction_core::fabrication`), loot entries by rarity and valley
    (`assets/data/loot.ron`), the dev cache.
 9. **The range** (`weapons::range`): every gun fires at every material.
@@ -90,7 +90,7 @@ what's in the chamber at 85%; forward, it rams the carrier's shell home.
 ### SVD (`svd`)
 
 A self-loader from a detachable ten-round box (`svd_mag`, family `svd`),
-7.62x54R: the Mosin's round and its re-packed boxes. The dovetail mount
+7.62x54R: the Mosin's round. The dovetail mount
 over the bore takes the PSO-1 (and the 3.5x scope, the side rail); the
 model's rail is on the left of the receiver as on the real gun. Safe and
 semi; the carrier holds open on the empty box. The faults are the
