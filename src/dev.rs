@@ -2679,6 +2679,19 @@ fn pockets_for_gallery(
         &GlobalTransform,
         &mut crate::interact::Socket,
     )>,
+    // The held gun's well (emptied for `load`), and the pouched magazine.
+    (mut wells, mags): (
+        Query<
+            (
+                &mut crate::interact::Socket,
+                &crate::interact::SocketOwner,
+                &GlobalTransform,
+            ),
+            Without<crate::interact::body::BodySlot>,
+        >,
+        Query<(&crate::weapons::Mag, &GlobalTransform)>,
+    ),
+    held: Query<(&crate::interact::Held, &GlobalTransform)>,
     mut actions: MessageWriter<crate::interact::HandAction>,
     mut state: Local<(u32, Option<Entity>)>,
 ) {
@@ -2756,6 +2769,43 @@ fn pockets_for_gallery(
     } else {
         return;
     };
+    // `load`: the gun's magazine out, and its empty well brought 9 cm
+    // over the pouched magazine's top (inside the sphere's 12 cm, short of
+    // the 6 cm where it seats).
+    let mut at = at;
+    if w("load")
+        && f >= 45
+        && let Some(gun) = state.1
+    {
+        let mag_top = slots
+            .iter()
+            .find(|(s, ..)| s.0 == target)
+            .and_then(|(_, _, sock)| sock.occupant)
+            .and_then(|m| mags.get(m).ok())
+            .map(|(m, g)| g.transform_point(Vec3::Y * m.height * 0.5));
+        for (mut well, owner, wg) in &mut wells {
+            if owner.0 != gun || !matches!(well.kind, crate::interact::SocketKind::MagWell(_)) {
+                continue;
+            }
+            if let Some(m) = well.occupant.take() {
+                commands.entity(m).despawn();
+            }
+            if let (Some(top), Ok((h, gg))) = (mag_top, held.get(gun)) {
+                // Where the hand goes for the well to be there: the well in
+                // the hand's frame, by the grip's offset.
+                let well_in_gun = gg.affine().inverse().transform_point3(wg.translation());
+                let well_in_hand = h.offset.transform_point(well_in_gun);
+                let rot = Transform::IDENTITY
+                    .looking_to(Vec3::new(0.0, -0.4, -1.0), Vec3::Y)
+                    .rotation;
+                let want = root
+                    .affine()
+                    .inverse()
+                    .transform_point3(top + Vec3::Y * 0.09);
+                at = want - rot * well_in_hand;
+            }
+        }
+    }
     let h = input.hand_mut(side);
     h.pose = Transform::from_translation(at).looking_to(Vec3::new(0.0, -0.4, -1.0), Vec3::Y);
     h.tracked = true;
