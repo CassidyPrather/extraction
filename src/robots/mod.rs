@@ -66,6 +66,8 @@ pub mod reel;
 pub mod rock;
 pub mod salvage;
 pub mod search;
+pub mod searchlight;
+pub mod searchlight_look;
 pub mod senses;
 pub mod sentry;
 pub mod sentry_look;
@@ -428,6 +430,7 @@ impl Plugin for RobotsPlugin {
             ))
             .add_plugins((
                 hazard_look::HazardLookPlugin,
+                searchlight::SearchlightPlugin,
                 weak_points::WeakPointsPlugin,
                 rock::RockPlugin,
             ))
