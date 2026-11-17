@@ -13,7 +13,9 @@
 //! later they come through it (`waves`). Clear the wave and call the
 //! next. Go down and the run is over: the board shows it, RESTART lays
 //! everything out again where you stand. Each run is written down
-//! (`record`).
+//! (`record`, its numbers in `stats`), and the gun board beside the bench
+//! holds each gun used to its best and asks how it felt. East of the bench
+//! is a range (`range`): plates at 10, 25 and 50 m.
 //!
 //! Nothing here runs outside an arcade session: the plugin adds no system
 //! unless [`active`].
@@ -23,8 +25,10 @@ use bevy::prelude::*;
 use crate::launch::{LaunchOptions, SceneChoice};
 
 pub mod arena;
+pub mod range;
 pub mod record;
 pub mod scenario;
+pub mod stats;
 pub mod visuals;
 pub mod waves;
 
@@ -170,6 +174,7 @@ impl Plugin for ArcadePlugin {
         )
         .add_plugins((
             arena::ArenaPlugin,
+            range::RangePlugin,
             waves::WavesPlugin,
             record::RecordPlugin,
             scenario::ScenarioPlugin,
