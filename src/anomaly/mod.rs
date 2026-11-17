@@ -499,13 +499,13 @@ fn lifts(
     }
 }
 
-/// A lift's pop throws a player this fast up (m/s): 3.3 m high, landing
-/// back at its own height within `health::SAFE_LANDING`, and over a
-/// container's 2.6 m roof.
-pub const LIFT_THROW: f32 = 8.0;
-/// ...and this fast the way they face (m/s): about 6 m onto a roof that
-/// height, 8 m on the flat.
-pub const LIFT_FLING: f32 = 5.0;
+/// A lift's pop throws a player this fast up (m/s): with the lift's own
+/// lightness under you, about 3.1 m high, landing back on the flat within
+/// `health::SAFE_LANDING`, and onto a roof up to about 2.4 m.
+pub const LIFT_THROW: f32 = 6.6;
+/// ...and this fast the way they face (m/s). In the air with no stick a
+/// body's way slows (`player`'s air control), so it carries about 4 m.
+pub const LIFT_FLING: f32 = 9.0;
 
 /// Burners: heat that hurts whoever stands in it, and cooks robot parts.
 #[allow(clippy::too_many_arguments)]
@@ -1172,10 +1172,6 @@ mod tests {
             LIFT_THROW <= crate::health::SAFE_LANDING,
             "lands safe on the flat"
         );
-        assert!(
-            LIFT_THROW * LIFT_THROW / (2.0 * 9.81) > 3.0,
-            "over a 2.6 m roof"
-        );
         let mut app = app(false);
         let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
         let p = player(&mut app);
@@ -1207,18 +1203,15 @@ mod tests {
                 landed = Some(now);
             }
         }
-        assert!(
-            top.y - start.y > 2.0,
-            "the pop threw you up ({:.2} m)",
-            top.y - start.y
-        );
+        let up = top.y - start.y;
+        assert!((2.6..4.0).contains(&up), "the pop threw you {up:.2} m up");
         let moved = landed.expect("and came down") - start;
         eprintln!(
             "lift throw: {:.2} m up, landed {moved:?} off",
             top.y - start.y
         );
         assert!(
-            moved.x > 2.5 && moved.z.abs() < moved.x * 0.3,
+            moved.x > 3.0 && moved.z.abs() < moved.x * 0.3,
             "the way you face: {moved:?}"
         );
         assert_eq!(
