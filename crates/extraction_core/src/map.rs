@@ -1270,6 +1270,9 @@ pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_res
 /// The fifth (docs/FIFTH_VALLEY.md).
 pub const RIME_FELL: &str = include_str!("../../../assets/maps/rime_fell.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
+/// The arcade's fighting ground (`--arcade`): not a valley, never on the
+/// truck's way or a career's.
+pub const ARCADE: &str = include_str!("../../../assets/maps/arcade.ron");
 /// The test field's id: a valley only tests load, never on [`VALLEYS`],
 /// the career or the truck's way (the game serves it to its own tests
 /// alone). The ground Marrow Creek had before its places were pulled in,
@@ -1439,7 +1442,7 @@ mod tests {
                 let p = e.path();
                 (p.extension()? == "ron").then(|| p.file_stem()?.to_str().map(String::from))?
             })
-            .filter(|id| id != "training_yard")
+            .filter(|id| id != "training_yard" && id != "arcade")
             .collect();
         files.sort();
         let mut listed: Vec<String> = VALLEYS.iter().map(|v| v.0.to_string()).collect();

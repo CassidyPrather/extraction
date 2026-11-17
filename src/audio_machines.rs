@@ -1214,6 +1214,18 @@ mod tests {
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
         (
+            "RunOver",
+            "an arcade run's end, for its record; going down is heard (Downed)",
+        ),
+        (
+            "Siren",
+            "the arcade's wave siren: `arcade::visuals` plays the machines' own siren at the gate",
+        ),
+        (
+            "WaveCalled",
+            "an arcade card's press is heard as a press; the wave as its Siren",
+        ),
+        (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
         ),

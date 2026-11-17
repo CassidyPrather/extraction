@@ -10,7 +10,9 @@
 //! - `load.txt`: each session's `load:` lines (`render::timeline`);
 //! - `logs/`: the newest session logs and crash reports;
 //! - `frames/`: the frame logs themselves (`frame cpu_ms gpu_ms`);
-//! - `settings.ron`, and `raid/`: the last raid's telemetry.
+//! - `settings.ron`, and `raid/`: the last raid's telemetry;
+//! - `arcade/`: the newest arcade runs, each a recording and its summary
+//!   (`arcade::record`).
 //!
 //! Private by construction: nothing but these files, and in their text the
 //! home folder becomes `~`, the user's name `<user>` and the machine's name
@@ -40,7 +42,8 @@ pub fn write_report(data: &Path) -> std::io::Result<PathBuf> {
          logs/               the newest session logs and crash reports\n\
          frames/             one line a frame: frame cpu_ms gpu_ms\n\
          settings.ron        your comfort settings\n\
-         raid/               the last raid's recording\n\n\
+         raid/               the last raid's recording\n\
+         arcade/             the newest arcade runs and their summaries\n\n\
          system.txt's \"eye targets\" is the eyes' share of the GPU's memory;\n\
          the rest (textures, meshes, shadows) runs about 1.1 GB a valley\n\
          (the VRAM gauge: 2.0-2.2 GB in all at a 2980-wide eye).\n\n\
@@ -84,6 +87,20 @@ pub fn write_report(data: &Path) -> std::io::Result<PathBuf> {
             &format!("raid/{map}-{}", name(&raid)),
             read(&raid, &scrub).as_bytes(),
         );
+    }
+    // The newest arcade runs: each recording with its summary.
+    for run in newest(&data.join("arcade"), "run-", ".jsonl", KEEP) {
+        zip.add(
+            &format!("arcade/{}", name(&run)),
+            read(&run, &scrub).as_bytes(),
+        );
+        let summary = run.with_extension("summary.txt");
+        if summary.exists() {
+            zip.add(
+                &format!("arcade/{}", name(&summary)),
+                read(&summary, &scrub).as_bytes(),
+            );
+        }
     }
 
     let dir = data.join("reports");
@@ -466,6 +483,31 @@ mod tests {
         }
         assert_eq!(u32_at(i), 0x0201_4b50, "the central directory follows");
         out
+    }
+
+    /// The arcade's runs go in: the newest recordings, each with its
+    /// summary.
+    #[test]
+    fn a_report_carries_the_arcade_runs() {
+        let data =
+            std::env::temp_dir().join(format!("extraction-report-arcade-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        let arcade = data.join("arcade");
+        std::fs::create_dir_all(&arcade).unwrap();
+        for i in 0..6 {
+            std::fs::write(arcade.join(format!("run-10{i}-1.jsonl")), "{\"t\":0}\n").unwrap();
+            std::fs::write(arcade.join(format!("run-10{i}-1.summary.txt")), "Score 0\n").unwrap();
+        }
+        let path = write_report(&data).unwrap();
+        let entries = unzip(&std::fs::read(&path).unwrap());
+        let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"arcade/run-105-1.jsonl"), "{names:?}");
+        assert!(names.contains(&"arcade/run-105-1.summary.txt"), "{names:?}");
+        assert!(
+            !names.contains(&"arcade/run-100-1.jsonl"),
+            "only the newest"
+        );
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     #[test]

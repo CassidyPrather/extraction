@@ -7,9 +7,13 @@
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --report [--data-dir DIR]
+//! extraction --arcade [--data-dir DIR]
 //! extraction --sim N [--map NAME] [--seed N] [--jobs J] [--personality P]
 //!            [--sim-minutes M] [--sim-out DIR]
 //! ```
+//!
+//! `--arcade` opens the arcade: waves of machines on a small fenced ground,
+//! no career (see `arcade` and `docs/ARCADE.md`).
 //!
 //! `--sim N` plays N bot raids headless, each in its own process, and
 //! writes telemetry (see `sim` and `docs/SIMULATION.md`).
@@ -31,6 +35,9 @@ pub enum SceneChoice {
     Range,
     /// The truck: base of operations.
     Truck,
+    /// The arcade (`--arcade`, `arcade::enter`): waves on a fenced
+    /// ground, nothing kept.
+    Arcade,
 }
 
 #[derive(Resource, Clone, Debug)]
@@ -262,6 +269,7 @@ impl LaunchOptions {
             && !self.tooling()
             && self.sim.is_none()
             && self.map != crate::camp::TRAINING_YARD
+            && self.scene != SceneChoice::Arcade
     }
 
     pub fn from_args() -> Self {
@@ -286,6 +294,7 @@ impl LaunchOptions {
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
                 "--report" => o.report = true,
+                "--arcade" => crate::arcade::enter(&mut o),
                 "--stress" => o.stress = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
@@ -496,6 +505,10 @@ impl LaunchOptions {
         {
             o.map = v.into();
             o.map_explicit = true;
+        }
+        // The arcade's smoke run is an arcade session.
+        if o.scenario.as_deref() == Some(crate::arcade::scenario::SCENARIO) {
+            crate::arcade::enter(&mut o);
         }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
