@@ -33,8 +33,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RY, RZ, S, T, TO_BLENDER, export, main_guard, make, parent, report)
-from mathutils import Vector
+import bpy
+from common import (Part, RY, RZ, S, T, TO_BLENDER, export, join, main_guard, make, parent, report)
+from mathutils import Matrix, Vector
 
 # Kept equal to src/render/props.rs (FINGER_BONES, finger_root, finger_aim).
 FINGER_BONES = [
@@ -301,27 +302,199 @@ def housing():
     return p
 
 
-# --- Assembly --------------------------------------------------------------
+# --- Skinned fingers --------------------------------------------------------
+# One continuous tube per finger from inside the palm to its tip, at the
+# rest pose (open, the chain straight from its knuckle: only the first
+# joint is turned, `finger_aim`), weighted along its length to the palm
+# and its segments with soft blends over each joint: it bends at the
+# knuckles as one glove does, where rigid segments crossed over one
+# another (the user, 17 November: "crudely intersecting primitive
+# geometries").
 
-def place(obj, game):
-    """Put an object built at the origin at `game` (a game-space matrix)."""
-    obj.matrix_world = TO_BLENDER @ game @ TO_BLENDER.inverted()
+# Half the width of the blend over each joint (m): the knuckle wide (the
+# glove's fabric draws over it), the finger's own joints narrow; the
+# thumb's root widest, its swing the largest, so it bends without
+# pinching to a waist (candy-wrapping).
+BLEND_KNUCKLE = 0.009
+BLEND_THUMB = 0.013
+BLEND_JOINT = 0.0045
+# How far the tube runs back into the palm behind its knuckle (m).
+ROOT_IN = 0.013
+
+
+def chain(f, ts):
+    """Each joint's rest matrix in the glove's frame, knuckle outwards."""
+    bones = [b for b in FINGER_BONES[f] if b > 0]
+    m = T(*finger_root(f, ts)) @ finger_aim(f, ts)
+    out = []
+    for b in bones:
+        out.append(m)
+        m = m @ T(0.0, 0.0, -b)
+    return out
+
+
+def finger_radius(f, s):
+    """The tube's radius `s` m out from the knuckle (behind it, in the
+    palm, the knuckle's)."""
+    bones = [b for b in FINGER_BONES[f] if b > 0]
+    joints = [0.0]
+    for b in bones:
+        joints.append(joints[-1] + b)
+    radii = RADII[f]
+    if s <= 0.0:
+        return radii[0]
+    for j in range(len(bones)):
+        if s <= joints[j + 1] or j == len(bones) - 1:
+            t = min(max((s - joints[j]) / bones[j], 0.0), 1.0)
+            r = radii[j] + (radii[j + 1] - radii[j]) * t
+            # A touch fuller over the middle of a segment.
+            return r + 0.0004 * math.sin(math.pi * t)
+    return radii[-1]
+
+
+def finger_stations(f):
+    """Where the tube's rings are (s, m out from the knuckle): close over
+    each joint, where it bends; the tip a rounded cap."""
+    bones = [b for b in FINGER_BONES[f] if b > 0]
+    joints = [0.0]
+    for b in bones:
+        joints.append(joints[-1] + b)
+    end = joints[-1]
+    r_tip = RADII[f][len(bones)]
+    s, out = -ROOT_IN, []
+    while s < end - r_tip:
+        out.append(s)
+        near = min(abs(s - j) for j in joints[:-1])
+        s += 0.0015 if near < 0.009 else 0.004
+    return out, end, r_tip
+
+
+def finger_tube(f, ts):
+    p = Part(f"finger_{f}")
+    m0 = chain(f, ts)[0]
+    stations, end, r_tip = finger_stations(f)
+    prof = [(finger_radius(f, 0.0) * 0.92, ROOT_IN)]  # closing the buried root
+    prof += [(finger_radius(f, s), -s) for s in stations]
+    n = 6
+    c = end - r_tip
+    prof += [(r_tip * math.cos(math.pi / 2 * k / n), -(c + r_tip * math.sin(math.pi / 2 * k / n)))
+             for k in range(n + 1)]
+    _, faces = p.lathe(prof, "Glove", segs=SIDES, start=360.0 / SIDES / 2, xf=m0)
+    # The palm side leather, the back fabric (in the finger's own frame);
+    # the outer half of the last segment leather all round, where work
+    # gloves wear through first.
+    inv = m0.inverted()
+    rot = inv.to_3x3()
+    bones = [b for b in FINGER_BONES[f] if b > 0]
+    leather = p._mi("Leather")
+    for fc in faces:
+        local_n = (rot @ fc.normal).normalized()
+        s_c = -(inv @ fc.calc_center_median()).z
+        if local_n.y < -0.25 or s_c > end - bones[-1] * 0.5:
+            fc.material_index = leather
+    # Pads over the back of the first two segments (the thumb's first).
+    cum = 0.0
+    for j, L in enumerate(bones):
+        if j < 2 and not (f == 4 and j == 1):
+            rm = (RADII[f][j] + RADII[f][j + 1]) * 0.5
+            big = j == 0
+            p.sphere(1.0, (0, 0, 0), "Padding", segs=10, rings=5,
+                     xf=m0 @ T(0.0, rm - 0.0004, -(cum + L * 0.5))
+                     @ S(rm * (0.66 if big else 0.56), 0.0026, L * (0.3 if big else 0.24)))
+        cum += L
+    return p
+
+
+def smooth(t):
+    t = min(max(t, 0.0), 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def finger_weights(f, s):
+    """[(bone, weight)] for a point `s` m out along finger `f`: the palm
+    behind the knuckle, each segment along its length, blended over each
+    joint."""
+    bones = [b for b in FINGER_BONES[f] if b > 0]
+    names = ["palm"] + [f"finger_{f}_{j}" for j in range(len(bones))]
+    joints = [0.0]
+    for b in bones[:-1]:
+        joints.append(joints[-1] + b)
+    for k, sj in enumerate(joints):
+        h = (BLEND_THUMB if f == 4 else BLEND_KNUCKLE) if k == 0 else BLEND_JOINT
+        if abs(s - sj) < h:
+            t = smooth((s - (sj - h)) / (2 * h))
+            return [(names[k], 1.0 - t), (names[k + 1], t)]
+    # Wholly on the bone whose span holds it.
+    k = sum(1 for sj in joints if s >= sj)
+    return [(names[k], 1.0)]
+
+
+def weigh(obj, f, ts):
+    """Vertex groups for finger `f`'s tube, from where each vertex lies
+    along it."""
+    to_game = TO_BLENDER.inverted() @ obj.matrix_world
+    inv = chain(f, ts)[0].inverted()
+    groups = {}
+    for v in obj.data.vertices:
+        s = -(inv @ (to_game @ v.co)).z
+        for name, w in finger_weights(f, s):
+            if w <= 1e-4:
+                continue
+            g = groups.get(name) or obj.vertex_groups.new(name=name)
+            groups[name] = g
+            g.add([v.index], w, "REPLACE")
+
+
+def rig(ts):
+    """The armature: the palm at the glove's origin, each finger's joints
+    at `spawn_hand`'s rest joints, each bone's frame its joint's (so the
+    glTF's joint nodes read as the game's joints)."""
+    data = bpy.data.armatures.new("glove_rig")
+    arm = bpy.data.objects.new("glove_rig", data)
+    bpy.context.scene.collection.objects.link(arm)
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode="EDIT")
+
+    def bone(name, game, par):
+        eb = data.edit_bones.new(name)
+        eb.head = (0.0, 0.0, 0.0)
+        eb.tail = (0.0, 0.01, 0.0)
+        # (A Blender bone runs along its own Y; the exporter turns each
+        # bone's frame -90 degrees about X to write it: turned back first,
+        # the joint node lands as the game's joint.)
+        eb.matrix = (TO_BLENDER @ game @ TO_BLENDER.inverted()
+                     @ Matrix.Rotation(math.pi / 2, 4, "X"))
+        if par is not None:
+            eb.parent = par
+        return eb
+
+    palm_b = bone("palm", Matrix.Identity(4), None)
+    for f in range(5):
+        prev = palm_b
+        for j, m in enumerate(chain(f, ts)):
+            prev = bone(f"finger_{f}_{j}", m, prev)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return arm
 
 
 def glove(side):
     main_guard()
     ts = 1.0 if side == "left" else -1.0
+    arm = rig(ts)
     palm_obj = make(palm(ts))
-    parent(make(housing()), palm_obj)
+    vg = palm_obj.vertex_groups.new(name="palm")
+    vg.add([v.index for v in palm_obj.data.vertices], 1.0, "REPLACE")
+    parts = [palm_obj]
     for f in range(5):
-        prev, chain = palm_obj, T(*finger_root(f, ts)) @ finger_aim(f, ts)
-        bones = [b for b in FINGER_BONES[f] if b > 0]
-        for j in range(len(bones)):
-            obj = make(segment(f, j), sharp_angle=60.0)
-            place(obj, chain)
-            parent(obj, prev)
-            prev = obj
-            chain = chain @ T(0.0, 0.0, -bones[j])
+        obj = make(finger_tube(f, ts), sharp_angle=60.0)
+        weigh(obj, f, ts)
+        parts.append(obj)
+    obj = join("glove", *parts)
+    obj.parent = arm
+    mod = obj.modifiers.new("rig", "ARMATURE")
+    mod.object = arm
+    house = make(housing())
+    parent(house, arm)
     report()
     export(f"assets/models/hands/glove_{side}.glb")
 

@@ -1295,9 +1295,16 @@ fn dress_gloves(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut bindposes: ResMut<Assets<bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
+    skins: Res<Assets<bevy::gltf::GltfSkin>>,
 ) {
     for (e, v, parts, mut glove_mat) in &mut gloves {
         let path = glove_model(v.side);
+        // The model's nodes, and its skin if it's a skinned glove: its
+        // joints' names and inverse binds.
+        let mut rig: Option<(
+            Vec<String>,
+            Handle<bevy::mesh::skinning::SkinnedMeshInverseBindposes>,
+        )> = None;
         let model = match models.request(path, &server) {
             None => None,
             Some(h) => match Models::state(&h, &server, &gltfs) {
@@ -1306,7 +1313,17 @@ fn dress_gloves(
                     warn!("{path} failed to load; using boxes");
                     None
                 }
-                ModelState::Ready(g) => Some(model_nodes(g, &nodes, &gltf_meshes)),
+                ModelState::Ready(g) => {
+                    rig = g.skins.first().and_then(|s| skins.get(s)).map(|s| {
+                        let names = s
+                            .joints
+                            .iter()
+                            .map(|j| nodes.get(j).map(|n| n.name.clone()).unwrap_or_default())
+                            .collect();
+                        (names, s.inverse_bind_matrices.clone())
+                    });
+                    Some(model_nodes(g, &nodes, &gltf_meshes))
+                }
             },
         };
         commands.entity(e).remove::<GloveParts>();
@@ -1341,6 +1358,72 @@ fn dress_gloves(
                 ))
                 .id();
             crate::models::spawn_primitives(&mut commands, holder, node, &mut mat);
+        }
+        // A skinned glove (`art/hands/gloves.py`): one continuous mesh,
+        // its vertices weighted over the joints `spawn_hand` made, by name
+        // (its joint nodes rest where those joints do, so its inverse binds
+        // are theirs). The fingers bend as one glove, where rigid segments
+        // crossed at every knuckle.
+        if let (Some((names, poses)), Some(body)) = (&rig, find_node(&model, "glove")) {
+            let joint = |name: &str| -> Option<Entity> {
+                if name == "palm" {
+                    return Some(parts.model);
+                }
+                parts
+                    .joints
+                    .iter()
+                    .find(|((f, j), _)| *name == format!("finger_{f}_{j}"))
+                    .map(|(_, e)| *e)
+            };
+            let joints: Option<Vec<Entity>> = names.iter().map(|n| joint(n)).collect();
+            // (The binds copied to an asset of the glove's own, as the
+            // merged rigid pieces had: drawn on the glTF's, the skin wasn't
+            // found when it was drawn.)
+            let own_poses = bindposes
+                .get(poses)
+                .map(|b| b.to_vec())
+                .map(|b| bindposes.add(bevy::mesh::skinning::SkinnedMeshInverseBindposes::from(b)));
+            if own_poses.is_none() {
+                warn!("{path}'s inverse binds aren't loaded; rigid pieces");
+            }
+            match joints.zip(own_poses) {
+                Some((joints, poses)) => {
+                    for p in &body.primitives {
+                        // (Tangents for the cloth's normal map: the exporter
+                        // writes none for a skinned mesh.)
+                        let mesh = match meshes.get(&p.mesh) {
+                            Some(m) => {
+                                let mut m = m.clone();
+                                if m.attribute(Mesh::ATTRIBUTE_TANGENT).is_none() {
+                                    let _ = m.generate_tangents();
+                                }
+                                meshes.add(m)
+                            }
+                            None => p.mesh.clone(),
+                        };
+                        commands.spawn((
+                            Mesh3d(mesh),
+                            MeshMaterial3d(mat(p.material.as_deref())),
+                            bevy::mesh::skinning::SkinnedMesh {
+                                inverse_bindposes: poses.clone(),
+                                joints: joints.clone(),
+                            },
+                            // A hand is always near; its bounds move with
+                            // every finger.
+                            bevy::camera::visibility::NoFrustumCulling,
+                            Transform::IDENTITY,
+                            Visibility::Inherited,
+                            ChildOf(parts.model),
+                        ));
+                    }
+                    for b in &parts.boxes {
+                        commands.entity(*b).despawn();
+                    }
+                    glove_mat.0 = own.into_iter().map(|(_, h)| h).collect();
+                    continue;
+                }
+                None => warn!("{path}'s skin names a joint the glove hasn't; rigid pieces"),
+            }
         }
         // Every piece with the joint it rides on: the palm, then each
         // finger segment.
