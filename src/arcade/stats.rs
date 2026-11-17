@@ -407,7 +407,7 @@ pub fn gun_card(title: &str, run: &RunStats, bests: &Bests, first: Option<&str>)
         );
         if st.kills > 0 {
             s += &format!(
-                " to kill {} shots, {} hits\n ttk {}\n",
+                " shots to kill {}\n hits to kill {}\n ttk {}\n",
                 n1(st.shots_to_kill().unwrap_or(0.0)),
                 vs(st.hits_to_kill(), b.hits_to_kill, false, &n1),
                 vs(median(&st.ttk), b.ttk, false, &sec)
@@ -445,10 +445,7 @@ pub fn gun_card(title: &str, run: &RunStats, bests: &Bests, first: Option<&str>)
         }
     }
     if !rest.is_empty() {
-        s += &format!(
-            "\nalso fired: {}\n(in the run's summary)\n",
-            rest.join(", ").to_uppercase()
-        );
+        s += &format!("\nalso fired: {}\n", rest.join(", ").to_uppercase());
     }
     s
 }
@@ -598,7 +595,10 @@ mod tests {
         );
         let card = gun_card("wave 1 cleared", &run, &bests, None);
         assert!(card.contains("acc 25% (best 50%)"), "{card}");
-        assert!(card.contains("2.0 NEW BEST"), "fewer hits to kill: {card}");
+        assert!(
+            card.contains("hits to kill 2.0 NEW BEST"),
+            "fewer hits to kill: {card}"
+        );
         assert!(card.contains("ttk 3.5 s NEW BEST"), "{card}");
         assert!(
             card.contains("reload 3.5 s (best 2.0 s), 1 stoppage\n"),
@@ -618,7 +618,7 @@ mod tests {
         // More guns than the card lists: the one asked about comes first,
         // the rest are named.
         let full = fullest_card();
-        assert_eq!(full.matches(" shots, ").count(), CARD_GUNS * 2, "{full}");
+        assert_eq!(full.matches(" shots, ").count(), CARD_GUNS, "{full}");
         assert!(full.contains("also fired: AK74, SKS, PM\n"), "{full}");
         let mut many = RunStats::default();
         for g in ["a", "b", "c", "d"] {
