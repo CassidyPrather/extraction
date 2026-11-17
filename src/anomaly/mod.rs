@@ -1196,11 +1196,15 @@ mod tests {
         let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
         app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
         let mut top = start;
-        for _ in 0..60 {
+        let mut landed = None;
+        for i in 0..240 {
             app.update();
             let now = pos(&app, p);
             if now.y > top.y {
                 top = now;
+            }
+            if i > 20 && landed.is_none() && app.world().get::<Body>(p).unwrap().grounded {
+                landed = Some(now);
             }
         }
         assert!(
@@ -1208,9 +1212,13 @@ mod tests {
             "the pop threw you up ({:.2} m)",
             top.y - start.y
         );
-        let moved = pos(&app, p) - start;
+        let moved = landed.expect("and came down") - start;
+        eprintln!(
+            "lift throw: {:.2} m up, landed {moved:?} off",
+            top.y - start.y
+        );
         assert!(
-            moved.x > 2.0 && moved.z.abs() < 1.5,
+            moved.x > 2.5 && moved.z.abs() < moved.x * 0.3,
             "the way you face: {moved:?}"
         );
         assert_eq!(
