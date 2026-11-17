@@ -741,6 +741,8 @@ pub(crate) struct GloveMaterial(pub(crate) Vec<Handle<StandardMaterial>>);
 fn tint_gloves(
     visuals: Query<(&HandVisual, &GloveMaterial)>,
     hands: Query<&Hand>,
+    items: Query<&crate::items::Item>,
+    catalog: Option<Res<crate::items::Catalog>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut lit: Local<std::collections::HashMap<Entity, bool>>,
 ) {
@@ -751,7 +753,15 @@ fn tint_gloves(
         // Only an empty hand says what it would take: a hand holding a gun
         // lit up by whatever it passed was a distraction (the 28 October
         // playtest).
-        let on = hand.hover.is_some() && hand.holding.is_none();
+        // Nor for junk (#104): the hand warms only for real things.
+        let junk = hand
+            .hover
+            .and_then(|h| items.get(h).ok())
+            .zip(catalog.as_ref())
+            .is_some_and(|(i, c)| {
+                c.get(i.kind()).category == extraction_core::items::Category::Junk
+            });
+        let on = hand.hover.is_some() && hand.holding.is_none() && !junk;
         if lit.insert(v.hand, on) == Some(on) {
             continue;
         }

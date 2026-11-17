@@ -916,6 +916,93 @@ pub(crate) mod tests {
         kinds(app)
     }
 
+    /// Junk dresses a place on a stream of its own (#104): with its
+    /// dressing, a place's real roll is the same thing for thing, and the
+    /// stream it was rolled from is left as it was; the real roll never
+    /// yields junk, and the dressing yields nothing else.
+    #[test]
+    fn junk_dresses_a_place_without_touching_its_real_roll() {
+        use extraction_core::items::Category;
+        let mut app = career_app();
+        app.update();
+        let loot = app.world().resource::<Loot>().clone();
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut junk = 0;
+        for raid in [Some(0), Some(8), None] {
+            for name in ["kitchen", "house", "food_common"] {
+                for seed in 0..300 {
+                    let (mut a, mut b) = (Rng::new(seed), Rng::new(seed));
+                    let all = loot.0.roll_at(name, None, raid, &cat.0, &mut a);
+                    let real = loot.0.roll_real(name, None, raid, &cat.0, &mut b);
+                    let kept: Vec<_> = all
+                        .iter()
+                        .filter(|d| cat.get(d.kind).category != Category::Junk)
+                        .copied()
+                        .collect();
+                    assert_eq!(kept, real, "{name} {raid:?} seed {seed}");
+                    assert_eq!(
+                        a.next_u64(),
+                        b.next_u64(),
+                        "{name}: the stream is as it was"
+                    );
+                    assert!(
+                        real.iter()
+                            .all(|d| cat.get(d.kind).category != Category::Junk)
+                    );
+                    junk += all.len() - kept.len();
+                }
+            }
+        }
+        assert!(junk > 0, "the dressing dresses");
+        // The dressing tables hold junk and nothing else.
+        for t in ["junk_pantry", "junk_kitchen", "junk_house"] {
+            let mut rng = Rng::new(9);
+            for _ in 0..200 {
+                for d in loot.0.roll_real(t, None, None, &cat.0, &mut rng.clone()) {
+                    panic!("{t} gave a real {}", cat.get(d.kind).id);
+                }
+                rng.next_u64();
+            }
+        }
+    }
+
+    /// Cooking isn't shown early (#104, the user: "I do not want it to be
+    /// presented early on"): no table rolls a cooking stage, and neither the
+    /// yard nor a valley puts up a kitchen station.
+    #[test]
+    fn nothing_early_shows_cooking() {
+        let app = career_app();
+        let loot = app.world().resource::<Loot>().clone();
+        let cat = app.world().resource::<Catalog>().clone();
+        for (_, def) in cat.0.iter() {
+            if def.id.starts_with("cook_") {
+                assert_eq!(loot.0.arrives(&def.id), None, "{} is rolled", def.id);
+            }
+        }
+        for map in [crate::camp::TRAINING_YARD, "marrow_creek"] {
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    map: map.into(),
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            for _ in 0..60 {
+                app.update();
+            }
+            let mut q = app.world_mut().query::<&crate::raid::kitchen::Cook>();
+            assert_eq!(q.iter(app.world()).count(), 0, "{map}: a kitchen station");
+            let mut q = app.world_mut().query::<&Item>();
+            for i in q.iter(app.world()) {
+                let id = &cat.get(i.kind()).id;
+                assert!(!id.starts_with("cook_"), "{map}: {id} lies about");
+            }
+        }
+    }
+
     /// `cargo test -- --ignored item_census --nocapture`: every item in
     /// each valley once it's settled, by kind, junk (food and the like:
     /// its `food:` tag, or the Junk category) apart from the rest (#104).
