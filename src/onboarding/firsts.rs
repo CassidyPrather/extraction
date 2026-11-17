@@ -16,6 +16,7 @@ use bevy::prelude::*;
 use extraction_core::firearm::{Event as FireEvent, Malfunction};
 use std::collections::{BTreeSet, VecDeque};
 
+use super::pickups::Family;
 use crate::anomaly::Anomaly;
 use crate::camp::TRAINING_YARD;
 use crate::interact::{Held, InteractEvent};
@@ -96,6 +97,9 @@ pub enum First {
     /// A dirigible that sees you, or you near its lowered pod: it sends
     /// for those that shoot.
     Dirigible,
+    /// The first of a family picked up out there: what it's for
+    /// (`onboarding::pickups`).
+    Picked(Family),
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -157,6 +161,26 @@ pub const ALL: &[First] = &[
     First::Grappler,
     First::Spotter,
     First::Dirigible,
+    First::Picked(Family::GunCare),
+    First::Picked(Family::CleaningRod),
+    First::Picked(Family::Lights),
+    First::Picked(Family::Matches),
+    First::Picked(Family::Salvage),
+    First::Picked(Family::MachineParts),
+    First::Picked(Family::Armour),
+    First::Picked(Family::Splint),
+    First::Picked(Family::Injector),
+    First::Picked(Family::Grenade),
+    First::Picked(Family::EmpTrap),
+    First::Picked(Family::Knife),
+    First::Picked(Family::Spanner),
+    First::Picked(Family::Bench),
+    First::Picked(Family::Wedge),
+    First::Picked(Family::Binoculars),
+    First::Picked(Family::LeadCase),
+    First::Picked(Family::Trinkets),
+    First::Picked(Family::Rounds),
+    First::Picked(Family::GunParts),
 ];
 
 impl First {
@@ -310,6 +334,7 @@ impl First {
             First::Dirigible => {
                 &["Truck: \"Under cover. It doesn't shoot, but it sends for those that do.\""]
             }
+            First::Picked(f) => f.lines(),
         }
     }
 }
@@ -417,6 +442,7 @@ impl Plugin for FirstsPlugin {
                         convoy,
                         asked,
                         payday,
+                        picked_up,
                     ),
                     speak,
                 )
@@ -1286,6 +1312,67 @@ fn payday(
         (Err(why), "{verdict}") => why.clone(),
         (Err(_), l) => l.into(),
     });
+}
+
+/// At most this many "what it's for" lines a raid (the rest wait for a
+/// later one, picked up again).
+pub const PICKED_A_RAID: usize = 3;
+
+/// The first of a family in your hand out there (`pickups`): its line,
+/// once a career, when it's calm (nothing waiting to be said, no machine
+/// after you, no bleed), and no more than [`PICKED_A_RAID`] a raid.
+#[allow(clippy::too_many_arguments)]
+fn picked_up(
+    held: Query<(&crate::items::Item, &Held)>,
+    locals: Query<(Entity, &crate::health::Health), With<LocalPlayer>>,
+    minds: Query<&Awareness>,
+    catalog: Res<crate::items::Catalog>,
+    raid: Res<Raid>,
+    mut waiting: Local<Vec<Family>>,
+    mut said: Local<usize>,
+    mut m: Meet,
+) {
+    if matches!(
+        raid.phase,
+        Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }
+    ) {
+        waiting.clear();
+        if raid.phase == Phase::AtBase {
+            *said = 0;
+        }
+        return;
+    }
+    let Some((me, health)) = locals.iter().next() else {
+        return;
+    };
+    for (item, h) in &held {
+        if h.player != me {
+            continue;
+        }
+        let def = catalog.get(item.kind());
+        if let Some(f) = super::pickups::family(def)
+            && !m.met(First::Picked(f))
+            && !waiting.contains(&f)
+        {
+            waiting.push(f);
+        }
+    }
+    let calm = m.queue.lines.is_empty()
+        && m.queue.quiet <= 0.0
+        && m.queue.has_you <= 0.0
+        && health.bleeding <= BLEEDING
+        // (One that has noticed you, not any that tracks you: a glimpse or a
+        // sound sets its target till its search gives up, which out there
+        // is most of a raid, and the first jobs' finds went unnamed.)
+        && !minds
+            .iter()
+            .any(|a| a.target == Some(me) && a.suspicion >= crate::robots::NOTICED);
+    if calm && *said < PICKED_A_RAID && !waiting.is_empty() {
+        let f = waiting.remove(0);
+        if m.meet(First::Picked(f)) {
+            *said += 1;
+        }
+    }
 }
 
 fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
@@ -2475,5 +2562,165 @@ mod tests {
         }
         assert_eq!(dressings(&mut app), 1, "one, however many raids");
         assert_eq!(said_dressing(&app), 1);
+    }
+
+    /// The first of a family in your hand out there: its line, once a
+    /// career, three a raid at most (the rest on a later raid's pickup);
+    /// not at the truck; not while something else is being said.
+    #[test]
+    fn a_familys_line_is_said_on_its_first_pickup_and_never_again() {
+        use super::super::pickups::Family;
+        let mut app = app();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .single(app.world())
+            .unwrap();
+        let hand = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::RigHand>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // (Long enough for what's queued ahead to be said, five seconds
+        // apart: the driver's spares at the start, three lines.)
+        let wait = |app: &mut App| {
+            for _ in 0..(30 * 90) {
+                app.update();
+            }
+        };
+        let said = |app: &App, f: Family| {
+            let line = f.lines()[0];
+            app.world()
+                .resource::<Spoken>()
+                .0
+                .iter()
+                .filter(|l| *l == line)
+                .count()
+        };
+        // In the hand a moment, then let go.
+        let hold = |app: &mut App, id: &str| {
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind(id).unwrap(),
+                        transform: Transform::IDENTITY,
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            app.world_mut().entity_mut(e).insert((
+                Held {
+                    player: me,
+                    hand,
+                    side: crate::rig::Side::Right,
+                    point: 0,
+                    offset: Transform::IDENTITY,
+                },
+                avian3d::prelude::RigidBodyDisabled,
+            ));
+            app.world_mut()
+                .get_mut::<crate::interact::Hand>(hand)
+                .unwrap()
+                .holding = Some(e);
+            app.update();
+            app.world_mut()
+                .get_mut::<crate::interact::Hand>(hand)
+                .unwrap()
+                .holding = None;
+            app.world_mut().entity_mut(e).despawn();
+            app.update();
+        };
+        let phase = |app: &mut App, p: Phase| {
+            app.world_mut().resource_mut::<Raid>().phase = p;
+            app.update();
+        };
+        // At the truck: nothing.
+        phase(&mut app, Phase::AtBase);
+        hold(&mut app, "gun_oil");
+        wait(&mut app);
+        assert_eq!(said(&app, Family::GunCare), 0, "said at the truck");
+        // Out: said once; another of its family, not again.
+        phase(&mut app, Phase::Out);
+        // A machine that only tracks you (it heard something once) doesn't
+        // hold it back; one that has noticed you does.
+        let tracks = app
+            .world_mut()
+            .spawn(crate::robots::Awareness {
+                target: Some(me),
+                suspicion: 0.2,
+                ..Default::default()
+            })
+            .id();
+        // Something else being said: it waits its turn.
+        app.world_mut()
+            .resource_mut::<Queue>()
+            .lines
+            .push_back("Truck: \"Busy.\"".into());
+        hold(&mut app, "gun_oil");
+        let spoken = app.world().resource::<Spoken>().0.clone();
+        assert!(
+            !spoken.contains(&Family::GunCare.lines()[0].to_string()),
+            "said over another line"
+        );
+        wait(&mut app);
+        assert_eq!(
+            said(&app, Family::GunCare),
+            1,
+            "not said on its first pickup"
+        );
+        let spoken = app.world().resource::<Spoken>().0.clone();
+        let at = |l: &str| spoken.iter().position(|s| s == l).unwrap();
+        assert!(at("Truck: \"Busy.\"") < at(Family::GunCare.lines()[0]));
+        hold(&mut app, "cleaning_kit");
+        wait(&mut app);
+        assert_eq!(said(&app, Family::GunCare), 1, "said twice");
+        app.world_mut().despawn(tracks);
+        let noticed = app
+            .world_mut()
+            .spawn(crate::robots::Awareness {
+                target: Some(me),
+                suspicion: crate::robots::NOTICED,
+                ..Default::default()
+            })
+            .id();
+        hold(&mut app, "matches");
+        wait(&mut app);
+        assert_eq!(said(&app, Family::Matches), 0, "said with a machine on you");
+        app.world_mut().despawn(noticed);
+        wait(&mut app);
+        // Three a raid: the fourth waits.
+        for id in ["knife", "door_wedge"] {
+            hold(&mut app, id);
+            wait(&mut app);
+        }
+        assert_eq!(said(&app, Family::Matches), 1);
+        assert_eq!(said(&app, Family::Knife), 1);
+        assert_eq!(said(&app, Family::Wedge), 0, "a fourth in one raid");
+        // Food and the yard's things: nothing to say.
+        for id in ["canned_stew", "power_cell", "pm_mag"] {
+            hold(&mut app, id);
+            wait(&mut app);
+        }
+        // Next raid, picked up again: said.
+        phase(&mut app, Phase::AtBase);
+        phase(&mut app, Phase::Out);
+        hold(&mut app, "door_wedge");
+        wait(&mut app);
+        assert_eq!(said(&app, Family::Wedge), 1, "not said next raid");
+        let picked = app
+            .world()
+            .resource::<Firsts>()
+            .0
+            .iter()
+            .filter(|k| k.starts_with("Picked("))
+            .count();
+        assert_eq!(picked, 4, "only what was said is kept");
     }
 }
