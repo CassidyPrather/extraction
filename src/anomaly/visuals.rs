@@ -1954,11 +1954,14 @@ fn dress_items(
                         Transform::from_xyz(0.012, 0.021, 0.05),
                     ));
                 }
-                parts.push((
-                    meshes.add(Cuboid::new(0.03, 0.004, 0.03)),
-                    black.clone(),
-                    Transform::from_xyz(-0.015, 0.021, 0.005),
-                ));
+                // (The Bear's screen covers the grille's place.)
+                if id != "detector_bear" {
+                    parts.push((
+                        meshes.add(Cuboid::new(0.03, 0.004, 0.03)),
+                        black.clone(),
+                        Transform::from_xyz(-0.015, 0.021, 0.005),
+                    ));
+                }
                 parts.push((
                     meshes.add(Cuboid::new(0.012, 0.012, 0.09)),
                     black.clone(),
@@ -2003,16 +2006,17 @@ fn dress_items(
                     stone_lamp = Some(green);
                 }
                 if id == "detector_bear" {
-                    // A round screen on top, facing up and back at you.
+                    // A round screen on top, facing up and back at you, as
+                    // large as the top allows.
                     parts.push((
-                        meshes.add(Cylinder::new(0.03, 0.004).mesh().resolution(32)),
+                        meshes.add(Cylinder::new(SCREEN_FACE, 0.004).mesh().resolution(48)),
                         mat(
                             Color::srgb(0.01, 0.03, 0.015),
                             0.0,
                             0.15,
                             LinearRgba::rgb(0.0, 0.02, 0.005),
                         ),
-                        Transform::from_xyz(0.0, 0.022, 0.035),
+                        Transform::from_xyz(SCREEN_AT.x, 0.022, SCREEN_AT.z),
                     ));
                     screen = true;
                 }
@@ -2135,36 +2139,40 @@ fn dress_items(
             commands.entity(e).insert(StoneLamp { material, lit: 0.0 });
         }
         if screen {
-            // A pool of blips on the screen, placed by `bear_screens`.
-            let dot = meshes.add(Cylinder::new(0.0022, 0.001).mesh().resolution(8));
-            let stone = materials.add(StandardMaterial {
+            // A pool of rings on the screen, placed by `bear_screens`: one
+            // outline a anomaly, its reach to scale, from a few sizes.
+            let rings: Vec<(f32, Handle<Mesh>)> = (0..RING_SIZES)
+                .map(|i| {
+                    let r = RING_MIN_R
+                        * (SCREEN_R / RING_MIN_R).powf(i as f32 / (RING_SIZES - 1) as f32);
+                    let mesh = Annulus::new(r - RING_LINE * 0.5, r + RING_LINE * 0.5)
+                        .mesh()
+                        .resolution(40);
+                    (r, meshes.add(mesh))
+                })
+                .collect();
+            let lit = materials.add(StandardMaterial {
                 base_color: Color::BLACK,
-                emissive: LinearRgba::rgb(2.0, 8.0, 2.5),
-                unlit: true,
-                ..default()
-            });
-            let ring = materials.add(StandardMaterial {
-                base_color: Color::BLACK,
-                emissive: LinearRgba::rgb(0.3, 1.6, 0.5),
+                emissive: LinearRgba::rgb(0.6, 3.2, 1.0),
                 unlit: true,
                 ..default()
             });
             let mut blips = Vec::new();
             commands.entity(e).with_children(|c| {
-                for i in 0..BEAR_BLIPS {
-                    let m = if i < BEAR_BLIPS / 2 { &stone } else { &ring };
+                for _ in 0..BEAR_BLIPS {
                     blips.push(
                         c.spawn((
-                            Mesh3d(dot.clone()),
-                            MeshMaterial3d(m.clone()),
-                            Transform::from_xyz(0.0, 0.025, 0.035),
+                            Mesh3d(rings[0].1.clone()),
+                            MeshMaterial3d(lit.clone()),
+                            Transform::from_translation(SCREEN_AT)
+                                .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
                             Visibility::Hidden,
                         ))
                         .id(),
                     );
                 }
             });
-            commands.entity(e).insert(BearBlips(blips));
+            commands.entity(e).insert(BearBlips { blips, rings });
         }
         commands.entity(e).with_children(|c| {
             for (mesh, material, tf) in parts {
@@ -2181,49 +2189,57 @@ struct StoneLamp {
     lit: f32,
 }
 
-/// Blips on a Bear's screen: the first half stones, the rest anomalies.
+/// Rings on a Bear's screen, and the outlines they're drawn from (radius,
+/// mesh; smallest first).
 #[derive(Component)]
-struct BearBlips(Vec<Entity>);
+struct BearBlips {
+    blips: Vec<Entity>,
+    rings: Vec<(f32, Handle<Mesh>)>,
+}
 
-const BEAR_BLIPS: usize = 24;
-/// The screen's radius and centre, item space.
-const SCREEN_R: f32 = 0.027;
-const SCREEN_AT: Vec3 = Vec3::new(0.0, 0.0245, 0.035);
+const BEAR_BLIPS: usize = 16;
+/// The screen's face (the disc), the radius it maps its range to, and its
+/// centre, item space: 66 mm across the Bear's 70 mm top.
+const SCREEN_FACE: f32 = 0.033;
+const SCREEN_R: f32 = 0.031;
+const SCREEN_AT: Vec3 = Vec3::new(0.0, 0.0245, 0.03);
+/// A ring's line, and the smallest ring (to the line's middle), metres on
+/// the screen: read held up at 0.4 m (as the wrist is), the line is 0.37
+/// degrees and the smallest ring's hole 0.49, over the incidental floor
+/// (`render::legibility::INCIDENTAL_DEG`). (A stone's dot was 2.2 mm.)
+const RING_LINE: f32 = 0.0026;
+const RING_MIN_R: f32 = 0.003;
+/// Outline sizes from the smallest to the screen's own.
+const RING_SIZES: usize = 10;
 
-/// Places a held Bear's blips: stones as bright dots, anomalies as dim
-/// ones sized by their reach. Up the screen is the way you face (-Z).
+/// Places a held Bear's rings: each anomaly about you an outline its reach
+/// across, to scale (never smaller than reads). Up the screen is the way
+/// you face (-Z). Stones aren't on it: finding them is the sweep's.
 fn bear_screens(
     screens: Query<(&super::detector::BearScreen, &BearBlips)>,
-    mut blips: Query<(&mut Transform, &mut Visibility)>,
+    mut blips: Query<(&mut Transform, &mut Visibility, &mut Mesh3d)>,
 ) {
     for (screen, pool) in &screens {
-        let half = pool.0.len() / 2;
-        let place = |i: usize,
-                     at: Option<([f32; 2], f32)>,
-                     blips: &mut Query<(&mut Transform, &mut Visibility)>| {
-            if let Ok((mut tf, mut vis)) = blips.get_mut(pool.0[i]) {
-                match at {
-                    Some((p, size)) => {
-                        tf.translation =
-                            SCREEN_AT + Vec3::new(p[0] * SCREEN_R, 0.0, -p[1] * SCREEN_R);
-                        tf.scale = Vec3::splat(size);
-                        vis.set_if_neq(Visibility::Inherited);
-                    }
-                    None => {
-                        vis.set_if_neq(Visibility::Hidden);
-                    }
-                }
+        for (i, blip) in pool.blips.iter().enumerate() {
+            let Ok((mut tf, mut vis, mut mesh)) = blips.get_mut(*blip) else {
+                continue;
+            };
+            let Some((p, r)) = screen.anomalies.get(i) else {
+                vis.set_if_neq(Visibility::Hidden);
+                continue;
+            };
+            let want = (r * SCREEN_R).max(RING_MIN_R);
+            let ring = pool
+                .rings
+                .iter()
+                .min_by(|a, b| (a.0 - want).abs().total_cmp(&(b.0 - want).abs()))
+                .map(|r| r.1.clone())
+                .unwrap_or_default();
+            if mesh.0 != ring {
+                mesh.0 = ring;
             }
-        };
-        for i in 0..half {
-            place(i, screen.stones.get(i).map(|p| (*p, 1.0)), &mut blips);
-        }
-        for i in 0..pool.0.len() - half {
-            let a = screen
-                .anomalies
-                .get(i)
-                .map(|(p, r)| (*p, (1.0 + r * 8.0).min(4.0)));
-            place(half + i, a, &mut blips);
+            tf.translation = SCREEN_AT + Vec3::new(p[0] * SCREEN_R, 0.0, -p[1] * SCREEN_R);
+            vis.set_if_neq(Visibility::Inherited);
         }
     }
 }
