@@ -619,7 +619,7 @@ mod tests {
         // the rest are named.
         let full = fullest_card();
         assert_eq!(full.matches(" shots, ").count(), CARD_GUNS * 2, "{full}");
-        assert!(full.contains("also fired: SKS, PM"), "{full}");
+        assert!(full.contains("also fired: AK74, SKS, PM\n"), "{full}");
         let mut many = RunStats::default();
         for g in ["a", "b", "c", "d"] {
             many.guns.insert(g.into(), ak());
