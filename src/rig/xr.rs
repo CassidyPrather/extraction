@@ -377,6 +377,8 @@ struct Actions {
     /// (Index and Touch sense it).
     thumb_rest: openxr::Action<bool>,
     haptic: openxr::Action<openxr::Haptic>,
+    /// The left menu button, where it's free (Touch): what's this (#107).
+    recall: openxr::Action<bool>,
     left: openxr::Path,
     right: openxr::Path,
 }
@@ -412,6 +414,7 @@ fn create_actions(instance: Res<OxrInstance>, mut commands: Commands) {
             stick_click: set.create_action("stick_click", "Thumbstick click", &both)?,
             thumb_rest: set.create_action("thumb_rest", "Thumb resting", &both)?,
             haptic: set.create_action("haptic", "Vibration", &both)?,
+            recall: set.create_action("recall", "What's this", &both)?,
             set,
             left,
             right,
@@ -449,6 +452,7 @@ fn suggest_bindings(
     let click = a.stick_click.as_raw();
     let thumb_rest = a.thumb_rest.as_raw();
     let haptic = a.haptic.as_raw();
+    let recall = a.recall.as_raw();
     for profile in [
         // (Quest 3's Touch Plus is offered to apps as plain Touch unless
         // they enable its extension.)
@@ -591,6 +595,11 @@ fn suggest_bindings(
                 ]
             };
             bind(profile, thumb_rest, rests);
+            // Touch's left menu button is free: held, it asks what the
+            // thing in hand is (#107). (Index's is the system button.)
+            if profile.contains("touch") {
+                bind(profile, recall, &["/user/hand/left/input/menu/click"]);
+            }
             let (p, s) = if profile.contains("index") {
                 ("a", "b")
             } else {
@@ -1016,6 +1025,7 @@ fn drive_xr_rig(
         hand.stick_click = click && side == comfort.gun_side() && !both_clicked;
         hand.thumb_rest = thumb_rest;
     }
+    input.recall = read_b(&a.recall, a.left);
     // Both sticks clicked, standing still: a playtest mark.
     input.mark = read_b(&a.stick_click, a.left)
         && read_b(&a.stick_click, a.right)

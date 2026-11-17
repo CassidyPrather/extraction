@@ -13,7 +13,7 @@
 // kit. Progression's ladder wants its tier-0 things (WANTS) at 0.
 (
     tables: {
-        "food_common": (rolls: (1, 2), entries: [
+        "food_common": (rolls: (1, 2), dressing: Some("junk_pantry"), entries: [
             Item(id: "canned_stew", weight: 3.0),
             Item(id: "canned_beans", weight: 3.0, from_raid: 1),
             Item(id: "canned_tomato", weight: 2.0, from_raid: 2),
@@ -26,7 +26,42 @@
             Item(id: "salt_packet", weight: 1.0, from_raid: 2),
             Nothing(weight: 2.0),
         ]),
-        "kitchen": (rolls: (1, 3), entries: [
+        // Junk (#104): set dressing, rolled after a place's real roll on a
+        // stream of its own (`dressing` on the table the place names), so
+        // it never takes a real thing's spot. The food in the real tables
+        // above still draws, and comes up empty: what's real is as it was.
+        // Each is weighted as its food was where it stood (the other
+        // entries of the real table become Nothing), so as much turns up.
+        "junk_pantry": (rolls: (1, 2), entries: [
+            Item(id: "canned_stew", weight: 3.0),
+            Item(id: "canned_beans", weight: 3.0, from_raid: 1),
+            Item(id: "canned_tomato", weight: 2.0, from_raid: 2),
+            Item(id: "crackers", weight: 3.0),
+            Item(id: "tea_tin", weight: 1.5),
+            Item(id: "sugar_cubes", weight: 1.5, from_raid: 2),
+            Item(id: "condensed_milk", weight: 1.0, from_raid: 1),
+            Item(id: "water_bottle", weight: 2.5),
+            Item(id: "rice_bag", weight: 1.0, from_raid: 2),
+            Item(id: "salt_packet", weight: 1.0, from_raid: 2),
+            Nothing(weight: 2.0),
+        ]),
+        "junk_kitchen": (rolls: (1, 3), entries: [
+            Table(name: "junk_pantry", weight: 6.0),
+            Item(id: "onion", weight: 1.0, from_raid: 2),
+            Item(id: "carrot", weight: 1.0, from_raid: 2),
+            Item(id: "flour_sack", weight: 0.6, from_raid: 2),
+            Item(id: "egg_powder", weight: 0.6, from_raid: 2),
+            Item(id: "spice_jar", weight: 0.8, from_raid: 2),
+            // The kitchen's matches, curio and nothing.
+            Nothing(weight: 5.0),
+        ]),
+        "junk_house": (rolls: (1, 3), entries: [
+            Table(name: "junk_kitchen", weight: 4.0),
+            // The house's tools, medical, rounds, curio, gadgets, guns and
+            // nothing.
+            Nothing(weight: 9.2),
+        ]),
+        "kitchen": (rolls: (1, 3), dressing: Some("junk_kitchen"), entries: [
             Table(name: "food_common", weight: 6.0),
             Item(id: "onion", weight: 1.0, from_raid: 2),
             Item(id: "carrot", weight: 1.0, from_raid: 2),
@@ -224,7 +259,7 @@
             Item(id: "cassette_player", weight: 0.5, from_raid: 2),
             Item(id: "power_cell", weight: 1.5),
         ]),
-        "house": (rolls: (1, 3), entries: [
+        "house": (rolls: (1, 3), dressing: Some("junk_house"), entries: [
             Table(name: "kitchen", weight: 4.0),
             Table(name: "tools", weight: 2.0),
             Table(name: "medical", weight: 1.0),

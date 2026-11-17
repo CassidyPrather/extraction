@@ -55,6 +55,9 @@ pub enum First {
     KitRecovered,
     /// The first note read (its copy goes on the truck's board).
     NotePinned,
+    /// A kind so often in hand its callout's gone quiet (#107): how to ask
+    /// again.
+    Recall,
     /// A walker's gun settling on you: the shot is a breath away.
     Aimed,
     /// A sentry's chirp: it has you in its sweep.
@@ -100,6 +103,15 @@ pub enum First {
     /// The first of a family picked up out there: what it's for
     /// (`onboarding::pickups`).
     Picked(Family),
+    /// A machine after you ran into a burner, a snare, a lift or a well,
+    /// in your sight: chasing, they don't look where they go.
+    Lured,
+    /// A machine lost you through a fold (a mirror), in your sight.
+    Dazzled,
+    /// A machine in a hush went deaf, in your sight.
+    Deafened,
+    /// A machine stiffened in a frost, in your sight.
+    Stiffened,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -123,6 +135,10 @@ impl From<Malfunction> for JamKind {
 }
 
 pub const ALL: &[First] = &[
+    First::Lured,
+    First::Dazzled,
+    First::Deafened,
+    First::Stiffened,
     First::Jam(JamKind::Eject),
     First::Jam(JamKind::Feed),
     First::Jam(JamKind::Double),
@@ -145,6 +161,7 @@ pub const ALL: &[First] = &[
     First::ConvoyTook,
     First::KitRecovered,
     First::NotePinned,
+    First::Recall,
     First::Aimed,
     First::Sentry,
     First::Hush,
@@ -279,6 +296,7 @@ impl First {
             First::ConvoyTook => {
                 &["Truck: \"That's through the Gate. Kept, they call it. Be quicker.\""]
             }
+            First::Recall => &["Truck: \"Forgot what that is? Hold it up close and look.\""],
             First::NotePinned => {
                 &["Truck: \"Reading their notes? I keep copies. Board in the back.\""]
             }
@@ -344,6 +362,20 @@ impl First {
                 &["Truck: \"Under cover. It doesn't shoot, but it sends for those that do.\""]
             }
             First::Picked(f) => f.lines(),
+            // (Said as it happens, in your sight: the Zone hurts them too,
+            // and that's yours to use, `robots::hazards`.)
+            First::Lured => {
+                &["Truck: \"Lead them in. Chasing you, they don't look where they run.\""]
+            }
+            First::Dazzled => {
+                &["Truck: \"Lost you in the fold. A mirror blinds them a while. Slip off.\""]
+            }
+            First::Deafened => {
+                &["Truck: \"Take it now. Deaf in that quiet, it won't hear your shots.\""]
+            }
+            First::Stiffened => {
+                &["Truck: \"Get clear while it's in there. Cold's in its joints: it's slow.\""]
+            }
         }
     }
 }
@@ -448,6 +480,7 @@ impl Plugin for FirstsPlugin {
                         worn,
                         bleeding,
                         anomaly_kit,
+                        zone_on_machines,
                         deaths,
                         convoy,
                         asked,
@@ -645,6 +678,72 @@ fn robots_heard(
             m.meet(First::LostYou);
         }
     }
+}
+
+/// How far off, and how far off your look, a machine the Zone strikes is
+/// seen happen (m, degrees).
+const ZONE_SEEN: f32 = 45.0;
+const ZONE_SEEN_DEG: f32 = 55.0;
+
+/// The Zone doing something to a machine, as you see it happen: the lure
+/// (one after you ran into a burner, a snare, a lift or a well), a fold's
+/// dazzle, a hush's deafness, a frost's stiffness. The machine shows it
+/// itself (`robots::hazards`' tells); the line says it's yours to use.
+fn zone_on_machines(
+    mut struck: MessageReader<crate::robots::hazards::HazardStruck>,
+    minds: Query<&Awareness>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut m: Meet,
+) {
+    let Some(me) = locals.iter().next() else {
+        struck.clear();
+        return;
+    };
+    let Some(eye) = heads
+        .iter()
+        .find(|(_, c)| c.parent() == me)
+        .map(|(g, _)| *g)
+    else {
+        struck.clear();
+        return;
+    };
+    for ev in struck.read() {
+        if !seen_happen(eye.translation(), eye.forward().as_vec3(), ev.at) {
+            continue;
+        }
+        let after_me = minds.get(ev.robot).is_ok_and(|a| a.target == Some(me));
+        if let Some(f) = zone_first(ev.hazard, ev.effect, after_me) {
+            m.meet(f);
+        }
+    }
+}
+
+/// Whether something at `at` is seen happen from an eye at `eye` looking
+/// along `look`: near enough, and before you.
+fn seen_happen(eye: Vec3, look: Vec3, at: Vec3) -> bool {
+    let to = at - eye;
+    to.length() < ZONE_SEEN && to.normalize_or_zero().dot(look) > ZONE_SEEN_DEG.to_radians().cos()
+}
+
+/// What seeing a hazard do this to a machine teaches (`after_me`: it was
+/// after you).
+fn zone_first(
+    hazard: crate::robots::hazards::Hazard,
+    effect: crate::robots::hazards::Effect,
+    after_me: bool,
+) -> Option<First> {
+    use crate::robots::hazards::{Effect, Hazard};
+    Some(match (hazard, effect) {
+        (_, Effect::Unaffected) => return None,
+        (Hazard::Burner | Hazard::Snare | Hazard::Lift | Hazard::Well, _) if after_me => {
+            First::Lured
+        }
+        (Hazard::Mirror, Effect::Dazzled) => First::Dazzled,
+        (Hazard::Hush, Effect::Deafened | Effect::Dazzled) => First::Deafened,
+        (Hazard::Frost, _) => First::Stiffened,
+        _ => return None,
+    })
 }
 
 /// A walker's gun settling on you, a sentry's chirp near you, and the
@@ -1772,6 +1871,46 @@ mod tests {
             let held = app.world().resource::<Queue>().has_you > 0.0;
             assert_eq!(held, f != First::Minelayer, "{f:?}: go still held {held}");
         }
+    }
+
+    /// The Zone on a machine is told as you see it: before you and near,
+    /// and the lure only for one that was after you.
+    #[test]
+    fn the_zone_on_a_machine_is_told_as_you_see_it() {
+        use crate::robots::hazards::{Effect, Hazard};
+        let eye = Vec3::new(0.0, 1.7, 0.0);
+        assert!(seen_happen(eye, Vec3::NEG_Z, Vec3::new(3.0, 1.0, -20.0)));
+        assert!(
+            !seen_happen(eye, Vec3::NEG_Z, Vec3::new(0.0, 1.0, 20.0)),
+            "behind you"
+        );
+        assert!(
+            !seen_happen(eye, Vec3::NEG_Z, Vec3::new(0.0, 1.0, -60.0)),
+            "too far"
+        );
+        assert_eq!(
+            zone_first(Hazard::Snare, Effect::Hurt, true),
+            Some(First::Lured)
+        );
+        assert_eq!(
+            zone_first(Hazard::Burner, Effect::Hurt, false),
+            None,
+            "not after you"
+        );
+        assert_eq!(
+            zone_first(Hazard::Mirror, Effect::Dazzled, false),
+            Some(First::Dazzled)
+        );
+        assert_eq!(
+            zone_first(Hazard::Hush, Effect::Deafened, false),
+            Some(First::Deafened)
+        );
+        assert_eq!(
+            zone_first(Hazard::Frost, Effect::Slowed, true),
+            Some(First::Stiffened)
+        );
+        assert_eq!(zone_first(Hazard::Mirror, Effect::Unaffected, true), None);
+        assert_eq!(zone_first(Hazard::Gas, Effect::Hurt, true), None);
     }
 
     /// Every line fits the wrist whole, with no game words in it.

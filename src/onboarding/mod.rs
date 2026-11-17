@@ -29,6 +29,7 @@
 pub mod census;
 pub mod first_hour;
 pub mod firsts;
+pub mod gates;
 pub mod hints;
 pub mod pickups;
 pub mod second_hour;
@@ -46,7 +47,7 @@ use crate::interact::{GrabPoint, Grabbable, Held, InteractEvent, Socket, SocketK
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::raid::bench::{ScreenStyle, ScreenText};
-use crate::raid::truck::{FLOOR, Pressable, Stash, Truck, base_pose};
+use crate::raid::truck::{Pressable, Stash, Truck};
 use crate::raid::{Phase, RadioCall, Raid, Show};
 use crate::rig::haptics::{Haptic, StepDone};
 use crate::rig::{LocalPlayer, RigDriver, Side};
@@ -59,8 +60,6 @@ use crate::world::{Layer, Zone};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Goal {
     TakePistol,
-    TakeRadio,
-    Pocket,
     Turn,
     Crouch,
     Run,
@@ -94,12 +93,10 @@ impl Goal {
     pub fn label(self) -> &'static str {
         match self {
             Goal::TakePistol => "Take the pistol",
-            Goal::TakeRadio => "Take the radio",
             Goal::Turn => "Turn around",
             Goal::Crouch => "Crouch",
             Goal::Run => "Run",
             Goal::PutAway => "Holster the pistol",
-            Goal::Pocket => "Radio on your chest",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
             Goal::FillMag => "Rounds into the mag",
@@ -160,9 +157,9 @@ impl Goal {
     /// Where a watcher takes something new, it goes here first.
     pub fn accepts(self, flat: bool) -> &'static [&'static str] {
         match (self, flat) {
-            // `watch_hands`: a grab from the stash crate.
-            (Goal::TakePistol | Goal::TakeRadio, false) => &["grip"],
-            (Goal::TakePistol | Goal::TakeRadio, true) => &["e"],
+            // `watch_hands`: the range table's pistol taken.
+            (Goal::TakePistol, false) => &["grip"],
+            (Goal::TakePistol, true) => &["e"],
             // `watch_moves`: the gun hand's stick sideways; the view swung.
             (Goal::Turn, false) => &["right stick"],
             (Goal::Turn, true) => &["mouse"],
@@ -178,8 +175,6 @@ impl Goal {
             // shoulder (the pack).
             (Goal::PutAway, false) => &["hip", "open your hand"],
             (Goal::PutAway, true) => &["g"],
-            (Goal::Pocket, false) => &["chest", "open your hand"],
-            (Goal::Pocket, true) => &["g"],
             (Goal::Pack, false) => &["shoulder", "open your hand"],
             (Goal::Pack, true) => &["g"],
             (Goal::FarGrab, false) => &["point", "grip", "flick"],
@@ -219,8 +214,10 @@ impl Goal {
             (Goal::Artifact, true) => &["e"],
             (Goal::Button, false) => &["finger"],
             (Goal::Button, true) => &["e"],
-            (Goal::CallTruck, false) => &["a or x"],
-            (Goal::CallTruck, true) => &["u"],
+            // `watch_uses`: a call from the set on the north post's pole
+            // (`raid::transceiver`).
+            (Goal::CallTruck, false) => &["grip"],
+            (Goal::CallTruck, true) => &["e"],
             (Goal::PullCord, false) => &["grip", "cord"],
             (Goal::PullCord, true) => &["e"],
         }
@@ -231,8 +228,7 @@ impl Goal {
     /// step's about you (a stick, your wrist, what's in your hand).
     pub fn names(self) -> Option<Names> {
         Some(match self {
-            Goal::TakePistol => Names::Stash("pm_pistol"),
-            Goal::TakeRadio => Names::Stash("radio"),
+            Goal::TakePistol => Names::Placed(Placed::RangeGun),
             Goal::Button => Names::SettingsCard,
             Goal::FarGrab => Names::Placed(Placed::FarBox),
             Goal::FillMag => Names::Placed(Placed::RangeMag),
@@ -242,6 +238,7 @@ impl Goal {
             Goal::Search => Names::Placed(Placed::HouseFind),
             Goal::Probe => Names::Snare,
             Goal::Artifact => Names::Placed(Placed::Stone),
+            Goal::CallTruck => Names::FieldSet,
             Goal::PullCord => Names::Cord,
             _ => return None,
         })
@@ -251,18 +248,10 @@ impl Goal {
     /// free hand means what was in it has somewhere to go.
     pub fn needs(self) -> &'static [Skill] {
         match self {
-            // The radio's taken with the pistol put away.
-            Goal::TakeRadio => &[Skill::Holster],
-            // A finger free to push: both put away.
-            Goal::Button => &[Skill::Holster, Skill::Pocket],
-            Goal::FarGrab | Goal::Probe | Goal::Search | Goal::OpenDoor => {
-                &[Skill::Holster, Skill::Pocket]
-            }
             // A magazine in one hand and the box in the other.
-            Goal::FillMag => &[Skill::Holster, Skill::Pocket, Skill::Pack],
+            Goal::FillMag => &[Skill::Holster, Skill::Pack],
             Goal::SeatMag => &[Skill::Holster],
             Goal::Artifact => &[Skill::FarGrab],
-            Goal::CallTruck => &[Skill::Pocket],
             _ => &[],
         }
     }
@@ -271,7 +260,6 @@ impl Goal {
     pub fn teaches(self) -> &'static [Skill] {
         match self {
             Goal::PutAway => &[Skill::Holster],
-            Goal::Pocket => &[Skill::Pocket],
             Goal::Button => &[Skill::Press],
             Goal::FarGrab => &[Skill::FarGrab],
             Goal::Pack => &[Skill::Pack],
@@ -282,10 +270,8 @@ impl Goal {
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
-            (Goal::TakePistol, false) => "The black pistol, ringed\nin the crate. Squeeze GRIP.",
-            (Goal::TakeRadio, false) => "The green radio, ringed\nin the crate. Squeeze GRIP.",
-            (Goal::TakePistol, true) => "The black pistol, ringed\nin the crate. Look. Press E.",
-            (Goal::TakeRadio, true) => "The green radio, ringed\nin the crate. Look. Press E.",
+            (Goal::TakePistol, false) => "The black pistol, ringed\non the table. Squeeze GRIP.",
+            (Goal::TakePistol, true) => "The black pistol, ringed\non the table. Look. Press E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
             (Goal::Crouch, false) => "Squat down, or pull the\nright stick down.",
@@ -294,8 +280,6 @@ impl Goal {
             (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip.\nOpen your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
-            (Goal::Pocket, false) => "Hold it to your chest.\nOpen your hand.",
-            (Goal::Pocket, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "The box: over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
             (Goal::FarGrab, false) => "Point at the ringed box.\nSqueeze GRIP, flick back.",
@@ -336,8 +320,8 @@ impl Goal {
             (Goal::Artifact, true) => "From the edge: look at\nit. Press E.",
             (Goal::Button, false) => "Point a finger, TRIGGER\noff. Push the amber cap.",
             (Goal::Button, true) => "Look at the card. Press E.",
-            (Goal::CallTruck, false) => "Radio in hand.\nPress A or X.",
-            (Goal::CallTruck, true) => "Radio in hand. Press U.",
+            (Goal::CallTruck, false) => "The set on the post's pole.\nSqueeze GRIP on it.",
+            (Goal::CallTruck, true) => "The set on the post's pole.\nLook. Press E.",
             (Goal::PullCord, false) => "Climb in the back.\nGRIP the cord by the cab.",
             (Goal::PullCord, true) => "Climb in. Look at the\ncord by the cab. Press E.",
         }
@@ -353,6 +337,8 @@ pub enum Names {
     SettingsCard,
     HouseDoor,
     Snare,
+    /// The extract's fixed radio (`raid::transceiver`).
+    FieldSet,
     Cord,
 }
 
@@ -365,20 +351,23 @@ pub struct Marked;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Skill {
     Holster,
-    Pocket,
     Pack,
     Press,
     FarGrab,
 }
 
-/// A station: a post by the track (the first hangs in the truck).
+/// A station: a post by the track, in a bay of the yard
+/// (`docs/YARD_SHAPE.md`).
 pub struct Station {
     pub title: &'static str,
-    /// Where its post stands, map metres (unused for the truck's).
+    /// Where its post stands, map metres.
     pub at: [f32; 2],
     /// Which way its board faces, degrees, as map markers (0 faces +Z,
     /// 90 faces -X, 270 faces +X).
     pub rot: f32,
+    /// The bay it's in (1 is the start): gate `bay` opens once every
+    /// station in it is done or SKIPped ([`gate_open`]).
+    pub bay: u8,
     pub goals: &'static [Goal],
     /// Where it is, for the driver sending you on to it.
     pub where_: &'static str,
@@ -391,35 +380,22 @@ pub struct Station {
     pub in_order: bool,
 }
 
-/// The stations, in order, from the truck north up the track.
+/// The stations, in order, from the start north down the track through
+/// the bays (#89): you load standing in the first, the truck nowhere, and
+/// each kind of thing is met where it's used (the designer: the truck at
+/// the start "exposes them to a whole bunch of stuff at once").
 pub const STATIONS: &[Station] = &[
-    // The pistol is holstered before the radio's taken, and the radio
-    // pocketed before anything else: hands are never both full before
-    // you've been shown where things go (the playtest held both, looking
-    // for a pocket nobody had shown it).
-    Station {
-        title: "YOUR KIT",
-        at: [0.0, 0.0],
-        rot: 0.0,
-        goals: &[
-            Goal::TakePistol,
-            Goal::PutAway,
-            Goal::TakeRadio,
-            Goal::Pocket,
-        ],
-        where_: "the crate in the truck",
-        tip: "Everything you own rides\nin that crate between raids.",
-        in_order: true,
-    },
-    // In the truck too, and early: pushing a button is how anything on a
-    // card is done, and this one opens the settings (the playtest looked
-    // for a menu and found none).
+    // The start board, by where you load: pushing a button is how anything
+    // on a card is done, and this one opens the settings (the playtest
+    // looked for a menu and found none). START OVER and ON TO THE ZONE
+    // are on every post.
     Station {
         title: "SETTINGS",
-        at: [0.0, 0.0],
+        at: START_BOARD_AT,
         rot: 0.0,
+        bay: 1,
         goals: &[Goal::Button],
-        where_: "the SETTINGS card on the wall to your left",
+        where_: "the board on your left",
         tip: "Change them any time.",
         in_order: false,
     },
@@ -427,25 +403,34 @@ pub const STATIONS: &[Station] = &[
         title: "GETTING ABOUT",
         at: [-3.5, 89.0],
         rot: 0.0,
+        bay: 1,
         goals: &[Goal::Turn, Goal::Crouch, Goal::Run],
-        where_: "off the back of the truck, the lamp on your left",
+        where_: "the lamp on your left, short of the gate",
         tip: "Running tires you; weight\nslows you. Crouched, the\nmachines see you later.",
         in_order: false,
     },
     Station {
         title: "OUT OF REACH",
-        at: [-3.0, 83.5],
+        at: [-2.5, 82.0],
         rot: 0.0,
+        bay: 2,
         goals: &[Goal::FarGrab, Goal::Pack],
-        where_: "the lamp by the pen, straight on",
+        where_: "through the gate, the lamp by the pen",
         tip: "Works on anything loose\nup to five metres off.\nWeight slows you.",
         in_order: true,
     },
+    // The pistol is met where it's used, and holstered before anything
+    // else: hands are never both full before you've been shown where
+    // things go (the playtest held both, looking for a pocket nobody had
+    // shown it).
     Station {
         title: "THE RANGE",
         at: [-6.0, 47.5],
         rot: 315.0,
+        bay: 3,
         goals: &[
+            Goal::TakePistol,
+            Goal::PutAway,
             Goal::FillMag,
             Goal::SeatMag,
             Goal::Rack,
@@ -453,7 +438,7 @@ pub const STATIONS: &[Station] = &[
             Goal::Safety,
             Goal::HitPlate,
         ],
-        where_: "the range, left past the gate",
+        where_: "through the gate, the range table on the left",
         tip: "Eight rounds in a PM's\nmag. Count them.",
         in_order: true,
     },
@@ -463,6 +448,7 @@ pub const STATIONS: &[Station] = &[
         title: "RUN IT DRY",
         at: [-9.5, 46.5],
         rot: 315.0,
+        bay: 3,
         goals: &[
             Goal::RunDry,
             Goal::DropMag,
@@ -478,8 +464,9 @@ pub const STATIONS: &[Station] = &[
         title: "THE HOUSE",
         at: [7.0, 27.0],
         rot: 90.0,
+        bay: 4,
         goals: &[Goal::OpenDoor, Goal::Search],
-        where_: "the house on the right",
+        where_: "through the gate, the house on the right",
         tip: "Scrap and parts go to the\nbench in the truck.",
         in_order: false,
     },
@@ -487,8 +474,9 @@ pub const STATIONS: &[Station] = &[
         title: "FIRST AID",
         at: [4.5, 8.0],
         rot: 90.0,
+        bay: 5,
         goals: &[Goal::Wrist, Goal::Dressing],
-        where_: "the lamp on the right",
+        where_: "through the gate, the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
         in_order: false,
     },
@@ -496,21 +484,43 @@ pub const STATIONS: &[Station] = &[
         title: "THE SHIMMER",
         at: [4.5, -30.0],
         rot: 90.0,
+        bay: 6,
         goals: &[Goal::Probe, Goal::Artifact],
-        where_: "the lamp on the right. Mind the sparks",
+        where_: "through the gate, by the sparks on the right",
         tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
         in_order: true,
     },
+    // The last: the way out, and the first sight of the truck. A fixed
+    // set at the north post calls it (#94); in it, the cord ends the yard.
     Station {
-        title: "GOING HOME",
+        title: "THE EXTRACT",
         at: [4.0, -64.0],
         rot: 0.0,
+        bay: 7,
         goals: &[Goal::CallTruck, Goal::PullCord],
-        where_: "the north post, end of the track",
-        tip: "Here it's quick. Out there:\n2 min to come, waits 5.\nMy card has your first job.",
+        where_: "through the last gate, the north post",
+        tip: "Everything you own rides\nin that crate between raids.\nMy card has your first job.",
         in_order: false,
     },
 ];
+
+/// The start board's post: 1.5 m ahead of where you load and to your
+/// left, facing you.
+pub const START_BOARD_AT: [f32; 2] = [-1.5, 94.5];
+
+/// The yard's gates, `gate_1` first: gate `k` stands between bay `k` and
+/// the next.
+pub const GATES: u8 = 6;
+
+/// Whether gate `k` (1-based) stands open: every station in its bay, and
+/// so in every bay before it, done or SKIPped; and the yard done, all.
+pub fn gate_open(ob: &Onboarding, k: u8) -> bool {
+    STATIONS
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.bay <= k)
+        .all(|(i, _)| ob.station_done(i))
+}
 
 /// Every goal, in order.
 pub fn all_goals() -> impl Iterator<Item = Goal> {
@@ -575,6 +585,9 @@ pub struct Onboarding {
     pub sent_to: Option<usize>,
     /// The driver's said how to mark a moment.
     pub told_mark: bool,
+    /// The driver's said to come back through a gate that's still shut
+    /// (`gates::through_the_gates`).
+    pub told_back: bool,
     /// The house's crate has scratched your watch arm (`the_scratch`).
     pub scratched: bool,
     /// The rooks by the truck have gone up, and you've been told why that
@@ -685,8 +698,8 @@ pub enum Prop {
     RangeTable,
     /// A crate to put a thing on.
     Crate(Vec3),
-    /// The board by the tailgate, on its post.
-    BoardPost,
+    /// The settings cards' board, beside the start's post.
+    SettingsBoard,
     /// A burnt stump the burner's stone sits on, out of the grass.
     Stump,
     /// Two stacks of crates across the track with a beam over the gap.
@@ -721,16 +734,22 @@ pub struct Shimmer;
 #[derive(Component)]
 pub struct Probed;
 
-/// Board sizes: a station's (read from a few steps off), the truck's (from
-/// where you stand in the bed), the list by the tailgate.
+/// Board sizes: a station's (read from a few steps off), the old list by
+/// the tailgate.
 pub const SIGN: Vec2 = crate::world::notes::SIGN;
-pub const TRUCK_SIGN: Vec2 = Vec2::new(0.9, 0.62);
 pub const CHECKLIST: Vec2 = Vec2::new(0.8, 1.0);
 /// A post's board centre, and its lamp's height.
 pub const BOARD_Y: f32 = 1.55;
 pub const LAMP_Y: f32 = 2.32;
 pub const SKIP_CARD: Vec2 = Vec2::new(0.22, 0.09);
 pub const PUSH_CARD: Vec2 = Vec2::new(0.36, 0.15);
+pub const START_OVER_CARD: Vec2 = Vec2::new(0.3, 0.1);
+pub const ZONE_CARD: Vec2 = Vec2::new(0.3, 0.14);
+/// The settings board beside the start's post: its panel, its middle's
+/// height, and where it stands from the post (to its left as you face it).
+pub const SETTINGS_BOARD: Vec2 = Vec2::new(1.62, 1.08);
+pub const SETTINGS_BOARD_Y: f32 = 1.35;
+pub const SETTINGS_BOARD_OFF: Vec2 = Vec2::new(-1.9, 0.0);
 
 pub struct OnboardingPlugin;
 
@@ -758,7 +777,7 @@ impl Plugin for OnboardingPlugin {
             )
             .add_systems(
                 PostStartup,
-                (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
+                (setup, gates::on_foot, dev_start_at).run_if(in_yard),
             )
             .add_systems(
                 Update,
@@ -788,7 +807,12 @@ impl Plugin for OnboardingPlugin {
                     ),
                     warn_near_anomalies,
                     hurry_the_truck,
-                    out_of_the_truck.after(crate::raid::tick_raid),
+                    (
+                        gates::gates,
+                        gates::truck_out_of_sight,
+                        gates::settings_to_the_start,
+                        gates::through_the_gates,
+                    ),
                     bot::direct,
                 )
                     .chain()
@@ -806,18 +830,17 @@ pub struct Folded(pub CollisionLayers);
 /// at a time (the playtest's truck: a dozen settings cards, the logbook,
 /// the bench, a note and the list, all at once, "completely
 /// overwhelming"):
-/// - a station's board: in the truck only while it's the station; out in
-///   the yard always (blank ahead, its tip done);
+/// - a station's board: always (blank ahead, its tip done);
 /// - a SKIP card: its station's, while it's the station;
 /// - the SETTINGS card: always (it's the menu); the settings cards behind
 ///   it once it's been pushed;
-/// - the list by the tailgate: never (the lamps lead);
+/// - the old list by the tailgate: never (the lamps lead);
 /// - the truck's own boards (logbook, bench, route, job card): when it's
 ///   time to go home.
 pub fn yard_shows(ob: &Onboarding, what: Panel) -> bool {
     let current = ob.current();
     match what {
-        Panel::Sign(i) => !in_truck(i) || current == Some(i),
+        Panel::Sign(_) => true,
         Panel::Skip(i) => current == Some(i),
         Panel::Settings | Panel::Other => true,
         // Nothing to start over before anything's been done.
@@ -922,10 +945,16 @@ fn stash_by_station(
     items: Query<(&Item, Option<&Folded>, Option<&CollisionLayers>)>,
     children: Query<&Children>,
     catalog: Res<Catalog>,
+    trucks: Query<&Truck>,
 ) {
-    let reached = |s: Option<usize>| match (s, ob.current()) {
-        (None, _) | (_, None) => true,
-        (Some(s), Some(c)) => c >= s,
+    // Nothing of it till the truck's come to the last bay
+    // (`gates::truck_out_of_sight`).
+    let come = trucks.iter().any(|t| !t.at_base);
+    let reached = |s: Option<usize>| {
+        come && match (s, ob.current()) {
+            (None, _) | (_, None) => true,
+            (Some(s), Some(c)) => c >= s,
+        }
     };
     for bag in &bags {
         for &e in &bag.contents {
@@ -976,6 +1005,7 @@ fn mark_the_step(
     cards: Query<(Entity, &OnboardCard)>,
     snares: Query<Entity, With<Probed>>,
     pressables: Query<(Entity, &Pressable)>,
+    sets: Query<Entity, With<crate::raid::transceiver::Transceiver>>,
     doors: Query<(Entity, &GlobalTransform), With<crate::world::buildings::DoorLeaf>>,
     buildings: Query<(&Building, &GlobalTransform)>,
 ) {
@@ -1002,6 +1032,7 @@ fn mark_the_step(
                 .iter()
                 .find(|(_, p)| **p == Pressable::BellPull)
                 .map(|(e, _)| e),
+            Names::FieldSet => sets.iter().next(),
             Names::HouseDoor => {
                 let house = buildings
                     .iter()
@@ -1152,17 +1183,6 @@ fn the_rats(
     }
 }
 
-/// The stations in the truck's bed (the kit, the settings): no post of
-/// their own, no SKIP card.
-pub fn in_truck(i: usize) -> bool {
-    STATIONS[i].goals.iter().any(|g| {
-        matches!(
-            g,
-            Goal::TakePistol | Goal::PutAway | Goal::TakeRadio | Goal::Pocket | Goal::Button
-        )
-    })
-}
-
 pub fn in_yard(opts: Res<LaunchOptions>) -> bool {
     opts.map == TRAINING_YARD
 }
@@ -1252,132 +1272,86 @@ fn setup(
     mut commands: Commands,
     zone: Res<Zone>,
     catalog: Res<Catalog>,
-    trucks: Query<Entity, With<Truck>>,
     anomalies: Query<(Entity, &GlobalTransform, &Transform), With<Anomaly>>,
     items: Query<(Entity, &Item, &Transform)>,
     doors: Query<(&crate::world::buildings::DoorLeaf, &GlobalTransform)>,
     buildings: Query<(&Building, &Transform)>,
 ) {
-    let truck = trucks.iter().next();
-    let base = base_pose(&zone);
     for (i, st) in STATIONS.iter().enumerate() {
-        let (post, board_at) = if in_truck(i) {
-            let Some(truck) = truck else { continue };
-            let at = if i == 0 {
-                // High on the cab wall, over the crate but clear of it: the
-                // playtest's board hung in front of the crate, in the way of
-                // the hands.
-                Transform::from_xyz(-0.52, FLOOR + 1.68, -1.42)
-                    .with_rotation(Quat::from_rotation_x(-0.2))
-            } else {
-                // On the left canvas wall where the settings cards fold out.
-                Transform::from_xyz(-1.1, FLOOR + 1.55, -0.7)
-                    .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
-            };
-            let post = commands
-                .spawn((
-                    Name::new(format!("Station {}", i + 1)),
-                    StationPost {
-                        index: i,
-                        lamp: Lamp::Dark,
-                    },
-                    at,
-                    Visibility::default(),
-                    ChildOf(truck),
-                ))
-                .id();
-            (post, Transform::from_xyz(0.0, 0.0, 0.02))
-        } else {
-            let post = commands
-                .spawn((
-                    Name::new(format!("Station {}", i + 1)),
-                    StationPost {
-                        index: i,
-                        lamp: Lamp::Dark,
-                    },
-                    Transform::from_translation(ground(&zone, st.at)).with_rotation(facing(st.rot)),
-                    Visibility::default(),
-                    RigidBody::Static,
-                    Collider::compound(vec![(
-                        Vec3::new(0.0, 1.2, -0.05),
-                        Quat::IDENTITY,
-                        Collider::cuboid(0.1, 2.4, 0.1),
-                    )]),
-                    CollisionLayers::new(Layer::World, LayerMask::ALL),
-                ))
-                .id();
-            // SKIP, low on the post's right, under the board.
-            commands.spawn((
-                card(OnboardCard::Skip(i), "SKIP", SKIP_CARD),
-                Transform::from_xyz(0.27, BOARD_Y - SIGN.y * 0.5 - 0.14, 0.03),
-                ChildOf(post),
-            ));
-            (post, Transform::from_xyz(0.0, BOARD_Y, 0.04))
-        };
-        let size = if i == 0 { TRUCK_SIGN } else { SIGN };
+        let post = commands
+            .spawn((
+                Name::new(format!("Station {}", i + 1)),
+                StationPost {
+                    index: i,
+                    lamp: Lamp::Dark,
+                },
+                Transform::from_translation(ground(&zone, st.at)).with_rotation(facing(st.rot)),
+                Visibility::default(),
+                RigidBody::Static,
+                Collider::compound(vec![(
+                    Vec3::new(0.0, 1.2, -0.05),
+                    Quat::IDENTITY,
+                    Collider::cuboid(0.1, 2.4, 0.1),
+                )]),
+                CollisionLayers::new(Layer::World, LayerMask::ALL),
+            ))
+            .id();
         commands.spawn((
             Name::new("Station board"),
             StationSign(i),
-            if in_truck(i) {
-                crate::render::legibility::TextSource::TruckBoard
-            } else {
-                crate::render::legibility::TextSource::StationBoard
-            },
-            paper(String::new(), size),
-            board_at,
+            crate::render::legibility::TextSource::StationBoard,
+            paper(String::new(), SIGN),
+            Transform::from_xyz(0.0, BOARD_Y, 0.04),
             Visibility::default(),
             ChildOf(post),
         ));
-        if STATIONS[i].goals.contains(&Goal::Button) {
-            // Under its board, below the settings cards' rows.
+        // Under the board: SKIP on the right (SETTINGS beside it on the
+        // start's post); under them START OVER and ON TO THE ZONE, on every
+        // post (nobody walks back to the start to leave or begin again).
+        // Each card's button sits on its right, clear of the next.
+        let row = BOARD_Y - SIGN.y * 0.5 - 0.14;
+        let row2 = row - 0.17;
+        commands.spawn((
+            card(OnboardCard::Skip(i), "SKIP", SKIP_CARD),
+            Transform::from_xyz(0.36, row, 0.03),
+            ChildOf(post),
+        ));
+        commands.spawn((
+            card(OnboardCard::StartOver, "START OVER", START_OVER_CARD),
+            Transform::from_xyz(-0.32, row2, 0.03),
+            ChildOf(post),
+        ));
+        let mut zone_card = crate::camp::skip_card();
+        zone_card.0.size = ZONE_CARD;
+        commands.spawn((
+            zone_card,
+            crate::render::legibility::TextSource::Card,
+            Transform::from_xyz(0.12, row2, 0.03),
+            ChildOf(post),
+        ));
+        if st.goals.contains(&Goal::Button) {
             commands.spawn((
                 card(OnboardCard::Push, "SETTINGS", PUSH_CARD),
-                Transform::from_xyz(0.0, -0.47, 0.01),
+                Transform::from_xyz(-0.05, row, 0.03),
                 ChildOf(post),
             ));
         }
     }
-
-    // The list by the tailgate, facing the steps you come down; START OVER
-    // and ON TO THE ZONE under it.
-    let at = base.transform_point(Vec3::new(1.9, 0.0, 3.4));
-    let post = commands
-        .spawn((
-            Name::new("Training board"),
-            Prop::BoardPost,
-            Transform::from_translation(Vec3::new(at.x, zone.ground(at.x, at.z), at.z))
-                .with_rotation(base.rotation * Quat::from_rotation_y(std::f32::consts::PI)),
-            Visibility::default(),
-            RigidBody::Static,
-            Collider::compound(vec![(
-                Vec3::new(0.0, 1.0, -0.05),
-                Quat::IDENTITY,
-                Collider::cuboid(0.1, 2.0, 0.1),
-            )]),
-            CollisionLayers::new(Layer::World, LayerMask::ALL),
-        ))
-        .id();
+    // The settings cards' own board, beside the start's: the cards come
+    // off the truck's wall to it (`settings_to_the_start`).
+    let at = Vec2::from(START_BOARD_AT) + SETTINGS_BOARD_OFF;
     commands.spawn((
-        Name::new("Training list"),
-        Checklist,
-        crate::render::legibility::TextSource::TrainingList,
-        paper(String::new(), CHECKLIST),
-        Transform::from_xyz(0.0, 1.45, 0.04),
+        Name::new("Settings board"),
+        Prop::SettingsBoard,
+        Transform::from_translation(ground(&zone, at.into())).with_rotation(facing(0.0)),
         Visibility::default(),
-        ChildOf(post),
-    ));
-    commands.spawn((
-        card(OnboardCard::StartOver, "START OVER", Vec2::new(0.3, 0.1)),
-        Transform::from_xyz(-0.2, 0.8, 0.03),
-        ChildOf(post),
-    ));
-    let mut skip = crate::camp::skip_card();
-    skip.0.size = Vec2::new(0.3, 0.14);
-    commands.spawn((
-        skip,
-        crate::render::legibility::TextSource::Card,
-        Transform::from_xyz(0.2, 0.62, 0.03),
-        ChildOf(post),
+        RigidBody::Static,
+        Collider::compound(vec![(
+            Vec3::new(0.0, 1.0, -0.05),
+            Quat::IDENTITY,
+            Collider::cuboid(SETTINGS_BOARD.x, 2.0, 0.06),
+        )]),
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
 
     let spawn = |commands: &mut Commands, id: &str, at: Transform| -> Option<Entity> {
@@ -1765,22 +1739,6 @@ fn setup(
     }
 }
 
-/// A bot running the course starts where a person does: in the bed.
-fn bot_in_the_bed(
-    zone: Res<Zone>,
-    opts: Res<LaunchOptions>,
-    mut players: Query<&mut Transform, With<LocalPlayer>>,
-) {
-    if opts.scenario.as_deref() != Some(bot::SCENARIO) {
-        return;
-    }
-    let base = base_pose(&zone);
-    for mut t in &mut players {
-        t.translation = base.transform_point(Vec3::new(0.3, FLOOR + 0.05, 0.6));
-        t.rotation = base.rotation;
-    }
-}
-
 /// Marks a goal done (once, and only while it's being taught:
 /// [`Onboarding::asks`]), and says so.
 fn complete(ob: &mut Onboarding, goal: Goal, out: &mut MessageWriter<GoalDone>) {
@@ -1811,7 +1769,6 @@ fn watch_hands(
     held: Query<(Entity, &Held, Option<&Placed>)>,
     locals: Query<(), With<LocalPlayer>>,
     catalog: Res<Catalog>,
-    mut in_crate: Local<Vec<Entity>>,
 ) {
     let id = |e: Entity| {
         items
@@ -1821,13 +1778,13 @@ fn watch_hands(
     };
     for ev in events.read() {
         match ev {
+            // The range table's pistol, the one the range teaches on.
             InteractEvent::Grabbed { item, .. } => {
-                if in_crate.contains(item) {
-                    match id(*item) {
-                        Some("pm_pistol") => complete(&mut ob, Goal::TakePistol, &mut out),
-                        Some("radio") => complete(&mut ob, Goal::TakeRadio, &mut out),
-                        _ => {}
-                    }
+                if items
+                    .get(*item)
+                    .is_ok_and(|(_, p)| p == Some(&Placed::RangeGun))
+                {
+                    complete(&mut ob, Goal::TakePistol, &mut out);
                 }
             }
             InteractEvent::Socketed { socket, item } => {
@@ -1835,12 +1792,9 @@ fn watch_hands(
                     if matches!(s.kind, SocketKind::Body(_))
                         && owner.is_some_and(|o| locals.contains(o.0))
                     {
-                        // The pistol holstered; the radio in its sleeve on
-                        // the chest (it fits no pocket: `body::slot_fit`).
-                        match id(*item) {
-                            Some("pm_pistol") => complete(&mut ob, Goal::PutAway, &mut out),
-                            Some("radio") => complete(&mut ob, Goal::Pocket, &mut out),
-                            _ => {}
+                        // The pistol holstered.
+                        if id(*item) == Some("pm_pistol") {
+                            complete(&mut ob, Goal::PutAway, &mut out);
                         }
                     }
                 }
@@ -1854,14 +1808,6 @@ fn watch_hands(
                 }
             }
             _ => {}
-        }
-    }
-    // What's in the crate now, for the next frame's grabs (a grab takes it
-    // out of the crate before the event is read).
-    in_crate.clear();
-    for (_, b, stash) in &bags {
-        if stash {
-            in_crate.extend(b.contents.iter().copied());
         }
     }
     // In a local hand: the far box, the house's find, the stone.
@@ -2178,6 +2124,8 @@ fn press_cards(
     mut ob: ResMut<Onboarding>,
     mut out: MessageWriter<GoalDone>,
     mut raid: ResMut<Raid>,
+    zone: Res<Zone>,
+    mut players: Query<&mut Transform, With<LocalPlayer>>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -2200,6 +2148,12 @@ fn press_cards(
                 ob.done.clear();
                 ob.skipped.clear();
                 ob.sent_to = None;
+                ob.told_back = false;
+                // Every gate shuts behind you: back where you loaded, so
+                // nobody's left in a bay with its way back shut.
+                for mut t in &mut players {
+                    *t = gates::start_pose(&zone);
+                }
                 raid.tell(START_OVER_LINE, Show::View);
             }
             _ => {}
@@ -2209,13 +2163,13 @@ fn press_cards(
 
 /// What the driver says, each short enough for the wrist (three lines of
 /// 26: it shows only the newest message, and cuts a long one off).
-pub const GREET_VR: &str = "Driver: \"Kit's in the crate by your left knee. Reach in, squeeze.\"";
-pub const GREET_FLAT: &str = "Driver: \"Kit's in the crate, front left. Look at it, press E.\"";
+pub const GREET_VR: &str = "Driver: \"The board on your left. Push SETTINGS with a finger.\"";
+pub const GREET_FLAT: &str = "Driver: \"The board on your left. Look at SETTINGS, press E.\"";
 pub const SPENT_LINE: &str =
     "Driver: \"See it go dark? Spent. A few seconds, then it's back: your gap.\"";
 pub const ALL_DONE_LINE: &str = "Driver: \"That's the lot. The real one's colder.\"";
 pub const TOO_CLOSE_LINE: &str = "Driver: \"Back out. That shimmer burns. Ask me how I know.\"";
-pub const START_OVER_LINE: &str = "Driver: \"From the top. The crate in the truck.\"";
+pub const START_OVER_LINE: &str = "Driver: \"From the top. The board where you started.\"";
 
 pub fn next_line(station: usize) -> String {
     format!("Driver: \"Good. Next: {}.\"", STATIONS[station].where_)
@@ -2303,11 +2257,7 @@ pub fn sign_text(
     // One thing to read: the step you're on, with how, and nothing ahead
     // of it (the playtest's truck was "completely overwhelming").
     if ob.station_done(i) {
-        // Done: what's worth knowing, out in the yard; in the truck the
-        // board clears for the next.
-        if in_truck(i) {
-            return String::new();
-        }
+        // Done: what's worth knowing.
         // (Where next is the driver's to say, and the lit lamp's to
         // show: "Next: the lit lamp" on a board left the playtest stuck
         // in the truck for two minutes.)
@@ -2423,38 +2373,6 @@ fn hurry_the_truck(mut raid: ResMut<Raid>) {
     }
 }
 
-/// Stepping out of the truck says when the Surge is due: nothing to do
-/// with the yard, and it pushes the driver's directions off the wrist. Here
-/// the driver says where to go instead.
-fn out_of_the_truck(
-    mut raid: ResMut<Raid>,
-    mut ob: ResMut<Onboarding>,
-    driver: crate::rig::KnownDriver,
-) {
-    let Some(i) = raid
-        .log
-        .iter()
-        .position(|(t, _)| t.starts_with("Out of the truck. The Surge"))
-    else {
-        return;
-    };
-    raid.log.remove(i);
-    // Where to, if the driver hasn't said (once is enough: the playtest
-    // heard "Next: the lamp by the pen." twice in 28 s); else how to mark
-    // something, said once (nobody in the playtest found it).
-    if let Some(next) = ob.current().filter(|n| ob.sent_to != Some(*n)) {
-        ob.sent_to = Some(next);
-        raid.tell(
-            format!("Driver: \"Off you go. Next: {}.\"", STATIONS[next].where_),
-            Show::View,
-        );
-    } else if !ob.told_mark {
-        ob.told_mark = true;
-        let flat = driver.flat().unwrap_or(false);
-        raid.tell(if flat { MARK_LINE_FLAT } else { MARK_LINE_VR }, Show::View);
-    }
-}
-
 /// How to mark a moment for the playtest report (`sim::playtest`).
 pub const MARK_LINE_VR: &str = "Driver: \"Anything odd, stand still, click both sticks: noted.\"";
 pub const MARK_LINE_FLAT: &str = "Driver: \"Anything odd, press F9. I'll note it.\"";
@@ -2466,48 +2384,65 @@ pub mod bot;
 
 #[cfg(test)]
 mod tests {
-    /// No station's post is in the truck: the ones in it hang their boards
-    /// on its walls (a post stood on the settings board's spot came up
-    /// through the canopy), and every yard post stands clear of where the
-    /// truck parks.
+    /// Each station's post, and what its steps use, stands in its own bay
+    /// (`Station::bay`): between the gate behind it and the one ahead,
+    /// clear of both by a body's width. A step out of its bay would be
+    /// behind a gate that's shut, or done before its gate opened.
     #[test]
-    fn no_station_post_goes_through_the_truck() {
-        for i in 0..super::STATIONS.len() {
-            assert_eq!(
-                super::visuals::stands(i),
-                !super::in_truck(i),
-                "station {}",
-                i + 1
-            );
-        }
-        let opts = crate::launch::LaunchOptions {
-            robots: false,
-            map: super::TRAINING_YARD.into(),
-            ..Default::default()
+    fn each_station_and_its_things_stand_in_its_bay() {
+        let zone = crate::world::Zone::load(TRAINING_YARD);
+        let mut gate_z: Vec<(u8, f32)> = zone
+            .map
+            .placements
+            .iter()
+            .filter(|p| p.prefab == "yard_gate")
+            .filter_map(|p| Some((crate::world::yard::gate_index(&p.tag)?, p.at[1])))
+            .collect();
+        gate_z.sort_by_key(|g| g.0);
+        assert_eq!(
+            gate_z.iter().map(|g| g.0).collect::<Vec<_>>(),
+            (1..=GATES).collect::<Vec<_>>(),
+            "the map's gates"
+        );
+        // Bay k: north of gate k (-z), south of gate k-1.
+        let bay = |k: u8| {
+            let hi = gate_z
+                .iter()
+                .find(|g| g.0 + 1 == k)
+                .map_or(f32::MAX, |g| g.1 - 0.6);
+            let lo = gate_z
+                .iter()
+                .find(|g| g.0 == k)
+                .map_or(f32::MIN, |g| g.1 + 0.6);
+            (lo, hi)
         };
-        let mut app = crate::headless_app(opts, false);
-        app.finish();
-        app.cleanup();
-        app.update();
-        let zone = app.world().resource::<Zone>();
-        let truck = crate::raid::truck::base_pose(zone);
-        let (centre, half) = super::second_hour::TRUCK_BOX;
-        let inv = truck.compute_affine().inverse();
-        for (i, st) in super::STATIONS.iter().enumerate() {
-            if !super::visuals::stands(i) {
-                continue;
-            }
-            let l = inv
-                .transform_point3(Vec3::new(st.at[0], 0.0, st.at[1]))
-                .xz()
-                - centre;
+        let things: Vec<(&str, [f32; 2], Goal)> = vec![
+            ("the pen", FAR_STAND_AT, Goal::FarGrab),
+            ("the range table", RANGE_TABLE_AT, Goal::TakePistol),
+            ("the shimmer", SHIMMER_AT, Goal::Artifact),
+            ("the snare", SNARE_AT, Goal::Probe),
+            ("the parts crate", PARTS_CRATE_AT, Goal::Probe),
+            ("the low beam", BEAM_AT, Goal::FarGrab),
+        ];
+        let posts = STATIONS
+            .iter()
+            .map(|s| (s.title, s.at, s.goals[0]))
+            .chain(things);
+        for (what, at, g) in posts {
+            let k = STATIONS[station_of(g)].bay;
+            let (lo, hi) = bay(k);
             assert!(
-                l.x.abs() > half.x + 1.0 || l.y.abs() > half.y + 1.0,
-                "{}'s post at {:?} stands in the truck ({l})",
-                st.title,
-                st.at
+                (lo..hi).contains(&at[1]),
+                "{what} at {at:?} isn't in bay {k} ({lo}..{hi})"
             );
         }
+        // The extract's set (on the north post's pole) is in the last bay.
+        let rv = zone
+            .marker(&extraction_core::map::MarkerKind::Rendezvous)
+            .expect("the north post")
+            .at;
+        let (lo, hi) = bay(STATIONS[station_of(Goal::CallTruck)].bay);
+        assert!((lo..hi).contains(&rv[1]), "the north post at {rv:?}");
     }
 
     /// Each starter kind the truck's crate holds back for a station lies
@@ -2624,36 +2559,94 @@ mod tests {
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
 
-    /// The truck's crate shows the first station's kit and nothing else
-    /// (the designer: "bombarded with too many item types at once"); every
-    /// other starter kind waits for the station that teaches it, in order.
+    /// Nothing of the truck is in the yard till it's called and come: not
+    /// it, nor its crate's kit (the designer: the truck at the start
+    /// "exposes them to a whole bunch of stuff at once"). Nothing in reach
+    /// where you load.
     #[test]
-    fn the_crate_shows_only_what_the_first_station_uses() {
-        let kit = [
-            "pm_pistol",
-            "radio",
-            "pm_mag",
-            "ammo_9x18",
-            "flashlight",
-            "power_cell",
-            "field_dressing",
-            "canned_stew",
-            "cleaning_kit",
-            "map_case",
-            "compass",
-            "detector",
-            "bolt",
-        ];
-        let first: Vec<_> = kit
-            .iter()
-            .filter(|id| stash_station(id).is_none())
-            .collect();
-        assert!(first.len() <= 3, "at the start: {first:?}");
-        for id in kit {
-            if let Some(s) = stash_station(id) {
-                assert!(s > station_of(Goal::Pocket), "{id} before the kit's done");
+    fn the_truck_and_its_kit_wait_for_the_extract() {
+        // A first run's profile: the crate's filled.
+        let dir = std::env::temp_dir().join(format!("extraction-yard-kit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: super::TRAINING_YARD.into(),
+            data_dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let (truck, vis) = w
+            .query::<(Entity, &Visibility, &Truck)>()
+            .iter(w)
+            .map(|(e, v, _)| (e, *v))
+            .next()
+            .expect("the truck");
+        assert_eq!(vis, Visibility::Hidden, "the truck's in sight");
+        let kids: Vec<Entity> = w
+            .query::<&Children>()
+            .get(w, truck)
+            .map(|c| c.iter().collect())
+            .unwrap_or_default();
+        for e in kids {
+            if let Some(l) = w.get::<CollisionLayers>(e) {
+                assert_eq!(*l, CollisionLayers::NONE, "a part of it in the way");
             }
         }
+        let stashed: Vec<Entity> = w
+            .query_filtered::<&crate::interact::body::Backpack, With<Stash>>()
+            .iter(w)
+            .flat_map(|b| b.contents.clone())
+            .collect();
+        assert!(!stashed.is_empty(), "the crate's kit");
+        for e in stashed {
+            assert!(w.get::<Folded>(e).is_some(), "the crate's kit in reach");
+        }
+        // Where you load: nothing loose within reach (the census's 6 m).
+        let start = w
+            .query_filtered::<&Transform, With<LocalPlayer>>()
+            .iter(w)
+            .next()
+            .unwrap()
+            .translation;
+        let near: Vec<Vec3> = w
+            .query_filtered::<&GlobalTransform, (With<Item>, Without<Folded>)>()
+            .iter(w)
+            .map(|gt| gt.translation())
+            .filter(|p| p.xz().distance(start.xz()) < 6.0)
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(near.is_empty(), "within reach at the start: {near:?}");
+    }
+
+    /// A gate opens with its bay done or SKIPped, and only then; the yard
+    /// done, every gate; START OVER, none. Nobody's shut in: every gate
+    /// behind the station you're on stands open.
+    #[test]
+    fn a_gate_opens_with_its_bay() {
+        let mut ob = Onboarding::default();
+        assert!((1..=GATES).all(|k| !gate_open(&ob, k)), "at the start");
+        for g in all_goals() {
+            let here = STATIONS[station_of(g)].bay;
+            for k in 1..here {
+                assert!(gate_open(&ob, k), "gate {k} shut behind {g:?}");
+            }
+            assert!(!gate_open(&ob, here), "gate {here} open before {g:?}");
+            ob.done.push(g);
+        }
+        assert!((1..=GATES).all(|k| gate_open(&ob, k)), "the yard done");
+        let mut skipped = Onboarding::default();
+        for i in 0..STATIONS.len() {
+            if STATIONS[i].bay == 1 {
+                skipped.done.extend(STATIONS[i].goals);
+            }
+        }
+        assert!(gate_open(&skipped, 1) && !gate_open(&skipped, 2));
     }
 
     /// The rooks by the truck sit where walking off the tailgate to
@@ -2706,8 +2699,8 @@ mod tests {
         let walk = reach(crate::player::WALK_SPEED, false);
         let run = reach(crate::player::SPRINT_SPEED, false);
         let station = Vec2::from(STATIONS[station_of(Goal::Run)].at);
-        // Off the back of the truck and along to the lamp, walking.
-        let tailgate = Vec2::new(0.0, 92.0);
+        // From where you load along to the lamp, walking.
+        let tailgate = Vec2::new(0.0, 96.0);
         for i in 0..=20 {
             let p = tailgate.lerp(station, i as f32 / 20.0);
             assert!(
@@ -2849,13 +2842,8 @@ mod tests {
                     .flat_map(|f| access_modes().into_iter().map(move |c| (f, c)))
                 {
                     for i in 0..STATIONS.len() {
-                        let size = if i == 0 { TRUCK_SIGN } else { SIGN };
-                        let s = paper(sign_text(&ob, i, flat, &comfort), size);
-                        let source = if in_truck(i) {
-                            TextSource::TruckBoard
-                        } else {
-                            TextSource::StationBoard
-                        };
+                        let s = paper(sign_text(&ob, i, flat, &comfort), SIGN);
+                        let source = TextSource::StationBoard;
                         smallest = smallest.min(panel_deg(&s, source));
                         if let Err(e) = readable(&s, source) {
                             bad.push(e);
@@ -2873,7 +2861,8 @@ mod tests {
         for (text, size) in [
             ("SKIP", SKIP_CARD),
             ("PUSH ME", PUSH_CARD),
-            ("START OVER", Vec2::new(0.3, 0.1)),
+            ("START OVER", START_OVER_CARD),
+            ("ON TO THE ZONE", ZONE_CARD),
         ] {
             let s = ScreenText {
                 text: text.into(),
@@ -2903,16 +2892,12 @@ mod tests {
             MARK_LINE_FLAT,
             SPENT_LINE,
             SCRATCH_LINE,
+            gates::BACK_LINE,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)
         .to_vec();
         lines.extend((1..STATIONS.len()).map(next_line));
-        lines.extend(
-            STATIONS
-                .iter()
-                .map(|s| format!("Driver: \"Off you go. Next: {}.\"", s.where_)),
-        );
         for l in lines {
             let wrapped = crate::render::screen::wrap(&l, 26, usize::MAX);
             assert!(wrapped.len() <= 3, "{} lines: {l}", wrapped.len());
@@ -2935,10 +2920,10 @@ mod tests {
             }
             taught.extend(g.teaches());
         }
-        // Every station outside the truck has a SKIP card: pushing comes
-        // first.
-        let first_outside = (0..STATIONS.len()).find(|i| !in_truck(*i)).unwrap();
-        assert!(station_of(Goal::Button) < first_outside);
+        // Pushing's the first thing asked: every card (SKIP, START OVER,
+        // ON TO THE ZONE) is pushed.
+        assert_eq!(station_of(Goal::Button), 0);
+        assert_eq!(all_goals().next(), Some(Goal::Button));
     }
 
     /// Every board names what its step's code accepts, and so does

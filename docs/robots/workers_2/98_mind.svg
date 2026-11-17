@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" font-family="sans-serif" font-size="12"><rect width="480" height="300" fill="#f6f4ee"/>
+<text x="12" y="20" font-weight="bold">#98 Engineer: builds where you've been</text>
+<rect x="20" y="40" width="70" height="40" fill="#999"/><text x="30" y="65">Gate</text>
+<path d="M60 160 C150 160 250 140 420 150" stroke="#36c" stroke-width="4" fill="none" stroke-dasharray="2 6"/><text x="300" y="140" fill="#36c">your route, 2 raids running</text>
+<rect x="230" y="135" width="8" height="34" fill="#a63"/><text x="190" y="190">barricade (20 s)</text>
+<rect x="380" y="220" width="60" height="50" fill="#aaa"/><text x="345" y="215">window you shot from</text>
+<path d="M300 260 L380 235 L380 270 Z" fill="#9cf" opacity="0.6"/><circle cx="300" cy="260" r="5" fill="#333"/><text x="210" y="285">camera (15 s) facing it</text>
+<circle cx="150" cy="120" r="8" fill="#e90"/><text x="110" y="105">engineer: scans 3 s, then builds</text>
+<text x="12" y="240" fill="#444">Unarmed. Shoot it, scare it off,</text><text x="12" y="256" fill="#444">or wreck the half-built piece.</text>
+</svg>

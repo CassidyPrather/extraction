@@ -1,6 +1,6 @@
 //! `--scenario onboarding`: a bot does the training yard end to end, as
-//! someone new would, from the truck bed to pulling the cord at the north
-//! post. Each step is done with the bot's ordinary tasks (the same hand
+//! someone new would, from where it loads in the first bay to pulling the
+//! cord in the truck it called at the north post. Each step is done with the bot's ordinary tasks (the same hand
 //! actions flat mode sends), and the scenario passes only if the yard
 //! noticed every step itself: nothing here marks a step done.
 
@@ -174,15 +174,16 @@ pub(super) fn direct(
     let mut tasks = Vec::new();
     // A newcomer's habits, at each new station.
     let station = station_of(goal);
-    // (Not in the truck: its stations have no post to walk to.)
-    if let Some(p) = persona.filter(|_| state.station != Some(station) && !super::in_truck(station))
-    {
+    if let Some(p) = persona.filter(|_| state.station != Some(station)) {
         let post = |i: usize| Vec2::from(STATIONS[i].at);
         if p.lost {
-            // Off up the track to the wrong lamp first; the lit lamp and
-            // the boards put it right.
-            let wrong = (station + 2) % STATIONS.len();
-            if !super::in_truck(wrong) {
+            // Off to the wrong lamp first, one it can reach (the gates
+            // ahead are shut): back up the track to the last bay's; the
+            // lit lamp and the boards put it right.
+            let wrong = STATIONS[..station]
+                .iter()
+                .rposition(|s| s.bay < STATIONS[station].bay);
+            if let Some(wrong) = wrong {
                 // Up the track the wrong way, to that one's lamp.
                 let lamp = Vec2::new(0.0, post(wrong).y);
                 tasks.extend(world.go(here, lamp, 1.5));
@@ -272,6 +273,13 @@ pub(super) struct DirectorWorld<'w, 's> {
     >,
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
     pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
+    sets: Query<
+        'w,
+        's,
+        (Entity, &'static GlobalTransform),
+        With<crate::raid::transceiver::Transceiver>,
+    >,
     cards: Query<'w, 's, (Entity, &'static super::OnboardCard)>,
     doors: Query<'w, 's, (Entity, &'static DoorLeaf, &'static GlobalTransform)>,
     buildings: Query<'w, 's, (&'static Building, &'static GlobalTransform)>,
@@ -292,13 +300,6 @@ impl DirectorWorld<'_, '_> {
             .get(e)
             .ok()
             .map(|(_, it, ..)| self.catalog.get(it.kind()).id.as_str())
-    }
-
-    fn in_stash(&self, id: &str) -> Option<Entity> {
-        self.stash
-            .iter()
-            .flat_map(|b| b.contents.iter().copied())
-            .find(|e| self.id(*e) == Some(id))
     }
 
     fn placed(&self, which: Placed) -> Option<(Entity, Vec3)> {
@@ -429,23 +430,18 @@ impl DirectorWorld<'_, '_> {
         use Task::*;
         let mut t = Vec::new();
         match goal {
-            Goal::TakePistol | Goal::TakeRadio => {
-                let id = if goal == Goal::TakePistol {
-                    "pm_pistol"
-                } else {
-                    "radio"
-                };
-                // (The pistol's holstered by the time the radio's taken:
-                // the right hand again.)
-                if let Some(e) = self.in_stash(id) {
+            // The range table's pistol.
+            Goal::TakePistol => {
+                if let Some((e, _)) = self.placed(Placed::RangeGun) {
+                    let table = Vec2::from(super::RANGE_TABLE_AT);
+                    t.extend(self.free_hands());
+                    t.extend(self.go(here, table + Vec2::new(0.0, 0.9), 0.5));
                     t.push(Grab {
                         item: e,
                         side: Side::Right,
                     });
                 }
             }
-            // Into its sleeve on the chest (quick-stow finds it).
-            Goal::Pocket => t.push(Stow(Side::Right)),
             Goal::Turn => {
                 // A look over the shoulder and back.
                 t.push(LookAt(Vec3::new(here.x, 13.0, here.y + 10.0)));
@@ -456,7 +452,7 @@ impl DirectorWorld<'_, '_> {
             Goal::Run => t.extend(self.walk(here, here + Vec2::new(0.0, -6.0), 1.0)),
             Goal::PutAway => {
                 if self.holding(Side::Right).is_none() {
-                    if let Some(e) = self.in_stash("pm_pistol") {
+                    if let Some((e, _)) = self.placed(Placed::RangeGun) {
                         t.push(Grab {
                             item: e,
                             side: Side::Right,
@@ -531,12 +527,15 @@ impl DirectorWorld<'_, '_> {
                         }
                     }
                     Goal::SeatMag => {
+                        // The pistol out of its holster (or off the table,
+                        // if it was put down).
                         if self.holding(Side::Right).is_none() {
-                            if let Some(gun) = self.loose("pm_pistol", table) {
-                                t.push(Grab {
+                            match self.loose("pm_pistol", table) {
+                                Some(gun) => t.push(Grab {
                                     item: gun,
                                     side: Side::Right,
-                                });
+                                }),
+                                None => t.push(DrawGun),
                             }
                         }
                         t.push(Gun(crate::weapons::flat::MacroKind::Reload));
@@ -705,25 +704,27 @@ impl DirectorWorld<'_, '_> {
                 }
             }
             Goal::Button => {
-                // The SETTINGS card, in the truck by you.
+                // The SETTINGS card on the start board, in front of it.
                 if let Some((e, _)) = self
                     .cards
                     .iter()
                     .find(|(_, c)| **c == super::OnboardCard::Push)
                 {
+                    t.extend(self.walk(here, self.station(goal) + Vec2::new(0.0, 1.0), 0.4));
                     t.push(Press(e));
                 }
             }
+            // The fixed set on the north post's pole: in front of it, and
+            // push.
             Goal::CallTruck => {
-                t.extend(self.go(here, self.station(goal) + Vec2::new(0.0, 1.5), 0.8));
-                t.extend(self.free_hands());
-                let radio = self.loose("radio", Vec2::from(super::HOME_CRATE_AT));
-                if let Some(e) = radio {
-                    t.push(Grab {
-                        item: e,
-                        side: Side::Right,
-                    });
-                    t.push(Use(Side::Right));
+                if let Some((e, at)) = self.sets.iter().next().map(|(e, gt)| (e, gt.translation()))
+                {
+                    let front = at.xz()
+                        + (Vec2::from(super::START_BOARD_AT) - at.xz()).normalize_or_zero() * 1.0;
+                    t.extend(self.free_hands());
+                    t.extend(self.go(here, front, 0.4));
+                    t.push(LookAt(at));
+                    t.push(Press(e));
                     t.push(Wait(super::HURRY + 1.0));
                 }
             }
@@ -733,6 +734,19 @@ impl DirectorWorld<'_, '_> {
                     .iter()
                     .find(|(_, p)| **p == Pressable::BellPull)
                 {
+                    // Round to the tailgate, square behind its steps, up
+                    // them on their line, and in by the cord (its side's
+                    // canvas is between it and anyone stood beside it).
+                    if let Some(truck) = self.trucks.iter().next() {
+                        let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
+                        t.extend(self.go(here, at(0.0, 4.0), 0.5));
+                        for (x, z) in [(0.05, 2.9), (0.05, 0.3), (-0.2, -0.6)] {
+                            t.push(WalkTo {
+                                to: at(x, z),
+                                within: 0.3,
+                            });
+                        }
+                    }
                     t.push(Press(e));
                 }
             }

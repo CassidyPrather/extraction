@@ -192,6 +192,23 @@ pub fn tell(role: PartRole, health: f32) -> Tell {
             motion: Motion::Sag,
             ..t
         },
+        // A searchlight cracked: it flickers; shot out, dark.
+        (PartRole::Lamp(_), Band::Hurt) => Tell {
+            sparks: 0.5,
+            motion: Motion::Gutter,
+            ..t
+        },
+        (PartRole::Lamp(_), Band::Failing) => Tell {
+            sparks: 1.2,
+            smoke: 0.6,
+            motion: Motion::Gutter,
+            ..t
+        },
+        (PartRole::Lamp(_), Band::Gone) => Tell {
+            sparks: 0.5,
+            dark: true,
+            ..t
+        },
         (PartRole::Armour(_), Band::Hurt) => Tell { sparks: 0.6, ..t },
         (PartRole::Armour(_), Band::Failing) => Tell {
             sparks: 0.8,
@@ -274,6 +291,7 @@ mod tests {
                 PartRole::Leg(i),
                 PartRole::GasCell(i),
                 PartRole::Armour(i),
+                PartRole::Lamp(i),
             ]);
         }
         r
