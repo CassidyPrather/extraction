@@ -1,6 +1,7 @@
 //! Items in the world: the catalog as a resource, spawning physical items,
 //! and their placeholder visuals.
 
+pub mod damp;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
@@ -53,6 +54,7 @@ impl Plugin for ItemsPlugin {
             impacts::ImpactPlugin,
             lost::LostItemsPlugin,
             rest::RestPlugin,
+            damp::DampPlugin,
         ));
     }
 }
@@ -160,7 +162,7 @@ pub struct ItemVisualsPlugin;
 
 impl Plugin for ItemVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_plugins(damp::DampVisualsPlugin).add_systems(
             PostUpdate,
             (placeholder_visuals, finish_item_models)
                 .chain()

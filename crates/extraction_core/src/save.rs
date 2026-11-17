@@ -696,6 +696,9 @@ mod tests {
         // The weapon light is the flashlight now, its cell still in it.
         assert_eq!(back.loadout.backpack[1].id, "flashlight");
         assert_eq!(back.loadout.backpack[1].inserted[0].id, "power_cell");
+        // A re-packed round in a magazine reads as ball.
+        let mag: Loads = ron::from_str("[Repacked, Ap]").unwrap();
+        assert_eq!(mag.0, vec![Load::Standard, Load::Ap]);
         for (old, new) in RENAMED {
             assert_ne!(old, new);
             assert!(

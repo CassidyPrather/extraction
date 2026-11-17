@@ -16,9 +16,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Load {
     /// Ball (full metal jacket); in 12 gauge, buckshot. Saves from before
-    /// old surplus ball was dropped read it as this.
+    /// old surplus and bench re-packed ball were dropped read them as this.
     #[default]
-    #[serde(alias = "Surplus")]
+    #[serde(alias = "Surplus", alias = "Repacked")]
     Standard,
     /// Armour-piercing: a hardened steel core.
     Ap,
@@ -26,16 +26,15 @@ pub enum Load {
     Tracer,
     /// A 12 gauge slug: one heavy lead ball where buckshot is nine.
     Slug,
-    /// Ball re-packed at the bench: now and then too little powder (a
-    /// squib) or a tired primer (a dud).
-    Repacked,
     /// A 26 mm signal star, red (a white one is the standard load: an
     /// illumination star).
     SignalRed,
     /// A 26 mm signal star, green.
     SignalGreen,
     /// Ball that's been wet: the primer or the powder damp. Misfires and
-    /// hang-fires far more. Restored at the bench, it's good again.
+    /// hang-fires far more, and now and then squibs (the powder burns weak
+    /// and the bullet stops in the bore). Restored at the bench, it's good
+    /// again.
     Damp,
     /// A heavy bullet on a light charge, slower than sound: no crack along
     /// its flight, a softer report, and under a suppressor next to nothing.
@@ -47,7 +46,7 @@ impl Load {
     /// A round of this load can get damp (a plain primer and a crimp; the
     /// AP's, tracers', slugs' and stars' are sealed).
     pub fn spoils(self) -> bool {
-        matches!(self, Load::Standard | Load::Repacked | Load::Subsonic)
+        matches!(self, Load::Standard | Load::Subsonic)
     }
 
     /// The muzzle speed of this load from a gun whose ball leaves at

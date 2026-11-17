@@ -882,9 +882,9 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
     | fresh | 0.17 | 0 |
     | damp | 18.8 | 7.9 |
     | cold-soaked | 4.4 | 5.5 |
-    | scavenged re-pack | 4.75 | 0 |
 
-    The re-pack's trouble is the squib. The longest hang was 1.0 s.
+    A damp round also squibs 4 times in 100 (below). The longest hang was
+    1.0 s.
 - **Signatures**: a test, `weapons/signature.rs`, records each gun's
   muzzle path. Each is held as a player would: two hands (a handgun
   cupped), shouldered where there's a stock. The trigger
@@ -923,8 +923,8 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   stovepipe jolts, a failure to feed is a dead click, a double feed
   grinds (`weapons/faults.rs`).
 - **Faults by type**:
-  - *Squib*: the bench's re-packed rounds now and then have too little
-    powder. You get a pop and no kick, the action doesn't move, and the
+  - *Squib*: a damp round's wet powder now and then burns weak (4 in
+    100; a dry round never squibs). You get a pop and no kick, the action doesn't move, and the
     bullet stays in the bore. Rack the case out and push a cleaning rod
     10 cm down the bore from the muzzle to knock the bullet out. Fire on
     it instead and the barrel bulges: a violent jolt, the gun keeps 30%

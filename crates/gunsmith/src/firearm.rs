@@ -351,9 +351,9 @@ pub const PAPER_DUD: f32 = 0.06;
 pub const RIMFIRE_DUD: f32 = 0.03;
 /// Where a double feed wedges the bolt: it won't come further forward.
 const DOUBLE_FEED_AT: f32 = 0.4;
-/// A re-packed round's chance of a squib, and of a dud on top of the gun's.
+/// A damp round's chance of a squib: its wet powder burns weak and the
+/// bullet stops in the bore. A dry round never squibs.
 pub const SQUIB_CHANCE: f32 = 0.04;
-pub const REPACK_DUD: f32 = 0.02;
 /// What a bulged barrel leaves of the gun's condition.
 pub const BULGE_KEEPS: f32 = 0.3;
 
@@ -837,14 +837,9 @@ impl Firearm {
             Some(Round::Live) => {
                 let load = self.chamber_load(c);
                 // Duds are rare and mostly the gun's fault (light strikes);
-                // re-packed primers fail more.
+                // a damp primer fails more (`primer`).
                 let dud_chance = 0.002
                     + 0.02 * (1.0 - self.condition)
-                    + if load == Load::Repacked {
-                        REPACK_DUD
-                    } else {
-                        0.0
-                    }
                     + if self.def.rimfire { RIMFIRE_DUD } else { 0.0 }
                     + if self.def.cartridge == "26mm" {
                         PAPER_DUD
@@ -983,7 +978,7 @@ impl Firearm {
             self.squib = None;
             self.condition *= BULGE_KEEPS;
             events.push(Event::Bulged { barrel });
-        } else if load == Load::Repacked && roll() < SQUIB_CHANCE {
+        } else if load == Load::Damp && roll() < SQUIB_CHANCE {
             self.squib = Some(barrel);
             events.push(Event::Squib { barrel });
             return (events, false);
@@ -1904,7 +1899,7 @@ pub(crate) mod tests {
         move || it.next().unwrap_or(0.99)
     }
 
-    /// A re-packed round squibs: a pop, no shot, the bullet in the bore and
+    /// A damp round squibs: a pop, no shot, the bullet in the bore and
     /// the action unmoved. Fire into it and the barrel bulges; rod it out
     /// first and the next round fires clean.
     #[test]
@@ -1913,11 +1908,11 @@ pub(crate) mod tests {
             let mut gun = Firearm::new(pistol(), 1.0);
             gun.cycle_mode();
             let mut m = mag("pm", 3);
-            m.loads.fill(0, Load::Repacked, 3);
+            m.loads.fill(0, Load::Damp, 3);
             gun.insert_magazine(m).unwrap();
             rack(&mut gun);
-            // The dud roll, then the squib's.
-            let mut r = rolls(&[0.5, 0.01]);
+            // The dud roll, the hang-fire's, then the squib's.
+            let mut r = rolls(&[0.5, 0.5, 0.01]);
             let ev = gun.update(0.016, true, &mut r);
             gun.update(0.016, false, &mut r);
             assert!(ev.contains(&Event::Squib { barrel: 0 }), "{ev:?}");
@@ -2598,18 +2593,15 @@ pub(crate) mod tests {
         let fresh = primer_run(Load::Standard, 0.0, n);
         let damp = primer_run(Load::Damp, 0.0, n);
         let cold = primer_run(Load::Standard, 1.0, n);
-        let repacked = primer_run(Load::Repacked, 0.0, n);
         println!(
             "misfires/hangs per 100: fresh {:.2}/{:.2}, damp {:.2}/{:.2}, \
-             cold {:.2}/{:.2}, re-packed {:.2}/{:.2}; longest hang {:.2} s",
+             cold {:.2}/{:.2}; longest hang {:.2} s",
             fresh.0,
             fresh.1,
             damp.0,
             damp.1,
             cold.0,
             cold.1,
-            repacked.0,
-            repacked.1,
             damp.2.max(cold.2)
         );
         assert!(fresh.0 < 0.5 && fresh.1 == 0.0, "fresh: {fresh:?}");
@@ -2618,8 +2610,6 @@ pub(crate) mod tests {
             "damp: {damp:?}"
         );
         assert!(cold.0 > fresh.0 && cold.1 > 2.0, "cold: {cold:?}");
-        // (Scavenged re-packs don't hang; their trouble is the squib.)
-        assert!(repacked.1 == 0.0, "re-packed: {repacked:?}");
         for r in [damp, cold] {
             assert!(r.2 <= HANG_MAX + 0.02, "a hang went {} s", r.2);
         }

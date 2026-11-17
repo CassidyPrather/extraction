@@ -86,6 +86,9 @@ pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
     ("nagant", Vec3::new(0.0, 0.015, -0.060)),
     ("flare_pistol", Vec3::new(0.0, -0.011, -0.052)),
     ("artifact_adapter", Vec3::new(-0.003, 0.015, 0.0)),
+    // The light is drawn from its rail clamp, its handle folded back
+    // behind its tail.
+    ("flashlight", Vec3::new(0.001, -0.004, 0.006)),
 ];
 
 /// An item's model's middle off its origin (zero for most).
