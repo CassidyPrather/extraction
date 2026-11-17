@@ -86,7 +86,14 @@ impl Plugin for SaidPlugin {
             .add_message::<Recall>()
             .add_systems(
                 Update,
-                (take_shown, tag_junk, recall, show_caption, show_callouts)
+                (
+                    take_shown,
+                    tag_junk,
+                    ask_about,
+                    recall,
+                    show_caption,
+                    show_callouts,
+                )
                     .chain()
                     .after(crate::items::handled::count_grabs),
             );
@@ -658,9 +665,92 @@ pub fn own_line(def: &extraction_core::items::ItemDef) -> (String, bool) {
     (first.to_string(), false)
 }
 
+/// Holding a thing up to look at it: between these from the eyes (m: not
+/// at the mouth, eating; not at arm's length), within `LOOK_CONE` of the
+/// gaze (degrees), for `LOOK_HOLD` (s). The menu button held, `ASK_HOLD`.
+pub const LOOK_NEAR: f32 = 0.18;
+pub const LOOK_FAR: f32 = 0.4;
+pub const LOOK_CONE: f32 = 15.0;
+pub const LOOK_HOLD: f32 = 0.6;
+pub const ASK_HOLD: f32 = 0.5;
+
+/// Whether a thing at `at` is held up to be looked at from `eye`.
+pub fn looked_at(eye: &GlobalTransform, at: Vec3) -> bool {
+    let to = at - eye.translation();
+    let d = to.length();
+    let fwd = eye.rotation() * Vec3::NEG_Z;
+    (LOOK_NEAR..LOOK_FAR).contains(&d) && to.angle_between(fwd) < LOOK_CONE.to_radians()
+}
+
+/// Asking what a thing in hand is (#107): holding it up to the eyes and
+/// looking at it (in the headset), or holding the menu button (Touch's
+/// left one; flat, I). Not while eating or drinking it, reading it, or
+/// with a gun at the sights. Once a hold; again after letting go.
+#[allow(clippy::too_many_arguments)]
+fn ask_about(
+    time: Res<Time>,
+    driver: Option<Res<crate::rig::RigDriver>>,
+    free: Query<&GlobalTransform, With<crate::render::FreeCamera>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<Entity, With<crate::rig::LocalPlayer>>,
+    inputs: Query<&crate::rig::RigInput, With<crate::rig::LocalPlayer>>,
+    held: HeldQuery,
+    catalog: Res<crate::items::Catalog>,
+    eating: Query<(), With<crate::interact::first_aid::Eating>>,
+    reading: Query<&crate::interact::read::Reading>,
+    guns: Query<&crate::weapons::feel::Handling>,
+    mut looks: Local<std::collections::HashMap<Entity, (f32, bool)>>,
+    mut menu: Local<(f32, bool)>,
+    mut ask: MessageWriter<Recall>,
+) {
+    let dt = time.delta_secs();
+    let hands = in_hand(&held, &locals, &catalog);
+    let me = locals.iter().next();
+    // The menu button held: everything in hand.
+    let pressed = inputs.iter().next().is_some_and(|i| i.recall);
+    if pressed {
+        menu.0 += dt;
+        if menu.0 >= ASK_HOLD && !menu.1 {
+            menu.1 = true;
+            for (e, ..) in &hands {
+                ask.write(Recall { item: *e });
+            }
+        }
+    } else {
+        *menu = (0.0, false);
+    }
+    // Held up and looked at: in the headset (flat, the hand's always
+    // before the eyes).
+    let xr = driver.is_some_and(|d| *d == crate::rig::RigDriver::Xr);
+    let Some(eye) = the_eye(&free, &heads, &locals).filter(|_| xr) else {
+        looks.clear();
+        return;
+    };
+    looks.retain(|e, _| hands.iter().any(|h| h.0 == *e));
+    for (e, place, _, side) in &hands {
+        let busy = eating.contains(*e)
+            || reading
+                .iter()
+                .any(|r| Some(r.player) == me && r.side == *side)
+            || guns.get(*e).is_ok_and(at_the_sights);
+        let l = looks.entry(*e).or_insert((0.0, false));
+        if !busy && looked_at(&eye, place.translation) {
+            l.0 += dt;
+            if l.0 >= LOOK_HOLD && !l.1 {
+                l.1 = true;
+                ask.write(Recall { item: *e });
+            }
+        } else {
+            *l = (0.0, false);
+        }
+    }
+}
+
 /// A thing asked about: its own callout, now.
 fn recall(
     mut commands: Commands,
+    mut raid: ResMut<Raid>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut asked: MessageReader<Recall>,
     held: HeldQuery,
     catalog: Res<crate::items::Catalog>,
@@ -673,6 +763,11 @@ fn recall(
         let def = catalog.get(item.kind());
         let (words, junk) = own_line(def);
         if words.is_empty() {
+            continue;
+        }
+        // Captions off the view: on the wrist.
+        if !comfort.as_ref().is_none_or(|c| c.in_view()) {
+            raid.say(format!("{}: {words}", def.name));
             continue;
         }
         let mut follow = Follow::default();
@@ -1744,5 +1839,114 @@ mod tests {
             "{pm}"
         );
         assert!(!pm.contains("Heavy trigger"), "one sentence: {pm}");
+    }
+
+    /// Held up to the eyes and looked at, it counts; at the mouth (eating),
+    /// at arm's length, or off to the side, it doesn't (#107).
+    #[test]
+    fn holding_a_thing_up_to_look_at_it_is_asking() {
+        let eye = GlobalTransform::from(Transform::from_xyz(0.0, 1.6, 0.0));
+        let at = |x: f32, y: f32, z: f32| looked_at(&eye, Vec3::new(x, 1.6 + y, z));
+        assert!(at(0.0, 0.0, -0.28), "held up, looked at");
+        assert!(at(0.03, -0.04, -0.3), "a little off the middle");
+        assert!(!at(0.0, -0.09, -0.08), "at the mouth: eating");
+        assert!(!at(0.0, -0.3, -0.45), "at rest, down at the waist");
+        assert!(!at(0.25, 0.0, -0.25), "off to the side");
+        assert!(!at(0.0, 0.0, -0.6), "at arm's length");
+    }
+
+    /// The menu button held asks about what's in hand: its own line,
+    /// once a hold; with captions on the wrist only, on the wrist.
+    #[test]
+    fn holding_the_menu_button_asks_about_what_is_in_hand() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.add_plugins(SaidPlugin);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().spawn((
+            crate::render::FreeCamera,
+            Transform::from_xyz(0.0, 1.7, 0.0),
+            GlobalTransform::from(Transform::from_xyz(0.0, 1.7, 0.0)),
+        ));
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("gun_oil").unwrap();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let oil = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_xyz(0.2, 1.3, -0.4),
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        let hand = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .entity_mut(oil)
+            .insert(crate::interact::Held {
+                player: me,
+                hand,
+                side: crate::rig::Side::Left,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+        app.update();
+        let shown = |app: &mut App| {
+            let mut q = app.world_mut().query::<&Callout>();
+            q.iter(app.world())
+                .filter(|c| c.item == oil)
+                .map(|c| c.line.words.clone())
+                .collect::<Vec<_>>()
+        };
+        // Its first grab told nothing (no line for it): nothing showing.
+        let press = |app: &mut App, on: bool| {
+            app.world_mut()
+                .get_mut::<crate::rig::RigInput>(me)
+                .unwrap()
+                .recall = on;
+        };
+        press(&mut app, true);
+        app.update();
+        assert!(shown(&mut app).is_empty(), "a tap isn't a hold");
+        for _ in 0..90 {
+            press(&mut app, true);
+            app.update();
+        }
+        let words = shown(&mut app);
+        assert_eq!(words.len(), 1, "once a hold: {words:?}");
+        assert!(words[0].starts_with("Touch it to your gun"), "{words:?}");
+        // On the wrist only: said there instead.
+        press(&mut app, false);
+        app.update();
+        app.world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .next_captions();
+        for _ in 0..90 {
+            press(&mut app, true);
+            app.update();
+        }
+        let log = &app.world().resource::<Raid>().log;
+        assert!(
+            log.iter()
+                .any(|(l, _)| l.starts_with("Gun oil: Touch it to your gun")),
+            "{log:?}"
+        );
     }
 }

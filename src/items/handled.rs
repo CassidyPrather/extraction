@@ -35,14 +35,22 @@ pub fn count_grabs(
     locals: Query<Entity, With<crate::rig::LocalPlayer>>,
     catalog: Res<super::Catalog>,
     mut handled: ResMut<Handled>,
+    mut teach: MessageWriter<crate::onboarding::firsts::MeetFirst>,
 ) {
     let me = locals.iter().next();
     for (item, held) in &taken {
         if Some(held.player) == me {
-            *handled
+            let n = handled
                 .0
                 .entry(catalog.get(item.kind()).id.clone())
-                .or_default() += 1;
+                .or_default();
+            *n += 1;
+            // The first kind to go quiet: how to ask again (once a career).
+            if *n == QUIET_AFTER + 1 {
+                teach.write(crate::onboarding::firsts::MeetFirst(
+                    crate::onboarding::firsts::First::Recall,
+                ));
+            }
         }
     }
 }
