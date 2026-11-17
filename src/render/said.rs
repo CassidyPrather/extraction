@@ -675,6 +675,9 @@ fn show_caption(
                         alpha: 0.0,
                     },
                     Transform::default(),
+                    // (Its text is its child: without one, every caption
+                    // logged a hierarchy warning.)
+                    Visibility::default(),
                 ))
                 .id();
             let bar = urgent.then(|| {
@@ -696,6 +699,7 @@ fn show_caption(
                             alpha: 0.0,
                         },
                         Transform::default(),
+                        Visibility::default(),
                     ))
                     .id()
             });
