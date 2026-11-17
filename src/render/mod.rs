@@ -15,6 +15,7 @@ pub mod far_rest;
 pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
+pub mod fog_beam;
 pub mod gate_lamp;
 pub mod gpu_lost;
 pub mod grade;
@@ -92,6 +93,7 @@ impl Plugin for RenderPlugin {
         app.add_plugins(held_light::HeldLightPlugin);
         app.add_plugins(wear::GunWearPlugin);
         app.add_plugins(pockets::PocketVisualsPlugin);
+        app.add_plugins(fog_beam::FogBeamPlugin);
         app.add_plugins(said::SaidPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
