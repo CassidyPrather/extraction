@@ -645,7 +645,7 @@ fn break_line_up(
 /// are words of its subject (before the first comma), split at `+` and
 /// `:`, matched whole: a substring took `climbing_kit` for the climbing
 /// wall (a slab across the view), `side_rail` for the side-on body view
-/// (the camera level), a `*_repack` for the pack carry and `wristwatch`
+/// (the camera level), a `backpack` for the pack carry and `wristwatch`
 /// for the wrist pose.
 pub fn gallery_word(spec: &str, word: &str) -> bool {
     spec.split(',')

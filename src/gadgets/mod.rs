@@ -240,7 +240,7 @@ fn item_mounts(
             Transform::from_xyz(0.0, 0.006, 0.0),
             Transform::from_xyz(0.0, 0.016, 0.0),
         ),
-        "flashlight" | "weapon_light" | "laser_module" | "cloak_generator" | "jammer" => {
+        "flashlight" | "laser_module" | "cloak_generator" | "jammer" => {
             let id = catalog.get(item.kind()).id.as_str();
             // A light's cell lies along it in an open cradle on its top
             // (`art/items/_kit.py`'s `cell_cradle`); it once stood across
@@ -248,8 +248,7 @@ fn item_mounts(
             // Where each model's bay holds it (each centred on its box,
             // `art/items/_kit.py`).
             let (at, seat) = match id {
-                "flashlight" => (Vec3::new(0.0, 0.0, 0.0155), CELL_ALONG),
-                "weapon_light" => (Vec3::new(0.0, 0.0, 0.008), CELL_ALONG),
+                "flashlight" => (Vec3::new(0.0, 0.0, 0.008), CELL_ALONG),
                 "laser_module" => (Vec3::new(0.0, 0.0, 0.0025), CELL_ALONG),
                 "cloak_generator" => (Vec3::new(0.0, 0.00065, 0.0252), CELL_UPRIGHT),
                 _ => (Vec3::new(0.0, 0.0005, 0.0235), CELL_UPRIGHT),
@@ -793,7 +792,7 @@ mod tests {
         let p = Vec3::new(40.0, 40.0, 262.0);
         let ak = spawn(&mut app, "ak74", p);
         let rail = spawn(&mut app, "side_rail", p);
-        let light = spawn(&mut app, "weapon_light", p);
+        let light = spawn(&mut app, "flashlight", p);
         let cell = spawn(&mut app, "power_cell", p);
         app.update();
         seat(&mut app, rail, ak, Mount::Dovetail);

@@ -343,42 +343,6 @@
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_9x18_repack", dims: Some((0.04, 0.029, 0.071)), name: "9x18 re-packed rounds (box)",
-            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
-            category: Ammo, size: Small, mass: 0.17, bulk: 0.12, cartridge: Some("9x18"), rounds: 16, load: Repacked,
-            tags: ["brass", "powder"],
-        ),
-        (
-            id: "ammo_545_repack", dims: Some((0.05, 0.034, 0.101)), name: "5.45x39 re-packed rounds (box)",
-            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
-            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Repacked,
-            tags: ["brass", "powder"],
-        ),
-        (
-            id: "ammo_762x39_repack", dims: Some((0.06, 0.044, 0.031)), name: "7.62x39 re-packed rounds (box)",
-            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
-            category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Repacked,
-            tags: ["brass", "powder"],
-        ),
-        (
-            id: "ammo_762x25_repack", dims: Some((0.1, 0.035, 0.074)), name: "7.62x25 re-packed rounds (box)",
-            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
-            category: Ammo, size: Small, mass: 0.85, bulk: 0.5, cartridge: Some("7.62x25"), rounds: 70, load: Repacked,
-            tags: ["brass", "powder"],
-        ),
-        (
-            id: "ammo_762r_repack", dims: Some((0.045, 0.038, 0.091)), name: "7.62x54R re-packed rounds (box)",
-            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
-            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Repacked,
-            tags: ["brass", "powder"],
-        ),
-        (
-            id: "ammo_12ga_repack", dims: Some((0.07, 0.068, 0.121)), name: "12 gauge re-packed rounds (box)",
-            description: "Packed at the bench from scavenged brass and powder. Mostly fine; now and then a weak one leaves its bullet in the barrel. Rod it out before the next.",
-            category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Repacked,
-            tags: ["brass", "powder", "polymer"],
-        ),
-        (
             id: "ammo_545_t4", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 rounds, every fourth a tracer (box)",
             description: "Packed as a section draws it: three ball, one tracer. Load them in order and every fourth shot shows you where they go.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, tracer_every: 4,
@@ -480,12 +444,6 @@
         (id: "round_762r_ap", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R AP round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
         (id: "round_762r_tracer", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R tracer round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
         (id: "slug_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge slug", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Slug, tags: ["brass", "powder", "polymer"]),
-        (id: "round_9x18_repack", dims: Some((0.0095, 0.0095, 0.025)), name: "9x18 re-packed round", category: Ammo, size: Tiny, mass: 0.01, bulk: 0.003, cartridge: Some("9x18"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
-        (id: "round_545_repack", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 re-packed round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
-        (id: "round_762x39_repack", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 re-packed round", category: Ammo, size: Tiny, mass: 0.0163, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
-        (id: "round_762x25_repack", dims: Some((0.0098, 0.0098, 0.0345)), name: "7.62x25 re-packed round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.004, cartridge: Some("7.62x25"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
-        (id: "round_762r_repack", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R re-packed round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
-        (id: "shell_12ga_repack", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge re-packed shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Repacked, tags: ["brass", "powder", "polymer"]),
         (id: "round_22lr", dims: Some((0.0069, 0.0069, 0.0251)), name: ".22 round", category: Ammo, size: Tiny, mass: 0.0034, bulk: 0.001, cartridge: Some("22lr"), rounds: 1, tags: ["brass", "powder"]),
         (
             id: "robot_ammo_belt", dims: Some((0.073, 0.037, 0.041)), name: "Robot ammunition belt",
@@ -498,9 +456,9 @@
         // Rail attachments
         // ---------------------------------------------------------------
         (
-            id: "weapon_light", dims: Some((0.036, 0.038, 0.092)), name: "Weapon light",
-            description: "Clamps to a rail. Takes one cell.",
-            category: Attachment, size: Small, mass: 0.12, bulk: 0.1, battery_wh: 0.0, mount: Some(Rail),
+            id: "flashlight", dims: Some((0.039, 0.038, 0.103)), name: "Flashlight",
+            description: "A torch with a carry handle. Clamp it to a rail and the handle folds back: a weapon light. Takes one cell.",
+            category: Attachment, size: Small, mass: 0.14, bulk: 0.1, battery_wh: 0.0, mount: Some(Rail),
             tags: ["electronics", "metal"],
         ),
         (
@@ -549,11 +507,6 @@
         // ---------------------------------------------------------------
         // Gadgets
         // ---------------------------------------------------------------
-        (
-            id: "flashlight", dims: Some((0.036, 0.036, 0.19)), name: "Flashlight",
-            category: Gadget, size: Medium, mass: 0.2, bulk: 0.2,
-            tags: ["electronics", "metal"],
-        ),
         (
             id: "power_cell", dims: Some((0.019, 0.02, 0.058)), name: "Power cell",
             description: "A rechargeable cell. Lights, radios and the clever stuff all drink from these.",
@@ -1188,32 +1141,6 @@
             id: "field_recorder", dims: Some((0.167, 0.073, 0.108)), name: "Field recorder",
             description: "A survey recorder in a grey-green case, stencilled QA-SURVEY 07. Its counter stopped on a Surge night. The driver wants what's on it.",
             category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
-        ),
-        // Old surplus lots (`Load::Surplus`): tired primers that misfire and
-        // hang-fire now and then. Restored at the bench they're good again.
-        (
-            id: "ammo_762r_surplus", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R surplus rounds (box)",
-            description: "Wartime ball in a tarred paper wrap, the brass gone brown. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
-            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Surplus,
-            tags: ["brass", "powder"],
-        ),
-        (
-            id: "ammo_545_surplus", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 surplus rounds (box)",
-            description: "A crate-opened lot, the lacquer flaking. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
-            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
-            tags: ["brass", "powder"],
-        ),
-        // Throwable lights for the dark (`world::glow`): snapped or struck
-        // on the Use button, then thrown, or kept in a hand.
-        (
-            id: "chemlight", dims: Some((0.028, 0.028, 0.143)), name: "Chemlight",
-            description: "A green light stick in a foil wrap. Bend it till it snaps inside and shake: ten minutes of light, and not a sound.",
-            category: Gadget, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["polymer"],
-        ),
-        (
-            id: "hand_flare", dims: Some((0.03, 0.03, 0.23)), name: "Hand flare",
-            description: "A road flare in a red paper tube. Strike the cap across the end: a minute of hissing red fire, and every eye in the dark on it.",
-            category: Gadget, size: Small, mass: 0.18, bulk: 0.08, tags: ["powder"],
         ),
         // #94: what calls the truck to a road end with no set. A machine's
         // distress canister, salvaged, is the same thing (`robots::distress`).

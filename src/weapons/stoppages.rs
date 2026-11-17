@@ -448,9 +448,16 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
         );
     }
     if !crossbow {
-        // A squib: a pop, no kick, the bullet stuck in the bore.
-        let mut g = loaded(def, Load::Repacked);
-        let moment = pull(&mut g, &[0.99, 0.0]);
+        // A squib: a damp round's pop, no kick, the bullet stuck in the
+        // bore (its misfire and hang-fire rolls pass, the squib's doesn't;
+        // an open bolt rolls no hang-fire).
+        let mut g = loaded(def, Load::Damp);
+        let rolls: &[f32] = if def.open_bolt {
+            &[0.99, 0.0]
+        } else {
+            &[0.99, 0.99, 0.0]
+        };
+        let moment = pull(&mut g, rolls);
         add(
             "squib",
             g,

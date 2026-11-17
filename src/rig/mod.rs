@@ -99,6 +99,9 @@ pub struct RigInput {
     pub crouch: bool,
     /// Playtest mark: flag this moment (flat F9; VR both sticks clicked).
     pub mark: bool,
+    /// Asking what the thing in hand is (#107): held, its callout shows
+    /// again (Touch: the left menu button; flat: I).
+    pub recall: bool,
     /// How far the head and hands have been lifted for seated play
     /// (`seated`): drivers write raw poses and set it to 0.
     pub lifted: f32,
