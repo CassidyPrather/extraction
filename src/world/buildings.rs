@@ -7475,3 +7475,35 @@ mod tests {
         assert!((g.loot[0].at.y - 0.82).abs() < 1e-6);
     }
 }
+
+#[cfg(test)]
+mod vantage_tests {
+    use super::*;
+
+    /// Each prop the core fires flares from the top of
+    /// (`map_extract::VANTAGE_DECKS`) has a solid floor at that deck's
+    /// height for its climber to stand on.
+    #[test]
+    fn the_vantage_decks_are_where_the_core_says() {
+        for &(id, deck) in extraction_core::map_extract::VANTAGE_DECKS {
+            let geo = prefab(id).unwrap_or_else(|| panic!("no prefab {id}"));
+            let tops: Vec<f32> = geo
+                .pieces
+                .iter()
+                .filter(|p| p.collide && p.at.rotation.angle_between(Quat::IDENTITY) < 0.01)
+                .map(|p| {
+                    let h = match p.shape {
+                        Shape::Box(s) | Shape::Prism(s) => s.y,
+                        Shape::Cylinder(_, h) => h,
+                    };
+                    p.at.translation.y + h * p.at.scale.y * 0.5
+                })
+                .collect();
+            assert!(
+                tops.iter().any(|t| (t - deck).abs() < 0.15),
+                "{id}: no floor at {deck} (tops {:?})",
+                tops.iter().filter(|t| **t > 3.0).collect::<Vec<_>>()
+            );
+        }
+    }
+}
