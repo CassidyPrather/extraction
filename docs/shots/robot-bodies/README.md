@@ -302,3 +302,13 @@ The dirigible and the spotter used to see a long way all round, and nothing show
 - **Where it lands.** One ray a tick down each beam (World): it stops on the ground, a roof or a tree, and what's behind a wall it lands on is dark.
 - **Shot out.** A lamp is a part (`PartRole::Lamp`, 45 hp): shot out, its beam is dark and what it lit isn't seen. Off too when its machine is wrecked, sinking, loose or stunned.
 - **By day and night.** The haze is blended, not added (`shaders/searchlight.wgsl`), so it reads lighter than a lit field; standing inside a beam it thins to glare round you. No light is cast (frame budget): the pool is the lit ground.
+
+## Light in fog (#110)
+
+The user on the #99 pictures: "Lights on fog look much prettier than that! Not like a solid polygon! Have you ever seen godrays in a dusty room?" One shared look for lit beams, `render::fog_beam` (`shaders/fog_beam.wgsl`): the cone mesh only bounds the volume, and each pixel it covers marches 12 samples of the view ray through it (single scattering): soft to the wall, bright at the lamp and thinning down the throw, a soft fade into the ground where it lands, billows and dust drifting through it, brighter looking up toward the lamp, as dense as the weather makes the air. The searchlights first; the drones' and sentries' night lamps, the torch, and the way-lamp and landmark halos to follow.
+
+| Picture | What it shows |
+|---|---|
+| `light_in_fog_day_before_after.png` | `reel:search,4,40` by day, clearing, frame 0 (camera `40,0,262,0,8`, crop 1400x1080 of 1920x1080): the solid cone before, hazy shafts under the lamps after; pools and rims unchanged |
+| `light_in_fog_dusk_before_after.png` | Dusk, frame 2, beams steered across the field toward you: flat translucent slabs before, light through drifting haze after |
+| `light_in_fog_night_drizzle_before_after.png` | Night in drizzle, frame 2: white slabs before; after, shafts bright at the lamp, billowing, thinning down their length |

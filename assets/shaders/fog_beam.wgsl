@@ -149,7 +149,8 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let near = select(dist, 0.0, inside);
     let cap = mix(0.18, 1.0, smoothstep(2.0, 20.0, near));
     let day = b.air.y;
-    let a = min(1.0 - exp(-k * mix(0.07, 0.05, day)), cap * mix(0.45, 0.38, day));
+    // (By day it must still show over a lit field: more of the haze.)
+    let a = min(1.0 - exp(-k * mix(0.07, 0.16, day)), cap * mix(0.45, 0.5, day));
     let glow = mix(2.2, 1.5, day);
     return vec4<f32>(b.light.rgb * glow, a);
 }
