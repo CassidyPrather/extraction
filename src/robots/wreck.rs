@@ -59,6 +59,35 @@ pub struct Debris {
 #[derive(Component)]
 pub struct Broken;
 
+/// How whole a piece was when its machine went down (0..1): a leg's, a
+/// rotor's health as it fell, for what it's worth as salvage.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct PieceHealth(pub f32);
+
+/// A piece that is a part worth taking (Heavy's whole-robot salvage,
+/// #105, puts it on: its table, keyed on `Debris`). Once the piece has
+/// settled (`settle`: static, its joints gone) it leaves the debris ledger,
+/// so the cap never takes one you're halfway through unbolting, and gets
+/// [`Settled`]: the salvage seats it there.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct SalvagePart {
+    /// The item it comes off as.
+    pub item: &'static str,
+    /// What holds it on: bolts to spanner off, cables to cut, a seam to
+    /// pry; hot (a cell) burns a bare hand.
+    pub bolts: u8,
+    pub cables: u8,
+    pub pry: bool,
+    pub hot: bool,
+    /// 0..1: how whole it came off (`PieceHealth`, or the table's own).
+    pub health: f32,
+}
+
+/// A [`SalvagePart`] piece has come to rest: the salvage seats it now
+/// (`Added<Settled>`).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Settled;
+
 /// A walker wreck's legs, their health as it fell (0: shot off).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct WreckLegs(pub [f32; 4]);
@@ -346,6 +375,10 @@ fn break_up(
                         .find(|(p, ..)| p.role == PartRole::Leg(i as u8))
                         .map_or(0.0, |(p, ..)| p.hp / p.max_hp.max(1.0));
                     let weak = !w.feet[i].alive || health < 0.4;
+                    // (What the leg's worth as salvage: its health as it fell.)
+                    let worth = if w.feet[i].alive { health } else { 0.0 };
+                    commands.entity(upper).insert(PieceHealth(worth));
+                    commands.entity(lower).insert(PieceHealth(worth));
                     hips[i] = Some((hip_joint, upper, weak));
                     legs[i] = if w.feet[i].alive { health } else { 0.0 };
                 }
@@ -474,7 +507,8 @@ fn break_up(
                         t.rotation * Vec3::new(ROTORS[i as usize].x, 0.0, ROTORS[i as usize].z);
                     let at =
                         Transform::from_translation(gt.translation()).with_rotation(gt.rotation());
-                    spawn(
+                    let worth = part.hp.max(0.0) / part.max_hp.max(1.0);
+                    let rotor = spawn(
                         &mut commands,
                         (
                             Debris {
@@ -489,6 +523,7 @@ fn break_up(
                             Vec3::new(0.0025, 0.0045, 0.0025),
                         ),
                     );
+                    commands.entity(rotor).insert(PieceHealth(worth));
                     commands.entity(c).despawn();
                 }
             }
@@ -933,15 +968,17 @@ fn settle(
         Option<&super::anim::Gait>,
         Option<&Children>,
         &mut Transform,
+        Has<SalvagePart>,
     )>,
     // (Immutable: a hull's layers are replaced, not edited.)
     layered: Query<(), With<CollisionLayers>>,
     joints: Query<(Entity, &WreckJoint)>,
     zone: Res<crate::world::Zone>,
     time: Res<Time>,
+    mut ledger: ResMut<DebrisLedger>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut s, mut v, mut w, gait, children, mut tr) in &mut moving {
+    for (e, mut s, mut v, mut w, gait, children, mut tr, salvage) in &mut moving {
         s.age += dt;
         // Under the ground, out of any site's rooms: it came through it (a
         // wreck made before the ground's collider was in, as a line-up's
@@ -969,6 +1006,12 @@ fn settle(
                 .entity(e)
                 .remove::<Settling>()
                 .insert(RigidBody::Static);
+            // A part worth taking: out of the debris cap's reach, and
+            // handed to the salvage to seat (`SalvagePart`).
+            if salvage {
+                ledger.0.retain(|d| *d != e);
+                commands.entity(e).insert(Settled);
+            }
             // A small carcass (a crawler's) lying in a doorway mustn't wall
             // anyone in: its hull goes on Item, as its legs are, and the
             // player's move-and-slide (World and Robot) steps over it.
@@ -1389,6 +1432,70 @@ mod tests {
         let a = how_it_breaks(0);
         assert!(!a.1.is_empty());
         assert_eq!(how_it_breaks(37), a);
+    }
+
+    /// A part worth taking comes to rest, leaves the debris ledger (the
+    /// cap can't take it), and is marked Settled for the salvage to seat;
+    /// a piece that isn't a part stays in the ledger, unmarked.
+    #[test]
+    fn a_salvage_part_settles_out_of_the_ledger() {
+        let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 250.0) + Vec3::Y * 0.5;
+        let (part, plain) = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let piece = |c: &mut Commands, x: f32| {
+                spawn_debris(
+                    c,
+                    (
+                        Debris {
+                            kind: RobotKind::Walker,
+                            piece: Piece::LegUpper,
+                        },
+                        Transform::from_translation(at + Vec3::X * x),
+                        Vec3::ZERO,
+                        Vec3::ZERO,
+                        7.0,
+                        Collider::capsule(0.06, 0.6),
+                        Vec3::new(0.4, 0.01, 0.4),
+                    ),
+                    1.0,
+                )
+            };
+            let part = piece(&mut c, 0.0);
+            let plain = piece(&mut c, 2.0);
+            c.entity(part).insert(SalvagePart {
+                item: "servo",
+                bolts: 4,
+                cables: 0,
+                pry: false,
+                hot: false,
+                health: 0.5,
+            });
+            q.apply(app.world_mut());
+            (part, plain)
+        };
+        for _ in 0..(90.0 * (SETTLE_BY + 1.0)) as usize {
+            app.update();
+        }
+        let ledger = &app.world().resource::<DebrisLedger>().0;
+        assert!(
+            app.world().get::<Settled>(part).is_some(),
+            "the part settled"
+        );
+        assert!(!ledger.contains(&part), "and left the ledger");
+        assert!(app.world().get::<Settled>(plain).is_none());
+        assert!(ledger.contains(&plain), "the plain piece stays counted");
+        assert_eq!(app.world().get::<RigidBody>(part), Some(&RigidBody::Static));
     }
 
     /// Wrecks come apart on joints; despawning them (a robot leaving, the

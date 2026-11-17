@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" font-family="DejaVu Sans, sans-serif">
+  <rect width="1400" height="760" fill="#e9ebee"/>
+  <text x="30" y="44" font-size="28" font-weight="bold" fill="#222">#101 body mock: one line body, rope or cable; a pod cable half cut</text>
+  <text x="30" y="74" font-size="16" fill="#444">Robot bodies. Shared by grappler lines, dirigible pod cables, the spotter's tether and new ones. Gauge, weak link, fray, grab points.</text>
+
+  <!-- Panel A: rope vs cable gauge -->
+  <g transform="translate(40,110)">
+    <rect width="380" height="600" fill="#f7f8f9" stroke="#bbb"/>
+    <text x="16" y="30" font-size="18" font-weight="bold" fill="#333">A. Rope vs cable, at a glance</text>
+    <line x1="90" y1="80" x2="90" y2="540" stroke="#a89670" stroke-width="16"/>
+    <line x1="90" y1="80" x2="90" y2="540" stroke="#7a6a4a" stroke-width="16" stroke-dasharray="3 9"/>
+    <text x="60" y="570" font-size="15" fill="#222">rope</text>
+    <line x1="270" y1="80" x2="270" y2="540" stroke="#4a4f55" stroke-width="9"/>
+    <line x1="270" y1="80" x2="270" y2="540" stroke="#9aa0a6" stroke-width="9" stroke-dasharray="14 4"/>
+    <text x="235" y="570" font-size="15" fill="#222">steel cable</text>
+    <text x="130" y="200" font-size="13" fill="#333">pale, fibrous,</text>
+    <text x="130" y="218" font-size="13" fill="#333">sags; one cut</text>
+    <text x="130" y="320" font-size="13" fill="#333">dark, glinting,</text>
+    <text x="130" y="338" font-size="13" fill="#333">taut; strands to</text>
+    <text x="130" y="356" font-size="13" fill="#333">get through</text>
+  </g>
+
+  <!-- Panel B: pod cable half cut -->
+  <g transform="translate(440,110)">
+    <rect width="520" height="600" fill="#f7f8f9" stroke="#bbb"/>
+    <text x="16" y="30" font-size="18" font-weight="bold" fill="#333">B. A dirigible's pod cable, half cut</text>
+    <!-- cable top -->
+    <line x1="260" y1="60" x2="260" y2="250" stroke="#4a4f55" stroke-width="12"/>
+    <line x1="260" y1="60" x2="260" y2="250" stroke="#9aa0a6" stroke-width="12" stroke-dasharray="16 4"/>
+    <!-- cut zone: strands -->
+    <g stroke-width="2.5">
+      <line x1="252" y1="250" x2="252" y2="300" stroke="#4a4f55"/>
+      <line x1="257" y1="250" x2="257" y2="300" stroke="#4a4f55"/>
+      <line x1="262" y1="250" x2="262" y2="300" stroke="#4a4f55"/>
+      <!-- cut strands splaying -->
+      <path d="M 266 250 Q 290 262 300 250" fill="none" stroke="#c9a27a"/>
+      <path d="M 268 300 Q 292 292 304 304" fill="none" stroke="#c9a27a"/>
+      <path d="M 270 252 Q 300 270 312 262" fill="none" stroke="#c9a27a"/>
+    </g>
+    <circle cx="300" cy="276" r="16" fill="#ffd27a" opacity="0.6"/>
+    <text x="320" y="270" font-size="13" fill="#333">bright cut ends: 5 of 9 strands gone</text>
+    <text x="320" y="288" font-size="13" fill="#333">(the progress shows on the cable)</text>
+    <!-- cable bottom -->
+    <line x1="260" y1="300" x2="260" y2="420" stroke="#4a4f55" stroke-width="12"/>
+    <line x1="260" y1="300" x2="260" y2="420" stroke="#9aa0a6" stroke-width="12" stroke-dasharray="16 4"/>
+    <!-- weak link shackle -->
+    <g transform="translate(260,440)">
+      <ellipse cx="0" cy="0" rx="20" ry="28" fill="none" stroke="#e8562a" stroke-width="7"/>
+      <rect x="-26" y="-6" width="52" height="12" fill="#3a3d41"/>
+    </g>
+    <text x="300" y="445" font-size="13" fill="#333">weak-link shackle, orange-red:</text>
+    <text x="300" y="463" font-size="13" fill="#333">shoot or pry it (quicker than the cable)</text>
+    <!-- pod -->
+    <rect x="190" y="480" width="140" height="80" rx="6" fill="#d0d3d6" stroke="#222" stroke-width="3"/>
+    <rect x="190" y="480" width="140" height="10" fill="#3a3d41"/>
+    <text x="210" y="530" font-size="14" fill="#333">cargo pod</text>
+    <text x="16" y="590" font-size="13" fill="#333">If picked: a walkable lip on the pod for the ride (Robot minds' option).</text>
+    <!-- hands -->
+    <rect x="236" y="150" width="48" height="40" rx="10" fill="#3a3d41" stroke="#222" stroke-width="2"/>
+    <text x="300" y="175" font-size="13" fill="#333">grab sleeve (hands hold, cutters bite here)</text>
+  </g>
+
+  <!-- Panel C: stages -->
+  <g transform="translate(980,110)">
+    <rect width="380" height="600" fill="#f7f8f9" stroke="#bbb"/>
+    <text x="16" y="30" font-size="18" font-weight="bold" fill="#333">C. Fray stages (cable)</text>
+    <g transform="translate(40,70)">
+      <line x1="40" y1="0" x2="40" y2="80" stroke="#4a4f55" stroke-width="10"/>
+      <text x="80" y="45" font-size="13" fill="#333">whole</text>
+    </g>
+    <g transform="translate(40,190)">
+      <line x1="40" y1="0" x2="40" y2="80" stroke="#4a4f55" stroke-width="10"/>
+      <path d="M 44 36 Q 60 30 64 38" fill="none" stroke="#c9a27a" stroke-width="2.5"/>
+      <text x="80" y="45" font-size="13" fill="#333">nicked: a strand springs out</text>
+    </g>
+    <g transform="translate(40,310)">
+      <line x1="40" y1="0" x2="40" y2="34" stroke="#4a4f55" stroke-width="10"/>
+      <line x1="38" y1="34" x2="38" y2="46" stroke="#4a4f55" stroke-width="4"/>
+      <line x1="40" y1="46" x2="40" y2="80" stroke="#4a4f55" stroke-width="10"/>
+      <path d="M 44 34 Q 66 28 70 40 M 44 46 Q 66 52 72 44" fill="none" stroke="#c9a27a" stroke-width="2.5"/>
+      <text x="80" y="45" font-size="13" fill="#333">half: thinned, bright ends,</text>
+      <text x="80" y="63" font-size="13" fill="#333">it sings under load</text>
+    </g>
+    <g transform="translate(40,430)">
+      <line x1="40" y1="0" x2="40" y2="30" stroke="#4a4f55" stroke-width="10"/>
+      <line x1="40" y1="56" x2="40" y2="86" stroke="#4a4f55" stroke-width="10"/>
+      <text x="80" y="45" font-size="13" fill="#333">parted: whips back, pod drops</text>
+    </g>
+    <text x="16" y="590" font-size="13" fill="#333">Cable: more durable than rope, still cuttable.</text>
+  </g>
+</svg>

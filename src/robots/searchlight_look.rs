@@ -292,8 +292,9 @@ pub(crate) fn decoy(world: &mut World, at: Vec3) -> Entity {
 }
 
 /// Past this a lamp's lens and rim hold the size they look here: which
-/// way it looks has to read at 50-100 m, by day.
-pub const HEAD_HOLDS_AT: f32 = 15.0;
+/// way it looks has to read at 50-100 m, by day (from 15 m, at 50 m the
+/// lens drew nearly a metre across).
+pub const HEAD_HOLDS_AT: f32 = 25.0;
 
 /// A lamp's lens or rim (held at its size past [`HEAD_HOLDS_AT`]), and its
 /// place on the lamp.

@@ -62,7 +62,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let k = clamp(path * ends * thin * near * far * inside * p.light.w * p.shape.w, 0.0, 1.0);
         // By day a pale, milky shaft (it must show over a lit field); by
         // night less of it is needed, and it's brighter.
-        let a = k * mix(0.42, 0.22, day);
+        // Near the eye a shaft is capped thin: two crossing over you are
+        // light round you, not a white-out of the lower half of the view.
+        let cap = mix(0.1, 1.0, smoothstep(3.0, 25.0, dist));
+        let a = min(k * mix(0.42, 0.22, day), cap * 0.42);
         // Display brightness, not scene light: exposure is the scene's,
         // and a beam by day must still read lighter than what's behind it.
         let glow = mix(2.4, 1.6, day);
