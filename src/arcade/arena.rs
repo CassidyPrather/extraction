@@ -60,7 +60,7 @@ pub const TABLES: [(f32, f32, f32); 5] = [
     // The board's table, forward and turned toward where you stand.
     (2.9, 0.9, 0.6),
     // The gun board's, as far the other side.
-    (-4.35, 0.9, -0.6),
+    (-4.35, 0.9, 0.6),
 ];
 
 /// The wave board's table and the gun board's.
