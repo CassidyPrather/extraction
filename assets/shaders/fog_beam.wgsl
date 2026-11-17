@@ -82,20 +82,21 @@ fn density(p: vec3<f32>) -> f32 {
         return 0.0;
     }
     // The light spreads: bright at the lamp, thinning down the throw (a
-    // tight beam holds more than a torch's).
+    // tight beam holds more than a torch's); a dense core near the lamp,
+    // more of it by day, so it reads against a lit sky.
     let spread = 1.0 / (1.0 + along * along * 0.0012);
+    let core = 1.0 + (1.2 + 2.0 * b.air.y) * exp(-along / 12.0);
     let start = smoothstep(0.0, 1.5, along);
     // Where it lands: a soft fade into the ground, and past its end.
     let ground = smoothstep(0.0, 1.2, p.y - b.air.z);
     let end = 1.0 - smoothstep(len - 1.0, len + 2.0, along);
-    // The air: billows drifting slowly, and fine dust in it.
+    // The air: large billows drifting slowly, fixed in the world. (No
+    // fine grain: in a headset it shimmers between the eyes and frames.)
     let t = globals.time;
-    let drift = vec3<f32>(t * 0.21, t * -0.05, t * 0.13);
-    let billow = noise3(p * 0.18 + drift * 0.6);
-    let dust = noise3(p * 1.3 + drift * 1.7);
-    // (Billows vary it a lot: light in moving air, not an even tube.)
-    let air = 0.2 + 1.1 * billow * billow + 0.45 * dust * dust;
-    return soft * spread * start * ground * end * air;
+    let drift = vec3<f32>(t * 0.08, t * -0.02, t * 0.05);
+    let billow = noise3(p * 0.09 + drift);
+    let air = 0.2 + 1.2 * billow * billow;
+    return soft * spread * core * start * ground * end * air;
 }
 
 @fragment
@@ -134,8 +135,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         span = dist;
     }
     let ds = span / f32(MARCH);
-    // A per-pixel jitter on where the samples fall (no banding).
-    let jit = hash3(at * 13.7 + vec3<f32>(globals.time));
+    // A per-pixel jitter on where the samples fall (no banding), fixed in
+    // the world: it doesn't crawl from frame to frame.
+    let jit = hash3(floor(at * 7.0));
     var sum = 0.0;
     for (var i = 0; i < MARCH; i = i + 1) {
         let p = p0 + rd * (ds * (f32(i) + jit));
@@ -152,5 +154,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // (By day it must still show over a lit field: more of the haze.)
     let a = min(1.0 - exp(-k * mix(0.07, 0.16, day)), cap * mix(0.45, 0.5, day));
     let glow = mix(2.2, 1.5, day);
-    return vec4<f32>(b.light.rgb * glow, a);
+    // Premultiplied: the blended haze, plus a little light added on top,
+    // so a thin stretch lightens what's behind it and never greys it like
+    // smoke.
+    let add = min(k * 0.02, 0.12) * mix(1.0, 0.6, day);
+    return vec4<f32>(b.light.rgb * (glow * a + add), a);
 }

@@ -7,6 +7,7 @@
 //! scatters toward the eye. Soft to the wall, thinning down the throw, a
 //! soft fade where it meets the ground, dust drifting in it, brighter
 //! looking up toward the lamp, as dense as the weather makes the air.
+//! Premultiplied: thin haze lightens what's behind it, never greys it.
 //! Cheap enough for stereo: 12 samples a pixel, only where a beam is.
 //!
 //! Built for the searchlights (`robots::searchlight_look`) first; the
@@ -56,7 +57,8 @@ impl Material for FogBeamMaterial {
     }
 
     fn alpha_mode(&self) -> AlphaMode {
-        AlphaMode::Blend
+        // (The shader adds a little light on top of what it blends.)
+        AlphaMode::Premultiplied
     }
 
     fn specialize(
