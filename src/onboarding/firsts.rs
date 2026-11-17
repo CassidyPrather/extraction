@@ -364,7 +364,7 @@ impl First {
                 &["Truck: \"Lead them in. Chasing you, they don't look where they run.\""]
             }
             First::Dazzled => {
-                &["Truck: \"Lost you in the fold. A mirror blinds them a while. Slip off.\""]
+                &["Truck: \"Lost you in the fold. A fold blinds them a while. Slip off.\""]
             }
             First::Deafened => {
                 &["Truck: \"Take it now. Deaf in that quiet, it won't hear your shots.\""]
@@ -687,6 +687,7 @@ const ZONE_SEEN_DEG: f32 = 55.0;
 /// itself (`robots::hazards`' tells); the line says it's yours to use.
 fn zone_on_machines(
     mut struck: MessageReader<crate::robots::hazards::HazardStruck>,
+    spatial: avian3d::prelude::SpatialQuery,
     minds: Query<&Awareness>,
     heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
     locals: Query<Entity, With<LocalPlayer>>,
@@ -704,8 +705,20 @@ fn zone_on_machines(
         struck.clear();
         return;
     };
+    // What hides it: the ground, walls and roofs.
+    let world = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
     for ev in struck.read() {
-        if !seen_happen(eye.translation(), eye.forward().as_vec3(), ev.at) {
+        let from = eye.translation();
+        if !seen_happen(from, eye.forward().as_vec3(), ev.at) {
+            continue;
+        }
+        // In plain sight, not behind a wall: a snare going off in a house
+        // you stand outside isn't seen.
+        let to = ev.at + Vec3::Y * 0.5 - from;
+        let hidden = Dir3::new(to)
+            .ok()
+            .and_then(|dir| spatial.cast_ray(from, dir, to.length() - 0.3, true, &world));
+        if hidden.is_some() {
             continue;
         }
         let after_me = minds.get(ev.robot).is_ok_and(|a| a.target == Some(me));
@@ -736,7 +749,8 @@ fn zone_first(
             First::Lured
         }
         (Hazard::Mirror, Effect::Dazzled) => First::Dazzled,
-        (Hazard::Hush, Effect::Deafened | Effect::Dazzled) => First::Deafened,
+        // (A drone in a hush flies blind, it doesn't go deaf: not this line.)
+        (Hazard::Hush, Effect::Deafened) => First::Deafened,
         (Hazard::Frost, _) => First::Stiffened,
         _ => return None,
     })
@@ -1900,6 +1914,11 @@ mod tests {
         assert_eq!(
             zone_first(Hazard::Hush, Effect::Deafened, false),
             Some(First::Deafened)
+        );
+        assert_eq!(
+            zone_first(Hazard::Hush, Effect::Dazzled, false),
+            None,
+            "a drone's blind, not deaf"
         );
         assert_eq!(
             zone_first(Hazard::Frost, Effect::Slowed, true),
