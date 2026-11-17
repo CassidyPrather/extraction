@@ -286,14 +286,12 @@ mod tests {
     /// A standing body, facing -Z, right-handed, the left hand out in
     /// front at waist height.
     fn standing() -> (Stance, Vec3) {
-        let st = Stance {
-            neck: Vec3::new(0.0, 1.5, 0.0),
-            shoulders: [Vec3::new(-0.2, 1.42, 0.0), Vec3::new(0.2, 1.42, 0.0)],
-            hips: [Vec3::new(-0.1, 0.92, 0.0), Vec3::new(0.1, 0.92, 0.0)],
-            knees: [Vec3::new(-0.1, 0.5, 0.0), Vec3::new(0.1, 0.5, 0.0)],
-            ankles: [Vec3::new(-0.1, 0.08, 0.0), Vec3::new(0.1, 0.08, 0.0)],
-            ..Default::default()
-        };
+        let mut st = Stance::default();
+        st.neck = Vec3::new(0.0, 1.5, 0.0);
+        st.shoulders = [Vec3::new(-0.2, 1.42, 0.0), Vec3::new(0.2, 1.42, 0.0)];
+        st.hips = [Vec3::new(-0.1, 0.92, 0.0), Vec3::new(0.1, 0.92, 0.0)];
+        st.knees = [Vec3::new(-0.1, 0.5, 0.0), Vec3::new(0.1, 0.5, 0.0)];
+        st.ankles = [Vec3::new(-0.1, 0.08, 0.0), Vec3::new(0.1, 0.08, 0.0)];
         (st, Vec3::new(-0.15, 1.0, -0.35))
     }
 
