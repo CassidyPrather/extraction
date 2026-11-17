@@ -558,9 +558,17 @@ fn strip_half(
                 taken.push(k);
             }
         }
-        // In a row on the ground, a stride to its right.
+        info!(
+            "strip_half: taken {:?}",
+            taken
+                .iter()
+                .map(|k| catalog.get(*k).id.clone())
+                .collect::<Vec<_>>()
+        );
+        // In a row on the ground before it, across the view.
+        let n = taken.len() as f32;
         for (k, kind) in taken.into_iter().enumerate() {
-            let p = at + Vec3::new(1.4, 0.0, -0.9 + 0.6 * k as f32);
+            let p = at + Vec3::new(-0.7 * (n - 1.0) * 0.5 + 0.7 * k as f32, 0.0, 1.3);
             let g = zone.on_ground(p.x, p.z) + Vec3::Y * 0.15;
             crate::items::spawn_item(
                 &mut commands,
