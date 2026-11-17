@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" font-family="sans-serif" font-size="12"><rect width="480" height="300" fill="#f6f4ee"/>
+<text x="12" y="20" font-weight="bold">#99 What's lit is what's seen (top-down, night)</text>
+<circle cx="90" cy="160" r="9" fill="#555"/><text x="70" y="185">spotter</text>
+<circle cx="90" cy="160" r="28" fill="none" stroke="#888" stroke-dasharray="4 3"/><text x="40" y="128" fill="#666">15 m ring</text>
+<path d="M90 160 L420 90 L420 200 Z" fill="#ffe680" opacity="0.7"/>
+<path d="M90 160 L380 250" stroke="#bb8" stroke-dasharray="5 4"/><text x="300" y="265" fill="#886">sweep (≤25°/s)</text>
+<circle cx="340" cy="140" r="6" fill="#c33"/><text x="350" y="138">you: lit, seen</text>
+<circle cx="300" cy="225" r="6" fill="#36c"/><text x="310" y="223">you: dark, unseen</text>
+<text x="12" y="290" fill="#444">The beam is the eye. Outside it the machine sees only its ring. Shoot the lamp and only the ring is left.</text>
+</svg>
