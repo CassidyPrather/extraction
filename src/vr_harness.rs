@@ -5631,6 +5631,154 @@ mod body {
         assert!(!vr.app.world().resource::<PocketsShown>().0);
     }
 
+    /// Seated (`Comfort::seated`, the view and the hands lifted to a
+    /// standing eye): each pocket sphere rides its slot up with the body,
+    /// and something its slot takes, brought to its sphere, lights that
+    /// one and no other, as standing. Left there, it goes in.
+    #[test]
+    fn seated_each_pocket_sphere_lights_as_standing() {
+        use crate::interact::pockets::PocketSphere;
+        // One thing each slot takes (by id: the same each run).
+        let for_slot = |catalog: &Catalog, k: SlotKind| -> String {
+            let mut defs: Vec<_> = catalog.iter().map(|(_, d)| d).collect();
+            defs.sort_by(|a, b| a.id.cmp(&b.id));
+            let kind = SocketKind::Body(k);
+            defs.iter()
+                .find(|d| {
+                    let family = d.magazine.as_ref().map(|m| m.fits.clone());
+                    crate::interact::accepts_item(
+                        &kind,
+                        d.size,
+                        family.as_deref(),
+                        d.firearm.is_some(),
+                        d.fits_mount(),
+                    ) && crate::interact::fits_body_slot(&kind, d)
+                })
+                .map(|d| d.id.clone())
+                .unwrap_or_else(|| panic!("nothing a {k:?} takes"))
+        };
+        let side = Side::Right;
+        // Per slot (by index): its kind, empty before, whether its own
+        // sphere lit, how many lit, and whether the thing went in.
+        type Row = (usize, SlotKind, bool, bool, usize, bool);
+        let run = |seated: bool| -> (Vec<Row>, f32) {
+            let mut vr = Vr::new("training_yard");
+            let feet = vr
+                .app
+                .world()
+                .resource::<crate::world::Zone>()
+                .on_ground(OPEN.x, OPEN.z);
+            vr.stand(feet, 0.0);
+            // The head once, raw (the lift adds only what it hasn't), and
+            // only then seated: a standing head in the seat's window would
+            // read as sitting up for its few seconds.
+            vr.head(Vec3::new(0.0, if seated { 1.2 } else { 1.65 }, 0.0));
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .seated = seated;
+            for s in [Side::Left, Side::Right] {
+                vr.hand_local(s, Vec3::new(0.25 * s.sign(), 0.95, -0.1), 0.0);
+            }
+            vr.step(90 * 3);
+            let lifted = vr.app.world().get::<RigInput>(vr.player).unwrap().lifted;
+            let mut slots: Vec<(usize, Entity, SlotKind)> = {
+                let mut q = vr.app.world_mut().query::<(Entity, &BodySlot, &Socket)>();
+                q.iter(vr.app.world())
+                    .filter_map(|(e, b, s)| match s.kind {
+                        SocketKind::Body(k) if !matches!(k, SlotKind::Vest | SlotKind::Head) => {
+                            Some((b.0, e, k))
+                        }
+                        _ => None,
+                    })
+                    .collect()
+            };
+            slots.sort_by_key(|s| s.0);
+            let spheres = |vr: &mut Vr| -> Vec<(Option<Entity>, bool, Option<Entity>, Vec3)> {
+                let mut q = vr
+                    .app
+                    .world_mut()
+                    .query::<(&PocketSphere, &GlobalTransform)>();
+                q.iter(vr.app.world())
+                    .map(|(s, g)| (s.slot, s.hover, s.holds, g.translation()))
+                    .collect()
+            };
+            let away = feet + Vec3::new(0.25, 1.0, -0.4);
+            let mut rows = Vec::new();
+            for (index, slot, kind) in slots {
+                let catalog = vr.app.world().resource::<Catalog>().clone();
+                let id = for_slot(&catalog, kind);
+                vr.move_hand(side, away);
+                vr.step(4);
+                let now = spheres(&mut vr);
+                let mine = *now.iter().find(|s| s.0 == Some(slot)).unwrap();
+                let empty = mine.2.is_none();
+                let item = vr.spawn(&id, Transform::from_translation(away));
+                vr.app
+                    .world_mut()
+                    .entity_mut(item)
+                    .insert(RigidBody::Static);
+                vr.hand(side, away, Quat::IDENTITY, 0.0, 0.0);
+                vr.step(2);
+                vr.grip(side, 1.0);
+                vr.step(4);
+                assert_eq!(
+                    vr.hand_state(side).holding,
+                    Some(item),
+                    "seated {seated}: holding {id}"
+                );
+                // The thing to its sphere (where the sphere is now, lifted).
+                for _ in 0..3 {
+                    let want = spheres(&mut vr)
+                        .iter()
+                        .find(|s| s.0 == Some(slot))
+                        .unwrap()
+                        .3;
+                    let hand = vr.hand_state(side).world.translation;
+                    let at = vr
+                        .app
+                        .world()
+                        .get::<GlobalTransform>(item)
+                        .unwrap()
+                        .translation();
+                    vr.move_hand(side, hand + (want - at));
+                    vr.step(3);
+                }
+                vr.step(12);
+                let lit = spheres(&mut vr);
+                let own = lit.iter().any(|s| s.0 == Some(slot) && s.1);
+                let count = lit.iter().filter(|s| s.1).count();
+                vr.grip(side, 0.0);
+                vr.step(4);
+                let went_in = vr
+                    .app
+                    .world()
+                    .get::<crate::interact::InSocket>(item)
+                    .is_some_and(|s| s.socket == slot);
+                rows.push((index, kind, empty, own, count, went_in));
+            }
+            (rows, lifted)
+        };
+        let (standing, flat) = run(false);
+        let (seated, lifted) = run(true);
+        assert!(flat.abs() < 1e-3, "standing: not lifted ({flat})");
+        assert!(
+            (lifted - (crate::rig::seated::STAND_EYE - 1.2)).abs() < 0.02,
+            "seated: lifted to a standing eye ({lifted})"
+        );
+        assert!(!standing.is_empty());
+        // Every empty slot: its own sphere and no other, and it goes in.
+        for (index, kind, empty, own, count, went_in) in &seated {
+            if *empty {
+                assert!(
+                    *own && *count == 1 && *went_in,
+                    "seated, slot {index} ({kind:?}): own {own}, lit {count}, in {went_in}"
+                );
+            }
+        }
+        assert_eq!(seated, standing, "seated the same as standing");
+    }
+
     /// Where a thing let go goes is what `interact::stow::StowTarget` says
     /// beforehand (what the pocket spheres show): for one thing of each
     /// kind the stow tells apart (size, magazine family, gun, mount, what
