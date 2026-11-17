@@ -1730,6 +1730,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
     if let Some(g) = super::way_lamps::geo(id) {
         return Some(g);
     }
+    if let Some(g) = super::yard::geo(id) {
+        return Some(g);
+    }
     if let Some(g) = super::fell::geo(id) {
         return Some(g);
     }
