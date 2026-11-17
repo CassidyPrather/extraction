@@ -16,25 +16,21 @@
     cell: 1.0,
     base_height: 12.0,
     noise: (seed: 31, amplitude: 1.2, scale: 90.0, octaves: 4, detail: 0.3),
-    rim: (width: 40.0, height: 8.0),
+    // The rim rises outside the perimeter fence (102 m out): the bays
+    // inside stand on level ground, their fences on it.
+    rim: (width: 18.0, height: 8.0),
     fence_inset: 18.0,
 
     features: [
-        // A low bank behind the firing line's targets.
-        Ridge(points: [(-45.0, -40.0), (-25.0, -45.0), (-5.0, -40.0)], width: 30.0, height: 4.0),
         Hill(at: (55.0, -55.0), radius: 30.0, height: 5.0),
     ],
 
     roads: [
         (
-            name: "Yard track", kind: Gravel, width: 4.0, smoothing: 10.0,
-            points: [(0.0, 104.0), (0.0, 70.0), (2.0, 30.0), (0.0, -20.0), (0.0, -78.0)],
-        ),
-        // The gate's apron: the track widened to the gate's width through
-        // it, so its posts and blocks stand on one level.
-        (
-            name: "Gate apron", kind: Gravel, width: 14.0, shoulder: 3.0, smoothing: 8.0,
-            points: [(0.0, 81.0), (0.0, 67.0)],
+            // Straight up the middle, through every bay's gate: 3 m, a
+            // gate's leaf across.
+            name: "Yard track", kind: Gravel, width: 3.0, smoothing: 10.0,
+            points: [(0.0, 98.0), (0.0, 40.0), (0.0, -20.0), (0.0, -78.0)],
         ),
     ],
 
@@ -53,8 +49,7 @@
     placements: [
         // The wait by the truck at each rendezvous: a log pile 2.5-3.6 m off it,
         // to go still by while it comes (map_lint::WAIT_NEAR).
-        (prefab: "log_pile", at: (5.6, -78.0), rot: 0.0, tag: "wait_north_post"),
-        (prefab: "quarantine_gate", at: (0.0, 74.0), rot: 0.0),
+        (prefab: "log_pile", at: (5.6, -74.0), rot: 0.0, tag: "wait_north_post"),
         // The firing line: targets at 15, 30 and 60 m from the bench.
         (prefab: "target", at: (-12.0, 25.0), rot: 0.0),
         (prefab: "target", at: (-18.0, 10.0), rot: 0.0),
@@ -65,18 +60,200 @@
         // first station that walking leaves them be; run, and they go up.
         (prefab: "shed", at: (-30.0, 95.0), rot: 90.0),
         (prefab: "log_pile", at: (-12.0, -32.0), rot: 90.0),
+
+        // The bays (#89, docs/YARD_SHAPE.md): bare timber fences, waist
+        // high (world::yard), the next bay seen over them, and a gate on
+        // the track in each, shut till its station's done or SKIPped.
+        // The lane west of bays
+        // 4-6 is the range's, out to its 60 m target; nothing in these
+        // fences breaks, so it stops rounds.
+        // Bay 1's back (south) fence, inside the yard's own.
+        (prefab: "yard_fence", at: (-31.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-25.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-19.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-13.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-7.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-1.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence", at: (5.0, 100.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (9.0, 100.0), rot: 0.0),
+        // Bays 1-2, west.
+        (prefab: "yard_fence", at: (-34.0, 77.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-34.0, 83.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-34.0, 89.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-34.0, 95.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (-34.0, 99.0), rot: 90.0),
+        // Bays 1-2, east.
+        (prefab: "yard_fence", at: (10.0, 77.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 83.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 89.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 95.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (10.0, 99.0), rot: 90.0),
+        // Bay 1 | bay 2.
+        (prefab: "yard_fence", at: (-31.0, 84.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-25.0, 84.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-19.0, 84.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-13.0, 84.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-7.0, 84.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (-3.0, 84.0), rot: 0.0),
+        (prefab: "yard_gate", at: (0.0, 84.0), rot: 0.0, tag: "gate_1"),
+        (prefab: "yard_fence", at: (5.0, 84.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (9.0, 84.0), rot: 0.0),
+        // Bay 2 | the range.
+        (prefab: "yard_fence", at: (-31.0, 74.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-25.0, 74.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-19.0, 74.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-13.0, 74.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-7.0, 74.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (-3.0, 74.0), rot: 0.0),
+        (prefab: "yard_gate", at: (0.0, 74.0), rot: 0.0, tag: "gate_2"),
+        (prefab: "yard_fence", at: (5.0, 74.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (9.0, 74.0), rot: 0.0),
+        // The range and its lane, west.
+        (prefab: "yard_fence", at: (-24.0, -21.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, -15.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, -9.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, -3.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 3.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 9.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 15.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 21.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 27.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 33.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 39.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 45.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 51.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 57.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 63.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-24.0, 69.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (-24.0, 73.0), rot: 90.0),
+        // The range, east.
+        (prefab: "yard_fence", at: (10.0, 41.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 47.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 53.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 59.0), rot: 90.0),
+        (prefab: "yard_fence", at: (10.0, 65.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (10.0, 69.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (10.0, 71.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (10.0, 73.0), rot: 90.0),
+        // The range | bay 4 (the house).
+        (prefab: "yard_fence_2", at: (-5.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (-3.0, 38.0), rot: 0.0),
+        (prefab: "yard_gate", at: (0.0, 38.0), rot: 0.0, tag: "gate_3"),
+        (prefab: "yard_fence", at: (5.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence", at: (11.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence", at: (17.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence", at: (23.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence", at: (29.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (33.0, 38.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (35.0, 38.0), rot: 0.0),
+        // The lane | bays 4-6.
+        (prefab: "yard_fence", at: (-6.0, -45.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -39.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -33.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -27.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -21.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -15.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -9.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, -3.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, 3.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, 9.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, 15.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, 21.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, 27.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-6.0, 33.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (-6.0, 37.0), rot: 90.0),
+        // The lane's far end.
+        (prefab: "yard_fence", at: (-21.0, -24.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-15.0, -24.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-9.0, -24.0), rot: 0.0),
+        // Bay 4, east.
+        (prefab: "yard_fence", at: (36.0, 15.0), rot: 90.0),
+        (prefab: "yard_fence", at: (36.0, 21.0), rot: 90.0),
+        (prefab: "yard_fence", at: (36.0, 27.0), rot: 90.0),
+        (prefab: "yard_fence", at: (36.0, 33.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (36.0, 37.0), rot: 90.0),
+        // Bay 4 | bay 5 (first aid).
+        (prefab: "yard_fence_2", at: (-5.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (-3.0, 12.0), rot: 0.0),
+        (prefab: "yard_gate", at: (0.0, 12.0), rot: 0.0, tag: "gate_4"),
+        (prefab: "yard_fence", at: (5.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence", at: (11.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence", at: (17.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence", at: (23.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence", at: (29.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (33.0, 12.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (35.0, 12.0), rot: 0.0),
+        // Bay 5, east.
+        (prefab: "yard_fence", at: (30.0, -13.0), rot: 90.0),
+        (prefab: "yard_fence", at: (30.0, -7.0), rot: 90.0),
+        (prefab: "yard_fence", at: (30.0, -1.0), rot: 90.0),
+        (prefab: "yard_fence", at: (30.0, 5.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (30.0, 9.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (30.0, 11.0), rot: 90.0),
+        // Bay 5 | bay 6 (the shimmer).
+        (prefab: "yard_fence_2", at: (-5.0, -16.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (-3.0, -16.0), rot: 0.0),
+        (prefab: "yard_gate", at: (0.0, -16.0), rot: 0.0, tag: "gate_5"),
+        (prefab: "yard_fence", at: (5.0, -16.0), rot: 0.0),
+        (prefab: "yard_fence", at: (11.0, -16.0), rot: 0.0),
+        (prefab: "yard_fence", at: (17.0, -16.0), rot: 0.0),
+        (prefab: "yard_fence", at: (23.0, -16.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (27.0, -16.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (29.0, -16.0), rot: 0.0),
+        // Bay 6, east.
+        (prefab: "yard_fence", at: (20.0, -45.0), rot: 90.0),
+        (prefab: "yard_fence", at: (20.0, -39.0), rot: 90.0),
+        (prefab: "yard_fence", at: (20.0, -33.0), rot: 90.0),
+        (prefab: "yard_fence", at: (20.0, -27.0), rot: 90.0),
+        (prefab: "yard_fence", at: (20.0, -21.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (20.0, -17.0), rot: 90.0),
+        // Bay 6 | bay 7 (the extract).
+        (prefab: "yard_fence", at: (-7.0, -48.0), rot: 0.0),
+        (prefab: "yard_fence_2", at: (-3.0, -48.0), rot: 0.0),
+        (prefab: "yard_gate", at: (0.0, -48.0), rot: 0.0, tag: "gate_6"),
+        (prefab: "yard_fence", at: (5.0, -48.0), rot: 0.0),
+        (prefab: "yard_fence", at: (11.0, -48.0), rot: 0.0),
+        (prefab: "yard_fence", at: (17.0, -48.0), rot: 0.0),
+        // Bay 7, west.
+        (prefab: "yard_fence", at: (-10.0, -79.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-10.0, -73.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-10.0, -67.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-10.0, -61.0), rot: 90.0),
+        (prefab: "yard_fence", at: (-10.0, -55.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (-10.0, -51.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (-10.0, -49.0), rot: 90.0),
+        // Bay 7, east.
+        (prefab: "yard_fence", at: (14.0, -79.0), rot: 90.0),
+        (prefab: "yard_fence", at: (14.0, -73.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (14.0, -69.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (14.0, -67.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (14.0, -65.0), rot: 90.0),
+        (prefab: "yard_fence", at: (14.0, -61.0), rot: 90.0),
+        (prefab: "yard_fence", at: (14.0, -55.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (14.0, -51.0), rot: 90.0),
+        (prefab: "yard_fence_2", at: (14.0, -49.0), rot: 90.0),
+        // Bay 7, north.
+        (prefab: "yard_fence", at: (-7.0, -82.0), rot: 0.0),
+        (prefab: "yard_fence", at: (-1.0, -82.0), rot: 0.0),
+        (prefab: "yard_fence", at: (5.0, -82.0), rot: 0.0),
+        (prefab: "yard_fence", at: (11.0, -82.0), rot: 0.0),
+
     ],
 
     markers: [
-        (kind: Insertion, at: (0.0, 80.0), rot: 0.0, name: "Yard gate"),
-        (kind: TruckStop, at: (0.0, 96.0), rot: 0.0, name: "Yard gate"),
-        (kind: Rendezvous, at: (0.0, -74.0), name: "North post"),
+        // You load standing in bay 1, on the track, facing north.
+        (kind: Insertion, at: (0.0, 96.0), rot: 0.0, name: "Yard gate"),
+        // The truck isn't in the yard till the extract is used
+        // (`onboarding`); then it shows here, in bay 7 by the North post,
+        // its bonnet 3 m short of the bay's north fence.
+        (kind: TruckStop, at: (0.0, -74.0), rot: 0.0, name: "Yard gate"),
+        (kind: Rendezvous, at: (0.0, -72.0), name: "North post"),
         (kind: RobotGate, at: (-90.0, -90.0), rot: 45.0, name: "Old gate"),
         (kind: ArtifactField, at: (45.0, -45.0), name: "The soft ground"),
         (kind: Poi, at: (-12.0, 30.0), name: "Firing line"),
         (kind: Poi, at: (28.0, 18.0), name: "Practice house"),
 
-        (kind: Sign(text: "THE MACHINES\n\nNone in the yard. Out there, little flyers spot you and call the rest; walkers come to look.\n\nShoot the eye, or keep still in cover."), at: (-6.0, -26.0), rot: 0.0, name: "Machines sign"),
+        (kind: Sign(text: "THE MACHINES\n\nNone in the yard. Out there, little flyers spot you and call the rest; walkers come to look.\n\nShoot the eye, or keep still in cover."), at: (-3.0, -30.0), rot: 0.0, name: "Machines sign"),
     ],
 
     regions: [

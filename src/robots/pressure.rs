@@ -175,10 +175,7 @@ pub fn called_pad(zone: &crate::world::Zone, phase: &crate::raid::Phase) -> Opti
         | crate::raid::Phase::TruckWaiting { rv, .. } => rv,
         _ => return None,
     };
-    zone.map
-        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
-        .nth(rv)
-        .map(|m| m.at)
+    crate::raid::truck::pad_at(zone, rv)
 }
 
 /// Whether `p` is on the job's hot place ([`job_hot_place`]).

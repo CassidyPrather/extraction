@@ -39,6 +39,7 @@ impl Plugin for RobotVisualsPlugin {
                 super::hit_gauge::HitGaugePlugin,
                 super::wear::WearPlugin,
                 super::distress_look::DistressLookPlugin,
+                super::searchlight_look::SearchlightLookPlugin,
             ))
             .add_systems(
                 Update,
