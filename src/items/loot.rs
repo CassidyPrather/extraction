@@ -916,6 +916,60 @@ pub(crate) mod tests {
         kinds(app)
     }
 
+    /// `cargo test -- --ignored item_census --nocapture`: every item in
+    /// each valley once it's settled, by kind, junk (food and the like:
+    /// its `food:` tag, or the Junk category) apart from the rest (#104).
+    #[test]
+    #[ignore]
+    fn item_census() {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let dir = std::env::temp_dir().join(format!("census_{map}_{}", std::process::id()));
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                data_dir: Some(dir.clone()),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..120 {
+                app.update();
+            }
+            let cat = app.world().resource::<Catalog>().clone();
+            let raid = app.world().resource::<Loot>().1;
+            let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+            let mut q = app.world_mut().query::<&Item>();
+            for i in q.iter(app.world()) {
+                *kinds.entry(cat.get(i.kind()).id.clone()).or_default() += 1;
+            }
+            let junk = |id: &str| {
+                let d = cat.get(cat.kind(id).unwrap());
+                d.tags.iter().any(|t| t.starts_with("food:"))
+                    || id.starts_with("grenade_pin")
+                    || id.starts_with("grenade_spoon")
+            };
+            let (j, r): (Vec<_>, Vec<_>) = kinds.iter().partition(|(k, _)| junk(k));
+            let sum = |v: &[(&String, &usize)]| v.iter().map(|(_, n)| **n).sum::<usize>();
+            println!(
+                "census {map} (raid {raid:?}): real {} in {} kinds, junk {} in {} kinds",
+                sum(&r),
+                r.len(),
+                sum(&j),
+                j.len()
+            );
+            println!("  real: {r:?}");
+            println!("  junk: {j:?}");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
     pub(crate) fn career_app() -> App {
         career_app_on("marrow_creek")
     }
