@@ -116,10 +116,20 @@ pub struct DistressPlugin;
 impl Plugin for DistressPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<FlareEvent>()
+            .add_message::<SignalLit>()
             .init_resource::<FlaresSaid>()
             .add_systems(
                 Update,
-                (fit_tubes, hit_tubes, tell, climb, hit_canisters, signals).chain(),
+                (
+                    fit_tubes,
+                    hit_tubes,
+                    drop_flares,
+                    tell,
+                    climb,
+                    hit_canisters,
+                    signals,
+                )
+                    .chain(),
             );
     }
 }
@@ -416,6 +426,66 @@ fn climb(
     }
 }
 
+/// A red star someone fired has lit (#94): the alternate extract opens on
+/// it (Progression). `by` is who fired it. Machines' own bursts are not
+/// sent.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct SignalLit {
+    pub at: Vec3,
+    pub by: Option<Entity>,
+}
+
+/// The item a wreck's unfired canister drops as (Progression's).
+pub const SIGNAL_FLARE: &str = "signal_flare";
+
+/// A wrecked machine whose flare never went up drops it (#94): with its
+/// tube whole, the canister falls at the tube as a `signal_flare` you can
+/// take and fire yourself. A tube shot through drops nothing. Either way
+/// the flare's spent; a wreck stopped in its tell still says so.
+fn drop_flares(
+    mut commands: Commands,
+    catalog: Option<Res<crate::items::Catalog>>,
+    mut robots: Query<(Entity, &Robot, &mut Distress, &Children)>,
+    tubes: Query<(&FlareTube, &GlobalTransform)>,
+    mut out: MessageWriter<FlareEvent>,
+) {
+    for (e, robot, mut d, children) in &mut robots {
+        if !robot.wrecked || !matches!(*d, Distress::Ready | Distress::Telling(_)) {
+            continue;
+        }
+        let Some((t, g)) = children.iter().find_map(|c| tubes.get(c).ok()) else {
+            continue;
+        };
+        let at = g.translation();
+        if matches!(*d, Distress::Telling(_)) {
+            out.write(FlareEvent {
+                robot: e,
+                at,
+                what: FlareAct::Stopped,
+            });
+        }
+        *d = Distress::Spent;
+        if t.hp <= 0.0 {
+            continue;
+        }
+        let Some(catalog) = catalog.as_deref() else {
+            continue;
+        };
+        let Some(kind) = catalog.0.kind(SIGNAL_FLARE) else {
+            continue;
+        };
+        crate::items::spawn_item(
+            &mut commands,
+            &catalog.0,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        );
+    }
+}
+
 /// A red star you fired, once it's lit, has been noticed by the Zone (it
 /// already brings what sees it: `weapons::flares`).
 #[derive(Component)]
@@ -434,6 +504,7 @@ pub fn signals(
     zone: Option<Res<Zone>>,
     mut director: Option<ResMut<super::director::Director>>,
     mut doing: Option<ResMut<super::pressure::Doing>>,
+    mut lit: MessageWriter<SignalLit>,
 ) {
     for (e, f, gt) in &stars {
         if f.star != crate::weapons::flares::Star::Red || !f.burning() {
@@ -444,6 +515,7 @@ pub fn signals(
             continue;
         }
         let at = gt.translation();
+        lit.write(SignalLit { at, by: f.shooter });
         let ground = zone.as_deref().map_or(at, |z| z.on_ground(at.x, at.z));
         if let Some(d) = director.as_deref_mut() {
             d.queue_response(super::pressure::CUE_LEAD, ground);
@@ -519,6 +591,7 @@ mod tests {
     fn your_red_star_stirs_like_a_distress_burst() {
         let mut app = App::new();
         app.init_resource::<super::super::pressure::Doing>()
+            .add_message::<SignalLit>()
             .insert_resource(director());
         let w = app.world_mut();
         let machine = w
@@ -548,5 +621,73 @@ mod tests {
         assert_eq!(d.responses.len(), 1);
         assert!((d.responses[0].0 - super::super::pressure::CUE_LEAD).abs() < 1e-6);
         assert!(w.entity(fired).contains::<Signalled>());
+        // Told once, as yours: not the white, not the machine's.
+        let lit: Vec<SignalLit> = w
+            .resource::<Messages<SignalLit>>()
+            .iter_current_update_messages()
+            .copied()
+            .collect();
+        assert_eq!(lit.len(), 1, "{lit:?}");
+        assert!((lit[0].at.x - 20.0).abs() < 0.01, "{lit:?}");
+        assert!(lit.iter().all(|l| l.by.is_none()));
+    }
+
+    /// A wreck whose flare never went up drops it at the tube as a
+    /// `signal_flare`; one whose tube was shot through drops nothing; a
+    /// standing machine keeps its flare. Each wreck's flare is spent.
+    #[test]
+    fn a_wrecks_unfired_flare_drops_as_a_signal_flare() {
+        let catalog = extraction_core::items::ItemCatalog::from_ron(
+            r#"(items: [(id: "signal_flare", name: "Signal flare (red)", description: "",
+                category: Gadget, size: Small, mass: 0.2, bulk: 0.1)])"#,
+        )
+        .unwrap();
+        let mut app = App::new();
+        app.add_message::<FlareEvent>()
+            .insert_resource(crate::items::Catalog(std::sync::Arc::new(catalog)));
+        let w = app.world_mut();
+        let mut machine = |wrecked: bool, d: Distress, hp: f32, x: f32| {
+            let tube = w
+                .spawn((
+                    FlareTube {
+                        robot: Entity::PLACEHOLDER,
+                        raised: 0.0,
+                        hp,
+                    },
+                    GlobalTransform::from_translation(Vec3::new(x, 2.0, 0.0)),
+                ))
+                .id();
+            let r = w
+                .spawn((
+                    Robot {
+                        kind: RobotKind::Walker,
+                        wrecked,
+                    },
+                    d,
+                ))
+                .id();
+            w.entity_mut(r).add_child(tube);
+            r
+        };
+        let whole = machine(true, Distress::Ready, TUBE_HP, 5.0);
+        let telling = machine(true, Distress::Telling(0.5), TUBE_HP, 9.0);
+        let shot = machine(true, Distress::Ready, 0.0, 30.0);
+        let fired = machine(true, Distress::Spent, TUBE_HP, 40.0);
+        let standing = machine(false, Distress::Ready, TUBE_HP, 50.0);
+        for _ in 0..3 {
+            app.world_mut().run_system_once(drop_flares).unwrap();
+        }
+        let w = app.world_mut();
+        let mut dropped: Vec<f32> = w
+            .query::<(&crate::items::Item, &Transform)>()
+            .iter(w)
+            .map(|(_, t)| t.translation.x)
+            .collect();
+        dropped.sort_by(f32::total_cmp);
+        assert_eq!(dropped, vec![5.0, 9.0], "at the whole tubes, once each");
+        for r in [whole, telling, shot, fired] {
+            assert_eq!(*w.get::<Distress>(r).unwrap(), Distress::Spent);
+        }
+        assert_eq!(*w.get::<Distress>(standing).unwrap(), Distress::Ready);
     }
 }

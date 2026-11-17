@@ -1288,6 +1288,10 @@ mod tests {
         ("SaveNow", "a save"),
         ("Searching", "a mind's turn: heard in its voice"),
         ("Setup", "a bot scenario"),
+        (
+            "SignalLit",
+            "Progression's cue for a red star's extract; the star itself is the signal",
+        ),
         ("SiteGrid", "a nav grid"),
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
