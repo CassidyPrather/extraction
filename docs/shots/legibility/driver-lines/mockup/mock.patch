@@ -1,0 +1,156 @@
+diff --git a/src/dev.rs b/src/dev.rs
+index fb789f29..cb8be876 100644
+--- a/src/dev.rs
++++ b/src/dev.rs
+@@ -252,11 +252,53 @@ fn sights_to_the_eye(
+             Without<crate::weapons::Gun>,
+         ),
+     >,
++    mut commands: Commands,
++    mut mocked: Local<bool>,
++    mut seen: Local<u32>,
+ ) {
+     let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
+     else {
+         return;
+     };
++    // MOCK (#90, not for commit): a callout 12 deg off the sight line.
++    let gun_here = spec.strip_prefix("sights:").is_some_and(|id| {
++        guns.iter()
++            .any(|(_, item, _, _)| catalog.get(item.kind()).id == id.split(',').next().unwrap_or(""))
++    });
++    if gun_here {
++        *seen += 1;
++    }
++    if let (false, Ok(text), true) = (*mocked, std::env::var("MOCK_CALLOUT"), *seen >= 15) {
++        info!("MOCK: sights callout spawned");
++        *mocked = true;
++        let ground = zone.ground(cam.x, cam.z);
++        let eye = Vec3::new(cam.x, if cam.y == 0.0 { ground + 1.7 } else { cam.y }, cam.z);
++        let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
++        let d = 0.5;
++        let em = d * 0.65f32.to_radians().tan() / 0.528;
++        let size = Vec2::new(em * (20.0 * 0.64 + 1.6), em * (4.0 * 1.2 + 1.6));
++        // Its nearest corner 12 deg right of and below the line.
++        let half = ((size.x * 0.5) / d).atan().to_degrees();
++        let halfy = ((size.y * 0.5) / d).atan().to_degrees();
++        let dir = look
++            * Quat::from_rotation_y(-(12.0 + half).to_radians())
++            * Quat::from_rotation_x(-(6.0 + halfy).to_radians())
++            * Vec3::NEG_Z;
++        let at = eye + dir * d;
++        commands.spawn((
++            crate::render::legibility::TextSource::Dev,
++            crate::raid::bench::ScreenText {
++                text: text.replace("|", "\n"),
++                size,
++                style: crate::raid::bench::ScreenStyle::Lcd,
++            },
++            crate::render::screen::Ink {
++                ground: Some(Color::srgb(0.045, 0.05, 0.06)),
++                ink: Color::srgb(0.82, 0.85, 0.88),
++            },
++            Transform::from_translation(at).with_rotation(look),
++        ));
++    }
+     let Some(rest) = spec.strip_prefix("sights:") else {
+         return;
+     };
+@@ -1271,6 +1313,44 @@ fn first_person_hands(
+         }
+         h
+     };
++    // MOCK (#90, not for commit): the view caption, 1.4 m out, 12 deg low.
++    if *stage == 15 && std::env::var("MOCK_CAPTION").is_ok() {
++        let d = 1.4;
++        let down = 12f32.to_radians();
++        let at = eye + flat * d * down.cos() - Vec3::Y * d * down.sin();
++        // x-height 0.9 deg at 1.4 m: em 41.7 mm; 3 lines of up to 26.
++        let em = d * 0.9f32.to_radians().tan() / 0.528;
++        let size = Vec2::new(em * (26.0 * 0.64 + 1.6), em * (3.0 * 1.2 + 1.6));
++        let t = Transform::from_translation(at).with_rotation(rot);
++        commands.spawn((
++            crate::render::legibility::TextSource::Dev,
++            crate::raid::bench::ScreenText {
++                text: std::env::var("MOCK_CAPTION").unwrap().replace("|", "\n"),
++                size,
++                style: crate::raid::bench::ScreenStyle::Lcd,
++            },
++            crate::render::screen::Ink {
++                ground: Some(Color::srgb(0.045, 0.05, 0.06)),
++                ink: Color::srgb(0.82, 0.85, 0.88),
++            },
++            t,
++        ));
++        if std::env::var("MOCK_URGENT").is_ok() {
++            commands.spawn((
++                crate::render::legibility::TextSource::Dev,
++                crate::raid::bench::ScreenText {
++                    text: " ".into(),
++                    size: Vec2::new(0.012, size.y),
++                    style: crate::raid::bench::ScreenStyle::Lcd,
++                },
++                crate::render::screen::Ink {
++                    ground: Some(Color::srgb(1.0, 0.24, 0.06)),
++                    ink: Color::srgb(1.0, 0.24, 0.06),
++                },
++                t * Transform::from_xyz(-size.x * 0.5 - 0.012, 0.0, 0.0),
++            ));
++        }
++    }
+     // Late enough for a map's cards and buttons to be up.
+     if *stage == 15 {
+         match what {
+@@ -1369,6 +1449,52 @@ fn first_person_hands(
+         return;
+     }
+     *waiting = None;
++    // MOCK (#90, not for commit): the item callout beside a held thing.
++    if let Ok(text) = std::env::var("MOCK_CALLOUT") {
++        let grip = level.translation;
++        // x-height 0.65 deg at the panel's distance; 20 a line, 4 lines.
++        let at0 = grip + right * 0.17 + Vec3::Y * 0.05;
++        let d = at0.distance(eye);
++        let em = d * 0.65f32.to_radians().tan() / 0.528;
++        let size = Vec2::new(em * (20.0 * 0.64 + 1.6), em * (4.0 * 1.2 + 1.6));
++        let at = at0 + right * size.x * 0.5;
++        let t = Transform::from_translation(at).with_rotation(rot);
++        commands.spawn((
++            crate::render::legibility::TextSource::Dev,
++            crate::raid::bench::ScreenText {
++                text: text.replace("|", "\n"),
++                size,
++                style: crate::raid::bench::ScreenStyle::Lcd,
++            },
++            crate::render::screen::Ink {
++                ground: Some(Color::srgb(0.045, 0.05, 0.06)),
++                ink: Color::srgb(0.82, 0.85, 0.88),
++            },
++            t,
++        ));
++        // The leader: a hair from the panel's lower near corner to the grip.
++        let up = rot * Vec3::Y;
++        let side = rot * Vec3::X;
++        let from = at - side * size.x * 0.5 - up * size.y * 0.5;
++        let to = grip + side * 0.035 + up * 0.01;
++        let mid = (from + to) * 0.5;
++        let along = (to - from).normalize();
++        let z = rot * Vec3::Z;
++        commands.spawn((
++            crate::render::legibility::TextSource::Dev,
++            crate::raid::bench::ScreenText {
++                text: " ".into(),
++                size: Vec2::new(from.distance(to), 0.0015),
++                style: crate::raid::bench::ScreenStyle::Lcd,
++            },
++            crate::render::screen::Ink {
++                ground: Some(Color::srgb(0.6, 0.62, 0.65)),
++                ink: Color::srgb(0.6, 0.62, 0.65),
++            },
++            Transform::from_translation(mid)
++                .with_rotation(Quat::from_mat3(&Mat3::from_cols(along, z.cross(along), z))),
++        ));
++    }
+     let point = |role: GripRole| grab.points.iter().find(|p| p.role == role);
+     if let Some(primary) = point(GripRole::Primary) {
+         let item_at =

@@ -61,6 +61,9 @@ pub enum ScreenStyle {
     Card,
     /// A green-phosphor computer screen.
     Crt,
+    /// Words put in the view (`render::said`): off-white on a dark slate,
+    /// the letters as big as the panel's width allows (it's sized to them).
+    Slate,
 }
 
 /// The bench in truck space.

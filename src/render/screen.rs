@@ -30,9 +30,38 @@ impl Plugin for ScreenPlugin {
                 idle_screens,
                 drop_screens,
                 show_mipped,
+                light_panels,
             )
                 .chain(),
         );
+    }
+}
+
+/// A lit panel's light and opacity, set as they change (a panel in the
+/// view, `render::said`): `glow` scales its emission (1 is a screen's own,
+/// to follow the eye's adaptation), `alpha` how much of it shows (fading
+/// in and out, a slate the world shows through).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct PanelLight {
+    pub glow: f32,
+    pub alpha: f32,
+}
+
+/// A screen's emission at `glow` 1.
+const SCREEN_GLOW: f32 = 2.5;
+
+fn light_panels(
+    panels: Query<(&ScreenView, &PanelLight), Or<(Changed<PanelLight>, Added<ScreenView>)>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (view, light) in &panels {
+        let Some(mut m) = materials.get_mut(&view.material) else {
+            continue;
+        };
+        let g = SCREEN_GLOW * light.glow.max(0.0);
+        m.emissive = LinearRgba::rgb(g, g, g);
+        m.base_color = m.base_color.with_alpha(light.alpha.clamp(0.0, 1.0));
+        m.alpha_mode = AlphaMode::Blend;
     }
 }
 
@@ -284,6 +313,8 @@ fn panel(screen: &ScreenText) -> (f32, u32, u32, f32) {
             // width bound them (a line's em and its margins, `fit_font`).
             ScreenStyle::Sign => 2.8,
             ScreenStyle::Crt => 14.0,
+            // Sized to its words: only `fit_font` bounds them.
+            ScreenStyle::Slate => 1.0,
             ScreenStyle::Card => 4.5,
         };
     (ppm, w, h, font)
@@ -396,6 +427,12 @@ fn build_screens(
                 Color::srgb(0.35, 1.0, 0.45),
                 true,
             ),
+            // Cool, never warm: not a lamp, not a warning.
+            ScreenStyle::Slate => (
+                Color::srgb(0.045, 0.05, 0.06),
+                Color::srgb(0.82, 0.85, 0.88),
+                true,
+            ),
         };
         let (bg, fg) = match ink {
             Some(i) => (i.ground.unwrap_or(Color::NONE), i.ink),
@@ -423,7 +460,7 @@ fn build_screens(
             base_color: if emissive { Color::BLACK } else { Color::WHITE },
             base_color_texture: (!emissive).then(|| handle.clone()),
             emissive: if emissive {
-                LinearRgba::rgb(2.5, 2.5, 2.5)
+                LinearRgba::rgb(SCREEN_GLOW, SCREEN_GLOW, SCREEN_GLOW)
             } else {
                 LinearRgba::BLACK
             },
