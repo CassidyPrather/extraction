@@ -622,6 +622,15 @@ fn spawn_building_loot(
 /// ground by the insertion point: a testing convenience for sessions that
 /// don't save (scenarios, screenshots, `--scene`). A saved game starts with
 /// a kit in the truck's stash instead.
+/// Whether a session gets the dev cache: only one that doesn't save, and
+/// not the yard (it has its own kit, in the crate) nor the arcade (it lays
+/// out its own sweep).
+fn wants_dev_cache(saves: bool, opts: &crate::launch::LaunchOptions) -> bool {
+    !saves
+        && opts.map != crate::camp::TRAINING_YARD
+        && opts.scene != crate::launch::SceneChoice::Arcade
+}
+
 fn spawn_dev_cache(
     mut commands: Commands,
     zone: Res<Zone>,
@@ -629,8 +638,7 @@ fn spawn_dev_cache(
     slot: Res<crate::persist::SaveSlot>,
     opts: Res<crate::launch::LaunchOptions>,
 ) {
-    // (Not in the yard: it has its own kit, in the crate.)
-    if slot.0.is_some() || opts.map == crate::camp::TRAINING_YARD {
+    if !wants_dev_cache(slot.0.is_some(), &opts) {
         return;
     }
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
@@ -718,6 +726,26 @@ fn spawn_dev_cache(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    /// The dev cache is for a session that doesn't save, in a valley: not
+    /// the yard, not the arcade.
+    #[test]
+    fn the_dev_cache_is_not_in_the_yard_nor_the_arcade() {
+        use crate::launch::{LaunchOptions, SceneChoice};
+        let raid = LaunchOptions::default();
+        assert!(super::wants_dev_cache(false, &raid));
+        assert!(!super::wants_dev_cache(true, &raid));
+        let yard = LaunchOptions {
+            map: crate::camp::TRAINING_YARD.into(),
+            ..Default::default()
+        };
+        assert!(!super::wants_dev_cache(false, &yard));
+        let arcade = LaunchOptions {
+            scene: SceneChoice::Arcade,
+            ..Default::default()
+        };
+        assert!(!super::wants_dev_cache(false, &arcade));
+    }
+
     use super::*;
 
     /// A prop placed in a valley doesn't change what's rolled anywhere
