@@ -48,6 +48,13 @@ pub fn cool_scald(
 
 /// How long a hand holds a hot stone before it lets go, seconds.
 pub const HOT_GRIP: f32 = 1.5;
+/// ...and how much longer, and how much less it burns, with your gloves
+/// soaked (rain on soaked ground, or wading): a wet hand's a way in.
+pub const WET_GRIP: f32 = 2.0;
+/// Wetness (`world::weather::Wetness`) or wading depth (m) past which your
+/// gloves are soaked.
+pub const WET_GLOVES: f32 = 0.5;
+pub const WADING_GLOVES: f32 = 0.3;
 /// What's said when it does.
 pub const TOO_HOT: &str = "Too hot to hold: you drop it. Let it cool, or pocket it.";
 
@@ -83,7 +90,8 @@ pub fn heat(
         Option<&mut Hot>,
         Option<&Held>,
     )>,
-    mut players: Query<&mut Health>,
+    mut players: Query<(&mut Health, Option<&crate::player::Body>)>,
+    wetness: Option<Res<crate::world::weather::Wetness>>,
     catalog: Res<Catalog>,
     zone: Res<Zone>,
     time: Res<Time>,
@@ -132,15 +140,18 @@ pub fn heat(
                     continue;
                 }
                 if let Some(held) = held
-                    && let Ok(mut hp) = players.get_mut(held.player)
+                    && let Ok((mut hp, body)) = players.get_mut(held.player)
                     && !hp.down
                 {
+                    let wet = wetness.as_ref().is_some_and(|w| w.level > WET_GLOVES)
+                        || body.is_some_and(|b| b.wading > WADING_GLOVES);
+                    let grip = if wet { WET_GRIP } else { 1.0 };
                     // Nobody holds on to something burning: a moment, and
                     // the hand lets go (someone new, told to take the
                     // stone, held it to death otherwise).
                     let t = gripped.entry(e).or_default();
                     *t += dt;
-                    if *t > HOT_GRIP {
+                    if *t > HOT_GRIP * grip {
                         gripped.remove(&e);
                         actions.write(crate::interact::HandAction::Release {
                             player: held.player,
@@ -152,7 +163,7 @@ pub fn heat(
                             raid.say(TOO_HOT);
                         }
                     }
-                    hp.hp -= HOT_BURN * h.heat().max(0.3) * dt;
+                    hp.hp -= HOT_BURN * h.heat().max(0.3) / grip * dt;
                     hp.since_hit = 0.0;
                     burned.write(Burned {
                         player: held.player,
@@ -320,6 +331,49 @@ mod tests {
             app.update();
         }
         assert!(app.world().get::<Hot>(stone).is_none(), "cool after twenty");
+    }
+
+    /// With your gloves soaked, a hot stone is held twice as long: a way
+    /// in, in the rain.
+    #[test]
+    fn a_wet_hand_holds_a_hot_stone_longer() {
+        let mut vr = Vr::new("marrow_creek");
+        let (_, at, _) = find(vr.app.world_mut(), AnomalyKind::Burner);
+        let feet = vr
+            .app
+            .world()
+            .resource::<Zone>()
+            .on_ground(at.x + 8.0, at.z);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::world::weather::Wetness>()
+            .level = 1.0;
+        let hand = feet + Vec3::new(0.25, 1.1, -0.35);
+        let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
+        vr.app
+            .world_mut()
+            .entity_mut(stone)
+            .insert((RigidBody::Static, Hot { out: 0.0 }));
+        vr.hand(Side::Right, hand, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(stone), "took it");
+        // Past a dry hand's grip, still held.
+        vr.step((90.0 * (HOT_GRIP + 0.6)) as usize);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(stone),
+            "wet, still holding"
+        );
+        vr.step((90.0 * (HOT_GRIP * WET_GRIP - HOT_GRIP + 0.4)) as usize);
+        assert_ne!(
+            vr.hand_state(Side::Right).holding,
+            Some(stone),
+            "then let go"
+        );
     }
 
     /// Held on to, a hot stone is let go of in a moment, with a word why:
