@@ -44,6 +44,7 @@ pub mod surfaces;
 pub mod terrain;
 pub mod trees;
 pub mod underground;
+pub mod village;
 pub mod water;
 pub mod way_lamps;
 pub mod weather;

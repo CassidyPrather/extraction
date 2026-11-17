@@ -191,11 +191,13 @@ plan keeps the common plan's loot spots; a ruin keeps the common plan.
 - **Post office** (Marrow's, `post_office` in `house_brick`'s walls): a
   public counter across the front room, the way in past its open end,
   the pigeonholes behind it and the parcel scales on it.
-- **Plank B** (`house_plank_b`: the village house opposite Hana's): the
+- **Plank B** (`house_plank_b`: was the village house opposite Hana's;
+  since #96 a farmhouse stands there and no map places Plank B): the
   common plan mirrored across the door's axis. Its things are set out as
   the common plan's and mirrored with it, so every resident's kit keeps
   to its walls.
-- **Plank C** (`house_plank_c`: beside the post office): the front room
+- **Plank C** (`house_plank_c`: was beside Marrow's post office, now a
+  log cabin there since #96; Cinder still has one): the front room
   round its side window, the table out in the room, the shelf on the
   far wall.
 - Map design's shell table (`map::prefab_shell`) lets the core read each
