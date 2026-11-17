@@ -424,6 +424,19 @@ pub fn cluster_roll(i: usize) -> Vec3 {
     )
 }
 
+/// Where a first raid's junk lies on its spot, the `i`th there (#104):
+/// round the real things' cluster, a ring clear of it, so set dressing
+/// never sits in or on what's worth taking.
+pub fn dressing_roll(i: usize) -> Vec3 {
+    const AROUND: usize = 6;
+    let a = (i % AROUND) as f32 / AROUND as f32 * std::f32::consts::TAU + 0.3;
+    let r = DRESSING_RING + (i / AROUND) as f32 * 0.07;
+    Vec3::new(a.cos() * r, 0.04, a.sin() * r)
+}
+
+/// How far round a first raid's cluster its junk lies (m, from the spot).
+pub const DRESSING_RING: f32 = 0.2;
+
 /// Between neighbours in a first raid's cluster (m, centre to centre).
 pub const CLUSTER_GAP: f32 = 0.12;
 
@@ -549,20 +562,41 @@ fn spawn_building_loot(
     // A first raid's small things that sit badly, moved once every spot's
     // own roll is in (so a spot's pile counts what's rolled there too).
     let mut moving = Vec::new();
+    // A first raid's junk on each spot, laid round its cluster.
+    let mut dressed: std::collections::HashMap<usize, usize> = Default::default();
+    let mut real: std::collections::HashMap<usize, usize> = Default::default();
     let mut lay = |to: usize,
                    drop: extraction_core::loot::Drop,
                    piled: &mut std::collections::HashMap<usize, usize>,
                    rng: &mut Rng| {
+        // On a first raid a spot's junk (#104) lies round its cluster, on
+        // a ring of its own, and isn't counted in it: the real things'
+        // cluster is laid as if it weren't there.
+        let junk = catalog.get(drop.kind).category == extraction_core::items::Category::Junk;
+        // (Every thing counts toward a spot's load, which decides where a
+        // badly sitting one moves to; only its slot leaves junk out.)
         let pile = piled.entry(to).or_default();
-        let i = *pile;
         *pile += 1;
+        let i = if cluster && placed {
+            let n = if junk {
+                dressed.entry(to).or_default()
+            } else {
+                real.entry(to).or_default()
+            };
+            *n += 1;
+            *n - 1
+        } else {
+            *pile - 1
+        };
         // On a first raid a small thing joins its spot's cluster; the rest
         // (and every later raid's) pile as rolled.
         let small = matches!(
             catalog.get(drop.kind).size,
             extraction_core::items::SizeClass::Tiny | extraction_core::items::SizeClass::Small
         );
-        let off = if cluster && placed && small {
+        let off = if cluster && placed && junk {
+            dressing_roll(i)
+        } else if cluster && placed && small {
             cluster_roll(i)
         } else {
             building_roll(i)
@@ -1225,7 +1259,10 @@ pub(crate) mod tests {
             let (at, k) = (gt.translation(), laid.0);
             let def = cat.0.get(item.kind);
             *kinds[k].entry(def.id.clone()).or_default() += 1;
-            if matches!(def.size, SizeClass::Tiny | SizeClass::Small) {
+            // (Junk lies round the cluster, on a ring of its own.)
+            if matches!(def.size, SizeClass::Tiny | SizeClass::Small)
+                && def.category != extraction_core::items::Category::Junk
+            {
                 small[k].push(at);
             }
         }
