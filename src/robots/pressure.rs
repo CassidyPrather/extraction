@@ -105,6 +105,9 @@ pub struct Doings {
     pub into_hot: bool,
     /// The Zone's attention on you (`anomaly::Attention::total`).
     pub attention: f32,
+    /// What calls on a transceiver stirred it by this tick (the pads'
+    /// weights: [`Transmitted::stir`]).
+    pub transmit: f32,
 }
 
 /// The account, a raid's.
@@ -196,6 +199,8 @@ pub enum Why {
     Fight,
     Ground,
     Carried,
+    /// A call on a transceiver ([`Transmitted`]): the pad's weight.
+    Transmit,
 }
 
 impl Pressure {
@@ -221,6 +226,7 @@ impl Pressure {
                 if d.hot { HOT * dt } else { 0.0 } + if d.into_hot { INTO_HOT } else { 0.0 },
             ),
             (Why::Carried, ATTENTION * d.attention.max(0.0) * dt),
+            (Why::Transmit, d.transmit.max(0.0)),
         ];
         let fed: f32 = parts.iter().map(|p| p.1).sum();
         self.stir = (self.stir + fed - DRAIN * dt).max(0.0);
@@ -277,12 +283,76 @@ impl Plugin for PressurePlugin {
         app.init_resource::<Pressure>()
             .init_resource::<Doing>()
             .add_message::<Stepped>()
+            .add_message::<Transmitted>()
+            .add_message::<MastTell>()
             .add_systems(
                 FixedUpdate,
-                tally_pressure
+                (hear_transmissions, tally_pressure)
+                    .chain()
                     .after(super::director::hear_reports)
                     .before(super::director::run_director),
             );
+    }
+}
+
+/// A call on a transceiver (Progression's, #94): the truck called from a
+/// mast. It's heard: the account takes the pad's weight (`Why::Transmit`),
+/// a step a time like anything else. At a busy pad, or one with a horn,
+/// the mast gives a tell ([`MastTell`]) and an answer comes to it
+/// [`CUE_LEAD`] after; a horn sounds valley-wide ([`HORN_REACH`]) and what
+/// hears it comes as to any noise. Nothing on a clock while you wait: the
+/// call's the price, each time.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Transmitted {
+    /// The transceiver (the mast): where the answer comes to.
+    pub at: Vec3,
+    /// What the call stirs the account by: the pad's weight (a calm
+    /// pad's little; Sallow's Gauge house a level, `distress::STIR`).
+    pub stir: f32,
+    /// A busy pad: a tell at the mast, then an answer to it.
+    pub busy: bool,
+    /// A horn that sounds with the call (Sallow's dam): heard across the
+    /// valley, and an answer to the mast as at a busy pad.
+    pub horn: Option<Vec3>,
+}
+
+/// The tell at a mast before its call's answer: a relay chirp and the
+/// mast's lamp (Audio's and Visual design's to give it a sound and a look).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct MastTell {
+    pub at: Vec3,
+}
+
+/// How far a horn's heard (m): the valley (a map is 600 m across).
+pub const HORN_REACH: f32 = 900.0;
+
+/// Takes this tick's calls: their weights into the account, a horn's
+/// noise, a busy mast's tell and the answer owed it.
+fn hear_transmissions(
+    mut calls: MessageReader<Transmitted>,
+    mut doing: ResMut<Doing>,
+    mut noise: MessageWriter<super::Noise>,
+    mut tells: MessageWriter<MastTell>,
+    mut director: Option<ResMut<super::director::Director>>,
+    zone: Res<crate::world::Zone>,
+) {
+    for c in calls.read() {
+        doing.transmit += c.stir.max(0.0);
+        if let Some(h) = c.horn {
+            noise.write(super::Noise {
+                at: h,
+                radius: HORN_REACH,
+                source: None,
+            });
+        }
+        if c.busy || c.horn.is_some() {
+            tells.write(MastTell { at: c.at });
+            let ground = zone.on_ground(c.at.x, c.at.z);
+            if let Some(d) = director.as_deref_mut() {
+                d.queue_response(CUE_LEAD, ground);
+                d.owed.push(ground);
+            }
+        }
     }
 }
 
@@ -293,6 +363,8 @@ pub struct Doing {
     pub shots: u32,
     /// Distress flares that burst this tick (`distress`).
     pub flares: u32,
+    /// Calls on a transceiver this tick, by their pads' weights.
+    pub transmit: f32,
     pub was_hot: bool,
 }
 
@@ -347,6 +419,7 @@ fn tally_pressure(
         hot,
         into_hot: hot && !doing.was_hot,
         attention: attention.map_or(0.0, |a| a.total()),
+        transmit: std::mem::take(&mut doing.transmit),
     };
     doing.was_hot = hot && in_zone;
     let stepped_up = pressure.feed(d, time.delta_secs(), time.elapsed_secs());
@@ -657,6 +730,121 @@ mod tests {
     }
 
     /// Back at base it's all forgotten: each raid starts quiet.
+    /// A call on a transceiver stirs it by its pad's weight, a step at a
+    /// time like anything else, and says so: on a raid half-way stirred, a
+    /// calm pad's call is a small thing, the Gauge house's a step.
+    #[test]
+    fn a_call_stirs_it_by_its_pads_weight() {
+        let call = |stir: f32| {
+            let mut p = Pressure {
+                stir: 0.5,
+                ..Default::default()
+            };
+            let steps = run(&mut p, 1.0, |t| Doings {
+                transmit: if t == 0.0 { stir } else { 0.0 },
+                ..out()
+            });
+            (steps, p.why)
+        };
+        let (calm, _) = call(0.2);
+        assert!(calm.is_empty(), "a calm pad's call stepped it: {calm:?}");
+        let (gauge, why) = call(super::super::distress::STIR);
+        assert_eq!(gauge.len(), 1, "the Gauge house's call: {gauge:?}");
+        assert_eq!((gauge[0].1, why), (Level::Stirred, Why::Transmit));
+    }
+
+    /// A busy pad's call, or one with a horn, is told at the mast before
+    /// anything comes, and owes an answer to the mast [`CUE_LEAD`] after;
+    /// a horn is heard across the valley. A calm pad's call owes nothing.
+    #[test]
+    fn a_busy_call_is_told_then_answered_and_a_horn_is_heard() {
+        use bevy::ecs::system::RunSystemOnce;
+        let zone = crate::world::Zone::load("sallow_reservoir");
+        let mast = zone.on_ground(236.0, -46.0);
+        let horn = zone.on_ground(200.0, -10.0);
+        let mut app = App::new();
+        app.add_message::<Transmitted>()
+            .add_message::<MastTell>()
+            .add_message::<super::super::Noise>()
+            .init_resource::<Doing>()
+            .insert_resource(zone)
+            .insert_resource(super::super::director::Director {
+                enabled: true,
+                rng: super::super::director::raid_rng(1, 0),
+                next_job: 25.0,
+                responses: Vec::new(),
+                response_cooldown: 0.0,
+                max_active: 6,
+                next_logistics: 150.0,
+                chatter: Vec::new(),
+                visits: Vec::new(),
+                heat: 0.0,
+                heat_gap: 0.0,
+                broken_placed: false,
+                quiet: 0.0,
+                net: Default::default(),
+                owed: Vec::new(),
+            });
+        let mut hear = |call: Transmitted| {
+            app.world_mut().write_message(call);
+            app.world_mut().run_system_once(hear_transmissions).unwrap();
+            let w = app.world_mut();
+            // (A fresh reader each run: the call's read, so it goes.)
+            w.resource_mut::<Messages<Transmitted>>().clear();
+            let tells: Vec<MastTell> = w.resource_mut::<Messages<MastTell>>().drain().collect();
+            let noises: Vec<super::super::Noise> = w
+                .resource_mut::<Messages<super::super::Noise>>()
+                .drain()
+                .collect();
+            let mut d = w.resource_mut::<super::super::director::Director>();
+            let owed = std::mem::take(&mut d.owed);
+            let responses = std::mem::take(&mut d.responses);
+            let stir = std::mem::take(&mut w.resource_mut::<Doing>().transmit);
+            (tells, noises, owed, responses, stir)
+        };
+        let (tells, noises, owed, responses, stir) = hear(Transmitted {
+            at: mast,
+            stir: 0.2,
+            busy: false,
+            horn: None,
+        });
+        assert!(tells.is_empty() && noises.is_empty() && owed.is_empty() && responses.is_empty());
+        assert!((stir - 0.2).abs() < 1e-6, "a calm call still stirs: {stir}");
+        let (tells, noises, owed, responses, _) = hear(Transmitted {
+            at: mast,
+            stir: 0.5,
+            busy: true,
+            horn: None,
+        });
+        assert_eq!(tells.len(), 1, "a busy mast tells");
+        assert!(noises.is_empty(), "no horn, no noise");
+        assert_eq!(owed.len(), 1);
+        assert!(owed[0].distance(mast) < 0.5, "owed to the mast: {owed:?}");
+        assert_eq!(responses.len(), 1);
+        assert!(
+            (responses[0].0 - CUE_LEAD).abs() < 1e-6,
+            "after the cue: {responses:?}"
+        );
+        let (tells, noises, owed, _, stir) = hear(Transmitted {
+            at: mast,
+            stir: super::super::distress::STIR,
+            busy: false,
+            horn: Some(horn),
+        });
+        assert_eq!((tells.len(), owed.len()), (1, 1), "a horn tells and owes");
+        assert_eq!(noises.len(), 1);
+        assert!(noises[0].at.distance(horn) < 0.01 && noises[0].radius >= HORN_REACH);
+        assert!(stir >= super::super::distress::STIR - 1e-6);
+        // The valley's whole: the horn's heard at its far corners.
+        let half = 300.0_f32;
+        for c in [[-half, -half], [half, half], [-half, half], [half, -half]] {
+            assert!(
+                Vec2::new(c[0], c[1]).distance(horn.xz()) <= noises[0].radius,
+                "the horn's not heard at {c:?}"
+            );
+        }
+    }
+
     #[test]
     fn each_raid_starts_quiet() {
         let mut p = Pressure {
