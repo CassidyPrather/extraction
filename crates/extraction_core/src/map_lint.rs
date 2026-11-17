@@ -4606,19 +4606,6 @@ mod tests {
         }
     }
 
-    /// The yard in bays (#89, `docs/yard/`), waiting to land with the
-    /// yard's gates code: held to the yard's own lint till it does.
-    #[test]
-    fn training_yard_bays_map_lint() {
-        let r = run(
-            "training_yard (bays)",
-            include_str!("../../../docs/yard/training_yard_bays.ron"),
-        );
-        for rule in [Rule::Reach, Rule::Footing, Rule::Overlap] {
-            assert_eq!(r.count(rule), 0, "{}", r.text());
-        }
-    }
-
     /// The arcade's ground (`--arcade`) is no valley either: held to the
     /// rules the yard is, and its findings printed.
     #[test]

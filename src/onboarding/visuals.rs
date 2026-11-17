@@ -9,7 +9,7 @@
 
 use bevy::prelude::*;
 
-use super::{BOARD_Y, CHECKLIST, LAMP_Y, Lamp, Prop, SIGN, StationPost, TRUCK_SIGN};
+use super::{BOARD_Y, LAMP_Y, Lamp, Prop, SIGN, StationPost};
 use crate::render::materials::{Mat, MaterialLibrary, metric_box};
 
 pub struct OnboardingVisualsPlugin;
@@ -96,12 +96,6 @@ fn lamp_mats(materials: &mut Assets<StandardMaterial>) -> LampMats {
     }
 }
 
-/// Whether station `i` stands on a post in the yard (else its board hangs
-/// in the truck).
-pub(super) fn stands(i: usize) -> bool {
-    !super::in_truck(i)
-}
-
 fn dress_posts(
     mut commands: Commands,
     posts: Query<(Entity, &StationPost), Added<StationPost>>,
@@ -128,7 +122,7 @@ fn dress_posts(
         perceptual_roughness: 0.7,
         ..default()
     });
-    for (e, post) in &posts {
+    for (e, _) in &posts {
         let mut part = |m: Option<Mat>, size: Vec3, at: Transform| {
             let material = match m {
                 Some(m) => lib.get(m, &server, &mut materials),
@@ -142,28 +136,7 @@ fn dress_posts(
             ));
         };
         // The lantern's height above the board's middle.
-        let (board, lamp_at) = if !stands(post.index) {
-            // In the truck: a board hung on the cab wall (on two cords from
-            // the canopy) or on the canvas wall, the lantern beside it; no
-            // post (a yard post's 2.6 m of timber, stood on the settings
-            // board's spot on the canvas wall, came up through the canopy).
-            let sign = if post.index == 0 { TRUCK_SIGN } else { SIGN };
-            part(
-                Some(Mat::Planks),
-                Vec3::new(sign.x + 0.05, sign.y + 0.05, 0.025),
-                Transform::default(),
-            );
-            if post.index == 0 {
-                for x in [-0.3, 0.3] {
-                    part(
-                        Some(Mat::DarkMetal),
-                        Vec3::new(0.008, 0.36, 0.008),
-                        Transform::from_xyz(x, sign.y * 0.5 + 0.18, 0.0),
-                    );
-                }
-            }
-            (Vec3::ZERO, Vec3::new(sign.x * 0.5 + 0.12, 0.05, 0.05))
-        } else {
+        let lamp_at = {
             let h = LAMP_Y + 0.1;
             part(
                 Some(Mat::Timber),
@@ -187,9 +160,8 @@ fn dress_posts(
                 Vec3::new(SIGN.x + 0.06, SIGN.y + 0.06, 0.03),
                 Transform::from_xyz(0.0, BOARD_Y, 0.01),
             );
-            (Vec3::Y * BOARD_Y, Vec3::new(0.0, LAMP_Y - 0.14, 0.24))
+            Vec3::new(0.0, LAMP_Y - 0.14, 0.24)
         };
-        let _ = board;
         let hood = lib.get(Mat::DarkMetal, &server, &mut materials);
         commands.spawn((
             Mesh3d(meshes.add(Cone {
@@ -410,21 +382,19 @@ fn dress_props(
                     ));
                 }
             }
-            Prop::BoardPost => {
-                part(
-                    Mat::Timber,
-                    Vec3::new(0.1, 2.0, 0.1),
-                    Transform::from_xyz(0.0, 1.0, -0.05),
-                );
-                part(
-                    Mat::Planks,
-                    Vec3::new(CHECKLIST.x + 0.06, CHECKLIST.y + 0.06, 0.03),
-                    Transform::from_xyz(0.0, 1.45, 0.01),
-                );
+            Prop::SettingsBoard => {
+                let w = super::SETTINGS_BOARD;
+                for x in [-w.x * 0.5, w.x * 0.5] {
+                    part(
+                        Mat::Timber,
+                        Vec3::new(0.1, 2.0, 0.1),
+                        Transform::from_xyz(x, 1.0, -0.05),
+                    );
+                }
                 part(
                     Mat::Planks,
-                    Vec3::new(0.82, 0.4, 0.03),
-                    Transform::from_xyz(0.0, 0.72, 0.01),
+                    Vec3::new(w.x, w.y, 0.03),
+                    Transform::from_xyz(0.0, super::SETTINGS_BOARD_Y, -0.02),
                 );
             }
         }
