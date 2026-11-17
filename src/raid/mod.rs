@@ -14,6 +14,7 @@ pub mod captions;
 pub mod chatter;
 pub mod comfort_board;
 pub mod epilogue;
+pub mod flare_stops;
 pub mod kitchen;
 pub mod lev;
 pub mod lev_walk;
@@ -247,7 +248,10 @@ impl Plugin for RaidPlugin {
             board::BoardPlugin,
             lev::LevPlugin,
             epilogue::EpiloguePlugin,
-            transceiver::TransceiverPlugin,
+            (
+                transceiver::TransceiverPlugin,
+                flare_stops::FlareStopsPlugin,
+            ),
         ))
         .add_systems(
             Update,
@@ -444,7 +448,7 @@ fn radio_calls(
                 )
             }
             Phase::TruckWaiting { rv, .. } => {
-                let (name, at) = rendezvous(&zone).get(rv).cloned().unwrap_or_else(|| {
+                let (name, at) = truck::pads(&zone).get(rv).cloned().unwrap_or_else(|| {
                     let gate = zone
                         .map
                         .markers_of(&MarkerKind::ShortExfil)
@@ -509,7 +513,7 @@ pub(crate) fn tick_raid(
             }
             let eta = eta - dt;
             if eta <= 0.0 {
-                let name = rendezvous(&zone)
+                let name = truck::pads(&zone)
                     .get(rv)
                     .map(|r| r.0.clone())
                     .unwrap_or_default();
@@ -534,7 +538,7 @@ pub(crate) fn tick_raid(
             // A minute to go: said before every departure without you, by
             // radio, wherever you are.
             if was > LAST_CALL && left <= LAST_CALL {
-                let name = rendezvous(&zone)
+                let name = truck::pads(&zone)
                     .get(rv)
                     .map_or_else(|| "gate".to_string(), |r| r.0.clone());
                 let n = raid.clock as u32;

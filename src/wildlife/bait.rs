@@ -35,7 +35,7 @@ pub(crate) fn put_down(
 ) {
     let food = items
         .get(remove.entity)
-        .is_ok_and(|i| catalog.get(i.kind()).category == extraction_core::items::Category::Food);
+        .is_ok_and(|i| catalog.get(i.kind()).is_food());
     if food {
         commands.entity(remove.entity).try_insert(Bait::default());
     }

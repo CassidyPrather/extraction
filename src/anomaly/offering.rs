@@ -235,7 +235,7 @@ fn accept_offerings(
             Boon::Time
         } else if has(Category::Curio) {
             Boon::Information
-        } else if has(Category::Food) {
+        } else if kinds.iter().any(|d| d.is_food()) {
             Boon::Calm
         } else {
             Boon::Nothing

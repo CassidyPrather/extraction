@@ -114,7 +114,7 @@ pub const OBVIOUS: &[&str] = &[
 pub fn obvious(id: &str, category: Category) -> bool {
     matches!(
         category,
-        Category::Food | Category::Firearm | Category::Magazine | Category::Artifact
+        Category::Junk | Category::Firearm | Category::Magazine | Category::Artifact
     ) || OBVIOUS.contains(&id)
 }
 

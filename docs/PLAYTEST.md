@@ -380,30 +380,32 @@ If any of this fails, stop and send the log: everything else depends on it.
 ### 1b. The yard and the camp (10 minutes)
 
 - A first launch (no career yet) opens in the **training yard**: a small
-  fenced valley with nothing hunting you and nothing kept. You stand in
-  the truck bed; a board hangs over the crate in front of you, with a
-  lit lantern beside it, saying what to do first ("Reach into the crate.
-  Squeeze GRIP."). The driver says the same on your wrist. That's the
-  whole start: there is nothing to read on the way.
-- The yard is **ten stations**: two in the truck, then up the gravel
-  track. You only ever read one thing: the board of the station you're
-  on shows the step you're on, with how; boards ahead are blank, and in
-  the yard the truck's other boards and the settings cards stay folded
-  away. A step counts only at its station, and at the kit, out of reach,
-  the range, running it dry and the shimmer only in the order asked:
+  fenced valley with nothing hunting you and nothing kept, cut into
+  **bays** by waist-high timber fences. You stand on the gravel track in
+  the first bay, no truck anywhere, facing a shut gate. A board on a
+  post just ahead on your left, with a lit lantern over it, says what to
+  do first (push SETTINGS); the settings cards are on the board beside
+  it. The driver says the same on your wrist.
+- The yard is **nine stations** in seven bays. You only ever read one
+  thing: the board of the station you're on shows the step you're on,
+  with how; boards ahead are blank. A bay's gate swings open once its
+  stations are done or SKIPped, and you can see the next bay over the
+  fence. A step counts only at its station, and at out of reach, the
+  range, running it dry and the shimmer only in the order asked. Each
+  kind of kit is met where it's used: the pistol on the range table,
+  and the truck only at the end:
 
   | # | Station | Do |
   | - | - | - |
-  | 1 | Your kit (in the truck) | reach into the crate and squeeze GRIP on the pistol; hold it at your hip and open your hand (the holster); squeeze GRIP on the radio; hold it to your chest (its sleeve) and open your hand |
-  | 2 | Settings (in the truck) | push the SETTINGS card's amber button with a fingertip (a finger pointed, TRIGGER off): the settings cards fold out, to change any time |
-  | 3 | Getting about | off the back of the truck: turn (push the right stick sideways); crouch (squat, or pull the right stick down; again to stand); run (push the left stick forward and click it) |
-  | 4 | Out of reach | a box on a crate in a fenced pen: point at it, squeeze GRIP, flick your hand back; then the box over your shoulder, open your hand (the pack) |
-  | 5 | The range | rounds into the empty magazine (magazine in one hand, the box in the other: touch them); push the magazine up into the grip; rack the slide (the other hand's TRIGGER on it, pull back, let go); squeeze TRIGGER at a plate: nothing, that's the safety; safety off (click the stick on the gun hand); hit a plate (TRIGGER) |
-  | 6 | Run it dry | TRIGGER at the plates till the slide stays back; drop the empty magazine (A on the gun hand); the full magazine off the table, up into the grip; let the slide go (B on the gun hand, or rack it): a magazine in doesn't load it; fire again (TRIGGER) |
-  | 7 | The house | open the door: GRIP it anywhere and pull it round; GRIP the dressing on the crate inside |
-  | 8 | First aid | taking the dressing in the house, the crate catches your arm: a scratch that bleeds, and your watch buzzes; raise your watch hand and look at it (the **wrist** screen: health, bleeding, load, the clock, the driver's last words); the dressing in one hand, circle it round the cut (a tick in both hands each quarter turn, a turn and a half in all; one-handed, A or X) |
-  | 9 | The shimmer | GRIP a spare part (crate by the post), swing and open your hand at the sparks inside the red flags: the snare goes off and goes dark for a few seconds; then a burner with a stone at its heart: don't step in (the driver shouts if you get close); from the edge point at the stone, GRIP, flick back |
-  | 10 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, GRIP the cord by the cab |
+  | 1 | Settings (the start board) | push the SETTINGS card's amber button with a fingertip (a finger pointed, TRIGGER off): the settings cards on the board beside it unfold, to change any time |
+  | 2 | Getting about | in the first bay: turn (push the right stick sideways); crouch (squat, or pull the right stick down; again to stand); run (push the left stick forward and click it) |
+  | 3 | Out of reach | through the gate, a box on a crate in a fenced pen: point at it, squeeze GRIP, flick your hand back; then the box over your shoulder, open your hand (the pack) |
+  | 4 | The range | squeeze GRIP on the pistol on the range table; hold it at your hip and open your hand (the holster); rounds into the empty magazine (magazine in one hand, the box in the other: touch them); push the magazine up into the grip; rack the slide (the other hand's TRIGGER on it, pull back, let go); squeeze TRIGGER at a plate: nothing, that's the safety; safety off (click the stick on the gun hand); hit a plate (TRIGGER) |
+  | 5 | Run it dry | TRIGGER at the plates till the slide stays back; drop the empty magazine (A on the gun hand); the full magazine off the table, up into the grip; let the slide go (B on the gun hand, or rack it): a magazine in doesn't load it; fire again (TRIGGER) |
+  | 6 | The house | open the door: GRIP it anywhere and pull it round; GRIP the dressing on the crate inside |
+  | 7 | First aid | taking the dressing in the house, the crate catches your arm: a scratch that bleeds, and your watch buzzes; raise your watch hand and look at it (the **wrist** screen: health, bleeding, load, the clock, the driver's last words); the dressing in one hand, circle it round the cut (a tick in both hands each quarter turn, a turn and a half in all; one-handed, A or X) |
+  | 8 | The shimmer | GRIP a spare part (crate by the post), swing and open your hand at the sparks inside the red flags: the snare goes off and goes dark for a few seconds; then a burner with a stone at its heart: don't step in (the driver shouts if you get close); from the edge point at the stone, GRIP, flick back |
+  | 9 | The extract | through the last gate, the radio set on the north post's pole: squeeze GRIP on it to call the truck; it's there in ten seconds, the first you see of it; climb in, GRIP the cord by the cab |
 
   The lantern is lit (warm yellow) on the station you're on, green on
   the ones done, dark ahead. Each step ticks off on its board with a
@@ -411,11 +413,11 @@ If any of this fails, stop and send the log: everything else depends on it.
   driver says where the next one is. Every board says the control to use
   (in flat mode, the key). **Mark** any board you couldn't read, any step
   you did that didn't tick, and anywhere you didn't know where to go.
-- **Skipping.** Every post has a SKIP card; the board by the tailgate
-  lists all ten with START OVER and ON TO THE ZONE (skips the lot). The
-  truck's cord ends the yard too, but before the last station it asks
-  first ("Pull again and we're off"): it's within reach of where you
-  start.
+- **Skipping.** Every post has a SKIP card, START OVER (every gate
+  shuts and you're back where you loaded) and ON TO THE ZONE (skips the
+  lot). Walking through a gate that's still shut isn't stopped; the
+  driver says once to come back through. The truck's cord ends the yard
+  too; pulled before the last step, it asks first ("Pull again to go").
 - Every later launch opens at the **camp**: you stand at a table behind
   the truck, a board on it with your career and cards to press (TRAINING
   YARD, NEW CAREER (press twice), the comfort cards, PACK UP to quit).
