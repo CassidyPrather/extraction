@@ -4035,7 +4035,7 @@ pub fn truck_fall(hm: &Heightmap, at: P2, yaw: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, TRAINING_YARD};
+    use crate::map::{ARCADE, CINDER_WORKS, TRAINING_YARD};
 
     fn run(name: &str, text: &str) -> Report {
         let map = MapDef::from_ron(text).unwrap();
@@ -4590,6 +4590,16 @@ mod tests {
     #[test]
     fn training_yard_map_lint() {
         let r = run("training_yard", TRAINING_YARD);
+        for rule in [Rule::Reach, Rule::Footing, Rule::Overlap] {
+            assert_eq!(r.count(rule), 0, "{}", r.text());
+        }
+    }
+
+    /// The arcade's ground (`--arcade`) is no valley either: held to the
+    /// rules the yard is, and its findings printed.
+    #[test]
+    fn arcade_map_lint() {
+        let r = run("arcade", ARCADE);
         for rule in [Rule::Reach, Rule::Footing, Rule::Overlap] {
             assert_eq!(r.count(rule), 0, "{}", r.text());
         }

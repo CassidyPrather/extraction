@@ -117,7 +117,10 @@ fn use_items(
         let mut consume = false;
         match def.id.as_str() {
             "radio" => {
-                radio.write(RadioCall { player: u.player });
+                radio.write(RadioCall {
+                    player: u.player,
+                    pad: None,
+                });
             }
             "field_dressing" => {
                 // Wound round a limb, it bound that limb's wounds

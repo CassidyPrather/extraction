@@ -6,6 +6,7 @@
 
 pub mod acoustics;
 pub mod anomaly;
+pub mod arcade;
 pub mod audio;
 pub mod audio_fight;
 pub mod audio_kit;
@@ -109,7 +110,9 @@ impl Plugin for GamePlugin {
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
         .add_plugins(wildlife::WildlifePlugin)
-        .add_plugins(transform_guard::TransformGuardPlugin);
+        .add_plugins(transform_guard::TransformGuardPlugin)
+        // Adds nothing outside `--arcade`.
+        .add_plugins(arcade::ArcadePlugin);
     }
 }
 
@@ -141,6 +144,7 @@ impl Plugin for ClientPlugin {
         .add_plugins(destruction::visuals::DestructionVisualsPlugin)
         .add_plugins(wildlife::WildlifeVisualsPlugin)
         .add_plugins(radio::visuals::MusicVisualsPlugin)
+        .add_plugins(arcade::visuals::ArcadeVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(
             Update,

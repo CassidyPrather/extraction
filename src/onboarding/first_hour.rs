@@ -4312,6 +4312,19 @@ fn routed_leg(world: &World2, feet: Vec3, to: Vec2, within: f32) -> Option<Vec<T
     if below || world.entrances.building_at(feet + Vec3::Y * 0.5).is_some() {
         return None;
     }
+    // Into or out of a pen, not through its doorway: by it. (`crossed`
+    // lets a leg with an end in a box by: a place in a house.)
+    let pens = pens(world);
+    if let Some(p) = pens.iter().find(|p| p.holds(here) != p.holds(to))
+        && !p.at_door(here)
+        && !p.at_door(to)
+    {
+        let mut way = walk(world, here, to);
+        if let Some(Task::WalkTo { within: w, .. }) = way.last_mut() {
+            *w = within;
+        }
+        return Some(way);
+    }
     let boxes = walk_boxes(world);
     crossed(&boxes, here, to)?;
     let clear_way = |to: Vec2| {
@@ -5316,8 +5329,66 @@ fn part_boxes(prefab: &str, xf: &Transform) -> Vec<(Transform, Vec2)> {
                 )
             })
             .to_vec(),
+        // The wheel house, walled round but for its doorway (`pens`).
+        "mill_race" => {
+            let (at, half, ..) = crate::world::buildings::wheel_house();
+            vec![(
+                Transform::from_translation(xf.transform_point(at)).with_rotation(xf.rotation),
+                half,
+            )]
+        }
         _ => vec![],
     }
+}
+
+/// A box `walk` goes round that has one doorway: walked into and out of
+/// by that only, square through it.
+struct Pen {
+    xf: Transform,
+    half: Vec2,
+    /// The doorway's middle, a stride inside and a stride outside.
+    door_in: Vec2,
+    door_out: Vec2,
+}
+
+impl Pen {
+    fn holds(&self, q: Vec2) -> bool {
+        let l = self
+            .xf
+            .compute_affine()
+            .inverse()
+            .transform_point3(Vec3::new(q.x, 0.0, q.y))
+            .xz();
+        l.x.abs() < self.half.x && l.y.abs() < self.half.y
+    }
+
+    fn at_door(&self, q: Vec2) -> bool {
+        q.distance(self.door_out) < DOOR_STOP * 2.0
+    }
+}
+
+/// How near a pen's doorway points a walk stops (m): its doorway's 1.4 m,
+/// less a body either side, and some.
+const DOOR_STOP: f32 = 0.3;
+
+/// The pens on the map: the mill race's wheel house. (In at its doorway
+/// on a leg past it, the cautious newcomer stood at its far wall five
+/// minutes, every way on straight through that wall.)
+fn pens(world: &World2) -> Vec<Pen> {
+    world
+        .buildings
+        .iter()
+        .filter(|(b, _)| b.prefab == "mill_race")
+        .map(|(_, xf)| {
+            let (at, half, door_in, door_out) = crate::world::buildings::wheel_house();
+            Pen {
+                xf: Transform::from_translation(xf.transform_point(at)).with_rotation(xf.rotation),
+                half,
+                door_in: xf.transform_point(door_in).xz(),
+                door_out: xf.transform_point(door_out).xz(),
+            }
+        })
+        .collect()
 }
 
 /// Halls with a way in for a road, walked into and through, open inside
@@ -6136,6 +6207,41 @@ fn reroute_span(tasks: &std::collections::VecDeque<Task>, n: usize) -> Option<(u
 /// banks (`route`'s; the second hour's walked straight, into a garden's
 /// fence and the wire).
 pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
+    // In or out of a pen by its doorway, square through it; round it
+    // otherwise (it's one of `walk_boxes`).
+    let pens = pens(world);
+    let pen_of = |q: Vec2| pens.iter().find(|p| p.holds(q));
+    let (inn, out) = (pen_of(from), pen_of(to));
+    if let (Some(a), Some(b)) = (inn, out)
+        && std::ptr::eq(a, b)
+    {
+        return world.legs(from, to);
+    }
+    let door = |to: Vec2| Task::WalkTo {
+        to,
+        within: DOOR_STOP,
+    };
+    let mut t = vec![];
+    let start = match inn {
+        Some(p) => {
+            t.extend([door(p.door_in), door(p.door_out)]);
+            p.door_out
+        }
+        None => from,
+    };
+    match out {
+        Some(p) => {
+            t.extend(walk_open(world, start, p.door_out));
+            t.extend([door(p.door_out), door(p.door_in)]);
+            t.extend(world.legs(p.door_in, to));
+        }
+        None => t.extend(walk_open(world, start, to)),
+    }
+    t
+}
+
+/// `walk`, with no pen at either end.
+fn walk_open(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut pts: Vec<Vec2> = vec![];
     let boxes = walk_boxes(world);
@@ -9338,6 +9444,86 @@ mod indoor_tests {
         let open = Vec2::new(-60.0, -40.0);
         assert!(!inside(open));
         assert_eq!(super::clear_of(&boxes, open), open);
+    }
+
+    /// The mill race's wheel house is walled round but for one doorway:
+    /// in by it, out by it. (The cautious newcomer walked off the first
+    /// fight's heavy, in at its doorway on a leg past it, and stood at its
+    /// far wall five minutes, every way on straight through that wall.)
+    /// Staged as walked: from inside, on east; and the legs it was on.
+    #[test]
+    fn the_wheel_house_is_walked_out_of_by_its_doorway() {
+        use crate::bot::Bot;
+        use crate::rig::LocalPlayer;
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let v = |x: f32, z: f32| Vec2::new(x, z);
+        // (Where it stood, and where its walk went on to; then the legs it
+        // was on from where it turned back west.)
+        let stagings: [&[Vec2]; 2] = [
+            &[v(-51.1, 123.0), v(-43.8, 125.8)],
+            &[
+                v(-47.8, 124.6),
+                v(-57.6, 121.7),
+                v(-49.7, 125.1),
+                v(-43.8, 125.8),
+            ],
+        ];
+        for stops in stagings {
+            let tasks = {
+                let w = app.world_mut();
+                let mut st: SystemState<super::World2> = SystemState::new(w);
+                let world = st.get(w).unwrap();
+                stops
+                    .windows(2)
+                    .flat_map(|s| super::walk(&world, s[0], s[1]))
+                    .collect::<Vec<_>>()
+            };
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = zone.on_ground(stops[0].x, stops[0].y) + Vec3::Y * 0.05;
+            app.update();
+            let planned: Vec<String> = tasks.iter().map(|t| format!("{t:?}")).collect();
+            app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+            for _ in 0..90 * 120 {
+                app.update();
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    break;
+                }
+            }
+            let at = app
+                .world()
+                .get::<Transform>(player)
+                .unwrap()
+                .translation
+                .xz();
+            let end = *stops.last().unwrap();
+            let bot = app.world().get::<Bot>(player).unwrap();
+            assert!(
+                bot.done() && at.distance(end) < 1.5,
+                "from {}: at {at} for {end} (left: {:?}; the walk: {planned:#?})",
+                stops[0],
+                bot.tasks.front()
+            );
+            app.world_mut().entity_mut(player).remove::<Bot>();
+        }
     }
 
     /// The walk on from against the pumping station's wall, where both

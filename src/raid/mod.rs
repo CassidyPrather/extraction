@@ -22,6 +22,7 @@ pub mod logbook;
 pub mod requests;
 pub mod route;
 pub mod slowed;
+pub mod transceiver;
 pub mod truck;
 
 use bevy::prelude::*;
@@ -198,6 +199,10 @@ impl Raid {
 #[derive(Message, Clone, Copy, Debug)]
 pub struct RadioCall {
     pub player: Entity,
+    /// Called from a fixed set (`transceiver`): the truck comes to that
+    /// set's pad (a rendezvous's index, or [`SHORT_EXFIL`] for the gate's),
+    /// not to the one nearest the caller. `None`: a carried radio.
+    pub pad: Option<usize>,
 }
 
 /// The player asked to leave (in the truck bed: the dash button).
@@ -242,6 +247,7 @@ impl Plugin for RaidPlugin {
             board::BoardPlugin,
             lev::LevPlugin,
             epilogue::EpiloguePlugin,
+            transceiver::TransceiverPlugin,
         ))
         .add_systems(
             Update,
@@ -363,10 +369,13 @@ fn radio_calls(
                 let here = [p.translation().x, p.translation().z];
                 // Near the gate you came in by, the truck can come straight
                 // back for you, if there's fuel in the stash to burn.
-                let at_short = zone
-                    .map
-                    .markers_of(&MarkerKind::ShortExfil)
-                    .any(|m| extraction_core::geom::dist(m.at, here) < 40.0);
+                let at_short = match call.pad {
+                    Some(pad) => pad == SHORT_EXFIL,
+                    None => zone
+                        .map
+                        .markers_of(&MarkerKind::ShortExfil)
+                        .any(|m| extraction_core::geom::dist(m.at, here) < 40.0),
+                };
                 if at_short {
                     let mut paid = free;
                     for mut stash in &mut stashes {
@@ -403,9 +412,14 @@ fn radio_calls(
                     raid.tell(lines::NO_FUEL, Show::View);
                 }
                 let rvs = rendezvous(&zone);
-                let Some((i, (name, _))) = rvs.iter().enumerate().min_by(|a, b| {
-                    extraction_core::geom::dist(a.1.1, here)
-                        .total_cmp(&extraction_core::geom::dist(b.1.1, here))
+                // A set calls the truck to its own pad; a carried radio,
+                // or the gate's set with no fuel, to the nearest.
+                let set = call.pad.filter(|i| *i < rvs.len()).map(|i| (i, &rvs[i]));
+                let Some((i, (name, _))) = set.or_else(|| {
+                    rvs.iter().enumerate().min_by(|a, b| {
+                        extraction_core::geom::dist(a.1.1, here)
+                            .total_cmp(&extraction_core::geom::dist(b.1.1, here))
+                    })
                 }) else {
                     continue;
                 };
@@ -655,7 +669,7 @@ fn depart(
     }
 }
 
-fn downed(
+pub(crate) fn downed(
     mut events: MessageReader<Downed>,
     mut raid: ResMut<Raid>,
     locals: Query<(), With<LocalPlayer>>,
@@ -905,7 +919,8 @@ mod tests {
             .0
             .done = done;
         app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        app.world_mut().write_message(RadioCall { player });
+        app.world_mut()
+            .write_message(RadioCall { player, pad: None });
         app.update();
         assert!(matches!(
             app.world().resource::<Raid>().phase,
@@ -959,7 +974,8 @@ mod tests {
                 .translation = zone.on_ground(0.0, -150.0);
             app.update();
             app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-            app.world_mut().write_message(RadioCall { player });
+            app.world_mut()
+                .write_message(RadioCall { player, pad: None });
             for _ in 0..4 {
                 app.update();
             }
