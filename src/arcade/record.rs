@@ -147,8 +147,9 @@ pub struct Recording {
     last_beat: (u8, u32),
     /// The finished runs' files, for the smoke scenario.
     pub finished: Vec<std::path::PathBuf>,
-    /// The last finished run, for the gun card until the next fires.
-    pub last_run: Option<(String, RunStats)>,
+    /// The last finished run, for the gun card until the next fires: its
+    /// title, numbers, and the bests it was held to.
+    pub last_run: Option<(String, RunStats, Bests)>,
 }
 
 /// Each gun's best so far, across runs (`<arcade dir>/guns.json`).
@@ -278,7 +279,7 @@ pub fn card(arcade: &Arcade, rec: &Recording, bests: &GunBests, feel: &Feel) -> 
     }
     let fired = rec.stats.guns.values().any(|g| g.shots > 0);
     s += &match (&rec.last_run, fired) {
-        (Some((title, run)), false) => gun_card(&format!("last run: {title}"), run, &bests.before),
+        (Some((title, run, before)), false) => gun_card(&format!("last run: {title}"), run, before),
         _ => gun_card(&card_title(arcade), &rec.stats, &bests.before),
     };
     s
@@ -785,6 +786,7 @@ fn close_run(
     // The bests take this run in; the card keeps holding it to the ones
     // before.
     let stats = rec.stats.clone();
+    let before = bests.before.clone();
     take_in(&mut bests.bests, &stats);
     if let Some(p) = bests.path.clone() {
         let text = serde_json::to_string_pretty(&bests.bests).unwrap_or_default();
@@ -804,7 +806,7 @@ fn close_run(
     } else {
         format!("down on wave {wave}")
     };
-    rec.last_run = Some((title, stats));
+    rec.last_run = Some((title, stats, before));
     arcade.summary = Some(summary);
     log.finished = true;
     commands.remove_resource::<SimLog>();

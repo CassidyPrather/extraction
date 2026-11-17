@@ -154,8 +154,10 @@ fn build_range(
     }
     for e in &plates {
         let paint = materials.add(StandardMaterial {
-            base_color: Color::srgb(0.82, 0.8, 0.74),
-            metallic: 0.3,
+            // High-visibility orange, as range steel is painted: it reads
+            // at 50 m through haze.
+            base_color: Color::srgb(0.95, 0.42, 0.08),
+            metallic: 0.2,
             perceptual_roughness: 0.55,
             ..default()
         });
