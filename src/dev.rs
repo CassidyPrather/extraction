@@ -23,6 +23,7 @@ impl Plugin for DevPlugin {
                     break_line_up.after(gallery),
                     kill_line_up.after(gallery),
                     strip_half.after(kill_line_up),
+                    no_gloves_over_rows,
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
@@ -506,6 +507,24 @@ fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::
         if let Ok(mut r) = robots.get_mut(*e) {
             r.wrecked = true;
         }
+    }
+}
+
+/// An `items:` row is to look at, not to reach for: the gloves, held out
+/// in front of the view, would cover it.
+fn no_gloves_over_rows(
+    opts: Res<crate::launch::LaunchOptions>,
+    mut gloves: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
+) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| s.starts_with("items:"))
+    {
+        return;
+    }
+    for mut v in &mut gloves {
+        v.set_if_neq(Visibility::Hidden);
     }
 }
 

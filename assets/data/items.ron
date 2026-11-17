@@ -960,8 +960,15 @@
             tags: ["electronics", "glass"],
         ),
         (
-            id: "robot_cell", dims: Some((0.067, 0.049, 0.085)), name: "Robot power cell",
-            category: RobotPart, size: Small, mass: 0.9, bulk: 0.5, battery_wh: 120.0,
+            id: "walker_eye", dims: Some((0.128, 0.1, 0.128)), name: "Walker eye",
+            description: "A walker's eye, pulled from its orb. The lens is good glass; the red behind it still follows you a little.",
+            category: RobotPart, size: Small, mass: 0.6, bulk: 1.0,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "robot_cell", dims: Some((0.147, 0.136, 0.186)), name: "Robot power cell",
+            description: "A walker's cell, stamped CUSTODIAN STD. The orange band is warm while it holds a charge; carry it by the handle.",
+            category: RobotPart, size: Small, mass: 2.4, bulk: 3.0, battery_wh: 120.0,
             tags: ["electronics"],
         ),
         (
@@ -985,8 +992,8 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "walker_leg_actuator", dims: Some((0.141, 0.386, 0.163)), name: "Walker knee actuator",
-            description: "A walker's knee, torn off between thigh and shin. The screw jack behind it could lift a truck.",
+            id: "walker_leg_actuator", dims: Some((0.094, 0.12, 0.497)), name: "Walker knee actuator",
+            description: "A walker's knee ram, unbolted whole, stamped WK ACT. The rod still runs out smooth; it could lift a truck.",
             category: RobotPart, size: Medium, mass: 3.5, bulk: 2.5,
             tags: ["electronics", "metal"],
         ),
