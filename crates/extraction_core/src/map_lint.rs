@@ -599,13 +599,16 @@ pub const VIEW_LIGHT: &[&str] = &[
     "way_lamp",
     "marker_post",
     "machine_marker",
+    "yard_fence",
+    "yard_fence_2",
+    "yard_gate",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
 /// grid blocks only the cells whose middles fall within 0.7 m of a run
 /// (its 0.1 m half depth and the grid's 0.6 m clearance), so a route can
 /// be drawn between two rows of cells straight through a fence.
-pub const FENCES: &[&str] = &["fence_garden"];
+pub const FENCES: &[&str] = &["fence_garden", "yard_fence", "yard_fence_2"];
 pub const FENCE_CLEAR: f32 = 0.5;
 /// A fence isn't levelled for (`map::prefab_wants_pad`): it stands on the
 /// lowest ground under its run, its posts sunk 0.25 m and its panels 0.15 m
@@ -654,6 +657,8 @@ const ON_ROADS: &[&str] = &[
     "barn",
     "quarantine_gate",
     "robot_gate",
+    // The training yard's gates stand across its track.
+    "yard_gate",
     "footbridge",
     "boxcar",
     // Rime Fell's funicular car stands on its own line.
@@ -816,7 +821,7 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
             q.rect.sdf(rv) <= WAIT_COVER
                 && (q.kiosk()
                     || crate::map_surge::roofed(&q.prefab)
-                    || (q.prefab != "fence_garden"
+                    || (!crate::map::is_fence(&q.prefab)
                         && crate::map::prefab_footprint(&q.prefab)[1] >= WAIT_HEIGHT))
         })
         .min_by(|a, b| {
@@ -2424,11 +2429,12 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             // What can crowd a way home: solid things you don't go into.
             let props: Vec<&Solid> = solids
                 .iter()
-                // (Rolling stock you walk along, as beside a train.)
+                // (Rolling stock you walk along, as beside a train; a yard
+                // gate you walk through.)
                 .filter(|s| {
                     !s.kiosk()
                         && !ENTERABLE.contains(&crate::map::prefab_shell(&s.prefab))
-                        && !matches!(s.prefab.as_str(), "boxcar" | "funicular_car")
+                        && !matches!(s.prefab.as_str(), "boxcar" | "funicular_car" | "yard_gate")
                 })
                 .collect();
             let homes: Vec<P2> = map
@@ -3297,11 +3303,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // -- Overlap: buildings in each other, on roads, squeezes -------------------------
     let solid = |id: &str| id != "anomaly_core";
-    let is_fence = |id: &str| id == "fence_garden";
+    let is_fence = crate::map::is_fence;
     for (a, ra) in &rects {
         for (b, rb) in rects.iter().filter(|(b, _)| b > a) {
             let (pa, pb) = (&solids[*a], &solids[*b]);
             if !solid(&pa.prefab) || !solid(&pb.prefab) {
+                continue;
+            }
+            // The yard's fence lines are built of runs and gates end to
+            // end, round their corners: pieces of one line meet.
+            if pa.prefab.starts_with("yard_") && pb.prefab.starts_with("yard_") {
                 continue;
             }
             if dist(ra.at, rb.at) > geom::len(ra.half) + geom::len(rb.half) + SQUEEZE {
@@ -4590,6 +4601,19 @@ mod tests {
     #[test]
     fn training_yard_map_lint() {
         let r = run("training_yard", TRAINING_YARD);
+        for rule in [Rule::Reach, Rule::Footing, Rule::Overlap] {
+            assert_eq!(r.count(rule), 0, "{}", r.text());
+        }
+    }
+
+    /// The yard in bays (#89, `docs/yard/`), waiting to land with the
+    /// yard's gates code: held to the yard's own lint till it does.
+    #[test]
+    fn training_yard_bays_map_lint() {
+        let r = run(
+            "training_yard (bays)",
+            include_str!("../../../docs/yard/training_yard_bays.ron"),
+        );
         for rule in [Rule::Reach, Rule::Footing, Rule::Overlap] {
             assert_eq!(r.count(rule), 0, "{}", r.text());
         }
