@@ -73,6 +73,11 @@ pub struct Comfort {
     /// A heartbeat on the wrist while you bleed, faster and harder the
     /// faster you bleed (`rig::haptics`).
     pub bleed_pulse: bool,
+    /// Faint grey spheres on your pouches, pockets, holster and sling
+    /// while you hold something: which would take it, which has something
+    /// in it (and what), and the one it goes in if let go
+    /// (`interact::pockets`). Not in flat mode.
+    pub pocket_spheres: bool,
     /// Iron sights: the front post goes soft as the eye comes down behind
     /// them, focused on the target (`weapons::optics`).
     pub post_blur: bool,
@@ -120,6 +125,7 @@ impl Default for Comfort {
             captions_in_view: true,
             machine_tick: true,
             bleed_pulse: true,
+            pocket_spheres: true,
             post_blur: true,
             body: false,
             msaa: 4,
@@ -355,6 +361,14 @@ impl Comfort {
         }
     }
 
+    pub fn pocket_spheres_label(&self) -> String {
+        if self.pocket_spheres {
+            "POCKETS\nspheres".into()
+        } else {
+            "POCKETS\nPOUCHES drawn".into()
+        }
+    }
+
     pub fn steady_aim_label(&self) -> String {
         if self.steady_aim {
             "STEADY AIM\ntwo hands, a stock".into()
@@ -451,6 +465,7 @@ impl Comfort {
                 "--wrist-captions" => c.captions_in_view = false,
                 "--no-machine-tick" => c.machine_tick = false,
                 "--no-bleed-pulse" => c.bleed_pulse = false,
+                "--no-pocket-spheres" => c.pocket_spheres = false,
                 "--no-post-blur" => c.post_blur = false,
                 "--no-body" => c.body = false,
                 "--body" => c.body = true,

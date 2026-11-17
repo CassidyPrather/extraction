@@ -62,6 +62,7 @@ impl Plugin for WarmupPlugin {
                             shelve::<crate::world::storm::SheetMaterial>,
                             shelve::<crate::world::storm::BoltMaterial>,
                             shelve::<crate::anomaly::visuals::MarkMaterial>,
+                            shelve::<super::pockets::PocketMaterial>,
                         ),
                         shelve_unworn,
                         shelve_models,
