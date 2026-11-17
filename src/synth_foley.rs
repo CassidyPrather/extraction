@@ -194,6 +194,11 @@ pub const STAND_INS: &[StandIn] = &[
         render: heartbeat,
     },
     StandIn {
+        set: "mast/tell",
+        variants: 2,
+        render: mast_tell,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -1105,6 +1110,50 @@ fn heartbeat(rng: &mut Rng, sr: f32) -> Vec<f32> {
                 knock.run(0.0) * 0.25
             };
             thump(t, &mut ph1, sr) + 0.65 * thump(t - 0.17, &mut ph2, sr) + tick
+        })
+        .collect()
+}
+
+/// A busy mast's tell (`robots::pressure::MastTell`): its relay chirping
+/// twice, hard and bright, then the transmitter winding up into a whine,
+/// a buzzy tone climbing from 600 Hz to 1.4 kHz with a fast warble, held
+/// at the top and cut off. A machine warning, not the valley's hum.
+fn mast_tell(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 1.9;
+    let n = (secs * sr) as usize;
+    let lo = 600.0 * jitter(rng, 0.04);
+    let mut chirp = Bp::new(2_300.0, 6.0, sr);
+    let mut body = Bp::new(1_200.0, 1.0, sr);
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            // Two relay chirps, 0.08 s each, at 0 and 0.16 s.
+            let c = [0.0f32, 0.16]
+                .iter()
+                .map(|&a| {
+                    let u = t - a;
+                    if (0.0..0.08).contains(&u) {
+                        (u / 0.004).min(1.0) * (1.0 - u / 0.08)
+                    } else {
+                        0.0
+                    }
+                })
+                .sum::<f32>();
+            let chirps = chirp.run(noise(rng)) * c * 4.0;
+            // The whine, from 0.35 s: up an octave and more over 1.1 s, held.
+            let w = t - 0.35;
+            let whine = if w >= 0.0 {
+                let k = (w / 1.1).min(1.0);
+                let f = lo * (1400.0 / 600.0f32).powf(k) * (1.0 + 0.015 * (TAU * 9.0 * t).sin());
+                ph = (ph + f / sr).fract();
+                let saw = 2.0 * ph - 1.0;
+                let env = (w / 0.15).min(1.0) * ((secs - t) / 0.05).clamp(0.0, 1.0);
+                (0.35 * saw + body.run(saw)) * env
+            } else {
+                0.0
+            };
+            chirps + whine
         })
         .collect()
 }
