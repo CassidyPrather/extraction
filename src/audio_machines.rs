@@ -83,6 +83,7 @@ impl Plugin for MachineSoundsPlugin {
                     gate_call,
                     gate_edges,
                     stand_down_sounds,
+                    mast_sounds,
                 ),
             );
     }
@@ -951,6 +952,29 @@ fn stand_down_sounds(
     }
 }
 
+/// A busy mast's tell (`robots::pressure::MastTell`, #94): a call made
+/// from a busy pad stirs the machines, and the mast it went out on says so
+/// before their answer comes ([`CUE_LEAD`](crate::robots::pressure::CUE_LEAD)
+/// after): its relay chirps twice and winds up into a whine (`mast.tell`),
+/// at the mast, heard from the pad and well past it. A warning, never
+/// ambience: every escalation is heard before it lands.
+fn mast_sounds(
+    mut commands: Commands,
+    mut tells: MessageReader<crate::robots::pressure::MastTell>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for t in tells.read() {
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            t.at,
+            &[("mast/tell", "mast.tell", 1.0)],
+        );
+    }
+}
+
 /// A minelayer stopped over a spot, about to lay: its chute charging, a
 /// hiss (`minelayer.hiss`) the length of the stop (`rules::LAY_TIME`)
 /// before the mine drops with a chunk (`mine.laid`). The playtest's
@@ -1283,10 +1307,6 @@ mod tests {
         ("Investigating", "a mind's turn: heard in its voice"),
         ("JobDone", "the card's chime (UI)"),
         ("LostYou", "a mind's turn: heard in its voice"),
-        (
-            "MastTell",
-            "the busy mast's tell (#94): excused until Audio's mast whine",
-        ),
         ("MeetFirst", "a first-time line"),
         ("NightVisit", "the walkers sent are heard walking"),
         (
@@ -1638,6 +1658,16 @@ mod tests {
         ] {
             assert_ne!(set("heavy.sigh"), set(other), "{other}");
         }
+    }
+
+    /// A busy mast's tell has a sound of its own, in the mix with its set.
+    #[test]
+    fn a_busy_mast_tells_aloud() {
+        let c = crate::audio_mix::MIX.iter().find(|c| c.name == "mast.tell");
+        assert_eq!(
+            c.map(|c| (c.set, c.role)),
+            Some(("mast/tell", crate::audio_mix::Role::Signal))
+        );
     }
 
     /// A grappler's hold is heard while it lasts, straining harder toward
