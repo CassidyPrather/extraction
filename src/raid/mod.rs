@@ -22,6 +22,7 @@ pub mod logbook;
 pub mod requests;
 pub mod route;
 pub mod slowed;
+pub mod transceiver;
 pub mod truck;
 
 use bevy::prelude::*;
@@ -92,7 +93,29 @@ pub struct Raid {
     /// What was said lately, as [`claim`]s, with seconds left before it
     /// may be said again.
     pub said_lately: Vec<(String, f32)>,
+    /// Lines for the view as well as the wrist ([`Raid::tell`]), oldest
+    /// first, for the client to take (`render::said`). Kept short: a run
+    /// with no client drops the oldest.
+    pub shown: Vec<(String, Show)>,
 }
+
+/// Where a line is shown besides the wrist (which shows every line).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Show {
+    /// The wrist only: narration, chatter, flavour.
+    Wrist,
+    /// A caption in the lower view: something to act on now.
+    View,
+    /// As `View`, and no later line takes its place inside its reading
+    /// time: danger now (a first contact's advice, the Surge).
+    Urgent,
+    /// A callout beside this thing in the hand: a line about it. In the
+    /// view instead when it isn't in a hand.
+    Item(Entity),
+}
+
+/// How many lines wait for the view at most.
+const SHOWN_MAX: usize = 8;
 
 /// How long a thing said is held back from being said again.
 pub const REPEAT_HOLD: f32 = 30.0;
@@ -118,6 +141,11 @@ impl Raid {
     /// [`REPEAT_HOLD`] is said once: the second time adds nothing and
     /// reads as the game stuttering.
     pub fn say(&mut self, text: impl Into<String>) {
+        self.tell(text, Show::Wrist);
+    }
+
+    /// [`Raid::say`], and shown where `show` says too (`render::said`).
+    pub fn tell(&mut self, text: impl Into<String>, show: Show) {
         let t = text.into();
         let key = claim(&t);
         if self.said_lately.iter().any(|(k, _)| *k == key) {
@@ -126,6 +154,12 @@ impl Raid {
         }
         info!("raid: {t}");
         self.said_lately.push((key, REPEAT_HOLD));
+        if show != Show::Wrist {
+            if self.shown.len() >= SHOWN_MAX {
+                self.shown.remove(0);
+            }
+            self.shown.push((t.clone(), show));
+        }
         self.log.push((t, 8.0));
     }
 
@@ -165,6 +199,10 @@ impl Raid {
 #[derive(Message, Clone, Copy, Debug)]
 pub struct RadioCall {
     pub player: Entity,
+    /// Called from a fixed set (`transceiver`): the truck comes to that
+    /// set's pad (a rendezvous's index, or [`SHORT_EXFIL`] for the gate's),
+    /// not to the one nearest the caller. `None`: a carried radio.
+    pub pad: Option<usize>,
 }
 
 /// The player asked to leave (in the truck bed: the dash button).
@@ -187,6 +225,7 @@ impl Plugin for RaidPlugin {
             deaths: 0,
             pending_call: None,
             said_lately: Vec::new(),
+            shown: Vec::new(),
             log: Vec::new(),
         })
         .add_message::<RadioCall>()
@@ -208,6 +247,7 @@ impl Plugin for RaidPlugin {
             board::BoardPlugin,
             lev::LevPlugin,
             epilogue::EpiloguePlugin,
+            transceiver::TransceiverPlugin,
         ))
         .add_systems(
             Update,
@@ -283,7 +323,10 @@ fn leave_base(
     raid.phase = Phase::Out;
     raid.raids += 1;
     let due = surge_due_words(raid.surge_in());
-    raid.say(format!("Out of the truck. The Surge is due in {due}."));
+    raid.tell(
+        format!("Out of the truck. The Surge is due in {due}."),
+        Show::View,
+    );
 }
 
 fn rendezvous(zone: &Zone) -> Vec<(String, [f32; 2])> {
@@ -326,10 +369,13 @@ fn radio_calls(
                 let here = [p.translation().x, p.translation().z];
                 // Near the gate you came in by, the truck can come straight
                 // back for you, if there's fuel in the stash to burn.
-                let at_short = zone
-                    .map
-                    .markers_of(&MarkerKind::ShortExfil)
-                    .any(|m| extraction_core::geom::dist(m.at, here) < 40.0);
+                let at_short = match call.pad {
+                    Some(pad) => pad == SHORT_EXFIL,
+                    None => zone
+                        .map
+                        .markers_of(&MarkerKind::ShortExfil)
+                        .any(|m| extraction_core::geom::dist(m.at, here) < 40.0),
+                };
                 if at_short {
                     let mut paid = free;
                     for mut stash in &mut stashes {
@@ -347,25 +393,33 @@ fn radio_calls(
                     }
                     if paid {
                         let n = raid.clock as u32;
-                        raid.say(if first_job {
-                            lines::FIRST_SHORT_RUN
-                        } else if free {
-                            lines::GENTLE_SHORT_RUN
-                        } else {
-                            lines::pick(lines::SHORT_RUN, n)
-                        });
+                        raid.tell(
+                            if first_job {
+                                lines::FIRST_SHORT_RUN
+                            } else if free {
+                                lines::GENTLE_SHORT_RUN
+                            } else {
+                                lines::pick(lines::SHORT_RUN, n)
+                            },
+                            Show::View,
+                        );
                         raid.phase = Phase::TruckWaiting {
                             rv: SHORT_EXFIL,
                             left: TRUCK_WAIT,
                         };
                         continue;
                     }
-                    raid.say(lines::NO_FUEL);
+                    raid.tell(lines::NO_FUEL, Show::View);
                 }
                 let rvs = rendezvous(&zone);
-                let Some((i, (name, _))) = rvs.iter().enumerate().min_by(|a, b| {
-                    extraction_core::geom::dist(a.1.1, here)
-                        .total_cmp(&extraction_core::geom::dist(b.1.1, here))
+                // A set calls the truck to its own pad; a carried radio,
+                // or the gate's set with no fuel, to the nearest.
+                let set = call.pad.filter(|i| *i < rvs.len()).map(|i| (i, &rvs[i]));
+                let Some((i, (name, _))) = set.or_else(|| {
+                    rvs.iter().enumerate().min_by(|a, b| {
+                        extraction_core::geom::dist(a.1.1, here)
+                            .total_cmp(&extraction_core::geom::dist(b.1.1, here))
+                    })
                 }) else {
                     continue;
                 };
@@ -384,7 +438,10 @@ fn radio_calls(
             }
             Phase::TruckCalled { eta, .. } => {
                 let n = raid.clock as u32;
-                raid.say(lines::fill_time(lines::pick(lines::ON_THE_WAY, n), eta))
+                raid.tell(
+                    lines::fill_time(lines::pick(lines::ON_THE_WAY, n), eta),
+                    Show::View,
+                )
             }
             Phase::TruckWaiting { rv, .. } => {
                 let (name, at) = rendezvous(&zone).get(rv).cloned().unwrap_or_else(|| {
@@ -400,7 +457,10 @@ fn radio_calls(
                     .map(|p| lines::way([p.translation().x, p.translation().z], at))
                     .unwrap_or_default();
                 let n = raid.clock as u32;
-                raid.say(lines::fill(lines::pick(lines::WAITING, n), &name, 0.0, &b));
+                raid.tell(
+                    lines::fill(lines::pick(lines::WAITING, n), &name, 0.0, &b),
+                    Show::View,
+                );
             }
             _ => {}
         }
@@ -442,7 +502,7 @@ pub(crate) fn tick_raid(
             // has, and it says the time the truck will take.
             if let Some((line, aged)) = raid.pending_call.take() {
                 if aged {
-                    raid.say(lines::fill_time(&line, eta));
+                    raid.tell(lines::fill_time(&line, eta), Show::View);
                 } else {
                     raid.pending_call = Some((line, true));
                 }
@@ -454,10 +514,13 @@ pub(crate) fn tick_raid(
                     .map(|r| r.0.clone())
                     .unwrap_or_default();
                 let n = raid.clock as u32;
-                raid.say(lines::fill_time(
-                    &lines::fill(lines::pick(lines::ARRIVED, n), &name, 0.0, ""),
-                    TRUCK_WAIT,
-                ));
+                raid.tell(
+                    lines::fill_time(
+                        &lines::fill(lines::pick(lines::ARRIVED, n), &name, 0.0, ""),
+                        TRUCK_WAIT,
+                    ),
+                    Show::View,
+                );
                 raid.phase = Phase::TruckWaiting {
                     rv,
                     left: TRUCK_WAIT,
@@ -475,10 +538,13 @@ pub(crate) fn tick_raid(
                     .get(rv)
                     .map_or_else(|| "gate".to_string(), |r| r.0.clone());
                 let n = raid.clock as u32;
-                raid.say(lines::fill_time(
-                    &lines::fill(lines::pick(lines::LAST_CALL, n), &name, 0.0, ""),
-                    LAST_CALL,
-                ));
+                raid.tell(
+                    lines::fill_time(
+                        &lines::fill(lines::pick(lines::LAST_CALL, n), &name, 0.0, ""),
+                        LAST_CALL,
+                    ),
+                    Show::Urgent,
+                );
             }
             // Someone in the back: it doesn't leave them, it takes them
             // (as the bell would).
@@ -493,7 +559,7 @@ pub(crate) fn tick_raid(
                 raid.phase = Phase::Extracting { left: 4.0 };
             } else if left <= 0.0 {
                 let n = raid.clock as u32;
-                raid.say(lines::pick(lines::GAVE_UP, n));
+                raid.tell(lines::pick(lines::GAVE_UP, n), Show::View);
                 raid.phase = Phase::Out;
             } else {
                 raid.phase = Phase::TruckWaiting { rv, left };
@@ -505,22 +571,28 @@ pub(crate) fn tick_raid(
     raid.clock += dt;
     let after = raid.surge_in();
     if before > SURGE_WARNING && after <= SURGE_WARNING {
-        raid.say(format!(
-            "The sky is going the wrong colour. {} until the Surge.",
-            lines::time_words(SURGE_WARNING)
-        ));
+        raid.tell(
+            format!(
+                "The sky is going the wrong colour. {} until the Surge.",
+                lines::time_words(SURGE_WARNING)
+            ),
+            Show::Urgent,
+        );
     }
     if before > SURGE_LAST && after <= SURGE_LAST {
-        raid.say(format!(
-            "{}. Get out, or get under something.",
-            lines::time_words(SURGE_LAST)
-        ));
+        raid.tell(
+            format!(
+                "{}. Get out, or get under something.",
+                lines::time_words(SURGE_LAST)
+            ),
+            Show::Urgent,
+        );
     }
     if before > 0.0 && after <= 0.0 {
-        raid.say("The Surge is here.");
+        raid.tell("The Surge is here.", Show::Urgent);
     }
     if before > -SURGE_LENGTH && after <= -SURGE_LENGTH {
-        raid.say("It's passing. The air tastes of pennies.");
+        raid.tell("It's passing. The air tastes of pennies.", Show::View);
     }
     if after <= 0.0 && after > -SURGE_LENGTH {
         for (mut h, gt, fx) in &mut healths {
@@ -597,7 +669,7 @@ fn depart(
     }
 }
 
-fn downed(
+pub(crate) fn downed(
     mut events: MessageReader<Downed>,
     mut raid: ResMut<Raid>,
     locals: Query<(), With<LocalPlayer>>,
@@ -847,7 +919,8 @@ mod tests {
             .0
             .done = done;
         app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        app.world_mut().write_message(RadioCall { player });
+        app.world_mut()
+            .write_message(RadioCall { player, pad: None });
         app.update();
         assert!(matches!(
             app.world().resource::<Raid>().phase,
@@ -901,7 +974,8 @@ mod tests {
                 .translation = zone.on_ground(0.0, -150.0);
             app.update();
             app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-            app.world_mut().write_message(RadioCall { player });
+            app.world_mut()
+                .write_message(RadioCall { player, pad: None });
             for _ in 0..4 {
                 app.update();
             }
@@ -915,6 +989,109 @@ mod tests {
             assert_eq!(said.len(), 1, "{said:?}");
             assert!(said[0].contains(want), "{cut:?}: {said:?}");
         }
+    }
+
+    /// What needs acting on now reaches the view, not the wrist alone
+    /// (#90, `render::said`): the truck's answer to a call, its arrival,
+    /// its last call (urgent) and its leaving without you; the Surge's
+    /// warnings (urgent), and its passing. A line told for the wrist only
+    /// isn't shown.
+    #[test]
+    fn what_needs_acting_on_is_told_for_the_view() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let zone = app.world().resource::<Zone>().clone();
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = zone.on_ground(0.0, -150.0);
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.world_mut().resource_mut::<Raid>().shown.clear();
+        let mut shown: Vec<(String, Show)> = Vec::new();
+        let mut take = |app: &mut App| {
+            shown.extend(app.world_mut().resource_mut::<Raid>().shown.drain(..));
+        };
+        // Called: the answer, then (the drive cut short) the arrival, the
+        // last call, and leaving without you.
+        app.world_mut()
+            .write_message(RadioCall { player, pad: None });
+        for _ in 0..4 {
+            app.update();
+            take(&mut app);
+        }
+        let step = |app: &mut App, f: &dyn Fn(&mut Raid)| {
+            f(&mut app.world_mut().resource_mut::<Raid>());
+            app.update();
+            app.update();
+        };
+        step(&mut app, &|r| {
+            if let Phase::TruckCalled { eta, .. } = &mut r.phase {
+                *eta = 0.001;
+            }
+        });
+        take(&mut app);
+        step(&mut app, &|r| {
+            if let Phase::TruckWaiting { left, .. } = &mut r.phase {
+                *left = LAST_CALL + 0.001;
+            }
+        });
+        take(&mut app);
+        step(&mut app, &|r| {
+            if let Phase::TruckWaiting { left, .. } = &mut r.phase {
+                *left = 0.001;
+            }
+        });
+        take(&mut app);
+        // The Surge: its warnings, then here, then passing.
+        for at in [SURGE_WARNING, SURGE_LAST, 0.0, -SURGE_LENGTH] {
+            step(&mut app, &|r| r.clock = SURGE_AFTER - at - 0.001);
+            take(&mut app);
+        }
+        let views = |pick: &dyn Fn(&str) -> bool| -> Vec<Show> {
+            shown
+                .iter()
+                .filter(|(l, _)| pick(l))
+                .map(|(_, s)| *s)
+                .collect()
+        };
+        let truck = views(&|l| l.starts_with("Truck:"));
+        assert!(
+            truck.len() >= 4,
+            "the answer, arrival, last call, leaving: {shown:?}"
+        );
+        assert!(truck.iter().all(|s| matches!(s, Show::View | Show::Urgent)));
+        assert!(
+            truck.contains(&Show::Urgent),
+            "the last call is urgent: {shown:?}"
+        );
+        let surge: Vec<_> = shown
+            .iter()
+            .filter(|(l, _)| !l.starts_with("Truck:"))
+            .collect();
+        assert!(surge.len() >= 4, "the Surge's lines: {shown:?}");
+        assert_eq!(
+            surge.iter().filter(|(_, s)| *s == Show::Urgent).count(),
+            3,
+            "its warnings and its coming are urgent: {surge:?}"
+        );
+        // A line for the wrist alone isn't shown.
+        let mut r = app.world_mut().resource_mut::<Raid>();
+        r.shown.clear();
+        r.say("You bind the wound.");
+        assert!(r.shown.is_empty());
     }
 
     /// The same news twice in a row is said once: two ways into one claim

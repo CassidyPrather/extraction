@@ -1091,6 +1091,18 @@ so it's unlike any that means danger: its raise's hiss rises before a
 blow, and this falls. It's quiet, for the one it let go: heard 71 m in
 calm and 27 m in a downpour (wants 25/20, at most 75).
 
+A busy mast's tell (`robots::pressure::MastTell`, #94): a truck called
+from a busy pad stirs the machines, and the mast the call went out on
+says so before their answer comes (`CUE_LEAD` after), since every
+escalation is heard before it lands. Its relay chirps twice, hard and
+bright, then winds up into a whine that climbs from 600 Hz to 1.4 kHz with
+a fast warble (`audio_machines::mast_sounds`, `mast.tell`, a stand-in), at
+the mast. It's heard 433 m in calm and 266 m in a downpour (wants 200/150;
+the pad is 120 m off at most). At 120 m, window by window (0.1 s), the
+whine clears the valley's beds through its whole 1.5 s: by 21-29 dB over
+the wind, and by 16-20 dB over wind and rain. The opening chirps clear
+them by 18 and 6 dB.
+
 A minelayer crawling grinds, its treads labouring, louder and quicker
 the faster it goes, silent standing (`audio_machines::grind_sounds`,
 `minelayer.grind`). Stopped over a spot to lay, its chute charges with a

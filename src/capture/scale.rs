@@ -128,6 +128,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("door_wedge", 0.13, Hand, "a wooden door wedge"),
     ("chemlight", 0.15, Hand, "a 6-inch lightstick"),
     ("hand_flare", 0.23, Hand, "a hand flare"),
+    ("signal_flare", 0.2, Hand, "a hand-fired red star"),
     ("relay_box", 0.16, Made, "a relay box"),
     ("camera", 0.14, Hand, "Zorki-4, 140 mm"),
     // Medical.

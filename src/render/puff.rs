@@ -761,6 +761,7 @@ mod tests {
             ),
             ("weapons/legibility.rs", 1, "a 6 mm dot"),
             ("world/buildings.rs", 1, "a door knob"),
+            ("arcade/visuals.rs", 1, "a gate's lamp (the arcade)"),
             ("world/cage.rs", 1, "a lamp"),
             ("world/halos.rs", 2, "light halos"),
             ("world/lockdown.rs", 1, "a lamp"),

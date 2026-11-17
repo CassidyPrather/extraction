@@ -154,12 +154,16 @@ pub enum TextSource {
     TruckBoard,
     /// The headset's loading view: the valley's name, or where to.
     Loading,
+    /// A line about the thing in hand, beside it (`render::said`).
+    Callout,
+    /// A line to act on now, in the lower view (`render::said`).
+    Caption,
     /// A dev mock-up (screenshot poses): not in the game.
     Dev,
 }
 
 impl TextSource {
-    pub const ALL: [TextSource; 23] = [
+    pub const ALL: [TextSource; 25] = [
         TextSource::Wrist,
         TextSource::Radio,
         TextSource::BenchDisplay,
@@ -182,6 +186,8 @@ impl TextSource {
         TextSource::TrainingList,
         TextSource::TruckBoard,
         TextSource::Loading,
+        TextSource::Callout,
+        TextSource::Caption,
         TextSource::Dev,
     ];
 
@@ -219,6 +225,18 @@ impl TextSource {
                 read(MustRead, 1.2, 10.0, "standing in the bed, at the crate")
             }
             TextSource::Loading => read(MustRead, 2.0, 0.0, "in the headset, between valleys"),
+            TextSource::Callout => read(
+                MustRead,
+                crate::render::said::CALLOUT_AT,
+                0.0,
+                "beside the thing in hand, facing the eye",
+            ),
+            TextSource::Caption => read(
+                MustRead,
+                crate::render::said::CAPTION_AT,
+                0.0,
+                "in the lower view, facing the eye",
+            ),
             TextSource::Dev => read(Incidental, 0.4, 0.0, "screenshots only"),
         }
     }

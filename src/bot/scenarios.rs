@@ -73,6 +73,7 @@ pub const NAMES: &[&str] = &[
     crate::world::echo::SCENARIO,
     crate::world::lockdown::SCENARIO,
     crate::world::live::SCENARIO,
+    crate::arcade::scenario::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -990,6 +991,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
         crate::onboarding::first_hour::RAID => crate::onboarding::first_hour::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),
+        crate::arcade::scenario::SCENARIO => crate::arcade::scenario::opening(),
         crate::progression::safehouse::scenario::SCENARIO => {
             crate::progression::safehouse::scenario::opening()
         }

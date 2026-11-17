@@ -83,6 +83,7 @@ impl Plugin for MachineSoundsPlugin {
                     gate_call,
                     gate_edges,
                     stand_down_sounds,
+                    mast_sounds,
                 ),
             );
     }
@@ -951,6 +952,29 @@ fn stand_down_sounds(
     }
 }
 
+/// A busy mast's tell (`robots::pressure::MastTell`, #94): a call made
+/// from a busy pad stirs the machines, and the mast it went out on says so
+/// before their answer comes ([`CUE_LEAD`](crate::robots::pressure::CUE_LEAD)
+/// after): its relay chirps twice and winds up into a whine (`mast.tell`),
+/// at the mast, heard from the pad and well past it. A warning, never
+/// ambience: every escalation is heard before it lands.
+fn mast_sounds(
+    mut commands: Commands,
+    mut tells: MessageReader<crate::robots::pressure::MastTell>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for t in tells.read() {
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            t.at,
+            &[("mast/tell", "mast.tell", 1.0)],
+        );
+    }
+}
+
 /// A minelayer stopped over a spot, about to lay: its chute charging, a
 /// hiss (`minelayer.hiss`) the length of the stop (`rules::LAY_TIME`)
 /// before the mine drops with a chunk (`mine.laid`). The playtest's
@@ -1214,6 +1238,18 @@ mod tests {
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
         (
+            "RunOver",
+            "an arcade run's end, for its record; going down is heard (Downed)",
+        ),
+        (
+            "Siren",
+            "the arcade's wave siren: `arcade::visuals` plays the machines' own siren at the gate",
+        ),
+        (
+            "WaveCalled",
+            "an arcade card's press is heard as a press; the wave as its Siren",
+        ),
+        (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
         ),
@@ -1284,10 +1320,18 @@ mod tests {
         ("SaveNow", "a save"),
         ("Searching", "a mind's turn: heard in its voice"),
         ("Setup", "a bot scenario"),
+        (
+            "SignalLit",
+            "Progression's cue for a red star's extract; the star itself is the signal",
+        ),
         ("SiteGrid", "a nav grid"),
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
         ("ToggleBackpack", "flat mode's pack; opening it is heard"),
+        (
+            "Transmitted",
+            "the pressure account's copy of a transceiver press; the press is heard",
+        ),
         (
             "Treated",
             "telemetry's note of a dressing or injector used; the use is heard",
@@ -1614,6 +1658,16 @@ mod tests {
         ] {
             assert_ne!(set("heavy.sigh"), set(other), "{other}");
         }
+    }
+
+    /// A busy mast's tell has a sound of its own, in the mix with its set.
+    #[test]
+    fn a_busy_mast_tells_aloud() {
+        let c = crate::audio_mix::MIX.iter().find(|c| c.name == "mast.tell");
+        assert_eq!(
+            c.map(|c| (c.set, c.role)),
+            Some(("mast/tell", crate::audio_mix::Role::Signal))
+        );
     }
 
     /// A grappler's hold is heard while it lasts, straining harder toward
