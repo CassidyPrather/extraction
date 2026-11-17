@@ -672,6 +672,40 @@ mod tests {
             }
             let _ = std::fs::remove_dir_all(&dir);
         }
+        // The arcade: its bench, boards, cards and range sign as laid, and
+        // its two sheets at their fullest.
+        {
+            let dir = std::env::temp_dir().join(format!(
+                "extraction-legibility-arcade-{}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            let mut opts = crate::LaunchOptions {
+                data_dir: Some(dir.clone()),
+                ..Default::default()
+            };
+            crate::arcade::enter(&mut opts);
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..60 {
+                app.update();
+            }
+            let mut q = app
+                .world_mut()
+                .query::<(Option<&Name>, &ScreenText, Option<&TextSource>)>();
+            let mut n = 0;
+            for (name, screen, source) in q.iter(app.world()) {
+                let name = name.map_or("(unnamed)".into(), |n| n.to_string());
+                n += 1;
+                check(&format!("arcade: {name}"), screen, source.copied());
+            }
+            assert!(n > 10, "the arcade's bench was laid: {n} panels");
+            let _ = std::fs::remove_dir_all(&dir);
+            for (what, screen, source) in crate::arcade::arena::fullest_panels() {
+                check(&what, &screen, Some(source));
+            }
+        }
         let wrist = ScreenText {
             text: crate::render::comfort::wrist_text(
                 "SURGE 12M",
