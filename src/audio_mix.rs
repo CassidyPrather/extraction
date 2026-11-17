@@ -114,6 +114,9 @@ pub const MIX: &[Cue] = &[
     cue!("use.switch", "physical/switch", -3.5, 50.0, 0.4, Detail),
     cue!("step.done", "physical/chime", -22.0, 60.0, 0.0, Detail),
     cue!("step.station", "ui/chime_station", -20.0, 65.0, 0.0, Detail),
+    // The playtest tour's sync chirp, in your head: loud enough to find
+    // on a recording (`capture::station`, scripts/playtest_ingest.py).
+    cue!("tour.sync", "ui/tour_sync", -10.0, 70.0, 0.0, Signal),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     cue!("drop.heavy", "impacts/dirt", -6.0, 85.0, 1.5, Event, 25.0),
     // Guns in your hands.

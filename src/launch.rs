@@ -109,6 +109,15 @@ pub struct LaunchOptions {
     pub tour: Option<std::path::PathBuf>,
     /// Set up the camp table even where the game wouldn't (a screenshot).
     pub camp: bool,
+    /// `--playtest TOUR.txt`: a playtest tour, one station a session
+    /// (`capture::station`). Saves nothing.
+    pub playtest: Option<std::path::PathBuf>,
+    /// The tour's station this session plays (`--playtest-station N`, from
+    /// 0); its arguments are spliced in after the command line's.
+    pub playtest_station: usize,
+    /// `--spawn x,y,z,yaw`: where the player stands, in a headset or flat
+    /// (unlike `--camera`, which flat gives a free camera).
+    pub spawn: Option<(Vec3, f32)>,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
     /// Dev: the tour's views from a file instead of the placements (see
@@ -196,6 +205,9 @@ impl Default for LaunchOptions {
             torch_dip: 0.0,
             terrain_debug: false,
             tour: None,
+            playtest: None,
+            playtest_station: 0,
+            spawn: None,
             tour_only: None,
             tour_views: None,
             legibility: None,
@@ -278,6 +290,9 @@ impl LaunchOptions {
 
     pub fn parse(args: impl IntoIterator<Item = String>) -> Self {
         let mut o = Self::default();
+        // A playtest tour's station plays with its own arguments too, after
+        // the command line's (so they win).
+        let args = crate::capture::station::with_station_args(args.into_iter().collect());
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
             let mut val = || args.next().unwrap_or_default();
@@ -362,6 +377,17 @@ impl LaunchOptions {
                 "--map" => {
                     o.map = val();
                     o.map_explicit = true;
+                }
+                "--playtest" => o.playtest = Some(PathBuf::from(val())),
+                "--playtest-station" => o.playtest_station = val().parse().unwrap_or(0),
+                "--spawn" => {
+                    let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
+                    if v.len() >= 3 {
+                        o.spawn = Some((
+                            Vec3::new(v[0], v[1], v[2]),
+                            v.get(3).copied().unwrap_or(0.0),
+                        ));
+                    }
                 }
                 "--seed" => {
                     o.seed = val().parse().unwrap_or(1);

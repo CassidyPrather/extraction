@@ -1,0 +1,26 @@
+# The playtest tour: one new or changed thing at a time, no travel
+# (`capture::station`, docs/PLAYTEST.md "The playtest tour"). Played from
+# PLAYTEST TOUR on the camp board, or `extraction --playtest
+# assets/playtest/tour.txt`. Nothing is saved.
+#
+# One station a line:
+#
+#   name | minutes | question (answered 1-5) | game arguments
+#
+# - The arguments are the game's own: --map, --hour, --weather, --spawn
+#   x,y,z,yaw (where you stand; y 0 is the ground), --no-robots, --gallery
+#   specs (src/dev.rs) and so on. They come after the command line's, so
+#   they win.
+# - On leaving a station the board asks the question, then for what
+#   bugged you, out loud for the recording.
+# - Owners: give one staging line for your thing, tried with
+#   `extraction --flat --playtest <a list with just your line>`.
+# - `cargo test` reads this file (capture::station tests): a line written
+#   wrong fails there.
+
+yard_start | 4 | How clear was it what to do first? | --map training_yard
+dusk_valley | 3 | How readable were the machines in the dusk sky? | --map marrow_creek --hour dusk --weather clearing --spawn 40,0,262,0
+
+# Waiting on a staging line from its owner:
+# ammo_boxes | 3 | How easy are the new ammo boxes to tell apart? | (Weapon feel / Armoury)
+# injector | 3 | How did using the injector feel? | (Hands #102)
