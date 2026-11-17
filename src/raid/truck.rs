@@ -172,13 +172,28 @@ pub fn base_pose(zone: &Zone) -> Transform {
     parked(zone, at, yaw)
 }
 
-pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
-    let rvs: Vec<[f32; 2]> = zone
-        .map
+/// Every place the truck pulls in to, by the index a call carries
+/// (`Phase::TruckCalled { rv }`): the rendezvous, then the flare stops
+/// (#94, `map_extract`: called by a red star, not a set). Name and place.
+pub fn pads(zone: &Zone) -> Vec<(String, [f32; 2])> {
+    zone.map
         .markers_of(&MarkerKind::Rendezvous)
-        .map(|m| m.at)
-        .collect();
-    let at = rvs.get(rv).copied().unwrap_or([0.0, 0.0]);
+        .map(|m| (m.name.clone(), m.at))
+        .chain(
+            extraction_core::map_extract::flare_stops(&zone.map)
+                .into_iter()
+                .map(|(name, at, _)| (name.to_string(), at)),
+        )
+        .collect()
+}
+
+/// Where pad `rv` is ([`pads`]), if it's one.
+pub fn pad_at(zone: &Zone, rv: usize) -> Option<[f32; 2]> {
+    pads(zone).get(rv).map(|p| p.1)
+}
+
+pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
+    let at = pad_at(zone, rv).unwrap_or([0.0, 0.0]);
     // Park with the bed toward the map centre, so you walk into it.
     let back = Vec3::new(-at[0], 0.0, -at[1]).normalize_or(Vec3::Z);
     let yaw = back.x.atan2(back.z);

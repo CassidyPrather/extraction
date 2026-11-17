@@ -241,8 +241,8 @@ fn raid_turns(
     let before = last.replace(now.clone());
     // Out at a rendezvous: remember which.
     if let (Some(Phase::TruckWaiting { rv, .. }), Phase::Extracting { .. }) = (&before, &now) {
-        if let Some(m) = zone.map.markers_of(&MarkerKind::Rendezvous).nth(*rv) {
-            mind.trace.rv = Some(m.at);
+        if let Some(at) = crate::raid::truck::pad_at(&zone, *rv) {
+            mind.trace.rv = Some(at);
         }
     }
     // The end: out or down, the raid goes in.

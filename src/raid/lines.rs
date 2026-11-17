@@ -72,6 +72,15 @@ pub const CALLED: &[&str] = &[
     "Truck: \"Heard you. {rv}, {b}. {t}.\"",
 ];
 
+/// A red star seen near a flare stop (#94, `raid::flare_stops`): the
+/// truck's coming there. `{rv}` is the stop, `{b}` which way and how far
+/// from the star.
+pub const STAR_SEEN: &[&str] = &[
+    "Truck: \"Saw your star. {rv}, {b}. {t}.\"",
+    "Truck: \"Red star, I see it. Coming to {rv}, {b}. {t}.\"",
+    "Truck: \"There's your star. {rv}, {b}. {t}.\"",
+];
+
 /// Stepping out with the Surge too close to outrun (`HOLD_THE_DOOR`): the
 /// driver keeps you in.
 pub const HOLD_THE_DOOR: &str =
