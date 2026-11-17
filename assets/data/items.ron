@@ -756,7 +756,7 @@
         ),
 
         // ---------------------------------------------------------------
-        // Food. Cosmetic: there is no hunger meter. Tags map to cooking::Food.
+        // Food: junk (#104). No hunger meter; an offering place takes it and animals come to it. Tags map to cooking::Food.
         // ---------------------------------------------------------------
         (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Canteen", description: "A canteen of water. Twist the cap off before you drink.", category: Junk, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
         (id: "condensed_milk", dims: Some((0.09, 0.068, 0.091)), name: "Condensed milk", category: Junk, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
