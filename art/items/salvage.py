@@ -111,7 +111,7 @@ def robot_cell():
                 axis="z", bevel=0.003, segs=1)
     # The hot band round its middle.
     p.prism(fillet([(-w - 0.002, -h - 0.002), (w + 0.002, -h - 0.002), (w + 0.002, h + 0.002),
-                    (-w - 0.002, h + 0.002)], 0.015, 3), -0.016, 0.016, "Warn", axis="z",
+                    (-w - 0.002, h + 0.002)], 0.015, 3), -0.024, 0.024, "Hot", axis="z",
             bevel=0.002, segs=1)
     # Ribs down one flank.
     for k in range(5):
@@ -140,6 +140,10 @@ def walker_eye():
              (0.0, 0.012)], "Lens", segs=32, xf=UP)
     p.tube(0.03, 0.016, 0.013, 0.016, "Eye", segs=32, xf=UP)
     p.cyl(0.012, 0.012, 0.0175, "Black", segs=20, xf=UP)
+    # The iris seen through the glass: a red disc on the dome's crown, its
+    # black pupil (the lens alone read as a dark puck at 1.5 m).
+    p.cyl(0.024, 0.029, 0.0315, "Eye", segs=28, xf=UP)
+    p.cyl(0.009, 0.0315, 0.0325, "Black", segs=16, xf=UP)
     # The torn mount and its leads.
     p.box((0.05, 0.022, 0.03), (0.0, -0.046, 0.0), "Dark", bevel=0.004, segs=1)
     tube_path(p, [(0.012, -0.05, 0.01), (0.025, -0.062, 0.02), (0.04, -0.066, 0.03)], 0.003,

@@ -960,7 +960,7 @@
             tags: ["electronics", "glass"],
         ),
         (
-            id: "walker_eye", dims: Some((0.128, 0.1, 0.128)), name: "Walker eye",
+            id: "walker_eye", dims: Some((0.128, 0.103, 0.128)), name: "Walker eye",
             description: "A walker's eye, pulled from its orb. The lens is good glass; the red behind it still follows you a little.",
             category: RobotPart, size: Small, mass: 0.6, bulk: 1.0,
             tags: ["electronics", "glass"],
