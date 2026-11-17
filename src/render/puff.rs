@@ -727,6 +727,11 @@ mod tests {
             ("render/bench.rs", 1, "a knob"),
             ("render/body.rs", 1, "a knee"),
             ("render/landmarks.rs", 1, "a lamp"),
+            (
+                "render/pockets.rs",
+                1,
+                "a pocket sphere, a soap-bubble shell",
+            ),
             ("render/rv_beacons.rs", 1, "a lamp"),
             ("render/way_lamps.rs", 1, "a yard lamp's bulb"),
             ("render/wounds.rs", 1, "a wound's patch, on the skin"),
