@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use super::range::{BAR, CHAIN, PLATE, RangeFrame, RangeLine, RangePlate, THICK};
+use super::range::{BAR, CHAIN, PLATE, RangeFrame, RangeLine, RangePlate, SIGN_AT, THICK};
 use super::waves::{GateLamp, Siren};
 use crate::launch::LaunchOptions;
 use crate::render::materials::{Mat, MaterialLibrary, metric_box};
@@ -182,9 +182,9 @@ fn build_range(
             ChildOf(e),
         ));
         commands.spawn((
-            Mesh3d(meshes.add(metric_box(Vec3::new(0.08, 1.3, 0.08)))),
+            Mesh3d(meshes.add(metric_box(Vec3::new(0.08, SIGN_AT, 0.08)))),
             MeshMaterial3d(timber.clone()),
-            Transform::from_xyz(1.5, 0.65, 0.0),
+            Transform::from_xyz(1.5, SIGN_AT * 0.5, 0.0),
             ChildOf(e),
         ));
     }

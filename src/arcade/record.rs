@@ -279,8 +279,10 @@ pub fn card(arcade: &Arcade, rec: &Recording, bests: &GunBests, feel: &Feel) -> 
     }
     let fired = rec.stats.guns.values().any(|g| g.shots > 0);
     s += &match (&rec.last_run, fired) {
-        (Some((title, run, before)), false) => gun_card(&format!("last run: {title}"), run, before),
-        _ => gun_card(&card_title(arcade), &rec.stats, &bests.before),
+        (Some((title, run, before)), false) => {
+            gun_card(&format!("last run: {title}"), run, before, feel.gun())
+        }
+        _ => gun_card(&card_title(arcade), &rec.stats, &bests.before, feel.gun()),
     };
     s
 }
@@ -807,7 +809,12 @@ fn close_run(
         format!("down on wave {wave}")
     };
     rec.last_run = Some((title, stats, before));
-    arcade.summary = Some(summary);
+    arcade.summary = Some(
+        rec.last_run
+            .as_ref()
+            .map(|(_, st, _)| st.board(wave, arcade.score, arcade.run_t, !restarted))
+            .unwrap_or_default(),
+    );
     log.finished = true;
     commands.remove_resource::<SimLog>();
 }
