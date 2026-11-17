@@ -198,7 +198,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("rotor_assembly", 0.1, Made, "a drone rotor hub"),
     ("servo", 0.08, Made, "a servo"),
     ("sensor_eye", 0.06, Made, "a sensor eye"),
-    ("robot_cell", 0.186, Made, "a robot cell (a walker's, carried by its handle)"),
+    ("robot_cell", 0.186, Made, "a walker's robot cell"),
     ("walker_eye", 0.128, Made, "a walker's eye"),
     ("robot_gunpod", 1.08, Made, "a robot's gun pod"),
     ("robot_plate", 0.3, Made, "a robot's plate"),
