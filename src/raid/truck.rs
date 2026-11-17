@@ -537,7 +537,7 @@ pub(crate) fn start_in_truck(
         }
     }
     // Scenarios and screenshots place the player themselves.
-    if !opts.plays_for_real() || opts.camera.is_some() {
+    if !opts.plays_for_real() || opts.places_player() {
         return;
     }
     let pose = base_pose(&zone);

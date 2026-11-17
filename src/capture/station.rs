@@ -716,6 +716,35 @@ mod tests {
         );
     }
 
+    /// `--spawn` puts the player there and keeps them there: the yard's
+    /// truck start once put a station's player back in the truck.
+    #[test]
+    fn a_station_stands_the_player_where_it_says() {
+        let opts = LaunchOptions::parse(
+            "--map training_yard --no-robots --spawn 0,0,40,0"
+                .split(' ')
+                .map(String::from),
+        );
+        assert!(opts.places_player());
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..60 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let at = w
+            .query_filtered::<&GlobalTransform, With<LocalPlayer>>()
+            .iter(w)
+            .next()
+            .expect("a player")
+            .translation();
+        assert!(
+            Vec2::new(at.x, at.z).distance(Vec2::new(0.0, 40.0)) < 1.5,
+            "the player stands at {at}, not (0, 40)"
+        );
+    }
+
     /// The tour is a sandbox: no station has a career to save to.
     #[test]
     fn a_tour_never_touches_the_career() {

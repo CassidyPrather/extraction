@@ -284,6 +284,13 @@ impl LaunchOptions {
             && self.scene != SceneChoice::Arcade
     }
 
+    /// The command line says where the player stands (`--camera` or
+    /// `--spawn`): the truck, the camp table and the arcade's bench leave
+    /// them there.
+    pub fn places_player(&self) -> bool {
+        self.camera.is_some() || self.spawn.is_some()
+    }
+
     pub fn from_args() -> Self {
         Self::parse(std::env::args().skip(1))
     }

@@ -220,8 +220,8 @@ fn set_up(
     let bench = bench_pose(&zone);
     arcade.bench = Some(bench);
     arcade.stand = Some(bench * Transform::from_translation(STAND));
-    // A screenshot's camera places itself.
-    arcade.hold = if opts.camera.is_some() { 0 } else { 30 };
+    // A screenshot's camera, or `--spawn`, places the player.
+    arcade.hold = if opts.places_player() { 0 } else { 30 };
     for i in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, i);
         let table = commands
