@@ -345,8 +345,8 @@ fn sync(
     heads: Query<Entity, With<crate::rig::RigHead>>,
     bank: Option<Res<crate::audio::SoundBank>>,
     rng: Option<ResMut<crate::audio::AudioRng>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    meshes: Option<ResMut<Assets<Mesh>>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
 ) {
     if let Some((e, left)) = tour.flash {
         if left == 0 {
@@ -372,7 +372,10 @@ fn sync(
             0.0,
         );
     }
-    if let Some(head) = heads.iter().next() {
+    // No window, nothing to flash (a headless run): the note's enough.
+    if let (Some(head), Some(mut meshes), Some(mut materials)) =
+        (heads.iter().next(), meshes, materials)
+    {
         let flash = commands
             .spawn((
                 Mesh3d(meshes.add(Rectangle::new(2.0, 2.0))),
