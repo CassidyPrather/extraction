@@ -228,6 +228,11 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Paper",
     "Olive",
     "Copper",
+    // A box's round's point, the band behind it, and a shell's hull:
+    // painted for each round's load (`items::rounds`).
+    "Tip",
+    "TipBand",
+    "Hull",
     "Dark",
     "Rotor",
     "Lens",
@@ -504,7 +509,10 @@ impl ModelMaterials {
             "Cream" => flat(materials, Color::srgb(0.82, 0.78, 0.66), 0.0, 0.6),
             "Paper" => flat(materials, Color::srgb(0.85, 0.83, 0.76), 0.0, 0.9),
             "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
-            "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
+            "Copper" | "Tip" | "TipBand" => {
+                flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32)
+            }
+            "Hull" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
             // Retroreflective tape by day: a pale cool grey, its beads a
             // little glossy (`render::reflectors` lights it for a torch).

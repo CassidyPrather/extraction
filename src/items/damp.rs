@@ -69,9 +69,14 @@ fn say_damp(
 
 pub struct DampVisualsPlugin;
 
+/// Where a damp look is made: after a box's rounds are painted
+/// (`items::rounds`).
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DampVisualsSet;
+
 impl Plugin for DampVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, damp_looks);
+        app.add_systems(Update, damp_looks.in_set(DampVisualsSet));
     }
 }
 
@@ -83,7 +88,18 @@ const DAMP_ROUGH: f32 = 0.35;
 /// A damp thing's own darkened copies of its materials, and what each mesh
 /// wore before (put back once it's dried).
 #[derive(Component)]
-struct DampLook(Vec<(Entity, Handle<StandardMaterial>)>);
+pub struct DampLook(Vec<(Entity, Handle<StandardMaterial>)>);
+
+impl DampLook {
+    /// Its meshes back as they were.
+    pub fn undo(&self, meshes: &mut Query<&mut MeshMaterial3d<StandardMaterial>>) {
+        for (m, h) in &self.0 {
+            if let Ok(mut mat) = meshes.get_mut(*m) {
+                mat.0 = h.clone();
+            }
+        }
+    }
+}
 
 fn damp_looks(
     mut commands: Commands,

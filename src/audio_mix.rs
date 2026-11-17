@@ -181,6 +181,8 @@ pub const MIX: &[Cue] = &[
     cue!("gun.burst_case", "physical/drop_metal", -8.0, 90.0, 0.5, Action),
     cue!("gun.grind", "physical/handle_metal", -14.0, 60.0, 0.5, Detail),
     cue!("smith.clamp", "machines/clank", -8.0, 75.0, 1.0, Detail),
+    cue!("box.tear", "physical/zip", -14.0, 60.0, 0.5, Detail),
+    cue!("box.round", "guns/casing", -16.0, 55.0, 0.5, Detail),
     cue!("smith.saw", "physical/handle_metal", -12.0, 65.0, 1.0, Detail),
     cue!("smith.cut", "impacts/metal", -8.0, 80.0, 1.0, Detail),
     cue!("smith.screw", "physical/door_creak", -16.0, 55.0, 0.5, Detail),
