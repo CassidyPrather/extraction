@@ -1272,11 +1272,12 @@ mod tests {
         for _ in 0..180 {
             app.update();
         }
-        let held = pos(&app, stone).y;
+        let at_stone = pos(&app, stone);
+        let held = at_stone.y;
         app.world_mut()
             .write_message(crate::weapons::ballistics::Hit {
                 entity: stone,
-                point: pos(&app, stone),
+                point: at_stone,
                 normal: Vec3::Y,
                 velocity: Vec3::X * 300.0,
                 damage: 0.0,
