@@ -90,6 +90,8 @@ RANGE_TARGETS = {
     # the Gate counting you, from its first tick (its start level), to past
     # the 60 m line; a heavy letting you go, for the one it let go
     "gate.call": (80, 80), "heavy.sigh": (25, 20),
+    # a busy mast's tell, heard from the pad and past it (#94: >= 120 m)
+    "mast.tell": (200, 150),
     "walker.aim_lock": (40, 20), "harpoon.windup": (30, 15), "dirigible.engine": (200, 80), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top
