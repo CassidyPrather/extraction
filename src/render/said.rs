@@ -385,6 +385,16 @@ fn at_the_sights(h: &crate::weapons::feel::Handling) -> bool {
     h.at_eye > 0.5
 }
 
+/// How much of the caption shows for the gun at the eye, 0..=1.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+struct AimFade(f32);
+
+impl Default for AimFade {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 /// How far (degrees) the caption may slide aside off what's held.
 pub const CAPTION_ASIDE: f32 = 20.0;
 
@@ -571,9 +581,13 @@ fn show_caption(
     mut commands: Commands,
     mut lines: ResMut<CaptionLines>,
     mut lock: Local<SoftLock>,
+    mut aim_fade: Local<AimFade>,
     mut showing: Local<Option<(Entity, Option<Entity>, String)>>,
     time: Res<Time>,
-    adapt: Option<Res<crate::render::grade::Adaptation>>,
+    (adapt, hold): (
+        Option<Res<crate::render::grade::Adaptation>>,
+        Option<Res<HoldForShot>>,
+    ),
     free: Query<&GlobalTransform, With<crate::render::FreeCamera>>,
     heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
     locals: Query<Entity, With<crate::rig::LocalPlayer>>,
@@ -583,7 +597,6 @@ fn show_caption(
         &mut Transform,
         (Or<(With<CaptionPanel>, With<UrgentBar>)>, Without<Callout>),
     >,
-    hold: Option<Res<HoldForShot>>,
     callouts: Query<(&GlobalTransform, &ScreenText, &PanelLight), With<Callout>>,
     gloves: Query<(&GlobalTransform, &InheritedVisibility), With<crate::render::props::HandVisual>>,
     guns: Query<(
@@ -611,7 +624,19 @@ fn show_caption(
         .is_some_and(|t| {
             (t.translation - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians()
         });
-    lines.tick(dt, gazed);
+    // A gun at the eye: the view is the sights'. The caption fades out
+    // and its time stands still till the gun comes down (it's on the
+    // wrist meanwhile), as the gun's own callout fades.
+    let hands = in_hand(&held, &locals, &catalog);
+    let aiming = hands
+        .iter()
+        .any(|(e, ..)| guns.get(*e).is_ok_and(|(_, _, h)| at_the_sights(h)));
+    aim_fade.0 = if aiming {
+        (aim_fade.0 - dt / SIGHT_FADE).max(0.0)
+    } else {
+        (aim_fade.0 + dt / SIGHT_FADE).min(1.0)
+    };
+    lines.tick(if aiming { 0.0 } else { dt }, gazed && !aiming);
     if hold.is_some() {
         if let Some(l) = &mut lines.now {
             l.time = l.time.max(l.shown + 10.0);
@@ -682,7 +707,6 @@ fn show_caption(
         return;
     };
     // Clear of what's in hand, seen from where the caption's anchored.
-    let hands = in_hand(&held, &locals, &catalog);
     let anchor_eye = eye.translation();
     let size = lines.now.as_ref().map_or(Vec2::ONE, |l| {
         panel(
@@ -742,19 +766,6 @@ fn show_caption(
         }
         things.push((lo, hi));
     }
-    // A gun at the eye: its sight picture, `SIGHT_CLEAR` round where
-    // it points, as a callout keeps off it.
-    for (e, ..) in &hands {
-        if let Ok((gun, gt, handling)) = guns.get(*e) {
-            if at_the_sights(handling) {
-                let line = gt.rotation() * gun.layout.sight.rotation * Vec3::NEG_Z;
-                let c = seen(anchor_eye, lock.yaw, anchor_eye + line);
-                let c = Vec2::new(c.x, c.y + lock.pitch.to_degrees());
-                let r = SIGHT_CLEAR - CAPTION_CLEAR;
-                things.push((c - r, c + r));
-            }
-        }
-    }
     // And the gloves themselves, holding or not, as drawn: a glove with
     // its cuff is bigger than the thing in it, and hangs below it.
     for g in &gloves {
@@ -786,7 +797,7 @@ fn show_caption(
         * Quat::from_rotation_y(-place_at.x.to_radians())
         * Quat::from_rotation_x(-down.to_radians());
     let at = anchor_eye + rot * Vec3::NEG_Z * CAPTION_AT;
-    let alpha = lines.alpha();
+    let alpha = lines.alpha() * aim_fade.0;
     let g = glow(adapt.as_ref().map_or(0.0, |a| a.stops));
     let place = Transform::from_translation(at).with_rotation(rot);
     if let Ok(mut t) = panels.get_mut(*p) {
@@ -1283,5 +1294,85 @@ mod tests {
         let mut q = app.world_mut().query::<&Callout>();
         let words: Vec<_> = q.iter(app.world()).map(|c| c.line.words.clone()).collect();
         assert_eq!(words, vec![how.to_string()], "the new line wasn't shown");
+    }
+
+    /// A gun at the eye: the caption doesn't show and its time stands
+    /// still; the gun down, it shows and runs on.
+    #[test]
+    fn the_caption_waits_while_a_gun_is_at_the_eye() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.add_plugins(SaidPlugin);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("pm_pistol").unwrap();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let pm = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_xyz(0.1, 1.5, -0.4),
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.world_mut().entity_mut(pm).insert((
+            Posed(crate::rig::Side::Right),
+            avian3d::prelude::RigidBody::Static,
+        ));
+        app.world_mut().spawn((
+            crate::render::FreeCamera,
+            Transform::from_xyz(0.0, 1.7, 0.0),
+            GlobalTransform::from(Transform::from_xyz(0.0, 1.7, 0.0)),
+        ));
+        app.update();
+        let aim = |app: &mut App, on: bool| {
+            let mut h = app
+                .world_mut()
+                .get_mut::<crate::weapons::feel::Handling>(pm)
+                .expect("a gun has its handling");
+            h.at_eye = if on { 1.0 } else { 0.0 };
+        };
+        aim(&mut app, true);
+        app.world_mut().resource_mut::<Raid>().shown.clear();
+        app.world_mut()
+            .resource_mut::<Raid>()
+            .tell("Truck: \"Heard you. Two minutes.\"", Show::View);
+        for _ in 0..30 {
+            aim(&mut app, true);
+            app.update();
+        }
+        let shown = |app: &mut App| {
+            app.world()
+                .resource::<CaptionLines>()
+                .now
+                .as_ref()
+                .map(|l| l.shown)
+        };
+        let alpha = |app: &mut App| {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&PanelLight, With<CaptionPanel>>();
+            q.iter(app.world()).map(|l| l.alpha).next()
+        };
+        assert_eq!(shown(&mut app), Some(0.0), "its time stands still");
+        assert_eq!(alpha(&mut app), Some(0.0), "it doesn't show");
+        for _ in 0..30 {
+            aim(&mut app, false);
+            app.update();
+        }
+        assert!(shown(&mut app).unwrap() > 0.0, "the gun down, it runs on");
+        assert!(alpha(&mut app).unwrap() > 0.0, "and shows");
     }
 }
