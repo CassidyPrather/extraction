@@ -34,6 +34,7 @@ pub mod roadworks;
 pub mod rocks;
 pub mod scenes;
 pub mod shafts;
+pub mod siren_mast;
 pub mod sky;
 pub mod snow;
 pub mod storm;
@@ -417,7 +418,11 @@ impl Plugin for WorldVisualsPlugin {
             storm::StormPlugin,
             snow::SnowVisualsPlugin,
         ))
-        .add_plugins((roadworks::RoadworksVisualsPlugin, cues::CuesPlugin));
+        .add_plugins((
+            roadworks::RoadworksVisualsPlugin,
+            cues::CuesPlugin,
+            siren_mast::SirenMastPlugin,
+        ));
     }
 }
 
