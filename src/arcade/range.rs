@@ -23,6 +23,10 @@ pub const LINE: [f32; 2] = [5.0, 33.0];
 /// Downrange.
 pub const DOWNRANGE: Vec3 = Vec3::X;
 
+/// Each plate's offset across the lane, m (+ south): staggered, so no
+/// plate stands in the line to another.
+pub const ACROSS: [f32; 3] = [-2.5, 0.0, 3.0];
+
 /// A plate's face (width, height) and thickness, m.
 pub const PLATE: Vec2 = Vec2::new(0.45, 0.6);
 pub const THICK: f32 = 0.02;
@@ -112,7 +116,7 @@ fn set_up(mut commands: Commands, zone: Res<Zone>, arcade: Res<Arcade>, mut done
     ));
     for (i, d) in PLATES.iter().enumerate() {
         let x = LINE[0] + d;
-        let foot = zone.on_ground(x, LINE[1]);
+        let foot = zone.on_ground(x, LINE[1] + ACROSS[i]);
         commands.spawn((
             Name::new(format!("Range frame, {d:.0} m")),
             RangeFrame,
@@ -196,5 +200,15 @@ mod tests {
             LINE[0] - 2.0 > 2.0,
             "the line stands clear of the 4 m track at x 0"
         );
+        // Seen from the line, each plate is clear of the others' lines.
+        for i in 0..PLATES.len() {
+            for j in 0..PLATES.len() {
+                if i != j {
+                    let a = ACROSS[i].atan2(PLATES[i]);
+                    let b = ACROSS[j].atan2(PLATES[j]);
+                    assert!((a - b).abs() > 0.05, "plates {i} and {j} line up");
+                }
+            }
+        }
     }
 }

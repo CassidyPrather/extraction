@@ -71,8 +71,8 @@ pub enum Aim {
     Range(usize),
 }
 
-/// Which plate a shot from `origin` along `dir` was aimed at: the one its
-/// line passes nearest, within [`AIMED_NEAR`].
+/// Which plate a shot from `origin` along `dir` was aimed at: of those its
+/// line passes within [`AIMED_NEAR`] of, the one nearest by angle.
 pub fn aimed_plate(
     origin: Vec3,
     dir: Vec3,
@@ -84,9 +84,9 @@ pub fn aimed_plate(
         .filter_map(|(i, c)| {
             let v = c - origin;
             let along = v.dot(dir);
-            (along > 0.0).then(|| (i, (v - dir * along).length()))
+            let miss = (v - dir * along).length();
+            (along > 0.0 && miss <= AIMED_NEAR).then_some((i, miss / along))
         })
-        .filter(|(_, miss)| *miss <= AIMED_NEAR)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
 }
@@ -856,11 +856,17 @@ mod tests {
 
     #[test]
     fn a_shot_is_put_to_the_plate_it_was_aimed_at() {
-        let plates = [
-            (0, Vec3::new(10.0, 1.4, 0.0)),
-            (1, Vec3::new(25.0, 1.4, 0.0)),
-            (2, Vec3::new(50.0, 1.4, 0.0)),
-        ];
+        // As the range stands them: staggered across the lane.
+        let plates = [0, 1, 2].map(|i| {
+            (
+                i,
+                Vec3::new(
+                    super::super::stats::PLATES[i],
+                    1.4,
+                    super::super::range::ACROSS[i],
+                ),
+            )
+        });
         let from = Vec3::new(0.0, 1.5, 0.0);
         let at = |p: Vec3| p - from;
         assert_eq!(aimed_plate(from, at(plates[1].1), plates), Some(1));
