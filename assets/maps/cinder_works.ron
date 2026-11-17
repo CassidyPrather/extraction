@@ -429,6 +429,15 @@
         (kind: Rendezvous, at: (-113.9, -123.6), name: "Fire lookout"),
         (kind: Rendezvous, at: (55.0, -180.8), name: "North sidings"),
         (kind: Rendezvous, at: (179.4, 6.4), name: "Works yard"),
+        // The radio set at each pickup, on the wall of its shed (the short exfil's
+        // on the guard booth), facing the pad (#94, `map_extract`).
+        (kind: FieldSet(pad: "Fire lookout"), at: (-124.55, -118.30), rot: 270.0),
+        (kind: FieldSet(pad: "North sidings"), at: (63.87, -172.82), rot: 132.0),
+        (kind: FieldSet(pad: "Works yard"), at: (183.30, 15.08), rot: 180.0),
+        (kind: FieldSet(pad: "short"), at: (-61.80, 209.78), rot: 180.0),
+        // Where the truck pulls in for a flare fired from the vantage (#94).
+        (kind: FlareStop(vantage: (97.1, -126.1)), at: (90.0, -81.0), name: "the slag road's end"),
+        (kind: FlareStop(vantage: (-118.8, -54.1)), at: (-110.0, 70.4), name: "the farm lane"),  // short of its end, clear of the cellars' way-up kiosk's pad
         (kind: RobotGate, at: (175.0, -178.5), rot: 315.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).

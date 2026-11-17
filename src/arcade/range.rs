@@ -36,6 +36,11 @@ pub const THICK: f32 = 0.02;
 pub const BAR: f32 = 1.9;
 pub const CHAIN: f32 = 0.15;
 
+/// The sign at the line's end: its board (m) and the height of its middle
+/// over the ground (`visuals` puts its post under it).
+pub const SIGN: Vec2 = Vec2::new(0.9, 0.45);
+pub const SIGN_AT: f32 = 1.5;
+
 /// A shot whose line passes this near a plate's middle was aimed at it, m.
 pub const AIMED_NEAR: f32 = 1.5;
 
@@ -106,11 +111,12 @@ fn set_up(mut commands: Commands, zone: Res<Zone>, arcade: Res<Arcade>, mut done
         Name::new("Range sign"),
         ScreenText {
             text: "RANGE\nplates at 10, 25, 50 m".into(),
-            size: Vec2::new(0.5, 0.2),
-            style: ScreenStyle::Card,
+            size: SIGN,
+            style: ScreenStyle::Sign,
         },
-        TextSource::Card,
-        Transform::from_xyz(1.5, 1.4, 0.05),
+        // Read a few steps off, from the line or on the way from the bench.
+        TextSource::Sign,
+        Transform::from_xyz(1.5, SIGN_AT, 0.05),
         Visibility::default(),
         ChildOf(at_line),
     ));

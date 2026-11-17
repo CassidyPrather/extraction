@@ -23,9 +23,9 @@ impl Plugin for LandmarkLampsPlugin {
     }
 }
 
-/// Prefabs whose models carry a lamp bright enough to steer by (the radio
-/// mast's own is too small to carry past 150 m at night: it gets one too).
-const LIT: &[&str] = &[];
+/// Prefabs whose models carry a lamp of their own (the radio mast's is too
+/// small to carry past 150 m at night: it gets one too).
+const LIT: &[&str] = extraction_core::map_landmarks::OWN_LAMP;
 
 /// The lamp's radius, and its halo's (m): a soft `world::halos::Halo`,
 /// fogged like every lamp's and shown after dark; a hard-edged sphere

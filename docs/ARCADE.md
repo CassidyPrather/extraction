@@ -43,22 +43,26 @@ ARCADE card, next to TRAINING YARD.
   - The gate turns north, east, west in order. All of it is printed on
     the board before you call.
 - **The range** (`arcade::range`), east of the bench: a firing line and
-  steel plates hung at 10, 25 and 50 m. A struck plate rings (the game's
+  steel plates hung at 10, 25 and 50 m, and a sign at its end. A struck plate rings (the game's
   own steel impact) and swings back on its chains as hard as the round hit
   it. It's there to judge a gun's recoil, sights and sound with nothing
   shooting back. Shots at it between waves are marked as the range's.
 - **The gun board**: the gun card, each gun fired this run with its
   shots, hits and accuracy, shots and hits to kill, median time to kill,
-  median reload, and accuracy by distance (fight and range), each against
-  that gun's best before this run (kept across sessions in
-  `<arcade dir>/guns.json`). It's live through a run and holds the last
+  median reload and stoppages, and accuracy by distance (fight and range),
+  each against that gun's best before this run (kept across sessions in
+  `<arcade dir>/guns.json`). It lists three guns (the one it's asking
+  about first) and names the rest, so its letters stay above the
+  legibility floor read standing at the table (`docs/LEGIBILITY.md`). It's live through a run and holds the last
   run's until a gun fires in the next. After a run it asks, gun by gun,
   "how did it feel?": cards 1 (poor) to 5 (great), or SKIP. One press
   each, in the headset.
 - **Score**: a walker is 100, a drone 75, a hound 150 and a heavy 400. A
   cleared wave adds 50 × its number.
 - **Down**: the run is over. You are up again at once, the ground is
-  quiet, and the board carries the run's summary. RESTART drops what you
+  quiet, and the board carries the run's ending: waves, score, time, what
+  took you down and what you took down. The guns' numbers are on the gun
+  card, and every number is in the summary file. RESTART drops what you
   carry, sweeps the ground, heals you, stands you at the bench and lays the
   tables again. A call after the end does the same.
 
@@ -157,5 +161,9 @@ The numbers' rules (`arcade::record`, `arcade::stats`):
   numbers and bests, the plate a shot was aimed at, the feel answers in
   both files, a plate's hang and swing, the lane inside the fence, and the
   mid-fight rule.
+- `every_panel_in_the_game_clears_its_floor` (`render::legibility`) lays
+  the arcade and holds every panel to its floor, and the two sheets at
+  their fullest (the furthest wave, a run's end with every machine down,
+  the gun card with more guns than it lists).
 - `cargo test -p extraction_core arcade_map_lint` holds the ground to the
   yard's rules (reach, footing, overlap) and prints the rest.

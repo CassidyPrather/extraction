@@ -93,7 +93,8 @@ pub struct Arcade {
     pub hold: u32,
     /// A reset under way: clear the ground this frame, lay out the next.
     pub reset: Reset,
-    /// The last run's summary, for the board once it's over.
+    /// The last run's ending, short (`stats::RunStats::board`), for the
+    /// board once it's over.
     pub summary: Option<String>,
     /// The best wave cleared and the best score this session.
     pub best: (u32, u32),

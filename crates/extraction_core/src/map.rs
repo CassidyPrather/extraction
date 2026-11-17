@@ -479,6 +479,15 @@ pub enum MarkerKind {
     /// A spotter's winch (`robots::spotter`): a balloon on a tether over
     /// it, watching the ground round about and calling in the others.
     Spotter,
+    /// Where a pickup's transceiver set hangs: on a wall face of the
+    /// shed or hut by `pad` (a rendezvous's name, or `"short"` for the
+    /// short exfil), at ground level, its front (`rot`) facing out from
+    /// the wall toward the pad (`map_extract`).
+    FieldSet { pad: String },
+    /// A flare-alternate pickup: the truck parks here (a level pad) and
+    /// the flare is fired from `vantage`, within `map_extract::FLARE_REACH`
+    /// and in clear sight of the stop.
+    FlareStop { vantage: P2 },
 }
 
 fn sentry_arc() -> f32 {
@@ -648,6 +657,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "anomaly_core" => [10.0, 3.1, 10.0],
         "bus_depot" => [30.0, 11.1, 18.0],
         "radio_mast" => [2.0, 45.0, 2.0],
+        // Its plinth; the cage up top overhangs it, out of reach.
+        "siren_mast" => [0.9, crate::siren_mast::HEIGHT, 0.9],
         "mast_hut" => [5.0, 3.0, 4.0],
         "rail_shed" => [20.0, 10.3, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
@@ -1172,6 +1183,7 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "anomaly_core"
             | "quarantine_gate"
             | "radio_mast"
+            | "siren_mast"
             | "boxcar"
             | "target"
             | "fence_garden"
@@ -1255,6 +1267,16 @@ impl MapDef {
         for m in self.markers_of(&MarkerKind::Rendezvous) {
             out.push((
                 format!("the rendezvous {}", m.name),
+                m.at,
+                yaw_to(m.at, [0.0, 0.0]),
+            ));
+        }
+        // A flare stop turns like a rendezvous: bed to the valley's middle.
+        for m in self.markers_of(&MarkerKind::FlareStop {
+            vantage: [0.0, 0.0],
+        }) {
+            out.push((
+                format!("the flare stop {}", m.name),
                 m.at,
                 yaw_to(m.at, [0.0, 0.0]),
             ));

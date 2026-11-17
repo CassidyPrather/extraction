@@ -261,6 +261,9 @@ fn set_up(
     info!("arcade: bench at {:.1}", bench.translation);
 }
 
+/// A board's sheet (the wave board's and the gun card), m.
+pub const SHEET: Vec2 = Vec2::new(0.66, 0.82);
+
 /// The board on the last table: the sheet on the left, the cards down
 /// the right.
 fn board(commands: &mut Commands, table: Entity) {
@@ -279,10 +282,12 @@ fn board(commands: &mut Commands, table: Entity) {
         ArcadeSheet,
         ScreenText {
             text: String::new(),
-            size: Vec2::new(0.66, 0.82),
+            size: SHEET,
             style: ScreenStyle::Paper,
         },
-        TextSource::StationBoard,
+        // The camp's board on a camp table, read as the camp's sheet is:
+        // standing at the table, within reach of its cards.
+        TextSource::CampSheet,
         Transform::from_xyz(-0.24, 0.0, z),
         Visibility::default(),
         ChildOf(board),
@@ -350,10 +355,12 @@ fn gun_board(commands: &mut Commands, table: Entity) {
         GunCardSheet,
         ScreenText {
             text: String::new(),
-            size: Vec2::new(0.66, 0.82),
+            size: SHEET,
             style: ScreenStyle::Paper,
         },
-        TextSource::StationBoard,
+        // The camp's board on a camp table, read as the camp's sheet is:
+        // standing at the table, within reach of its cards.
+        TextSource::CampSheet,
         Transform::from_xyz(-0.24, 0.0, z),
         Visibility::default(),
         ChildOf(board),
@@ -696,6 +703,63 @@ fn saved(id: &str, rounds: u32) -> SavedItem {
         inserted: Vec::new(),
         loads: Default::default(),
     }
+}
+
+/// The board's sheet and the gun card at their fullest, for the
+/// legibility gauge (`render::legibility`): the furthest wave's call, a
+/// run's end with every machine down, and the gun card with more guns than
+/// it lists.
+#[cfg(test)]
+pub fn fullest_panels() -> Vec<(String, ScreenText, TextSource)> {
+    let mut a = Arcade {
+        start_at: 7,
+        best: (99, 99999),
+        ..default()
+    };
+    let mut texts = vec![("sheet, ready".to_string(), sheet(&a))];
+    a.phase = RunPhase::Warning {
+        wave: 99,
+        left: 10.0,
+    };
+    a.score = 99999;
+    a.run_t = 5999.0;
+    texts.push(("sheet, wave called".into(), sheet(&a)));
+    a.phase = RunPhase::Fighting { wave: 99 };
+    texts.push(("sheet, fighting".into(), sheet(&a)));
+    let mut run = super::stats::RunStats {
+        cause: Some("heavy".into()),
+        waves_cleared: 98,
+        ..default()
+    };
+    for m in ["walker", "drone", "hound", "heavy"] {
+        run.machines.insert(
+            m.into(),
+            super::stats::KillStats {
+                kills: 999,
+                ttk: vec![111.0],
+                shots: 1,
+                hits: 1,
+            },
+        );
+    }
+    a.phase = RunPhase::Over { wave: 99 };
+    a.summary = Some(run.board(99, 99999, 5999.0, true));
+    texts.push(("sheet, down".into(), sheet(&a)));
+    texts.push(("gun card".into(), super::stats::fullest_card()));
+    texts
+        .into_iter()
+        .map(|(what, text)| {
+            (
+                format!("arcade {what}"),
+                ScreenText {
+                    text,
+                    size: SHEET,
+                    style: ScreenStyle::Paper,
+                },
+                TextSource::CampSheet,
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
