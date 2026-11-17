@@ -411,9 +411,9 @@
         (prefab: "farmhouse", at: (22.8, 53.5), rot: 255.0),
         (prefab: "post_office", at: (-22.2, 33.5), rot: 90.0, tag: "post_office"),
         (prefab: "cabin_log", at: (20.8, 23.5), rot: 285.0),
-        (prefab: "log_pile", at: (15.5, 30.0), rot: 15.0),
+        (prefab: "log_pile", at: (13.5, 33.5), rot: 15.0),
         (prefab: "shop", at: (-18.2, 3.5), rot: 90.0),
-        (prefab: "house_brick", at: (-47.2, 43.5), rot: 20.0),
+        (prefab: "house_brick", at: (-45.2, 43.5), rot: 20.0),
         // The well sweep: its post 6 m north of The well, its long end out
         // over the ring and up past the roofs (`world::village`).
         (prefab: "well_sweep", at: (-32.2, 72.5), rot: 0.0),
@@ -470,7 +470,7 @@
         (prefab: "fence_garden", at: (-34.0, 63.8), rot: 90.0),
         // Behind the house over the road, open to the south.
         (prefab: "fence_garden", at: (32.1, 49.6), rot: 0.0),
-        (prefab: "fence_garden", at: (33.5, 53.8), rot: 270.0),
+        (prefab: "fence_garden", at: (36.5, 53.8), rot: 270.0),
         // Beside the south house, open to the west and the road.
         (prefab: "fence_garden", at: (26.1, 33.3), rot: 270.0),
         (prefab: "fence_garden", at: (22.0, 37.7), rot: 0.0),
