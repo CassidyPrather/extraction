@@ -217,7 +217,7 @@ fn spawn_lamp(commands: &mut Commands, l: Beam, i: u8) {
             )]),
             t,
         ),
-        Visibility::default(),
+        // (part_bundle brings its Visibility.)
         ChildOf(robot),
         l,
     ));
