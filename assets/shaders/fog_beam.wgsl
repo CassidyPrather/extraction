@@ -93,7 +93,8 @@ fn density(p: vec3<f32>) -> f32 {
     let drift = vec3<f32>(t * 0.21, t * -0.05, t * 0.13);
     let billow = noise3(p * 0.18 + drift * 0.6);
     let dust = noise3(p * 1.3 + drift * 1.7);
-    let air = 0.45 + 0.75 * billow + 0.35 * dust * dust;
+    // (Billows vary it a lot: light in moving air, not an even tube.)
+    let air = 0.2 + 1.1 * billow * billow + 0.45 * dust * dust;
     return soft * spread * start * ground * end * air;
 }
 
@@ -148,7 +149,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let near = select(dist, 0.0, inside);
     let cap = mix(0.18, 1.0, smoothstep(2.0, 20.0, near));
     let day = b.air.y;
-    let a = min(1.0 - exp(-k * mix(0.09, 0.05, day)), cap * mix(0.55, 0.38, day));
+    let a = min(1.0 - exp(-k * mix(0.07, 0.05, day)), cap * mix(0.45, 0.38, day));
     let glow = mix(2.2, 1.5, day);
     return vec4<f32>(b.light.rgb * glow, a);
 }
