@@ -2785,26 +2785,6 @@ mod onboarding {
         feet
     }
 
-    fn stash_item(vr: &mut Vr, id: &str) -> Entity {
-        let catalog = vr.app.world().resource::<Catalog>().clone();
-        let contents: Vec<Entity> = vr
-            .app
-            .world_mut()
-            .query_filtered::<&crate::interact::body::Backpack, With<Stash>>()
-            .iter(vr.app.world())
-            .flat_map(|b| b.contents.clone())
-            .collect();
-        contents
-            .into_iter()
-            .find(|e| {
-                vr.app
-                    .world()
-                    .get::<crate::items::Item>(*e)
-                    .is_some_and(|it| catalog.get(it.kind()).id == id)
-            })
-            .unwrap_or_else(|| panic!("{id} in the crate"))
-    }
-
     fn card(vr: &mut Vr, which: OnboardCard) -> Entity {
         vr.app
             .world_mut()
