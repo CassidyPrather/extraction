@@ -69,6 +69,29 @@ impl Vr {
         Self::with(opts, Some(dir))
     }
 
+    /// In the yard, the truck comes to the last bay as if called and
+    /// watched for: parked at the north post, waiting (it's out of sight
+    /// till then: `onboarding::gates`).
+    pub fn bring_the_truck(&mut self) {
+        let pose = {
+            let zone = self.app.world().resource::<crate::world::Zone>();
+            crate::raid::truck::rv_pose(zone, 0)
+        };
+        {
+            let w = self.app.world_mut();
+            let mut q = w.query::<(&mut crate::raid::truck::Truck, &mut Transform)>();
+            for (mut t, mut tr) in q.iter_mut(w) {
+                t.at_base = false;
+                *tr = pose;
+            }
+            w.resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::TruckWaiting {
+                rv: 0,
+                left: crate::raid::TRUCK_WAIT,
+            };
+        }
+        self.step(10);
+    }
+
     pub(crate) fn with(opts: crate::LaunchOptions, dir: Option<std::path::PathBuf>) -> Self {
         let mut app = crate::headless_app(opts, false);
         app.init_resource::<Seen>().add_systems(Update, collect);
@@ -848,7 +871,8 @@ mod tests {
         let doors: Vec<(Entity, crate::world::buildings::DoorLeaf, GlobalTransform)> = vr
             .app
             .world_mut()
-            .query::<(Entity, &crate::world::buildings::DoorLeaf, &GlobalTransform)>()
+            // (Not the yard's gates: hands don't move them, the yard does.)
+            .query_filtered::<(Entity, &crate::world::buildings::DoorLeaf, &GlobalTransform), Without<crate::world::yard::YardGate>>()
             .iter(vr.app.world())
             .map(|(e, d, g)| (e, *d, *g))
             .collect();
@@ -919,7 +943,8 @@ mod tests {
         let doors: Vec<(Entity, crate::world::buildings::DoorLeaf, GlobalTransform)> = vr
             .app
             .world_mut()
-            .query::<(Entity, &crate::world::buildings::DoorLeaf, &GlobalTransform)>()
+            // (Not the yard's gates: hands don't move them, the yard does.)
+            .query_filtered::<(Entity, &crate::world::buildings::DoorLeaf, &GlobalTransform), Without<crate::world::yard::YardGate>>()
             .iter(vr.app.world())
             .map(|(e, d, g)| (e, *d, *g))
             .collect();
@@ -994,6 +1019,8 @@ mod tests {
     #[test]
     fn the_cord_answers_a_hand_on_its_toggle() {
         let mut vr = Vr::new("training_yard");
+        // (The yard's truck is out of sight till it's called.)
+        vr.bring_the_truck();
         let pulls: Vec<(Entity, GlobalTransform)> = vr
             .app
             .world_mut()
@@ -1273,6 +1300,8 @@ mod tests {
     #[test]
     fn stepping_into_the_truck_in_the_room() {
         let mut vr = Vr::new("training_yard");
+        // (The yard's truck is out of sight till it's called.)
+        vr.bring_the_truck();
         let truck = {
             let mut q = vr
                 .app
@@ -2310,19 +2339,34 @@ mod tests {
     /// and let go of the ground.)
     #[test]
     fn leaning_over_the_kitchen_bench_on_a_slope_stays_put() {
-        let mut vr = Vr::new("training_yard");
-        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
         // The bench is beside the truck stop, its long side along z; stand
-        // east of it, facing west.
-        let stop = zone
-            .marker(&extraction_core::map::MarkerKind::TruckStop)
-            .unwrap()
-            .at;
-        let at = Vec2::new(stop[0] - 4.5 + 0.75, stop[1] - 1.0);
-        assert!(
-            zone.hm.slope_deg([at.x, at.y]) > 10.0,
-            "a slope to stand on"
-        );
+        // east of it, facing west. (The yard's bays stand level now: the
+        // first valley whose kitchen is on a slope.)
+        let spot = |zone: &crate::world::Zone| {
+            let stop = zone
+                .marker(&extraction_core::map::MarkerKind::TruckStop)
+                .unwrap()
+                .at;
+            Vec2::new(stop[0] - 4.5 + 0.75, stop[1] - 1.0)
+        };
+        let map = [
+            "training_yard",
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "rime_fell",
+            "sallow_reservoir",
+        ]
+        .into_iter()
+        .find(|m| {
+            let z = crate::world::Zone::load(m);
+            let at = spot(&z);
+            z.hm.slope_deg([at.x, at.y]) > 10.0
+        })
+        .expect("a kitchen on a slope to stand on");
+        let mut vr = Vr::new(map);
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let at = spot(&zone);
         vr.stand(
             zone.on_ground(at.x, at.y) + Vec3::Y * 0.02,
             std::f32::consts::FRAC_PI_2,
@@ -2741,26 +2785,6 @@ mod onboarding {
         feet
     }
 
-    fn stash_item(vr: &mut Vr, id: &str) -> Entity {
-        let catalog = vr.app.world().resource::<Catalog>().clone();
-        let contents: Vec<Entity> = vr
-            .app
-            .world_mut()
-            .query_filtered::<&crate::interact::body::Backpack, With<Stash>>()
-            .iter(vr.app.world())
-            .flat_map(|b| b.contents.clone())
-            .collect();
-        contents
-            .into_iter()
-            .find(|e| {
-                vr.app
-                    .world()
-                    .get::<crate::items::Item>(*e)
-                    .is_some_and(|it| catalog.get(it.kind()).id == id)
-            })
-            .unwrap_or_else(|| panic!("{id} in the crate"))
-    }
-
     fn card(vr: &mut Vr, which: OnboardCard) -> Entity {
         vr.app
             .world_mut()
@@ -2792,41 +2816,95 @@ mod onboarding {
             .any(|(t, _)| t.contains(text))
     }
 
-    /// Station 1: in the bed, reach into the crate and squeeze; the pistol
-    /// and the radio each tick, and the first lamp goes from lit to done
-    /// while the second lights.
+    fn bring_the_truck(vr: &mut Vr) {
+        vr.bring_the_truck();
+    }
+
+    /// Station 1, where you load: the start board's lamp is lit and the
+    /// rest dark; the settings cards hang on the board beside it, not in
+    /// a truck; no truck in sight.
     #[test]
-    fn station_kit_from_the_crate() {
+    fn the_start_board_first_and_the_settings_by_it() {
         let mut vr = Vr::first_run();
-        in_the_bed(&mut vr);
+        vr.step(10);
         let l = lamps(&mut vr);
-        assert_eq!(l[0], Lamp::Lit, "the crate's lamp is lit first: {l:?}");
+        assert_eq!(
+            l[0],
+            Lamp::Lit,
+            "the start board's lamp is lit first: {l:?}"
+        );
         assert!(l[1..].iter().all(|l| *l == Lamp::Dark), "{l:?}");
-        let pistol = stash_item(&mut vr, "pm_pistol");
-        take(&mut vr, Side::Right, pistol);
-        assert!(done(&vr, Goal::TakePistol));
-        // The radio before the pistol's holstered doesn't count: hands
-        // aren't both filled before pockets are shown.
-        let radio = stash_item(&mut vr, "radio");
-        take(&mut vr, Side::Left, radio);
-        vr.step(2);
-        assert!(!done(&vr, Goal::TakeRadio), "the radio before the holster");
-        vr.grip(Side::Left, 0.0);
-        vr.step(20);
-        {
-            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
-            o.done.push(Goal::PutAway);
-        }
-        take(&mut vr, Side::Left, radio);
-        vr.step(2);
-        assert!(done(&vr, Goal::TakeRadio));
-        {
-            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
-            o.done.push(Goal::Pocket);
-        }
-        vr.step(2);
-        let l = lamps(&mut vr);
-        assert_eq!((l[0], l[1]), (Lamp::Done, Lamp::Lit), "{l:?}");
+        let board = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &crate::onboarding::Prop)>()
+            .iter(vr.app.world())
+            .find(|(_, p)| **p == crate::onboarding::Prop::SettingsBoard)
+            .map(|(e, _)| e)
+            .expect("the settings board");
+        let parents: Vec<Entity> = vr
+            .app
+            .world_mut()
+            .query_filtered::<&ChildOf, With<crate::raid::comfort_board::ComfortCard>>()
+            .iter(vr.app.world())
+            .map(|c| c.parent())
+            .collect();
+        assert!(!parents.is_empty(), "settings cards");
+        assert!(
+            parents.iter().all(|p| *p == board),
+            "a card not on the board"
+        );
+        let truck = vr
+            .app
+            .world_mut()
+            .query_filtered::<&Visibility, With<Truck>>()
+            .iter(vr.app.world())
+            .copied()
+            .next();
+        assert_eq!(truck, Some(Visibility::Hidden), "the truck's in sight");
+        let feet = super::tests_feet(&vr);
+        assert!(feet.z > 90.0, "loaded in the first bay: {feet}");
+    }
+
+    /// A shut gate stops you; its bay done, it swings open and you walk
+    /// through; through one still shut (a headset's head goes through
+    /// anything), the driver says once to come back.
+    #[test]
+    fn a_gate_holds_till_its_bay_is_done() {
+        let mut vr = Vr::first_run();
+        let walk = |vr: &mut Vr, from: Vec3, secs: f32| -> f32 {
+            vr.stand(from, 0.0);
+            vr.step(5);
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::Y;
+            vr.step((secs * 90.0) as usize);
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::ZERO;
+            vr.step(2);
+            super::tests_feet(vr).z
+        };
+        let from = ground(&vr, [0.0, 87.0]);
+        let z = walk(&mut vr, from, 3.0);
+        assert!(z > 84.0, "through gate 1 while it's shut: z {z:.1}");
+        at_station(&mut vr, crate::onboarding::station_of(Goal::FarGrab), &[]);
+        vr.step(180);
+        let z = walk(&mut vr, from, 3.0);
+        assert!(z < 83.0, "gate 1 open, still held: z {z:.1}");
+        assert!(!said(&vr, crate::onboarding::gates::BACK_LINE));
+        // Stood past gate 2, shut.
+        let past = ground(&vr, [0.0, 70.0]);
+        vr.stand(past, 0.0);
+        vr.step(5);
+        assert!(
+            said(&vr, crate::onboarding::gates::BACK_LINE),
+            "told to come back"
+        );
     }
 
     /// Station 2: the right stick sideways turns you, pulled down crouches
@@ -2874,60 +2952,63 @@ mod onboarding {
         assert!(done(&vr, Goal::Run), "the run counted");
     }
 
-    /// Station 3: let go of a thing at a pocket, and of another over the
-    /// shoulder.
+    /// The range: the pistol off its table (another doesn't count), held
+    /// at the hip and let go (the holster); and out of reach's box over
+    /// the shoulder (the pack).
     #[test]
     fn station_put_it_away() {
         let mut vr = Vr::first_run();
         at_station(
             &mut vr,
-            crate::onboarding::station_of(Goal::PutAway),
-            &[Goal::TakePistol, Goal::PutAway, Goal::TakeRadio],
+            crate::onboarding::station_of(Goal::TakePistol),
+            &[],
         );
-        let feet = ground(&vr, [3.0, 70.0]);
+        let table = crate::onboarding::RANGE_TABLE_AT;
+        let feet = ground(&vr, [table[0], table[1] + 0.8]);
         vr.stand(feet, 0.0);
         vr.head(Vec3::new(0.0, 1.7, 0.0));
         vr.step(30);
-        let radio = vr.spawn(
-            "radio",
+        let other = vr.spawn(
+            "pm_pistol",
             Transform::from_translation(feet + Vec3::new(0.3, 1.0, -0.4)),
         );
         vr.app
             .world_mut()
-            .entity_mut(radio)
+            .entity_mut(other)
             .insert(RigidBody::Static);
-        take(&mut vr, Side::Right, radio);
-        // The chest mount: the radio's sleeve (it fits no pocket or pouch).
-        let slots: Vec<Vec3> = {
+        take(&mut vr, Side::Right, other);
+        assert!(!done(&vr, Goal::TakePistol), "not the range's pistol");
+        vr.grip(Side::Right, 0.0);
+        vr.step(10);
+        vr.app.world_mut().entity_mut(other).despawn();
+        let pistol = placed(&mut vr, Placed::RangeGun);
+        take(&mut vr, Side::Right, pistol);
+        assert!(done(&vr, Goal::TakePistol), "the range's pistol");
+        let holster = {
             let mut q = vr.app.world_mut().query::<(
                 &crate::interact::Socket,
                 &crate::interact::SocketOwner,
                 &GlobalTransform,
             )>();
             q.iter(vr.app.world())
-                .filter(|(s, o, _)| {
+                .find(|(s, o, _)| {
                     o.0 == vr.player
-                        && s.occupant.is_none()
-                        && matches!(
-                            s.kind,
-                            crate::interact::SocketKind::Body(
-                                extraction_core::inventory::SlotKind::Mount
+                        && s.kind
+                            == crate::interact::SocketKind::Body(
+                                extraction_core::inventory::SlotKind::Holster,
                             )
-                        )
                 })
                 .map(|(_, _, g)| g.translation())
-                .collect()
+                .expect("a holster")
         };
-        assert!(!slots.is_empty(), "a chest mount");
-        let from = at(&vr, radio);
+        let from = at(&vr, pistol);
         for i in 0..=12 {
-            vr.move_hand(Side::Right, from.lerp(slots[0], i as f32 / 12.0));
+            vr.move_hand(Side::Right, from.lerp(holster, i as f32 / 12.0));
             vr.step(1);
         }
         vr.grip(Side::Right, 0.0);
         vr.step(4);
-        assert!(done(&vr, Goal::Pocket), "on the chest");
-        assert!(!done(&vr, Goal::Pack));
+        assert!(done(&vr, Goal::PutAway), "holstered");
         // The pack comes with the far box.
         at_station(
             &mut vr,
@@ -2999,7 +3080,12 @@ mod onboarding {
     #[test]
     fn station_the_range() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, crate::onboarding::station_of(Goal::FillMag), &[]);
+        // (The pistol taken and holstered: the range's first two steps.)
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::FillMag),
+            &[Goal::TakePistol, Goal::PutAway],
+        );
         let table = crate::onboarding::RANGE_TABLE_AT;
         let feet = ground(&vr, [table[0], table[1] + 0.75]);
         vr.stand(feet, 0.0);
@@ -3609,10 +3695,11 @@ mod onboarding {
         assert!(done(&vr, Goal::Button), "the push counted");
     }
 
-    /// Station 9: radio in hand at the north post, the face button; the
-    /// truck comes round in seconds; the cord in its bed ends the yard.
+    /// The extract: GRIP on the set on the north post's pole; the truck,
+    /// the first you've seen of it, comes round in seconds; the cord in
+    /// its bed ends the yard.
     #[test]
-    fn station_going_home() {
+    fn station_the_extract() {
         let _restarts = crate::RESTART_TEST
             .lock()
             .unwrap_or_else(|e| e.into_inner());
@@ -3629,18 +3716,30 @@ mod onboarding {
         let feet = ground(&vr, [st.at[0], st.at[1] + 1.5]);
         vr.stand(feet, 0.0);
         vr.step(20);
-        let radio = vr.spawn(
-            "radio",
-            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),
-        );
-        vr.app
+        let truck_seen = |vr: &mut Vr| {
+            vr.app
+                .world_mut()
+                .query_filtered::<&Visibility, With<Truck>>()
+                .iter(vr.app.world())
+                .any(|v| *v != Visibility::Hidden)
+        };
+        assert!(!truck_seen(&mut vr), "the truck before it's called");
+        let set = vr
+            .app
             .world_mut()
-            .entity_mut(radio)
-            .insert(RigidBody::Static);
-        take(&mut vr, Side::Right, radio);
-        vr.primary(Side::Right, true);
-        vr.step(3);
-        vr.primary(Side::Right, false);
+            .query_filtered::<Entity, With<crate::raid::transceiver::Transceiver>>()
+            .iter(vr.app.world())
+            .next()
+            .expect("the set on the north post");
+        let set_at = at(&vr, set);
+        vr.stand(ground(&vr, [set_at.x, set_at.z + 0.7]), 0.0);
+        vr.step(5);
+        // A squeeze on it presses it (it isn't taken).
+        vr.hand(Side::Right, at(&vr, set), Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        vr.grip(Side::Right, 0.0);
         vr.step(3);
         assert!(done(&vr, Goal::CallTruck), "the call counted");
         // (Watched, it pulls in after a moment: `raid::truck::UNSEEN_FOR`.)
@@ -3659,6 +3758,7 @@ mod onboarding {
             truck.translation.xz().distance(feet.xz()) < 25.0,
             "at the north post"
         );
+        assert!(truck_seen(&mut vr), "come, and in sight");
         in_the_bed(&mut vr);
         let pull = vr
             .app
@@ -3688,6 +3788,7 @@ mod onboarding {
             .unwrap_or_else(|e| e.into_inner());
         let _ = crate::take_restart();
         let mut vr = Vr::first_run();
+        bring_the_truck(&mut vr);
         in_the_bed(&mut vr);
         let pull = vr
             .app
@@ -3805,6 +3906,7 @@ mod onboarding {
                 Names::SettingsCard => w.get::<OnboardCard>(e) == Some(&OnboardCard::Push),
                 Names::Snare => w.get::<crate::onboarding::Probed>(e).is_some(),
                 Names::Cord => w.get::<Pressable>(e) == Some(&Pressable::BellPull),
+                Names::FieldSet => w.get::<crate::raid::transceiver::Transceiver>(e).is_some(),
                 Names::HouseDoor => w.get::<crate::world::buildings::DoorLeaf>(e).is_some(),
             };
             assert!(right, "{g:?} marked the wrong thing");
@@ -3812,14 +3914,13 @@ mod onboarding {
         assert!(named >= 10, "only {named} steps name a thing");
     }
 
-    /// One thing to read: in the truck at the start, the only words in
-    /// view are the step you're on and the SETTINGS card (the playtest's
-    /// truck: a dozen settings cards, the logbook, the bench, a note and
-    /// the list, "completely overwhelming"). Boards ahead are blank.
+    /// One thing to read: where you load, the only words in view are the
+    /// step you're on and the start board's cards (the playtest's truck:
+    /// a dozen settings cards, the logbook, the bench, a note and the
+    /// list, "completely overwhelming"). Boards ahead are blank.
     #[test]
-    fn one_thing_to_read_in_the_truck() {
+    fn one_thing_to_read_at_the_start() {
         let mut vr = Vr::first_run();
-        in_the_bed(&mut vr);
         vr.step(10);
         let head = vr.root().transform_point(Vec3::new(0.0, 1.65, 0.0));
         let mut q = vr.app.world_mut().query::<(
@@ -3830,11 +3931,11 @@ mod onboarding {
             Option<&crate::onboarding::StationSign>,
             Option<&OnboardCard>,
         )>();
-        let shown: Vec<String> = q
+        let mut shown: Vec<String> = q
             .iter(vr.app.world())
             .filter(|(e, t, g, v, ..)| {
                 !t.text.is_empty()
-                    && g.translation().distance(head) < 4.0
+                    && g.translation().distance(head) < 5.0
                     && v.is_none_or(|v| *v != Visibility::Hidden)
                     && vr
                         .app
@@ -3848,15 +3949,15 @@ mod onboarding {
                 _ => t.text.lines().next().unwrap_or("").to_string(),
             })
             .collect();
-        let mut shown = shown;
         shown.sort();
         assert_eq!(
             shown,
-            // (And ON TO THE ZONE by the tailgate: the one way out of the
-            // yard for someone who's been through it.)
+            // (And ON TO THE ZONE: the one way out of the yard for someone
+            // who's been through it.)
             vec![
                 "ON TO THE ZONE".to_string(),
                 "Push".to_string(),
+                "Skip(0)".to_string(),
                 "board 0".to_string()
             ],
             "in view: {shown:?}"
@@ -3874,11 +3975,11 @@ mod onboarding {
         assert_eq!(ahead, 0, "boards ahead are blank");
     }
 
-    /// Done in the truck, the driver says to get off it, plainly, and the
-    /// next lamp lights (the playtest read "Next: the lit lamp" as a lamp
-    /// in the truck and stood there two minutes).
+    /// Settings pushed, the driver sends you on to the next lamp in the
+    /// bay, plainly, and it lights (the playtest read "Next: the lit lamp"
+    /// as a lamp in the truck and stood there two minutes).
     #[test]
-    fn done_in_the_truck_you_are_told_to_get_off_it() {
+    fn done_at_the_start_you_are_sent_on() {
         let mut vr = Vr::first_run();
         let settings = crate::onboarding::station_of(Goal::Button);
         at_station(&mut vr, settings, &[]);
@@ -3887,41 +3988,44 @@ mod onboarding {
         take_card(&mut vr, card);
         vr.step(3);
         assert!(done(&vr, Goal::Button));
-        assert!(said(&vr, "off the back of the truck"), "told to get off");
+        assert!(
+            said(&vr, &crate::onboarding::next_line(settings + 1)),
+            "sent on"
+        );
         assert!(!said(&vr, "lit lamp"), "not \"the lit lamp\"");
         let l = lamps(&mut vr);
         assert_eq!(l[settings + 1], Lamp::Lit, "{l:?}");
     }
 
-    /// The driver names the next station once: stepping out of the truck
-    /// doesn't say it again (the playtest heard "Next: the lamp by the
-    /// pen." twice in 28 s).
+    /// The driver names the next station once, and through the first
+    /// gate says, once, how to mark a moment (nobody in the playtest found
+    /// it).
     #[test]
     fn the_driver_names_the_next_station_once() {
         let mut vr = Vr::first_run();
         vr.step(5);
         let pen = crate::onboarding::station_of(Goal::FarGrab);
-        at_station(&mut vr, pen - 1, &[Goal::PutAway]);
+        at_station(&mut vr, pen - 1, &[]);
         vr.step(2);
-        // The last of the station in the truck (as the playtest's Pack).
         let skip = card(&mut vr, OnboardCard::Skip(pen - 1));
         take_card(&mut vr, skip);
         let next = crate::onboarding::next_line(pen);
         assert!(said(&vr, &next), "sent on");
-        // Then out of the truck.
-        vr.app
-            .world_mut()
-            .resource_mut::<crate::raid::Raid>()
-            .say("Out of the truck. The Surge is due in about 60 minutes.");
-        vr.step(3);
+        assert!(
+            !said(&vr, crate::onboarding::MARK_LINE_VR),
+            "before the gate"
+        );
+        // Through the gate, now open.
+        vr.step(180);
+        let through = ground(&vr, [0.0, 81.0]);
+        vr.stand(through, 0.0);
+        vr.step(5);
         let log = &vr.app.world().resource::<crate::raid::Raid>().log;
         let named = log
             .iter()
             .filter(|(t, _)| t.contains(crate::onboarding::STATIONS[pen].where_))
             .count();
         assert_eq!(named, 1, "{log:?}");
-        assert!(!log.iter().any(|(t, _)| t.starts_with("Out of the truck")));
-        // In its place, once, how to mark a moment.
         assert!(said(&vr, crate::onboarding::MARK_LINE_VR), "{log:?}");
     }
 
@@ -3943,6 +4047,10 @@ mod onboarding {
         take_card(&mut vr, restart);
         assert!(ob(&vr).done.is_empty());
         assert_eq!(lamps(&mut vr)[0], Lamp::Lit);
+        // Back where you loaded: every gate's shut behind you.
+        vr.step(2);
+        let feet = super::tests_feet(&vr);
+        assert!(feet.z > 90.0, "not back at the start: {feet}");
 
         let text = |vr: &mut Vr| {
             vr.app
@@ -3957,7 +4065,7 @@ mod onboarding {
                 .unwrap()
         };
         vr.step(2);
-        assert!(text(&mut vr).contains("Squeeze GRIP"), "{}", text(&mut vr));
+        assert!(text(&mut vr).contains("TRIGGER"), "{}", text(&mut vr));
         vr.app.insert_resource(RigDriver::Flat);
         vr.step(2);
         assert!(text(&mut vr).contains("Press E"), "{}", text(&mut vr));
@@ -4031,6 +4139,7 @@ mod onboarding {
     #[test]
     fn the_cord_is_in_reach_from_the_bed() {
         let mut vr = Vr::first_run();
+        bring_the_truck(&mut vr);
         in_the_bed(&mut vr);
         let toggle = {
             let mut q = vr.app.world_mut().query::<(&Pressable, &GlobalTransform)>();
@@ -6912,6 +7021,8 @@ mod vault {
     #[test]
     fn climb_into_the_truck_over_the_tailgate() {
         let mut vr = Vr::new("training_yard");
+        // (The yard's truck is out of sight till it's called.)
+        vr.bring_the_truck();
         let truck = vr
             .app
             .world_mut()
@@ -7495,7 +7606,9 @@ mod salvage {
     use crate::robots::salvage::{Arced, Bolt, Cable, Hold, Live, SalvageSeat};
     use crate::robots::{Job, JobKind, PartRole, Robot, RobotPart};
 
-    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+    // Level, open ground in the yard's first-aid bay (on the bays' map, #89,
+    // the plate's claw didn't seat at the old spot on the track at z 30).
+    const OPEN: Vec3 = Vec3::new(12.0, 0.0, 0.0);
 
     /// Hands thrown off live cells.
     #[derive(Resource, Default)]
@@ -8951,6 +9064,7 @@ mod door_hinge {
                 let mut q = vr.app.world_mut().query_filtered::<(Entity, &DoorLeaf), (
                     Without<Wedged>,
                     Without<crate::world::underground::PowerLocked>,
+                    Without<crate::world::yard::YardGate>,
                 )>();
                 q.iter(vr.app.world()).map(|(e, l)| (e, l.0)).collect()
             };
@@ -9443,6 +9557,7 @@ mod door_hinge {
                         With<DoorLeaf>,
                         Without<crate::robots::doors::Wedged>,
                         Without<crate::world::underground::PowerLocked>,
+                        Without<crate::world::yard::YardGate>,
                     )>();
                 q.iter(vr.app.world())
                     .map(|(e, g)| (e, crate::destruction::key(g.translation())))
