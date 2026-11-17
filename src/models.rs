@@ -346,7 +346,7 @@ impl ModelMaterials {
             // the shell's own faint glow (`robots::visuals`), so the
             // dirigible's belly stands off the overcast from below (#99).
             "ShellBelly" => derive(Mat::RobotShell, &|m| {
-                m.base_color = Color::srgb(0.42, 0.43, 0.44);
+                m.base_color = Color::srgb(0.62, 0.63, 0.64);
             }),
             // Bright steel: the gun-metal scan's relief, without its dark albedo.
             "Steel" => derive(Mat::GunMetal, &|m| {
