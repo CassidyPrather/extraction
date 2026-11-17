@@ -1,6 +1,7 @@
 """26 mm signal cartridges for the SPSh-44 flare pistol: one loose cartridge
 per colour. Writes assets/models/items/flare_{white,red,green}.glb (item
-space: see _kit.py).
+space: see _kit.py). And the hand-fired red star that replaced the pistol
+in the loot (#94): assets/models/items/signal_flare.glb.
 
 Each lies along Z, the wad (the end the star leaves by) to -Z, in a box of
 0.0296 x 0.0296 x 0.078 m: a brass head with its rim and primer, a card
@@ -54,6 +55,25 @@ def flare(colour, bumps):
     return build
 
 
+def signal_flare():
+    """0.035 x 0.035 x 0.2 along Z: a red card tube, a white band printed
+    round it, a black plastic cap over the star's end (+Z), and at the
+    other end a turned wooden base with the pull cord's ring taped down
+    against its side."""
+    L = 0.2
+    z0, z1 = -L / 2, L / 2
+    r = 0.0155
+    p = Part("body")
+    p.cyl(r, z0 + 0.03, z1 - 0.03, "Red", segs=20, chamfer=0.001)
+    p.cyl(r + 0.0003, 0.01, 0.03, "Enamel", segs=20)
+    p.cyl(r + 0.0015, z1 - 0.032, z1, "Black", segs=20, chamfer=0.002)
+    p.cyl(r - 0.001, z0 + 0.004, z0 + 0.032, "Wood", segs=18, chamfer=0.0015)
+    # The cord's ring, and the tape over it.
+    p.cyl(0.0105, z0, z0 + 0.004, "Black", segs=16)
+    p.box((0.003, 0.016, 0.03), (r + 0.0005, 0.0, z0 + 0.03), "Rope")
+    return centred([p])
+
+
 FLARES = {
     "flare_white": flare("Enamel", 0),
     "flare_red": flare("Red", 1),
@@ -64,3 +84,5 @@ if __name__ == "__main__":
     for item_id, fn in FLARES.items():
         if wanted(item_id):
             item(item_id, fn)
+    if wanted("signal_flare"):
+        item("signal_flare", signal_flare)
