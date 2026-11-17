@@ -1,21 +1,59 @@
-# Driver lines in view (#90): mock-up
+# Driver lines in view (#90)
 
-Throwaway mock-up of the approved design. These are panels placed by hand
-in the dev poses (`mock.patch` on `src/dev.rs`, not merged). There is no
-follow, fade or reading time yet. All shots are 3200×1800 PNG (2×), with
-the desktop's 75° vertical field of view.
+Every line is still on the wrist. A line told for the view (`Raid::tell`)
+also shows in front of the eyes (`render::said`):
+
+- **About a thing in hand** (`Show::Item`): a callout beside it.
+- **To act on now** (`Show::View`, `Show::Urgent`): a caption in the lower
+  view.
+
+The Captions card cycles three settings: in view (the default), the wrist
+only, off.
+
+All shots are 3200×1800 PNG, made with the real systems in the dev poses
+(`EXTRACTION_SAY`, see `dev::say_for_gallery`). The view is the desktop's
+75° vertical field of view, so panels off to the side show its
+perspective. The callout text is real: the yard's own steps
+(`onboarding::Goal::how`).
 
 | Shot | What it shows |
 |---|---|
-| `1_callout_day.png` | Item callout beside a held PM, daylight. Panel x-height 0.65° at its distance (about 0.5 m), 20 characters a line, 4 lines. A 1.5 mm leader runs from the grip to the panel's lower near corner. |
-| `2_callout_night.png` | The same at night. |
-| `3_caption_walk.png` | The view caption, walking (hands at rest): 1.4 m out, 12° below the eye line, x-height 0.9°, 26 characters a line. Speaker on its own line. |
-| `4_caption_and_callout.png` | Both live, with the caption's urgent bar (orange-red, 12 mm). The view is pitched 18° down, as when looking at the gun. |
+| `1_callout_day.png` | The yard's Rack step as a callout beside the PM in hand, headed with the catalog's name. |
+| `2_callout_night.png` | The same at night: the slate stays near black, lit only as far as the eyes are open (`said::glow`), never a glow. |
+| `3_caption_walk.png` | The truck's answer as the caption, walking, hands at rest. The speaker is on its own line. |
+| `4_caption_and_callout.png` | Both live, the caption urgent (orange-red bar). A pistol raised to look at fills every height from the eye line to 20° below, so the caption slides aside off it and its glove. |
+| `5_at_the_sights.png` | The PM at the eye. Its own callout has faded, the caption waits (time stood still, back when the gun comes down), and the magazine's callout in the other hand keeps 12° off the sight line. |
 
-Findings for the real build:
+## Numbers
 
-- **Night:** the slate behind the text is lifted to grey. The panel is self-lit, and the night exposure brightens it along with the letters. The real panel's emission must follow the eye's adaptation (`render::grade`), so the slate stays near-black and the letters stay at reading contrast, never a glow.
-- **Caption over the held gun (shot 4):** the caption and the callout keep clear of each other. But looking down at a raised pistol puts the caption over its muzzle. Rule: the caption keeps 3° clear of every held item's outline in view. It moves up toward the eye line (no higher than 6° below it), else down (no lower than 20° below).
-- **Sight keep-out:** the shot of a gun at the sights with a callout 12° off its line didn't render. The mock panel spawns (logged) but doesn't draw in the `--gallery sights:` pose, cause not found. The keep-out will be shown from the real build, with its unit test.
+| | Callout | Caption |
+|---|---|---|
+| Distance | about 0.5 m (beside the thing) | 1.4 m, 12° below the eye line |
+| Letter size | x-height 0.65° | x-height 0.9° |
+| Measure | 20 characters a line | 26 characters a line |
+| Follow | critically damped, ω 8 rad/s (about 0.13 s behind, no overshoot); turn τ 0.15 s; tremor under 1 cm ignored | soft lock: still within 18° of yaw and 10° of pitch, then comes round with τ 0.4 s |
 
-Shots were made with `EXTRACTION_BIN=<mock build> scripts/shot.sh` at camera `40,19.2,262,0,-25` (`fp:pm_pistol`), `40,0,262,0,-4` (`fp:open`) and `40,19.2,262,0,-18`. Flags: `--no-robots --hour day|night --size 3200x1800`. Text came from `MOCK_CALLOUT`, `MOCK_CAPTION` and `MOCK_URGENT`.
+Both clear the 0.55° floor for text that must be read
+(`legibility::MUST_READ_DEG`).
+
+**Reading time:** 1.5 s + 0.06 s a character, 3 to 9 s. Looked at
+(within 10°), a line holds up to 4 s longer. It fades over 0.3 s. A new
+line takes the place of the shown one after 1.5 s, except that an urgent
+line is never replaced inside its reading time.
+
+**Clear of what's held:** the caption keeps 3° clear of everything held
+and of the gloves, by their outline in view:
+
+1. it moves up to 6° below the eye line;
+2. then down to 20° below;
+3. then up to the eye line;
+4. then aside, up to 20°;
+5. if nothing clears, it takes the least crowded spot.
+
+It also keeps clear of the callouts showing.
+
+**At the sights:** a callout's centre keeps 12° off every held gun's sight
+line. With a gun at the eye (`Handling::at_eye`), that gun's own callout
+and the caption fade over 0.15 s.
+
+`mockup/` holds the throwaway mock-up the design was approved from.
