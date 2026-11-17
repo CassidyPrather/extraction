@@ -22,6 +22,7 @@ impl Plugin for DevPlugin {
                     turn_line_up.after(gallery),
                     break_line_up.after(gallery),
                     kill_line_up.after(gallery),
+                    strip_half.after(kill_line_up),
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
@@ -508,6 +509,72 @@ fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::
     }
 }
 
+/// `walker!half` in a line-up: once its salvage is seated (`robots::salvage`)
+/// and it has lain a while, every other seated part and one plate taken off
+/// and laid in a row beside it: a wreck half stripped.
+#[derive(Resource)]
+struct HalfStripped(Vec<Entity>, u32);
+
+fn strip_half(
+    mut commands: Commands,
+    half: Option<ResMut<HalfStripped>>,
+    seats: Query<(Entity, &crate::robots::salvage::SalvageSeat)>,
+    items: Query<&crate::items::Item>,
+    parts: Query<(Entity, &crate::robots::RobotPart)>,
+    places: Query<&GlobalTransform>,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    let (Some(mut half), Some(zone)) = (half, zone) else {
+        return;
+    };
+    half.1 += 1;
+    if half.1 != 400 {
+        return;
+    }
+    for &wreck in &half.0 {
+        let Ok(at) = places.get(wreck).map(|g| g.translation()) else {
+            continue;
+        };
+        let mut taken: Vec<extraction_core::items::ItemKind> = Vec::new();
+        let mut mine: Vec<_> = seats.iter().filter(|(_, s)| s.wreck == wreck).collect();
+        mine.sort_by_key(|(e, _)| e.index_u32());
+        for (k, (seat, s)) in mine.into_iter().enumerate() {
+            if k % 2 == 1 {
+                continue;
+            }
+            if let Ok(item) = items.get(s.item) {
+                taken.push(item.kind());
+            }
+            commands.entity(s.item).despawn();
+            commands.entity(seat).despawn();
+        }
+        if let Some((plate, _)) = parts
+            .iter()
+            .find(|(_, p)| p.robot == wreck && matches!(p.role, crate::robots::PartRole::Armour(_)))
+        {
+            commands.entity(plate).despawn();
+            if let Some(k) = catalog.kind("robot_plate") {
+                taken.push(k);
+            }
+        }
+        // In a row on the ground, a stride to its right.
+        for (k, kind) in taken.into_iter().enumerate() {
+            let p = at + Vec3::new(1.4, 0.0, -0.9 + 0.6 * k as f32);
+            let g = zone.on_ground(p.x, p.z) + Vec3::Y * 0.15;
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(g),
+                    condition: 0.7,
+                },
+            );
+        }
+    }
+}
+
 /// `walker!broken` in a line-up: the job-2 walker, its gun dead and one
 /// leg failing (5%), as `robots::reel` breaks a walker. Broken a few frames
 /// in, so it has its parts, and left a second for the smoke and limp.
@@ -712,6 +779,7 @@ fn gallery(
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
                 let mut dead = Vec::new();
+                let mut halves = Vec::new();
                 let d = dist.unwrap_or(30.0);
                 let right = Vec3::new(-flat.z, 0.0, flat.x);
                 let gap = (d * 0.16).max(3.5);
@@ -721,8 +789,15 @@ fn gallery(
                 for (i, id) in ids.iter().enumerate() {
                     // `heavy!dead`: wrecked once it stands, its salvage
                     // seated on it (`robots::salvage`), to read the wreck.
+                    // `walker!half`: dead, and half its salvage taken off and
+                    // laid beside it, as a hand would (`strip_half`).
+                    let (id, half) = match id.strip_suffix("!half") {
+                        Some(base) => (base, true),
+                        None => (*id, false),
+                    };
                     let (id, wreck): (&str, bool) = match id.strip_suffix("!dead") {
                         Some(base) => (base, true),
+                        None if half => (id, true),
                         None => (id, false),
                     };
                     let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
@@ -847,6 +922,9 @@ fn gallery(
                             )),
                         );
                         dead.push(e);
+                        if half {
+                            halves.push(e);
+                        }
                     } else if id != "sentry" {
                         line_up.push((e, face_cam, None));
                     }
@@ -857,6 +935,7 @@ fn gallery(
                 commands.insert_resource(LineUp(line_up));
                 commands.insert_resource(BrokenWalkers(broken, 0));
                 commands.insert_resource(DeadLineUp(dead, 0));
+                commands.insert_resource(HalfStripped(halves, 0));
             }
             s if s.starts_with("items:") => {
                 // A row of items lying side by side on the ground DIST
