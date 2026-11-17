@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" font-family="sans-serif" font-size="12"><rect width="480" height="300" fill="#f6f4ee"/>
+<text x="12" y="20" font-weight="bold">#101 One line, four things you can do</text>
+<line x1="40" y1="70" x2="440" y2="70" stroke="#7a5" stroke-width="3"/><text x="40" y="60">rope: grappler line, strap</text>
+<line x1="40" y1="150" x2="440" y2="150" stroke="#555" stroke-width="6"/><text x="40" y="140">cable: pod, tether, power</text>
+<rect x="300" y="143" width="16" height="14" fill="#c33"/><text x="290" y="175" fill="#c33">weak link</text>
+<text x="40" y="215">GRAB and YANK: light comes to you, heavy pulls you</text>
+<text x="40" y="235">CUT: knife (rope), bolt cutters 4 s, interruptible (cable)</text>
+<text x="40" y="255">SHOOT: rope 1-2 hits; cable only sustained fire on its weak link</text>
+<text x="40" y="275">RIDE: hold a winching cable to be carried up; let go to fall</text>
+</svg>

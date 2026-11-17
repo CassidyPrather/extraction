@@ -56,7 +56,54 @@ struct EyeLevel(u8);
 
 impl Plugin for ReelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (reel, feetat_follow, flare_tell));
+        app.add_systems(Update, (reel, feetat_follow, flare_tell, search_steer));
+    }
+}
+
+/// `reel:search`: from a little after the machines are up, their forward
+/// beams are steered along a line on the ground from 40 m out to 4 m in
+/// front of you (the spotter's offset to one side), so the pool comes
+/// across the field at you and the beam ends pointing at the camera.
+fn search_steer(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<Zone>>,
+    mut beams: Query<&mut super::searchlight::Beam>,
+    spotters: Query<(), With<super::spotter::Spotter>>,
+    mut frame: Local<u32>,
+) {
+    let (Some(spec), Some((cam, yaw, _)), Some(zone)) = (&opts.gallery, opts.camera, zone) else {
+        return;
+    };
+    let Some(rest) = spec.strip_prefix("reel:search") else {
+        return;
+    };
+    *frame += 1;
+    let mut args = rest.trim_start_matches(',').split(',');
+    let shots: f32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(12.0);
+    let every: f32 = args.next().and_then(|v| v.parse().ok()).unwrap_or(4.0);
+    // (The reel starts shooting on frame 3, after the machines are made;
+    // give them a second to settle first.)
+    let start = 40.0;
+    let k = ((*frame as f32 - start) / (shots * every).max(1.0)).clamp(0.0, 1.0);
+    if *frame < start as u32 {
+        return;
+    }
+    let rot = Quat::from_rotation_y(-yaw.to_radians());
+    let flat = rot * Vec3::NEG_Z;
+    let right = Vec3::new(-flat.z, 0.0, flat.x);
+    for mut b in &mut beams {
+        // Only the lamps that look ahead (not the dirigible's stern lamp).
+        if b.base_yaw.abs() > 1.0 {
+            continue;
+        }
+        let side = if spotters.contains(b.robot) {
+            4.0
+        } else {
+            -1.5
+        };
+        let p = Vec3::new(cam.x, 0.0, cam.z) + flat * (40.0 - 36.0 * k) + right * side * (1.0 - k);
+        let at = Vec3::new(p.x, zone.ground(p.x, p.z), p.z);
+        b.steer(Some(at), super::searchlight::STEER_RATE_MAX);
     }
 }
 
@@ -421,6 +468,21 @@ fn reel(
             "hound" => {
                 let start = eye + flat * 6.0 - right * 7.0;
                 super::hound::spawn_hound(&mut commands, &zone, start, job(start))
+            }
+            "search" => {
+                // A dirigible holding 30 m up, 45 m out, and a spotter on
+                // its tether off to the right, their searchlights lit
+                // (`searchlight`): `search_steer` walks their beams across
+                // the ground toward you.
+                let sp = eye + flat * 30.0 + right * 16.0;
+                let s = super::spotter::spawn_spotter(&mut commands, &zone, sp.xz());
+                commands.entity(s).remove::<Senses>();
+                let d = eye + flat * 45.0 - right * 6.0;
+                let at = Vec3::new(d.x, zone.ground(d.x, d.z) + 30.0, d.z);
+                let e = super::dirigible::spawn_dirigible(&mut commands, at, job(at));
+                // (It holds where it is: no brain to fly it off.)
+                commands.entity(e).remove::<Senses>().remove::<Brain>();
+                e
             }
             "flare" => {
                 // A walker 15 m off facing you, and a sentry beside it,

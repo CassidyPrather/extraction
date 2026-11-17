@@ -3711,7 +3711,7 @@ fn a_building_you_cleared_is_found_shut() {
     assert_eq!(wedged, 1, "one wedged, another still a way in");
 }
 
-/// A light that wasn't there (a chemlight thrown, a room's lamps on),
+/// A light that wasn't there (a torch switched on, a room's lamps on),
 /// 18 m off in front of a walker: further than it makes out other signs,
 /// it comes to look; one 30 m off it doesn't see.
 #[test]

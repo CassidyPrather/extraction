@@ -6,10 +6,13 @@
 //!   a wall's face near its pad and facing out from it.
 //! - Every valley has its flare stops: each named, on a level pad the
 //!   truck stands on (`map_lint`'s truck stands), its vantage within
-//!   [`FLARE_REACH`] and in sight of the truck there.
+//!   [`FLARE_REACH`] and in sight of the truck there: from the eye on
+//!   the vantage's deck ([`vantage_eye`]), past the ground and every
+//!   placed prop between ([`flare_sight`]).
 
 use crate::geom::{P2, dist};
 use crate::map::{MapDef, MarkerKind, prefab_footprint};
+use crate::map_lint::{Solid, solids};
 use crate::terrain::Heightmap;
 
 /// The farthest a flare's vantage is from its stop (m).
@@ -52,6 +55,75 @@ pub fn ground_clear(hm: &Heightmap, a: P2, ha: f32, b: P2, hb: f32) -> bool {
         let p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
         hm.height(p) < ya + (yb - ya) * t - 0.1
     })
+}
+
+/// The props a flare is fired from the top of: prefab, and the height of
+/// the deck its climber stands on (m over its foot), as `world` builds
+/// them (held there by `the_vantage_decks_are_where_the_core_says`).
+pub const VANTAGE_DECKS: &[(&str, f32)] = &[
+    // The gallery round the tank, off the ladder up the back.
+    ("water_tower", 12.55),
+    // The cabin's floor on the legs (`tower_legs`' top + 0.075).
+    ("ranger_tower", 9.075),
+    ("survey_tower", 9.075),
+    // The flat roof behind the parapet, by the ladder through the hatch.
+    ("observatory", 6.5),
+];
+/// A flarer's eye over what they stand on (m).
+pub const EYE: f32 = 1.6;
+/// The point on the truck the flare is seen against (m over the ground).
+pub const TRUCK_SEEN: f32 = 3.0;
+
+/// The prop with a deck the vantage `v` stands on, if any: its index in
+/// [`solids`] and its deck height.
+fn deck_at(solids: &[Solid], v: P2) -> Option<(usize, f32)> {
+    solids.iter().enumerate().find_map(|(i, s)| {
+        let deck = VANTAGE_DECKS.iter().find(|d| d.0 == s.prefab)?.1;
+        (s.rect.sdf(v) <= 0.0).then_some((i, deck))
+    })
+}
+
+/// The height of a flarer's eye at the vantage `v`: on its prop's deck
+/// when it stands on one with a deck, else on the ground.
+pub fn vantage_eye(map: &MapDef, hm: &Heightmap, v: P2) -> f32 {
+    let solids = solids(map);
+    match deck_at(&solids, v) {
+        Some((i, deck)) => hm.height(solids[i].rect.at) + deck + EYE,
+        None => hm.height(v) + EYE,
+    }
+}
+
+/// Whether the truck at the stop `at` is in sight from the vantage `v`:
+/// the line from the eye ([`vantage_eye`]) to [`TRUCK_SEEN`] over the stop
+/// clear of the ground and of every placed prop between, to its footprint's
+/// top over its pad (the deck the eye stands on aside, and what the truck
+/// stands among). `Err` names what's in the way.
+pub fn flare_sight(map: &MapDef, hm: &Heightmap, v: P2, at: P2) -> Result<(), String> {
+    let all = solids(map);
+    let mine = deck_at(&all, v).map(|d| d.0);
+    let eye = vantage_eye(map, hm, v);
+    let target = hm.height(at) + TRUCK_SEEN;
+    let n = (dist(v, at) / 0.5).ceil().max(2.0) as usize;
+    let line = |i: usize| {
+        let t = i as f32 / n as f32;
+        (crate::geom::lerp(v, at, t), eye + (target - eye) * t)
+    };
+    if let Some(p) = (1..n).map(line).find(|(p, y)| hm.height(*p) >= y - 0.1) {
+        return Err(format!("the ground at {:.0?}", p.0));
+    }
+    for (i, s) in all.iter().enumerate() {
+        if Some(i) == mine || s.rect.sdf(at) < 1.0 {
+            continue;
+        }
+        let top = hm.height(s.rect.at) + prefab_footprint(&s.prefab)[1];
+        if let Some((p, _)) = (1..n)
+            .map(line)
+            .find(|(p, y)| s.rect.sdf(*p) <= 0.0 && *y < top)
+        {
+            return Err(format!("{} at {:.0?} (line at {p:.0?})", s.name, s.rect.at));
+        }
+    }
+    Ok(())
 }
 
 /// Where a lookout tower's four legs stand in its frame, and their half
@@ -170,9 +242,9 @@ mod tests {
                 if d > FLARE_REACH {
                     bad.push(format!("{id}: {name}'s vantage {d:.0} m off"));
                 }
-                if !ground_clear(&hm, v, 1.6, at, 3.0) {
+                if let Err(why) = flare_sight(&map, &hm, v, at) {
                     bad.push(format!(
-                        "{id}: {name} is out of sight from its vantage {v:?}"
+                        "{id}: {name} is out of sight from its vantage {v:?}: {why}"
                     ));
                 }
                 // As the truck stands at a rendezvous: its bed to the valley's middle.

@@ -83,7 +83,20 @@ pub struct SaidPlugin;
 impl Plugin for SaidPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CaptionLines>()
-            .add_systems(Update, (take_shown, show_caption, show_callouts).chain());
+            .add_message::<Recall>()
+            .add_systems(
+                Update,
+                (
+                    take_shown,
+                    tag_junk,
+                    ask_about,
+                    recall,
+                    show_caption,
+                    show_callouts,
+                )
+                    .chain()
+                    .after(crate::items::handled::count_grabs),
+            );
     }
 }
 
@@ -425,6 +438,24 @@ pub struct Callout {
     pub follow: Follow,
     /// Faded by the sights, 0..=1 (1: shows).
     pub sights: f32,
+    /// Junk's tag: muted grey, short (#104).
+    pub junk: bool,
+}
+
+/// How long junk's tag shows on a grab (s), and its colours: grey on a
+/// greyer ground, never a real line's white.
+pub const JUNK_TAG_TIME: f32 = 2.0;
+pub const JUNK_GROUND: Color = Color::srgb(0.16, 0.16, 0.16);
+pub const JUNK_INK: Color = Color::srgb(0.55, 0.55, 0.53);
+
+/// What junk's tag says: junk first, then what it's still good for (food:
+/// an offering place takes it, and animals come to it set down).
+pub fn junk_words(def: &extraction_core::items::ItemDef) -> &'static str {
+    if def.is_food() {
+        "Junk. Animals come to it. A place may take it."
+    } else {
+        "Junk."
+    }
 }
 
 /// Screenshots (`dev`): lines stay up, however slowly the frames come
@@ -506,6 +537,7 @@ fn header_and_words(line: &str) -> (Option<String>, String) {
 /// on the wrist alone.
 #[allow(clippy::too_many_arguments)]
 fn take_shown(
+    handled: Res<crate::items::handled::Handled>,
     mut commands: Commands,
     mut raid: ResMut<Raid>,
     mut lines: ResMut<CaptionLines>,
@@ -527,7 +559,13 @@ fn take_shown(
         let (header, words) = header_and_words(&text);
         match show {
             Show::Wrist => {}
-            Show::Item(item) if hands.iter().any(|h| h.0 == item) => {
+            // A thing's own line, its kind long familiar: asked for, not
+            // offered (#107).
+            Show::Item(item)
+                if held.get(item).is_ok_and(|(_, _, i, _, _)| {
+                    !handled.still_told(&catalog.get(i.kind()).id)
+                }) => {}
+            Show::Item(item) | Show::ItemNow(item) if hands.iter().any(|h| h.0 == item) => {
                 let name = held
                     .get(item)
                     .map(|(_, _, i, _, _)| catalog.get(i.kind()).name.clone())
@@ -548,14 +586,212 @@ fn take_shown(
                         line,
                         follow,
                         sights: 1.0,
+                        junk: false,
                     },
                     Transform::default(),
                     Visibility::Hidden,
                 ));
             }
-            Show::Item(_) | Show::View => lines.push(Line::new(header, words, false)),
+            Show::Item(_) | Show::ItemNow(_) | Show::View => {
+                lines.push(Line::new(header, words, false))
+            }
             Show::Urgent => lines.push(Line::new(header, words, true)),
         }
+    }
+}
+
+/// Junk taken in hand: a short grey tag beside it saying so (#104), unless
+/// a line about it is up already.
+fn tag_junk(
+    handled: Res<crate::items::handled::Handled>,
+    mut commands: Commands,
+    taken: Query<
+        (Entity, &crate::items::Item, &crate::interact::Held),
+        Added<crate::interact::Held>,
+    >,
+    locals: Query<Entity, With<crate::rig::LocalPlayer>>,
+    catalog: Res<crate::items::Catalog>,
+    callouts: Query<&Callout>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+) {
+    if !comfort.is_none_or(|c| c.in_view()) {
+        return;
+    }
+    let me = locals.iter().next();
+    for (e, item, held) in &taken {
+        let def = catalog.get(item.kind());
+        if Some(held.player) != me
+            || def.category != extraction_core::items::Category::Junk
+            || callouts.iter().any(|c| c.item == e)
+            || !handled.still_told(&def.id)
+        {
+            continue;
+        }
+        let mut line = Line::new(Some(def.name.clone()), junk_words(def).into(), false);
+        line.time = JUNK_TAG_TIME;
+        commands.spawn((
+            Callout {
+                item: e,
+                line,
+                follow: Follow::default(),
+                sights: 1.0,
+                junk: true,
+            },
+            Transform::default(),
+            Visibility::Hidden,
+        ));
+    }
+}
+
+/// Show a thing's own callout now, however familiar its kind (#107: asked
+/// for).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Recall {
+    pub item: Entity,
+}
+
+/// What a thing's own callout says when asked for: junk's tag; else its
+/// first-pickup line, if its family has one (`onboarding::pickups`); else
+/// the first sentence of its description. Under its name either way.
+pub fn own_line(def: &extraction_core::items::ItemDef) -> (String, bool) {
+    if def.category == extraction_core::items::Category::Junk {
+        return (junk_words(def).into(), true);
+    }
+    if let Some(line) = crate::onboarding::pickups::family(def).and_then(|f| f.lines().first()) {
+        return (parse(line).1, false);
+    }
+    let d = def.description.trim();
+    let first = d.find(". ").map_or(d, |i| &d[..=i]);
+    (first.to_string(), false)
+}
+
+/// Holding a thing up to look at it: between these from the eyes (m: not
+/// at the mouth, eating; not at arm's length), within `LOOK_CONE` of the
+/// gaze (degrees), for `LOOK_HOLD` (s). The menu button held, `ASK_HOLD`.
+pub const LOOK_NEAR: f32 = 0.18;
+pub const LOOK_FAR: f32 = 0.4;
+pub const LOOK_CONE: f32 = 15.0;
+pub const LOOK_HOLD: f32 = 0.6;
+pub const ASK_HOLD: f32 = 0.5;
+
+/// Whether a thing at `at` is held up to be looked at from `eye`.
+pub fn looked_at(eye: &GlobalTransform, at: Vec3) -> bool {
+    let to = at - eye.translation();
+    let d = to.length();
+    let fwd = eye.rotation() * Vec3::NEG_Z;
+    (LOOK_NEAR..LOOK_FAR).contains(&d) && to.angle_between(fwd) < LOOK_CONE.to_radians()
+}
+
+/// Asking what a thing in hand is (#107): holding it up to the eyes and
+/// looking at it (in the headset), or holding the menu button (Touch's
+/// left one; flat, I). Not while eating or drinking it, reading it, or
+/// with a gun at the sights. Once a hold; again after letting go.
+#[allow(clippy::too_many_arguments)]
+fn ask_about(
+    time: Res<Time>,
+    driver: Option<Res<crate::rig::RigDriver>>,
+    free: Query<&GlobalTransform, With<crate::render::FreeCamera>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<Entity, With<crate::rig::LocalPlayer>>,
+    inputs: Query<&crate::rig::RigInput, With<crate::rig::LocalPlayer>>,
+    held: HeldQuery,
+    catalog: Res<crate::items::Catalog>,
+    eating: Query<(), With<crate::interact::first_aid::Eating>>,
+    reading: Query<&crate::interact::read::Reading>,
+    guns: Query<&crate::weapons::feel::Handling>,
+    mut looks: Local<std::collections::HashMap<Entity, (f32, bool)>>,
+    mut menu: Local<(f32, bool)>,
+    mut ask: MessageWriter<Recall>,
+) {
+    let dt = time.delta_secs();
+    let hands = in_hand(&held, &locals, &catalog);
+    let me = locals.iter().next();
+    // The menu button held: everything in hand.
+    let pressed = inputs.iter().next().is_some_and(|i| i.recall);
+    if pressed {
+        menu.0 += dt;
+        if menu.0 >= ASK_HOLD && !menu.1 {
+            menu.1 = true;
+            for (e, ..) in &hands {
+                ask.write(Recall { item: *e });
+            }
+        }
+    } else {
+        *menu = (0.0, false);
+    }
+    // Held up and looked at: in the headset (flat, the hand's always
+    // before the eyes).
+    let xr = driver.is_some_and(|d| *d == crate::rig::RigDriver::Xr);
+    let Some(eye) = the_eye(&free, &heads, &locals).filter(|_| xr) else {
+        looks.clear();
+        return;
+    };
+    looks.retain(|e, _| hands.iter().any(|h| h.0 == *e));
+    for (e, place, _, side) in &hands {
+        let busy = eating.contains(*e)
+            || reading
+                .iter()
+                .any(|r| Some(r.player) == me && r.side == *side)
+            || guns.get(*e).is_ok_and(at_the_sights);
+        let l = looks.entry(*e).or_insert((0.0, false));
+        if !busy && looked_at(&eye, place.translation) {
+            l.0 += dt;
+            if l.0 >= LOOK_HOLD && !l.1 {
+                l.1 = true;
+                ask.write(Recall { item: *e });
+            }
+        } else {
+            *l = (0.0, false);
+        }
+    }
+}
+
+/// A thing asked about: its own callout, now.
+fn recall(
+    mut commands: Commands,
+    mut raid: ResMut<Raid>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut asked: MessageReader<Recall>,
+    held: HeldQuery,
+    catalog: Res<crate::items::Catalog>,
+    callouts: Query<(Entity, &Callout)>,
+) {
+    for r in asked.read() {
+        let Ok((_, _, item, _, _)) = held.get(r.item) else {
+            continue;
+        };
+        let def = catalog.get(item.kind());
+        let (words, junk) = own_line(def);
+        if words.is_empty() {
+            continue;
+        }
+        // Captions off the view: on the wrist.
+        if !comfort.as_ref().is_none_or(|c| c.in_view()) {
+            raid.say(format!("{}: {words}", def.name));
+            continue;
+        }
+        let mut follow = Follow::default();
+        for (e, c) in &callouts {
+            if c.item == r.item {
+                follow = c.follow;
+                commands.entity(e).despawn();
+            }
+        }
+        let mut line = Line::new(Some(def.name.clone()), words, false);
+        if junk {
+            line.time = JUNK_TAG_TIME;
+        }
+        commands.spawn((
+            Callout {
+                item: r.item,
+                line,
+                follow,
+                sights: 1.0,
+                junk,
+            },
+            Transform::default(),
+            Visibility::Hidden,
+        ));
     }
 }
 
@@ -877,6 +1113,12 @@ fn show_callouts(
                 },
                 Visibility::Inherited,
             ));
+            if c.junk {
+                commands.entity(e).insert(crate::render::screen::Ink {
+                    ground: Some(JUNK_GROUND),
+                    ink: JUNK_INK,
+                });
+            }
             continue;
         }
         let size = screen.map_or(Vec2::ONE, |s| s.size);
@@ -908,7 +1150,9 @@ fn show_callouts(
         if hold.is_some() {
             c.line.time = c.line.time.max(c.line.shown + 10.0);
         }
-        let gazed = (now - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians();
+        // (Junk's tag is a glance, not a read: no hold.)
+        let gazed =
+            (now - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians() && !c.junk;
         if gazed {
             c.line.time = c
                 .line
@@ -1378,5 +1622,331 @@ mod tests {
         }
         assert!(shown(&mut app).unwrap() > 0.0, "the gun down, it runs on");
         assert!(alpha(&mut app).unwrap() > 0.0, "and shows");
+    }
+
+    /// Junk taken in hand gets a short grey tag saying so, food its uses
+    /// too (#104); a real thing taken gets none.
+    #[test]
+    fn junk_taken_is_tagged_grey_and_a_real_thing_is_not() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.add_plugins(SaidPlugin);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().spawn((
+            crate::render::FreeCamera,
+            Transform::from_xyz(0.0, 1.7, 0.0),
+            GlobalTransform::from(Transform::from_xyz(0.0, 1.7, 0.0)),
+        ));
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let take = |app: &mut App, id: &str| {
+            let kind = catalog.kind(id).unwrap();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind,
+                        transform: Transform::from_xyz(0.2, 1.4, -0.4),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            let hand = app.world_mut().spawn_empty().id();
+            app.world_mut().entity_mut(e).insert(crate::interact::Held {
+                player: me,
+                hand,
+                side: crate::rig::Side::Right,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+            app.update();
+            app.update();
+            e
+        };
+        let stew = take(&mut app, "canned_stew");
+        let pin = take(&mut app, "grenade_pin");
+        let pm = take(&mut app, "pm_pistol");
+        let mut q = app.world_mut().query::<&Callout>();
+        let tags: Vec<_> = q
+            .iter(app.world())
+            .map(|c| (c.item, c.junk, c.line.words.clone(), c.line.time))
+            .collect();
+        let of = |e: Entity| tags.iter().find(|t| t.0 == e).cloned();
+        let s = of(stew).expect("the stew is tagged");
+        assert!(
+            s.1 && s.2.starts_with("Junk.") && s.2.contains("Animals"),
+            "{s:?}"
+        );
+        assert_eq!(s.3, JUNK_TAG_TIME);
+        let p = of(pin).expect("the pin is tagged");
+        assert_eq!(p.2, "Junk.");
+        assert!(of(pm).is_none(), "a real thing gets no junk tag");
+        // Grey: its panel's ink, once shown.
+        app.update();
+        let mut q = app
+            .world_mut()
+            .query::<(&Callout, &crate::render::screen::Ink)>();
+        assert!(
+            q.iter(app.world())
+                .all(|(c, i)| c.junk && i.ink == JUNK_INK)
+        );
+        // Off the view: none.
+        app.world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .next_captions();
+        let crackers = take(&mut app, "crackers");
+        let mut q = app.world_mut().query::<&Callout>();
+        assert!(q.iter(app.world()).all(|c| c.item != crackers));
+    }
+
+    /// Past `QUIET_AFTER` grabs of a kind, its own callout (junk's tag,
+    /// what it is) waits to be asked for (#107); a line about what to do
+    /// with it now still shows; asked for, its own line shows.
+    #[test]
+    fn a_familiar_thing_waits_to_be_asked_about() {
+        use crate::items::handled::{Handled, QUIET_AFTER};
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.add_plugins(SaidPlugin);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().spawn((
+            crate::render::FreeCamera,
+            Transform::from_xyz(0.0, 1.7, 0.0),
+            GlobalTransform::from(Transform::from_xyz(0.0, 1.7, 0.0)),
+        ));
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let spawn = |app: &mut App, id: &str| {
+            let kind = catalog.kind(id).unwrap();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind,
+                        transform: Transform::from_xyz(0.2, 1.4, -0.4),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            e
+        };
+        let hand = app.world_mut().spawn_empty().id();
+        let held = crate::interact::Held {
+            player: me,
+            hand,
+            side: crate::rig::Side::Right,
+            point: 0,
+            offset: Transform::IDENTITY,
+        };
+        let tagged = |app: &mut App, e: Entity| {
+            let mut q = app.world_mut().query::<&Callout>();
+            q.iter(app.world()).any(|c| c.item == e)
+        };
+        // Junk: tagged on each of its first grabs, then not.
+        let stew = spawn(&mut app, "canned_stew");
+        for n in 1..=QUIET_AFTER + 1 {
+            app.world_mut().entity_mut(stew).insert(held);
+            app.update();
+            app.update();
+            assert_eq!(tagged(&mut app, stew), n <= QUIET_AFTER, "grab {n}");
+            app.world_mut()
+                .entity_mut(stew)
+                .remove::<crate::interact::Held>();
+            app.update();
+        }
+        assert_eq!(
+            app.world().resource::<Handled>().0.get("canned_stew"),
+            Some(&(QUIET_AFTER + 1))
+        );
+        // A familiar gun: its own line waits; what to do now still shows.
+        let pm = spawn(&mut app, "pm_pistol");
+        app.world_mut()
+            .resource_mut::<Handled>()
+            .0
+            .insert("pm_pistol".into(), QUIET_AFTER + 3);
+        app.world_mut().entity_mut(pm).insert(held);
+        app.update();
+        app.world_mut()
+            .resource_mut::<Raid>()
+            .tell("A pistol. Point it away from you.", Show::Item(pm));
+        app.update();
+        app.update();
+        assert!(!tagged(&mut app, pm), "familiar: not offered");
+        app.world_mut()
+            .resource_mut::<Raid>()
+            .tell("Truck: \"Empty. Mag in the grip.\"", Show::ItemNow(pm));
+        app.update();
+        app.update();
+        assert!(tagged(&mut app, pm), "something to do now: shown");
+        // Asked about: its own line.
+        app.world_mut().write_message(Recall { item: stew });
+        app.world_mut().entity_mut(stew).insert(held);
+        app.world_mut().write_message(Recall { item: stew });
+        app.update();
+        app.update();
+        let mut q = app.world_mut().query::<&Callout>();
+        let c = q
+            .iter(app.world())
+            .find(|c| c.item == stew)
+            .expect("asked: shown");
+        assert!(c.junk && c.line.words.starts_with("Junk."));
+    }
+
+    /// What a thing's own callout says when asked: junk's tag, a family's
+    /// first-pickup line, else its description's first sentence.
+    #[test]
+    fn a_things_own_line_is_its_tag_its_pickup_line_or_its_description() {
+        let catalog = crate::items::Catalog::load();
+        let def = |id: &str| catalog.get(catalog.kind(id).unwrap()).clone();
+        assert!(own_line(&def("crackers")).1);
+        let (oil, _) = own_line(&def("gun_oil"));
+        assert!(oil.starts_with("Touch it to your gun"), "{oil}");
+        let (pm, junk) = own_line(&def("pm_pistol"));
+        assert!(
+            !junk && pm.starts_with("A compact Soviet service pistol."),
+            "{pm}"
+        );
+        assert!(!pm.contains("Heavy trigger"), "one sentence: {pm}");
+    }
+
+    /// Held up to the eyes and looked at, it counts; at the mouth (eating),
+    /// at arm's length, or off to the side, it doesn't (#107).
+    #[test]
+    fn holding_a_thing_up_to_look_at_it_is_asking() {
+        let eye = GlobalTransform::from(Transform::from_xyz(0.0, 1.6, 0.0));
+        let at = |x: f32, y: f32, z: f32| looked_at(&eye, Vec3::new(x, 1.6 + y, z));
+        assert!(at(0.0, 0.0, -0.28), "held up, looked at");
+        assert!(at(0.03, -0.04, -0.3), "a little off the middle");
+        assert!(!at(0.0, -0.09, -0.08), "at the mouth: eating");
+        assert!(!at(0.0, -0.3, -0.45), "at rest, down at the waist");
+        assert!(!at(0.25, 0.0, -0.25), "off to the side");
+        assert!(!at(0.0, 0.0, -0.6), "at arm's length");
+    }
+
+    /// The menu button held asks about what's in hand: its own line,
+    /// once a hold; with captions on the wrist only, on the wrist.
+    #[test]
+    fn holding_the_menu_button_asks_about_what_is_in_hand() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.add_plugins(SaidPlugin);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().spawn((
+            crate::render::FreeCamera,
+            Transform::from_xyz(0.0, 1.7, 0.0),
+            GlobalTransform::from(Transform::from_xyz(0.0, 1.7, 0.0)),
+        ));
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let kind = catalog.kind("gun_oil").unwrap();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let oil = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_xyz(0.2, 1.3, -0.4),
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        let hand = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .entity_mut(oil)
+            .insert(crate::interact::Held {
+                player: me,
+                hand,
+                side: crate::rig::Side::Left,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+        app.update();
+        let shown = |app: &mut App| {
+            let mut q = app.world_mut().query::<&Callout>();
+            q.iter(app.world())
+                .filter(|c| c.item == oil)
+                .map(|c| c.line.words.clone())
+                .collect::<Vec<_>>()
+        };
+        // Its first grab told nothing (no line for it): nothing showing.
+        let press = |app: &mut App, on: bool| {
+            app.world_mut()
+                .get_mut::<crate::rig::RigInput>(me)
+                .unwrap()
+                .recall = on;
+        };
+        press(&mut app, true);
+        app.update();
+        assert!(shown(&mut app).is_empty(), "a tap isn't a hold");
+        for _ in 0..90 {
+            press(&mut app, true);
+            app.update();
+        }
+        let words = shown(&mut app);
+        assert_eq!(words.len(), 1, "once a hold: {words:?}");
+        assert!(words[0].starts_with("Touch it to your gun"), "{words:?}");
+        // On the wrist only: said there instead.
+        press(&mut app, false);
+        app.update();
+        app.world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .next_captions();
+        for _ in 0..90 {
+            press(&mut app, true);
+            app.update();
+        }
+        let log = &app.world().resource::<Raid>().log;
+        assert!(
+            log.iter()
+                .any(|(l, _)| l.starts_with("Gun oil: Touch it to your gun")),
+            "{log:?}"
+        );
     }
 }
