@@ -5504,6 +5504,133 @@ mod body {
         }
     }
 
+    /// The pocket spheres (`interact::pockets`), in place of the drawn
+    /// pouches: every slot but the worn ones shows, faint, at rest; a
+    /// magazine held, none is bright till it's at a pouch, and the one
+    /// that's bright is the one it goes in, let go; then that one shows
+    /// what's in it, and an empty hand at it brightens it; held again at
+    /// it, full, it isn't bright. Flat mode and the setting off: none,
+    /// and the pouches are drawn.
+    #[test]
+    fn the_bright_pocket_sphere_is_where_it_goes() {
+        use crate::interact::pockets::{PocketSphere, PocketsShown};
+        type S = (Option<Entity>, f32, bool, Option<Entity>);
+        let (mut vr, _) = standing();
+        let side = Side::Right;
+        let spheres = |vr: &mut Vr| -> Vec<S> {
+            vr.step(12);
+            let mut q = vr.app.world_mut().query::<&PocketSphere>();
+            q.iter(vr.app.world())
+                .map(|s| (s.slot, s.look.alpha, s.hover, s.holds))
+                .collect()
+        };
+        let shown = |s: &[S]| s.iter().filter(|x| x.1 > 0.05).count();
+        let of = |s: &[S], slot: Entity| *s.iter().find(|x| x.0 == Some(slot)).unwrap();
+        let all = spheres(&mut vr);
+        // A sphere a body slot (twelve) and the pack's.
+        assert_eq!(all.len(), 13, "spheres: {all:?}");
+        // At rest: every slot but the vest and the helmet, faint.
+        assert_eq!(shown(&all), 10, "at rest: {all:?}");
+        assert!(all.iter().all(|x| !x.2 && x.1 < 0.2), "faint: {all:?}");
+        assert!(vr.app.world().resource::<PocketsShown>().0);
+        let pouches: Vec<(Entity, Vec3)> = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &BodySlot, &Socket, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, _, s, _)| s.kind == SocketKind::Body(SlotKind::Pouch))
+                .map(|(e, _, _, g)| (e, g.translation()))
+                .collect()
+        };
+        let at = vr.feet() + Vec3::new(0.25, 1.0, -0.4);
+        let take = |vr: &mut Vr| {
+            let m = vr.spawn("pm_mag", Transform::from_translation(at));
+            vr.app.world_mut().entity_mut(m).insert(RigidBody::Static);
+            vr.hand(side, at, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(2);
+            vr.grip(side, 1.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(side).holding, Some(m));
+            m
+        };
+        let to = |vr: &mut Vr, item: Entity, p: Vec3| {
+            for _ in 0..3 {
+                let hand = vr.hand_state(side).world.translation;
+                let at = vr
+                    .app
+                    .world()
+                    .get::<GlobalTransform>(item)
+                    .unwrap()
+                    .translation();
+                vr.move_hand(side, hand + (p - at));
+                vr.step(3);
+            }
+        };
+        let first = take(&mut vr);
+        let held = spheres(&mut vr);
+        assert!(
+            held.iter().all(|x| !x.2),
+            "held out in front, none bright: {held:?}"
+        );
+        to(&mut vr, first, pouches[0].1);
+        let at_pouch = spheres(&mut vr);
+        let bright: Vec<_> = at_pouch.iter().filter(|s| s.2).collect();
+        assert_eq!(bright.len(), 1, "one bright: {at_pouch:?}");
+        assert_eq!(bright[0].0, Some(pouches[0].0), "the pouch it's at");
+        assert!(of(&at_pouch, pouches[0].0).1 > 0.3, "bright: {at_pouch:?}");
+        vr.grip(side, 0.0);
+        vr.step(4);
+        let on = vr.app.world().get::<crate::interact::InSocket>(first);
+        assert_eq!(
+            on.map(|s| s.socket),
+            Some(pouches[0].0),
+            "let go, it's in that one"
+        );
+        // Empty-handed and away: it shows what's in it; the hand at it,
+        // brighter.
+        vr.move_hand(side, at);
+        // (Eased down from bright.)
+        vr.step(60);
+        let away = spheres(&mut vr);
+        let full = of(&away, pouches[0].0);
+        assert_eq!(full.3, Some(first), "what's in it: {full:?}");
+        assert_eq!(shown(&away), 10, "every slot still: {away:?}");
+        vr.move_hand(side, pouches[0].1 + Vec3::new(0.0, 0.05, -0.1));
+        let near = of(&spheres(&mut vr), pouches[0].0);
+        assert!(
+            near.1 > full.1 + 0.02,
+            "brighter with the hand at it: {near:?} {full:?}"
+        );
+        // Another magazine at the full pouch: not bright.
+        vr.move_hand(side, at);
+        vr.step(4);
+        let second = take(&mut vr);
+        to(&mut vr, second, pouches[0].1);
+        let f = of(&spheres(&mut vr), pouches[0].0);
+        assert!(
+            f.1 > 0.01 && !f.2 && f.3 == Some(first),
+            "full, not bright: {f:?}"
+        );
+        // The setting off, and flat mode: none, and the pouches drawn.
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .pocket_spheres = false;
+        let off = spheres(&mut vr);
+        assert_eq!(shown(&off), 0, "setting off: {off:?}");
+        assert!(!vr.app.world().resource::<PocketsShown>().0);
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .pocket_spheres = true;
+        assert!(shown(&spheres(&mut vr)) > 0);
+        vr.app.insert_resource(crate::rig::RigDriver::Flat);
+        let flat = spheres(&mut vr);
+        assert_eq!(shown(&flat), 0, "flat mode: {flat:?}");
+        assert!(!vr.app.world().resource::<PocketsShown>().0);
+    }
+
     /// Where a thing let go goes is what `interact::stow::StowTarget` says
     /// beforehand (what the pocket spheres show): for one thing of each
     /// kind the stow tells apart (size, magazine family, gun, mount, what

@@ -38,6 +38,7 @@ pub mod offering;
 #[cfg(test)]
 pub mod overdraw;
 pub mod part_rest;
+pub mod pockets;
 pub mod prepass;
 pub mod props;
 pub mod pry_cue;
@@ -89,6 +90,7 @@ impl Plugin for RenderPlugin {
         app.add_plugins(sky_light::SkyLightPlugin);
         app.add_plugins(held_light::HeldLightPlugin);
         app.add_plugins(wear::GunWearPlugin);
+        app.add_plugins(pockets::PocketVisualsPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,

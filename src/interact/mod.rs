@@ -25,6 +25,7 @@ pub mod hand_climb;
 #[cfg(test)]
 mod physics_audit;
 pub mod physics_hands;
+pub mod pockets;
 pub mod poke;
 pub mod read;
 pub mod stow;
@@ -351,7 +352,8 @@ impl Plugin for InteractPlugin {
                 fight::FightPlugin,
                 wounds::WoundsPlugin,
                 read::ReadPlugin,
-            ));
+            ))
+            .add_plugins(pockets::PocketsPlugin);
     }
 }
 
