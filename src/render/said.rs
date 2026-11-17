@@ -82,8 +82,10 @@ pub struct SaidPlugin;
 
 impl Plugin for SaidPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CaptionLines>()
-            .add_systems(Update, (take_shown, show_caption, show_callouts).chain());
+        app.init_resource::<CaptionLines>().add_systems(
+            Update,
+            (take_shown, tag_junk, show_caption, show_callouts).chain(),
+        );
     }
 }
 
@@ -425,6 +427,24 @@ pub struct Callout {
     pub follow: Follow,
     /// Faded by the sights, 0..=1 (1: shows).
     pub sights: f32,
+    /// Junk's tag: muted grey, short (#104).
+    pub junk: bool,
+}
+
+/// How long junk's tag shows on a grab (s), and its colours: grey on a
+/// greyer ground, never a real line's white.
+pub const JUNK_TAG_TIME: f32 = 2.0;
+pub const JUNK_GROUND: Color = Color::srgb(0.16, 0.16, 0.16);
+pub const JUNK_INK: Color = Color::srgb(0.55, 0.55, 0.53);
+
+/// What junk's tag says: junk first, then what it's still good for (food:
+/// an offering place takes it, and animals come to it set down).
+pub fn junk_words(def: &extraction_core::items::ItemDef) -> &'static str {
+    if def.is_food() {
+        "Junk. Animals come to it. A place may take it."
+    } else {
+        "Junk."
+    }
 }
 
 /// Screenshots (`dev`): lines stay up, however slowly the frames come
@@ -548,6 +568,7 @@ fn take_shown(
                         line,
                         follow,
                         sights: 1.0,
+                        junk: false,
                     },
                     Transform::default(),
                     Visibility::Hidden,
@@ -556,6 +577,47 @@ fn take_shown(
             Show::Item(_) | Show::View => lines.push(Line::new(header, words, false)),
             Show::Urgent => lines.push(Line::new(header, words, true)),
         }
+    }
+}
+
+/// Junk taken in hand: a short grey tag beside it saying so (#104), unless
+/// a line about it is up already.
+fn tag_junk(
+    mut commands: Commands,
+    taken: Query<
+        (Entity, &crate::items::Item, &crate::interact::Held),
+        Added<crate::interact::Held>,
+    >,
+    locals: Query<Entity, With<crate::rig::LocalPlayer>>,
+    catalog: Res<crate::items::Catalog>,
+    callouts: Query<&Callout>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+) {
+    if !comfort.is_none_or(|c| c.in_view()) {
+        return;
+    }
+    let me = locals.iter().next();
+    for (e, item, held) in &taken {
+        let def = catalog.get(item.kind());
+        if Some(held.player) != me
+            || def.category != extraction_core::items::Category::Junk
+            || callouts.iter().any(|c| c.item == e)
+        {
+            continue;
+        }
+        let mut line = Line::new(Some(def.name.clone()), junk_words(def).into(), false);
+        line.time = JUNK_TAG_TIME;
+        commands.spawn((
+            Callout {
+                item: e,
+                line,
+                follow: Follow::default(),
+                sights: 1.0,
+                junk: true,
+            },
+            Transform::default(),
+            Visibility::Hidden,
+        ));
     }
 }
 
@@ -877,6 +939,12 @@ fn show_callouts(
                 },
                 Visibility::Inherited,
             ));
+            if c.junk {
+                commands.entity(e).insert(crate::render::screen::Ink {
+                    ground: Some(JUNK_GROUND),
+                    ink: JUNK_INK,
+                });
+            }
             continue;
         }
         let size = screen.map_or(Vec2::ONE, |s| s.size);
@@ -908,7 +976,9 @@ fn show_callouts(
         if hold.is_some() {
             c.line.time = c.line.time.max(c.line.shown + 10.0);
         }
-        let gazed = (now - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians();
+        // (Junk's tag is a glance, not a read: no hold.)
+        let gazed =
+            (now - eye.translation()).angle_between(fwd) < GAZE_CONE.to_radians() && !c.junk;
         if gazed {
             c.line.time = c
                 .line
@@ -1378,5 +1448,96 @@ mod tests {
         }
         assert!(shown(&mut app).unwrap() > 0.0, "the gun down, it runs on");
         assert!(alpha(&mut app).unwrap() > 0.0, "and shows");
+    }
+
+    /// Junk taken in hand gets a short grey tag saying so, food its uses
+    /// too (#104); a real thing taken gets none.
+    #[test]
+    fn junk_taken_is_tagged_grey_and_a_real_thing_is_not() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.add_plugins(SaidPlugin);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().spawn((
+            crate::render::FreeCamera,
+            Transform::from_xyz(0.0, 1.7, 0.0),
+            GlobalTransform::from(Transform::from_xyz(0.0, 1.7, 0.0)),
+        ));
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let take = |app: &mut App, id: &str| {
+            let kind = catalog.kind(id).unwrap();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind,
+                        transform: Transform::from_xyz(0.2, 1.4, -0.4),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            let hand = app.world_mut().spawn_empty().id();
+            app.world_mut().entity_mut(e).insert(crate::interact::Held {
+                player: me,
+                hand,
+                side: crate::rig::Side::Right,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+            app.update();
+            app.update();
+            e
+        };
+        let stew = take(&mut app, "canned_stew");
+        let pin = take(&mut app, "grenade_pin");
+        let pm = take(&mut app, "pm_pistol");
+        let mut q = app.world_mut().query::<&Callout>();
+        let tags: Vec<_> = q
+            .iter(app.world())
+            .map(|c| (c.item, c.junk, c.line.words.clone(), c.line.time))
+            .collect();
+        let of = |e: Entity| tags.iter().find(|t| t.0 == e).cloned();
+        let s = of(stew).expect("the stew is tagged");
+        assert!(
+            s.1 && s.2.starts_with("Junk.") && s.2.contains("Animals"),
+            "{s:?}"
+        );
+        assert_eq!(s.3, JUNK_TAG_TIME);
+        let p = of(pin).expect("the pin is tagged");
+        assert_eq!(p.2, "Junk.");
+        assert!(of(pm).is_none(), "a real thing gets no junk tag");
+        // Grey: its panel's ink, once shown.
+        app.update();
+        let mut q = app
+            .world_mut()
+            .query::<(&Callout, &crate::render::screen::Ink)>();
+        assert!(
+            q.iter(app.world())
+                .all(|(c, i)| c.junk && i.ink == JUNK_INK)
+        );
+        // Off the view: none.
+        app.world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .next_captions();
+        let crackers = take(&mut app, "crackers");
+        let mut q = app.world_mut().query::<&Callout>();
+        assert!(q.iter(app.world()).all(|c| c.item != crackers));
     }
 }

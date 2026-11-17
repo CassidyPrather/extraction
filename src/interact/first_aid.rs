@@ -28,7 +28,6 @@ use crate::items::{Catalog, Item};
 use crate::player::Player;
 use crate::rig::haptics::Haptic;
 use crate::rig::{RigDriver, RigHand, RigInput};
-use extraction_core::items::Category;
 
 /// Turns round the forearm a dressing takes.
 const WRAP_TURNS: f32 = 1.5;
@@ -478,7 +477,7 @@ fn eat_and_drink(
     for (e, item, held, gt, eating, capped) in &mut items {
         let def = catalog.get(item.kind());
         // (A capped bottle doesn't pour.)
-        if def.category != Category::Food || capped {
+        if !def.is_food() || capped {
             continue;
         }
         let Ok((root, input)) = players.get(held.player) else {
