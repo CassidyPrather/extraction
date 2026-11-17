@@ -25,8 +25,10 @@ pub mod hand_climb;
 #[cfg(test)]
 mod physics_audit;
 pub mod physics_hands;
+pub mod pockets;
 pub mod poke;
 pub mod read;
+pub mod stow;
 pub mod tools;
 pub mod touch;
 pub mod wounds;
@@ -350,7 +352,8 @@ impl Plugin for InteractPlugin {
                 fight::FightPlugin,
                 wounds::WoundsPlugin,
                 read::ReadPlugin,
-            ));
+            ))
+            .add_plugins(pockets::PocketsPlugin);
     }
 }
 
@@ -684,11 +687,7 @@ fn grip_from_input(
                 // Let go over the shoulder (above it, behind the neck): into
                 // the pack.
                 let over_shoulder = torso.is_some_and(|t| {
-                    let local = t
-                        .affine()
-                        .inverse()
-                        .transform_point3(hand.world.translation);
-                    local.y > 0.05 && local.z > 0.0 && local.x.abs() < 0.45
+                    stow::over_shoulder(t.affine().inverse(), hand.world.translation)
                 });
                 if over_shoulder && hand.holding.is_some_and(|h| !bags.contains(h)) {
                     actions.write(HandAction::Stow {
@@ -1200,92 +1199,61 @@ fn apply_hand_actions(
                     });
                     continue;
                 }
-                let size = it
-                    .map(|i| catalog.get(i.kind()).size)
-                    .unwrap_or(SizeClass::Medium);
-                let is_gun = it.is_some_and(|i| catalog.get(i.kind()).firearm.is_some());
-                let mount = it.and_then(|i| catalog.get(i.kind()).fits_mount());
-                let family = it.and_then(|i| {
-                    catalog
-                        .get(i.kind())
-                        .magazine
-                        .as_ref()
-                        .map(|m| m.fits.clone())
-                });
-                // Socket in reach?
+                // Where it goes: `stow::stow_target`, which the pocket
+                // spheres ask beforehand, so the one that lights is it.
                 let pos = gt.translation();
-                let mut target = None;
-                // A body slot in reach it doesn't fit (`body::slot_fit`).
-                let mut refused = false;
                 let def = it.map(|i| catalog.get(i.kind()));
-                for (se, sgt, socket, owner) in &sockets {
-                    if socket.occupant.is_some()
-                        || !accepts_item(&socket.kind, size, family.as_deref(), is_gun, mount)
-                    {
-                        continue;
-                    }
-                    if owner.is_some_and(|o| o.0 == item) {
-                        continue;
-                    }
-                    if def.is_some_and(|d| !fits_body_slot(&socket.kind, d)) {
-                        refused |= sgt.translation().distance(pos) < socket.radius;
-                        continue;
-                    }
-                    let mut d = sgt.translation().distance(pos);
-                    let mut radius = socket.radius;
-                    // A long gun let go near a shoulder goes onto that side's
-                    // sling, front or back.
-                    if socket.kind == SocketKind::Body(SlotKind::Sling) {
-                        if let Ok(local) = slot_places.get(se) {
-                            let shoulder =
-                                sgt.transform_point(body::sling_shoulder(local.translation));
-                            d = d.min(shoulder.distance(pos));
-                            radius = radius.max(body::SLING_REACH);
+                let target = {
+                    let (size, bulk) = def.map_or((SizeClass::Medium, 0.0), |d| (d.size, d.bulk));
+                    let slots = sockets.iter().map(|(se, sgt, socket, owner)| {
+                        stow::SlotView::new(se, sgt, socket, owner, slot_places.get(se).ok())
+                    });
+                    let packs = backpacks.iter().map(|(be, bgt, bag)| {
+                        let used = bag.used(&catalog, &items_kinds(&items, &bag.contents));
+                        stow::PackView {
+                            entity: be,
+                            owner: bag.owner,
+                            open: bag.open,
+                            carried: bag.carried,
+                            inverse: bgt.affine().inverse(),
+                            half: bag.half,
+                            room: bag.fits(used, size, bulk),
                         }
-                    }
-                    if d < radius && target.is_none_or(|(bd, _)| d < bd) {
-                        target = Some((d, se));
-                    }
-                }
-                if let Some((_, se)) = target {
-                    if let Ok((_, _, mut socket, _)) = sockets.get_mut(se) {
-                        seat_in_socket(&mut commands, item, se, &mut socket);
-                        events.write(InteractEvent::Socketed { item, socket: se });
-                        continue;
-                    }
-                }
-                // Into an open backpack?
-                let mut stowed = false;
-                for (be, bgt, mut bag) in &mut backpacks {
-                    if !bag.open || bag.owner != player {
-                        continue;
-                    }
-                    let local = bgt.affine().inverse().transform_point3(pos);
-                    if local.abs().cmple(bag.half * 1.3).all() {
-                        if let Some(it) = it {
-                            let def = catalog.get(it.kind());
-                            let used = bag.used(&catalog, &items_kinds(&items, &bag.contents));
-                            if bag.fits(used, def.size, def.bulk) {
-                                // As it was put in, at whatever angle.
-                                let posed = Transform::from_matrix(
-                                    (bgt.affine().inverse() * gt.affine()).into(),
-                                );
-                                body::stow_posed(&mut commands, item, be, &mut bag, posed);
-                                events.write(InteractEvent::Stowed { item });
-                                stowed = true;
-                            } else {
-                                events.write(InteractEvent::Refused { item });
-                            }
+                    });
+                    stow::stow_target(item, def, pos, player, slots, packs)
+                };
+                let pack_full = match target {
+                    stow::StowTarget::Socket(se) => {
+                        if let Ok((_, _, mut socket, _)) = sockets.get_mut(se) {
+                            seat_in_socket(&mut commands, item, se, &mut socket);
+                            events.write(InteractEvent::Socketed { item, socket: se });
+                            continue;
                         }
-                        break;
+                        None
                     }
-                }
-                if stowed {
-                    continue;
+                    stow::StowTarget::Pack(be) => {
+                        if let Ok((_, bgt, mut bag)) = backpacks.get_mut(be) {
+                            // As it was put in, at whatever angle.
+                            let posed = Transform::from_matrix(
+                                (bgt.affine().inverse() * gt.affine()).into(),
+                            );
+                            body::stow_posed(&mut commands, item, be, &mut bag, posed);
+                            events.write(InteractEvent::Stowed { item });
+                            continue;
+                        }
+                        None
+                    }
+                    stow::StowTarget::Refused { pack_full }
+                    | stow::StowTarget::Drop { pack_full } => pack_full,
+                };
+                // Into a pack with no room for it: a tick, and on.
+                if pack_full.is_some() {
+                    events.write(InteractEvent::Refused { item });
                 }
                 // Let go at a slot it doesn't fit, and nothing else to take
                 // it: it stays in the hand, with a tick, rather than drop at
                 // your feet (the slot would never have held it).
+                let refused = matches!(target, stow::StowTarget::Refused { .. });
                 if refused && let Ok((_, _, Some(held), ..)) = items.get(item) {
                     let held = *held;
                     commands.entity(item).insert(held);
@@ -1322,51 +1290,54 @@ fn apply_hand_actions(
                     continue;
                 };
                 let def = catalog.get(it.kind());
-                // A body slot first (most specific), then the backpack.
-                let mut slots: Vec<(u8, Entity)> = sockets
-                    .iter()
-                    .filter(|(_, _, s, o)| {
-                        o.is_some_and(|o| o.0 == player)
-                            && s.occupant.is_none()
-                            && accepts_item(&s.kind, def.size, None, def.firearm.is_some(), None)
-                            && fits_body_slot(&s.kind, def)
-                    })
-                    .map(|(e, _, s, _)| (slot_rank(&s.kind, def.magazine.is_some()), e))
-                    .collect();
-                slots.sort_by_key(|(r, _)| *r);
-                if let Some((_, se)) = slots.first().copied() {
-                    if let Ok((_, _, mut socket, _)) = sockets.get_mut(se) {
-                        hand.holding = None;
-                        commands.entity(item).remove::<(Held, Supported)>();
-                        seat_in_socket(&mut commands, item, se, &mut socket);
-                        events.write(InteractEvent::Socketed { item, socket: se });
-                        continue;
+                // A body slot first (most specific), then the worn pack
+                // (`stow::shoulder_stow`, which the spheres ask too).
+                let target = {
+                    let slots = sockets.iter().map(|(se, sgt, socket, owner)| {
+                        stow::SlotView::new(se, sgt, socket, owner, slot_places.get(se).ok())
+                    });
+                    let packs = backpacks.iter().map(|(be, bgt, bag)| {
+                        let used = bag.used(&catalog, &items_kinds(&items, &bag.contents));
+                        stow::PackView {
+                            entity: be,
+                            owner: bag.owner,
+                            open: bag.open,
+                            carried: bag.carried,
+                            inverse: bgt.affine().inverse(),
+                            half: bag.half,
+                            room: bag.fits(used, def.size, def.bulk),
+                        }
+                    });
+                    stow::shoulder_stow(def, player, slots, packs)
+                };
+                match target {
+                    stow::StowTarget::Socket(se) => {
+                        if let Ok((_, _, mut socket, _)) = sockets.get_mut(se) {
+                            hand.holding = None;
+                            commands.entity(item).remove::<(Held, Supported)>();
+                            seat_in_socket(&mut commands, item, se, &mut socket);
+                            events.write(InteractEvent::Socketed { item, socket: se });
+                        }
                     }
-                }
-                let mut done = false;
-                for (be, _, mut bag) in &mut backpacks {
-                    if bag.owner != player || !bag.carried {
-                        continue;
+                    stow::StowTarget::Pack(be) => {
+                        if let Ok((_, _, mut bag)) = backpacks.get_mut(be) {
+                            hand.holding = None;
+                            commands.entity(item).remove::<(Held, Supported)>();
+                            let n = bag.contents.len() as f32;
+                            let spot = Vec3::new(
+                                ((n * 0.37) % 1.0 - 0.5) * 0.3,
+                                ((n * 0.61) % 1.0 - 0.5) * 0.35,
+                                ((n * 0.23) % 1.0 - 0.5) * 0.15,
+                            );
+                            body::stow_in_backpack(&mut commands, item, be, &mut bag, spot);
+                            events.write(InteractEvent::Stowed { item });
+                        }
                     }
-                    let used = bag.used(&catalog, &items_kinds(&items, &bag.contents));
-                    if bag.fits(used, def.size, def.bulk) {
-                        hand.holding = None;
-                        commands.entity(item).remove::<(Held, Supported)>();
-                        let n = bag.contents.len() as f32;
-                        let spot = Vec3::new(
-                            ((n * 0.37) % 1.0 - 0.5) * 0.3,
-                            ((n * 0.61) % 1.0 - 0.5) * 0.35,
-                            ((n * 0.23) % 1.0 - 0.5) * 0.15,
-                        );
-                        body::stow_in_backpack(&mut commands, item, be, &mut bag, spot);
-                        events.write(InteractEvent::Stowed { item });
-                        done = true;
-                    } else {
+                    stow::StowTarget::Refused { pack_full: Some(_) } => {
                         events.write(InteractEvent::Refused { item });
                     }
-                    break;
+                    _ => {}
                 }
-                let _ = done;
             }
             HandAction::Draw { player, side, slot } => {
                 let mine: Vec<(Entity, &Socket)> = sockets
@@ -1425,22 +1396,6 @@ fn items_kinds(
                 .and_then(|(.., it, _)| it.map(|i| i.kind()))
         })
         .collect()
-}
-
-/// Which free slot a put-away item goes to first. The pouches are kept for
-/// magazines (where a reload reaches, and where a one-handed one takes
-/// them from, `seat_from_body`): anything else goes to a pocket first, a
-/// pouch only when nothing else on the body is free.
-fn slot_rank(kind: &SocketKind, magazine: bool) -> u8 {
-    match (kind, magazine) {
-        (SocketKind::Body(SlotKind::Pouch), true) => 0,
-        (SocketKind::Body(SlotKind::Pocket), _) => 1,
-        (SocketKind::Body(SlotKind::Mount), _) => 2,
-        (SocketKind::Body(SlotKind::Holster), _) => 3,
-        (SocketKind::Body(SlotKind::Sling), _) => 4,
-        (SocketKind::Body(SlotKind::Pouch), false) => 5,
-        _ => 9,
-    }
 }
 
 /// Whether a socket takes an item of this size (and magazine family).

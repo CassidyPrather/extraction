@@ -229,3 +229,22 @@ corner, and a tape in it stood 4 mm through the belt. After, it hangs on
 the belt's side turned to it (46° at x = ±0.17, `interact::body::pocket_place`,
 the art's `rig.py` `pocket_place` the same), the belt along its back and
 through its loop, what's in it turned with it.
+
+`37_pocket_spheres/` (#93; `--gallery kit+pockets[+...]`, the chest's eye
+looking down at the belt, 100° across, rendered at 3200×1800 and cropped,
+lossless; the gallery's kit: a PM in the holster, AK magazines in two
+pouches, a PM magazine in a third, a Mosin clip in the left hip pocket, a
+compass on the chest mount; the pack hidden, as it hangs in front of the
+belt in this view): `1_before` the drawn pouches (`--no-pocket-spheres`),
+`2_after` the spheres in their place, nothing held: each slot a faint
+sphere, the empty pouch hollow, the full ones with what's in them small
+and white (the things themselves not drawn while they're stowed). Then a
+PM magazine in the right hand: `3_hover` at the empty pouch, its sphere
+bright (where it goes if let go); `4_full` at the full one, not bright.
+A PM in hand: `5_holster` at the emptied holster, bright; `6_lefty` the
+same left-handed (`--left-handed`: holster and mount on the left).
+`7_onehand_load` one-handed (`--one-handed`): the PM's empty well 9 cm
+over the pouched PM magazine, which is bright: brought on, it seats
+(`seat_from_body`). Drawn in the before view, the kit's 9 meshes; after,
+10 spheres and 4 icons for the belt and chest (one mesh and one material
+for all the spheres, each icon one merged mesh), 33k triangles.
