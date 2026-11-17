@@ -13,6 +13,9 @@ use crate::progression::Progress;
 
 pub const SAVE_VERSION: u32 = 1;
 
+/// Grabs of a kind after which its callout shows only when asked (#107).
+pub const QUIET_AFTER: u32 = 4;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SaveGame {
     pub version: u32,
@@ -35,6 +38,10 @@ pub struct SaveGame {
     /// (one line each, once a career).
     #[serde(default)]
     pub firsts: Vec<String>,
+    /// How many times each kind of thing has been taken in hand (by id):
+    /// past [`QUIET_AFTER`] its own callout no longer shows unbidden (#107).
+    #[serde(default)]
+    pub grabs: std::collections::BTreeMap<String, u32>,
 }
 
 /// The driver's requests: how many there have been, what's wanted now,
@@ -264,6 +271,10 @@ pub struct Career {
     /// (one line each, once a career).
     #[serde(default)]
     pub firsts: Vec<String>,
+    /// How many times each kind of thing has been taken in hand (by id):
+    /// past [`QUIET_AFTER`] its own callout no longer shows unbidden (#107).
+    #[serde(default)]
+    pub grabs: std::collections::BTreeMap<String, u32>,
     /// This career's own world seed, rolled at its start by a play launch
     /// (the director's raids, the wildlife's homes). Older careers have
     /// none: one is rolled on their first load.
@@ -528,6 +539,7 @@ impl Career {
         save.requests = self.requests.clone();
         save.progress = self.progress.clone();
         save.firsts = self.firsts.clone();
+        save.grabs = self.grabs.clone();
         if let Some(z) = self.zones.iter().find(|z| z.map == map) {
             save.zone = z.clone();
         }
@@ -544,6 +556,7 @@ impl Career {
         self.requests = save.requests.clone();
         self.progress = save.progress.clone();
         self.firsts = save.firsts.clone();
+        self.grabs = save.grabs.clone();
         if self.map.is_empty() {
             self.map = save.zone.map.clone();
         }
@@ -650,6 +663,25 @@ impl SaveGame {
 
 #[cfg(test)]
 mod tests {
+
+    /// A career keeps how often each kind's been in hand (#107).
+    #[test]
+    fn a_career_keeps_its_grabs() {
+        let mut game = SaveGame::default();
+        game.grabs.insert("pm_pistol".into(), 7);
+        let career = Career::from_game(&game);
+        assert_eq!(career.game("marrow_creek").grabs.get("pm_pistol"), Some(&7));
+        let text = ron::to_string(&career).unwrap();
+        let back: Career = ron::from_str(&text).unwrap();
+        assert_eq!(back.grabs.get("pm_pistol"), Some(&7));
+        // An older save without them reads as none.
+        let old: Career = ron::from_str(
+            "(version: 1, map: \"m\", stats: (), stash: [], loadout: (), memorial: (), zones: [])",
+        )
+        .unwrap_or_default();
+        assert!(old.grabs.is_empty());
+    }
+
     use super::*;
 
     fn item(id: &str) -> SavedItem {

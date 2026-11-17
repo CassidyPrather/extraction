@@ -55,6 +55,9 @@ pub enum First {
     KitRecovered,
     /// The first note read (its copy goes on the truck's board).
     NotePinned,
+    /// A kind so often in hand its callout's gone quiet (#107): how to ask
+    /// again.
+    Recall,
     /// A walker's gun settling on you: the shot is a breath away.
     Aimed,
     /// A sentry's chirp: it has you in its sweep.
@@ -158,6 +161,7 @@ pub const ALL: &[First] = &[
     First::ConvoyTook,
     First::KitRecovered,
     First::NotePinned,
+    First::Recall,
     First::Aimed,
     First::Sentry,
     First::Hush,
@@ -292,6 +296,7 @@ impl First {
             First::ConvoyTook => {
                 &["Truck: \"That's through the Gate. Kept, they call it. Be quicker.\""]
             }
+            First::Recall => &["Truck: \"Forgot what that is? Hold it up close and look.\""],
             First::NotePinned => {
                 &["Truck: \"Reading their notes? I keep copies. Board in the back.\""]
             }

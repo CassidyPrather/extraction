@@ -2,6 +2,7 @@
 //! and their placeholder visuals.
 
 pub mod damp;
+pub mod handled;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
@@ -55,6 +56,7 @@ impl Plugin for ItemsPlugin {
             lost::LostItemsPlugin,
             rest::RestPlugin,
             damp::DampPlugin,
+            handled::HandledPlugin,
         ));
     }
 }
