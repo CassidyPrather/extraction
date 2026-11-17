@@ -1026,7 +1026,8 @@ mod tests {
         };
         // Called: the answer, then (the drive cut short) the arrival, the
         // last call, and leaving without you.
-        app.world_mut().write_message(RadioCall { player, pad: None });
+        app.world_mut()
+            .write_message(RadioCall { player, pad: None });
         for _ in 0..4 {
             app.update();
             take(&mut app);
