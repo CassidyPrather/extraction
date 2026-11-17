@@ -1208,5 +1208,12 @@
             description: "A road flare in a red paper tube. Strike the cap across the end: a minute of hissing red fire, and every eye in the dark on it.",
             category: Gadget, size: Small, mass: 0.18, bulk: 0.08, tags: ["powder"],
         ),
+        // #94: what calls the truck to a road end with no set. A machine's
+        // distress canister, salvaged, is the same thing (`robots::distress`).
+        (
+            id: "signal_flare", dims: Some((0.035, 0.035, 0.2)), name: "Signal flare (red)",
+            description: "A red star in a cardboard tube, its pull cord taped down. Hold it up and pull: a red star climbs sixty metres and burns, and everything in the valley sees it.",
+            category: Gadget, size: Small, mass: 0.2, bulk: 0.08, tags: ["powder"],
+        ),
     ],
 )
