@@ -1090,7 +1090,7 @@ mod tests {
         // A line for the wrist alone isn't shown.
         let mut r = app.world_mut().resource_mut::<Raid>();
         r.shown.clear();
-        r.say("You bind the wound.");
+        r.say("Cold, then warm. Something knits.");
         assert!(r.shown.is_empty());
     }
 

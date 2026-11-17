@@ -151,8 +151,11 @@ mod tests {
             (Speaker::LevCab, "You came back.".to_string())
         );
         assert_eq!(
-            parse("You bind the wound."),
-            (Speaker::None, "You bind the wound.".to_string())
+            parse("Cold, then warm. Something knits."),
+            (
+                Speaker::None,
+                "Cold, then warm. Something knits.".to_string()
+            )
         );
     }
 

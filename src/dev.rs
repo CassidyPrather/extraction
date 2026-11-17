@@ -27,6 +27,7 @@ impl Plugin for DevPlugin {
                     sights_to_the_eye,
                     say_for_gallery,
                     camera_over_ground,
+                    hurt_and_give.run_if(world_in),
                 ),
             )
             .add_systems(
@@ -36,7 +37,6 @@ impl Plugin for DevPlugin {
                     carry_for_gallery,
                     climb_for_gallery,
                     fight_for_gallery,
-                    treat_for_gallery,
                     spall_for_gallery,
                     plate_hits_for_gallery.run_if(world_in),
                     impact_hits_for_gallery.run_if(world_in),
@@ -50,6 +50,55 @@ impl Plugin for DevPlugin {
                 PostUpdate,
                 pockets_gallery_eye.before(bevy::transform::TransformSystems::Propagate),
             );
+    }
+}
+
+/// `--hurt HP` and `--give ID,..` (a playtest's station: hurt, and an
+/// injector to try on yourself): once the world's in and the player
+/// stands in it, health set, and the things laid on the ground half a
+/// metre in front, a hand's width apart.
+fn hurt_and_give(
+    mut commands: Commands,
+    opts: Res<crate::launch::LaunchOptions>,
+    mut players: Query<
+        (&mut crate::health::Health, &GlobalTransform),
+        With<crate::rig::LocalPlayer>,
+    >,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+    mut done: Local<bool>,
+) {
+    if *done || (opts.hurt.is_none() && opts.give.is_empty()) {
+        return;
+    }
+    let (Some(zone), Ok((mut health, at))) = (zone, players.single_mut()) else {
+        return;
+    };
+    *done = true;
+    if let Some(hp) = opts.hurt {
+        health.hp = hp.clamp(1.0, health.max);
+    }
+    let fwd = (at.rotation() * Vec3::NEG_Z)
+        .with_y(0.0)
+        .normalize_or(Vec3::NEG_Z);
+    let side = fwd.cross(Vec3::Y);
+    let n = opts.give.len() as f32;
+    for (i, id) in opts.give.iter().enumerate() {
+        let Some(kind) = catalog.kind(id) else {
+            eprintln!("--give: no item {id:?}");
+            continue;
+        };
+        let p = at.translation() + fwd * 0.5 + side * (0.12 * (i as f32 - (n - 1.0) * 0.5));
+        let y = zone.on_ground(p.x, p.z).y + 0.05;
+        crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_xyz(p.x, y, p.z),
+                condition: 1.0,
+            },
+        );
     }
 }
 
@@ -1714,7 +1763,7 @@ fn wear_kit(
 /// door taken by its two ends off the ground and held up across you;
 /// `drag`: taken by its near end in the right hand and drawn back, the
 /// far end on the ground; `pack`: your pack off the left shoulder, hanging
-/// open in front of you, a dressing in it and the right hand reaching in.
+/// open in front of you, an injector in it and the right hand reaching in.
 #[allow(clippy::too_many_arguments)]
 fn carry_for_gallery(
     mut commands: Commands,
@@ -1777,7 +1826,7 @@ fn carry_for_gallery(
         ));
     }
     if f == 10 && pack {
-        let id = catalog.kind("field_dressing").expect("a dressing");
+        let id = catalog.kind("regen_injector").expect("an injector");
         let mut c = commands.reborrow();
         state.1 = Some(crate::items::spawn_item(
             &mut c,
@@ -1840,7 +1889,7 @@ fn carry_for_gallery(
             return;
         };
         if f == 20 {
-            // A dressing in the pack.
+            // An injector in the pack.
             commands.queue(move |world: &mut World| {
                 if let Some(mut b) = world.get_mut::<crate::interact::body::Backpack>(bag) {
                     b.contents.push(thing);
@@ -2305,115 +2354,6 @@ fn impact_hits_for_gallery(
     }
 }
 
-/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
-/// a body hurt and treated (`interact::wounds`, drawn by
-/// `render::wounds`). An open wound on the right thigh and the left
-/// forearm, a dressing round the right upper arm, a splint strapped on the
-/// right shin, and the left glove, turned palm up, bloody from the wound.
-/// What a dressing round that arm says is said (the upper arm's bound, the
-/// thigh still bleeds); with `wrist` the left wrist is raised to the eye
-/// instead, its screen showing it, and BLEED.
-#[allow(clippy::too_many_arguments)]
-fn treat_for_gallery(
-    mut commands: Commands,
-    opts: Res<LaunchOptions>,
-    mut players: Query<
-        (
-            Entity,
-            &Transform,
-            &mut crate::rig::RigInput,
-            &mut crate::health::Health,
-            Option<&mut crate::interact::wounds::Wounds>,
-        ),
-        With<crate::rig::LocalPlayer>,
-    >,
-    hands: Query<(Entity, &crate::rig::RigHand)>,
-    raid: Option<ResMut<crate::raid::Raid>>,
-    mut frames: Local<u32>,
-) {
-    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
-    use crate::rig::Side;
-    if !opts
-        .gallery
-        .as_deref()
-        .is_some_and(|s| gallery_word(s, "treat"))
-    {
-        return;
-    }
-    let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
-        return;
-    };
-    let Some(mut wounds) = wounds else {
-        return;
-    };
-    *frames += 1;
-    let wound = |limb, along, around, bleed, dressed| Wound {
-        limb,
-        along,
-        around,
-        bleed,
-        dressed,
-    };
-    // Round a limb hanging down, the angle that faces out to your right
-    // and a little forward (`Segment::point`'s frame).
-    let x = Vec3::NEG_Y.any_orthonormal_vector();
-    let y = Vec3::NEG_Y.cross(x);
-    let out = root.rotation * Vec3::new(1.0, 0.0, -0.5).normalize();
-    let facing = out.dot(y).atan2(out.dot(x));
-    wounds.0 = vec![
-        wound(Limb::Thigh(Side::Right), 0.45, facing, 1.0, false),
-        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
-        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
-        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
-    ];
-    // Bleeding as the wounds have it, and in no danger of going down.
-    health.bleeding = 1.6;
-    health.hp = health.max;
-    if *frames == 2 {
-        commands.entity(player).insert(Fracture {
-            leg: Side::Right,
-            splinted: true,
-        });
-        for (h, rh) in &hands {
-            if rh.side == Side::Left {
-                commands.entity(h).insert(Bloodied(1.0));
-            }
-        }
-    }
-    // Said, and said again whenever it's gone from the log (a line lasts
-    // seconds; frames here are slow), so the wrist shows it.
-    if let Some(mut raid) = raid {
-        let line = crate::interact::wounds::dressed_line(
-            Some(Limb::UpperArm(Side::Right)),
-            Some(&wounds),
-            health.bleeding,
-        );
-        if !raid.log.iter().any(|(t, _)| *t == line) {
-            raid.say(line);
-        }
-    }
-    let left = input.hand_mut(Side::Left);
-    left.pose = if opts
-        .gallery
-        .as_deref()
-        .is_some_and(|s| gallery_word(s, "wrist"))
-    {
-        // Across the chest, fingers to the right, the back of the wrist
-        // (its screen) turned up to the eye.
-        Transform::from_xyz(-0.08, 1.2, -0.32).with_rotation(
-            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
-                * Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2)
-                * Quat::from_rotation_y(0.4),
-        )
-    } else {
-        // Low and turned palm up (its palm faces +X, inward).
-        Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
-            Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
-        )
-    };
-    left.tracked = true;
-}
-
 /// How far under the ground (m) a screenshot's camera may be before it's
 /// told: a camera under the ground draws a blank frame (fog and rain).
 pub const CAMERA_UNDER: f32 = 1.0;
@@ -2460,9 +2400,9 @@ fn camera_over_ground(
     }
 }
 
-/// The subjects whose gallery poses the body: the kit on it, wounds
-/// treated on it, climbing, the body itself.
-const BODY_SUBJECTS: [&str; 4] = ["kit", "treat", "climb", "body"];
+/// The subjects whose gallery poses the body: the kit on it, climbing,
+/// the body itself.
+const BODY_SUBJECTS: [&str; 3] = ["kit", "climb", "body"];
 /// The pose words (`pose_body_for_gallery`).
 const BODY_POSES: [&str; 6] = ["stoop", "behind", "above", "down", "side", "crouch"];
 
@@ -2518,10 +2458,10 @@ fn pose_body_for_gallery(
     if !is_body_gallery(spec) {
         return;
     }
-    // A gallery of the body (or of wounds on it) draws it, whatever the
-    // setting (off by default).
+    // A gallery of the body draws it, whatever the setting (off by
+    // default).
     if let Some(mut c) = comfort
-        && (gallery_word(spec, "body") || gallery_word(spec, "treat"))
+        && gallery_word(spec, "body")
         && !c.body
     {
         c.body = true;
@@ -2674,8 +2614,8 @@ mod tests {
         for spec in [
             "kit+stoop",
             "kit+down",
-            "treat,down",
-            "treat+down+wrist",
+            "kit,down",
+            "body+down+wrist",
             "body+down+side",
             "climb+behind",
             "above",
@@ -2731,8 +2671,8 @@ mod gallery_word_tests {
             "words after the comma are numbers"
         );
         let modes = [
-            "carry", "drag", "pack", "climb", "fight", "treat", "wrist", "present", "body",
-            "stoop", "behind", "above", "down", "side", "crouch",
+            "carry", "drag", "pack", "climb", "fight", "wrist", "present", "body", "stoop",
+            "behind", "above", "down", "side", "crouch",
         ];
         let items =
             extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)

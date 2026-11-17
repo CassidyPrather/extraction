@@ -132,13 +132,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("relay_box", 0.16, Made, "a relay box"),
     ("camera", 0.14, Hand, "Zorki-4, 140 mm"),
     // Medical.
-    (
-        "field_dressing",
-        0.11,
-        Hand,
-        "IPP-1 individual dressing, 110 mm",
-    ),
-    ("splint", 0.45, Hand, "a ladder splint"),
     ("regen_injector", 0.13, Made, "an autoinjector"),
     // Food.
     ("water_bottle", 0.24, Hand, "an army canteen"),

@@ -2,9 +2,8 @@
 //! hear and feel"): a signal flare's pop and hiss, the RPK's bipod
 //! swinging and locking, a palm slapped on whatever it meets, a held gun
 //! knocked into a wall, something heavy dragged over the ground, and the
-//! lights for the dark: a chemlight snapped, a hand flare struck; and
-//! treatment: a dressing wound on, a splint strapped, a bottle's cap
-//! twisted off, a hand at a wound. (The
+//! lights for the dark: a chemlight snapped, a hand flare struck; and a
+//! bottle's cap twisted off. (The
 //! pump-action's rack is a gun event, heard with the rest in
 //! `audio::gun_sounds`.)
 //!
@@ -40,7 +39,7 @@ impl Plugin for KitSoundsPlugin {
             .add_message::<ActionGrind>()
             .add_message::<Lit>()
             .add_message::<crate::weapons::gunsmith::Worked>()
-            .add_systems(Update, heartbeat_sounds.after(heartbeat))
+            .add_systems(Update, heartbeat_sounds)
             .add_systems(
                 Update,
                 (
@@ -61,78 +60,32 @@ impl Plugin for KitSoundsPlugin {
     }
 }
 
-/// The bleed's one clock (`Heartbeat`, [`heartbeat`]), apart from any
-/// sound, so a headless app (Hands' haptic tests) keeps the same rhythm:
-/// added by the kit's sounds, or by whatever else wants the beat (add it
-/// guarded with `is_plugin_added`).
+/// The heart's one message (`Heartbeat`), apart from any sound, so a
+/// headless app (Hands' haptic tests) gets the same beats: added by the
+/// kit's sounds, or by whatever else wants the beat (add it guarded with
+/// `is_plugin_added`). Nothing beats it since bleeding went (#102); a
+/// stim's racing heart is to (#102's second step).
 pub struct HeartbeatPlugin;
 
 impl Plugin for HeartbeatPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Heartbeat>()
-            .add_systems(Update, heartbeat);
+        app.add_message::<Heartbeat>();
     }
 }
 
-/// One beat of a bleeding player's heart: heard here (`body.heartbeat`)
-/// and felt in the hands off the same message (`rig::haptics`, Hands'),
-/// so sound and pulse keep one rhythm. `level` 0..1: how hard you're
-/// bleeding.
+/// One beat of the player's heart: heard here (`body.heartbeat`) and felt
+/// in the hands off the same message (`rig::haptics`, Hands'), so sound
+/// and pulse keep one rhythm. `level` 0..1: how hard it's pounding.
 #[derive(Message, Clone, Copy, Debug, PartialEq)]
 pub struct Heartbeat {
     pub level: f32,
 }
 
-/// A bleed at or under this (HP a second) isn't heard: a graze clotting.
-pub const BLEED_HEARD: f32 = 0.1;
-/// A bleed this hard (HP a second) beats fastest and loudest.
-pub const BLEED_FULL: f32 = 2.0;
-/// The beat's period (s), from a light bleed to [`BLEED_FULL`]: 60 a
-/// minute to about 133.
-pub const BEAT_SLOW: f32 = 1.0;
-pub const BEAT_FAST: f32 = 0.45;
-/// How far under its cue a light bleed's beat sits (dB).
+/// How far under its cue the softest beat sits (dB).
 pub const BEAT_QUIET_DB: f32 = -12.0;
 
-/// A bleed's beat: (period s, level 0..1), none when it isn't heard.
-pub fn bleed_beat(bleeding: f32) -> Option<(f32, f32)> {
-    if bleeding <= BLEED_HEARD {
-        return None;
-    }
-    let k = ((bleeding - BLEED_HEARD) / (BLEED_FULL - BLEED_HEARD)).clamp(0.0, 1.0);
-    Some((BEAT_SLOW + (BEAT_FAST - BEAT_SLOW) * k, k))
-}
-
-/// The local player's heart while they bleed: a beat as soon as it's
-/// heard, then one a period, quicker and harder as the bleed is worse;
-/// none once it's dressed, clotted under [`BLEED_HEARD`], or they're down.
-/// A newcomer looking at neither the wrist nor the screen's edge hears it.
-pub fn heartbeat(
-    players: Query<&crate::health::Health, With<crate::rig::LocalPlayer>>,
-    time: Res<Time>,
-    mut since: Local<Option<f32>>,
-    mut beats: MessageWriter<Heartbeat>,
-) {
-    let beat = players
-        .iter()
-        .next()
-        .filter(|h| !h.down)
-        .and_then(|h| bleed_beat(h.bleeding));
-    let Some((period, level)) = beat else {
-        *since = None;
-        return;
-    };
-    let t = since.map_or(period, |t| t + time.delta_secs());
-    if t >= period {
-        beats.write(Heartbeat { level });
-        *since = Some(0.0);
-    } else {
-        *since = Some(t);
-    }
-}
-
-/// Each beat heard in your head, not out in the world: quiet at a light
-/// bleed, [`BEAT_QUIET_DB`] under its cue, up to the cue at the worst.
+/// Each beat heard in your head, not out in the world: the softest
+/// [`BEAT_QUIET_DB`] under its cue, up to the cue at the hardest.
 fn heartbeat_sounds(
     mut commands: Commands,
     mut beats: MessageReader<Heartbeat>,
@@ -459,59 +412,28 @@ fn flare_burns(
     }
 }
 
-/// What treatment was where last frame: a dressing's quarter turns round
-/// the limb, a splint's half seconds strapping, a cap's quarter turns.
-#[derive(Clone, Copy)]
-struct Treating {
-    steps: f32,
-    at: Vec3,
-    splint: bool,
-}
-
-/// Treatment with the hands (`interact::first_aid`, `wounds`), which
-/// sends no messages: its state is read.
-///
-/// - A dressing wound round a limb (`Winding`): a short rasp of cloth at
-///   each quarter turn (`aid.wrap`); the tear when it's done is the use's
-///   (`use.bandage`).
-/// - A splint strapped along the shin (`Strapping`): a strap pulled
-///   tight each half second, as the hand feels it (`aid.strap`, velcro),
-///   and cinched hard when it's on (`aid.cinch`).
-/// - A bottle's cap twisted (`Capped`): a plastic tick at each quarter
-///   turn (`aid.cap`) and the pop as it comes off (`aid.cap_off`); the
-///   swallow is the drink's (`use.drink`).
-/// - A hand at an open wound (`Bloodied` coming on): a wet squelch
-///   (`aid.wet`).
-#[allow(clippy::type_complexity)]
+/// A bottle's cap twisted with the hands (`interact::first_aid`, which
+/// sends no messages: its state is read): a plastic tick at each quarter
+/// turn (`aid.cap`) and the pop as it comes off (`aid.cap_off`); the
+/// swallow is the drink's (`use.drink`).
 fn treatment_sounds(
     mut commands: Commands,
-    windings: Query<(
-        Entity,
-        &crate::interact::first_aid::Winding,
-        &GlobalTransform,
-    )>,
-    straps: Query<(
-        Entity,
-        &crate::interact::first_aid::Strapping,
-        &GlobalTransform,
-    )>,
     caps: Query<(
         Entity,
         &crate::interact::first_aid::Capped,
         &GlobalTransform,
     )>,
     places: Query<&GlobalTransform>,
-    bloodied: Query<&GlobalTransform, Added<crate::interact::wounds::Bloodied>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
-    mut was: Local<HashMap<Entity, Treating>>,
+    mut was: Local<HashMap<Entity, f32>>,
 ) {
-    let sound = |commands: &mut Commands, rng: &mut AudioRng, set, cue, at, speed| {
+    let mut sound = |commands: &mut Commands, cue, at, speed| {
         play_at_speed(
             commands,
             &bank,
             &mut rng.0,
-            set,
+            "physical/handle_plastic",
             Some(at),
             cue,
             0.0,
@@ -520,88 +442,26 @@ fn treatment_sounds(
         );
     };
     let mut seen = Vec::new();
-    let now = windings
-        .iter()
-        .map(|(e, w, g)| {
-            (
-                e,
-                (w.turns * 4.0).floor(),
-                g.translation(),
-                false,
-                "aid.wrap",
-            )
-        })
-        .chain(
-            straps
-                .iter()
-                .map(|(e, s, g)| (e, (s.0 * 2.0).floor(), g.translation(), true, "aid.strap")),
-        )
-        .chain(caps.iter().map(|(e, c, g)| {
-            (
-                e,
-                (c.twisted * 4.0).floor(),
-                g.translation(),
-                false,
-                "aid.cap",
-            )
-        }));
-    for (e, steps, at, splint, cue) in now {
+    for (e, c, g) in &caps {
         seen.push(e);
-        let before = was.insert(e, Treating { steps, at, splint });
-        if before.is_some_and(|b| steps > b.steps) {
-            let (set, speed) = match cue {
-                "aid.wrap" => ("physical/bandage", 1.25),
-                "aid.strap" => ("physical/velcro", 1.3),
-                _ => ("physical/handle_plastic", 1.8),
-            };
-            sound(&mut commands, &mut rng, set, cue, at, speed);
+        let steps = (c.twisted * 4.0).floor();
+        if was.insert(e, steps).is_some_and(|b| steps > b) {
+            sound(&mut commands, "aid.cap", g.translation(), 1.8);
         }
     }
-    // Gone from its state: a splint strapped on (it leaves the hand), a cap
-    // off (the bottle stays, capless).
-    let mut done = Vec::new();
-    was.retain(|e, t| {
+    // Gone from its state, the bottle still here: the cap's off.
+    let mut off = Vec::new();
+    was.retain(|e, _| {
         let keep = seen.contains(e);
         if !keep {
-            done.push((*e, *t));
+            off.push(*e);
         }
         keep
     });
-    for (e, t) in done {
-        if t.splint {
-            if t.steps >= 2.0 {
-                sound(
-                    &mut commands,
-                    &mut rng,
-                    "physical/velcro",
-                    "aid.cinch",
-                    t.at,
-                    0.9,
-                );
-            }
-        } else if let Ok(g) = places.get(e)
-            && caps.get(e).is_err()
-            && windings.get(e).is_err()
-        {
-            sound(
-                &mut commands,
-                &mut rng,
-                "physical/handle_plastic",
-                "aid.cap_off",
-                g.translation(),
-                1.3,
-            );
+    for e in off {
+        if let Ok(g) = places.get(e) {
+            sound(&mut commands, "aid.cap_off", g.translation(), 1.3);
         }
-    }
-    for g in &bloodied {
-        sound(
-            &mut commands,
-            &mut rng,
-            "footsteps/mud",
-            "aid.wet",
-            g.translation(),
-            1.4,
-        );
     }
 }
 
@@ -862,72 +722,6 @@ mod tests {
         assert!((grind_db(0.0) + 20.0).abs() < 1e-4);
     }
 
-    /// A bleed is heard once it's more than a graze, quicker and harder the
-    /// worse it is, and not at all once dressed or clotted.
-    #[test]
-    fn a_bleed_beats_quicker_the_worse() {
-        assert!(bleed_beat(0.0).is_none());
-        assert!(bleed_beat(BLEED_HEARD).is_none());
-        let (slow, quiet) = bleed_beat(0.2).unwrap();
-        let (fast, loud) = bleed_beat(BLEED_FULL).unwrap();
-        assert!(slow > fast && quiet < loud);
-        assert_eq!(bleed_beat(3.0), bleed_beat(BLEED_FULL));
-        assert!((fast - BEAT_FAST).abs() < 1e-6 && (loud - 1.0).abs() < 1e-6);
-        assert!(slow <= BEAT_SLOW);
-    }
-
-    /// In the world: bleeding hard, the local player's heart beats at once
-    /// and then every BEAT_FAST; dressed (bleeding 0), it stops; down, too.
-    #[test]
-    fn the_heart_beats_while_you_bleed() {
-        use crate::health::Health;
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins)
-            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
-                std::time::Duration::from_millis(50),
-            ))
-            .add_plugins(HeartbeatPlugin);
-        let p = app
-            .world_mut()
-            .spawn((
-                Health {
-                    bleeding: BLEED_FULL,
-                    ..default()
-                },
-                crate::rig::LocalPlayer,
-            ))
-            .id();
-        let mut beats = 0;
-        // Each update is 50 ms on.
-        let step = |app: &mut App| -> usize {
-            app.update();
-            let mut m = app.world_mut().resource_mut::<Messages<Heartbeat>>();
-            let n = m.drain().count();
-            n
-        };
-        beats += step(&mut app);
-        assert_eq!(beats, 1, "a beat at once");
-        for _ in 0..90 {
-            beats += step(&mut app);
-        }
-        // 4.5 s at BEAT_FAST: about ten more.
-        assert!((9..=11).contains(&(beats - 1)), "{beats}");
-        app.world_mut().get_mut::<Health>(p).unwrap().bleeding = 0.0;
-        let mut after = 0;
-        for _ in 0..40 {
-            after += step(&mut app);
-        }
-        assert_eq!(after, 0, "dressed, it stops");
-        let mut h = app.world_mut().get_mut::<Health>(p).unwrap();
-        h.bleeding = BLEED_FULL;
-        h.down = true;
-        let mut down = 0;
-        for _ in 0..40 {
-            down += step(&mut app);
-        }
-        assert_eq!(down, 0, "down, it stops");
-    }
-
     /// A drag is the cue's level at a full haul, softer and lower slower.
     #[test]
     fn drags_are_louder_the_faster() {
@@ -953,12 +747,8 @@ mod tests {
             ("physical/handle_plastic", "glow.snap"),
             ("physical/zip", "glow.strike"),
             ("anomaly/burner_roar", "glow.burn"),
-            ("physical/bandage", "aid.wrap"),
-            ("physical/velcro", "aid.strap"),
-            ("physical/velcro", "aid.cinch"),
             ("physical/handle_plastic", "aid.cap"),
             ("physical/handle_plastic", "aid.cap_off"),
-            ("footsteps/mud", "aid.wet"),
             ("body/breath", "frost.gasp"),
             ("physical/ice_crack", "frost.bite"),
             ("machines/clank", "smith.clamp"),

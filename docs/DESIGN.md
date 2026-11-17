@@ -74,10 +74,18 @@ how far robots see, and rain covers footsteps. It drives the sky, distance
 and ground fog, the sun, GPU-animated rain streaks and the rain bed.
 
 A new game starts with an empty stash except for a starter kit (a
-pistol, a spare magazine, a box of rounds, the radio, a light, a
-dressing, a tin of stew and a cleaning kit). `--new-game` starts over;
+pistol, a spare magazine, a box of rounds, the radio, a light, an
+injector, a tin of stew and a cleaning kit). `--new-game` starts over;
 `--save PATH` saves elsewhere. Scenarios, screenshots and test scenes
 never save.
+
+**Your health** is one number (`health`). A hit takes HP at once and a
+hard landing just hurts; nothing bleeds, nothing breaks, and nothing comes
+back by itself. The regen injector is the only medicine: its tip to your
+thigh and the trigger (or, one-handed, the face button) gives 45 HP. At
+none you're down, and the raid's over. (Bleeding, placed wounds, broken
+legs, dressings and splints were taken out in #102: too situational to be
+worth their weight.)
 
 ### No cash, and the resource sinks
 

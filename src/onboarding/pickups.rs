@@ -34,9 +34,7 @@ pub enum Family {
     MachineParts,
     /// A helmet, a vest, a plate: let go where it's worn.
     Armour,
-    /// Along a broken shin (`interact::first_aid`).
-    Splint,
-    /// In the thigh: heals, and slows a bleed (`items::usage`).
+    /// In the thigh: heals (`items::usage`).
     Injector,
     /// Pin out, thrown: a few seconds (`weapons::grenades`, `gadgets`).
     Grenade,
@@ -73,7 +71,6 @@ pub const FAMILIES: &[Family] = &[
     Family::Salvage,
     Family::MachineParts,
     Family::Armour,
-    Family::Splint,
     Family::Injector,
     Family::Grenade,
     Family::EmpTrap,
@@ -99,7 +96,6 @@ pub const OBVIOUS: &[&str] = &[
     "radio",
     "flashlight",
     "power_cell",
-    "field_dressing",
     "detector",
     "bolt",
     "map_case",
@@ -135,7 +131,6 @@ pub fn family(def: &ItemDef) -> Option<Family> {
         "matches" => Family::Matches,
         "scrap_metal" | "electronics" | "polymer" | "brass" | "powder" => Family::Salvage,
         "helmet" | "vest" | "steel_plate" => Family::Armour,
-        "splint" => Family::Splint,
         "regen_injector" => Family::Injector,
         "rgd5" | "emp_grenade" => Family::Grenade,
         "emp_trap" => Family::EmpTrap,
@@ -183,12 +178,7 @@ impl Family {
             Family::Armour => {
                 &["Truck: \"Let a helmet go at your head, a vest at your chest. Plates go in it.\""]
             }
-            Family::Splint => {
-                &["Truck: \"Leg broken? Hold the splint along the shin, other hand strapping.\""]
-            }
-            Family::Injector => {
-                &["Truck: \"Tip to your thigh, pull the trigger. It heals, slows a bleed.\""]
-            }
+            Family::Injector => &["Truck: \"Tip to your thigh, pull the trigger. It heals you.\""],
             Family::Grenade => {
                 &["Truck: \"Pull the pin, then throw it far. You've seconds, not many.\""]
             }
@@ -382,13 +372,7 @@ mod tests {
                 include_str!("../weapons/armour.rs"),
                 "a plate at either of the",
             ),
-            // "Hold the splint along the shin."
-            (
-                "splint",
-                include_str!("../interact/first_aid.rs"),
-                "hold it\n//!   along the shin",
-            ),
-            // "Tip to your thigh, pull the trigger. It heals, slows a bleed."
+            // "Tip to your thigh, pull the trigger. It heals you."
             (
                 "regen_injector",
                 include_str!("../interact/first_aid.rs"),
@@ -397,7 +381,7 @@ mod tests {
             (
                 "regen_injector",
                 include_str!("../items/usage.rs"),
-                "h.bleeding *= 0.3",
+                "h.hp = (h.hp + 45.0).min(h.max)",
             ),
             // "Pull the pin, then throw it far. You've seconds."
             (

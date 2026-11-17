@@ -27,7 +27,6 @@ pub const AGAIN: f32 = 30.0;
 pub enum Held {
     Crouched,
     Hauling,
-    Limping,
     Chilled,
     Heavy(f32),
     Deep,
@@ -41,8 +40,6 @@ pub fn why_not(input: &RigInput, body: &Body) -> Option<Held> {
         Some(Held::Crouched)
     } else if body.hauling > 0.0 {
         Some(Held::Hauling)
-    } else if body.limping >= crate::interact::wounds::LIMP {
-        Some(Held::Limping)
     } else if body.chilled >= crate::anomaly::frost::STIFF {
         Some(Held::Chilled)
     } else if !enc.can_sprint {
@@ -62,7 +59,6 @@ pub fn line(held: Held, flat: bool) -> String {
         Held::Crouched if flat => "Crouched: slow, no running. C to stand.".into(),
         Held::Crouched => "Crouched: slow, no running. Right stick down to stand.".into(),
         Held::Hauling => "Both hands on it: no running with that.".into(),
-        Held::Limping => "On a broken leg: no running. Splint it.".into(),
         Held::Chilled => "Stiff with the cold: no running.".into(),
         Held::Heavy(kg) => format!("Too heavy to run: {kg:.0} kg on you."),
         Held::Deep => "Too deep to run.".into(),
@@ -198,10 +194,6 @@ mod tests {
             Some(Held::Crouched),
             "the hidden one first"
         );
-        input.crouch = false;
-        body.carried_kg = 3.0;
-        body.limping = crate::interact::wounds::LIMP;
-        assert_eq!(why_not(&input, &body), Some(Held::Limping));
     }
 
     /// Every cause that stops a run has its line, and it fits the wrist.
@@ -210,7 +202,6 @@ mod tests {
         for held in [
             Held::Crouched,
             Held::Hauling,
-            Held::Limping,
             Held::Chilled,
             Held::Heavy(41.0),
             Held::Deep,

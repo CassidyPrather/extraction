@@ -257,14 +257,7 @@ fn wrist_panel(
         (Some(c), Some(h)) => Some(Said::Captioned(h, &c.text)),
         _ => raid.log.last().map(|(m, _)| Said::Plain(m.as_str())),
     };
-    let text = wrist_text(
-        &clock,
-        body.carried_kg,
-        health.hp,
-        health.bleeding > 0.05,
-        said,
-        page(&time),
-    );
+    let text = wrist_text(&clock, body.carried_kg, health.hp, said, page(&time));
     for mut p in &mut panels {
         if p.text != text {
             p.text = text.clone();
@@ -381,20 +374,8 @@ pub enum Said<'a> {
 /// What the wrist shows: the clock, the load, health, and the driver's
 /// last words (a page at a time). A caption's speaker line takes one of
 /// the words' lines, so the panel stays as tall.
-pub fn wrist_text(
-    clock: &str,
-    kg: f32,
-    hp: f32,
-    bleeding: bool,
-    said: Option<Said>,
-    page: usize,
-) -> String {
-    let mut text = format!(
-        "{clock} {:>5.1}KG\nHP {:>3.0}{}",
-        kg,
-        hp.max(0.0),
-        if bleeding { " BLEED" } else { "" }
-    );
+pub fn wrist_text(clock: &str, kg: f32, hp: f32, said: Option<Said>, page: usize) -> String {
+    let mut text = format!("{clock} {:>5.1}KG\nHP {:>3.0}", kg, hp.max(0.0));
     let (header, msg, lines) = match said {
         Some(Said::Plain(m)) => (None, m, WRIST_LINES),
         Some(Said::Captioned(h, m)) => (Some(h), m, WRIST_LINES - 1),

@@ -81,7 +81,7 @@ pub enum Goal {
     OpenDoor,
     Search,
     Wrist,
-    Dressing,
+    Inject,
     Probe,
     Artifact,
     Button,
@@ -114,9 +114,9 @@ impl Goal {
             Goal::SlideRelease => "Let the slide go",
             Goal::FireAgain => "Fire again",
             Goal::OpenDoor => "Open the door",
-            Goal::Search => "Take the dressing",
-            Goal::Wrist => "You're bleeding: look",
-            Goal::Dressing => "Dress the cut",
+            Goal::Search => "Take the injector",
+            Goal::Wrist => "You're hurt: look",
+            Goal::Inject => "Inject your thigh",
             Goal::Probe => "A part at the sparks",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
@@ -135,7 +135,7 @@ impl Goal {
                     Some("Mag in a pouch. Bring the\npistol in hand down on it.")
                 }
                 Goal::Rack => Some("Press B or Y on the gun\nhand: it racks."),
-                Goal::Dressing => Some("Hold it. Press A or X\non that hand."),
+                Goal::Inject => Some("Hold it. Press A or X\non that hand."),
                 _ => None,
             };
             if let Some(t) = one {
@@ -209,10 +209,10 @@ impl Goal {
             (Goal::OpenDoor | Goal::Search, true) => &["e"],
             (Goal::Wrist, false) => &["watch hand", "look at it"],
             (Goal::Wrist, true) => &["h"],
-            // `interact::first_aid`: circled round a limb, not the holding
-            // arm; one-handed, the button (`how_for`).
-            (Goal::Dressing, false) => &["circle it", "the cut"],
-            (Goal::Dressing, true) => &["u"],
+            // `interact::first_aid`: its tip at a thigh, the trigger;
+            // one-handed, the button (`how_for`).
+            (Goal::Inject, false) => &["thigh", "trigger"],
+            (Goal::Inject, true) => &["u"],
             (Goal::Probe, false) => &["grip", "open your hand"],
             (Goal::Probe, true) => &["q"],
             (Goal::Artifact, false) => &["point", "grip", "flick"],
@@ -324,12 +324,12 @@ impl Goal {
             (Goal::FireAgain, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::OpenDoor, false) => "GRIP the door anywhere\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
-            (Goal::Search, false) => "The white roll, ringed on\nthe crate. Squeeze GRIP.",
-            (Goal::Search, true) => "The white roll, ringed on\nthe crate. Look. Press E.",
+            (Goal::Search, false) => "The injector, ringed on\nthe crate. Squeeze GRIP.",
+            (Goal::Search, true) => "The injector, ringed on\nthe crate. Look. Press E.",
             (Goal::Wrist, false) => "It's buzzing. Raise your\nwatch hand, look at it.",
-            (Goal::Wrist, true) => "You're bleeding. Hold H\nto check yourself.",
-            (Goal::Dressing, false) => "One hand: circle it round\nthe cut, 1.5 turns.",
-            (Goal::Dressing, true) => "Hold it. Press U.",
+            (Goal::Wrist, true) => "You're hurt. Hold H\nto check yourself.",
+            (Goal::Inject, false) => "Its tip to your thigh.\nSqueeze TRIGGER.",
+            (Goal::Inject, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the sparks.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo at the sparks.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
@@ -487,7 +487,7 @@ pub const STATIONS: &[Station] = &[
         title: "FIRST AID",
         at: [4.5, 8.0],
         rot: 90.0,
-        goals: &[Goal::Wrist, Goal::Dressing],
+        goals: &[Goal::Wrist, Goal::Inject],
         where_: "the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
         in_order: false,
@@ -905,7 +905,7 @@ pub fn stash_station(id: &str) -> Option<usize> {
         "cleaning_kit" => at(Goal::FarGrab),
         "pm_mag" | "ammo_9x18" => at(Goal::FillMag),
         "flashlight" | "power_cell" => at(Goal::OpenDoor),
-        "field_dressing" | "canned_stew" => at(Goal::Wrist),
+        "regen_injector" | "canned_stew" => at(Goal::Wrist),
         "detector" | "bolt" => at(Goal::Probe),
         // The map and the compass, for the way home and the first job.
         _ => at(Goal::CallTruck),
@@ -1027,21 +1027,13 @@ fn mark_the_step(
     }
 }
 
-/// First aid with something to aid: taking the dressing in the house, the
-/// crate's nail catches your watch arm, a scratch that bleeds (slowly)
-/// till it's dressed. The watch buzzes till you look at it. The wrist and
-/// the dressing were read-then-do; now there's a cut to find and to wrap.
-#[allow(clippy::too_many_arguments)]
+/// First aid with something to aid: taking the injector in the house,
+/// the crate's nail catches your watch arm and takes [`SCRATCH`] HP. The
+/// watch buzzes till you look at it; then the injector puts it back.
 fn the_scratch(
     mut done: MessageReader<GoalDone>,
     mut ob: ResMut<Onboarding>,
-    mut players: Query<
-        (
-            &mut crate::health::Health,
-            Option<&mut crate::interact::wounds::Wounds>,
-        ),
-        With<LocalPlayer>,
-    >,
+    mut players: Query<&mut crate::health::Health, With<LocalPlayer>>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut raid: ResMut<Raid>,
     mut haptics: MessageWriter<Haptic>,
@@ -1051,7 +1043,7 @@ fn the_scratch(
     let watch = comfort
         .as_ref()
         .map_or(Side::Left, |c| c.gun_side().other());
-    let Some((mut health, wounds)) = players.iter_mut().next() else {
+    let Some(mut health) = players.iter_mut().next() else {
         return;
     };
     // (At first aid without it, the house skipped: there and then.)
@@ -1063,16 +1055,9 @@ fn the_scratch(
     {
         if d == Goal::Search && !ob.scratched {
             ob.scratched = true;
-            if let Some(mut w) = wounds {
-                w.0.push(crate::interact::wounds::Wound {
-                    limb: crate::interact::wounds::Limb::Forearm(watch),
-                    along: 0.55,
-                    around: 0.0,
-                    bleed: SCRATCH_BLEED,
-                    dressed: false,
-                });
-            }
-            health.bleeding = health.bleeding.max(SCRATCH_BLEED);
+            // Never the last of it.
+            health.hp = (health.hp - SCRATCH).max(10.0).min(health.hp);
+            health.since_hit = 0.0;
             raid.say(SCRATCH_LINE);
             haptics.write(Haptic {
                 side: watch,
@@ -1082,13 +1067,8 @@ fn the_scratch(
             break;
         }
     }
-    if !ob.scratched || ob.is_done(Goal::Dressing) {
+    if !ob.scratched || ob.is_done(Goal::Inject) {
         return;
-    }
-    // It bleeds till it's dressed (bleeding wears off on its own), but
-    // never takes much.
-    if health.hp > 60.0 {
-        health.bleeding = health.bleeding.max(SCRATCH_BLEED);
     }
     // The watch buzzes, every couple of seconds, till you've looked.
     if ob.next_goal() == Some(Goal::Wrist) {
@@ -1104,8 +1084,8 @@ fn the_scratch(
     }
 }
 
-/// How fast the yard's scratch bleeds, hp/s.
-pub const SCRATCH_BLEED: f32 = 0.08;
+/// What the yard's scratch takes, HP (an injector gives 45).
+pub const SCRATCH: f32 = 30.0;
 pub const SCRATCH_LINE: &str = "Driver: \"That crate's nail got your arm. Look at your watch.\"";
 
 /// Where the yard's rooks sit: a shed's roof west of GETTING ABOUT
@@ -1496,7 +1476,7 @@ fn setup(
     );
     set_rounds(&mut commands, ammo, 16);
 
-    // The house: a crate just inside its door, a dressing on it.
+    // The house: a crate just inside its door, an injector on it.
     let house = buildings
         .iter()
         .filter(|(b, _)| b.prefab.starts_with("house"))
@@ -1538,7 +1518,7 @@ fn setup(
             ));
             if let Some(e) = spawn(
                 &mut commands,
-                "field_dressing",
+                "regen_injector",
                 Transform::from_xyz(at.x, floor + size.y + 0.05, at.z),
             ) {
                 commands.entity(e).insert(Placed::HouseFind);
@@ -1962,7 +1942,7 @@ fn watch_guns(
     *rounds = now;
 }
 
-/// A field dressing used, the radio used to call the truck.
+/// An injector used, the radio used to call the truck.
 fn watch_uses(
     mut uses: MessageReader<crate::items::usage::UseItem>,
     mut calls: MessageReader<RadioCall>,
@@ -1972,22 +1952,22 @@ fn watch_uses(
     catalog: Res<Catalog>,
     locals: Query<(), With<LocalPlayer>>,
     raid: Res<Raid>,
-    mut dressings: Local<Vec<Entity>>,
+    mut injectors: Local<Vec<Entity>>,
 ) {
-    // Held dressings, remembered: a used one is gone by the time a message
+    // Held injectors, remembered: a used one is gone by the time a message
     // written after this ran comes round.
     for (e, it) in &held {
-        if catalog.get(it.kind()).id == "field_dressing" && !dressings.contains(&e) {
-            dressings.push(e);
+        if catalog.get(it.kind()).id == "regen_injector" && !injectors.contains(&e) {
+            injectors.push(e);
         }
     }
     for u in uses.read() {
-        if dressings.contains(&u.item) && locals.contains(u.player) {
-            complete(&mut ob, Goal::Dressing, &mut out);
+        if injectors.contains(&u.item) && locals.contains(u.player) {
+            complete(&mut ob, Goal::Inject, &mut out);
         }
     }
-    // Then forget what's no longer in hand (each dressing ever held stayed).
-    dressings.retain(|e| held.contains(*e));
+    // Then forget what's no longer in hand (each injector ever held stayed).
+    injectors.retain(|e| held.contains(*e));
     for c in calls.read() {
         // A call only counts once you're out where the truck can come.
         if locals.contains(c.player) && raid.phase != Phase::AtBase {
@@ -2636,7 +2616,7 @@ mod tests {
             "ammo_9x18",
             "flashlight",
             "power_cell",
-            "field_dressing",
+            "regen_injector",
             "canned_stew",
             "cleaning_kit",
             "map_case",

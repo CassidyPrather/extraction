@@ -550,10 +550,8 @@ fn fresh_save(map: &str) -> SaveGame {
         // Clear of the map case (under it at (-0.2, -0.4), it was hidden).
         item("ammo_9x18", 16, [0.2, 0.05, 0.12]),
         radio,
-        // Two (one went on Marrow's first wound, and the second wound
-        // bled out in 15 s): the second on the first.
-        item("field_dressing", 0, [0.2, 0.05, 0.3]),
-        item("field_dressing", 0, [0.2, 0.095, 0.3]),
+        // The one medicine (#102): an injector, where the dressings were.
+        item("regen_injector", 0, [0.2, 0.05, 0.3]),
         // Off the near wall (at 0.4, from where you stand it hid behind it).
         item("canned_stew", 0, [-0.25, 0.05, 0.2]),
         item("cleaning_kit", 0, [0.0, 0.05, -0.1]),
@@ -561,7 +559,7 @@ fn fresh_save(map: &str) -> SaveGame {
         item("compass", 0, [0.3, 0.05, 0.0]),
         // To find anomalies before they find you: the clicker, and bolts
         // to throw where the air looks wrong.
-        // Off the near wall too, and clear of the dressings.
+        // Off the near wall too, and clear of the injector.
         item("detector", 0, [0.12, 0.05, 0.17]),
         item("bolt", 0, [-0.1, 0.05, 0.1]),
         item("bolt", 0, [-0.05, 0.05, 0.1]),
@@ -570,12 +568,21 @@ fn fresh_save(map: &str) -> SaveGame {
     s
 }
 
+/// Things no longer in the game, dropped from an old save without a
+/// word: bleeding and broken legs went (#102), and what treated them.
+pub const RETIRED: [&str; 2] = ["field_dressing", "splint"];
+
 /// Spawns one saved item (and what's seated in it) with physics on, at
-/// `at`. Returns `None` for ids the catalog no longer knows.
+/// `at`. Returns `None` for ids the catalog no longer knows ([`RETIRED`]
+/// ones quietly).
 pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
     let catalog = world.resource::<Catalog>().clone();
     let Some(kind) = catalog.kind(&saved.id) else {
-        warn!("save: unknown item {:?}, skipped", saved.id);
+        if RETIRED.contains(&saved.id.as_str()) {
+            debug!("save: {:?} is no longer in the game, dropped", saved.id);
+        } else {
+            warn!("save: unknown item {:?}, skipped", saved.id);
+        }
         return None;
     };
     let mut queue = CommandQueue::default();
@@ -1680,7 +1687,7 @@ mod tests {
         };
         // Four bags of remains, each with its own things.
         let kit = [
-            ["radio", "field_dressing"],
+            ["radio", "matches"],
             ["ak_mag", "ammo_545"],
             ["regen_injector", "canned_stew"],
             ["flashlight", "compass"],
@@ -1705,10 +1712,7 @@ mod tests {
             .iter(app.world())
             .next();
         if let Some(stash) = stash {
-            for (k, id) in ["ammo_545", "field_dressing", "binoculars"]
-                .iter()
-                .enumerate()
-            {
+            for (k, id) in ["ammo_545", "matches", "binoculars"].iter().enumerate() {
                 let e = spawn(&mut app, id, Vec3::ZERO);
                 put_in_bag(
                     app.world_mut(),
@@ -1846,20 +1850,12 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A new game's crate holds two dressings, apart (one went on Marrow's
-    /// first wound, and the second wound bled out in 15 s).
+    /// A new game's crate holds the one medicine there is: an injector.
     #[test]
-    fn a_new_game_has_two_dressings() {
+    fn a_new_game_has_an_injector() {
         let s = fresh_save("marrow_creek");
-        let at: Vec<[f32; 3]> = s
-            .stash
-            .iter()
-            .filter(|i| i.id == "field_dressing")
-            .map(|i| i.local)
-            .collect();
-        assert_eq!(at.len(), 2, "two dressings: {at:?}");
-        let gap = Vec3::from_array(at[0]).distance(Vec3::from_array(at[1]));
-        assert!(gap > 0.03, "not in one place: {at:?}");
+        let n = s.stash.iter().filter(|i| i.id == "regen_injector").count();
+        assert_eq!(n, 1, "{:?}", s.stash);
     }
 
     /// The same world saves to the same bytes: remains come out in one
@@ -1877,7 +1873,7 @@ mod tests {
             let at = zone.on_ground(30.0 + 6.0 * i as f32, -40.0);
             let bag = spawn_remains(world, at);
             let saved = SavedItem {
-                id: "field_dressing".into(),
+                id: "canned_stew".into(),
                 condition: 1.0 - 0.05 * i as f32,
                 rounds: 0,
                 charge_wh: 0.0,
@@ -1887,7 +1883,7 @@ mod tests {
                 inserted: Vec::new(),
                 loads: Default::default(),
             };
-            assert!(catalog.kind("field_dressing").is_some());
+            assert!(catalog.kind("canned_stew").is_some());
             let e = restore_item(world, &saved, Transform::IDENTITY).unwrap();
             settle_turned(world, e, Some(bag), Vec3::ZERO, Quat::IDENTITY, at);
         }
@@ -2105,6 +2101,62 @@ mod tests {
         assert!(loaded_guns >= 1, "the starter pistol keeps its magazine");
         let again = snapshot(b.world_mut());
         assert_eq!(again.item_count(), save.item_count());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// An old save's dressings and splint (#102 took them out of the game)
+    /// load as nothing: the rest of the stash comes back as it was, and
+    /// nothing in the world is a dressing or a splint.
+    #[test]
+    fn an_old_saves_dressings_and_splints_load_as_nothing() {
+        fn by_kind(world: &mut World) -> std::collections::BTreeMap<String, usize> {
+            let catalog = world.resource::<crate::items::Catalog>().clone();
+            let mut m = std::collections::BTreeMap::new();
+            for it in world.query::<&Item>().iter(world) {
+                *m.entry(catalog.get(it.kind()).id.clone()).or_insert(0) += 1;
+            }
+            m
+        }
+        // Saved and loaded back, as it is, and with the old things in it.
+        let load = |path: &std::path::Path| {
+            let mut app = app_with_save(path);
+            for _ in 0..10 {
+                app.update();
+            }
+            app
+        };
+        let path = temp_save("retired_items.ron");
+        let mut app = app_with_save(&path);
+        let mut save = snapshot(app.world_mut());
+        let career = app.world().resource::<CareerState>().0.clone();
+        let mut plain = career.clone();
+        plain.store(&save);
+        write_career(&path, &plain);
+        let before = by_kind(load(&path).world_mut());
+        let old = |id: &str, local: [f32; 3]| SavedItem {
+            id: id.into(),
+            condition: 1.0,
+            rounds: 0,
+            charge_wh: 0.0,
+            local,
+            turn: [0.0, 0.0, 0.0, 1.0],
+            gun: None,
+            inserted: Vec::new(),
+            loads: Default::default(),
+        };
+        save.stash.push(old("field_dressing", [0.2, 0.05, 0.3]));
+        save.stash.push(old("field_dressing", [0.2, 0.095, 0.3]));
+        save.stash.push(old("splint", [-0.2, 0.05, 0.3]));
+        let mut career = career;
+        career.store(&save);
+        write_career(&path, &career);
+        let mut app = load(&path);
+        let after = by_kind(app.world_mut());
+        assert_eq!(after, before, "the rest as it was, and nothing more");
+        for id in RETIRED {
+            let catalog = app.world().resource::<crate::items::Catalog>();
+            assert!(catalog.kind(id).is_none(), "{id} is still in the game");
+        }
         let _ = std::fs::remove_file(&path);
     }
 
