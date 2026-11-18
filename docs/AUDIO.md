@@ -948,8 +948,16 @@ speed for the same moment.
 soft low thumps (`body.heartbeat`, a stand-in), up to 12 dB louder and a
 little quicker the harder it pounds. Each beat is a `Heartbeat` message,
 and the hands' pulse (Hands') answers the same one, so sound and haptics
-keep one rhythm. Bleeding drove it until #102; nothing does now (#102's
-stim is to).
+keep one rhythm. Bleeding drove it until #102; now a stim does
+(`items::stim`): slow and heavy (level 1) every 1.2 real seconds while
+the world's slowed, quick (0.7) every 0.5 s in its last two seconds.
+Its start, tell and end are `StimCue`s, for sounds to come.
+
+**The world in a stim** (`audio_mix::world_speed`): the stim's clock sets
+a world pace; a placed sound (out in the world) starts at its speed times
+1 - (1 - pace) x 0.5, so 0.7 at the stim's 0.4: lower and slower. Sounds
+in your head (the heart, the driver) don't change. Sounds already playing
+keep their pitch, and there's no low-pass yet (a filter on a world bus).
 `audio_gunstate.heartbeat` gauges it beat by beat:
 - at its worst it's 18.6 dB over the wind, and at its lightest 6.6 (wants
   6 and 3);
