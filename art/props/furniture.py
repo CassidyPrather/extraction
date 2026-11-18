@@ -476,8 +476,10 @@ def locker():
         p.box((T, y1 - y0, zb - zf), (sx * (W / 2 - T / 2), (y0 + y1) / 2, mid), "Painted",
               bevel=0.003, segs=1)
     p.box((W, T, zb - zf), (0.0, y1 - T / 2, mid), "Painted", bevel=0.003, segs=1)
-    p.box((W - 2 * T, y1 - y0 - T, T), (0.0, (y0 + y1 - T) / 2, zb - T / 2), "Painted", segs=1)
-    p.box((W - 2 * T, T, zb - zf - T), (0.0, y0 + T / 2, mid - T / 2), "Painted", segs=1)
+    # Its back and floor painted pale inside, as lockers were: what's left in
+    # one reads against them from the door, in a dim room.
+    p.box((W - 2 * T, y1 - y0 - T, T), (0.0, (y0 + y1 - T) / 2, zb - T / 2), "Cream", segs=1)
+    p.box((W - 2 * T, T, zb - zf - T), (0.0, y0 + T / 2, mid - T / 2), "Cream", segs=1)
     p.box((W - 2 * T, T, zb - zf - T), (0.0, LOCKER_SHELF - T / 2, mid - T / 2), "Painted",
           segs=1)
     p.box((W - 0.04, 0.06, D - 0.06), (0.0, 0.03, 0.02), "Cast", bevel=0.003, segs=1)

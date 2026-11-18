@@ -164,6 +164,8 @@ pub struct Hold {
     pub at: Vec3,
     pub table: &'static str,
     pub part: Option<&'static str>,
+    /// The way out of its container, the way its door or drawer opens.
+    pub out: Vec3,
 }
 
 /// The longest thing a hold takes (m).
@@ -175,6 +177,8 @@ pub struct HoldSpot {
     pub table: &'static str,
     /// Where it is shut, in the world (a drawer's, pushed in).
     pub at: Vec3,
+    /// The way out of its container, in the world.
+    pub out: Vec3,
 }
 
 /// Every building's holds, world space shut, as their loot is rolled.
@@ -183,10 +187,14 @@ pub struct BuildingHolds(pub Vec<Hold>);
 
 /// A hold's socket: takes any loose thing of a hold's size, seated on the
 /// floor it rests on (`items::loot::seat_held` lifts it by its height).
-pub fn hold_socket(table: &'static str, shut: Vec3, at: Transform) -> impl Bundle {
+pub fn hold_socket(table: &'static str, shut: Vec3, out: Vec3, at: Transform) -> impl Bundle {
     (
         Name::new("Hold"),
-        HoldSpot { table, at: shut },
+        HoldSpot {
+            table,
+            at: shut,
+            out,
+        },
         crate::interact::Socket {
             kind: crate::interact::SocketKind::Hold { most: HOLD_MOST },
             occupant: None,
@@ -494,8 +502,19 @@ impl Builder {
     }
 
     /// A hold inside a container (`Hold`), shut, on the floor it rests on.
-    pub fn hold(&mut self, at: Vec3, table: &'static str, part: Option<&'static str>) -> &mut Self {
-        self.geo.holds.push(Hold { at, table, part });
+    pub fn hold(
+        &mut self,
+        at: Vec3,
+        table: &'static str,
+        part: Option<&'static str>,
+        out: Vec3,
+    ) -> &mut Self {
+        self.geo.holds.push(Hold {
+            at,
+            table,
+            part,
+            out,
+        });
         self
     }
 
@@ -1459,6 +1478,7 @@ impl Builder {
                         at: at + front * Vec3::new(x, 0.57, -0.03),
                         table: loot.unwrap_or("house"),
                         part: Some("counter_drawers#drawer_0"),
+                        out: front * Vec3::NEG_Z,
                     });
                 }
                 (
@@ -1735,7 +1755,12 @@ impl Builder {
             );
         }
         // Something left on its floor, behind its door.
-        self.hold(at + rot * Vec3::new(0.0, 0.06 + t, mid), "tools", None);
+        self.hold(
+            at + rot * Vec3::new(0.0, 0.06 + t, mid),
+            "tools",
+            None,
+            rot * Vec3::NEG_Z,
+        );
         self.dress(
             from,
             vec![(
@@ -6135,6 +6160,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                     hold_socket(
                         h.table,
                         t.transform_point(h.at),
+                        t.rotation * h.out,
                         Transform::from_translation(h.at),
                     ),
                     ChildOf(root),

@@ -570,6 +570,7 @@ pub fn fit_counters(
                             super::buildings::hold_socket(
                                 h.table,
                                 rest.translation,
+                                bxf.rotation * h.out,
                                 Transform::from_matrix(seat.into()),
                             ),
                             ChildOf(part),
