@@ -223,8 +223,19 @@ def boxed(body, slots, band_at, band_mat, seal_at, seal_mat, mix):
     h, xf = mix
     text(m, "MIX", h, "Black", xf, depth=0.0004)  # smallest: 0.0045
     parts.append(m)
-    far = [body] + rounds + ([band] if band else []) + [seal]
-    parts.append(merged("box_lod1", far))
+    # Past a few metres: a low box (its card's bounds, in the seal's
+    # colour, as it comes shut) and its band's four strips (the type's
+    # colour, or the pale backing on ball): about 60 triangles, one draw.
+    vs = [v.co for v in body.bm.verts]
+    lo = [min(v[a] for v in vs) for a in range(3)]
+    hi = [max(v[a] for v in vs) for a in range(3)]
+    shell = Part("lod_shell")
+    shell.box(tuple(h - l for l, h in zip(lo, hi)), tuple((l + h) / 2 for l, h in zip(lo, hi)),
+              seal_mat, segs=1)
+    strips = Part("lod_band")
+    for size, at in band_at:
+        strips.box(size, off(size, at, 1), band_mat or "Paper", segs=1)
+    parts.append(merged("box_lod1", [shell, strips]))
     return parts
 
 
