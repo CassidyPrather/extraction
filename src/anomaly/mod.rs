@@ -25,6 +25,7 @@ pub mod mirrors;
 pub mod offering;
 pub mod rake;
 pub mod scenarios;
+pub mod snare_water;
 pub mod steam;
 pub mod surge;
 pub mod visuals;
@@ -244,6 +245,7 @@ impl Plugin for AnomalyPlugin {
                         frost::freeze_water,
                         frost::creak,
                         steam::pair_up,
+                        snare_water::find_water,
                         cook::cook,
                         measure_attention,
                         spend_attention,
@@ -662,11 +664,25 @@ fn held_spent() -> bool {
 #[allow(clippy::too_many_arguments)]
 fn snares(
     mut anomalies: Query<
-        (Entity, &mut Anomaly, &GlobalTransform, &mut Dice),
+        (
+            Entity,
+            &mut Anomaly,
+            &GlobalTransform,
+            &mut Dice,
+            Option<&snare_water::ChargesWater>,
+        ),
         Without<surge::Forming>,
     >,
     agitation: Res<surge::Agitation>,
-    mut players: Query<(Entity, &GlobalTransform, &mut Health), With<Player>>,
+    mut players: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            &mut Health,
+            Option<&crate::player::Body>,
+        ),
+        With<Player>,
+    >,
     items: Query<(&GlobalTransform, &Item, Option<&crate::interact::Held>)>,
     hands: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHand>>,
     catalog: Res<Catalog>,
@@ -693,7 +709,7 @@ fn snares(
 ) {
     let dt = time.delta_secs();
     let downpour = conditions.as_ref().is_some_and(|c| c.rain >= SNARE_RAIN);
-    for (e, mut a, gt, mut dice) in &mut anomalies {
+    for (e, mut a, gt, mut dice, water) in &mut anomalies {
         let rng = &mut dice.0;
         if a.kind != AnomalyKind::Snare {
             continue;
@@ -731,9 +747,19 @@ fn snares(
             .filter(|(g, _)| g.translation().distance(c) < a.radius)
             .map(|(_, p)| p.parent())
             .collect();
-        let player_in = players.iter().any(|(pe, pt, _)| {
+        // Wading in the water it charges (`snare_water`): its reach runs
+        // through the water to you.
+        let in_its_water = |pt: &GlobalTransform, body: Option<&crate::player::Body>| {
+            water.is_some_and(|w| {
+                let p = pt.translation();
+                body.is_some_and(|b| b.wading > snare_water::WADING)
+                    && Vec2::new(p.x - c.x, p.z - c.z).length() < w.reach
+            })
+        };
+        let player_in = players.iter().any(|(pe, pt, _, body)| {
             (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
                 || reaching.contains(&pe)
+                || in_its_water(pt, body)
         });
         // Metal in a hand draws an arc from further off, through you.
         let metal: Vec<(Entity, Vec3)> = items
@@ -774,7 +800,7 @@ fn snares(
                     to: zone.on_ground(at.x + ang.cos() * d, at.z + ang.sin() * d),
                 });
             }
-            for (_, pt, mut h) in &mut players {
+            for (_, pt, mut h, _) in &mut players {
                 let p = pt.translation();
                 if !h.down
                     && Vec2::new(p.x - at.x, p.z - at.z).length() < a.radius + SNARE_WET_REACH
@@ -798,9 +824,10 @@ fn snares(
         }
         holding.remove(&e);
         a.charge = 0.0;
-        for (pe, pt, mut h) in &mut players {
+        for (pe, pt, mut h, body) in &mut players {
             let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
-                || reaching.contains(&pe);
+                || reaching.contains(&pe)
+                || in_its_water(pt, body);
             let grounded = metal.iter().any(|(p, _)| *p == pe);
             if (inside || grounded) && !h.down {
                 h.hp -= 22.0;

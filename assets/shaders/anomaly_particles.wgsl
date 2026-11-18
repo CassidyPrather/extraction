@@ -12,6 +12,7 @@
 //   6 lift dust       a low swirl over the flattened ring
 //   7 hush dust       hanging dead still in a dome
 //   8 steam bank      big billows, low, rolling where a burner meets a frost
+//   9 charged water   crackles on the water a snare charges, out to its reach
 //
 // Fog is applied here through bevy_pbr's apply_fog, which render/fog.rs
 // patches to add the ground-fog banks and Kettle Pass's cloud cap, so a
@@ -168,6 +169,19 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         p.alpha = 0.6 + 0.4 * max(reveal, stir);
         p.size = p.size * (1.0 + 0.4 * stir);
         p.spin = s * 3.0;
+    } else if (mode == 9) {
+        // Charged water (`anomaly::snare_water`): blue crackles flicking on
+        // the water's surface from the snare's edge out to its reach (z),
+        // more and brighter as it charges. The child sits at the water's
+        // level; over dry ground they're under it.
+        let reach = params.mode.z;
+        let a = s * TAU + floor(t * 3.0 + s * 5.0) * 2.4;
+        let rr = mix(R * 0.85, reach, sqrt(h(s + floor(t * 3.0 + s * 5.0), 3.7)));
+        p.pos = vec3<f32>(cos(a) * rr, 0.02, sin(a) * rr);
+        let lit = step(h(s + floor(t * 14.0), 2.9), 0.08 + 0.5 * charge + 0.8 * flash);
+        p.alpha = lit;
+        p.size = p.size * (0.6 + 0.8 * h(s + floor(t * 14.0), 4.1));
+        p.heat = 1.0;
     } else if (mode == 8) {
         // Steam (`anomaly::steam`): a low, wide lens of vapour hugging the
         // gap, thickest at its core and thin enough at its outer third to
