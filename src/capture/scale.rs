@@ -81,7 +81,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("ppsh_drum", 0.19, Fit, "PPSh 71-round drum"),
     ("sks_clip", 0.08, Fit, "7.62x39 stripper clip with rounds"),
     // Attachments.
-    ("weapon_light", 0.09, Fit, "a weapon light"),
     ("laser_module", 0.07, Fit, "a laser module"),
     ("pu_scope", 0.27, Fit, "PU 3.5x, 270 mm"),
     ("pso_scope", 0.375, Fit, "PSO-1 with shade, 375 mm"),
@@ -101,7 +100,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("vest", 0.46, Hand, "a plate carrier"),
     ("steel_plate", 0.3, Hand, "a 250 x 300 mm plate"),
     ("helmet", 0.29, Hand, "SSh-68"),
-    ("flashlight", 0.19, Hand, "a two-cell torch"),
+    ("flashlight", 0.1, Fit, "a weapon light with a carry handle"),
     ("power_cell", 0.06, Fit, "a D-size cell, 61 mm"),
     (
         "compass",
@@ -115,7 +114,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("binoculars", 0.17, Hand, "BPTs 7x50"),
     ("detector", 0.16, Made, "an anomaly detector"),
     ("detector_sweep", 0.2, Made, "a sweep detector"),
-    ("detector_bear", 0.16, Made, "the Bear detector"),
+    ("detector_bear", 0.16, Made, "the DP-2 field screen"),
     ("canary", 0.24, Hand, "a canary cage"),
     ("lead_case", 0.12, Made, "a lead-lined case"),
     ("camera_drone", 0.19, Made, "a camera drone"),
@@ -126,19 +125,10 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("zipline_kit", 0.3, Hand, "a coiled line and trolley"),
     ("matches", 0.05, Hand, "a Soviet matchbox, 50 mm"),
     ("door_wedge", 0.13, Hand, "a wooden door wedge"),
-    ("chemlight", 0.15, Hand, "a 6-inch lightstick"),
-    ("hand_flare", 0.23, Hand, "a hand flare"),
     ("signal_flare", 0.2, Hand, "a hand-fired red star"),
     ("relay_box", 0.16, Made, "a relay box"),
     ("camera", 0.14, Hand, "Zorki-4, 140 mm"),
     // Medical.
-    (
-        "field_dressing",
-        0.11,
-        Hand,
-        "IPP-1 individual dressing, 110 mm",
-    ),
-    ("splint", 0.45, Hand, "a ladder splint"),
     ("regen_injector", 0.13, Made, "an autoinjector"),
     // Food.
     ("water_bottle", 0.24, Hand, "an army canteen"),
@@ -198,11 +188,12 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("rotor_assembly", 0.1, Made, "a drone rotor hub"),
     ("servo", 0.08, Made, "a servo"),
     ("sensor_eye", 0.06, Made, "a sensor eye"),
-    ("robot_cell", 0.085, Made, "a robot cell"),
+    ("robot_cell", 0.186, Made, "a walker's robot cell"),
+    ("walker_eye", 0.128, Made, "a walker's eye"),
     ("robot_gunpod", 1.08, Made, "a robot's gun pod"),
     ("robot_plate", 0.3, Made, "a robot's plate"),
     ("drone_rotor_motor", 0.25, Made, "a drone's rotor motor"),
-    ("walker_leg_actuator", 0.39, Made, "a walker's knee"),
+    ("walker_leg_actuator", 0.5, Made, "a walker's knee ram"),
     ("crawler_capacitor", 0.28, Made, "a crawler's capacitors"),
     ("dirigible_gas_valve", 0.37, Made, "an airship's valve"),
     ("pylon_relay_coil", 0.27, Made, "a pylon's coil"),
@@ -294,10 +285,8 @@ pub fn ammo(id: &str) -> Option<(f32, Rule)> {
             i if i.contains("22lr") => 0.076,
             _ => return None,
         };
-        // As issued: a packet's size is its count of rounds. Re-packed
-        // ones are whatever box came to hand.
-        let rule = if id.contains("repack") { Made } else { Fit };
-        return Some((pack, rule));
+        // As issued: a packet's size is its count of rounds.
+        return Some((pack, Fit));
     }
     None
 }

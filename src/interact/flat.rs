@@ -302,6 +302,8 @@ fn flat_buttons(
                 .is_ok_and(|(rh, h)| rh.side == Side::Left && h.supporting.is_some())
         });
         let aiming = captured && mouse.pressed(MouseButton::Right);
+        // What's this (#107): held, the thing in hand says again.
+        input.recall = keys.pressed(KeyCode::KeyI);
         let right = input.hand_mut(Side::Right);
         right.trigger = if captured && mouse.pressed(MouseButton::Left) {
             1.0

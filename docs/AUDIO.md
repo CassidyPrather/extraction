@@ -224,7 +224,6 @@ is what it did before.
 | Far grab: the catch | `far.catch`, a slap into the palm, then `hand.take` | the grab's pulse plus a bit | `hand.grab` |
 | Doors | `door.open`, `door.close` | click (grip press) | same, both hands |
 | Eating, drinking | `use.eat`, `use.drink` (by the food's tag) | — | silent |
-| Field dressing | `use.bandage` | — | silent |
 | A light, the injector, a cloak, arming a charge | `use.switch` | — | silent |
 | The radio | `radio.squelch`, `radio.static` | — | same |
 | A grenade's pin pulled | `grenade.pin` (a click) and `grenade.scrape` (the ring coming off) | click in the hand on the ring | silent |
@@ -252,7 +251,6 @@ is what it did before.
 | The RPK's bipod swung down or up (`weapons::armoury::Bipod`) | `bipod.swing`, a short metal creak as the legs start to move; `bipod.lock`, a clank as they lock down or fold home; at most one every 0.15 s per gun | — | silent |
 | A bare hand striking something at 1.5 m/s or more (`interact::touch::HandStruck`) | a palm slap by what it met: `hand.slap_wood`, `hand.slap_metal`, `hand.slap_stone` (concrete), `hand.slap_glass` (a small knock, the break sped up), `hand.slap_skin` (a robot's soft parts, a dull thud), `hand.slap_wire` (a chain-link rattle); 12 dB down and dull at 1.5 m/s, the cue's level and full brightness at 6 m/s (`audio_kit::slap_db`) | that material's shape, by speed (`rig::shapes`) | felt, not heard |
 | A held gun carried into a wall, a doorframe or a tree at 0.8 m/s or more (`weapons::carry::GunBumped`) | what it met as a hand would slap it, 3 dB under and duller, under `gun.bump`, the steel's own knock; 12 dB down at 0.8 m/s, the cue's level at 3 m/s (`audio_kit::bump_sounds`) | Weapon feel's, by material (gun hand, support hand at 0.6) | felt, not heard |
-| A chemlight snapped, a hand flare struck (`world::glow::Lit`) | the chemlight: `glow.snap`, a plastic crack at 1.5x. The flare: `glow.strike`, the cap rasping across (a zip slowed to 0.7), then `glow.burn`, the burner's roar at 2.1x, a spitting sputter that rides on the flare wherever it's thrown and stops when it burns out | — | — |
 | A hang-fire (`HangFire`: the hammer fell, the round hasn't gone) | `gun.dry_fire`, a dud's click and nothing more; the shot comes 0.3-1 s later as its own `Fired` | Weapon feel's | — |
 | Out of battery (`OutOfBattery`: a hanging round going off with the action open) | `gun.out_of_battery`, the shot at 1.3x through 3 kHz, flat and harsh, between a squib and a shot, and `gun.burst_case`, the case clattering out | Weapon feel's, 1.0 (it hurts the hand) | — |
 | A stiff action worked (`weapons::ActionGrind`, a cold bolt, pump or charging handle) | `gun.grind`, the metal handle's scrape at 1.6x, a dry grate under the hand, its level by `stiff` (20 dB down at the faintest), at most every 0.11 s | Weapon feel's ticks | — |
@@ -270,7 +268,7 @@ is what it did before.
 | A suppressed shot (`gadgets::Suppressed`) | `gun.shot_suppressed`: the shot through a 2.2 kHz low-pass, 5 LU under a bare one (about 118 dB at the ear, against 140); far off, the distant shot 14 dB down | as a shot | a bare shot |
 | A malfunction (stovepipe, failure to feed, double feed) | `gun.malfunction`: the bolt's close, slowed to a dull, wrong clack | knock in the grip hand | the haptic only |
 | A round into you | `hit.body`, a thump | both hands, harder for more | the ground's dirt spray |
-| A fall, an anomaly, the Surge, bleeding | — | both hands, at most four times a second | nothing |
+| A fall, an anomaly, the Surge | — | both hands, at most four times a second | nothing |
 | The truck coming to the rendezvous | `truck.arrive`, up the road, as it's due | — | silent |
 | The truck waiting | `truck.idle` at its engine | — | silent |
 | The truck leaving, with you or without | `truck.depart` | — | silent |
@@ -344,26 +342,14 @@ with the stock shouldered. (Every shot once sat between 0.6 and 0.82: a
 frame merge (strongest, longest), because the runtime plays only the
 last one it is given: a shot was being cut short by its own casing.
 
-Bleeding is felt as a heartbeat in both hands on every beat of the
-bleed's one clock (`audio_kit::heartbeat`, the `Heartbeat` message, the
-same beat the sound plays: Audio's), so it's felt and heard as one. Each
-beat is `rig::haptics::HEARTBEAT`, a 45 ms tap and one at 0.65 of it for
-35 ms, 0.17 s after it (the sound's lub-dub), at
-`heartbeat_scale(level)` = 0.18 + 0.22 times the beat's level. It used to
-only drain: a newcomer looking elsewhere after a fight could bleed out in
-about 15 s without knowing. Off with the comfort setting `bleed_pulse`
-(`--no-bleed-pulse`); the sound goes on.
+A pounding heart is felt as a heartbeat in both hands on every beat
+(the `Heartbeat` message, the same beat the sound plays: Audio's), so
+it's felt and heard as one. Each beat is `rig::haptics::HEARTBEAT`, a
+45 ms tap and one at 0.65 of it for 35 ms, 0.17 s after it (the sound's
+lub-dub), at `heartbeat_scale(level)` = 0.18 + 0.22 times the beat's
+level. Bleeding drove it until #102 took bleeding out; nothing beats it
+now, and #102's stim is to.
 
-| Bleeding | Level | Felt | Every |
-|---|---|---|---|
-| 0.2 hp/s | 0.05 | 0.19 | 0.97 s |
-| 0.5 hp/s | 0.21 | 0.23 | 0.88 s |
-| 1 hp/s | 0.47 | 0.28 | 0.74 s |
-| 1.5 hp/s | 0.74 | 0.34 | 0.59 s |
-| 2 hp/s and over | 1.00 | 0.40 | 0.45 s |
-
-It starts over 0.1 hp/s (`BLEED_HEARD`), with a beat at once, and stops
-when the bleeding's dressed or has clotted to 0.1, and while you're down.
 It's kept apart from the other tells: a hit's buzz is 0.45 or more for
 0.1 s; the machine's tick is one 12 ms whisper on the wrist; the aegis's
 fizz is a steady tremor in both hands.
@@ -680,10 +666,7 @@ asserts that the walker's loss and the player's agree within a dB:
 
 | A held robot torn out of the hand (`interact::fight::TornFree`, a drone thrusting free) | `fight.torn`, metal wrenched (a creak at 1.9x), and `fight.lurch`, the machine whooshing away |
 | A round out through steel, a plank or a wall (`impacts::is_exit`) | the exit's crack, 6 dB under the entry, and `hit.spall`: bits clattering out 0.4 m past the hole (steel's drop at 1.7x, wood's knock at 1.4x, grit at 1.5x) |
-| Winding a dressing round a limb (`first_aid::Winding`) | `aid.wrap`, a short rasp of the bandage at each quarter turn; the tear when it's on is `use.bandage` |
-| Strapping a splint (`Strapping`) | `aid.strap`, a strap pulled tight (velcro) each half second, as the hand feels it; `aid.cinch` as it's on |
 | A bottle's cap twisted (`Capped`) | `aid.cap`, a plastic tick each quarter turn, and `aid.cap_off`, the pop; the swallow is `use.drink` |
-| A hand at an open wound (`wounds::Bloodied` coming on) | `aid.wet`, a wet squelch |
 
 Until now the crawler made no sound except its voice.
 
@@ -961,15 +944,20 @@ Mosin or an SKS filled a round at a time).
 the PM, SKS, TOZ-8 and Mosin, no two play the same sample at the same
 speed for the same moment.
 
-**Your heart while you bleed** (`audio_kit::heartbeat`): bleeding made no
-sound, so a newcomer watching neither the wrist nor the screen's edge could
-bleed out in about 15 s after a fight. Now, once a bleed is more than a
-graze (over 0.1 HP/s), your heart beats in your head: a lub-dub, two soft
-low thumps (`body.heartbeat`, a stand-in). It beats at once, then every
-1.0 s at a light bleed, quickening to 0.45 s at 2 HP/s and over, and
-growing 12 dB louder. It stops when the bleed is dressed or clots, or when
-you go down. Each beat is a `Heartbeat` message, and the hands' pulse
-(Hands') answers the same one, so sound and haptics keep one rhythm.
+**Your heart** (`audio_kit::Heartbeat`): a lub-dub in your head, two
+soft low thumps (`body.heartbeat`, a stand-in), up to 12 dB louder and a
+little quicker the harder it pounds. Each beat is a `Heartbeat` message,
+and the hands' pulse (Hands') answers the same one, so sound and haptics
+keep one rhythm. Bleeding drove it until #102; now a stim does
+(`items::stim`): slow and heavy (level 1) every 1.2 real seconds while
+the world's slowed, quick (0.7) every 0.5 s in its last two seconds.
+Its start, tell and end are `StimCue`s, for sounds to come.
+
+**The world in a stim** (`audio_mix::world_speed`): the stim's clock sets
+a world pace; a placed sound (out in the world) starts at its speed times
+1 - (1 - pace) x 0.5, so 0.7 at the stim's 0.4: lower and slower. Sounds
+in your head (the heart, the driver) don't change. Sounds already playing
+keep their pitch, and there's no low-pass yet (a filter on a world bus).
 `audio_gunstate.heartbeat` gauges it beat by beat:
 - at its worst it's 18.6 dB over the wind, and at its lightest 6.6 (wants
   6 and 3);
@@ -1283,7 +1271,7 @@ narrow ones (comfort board), go through these and note what's wrong in
 words ("too bright", "sounds like plastic", "late"):
 
 1. **Taking things up.** A rifle, a pistol, a tin, a wooden crate slat,
-   a dressing, a radio. Does each sound like what it is, and does the
+   an injector, a radio. Does each sound like what it is, and does the
    rifle sound heavier than the tin? Letting go: heard, but not fussy?
    Does the haptic match: a tin a tick, a rifle a knock?
 2. **Push buttons** beside the cards. Does the click land when the
@@ -1295,7 +1283,7 @@ words ("too bright", "sounds like plastic", "late"):
    truck's bed?
 6. **Onboarding.** The step ding and the station chime: pleasant, clear
    over wind, distinct from each other and from the bell?
-7. **Eating, drinking, the field dressing, a flashlight's switch.**
+7. **Eating, drinking, the injector, a flashlight's switch.**
 8. **The truck.** Call it: is the approach heard about when it appears,
    does the idle sit right (not droning for five minutes), does it pull
    away when you extract?

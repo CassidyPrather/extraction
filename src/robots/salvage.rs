@@ -112,6 +112,8 @@ pub enum Hold {
     Bolts,
     /// Nothing but the charge in it (a cell).
     Live,
+    /// Nothing: it lifts off.
+    Hand,
 }
 
 /// A seat on a wreck with a part in it.
@@ -262,8 +264,140 @@ fn free(commands: &mut Commands, item: Entity) {
     });
 }
 
-/// A wreck, settled a moment, gets what came through seated on it: a
-/// walker's gun pod (on its cables) and its cell (live a while).
+/// What holds a part on a wreck, as a row of a machine's salvage table
+/// says (where, in the wreck's space).
+#[derive(Clone, Copy, Debug)]
+pub enum Fix {
+    /// Nothing: it lifts off (unless it's hot).
+    Hand,
+    /// `n` bolts in a ring of `radius` round `centre`, their heads along
+    /// `face`'s +Y.
+    Bolts {
+        n: usize,
+        centre: Vec3,
+        face: Quat,
+        radius: f32,
+    },
+    /// `n` cables from the hull up to it.
+    Cables { n: usize },
+}
+
+/// One part a wreck gives up: a row of its machine's salvage table
+/// (#105: every visible part comes off its own way).
+#[derive(Clone, Copy, Debug)]
+pub struct Row {
+    /// The item it comes off as.
+    pub item: &'static str,
+    /// Where it sits on the wreck (its space).
+    pub at: Transform,
+    /// The machine's size (items are world-sized; its body may be scaled).
+    pub size: f32,
+    /// How whole it was when the machine died (0: shot through, scrap).
+    pub health: f32,
+    pub fix: Fix,
+    /// Live a while after it died: it arcs at a hand ([`HOT_FOR`]).
+    pub hot: bool,
+    /// The machine's own piece it takes the place of (despawned).
+    pub replaces: Option<Entity>,
+}
+
+/// What a wreck's parts are, as [`fit_salvage`] reads them.
+pub struct WreckParts<'a> {
+    pub kind: RobotKind,
+    pub size: f32,
+    pub shape: super::anim::Shape,
+    pub legs: [f32; 4],
+    pub servo: Option<ServoAt>,
+    pub crawler: bool,
+    pub hound: bool,
+    pub heavy: bool,
+    /// Its parts still on it: (entity, part, where, a walker's turret).
+    pub parts: &'a [(Entity, PartRole, f32, Transform, bool)],
+}
+
+/// A machine's salvage table: every part its wreck gives up, and how each
+/// comes off.
+pub fn rows(w: &WreckParts) -> Vec<Row> {
+    let mut out = Vec::new();
+    // The Sorter's servo pack, bolted on at its shoulder.
+    if let Some(sv) = w.servo {
+        out.push(Row {
+            item: "sorter_servo_pack",
+            at: Transform::from_translation(sv.local),
+            size: 1.0,
+            health: sv.health,
+            fix: Fix::Bolts {
+                n: SORTER_BOLTS,
+                centre: sv.local + Vec3::Y * 0.2,
+                face: Quat::IDENTITY,
+                radius: 0.15,
+            },
+            hot: false,
+            replaces: None,
+        });
+    }
+    // (The heavy is a walker too, but its salvage is its own seats,
+    // `heavy`: a walker's cell fitted in it was sealed in its hull.)
+    if w.kind != RobotKind::Walker || w.crawler || w.hound || w.heavy {
+        return out;
+    }
+    // The cell: the core's health is the cell's (a core shot through
+    // cooked it).
+    let core = w
+        .parts
+        .iter()
+        .find(|p| p.1 == PartRole::Core)
+        .map_or(0.0, |p| p.2);
+    out.push(Row {
+        item: "robot_cell",
+        at: Transform::from_translation(CELL_AT),
+        size: w.size,
+        health: core,
+        fix: Fix::Hand,
+        hot: true,
+        replaces: None,
+    });
+    // The servo packs at the soundest hips, bolted on. (The side its wreck
+    // rolled up: `wreck::servo_hips`.)
+    for i in super::wreck::servo_hips(w.legs) {
+        let hip = w.shape.hip(i) * w.size;
+        let out_dir = Vec3::new(hip.x, 0.0, hip.z).normalize_or(Vec3::X);
+        // Facing out of the hip, the bolts round it.
+        let face = Quat::from_rotation_arc(Vec3::Y, out_dir);
+        out.push(Row {
+            item: "walker_leg_actuator",
+            at: Transform::from_translation(hip).with_rotation(face),
+            size: w.size,
+            health: w.legs[i],
+            fix: Fix::Bolts {
+                n: BOLTS,
+                centre: hip + out_dir * BOLT_PROUD,
+                face,
+                radius: 0.06,
+            },
+            hot: false,
+            replaces: None,
+        });
+    }
+    // The gun pod, where the turret was, on its cables.
+    for &(e, role, health, at, turret) in w.parts {
+        if turret && role == PartRole::Weapon {
+            out.push(Row {
+                item: "robot_gunpod",
+                at,
+                size: w.size,
+                health,
+                fix: Fix::Cables { n: CABLES },
+                hot: false,
+                replaces: Some(e),
+            });
+        }
+    }
+    out
+}
+
+/// A wreck, settled a moment, gets what came through seated on it: its
+/// machine's salvage table ([`rows`]), each part held its own way.
 #[allow(clippy::type_complexity)]
 fn fit_salvage(
     mut commands: Commands,
@@ -307,10 +441,67 @@ fn fit_salvage(
                 }
             }
         }
-        let bolt_look = match (meshes.as_mut(), materials.as_mut()) {
-            (Some(m), Some(s)) => Some((
-                // A bolt's head: dark, oily steel (bright metal reads as a
-                // loose die in daylight, not a bolt).
+        let health = |p: &RobotPart| p.hp / p.max_hp.max(1.0);
+        let mut on: Vec<(Entity, PartRole, f32, Transform, bool)> = children
+            .iter()
+            .filter_map(|c| {
+                parts
+                    .get(c)
+                    .ok()
+                    .map(|(p, t, turret)| (c, p.role, health(p), *t, turret))
+            })
+            .collect();
+        // (A part not a child of the hull, as the walker's core is not.)
+        for p in all_parts.iter().filter(|p| p.robot == e) {
+            if !on.iter().any(|o| o.1 == p.role) {
+                on.push((
+                    Entity::PLACEHOLDER,
+                    p.role,
+                    health(p),
+                    Transform::IDENTITY,
+                    false,
+                ));
+            }
+        }
+        let w = WreckParts {
+            kind: robot.kind,
+            size: gait.map_or(1.0, |g| g.size),
+            shape: gait.map_or(super::anim::Shape::Orb, |g| g.shape),
+            legs: legs.map(|l| l.0).unwrap_or_default(),
+            servo: servo.copied(),
+            crawler,
+            hound,
+            heavy,
+            parts: &on,
+        };
+        let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        for row in rows(&w) {
+            fit(&mut commands, &catalog, e, row, &look);
+        }
+    }
+}
+
+/// The meshes a part's holds are drawn with (none in a headless app).
+struct Look {
+    bolt: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+    cable: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+}
+
+impl Look {
+    fn new(
+        meshes: Option<&mut Assets<Mesh>>,
+        materials: Option<&mut Assets<StandardMaterial>>,
+    ) -> Self {
+        let (Some(m), Some(s)) = (meshes, materials) else {
+            return Self {
+                bolt: None,
+                cable: None,
+            };
+        };
+        Self {
+            // A bolt's head: dark, oily steel (bright metal reads as a
+            // loose die in daylight, not a bolt).
+            bolt: Some((
                 m.add(Cylinder::new(0.018, 0.016)),
                 s.add(StandardMaterial {
                     base_color: Color::srgb(0.12, 0.11, 0.1),
@@ -319,162 +510,92 @@ fn fit_salvage(
                     ..default()
                 }),
             )),
-            _ => None,
-        };
-        // The Sorter's servo pack, bolted on at its shoulder.
-        if let Some(sv) = servo {
-            if let Some((seat_e, _)) = seat(
-                &mut commands,
-                &catalog,
-                e,
-                "sorter_servo_pack",
-                Transform::from_translation(sv.local),
-                1.0,
-                sv.health,
-                Hold::Bolts,
-            ) {
-                bolt_on(
-                    &mut commands,
-                    e,
-                    seat_e,
-                    sv.local + Vec3::Y * 0.2,
-                    Quat::IDENTITY,
-                    SORTER_BOLTS,
-                    0.15,
-                    &bolt_look,
-                );
-            }
+            cable: Some((
+                m.add(Cylinder::new(0.012, 0.22)),
+                s.add(StandardMaterial {
+                    base_color: Color::srgb(0.08, 0.08, 0.09),
+                    perceptual_roughness: 0.6,
+                    ..default()
+                }),
+            )),
         }
-        // (The heavy is a walker too, but its salvage is its own seats,
-        // `heavy`: a walker's cell fitted in it was sealed in its hull.)
-        if robot.kind != RobotKind::Walker || crawler || hound || heavy {
-            continue;
+    }
+}
+
+/// Seats one row's part on `wreck`, held its way.
+fn fit(commands: &mut Commands, catalog: &Catalog, wreck: Entity, row: Row, look: &Look) {
+    if let Some(e) = row.replaces {
+        if e != Entity::PLACEHOLDER {
+            commands.entity(e).despawn();
         }
-        let size = gait.map_or(1.0, |g| g.size);
-        // The cell: the core's health is the cell's (a core shot through
-        // cooked it).
-        let core = all_parts
-            .iter()
-            .find(|p| p.robot == e && p.role == PartRole::Core)
-            .map_or(0.0, |p| p.hp / p.max_hp.max(1.0));
-        if let Some((_, item)) = seat(
-            &mut commands,
-            &catalog,
-            e,
-            "robot_cell",
-            Transform::from_translation(CELL_AT),
-            size,
-            core,
-            Hold::Live,
-        ) {
-            commands.entity(item).insert(Live {
-                left: HOT_FOR,
-                next: 0.0,
-            });
-        }
-        // The servo packs at the soundest hips, bolted on.
-        let shape = gait.map_or(super::anim::Shape::Orb, |g| g.shape);
-        // (The side its wreck rolled up: `wreck::servo_hips`.)
-        let legs = legs.map(|l| l.0).unwrap_or_default();
-        for i in super::wreck::servo_hips(legs) {
-            let health = legs[i];
-            let hip = shape.hip(i) * size;
-            let out = Vec3::new(hip.x, 0.0, hip.z).normalize_or(Vec3::X);
-            // Facing out of the hip, the bolts round it.
-            let face = Quat::from_rotation_arc(Vec3::Y, out);
-            let Some((seat_e, _)) = seat(
-                &mut commands,
-                &catalog,
-                e,
-                "walker_leg_actuator",
-                Transform::from_translation(hip).with_rotation(face),
-                size,
-                health,
-                Hold::Bolts,
-            ) else {
-                continue;
-            };
-            bolt_on(
-                &mut commands,
-                e,
-                seat_e,
-                hip + out * BOLT_PROUD,
-                face,
-                BOLTS,
-                0.06,
-                &bolt_look,
-            );
-        }
-        // The gun pod, where the turret was, on its cables.
-        for c in children.iter() {
-            let Ok((part, t, turret)) = parts.get(c) else {
-                continue;
-            };
-            if !turret || part.role != PartRole::Weapon {
-                continue;
-            }
-            let health = part.hp / part.max_hp.max(1.0);
-            let at = *t;
-            commands.entity(c).despawn();
-            let Some((seat_e, _)) = seat(
-                &mut commands,
-                &catalog,
-                e,
-                "robot_gunpod",
-                at,
-                size,
-                health,
-                Hold::Cables,
-            ) else {
-                continue;
-            };
-            let look = match (meshes.as_mut(), materials.as_mut()) {
-                (Some(m), Some(s)) => Some((
-                    m.add(Cylinder::new(0.012, 0.22)),
-                    s.add(StandardMaterial {
-                        base_color: Color::srgb(0.08, 0.08, 0.09),
-                        perceptual_roughness: 0.6,
-                        ..default()
-                    }),
-                )),
-                _ => None,
-            };
-            for k in 0..CABLES {
-                // From the hull up to the pod's mount, either side.
-                let side = if k == 0 { -1.0 } else { 1.0 };
-                let mid = at.translation * 0.75 + Vec3::new(0.09 * side, 0.0, 0.05);
-                let local =
-                    Transform::from_translation(mid).with_rotation(Quat::from_rotation_x(0.5));
-                let cable = commands
-                    .spawn((
-                        Name::new("Salvage cable"),
-                        Cable { seat: seat_e },
-                        OnWreck { wreck: e, local },
-                        Cuttable { needs: 0.0 },
-                        // (Thicker than it looks, so jaws put to it find it;
-                        // found as a padlock is, a collider that meets only
-                        // the world. Its own collider, not one of the
-                        // wreck's: a settled body's child colliders aren't
-                        // kept where the body is, and the cutters' query
-                        // would look for it where it was. `follow_wrecks`
-                        // carries it.)
-                        Collider::capsule(CABLE_REACH, 0.2),
-                        CollisionLayers::new(
-                            crate::world::Layer::Item,
-                            [crate::world::Layer::World],
-                        ),
-                        local,
-                        Visibility::default(),
-                    ))
-                    .id();
-                if let Some((mesh, mat)) = &look {
-                    commands.entity(cable).insert((
-                        Mesh3d(mesh.clone()),
-                        MeshMaterial3d(mat.clone()),
-                        NotShadowCaster,
-                    ));
-                }
-            }
+    }
+    let hold = match row.fix {
+        Fix::Hand if row.hot => Hold::Live,
+        Fix::Hand => Hold::Hand,
+        Fix::Bolts { .. } => Hold::Bolts,
+        Fix::Cables { .. } => Hold::Cables,
+    };
+    let Some((seat_e, item)) = seat(
+        commands, catalog, wreck, row.item, row.at, row.size, row.health, hold,
+    ) else {
+        return;
+    };
+    if row.hot {
+        commands.entity(item).insert(Live {
+            left: HOT_FOR,
+            next: 0.0,
+        });
+    }
+    match row.fix {
+        Fix::Hand => {}
+        Fix::Bolts {
+            n,
+            centre,
+            face,
+            radius,
+        } => bolt_on(commands, wreck, seat_e, centre, face, n, radius, &look.bolt),
+        Fix::Cables { n } => cable_on(commands, wreck, seat_e, row.at, n, &look.cable),
+    }
+}
+
+/// `n` cables from the hull up to a part's mount at `at`, either side.
+fn cable_on(
+    commands: &mut Commands,
+    wreck: Entity,
+    seat: Entity,
+    at: Transform,
+    n: usize,
+    look: &Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+) {
+    for k in 0..n {
+        let side = if k % 2 == 0 { -1.0 } else { 1.0 };
+        let mid = at.translation * 0.75 + Vec3::new(0.09 * side, 0.0, 0.05);
+        let local = Transform::from_translation(mid).with_rotation(Quat::from_rotation_x(0.5));
+        let cable = commands
+            .spawn((
+                Name::new("Salvage cable"),
+                Cable { seat },
+                OnWreck { wreck, local },
+                Cuttable { needs: 0.0 },
+                // (Thicker than it looks, so jaws put to it find it;
+                // found as a padlock is, a collider that meets only
+                // the world. Its own collider, not one of the
+                // wreck's: a settled body's child colliders aren't
+                // kept where the body is, and the cutters' query
+                // would look for it where it was. `follow_wrecks`
+                // carries it.)
+                Collider::capsule(CABLE_REACH, 0.2),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                local,
+                Visibility::default(),
+            ))
+            .id();
+        if let Some((mesh, mat)) = look {
+            commands.entity(cable).insert((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                NotShadowCaster,
+            ));
         }
     }
 }
@@ -588,6 +709,7 @@ fn holds_gone(
             Hold::Cables => cables.iter().any(|c| c.seat == seat),
             Hold::Bolts => bolts.iter().any(|b| b.seat == seat),
             Hold::Live => continue,
+            Hold::Hand => false,
         };
         if !held {
             free(&mut commands, s.item);
@@ -642,6 +764,113 @@ mod tests {
     /// A part comes off in the condition it was in; shot through, it's
     /// scrap metal by its weight (Progression's rate: a piece per 2 kg, at
     /// least one).
+    /// A walker's table: its cell (hot, by hand), knee actuators at its
+    /// soundest hips (bolted) and its gun pod in the turret's place (on
+    /// cables); a crawler, a hound and the heavy have their own; the Sorter
+    /// its servo pack.
+    #[test]
+    fn each_machine_has_its_salvage_table() {
+        let turret = Entity::from_raw_u32(7).unwrap();
+        let parts = [
+            (
+                Entity::PLACEHOLDER,
+                PartRole::Core,
+                0.8,
+                Transform::IDENTITY,
+                false,
+            ),
+            (
+                turret,
+                PartRole::Weapon,
+                0.5,
+                Transform::from_xyz(0.0, 0.6, 0.0),
+                true,
+            ),
+        ];
+        let walker = WreckParts {
+            kind: RobotKind::Walker,
+            size: 1.0,
+            shape: super::super::anim::Shape::Orb,
+            legs: [1.0, 0.9, 0.0, 0.7],
+            servo: None,
+            crawler: false,
+            hound: false,
+            heavy: false,
+            parts: &parts,
+        };
+        let r = rows(&walker);
+        let ids: Vec<_> = r.iter().map(|r| r.item).collect();
+        assert_eq!(
+            ids.iter().filter(|i| **i == "robot_cell").count(),
+            1,
+            "{ids:?}"
+        );
+        assert_eq!(
+            ids.iter().filter(|i| **i == "walker_leg_actuator").count(),
+            MOST_SERVOS,
+            "{ids:?}"
+        );
+        let cell = r.iter().find(|r| r.item == "robot_cell").unwrap();
+        assert!(cell.hot && matches!(cell.fix, Fix::Hand));
+        assert_eq!(cell.health, 0.8, "the core's health is the cell's");
+        let pod = r.iter().find(|r| r.item == "robot_gunpod").unwrap();
+        assert!(matches!(pod.fix, Fix::Cables { n: CABLES }));
+        assert_eq!(pod.replaces, Some(turret));
+        assert!(
+            r.iter()
+                .filter(|r| r.item == "walker_leg_actuator")
+                .all(|r| matches!(r.fix, Fix::Bolts { n: BOLTS, .. }))
+        );
+        for other in [
+            WreckParts {
+                crawler: true,
+                ..walker_like(&parts)
+            },
+            WreckParts {
+                hound: true,
+                ..walker_like(&parts)
+            },
+            WreckParts {
+                heavy: true,
+                ..walker_like(&parts)
+            },
+        ] {
+            assert!(rows(&other).is_empty());
+        }
+        let sorter = WreckParts {
+            kind: RobotKind::Sorter,
+            servo: Some(ServoAt {
+                local: Vec3::Y,
+                health: 0.6,
+            }),
+            ..walker_like(&parts)
+        };
+        let r = rows(&sorter);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].item, "sorter_servo_pack");
+        assert!(matches!(
+            r[0].fix,
+            Fix::Bolts {
+                n: SORTER_BOLTS,
+                ..
+            }
+        ));
+    }
+
+    fn walker_like<'a>(parts: &'a [(Entity, PartRole, f32, Transform, bool)]) -> WreckParts<'a> {
+        WreckParts {
+            kind: RobotKind::Walker,
+            size: 1.0,
+            shape: super::super::anim::Shape::Orb,
+            legs: [1.0; 4],
+            servo: None,
+            crawler: false,
+            hound: false,
+            heavy: false,
+            parts,
+        }
+    }
+
     #[test]
     fn where_you_shot_it_is_what_its_worth() {
         assert_eq!(condition(1.0), 1.0);

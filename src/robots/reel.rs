@@ -484,6 +484,41 @@ fn reel(
                 commands.entity(e).remove::<Senses>().remove::<Brain>();
                 e
             }
+            "lamps" => {
+                // Lit beams in the air (`render::fog_beam`): three drones
+                // hovering 8-14 m off, their belly lamps down and ahead, a
+                // sentry 16 m off facing you (its lamp lit after dark), and a
+                // hand torch at your hip, pointed out ahead.
+                // (The sentry is the subject: a subject drone is flown.)
+                for (d, x, up) in [
+                    (8.0f32, -3.5f32, 2.6f32),
+                    (11.0, 2.5, 3.4),
+                    (14.0, -0.5, 4.2),
+                ] {
+                    let at = eye + flat * d + right * x;
+                    let at = Vec3::new(at.x, zone.ground(at.x, at.z) + up, at.z);
+                    let drone = spawn_drone(&mut commands, at, job(at));
+                    commands.entity(drone).remove::<Senses>().remove::<Brain>();
+                }
+                let s = eye + flat * 16.0 + right * 4.0;
+                let toward = -flat;
+                let sentry = super::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    s.xz(),
+                    toward.x.atan2(-toward.z),
+                    0.0,
+                    (s - flat * 3.0).xz(),
+                );
+                let hip = eye + right * 0.3 - Vec3::Y * 0.45;
+                commands.spawn((
+                    Name::new("Reel torch"),
+                    crate::gadgets::visuals::torch_beam(),
+                    Transform::from_translation(hip)
+                        .looking_to(flat - Vec3::Y * 0.12 - right * 0.05, Vec3::Y),
+                ));
+                sentry
+            }
             "flare" => {
                 // A walker 15 m off facing you, and a sentry beside it,
                 // each put into its flare's tell (`flare_tell`): the tube

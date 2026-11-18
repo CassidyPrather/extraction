@@ -27,9 +27,9 @@ pub enum Make {
     Items(&'static [(&'static str, u32)]),
     /// Restore a gun's condition by this much (up to 1).
     Repair(f32),
-    /// Re-pack the old (surplus) and damp rounds in an ammunition box with
-    /// fresh primers and powder: they come out good ball
-    /// (`Load::Standard`); the box stays.
+    /// Re-prime the damp rounds in an ammunition box with fresh primers
+    /// and dry powder: they come out good ball (`Load::Standard`); the box
+    /// stays.
     Restore,
 }
 
@@ -132,55 +132,10 @@ pub const RECIPES: &[Recipe] = &[
         makes: Make::Items(&[("electronics", 1)]),
         seconds: 6.0,
     },
-    // --- Re-packing rounds -----------------------------------------------
-    Recipe {
-        id: "pack_9x18",
-        name: "Re-pack 9x18 (box of 16)",
-        needs: &[
-            (Need::Item("powder"), 1),
-            (Need::Item("brass"), 1),
-            (Need::Item("scrap_metal"), 1),
-        ],
-        makes: Make::Items(&[("ammo_9x18_repack", 1)]),
-        seconds: 8.0,
-    },
-    Recipe {
-        id: "pack_545",
-        name: "Re-pack 5.45x39 (box of 30)",
-        needs: &[
-            (Need::Item("powder"), 2),
-            (Need::Item("brass"), 2),
-            (Need::Item("scrap_metal"), 1),
-        ],
-        makes: Make::Items(&[("ammo_545_repack", 1)]),
-        seconds: 10.0,
-    },
-    Recipe {
-        id: "pack_762r",
-        name: "Re-pack 7.62x54R (box of 10)",
-        needs: &[
-            (Need::Item("powder"), 2),
-            (Need::Item("brass"), 1),
-            (Need::Item("scrap_metal"), 1),
-        ],
-        makes: Make::Items(&[("ammo_762r_repack", 1)]),
-        seconds: 10.0,
-    },
-    Recipe {
-        id: "pack_12ga",
-        name: "Re-pack 12 gauge (box of 10)",
-        needs: &[
-            (Need::Item("powder"), 1),
-            (Need::Item("brass"), 1),
-            (Need::Item("scrap_metal"), 1),
-            (Need::Item("polymer"), 1),
-        ],
-        makes: Make::Items(&[("ammo_12ga_repack", 1)]),
-        seconds: 10.0,
-    },
+    // --- Rounds -----------------------------------------------------------
     Recipe {
         id: "restore_rounds",
-        name: "Re-pack a box's old or damp rounds",
+        name: "Dry and re-prime a box's damp rounds",
         needs: &[(Need::AmmoBox, 1), (Need::Item("powder"), 1)],
         makes: Make::Restore,
         seconds: 8.0,
@@ -239,13 +194,13 @@ pub const VICE_RECIPES: &[Recipe] = &[
     },
     Recipe {
         id: "make_weapon_light",
-        name: "Build a weapon light",
+        name: "Build a light",
         needs: &[
             (Need::Item("electronics"), 1),
             (Need::Item("power_cell"), 1),
             (Need::Item("polymer"), 1),
         ],
-        makes: Make::Items(&[("weapon_light", 1)]),
+        makes: Make::Items(&[("flashlight", 1)]),
         seconds: 14.0,
     },
     Recipe {
@@ -260,28 +215,6 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 16.0,
     },
     Recipe {
-        id: "pack_762x39",
-        name: "Re-pack 7.62x39 (box of 20)",
-        needs: &[
-            (Need::Item("powder"), 2),
-            (Need::Item("brass"), 2),
-            (Need::Item("scrap_metal"), 1),
-        ],
-        makes: Make::Items(&[("ammo_762x39_repack", 1)]),
-        seconds: 10.0,
-    },
-    Recipe {
-        id: "pack_762x25",
-        name: "Re-pack 7.62x25 (box of 70)",
-        needs: &[
-            (Need::Item("powder"), 2),
-            (Need::Item("brass"), 2),
-            (Need::Item("scrap_metal"), 1),
-        ],
-        makes: Make::Items(&[("ammo_762x25_repack", 1)]),
-        seconds: 12.0,
-    },
-    Recipe {
         id: "make_crossbow",
         name: "Build a crossbow from a leaf spring",
         needs: &[
@@ -292,17 +225,6 @@ pub const VICE_RECIPES: &[Recipe] = &[
         ],
         makes: Make::Items(&[("crossbow", 1)]),
         seconds: 30.0,
-    },
-    Recipe {
-        id: "pack_flare",
-        name: "Pack two signal cartridges (white)",
-        needs: &[
-            (Need::Item("powder"), 2),
-            (Need::Item("brass"), 1),
-            (Need::Item("polymer"), 1),
-        ],
-        makes: Make::Items(&[("flare_white", 2)]),
-        seconds: 12.0,
     },
     Recipe {
         id: "can_suppressor",
@@ -560,15 +482,25 @@ mod tests {
     #[test]
     fn plans_use_distinct_items() {
         let cat = cat();
-        let t = tray(&cat, &["powder", "brass", "scrap_metal", "powder", "brass"]);
-        let r = recipe("pack_545").unwrap();
+        let t = tray(
+            &cat,
+            &[
+                "powder",
+                "brass",
+                "scrap_metal",
+                "powder",
+                "brass",
+                "scrap_metal",
+            ],
+        );
+        let r = recipe("pack_545_ap").unwrap();
         let p = plan(r, &t, &cat).unwrap();
-        assert_eq!(p.len(), 5);
+        assert_eq!(p.len(), 6);
         let mut s = p.clone();
         s.sort();
         s.dedup();
-        assert_eq!(s.len(), 5);
-        assert!(plan(r, &t[..4], &cat).is_none());
+        assert_eq!(s.len(), 6);
+        assert!(plan(r, &t[..5], &cat).is_none());
     }
 
     #[test]
@@ -587,19 +519,6 @@ mod tests {
         let ids =
             |tier| -> Vec<&str> { available_at(&t, &cat, tier).iter().map(|r| r.id).collect() };
         assert!(!ids(0).contains(&"make_side_rail"));
-        let carbine = tray(&cat, &["powder", "powder", "brass", "brass", "scrap_metal"]);
-        assert!(
-            available_at(&carbine, &cat, 1)
-                .iter()
-                .any(|r| r.id == "pack_762x39"),
-            "the vice packs the carbine's rounds"
-        );
-        assert!(
-            available_at(&carbine, &cat, 1)
-                .iter()
-                .any(|r| r.id == "pack_762x25"),
-            "and the sub-machine gun's"
-        );
         assert!(ids(1).contains(&"make_side_rail"));
         assert!(recipe("make_emp_trap").is_some());
         let mut seen: Vec<&str> = recipes(1).map(|r| r.id).collect();

@@ -53,8 +53,8 @@ pub const HOLSTER: Cavity = Cavity {
 pub const HOLSTER_BACK_MOUTH: f32 = -0.042;
 
 /// The chest mount: a webbing sleeve on the left strap, open top and
-/// bottom. The radio slides down into it, thin side out; a chemlight or a
-/// compass hangs in it (so `floor` is only the sleeve's foot).
+/// bottom. The radio slides down into it, thin side out; a compass hangs
+/// in it (so `floor` is only the sleeve's foot).
 pub const MOUNT: Cavity = Cavity {
     floor: Vec3::new(0.0, -0.08, -0.015),
     half: Vec3::new(0.036, 0.055, 0.025),
@@ -86,6 +86,9 @@ pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
     ("nagant", Vec3::new(0.0, 0.015, -0.060)),
     ("flare_pistol", Vec3::new(0.0, -0.011, -0.052)),
     ("artifact_adapter", Vec3::new(-0.003, 0.015, 0.0)),
+    // The light is drawn from its rail clamp, its handle folded back
+    // behind its tail.
+    ("flashlight", Vec3::new(0.001, -0.004, 0.006)),
 ];
 
 /// An item's model's middle off its origin (zero for most).

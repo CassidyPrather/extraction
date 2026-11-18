@@ -808,7 +808,6 @@ fn spawn_dev_cache(
         ("canned_stew", 0),
         ("art_featherstone", 0),
         ("side_rail", 0),
-        ("weapon_light", 0),
         ("laser_module", 0),
         ("pu_scope", 0),
         ("power_cell", 0),
@@ -1145,6 +1144,30 @@ pub(crate) mod tests {
                 assert!(!id.starts_with("cook_"), "{map}: {id} lies about");
             }
         }
+    }
+
+    /// The survey sets come as a ladder (#104): the clicker first, the
+    /// field screen later, the sweep last, each rarer than the one before.
+    #[test]
+    fn the_survey_sets_come_in_order_each_rarer() {
+        let app = career_app();
+        let loot = app.world().resource::<Loot>().clone();
+        let first = |id: &str| loot.0.arrives(id).expect(id);
+        assert!(first("detector") < first("detector_bear"));
+        assert!(first("detector_bear") < first("detector_sweep"));
+        let mut rng = Rng::new(3);
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut n = std::collections::HashMap::<String, u32>::new();
+        for _ in 0..20_000 {
+            for d in loot.0.roll_at("gadgets", None, None, &cat.0, &mut rng) {
+                *n.entry(cat.get(d.kind).id.clone()).or_default() += 1;
+            }
+        }
+        let c = |id: &str| n.get(id).copied().unwrap_or(0);
+        assert!(
+            c("detector") > c("detector_bear") && c("detector_bear") > c("detector_sweep"),
+            "{n:?}"
+        );
     }
 
     /// `cargo test -- --ignored item_census --nocapture`: every item in

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760" font-family="DejaVu Sans, sans-serif">
+  <rect width="1400" height="760" fill="#e9ebee"/>
+  <text x="30" y="44" font-size="28" font-weight="bold" fill="#222">#100 body mock: the legless grappler (hub, hook, line, swing)</text>
+  <text x="30" y="74" font-size="16" fill="#444">Robot bodies. Walker units; not to scale between panels. Silhouette: no legs, a hanging block under a taut line, unlike any machine.</text>
+
+  <!-- Panel A: side view of the hub -->
+  <g transform="translate(40,110)">
+    <rect width="420" height="600" fill="#f7f8f9" stroke="#bbb"/>
+    <text x="16" y="30" font-size="18" font-weight="bold" fill="#333">A. The hub, side on</text>
+    <!-- winch drum body -->
+    <rect x="120" y="250" width="180" height="120" rx="22" fill="#5d6166" stroke="#222" stroke-width="3"/>
+    <circle cx="210" cy="310" r="44" fill="#3a3d41" stroke="#222" stroke-width="3"/>
+    <circle cx="210" cy="310" r="30" fill="none" stroke="#9aa0a6" stroke-width="5" stroke-dasharray="6 5"/>
+    <text x="150" y="400" font-size="13" fill="#333">line drum (winch)</text>
+    <!-- eye -->
+    <rect x="108" y="282" width="18" height="34" rx="4" fill="#c92a1e"/>
+    <text x="14" y="300" font-size="13" fill="#333">eye</text>
+    <!-- launcher on top -->
+    <rect x="160" y="200" width="120" height="40" rx="8" fill="#43474c" stroke="#222" stroke-width="3" transform="rotate(-25 220 220)"/>
+    <polygon points="278,178 322,160 312,190" fill="#d9822b" stroke="#222" stroke-width="2"/>
+    <text x="250" y="150" font-size="13" fill="#333">hook launcher (arcs a shot)</text>
+    <!-- line up -->
+    <line x1="210" y1="250" x2="210" y2="60" stroke="#222" stroke-width="4"/>
+    <text x="220" y="90" font-size="13" fill="#333">line up to its anchor</text>
+    <!-- warning band -->
+    <rect x="120" y="356" width="180" height="10" fill="#e8562a"/>
+    <text x="120" y="440" font-size="13" fill="#333">orange-red band: lit when it fires/reels</text>
+    <!-- no legs note -->
+    <text x="40" y="520" font-size="15" fill="#222">No legs. It hangs, swings, reels.</text>
+    <text x="40" y="545" font-size="15" fill="#222">Hit volume: the box (as Shape::Grappler's).</text>
+    <text x="40" y="570" font-size="15" fill="#222">Weak points: eye, launcher, drum.</text>
+  </g>
+
+  <!-- Panel B: the swing between anchors -->
+  <g transform="translate(480,110)">
+    <rect width="500" height="600" fill="#f7f8f9" stroke="#bbb"/>
+    <text x="16" y="30" font-size="18" font-weight="bold" fill="#333">B. Swing and reel between anchors</text>
+    <!-- trees -->
+    <rect x="40" y="120" width="26" height="440" fill="#4a3b2c"/>
+    <polygon points="20,140 86,140 53,60" fill="#3d5a3d"/>
+    <rect x="420" y="160" width="26" height="400" fill="#4a3b2c"/>
+    <polygon points="400,180 466,180 433,100" fill="#3d5a3d"/>
+    <line x1="0" y1="560" x2="500" y2="560" stroke="#6b5b45" stroke-width="4"/>
+    <!-- anchor hook in tree A -->
+    <circle cx="66" cy="160" r="9" fill="#d9822b" stroke="#222" stroke-width="2"/>
+    <!-- swing arc -->
+    <path d="M 120 330 Q 250 520 380 300" fill="none" stroke="#888" stroke-width="3" stroke-dasharray="10 8"/>
+    <!-- current pose line -->
+    <line x1="66" y1="160" x2="250" y2="440" stroke="#222" stroke-width="4"/>
+    <rect x="215" y="430" width="70" height="46" rx="10" fill="#5d6166" stroke="#222" stroke-width="3"/>
+    <!-- second shot toward tree B, arcing -->
+    <path d="M 270 430 Q 360 250 446 190" fill="none" stroke="#d9822b" stroke-width="3" stroke-dasharray="4 6"/>
+    <circle cx="446" cy="190" r="8" fill="#d9822b" stroke="#222" stroke-width="2"/>
+    <text x="300" y="250" font-size="13" fill="#333">next hook, on an arc</text>
+    <text x="90" y="300" font-size="13" fill="#333">swing</text>
+    <!-- hauled crate -->
+    <line x1="250" y1="476" x2="250" y2="520" stroke="#222" stroke-width="3"/>
+    <rect x="228" y="520" width="44" height="34" fill="#8a7a5a" stroke="#222" stroke-width="2"/>
+    <text x="284" y="545" font-size="13" fill="#333">hauled crate on a line</text>
+    <text x="20" y="590" font-size="13" fill="#333">Cut or shot mid-swing: it falls and is stunned (Robot minds' rule).</text>
+  </g>
+
+  <!-- Panel C: the line -->
+  <g transform="translate(1000,110)">
+    <rect width="360" height="600" fill="#f7f8f9" stroke="#bbb"/>
+    <text x="16" y="30" font-size="18" font-weight="bold" fill="#333">C. The line (#101's rope)</text>
+    <line x1="60" y1="70" x2="60" y2="560" stroke="#7a6a4a" stroke-width="10"/>
+    <line x1="60" y1="70" x2="60" y2="560" stroke="#a89670" stroke-width="10" stroke-dasharray="4 10"/>
+    <rect x="44" y="250" width="32" height="54" fill="#3a3d41" stroke="#222" stroke-width="2"/>
+    <text x="90" y="270" font-size="13" fill="#333">grab sleeve: hands hold here</text>
+    <text x="90" y="290" font-size="13" fill="#333">(yank: it jerks toward you)</text>
+    <g transform="translate(60,400)">
+      <line x1="-12" y1="-6" x2="12" y2="6" stroke="#e8562a" stroke-width="4"/>
+      <line x1="-12" y1="6" x2="12" y2="-6" stroke="#e8562a" stroke-width="4"/>
+    </g>
+    <text x="90" y="398" font-size="13" fill="#333">cut or shot: frays, then parts</text>
+    <text x="90" y="418" font-size="13" fill="#333">(rope: one cut; see #101)</text>
+    <text x="16" y="590" font-size="13" fill="#333">Rope, not cable: thick, pale, soft-sagging.</text>
+  </g>
+</svg>

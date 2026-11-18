@@ -1,14 +1,16 @@
 """Rail and muzzle attachments: the 3.5x scope, the side-mount rail, the
-weapon light, the laser module and the artifact adapter. Writes
+light, the laser module and the artifact adapter. Writes
 assets/models/items/<id>.glb for each (item space: see _kit.py).
 
 Sockets they carry (src/gadgets/mod.rs), which the models are built round:
 
 - side_rail: things on its rail sit with their centre at y 0.022, so the
   rail's top is y 0.006.
-- weapon_light, laser_module, flashlight: a power cell (0.02 x 0.06 x 0.02,
-  standing up) seats with its centre at (0, 0, 0.02), so each has an open
-  cell bay through it there.
+- flashlight, laser_module: a power cell lies along each in an open
+  cradle on its top (`gadgets`'s cell mounts).
+- flashlight: its carry handle is its own node, `handle`, its origin on
+  the hinge; modelled folded back along the sides, as it is on a rail,
+  and swung up over the top in a hand (`gadgets::visuals`).
 - artifact_adapter: the gun's muzzle is at its back face (z 0.045); an
   artifact sits in the cradle with its centre at (0, 0.03, 0).
 - pu_scope: the eye goes at (0, 0, 0.2), so the optical axis is y = 0.
@@ -174,9 +176,22 @@ def side_rail():
     return [p]
 
 
-# --- Weapon light --------------------------------------------------------------------------
+# --- Light ---------------------------------------------------------------------------------
 
-def weapon_light():
+# The handle's hinge (each side of the body) and its arms' length to the
+# grip's middle: folded back along the sides the grip lies just behind the
+# tail; swung up it stands over the cell's cradle.
+HINGE = (0.0, -0.004)  # (y, z)
+HINGE_X = 0.0172
+ARM = 0.056
+
+
+def flashlight():
+    """One light, held or clamped. Its body is a compact weapon light (a
+    head bell and lens, the cell lying along the top in its cradle, a
+    pressure switch on the tail, a rail clamp under the head); a U-shaped
+    carry handle hinged on its sides folds back along it on a rail and
+    swings up over it in a hand, so held it's a torch with a handle."""
     p = Part("body")
     # Head bell and lens at the front (the beam is at z -0.06).
     p.lathe([(0.0, -0.045), (0.0145, -0.045), (0.015, -0.043), (0.015, -0.033), (0.0125, -0.028),
@@ -189,7 +204,22 @@ def weapon_light():
     # The cell lies along it, centred at z 0.008 (`gadgets`'s cell mount).
     cell_cradle(p, 0.0125, "Black", -0.024, 0.04)
     rail_clamp(p, -0.034, 0.0, -0.011)
-    return [p]
+    # The hinge's bosses, a steel pin through each.
+    y, z = HINGE
+    for sx in (-1, 1):
+        a, b = sorted((sx * 0.0118, sx * 0.0158))
+        p.cyl(0.0042, a, b, "Black", segs=12, xf=T(0, y, z) @ ALONG_X)
+        a, b = sorted((sx * 0.0158, sx * 0.0166))
+        p.cyl(0.0018, a, b, "Steel", segs=8, xf=T(0, y, z) @ ALONG_X)
+    # The handle, folded back: an arm along each side from the hinge, and
+    # the grip across behind the tail in a rubber sleeve.
+    h = Part("handle", origin=(0.0, y, z))
+    for sx in (-1, 1):
+        h.box((0.003, 0.007, ARM), (sx * HINGE_X, y, z + ARM / 2), "Steel", bevel=0.0008, segs=1)
+    h.cyl(0.0035, -HINGE_X - 0.0015, HINGE_X + 0.0015, "Steel", segs=10,
+          xf=T(0, y, z + ARM) @ ALONG_X)
+    h.cyl(0.0052, -0.012, 0.012, "Rubber", segs=14, xf=T(0, y, z + ARM) @ ALONG_X)
+    return [p, h]
 
 
 # --- Laser module ---------------------------------------------------------------------------
@@ -249,7 +279,7 @@ def artifact_adapter():
 
 for item_id, fn in (("pso_scope", pso_scope), ("pbs_suppressor", pbs_suppressor),
                     ("pu_scope", pu_scope), ("side_rail", side_rail),
-                    ("weapon_light", weapon_light), ("laser_module", laser_module),
+                    ("flashlight", flashlight), ("laser_module", laser_module),
                     ("artifact_adapter", artifact_adapter)):
     if wanted(item_id):
         item(item_id, fn)

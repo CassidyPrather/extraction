@@ -826,7 +826,7 @@ fn quit_at() -> f32 {
 }
 
 /// The moments a raid may never come to on its own, brought about (as the
-/// Surge's clock is wound): a grab put to the bot (a dressing at its
+/// Surge's clock is wound): a grab put to the bot (an injector at its
 /// feet: mid-grab, then in hand), the truck called to the nearest
 /// rendezvous and its drive wound to two seconds (the countdown), and,
 /// once it waits there, the bot put in its bed. `done` keeps each to once.
@@ -849,7 +849,7 @@ fn force_moment(world: &mut World, m: Moment, done: &mut bool) {
                 return;
             }
             let catalog = world.resource::<Catalog>().clone();
-            let Some(kind) = catalog.kind("field_dressing") else {
+            let Some(kind) = catalog.kind("regen_injector") else {
                 return;
             };
             let at = root.translation() + root.forward().as_vec3() * 0.5 + Vec3::Y * 0.9;

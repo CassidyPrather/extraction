@@ -347,7 +347,8 @@ fn one_up(
     });
     if empty {
         // Beside the gun when it's in your hand: it's about the gun.
-        let show = gun.map_or(Show::View, |(e, _)| Show::Item(e));
+        // (Now, however often it's been in hand: #107.)
+        let show = gun.map_or(Show::View, |(e, _)| Show::ItemNow(e));
         let (line, show) = match (in_gun, spare, packed, in_crate) {
             (true, ..) => (ONE_UP, show),
             (false, true, ..) => (MAG_IN, show),

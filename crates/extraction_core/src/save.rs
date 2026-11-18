@@ -13,6 +13,9 @@ use crate::progression::Progress;
 
 pub const SAVE_VERSION: u32 = 1;
 
+/// Grabs of a kind after which its callout shows only when asked (#107).
+pub const QUIET_AFTER: u32 = 4;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SaveGame {
     pub version: u32,
@@ -35,6 +38,10 @@ pub struct SaveGame {
     /// (one line each, once a career).
     #[serde(default)]
     pub firsts: Vec<String>,
+    /// How many times each kind of thing has been taken in hand (by id):
+    /// past [`QUIET_AFTER`] its own callout no longer shows unbidden (#107).
+    #[serde(default)]
+    pub grabs: std::collections::BTreeMap<String, u32>,
 }
 
 /// The driver's requests: how many there have been, what's wanted now,
@@ -196,6 +203,25 @@ impl Memorial {
     }
 }
 
+/// Kinds retired from the game, and what one in an old save becomes:
+/// the flare pistol and its 26 mm cartridges, since the hand-fired signal
+/// flare (#94). A red star is still a red star; the others are their
+/// brass, and the pistol scrap.
+pub const RETIRED: &[(&str, &str)] = &[
+    ("flare_pistol", "scrap_metal"),
+    ("flare_red", "signal_flare"),
+    ("flare_white", "brass"),
+    ("flare_green", "brass"),
+];
+
+/// What a retired kind becomes ([`RETIRED`]), if `id` is one.
+pub fn retired_as(id: &str) -> Option<&'static str> {
+    RETIRED
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map(|(_, now)| *now)
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SavedItem {
     pub id: String,
@@ -264,6 +290,10 @@ pub struct Career {
     /// (one line each, once a career).
     #[serde(default)]
     pub firsts: Vec<String>,
+    /// How many times each kind of thing has been taken in hand (by id):
+    /// past [`QUIET_AFTER`] its own callout no longer shows unbidden (#107).
+    #[serde(default)]
+    pub grabs: std::collections::BTreeMap<String, u32>,
     /// This career's own world seed, rolled at its start by a play launch
     /// (the director's raids, the wildlife's homes). Older careers have
     /// none: one is rolled on their first load.
@@ -296,12 +326,49 @@ fn upright() -> [f32; 4] {
     [0.0, 0.0, 0.0, 1.0]
 }
 
+/// Item ids folded into another: a save holding the old id loads it as
+/// the new one (with its rounds and their loads).
+pub const RENAMED: &[(&str, &str)] = &[
+    // Re-packed and surplus rounds were dropped: the plain round of the
+    // calibre, box for box (the same count).
+    ("ammo_9x18_repack", "ammo_9x18"),
+    ("ammo_545_repack", "ammo_545"),
+    ("ammo_762x39_repack", "ammo_762x39"),
+    ("ammo_762x25_repack", "ammo_762x25"),
+    ("ammo_762r_repack", "ammo_762r"),
+    ("ammo_12ga_repack", "ammo_12ga"),
+    ("ammo_545_surplus", "ammo_545"),
+    ("ammo_762r_surplus", "ammo_762r"),
+    ("round_9x18_repack", "round_9x18"),
+    ("round_545_repack", "round_545"),
+    ("round_762x39_repack", "round_762x39"),
+    ("round_762x25_repack", "round_762x25"),
+    ("round_762r_repack", "round_762r"),
+    ("shell_12ga_repack", "shell_12ga"),
+    // The torch and the weapon light are one light now.
+    ("weapon_light", "flashlight"),
+];
+
+/// What a saved id is now (itself, unless [`RENAMED`]).
+pub fn current_id(id: &str) -> &str {
+    RENAMED
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map_or(id, |(_, new)| new)
+}
+
 impl SavedItem {
     /// Mends what a mangled file can put in an item (NaN, infinities,
-    /// absurd counts), it and what's seated in it. Returns how many
-    /// values were mended.
+    /// absurd counts), it and what's seated in it, and gives a renamed
+    /// item its current id ([`RENAMED`]). Returns how many values were
+    /// mended.
     pub fn sanitize(&mut self) -> usize {
         let mut n = 0;
+        let id = current_id(&self.id);
+        if id != self.id {
+            self.id = id.to_owned();
+            n += 1;
+        }
         let mut fix = |v: &mut f32, lo: f32, hi: f32, or: f32| {
             let good = if v.is_finite() { v.clamp(lo, hi) } else { or };
             if good != *v && !(v.is_nan() && good.is_nan()) {
@@ -491,6 +558,7 @@ impl Career {
         save.requests = self.requests.clone();
         save.progress = self.progress.clone();
         save.firsts = self.firsts.clone();
+        save.grabs = self.grabs.clone();
         if let Some(z) = self.zones.iter().find(|z| z.map == map) {
             save.zone = z.clone();
         }
@@ -507,6 +575,7 @@ impl Career {
         self.requests = save.requests.clone();
         self.progress = save.progress.clone();
         self.firsts = save.firsts.clone();
+        self.grabs = save.grabs.clone();
         if self.map.is_empty() {
             self.map = save.zone.map.clone();
         }
@@ -613,7 +682,55 @@ impl SaveGame {
 
 #[cfg(test)]
 mod tests {
+
+    /// A career keeps how often each kind's been in hand (#107).
+    #[test]
+    fn a_career_keeps_its_grabs() {
+        let mut game = SaveGame::default();
+        game.grabs.insert("pm_pistol".into(), 7);
+        let career = Career::from_game(&game);
+        assert_eq!(career.game("marrow_creek").grabs.get("pm_pistol"), Some(&7));
+        let text = ron::to_string(&career).unwrap();
+        let back: Career = ron::from_str(&text).unwrap();
+        assert_eq!(back.grabs.get("pm_pistol"), Some(&7));
+        // An older save without them reads as none.
+        let old: Career = ron::from_str(
+            "(version: 1, map: \"m\", stats: (), stash: [], loadout: (), memorial: (), zones: [])",
+        )
+        .unwrap_or_default();
+        assert!(old.grabs.is_empty());
+    }
+
     use super::*;
+
+    /// Each retired kind becomes one the game has and hasn't retired, and
+    /// nothing hands out a retired kind any more: not the loot, not a
+    /// recipe.
+    #[test]
+    fn retired_kinds_become_live_ones_and_nothing_makes_them() {
+        use crate::fabrication::{Make, RECIPES};
+        use crate::items::{BUILTIN_CATALOG, ItemCatalog};
+        use crate::loot::{BUILTIN_LOOT, LootTables};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let loot = LootTables::from_ron(BUILTIN_LOOT, &cat).unwrap();
+        for (old, now) in RETIRED {
+            assert!(cat.kind(now).is_some(), "{old} becomes {now}: no such kind");
+            assert!(
+                retired_as(now).is_none(),
+                "{old} becomes {now}, itself retired"
+            );
+            assert!(!loot.mentions(old), "{old} is still in the loot");
+            for r in RECIPES {
+                if let Make::Items(makes) = r.makes {
+                    assert!(
+                        makes.iter().all(|(id, _)| id != old),
+                        "{} still makes {old}",
+                        r.id
+                    );
+                }
+            }
+        }
+    }
 
     fn item(id: &str) -> SavedItem {
         SavedItem {
@@ -626,6 +743,48 @@ mod tests {
             gun: None,
             inserted: Vec::new(),
             loads: Loads::default(),
+        }
+    }
+
+    /// A save from before re-packed and surplus rounds were dropped loads
+    /// them as the plain round of their calibre, rounds and loads kept;
+    /// and a weapon light as the one light.
+    #[test]
+    fn retired_kinds_load_as_what_replaced_them() {
+        let mut s = SaveGame::new("marrow_creek");
+        let mut b = item("ammo_762r_surplus");
+        b.rounds = 10;
+        b.loads = Loads(vec![Load::Damp, Load::Ap]);
+        let mut mag = item("pm_mag");
+        mag.inserted.push(item("round_9x18_repack"));
+        s.stash.push(b);
+        s.stash.push(mag);
+        s.loadout.backpack.push(item("ammo_12ga_repack"));
+        let mut light = item("weapon_light");
+        light.inserted.push(item("power_cell"));
+        s.loadout.backpack.push(light);
+        // As an old build wrote it: a surplus round in the box.
+        let text = s.to_ron().unwrap().replacen("Damp", "Surplus", 1);
+        assert!(text.contains("Surplus"));
+        let mut back = SaveGame::from_ron(&text).expect("it loads");
+        back.sanitize();
+        assert_eq!(back.stash[0].id, "ammo_762r");
+        assert_eq!(back.stash[0].rounds, 10);
+        assert_eq!(back.stash[0].loads.0, vec![Load::Standard, Load::Ap]);
+        assert_eq!(back.stash[1].inserted[0].id, "round_9x18");
+        assert_eq!(back.loadout.backpack[0].id, "ammo_12ga");
+        // The weapon light is the flashlight now, its cell still in it.
+        assert_eq!(back.loadout.backpack[1].id, "flashlight");
+        assert_eq!(back.loadout.backpack[1].inserted[0].id, "power_cell");
+        // A re-packed round in a magazine reads as ball.
+        let mag: Loads = ron::from_str("[Repacked, Ap]").unwrap();
+        assert_eq!(mag.0, vec![Load::Standard, Load::Ap]);
+        for (old, new) in RENAMED {
+            assert_ne!(old, new);
+            assert!(
+                !RENAMED.iter().any(|(o, _)| o == new),
+                "{new} is renamed again"
+            );
         }
     }
 

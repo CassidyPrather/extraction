@@ -100,7 +100,7 @@ coming ("Do these and I'll fit a vice to the bench").
 | 1 **Odd jobs** | 3 | danger 1 (the village, the farm) | **Stash rack**: a timber rack over the crate, the stash grows 200 → 300 L |
 | 2 **Errands** | 3 | danger 1-2; robot parts | **Bench vice**: the bench learns seven more recipes (side rail, weapon light, EMP trap, careful repair, door wedge, 7.62x39 for the SKS, 7.62x25 for the PPSh) |
 | 3 **Runs** | 4 | danger 2-3 | **Whip aerial** on the cab: the truck radios a Surge warning at ten minutes instead of five, and robot chatter says how far |
-| 4 **Far jobs** | 4 | another valley, danger 2-3 | **Medicine cabinet** on the front wall (a dressing in it each raid) and a **second rack**: 400 L |
+| 4 **Far jobs** | 4 | another valley, danger 2-3 | **Medicine cabinet** on the front wall (an injector in it each raid, one at a time) and a **second rack**: 400 L |
 
 The last job of the last tier is always the same, whatever valley you're
 in: "There's a house by the well in the village. On the table. Bring me
@@ -176,7 +176,7 @@ two scrap for the rack"):
 | Stash rack, wall shelf | 2 scrap metal each |
 | Bench vice | 1 gun oil |
 | Whip aerial | 1 electronics |
-| Medicine cabinet | 1 field dressing |
+| Medicine cabinet | 2 matches |
 
 If the stash hasn't got it, that fitting is **laid up** until it has (the
 next time home with the parts): the rack's room shrinks back (what's on it
@@ -198,7 +198,7 @@ three piles of what you ordered. Upkeep at the bots' loot rates:
 | scrap metal | 1.56 | 0.67 | 43% |
 | gun oil | 1.00 | 0.17 | 17% |
 | electronics | 0.72 | 0.17 | 23% |
-| field dressing | 1.54 | 0.17 | 11% |
+| field dressing (gone in #102; the cabinet takes matches now) | 1.54 | 0.17 | 11% |
 
 It never lays a fitting up for a career that keeps what it finds (0% of
 raids, every fitting); what it does is take nearly half the scrap, which
@@ -231,18 +231,18 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 
 | Contract | For | Offered | Steps | Pays | Opens |
 | - | - | - | - | - | - |
-| The post counter | the Holm boy | the third odd job (no contract is a career's first two jobs: `GENTLE_JOBS`) | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
+| The post counter | the Holm boy | the third odd job (no contract is a career's first two jobs: `GENTLE_JOBS`) | bring Jan Holm's post office watch from the counter (Marrow village) | a tin of stew, 2 matches, trust 1 | |
 | The mast relay | Lev | head of Errands | plant a relay up the Radio mast (Marrow); a radio | 2 power cells, 2 boxes 5.45, trust 1 | re-pack 5.45 AP |
 | Anna's tape | Anna | the third Errand | bring Anna's practice tape from Hana's house by the well (Marrow village) | 2 tins of stew, a tea tin, trust 1 | |
-| Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 dressings, trust 2 | re-pack 7.62x39 AP |
+| Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 tins of stew, trust 2 | re-pack 7.62x39 AP |
 | A walker's portrait | the town paper | head of Far jobs | photograph a walker; look at the chimney (Cinder) | a PU scope, 2 boxes 7.62R, trust 2 | re-pack 7.62R AP |
 | The overflow | Lev | past the ladder, trust 3, all three valleys raided | plant a relay at the Depot (Marrow); 2 electronics | a fuel can, a radio, trust 2 | Sallow Reservoir |
 | The scour key | Lev | past the ladder, trust 4, after the overflow | bring the scour valve key from the Valve house; plant a relay at the Draw-off tower (Sallow) | an EMP trap, 2 boxes 5.45 AP, trust 2 | |
-| Up the fell | Lev | past the ladder, trust 6, after the scour key | plant a relay in the observatory (Rime Fell); a hearth in the kit, for the frost | 2 hand flares, 2 boxes 7.62R AP, trust 2 | Rime Fell |
+| Up the fell | Lev | past the ladder, trust 6, after the scour key | plant a relay in the observatory (Rime Fell); a hearth in the kit, for the frost | 2 power cells, 2 boxes 7.62R AP, trust 2 | Rime Fell |
 | The heavy | the town paper | past the ladder, trust 5 | photograph a heavy; plant a relay at the Fire lookout (Cinder) | 2 EMP grenades, a steel plate, trust 3 | |
-| The keeper's log | the water board | past the ladder, trust 8 | bring Brabec's pump log up from the sump of the pump wells (Marrow) | 2 power cells, 3 chemlights, trust 2 | |
+| The keeper's log | the water board | past the ladder, trust 8 | bring Brabec's pump log up from the sump of the pump wells (Marrow) | 4 power cells, trust 2 | |
 | The canary | Old Fiala, at the lodge | past the ladder, trust 9 | bring the canary up alive from the cage landing of the deep workings (Kettle); one that died in the gas isn't taken | a tea tin, an injector, trust 2 | |
-| The deputy's lamp | Irena, from the mine office | past the ladder, trust 10, after the canary | bring the deputy's flame lamp out of the old heading, in the deep workings' gas (Kettle) | an injector, 2 chemlights, trust 2 | |
+| The deputy's lamp | Irena, from the mine office | past the ladder, trust 10, after the canary | bring the deputy's flame lamp out of the old heading, in the deep workings' gas (Kettle) | an injector, 2 power cells, trust 2 | |
 | The charging manifest | Vlasta Kralova | past the ladder, trust 11 | bring the charging manifest off the far ledge of the furnace cellars, over the ash pit (Cinder) | a steel plate, 2 boxes 7.62R AP, trust 3 | |
 
 **The ladder keeps its length.** A contract starts only at the head of its
@@ -338,11 +338,6 @@ they batter a wedged door down and search the cabin for up to ten minutes.
 
 **The truck** waits one night if you radio it from the safehouse (press
 the radio); untold, it leaves the rendezvous while you sleep.
-
-**A night doesn't mend a bone.** A leg broken out there (`interact::wounds`)
-is broken till you're home: a splint takes the worst of the limp, a night
-in the bed none of it. Home, it's set between raids, as your health comes
-back; the logbook says "Broke a leg" (", splinted" if you did).
 
 **Expeditions**: past the ladder, once you've slept out, half the recover
 jobs are expeditions to the valley's deepest place ("Two days' walk. Sleep
