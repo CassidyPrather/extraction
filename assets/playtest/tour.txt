@@ -23,7 +23,7 @@
 #   wrong fails there.
 
 yard_start | 4 | How clear was it what to do first? | --map training_yard
-searchlights | 3 | How well could you read where the searchlights were looking? | --map marrow_creek --hour dusk --weather clearing --no-robots --camera 40,0,262,0,35 --gallery dirigible,50
+searchlights | 3 | How well could you read where the searchlights were looking? | --map marrow_creek --hour dusk --weather clearing --no-robots --camera 22,0,148.5,53,35 --gallery dirigible,50
 injector | 3 | How did using the injector on yourself feel? | --map training_yard --hurt 40 --give regen_injector,regen_injector,regen_injector
 stim | 3 | Did the slow-down feel right, and how long should it last? | --map training_yard --hurt 40 --give regen_injector,stim_s1 | load the stim into the pen's free slot and jab
 grappler | 4 | Could you fight the grappler's line: cut it, shoot it, or grab and yank it? | --map test_field --hour dusk --stage grappler_tour | watch it hook and swing; cut, shoot or grab-and-yank its line, ideally while it climbs. Then stay out of the spotter's beam: it only sees what its lamp lights

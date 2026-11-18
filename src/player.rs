@@ -112,7 +112,24 @@ fn spawn_local_player(mut commands: Commands, zone: Res<Zone>, opts: Res<LaunchO
         "spawning local player at {pos} (ground {:.2})",
         zone.ground(pos.x, pos.z)
     );
+    // A recipe's camera left over from when a map was bigger looks like
+    // ground and holds nothing up: a wreck filmed there fell through.
+    if at.is_some() && !on_the_map(zone.map.size, pos) {
+        warn!(
+            "--camera / --spawn at ({:.0}, {:.0}) is off {}'s ground (it spans +-{:.0} m): nothing physical stays up there",
+            pos.x,
+            pos.z,
+            zone.map.name,
+            zone.map.size * 0.5
+        );
+    }
     spawn_player(&mut commands, pos + Vec3::Y * 0.05, yaw, true);
+}
+
+/// Whether a point is over a map's ground (its heightmap spans the map's
+/// `size`, centred on the origin).
+pub fn on_the_map(size: f32, p: Vec3) -> bool {
+    p.x.abs() <= size * 0.5 && p.z.abs() <= size * 0.5
 }
 
 /// Spawns a player rig (root, collider, head, hands) and returns the root.

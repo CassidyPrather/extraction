@@ -710,6 +710,29 @@ mod tests {
             ]);
             if !o.unknown_args.is_empty() {
                 eprintln!("{}: skipped in this build: {:?}", s.name, o.unknown_args);
+                continue;
+            }
+            // Where it stands you is on the valley's ground.
+            let at = o.spawn.map(|(p, _)| p).or(o.camera.map(|(p, _, _)| p));
+            if let Some(p) = at {
+                let map = std::fs::read_to_string(
+                    crate::asset_root_path()
+                        .join("maps")
+                        .join(format!("{}.ron", o.map)),
+                )
+                .map_err(|e| e.to_string())
+                .and_then(|t| extraction_core::map::MapDef::from_ron(&t));
+                if let Ok(m) = map {
+                    assert!(
+                        crate::player::on_the_map(m.size, p),
+                        "{}: ({}, {}) is off {}'s ground (+-{} m)",
+                        s.name,
+                        p.x,
+                        p.z,
+                        o.map,
+                        m.size / 2.0
+                    );
+                }
             }
         }
     }

@@ -762,7 +762,7 @@ pub fn gallery_word(spec: &str, word: &str) -> bool {
 /// Z so another part of a long gun is centred (-0.4 frames an AK's muzzle).
 ///
 /// ```text
-/// scripts/shot.sh target/shots/ak.png 40,0,262,0,0 20 --gallery ak74
+/// scripts/shot.sh target/shots/ak.png 0,0,36,0,0 20 --map training_yard --gallery ak74
 /// ```
 fn gallery(
     mut commands: Commands,
@@ -1480,7 +1480,7 @@ enum KitPlace {
 /// hold (`render::props::hold_curl`).
 ///
 /// ```text
-/// scripts/shot.sh target/shots/fp.png 40,0,262,0,-10 20 --gallery fp:ak74
+/// scripts/shot.sh target/shots/fp.png 0,0,36,0,-10 20 --map training_yard --gallery fp:ak74
 /// ```
 fn first_person_hands(
     mut commands: Commands,
