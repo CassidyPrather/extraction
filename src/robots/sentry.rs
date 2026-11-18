@@ -1420,6 +1420,7 @@ pub(crate) mod tests {
             .query_filtered::<(&Item, &GlobalTransform), With<InSocket>>()
             .iter(app.world())
             .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
+            .filter(|(id, _)| id.starts_with("sentry_"))
             .collect();
         let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
         ids.sort();
@@ -1431,11 +1432,7 @@ pub(crate) mod tests {
         // Each where a hand reaches from standing, beside the head or on
         // its box.
         for (id, at) in &seated {
-            assert!(
-                at.y - s.foot.y < 1.2,
-                "{id} {:.2} m up",
-                at.y - s.foot.y
-            );
+            assert!(at.y - s.foot.y < 1.2, "{id} {:.2} m up", at.y - s.foot.y);
             let near = if id == "sentry_junction" {
                 at.xz().distance(s.foot.xz()) > 5.0
             } else {
@@ -1443,6 +1440,15 @@ pub(crate) mod tests {
             };
             assert!(near, "{id} at {at}, head at {}", head.translation);
         }
+        // The breaker is live (it had power): it crackles and sparks
+        // before it bites, as a cell does.
+        let live: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&Item, With<super::super::salvage::Live>>()
+            .iter(app.world())
+            .map(|i| catalog.get(i.kind()).id.clone())
+            .collect();
+        assert_eq!(live, ["sentry_junction"]);
         // No pylon loot thrown about it.
         let loose: Vec<String> = app
             .world_mut()
@@ -1450,6 +1456,9 @@ pub(crate) mod tests {
             .iter(app.world())
             .map(|i| catalog.get(i.kind()).id.clone())
             .collect();
-        assert!(!loose.iter().any(|id| id.starts_with("pylon_")), "{loose:?}");
+        assert!(
+            !loose.iter().any(|id| id.starts_with("pylon_")),
+            "{loose:?}"
+        );
     }
 }
