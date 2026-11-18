@@ -106,17 +106,24 @@ Rules: `extraction_core::anomaly::surge_*`; game side `src/anomaly/surge.rs`.
   workshops), a nut, a tin. The moment a loose thing first crosses into an
   anomaly it shows itself for six seconds: its light, particles and haze
   surge, whatever kind it is.
-- **Detectors**, cheapest first (`DetectorTier`):
-  - **Clicker** (`detector`): carried anywhere on you it clicks for the
-    nearest anomaly's edge, about 1.5 s apart at 25 m, a rattle at the
-    edge. Held, it favours the way its antenna points.
-  - **Sweep** (`detector_sweep`, rarer): held, it hears only what lies in
-    a 25° cone ahead, so you sweep to find it; and a second, higher
-    voice (`StonePing`, its green lamp) sings for a loose stone in the
-    cone within 20 m, quicker the nearer. Worn, it's a plain clicker.
-  - **Bear** (`detector_bear`, rarest): held up, its round screen shows
-    the stones within 20 m as bright dots and the anomalies within 25 m
-    as dim ones sized by their reach, the way you face. It still clicks.
+- **Detectors**, the survey sets, a ladder (#104): each one is a find
+  that matters, harder to use than the last and telling something the
+  last can't (`DetectorTier`):
+  - **DP-1 clicker** (`detector`; the yard's, then houses from raid 2):
+    carried anywhere on you it clicks for the nearest anomaly's edge, about
+    1.5 s apart at 25 m, a rattle at the edge. Held, it favours the way its
+    antenna points. It tells you something's near.
+  - **DP-2 field screen** (`detector_bear`; from raid 4, rarer): held up,
+    its round screen draws every anomaly within 25 m as a lit ring, as wide
+    as it reaches, the way you face. It tells you where each one is and how
+    big, all round at once. It doesn't see stones. It still clicks.
+  - **DP-3 sweep** (`detector_sweep`; from raid 7, rarest): held, it hears
+    only what lies in a 25° cone ahead, above and below as well, so you
+    sweep to find it; and a second, higher voice (`StonePing`, its green
+    lamp) sings for a loose stone in the cone within 20 m, quicker the
+    nearer. The only one that finds stones, on another floor or down a
+    shaft too. A stone sealed in a lead case is silent. Worn, it's a plain
+    clicker.
   Shot: `docs/shots/anomalies/detectors.png`.
 
 ## Artifacts: what they give, what they cost, how to get them

@@ -114,7 +114,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("binoculars", 0.17, Hand, "BPTs 7x50"),
     ("detector", 0.16, Made, "an anomaly detector"),
     ("detector_sweep", 0.2, Made, "a sweep detector"),
-    ("detector_bear", 0.16, Made, "the Bear detector"),
+    ("detector_bear", 0.16, Made, "the DP-2 field screen"),
     ("canary", 0.24, Hand, "a canary cage"),
     ("lead_case", 0.12, Made, "a lead-lined case"),
     ("camera_drone", 0.19, Made, "a camera drone"),

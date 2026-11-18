@@ -253,8 +253,13 @@
             Item(id: "artifact_adapter", weight: 0.15, from_raid: 6),
             Item(id: "lead_case", weight: 0.3, from_raid: 4),
             Item(id: "detector", weight: 0.8, from_raid: 2),
-            Item(id: "detector_sweep", weight: 0.35, from_raid: 6),
-            Item(id: "detector_bear", weight: 0.12, from_raid: 6),
+            // The survey sets, a ladder (#104): each easier than the next
+            // is harder, and each tells what the one before can't. DP-1, the
+            // clicker: something's near. DP-2, the field screen: where each
+            // anomaly is, and how big. DP-3, the sweep: stones, above and
+            // below too. The later the rarer.
+            Item(id: "detector_bear", weight: 0.3, from_raid: 4),
+            Item(id: "detector_sweep", weight: 0.12, from_raid: 7),
             Item(id: "cassette_player", weight: 0.5, from_raid: 2),
             Item(id: "power_cell", weight: 1.5),
         ]),
