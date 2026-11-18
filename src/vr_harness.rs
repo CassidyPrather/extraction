@@ -4853,14 +4853,23 @@ mod first_aid {
         let (mut vr, feet) = setup();
         let at = feet + Vec3::new(0.0, 0.3, -1.0);
         let new = vr.spawn("regen_injector", Transform::from_translation(at));
-        let found = vr.spawn(
-            "regen_injector",
-            Transform::from_translation(at + Vec3::X * 0.3),
-        );
-        vr.app
-            .world_mut()
-            .entity_mut(found)
-            .insert(crate::items::loot::Found);
+        // As loot lays it (`loot::spawn_found`): found from the first.
+        let found = {
+            let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+            let kind = catalog.kind("regen_injector").unwrap();
+            let mut commands = vr.app.world_mut().commands();
+            let e = crate::items::loot::spawn_found(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at + Vec3::X * 0.3),
+                    condition: 1.0,
+                },
+            );
+            vr.app.world_mut().flush();
+            e
+        };
         vr.step(5);
         let in_pen = |vr: &mut Vr, pen: Entity| -> Vec<String> {
             let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
