@@ -27,8 +27,9 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| first_jobs A/B: the reckless bot dies in raids 3 and 5, the one-handed in raids 3 and 4 (main was all home) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a: the yard crate held a second pistol); bot cause #96 (one-handed reload only from a pouch; spare packed) — fix in test |
-| `soak::chaos::chaos_monkey_short` (chaos.rs:1285, findings) | aa4fccff | untriaged (coordinator) | rerun to get its findings |
+| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
+| `capture::attach::tests::model_pieces_touch_what_holds_them`: props/field_set board 4 mm and its button/lamp/meter/handset pieces 6-12 mm off what holds them | 5f9a23a7 | Progression | |
+| `render::legibility::tests::every_model_with_letters_is_registered_and_legible` (#103's MIX label had no `# smallest:`) | 5f9a23a7 | Legibility | fixed in edfd7666, in the next gate |
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
 
@@ -56,3 +57,4 @@ How it works:
 | `audio_machines::tests::the_dangers_are_heard` (Recall) | 88c44a5e (Legibility) |
 | `render::legibility::tests::every_panel_in_the_game_clears_its_floor` | 1744915e (Legibility) |
 | `interact::read::tests::the_logbook_comes_up_to_be_read_and_goes_back` | ae762ae8 (Hands) |
+| `soak::chaos::chaos_monkey_short` | passes on 5f9a23a7 (lib332) |
