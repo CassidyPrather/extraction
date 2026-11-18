@@ -109,6 +109,12 @@ fn damp_looks(
     mut meshes: Query<&mut MeshMaterial3d<StandardMaterial>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     catalog: Res<Catalog>,
+    // One damp copy of each material, shared by every damp thing that
+    // wears it (fewer uploads and bind groups; `render::gun_rest` merges
+    // alike ones either way).
+    mut wet_of: Local<
+        std::collections::HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
+    >,
 ) {
     for (e, item, kids, look) in &items {
         let damp = damp_rounds(item, catalog.get(item.kind()).category) > 0;
@@ -122,10 +128,15 @@ fn damp_looks(
                     let Ok(mut mat) = meshes.get_mut(m) else {
                         continue;
                     };
+                    was.push((m, mat.0.clone()));
+                    if let Some(h) = wet_of.get(&mat.0.id()) {
+                        mat.0 = h.clone();
+                        continue;
+                    }
                     let Some(src) = materials.get(&mat.0).cloned() else {
+                        was.pop();
                         continue;
                     };
-                    was.push((m, mat.0.clone()));
                     let base = src.base_color.to_linear();
                     let wet = StandardMaterial {
                         base_color: Color::LinearRgba(LinearRgba::new(
@@ -137,7 +148,9 @@ fn damp_looks(
                         perceptual_roughness: src.perceptual_roughness * DAMP_ROUGH,
                         ..src
                     };
-                    mat.0 = materials.add(wet);
+                    let h = materials.add(wet);
+                    wet_of.insert(mat.0.id(), h.clone());
+                    mat.0 = h;
                 }
                 if !was.is_empty() {
                     commands.entity(e).insert(DampLook(was));

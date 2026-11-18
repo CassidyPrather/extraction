@@ -64,8 +64,8 @@ To make one again (about 2 s a frame under lavapipe):
 ```bash
 cargo build --profile fast
 WGPU_BACKEND=vulkan xvfb-run -a -s "-screen 0 1600x900x24" target/fast/extraction \
-    --screenshot /tmp/reel/wreck.png --frames 99999 --camera 40,0,262,0,-12 \
-    --no-robots --data-dir /tmp/reel-data --gallery reel:wreck,16,5 --size 960x540
+    --screenshot /tmp/reel/wreck.png --frames 99999 --camera 0,0,36,0,-12 \
+    --map training_yard --new-game --no-captions --no-robots --data-dir /tmp/reel-data --gallery reel:wreck,16,5 --size 960x540
 python3 scripts/contact_sheet.py docs/shots/robot-bodies/walker_wreck.png 4 \
     /tmp/reel/wreck_[0-9]*.png --crop 230,150,500,300 --scale 0.6
 ```
@@ -168,7 +168,7 @@ Before and after, the walker and the drone 5 m off on the training yard in fog, 
 ![walker wreck](wreck_rests_on_bare_side_walker_before_after.png)
 ![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)
 
-> **Reel spot.** Most recipes above put the camera at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
+> **Reel spot.** The recipes now film in the training yard (`--map training_yard --new-game --no-captions --camera 0,0,36,…`), on the map. `--no-captions` keeps the yard's radio lines off the frames; a reel's first two frames come before the yard's ground has loaded (bare white), so start the sheet at frame 2. Pictures made before 18 November (their captions name `40,0,262`) were filmed at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
 
 ## Feet that hold the ground
 

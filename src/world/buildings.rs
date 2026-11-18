@@ -3548,7 +3548,9 @@ fn pump_station(b: &mut Builder) {
         Mat::Brick,
         [
             &[window(3.0), door(7.0), window(11.3)],
-            &[window(5.0)],
+            // A window by the locker's corner: what's left on its shelf
+            // reads from its door (`loot_stands_out_from_what_it_lies_on`).
+            &[window(1.5), window(5.0)],
             &[window(4.0), window(10.0)],
             &[door(5.0)],
         ],
