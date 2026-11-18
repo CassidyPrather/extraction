@@ -169,9 +169,11 @@ def brake_drum():
     rod(p, (0.0, 0.75, -0.62), (0.0, 0.2, -0.6), 0.02, "Iron", segs=6)
     p.box((0.22, 0.26, 0.22), (0.0, 1.32, -0.53), "Cast", bevel=0.015, segs=1)
     p.box((0.05, 0.05, 0.14), (0.0, 1.47, -0.56), "Timber")
-    # The lever chained down to its foot and locked: it doesn't move.
-    chain(p, (0.0, 1.0, -0.6), (0.0, 0.2, -0.82))
-    padlock(p, (0.0, 0.2, -0.82), (0, 0, -1))
+    # Its band rusted fast to the drum, the lever's pivot seized in a
+    # blister of rust: it hasn't moved in years.
+    p.lathe([(0.632, -0.31), (0.645, -0.31), (0.645, 0.31), (0.632, 0.31)], "Rusty", segs=24,
+            closed=True, sweep=300.0, start=-60.0, xf=T(0, 0.78, 0) @ RY(math.pi / 2))
+    p.box((0.2, 0.2, 0.3), (0.0, 0.1, -0.7), "Rusty", bevel=0.02, segs=1)
     return [p]
 
 
