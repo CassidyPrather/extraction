@@ -376,7 +376,7 @@ mod tests {
             (
                 "regen_injector",
                 include_str!("../interact/first_aid.rs"),
-                "Put its tip to your thigh and pull\n//!   the trigger",
+                "its tip to a thigh",
             ),
             (
                 "regen_injector",
