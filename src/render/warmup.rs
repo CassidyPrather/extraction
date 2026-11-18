@@ -1217,6 +1217,16 @@ fn shelve_models(
         let mut prims = Vec::new();
         walk(&nodes, &mut prims);
         for prim in prims {
+            // A skinned mesh (the gloves', `art/hands/gloves.py`) draws only
+            // with its skin: shelved bare, its pipeline asked for a skin
+            // the shelf hasn't, and the frame failed validation. The gloves
+            // are drawn from the first frame; they warm themselves.
+            if meshes
+                .get(prim.mesh.id())
+                .is_some_and(|m| m.attribute(Mesh::ATTRIBUTE_JOINT_INDEX).is_some())
+            {
+                continue;
+            }
             let mat = model_mats.get(
                 prim.material.as_deref().unwrap_or("Blued"),
                 &mut lib,
