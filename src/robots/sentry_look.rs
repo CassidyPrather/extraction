@@ -154,7 +154,9 @@ fn dress_sentries(
                     own: Option<&Lights>,
                     parent: Entity,
                     name: &str,
-                    at: Transform| {
+                    at: Transform|
+     -> Vec<Entity> {
+        let mut holders = Vec::new();
         for lod in 0..3 {
             let Some(node) = ModelNode::find(&model, &lod_name(name, lod)) else {
                 continue;
@@ -162,6 +164,7 @@ fn dress_sentries(
             let holder = commands
                 .spawn((at, Visibility::default(), ChildOf(parent)))
                 .id();
+            holders.push(holder);
             for p in &node.primitives {
                 let m = match (p.material.as_deref(), own) {
                     (Some("Glow"), Some(l)) => l.glow.clone(),
@@ -200,6 +203,16 @@ fn dress_sentries(
                     _ => {}
                 }
             }
+        }
+        holders
+    };
+    // What's seated in a part's place on its wreck hides its look here
+    // (`sentry::seat_wreck`).
+    let seat_look = |commands: &mut Commands, holders: Vec<Entity>, robot: Entity, role| {
+        for h in holders {
+            commands
+                .entity(h)
+                .insert(super::salvage::SeatLook { robot, role });
         }
     };
     for (head, children) in &heads {
@@ -246,7 +259,7 @@ fn dress_sentries(
             "head",
             Transform::IDENTITY,
         );
-        hang(
+        let lamp = hang(
             &mut commands,
             &mut materials,
             Some(&l),
@@ -254,6 +267,7 @@ fn dress_sentries(
             "lamp",
             Transform::from_translation(LAMP),
         );
+        seat_look(&mut commands, lamp, head, PartRole::Lamp(0));
         // Its pilot lamp: the lens again, on its crown.
         if let Some(lens) = ModelNode::find(&model, "lamp").and_then(|n| {
             n.primitives
@@ -276,7 +290,7 @@ fn dress_sentries(
             // The part sits at its offset already.
             match part.role {
                 PartRole::Sensor => {
-                    hang(
+                    let eye = hang(
                         &mut commands,
                         &mut materials,
                         Some(&l),
@@ -284,6 +298,7 @@ fn dress_sentries(
                         "eye",
                         Transform::IDENTITY,
                     );
+                    seat_look(&mut commands, eye, head, PartRole::Sensor);
                     commands.spawn((
                         Mesh3d(meshes.add(Sphere::new(HALO).mesh().ico(2).unwrap())),
                         MeshMaterial3d(l.halo.clone()),
@@ -292,14 +307,17 @@ fn dress_sentries(
                         ChildOf(c),
                     ));
                 }
-                PartRole::Weapon => hang(
-                    &mut commands,
-                    &mut materials,
-                    Some(&l),
-                    c,
-                    "gun",
-                    Transform::IDENTITY,
-                ),
+                PartRole::Weapon => {
+                    let gun = hang(
+                        &mut commands,
+                        &mut materials,
+                        Some(&l),
+                        c,
+                        "gun",
+                        Transform::IDENTITY,
+                    );
+                    seat_look(&mut commands, gun, head, PartRole::Weapon);
+                }
                 _ => {}
             }
             let _ = pt;
@@ -308,7 +326,7 @@ fn dress_sentries(
     }
     for (e, piece, of, len) in &pieces {
         let own = lights.get(of.0).ok();
-        match piece {
+        let _ = match piece {
             SentryPiece::Mast => hang(
                 &mut commands,
                 &mut materials,
@@ -334,7 +352,7 @@ fn dress_sentries(
                 "cable",
                 Transform::from_scale(Vec3::new(1.0, 1.0, len.map_or(1.0, |l| l.0))),
             ),
-        }
+        };
         commands.entity(e).insert(Dressed);
     }
 }
