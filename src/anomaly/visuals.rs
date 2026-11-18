@@ -851,9 +851,11 @@ fn particle_mesh(n: usize, rng: &mut extraction_core::noise::Rng) -> Mesh {
         let k = (i * 4) as u32;
         idx.extend_from_slice(&[k, k + 1, k + 2, k, k + 2, k + 3]);
     }
+    // (Kept in the main world too: `render::overdraw` replays the shader's
+    // placement from the seeds to count what the particles shade.)
     Mesh::new(
         PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
+        RenderAssetUsages::default(),
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
