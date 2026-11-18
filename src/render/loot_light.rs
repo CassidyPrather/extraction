@@ -25,7 +25,7 @@ impl Plugin for LootLightPlugin {
 /// Steps the light is shared out in (of before the field).
 const STEP: f32 = 0.125;
 /// How far in front of a container a thing in its hold is lit from (m).
-const HOLD_SEEN_FROM: f32 = 0.6;
+pub const HOLD_SEEN_FROM: f32 = 0.6;
 /// How far an item moves before it's lit afresh (m).
 const MOVED: f32 = 0.25;
 
