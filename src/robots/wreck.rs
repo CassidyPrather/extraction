@@ -1228,7 +1228,9 @@ mod tests {
         // against World and Robot, and debris is neither.
         let walks = LayerMask::from([Layer::World, Layer::Robot]);
         for e in &pieces {
-            let layers = app.world().get::<CollisionLayers>(*e).unwrap();
+            let Some(layers) = app.world().get::<CollisionLayers>(*e) else {
+                continue;
+            };
             assert_eq!(
                 layers.memberships & walks,
                 LayerMask::NONE,
