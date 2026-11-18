@@ -907,6 +907,26 @@ impl Scene<'_, '_> {
             .collect()
     }
 
+    /// Its pens with something left in them (`items::pen`): a used one
+    /// stays on it, empty.
+    fn loaded_pens(&self, me: Entity) -> Vec<Entity> {
+        self.carried(me, crate::items::pen::PEN)
+            .into_iter()
+            .filter(|pen| {
+                self.sockets.iter().any(|(s, o)| {
+                    o.0 == *pen
+                        && s.occupant.is_some_and(|c| {
+                            self.items.get(c).is_ok_and(|(_, it, ..)| {
+                                it.condition > 0.0
+                                    && crate::items::pen::Dose::of(self.catalog.get(it.kind()))
+                                        .is_some()
+                            })
+                        })
+                })
+            })
+            .collect()
+    }
+
     fn pack(&self, me: Entity) -> Option<&Backpack> {
         self.bags.iter().find(|b| b.owner == me && b.carried)
     }
@@ -1590,7 +1610,7 @@ fn time_to_go(
     if heat >= r.traits.heat {
         return Some("heat");
     }
-    let meds = !scene.carried(me, "regen_injector").is_empty();
+    let meds = !scene.loaded_pens(me).is_empty();
     if health.hp < 35.0 && !meds {
         return Some("hurt");
     }
@@ -1621,7 +1641,7 @@ fn heal(
     if scene.hand(children, Side::Left).is_some() {
         return None;
     }
-    let item = scene.carried(me, "regen_injector").first().copied()?;
+    let item = scene.loaded_pens(me).first().copied()?;
     let id = scene
         .items
         .get(item)

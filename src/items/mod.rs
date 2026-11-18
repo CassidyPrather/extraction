@@ -6,6 +6,7 @@ pub mod handled;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
+pub mod pen;
 pub mod rest;
 pub mod usage;
 
@@ -57,6 +58,7 @@ impl Plugin for ItemsPlugin {
             rest::RestPlugin,
             damp::DampPlugin,
             handled::HandledPlugin,
+            pen::PenPlugin,
         ));
     }
 }

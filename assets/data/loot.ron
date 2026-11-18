@@ -229,8 +229,12 @@
             Item(id: "bolt_mosin", weight: 0.8, condition: (0.2, 0.95), from_raid: 7),
         ]),
         "medical": (rolls: (1, 2), entries: [
-            // The only medicine (#102): from the first raid.
-            Item(id: "regen_injector", weight: 2.0),
+            // The only medicine (#102): a pen (with its R-2) now and then,
+            // cartridges by grade more often, most of them part used.
+            Item(id: "regen_injector", weight: 0.8),
+            Item(id: "regen_r1", weight: 2.0, condition: (0.3, 1.0)),
+            Item(id: "regen_r2", weight: 1.0, condition: (0.3, 1.0), from_raid: 2),
+            Item(id: "regen_r3", weight: 0.3, condition: (0.5, 1.0), from_raid: 5),
             Nothing(weight: 2.0),
         ]),
         "gadgets": (rolls: (1, 1), entries: [

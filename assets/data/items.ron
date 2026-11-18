@@ -692,10 +692,43 @@
         // ---------------------------------------------------------------
         // Medical
         // ---------------------------------------------------------------
+        // The injector pen (#102): two cartridges ride in its slots, and
+        // one jab gives both (`items::pen`). A cartridge's condition is
+        // how full it is.
         (
-            id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Regen injector",
-            description: "Jab it in your thigh. Something in the Zone makes these work better than they should.",
+            id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Injector pen",
+            description: "Two cartridges, one jab, anywhere you can reach. A new one comes with a REGEN R-2 in it.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,
+        ),
+        (
+            id: "regen_r1", dims: Some((0.012, 0.012, 0.07)), name: "REGEN R-1 cartridge",
+            description: "Green, one band. Up to 30 HP, as much as is left in it.",
+            category: Medical, size: Tiny, mass: 0.02, bulk: 0.01, mount: Some(Cartridge),
+            tags: ["dose:regen:30", "glass"],
+        ),
+        (
+            id: "regen_r2", dims: Some((0.012, 0.012, 0.07)), name: "REGEN R-2 cartridge",
+            description: "Green, two bands. Up to 60 HP, as much as is left in it.",
+            category: Medical, size: Tiny, mass: 0.02, bulk: 0.01, mount: Some(Cartridge),
+            tags: ["dose:regen:60", "glass"],
+        ),
+        (
+            id: "regen_r3", dims: Some((0.012, 0.012, 0.07)), name: "REGEN R-3 cartridge",
+            description: "Green, three bands. Up to 100 HP, as much as is left in it.",
+            category: Medical, size: Tiny, mass: 0.02, bulk: 0.01, mount: Some(Cartridge),
+            tags: ["dose:regen:100", "glass"],
+        ),
+        (
+            id: "stim_s1", dims: Some((0.012, 0.012, 0.07)), name: "STIM S-1 cartridge",
+            description: "Amber, one band. The world slows round you for a few seconds.",
+            category: Medical, size: Tiny, mass: 0.02, bulk: 0.01, mount: Some(Cartridge),
+            tags: ["dose:stim:6", "glass"],
+        ),
+        (
+            id: "stim_s2", dims: Some((0.012, 0.012, 0.07)), name: "STIM S-2 cartridge",
+            description: "Amber, two bands. The world slows round you for longer.",
+            category: Medical, size: Tiny, mass: 0.02, bulk: 0.01, mount: Some(Cartridge),
+            tags: ["dose:stim:12", "glass"],
         ),
 
         // ---------------------------------------------------------------

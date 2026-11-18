@@ -4820,14 +4820,133 @@ mod first_aid {
         vr.step(8);
         vr.trigger(Side::Right, 1.0);
         vr.step(3);
-        // Used, and it healed (from 50).
-        gone(&vr, inj) && vr.app.world().get::<Health>(vr.player).unwrap().hp > 90.0
+        // It healed (from 50: its R-2 gives 60), and its cartridge is
+        // spent, still in the pen (`items::pen`).
+        let spent = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::items::Item, &crate::interact::InSocket)>();
+            q.iter(vr.app.world())
+                .filter(|(_, s)| {
+                    vr.app
+                        .world()
+                        .get::<crate::interact::SocketOwner>(s.socket)
+                        .is_some_and(|o| o.0 == inj)
+                })
+                .any(|(it, _)| it.condition == 0.0)
+        };
+        spent && vr.app.world().get::<Health>(vr.player).unwrap().hp > 99.0
     }
 
     /// In at the thigh, it's used, and it heals (from 50).
     #[test]
     fn an_injector_goes_in_at_the_thigh() {
         assert!(jab(true), "the thigh took no injection");
+    }
+
+    /// Half heal, half stim (#102): a new pen comes with an R-2; an S-1
+    /// let go at its other slot clicks in; one jab gives both (60 HP, six
+    /// seconds of stim), and both cartridges are left in it, spent.
+    #[test]
+    fn a_stim_in_the_other_slot_and_one_jab_gives_both() {
+        use crate::items::pen::{PenSlot, SLOTS, Stimmed};
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        // The S-1 in the left hand, to the pen's free slot.
+        let at = feet + Vec3::new(-0.2, 1.1, -0.35);
+        let stim = vr.spawn("stim_s1", Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(stim)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Left, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(stim)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(
+            vr.hand_state(Side::Left).holding,
+            Some(stim),
+            "the S-1 in hand"
+        );
+        let free = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&PenSlot, &crate::interact::Socket, &ChildOf)>();
+            q.iter(vr.app.world())
+                .find(|(_, s, c)| c.parent() == pen && s.occupant.is_none())
+                .map(|(p, ..)| p.0)
+                .expect("a free slot")
+        };
+        for _ in 0..3 {
+            let slot = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(pen)
+                .unwrap()
+                .transform_point(SLOTS[free]);
+            let hand = vr.hand_state(Side::Left).world.translation;
+            let held = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(stim)
+                .unwrap()
+                .translation();
+            vr.move_hand(Side::Left, hand + (slot - held));
+            vr.step(3);
+        }
+        vr.grip(Side::Left, 0.0);
+        vr.step(4);
+        let seated = vr
+            .app
+            .world()
+            .get::<crate::interact::InSocket>(stim)
+            .and_then(|s| vr.app.world().get::<crate::interact::SocketOwner>(s.socket))
+            .map(|o| o.0);
+        assert_eq!(seated, Some(pen), "the S-1 clicked into the pen");
+        // Its tip to the thigh, and the trigger.
+        let thigh = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::interact::body::Torso>>();
+            q.iter(vr.app.world())
+                .next()
+                .unwrap()
+                .transform_point(Vec3::new(0.11, -0.62, -0.04))
+        };
+        let off = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(pen)
+            .unwrap()
+            .transform_point(NEEDLE)
+            - vr.hand_state(Side::Right).world.translation;
+        vr.move_hand(Side::Right, thigh - off);
+        vr.step(8);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        let hp = vr.app.world().get::<Health>(vr.player).unwrap().hp;
+        assert!(hp > 99.0, "healed from 50 by the R-2: {hp}");
+        let s = vr.app.world().get::<Stimmed>(vr.player).copied();
+        assert!(
+            s.is_some_and(|s| (s.total - 6.0).abs() < 1e-3),
+            "six seconds of stim: {s:?}"
+        );
+        assert_eq!(
+            vr.app
+                .world()
+                .get::<crate::items::Item>(stim)
+                .unwrap()
+                .condition,
+            0.0,
+            "the S-1 spent"
+        );
     }
 
     #[test]

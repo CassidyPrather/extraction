@@ -2110,6 +2110,83 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// A pen saved with its R-2 part used (#102) loads with it as it was,
+    /// and no second R-2: a pen is given its cartridge once.
+    #[test]
+    fn a_pen_loads_as_it_was_saved() {
+        let r2_fill = |world: &mut World| -> Vec<f32> {
+            let catalog = world.resource::<crate::items::Catalog>().clone();
+            world
+                .query::<&Item>()
+                .iter(world)
+                .filter(|i| catalog.get(i.kind()).id == crate::items::pen::PRIMED_WITH)
+                .map(|i| i.condition)
+                .collect()
+        };
+        let path = temp_save("pen_fill.ron");
+        let mut app = app_with_save(&path);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let before = r2_fill(app.world_mut()).len();
+        let pen = {
+            let mut queue = CommandQueue::default();
+            let e = crate::items::spawn_item(
+                &mut Commands::new(&mut queue, app.world()),
+                &catalog,
+                SpawnItem {
+                    kind: catalog.kind(crate::items::pen::PEN).unwrap(),
+                    transform: Transform::from_xyz(0.0, 40.0, 0.0),
+                    condition: 1.0,
+                },
+            );
+            queue.apply(app.world_mut());
+            e
+        };
+        for _ in 0..4 {
+            app.update();
+        }
+        let fills = r2_fill(app.world_mut());
+        assert_eq!(fills.len(), before + 1, "a new pen comes with an R-2");
+        // Part used, and in the stash.
+        {
+            let world = app.world_mut();
+            let cart = world
+                .query::<(Entity, &Item, &InSocket)>()
+                .iter(world)
+                .find(|(_, i, s)| {
+                    catalog.get(i.kind()).id == crate::items::pen::PRIMED_WITH
+                        && world
+                            .get::<SocketOwner>(s.socket)
+                            .is_some_and(|o| o.0 == pen)
+                })
+                .map(|(e, ..)| e)
+                .expect("its R-2");
+            world.get_mut::<Item>(cart).unwrap().condition = 0.4;
+        }
+        let stash = app
+            .world_mut()
+            .query_filtered::<Entity, With<Stash>>()
+            .iter(app.world())
+            .next()
+            .expect("the stash");
+        put_in_bag(app.world_mut(), pen, stash, Vec3::new(0.0, 0.1, 0.0));
+        app.update();
+        let save = snapshot(app.world_mut());
+        let mut career = app.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+        let mut app = app_with_save(&path);
+        for _ in 0..10 {
+            app.update();
+        }
+        let fills = r2_fill(app.world_mut());
+        assert_eq!(fills.len(), before + 1, "no second R-2: {fills:?}");
+        assert!(
+            fills.iter().any(|f| (f - 0.4).abs() < 1e-4),
+            "its R-2 still 0.4 full: {fills:?}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
     /// An old save's dressings and splint (#102 took them out of the game)
     /// load as nothing: the rest of the stash comes back as it was, and
     /// nothing in the world is a dressing or a splint.

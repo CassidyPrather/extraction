@@ -38,6 +38,8 @@ pub enum Mount {
     Cassette,
     /// A gramophone's platter: records.
     Record,
+    /// An injector pen's slot: its cartridges.
+    Cartridge,
 }
 
 /// How big a thing is, for pockets and slings. Bulk (a continuous volume) is

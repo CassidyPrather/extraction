@@ -405,6 +405,10 @@ mod tests {
                 q.apply(app.world_mut());
                 e
             };
+            // (A frame or two for the pen to get its cartridge.)
+            for _ in 0..3 {
+                app.update();
+            }
             app.world_mut().write_message(crate::items::usage::UseItem {
                 player: me,
                 item: injector,
