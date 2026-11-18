@@ -349,6 +349,18 @@ The night pack is the rollout as it will be (the drones', sentry's and
 torch's lamps still draw `world::beams` today). `EXTRACTION_NO_FOG_BEAMS=1`
 hides every beam, for an A/B of the shader's price per pixel.
 
+Since then the drones', sentry's and torch's lamps draw it too (the night
+pack is the game's), and the march runs the ray's true stretch in the
+cone (sorted wall and end crossings, at least 5 samples).
+
+**Priced (Performance, 2026-11-18):** lavapipe 1024 px, both eyes, the
+gauge's crossing and inside views, beams on against `EXTRACTION_NO_FOG_BEAMS=1`
+on one binary. `main_transparent_pass_3d` adds 115 ms at crossing and
+49 ms inside (82871da8's shader; 75 and 34 before the true-stretch march),
+1.7% and 1.1% of the GPU frame; the opaque pass doesn't move. A beam
+fragment is about 0.02-0.04 of an average opaque fragment there (a lower
+bound). So no coverage or lit-beam cap: the fragment gauge is the guard.
+
 ### Puffs where they stack
 
 Soft puffs (`render::puff`) are 1.6 m blended quads, so each one across
