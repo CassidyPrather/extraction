@@ -93,6 +93,15 @@ fn both_sides(w: &World, e: Entity) -> bool {
         Some(base(m).cull_mode.is_none())
     }
     use crate::world::{cover, impostors, trees};
+    // A lit beam (`render::fog_beam`) draws one face: its front from
+    // outside, its back from inside, where every face the eye sees is a
+    // back face, so it counts as both sides.
+    if let Some(h) = w.get::<MeshMaterial3d<crate::render::fog_beam::FogBeamMaterial>>(e) {
+        return w
+            .resource::<Assets<crate::render::fog_beam::FogBeamMaterial>>()
+            .get(&h.0)
+            .is_some_and(|m| m.inside);
+    }
     cull::<StandardMaterial>(w, e, |m| m)
         .or_else(|| cull::<trees::TreeSwayMaterial>(w, e, |m| &m.base))
         .or_else(|| cull::<trees::FarCrownMaterial>(w, e, |m| &m.base))

@@ -107,6 +107,8 @@ pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
             || opts.camera.is_some()
             || !owns_profile(opts)
             || opts.gallery.is_some()
+            // A playtest tour is a sandbox: no station touches the career.
+            || opts.playtest.is_some()
             || opts.scene != crate::launch::SceneChoice::Raid =>
         {
             None
@@ -545,6 +547,17 @@ fn fresh_save(map: &str) -> SaveGame {
     mag.turn = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array();
     let mut torch = item("flashlight", 0, [0.0, 0.05, 0.2]);
     torch.inserted.push(item("power_cell", 0, [0.0; 3]));
+    // The yard's pistol is the range table's, and it's yours to keep: the
+    // crate holds its magazine, not a second pistol (#89: with both, the
+    // newcomer went out with the range's, empty, in its holster and the
+    // crate's packed, and was caught empty-handed by its third raid).
+    let pistol = if map == crate::camp::TRAINING_YARD {
+        let mut m = item("pm_mag", 8, [0.2, 0.04, -0.4]);
+        m.turn = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array();
+        m
+    } else {
+        pistol
+    };
     s.stash = vec![
         pistol,
         torch,
@@ -578,6 +591,21 @@ pub const RETIRED: [&str; 2] = ["field_dressing", "splint"];
 /// `at`. Returns `None` for ids the catalog no longer knows ([`RETIRED`]
 /// ones quietly).
 pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
+    // A kind retired since the save: what it became, fresh, where it lay.
+    if let Some(now) = extraction_core::save::retired_as(&saved.id) {
+        let fresh = SavedItem {
+            id: now.to_string(),
+            condition: saved.condition,
+            rounds: 0,
+            charge_wh: 0.0,
+            local: saved.local,
+            turn: saved.turn,
+            gun: None,
+            inserted: Vec::new(),
+            loads: Default::default(),
+        };
+        return restore_item(world, &fresh, at);
+    }
     let catalog = world.resource::<Catalog>().clone();
     let Some(kind) = catalog.kind(&saved.id) else {
         if RETIRED.contains(&saved.id.as_str()) {
@@ -1856,12 +1884,68 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The yard's crate holds no pistol of its own (the range table's is
+    /// the one you keep) but its magazine: one pistol leaves the yard, with
+    /// the rounds a valley's new game starts with.
+    #[test]
+    fn the_yard_crate_holds_the_pistols_magazine_not_a_second_pistol() {
+        let count = |s: &SaveGame, id: &str| s.stash.iter().filter(|i| i.id == id).count();
+        let rounds = |s: &SaveGame| -> u32 {
+            s.stash
+                .iter()
+                .flat_map(|i| std::iter::once(i).chain(i.inserted.iter()))
+                .filter(|i| i.id == "pm_mag")
+                .map(|i| i.rounds)
+                .sum()
+        };
+        let yard = fresh_save(crate::camp::TRAINING_YARD);
+        let valley = fresh_save("marrow_creek");
+        assert_eq!(count(&yard, "pm_pistol"), 0);
+        assert_eq!(count(&valley, "pm_pistol"), 1);
+        assert_eq!(count(&yard, "pm_mag"), 2);
+        assert_eq!(rounds(&yard), rounds(&valley));
+    }
+
     /// A new game's crate holds the one medicine there is: an injector.
     #[test]
     fn a_new_game_has_an_injector() {
         let s = fresh_save("marrow_creek");
         let n = s.stash.iter().filter(|i| i.id == "regen_injector").count();
         assert_eq!(n, 1, "{:?}", s.stash);
+    }
+
+    /// A save from before the flare pistol was retired loads: its red
+    /// cartridge is a signal flare, its white one brass, the pistol scrap
+    /// (`save::RETIRED`), where each lay.
+    #[test]
+    fn a_retired_kind_in_an_old_save_loads_as_what_it_became() {
+        let path = temp_save("retired.ron");
+        let mut app = app_with_save(&path);
+        let world = app.world_mut();
+        for (old, now) in [
+            ("flare_red", "signal_flare"),
+            ("flare_white", "brass"),
+            ("flare_pistol", "scrap_metal"),
+        ] {
+            let saved = SavedItem {
+                id: old.into(),
+                condition: 0.7,
+                rounds: 1,
+                charge_wh: 0.0,
+                local: [0.0; 3],
+                turn: [0.0, 0.0, 0.0, 1.0],
+                gun: None,
+                inserted: Vec::new(),
+                loads: Default::default(),
+            };
+            let at = Transform::from_xyz(3.0, 40.0, 7.0);
+            let e = restore_item(world, &saved, at).expect(old);
+            let catalog = world.resource::<Catalog>().clone();
+            let kind = world.get::<crate::items::Item>(e).unwrap().kind();
+            assert_eq!(catalog.get(kind).id, now, "{old}");
+            let t = world.get::<Transform>(e).unwrap().translation;
+            assert!(t.distance(at.translation) < 0.01, "{old} moved to {t}");
+        }
     }
 
     /// The same world saves to the same bytes: remains come out in one

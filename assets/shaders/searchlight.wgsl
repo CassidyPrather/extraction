@@ -48,7 +48,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let square = abs(dot(n, v));
         // Looking down the throw (it's coming at you): all of it at once.
         let down = pow(abs(dot(v, p.axis.xyz)), 6.0);
-        let path = smoothstep(0.0, 0.6, square) * (0.5 + 1.5 * down);
+        // (A little more looking down the throw, not much: from under a
+        // beam coming at you, its whole far end fills the view.)
+        let path = smoothstep(0.0, 0.6, square) * (0.6 + 0.4 * down);
         let ends = smoothstep(0.0, 0.03, along) * (1.0 - smoothstep(0.75, 1.0, along));
         // A tight beam thins slowly: still a shaft where it lands.
         let thin = 1.0 - 0.55 * along;
@@ -65,7 +67,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         // Near the eye a shaft is capped thin: two crossing over you are
         // light round you, not a white-out of the lower half of the view.
         let cap = mix(0.1, 1.0, smoothstep(3.0, 25.0, dist));
-        let a = min(k * mix(0.42, 0.22, day), cap * 0.42);
+        let a = min(k * mix(0.42, 0.22, day), cap * mix(0.3, 0.22, day));
         // Display brightness, not scene light: exposure is the scene's,
         // and a beam by day must still read lighter than what's behind it.
         let glow = mix(2.4, 1.6, day);

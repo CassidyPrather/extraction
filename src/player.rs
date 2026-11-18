@@ -96,8 +96,9 @@ impl Plugin for PlayerPlugin {
 }
 
 fn spawn_local_player(mut commands: Commands, zone: Res<Zone>, opts: Res<LaunchOptions>) {
-    let (pos, yaw) = match opts.camera {
-        Some((p, yaw, _)) => (Vec3::new(p.x, zone.ground(p.x, p.z), p.z), yaw),
+    let at = opts.spawn.or(opts.camera.map(|(p, yaw, _)| (p, yaw)));
+    let (pos, yaw) = match at {
+        Some((p, yaw)) => (Vec3::new(p.x, zone.ground(p.x, p.z), p.z), yaw),
         None => {
             let m = zone.marker(&MarkerKind::Insertion);
             let at = m.map(|m| m.at).unwrap_or([0.0, 0.0]);

@@ -1308,6 +1308,10 @@ mod tests {
         ("JobDone", "the card's chime (UI)"),
         ("LostYou", "a mind's turn: heard in its voice"),
         ("MeetFirst", "a first-time line"),
+        (
+            "Recall",
+            "asking what a thing in hand is: its callout shows (render::said)",
+        ),
         ("NightVisit", "the walkers sent are heard walking"),
         (
             "Noise",

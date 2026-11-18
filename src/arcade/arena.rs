@@ -6,6 +6,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use extraction_core::ammo::{Load, Loads};
 use extraction_core::map::MarkerKind;
 use extraction_core::save::SavedItem;
 
@@ -120,6 +121,43 @@ fn kit(table: usize) -> &'static [Kit] {
     }
 }
 
+/// On the gun board's table, in front of it: boxes of the AK's rounds to
+/// read and handle (#103, `items::rounds`): an AP box and a tracer box,
+/// shut and full; a ball box with AP and tracers put in it (mixed); an AP
+/// box with twelve left; and a ball box with four rounds gone damp.
+/// (catalog id, rounds, its loads from the bottom, where (x, z)).
+pub const BOX_TABLE_KIT: [(&str, u32, &[Load], [f32; 2]); 5] = [
+    ("ammo_545_ap", 30, &[], [-0.36, 0.25]),
+    ("ammo_545_tracer", 30, &[], [-0.18, 0.25]),
+    (
+        "ammo_545",
+        24,
+        &[
+            Load::Ap,
+            Load::Tracer,
+            Load::Standard,
+            Load::Ap,
+            Load::Tracer,
+            Load::Ap,
+        ],
+        [0.0, 0.25],
+    ),
+    ("ammo_545_ap", 12, &[], [0.18, 0.25]),
+    (
+        "ammo_545",
+        30,
+        &[
+            Load::Damp,
+            Load::Standard,
+            Load::Damp,
+            Load::Damp,
+            Load::Standard,
+            Load::Damp,
+        ],
+        [0.36, 0.25],
+    ),
+];
+
 /// On the board's table, in front of the board: the throwables.
 const BOARD_TABLE_KIT: [Kit; 2] = [
     ("rgd5", 0, None, [-0.3, 0.2], Lie::Flat),
@@ -219,8 +257,8 @@ fn set_up(
     let bench = bench_pose(&zone);
     arcade.bench = Some(bench);
     arcade.stand = Some(bench * Transform::from_translation(STAND));
-    // A screenshot's camera places itself.
-    arcade.hold = if opts.camera.is_some() { 0 } else { 30 };
+    // A screenshot's camera, or `--spawn`, places the player.
+    arcade.hold = if opts.places_player() { 0 } else { 30 };
     for i in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, i);
         let table = commands
@@ -674,6 +712,19 @@ fn lay_tables(world: &mut World) {
             }
         }
     }
+    // The boxes, on the gun board's table: opened ones torn already.
+    let pose = table_pose(&zone, &bench, GUN_TABLE);
+    for (id, rounds, loads, [x, z]) in BOX_TABLE_KIT {
+        let at = pose * Transform::from_xyz(x, TABLE.y + 0.06, z);
+        let mut saved = saved(id, rounds);
+        saved.loads = Loads(loads.to_vec());
+        if let Some(e) = crate::persist::restore_item(world, &saved, at) {
+            n += 1;
+            if !loads.is_empty() {
+                world.entity_mut(e).insert(crate::items::rounds::Opened);
+            }
+        }
+    }
     world.resource_mut::<Laid>().0 = true;
     info!("arcade: {n} things laid on the bench");
     // Shots only: `EXTRACTION_ARCADE_CALL=1` calls a wave once the bench is
@@ -761,6 +812,10 @@ mod tests {
     #[test]
     fn every_thing_on_the_bench_is_in_the_catalog() {
         let catalog = crate::items::Catalog::load();
+        for (id, rounds, loads, _) in BOX_TABLE_KIT {
+            let def = catalog.get(catalog.kind(id).expect(id));
+            assert!(rounds <= def.rounds && loads.len() as u32 <= rounds, "{id}");
+        }
         let all = (0..KIT_TABLES)
             .flat_map(|t| kit(t).iter())
             .chain(BOARD_TABLE_KIT.iter());

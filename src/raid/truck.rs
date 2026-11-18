@@ -551,10 +551,10 @@ pub(crate) fn start_in_truck(
             s.owner = p;
         }
     }
-    // Scenarios and screenshots place the player themselves; the yard
-    // starts you on foot in its first bay, the truck not come yet
-    // (`onboarding`, #89).
-    if !opts.plays_for_real() || opts.camera.is_some() || opts.map == crate::camp::TRAINING_YARD {
+    // Scenarios, screenshots and `--spawn` place the player themselves;
+    // the yard starts you on foot in its first bay, the truck not come
+    // yet (`onboarding`, #89).
+    if !opts.plays_for_real() || opts.places_player() || opts.map == crate::camp::TRAINING_YARD {
         return;
     }
     let pose = base_pose(&zone);

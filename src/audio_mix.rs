@@ -113,6 +113,9 @@ pub const MIX: &[Cue] = &[
     cue!("use.switch", "physical/switch", -3.5, 50.0, 0.4, Detail),
     cue!("step.done", "physical/chime", -22.0, 60.0, 0.0, Detail),
     cue!("step.station", "ui/chime_station", -20.0, 65.0, 0.0, Detail),
+    // The playtest tour's sync chirp, in your head: loud enough to find
+    // on a recording (`capture::station`, scripts/playtest_ingest.py).
+    cue!("tour.sync", "ui/tour_sync", -10.0, 70.0, 0.0, Signal),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     cue!("drop.heavy", "impacts/dirt", -6.0, 85.0, 1.5, Event, 25.0),
     // Guns in your hands.
@@ -180,6 +183,8 @@ pub const MIX: &[Cue] = &[
     cue!("gun.burst_case", "physical/drop_metal", -8.0, 90.0, 0.5, Action),
     cue!("gun.grind", "physical/handle_metal", -14.0, 60.0, 0.5, Detail),
     cue!("smith.clamp", "machines/clank", -8.0, 75.0, 1.0, Detail),
+    cue!("box.tear", "physical/zip", -14.0, 60.0, 0.5, Detail),
+    cue!("box.round", "guns/casing", -16.0, 55.0, 0.5, Detail),
     cue!("smith.saw", "physical/handle_metal", -12.0, 65.0, 1.0, Detail),
     cue!("smith.cut", "impacts/metal", -8.0, 80.0, 1.0, Detail),
     cue!("smith.screw", "physical/door_creak", -16.0, 55.0, 0.5, Detail),
