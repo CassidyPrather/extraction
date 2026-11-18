@@ -363,6 +363,10 @@ pub const MIX: &[Cue] = &[
     cue!("relay.filed", "signal/filed", -14.0, 80.0, 20.0, Signal, 8.0),
     cue!("wreck.thud", "impacts/metal", -2.0, 100.0, 20.0, Action, 10.0),
     cue!("cell.arc", "device/crackle", -9.0, 95.0, 1.0, Action),
+    // A live cell's warning before it arcs (`salvage::Crackled`): a quiet
+    // tick heard near it, and a sharper snap at a hand close to it.
+    cue!("cell.crackle", "device/crackle", -26.0, 58.0, 1.0, Detail, 4.0),
+    cue!("cell.warn", "device/crackle", -17.0, 70.0, 0.5, Action, 3.0),
     cue!("you.hurt", "physical/body_hit", -8.0, 85.0, 0.0, Detail),
     cue!("you.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
     cue!("you.down", "physical/body_hit", -9.0, 95.0, 0.0, Action),
