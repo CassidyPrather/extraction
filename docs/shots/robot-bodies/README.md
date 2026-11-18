@@ -316,3 +316,11 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 | `light_in_fog_lamps_night_clearing_before_after.png` | The same on a clear night: a lamp's haze goes with the wet in the air (`world::beams::lamp_haze`), so next to nothing shows |
 | `light_in_fog_halo_waylamp_night_drizzle_before_after.png` | The lamps' halos (`world::halos`) onto the same look: `--wayfind-lamps` shot 12, night in drizzle (crop 1120x660 of 1920x1080). A way lamp: a hard little disc before; after, its light hangs in the wet air round it as a soft aureole, the beams' slow billows drifting through it, with no edge. The core, its glare caps and its hue are as they were (the halo's sphere is drawn wider for the aureole, `halos::spread`: none in dry air, 2.5x in fog) |
 | `light_in_fog_halo_lamps_orange_night_drizzle_before_after.png` | Shot 7: the Depot's orange lamps through the trees, and a red landmark lamp up the tower. The orange keeps its hue; the red at range is unchanged |
+
+## One line body (#101)
+
+`robots::lines`: one body for every line a machine hangs by or throws: the dirigible's pod cable (steel, its weak-link shackle 0.6 m over the pod, a grip sleeve a hand's reach above), the spotter's tether (steel, a grip sleeve on each stretch in reach, where the cutters bite), and next the grappler's line (rope). Rope reads pale, fat and fibrous and sags; cable dark, thin and glinting, hanging taut. It frays on the line itself where it's worked, over a hand's length, large enough to steer a cut by at arm's length: whole, nicked (a bright strand springs out), half through (necked to under half its thickness, bright cut ends splayed at both sides), parting (a clear gap spanned by a single thread, the ends splayed). Rounds on a line wear it by its gauge (rope four times as fast as cable); what parts it is its owner's rule.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/101_body_lines.png` | `reel:lines,4,20` by day (camera `40,0,262,0,8`, crop 900x700 of 1920x1080 at 2x): rope whole and half through, then cable whole with its orange shackle and a grip sleeve, nicked, half through and parting |
