@@ -35,7 +35,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import ALONG_X, UP, centred, item, tube_path, wanted  # noqa: E402
-from common import RX, RY, RZ, T, Part  # noqa: E402
+from common import RX, RY, RZ, T, Part, fillet  # noqa: E402
 
 # (A cyl's or tube's own axis is Z.)
 ALONG_Z = T(0, 0, 0)
@@ -96,6 +96,97 @@ def walker_leg_actuator():
     # Its leads, torn.
     tube_path(p, [(0.0, 0.042, -0.15), (0.02, 0.06, -0.17), (0.03, 0.07, -0.2)], 0.003, "Red",
               sides=5, closed=False)
+    return centred([p])
+
+
+def crawler_leg_servo():
+    p = Part("body")
+    # A crawler's hip servo, small and squat (#105): a dark block with a
+    # teal drive ring on its face, a stub of its pale leg out of one side,
+    # two mounting ears.
+    p.box((0.07, 0.05, 0.06), (0.0, 0.0, 0.0), "Dark", bevel=0.008, segs=2)
+    p.tube(0.024, 0.016, 0.03, 0.036, "Glow", segs=20)
+    p.cyl(0.014, 0.03, 0.04, "Steel", segs=14)
+    for sx in (-1, 1):
+        p.box((0.014, 0.008, 0.03), (sx * 0.042, -0.02, 0.0), "Dark", bevel=0.002, segs=1)
+    p.lathe([(0.0, 0.0), (0.02, 0.0), (0.018, 0.07), (0.014, 0.075), (0.0, 0.075)], "Shell",
+            segs=14, xf=T(0.035, 0, 0) @ ALONG_X)
+    return centred([p])
+
+
+def hound_hip_servo():
+    p = Part("body")
+    # A hound's hip motor: a flat pancake drum (wide, thin), its output hub
+    # and spline in the middle, cooling fins round the rim, a stub of
+    # hip bracket. Round and flat: nothing else is (#105).
+    p.cyl(0.055, -0.016, 0.016, "Dark", segs=32, chamfer=0.004)
+    for k in range(16):
+        a = 2 * math.pi * k / 16
+        p.box((0.012, 0.004, 0.03), (0.06 * math.cos(a), 0.06 * math.sin(a), 0.0), "Dark",
+              xf=RZ(a))
+    p.cyl(0.022, 0.016, 0.026, "Shell", segs=24, chamfer=0.002)
+    p.cyl(0.01, 0.026, 0.038, "Steel", segs=12)
+    p.box((0.03, 0.06, 0.02), (0.0, -0.075, 0.0), "Shell", bevel=0.004, segs=1)
+    tube_path(p, [(0.03, 0.04, -0.012), (0.05, 0.06, -0.02), (0.07, 0.06, -0.03)], 0.0025, "Red",
+              sides=5, closed=False)
+    return centred([p])
+
+
+def hound_head():
+    p = Part("body")
+    # A hound's head, pulled off its neck whole (#105): the pale wedge the
+    # hound wears (art/robots/walker.py `hound_head`), its dark visor band
+    # with the red eye slit, the jaw under it, a stub of the neck behind.
+    p.box((0.2, 0.12, 0.22), (0.0, 0.0, 0.0), "Shell", bevel=0.025, segs=3)
+    p.box((0.16, 0.026, 0.02), (0.0, 0.012, -0.115), "Dark", bevel=0.006, segs=1)
+    p.box((0.13, 0.012, 0.012), (0.0, 0.012, -0.122), "Eye", bevel=0.003, segs=1)
+    p.box((0.15, 0.03, 0.16), (0.0, -0.075, -0.03), "Dark", bevel=0.01, segs=2)
+    p.cyl(0.055, 0.11, 0.16, "Dark", segs=14, chamfer=0.004)
+    tube_path(p, [(0.02, -0.02, 0.15), (0.04, -0.05, 0.19), (0.03, -0.08, 0.22)], 0.004, "Red",
+              sides=5, closed=False)
+    return centred([p])
+
+
+def grappler_launcher():
+    p = Part("body")
+    # A grappler's launcher, unbolted off its boom's head: the pale housing,
+    # its trunnion pin, the dark tube out of the front with its rings, the
+    # barbed harpoon still in its mouth (art/robots/logistics.py, the
+    # launcher's head).
+    side = fillet([(0.16, -0.08), (0.2, 0.0), (0.14, 0.08), (-0.14, 0.08), (-0.22, 0.04),
+                   (-0.22, -0.05), (-0.16, -0.08)], [0.02, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02], 3)
+    p.prism(side, -0.09, 0.09, "Shell", axis="x", bevel=0.018, segs=2)
+    p.cyl(0.05, -0.11, 0.11, "Dark", segs=14, xf=ALONG_X, chamfer=0.006)
+    tube = T(0, 0.01, 0)
+    p.tube(0.05, 0.032, -0.5, -0.14, "Dark", segs=14, xf=tube, chamfer=0.004)
+    for i in range(3):
+        p.tube(0.056, 0.032, -0.26 - i * 0.08, -0.24 - i * 0.08, "Dark", segs=14, xf=tube,
+               chamfer=0.004)
+    p.cyl(0.012, -0.56, -0.3, "Steel", segs=10, xf=tube)
+    p.lathe([(0.0, -0.66), (0.012, -0.64), (0.026, -0.585), (0.024, -0.56), (0.0, -0.56)],
+            "Steel", segs=12, xf=tube)
+    for k in range(3):
+        a = 2 * math.pi * k / 3 + 0.5
+        p.box((0.008, 0.008, 0.07), (0.0, 0.0, 0.0), "Steel",
+              xf=tube @ RZ(a) @ T(0.03, 0, -0.565) @ RY(-0.35))
+    # Its bolt flange where it sat on the boom, and a torn hydraulic lead.
+    p.box((0.16, 0.02, 0.14), (0.0, -0.09, 0.0), "Dark", bevel=0.004, segs=1)
+    tube_path(p, [(0.05, -0.08, 0.1), (0.07, -0.12, 0.15), (0.06, -0.15, 0.2)], 0.005, "Red",
+              sides=5, closed=False)
+    return centred([p])
+
+
+def grappler_drum():
+    p = Part("body")
+    # A grappler's line drum, cut off its trunnions: yellow line wound
+    # between dark flanges, its axle through (the drum behind the orb,
+    # art/robots/logistics.py), and the cut tail of the line.
+    p.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=ALONG_X)
+    for x in (-0.17, 0.17):
+        p.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=ALONG_X, chamfer=0.004)
+    p.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=ALONG_X)
+    tube_path(p, [(0.0, 0.2, 0.0), (0.0, 0.22, -0.06), (0.03, 0.2, -0.14), (0.06, 0.16, -0.2)],
+              0.008, "Steel", sides=6, closed=False)
     return centred([p])
 
 
@@ -245,6 +336,11 @@ if __name__ == "__main__":
     for item_id, build in (("drone_rotor_motor", drone_rotor_motor),
                            ("walker_leg_actuator", walker_leg_actuator),
                            ("crawler_capacitor", crawler_capacitor),
+                           ("crawler_leg_servo", crawler_leg_servo),
+                           ("hound_hip_servo", hound_hip_servo),
+                           ("hound_head", hound_head),
+                           ("grappler_launcher", grappler_launcher),
+                           ("grappler_drum", grappler_drum),
                            ("dirigible_gas_valve", dirigible_gas_valve),
                            ("pylon_relay_coil", pylon_relay_coil),
                            ("sorter_servo_pack", sorter_servo_pack),

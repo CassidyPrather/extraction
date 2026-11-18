@@ -33,7 +33,8 @@ pub struct RobotFxPlugin;
 impl Plugin for RobotFxPlugin {
     fn build(&self, app: &mut App) {
         crate::render::puff::add_to(app);
-        app.init_resource::<MarkReach>();
+        app.init_resource::<MarkReach>()
+            .add_message::<super::salvage::Crackled>();
         app.add_systems(
             Update,
             (
@@ -43,6 +44,7 @@ impl Plugin for RobotFxPlugin {
                 scuff_dust,
                 eye_out,
                 cell_arcs,
+                cell_crackles,
                 hazard_bursts,
                 strike_flashes,
                 mark_reach,
@@ -1181,6 +1183,46 @@ fn cell_arcs(
             ));
         }
         n += 12;
+    }
+}
+
+/// A live cell's warning (`salvage::Crackled`): a few small blue-white
+/// sparks off it, toward a hand near it if there is one.
+fn cell_crackles(
+    mut commands: Commands,
+    mut tells: MessageReader<super::salvage::Crackled>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    soft: Res<crate::render::puff::PuffAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+) {
+    let mut n = sparks.iter().len();
+    for t in tells.read() {
+        if n >= MAX_SPARKS {
+            continue;
+        }
+        let a = assets(&mut commands, &existing, &soft, &mut meshes, &mut materials);
+        let toward = t
+            .to_hand
+            .map(|h| (h - t.at).normalize_or(Vec3::Y))
+            .unwrap_or(Vec3::Y);
+        let k = if t.to_hand.is_some() { 5 } else { 3 };
+        for _ in 0..k {
+            let vel = (toward + dice.signed() * 0.4).normalize_or(Vec3::Y) * (0.8 + 1.2 * dice.f());
+            commands.spawn((
+                Spark {
+                    vel,
+                    life: 0.05 + dice.f() * 0.08,
+                },
+                Mesh3d(a.spark.clone()),
+                MeshMaterial3d(a.arc.clone()),
+                Transform::from_translation(t.at).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+        }
+        n += k;
     }
 }
 

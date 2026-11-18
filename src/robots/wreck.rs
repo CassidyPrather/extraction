@@ -59,6 +59,12 @@ pub struct Debris {
 #[derive(Component)]
 pub struct Broken;
 
+/// The wreck a piece came off (its root, the robot): what kind of machine
+/// it was, by its markers and size (a crawler's leg and a walker's are
+/// different salvage), when its joints are long gone.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct PieceOf(pub Entity);
+
 /// How whole a piece was when its machine went down (0..1): a leg's, a
 /// rotor's health as it fell, for what it's worth as salvage.
 #[derive(Component, Debug, Clone, Copy)]
@@ -287,6 +293,7 @@ fn break_up(
         let mut spawn =
             |commands: &mut Commands, b: (Debris, Transform, Vec3, Vec3, f32, Collider, Vec3)| {
                 let id = spawn_piece(commands, b, size);
+                commands.entity(id).insert(PieceOf(e));
                 spawned.push(id);
                 id
             };
@@ -418,9 +425,10 @@ fn break_up(
                         continue;
                     }
                     if sensor {
-                        // The visor knocked off its mount.
+                        // The visor knocked off its mount, as whole as it was.
                         let fwd = t.rotation * Vec3::NEG_Z;
-                        spawn(
+                        let worth = part.hp.max(0.0) / part.max_hp.max(1.0);
+                        let visor = spawn(
                             &mut commands,
                             (
                                 Debris {
@@ -436,6 +444,7 @@ fn break_up(
                                 Vec3::new(0.001, 0.009, 0.009),
                             ),
                         );
+                        commands.entity(visor).insert(PieceHealth(worth));
                         commands.entity(c).despawn();
                         continue;
                     }
@@ -445,7 +454,9 @@ fn break_up(
                     if turret {
                         let at = Transform::from_translation(gt.translation())
                             .with_rotation(gt.rotation());
-                        spawn(
+                        // (Torn off because it was shot through: nothing left.)
+                        let worth = part.hp.max(0.0) / part.max_hp.max(1.0);
+                        let torn = spawn(
                             &mut commands,
                             (
                                 Debris {
@@ -460,6 +471,7 @@ fn break_up(
                                 Vec3::new(0.13, 0.13, 0.03),
                             ),
                         );
+                        commands.entity(torn).insert(PieceHealth(worth));
                     }
                     if leg || turret {
                         commands.entity(c).despawn();
@@ -806,6 +818,7 @@ fn spiral(
                 ),
                 1.0,
             )];
+            commands.entity(ids[0]).insert(PieceOf(e));
             for c in children.iter() {
                 let Ok((part, gt)) = parts.get(c) else {
                     continue;
@@ -813,6 +826,7 @@ fn spiral(
                 if part.role != PartRole::Weapon {
                     continue;
                 }
+                let worth = part.hp.max(0.0) / part.max_hp.max(1.0);
                 ids.push(spawn_piece(
                     &mut commands,
                     (
@@ -829,6 +843,9 @@ fn spiral(
                     ),
                     1.0,
                 ));
+                commands
+                    .entity(*ids.last().unwrap())
+                    .insert((PieceOf(e), PieceHealth(worth)));
                 commands.entity(c).despawn();
             }
             keep(&mut ledger, &mut commands, &ids);
@@ -1474,7 +1491,7 @@ mod tests {
             let part = piece(&mut c, 0.0);
             let plain = piece(&mut c, 2.0);
             c.entity(part).insert(SalvagePart {
-                item: "servo",
+                item: "hound_hip_servo",
                 bolts: 4,
                 cables: 0,
                 pry: false,
@@ -1502,6 +1519,68 @@ mod tests {
     /// debris cap, a whole tree at once) must never leave avian holding a
     /// joint whose body is gone. (A torn-off leg's `JointDisabled` joint,
     /// despawned with its leg, was re-added to the graph and panicked.)
+    #[test]
+    fn every_piece_knows_its_wreck_and_the_visor_its_health() {
+        let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(30.0, 230.0);
+        let job = super::super::Job {
+            kind: super::super::JobKind::Survey,
+            site: at,
+            duration: 999.0,
+            exit: at,
+        };
+        let e = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(&mut c, &zone, at, job);
+            c.entity(e).remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..20 {
+            app.update();
+        }
+        // Its eye shot to 60% before it went down.
+        {
+            let w = app.world_mut();
+            let mut q = w.query::<&mut super::super::RobotPart>();
+            for mut p in q.iter_mut(w) {
+                if p.robot == e && p.role == PartRole::Sensor {
+                    p.hp = p.max_hp * 0.6;
+                }
+            }
+        }
+        app.world_mut().get_mut::<Robot>(e).unwrap().wrecked = true;
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let pieces: Vec<(Piece, Option<PieceOf>, Option<PieceHealth>)> = w
+            .query::<(&Debris, Option<&PieceOf>, Option<&PieceHealth>)>()
+            .iter(w)
+            .map(|(d, of, h)| (d.piece, of.copied(), h.copied()))
+            .collect();
+        assert!(!pieces.is_empty(), "it broke into pieces");
+        for (piece, of, _) in &pieces {
+            assert_eq!(*of, Some(PieceOf(e)), "{piece:?} knows its wreck");
+        }
+        let visor = pieces
+            .iter()
+            .find(|(p, ..)| *p == Piece::Sensor)
+            .expect("its visor came off");
+        let h = visor.2.expect("the visor carries its health").0;
+        assert!((h - 0.6).abs() < 1e-3, "{h}");
+    }
+
     #[test]
     fn jointed_wrecks_despawn_cleanly() {
         let opts = crate::LaunchOptions {
@@ -1762,7 +1841,7 @@ mod tests {
                     &mut c,
                     &catalog,
                     crate::items::SpawnItem {
-                        kind: catalog.kind("servo").unwrap(),
+                        kind: catalog.kind("hound_hip_servo").unwrap(),
                         transform: Transform::from_translation(
                             zone.on_ground(item_at.x, item_at.y) + Vec3::Y * 0.2,
                         ),

@@ -338,7 +338,7 @@ pub fn cargo(ids: impl Iterator<Item = (String, extraction_core::items::Category
     for (id, cat) in ids {
         match (id.as_str(), cat) {
             (_, Category::Artifact) => c.artifact = true,
-            ("sensor_eye", _) => c.eye = true,
+            ("walker_eye", _) => c.eye = true,
             ("robot_cell", _) => c.cell = true,
             ("tape_practice", _) => c.anna = true,
             // Food: junk that isn't a grenade's leavings.
@@ -516,7 +516,7 @@ mod tests {
         use extraction_core::items::Category;
         let c = |v: &[(&str, Category)]| cargo(v.iter().map(|(i, k)| (i.to_string(), *k)));
         assert!(c(&[("art_hearth", Category::Artifact)]).artifact);
-        assert!(c(&[("sensor_eye", Category::RobotPart)]).eye);
+        assert!(c(&[("walker_eye", Category::RobotPart)]).eye);
         assert_eq!(c(&[("canned_stew", Category::Junk); 6]).food, 6);
         assert_eq!(c(&[("grenade_pin", Category::Junk)]).food, 0);
         let lines = super::super::lines::CARGO_ARTIFACT;

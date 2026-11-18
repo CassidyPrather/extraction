@@ -334,7 +334,7 @@
             Chair(at: (0.0, 0.7), rot: 0.0),
         ],
         items: [
-            (id: "multitool", at: (-0.23, 0.6, 0.1), condition: 0.5),
+            (id: "spanner", at: (-0.23, 0.6, 0.1), condition: 0.5),
             (id: "spare_parts", at: (0.18, 0.6, -0.1)),
         ],
         note: Some((
@@ -591,7 +591,7 @@
             Crate(at: (0.0, 0.0), size: 0.6),
         ],
         items: [
-            (id: "multitool", at: (0.2, 0.6, 0.1), condition: 0.4),
+            (id: "spanner", at: (0.2, 0.6, 0.1), condition: 0.4),
         ],
         note: Some((
             name: "Far stair note",
@@ -820,7 +820,7 @@
         ],
         items: [
             (id: "binoculars", at: (1.5, 0.45, 0.7), rot: 40.0),
-            (id: "sensor_eye", at: (-1.6, 0.5, 0.45)),
+            (id: "walker_eye", at: (-1.6, 0.5, 0.45)),
         ],
         note: Some((
             name: "Fiala's card",
@@ -854,7 +854,7 @@
             Crate(at: (6.3, 0.0), size: 0.9),
         ],
         items: [
-            (id: "multitool", at: (3.8, 0.694, 0.0), rot: 20.0),
+            (id: "spanner", at: (3.8, 0.694, 0.0), rot: 20.0),
             (id: "spare_parts", at: (4.25, 0.694, 0.05)),
             (id: "chess_piece", at: (6.1, 0.9, 0.25)),
         ],
