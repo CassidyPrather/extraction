@@ -209,6 +209,9 @@ for p in items():
     mid = [(a + b) / 2 for a, b in zip(lo, hi)]
     for v in me.vertices:
         v.co = [v.co[k] - mid[k] for k in range(3)]
+    # (At the item's own origin, not the part's: the item's box is round
+    # its middle.)
+    obj.location = (0.0, 0.0, 0.0)
     size = [hi[k] - lo[k] for k in range(3)]
     # (Blender is Z up: game x, y, z = its x, z, y; game z = -its y.)
     print(f"{p.name} dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
