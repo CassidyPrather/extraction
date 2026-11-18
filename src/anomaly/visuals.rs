@@ -863,6 +863,10 @@ fn particle_mesh(n: usize, rng: &mut extraction_core::noise::Rng) -> Mesh {
     .with_inserted_indices(Indices::U32(idx))
 }
 
+/// A ground mark fades out on steep ground, from the first slope (degrees)
+/// to gone by the second: draped up a bank it stood as a wall.
+pub const MARK_SLOPE_FADE: (f32, f32) = (25.0, 35.0);
+
 /// A ground mark draped over the terrain round `centre` (the anomaly's
 /// position): a grid whose every vertex sits just above the ground, so a
 /// slope can't bury half a flat disc and cut it off in a hard line.
@@ -874,20 +878,33 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
     let mut pos = Vec::new();
     let mut uv = Vec::new();
     let mut nrm = Vec::new();
+    let mut col = Vec::new();
     let mut idx = Vec::new();
     for j in 0..=n {
         for i in 0..=n {
             let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
             let (x, z) = ((u * 2.0 - 1.0) * half, (v * 2.0 - 1.0) * half);
             // Underground, on the site's floor.
+            let (wx, wz) = (centre.x + x, centre.z + z);
             let y = if below {
                 0.04
             } else {
-                zone.ground(centre.x + x, centre.z + z) - centre.y + 0.06
+                zone.ground(wx, wz) - centre.y + 0.06
+            };
+            // Gone up a steep bank: draped up one it stood as a pale wall.
+            let fade = if below {
+                1.0
+            } else {
+                let d = 0.5;
+                let gx = (zone.ground(wx + d, wz) - zone.ground(wx - d, wz)) / (2.0 * d);
+                let gz = (zone.ground(wx, wz + d) - zone.ground(wx, wz - d)) / (2.0 * d);
+                let slope = (gx * gx + gz * gz).sqrt().atan().to_degrees();
+                1.0 - smooth(MARK_SLOPE_FADE.0, MARK_SLOPE_FADE.1, slope)
             };
             pos.push([x, y, z]);
             uv.push([u, v]);
             nrm.push([0.0, 1.0, 0.0]);
+            col.push([1.0, 1.0, 1.0, fade]);
         }
     }
     for j in 0..n {
@@ -903,6 +920,7 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
     )
     .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
     .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
     .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
     .with_inserted_indices(Indices::U32(idx))
 }
@@ -2639,7 +2657,7 @@ fn dress_steam_banks(
                         state: Vec4::new(0.0, 0.0, 0.0, size),
                         color: color.extend(STEAM_ALPHA),
                     },
-                    texture: a.radial.clone(),
+                    texture: a.dot.clone(),
                     additive: false,
                 })),
                 Transform::IDENTITY,
@@ -2669,9 +2687,17 @@ fn light_steam_banks(
     systems: Query<&MeshMaterial3d<ParticleMaterial>>,
     mut mats: ResMut<Assets<ParticleMaterial>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let light = conditions.as_ref().map_or(1.0, |c| c.light);
     for (bank, gt, kids) in &banks {
+        // Cold and bright (snow lying, by day): its underside deeper and
+        // cooler and its core thicker, so it holds a body against white.
+        let lying = snow.as_ref().map_or(0.0, |s| {
+            s.above(gt.translation().y)
+                .max(if s.floor > 0.0 { 1.0 } else { 0.0 })
+        });
+        let cold = (lying * light).clamp(0.0, 1.0);
         let toward = anomalies.get(bank.burner).map_or(Vec2::X, |b| {
             let d = b.translation() - gt.translation();
             Vec2::new(d.x, d.z).normalize_or(Vec2::X)
@@ -2681,6 +2707,7 @@ fn light_steam_banks(
                 && let Some(mut mat) = mats.get_mut(&m.0)
             {
                 mat.params.color = (STEAM_GREY * (0.3 + 0.7 * light)).extend(STEAM_ALPHA);
+                mat.params.state.x = cold;
                 mat.params.state.y = toward.x;
                 mat.params.state.z = toward.y;
             }
@@ -2739,17 +2766,17 @@ fn dress_charged_water(
             }
         }
         let mut rng = extraction_core::noise::Rng::new(e.to_bits() ^ 0x9A7E);
-        let color = Vec3::new(6.0, 12.0, 30.0);
+        let color = Vec3::new(10.0, 20.0, 50.0);
         let ext = w.reach + 1.0;
         commands.entity(e).with_children(|c| {
             c.spawn((
                 WaterCrackle,
                 Particles { color, alpha: 1.0 },
-                Mesh3d(meshes.add(particle_mesh(80, &mut rng))),
+                Mesh3d(meshes.add(particle_mesh(140, &mut rng))),
                 MeshMaterial3d(particles.add(ParticleMaterial {
                     params: ParticleParams {
                         mode: Vec4::new(9.0, an.radius, w.reach, 1.0),
-                        state: Vec4::new(an.charge, 0.0, 0.0, 0.09),
+                        state: Vec4::new(an.charge, 0.0, 0.0, 0.16),
                         color: color.extend(1.0),
                     },
                     texture: a.dot.clone(),

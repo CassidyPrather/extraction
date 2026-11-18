@@ -407,6 +407,51 @@ pub fn placeable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
 /// Margin an anomaly keeps from the edge of any road or path, metres.
 pub const ROAD_MARGIN: f32 = 1.0;
 
+/// How near water a road must run, inside a crossing frost, for the frost
+/// to lie on it (m): the road along the beck it spans, not one it cuts.
+pub const CROSSING_ALONG_WATER: f32 = 4.0;
+
+/// A standing frost laid as a crossing (`MarkerKind::Anomaly { crossing }`)
+/// may reach onto a road, where the road runs along the water it spans:
+/// its centre on the water, and every bit of road inside its radius (under
+/// its own rime mark, never past it, so never an unseen trap) within
+/// [`CROSSING_ALONG_WATER`] of water. Nothing else may.
+pub fn crossing_road_ok(
+    map: &MapDef,
+    hm: &Heightmap,
+    at: [f32; 2],
+    kind: AnomalyKind,
+    radius: f32,
+) -> bool {
+    if kind != AnomalyKind::Frost || hm.water_level(at).is_none() {
+        return false;
+    }
+    let flagged = map.markers.iter().any(|m| {
+        matches!(&m.kind, MarkerKind::Anomaly { crossing: true, kind: k, .. } if AnomalyKind::from_name(k) == Some(kind))
+            && geom::dist(m.at, at) < 0.01
+    });
+    if !flagged {
+        return false;
+    }
+    let wet_near = |p: [f32; 2]| {
+        (0..16).any(|k| {
+            let a = k as f32 / 16.0 * std::f32::consts::TAU;
+            [0.0, 1.0, 2.0, CROSSING_ALONG_WATER].iter().any(|d| {
+                hm.water_level([p[0] + a.cos() * d, p[1] + a.sin() * d])
+                    .is_some()
+            })
+        })
+    };
+    // The road inside its radius: a grid over the disc, the points on a road.
+    let n = (radius / 0.5).ceil() as i32;
+    (-n..=n).all(|i| {
+        (-n..=n).all(|j| {
+            let p = [at[0] + i as f32 * 0.5, at[1] + j as f32 * 0.5];
+            geom::dist(p, at) > radius || hm.road_at(p).kind.is_none() || wet_near(p)
+        })
+    })
+}
+
 /// Whether an anomaly of `radius` at `p` keeps off every road and path:
 /// the road is the safe, exposed way, and a shimmer across it is a trap
 /// nobody walking it would see coming.
@@ -919,7 +964,7 @@ fn scatter(
     // Surge's draws as they were.
     let mut srng = Rng::new(seed ^ 0x57A4D ^ (cycle as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
     for m in &map.markers {
-        let MarkerKind::Anomaly { kind, radius } = &m.kind else {
+        let MarkerKind::Anomaly { kind, radius, .. } = &m.kind else {
             continue;
         };
         let Some(kind) = AnomalyKind::from_name(kind) else {
@@ -1422,6 +1467,7 @@ mod tests {
             kind: MarkerKind::Anomaly {
                 kind: "Well".into(),
                 radius: 2.0,
+                crossing: false,
             },
             at: [1000.0, 1000.0],
             rot: 0.0,
@@ -1473,7 +1519,7 @@ mod tests {
             let hm = Heightmap::build(&map);
             let mut kinds = Vec::new();
             for m in &map.markers {
-                let MarkerKind::Anomaly { kind, radius } = &m.kind else {
+                let MarkerKind::Anomaly { kind, radius, .. } = &m.kind else {
                     continue;
                 };
                 let kind = AnomalyKind::from_name(kind)
@@ -1492,7 +1538,8 @@ mod tests {
                     m.name
                 );
                 assert!(
-                    clear_of_roads(&hm, m.at, kind.danger_radius(*radius)),
+                    clear_of_roads(&hm, m.at, kind.danger_radius(*radius))
+                        || crossing_road_ok(&map, &hm, m.at, kind, *radius),
                     "{}: {} reaches a road",
                     map.name,
                     m.name
@@ -1519,6 +1566,42 @@ mod tests {
         assert!(
             n >= 10,
             "about a handful of artifacts per cycle (got {n} over 10)"
+        );
+    }
+
+    /// Only a frost flagged as a crossing, on the water, may lie on a road
+    /// along it: an unflagged one on a road still fails, and so does a
+    /// flagged one away from water.
+    #[test]
+    fn only_a_crossing_frost_lies_on_a_road() {
+        let (mut map, hm) = marrow();
+        // A road point, and the nearest water to it.
+        let rl = &hm.road_lines[0];
+        let on_road = rl.points[rl.points.len() / 2];
+        let template = map.markers[0].clone();
+        let frost = |crossing| crate::map::Marker {
+            kind: MarkerKind::Anomaly {
+                kind: "Frost".into(),
+                radius: 3.0,
+                crossing,
+            },
+            at: on_road,
+            ..template.clone()
+        };
+        map.markers.push(frost(false));
+        assert!(
+            !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Frost, 3.0),
+            "unflagged, on a road: fails"
+        );
+        map.markers.push(frost(true));
+        assert!(
+            hm.water_level(on_road).is_some()
+                || !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Frost, 3.0),
+            "flagged but off the water: fails"
+        );
+        assert!(
+            !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Well, 3.0),
+            "never another kind"
         );
     }
 }
