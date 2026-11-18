@@ -1,8 +1,8 @@
 //! The field sets: a fixed radio at every way out, to call the truck from
 //! (#94: the carried radio was the one way home, and a career saved
-//! without one could never end). Each rendezvous has one on its beacon's
-//! pole, at chest height, facing the valley's middle where you come from;
-//! the gate's short run has one on a post of its own. Pressed, it calls
+//! without one could never end). Each pad's hangs at chest height on a
+//! wall by it, facing out (a map without one: on the beacon's pole, or for
+//! the short run a post of its own). Pressed, it calls
 //! the truck to that pad (`RadioCall { pad }`), not to the one nearest the
 //! caller: you call from where you'll wait.
 //!
@@ -12,17 +12,20 @@
 //! an answer to it; the Gauge house's set sounds the dam's alarm horn
 //! across the valley.
 //!
-//! (Map design moves each onto its pad's wait-cover shed wall, and puts
-//! the horn on its siren mast. Not yet.)
+//! Where each hangs, and the horn, are the map's (`map_extract`,
+//! `siren_mast`).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
+use extraction_core::map_extract;
 use extraction_core::map_landmarks::beacon_at;
+use extraction_core::siren_mast;
 
 use super::{Phase, RadioCall, Raid, SHORT_EXFIL};
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::raid::truck::Pressable;
+use crate::render::world_props::{Blockout, SwapIn};
 use crate::robots::pressure::Transmitted;
 use crate::world::{Layer, Zone};
 
@@ -87,13 +90,17 @@ impl PadKind {
 /// would leave a busy pad its weight alone.)
 pub const MAST_WHINE_HEARD: bool = true;
 
-/// The dam's alarm horn, on the Gauge house (Sallow Reservoir), and how
-/// high it's mounted.
-pub const GAUGE_HORN: [f32; 2] = [245.0, -70.0];
-const HORN_UP: f32 = 8.0;
+/// Where the dam's alarm horn is: on the gauge house's siren mast
+/// (`siren_mast`, tagged `gauge_horn`), where the valley has one.
+pub fn gauge_horn(zone: &Zone) -> Option<Vec3> {
+    siren_mast::gauge_horn(&zone.map).map(|p| Vec3::from(siren_mast::horn_at(&zone.hm, p)))
+}
 
 /// The set's box (m): a field set bolted on, its face to you.
 const SIZE: Vec3 = Vec3::new(0.32, 0.26, 0.14);
+/// How far a set's back stands off its wall: on its board, on standoffs,
+/// proud of the ivy (`art/props/field_set.py`, `OFF`).
+const OFF_WALL: f32 = 0.13;
 /// Its middle this high off the ground.
 const CHEST: f32 = 1.3;
 /// The beacon pole's radius (`render::rv_beacons`), and the gap to it.
@@ -111,32 +118,88 @@ impl Plugin for TransceiverPlugin {
     }
 }
 
-/// Where each set stands and which pad it calls: on each rendezvous's
-/// beacon pole, then at each short run's marker. (Ground position, the
-/// way it faces as a yaw: toward the valley's middle.)
-pub fn sets(zone: &Zone) -> Vec<(Transceiver, Vec3, f32)> {
-    let face = |at: [f32; 2]| {
+/// Where a set stands: which pad it calls, its middle, the way its face
+/// turns (a yaw), and the foot of the post it's on, if it's on one.
+#[derive(Clone, Copy, Debug)]
+pub struct Site {
+    pub set: Transceiver,
+    pub at: Vec3,
+    pub yaw: f32,
+    pub post: Option<Vec3>,
+}
+
+/// Each pad's set: hung on the wall the map gives it (a `FieldSet`
+/// marker, `map_extract`: its back to the wall, facing out); else, for a
+/// rendezvous, on its beacon's pole, and for the short run on a post of
+/// its own, facing the valley's middle.
+pub fn sets(zone: &Zone) -> Vec<Site> {
+    let walls = map_extract::field_sets(&zone.map);
+    let wall = |pad: &str| {
+        walls.iter().find(|w| w.0 == pad).map(|&(_, at, rot)| {
+            // A marker's front is (-sin, cos) in the map; a set's face is
+            // its +Z, which a yaw of -rot turns there.
+            let yaw = -rot.to_radians();
+            let front = Quat::from_rotation_y(yaw) * Vec3::Z;
+            (
+                zone.on_ground(at[0], at[1]) + front * (OFF_WALL + SIZE.z * 0.5),
+                yaw,
+            )
+        })
+    };
+    let middle = |at: [f32; 2]| {
         let f = Vec3::new(-at[0], 0.0, -at[1]).normalize_or(Vec3::Z);
         (f, f.x.atan2(f.z))
     };
     let mut out = Vec::new();
     for (i, rv) in zone.map.markers_of(&MarkerKind::Rendezvous).enumerate() {
-        let at = beacon_at(rv.at);
-        let (f, yaw) = face(at);
-        let foot = zone.on_ground(at[0], at[1]) + f * (POLE_R + SIZE.z * 0.5);
-        let kind = PadKind::of(&rv.name);
-        out.push((Transceiver { pad: i, kind }, foot, yaw));
-    }
-    for m in zone.map.markers_of(&MarkerKind::ShortExfil) {
-        let (_, yaw) = face(m.at);
-        out.push((
-            Transceiver {
-                pad: SHORT_EXFIL,
-                kind: PadKind::Short,
-            },
-            zone.on_ground(m.at[0], m.at[1]),
+        let set = Transceiver {
+            pad: i,
+            kind: PadKind::of(&rv.name),
+        };
+        let (foot, yaw) = wall(&rv.name).unwrap_or_else(|| {
+            let at = beacon_at(rv.at);
+            let (f, yaw) = middle(at);
+            (
+                zone.on_ground(at[0], at[1]) + f * (POLE_R + SIZE.z * 0.5),
+                yaw,
+            )
+        });
+        out.push(Site {
+            set,
+            at: foot + Vec3::Y * CHEST,
             yaw,
-        ));
+            post: None,
+        });
+    }
+    let set = Transceiver {
+        pad: SHORT_EXFIL,
+        kind: PadKind::Short,
+    };
+    let shorts: Vec<[f32; 2]> = zone
+        .map
+        .markers_of(&MarkerKind::ShortExfil)
+        .map(|m| m.at)
+        .collect();
+    match wall(map_extract::SHORT) {
+        Some((foot, yaw)) if !shorts.is_empty() => out.push(Site {
+            set,
+            at: foot + Vec3::Y * CHEST,
+            yaw,
+            post: None,
+        }),
+        _ => {
+            for at in shorts {
+                let (_, yaw) = middle(at);
+                let foot = zone.on_ground(at[0], at[1]);
+                let turn = Quat::from_rotation_y(yaw);
+                out.push(Site {
+                    set,
+                    at: foot + turn * Vec3::new(0.0, CHEST, POST_R + SIZE.z * 0.5),
+                    yaw,
+                    post: Some(foot),
+                });
+            }
+        }
     }
     out
 }
@@ -166,9 +229,9 @@ fn spawn_sets(
     let looks = meshes
         .zip(materials)
         .map(|(mut m, mut mats)| Looks::new(&mut m, &mut mats));
-    for (set, foot, yaw) in sets(&zone) {
+    for Site { set, at, yaw, post } in sets(&zone) {
         let turn = Quat::from_rotation_y(yaw);
-        if set.pad == SHORT_EXFIL {
+        if let Some(foot) = post {
             let mut post = commands.spawn((
                 Name::new("Field set post"),
                 SetPost,
@@ -181,11 +244,6 @@ fn spawn_sets(
                 post.insert((Mesh3d(l.post.clone()), MeshMaterial3d(l.steel.clone())));
             }
         }
-        let at = if set.pad == SHORT_EXFIL {
-            foot + turn * Vec3::new(0.0, CHEST, POST_R + SIZE.z * 0.5)
-        } else {
-            foot + Vec3::Y * CHEST
-        };
         let mut e = commands.spawn((
             Name::new(format!("Field set ({})", set.pad)),
             set,
@@ -199,16 +257,34 @@ fn spawn_sets(
             Visibility::default(),
         ));
         if let Some(l) = &looks {
-            e.insert((Mesh3d(l.body.clone()), MeshMaterial3d(l.olive.clone())))
-                .with_child((
-                    Name::new("Field set grille"),
+            // A box and its grille until the model's in (`art/props/
+            // field_set.py`: its front is -Z, the set's face +Z).
+            e.insert(SwapIn(vec![(
+                MODEL,
+                Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+            )]))
+            .with_children(|c| {
+                c.spawn((
+                    Name::new("Field set (blockout)"),
+                    Blockout,
+                    Mesh3d(l.body.clone()),
+                    MeshMaterial3d(l.olive.clone()),
+                    Transform::IDENTITY,
+                ));
+                c.spawn((
+                    Name::new("Field set grille (blockout)"),
+                    Blockout,
                     Mesh3d(l.grille.clone()),
                     MeshMaterial3d(l.dark.clone()),
                     Transform::from_xyz(0.0, 0.0, SIZE.z * 0.5 + 0.005),
                 ));
+            });
         }
     }
 }
+
+/// The set's model under `models/props/`.
+pub const MODEL: &str = "field_set";
 
 /// The gate's post.
 #[derive(Component)]
@@ -288,7 +364,7 @@ pub fn transmitted(kind: PadKind, at: Vec3, zone: Option<&Zone>) -> Transmitted 
     let horn = (kind == PadKind::Horn)
         .then_some(zone)
         .flatten()
-        .map(|z| z.on_ground(GAUGE_HORN[0], GAUGE_HORN[1]) + Vec3::Y * HORN_UP);
+        .and_then(gauge_horn);
     Transmitted {
         at,
         stir: kind.stir(),
@@ -427,6 +503,68 @@ mod tests {
         for n in named {
             assert!(seen.iter().any(|s| s == n), "no rendezvous named {n}");
         }
+    }
+
+    /// In every valley each set hangs where the map says, on its wall
+    /// (`FieldSet`): at chest height off the marker, its face along the
+    /// marker's front, and none on a post.
+    #[test]
+    fn every_set_hangs_on_the_wall_the_map_gives_it() {
+        for valley in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let zone = Zone::load(valley);
+            let walls = map_extract::field_sets(&zone.map);
+            let names: Vec<String> = zone
+                .map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| m.name.clone())
+                .collect();
+            let sites = sets(&zone);
+            assert_eq!(sites.len(), names.len() + 1, "{valley}");
+            for site in sites {
+                assert!(site.post.is_none(), "{valley}: {:?} on a post", site.set);
+                let pad = if site.set.pad == SHORT_EXFIL {
+                    map_extract::SHORT
+                } else {
+                    names[site.set.pad].as_str()
+                };
+                let &(_, at, rot) = walls
+                    .iter()
+                    .find(|w| w.0 == pad)
+                    .unwrap_or_else(|| panic!("{valley}: no wall for {pad}"));
+                let flat = Vec2::new(site.at.x - at[0], site.at.z - at[1]);
+                let off = flat.length() - (OFF_WALL + SIZE.z * 0.5);
+                assert!(off.abs() < 0.01, "{valley} {pad}: {flat} off its mark");
+                let up = site.at.y - zone.ground(at[0], at[1]);
+                assert!((up - CHEST).abs() < 0.3, "{valley} {pad}: {up} m up");
+                let face = Quat::from_rotation_y(site.yaw) * Vec3::Z;
+                let (fs, fc) = rot.to_radians().sin_cos();
+                let front = Vec3::new(-fs, 0.0, fc);
+                assert!(
+                    face.dot(front) > 0.99,
+                    "{valley} {pad}: faces {face}, not {front}"
+                );
+            }
+        }
+    }
+
+    /// The Gauge house's call sounds the horn on the siren mast, near its
+    /// top; no other valley has the horn.
+    #[test]
+    fn the_gauge_house_horn_is_on_its_siren_mast() {
+        let sallow = Zone::load("sallow_reservoir");
+        let horn = gauge_horn(&sallow).expect("Sallow's siren mast");
+        let mast = siren_mast::gauge_horn(&sallow.map).unwrap();
+        let up = horn.y - sallow.ground(mast.at[0], mast.at[1]);
+        assert!((up - siren_mast::HORN[1]).abs() < 1.5, "{up} m up");
+        let call = transmitted(PadKind::Horn, Vec3::ZERO, Some(&sallow));
+        assert_eq!(call.horn, Some(horn));
+        assert!(gauge_horn(&Zone::load("marrow_creek")).is_none());
     }
 
     /// A call from a set is heard by its pad's weight: the Gauge house

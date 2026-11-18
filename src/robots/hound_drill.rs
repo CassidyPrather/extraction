@@ -125,7 +125,6 @@ pub fn fight(
             .unwrap();
         h.hp = h.max;
         h.down = false;
-        h.bleeding = 0.0;
     }
     app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
     app.world_mut().resource_mut::<Coils>().0.clear();

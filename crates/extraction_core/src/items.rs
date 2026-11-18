@@ -67,7 +67,10 @@ pub enum Category {
     Attachment,
     Gadget,
     Medical,
-    Food,
+    /// Junk: set dressing with no use worth the space (#104), raw food
+    /// and its cooking stages among it (food's few uses go by its `food:`
+    /// tag, [`ItemDef::is_food`]), a grenade's pin and spoon.
+    Junk,
     Tool,
     Material,
     RobotPart,
@@ -155,6 +158,12 @@ impl ItemDef {
 
     pub fn has_tag(&self, tag: &str) -> bool {
         self.tags.iter().any(|t| t == tag)
+    }
+
+    /// Food or drink: something eaten, an offering's calm, bait (its
+    /// `food:` tag; the category is Junk).
+    pub fn is_food(&self) -> bool {
+        self.tags.iter().any(|t| t.starts_with("food:"))
     }
 }
 

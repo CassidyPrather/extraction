@@ -67,6 +67,33 @@ the recording up with the logs afterwards:
 Then hand over the recording (or a transcript of it) with the files
 below, and the findings can be pulled out of both together.
 
+## The playtest tour
+
+One new or changed thing at a time, with no travelling between them.
+Press **PLAYTEST TOUR** on the camp board (beside REPORT), or start the
+game with `--playtest assets/playtest/tour.txt`. Nothing you do on the
+tour is saved.
+
+- **Each station** opens straight onto its thing: a valley, an hour,
+  where you stand, what's set out. A small board beside you says which
+  station it is, of how many, and about how long it's meant to take.
+  Look it over and talk about what you notice. Mark anything odd as
+  usual (both sticks, or F9).
+- **NEXT** asks the station's question: press 1 to 5. Then say out loud
+  what bugged you, if anything, and press **NEXT** again. The next
+  station opens.
+- **Record it** as below (the SteamVR mirror in OBS, with your voice).
+  Each station starts with a short rising chirp and a white flash; leave
+  them in. They line the recording up with the game's notes, to the frame.
+- **Afterwards**, press **REPORT** at camp and send the zip with the
+  recording. `scripts/playtest_ingest.py` turns the two into a timeline
+  (speech, stations, ratings, marks), a table of stations with what you
+  said about each, and frames wherever you made a mark or said "bug" or
+  "note".
+
+The stations are lines in `assets/playtest/tour.txt`, one per station, so
+the list changes with each playtest.
+
 ## What's new to look at (since the first headset session)
 
 The first session found the controls mostly dead and a lot of stooping.
@@ -171,27 +198,14 @@ What changed, and worth a comment each:
   and the jaws open with them. Spread them, put the jaws on a
   padlock's shackle or on chain-link, and squeeze your hands together. A
   cut panel leaves a gap you can walk through.
-- **First aid and food.** Wind a dressing round your other forearm (one
-  and a half turns). Put the injector's tip to your thigh and pull the
-  trigger. Hold food to your mouth to eat, and tip a bottle up to drink.
-  The A/X button no longer does these in the headset, except medicine
-  with the one-handed comfort setting.
-- **Treating yourself.** A hit leaves a wound where it landed, on the
-  limb it hit, and each wound bleeds by itself (your health's bleeding is
-  their sum). Wind a dressing round that limb (thigh, arm, shin, chest),
-  not just your forearm: it binds only the wounds on that limb, so a
-  thigh and an arm wound take two dressings. A fall hard enough (landing at
-  11 m/s, about a 6 m drop) breaks a shin: you limp, slowly and with no sprint,
-  until a splint (new, in medical loot) is held along the broken shin,
-  your other hand at the leg, for a second and a half while the straps
-  pull tight. You still limp a little. The water bottle (now "Canteen")
-  comes capped: take the cap in your other hand with the trigger and
-  twist three quarters of a turn before you can drink. All of it takes
-  as long as your hands take. Look down: open wounds show red on the
-  body, dressings as white bands, the splint's slats on the shin, and a
-  glove that touched an open wound is bloody, fading over a minute. Is
-  winding a dressing round your own thigh possible without looking? Is
-  the splint too fiddly with someone shooting at you, or too easy?
+- **Health, simply (#102).** A hit takes HP, a hard landing hurts, and
+  that's all: nothing bleeds, no leg breaks, and there are no dressings
+  or splints. The injector is the only medicine: put its tip to your
+  thigh and pull the trigger (45 HP back). The A/X button does it with
+  the one-handed comfort setting. Hold food to your mouth to eat, and tip
+  a bottle up to drink; the canteen comes capped (take the cap in your
+  other hand with the trigger and twist three quarters of a turn). Do you
+  miss the bleed's pressure to get out, or is a plain HP number calmer?
 - **Gestures.** A hand over your mouth quietens your breathing when
   you're winded (robots nearby can hear it). An open palm raised over
   your head is a gesture robots can read, though nothing reacts to it
@@ -375,8 +389,8 @@ If any of this fails, stop and send the log: everything else depends on it.
   | 3 | Out of reach | through the gate, a box on a crate in a fenced pen: point at it, squeeze GRIP, flick your hand back; then the box over your shoulder, open your hand (the pack) |
   | 4 | The range | squeeze GRIP on the pistol on the range table; hold it at your hip and open your hand (the holster); rounds into the empty magazine (magazine in one hand, the box in the other: touch them); push the magazine up into the grip; rack the slide (the other hand's TRIGGER on it, pull back, let go); squeeze TRIGGER at a plate: nothing, that's the safety; safety off (click the stick on the gun hand); hit a plate (TRIGGER) |
   | 5 | Run it dry | TRIGGER at the plates till the slide stays back; drop the empty magazine (A on the gun hand); the full magazine off the table, up into the grip; let the slide go (B on the gun hand, or rack it): a magazine in doesn't load it; fire again (TRIGGER) |
-  | 6 | The house | open the door: GRIP it anywhere and pull it round; GRIP the dressing on the crate inside |
-  | 7 | First aid | taking the dressing in the house, the crate catches your arm: a scratch that bleeds, and your watch buzzes; raise your watch hand and look at it (the **wrist** screen: health, bleeding, load, the clock, the driver's last words); the dressing in one hand, circle it round the cut (a tick in both hands each quarter turn, a turn and a half in all; one-handed, A or X) |
+  | 6 | The house | open the door: GRIP it anywhere and pull it round; GRIP the injector on the crate inside |
+  | 7 | First aid | taking the injector in the house, the crate catches your arm: a scratch takes 30 HP, and your watch buzzes; raise your watch hand and look at it (the **wrist** screen: health, load, the clock, the driver's last words); the injector's tip to your thigh, and the trigger (one-handed, A or X) |
   | 8 | The shimmer | GRIP a spare part (crate by the post), swing and open your hand at the sparks inside the red flags: the snare goes off and goes dark for a few seconds; then a burner with a stone at its heart: don't step in (the driver shouts if you get close); from the edge point at the stone, GRIP, flick back |
   | 9 | The extract | through the last gate, the radio set on the north post's pole: squeeze GRIP on it to call the truck; it's there in ten seconds, the first you see of it; climb in, GRIP the cord by the cab |
 
@@ -418,7 +432,6 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
 | WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
-| HEARTBEAT | on the wrist / off | while you bleed, a heartbeat on the watch wrist, faster and harder the faster you bleed |
 | BODY | shown / hidden | your body drawn under you when you look down (torso, legs, boots); hidden, only the arms and hands |
 
 For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
@@ -811,6 +824,8 @@ on or off is worth as much as the milliseconds.
 | `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
+| `--hurt HP` | Start hurt (try 40), to try the injector on yourself |
+| `--give ID,ID` | Lay these on the ground in front of you (try `regen_injector`) |
 | `--weather NAME` | `drizzle` (or `rain`), `fog`, `downpour`, `storm` (a downpour with lightning), `clearing`; anything else stops with an error |
 | `--snow N` | Kettle Pass: snow falling now, and this much (0 to 1) already lying above the snow line |
 | `--hour NAME` | `dawn`, `day`, `dusk`, `night`, or a clock hour (`23`, `5:30`): dawn from 5, day from 7, dusk from 18, night from 21; anything else stops with an error |

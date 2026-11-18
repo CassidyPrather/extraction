@@ -132,11 +132,11 @@ pub struct StonePing {
     pub near: f32,
 }
 
-/// What a held Bear's screen shows: blips in screen space (-1..1, up is
-/// the way it faces), refreshed a few times a second.
+/// What a held Bear's screen shows: the anomalies about you, in screen
+/// space (-1..1, up is the way it faces), refreshed a few times a second.
+/// Not stones: of the detectors only the sweep finds those.
 #[derive(Component, Debug, Default, Clone)]
 pub struct BearScreen {
-    pub stones: Vec<[f32; 2]>,
     /// Anomalies: centre and radius, screen units.
     pub anomalies: Vec<([f32; 2], f32)>,
     pub refresh: f32,
@@ -149,8 +149,8 @@ fn yaw_of(fwd: Vec3) -> f32 {
 
 /// Carried detectors, by their tier: the clicker ticks for the nearest
 /// anomaly; a held sweep hears only what it points at, and pings for a
-/// loose stone in its cone; a held Bear shows the stones and anomalies
-/// round you on its screen.
+/// loose stone in its cone; a held Bear shows the anomalies round you on
+/// its screen.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn detectors(
     mut commands: Commands,
@@ -166,7 +166,15 @@ pub fn detectors(
         With<CarriedBy>,
     >,
     anomalies: Query<(&Anomaly, &GlobalTransform)>,
-    stones: Query<(&Item, &GlobalTransform), (Without<Held>, Without<CarriedBy>)>,
+    // A stone sealed in lead is quiet to a detector as to everything else.
+    stones: Query<
+        (&Item, &GlobalTransform),
+        (
+            Without<Held>,
+            Without<CarriedBy>,
+            Without<super::artifacts::Shielded>,
+        ),
+    >,
     catalog: Res<Catalog>,
     hushes: Res<super::hush::Hushes>,
     time: Res<Time>,
@@ -263,15 +271,10 @@ pub fn detectors(
             }
             screen.refresh = 0.25;
             if !held {
-                screen.stones.clear();
                 screen.anomalies.clear();
                 continue;
             }
             let yaw = yaw_of(fwd);
-            screen.stones = loose
-                .iter()
-                .filter_map(|s| bear_blip((*s - p).xz().to_array(), yaw, STONE_RANGE))
-                .collect();
             screen.anomalies = all
                 .iter()
                 .filter_map(|(c, r)| {
@@ -444,7 +447,8 @@ mod tests {
                 .resource::<crate::world::Zone>()
                 .on_ground(feet.x + 8.0, feet.z)
                 + Vec3::Y * 0.2;
-            crate::anomaly::surge::grow(vr.app.world_mut(), "art_hearth", stone);
+            let hearth =
+                crate::anomaly::surge::grow(vr.app.world_mut(), "art_hearth", stone).unwrap();
             let quiet = empty_way(&mut vr, hand);
             point(&mut vr, det, hand, quiet);
             let blind = count::<StonePing>(&mut vr, 90 * 2, |m| m.detector == det);
@@ -454,10 +458,31 @@ mod tests {
                 pings >= 2 && blind == 0,
                 "pointed at the stone {pings}, away {blind}"
             );
+            // Sealed in a lead case lying there, it's quiet.
+            let catalog = vr.app.world().resource::<Catalog>().clone();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let case = {
+                let mut c = Commands::new(&mut queue, vr.app.world());
+                crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind("lead_case").unwrap(),
+                        transform: Transform::from_translation(stone),
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(vr.app.world_mut());
+            vr.step(2);
+            crate::persist::seat_in_mount(vr.app.world_mut(), case, hearth);
+            vr.step(10);
+            let sealed = count::<StonePing>(&mut vr, 90 * 2, |m| m.detector == det);
+            assert_eq!(sealed, 0, "a stone sealed in lead doesn't ping");
         }
 
         #[test]
-        fn a_held_bear_shows_the_stone_the_way_you_face() {
+        fn a_held_bear_shows_the_anomalies_the_way_you_face_and_no_stones() {
             let mut vr = Vr::new("marrow_creek");
             let (c, r) = snare(&mut vr);
             let feet = vr
@@ -470,19 +495,12 @@ mod tests {
             let stone = feet + Vec3::new(8.0, 0.2, 0.0);
             crate::anomaly::surge::grow(vr.app.world_mut(), "art_aegis", stone);
             let (det, hand) = hold(&mut vr, "detector_bear", feet);
-            // Facing north (-Z): the stone east shows right of centre, and
-            // the snare north up the screen.
+            // Facing north (-Z): the snare north shows up the screen. (The
+            // stone east isn't on it: a screen has no stones, the sweep
+            // finds those.)
             point(&mut vr, det, hand, Vec3::NEG_Z);
             vr.step(60);
             let screen = vr.app.world().get::<BearScreen>(det).unwrap().clone();
-            assert!(
-                screen
-                    .stones
-                    .iter()
-                    .any(|s| s[0] > 0.25 && s[1].abs() < 0.2),
-                "the stone shows to the right: {:?}",
-                screen.stones
-            );
             assert!(
                 screen
                     .anomalies

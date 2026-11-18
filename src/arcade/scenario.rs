@@ -166,10 +166,10 @@ fn drive(
                     Log("arcade smoke: engaging".into()),
                     Engage { shots: 30 },
                     Wait(1.0),
-                    // A wound from the walker bleeds: dressed, as anyone
-                    // would after the fight.
+                    // Hurt by the walker: the injector, as anyone would
+                    // after the fight.
                     PickUp {
-                        id: "field_dressing".into(),
+                        id: "regen_injector".into(),
                         side: Side::Left,
                     },
                     Use(Side::Left),

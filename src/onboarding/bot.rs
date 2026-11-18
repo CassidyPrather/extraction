@@ -671,17 +671,17 @@ impl DirectorWorld<'_, '_> {
                 t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
                 t.push(Wait(0.8));
             }
-            Goal::Dressing => {
-                let dressing = if self.holding(Side::Right).and_then(|e| self.id(e))
-                    == Some("field_dressing")
+            Goal::Inject => {
+                let injector = if self.holding(Side::Right).and_then(|e| self.id(e))
+                    == Some("regen_injector")
                 {
                     None
                 } else {
                     // Lying there, or already in a pocket (a hoarder's).
-                    self.loose("field_dressing", here)
-                        .or_else(|| self.on_body("field_dressing"))
+                    self.loose("regen_injector", here)
+                        .or_else(|| self.on_body("regen_injector"))
                 };
-                if let Some(e) = dressing {
+                if let Some(e) = injector {
                     t.extend(self.free_hands());
                     t.push(Grab {
                         item: e,

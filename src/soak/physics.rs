@@ -760,7 +760,7 @@ fn the_player_cant_be_pushed_through_walls() {
 fn items_under_the_world_come_back() {
     let mut app = game("marrow_creek");
     let cat = catalog(&app);
-    let kind = cat.kind("field_dressing").expect("a dressing");
+    let kind = cat.kind("regen_injector").expect("an injector");
     let g = ground_spots(&mut app, 4);
     // Rests a while on the ground, then is shoved under it.
     let rested = throw(
@@ -822,7 +822,7 @@ fn items_under_the_world_come_back() {
         let p = pos(&app, e);
         assert!(
             p.distance(floor) < 0.5,
-            "a dressing on a site's floor at {floor:.1} stays there: {p:.2}"
+            "an injector on a site's floor at {floor:.1} stays there: {p:.2}"
         );
     }
 }
@@ -840,7 +840,7 @@ fn a_tracking_jump_doesnt_launch_what_you_let_go() {
     };
     vr.stand(at, 0.0);
     let hand = at + Vec3::new(0.25, 1.0, -0.4);
-    let item = vr.spawn("field_dressing", Transform::from_translation(hand));
+    let item = vr.spawn("regen_injector", Transform::from_translation(hand));
     vr.hand(Side::Right, hand, Quat::IDENTITY, 1.0, 0.0);
     vr.step(5);
     assert!(

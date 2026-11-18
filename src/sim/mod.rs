@@ -109,7 +109,7 @@ fn career_memory(
 }
 
 /// The sim kit past the dev cache: what's laid by the insertion point,
-/// and what the raider picks up of it (the radio and dressings are the
+/// and what the raider picks up of it (the radio and injector are the
 /// kit tasks', `raider::kit_tasks`). A contract's kit, a skilled raider's
 /// bolts, and a hearth: bound for Rime Fell, a career has the one "Up the
 /// fell" gave it, the way into the frost (`progression::contracts`). A
@@ -131,7 +131,7 @@ pub(crate) fn sim_kit(
     if hearth && !carried.contains(&"lead_case") {
         carried.push("lead_case");
     }
-    let mut laid = vec!["radio", "field_dressing", "field_dressing"];
+    let mut laid = vec!["radio", "regen_injector"];
     laid.extend(&carried);
     // The hearth goes in its case.
     let picked = carried
@@ -142,7 +142,7 @@ pub(crate) fn sim_kit(
 }
 
 /// What a fresh game keeps in the truck's stash and the dev cache lacks:
-/// the radio and two dressings (and a skilled raider's bolts,
+/// the radio and an injector (and a skilled raider's bolts,
 /// `harvest::kit`), laid out by the insertion point.
 ///
 /// Not when the game resumes a saved raid in this valley: the kit came

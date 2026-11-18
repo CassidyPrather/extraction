@@ -172,13 +172,28 @@ pub fn base_pose(zone: &Zone) -> Transform {
     parked(zone, at, yaw)
 }
 
-pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
-    let rvs: Vec<[f32; 2]> = zone
-        .map
+/// Every place the truck pulls in to, by the index a call carries
+/// (`Phase::TruckCalled { rv }`): the rendezvous, then the flare stops
+/// (#94, `map_extract`: called by a red star, not a set). Name and place.
+pub fn pads(zone: &Zone) -> Vec<(String, [f32; 2])> {
+    zone.map
         .markers_of(&MarkerKind::Rendezvous)
-        .map(|m| m.at)
-        .collect();
-    let at = rvs.get(rv).copied().unwrap_or([0.0, 0.0]);
+        .map(|m| (m.name.clone(), m.at))
+        .chain(
+            extraction_core::map_extract::flare_stops(&zone.map)
+                .into_iter()
+                .map(|(name, at, _)| (name.to_string(), at)),
+        )
+        .collect()
+}
+
+/// Where pad `rv` is ([`pads`]), if it's one.
+pub fn pad_at(zone: &Zone, rv: usize) -> Option<[f32; 2]> {
+    pads(zone).get(rv).map(|p| p.1)
+}
+
+pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
+    let at = pad_at(zone, rv).unwrap_or([0.0, 0.0]);
     // Park with the bed toward the map centre, so you walk into it.
     let back = Vec3::new(-at[0], 0.0, -at[1]).normalize_or(Vec3::Z);
     let yaw = back.x.atan2(back.z);
@@ -536,10 +551,10 @@ pub(crate) fn start_in_truck(
             s.owner = p;
         }
     }
-    // Scenarios and screenshots place the player themselves; the yard
-    // starts you on foot in its first bay, the truck not come yet
-    // (`onboarding`, #89).
-    if !opts.plays_for_real() || opts.camera.is_some() || opts.map == crate::camp::TRAINING_YARD {
+    // Scenarios, screenshots and `--spawn` place the player themselves;
+    // the yard starts you on foot in its first bay, the truck not come
+    // yet (`onboarding`, #89).
+    if !opts.plays_for_real() || opts.places_player() || opts.map == crate::camp::TRAINING_YARD {
         return;
     }
     let pose = base_pose(&zone);
@@ -858,7 +873,6 @@ pub const WOKE_LINE: &str = "You went down. You wake in the back of the truck.";
 /// End of a raid: drive home with whatever you're carrying, or wake up in
 /// the truck with nothing.
 fn finish_raid(
-    mut commands: Commands,
     mut raid: ResMut<Raid>,
     time: Res<Time>,
     zone: Res<Zone>,
@@ -900,11 +914,6 @@ fn finish_raid(
         t.translation = base.transform_point(Vec3::new(0.3, FLOOR + 0.05, 0.6));
         t.rotation = base.rotation;
         *h = Health::default();
-        // A broken leg's set in town between raids (never by a night in a
-        // safehouse: out there it's a splint and a limp).
-        commands
-            .entity(e)
-            .remove::<crate::interact::wounds::Fracture>();
         body.velocity = Vec3::ZERO;
     }
     raid.phase = Phase::AtBase;

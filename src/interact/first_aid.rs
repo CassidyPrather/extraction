@@ -1,22 +1,16 @@
 //! First aid and food with the hands, in the headset.
 //!
-//! - **A dressing** is wound round the wounded limb (`wounds`): hold it
-//!   against the limb (a thigh, a shin, an arm, the chest, the belly, the
-//!   head) and circle it round, one and a half turns. It binds that limb's
-//!   wounds; the others bleed on.
-//! - **A splint** goes along a broken shin (`wounds::Fracture`): hold it
-//!   along the shin, the other hand at the leg strapping it, for
-//!   [`STRAP`] seconds, and you walk on it (limping less).
-//! - **An injector** goes in the thigh. Put its tip to your thigh and pull
-//!   the trigger.
+//! - **An injector** (the only medicine) goes in anywhere sensible
+//!   ([`on_body`]): its tip to a thigh, a shin, the chest, the belly, the
+//!   neck, an arm, or the other wrist or hand (an empty one), and the
+//!   trigger. Not into the gun, nor what the other hand holds, nor the air.
 //! - **Food** goes to your mouth: hold it there a moment. A bottle has to
 //!   be tipped up to drink, and its cap off first ([`Capped`]): the other
 //!   hand takes the cap (the trigger, as a gun's slide is taken) and
 //!   twists it [`UNSCREW`] of a turn.
 //!
 //! Each, done, uses the item as the button used to (`items::usage`). The
-//! button still works for medicine with the one-handed comfort setting,
-//! since a dressing takes both arms.
+//! button still works for medicine with the one-handed comfort setting.
 
 use bevy::prelude::*;
 
@@ -27,11 +21,9 @@ use crate::items::usage::UseItem;
 use crate::items::{Catalog, Item};
 use crate::player::Player;
 use crate::rig::haptics::Haptic;
-use crate::rig::{RigDriver, RigHand, RigInput};
-use extraction_core::items::Category;
+use crate::rig::stance::Stance;
+use crate::rig::{RigDriver, RigHand, RigInput, Side};
 
-/// Turns round the forearm a dressing takes.
-const WRAP_TURNS: f32 = 1.5;
 /// How far round a bottle's cap is twisted to come off, turns.
 pub const UNSCREW: f32 = 0.75;
 
@@ -42,24 +34,19 @@ pub struct Capped {
     pub twisted: f32,
 }
 
-/// How long a splint takes to strap on, s.
-pub const STRAP: f32 = 1.5;
-
-/// How far out from a limb's surface a dressing going round it may be
-/// (m): a hand circling the other forearm can't come closer than its
-/// controller lets it, and a circle by hand is never round.
-const ROUND: f32 = 0.12;
-/// How long a dressing drifted off its limb keeps what's wound (s), and
-/// how fast it unwinds after (turns a second).
-const KEEP: f32 = 1.5;
-/// How far out a dressing already going round a limb is still followed (m).
-const FOLLOW: f32 = 0.25;
-const UNWIND: f32 = 1.0;
-/// An injector's tip, in its own space, and how near the thigh it must be.
+/// An injector's tip, in its own space.
 pub const NEEDLE: Vec3 = Vec3::new(0.0, 0.0, -0.065);
-const ON_THIGH: f32 = 0.12;
-/// The thighs, from the torso anchor (it rides mid-chest).
+/// How near a limb's line its tip must be (m): a limb's half thickness
+/// and a little more (the user: "I do not want to be pedantic about where
+/// the player uses it").
+pub const ON_LIMB: f32 = 0.13;
+/// The same for the trunk, from the spine's line (m).
+pub const ON_TRUNK: f32 = 0.2;
+/// The thighs, from the torso anchor (it rides mid-chest): a body with no
+/// `Stance` yet.
 const THIGH: Vec3 = Vec3::new(0.11, -0.62, -0.04);
+/// The upper arm, as a share of the way from the shoulder to the hand.
+const UPPER_ARM: f32 = 0.45;
 /// The mouth, from the eyes, and how near food must come; how long it's
 /// held there.
 const MOUTH: Vec3 = Vec3::new(0.0, -0.08, -0.07);
@@ -72,278 +59,14 @@ impl Plugin for FirstAidPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(cap_bottles).add_systems(
             FixedUpdate,
-            (
-                wrap_dressings,
-                strap_splints,
-                unscrew,
-                inject,
-                eat_and_drink,
-            )
-                .after(InteractSystems::Follow),
+            (unscrew, inject, eat_and_drink).after(InteractSystems::Follow),
         );
     }
-}
-
-/// Where a dressing is in its winding: for each limb it's near, how far
-/// round that limb it's gone (net: back and forth doesn't wind), and the
-/// one furthest round.
-#[derive(Component, Debug, Default)]
-pub struct Winding {
-    rounds: Vec<Round>,
-    /// The furthest round any limb, turns.
-    pub turns: f32,
-    /// That limb.
-    pub limb: Option<super::wounds::Limb>,
-}
-
-/// A dressing's way round one limb.
-#[derive(Debug)]
-struct Round {
-    limb: super::wounds::Limb,
-    /// The angle it was last at round the limb, while it's near it.
-    last: Option<f32>,
-    /// Signed turns.
-    net: f32,
-    /// Seconds since it was last near.
-    away: f32,
 }
 
 /// Seconds food has been at the mouth.
 #[derive(Component, Debug, Default)]
 pub struct Eating(pub f32);
-
-/// The dressing a hand winds round a limb, for `items::usage`: it binds
-/// that limb's wounds (`wounds::Wounds::dress`), not every bleed.
-#[derive(Component, Debug)]
-pub struct OnLimb(pub super::wounds::Limb);
-
-/// A dressing circled round a limb: the wounded one (where the hit was),
-/// or any. One and a half turns round it binds it.
-#[allow(clippy::type_complexity)]
-fn wrap_dressings(
-    mut commands: Commands,
-    mut items: Query<(Entity, &Item, &Held, &GlobalTransform, Option<&mut Winding>)>,
-    players: Query<
-        (
-            &Transform,
-            &RigInput,
-            &crate::rig::stance::Stance,
-            &Children,
-        ),
-        With<crate::rig::LocalPlayer>,
-    >,
-    hands: Query<(&RigHand, &Hand)>,
-    mut patients: Query<(&mut crate::health::Health, &mut super::wounds::Wounds)>,
-    catalog: Res<Catalog>,
-    driver: Res<RigDriver>,
-    mut uses: MessageWriter<UseItem>,
-    mut haptics: MessageWriter<Haptic>,
-    time: Res<Time>,
-) {
-    if *driver != RigDriver::Xr {
-        return;
-    }
-    for (e, item, held, gt, winding) in &mut items {
-        let def = catalog.get(item.kind());
-        if def.id != "field_dressing" {
-            continue;
-        }
-        let Some(mut w) = winding else {
-            commands.entity(e).insert(Winding::default());
-            continue;
-        };
-        let Some(segs) = super::wounds::player_segments(held.player, &players, &hands) else {
-            continue;
-        };
-        // Round a limb, not the arm holding it. Every limb it's near
-        // keeps its own count, so a forearm held across the chest winds the
-        // forearm (a circle round it doesn't go round the chest), and the
-        // first wound round far enough is the one dressed.
-        let at = gt.translation();
-        let dt = time.delta_secs();
-        let before = (w.turns * 4.0).floor();
-        for s in &segs {
-            if matches!(s.limb, super::wounds::Limb::Forearm(side) if side == held.side) {
-                continue;
-            }
-            let (t, a, d) = s.locate(at);
-            let along = (-0.1..=1.1).contains(&t);
-            // Close to start; once going, followed further out (a circle by
-            // hand dips wide under the arm, and an arc lost there can't be
-            // told from one gone back).
-            let near = along && d <= s.r + ROUND;
-            let round = along && d <= s.r + FOLLOW;
-            let i = match w.rounds.iter().position(|r| r.limb == s.limb) {
-                Some(i) => i,
-                None if near => {
-                    w.rounds.push(Round {
-                        limb: s.limb,
-                        last: None,
-                        net: 0.0,
-                        away: 0.0,
-                    });
-                    w.rounds.len() - 1
-                }
-                None => continue,
-            };
-            let r = &mut w.rounds[i];
-            if !round {
-                // Drifted off (a circle by hand dips out under the arm):
-                // what's wound stays a while, and the way back in counts
-                // the arc it went round outside; then it unwinds.
-                r.away += dt;
-                if r.away > KEEP {
-                    r.last = None;
-                }
-                if r.away > KEEP {
-                    r.net -= r.net.signum() * (dt * UNWIND).min(r.net.abs());
-                }
-                continue;
-            }
-            r.away = 0.0;
-            if let Some(last) = r.last {
-                let mut d = a - last;
-                if d > std::f32::consts::PI {
-                    d -= std::f32::consts::TAU;
-                } else if d < -std::f32::consts::PI {
-                    d += std::f32::consts::TAU;
-                }
-                r.net += d / std::f32::consts::TAU;
-            }
-            r.last = Some(a);
-        }
-        w.rounds.retain(|r| r.last.is_some() || r.net.abs() > 1e-3);
-        let lead = w
-            .rounds
-            .iter()
-            .max_by(|a, b| a.net.abs().total_cmp(&b.net.abs()))
-            .map(|r| (r.limb, r.net.abs()));
-        w.turns = lead.map_or(0.0, |l| l.1);
-        w.limb = lead.map(|l| l.0);
-        if (w.turns * 4.0).floor() > before {
-            // A tick each quarter turn, in both hands: it's going on.
-            pulse(&mut haptics, held.side, TICK);
-            pulse(&mut haptics, held.side.other(), TICK);
-        }
-        let Some(limb) = w.limb else {
-            continue;
-        };
-        if w.turns >= WRAP_TURNS {
-            // That limb's wounds bound; the rest bleed on.
-            if let Ok((mut h, mut wounds)) = patients.get_mut(held.player) {
-                let stopped = wounds.dress(limb);
-                h.bleeding = (h.bleeding - stopped).max(0.0);
-            }
-            commands.entity(e).insert(OnLimb(limb));
-            uses.write(UseItem {
-                player: held.player,
-                item: e,
-            });
-            pulse(&mut haptics, held.side, CLICK);
-            pulse(&mut haptics, held.side.other(), CLICK);
-            *w = Winding::default();
-        }
-    }
-}
-
-/// How long a splint's been held along the broken shin.
-#[derive(Component, Debug, Default)]
-pub struct Strapping(pub f32);
-
-/// A splint held along the broken shin, the other hand at it: strapped
-/// on, after a while.
-#[allow(clippy::type_complexity)]
-fn strap_splints(
-    mut commands: Commands,
-    mut items: Query<(
-        Entity,
-        &Item,
-        &Held,
-        &GlobalTransform,
-        Option<&mut Strapping>,
-    )>,
-    players: Query<
-        (
-            &Transform,
-            &RigInput,
-            &crate::rig::stance::Stance,
-            &Children,
-        ),
-        With<crate::rig::LocalPlayer>,
-    >,
-    hands: Query<(&RigHand, &Hand)>,
-    mut broken: Query<&mut super::wounds::Fracture>,
-    catalog: Res<Catalog>,
-    mut haptics: MessageWriter<Haptic>,
-    time: Res<Time>,
-) {
-    for (e, item, held, gt, strapping) in &mut items {
-        if catalog.get(item.kind()).id != "splint" {
-            continue;
-        }
-        let Ok(mut fracture) = broken.get_mut(held.player) else {
-            continue;
-        };
-        if fracture.splinted {
-            continue;
-        }
-        let Some(segs) = super::wounds::player_segments(held.player, &players, &hands) else {
-            continue;
-        };
-        let Some(shin) = segs
-            .iter()
-            .find(|s| s.limb == super::wounds::Limb::Shin(fracture.leg))
-        else {
-            continue;
-        };
-        let along = (shin.b - shin.a).normalize_or(Vec3::NEG_Y);
-        let axis = gt.rotation() * Vec3::Z;
-        let (t, _, d) = shin.locate(gt.translation());
-        let mid = shin.a.lerp(shin.b, 0.5);
-        let other = players.get(held.player).ok().and_then(|(.., children)| {
-            children.iter().find_map(|c| {
-                hands
-                    .get(c)
-                    .ok()
-                    .filter(|(rh, _)| rh.side != held.side)
-                    .map(|(_, h)| h.world.translation)
-            })
-        });
-        let laid = axis.dot(along).abs() > 0.8
-            && (0.1..=0.9).contains(&t)
-            && d < shin.r + 0.08
-            && other.is_some_and(|o| o.distance(mid) < 0.25);
-        let Some(mut s) = strapping else {
-            commands.entity(e).insert(Strapping::default());
-            continue;
-        };
-        if !laid {
-            s.0 = 0.0;
-            continue;
-        }
-        let before = (s.0 * 2.0).floor();
-        s.0 += time.delta_secs();
-        if (s.0 * 2.0).floor() > before {
-            // A strap pulled tight, each half second.
-            pulse(&mut haptics, held.side.other(), TICK);
-        }
-        if s.0 >= STRAP {
-            fracture.splinted = true;
-            pulse(&mut haptics, held.side, CLICK);
-            pulse(&mut haptics, held.side.other(), CLICK);
-            // On the leg now: out of the hand, and gone.
-            let hand = held.hand;
-            commands.queue(move |world: &mut World| {
-                if let Some(mut h) = world.get_mut::<Hand>(hand)
-                    && h.holding == Some(e)
-                {
-                    h.holding = None;
-                }
-                world.despawn(e);
-            });
-        }
-    }
-}
 
 /// A water bottle comes with its cap on, and a handle at it to twist.
 fn cap_bottles(
@@ -407,10 +130,38 @@ fn unscrew(
     }
 }
 
-/// An injector's tip on the thigh, and the trigger.
+/// Whether an injector's `tip`, held in the hand on `side`, is on the
+/// body (`stance`, world space): the trunk from the neck down to the hips,
+/// the legs, and the other arm: its upper arm always, and on to its hand
+/// (`other`) while that hand holds nothing (not into the gun it holds).
+/// The hand holding the injector can't reach its own arm.
+pub fn on_body(stance: &Stance, tip: Vec3, side: Side, other: Vec3, other_empty: bool) -> bool {
+    let near = |a: Vec3, b: Vec3, r: f32| {
+        let ab = b - a;
+        let t = ((tip - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
+        (a + ab * t).distance(tip) < r
+    };
+    let hips = (stance.hips[0] + stance.hips[1]) * 0.5;
+    let legs = (0..2).any(|i| {
+        near(stance.hips[i], stance.knees[i], ON_LIMB)
+            || near(stance.knees[i], stance.ankles[i], ON_LIMB)
+    });
+    let shoulder = stance.shoulders[side.other().index()];
+    let upper = shoulder + (other - shoulder) * UPPER_ARM;
+    near(stance.neck, hips, ON_TRUNK)
+        || legs
+        || near(shoulder, upper, ON_LIMB)
+        || (other_empty && near(shoulder, other, ON_LIMB))
+}
+
+/// An injector's tip on the body ([`on_body`]), and the trigger.
+#[allow(clippy::too_many_arguments)]
 fn inject(
     items: Query<(Entity, &Item, &Held, &GlobalTransform)>,
     torsos: Query<(&GlobalTransform, &ChildOf), With<Torso>>,
+    stances: Query<&Stance>,
+    players: Query<&Children>,
+    hands: Query<(&RigHand, &Hand)>,
     inputs: Query<&RigInput>,
     catalog: Res<Catalog>,
     driver: Res<RigDriver>,
@@ -436,13 +187,25 @@ fn inject(
         if !pulled || was {
             continue;
         }
-        let Some((torso, _)) = torsos.iter().find(|(_, c)| c.parent() == held.player) else {
-            continue;
-        };
         let tip = gt.transform_point(NEEDLE);
-        let on = [THIGH, THIGH * Vec3::new(-1.0, 1.0, 1.0)]
-            .iter()
-            .any(|t| torso.transform_point(*t).distance(tip) < ON_THIGH);
+        let other = players.get(held.player).ok().and_then(|c| {
+            c.iter()
+                .filter_map(|c| hands.get(c).ok())
+                .find(|(rh, _)| rh.side != held.side)
+                .map(|(_, h)| (h.world.translation, h.holding.is_none()))
+        });
+        let on = match (stances.get(held.player), other) {
+            (Ok(st), Some((at, empty))) => on_body(st, tip, held.side, at, empty),
+            // No body worked out yet: the thighs, from the torso.
+            _ => torsos
+                .iter()
+                .find(|(_, c)| c.parent() == held.player)
+                .is_some_and(|(torso, _)| {
+                    [THIGH, THIGH * Vec3::new(-1.0, 1.0, 1.0)]
+                        .iter()
+                        .any(|t| torso.transform_point(*t).distance(tip) < ON_LIMB)
+                }),
+        };
         if on {
             uses.write(UseItem {
                 player: held.player,
@@ -478,7 +241,7 @@ fn eat_and_drink(
     for (e, item, held, gt, eating, capped) in &mut items {
         let def = catalog.get(item.kind());
         // (A capped bottle doesn't pour.)
-        if def.category != Category::Food || capped {
+        if !def.is_food() || capped {
             continue;
         }
         let Ok((root, input)) = players.get(held.player) else {
@@ -511,6 +274,60 @@ fn eat_and_drink(
                 item: e,
             });
             eating.0 = 0.0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A standing body, facing -Z, right-handed, the left hand out in
+    /// front at waist height.
+    fn standing() -> (Stance, Vec3) {
+        let mut st = Stance::default();
+        st.neck = Vec3::new(0.0, 1.5, 0.0);
+        st.shoulders = [Vec3::new(-0.2, 1.42, 0.0), Vec3::new(0.2, 1.42, 0.0)];
+        st.hips = [Vec3::new(-0.1, 0.92, 0.0), Vec3::new(0.1, 0.92, 0.0)];
+        st.knees = [Vec3::new(-0.1, 0.5, 0.0), Vec3::new(0.1, 0.5, 0.0)];
+        st.ankles = [Vec3::new(-0.1, 0.08, 0.0), Vec3::new(0.1, 0.08, 0.0)];
+        (st, Vec3::new(-0.15, 1.0, -0.35))
+    }
+
+    /// Generous (#102): a thigh, a shin, the belly, the chest, the neck,
+    /// the other upper arm, and the other wrist and hand while it holds
+    /// nothing all take it; the air, the gun in the other hand, and the
+    /// injecting hand's own forearm don't.
+    #[test]
+    fn an_injector_goes_in_anywhere_sensible() {
+        let (st, other) = standing();
+        let right = Side::Right;
+        let on = |tip: Vec3, empty: bool| on_body(&st, tip, right, other, empty);
+        for (what, tip) in [
+            ("the right thigh", Vec3::new(0.1, 0.75, -0.08)),
+            ("the left thigh", Vec3::new(-0.1, 0.7, -0.1)),
+            ("a shin", Vec3::new(0.1, 0.3, -0.06)),
+            ("the belly", Vec3::new(0.0, 1.05, -0.15)),
+            ("the chest", Vec3::new(0.05, 1.3, -0.15)),
+            ("the neck", Vec3::new(0.06, 1.5, -0.05)),
+            ("the left upper arm", Vec3::new(-0.22, 1.3, -0.1)),
+            ("the left wrist", other + Vec3::new(0.0, 0.03, 0.06)),
+            ("the left hand", other + Vec3::new(0.02, 0.05, 0.0)),
+        ] {
+            assert!(on(tip, true), "{what} didn't take it");
+        }
+        // The other hand holding the gun: its wrist and the gun don't.
+        assert!(
+            !on(other + Vec3::new(0.0, 0.05, -0.1), false),
+            "the gun took it"
+        );
+        // Out in front, at arm's length, and off to the side.
+        for tip in [
+            Vec3::new(0.25, 1.2, -0.55),
+            Vec3::new(0.6, 1.0, 0.0),
+            Vec3::new(0.0, 1.9, -0.3),
+        ] {
+            assert!(!on(tip, true), "the air at {tip} took it");
         }
     }
 }

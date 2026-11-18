@@ -14,6 +14,7 @@ pub mod captions;
 pub mod chatter;
 pub mod comfort_board;
 pub mod epilogue;
+pub mod flare_stops;
 pub mod kitchen;
 pub mod lev;
 pub mod lev_walk;
@@ -109,9 +110,14 @@ pub enum Show {
     /// As `View`, and no later line takes its place inside its reading
     /// time: danger now (a first contact's advice, the Surge).
     Urgent,
-    /// A callout beside this thing in the hand: a line about it. In the
-    /// view instead when it isn't in a hand.
+    /// A callout beside this thing in the hand: a line about it, what it
+    /// is or how it works. In the view instead when it isn't in a hand.
+    /// Once its kind's been in hand `items::handled::QUIET_AFTER` times it
+    /// waits to be asked for (#107).
     Item(Entity),
+    /// As `Item`, but it always shows: something to do with it now (an
+    /// empty gun, the step being taught).
+    ItemNow(Entity),
 }
 
 /// How many lines wait for the view at most.
@@ -247,7 +253,10 @@ impl Plugin for RaidPlugin {
             board::BoardPlugin,
             lev::LevPlugin,
             epilogue::EpiloguePlugin,
-            transceiver::TransceiverPlugin,
+            (
+                transceiver::TransceiverPlugin,
+                flare_stops::FlareStopsPlugin,
+            ),
         ))
         .add_systems(
             Update,
@@ -444,7 +453,7 @@ fn radio_calls(
                 )
             }
             Phase::TruckWaiting { rv, .. } => {
-                let (name, at) = rendezvous(&zone).get(rv).cloned().unwrap_or_else(|| {
+                let (name, at) = truck::pads(&zone).get(rv).cloned().unwrap_or_else(|| {
                     let gate = zone
                         .map
                         .markers_of(&MarkerKind::ShortExfil)
@@ -509,7 +518,7 @@ pub(crate) fn tick_raid(
             }
             let eta = eta - dt;
             if eta <= 0.0 {
-                let name = rendezvous(&zone)
+                let name = truck::pads(&zone)
                     .get(rv)
                     .map(|r| r.0.clone())
                     .unwrap_or_default();
@@ -534,7 +543,7 @@ pub(crate) fn tick_raid(
             // A minute to go: said before every departure without you, by
             // radio, wherever you are.
             if was > LAST_CALL && left <= LAST_CALL {
-                let name = rendezvous(&zone)
+                let name = truck::pads(&zone)
                     .get(rv)
                     .map_or_else(|| "gate".to_string(), |r| r.0.clone());
                 let n = raid.clock as u32;
@@ -1090,7 +1099,7 @@ mod tests {
         // A line for the wrist alone isn't shown.
         let mut r = app.world_mut().resource_mut::<Raid>();
         r.shown.clear();
-        r.say("You bind the wound.");
+        r.say("Cold, then warm. Something knits.");
         assert!(r.shown.is_empty());
     }
 

@@ -4705,7 +4705,7 @@ fn truck_sounds(
 }
 
 /// What using a thing sounds like, by what it is: eating, drinking,
-/// tearing a dressing open, a switch.
+/// an injector's plunger, a switch.
 pub fn use_sound(def: &extraction_core::items::ItemDef) -> Option<(&'static str, &'static str)> {
     use extraction_core::items::Category;
     const DRINKS: &[&str] = &[
@@ -4717,9 +4717,8 @@ pub fn use_sound(def: &extraction_core::items::ItemDef) -> Option<(&'static str,
         "food:Soup",
     ];
     match def.id.as_str() {
-        "field_dressing" => Some(("physical/bandage", "use.bandage")),
         "radio" | "deployable_cover" | "climbing_kit" | "zipline_kit" | "camera_drone" => None,
-        _ if def.category == Category::Food => Some(if DRINKS.iter().any(|t| def.has_tag(t)) {
+        _ if def.is_food() => Some(if DRINKS.iter().any(|t| def.has_tag(t)) {
             ("physical/drink", "use.drink")
         } else {
             ("physical/eat", "use.eat")
@@ -5701,7 +5700,7 @@ mod tests {
         };
         assert_eq!(sound("crackers"), Some("physical/eat"));
         assert_eq!(sound("water_bottle"), Some("physical/drink"));
-        assert_eq!(sound("field_dressing"), Some("physical/bandage"));
+        assert_eq!(sound("regen_injector"), Some("physical/switch"));
         assert_eq!(sound("flashlight"), Some("physical/switch"));
         assert_eq!(sound("radio"), None, "the radio has its own");
         let bank: serde_json::Value = serde_json::from_str(
@@ -5709,7 +5708,7 @@ mod tests {
         )
         .unwrap();
         for (_, def) in catalog.0.iter() {
-            if def.category == extraction_core::items::Category::Food {
+            if def.is_food() {
                 assert!(use_sound(def).is_some(), "{} is eaten silently", def.id);
             }
             if let Some((set, _)) = use_sound(def) {

@@ -29,7 +29,9 @@ impl Plugin for PlaytestPlugin {
         };
         // The yard keeps nothing, but it's recorded like a raid: the first
         // night's 32 minutes there left no trace but the log.
-        let yard = opts.map == crate::camp::TRAINING_YARD
+        // A playtest tour's station keeps nothing either, and is recorded
+        // the same way, marks and all (`capture::station`).
+        let yard = (opts.map == crate::camp::TRAINING_YARD || opts.playtest.is_some())
             && crate::persist::owns_profile(&opts)
             && !opts.tooling();
         if opts.sim_run.is_some()
@@ -347,7 +349,7 @@ mod tests {
     }
 
     /// A session's second raid is recorded as fully as its first: its
-    /// positions, its damage and a dressing used. (The recorder's state
+    /// positions, its damage and an injector used. (The recorder's state
     /// lived in a system's `Local` for the app's life; the playtest's
     /// second raid logged no positions and no damage at all.)
     #[test]
@@ -380,19 +382,24 @@ mod tests {
             for _ in 0..90 * secs / 2 {
                 app.update();
             }
-            // Hurt, then a dressing.
+            // Hurt, then an injector.
             app.world_mut()
                 .get_mut::<crate::health::Health>(me)
                 .unwrap()
                 .hp -= 10.0;
-            let dressing = {
+            // (A second for the harm to be recorded: the injector's 45
+            // the same frame would hide it.)
+            for _ in 0..90 {
+                app.update();
+            }
+            let injector = {
                 let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
                 let mut c = q.get_mut(app.world_mut()).unwrap();
                 let e = crate::items::spawn_item(
                     &mut c,
                     &catalog,
                     crate::items::SpawnItem {
-                        kind: catalog.kind("field_dressing").unwrap(),
+                        kind: catalog.kind("regen_injector").unwrap(),
                         transform: Transform::from_xyz(0.0, -100.0, 0.0),
                         condition: 1.0,
                     },
@@ -402,7 +409,7 @@ mod tests {
             };
             app.world_mut().write_message(crate::items::usage::UseItem {
                 player: me,
-                item: dressing,
+                item: injector,
             });
             for _ in 0..90 * secs / 2 {
                 app.update();
@@ -435,7 +442,7 @@ mod tests {
             let count = |e: &str| evs.iter().filter(|v| v["ev"] == e).count();
             assert!(count("pos") >= 3, "{}: positions\n{text}", f.display());
             assert!(count("damage") >= 1, "{}: damage\n{text}", f.display());
-            assert_eq!(count("heal"), 1, "{}: the dressing\n{text}", f.display());
+            assert_eq!(count("heal"), 1, "{}: the injector\n{text}", f.display());
             let end = evs.iter().find(|v| v["ev"] == "end").unwrap();
             assert_eq!(end["heals"], 1);
         }

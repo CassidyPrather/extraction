@@ -6,7 +6,7 @@
 //!   it in). A Recover job's recorder is put in its building here, a Scout
 //!   job's place is noticed here.
 //! - What's fitted takes effect here: the stash's room, the bench's
-//!   recipes, the aerial's early warning, the cabinet's dressing. Each
+//!   recipes, the aerial's early warning, the cabinet's injector. Each
 //!   fitting is a prop in the truck bed (`TruckUpgradeProp`, dressed by
 //!   `render::upgrades`).
 //! - The career page on the logbook (`career_page`).
@@ -42,10 +42,10 @@ const UNDERGROUND_REACH: f32 = 60.0;
 
 /// The aerial warns of the Surge this many seconds out.
 pub const AERIAL_WARNING: f32 = 10.0 * 60.0;
-/// The cabinet holds at most this many dressings.
-const CABINET_HOLDS: usize = 2;
+/// The cabinet holds at most this many injectors.
+const CABINET_HOLDS: usize = 1;
 /// The cabinet's floor, truck space (on the front wall), where its
-/// dressing is left.
+/// injector is left.
 pub const CABINET_AT: Vec3 = Vec3::new(0.6, FLOOR + 0.74, -1.70);
 /// From the cabinet's floor up to its centre (the model's origin).
 const CABINET_SHELF_BELOW: Vec3 = Vec3::new(0.0, 0.21, -0.04);
@@ -1178,8 +1178,8 @@ fn fit_bench(progression: Res<Progression>, mut benches: Query<&mut crate::raid:
     }
 }
 
-/// Home from a raid with the cabinet fitted: the driver leaves a dressing
-/// on its shelf (it holds two).
+/// Home from a raid with the cabinet fitted: the driver leaves an
+/// injector on its shelf (it holds one).
 fn stock_cabinet(
     mut commands: Commands,
     raid: Res<Raid>,
@@ -1197,7 +1197,7 @@ fn stock_cabinet(
     let Some((_, truck)) = trucks.iter().find(|(t, _)| t.at_base) else {
         return;
     };
-    let Some(kind) = catalog.kind("field_dressing") else {
+    let Some(kind) = catalog.kind("regen_injector") else {
         return;
     };
     let shelf = truck.transform_point(CABINET_AT);

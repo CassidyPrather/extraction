@@ -4,7 +4,7 @@
 //! there is rolled from a named table. Tables can reference other tables,
 //! so "kitchen" can include "food_common" plus the odd "curio".
 
-use crate::items::{ItemCatalog, ItemKind};
+use crate::items::{Category, ItemCatalog, ItemKind};
 use crate::noise::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -35,6 +35,9 @@ pub enum Entry {
     Nothing { weight: f32 },
 }
 
+/// Mixed into a dressing's fork of the place's stream.
+const DRESSING_SALT: u64 = 0xD2E5_5196_0F0A_D1C4;
+
 const fn full() -> (f32, f32) {
     (0.6, 1.0)
 }
@@ -44,6 +47,12 @@ pub struct Table {
     /// How many rolls: inclusive range.
     pub rolls: (u32, u32),
     pub entries: Vec<Entry>,
+    /// Junk to dress the place with (#104), rolled after the real roll on
+    /// a stream of its own: what it adds never takes a real thing's place,
+    /// nor changes what the real roll draws. Only the table a place names
+    /// rolls its dressing, not one it includes.
+    #[serde(default)]
+    pub dressing: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -156,7 +165,40 @@ impl LootTables {
         rng: &mut Rng,
     ) -> Vec<Drop> {
         let mut out = Vec::new();
+        // A table's own fork for its dressing, taken before the real roll
+        // so it's the same whatever the real roll draws, and drawn from a
+        // copy: the stream the place rolls from is left as it was.
+        let mut fork = {
+            let mut copy = rng.clone();
+            Rng::new(copy.next_u64() ^ DRESSING_SALT)
+        };
         self.roll_into(name, valley, raid, catalog, rng, &mut out, 0);
+        // The real roll yields no junk: a junk entry in a real table draws
+        // as it always did, and comes up empty.
+        out.retain(|d| catalog.get(d.kind).category != Category::Junk);
+        let dressing = valley
+            .map(|v| format!("{name}@{v}"))
+            .and_then(|k| self.tables.get(&k))
+            .or_else(|| self.tables.get(name))
+            .and_then(|t| t.dressing.clone());
+        if let Some(d) = dressing {
+            self.roll_into(&d, valley, raid, catalog, &mut fork, &mut out, 1);
+        }
+        out
+    }
+
+    /// The real roll alone: what [`Self::roll_at`] gives less its dressing.
+    pub fn roll_real(
+        &self,
+        name: &str,
+        valley: Option<&str>,
+        raid: Option<u32>,
+        catalog: &ItemCatalog,
+        rng: &mut Rng,
+    ) -> Vec<Drop> {
+        let mut out = Vec::new();
+        self.roll_into(name, valley, raid, catalog, rng, &mut out, 0);
+        out.retain(|d| catalog.get(d.kind).category != Category::Junk);
         out
     }
 
@@ -301,7 +343,8 @@ pub fn idea(def: &crate::items::ItemDef, catalog: &ItemCatalog) -> String {
         .or_else(|| def.cartridge.clone());
     match (def.category, rounds) {
         (Category::Firearm | Category::Ammo | Category::Magazine, Some(c)) => format!("rounds {c}"),
-        (Category::Food, _) => "food".into(),
+        _ if def.is_food() => "food".into(),
+        (Category::Junk, _) => "junk".into(),
         // A tape is a tape, a record a record, whatever's on it.
         _ if def.id.starts_with("tape_") => "tape".into(),
         _ if def.id.starts_with("record_") => "record".into(),
@@ -353,7 +396,7 @@ mod tests {
         );
         for id in [
             "canned_stew",
-            "field_dressing",
+            "regen_injector",
             "ammo_9x18",
             "power_cell",
             "bolt",

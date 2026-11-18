@@ -178,7 +178,7 @@ impl Traits {
             Category::Magazine | Category::Ammo | Category::Gadget => 4.0,
             Category::Tool | Category::RobotPart | Category::Attachment => 3.0,
             Category::Material | Category::Curio => 2.0,
-            Category::Food => 1.5,
+            Category::Junk => 1.5,
         };
         match (self.name, def.category) {
             ("hunter", Category::Artifact) => v * 3.0,
@@ -324,7 +324,7 @@ pub struct Raider {
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
     /// Since when (raid seconds) it's been losing health with nothing
-    /// hitting it or bleeding, and its health then.
+    /// hitting it, and its health then.
     calm: (f32, f32),
     /// Where it last got stuck, and how many times in a row near there.
     stuck_spot: (Vec2, u32),
@@ -646,7 +646,7 @@ pub fn attach_raider(
 
 /// Out of the truck bed and kitted up from what's on the ground by the
 /// insertion point (the dev cache and the sim kit): an AK with two
-/// magazines, a box of rounds, the radio, two dressings.
+/// magazines, a box of rounds, the radio, an injector.
 /// `SIM_CONTRACT=<id>[:step]`: the contract's kit (a relay to plant; the
 /// camera, though the raider can't take pictures).
 pub fn contract_kit(opts: &LaunchOptions) -> Vec<&'static str> {
@@ -671,14 +671,7 @@ fn kit_tasks() -> Vec<Task> {
         id: s("ak74"),
         side: Side::Right,
     });
-    for id in [
-        "ak_mag",
-        "ak_mag",
-        "radio",
-        "field_dressing",
-        "field_dressing",
-        "ammo_545",
-    ] {
+    for id in ["ak_mag", "ak_mag", "radio", "regen_injector", "ammo_545"] {
         t.push(Task::PickUp {
             id: s(id),
             side: Side::Left,
@@ -1290,10 +1283,9 @@ pub fn think(
             r.anchor = (here, r.clock);
         }
 
-        // Hurting with nothing hitting it and no wound bleeding: heat, gas,
-        // whatever its plan didn't know of. Out of the building, and that
-        // site crossed off.
-        if health.since_hit < 3.0 || health.bleeding > 0.05 || r.hp > r.calm.1 {
+        // Hurting with nothing hitting it: heat, gas, whatever its plan
+        // didn't know of. Out of the building, and that site crossed off.
+        if health.since_hit < 3.0 || r.hp > r.calm.1 {
             r.calm = (r.clock, r.hp);
         } else if r.calm.1 - r.hp > HAZARD_HP
             && r.combat.is_none()
@@ -1337,7 +1329,7 @@ pub fn think(
             continue;
         }
         if let Some(target) = r.combat.as_ref().map(|c| c.target) {
-            // Between bursts: a dressing if it's bad, else keep at it.
+            // Between bursts: the injector if it's bad, else keep at it.
             if let Some(tasks) = heal(me, r, &scene, health, children, &mut log, true) {
                 bot.replace(tasks);
                 continue;
@@ -1598,8 +1590,7 @@ fn time_to_go(
     if heat >= r.traits.heat {
         return Some("heat");
     }
-    let meds = !scene.carried(me, "field_dressing").is_empty()
-        || !scene.carried(me, "regen_injector").is_empty();
+    let meds = !scene.carried(me, "regen_injector").is_empty();
     if health.hp < 35.0 && !meds {
         return Some("hurt");
     }
@@ -1613,7 +1604,7 @@ fn time_to_go(
     None
 }
 
-/// Dress wounds when bleeding or low (and not fighting).
+/// The injector when low (lower still in a fight).
 fn heal(
     me: Entity,
     r: &mut Raider,
@@ -1623,30 +1614,21 @@ fn heal(
     log: &mut SimLog,
     urgent_only: bool,
 ) -> Option<Vec<Task>> {
-    let (bleed, low) = if urgent_only {
-        (1.0, 35.0)
-    } else {
-        (0.4, 45.0)
-    };
-    if health.bleeding < bleed && health.hp > low {
+    let low = if urgent_only { 35.0 } else { 45.0 };
+    if health.hp > low {
         return None;
     }
     if scene.hand(children, Side::Left).is_some() {
         return None;
     }
-    let item = ["regen_injector", "field_dressing"]
-        .iter()
-        .find_map(|id| scene.carried(me, id).first().copied())?;
+    let item = scene.carried(me, "regen_injector").first().copied()?;
     let id = scene
         .items
         .get(item)
         .map(|(_, it, ..)| scene.catalog.get(it.kind()).id.clone())
         .unwrap_or_default();
     log.stats.heals += 1;
-    log.event(
-        "heal",
-        json!({"item": id, "hp": round(health.hp, 0), "bleeding": round(health.bleeding, 2)}),
-    );
+    log.event("heal", json!({"item": id, "hp": round(health.hp, 0)}));
     let _ = r;
     Some(vec![
         Task::Grab {
@@ -2393,7 +2375,7 @@ fn fight_on(
     }
     let (loaded, spare) = scene.ammo(me, gun);
     // Hurt and still being hit: get out of its sight and see to it (the
-    // dressing comes once out of the fight; it'll be back if the robot
+    // injector comes once out of the fight; it'll be back if the robot
     // follows).
     let cover = threat
         .filter(|t| hit && r.hp < 45.0 && scene.visible(*t, eye))

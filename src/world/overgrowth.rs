@@ -193,6 +193,74 @@ pub fn lettered(id: &str) -> &'static [(Vec3, Vec3)] {
     }
 }
 
+/// How far up its wall a field set's middle hangs, from the ground at its
+/// marker (`map_extract::field_sets`), and the clearing kept cut back
+/// round it: a set someone uses doesn't vanish under the ivy. Its board
+/// is 0.56 by 0.5 m, its corners 0.4 m out, and a leaf card rooted just
+/// outside reaches 0.1 m in: the whole board and its band stay clear.
+pub const FIELD_SET_UP: f32 = 1.3;
+pub const FIELD_SET_CLEAR: f32 = 0.5;
+
+/// The field sets hung on a building's walls, as clearings (middle,
+/// radius) in the building's own space: those within `half` (its
+/// footprint's half extents, x and z) and a little.
+pub fn field_set_clearings(
+    map: &extraction_core::map::MapDef,
+    hm: &extraction_core::terrain::Heightmap,
+    xf: &Transform,
+    half: Vec2,
+) -> Vec<(Vec3, f32)> {
+    let to_local = xf.compute_affine().inverse();
+    extraction_core::map_extract::field_sets(map)
+        .into_iter()
+        .filter_map(|(_, at, _)| {
+            let world = Vec3::new(at[0], hm.height(at) + FIELD_SET_UP, at[1]);
+            let l = to_local.transform_point3(world);
+            (l.x.abs() <= half.x + 0.5 && l.z.abs() <= half.y + 0.5).then_some((l, FIELD_SET_CLEAR))
+        })
+        .collect()
+}
+
+/// Cuts a building's ivy back from `clearings` (middle, radius): no leaf
+/// there, and its stems cut where they cross.
+pub fn keep_off(g: &mut Growth, clearings: &[(Vec3, f32)]) {
+    if clearings.is_empty() {
+        return;
+    }
+    let clear = |p: Vec3| clearings.iter().all(|(c, r)| p.distance(*c) > *r);
+    g.leaves.retain(|l| clear(l.at));
+    let mut vines = Vec::new();
+    for v in g.vines.drain(..) {
+        let mut piece = Vine {
+            points: Vec::new(),
+            radius: Vec::new(),
+            normal: v.normal,
+        };
+        for (p, r) in v.points.iter().zip(&v.radius) {
+            if clear(*p) {
+                piece.points.push(*p);
+                piece.radius.push(*r);
+            } else if !piece.points.is_empty() {
+                let done = std::mem::replace(
+                    &mut piece,
+                    Vine {
+                        points: Vec::new(),
+                        radius: Vec::new(),
+                        normal: v.normal,
+                    },
+                );
+                if done.points.len() >= 2 {
+                    vines.push(done);
+                }
+            }
+        }
+        if piece.points.len() >= 2 {
+            vines.push(piece);
+        }
+    }
+    g.vines = vines;
+}
+
 /// Whether the face `f` is one of `clear`'s lettered faces.
 fn is_lettered(f: &Face, clear: &[(Vec3, Vec3)]) -> bool {
     clear.iter().any(|(at, n)| {
@@ -1000,6 +1068,61 @@ mod tests {
             }
             assert!(grown > 0, "{id}: no ivy at all");
         }
+    }
+
+    /// The field sets stay in sight: every valley's sets on a building's
+    /// wall, its ivy grown at many seeds, no leaf within 0.3 m of a set's
+    /// middle, and no stem through it.
+    #[test]
+    fn ivy_keeps_off_field_sets() {
+        use extraction_core::map::prefab_footprint;
+        let mut checked = 0;
+        for name in crate::test_maps() {
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    map: name.clone(),
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            for p in &zone.map.placements {
+                let f = prefab_footprint(&p.prefab);
+                let xf = crate::world::buildings::placement_transform(&zone, p);
+                let sets =
+                    field_set_clearings(&zone.map, &zone.hm, &xf, Vec2::new(f[0], f[2]) * 0.5);
+                if sets.is_empty() {
+                    continue;
+                }
+                let Some(geo) = crate::world::buildings::prefab(&p.prefab) else {
+                    continue;
+                };
+                let occ = crate::world::buildings::occluders(&geo);
+                checked += 1;
+                for k in 1..24u64 {
+                    let mut g = grow_on(&p.prefab, &geo, &occ, k * 7919, Vec3::NEG_Z);
+                    keep_off(&mut g, &sets);
+                    for (c, _) in &sets {
+                        for l in &g.leaves {
+                            assert!(
+                                l.at.distance(*c) > 0.3,
+                                "{name} {}: a leaf at {:?} over the field set at {c:?}",
+                                p.prefab,
+                                l.at
+                            );
+                        }
+                        for v in &g.vines {
+                            assert!(v.points.iter().all(|q| q.distance(*c) > 0.3));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "no field set hangs on a building's wall");
     }
 
     /// No ivy on a vehicle: a wreck's body or a boxcar isn't a ruin's wall.

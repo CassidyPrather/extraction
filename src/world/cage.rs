@@ -364,7 +364,6 @@ fn run_cage(
             if let Ok((_, _, _, mut h)) = players.get_mut(e) {
                 h.hp -= CRUSH;
                 h.since_hit = 0.0;
-                h.bleeding = (h.bleeding + 1.5).min(3.0);
             }
             crushed.write(CageCrushed {
                 player: e,
