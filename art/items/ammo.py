@@ -65,6 +65,15 @@ def bullet(p, c, xf, segs, tip=None, seat=0.0):
         return
     end = prof[-1][1]
     mat = "Copper"
+    if tip == "slot":
+        # A box's round, painted by the game for its load (`items::rounds`):
+        # the band behind the point, and the point.
+        behind, prof = split(prof, end + TIP + BAND)
+        p.lathe(behind, "Copper", segs=segs, xf=xf)
+        band, prof = split(prof, end + TIP)
+        p.lathe(band, "TipBand", segs=segs, xf=xf)
+        p.lathe(prof, "Tip", segs=segs, xf=xf)
+        return
     for back, m in TIPS[tip]:
         behind, prof = split(prof, end + back)
         p.lathe(behind, mat, segs=segs, xf=xf)
@@ -108,6 +117,103 @@ def carton(p, sx, sy, sz, y0, mat, top=None, wall=0.0012, sides=True):
         z0, z1 = top
         p.box((sx, wall, z1 - z0), (0.0, y0 + sy - wall / 2, (z0 + z1) / 2), mat, bevel=0.0004,
               segs=1)
+
+
+# --- A box's parts (`items::rounds`) ---------------------------------------------------------
+
+def ring_band(sx, sy, yc, z, w, t=0.0006):
+    """A band `w` wide right round a box of section sx x sy (centred on y
+    yc), across Z at z: four strips standing `t` off its faces."""
+    return [((sx + 2 * t, t, w), (0.0, yc + sy / 2 + t / 2, z)),
+            ((sx + 2 * t, t, w), (0.0, yc - sy / 2 - t / 2, z)),
+            ((t, sy, w), (sx / 2 + t / 2, yc, z)),
+            ((t, sy, w), (-sx / 2 - t / 2, yc, z))]
+
+
+def flat_band(sx, sz, y, h, t=0.0006):
+    """A band `h` tall right round a box standing on its floor (section
+    sx x sz in X, Z), at height y: four strips on its walls."""
+    return [((sx + 2 * t, h, t), (0.0, y, sz / 2 + t / 2)),
+            ((sx + 2 * t, h, t), (0.0, y, -sz / 2 - t / 2)),
+            ((t, h, sz), (sx / 2 + t / 2, y, 0.0)),
+            ((t, h, sz), (-sx / 2 - t / 2, y, 0.0))]
+
+
+def merged(name, parts):
+    """One Part of all of `parts` (a far stand-in)."""
+    out = Part(name)
+    for q in parts:
+        vmap = {v: out.bm.verts.new(v.co) for v in q.bm.verts}
+        for f in q.bm.faces:
+            try:
+                nf = out.bm.faces.new([vmap[v] for v in f.verts])
+            except ValueError:
+                continue
+            nf.material_index = out._mi(q.mats[f.material_index])
+            nf.smooth = f.smooth
+    return out
+
+
+def boxed(body, slots, band_at, band_mat, seal_at, seal_mat, mix):
+    """A box of rounds as `items::rounds` works it: its `body`; a node for
+    each round that shows (`round_<i>`, `slots` drawing each: the first
+    goes last, the last first); its type's `band` (when it has one) and the
+    hatched `band_mix` it wears mixed; the `seal` over its open end while
+    it's shut; `print_mix`, MIX printed where `mix` (h, xf) says; and
+    `box_lod1`, all of it as it comes, full and shut, past a few metres."""
+    rounds = []
+    for i, draw in enumerate(slots):
+        r = Part(f"round_{i}")
+        draw(r)
+        rounds.append(r)
+    parts = [body] + rounds
+
+    def off(size, at, k):
+        """A strip moved `k` of its thicknesses further off the box."""
+        thin = min(range(3), key=lambda a: size[a])
+        at = list(at)
+        at[thin] += k * math.copysign(size[thin], at[thin] or 1.0)
+        return tuple(at)
+
+    # The band's backing on the box: a pale paper strip a little wider than
+    # it, so any band reads on any card (black on olive was lost).
+    for size, at in band_at:
+        thin = min(range(3), key=lambda a: size[a])
+        long = max(range(3), key=lambda a: size[a])
+        wide = list(size)
+        wide[3 - thin - long] += 0.003
+        body.box(tuple(wide), at, "Paper", segs=1)
+    band = None
+    if band_mat:
+        band = Part("band")
+        for size, at in band_at:
+            band.box(size, off(size, at, 1), band_mat, segs=1)
+        parts.append(band)
+    hatch = Part("band_mix")
+    for size, at in band_at:
+        # Out past the type's band (never both at once).
+        at = off(size, at, 2)
+        # Stripes across its length: black, green, blue.
+        k = max(range(3), key=lambda a: size[a])
+        n = 9
+        for s_ in range(n):
+            sz_ = list(size)
+            sz_[k] = size[k] / n
+            c = list(at)
+            c[k] = at[k] - size[k] / 2 + size[k] * (s_ + 0.5) / n
+            hatch.box(tuple(sz_), tuple(c), ("Black", "Leaf", "Blue")[s_ % 3], segs=1)
+    parts.append(hatch)
+    seal = Part("seal")
+    for size, at in seal_at:
+        seal.box(size, at, seal_mat, bevel=0.0004, segs=1)
+    parts.append(seal)
+    m = Part("print_mix")
+    h, xf = mix
+    text(m, "MIX", h, "Black", xf, depth=0.0004)
+    parts.append(m)
+    far = [body] + rounds + ([band] if band else []) + [seal]
+    parts.append(merged("box_lod1", far))
+    return parts
 
 
 # --- Loose rounds ----------------------------------------------------------------------------
@@ -174,34 +280,40 @@ def shell_12ga(hull="Red", head="Brass"):
 def ammo_9x18():
     p = Part("body")
     # A small kraft card box of pistol rounds standing nose up, the front
-    # of the lid torn off; a printed label on what is left.
+    # of the lid torn off; the calibre printed large on what is left.
     sx, sy, sz = 0.04, 0.03, 0.07
     y0 = -sy / 2
     yl = y0 + sy - 0.001
     carton(p, sx, sy - 0.0022, sz, y0, "Rope")
-    # What is left of the lid, its label printed on it.
+    # What is left of the lid.
     panel(p, "y", -sx / 2, sx / 2, -0.004, sz / 2, yl - 0.0012, yl, "Rope",
-          [(-0.016, 0.016, 0.001, 0.031, "Paper"), (-0.016, 0.016, 0.024, 0.028, "Red")])
+          [(-0.017, 0.017, 0.004, 0.02, "Paper")])
     ragged(p, sx - 0.001, -0.004, 0.006, yl - 0.0012, yl, "Rope", seed=2)
     p.box((sx - 0.003, 0.001, 0.034), (0.0, y0 + 0.0125, -0.0175), "Black")
-    for i in range(4):
-        for j in range(3):
+    # Front row first.
+    slots = []
+    for j in (2, 1, 0):
+        for i in range(4):
             x = -0.0143 + i * 0.00953
             z = -0.0295 + j * 0.0095
-            nose(p, C9, -0.012, T(x, y0 + 0.0013, z) @ RX(math.pi / 2), segs=8)
-    text(p, "9x18", 0.0065, "Black", T(0.0, yl, 0.012) @ ON_TOP,
-         depth=0.0004)
-    # The calibre stamped on both sides too.
+            slots.append(lambda r, x=x, z=z: nose(r, C9, -0.012, T(x, y0 + 0.0013, z)
+                                                     @ RX(math.pi / 2), segs=8, tip="slot"))
+    text(p, "9x18", 0.009, "Black", T(0.0, yl, 0.012) @ ON_TOP, depth=0.0004)
+    # The calibre on both sides and the back end too.
     for sx_ in (-1, 1):
         text(p, "9x18", 0.008, "Black",
              T(sx_ * (sx / 2), 0.0, 0.0) @ RY(sx_ * math.pi / 2), depth=0.0004)
-    return [p]
+    text(p, "9x18", 0.008, "Black", T(0.0, -0.002, sz / 2), depth=0.0004)
+    return boxed(p, slots, ring_band(sx, sy, 0.0, 0.0305, 0.006), None,
+                 [((sx - 0.002, 0.0012, 0.031), (0.0, yl - 0.0006, -0.0195))], "Rope",
+                 (0.006, T(0.0, yl, 0.0245) @ ON_TOP))
 
 
-def ammo_545(label="5.45", tip_of=lambda k: None, stripe=None):
+def ammo_545(band=None):
     p = Part("body")
     # A packet of rifle rounds wrapped in olive paper and tied with string,
-    # one end torn open on the slim pointed noses.
+    # one end torn open on the slim pointed noses; the calibre large on top
+    # and on the far end, the type's band right round it.
     sx, sy, sz = 0.05, 0.035, 0.1
     zt = -0.03
     body = fillet([(-0.0245, -0.017), (0.0245, -0.017), (0.0245, 0.017), (-0.0245, 0.017)],
@@ -216,26 +328,25 @@ def ammo_545(label="5.45", tip_of=lambda k: None, stripe=None):
         ragged(p, 0.032, zp, 0.0105, -0.0004, 0.0004, "Olive", seed=3 + sx_,
                xf=T(sx_ * 0.0241, 0.0, 0.0) @ RZ(math.pi / 2))
     p.box((0.046, 0.031, 0.0035), (0.0, 0.0, zt + 0.00175), "Black")
-    for i in range(4):
-        for j in range(3):
+    # The top row first.
+    slots = []
+    for j in range(3):
+        for i in range(4):
             x = -0.0158 + i * 0.0105
             y = -0.0105 + j * 0.0105
-            nose(p, C545, -0.028, T(x, y, -sz / 2 + C545[2]), segs=8, tip=tip_of(i * 3 + j))
-    # String round it, both ways.
+            slots.append(lambda r, x=x, y=y: nose(r, C545, -0.028, T(x, y, -sz / 2 + C545[2]),
+                                                  segs=8, tip="slot"))
+    # String round it.
     for z in (-0.005, 0.03):
         p.box((0.0505, 0.0015, 0.0015), (0.0, 0.0172, z), "Rope")
         p.box((0.0505, 0.0015, 0.0015), (0.0, -0.0172, z), "Rope")
         for sx_ in (-1, 1):
             p.box((0.0015, 0.0345, 0.0015), (sx_ * 0.0248, 0.0, z), "Rope")
-    p.box((0.0016, 0.0015, 0.0365), (0.0, 0.0174, 0.0125), "Rope")
-    # A paper slip under the string with the calibre on it.
-    p.box((0.03, 0.0004, 0.022), (-0.008, 0.0171, 0.0125), "Paper", xf=RY(0.04))
-    text(p, label, 0.006, "Black",
-         T(-0.008, 0.0174, 0.0125) @ ON_TOP, depth=0.0004)
-    if stripe:
-        # The type's stripe across the slip's foot.
-        p.box((0.03, 0.0004, 0.004), (-0.008, 0.0175, 0.003), stripe, xf=RY(0.04))
-    return [p]
+    text(p, "5.45", 0.011, "Black", T(-0.0005, 0.0175, 0.013) @ ON_TOP, depth=0.0004)
+    text(p, "5.45", 0.009, "Black", T(0.0, 0.0, sz / 2 - 0.0005), depth=0.0004)
+    return boxed(p, slots, ring_band(0.049, 0.034, 0.0, -0.0155, 0.008), band,
+                 [((0.0495, 0.0345, 0.0205), (0.0, 0.0, -0.03925))], "Olive",
+                 (0.007, T(0.0, 0.0175, 0.04) @ ON_TOP))
 
 
 def round_762x39():
@@ -245,31 +356,37 @@ def round_762x39():
     return [p]
 
 
-def ammo_762x39(label="7.62x39", tip=None, band="Olive"):
+def ammo_762x39(band=None):
     p = Part("body")
     # A cream card box of twenty standing on end, two rows of ten, its lid
-    # torn off over the bullets; a green band and the calibre on the sides.
+    # torn off over the bullets; the calibre large on both faces, the
+    # type's band right round it.
     sx, sy, sz = 0.06, 0.03, 0.026
     y0 = -0.0235
     wall = 0.0012
     carton(p, sx, sy, sz, y0, "Cream", wall=wall, sides=False)
     for sx_ in (-1, 1):
         panel(p, "x", -sz / 2, sz / 2, y0, y0 + sy, sx_ * (sx / 2 - wall), sx_ * sx / 2,
-              "Cream", [(-sz / 2, sz / 2, y0 + 0.007, y0 + 0.013, band)])
+              "Cream")
     ragged(p, sx - 0.003, -sz / 2 + wall, 0.004, y0 + sy - 0.0012, y0 + sy, "Cream", seed=7)
     # The dark between the rounds, under the tops of the cases.
     p.box((sx - 0.004, 0.003, sz - 0.004), (0.0, y0 + sy - 0.006, 0.0), "Black")
-    for i in range(10):
-        for j in range(2):
+    # The front row first.
+    slots = []
+    for j in (1, 0):
+        for i in range(10):
             x = -0.0255 + i * 0.00567
             z = -0.0058 + j * 0.0116
             base = y0 + sy - 0.006 - 0.034
-            nose(p, C762X39, -0.034, T(x, base, z) @ RX(math.pi / 2), segs=8, tip=tip)
+            slots.append(lambda r, x=x, z=z, base=base: nose(
+                r, C762X39, -0.034, T(x, base, z) @ RX(math.pi / 2), segs=8, tip="slot"))
     for sz_ in (-1, 1):
         rot = RY(math.pi) if sz_ < 0 else T()
-        text(p, label, 0.0075, "Black", T(0.0, y0 + 0.012, sz_ * (sz / 2 + 0.0001)) @ rot,
+        text(p, "7.62x39", 0.009, "Black", T(0.0, y0 + 0.0215, sz_ * (sz / 2 + 0.0001)) @ rot,
              depth=0.0004)
-    return [p]
+    return boxed(p, slots, flat_band(sx, sz, y0 + 0.01, 0.006), band,
+                 [((sx, 0.0012, sz), (0.0, y0 + sy + 0.0006, 0.0))], "Cream",
+                 (0.005, T(0.0, y0 + 0.0035, -sz / 2 - 0.0001) @ RY(math.pi)))
 
 
 def round_762x38r():
@@ -282,7 +399,8 @@ def round_762x38r():
 def ammo_762x38r():
     p = Part("body")
     # A brown paper packet of fourteen, two rows of seven lying flat, one
-    # end torn open on the crimped mouths; the calibre in black.
+    # end torn open on the crimped mouths; the calibre in black on top and
+    # on the far end.
     sx, sy, sz = 0.072, 0.022, 0.042
     zt = -0.017
     body = fillet([(-sx / 2, -sy / 2), (sx / 2, -sy / 2), (sx / 2, sy / 2), (-sx / 2, sy / 2)],
@@ -292,15 +410,21 @@ def ammo_762x38r():
     ragged(p, sx - 0.003, zp, 0.009, sy / 2 - 0.0008, sy / 2, "Rope", seed=2)
     ragged(p, sx - 0.003, zp, 0.008, -sy / 2, -sy / 2 + 0.0008, "Rope", seed=5)
     p.box((sx - 0.004, sy - 0.003, 0.003), (0.0, 0.0, zt + 0.0015), "Black")
-    for i in range(7):
-        for j in range(2):
+    # The top row first.
+    slots = []
+    for j in range(2):
+        for i in range(7):
             x = -0.03 + i * 0.01
             y = -0.0049 + j * 0.0098
-            nose(p, C762X38R, -0.031, T(x, y, -sz / 2 + C762X38R[2] - 0.004), segs=8)
-    p.box((0.05, 0.0004, 0.02), (0.0, sy / 2 + 0.0001, 0.006), "Paper")
-    text(p, "7.62 НАГАН", 0.005, "Black", T(0.0, sy / 2 + 0.0003, 0.006) @ ON_TOP,
+            slots.append(lambda r, x=x, y=y: nose(
+                r, C762X38R, -0.031, T(x, y, -sz / 2 + C762X38R[2] - 0.004), segs=8))
+    p.box((0.056, 0.0004, 0.016), (0.0, sy / 2 + 0.0001, 0.003), "Paper")
+    text(p, "7.62 НАГАН", 0.0065, "Black", T(0.0, sy / 2 + 0.0003, 0.003) @ ON_TOP,
          depth=0.0004)
-    return [p]
+    text(p, "7.62", 0.009, "Black", T(0.0, 0.003, sz / 2 - 0.0005), depth=0.0004)
+    return boxed(p, slots, ring_band(sx - 0.001, sy - 0.001, 0.0, 0.0165, 0.004), None,
+                 [((sx - 0.0005, sy - 0.0005, 0.0185), (0.0, 0.0, -0.0118))], "Rope",
+                 (0.005, T(0.0, -0.006, sz / 2 - 0.0005)))
 
 
 def round_762x25():
@@ -313,7 +437,7 @@ def round_762x25():
 def ammo_762x25():
     p = Part("body")
     # A grey card box of seventy, ten by seven on end, half its lid torn off;
-    # the calibre stamped on the sides.
+    # the calibre large on both faces.
     sx, sy, sz = 0.1, 0.03, 0.07
     y0 = -0.0245
     wall = 0.0012
@@ -327,57 +451,69 @@ def ammo_762x25():
     ragged(p, sx / 2 - 0.003, -sz / 2 + wall, 0.004, y0 + sy - 0.0012, y0 + sy, "Pebble", seed=9,
            xf=T(-sx / 4, 0, 0))
     p.box((sx / 2 - 0.004, 0.003, sz - 0.004), (-sx / 4, y0 + sy - 0.006, 0.0), "Black")
-    for i in range(5):
+    # The outer column first.
+    slots = []
+    for i in (4, 3, 2, 1, 0):
         for j in range(7):
             x = -0.045 + i * 0.01
             z = -0.03 + j * 0.01
             base = y0 + sy - 0.006 - 0.022
-            nose(p, C762X25, -0.022, T(x, base, z) @ RX(math.pi / 2), segs=7)
+            slots.append(lambda r, x=x, z=z, base=base: nose(
+                r, C762X25, -0.022, T(x, base, z) @ RX(math.pi / 2), segs=7, tip="slot"))
     for sz_ in (-1, 1):
         rot = RY(math.pi) if sz_ < 0 else T()
-        text(p, "7.62x25", 0.0075, "Black", T(0.0, y0 + 0.017, sz_ * (sz / 2 + 0.0001)) @ rot,
+        text(p, "7.62x25", 0.009, "Black", T(0.0, y0 + 0.0175, sz_ * (sz / 2 + 0.0001)) @ rot,
              depth=0.0004)
-    return [p]
+    return boxed(p, slots, flat_band(sx, sz, y0 + 0.0265, 0.003), None,
+                 [((sx / 2, wall, sz), (-sx / 4, y0 + sy - wall / 2 + 0.0004, 0.0))], "Pebble",
+                 (0.0045, T(0.0, y0 + 0.0065, -sz / 2 - 0.0001) @ RY(math.pi)))
 
 
-def ammo_762r(label="54R", band="Red"):
+def ammo_762r(band=None):
     p = Part("body")
     # A white card carton of the big rimmed rounds lying in two layers,
-    # its back end torn off on the brass rims; a red band and the calibre.
+    # its back end torn off on the brass rims; the calibre large on top and
+    # on the front end, the type's band right round it.
     sx, sy, sz = 0.045, 0.03, 0.09
     zt = 0.03
     ze = zt - 0.0035
-    for z0, z1, mat in ((-sz / 2, -0.018, "Paper"), (-0.018, -0.006, band), (-0.006, ze, "Paper")):
-        p.box((sx - 0.001, sy - 0.0005, z1 - z0), (0.0, -0.00025, (z0 + z1) / 2), mat,
-              bevel=0.0006, segs=1)
+    p.box((sx - 0.001, sy - 0.0005, ze + sz / 2), (0.0, -0.00025, (ze - sz / 2) / 2), "Paper",
+          bevel=0.0006, segs=1)
     for y0, y1 in ((sy / 2 - 0.0013, sy / 2 - 0.0005), (-sy / 2, -sy / 2 + 0.0008)):
         ragged(p, sx - 0.001, ze, -0.0105, y0, y1, "Paper", seed=2)
     for sx_ in (-1, 1):
         ragged(p, sy - 0.003, ze, -0.0105, -0.0004, 0.0004, "Paper", seed=5 + sx_,
                xf=T(sx_ * (sx / 2 - 0.0009), -0.00025, 0.0) @ RZ(math.pi / 2))
     p.box((sx - 0.003, sy - 0.003, 0.0035), (0.0, -0.00025, ze + 0.00175), "Black")
-    for i in range(3):
-        for j in range(2):
-            x = -0.0138 + i * 0.0138
-            y = -0.0072 + j * 0.0136
+
+    def rim(x, y):
+        def draw(r):
             xf = T(x, y, sz / 2 - 0.0004)
-            p.lathe([(0.0, -0.016), (0.0057, -0.016)]
-                    + [(r, z) for r, z in C762[0] if -0.016 < z and r > 0][::-1]
+            r.lathe([(0.0, -0.016), (0.0057, -0.016)]
+                    + [(rr, z) for rr, z in C762[0] if -0.016 < z and rr > 0][::-1]
                     + [(0.0, 0.0)], "Brass", segs=14, xf=xf)
-            p.cyl(0.0017, -0.0004, 0.00003, "Copper", segs=10, xf=xf)
-            p.tube(0.0023, 0.0017, -0.0004, 0.00002, "Red", segs=10, xf=xf)
-    text(p, "7.62", 0.008, "Black", T(0.0, sy / 2 - 0.0005, -0.033) @ ON_TOP,
-         depth=0.0004)
+            r.cyl(0.0017, -0.0004, 0.00003, "Copper", segs=10, xf=xf)
+            r.tube(0.0023, 0.0017, -0.0004, 0.00002, "Red", segs=10, xf=xf)
+        return draw
+
+    # The top layer first.
+    slots = [rim(-0.0138 + i * 0.0138, -0.0072 + j * 0.0136) for j in range(2) for i in range(3)]
+    text(p, "7.62", 0.011, "Black", T(0.0, sy / 2 - 0.0005, -0.026) @ ON_TOP, depth=0.0004)
+    text(p, "54R", 0.009, "Black", T(0.0, -0.001, -sz / 2) @ RY(math.pi), depth=0.0004)
     for sx_ in (-1, 1):
-        text(p, label, 0.0055, "Black",
+        text(p, "54R", 0.0055, "Black",
              T(sx_ * (sx / 2 - 0.0005), 0.0, -0.032) @ RY(sx_ * math.pi / 2), depth=0.0004)
-    return [p]
+    return boxed(p, slots, ring_band(sx - 0.001, sy - 0.0005, -0.00025, -0.008, 0.01), band,
+                 [((sx - 0.0005, sy, sz / 2 - ze + 0.011), (0.0, -0.00025,
+                                                           (ze - 0.011 + sz / 2) / 2))],
+                 "Paper", (0.007, T(0.0, sy / 2 - 0.0005, 0.008) @ ON_TOP))
 
 
-def ammo_12ga(hull="Red", label=None):
+def ammo_12ga(band=None, label=None):
     p = Part("body")
     # A yellow carton of shells standing on end, the lid torn back off the
-    # front rows: brass heads with their primers, red hulls between.
+    # front rows: brass heads with their primers, the hulls between (red
+    # buck, blue slug: `items::rounds` paints each).
     sx, sy, sz = 0.07, 0.07, 0.12
     y0 = -sy / 2
     wall = 0.0015
@@ -393,16 +529,19 @@ def ammo_12ga(hull="Red", label=None):
     ragged(p, sx - 0.001, 0.0, 0.01, yl - wall, yl, "Yellow", seed=3)
     p.box((sx - 0.004, 0.001, 0.058), (0.0, y0 + 0.052, -0.03), "Black")
     yt = y0 + sy - 0.0035
-    for i in range(3):
-        for j in range(3):
-            x = -0.021 + i * 0.021
-            z = -0.0475 + j * 0.0205
+
+    def shell(x, z):
+        def draw(r):
             xf = T(x, yt, z) @ UP
-            p.lathe([(0.0, -0.009), (0.0092, -0.009), (0.0092, -0.0016), (0.0099, -0.0013),
+            r.lathe([(0.0, -0.009), (0.0092, -0.009), (0.0092, -0.0016), (0.0099, -0.0013),
                      (0.0099, 0.0), (0.0, 0.0)], "Brass", segs=16, xf=xf)
-            p.lathe([(0.0, -0.022), (0.009, -0.022), (0.009, -0.0088), (0.0, -0.0088)], hull,
+            r.lathe([(0.0, -0.022), (0.009, -0.022), (0.009, -0.0088), (0.0, -0.0088)], "Hull",
                     segs=12, xf=xf)
-            p.cyl(0.0028, -0.0004, 0.0003, "Steel", segs=10, xf=xf)
+            r.cyl(0.0028, -0.0004, 0.0003, "Steel", segs=10, xf=xf)
+        return draw
+
+    # The front row first.
+    slots = [shell(-0.021 + i * 0.021, -0.0475 + j * 0.0205) for j in (2, 1, 0) for i in range(3)]
     # The gauge on the lid by a drawn shell, and on the sides.
     text(p, "12", 0.018, "Black", T(-0.01, yl, 0.026) @ ON_TOP, depth=0.0005)
     for sx_ in (-1, 1):
@@ -411,7 +550,9 @@ def ammo_12ga(hull="Red", label=None):
         if label:
             text(p, label, 0.009, "Black",
                  T(sx_ * (sx / 2), -0.02, 0.0) @ RY(sx_ * math.pi / 2), depth=0.0005)
-    return [p]
+    return boxed(p, slots, flat_band(sx, sz, y0 + 0.006, 0.008), band,
+                 [((sx, wall, sz / 2), (0.0, yl - wall / 2, -sz / 4))], "Yellow",
+                 (0.012, T(0.0, -0.015, -sz / 2 - 0.0001) @ RY(math.pi)))
 
 
 # --- Typed rounds and boxes (Weapon feel's ammunition types) --------------------------------
@@ -452,21 +593,20 @@ TYPED = {
     "round_762r_tracer": typed_round(C762, "tracer", 16),
     "slug_12ga": slug_12ga,
     # Boxes: the ball boxes with their type's tips, stripes and labels.
-    "ammo_545_ap": lambda: ammo_545("7N22", lambda k: "ap", "Black"),
-    "ammo_545_tracer": lambda: ammo_545("7T3", lambda k: "tracer", "Leaf"),
-    "ammo_545_t4": lambda: ammo_545("5.45 T", lambda k: "tracer" if k % 4 == 3 else None,
-                                    "Leaf"),
-    "ammo_762x39_ap": lambda: ammo_762x39("BZ", "api", "Black"),
-    "ammo_762x39_tracer": lambda: ammo_762x39("T-45", "tracer", "Leaf"),
-    "ammo_762r_ap": lambda: ammo_762r("B-32", "Black"),
-    "ammo_762r_tracer": lambda: ammo_762r("T-46", "Leaf"),
+    "ammo_545_ap": lambda: ammo_545("Black"),
+    "ammo_545_tracer": lambda: ammo_545("Leaf"),
+    "ammo_545_t4": lambda: ammo_545("Leaf"),
+    "ammo_762x39_ap": lambda: ammo_762x39("Black"),
+    "ammo_762x39_tracer": lambda: ammo_762x39("Leaf"),
+    "ammo_762r_ap": lambda: ammo_762r("Black"),
+    "ammo_762r_tracer": lambda: ammo_762r("Leaf"),
     "ammo_12ga_slug": lambda: ammo_12ga("Blue", "ПУЛЯ"),
     # Subsonic: black over green tips, a blue band on the box (the tracer
     # box's is green, the AP's black).
     "round_545_us": typed_round(C545, "sub", 14),
     "round_762x39_us": typed_round(C762X39, "sub", 14),
-    "ammo_545_us": lambda: ammo_545("7U1", lambda k: "sub", "Blue"),
-    "ammo_762x39_us": lambda: ammo_762x39("7.62 US", "sub", "Blue"),
+    "ammo_545_us": lambda: ammo_545("Blue"),
+    "ammo_762x39_us": lambda: ammo_762x39("Blue"),
 }
 
 

@@ -77,17 +77,34 @@ pub fn gather(
 pub const HUSH_WARN: &str = "Your ears ring in the silence. Get out of it.";
 pub const HUSH_HURTS: &str = "The silence is pressing on you.";
 
+/// A sound louder than this (heard this far, m) feeds it: a thing landing,
+/// a shot; not your breath.
+pub const HUSH_FED_LOUD: f32 = 8.0;
+/// Each sound a hush eats within this many metres of you...
+pub const HUSH_FED_NEAR: f32 = 6.0;
+/// ...pushes its silence back this many seconds: make a noise in it (throw
+/// something in, fire a shot) and you have longer to reach its stone.
+pub const HUSH_FED: f32 = 2.0;
+
 /// The silence presses on whoever stays in a Hush past its grace; you're
 /// warned first.
 pub fn press(
     mut commands: Commands,
     hushes: Res<Hushes>,
+    mut noises: MessageReader<crate::robots::Noise>,
     mut players: Query<(Entity, &GlobalTransform, &mut Health, Option<&mut InHush>), With<Player>>,
     locals: Query<(), With<crate::rig::LocalPlayer>>,
     mut raid: ResMut<crate::raid::Raid>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
+    // Sounds it ate this tick, where (a thing thrown in, a shot, a radio):
+    // fed, its silence eases off whoever's near.
+    let eaten: Vec<Vec3> = noises
+        .read()
+        .filter(|n| n.radius > HUSH_FED_LOUD && hushes.in_standing(n.at))
+        .map(|n| n.at)
+        .collect();
     for (e, g, mut h, inside) in &mut players {
         let chest = g.translation() + Vec3::Y * 1.0;
         let here = hushes.in_standing(chest);
@@ -96,6 +113,11 @@ pub fn press(
                 commands.entity(e).insert(InHush(0.0));
             }
             (true, Some(mut t)) => {
+                let fed = eaten
+                    .iter()
+                    .filter(|n| n.distance(chest) < HUSH_FED_NEAR)
+                    .count();
+                t.0 = (t.0 - HUSH_FED * fed as f32).max(0.0);
                 let before = t.0;
                 t.0 += dt;
                 if locals.contains(e) {
@@ -238,6 +260,40 @@ mod tests {
             "outside, a shot gets a team sent"
         );
         assert!(!reported(&mut app, p, inside), "inside, nobody heard it");
+    }
+
+    /// A loud sound it eats near you (a thing thrown in, a shot) pushes its
+    /// silence back; your breath doesn't.
+    #[test]
+    fn a_sound_it_eats_pushes_its_silence_back() {
+        let (mut app, p, at, _) = app();
+        stand(&mut app, p, at);
+        for _ in 0..90 * 5 {
+            app.update();
+        }
+        let before = app.world().get::<InHush>(p).unwrap().0;
+        let chest = at + Vec3::Y * 1.0;
+        // A breath: nothing.
+        app.world_mut().write_message(Noise {
+            at: chest,
+            radius: 2.0,
+            source: Some(p),
+        });
+        app.update();
+        let breathed = app.world().get::<InHush>(p).unwrap().0;
+        assert!(breathed > before, "a breath doesn't feed it");
+        // A thing landing by you: two seconds back.
+        app.world_mut().write_message(Noise {
+            at: chest + Vec3::X,
+            radius: 20.0,
+            source: None,
+        });
+        app.update();
+        let fed = app.world().get::<InHush>(p).unwrap().0;
+        assert!(
+            fed < breathed - HUSH_FED + 0.1,
+            "a loud one does ({breathed:.2} -> {fed:.2})"
+        );
     }
 
     #[test]

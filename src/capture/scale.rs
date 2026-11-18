@@ -129,13 +129,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("relay_box", 0.16, Made, "a relay box"),
     ("camera", 0.14, Hand, "Zorki-4, 140 mm"),
     // Medical.
-    (
-        "field_dressing",
-        0.11,
-        Hand,
-        "IPP-1 individual dressing, 110 mm",
-    ),
-    ("splint", 0.45, Hand, "a ladder splint"),
     ("regen_injector", 0.13, Made, "an autoinjector"),
     // Food.
     ("water_bottle", 0.24, Hand, "an army canteen"),
@@ -195,11 +188,12 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("rotor_assembly", 0.1, Made, "a drone rotor hub"),
     ("servo", 0.08, Made, "a servo"),
     ("sensor_eye", 0.06, Made, "a sensor eye"),
-    ("robot_cell", 0.085, Made, "a robot cell"),
+    ("robot_cell", 0.186, Made, "a walker's robot cell"),
+    ("walker_eye", 0.128, Made, "a walker's eye"),
     ("robot_gunpod", 1.08, Made, "a robot's gun pod"),
     ("robot_plate", 0.3, Made, "a robot's plate"),
     ("drone_rotor_motor", 0.25, Made, "a drone's rotor motor"),
-    ("walker_leg_actuator", 0.39, Made, "a walker's knee"),
+    ("walker_leg_actuator", 0.5, Made, "a walker's knee ram"),
     ("crawler_capacitor", 0.28, Made, "a crawler's capacitors"),
     ("dirigible_gas_valve", 0.37, Made, "an airship's valve"),
     ("pylon_relay_coil", 0.27, Made, "a pylon's coil"),

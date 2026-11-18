@@ -8,9 +8,8 @@
 //! the middle of the view, and held, not strobed, under sustained fire
 //! (a hit within [`HOLD`] of the last raises the edges and holds them;
 //! they only fade once the hits stop). Harm with no direction (a fall,
-//! an anomaly, the Surge) darkens every edge alike; bleeding throbs
-//! faintly every [`THROB_EVERY`] s, so a wound that only the wrist would
-//! report is seen wherever you look. `Comfort::hurt_vignette` sets how
+//! an anomaly, the Surge) darkens every edge alike.
+//! `Comfort::hurt_vignette` sets how
 //! strong (0 is off). Headset and flat alike.
 
 use bevy::asset::RenderAssetUsages;
@@ -36,9 +35,8 @@ pub const CAP: f32 = 0.7;
 pub const HOLD: f32 = 0.3;
 /// How fast they fade after that (time constant, s): gone in about 0.6 s.
 pub const FADE: f32 = 0.2;
-/// How often a bleeding wound throbs (s), and how strongly (of full).
-pub const THROB_EVERY: f32 = 1.5;
-pub const THROB: f32 = 0.25;
+/// How dim the edges are held in a stim, at its slowest (of full).
+pub const STIM_EDGE: f32 = 0.35;
 /// The faintest hit still shows this much (of full), and a hit of this
 /// share of the player's health shows at full.
 pub const LEAST: f32 = 0.25;
@@ -73,8 +71,6 @@ pub struct HurtVignette {
     pub levels: [f32; 4],
     /// Seconds since the edges were last raised.
     pub since: f32,
-    /// Seconds to the next throb while bleeding.
-    throb: f32,
     materials: Vec<Handle<StandardMaterial>>,
 }
 
@@ -203,7 +199,17 @@ fn hurt_vignette(
     time: Res<Time>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut last: Local<Option<(f32, f32)>>,
+    pace: Option<Res<crate::items::stim::WorldPace>>,
 ) {
+    // In a stim, the edges held dim as far as the world's slowed
+    // (`items::stim`), unless the stim's to look plain.
+    let stim_floor = match (&comfort, &pace) {
+        (Some(c), _) if !c.stim_look => 0.0,
+        (_, Some(p)) => {
+            STIM_EDGE * ((1.0 - p.0) / (1.0 - crate::items::stim::SLOW)).clamp(0.0, 1.0)
+        }
+        _ => 0.0,
+    };
     let strength = comfort.map_or(0.6, |c| c.hurt_vignette);
     let dt = time.delta_secs();
     let me = locals.iter().next();
@@ -233,15 +239,10 @@ fn hurt_vignette(
                 }
             }
             *last = Some((h.hp, h.since_hit));
-            // A wound that bleeds throbs, so it's seen without the wrist.
-            if h.bleeding > 0.0 && !h.down {
-                v.throb -= dt;
-                if v.throb <= 0.0 {
-                    v.throb = THROB_EVERY;
-                    v.hit([THROB; 4]);
-                }
-            } else {
-                v.throb = 0.0;
+        }
+        if stim_floor > 0.0 {
+            for l in &mut v.levels {
+                *l = l.max(stim_floor);
             }
         }
         let any = v.levels.iter().any(|l| *l > 0.0) && strength > 0.0;

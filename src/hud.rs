@@ -214,12 +214,7 @@ fn update_hud(
         body.stamina * 100.0
     ));
     if let Ok(h) = healths.get(player) {
-        let bleed = if h.bleeding > 0.05 {
-            format!(" bleeding {:.1}/s", h.bleeding)
-        } else {
-            String::new()
-        };
-        lines.push(format!("health {:.0}/{:.0}{bleed}", h.hp.max(0.0), h.max));
+        lines.push(format!("health {:.0}/{:.0}", h.hp.max(0.0), h.max));
     }
     let phase = match &raid.phase {
         crate::raid::Phase::AtBase => "at the truck".to_string(),

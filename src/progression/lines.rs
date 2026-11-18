@@ -223,7 +223,7 @@ pub const CAREER_AFTER: &str = "Lev drives in now. He parks by the well.";
 pub fn why_after(item: &str) -> Option<&'static str> {
     Some(match item {
         "canned_stew" => "Something hot. We'll eat at the well.",
-        "field_dressing" => "Dressings. For my sister. She's asking after you.",
+        "water_bottle" => "Canteens. For my sister. She's asking after you.",
         "matches" => "Matches. I light the lamp in her window.",
         "tea_tin" => "Tea. Two cups, these days.",
         "scrap_metal" => "Scrap. I'm mending her gate.",
@@ -474,8 +474,8 @@ mod tests {
             job_this_way(place, "north-west, 1480 m", false),
             scout_forgotten(place),
             AERIAL_SURGE.into(),
-            upkeep_paid("cabinet", "1 field dressing"),
-            laid_up("cabinet", "1 field dressing"),
+            upkeep_paid("cabinet", "2 matches"),
+            laid_up("cabinet", "2 matches"),
             back_in_order("cabinet"),
             ORDER_LATER.into(),
             ordered("Medicine"),

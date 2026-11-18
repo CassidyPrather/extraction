@@ -63,12 +63,20 @@ MATERIALS = {
     "LampRed": ((0.5, 0.03, 0.02), 0.0, 0.2, (1.0, 0.05, 0.02)),
     "Lens": ((0.08, 0.1, 0.14), 0.5, 0.05, None),
     "Copper": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
+    # A box's round's point and the band behind it, and a shell's hull:
+    # painted by the game for each round's load (`items::rounds`).
+    "Tip": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
+    "TipBand": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
+    "Hull": ((0.5, 0.06, 0.04), 0.0, 0.6, None),
     "Glow": ((0.1, 0.4, 0.5), 0.0, 0.3, (0.2, 0.8, 1.0)),
     "Rope": ((0.5, 0.42, 0.28), 0.0, 0.9, None),
     "Cream": ((0.82, 0.78, 0.66), 0.0, 0.6, None),
     "Olive": ((0.25, 0.27, 0.17), 0.0, 0.8, None),
     "Clear": ((0.8, 0.82, 0.8), 0.0, 0.1, None),
     "Warn": ((0.9, 0.6, 0.1), 0.0, 0.4, (1.0, 0.55, 0.07)),
+    # A salvaged cell's charge band (#105): a deep orange that stays orange
+    # under the light, not the yellow Warn blooms to.
+    "Hot": ((0.85, 0.22, 0.02), 0.0, 0.4, (0.9, 0.2, 0.01)),
     "Beacon": ((1.0, 0.75, 0.4), 0.0, 0.3, (1.0, 0.6, 0.2)),
     # The machines' boundary stake's lens (`machine_marker`): frosted and
     # unlit; the game lights it amber (Visual design) through its own
