@@ -595,8 +595,8 @@
             tags: ["glass", "metal"],
         ),
         (
-            id: "detector", dims: Some((0.07, 0.04, 0.16)), name: "Anomaly detector",
-            description: "A survey clicker in a dented olive case with a stub antenna. Carried, it ticks for the nearest anomaly, faster as you close on its edge. Held, it listens the way it points.",
+            id: "detector", dims: Some((0.07, 0.04, 0.16)), name: "DP-1 clicker",
+            description: "The first of the survey sets: a clicker in a dented olive case with a stub antenna. Carried, it ticks for the nearest anomaly, faster as you close on its edge. Held, it listens the way it points.",
             category: Gadget, size: Small, mass: 0.35, bulk: 0.3,
             tags: ["metal", "electronics"],
         ),
@@ -613,14 +613,14 @@
             tags: ["metal"],
         ),
         (
-            id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "Sweep detector",
-            description: "A survey detector with a long whip antenna. Held, it hears only what it points at, and a second, higher voice sings out for a loose stone in its beam. Worn, it's a plain clicker.",
+            id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "DP-3 sweep",
+            description: "The last and rarest of the survey sets, with a long whip antenna. Held, it hears only what it points at, above and below you too, and a second, higher voice sings out for a loose stone in its beam. Worn, it's a plain clicker.",
             category: Gadget, size: Small, mass: 0.45, bulk: 0.35,
             tags: ["metal", "electronics"],
         ),
         (
-            id: "detector_bear", dims: Some((0.09, 0.05, 0.16)), name: "Bear detector",
-            description: "The Authority's own field set, its round green screen scratched. Held up, it shows the stones near you as dots and the anomalies as rings, the way you face.",
+            id: "detector_bear", dims: Some((0.09, 0.05, 0.16)), name: "DP-2 field screen",
+            description: "The second of the survey sets, the Authority's own, its round green screen scratched. Held up, it draws every anomaly near you as a ring, as wide as it reaches, the way you face. It doesn't see stones.",
             category: Gadget, size: Small, mass: 0.6, bulk: 0.4,
             tags: ["metal", "electronics"],
         ),
@@ -696,7 +696,7 @@
         // one jab gives both (`items::pen`). A cartridge's condition is
         // how full it is.
         (
-            id: "regen_injector", dims: Some((0.032, 0.027, 0.13)), name: "Injector pen",
+            id: "regen_injector", dims: Some((0.032, 0.022, 0.13)), name: "Injector pen",
             description: "Two cartridges, one jab, anywhere you can reach. A new one comes with a REGEN R-2 in it.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,
         ),

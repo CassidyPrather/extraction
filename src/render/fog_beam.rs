@@ -44,7 +44,9 @@ pub struct FogBeamParams {
     /// xyz: the way it throws (world, unit); w: how far it goes (m).
     pub axis: Vec4,
     /// x: how dense the air is (0.2 clear .. 1.2 thick fog); y: daylight
-    /// 0..1; z: the ground's height where it lands (world y).
+    /// 0..1; z: the ground's height where it lands (world y); w: how fast
+    /// the light spreads down the throw (0 for a searchlight's 0.0012;
+    /// [`LAMP_SPREAD`] for a lamp's or a torch's).
     pub air: Vec4,
 }
 
@@ -74,11 +76,13 @@ impl From<&FogBeamMaterial> for FogBeamKey {
 /// `tan` its half-angle's tangent, `length` long: then its back faces
 /// draw. Generous at the wall (each eye of a pair, and an eye just inside
 /// whose front faces would be behind it and the beam lost); an eye just
-/// outside drawn as inside only marches a little empty air.
+/// outside drawn as inside only marches a little empty air. Behind the
+/// lamp (a held torch's, at the eye) it's outside: from there the cone's
+/// front faces face the eye.
 pub fn eye_inside(eye: Vec3, apex: Vec3, dir: Vec3, tan: f32, length: f32) -> bool {
     let rel = eye - apex;
     let along = rel.dot(dir);
-    if along < -0.5 || along > length + 2.5 {
+    if along <= 0.0 || along > length + 2.5 {
         return false;
     }
     let off = (rel - dir * along).length();
@@ -130,6 +134,10 @@ impl Material for FogBeamMaterial {
         Ok(())
     }
 }
+
+/// How fast a lamp's or a torch's light spreads down its throw (`air.w`):
+/// thin a few metres out, as a wide cheap lens's is.
+pub const LAMP_SPREAD: f32 = 0.08;
 
 /// How dense the air is for a beam, from the weather: a clear day thin, a
 /// drizzle more, fog and ground mist thick.
@@ -236,6 +244,8 @@ mod tests {
         assert!(!eye_inside(Vec3::new(6.0, 1.7, 0.0), apex, dir, tan, len));
         assert!(!eye_inside(Vec3::new(0.0, 33.0, 0.0), apex, dir, tan, len));
         assert!(!eye_inside(Vec3::new(0.0, -4.0, 0.0), apex, dir, tan, len));
+        // A torch held at the eye: behind its lamp.
+        assert!(!eye_inside(Vec3::new(0.0, 30.3, 0.0), apex, dir, tan, len));
     }
 
     /// `placed` puts the cone's tip at the lamp and its end `length` down

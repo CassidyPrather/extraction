@@ -124,6 +124,12 @@ pub struct LaunchOptions {
     /// `--spawn x,y,z,yaw`: where the player stands, in a headset or flat
     /// (unlike `--camera`, which flat gives a free camera).
     pub spawn: Option<(Vec3, f32)>,
+    /// Arguments this build doesn't know (a playtest station staged for a
+    /// fix not in it yet is skipped, `capture::station`).
+    pub unknown_args: Vec<String>,
+    /// `--stage NAME`: a playtest station's staging, set up by whichever
+    /// plugin registered NAME (`capture::station::register_stage`).
+    pub stage: Option<String>,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
     /// Dev: the tour's views from a file instead of the placements (see
@@ -214,6 +220,8 @@ impl Default for LaunchOptions {
             playtest: None,
             playtest_station: 0,
             spawn: None,
+            unknown_args: Vec::new(),
+            stage: None,
             tour_only: None,
             tour_views: None,
             legibility: None,
@@ -401,6 +409,7 @@ impl LaunchOptions {
                     o.map_explicit = true;
                 }
                 "--playtest" => o.playtest = Some(PathBuf::from(val())),
+                "--stage" => o.stage = Some(val()),
                 "--playtest-station" => o.playtest_station = val().parse().unwrap_or(0),
                 "--spawn" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
@@ -494,7 +503,10 @@ impl LaunchOptions {
                     }
                 }
                 flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
-                other => eprintln!("ignoring unknown argument {other}"),
+                other => {
+                    eprintln!("ignoring unknown argument {other}");
+                    o.unknown_args.push(other.to_owned());
+                }
             }
         }
         // The worst minute's light and weather, unless asked for others.
@@ -562,6 +574,18 @@ impl LaunchOptions {
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
             o.map = crate::camp::TRAINING_YARD.into();
             o.map_explicit = true;
+        }
+        // A tour station in a valley this build hasn't got opens the yard
+        // instead, to be skipped (`capture::station`): loading a map that
+        // isn't there would end the tour.
+        if o.playtest.is_some()
+            && !crate::asset_root_path()
+                .join("maps")
+                .join(format!("{}.ron", o.map))
+                .exists()
+        {
+            o.unknown_args.push(format!("--map {}", o.map));
+            o.map = crate::camp::TRAINING_YARD.into();
         }
         o
     }
