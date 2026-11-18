@@ -127,6 +127,9 @@ pub struct LaunchOptions {
     /// Arguments this build doesn't know (a playtest station staged for a
     /// fix not in it yet is skipped, `capture::station`).
     pub unknown_args: Vec<String>,
+    /// `--stage NAME`: a playtest station's staging, set up by whichever
+    /// plugin registered NAME (`capture::station::register_stage`).
+    pub stage: Option<String>,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
     /// Dev: the tour's views from a file instead of the placements (see
@@ -218,6 +221,7 @@ impl Default for LaunchOptions {
             playtest_station: 0,
             spawn: None,
             unknown_args: Vec::new(),
+            stage: None,
             tour_only: None,
             tour_views: None,
             legibility: None,
@@ -405,6 +409,7 @@ impl LaunchOptions {
                     o.map_explicit = true;
                 }
                 "--playtest" => o.playtest = Some(PathBuf::from(val())),
+                "--stage" => o.stage = Some(val()),
                 "--playtest-station" => o.playtest_station = val().parse().unwrap_or(0),
                 "--spawn" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();

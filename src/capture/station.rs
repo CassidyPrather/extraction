@@ -130,6 +130,22 @@ pub fn next_args(args: impl IntoIterator<Item = String>, next: usize) -> Vec<Str
     out
 }
 
+/// The `--stage` names something in this build sets up, registered by
+/// their plugins ([`register_stage`]).
+#[derive(Resource, Default)]
+pub struct KnownStages(pub Vec<&'static str>);
+
+/// Says this build stages `name` (`--stage name`): a plugin calls it from
+/// its `build` and sets the staging up when `opts.stage` is `name`. A tour
+/// station whose stage nothing registered is skipped.
+pub fn register_stage(app: &mut App, name: &'static str) {
+    app.init_resource::<KnownStages>()
+        .world_mut()
+        .resource_mut::<KnownStages>()
+        .0
+        .push(name);
+}
+
 pub struct StationPlugin;
 
 impl Plugin for StationPlugin {
@@ -167,7 +183,15 @@ impl Plugin for StationPlugin {
         })
         .add_systems(
             Update,
-            (skip_unstageable, put_up_board, sync, press_cards, board_text, nudge).chain(),
+            (
+                skip_unstageable,
+                put_up_board,
+                sync,
+                press_cards,
+                board_text,
+                nudge,
+            )
+                .chain(),
         );
     }
 }
@@ -507,6 +531,7 @@ fn skip_unstageable(
     catalog: Option<Res<crate::items::Catalog>>,
     mut exit: MessageWriter<AppExit>,
     mut leaving: Option<ResMut<crate::rig::loading::Leaving>>,
+    known: Option<Res<KnownStages>>,
     mut checked: Local<bool>,
 ) {
     if *checked {
@@ -522,6 +547,11 @@ fn skip_unstageable(
             "this build doesn't know {}",
             opts.unknown_args.join(" ")
         ));
+    }
+    if let Some(stage) = &opts.stage {
+        if !known.is_some_and(|k| k.0.contains(&stage.as_str())) {
+            why.push(format!("nothing stages {stage} in this build"));
+        }
     }
     if let Some(ids) = flag(&tour.station().args, "--give") {
         for id in ids.split(',').filter(|i| !i.is_empty()) {
@@ -874,7 +904,9 @@ mod tests {
     /// optional fifth field is what to try.
     #[test]
     fn a_station_this_build_cant_stage_is_skipped() {
-        let _one = crate::RESTART_TEST.lock().unwrap_or_else(|e| e.into_inner());
+        let _one = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _ = crate::take_relaunch();
         let p = list(
             "future | 1 | Q? | --map training_yard --no-robots --grapple-from-orbit | swing on it\n\
@@ -910,7 +942,10 @@ mod tests {
             notes.contains("\"skipped\"") && notes.contains("--grapple-from-orbit"),
             "{notes}"
         );
-        assert!(!notes.contains("\"start\""), "no board for a skipped station");
+        assert!(
+            !notes.contains("\"start\""),
+            "no board for a skipped station"
+        );
     }
 
     /// The tour is a sandbox: no station has a career to save to.
