@@ -6,8 +6,8 @@
 //! `--frames` larger than the reel so the ordinary screenshot never fires.
 //!
 //! ```text
-//! scripts/shot.sh docs/shots/robot-bodies/walk.png 40,0,262,0,-12 99999 \
-//!     --no-robots --gallery reel:walk,12,4
+//! scripts/shot.sh docs/shots/robot-bodies/walk.png 0,0,36,0,-12 99999 \
+//!     --map training_yard --new-game --no-robots --gallery reel:walk,12,4
 //! ```
 //!
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
