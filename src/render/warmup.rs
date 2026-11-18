@@ -58,7 +58,6 @@ impl Plugin for WarmupPlugin {
                             shelve::<ParticleMaterial>,
                             shelve::<XrayMaterial>,
                             shelve::<crate::world::halos::HaloMaterial>,
-                            shelve::<crate::world::beams::BeamMaterial>,
                             shelve::<crate::world::storm::SheetMaterial>,
                             shelve::<crate::world::storm::BoltMaterial>,
                             shelve::<crate::anomaly::visuals::MarkMaterial>,
@@ -1066,14 +1065,14 @@ fn shelve_start(
                     crate::anomaly::spawn_anomaly(world, kind, DECOYS_AT, (lo + hi) * 0.5, None)
                 })
                 .collect();
-            // A light's beam: spotlights (lamps at night, a torch) may not
-            // be lit yet, and a cycle turned to night in the same session
-            // built the beam's pipeline at first sight.
-            decoys.push(crate::world::beams::decoy(world, DECOYS_AT));
             // A searchlight's (`robots::searchlight_look`): no dirigible
             // or spotter may be up yet.
             decoys.push(crate::robots::searchlight_look::decoy(world, DECOYS_AT));
-            // Light in fog (`render::fog_beam`): the searchlights' shafts.
+            // Light in fog (`render::fog_beam`): the searchlights' shafts
+            // and every spotlight's beam (`world::beams`). Spotlights (lamps
+            // at night, a torch) may not be lit yet, and a cycle turned to
+            // night in the same session built the beam's pipeline at first
+            // sight.
             // Seen from outside and from in one: a face each.
             decoys.push(super::fog_beam::decoy(world, DECOYS_AT, false));
             decoys.push(super::fog_beam::decoy(world, DECOYS_AT, true));

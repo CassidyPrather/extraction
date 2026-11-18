@@ -1516,6 +1516,13 @@ fn first_person_hands(
         Some(w) => (w, true),
         None => (what, false),
     };
+    // `fp:<item>+up`: a thing held free brought up to read, a forearm's
+    // length before the eyes, its top to them and its front up and away
+    // (a field screen, a radio's face).
+    let (what, held_up) = match what.strip_suffix("+up") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
     *stage += 1;
     for mut v in &mut players {
         *v = Visibility::Hidden;
@@ -1804,6 +1811,13 @@ fn first_person_hands(
         }
         let in_hand = crate::render::hold::taken(Side::Left, half);
         let seat = crate::render::hold::seat(Side::Left, half, in_hand);
+        if held_up {
+            let at = eye + (flat * 0.36 - Vec3::Y * 0.1 - right * 0.04) / zoom;
+            let to_eye = (eye - at).normalize();
+            let up_away = (Vec3::Y + flat * 0.4).normalize();
+            let want = Transform::from_translation(at).looking_to(up_away, to_eye);
+            hand = Transform::from_matrix(want.to_matrix() * in_hand.to_matrix().inverse());
+        }
         commands
             .entity(item)
             .insert((view(hand * in_hand), crate::render::said::Posed(Side::Left)));

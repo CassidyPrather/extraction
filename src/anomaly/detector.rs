@@ -162,8 +162,10 @@ pub fn detectors(
             Has<Held>,
             Option<&mut Ticking>,
             Option<&mut BearScreen>,
+            // A dev pose's thing in hand (screenshots) counts as held.
+            Has<crate::render::said::Posed>,
         ),
-        With<CarriedBy>,
+        Or<(With<CarriedBy>, With<crate::render::said::Posed>)>,
     >,
     anomalies: Query<(&Anomaly, &GlobalTransform)>,
     // A stone sealed in lead is quiet to a detector as to everything else.
@@ -191,7 +193,8 @@ pub fn detectors(
         .filter(|(i, _)| catalog.get(i.kind()).category == Category::Artifact)
         .map(|(_, g)| g.translation())
         .collect();
-    for (e, item, gt, held, ticking, screen) in &mut found {
+    for (e, item, gt, held, ticking, screen, posed) in &mut found {
+        let held = held || posed;
         let Some(tier) = DetectorTier::of(&catalog.get(item.kind()).id) else {
             continue;
         };
