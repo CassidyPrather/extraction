@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import ON_TOP, UP, cube, item, panel, ragged, text, wanted
-from common import Part, RX, RY, RZ, T, S, fillet
+from common import MATERIALS, Part, RX, RY, RZ, T, S, fillet
 
 # Cartridge profiles, (r, z) with the base at z 0 and the bullet to -z:
 # (case, bullet, overall length).
@@ -140,8 +140,16 @@ def flat_band(sx, sz, y, h, t=0.0006):
 
 
 def merged(name, parts):
-    """One Part of all of `parts` (a far stand-in)."""
+    """One Part of all of `parts`, for a far stand-in: one mesh in one
+    material ("Baked", white), each face's own material's colour baked into
+    its corners' vertex colour, so it draws in a single call."""
     out = Part(name)
+    col = out.bm.loops.layers.color.new("Col")
+    baked = out._mi("Baked")
+
+    def linear(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
     for q in parts:
         vmap = {v: out.bm.verts.new(v.co) for v in q.bm.verts}
         for f in q.bm.faces:
@@ -149,8 +157,12 @@ def merged(name, parts):
                 nf = out.bm.faces.new([vmap[v] for v in f.verts])
             except ValueError:
                 continue
-            nf.material_index = out._mi(q.mats[f.material_index])
+            rgb = MATERIALS[q.mats[f.material_index]][0]
+            rgba = tuple(linear(c) for c in rgb) + (1.0,)
+            nf.material_index = baked
             nf.smooth = f.smooth
+            for loop in nf.loops:
+                loop[col] = rgba
     return out
 
 

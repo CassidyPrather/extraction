@@ -15,6 +15,7 @@
 //!   anomalies blooming across your path.
 
 pub mod artifacts;
+pub mod cook;
 pub mod costs;
 pub mod detector;
 pub mod frost;
@@ -24,6 +25,7 @@ pub mod mirrors;
 pub mod offering;
 pub mod rake;
 pub mod scenarios;
+pub mod steam;
 pub mod surge;
 pub mod visuals;
 pub mod wells;
@@ -195,6 +197,8 @@ impl Plugin for AnomalyPlugin {
             .init_resource::<AttentionBudget>()
             .init_resource::<surge::Agitation>()
             .init_resource::<hush::Hushes>()
+            .init_resource::<steam::Steams>()
+            .add_message::<cook::PartCooked>()
             .add_observer(surge::remember_size)
             .add_observer(seed_dice)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
@@ -235,9 +239,12 @@ impl Plugin for AnomalyPlugin {
                         harvest::heat,
                         harvest::cool_scald,
                         hush::press,
+                        hush::stir,
                         frost::chill,
                         frost::freeze_water,
                         frost::creak,
+                        steam::pair_up,
+                        cook::cook,
                         measure_attention,
                         spend_attention,
                         age_blooms,

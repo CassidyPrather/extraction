@@ -8,7 +8,9 @@
 //! how full it is is its condition (0..1): a part-used one gives its share,
 //! and a used one is left in the slot, empty, till it's taken out.
 //!
-//! A pen comes with a REGEN R-2 in its first slot ([`prime_pens`]), once:
+//! A pen comes with a REGEN R-2 in its first slot ([`prime_pens`]), once
+//! (one found lying about, an R-1: [`FOUND_WITH`], so a found pen keeps to
+//! the medical table's grades, the R-2 out from raid 2):
 //! its `rounds` (a pen has none) records that it has (`1`), so a pen saved
 //! empty loads empty. An old save's single-use injector loads as a new
 //! pen, R-2 and all.
@@ -27,6 +29,8 @@ use extraction_core::items::{ItemDef, Mount};
 pub const PEN: &str = "regen_injector";
 /// What a new pen comes with.
 pub const PRIMED_WITH: &str = "regen_r2";
+/// What a pen found lying about comes with (`loot::Found`).
+pub const FOUND_WITH: &str = "regen_r1";
 /// The slots, in the pen's frame (it lies along Z, the needle at -Z): two
 /// wells side by side in its body, open on top (each a cartridge's centre
 /// line).
@@ -189,21 +193,25 @@ fn wells_up(
     h.offset = wells_to(h.offset, eye);
 }
 
-/// A new pen (`rounds` 0) gets its R-2, once.
-fn prime_pens(mut commands: Commands, mut pens: Query<(Entity, &mut Item)>, catalog: Res<Catalog>) {
-    let Some(r2) = catalog.kind(PRIMED_WITH) else {
-        return;
-    };
-    for (pen, mut item) in &mut pens {
+/// A new pen (`rounds` 0) gets its R-2, once; one found, an R-1.
+fn prime_pens(
+    mut commands: Commands,
+    mut pens: Query<(Entity, &mut Item, Has<super::loot::Found>)>,
+    catalog: Res<Catalog>,
+) {
+    for (pen, mut item, found) in &mut pens {
         if item.0.rounds != 0 || catalog.get(item.kind()).id != PEN {
             continue;
         }
+        let Some(kind) = catalog.kind(if found { FOUND_WITH } else { PRIMED_WITH }) else {
+            continue;
+        };
         item.0.rounds = 1;
         let c = spawn_item(
             &mut commands,
             &catalog,
             SpawnItem {
-                kind: r2,
+                kind,
                 transform: Transform::default(),
                 condition: 1.0,
             },
