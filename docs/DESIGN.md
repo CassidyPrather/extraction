@@ -89,7 +89,7 @@ one-handed the face button, gives what's in both. REGEN cartridges heal
 real seconds (S-1 6, S-2 12) while your head and hands keep real time
 (`items::stim`): a panic button, felt in a slow heavy heart that
 quickens near its end. A part-used cartridge gives its share; a new pen
-comes with an R-2; a cartridge let go at a slot clicks in, so half heal,
+comes with an R-2 (one found lying about, an R-1); a cartridge let go at a slot clicks in, so half heal,
 half stim is what you put in it. At
 none you're down, and the raid's over. (Bleeding, placed wounds, broken
 legs, dressings and splints were taken out in #102: too situational to be
