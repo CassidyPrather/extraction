@@ -1394,7 +1394,8 @@ pub(crate) mod tests {
     /// not the pylon's rolls.
     #[test]
     fn its_wreck_lies_in_reach() {
-        use crate::items::{Catalog, InSocket, Item};
+        use crate::interact::InSocket;
+        use crate::items::{Catalog, Item};
         let (mut app, e) = world_with_sentry([40.0, 230.0], 0.0, 160.0);
         for _ in 0..30 {
             app.update();
