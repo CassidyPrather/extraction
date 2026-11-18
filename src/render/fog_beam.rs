@@ -8,7 +8,10 @@
 //! soft fade where it meets the ground, dust drifting in it, brighter
 //! looking up toward the lamp, as dense as the weather makes the air.
 //! Premultiplied: thin haze lightens what's behind it, never greys it.
-//! Cheap enough for stereo: 12 samples a pixel, only where a beam is.
+//! Cheap enough for stereo: one face a pixel (from outside a beam only
+//! its front faces draw, from inside only its back: `eye_inside`, picked
+//! on the CPU), and 3 to 12 samples a pixel by how much beam the ray
+//! crosses. `EXTRACTION_NO_FOG_BEAMS=1` hides them all, to price them.
 //!
 //! Built for the searchlights (`robots::searchlight_look`) first; the
 //! drones' and sentries' night lamps, the torch, and the lamps' halos are
@@ -19,7 +22,7 @@ use bevy::mesh::{Indices, MeshVertexBufferLayoutRef};
 use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
 use bevy::prelude::*;
 use bevy::render::render_resource::{
-    AsBindGroup, PrimitiveTopology, RenderPipelineDescriptor, ShaderType,
+    AsBindGroup, Face, PrimitiveTopology, RenderPipelineDescriptor, ShaderType,
     SpecializedMeshPipelineError,
 };
 use bevy::shader::ShaderRef;
@@ -46,9 +49,56 @@ pub struct FogBeamParams {
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[bind_group_data(FogBeamKey)]
 pub struct FogBeamMaterial {
     #[uniform(0)]
     pub params: FogBeamParams,
+    /// The eye is in the cone (`eye_inside`): its back faces draw, and
+    /// the march starts at the eye. Otherwise its front faces.
+    pub inside: bool,
+}
+
+/// The pipeline key: which face draws.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FogBeamKey {
+    inside: bool,
+}
+
+impl From<&FogBeamMaterial> for FogBeamKey {
+    fn from(m: &FogBeamMaterial) -> Self {
+        Self { inside: m.inside }
+    }
+}
+
+/// Whether the eye at `eye` is in a beam from `apex` along `dir` (unit),
+/// `tan` its half-angle's tangent, `length` long: then its back faces
+/// draw. Generous at the wall (each eye of a pair, and an eye just inside
+/// whose front faces would be behind it and the beam lost); an eye just
+/// outside drawn as inside only marches a little empty air.
+pub fn eye_inside(eye: Vec3, apex: Vec3, dir: Vec3, tan: f32, length: f32) -> bool {
+    let rel = eye - apex;
+    let along = rel.dot(dir);
+    if along < -0.5 || along > length + 2.5 {
+        return false;
+    }
+    let off = (rel - dir * along).length();
+    off < along.max(0.0) * tan * 1.1 + 0.4
+}
+
+/// The cone (`cone`) placed for a beam from `apex` along `dir` (unit),
+/// `tan` its half-angle's tangent, `length` long, in world space.
+pub fn placed(apex: Vec3, dir: Vec3, tan: f32, length: f32) -> Transform {
+    let up = if dir.y.abs() > 0.99 { Vec3::X } else { Vec3::Y };
+    let r = tan * length;
+    Transform::from_translation(apex)
+        .looking_to(dir, up)
+        .with_scale(Vec3::new(r, r, length))
+}
+
+/// `EXTRACTION_NO_FOG_BEAMS=1`: no beam draws (the A/B price of them).
+pub fn hidden() -> bool {
+    static HIDDEN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *HIDDEN.get_or_init(|| std::env::var_os("EXTRACTION_NO_FOG_BEAMS").is_some_and(|v| v != "0"))
 }
 
 impl Material for FogBeamMaterial {
@@ -65,11 +115,18 @@ impl Material for FogBeamMaterial {
         _pipeline: &MaterialPipeline,
         descriptor: &mut RenderPipelineDescriptor,
         _layout: &MeshVertexBufferLayoutRef,
-        _key: MaterialPipelineKey<Self>,
+        key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        // Both faces: from outside the front ones draw it, from inside the
-        // back ones (the shader picks).
-        descriptor.primitive.cull_mode = None;
+        // One face a pixel: from outside the front ones, from inside the
+        // back ones (they surround the eye).
+        if key.bind_group_data.inside {
+            descriptor.primitive.cull_mode = Some(Face::Front);
+            if let Some(f) = descriptor.fragment.as_mut() {
+                f.shader_defs.push("FOG_BEAM_INSIDE".into());
+            }
+        } else {
+            descriptor.primitive.cull_mode = Some(Face::Back);
+        }
         Ok(())
     }
 }
@@ -134,8 +191,9 @@ pub fn cone() -> Mesh {
 }
 
 /// A beam with no lamp, at `at`, for the warm-up shelf (`render::warmup`)
-/// to build its pipeline before any lit beam is in view.
-pub(crate) fn decoy(world: &mut World, at: Vec3) -> Entity {
+/// to build its pipeline before any lit beam is in view: seen from
+/// outside, or (`inside`) from in it.
+pub(crate) fn decoy(world: &mut World, at: Vec3, inside: bool) -> Entity {
     let mesh = world.resource_mut::<Assets<Mesh>>().add(cone());
     let material = world
         .resource_mut::<Assets<FogBeamMaterial>>()
@@ -146,10 +204,15 @@ pub(crate) fn decoy(world: &mut World, at: Vec3) -> Entity {
                 axis: Vec3::NEG_Y.extend(10.0),
                 air: Vec4::new(0.5, 1.0, at.y - 10.0, 0.0),
             },
+            inside,
         });
     world
         .spawn((
-            Name::new("Warm-up fog beam"),
+            Name::new(if inside {
+                "Warm-up fog beam (inside)"
+            } else {
+                "Warm-up fog beam"
+            }),
             Mesh3d(mesh),
             MeshMaterial3d(material),
             Transform::from_translation(at).with_scale(Vec3::new(1.3, 1.3, 10.0)),
@@ -162,6 +225,30 @@ pub(crate) fn decoy(world: &mut World, at: Vec3) -> Entity {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// In the cone (with a little give at the wall), not beside it,
+    /// behind the lamp or past the end.
+    #[test]
+    fn the_eye_is_inside_where_the_cone_is() {
+        let (apex, dir, tan, len) = (Vec3::new(0.0, 30.0, 0.0), Vec3::NEG_Y, 0.13, 30.0);
+        assert!(eye_inside(Vec3::new(0.0, 1.7, 0.0), apex, dir, tan, len));
+        assert!(eye_inside(Vec3::new(3.9, 1.7, 0.0), apex, dir, tan, len));
+        assert!(!eye_inside(Vec3::new(6.0, 1.7, 0.0), apex, dir, tan, len));
+        assert!(!eye_inside(Vec3::new(0.0, 33.0, 0.0), apex, dir, tan, len));
+        assert!(!eye_inside(Vec3::new(0.0, -4.0, 0.0), apex, dir, tan, len));
+    }
+
+    /// `placed` puts the cone's tip at the lamp and its end `length` down
+    /// the throw, `tan * length` wide.
+    #[test]
+    fn a_placed_cone_lies_along_its_beam() {
+        let dir = Vec3::new(0.3, -1.0, 0.2).normalize();
+        let t = placed(Vec3::new(1.0, 20.0, 2.0), dir, 0.13, 25.0);
+        let end = t.transform_point(Vec3::new(0.0, 0.0, -1.0));
+        assert!(end.distance(Vec3::new(1.0, 20.0, 2.0) + dir * 25.0) < 1e-3);
+        let rim = t.transform_point(Vec3::new(1.0, 0.0, -1.0));
+        assert!((rim.distance(end) - 0.13 * 25.0).abs() < 1e-3);
+    }
 
     /// The cone's end is closed (a ray down its throw from inside meets a
     /// face), and every face's normal points out of it.

@@ -227,6 +227,7 @@ fn dress_lamps(
                 axis: Vec3::NEG_Y.extend(l.landed),
                 air: Vec4::new(0.5, 1.0, -1000.0, 0.0),
             },
+            inside: false,
         });
         let pool_mat = searches.add(SearchMaterial {
             params: params(true),
@@ -372,7 +373,9 @@ fn light_lamps(
     mut materials: ResMut<Assets<StandardMaterial>>,
     weather: Option<Res<crate::world::sky::Weather>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
+    eyes: crate::render::puff::Eyes,
 ) {
+    let eye = crate::render::puff::eye(&eyes);
     let day = weather
         .as_ref()
         .map_or(1.0, |w| 1.0 - w.night.clamp(0.0, 1.0));
@@ -392,7 +395,7 @@ fn light_lamps(
             if (t.scale - want.scale).length() > 0.02 {
                 *t = want;
             }
-            let vis = if on {
+            let vis = if on && !crate::render::fog_beam::hidden() {
                 Visibility::Inherited
             } else {
                 Visibility::Hidden
@@ -435,15 +438,21 @@ fn light_lamps(
                 axis: dir.extend(l.landed),
                 air: Vec4::new(density, day, ground, 0.0),
             };
+            // Which face draws: the back ones with the eye in the beam.
+            let inside = eye.is_some_and(|e| {
+                crate::render::fog_beam::eye_inside(e, from, dir, l.half_angle.tan(), l.landed)
+            });
             if let Some(m) = fog_beams.get(&look.beam_mat) {
                 let p = m.params;
                 let changed = (p.light - want.light).length() > 0.01
                     || (p.apex - want.apex).length() > 0.02
                     || (p.axis - want.axis).length() > 0.003
-                    || (p.air - want.air).length() > 0.02;
+                    || (p.air - want.air).length() > 0.02
+                    || m.inside != inside;
                 if changed {
                     if let Some(mut m) = fog_beams.get_mut(&look.beam_mat) {
                         m.params = want;
+                        m.inside = inside;
                     }
                 }
             }

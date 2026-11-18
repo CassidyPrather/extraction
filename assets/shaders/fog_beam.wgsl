@@ -14,8 +14,10 @@
 // - brighter looking up the beam toward the lamp (forward scattering);
 // - as dense as the air is: the world's fog and weather (`air`).
 //
-// Seen from outside, the front faces draw it; from inside, the back faces
-// (the camera is in the beam: the march starts at the eye). Near the eye
+// One face a pixel: seen from outside, the front faces draw it; from
+// inside (FOG_BEAM_INSIDE, picked on the CPU) the back faces, and the
+// march starts at the eye. 3 to 12 samples, by how much beam the ray
+// crosses: a ray grazing the edge needs few. Near the eye
 // it's capped: a beam over you lights the air round you, it doesn't white
 // out the view.
 
@@ -39,6 +41,8 @@ struct FogBeam {
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> b: FogBeam;
 
 const MARCH: i32 = 12;
+// Metres of beam a sample covers before another is added.
+const STEP: f32 = 1.5;
 
 fn hash3(p: vec3<f32>) -> f32 {
     var q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
@@ -109,17 +113,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let to = at - eye;
     let dist = length(to);
     let rd = to / max(dist, 1e-4);
-    // Inside the cone (between the lamp and the ground, within its
-    // angle)? Then only the back faces draw, marching from the eye.
-    let rel = eye - b.apex.xyz;
-    let c_along = dot(rel, b.axis.xyz);
-    let c_off = length(rel - b.axis.xyz * c_along);
-    let inside = c_along > 0.0 && c_along < b.axis.w && c_off < c_along * b.apex.w;
-    let n = normalize(in.world_normal);
-    let facing = dot(n, -rd) > 0.0;
-    if (inside == facing) {
-        discard;
-    }
+#ifdef FOG_BEAM_INSIDE
+    let inside = true;
+#else
+    let inside = false;
+#endif
     // The stretch of the ray through the beam: from where it enters (or
     // the eye) on through as wide as the cone is here, crossing at a slant.
     var t0 = dist;
@@ -134,12 +132,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     if (inside) {
         span = dist;
     }
-    let ds = span / f32(MARCH);
+    let n = clamp(i32(ceil(span / STEP)), 3, MARCH);
+    let ds = span / f32(n);
     // A per-pixel jitter on where the samples fall (no banding), fixed in
     // the world: it doesn't crawl from frame to frame.
     let jit = hash3(floor(at * 7.0));
     var sum = 0.0;
-    for (var i = 0; i < MARCH; i = i + 1) {
+    for (var i = 0; i < n; i = i + 1) {
         let p = p0 + rd * (ds * (f32(i) + jit));
         sum = sum + density(p) * ds;
     }
@@ -152,8 +151,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let cap = mix(0.18, 1.0, smoothstep(2.0, 20.0, near));
     let day = b.air.y;
     // (By day it must still show over a lit field: more of the haze.)
-    let a = min(1.0 - exp(-k * mix(0.07, 0.16, day)), cap * mix(0.45, 0.5, day));
-    let glow = mix(2.2, 1.5, day);
+    // (At night it's the brightest thing in view: a lower ceiling, so the
+    // billows show in it and it doesn't read as a solid cone.)
+    let a = min(1.0 - exp(-k * mix(0.07, 0.16, day)), cap * mix(0.32, 0.5, day));
+    let glow = mix(1.7, 1.5, day);
     // Premultiplied: the blended haze, plus a little light added on top,
     // so a thin stretch lightens what's behind it and never greys it like
     // smoke.

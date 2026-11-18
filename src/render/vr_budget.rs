@@ -1270,3 +1270,225 @@ fn gauge_puffs_hold_the_stereo_budget() {
         over.join("\n")
     );
 }
+
+/// Lit beams in the air (`render::fog_beam`): the scenes where they pile
+/// up, through both eyes, as the rollout will draw them.
+mod fog_beams {
+    use super::*;
+    use crate::render::fog_beam::{self, FogBeamMaterial, FogBeamParams};
+
+    /// One beam: the lamp, the way it throws, its half-angle (rad) and
+    /// how far it goes before it lands (m).
+    #[derive(Clone, Copy)]
+    pub(super) struct Lamp {
+        pub at: Vec3,
+        pub dir: Vec3,
+        pub half: f32,
+        pub length: f32,
+    }
+
+    /// (name, the eye, where it looks, the beams)
+    pub(super) type Scene = (&'static str, Vec3, Vec3, Vec<Lamp>);
+
+    /// A lamp at `at` throwing along `dir` until it meets the ground
+    /// (`ground` its height under the eye) or `reach`.
+    fn lamp(at: Vec3, dir: Vec3, half_deg: f32, reach: f32, ground: f32) -> Lamp {
+        let dir = dir.normalize();
+        let down = -dir.y;
+        let length = if down > 0.01 {
+            ((at.y - ground) / down).min(reach)
+        } else {
+            reach
+        };
+        Lamp {
+            at,
+            dir,
+            half: half_deg.to_radians(),
+            length,
+        }
+    }
+
+    pub(super) fn scenes(eye: Vec3, fwd: Vec3) -> Vec<Scene> {
+        let side = fwd.cross(Vec3::Y).normalize();
+        let ground = eye.y - 1.7;
+        let half = crate::robots::searchlight::HALF_ANGLE.to_degrees();
+        let reach = crate::robots::searchlight::REACH;
+        let mut out = Vec::new();
+        // The dirigible's two searchlights, 30 m up and 45 m out, swept to
+        // cross on the ground a few metres in front of the eye: the shafts
+        // fill the view as they come down toward it.
+        let ship = eye + fwd * 45.0 + Vec3::Y * 30.0;
+        let cross = eye + fwd * 4.0 + Vec3::Y * (ground - eye.y);
+        let crossing = vec![
+            lamp(
+                ship + fwd * 1.6,
+                cross + side * 1.5 - ship,
+                half,
+                reach,
+                ground,
+            ),
+            lamp(
+                ship - fwd * 1.6,
+                cross - side * 1.5 - ship,
+                half,
+                reach,
+                ground,
+            ),
+        ];
+        out.push((
+            "two searchlights crossing toward the eye",
+            eye,
+            ship,
+            crossing,
+        ));
+        // Inside a searchlight's cone: the spotter's lamp 25 m off and 8 m
+        // up, on the eye, which looks up the beam at it.
+        let spotter = eye + fwd * 25.0 + Vec3::Y * 8.0;
+        let on_you = lamp(spotter, eye - Vec3::Y * 1.0 - spotter, half, reach, ground);
+        out.push(("inside a searchlight's cone", eye, spotter, vec![on_you]));
+        // A night pack as the rollout will light it: 4 drones' belly lamps
+        // (0.3 rad, down and ahead), a sentry's (9 degrees, 45 m) within
+        // 25 m, and the player's torch (0.38 rad, 14 m).
+        let mut pack = Vec::new();
+        for (i, (r, a)) in [(8.0, -0.5), (12.0, 0.3), (17.0, -0.15), (22.0, 0.55)]
+            .into_iter()
+            .enumerate()
+        {
+            let at = eye
+                + (fwd * a.cos() as f32 + side * a.sin() as f32) * r
+                + Vec3::Y * (2.5 + i as f32);
+            let toward = (eye - at).with_y(0.0).normalize();
+            pack.push(lamp(
+                at,
+                toward * 0.7 - Vec3::Y,
+                0.3f32.to_degrees(),
+                40.0,
+                ground,
+            ));
+        }
+        let sentry = eye + fwd * 24.0 + side * 6.0 + Vec3::Y * 1.0;
+        pack.push(lamp(sentry, eye - sentry, 9.0, 45.0, ground));
+        let hand = eye + side * 0.25 - Vec3::Y * 0.35;
+        pack.push(lamp(
+            hand,
+            fwd - Vec3::Y * 0.15,
+            0.38f32.to_degrees(),
+            14.0,
+            ground,
+        ));
+        out.push((
+            "a night pack: 4 drones, a sentry, the torch",
+            eye,
+            eye + fwd * 10.0,
+            pack,
+        ));
+        out
+    }
+
+    /// Spawns a scene's beams as `robots::searchlight_look` draws its
+    /// shafts: the cone scaled to the beam, its face picked by the eye.
+    pub(super) fn spawn(app: &mut App, eye: Vec3, lamps: &[Lamp]) -> Vec<Entity> {
+        let w = app.world_mut();
+        let mesh = w.resource_mut::<Assets<Mesh>>().add(fog_beam::cone());
+        lamps
+            .iter()
+            .map(|l| {
+                let tan = l.half.tan();
+                let material = w
+                    .resource_mut::<Assets<FogBeamMaterial>>()
+                    .add(FogBeamMaterial {
+                        params: FogBeamParams {
+                            light: Vec4::new(0.85, 0.92, 1.0, 1.0),
+                            apex: l.at.extend(tan),
+                            axis: l.dir.extend(l.length),
+                            air: Vec4::new(0.6, 0.0, (l.at + l.dir * l.length).y, 0.0),
+                        },
+                        inside: fog_beam::eye_inside(eye, l.at, l.dir, tan, l.length),
+                    });
+                w.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material),
+                    fog_beam::placed(l.at, l.dir, tan, l.length),
+                    bevy::light::NotShadowCaster,
+                    bevy::light::NotShadowReceiver,
+                ))
+                .id()
+            })
+            .collect()
+    }
+}
+
+/// Lit beams (`render::fog_beam`) where they pile up: two searchlights
+/// crossing toward the eye, the eye inside one's cone, and a night pack
+/// as the rollout will light it (4 drones' lamps and a sentry's within
+/// 25 m, and the torch), both eyes at dusk: the frame's shaded fragments
+/// within the stereo budget with 5% to spare. One face a pixel: from
+/// outside a beam only its front faces draw, from inside only its back.
+#[test]
+fn gauge_beams_hold_the_stereo_budget() {
+    let _counting = super::budget::tests::counted();
+    let mut app = super::budget::tests::client_threads("marrow_creek", "drizzle", None);
+    app.world_mut().resource_mut::<crate::LaunchOptions>().hour = Some("dusk".into());
+    for _ in 0..300 {
+        app.update();
+    }
+    let eyes = both_eyes(&mut app);
+    // The meadow, looking up the valley (the puffs' spot, level).
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let (x, z) = (92.9, 131.9);
+    let eye = Vec3::new(x, zone.ground(x, z) + 1.7, z);
+    let fwd = Quat::from_rotation_y(-315f32.to_radians()) * Vec3::NEG_Z;
+    let b = budget();
+    let px = eye_px();
+    let spare = b.fragments_m * 0.95;
+    let fragments = |app: &mut App| {
+        let od_l = super::overdraw::measure(app.world_mut(), eyes.0);
+        let od_r = super::overdraw::measure(app.world_mut(), eyes.1);
+        (
+            (od_l.mean + od_r.mean) * px * px / 1e6,
+            od_l.p95.max(od_r.p95),
+        )
+    };
+    let mut over = Vec::new();
+    for (name, eye, look, lamps) in fog_beams::scenes(eye, fwd) {
+        {
+            let w = app.world_mut();
+            let mut q =
+                w.query_filtered::<(&mut Transform, &mut Projection), With<super::FreeCamera>>();
+            let (mut t, mut p) = q.single_mut(w).unwrap();
+            *t = Transform::from_translation(eye).looking_at(look, Vec3::Y);
+            if let Projection::Perspective(p) = &mut *p {
+                p.fov = super::budget::EYE_FOV_DEG.to_radians();
+                p.aspect_ratio = 1.0;
+            }
+        }
+        for _ in 0..60 {
+            app.update();
+        }
+        let (bare, bare_p95) = fragments(&mut app);
+        let spawned = fog_beams::spawn(&mut app, eye, &lamps);
+        for _ in 0..3 {
+            app.update();
+        }
+        let (with, p95) = fragments(&mut app);
+        println!(
+            "{name}: {} beams, {bare:.1}M fragments > {with:.1}M of {:.1}M (p95 {bare_p95} > {p95} layers)",
+            lamps.len(),
+            b.fragments_m
+        );
+        if with > spare {
+            over.push(format!(
+                "{name}: {with:.1}M fragments > {spare:.1}M (95% of {:.1}M)",
+                b.fragments_m
+            ));
+        }
+        for e in spawned {
+            app.world_mut().despawn(e);
+        }
+    }
+    assert!(
+        over.is_empty(),
+        "beams over the frame budget:\n{}",
+        over.join("\n")
+    );
+}

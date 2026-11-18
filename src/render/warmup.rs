@@ -1074,7 +1074,9 @@ fn shelve_start(
             // or spotter may be up yet.
             decoys.push(crate::robots::searchlight_look::decoy(world, DECOYS_AT));
             // Light in fog (`render::fog_beam`): the searchlights' shafts.
-            decoys.push(super::fog_beam::decoy(world, DECOYS_AT));
+            // Seen from outside and from in one: a face each.
+            decoys.push(super::fog_beam::decoy(world, DECOYS_AT, false));
+            decoys.push(super::fog_beam::decoy(world, DECOYS_AT, true));
             world.resource_mut::<Shelf>().decoys = decoys;
         });
     }

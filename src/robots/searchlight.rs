@@ -40,6 +40,9 @@ impl Plugin for SearchlightPlugin {
 
 /// What a lamp takes: a few rounds (it's armoured glass in a steel drum).
 pub const LAMP_HP: f32 = 45.0;
+/// A searchlight's half-angle (rad) and its reach (m).
+pub const HALF_ANGLE: f32 = 0.13;
+pub const REACH: f32 = 110.0;
 
 /// How fast a steered lamp turns by default (rad/s): slow enough to see
 /// it coming, and the fastest any mind may turn it.
@@ -94,8 +97,8 @@ impl Beam {
             nod: 0.18,
             period: 26.0,
             phase: 0.0,
-            half_angle: 0.13,
-            reach: 110.0,
+            half_angle: HALF_ANGLE,
+            reach: REACH,
             yaw: base_yaw,
             pitch: base_pitch,
             target: None,
