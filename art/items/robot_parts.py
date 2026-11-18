@@ -122,8 +122,8 @@ def hound_hip_servo():
     p.cyl(0.055, -0.016, 0.016, "Dark", segs=32, chamfer=0.004)
     for k in range(16):
         a = 2 * math.pi * k / 16
-        p.box((0.012, 0.004, 0.03), (0.06 * math.cos(a), 0.06 * math.sin(a), 0.0), "Dark",
-              xf=RZ(a))
+        # (Placed on +X, then turned round: radial, its root in the drum.)
+        p.box((0.012, 0.004, 0.03), (0.06, 0.0, 0.0), "Dark", xf=RZ(a))
     p.cyl(0.022, 0.016, 0.026, "Shell", segs=24, chamfer=0.002)
     p.cyl(0.01, 0.026, 0.038, "Steel", segs=12)
     p.box((0.03, 0.06, 0.02), (0.0, -0.075, 0.0), "Shell", bevel=0.004, segs=1)
