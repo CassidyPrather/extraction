@@ -30,6 +30,7 @@ impl Plugin for DevPlugin {
                     say_for_gallery,
                     camera_over_ground,
                     hurt_and_give.run_if(world_in),
+                    load_gallery_pens,
                 ),
             )
             .add_systems(
@@ -447,6 +448,53 @@ fn say_for_gallery(
 /// How high a sight-picture still's walker is aimed at, over the ground
 /// it stands on (its body's middle, where `spawn_walker` puts it).
 const TARGET_MIDDLE: f32 = 1.15;
+
+/// A gallery pen's cartridges (`--gallery items:regen_injector/...`): what
+/// to seat in its slots, each at its condition, and the frames it has
+/// waited (its slots made, and its own R-2 seated, `items::pen`).
+#[derive(Component)]
+struct GalleryLoads(Vec<(String, f32)>, u32);
+
+/// Seats a gallery pen's cartridges in place of what it came with.
+fn load_gallery_pens(
+    mut commands: Commands,
+    mut pens: Query<(Entity, &mut GalleryLoads, &Children)>,
+    slots: Query<&crate::interact::Socket, With<crate::items::pen::PenSlot>>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    for (pen, mut loads, children) in &mut pens {
+        loads.1 += 1;
+        if loads.1 < 4 {
+            continue;
+        }
+        commands.entity(pen).remove::<GalleryLoads>();
+        for s in children.iter() {
+            if let Some(c) = slots.get(s).ok().and_then(|s| s.occupant) {
+                commands.entity(c).despawn();
+                commands.queue(move |w: &mut World| {
+                    if let Some(mut sock) = w.get_mut::<crate::interact::Socket>(s) {
+                        sock.occupant = None;
+                    }
+                });
+            }
+        }
+        for (id, cond) in loads.0.clone() {
+            let Some(kind) = catalog.kind(&id) else {
+                continue;
+            };
+            let c = crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::default(),
+                    condition: cond,
+                },
+            );
+            commands.queue(move |w: &mut World| crate::persist::seat_in_mount(w, pen, c));
+        }
+    }
+}
 
 /// A `--gallery robots:` line-up: each machine, the yaw it faces (a
 /// walker's `yaw`), and where it stood when it came (taken on its first
@@ -1018,19 +1066,48 @@ fn gallery(
                 // ahead (1.2 m), for a contact sheet of every kind:
                 // `items:tea_tin+matches+bolt`. Each rests on its box's
                 // floor, turned TURN; SHIFT spaces them (0.3 m).
+                // `id@0.5` lies at that condition (a cartridge half
+                // full; a box of rounds with half its rounds left);
+                // `regen_injector/regen_r2/stim_s1@0.5` a pen with
+                // those in its slots, `regen_injector/` an empty one.
                 let ids: Vec<&str> = s["items:".len()..].split('+').collect();
                 let right = Vec3::new(-flat.z, 0.0, flat.x);
                 let gap = if shift > 0.0 { shift } else { 0.3 };
                 let d = dist.unwrap_or(1.2);
-                for (i, id) in ids.iter().enumerate() {
-                    let Some(kind) = catalog.kind(id) else {
+                let at_cond = |spec: &str| -> (String, f32) {
+                    match spec.split_once('@') {
+                        Some((id, c)) => (id.to_owned(), c.parse().unwrap_or(1.0)),
+                        None => (spec.to_owned(), 1.0),
+                    }
+                };
+                for (i, spec) in ids.iter().enumerate() {
+                    let mut parts = spec.split('/');
+                    let (id, cond) = at_cond(parts.next().unwrap_or_default());
+                    let loads: Option<Vec<(String, f32)>> = spec
+                        .contains('/')
+                        .then(|| parts.filter(|p| !p.is_empty()).map(at_cond).collect());
+                    let Some(kind) = catalog.kind(&id) else {
                         continue;
                     };
                     let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
                     let at = eye + flat * d + right * off;
                     let half = catalog.get(kind).size_m()[1] * 0.5;
                     let at = zone.on_ground(at.x, at.z) + Vec3::Y * (half + 0.002);
-                    spawn_static(&mut commands, id, at);
+                    if let Some(e) = spawn_static(&mut commands, &id, at) {
+                        if cond < 1.0 {
+                            commands.queue(move |w: &mut World| {
+                                if let Some(mut it) = w.get_mut::<crate::items::Item>(e) {
+                                    it.0.condition = cond;
+                                    if it.0.rounds > 1 {
+                                        it.0.rounds = (it.0.rounds as f32 * cond).round() as _;
+                                    }
+                                }
+                            });
+                        }
+                        if let Some(loads) = loads {
+                            commands.entity(e).insert(GalleryLoads(loads, 0));
+                        }
+                    }
                 }
             }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
@@ -1590,8 +1667,21 @@ fn first_person_hands(
                 }
                 glove(&mut commands, Side::Right, at, POINTING);
             }
-            id => {
-                let Some(kind) = catalog.kind(id) else {
+            spec => {
+                // `regen_r2@0.5`: at that condition; `regen_injector/regen_r2/
+                // stim_s1`: a pen loaded so (`load_gallery_pens`).
+                let at_cond = |s: &str| -> (String, f32) {
+                    match s.split_once('@') {
+                        Some((id, c)) => (id.to_owned(), c.parse().unwrap_or(1.0)),
+                        None => (s.to_owned(), 1.0),
+                    }
+                };
+                let mut parts = spec.split('/');
+                let (id, condition) = at_cond(parts.next().unwrap_or_default());
+                let loads: Option<Vec<(String, f32)>> = spec
+                    .contains('/')
+                    .then(|| parts.filter(|p| !p.is_empty()).map(at_cond).collect());
+                let Some(kind) = catalog.kind(&id) else {
                     warn!("gallery: no item {id}");
                     return;
                 };
@@ -1601,10 +1691,13 @@ fn first_person_hands(
                     crate::items::SpawnItem {
                         kind,
                         transform: rest(Side::Left),
-                        condition: 1.0,
+                        condition,
                     },
                 );
                 commands.entity(e).insert(RigidBody::Static);
+                if let Some(loads) = loads {
+                    commands.entity(e).insert(GalleryLoads(loads, 0));
+                }
                 // A gun is held level, a hand's width right of centre.
                 let level = Transform::from_translation(
                     eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom,
