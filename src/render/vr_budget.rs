@@ -1424,6 +1424,10 @@ mod fog_beams {
 /// 25 m, and the torch), both eyes at dusk: the frame's shaded fragments
 /// within the stereo budget with 5% to spare. One face a pixel: from
 /// outside a beam only its front faces draw, from inside only its back.
+///
+/// First measure (2026-11-18): crossing 20.3M bare > 38.1M, inside a cone
+/// 20.0M > 26.0M, the night pack 15.8M > 23.6M, of 64.8M
+/// (`docs/PERFORMANCE.md`).
 #[test]
 fn gauge_beams_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();
