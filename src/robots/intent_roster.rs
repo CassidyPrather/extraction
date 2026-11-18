@@ -67,6 +67,13 @@ const ROSTER: &[(&str, Option<&str>)] = &[
         "sorter",
         Some("the Depot's gantry: its own windup tell and alarm (sorter_mind)"),
     ),
+    (
+        "engineer",
+        Some(
+            "unarmed: it builds, never acts on you; on walker_brain (tried as the walker) \
+             until Robot minds' engineer mind lands, which tries it here",
+        ),
+    ),
     ("debris", Some("a wreck's pieces, not a machine")),
 ];
 
