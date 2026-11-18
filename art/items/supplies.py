@@ -46,22 +46,102 @@ def field_dressing():
 # --- Regen injector ---------------------------------------------------------------------------
 
 def regen_injector():
-    s = cube(0.08)
-    y = -s / 2 + 0.0085
+    """The injector pen (#102), lying along Z, its needle at -Z: two
+    cartridge wells side by side down its back, open on top so you see
+    into them (`items::pen::SLOTS`, each a cartridge's centre line), a
+    steel catch over each well that closes on a seated cartridge's collar,
+    a thumb eject button on top ahead of the wells, the red back cap, and
+    a short needle in its shroud at the front."""
     p = Part("body")
-    ax = T(0, y, 0)
-    # A stubby auto-injector lying along Z: grip, a window on the fluid, cap.
-    p.lathe([(0.0, -0.022), (0.006, -0.022), (0.0085, -0.019), (0.0085, 0.016), (0.0075, 0.019),
-             (0.0, 0.019)], "Polymer", segs=16, xf=ax)
-    p.tube(0.0088, 0.008, -0.012, 0.006, "Clear", segs=16, xf=ax)
-    p.cyl(0.0078, -0.011, 0.005, "Glow", segs=12, xf=ax)
-    for z in (-0.017, 0.011):
-        p.tube(0.0089, 0.0082, z - 0.0015, z + 0.0015, "Black", segs=16, xf=ax)
-    p.lathe([(0.0, 0.019), (0.0072, 0.019), (0.0072, 0.026), (0.006, 0.028), (0.0, 0.028)],
-            "Yellow", segs=16, xf=ax)
-    p.box((0.002, 0.006, 0.014), (0.0, y + 0.008, -0.004), "Black", bevel=0.0005, segs=1)
-    # Modelled stubby; a real auto-injector is a 13 cm pen.
-    return centred(transform([p], S(1.35, 1.35, 2.6)))
+    # The body: a dark olive block, its edges rounded, the wells cut down
+    # into its top.
+    # (Its bottom as far under the centre as the button stands over it:
+    # the model is centred on its box, and the slots are from its centre.)
+    top, bottom = 0.004, -0.011
+    prof = fillet([(-0.016, bottom), (0.016, bottom), (0.016, top), (-0.016, top)],
+                  [0.006, 0.006, 0.003, 0.003], 3)
+    p.prism([(x, y) for x, y in prof], -0.052, 0.058, "Olive", axis="z", bevel=0.002, segs=2)
+    wells = Part("wells")
+    for x in SLOT_X:
+        wells.cyl(0.0064, -0.0115, 0.0615, "Olive", segs=20, xf=T(x, SLOT_Y, 0.0))
+    p.cut(wells)
+    # The wells' floors, dark, so a cartridge reads against them.
+    for x in SLOT_X:
+        p.box((0.008, 0.0008, 0.072), (x, SLOT_Y - 0.0062, 0.025), "Black", segs=1)
+    # The catches: a steel bridge over each well on the cartridge's collar.
+    for x in SLOT_X:
+        p.box((0.011, 0.0016, 0.003), (x, SLOT_Y + 0.0072, 0.0), "Steel", bevel=0.0004, segs=1)
+    # The thumb eject button, ahead of the wells, ridged.
+    p.box((0.010, 0.0062, 0.011), (0.0, top + 0.0031, -0.021), "Black", bevel=0.0015, segs=2)
+    for k in range(3):
+        p.box((0.0105, 0.0009, 0.0012), (0.0, top + 0.0066, -0.025 + k * 0.004), "Black",
+              segs=1)
+    # The red back cap.
+    cap = fillet([(-0.0155, bottom + 0.0005), (0.0155, bottom + 0.0005), (0.0155, top + 0.0015),
+                  (-0.0155, top + 0.0015)], [0.006, 0.006, 0.004, 0.004], 3)
+    p.prism(cap, 0.058, 0.065, "Red", axis="z", bevel=0.0018, segs=2)
+    # The nose: the body tapering to the needle's shroud, the needle short.
+    p.lathe([(0.0, -0.052), (0.0085, -0.052), (0.0065, -0.056), (0.0042, -0.058), (0.0042, -0.0615),
+             (0.0, -0.0615)], "Black", segs=18, xf=T(0.0, -0.0035, 0.0))
+    p.cyl(0.0006, -0.065, -0.061, "Steel", segs=8, xf=T(0.0, -0.0035, 0.0))
+    return [p]
+
+
+# The wells' centre lines (`items::pen::SLOTS`, x and y; z 0.025).
+SLOT_X = (0.0075, -0.0075)
+SLOT_Y = 0.002
+
+
+# --- Injector cartridges (#102) ---------------------------------------------------------------
+# A glass cartridge along Z, its needle end (the septum) at -Z: the dose
+# behind glass, a dark label sleeve round it with a long window on top so
+# you read how full it is at arm's length, its grade in coloured bands
+# round the back (REGEN green 1-3, STIM amber 1-2), steel caps, and a
+# locking collar near the front that the pen's well closes on.
+#
+# The liquid is its own node, `fill`, its origin at its front end: the
+# game scales it along Z by the cartridge's condition, how full it is
+# (`items::pen`), so the window shows what's left.
+CART_R, CART_HALF = 0.006, 0.035
+WINDOW = (52.0, 128.0)  # the label's window, degrees round from +X (90: on top)
+
+
+def cartridge(dose, bands):
+    p = Part("body")
+    # The glass, open at the ends to the caps.
+    p.tube(0.0052, 0.0047, -0.029, 0.029, "Vial", segs=20)
+    # The label sleeve, the window left out of it.
+    w0, w1 = WINDOW
+    p.lathe([(0.0057, -0.026), (0.0057, 0.026), (0.0053, 0.026), (0.0053, -0.026)], "Black",
+            segs=18, start=w1, sweep=360.0 - (w1 - w0), closed=True)
+    # The grade: bands round the back of the sleeve, in the dose's colour.
+    for k in range(bands):
+        z = 0.021 - k * 0.0045
+        p.lathe([(0.00585, z - 0.0013), (0.00585, z + 0.0013), (0.0056, z + 0.0013),
+                 (0.0056, z - 0.0013)], dose, segs=18, start=w1, sweep=360.0 - (w1 - w0),
+                closed=True)
+    # Window ticks: a quarter, a half, three quarters, along its edge.
+    for t in (0.25, 0.5, 0.75):
+        z = -0.026 + 0.052 * t
+        p.box((0.0012, 0.0006, 0.0005), (0.0055 * math.cos(math.radians(w1 + 4)),
+              0.0055 * math.sin(math.radians(w1 + 4)), z), "Steel", segs=1)
+    # Steel caps: the septum's neck at the front, a ribbed back.
+    p.lathe([(0.0, -0.035), (0.0026, -0.035), (0.0032, -0.0335), (0.0032, -0.032),
+             (0.0053, -0.031), (0.0053, -0.028), (0.0, -0.028)], "Steel", segs=18)
+    p.lathe([(0.0, 0.028), (0.0058, 0.028), (0.006, 0.0295), (0.006, 0.0335), (0.0056, 0.035),
+             (0.0, 0.035)], "Steel", segs=18)
+    p.tube(0.00605, 0.0055, 0.0302, 0.0312, "Black", segs=18)
+    # The locking collar the well's catch closes on, near the front.
+    p.tube(0.006, 0.0053, -0.0262, -0.0235, "Steel", segs=18)
+    # The dose, front to back inside the glass: scaled by the game.
+    front = -0.0275
+    fill = Part("fill", origin=(0.0, 0.0, front))
+    fill.cyl(0.0046, front, 0.0275, dose, segs=16)
+    return [p, fill]
+
+
+CARTRIDGES = (("regen_r1", "Regen", 1), ("regen_r2", "Regen", 2), ("regen_r3", "Regen", 3),
+              ("stim_s1", "Stim", 1), ("stim_s2", "Stim", 2))
 
 
 # --- Cleaning kit -----------------------------------------------------------------------------
@@ -244,3 +324,6 @@ for item_id, fn in (("field_dressing", field_dressing), ("regen_injector", regen
                     ("fuel_can", fuel_can)):
     if wanted(item_id):
         item(item_id, fn)
+for item_id, dose, bands in CARTRIDGES:
+    if wanted(item_id):
+        item(item_id, lambda d=dose, b=bands: cartridge(d, b))

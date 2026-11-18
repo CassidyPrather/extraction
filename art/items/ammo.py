@@ -221,7 +221,7 @@ def boxed(body, slots, band_at, band_mat, seal_at, seal_mat, mix):
     parts.append(seal)
     m = Part("print_mix")
     h, xf = mix
-    text(m, "MIX", h, "Black", xf, depth=0.0004)
+    text(m, "MIX", h, "Black", xf, depth=0.0004)  # smallest: 0.0045
     parts.append(m)
     far = [body] + rounds + ([band] if band else []) + [seal]
     parts.append(merged("box_lod1", far))

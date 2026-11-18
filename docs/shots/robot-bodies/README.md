@@ -302,3 +302,25 @@ The dirigible and the spotter used to see a long way all round, and nothing show
 - **Where it lands.** One ray a tick down each beam (World): it stops on the ground, a roof or a tree, and what's behind a wall it lands on is dark.
 - **Shot out.** A lamp is a part (`PartRole::Lamp`, 45 hp): shot out, its beam is dark and what it lit isn't seen. Off too when its machine is wrecked, sinking, loose or stunned.
 - **By day and night.** The haze is blended, not added (`shaders/searchlight.wgsl`), so it reads lighter than a lit field; standing inside a beam it thins to glare round you. No light is cast (frame budget): the pool is the lit ground.
+
+## Light in fog (#110)
+
+The user on the #99 pictures: "Lights on fog look much prettier than that! Not like a solid polygon! Have you ever seen godrays in a dusty room?" One shared look for lit beams, `render::fog_beam` (`shaders/fog_beam.wgsl`): the cone mesh only bounds the volume, and each pixel it covers marches 12 samples of the view ray through it (single scattering): soft to the wall, bright at the lamp and thinning down the throw, a soft fade into the ground where it lands, billows and dust drifting through it, brighter looking up toward the lamp, as dense as the weather makes the air. The searchlights first; the drones' and sentries' night lamps, the torch, and the way-lamp and landmark halos to follow.
+
+| Picture | What it shows |
+|---|---|
+| `light_in_fog_day_before_after.png` | `reel:search,4,40` by day, clearing, frame 0 (camera `40,0,262,0,8`, crop 1400x1080 of 1920x1080): the solid cone before, hazy shafts under the lamps after; pools and rims unchanged |
+| `light_in_fog_dusk_before_after.png` | Dusk, frame 2, beams steered across the field toward you: flat translucent slabs before, light through drifting haze after |
+| `light_in_fog_night_drizzle_before_after.png` | Night in drizzle, frame 2: white slabs before; after, shafts bright at the lamp, billowing, thinning down their length |
+| `light_in_fog_lamps_night_drizzle_before_after.png` | Every spotlight's beam onto the same look (`world::beams`): `reel:lamps,4,30`, night in drizzle, frame 2 (camera `40,0,262,0,0`, crop 1440x800 of 1920x1080). Three drones' belly lamps 8-14 m off, a sentry's lamp 16 m off facing you, a hand torch at your hip. Before: faint additive wedges under the drones, the torch and sentry barely there. After: each drone's light falls through the drizzle, cold, and thins to the ground. The torch in your hand is a faint shaft, shown by what it lights, never a haze over where you point it. A lamp's haze is cold whatever its colour (a warm glow reads as shelter light), and lamps whose beams come near the eye share one haze, so three drones and a torch never wash the view |
+| `light_in_fog_lamps_night_clearing_before_after.png` | The same on a clear night: a lamp's haze goes with the wet in the air (`world::beams::lamp_haze`), so next to nothing shows |
+| `light_in_fog_halo_waylamp_night_drizzle_before_after.png` | The lamps' halos (`world::halos`) onto the same look: `--wayfind-lamps` shot 12, night in drizzle (crop 1120x660 of 1920x1080). A way lamp: a hard little disc before; after, its light hangs in the wet air round it as a soft aureole, the beams' slow billows drifting through it, with no edge. The core, its glare caps and its hue are as they were (the halo's sphere is drawn wider for the aureole, `halos::spread`: none in dry air, 2.5x in fog) |
+| `light_in_fog_halo_lamps_orange_night_drizzle_before_after.png` | Shot 7: the Depot's orange lamps through the trees, and a red landmark lamp up the tower. The orange keeps its hue; the red at range is unchanged |
+
+## One line body (#101)
+
+`robots::lines`: one body for every line a machine hangs by or throws: the dirigible's pod cable (steel, its weak-link shackle 0.6 m over the pod, a grip sleeve a hand's reach above), the spotter's tether (steel, a grip sleeve on each stretch in reach, where the cutters bite), and next the grappler's line (rope). Rope reads pale, fat and fibrous and sags; cable dark, thin and glinting, hanging taut. It frays on the line itself where it's worked, over a hand's length, large enough to steer a cut by at arm's length: whole, nicked (a bright strand springs out), half through (necked to under half its thickness, bright cut ends splayed at both sides), parting (a clear gap spanned by a single thread, the ends splayed). Rounds on a line wear it by its gauge (rope four times as fast as cable); what parts it is its owner's rule.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/101_body_lines.png` | `reel:lines,4,20` by day (camera `40,0,262,0,8`, crop 900x700 of 1920x1080 at 2x): rope whole and half through, then cable whole with its orange shackle and a grip sleeve, nicked, half through and parting |

@@ -22,7 +22,7 @@ ARCADE card, next to TRAINING YARD.
     - the AK-74 and the PPSh (each loaded) with two spare AK magazines;
     - the Mosin and the SKS with their clips;
     - the MP-133 with a box of shells, and the PM with two spare
-      magazines and two dressings;
+      magazines and an injector;
   - a fourth table with the board and two RGD-5s;
   - a fifth, the other side, with the gun board (below) and, in front of
     it, five boxes of 5.45 to read and handle (`items::rounds`): an AP box

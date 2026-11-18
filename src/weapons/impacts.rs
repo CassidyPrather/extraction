@@ -1361,6 +1361,16 @@ mod plate_tests {
                 w.get::<GlobalTransform>(b).unwrap().rotation() * Vec3::Z
             };
             let from = *plate + normal * 6.0;
+            // Stood where the shot's taken from, not at the harness's own
+            // spot: across the yard's bays, the gun went to its mark
+            // through a bay's fence and came up off its aim (#89).
+            let feet = {
+                let zone = r.vr.app.world().resource::<crate::world::Zone>();
+                let back = from + normal * 0.6;
+                zone.on_ground(back.x, back.z)
+            };
+            r.vr.stand(feet, 0.0);
+            r.vr.step(5);
             let want = Transform::from_translation(from)
                 .looking_at(*plate, Vec3::Y)
                 .rotation;

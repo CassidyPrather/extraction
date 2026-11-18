@@ -100,7 +100,6 @@ pub const MIX: &[Cue] = &[
     cue!("press.lever", "physical/switch", -1.0, 65.0, 0.6, Detail),
     cue!("use.eat", "physical/eat", -10.0, 50.0, 0.3, Detail),
     cue!("use.drink", "physical/drink", -13.5, 50.0, 0.3, Detail),
-    cue!("use.bandage", "physical/bandage", -12.0, 60.0, 0.4, Detail),
     cue!("grapnel.throw", "physical/whoosh", -12.0, 60.0, 2.0, Detail),
     cue!("grapnel.hook", "impacts/metal", -8.5, 80.0, 6.0, Detail),
     cue!("grapnel.coil", "physical/cloth", -12.0, 50.0, 0.6, Detail),
@@ -114,6 +113,9 @@ pub const MIX: &[Cue] = &[
     cue!("use.switch", "physical/switch", -3.5, 50.0, 0.4, Detail),
     cue!("step.done", "physical/chime", -22.0, 60.0, 0.0, Detail),
     cue!("step.station", "ui/chime_station", -20.0, 65.0, 0.0, Detail),
+    // The playtest tour's sync chirp, in your head: loud enough to find
+    // on a recording (`capture::station`, scripts/playtest_ingest.py).
+    cue!("tour.sync", "ui/tour_sync", -10.0, 70.0, 0.0, Signal),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     cue!("drop.heavy", "impacts/dirt", -6.0, 85.0, 1.5, Event, 25.0),
     // Guns in your hands.
@@ -371,12 +373,8 @@ pub const MIX: &[Cue] = &[
     cue!("hit.spall", "physical/drop_metal", -8.0, 85.0, 5.0, Action, 4.0),
     cue!("fight.torn", "physical/door_creak", -8.0, 85.0, 2.0, Action),
     cue!("fight.lurch", "physical/whoosh", -8.0, 80.0, 2.0, Detail),
-    cue!("aid.wrap", "physical/bandage", -16.0, 50.0, 0.4, Detail),
-    cue!("aid.strap", "physical/velcro", -14.0, 55.0, 0.4, Detail),
-    cue!("aid.cinch", "physical/velcro", -17.0, 60.0, 0.4, Detail),
     cue!("aid.cap", "physical/handle_plastic", -9.0, 45.0, 0.3, Detail),
     cue!("aid.cap_off", "physical/handle_plastic", -12.0, 50.0, 0.3, Detail),
-    cue!("aid.wet", "footsteps/mud", -16.0, 50.0, 0.3, Detail),
     cue!("fight.shove", "impacts/metal", -6.0, 90.0, 1.0, Action),
     cue!("fight.stagger", "machines/servo", -9.0, 75.0, 3.0, Detail, 3.0),
     cue!("fight.strain", "machines/servo", -10.0, 75.0, 1.0, Detail),
@@ -524,6 +522,7 @@ pub const MIX: &[Cue] = &[
     cue!("anomaly.frost", "anomaly/frost", -26.0, 50.0, 4.0, Signal, 2.0),
     cue!("frost.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
     cue!("frost.bite", "physical/ice_crack", -8.0, 80.0, 0.0, Action),
+    cue!("frost.creak", "physical/ice_crack", -20.0, 45.0, 0.0, Detail),
     cue!("anomaly.blink", "anomaly/mirror_blink", -9.5, 95.0, 8.0, Action, 7.0),
     cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
     cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),
@@ -638,6 +637,26 @@ fn find(name: &str) -> Option<&'static Cue> {
     c
 }
 
+/// The world's pace (`items::stim`), for the world's sounds: in a stim
+/// what's out in the world plays lower and slower, your own head doesn't.
+/// Set by the stim's clock; read by `audio::play_at_speed` for placed
+/// sounds as they start.
+static WORLD_PACE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+
+/// How far a world sound's speed (and so its pitch) goes down at the
+/// stim's slowest: half the way the world does.
+pub const WORLD_PITCH_SHARE: f64 = 0.5;
+
+pub fn set_world_pace(pace: f32) {
+    WORLD_PACE.store(pace.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// What a world sound's speed is multiplied by now (1 out of a stim).
+pub fn world_speed() -> f64 {
+    let pace = f32::from_bits(WORLD_PACE.load(std::sync::atomic::Ordering::Relaxed)) as f64;
+    1.0 - (1.0 - pace.clamp(0.0, 1.0)) * WORLD_PITCH_SHARE
+}
+
 /// The spatial node a cue plays through: its reach, and the gentler muffle.
 pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
     use bevy_seedling::firewheel::dsp::distance_attenuation::DistanceAttenuation;
@@ -655,6 +674,21 @@ pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Out in the world, sounds start lower in a stim (`items::stim`): at
+    /// its slowest (0.4) 0.7 of their speed; out of one, as they were.
+    #[test]
+    fn world_sounds_go_lower_in_a_stim() {
+        let at = |p: f32| {
+            set_world_pace(p);
+            world_speed()
+        };
+        assert!((at(0.4) - 0.7).abs() < 1e-6);
+        let mid = at(0.7);
+        assert!(mid > 0.7 && mid < 1.0);
+        // (Left as it was: the pace is the whole process's.)
+        assert!((at(1.0) - 1.0).abs() < 1e-9);
+    }
 
     /// Narrow dynamics moves every role, and closes the gap between the
     /// quiet ones and the loud ones rather than widening it.
@@ -739,7 +773,6 @@ mod tests {
             "boxcar",
             "file",
             "files",
-            "field_dressing",
             "radio",
             "deployable_cover",
             "climbing_kit",

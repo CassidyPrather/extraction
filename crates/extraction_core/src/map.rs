@@ -710,6 +710,7 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "yard_fence" => [6.12, 1.35, 0.12],
         "yard_fence_2" => [2.12, 1.35, 0.12],
         "yard_gate" => [4.0, 1.5, 0.16],
+        "yard_store" => [4.2, 2.0, 3.2],
         // Hero landmarks: a valley's one unmistakable silhouette.
         "mill_race" => [7.8, 28.5, 54.6],
         // A mine's aerial ropeway: the upper station (its ropes run out

@@ -116,8 +116,7 @@ fn kit(table: usize) -> &'static [Kit] {
             ("pm_pistol", 0, Some(("pm_mag", 8)), [0.2, 0.12], Lie::Side),
             ("pm_mag", 8, None, [0.38, 0.26], Lie::Side),
             ("pm_mag", 8, None, [0.48, 0.26], Lie::Side),
-            ("field_dressing", 0, None, [-0.1, 0.27], Lie::Flat),
-            ("field_dressing", 0, None, [0.05, 0.27], Lie::Flat),
+            ("regen_injector", 0, None, [-0.1, 0.27], Lie::Flat),
         ],
     }
 }
@@ -258,8 +257,8 @@ fn set_up(
     let bench = bench_pose(&zone);
     arcade.bench = Some(bench);
     arcade.stand = Some(bench * Transform::from_translation(STAND));
-    // A screenshot's camera places itself.
-    arcade.hold = if opts.camera.is_some() { 0 } else { 30 };
+    // A screenshot's camera, or `--spawn`, places the player.
+    arcade.hold = if opts.places_player() { 0 } else { 30 };
     for i in 0..TABLES.len() {
         let pose = table_pose(&zone, &bench, i);
         let table = commands
@@ -664,7 +663,7 @@ fn sweep(world: &mut World) {
     }
 }
 
-/// Whole again: health, wounds, a broken leg.
+/// Whole again.
 fn heal(world: &mut World) {
     let players: Vec<Entity> = world
         .query_filtered::<Entity, With<LocalPlayer>>()
@@ -674,13 +673,6 @@ fn heal(world: &mut World) {
         if let Some(mut h) = world.get_mut::<crate::health::Health>(p) {
             *h = crate::health::Health::default();
         }
-        if let Some(mut w) = world.get_mut::<crate::interact::wounds::Wounds>(p) {
-            w.0.clear();
-        }
-        world.entity_mut(p).remove::<(
-            crate::interact::wounds::Fracture,
-            crate::interact::wounds::Bloodied,
-        )>();
     }
 }
 

@@ -46,6 +46,8 @@ MATERIALS = {
     "Black": ((0.025, 0.025, 0.025), 0.5, 0.5, None),
     "Brass": ((0.75, 0.55, 0.25), 1.0, 0.3, None),
     "Shell": ((0.84, 0.85, 0.86), 0.0, 0.32, None),
+    # A robot's underside, a shade under its shell (the dirigible's belly).
+    "ShellBelly": ((0.62, 0.63, 0.64), 0.0, 0.36, None),
     "Dark": ((0.06, 0.065, 0.07), 0.7, 0.4, None),
     "Eye": ((0.1, 0.02, 0.02), 0.0, 0.3, (1.0, 0.14, 0.07)),
     "Rotor": ((0.06, 0.06, 0.065), 0.3, 0.45, None),
@@ -75,6 +77,9 @@ MATERIALS = {
     "Olive": ((0.25, 0.27, 0.17), 0.0, 0.8, None),
     "Clear": ((0.8, 0.82, 0.8), 0.0, 0.1, None),
     "Warn": ((0.9, 0.6, 0.1), 0.0, 0.4, (1.0, 0.55, 0.07)),
+    # A salvaged cell's charge band (#105): a deep orange that stays orange
+    # under the light, not the yellow Warn blooms to.
+    "Hot": ((0.85, 0.22, 0.02), 0.0, 0.4, (0.9, 0.2, 0.01)),
     "Beacon": ((1.0, 0.75, 0.4), 0.0, 0.3, (1.0, 0.6, 0.2)),
     # The machines' boundary stake's lens (`machine_marker`): frosted and
     # unlit; the game lights it amber (Visual design) through its own
@@ -82,6 +87,14 @@ MATERIALS = {
     "MarkerLens": ((0.82, 0.82, 0.8), 0.0, 0.2, None),
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
+    # The injector cartridges' doses (#102): REGEN a strong green, STIM a
+    # deep amber-orange, far apart in hue and value so heal and stim tell
+    # apart at arm's length by torchlight; and their bands. Their glass is
+    # Vial: a glint and next to no veil (Clear's whitened the doses to
+    # mint and peach under the torch).
+    "Regen": ((0.1, 0.8, 0.18), 0.0, 0.5, None),
+    "Stim": ((0.7, 0.27, 0.0), 0.0, 0.5, None),
+    "Vial": ((0.6, 0.62, 0.6), 0.0, 0.1, None),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
     # A car's weathered paint (src/models.rs: the painted-metal relief).
     "CarBlue": ((0.21, 0.29, 0.4), 0.25, 0.6, None),

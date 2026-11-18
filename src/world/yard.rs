@@ -12,6 +12,9 @@
 //!   `buildings::swing_doors`); tagged `gate_N` in the map, it carries
 //!   [`YardGate`] `{ index: N }`. Set its `Door::open` to open or shut it.
 //!   No hand opens one: a press, a grip and a palm all leave it be.
+//! - `yard_store`: a squat concrete store, 4 m by 3 m, its flat roof
+//!   [`STORE_ROOF`] up: low enough for a lift's pop to land you on it
+//!   (#108), its rim kerbed pale so the roof reads as somewhere to land.
 
 use bevy::prelude::*;
 
@@ -55,9 +58,56 @@ pub fn geo(id: &str) -> Option<Geo> {
         "yard_fence" => run(&mut b, -3.0, 3.0),
         "yard_fence_2" => run(&mut b, -1.0, 1.0),
         "yard_gate" => gate(&mut b),
+        "yard_store" => store(&mut b),
         _ => return None,
     }
     Some(b.finish())
+}
+
+/// The store's flat roof, its top over the ground (m): under the 2.2 m a
+/// lift's pop clears (2.8 m up at the top of its arc).
+pub const STORE_ROOF: f32 = 2.0;
+/// The store's walls (along x, along z), and the roof's overhang.
+const STORE: (f32, f32) = (4.0, 3.0);
+const EAVE: f32 = 0.1;
+
+/// The store: a solid block, a roof slab over it with a pale kerb round
+/// its rim (paint for the eye, no lip to trip on), a steel door.
+fn store(b: &mut Builder) {
+    let (sx, sz) = STORE;
+    let slab = 0.15;
+    let wall = STORE_ROOF - slab;
+    b.bx(
+        Vec3::new(sx, wall, sz),
+        Vec3::new(0.0, wall * 0.5, 0.0),
+        Mat::Concrete,
+    );
+    let (rx, rz) = (sx + 2.0 * EAVE, sz + 2.0 * EAVE);
+    b.bx(
+        Vec3::new(rx, slab, rz),
+        Vec3::new(0.0, STORE_ROOF - slab * 0.5, 0.0),
+        Mat::Concrete,
+    );
+    let (k, kh) = (0.18, 0.03);
+    let y = STORE_ROOF + kh * 0.5;
+    for s in [-1.0f32, 1.0] {
+        b.deco(
+            Vec3::new(rx, kh, k),
+            Vec3::new(0.0, y, s * (rz - k) * 0.5),
+            Mat::Plaster,
+        );
+        b.deco(
+            Vec3::new(k, kh, rz - 2.0 * k),
+            Vec3::new(s * (rx - k) * 0.5, y, 0.0),
+            Mat::Plaster,
+        );
+    }
+    // The door, shut, on the north face (-z).
+    b.deco(
+        Vec3::new(0.9, 1.7, 0.05),
+        Vec3::new(0.8, 0.85, -sz * 0.5 - 0.02),
+        Mat::PaintedMetal,
+    );
 }
 
 /// Posts every [`BAY`] from `x0` to `x1`, rails between.
@@ -187,5 +237,27 @@ mod tests {
         assert_eq!(extraction_core::map::prefab_footprint("yard_gate")[0], 4.0);
         assert_eq!(gate_index("gate_3"), Some(3));
         assert_eq!(gate_index("wait_north_post"), None);
+    }
+
+    /// The store's roof is where the core's footprint says, low enough for
+    /// a lift's pop, and solid to land on; nothing on it to trip over.
+    #[test]
+    fn the_store_roof_is_low_flat_and_solid() {
+        let g = geo("yard_store").unwrap();
+        let f = extraction_core::map::prefab_footprint("yard_store");
+        assert!((f[1] - STORE_ROOF).abs() < 0.05, "{f:?}");
+        assert!(STORE_ROOF <= 2.2);
+        let top = g
+            .pieces
+            .iter()
+            .filter(|p| p.collide)
+            .filter_map(|p| match p.shape {
+                super::super::buildings::Shape::Box(s) => Some(p.at.translation.y + s.y * 0.5),
+                _ => None,
+            })
+            .fold(0.0f32, f32::max);
+        assert!((top - STORE_ROOF).abs() < 0.01, "solid top {top}");
+        assert!(f[0] >= STORE.0 && f[2] >= STORE.1);
+        assert!(g.loot.is_empty());
     }
 }

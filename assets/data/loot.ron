@@ -6,7 +6,7 @@
 // first raid is 0; a sim rolls everything). The first job's houses draw
 // from a small starter set, and the families arrive a few at a time (the
 // designer, in a first house: "bombarded with too many item types at
-// once"): 0 the starter (food, a dressing, the pistol's rounds, light,
+// once"): 0 the starter (food, an injector, the pistol's rounds, light,
 // bolts, scrap, gun oil, tea); 1 more food, the torch, electronics; 2 the
 // kitchen, everyday tools, the first gadgets (radio, compass, detector);
 // 3 other calibres, curios and tapes; 4 guns, grenades, scopes; 6 the rare
@@ -229,9 +229,12 @@
             Item(id: "bolt_mosin", weight: 0.8, condition: (0.2, 0.95), from_raid: 7),
         ]),
         "medical": (rolls: (1, 2), entries: [
-            Item(id: "field_dressing", weight: 4.0),
-            Item(id: "regen_injector", weight: 1.0, from_raid: 5),
-            Item(id: "splint", weight: 1.0, from_raid: 1),
+            // The only medicine (#102): a pen (with its R-2) now and then,
+            // cartridges by grade more often, most of them part used.
+            Item(id: "regen_injector", weight: 0.8),
+            Item(id: "regen_r1", weight: 2.0, condition: (0.3, 1.0)),
+            Item(id: "regen_r2", weight: 1.0, condition: (0.3, 1.0), from_raid: 2),
+            Item(id: "regen_r3", weight: 0.3, condition: (0.5, 1.0), from_raid: 5),
             Nothing(weight: 2.0),
         ]),
         "gadgets": (rolls: (1, 1), entries: [
@@ -254,8 +257,13 @@
             Item(id: "artifact_adapter", weight: 0.15, from_raid: 6),
             Item(id: "lead_case", weight: 0.3, from_raid: 4),
             Item(id: "detector", weight: 0.8, from_raid: 2),
-            Item(id: "detector_sweep", weight: 0.35, from_raid: 6),
-            Item(id: "detector_bear", weight: 0.12, from_raid: 6),
+            // The survey sets, a ladder (#104): each easier than the next
+            // is harder, and each tells what the one before can't. DP-1, the
+            // clicker: something's near. DP-2, the field screen: where each
+            // anomaly is, and how big. DP-3, the sweep: stones, above and
+            // below too. The later the rarer.
+            Item(id: "detector_bear", weight: 0.3, from_raid: 4),
+            Item(id: "detector_sweep", weight: 0.12, from_raid: 7),
             Item(id: "cassette_player", weight: 0.5, from_raid: 2),
             Item(id: "power_cell", weight: 1.5),
         ]),

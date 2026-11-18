@@ -128,7 +128,7 @@ impl Career {
 }
 
 /// What the raider kits up from: an AK, two full magazines, a box of
-/// rounds, the radio and two dressings, by the insertion point.
+/// rounds, the radio and an injector, by the insertion point.
 fn lay_out_kit(world: &mut World) {
     use extraction_core::map::MarkerKind;
     let zone = world.resource::<Zone>().clone();
@@ -158,8 +158,8 @@ fn lay_out_kit(world: &mut World) {
         ("ak_mag", 30),
         ("ammo_545", 30),
         ("radio", 0),
-        ("field_dressing", 0),
-        ("field_dressing", 0),
+        ("regen_injector", 0),
+        ("regen_injector", 0),
     ];
     let mut queue = bevy::ecs::world::CommandQueue::default();
     let mut made = Vec::new();

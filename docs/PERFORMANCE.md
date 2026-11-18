@@ -330,6 +330,37 @@ largest side). The valley's far loot (1,400 item meshes past 100 m)
 isn't drawn already, so it saved 6-8 draws in clear weather and none in
 drizzle.
 
+### Lit beams in the air
+
+A lit beam (`render::fog_beam`, the searchlights' shafts first) is a
+cone whose pixels each march the view ray through it: one face a pixel
+(front from outside, back from inside, picked on the CPU) and 3-12
+samples by how much beam the ray crosses. `gauge_beams_hold_the_stereo_budget`
+measures both eyes from Marrow's meadow at dusk in drizzle, each scene
+held 5% under the 64.8M budget (2026-11-18):
+
+| | beams | fragments (bare > with) | p95 layers |
+| - | - | - | - |
+| two searchlights crossing toward the eye | 2 | 20.3M > 38.1M | 11 > 13 |
+| inside a searchlight's cone, looking up it | 1 | 20.0M > 26.0M | 10 > 11 |
+| a night pack: 4 drones' lamps, a sentry, the torch | 6 | 15.8M > 23.6M | 8 > 10 |
+
+The night pack is the rollout as it will be (the drones', sentry's and
+torch's lamps still draw `world::beams` today). `EXTRACTION_NO_FOG_BEAMS=1`
+hides every beam, for an A/B of the shader's price per pixel.
+
+Since then the drones', sentry's and torch's lamps draw it too (the night
+pack is the game's), and the march runs the ray's true stretch in the
+cone (sorted wall and end crossings, at least 5 samples).
+
+**Priced (Performance, 2026-11-18):** lavapipe 1024 px, both eyes, the
+gauge's crossing and inside views, beams on against `EXTRACTION_NO_FOG_BEAMS=1`
+on one binary. `main_transparent_pass_3d` adds 115 ms at crossing and
+49 ms inside (82871da8's shader; 75 and 34 before the true-stretch march),
+1.7% and 1.1% of the GPU frame; the opaque pass doesn't move. A beam
+fragment is about 0.02-0.04 of an average opaque fragment there (a lower
+bound). So no coverage or lit-beam cap: the fragment gauge is the guard.
+
 ### Puffs where they stack
 
 Soft puffs (`render::puff`) are 1.6 m blended quads, so each one across

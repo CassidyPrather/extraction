@@ -413,6 +413,30 @@ scripts/before_after.py LIST --check                             # read the list
   big valley 150 frames or so; a run has 30 minutes. A bug that needs many
   fast frames (a give-up counted in frames) won't show here.
 
+## Playtests: the tour and the ingest
+
+`--playtest TOUR.txt` (`capture::station`) plays a playtest tour: one
+station per session, each the game launched with its own arguments from
+the list (`name | minutes | question | game arguments`). It's a sandbox
+(`persist::career_path` is None), recorded like the yard (marks work), and
+it writes `<data dir>/playtest/tour.jsonl`, which REPORT packs. NEXT asks
+for a 1–5 on the station's question, then for what bugged you out loud.
+NEXT again asks `main` to relaunch with `--playtest-station N+1`
+(`request_relaunch`). Each station plays `ui/tour_sync` (made by
+`scripts/make_sync_chirp.py`), flashes the view for two frames, and logs
+the wall clock. `a_bot_walks_a_three_station_tour` presses its way
+through three stations headless.
+
+`scripts/playtest_ingest.py --video REC --report ZIP --out
+docs/playtests/<date>` finds those chirps in the recording by matched
+filter and pairs them with the logged syncs, so the video's clock and the
+logs agree without hand alignment. It takes Whisper's JSON with
+`--transcript`, or runs Whisper if it's installed. It writes
+`timeline.md`, `stations.md` (rating, time taken, marks, and what was said
+between rating and leaving) and frames at marks, station starts and
+marker words. `--self-test` (run by `cargo test`) makes a recording with
+chirps at known times and checks it all comes back.
+
 ## Visual diff: `scripts/visual_diff.sh [old_sha new_sha]`
 
 The same cameras in every valley, shot by two builds at day, dusk, night

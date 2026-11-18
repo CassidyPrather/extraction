@@ -6,8 +6,10 @@ pub mod handled;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
+pub mod pen;
 pub mod rest;
 pub mod rounds;
+pub mod stim;
 pub mod usage;
 
 use avian3d::prelude::*;
@@ -59,6 +61,8 @@ impl Plugin for ItemsPlugin {
             damp::DampPlugin,
             rounds::RoundsPlugin,
             handled::HandledPlugin,
+            pen::PenPlugin,
+            stim::StimPlugin,
         ));
     }
 }
@@ -158,6 +162,39 @@ pub struct CustomVisual;
 #[derive(Component)]
 pub struct ItemModelRoot;
 
+/// A model node that shows how full its item is (an injector cartridge's
+/// dose behind its window, `art/items/supplies.py`): modelled full, its
+/// origin at the end it drains toward, it's scaled along its Z by the
+/// item's condition. Its rest transform, as modelled.
+#[derive(Component)]
+pub struct FillLevel(Transform);
+
+/// The least a drawn level goes to: an empty cartridge still shows the
+/// dose's colour in a sliver at its front, so its grade reads.
+pub const FILL_MIN: f32 = 0.02;
+
+/// Sizes each `FillLevel` node to its item's condition.
+fn fill_levels(
+    mut fills: Query<(&FillLevel, &ChildOf, &mut Transform)>,
+    roots: Query<&ChildOf, With<ItemModelRoot>>,
+    items: Query<&Item>,
+) {
+    for (rest, parent, mut t) in &mut fills {
+        let Some(item) = roots
+            .get(parent.parent())
+            .ok()
+            .and_then(|r| items.get(r.parent()).ok())
+        else {
+            continue;
+        };
+        let k = item.0.condition.clamp(FILL_MIN, 1.0);
+        let want = rest.0.with_scale(rest.0.scale * Vec3::new(1.0, 1.0, k));
+        if *t != want {
+            *t = want;
+        }
+    }
+}
+
 /// An item whose model file is still loading.
 #[derive(Component)]
 struct PendingItemModel(Handle<bevy::gltf::Gltf>);
@@ -169,7 +206,7 @@ impl Plugin for ItemVisualsPlugin {
         app.add_plugins((damp::DampVisualsPlugin, rounds::RoundsVisualsPlugin))
             .add_systems(
                 PostUpdate,
-                (placeholder_visuals, finish_item_models)
+                (placeholder_visuals, finish_item_models, fill_levels)
                     .chain()
                     .before(TransformSystems::Propagate),
             );
@@ -302,6 +339,11 @@ fn finish_item_models(
                     ChildOf(root),
                 ))
                 .id();
+            // A dose's level (an injector cartridge's `fill`): its length
+            // follows how full the item is (`fill_levels`).
+            if node.name == "fill" {
+                commands.entity(n).insert(FillLevel(node.transform));
+            }
             let range = item_lod_range(&node.name, has_lods);
             spawn_primitives_ranged(&mut commands, n, &node, range, |name| {
                 model_mats.get(name.unwrap_or("Blued"), &mut lib, &server, &mut materials)

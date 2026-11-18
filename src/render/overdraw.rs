@@ -93,6 +93,15 @@ fn both_sides(w: &World, e: Entity) -> bool {
         Some(base(m).cull_mode.is_none())
     }
     use crate::world::{cover, impostors, trees};
+    // A lit beam (`render::fog_beam`) draws one face: its front from
+    // outside, its back from inside, where every face the eye sees is a
+    // back face, so it counts as both sides.
+    if let Some(h) = w.get::<MeshMaterial3d<crate::render::fog_beam::FogBeamMaterial>>(e) {
+        return w
+            .resource::<Assets<crate::render::fog_beam::FogBeamMaterial>>()
+            .get(&h.0)
+            .is_some_and(|m| m.inside);
+    }
     cull::<StandardMaterial>(w, e, |m| m)
         .or_else(|| cull::<trees::TreeSwayMaterial>(w, e, |m| &m.base))
         .or_else(|| cull::<trees::FarCrownMaterial>(w, e, |m| &m.base))
@@ -241,6 +250,18 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
                     let left = crate::world::trees::card_scale(c.distance(eye_pos));
                     *p = c + (*p - c) * left;
                 }
+            }
+        }
+        // A halo's sphere is drawn its aureole's spread bigger, about the
+        // lamp, in its vertex shader (`world::halos::spread`).
+        if let Some(h) = w.get::<MeshMaterial3d<crate::world::halos::HaloMaterial>>(e) {
+            let s = w
+                .resource::<Assets<crate::world::halos::HaloMaterial>>()
+                .get(&h.0)
+                .map_or(1.0, |m| m.params.air.z.max(1.0));
+            let centre = model.translation;
+            for p in world.iter_mut() {
+                *p = Vec3::from(centre) + (*p - Vec3::from(centre)) * s;
             }
         }
         // Impostors turn to face the eye in their vertex shader.

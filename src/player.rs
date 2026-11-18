@@ -68,9 +68,6 @@ pub struct Body {
     /// How much slower a bulky thing in the hands makes you (0: not at
     /// all; `interact::carry`). You can't run with one.
     pub hauling: f32,
-    /// How much slower a broken leg makes you (0: not at all;
-    /// `interact::wounds`). You can't run on one.
-    pub limping: f32,
     /// How much slower a frost's chill makes you (0: not at all;
     /// `anomaly::frost`). Stiff with it, you can't run.
     pub chilled: f32,
@@ -99,8 +96,9 @@ impl Plugin for PlayerPlugin {
 }
 
 fn spawn_local_player(mut commands: Commands, zone: Res<Zone>, opts: Res<LaunchOptions>) {
-    let (pos, yaw) = match opts.camera {
-        Some((p, yaw, _)) => (Vec3::new(p.x, zone.ground(p.x, p.z), p.z), yaw),
+    let at = opts.spawn.or(opts.camera.map(|(p, yaw, _)| (p, yaw)));
+    let (pos, yaw) = match at {
+        Some((p, yaw)) => (Vec3::new(p.x, zone.ground(p.x, p.z), p.z), yaw),
         None => {
             let m = zone.marker(&MarkerKind::Insertion);
             let at = m.map(|m| m.at).unwrap_or([0.0, 0.0]);
@@ -219,6 +217,7 @@ pub fn move_bodies(
     levels: Option<Res<crate::world::underground::Levels>>,
     mut steps: MessageWriter<Footstep>,
     opts: Option<Res<crate::launch::LaunchOptions>>,
+    pace: Option<Res<crate::items::stim::WorldPace>>,
 ) {
     let dt = time.delta_secs();
     let tooling = opts.is_some_and(|o| o.tooling());
@@ -261,7 +260,6 @@ pub fn move_bodies(
         let want_sprint = input.sprint
             && enc.can_sprint
             && body.hauling <= 0.0
-            && body.limping < crate::interact::wounds::LIMP
             && body.chilled < crate::anomaly::frost::STIFF
             && body.stamina > 0.05
             && input.locomotion.y > 0.3
@@ -276,9 +274,12 @@ pub fn move_bodies(
             WALK_SPEED
         } * enc.speed
             * (1.0 - body.hauling)
-            * (1.0 - body.limping)
             * (1.0 - body.chilled)
-            * if swimming { 1.0 } else { drag };
+            * if swimming { 1.0 } else { drag }
+            // In a stim the world's clock is slowed, yours isn't
+            // (`items::stim`): its steps come less often, so each goes
+            // further.
+            * pace.as_ref().map_or(1.0, |p| p.own());
         let target = if climbing {
             // On a rope the stick climbs (see `gadgets::climbing`).
             Vec3::ZERO

@@ -26,6 +26,7 @@ use bevy::render::render_resource::{
 use bevy::shader::ShaderRef;
 
 use super::searchlight::Beam;
+use crate::render::fog_beam::{FogBeamMaterial, FogBeamParams};
 
 pub struct SearchlightLookPlugin;
 
@@ -96,7 +97,8 @@ impl Material for SearchMaterial {
 struct LampLook {
     beam: Entity,
     pool: Entity,
-    beam_mat: Handle<SearchMaterial>,
+    /// The shaft: light in fog (`render::fog_beam`).
+    beam_mat: Handle<FogBeamMaterial>,
     pool_mat: Handle<SearchMaterial>,
     lens: Handle<StandardMaterial>,
     rim: Handle<StandardMaterial>,
@@ -104,7 +106,7 @@ struct LampLook {
 
 #[derive(Default)]
 struct Shared {
-    cone: Handle<Mesh>,
+    fog_cone: Handle<Mesh>,
     plane: Handle<Mesh>,
     drum: Handle<Mesh>,
     lens: Handle<Mesh>,
@@ -155,10 +157,11 @@ fn dress_lamps(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut searches: ResMut<Assets<SearchMaterial>>,
+    mut fog_beams: ResMut<Assets<FogBeamMaterial>>,
 ) {
     for (e, l) in &lamps {
         let s = shared.get_or_insert_with(|| Shared {
-            cone: meshes.add(cone()),
+            fog_cone: meshes.add(crate::render::fog_beam::cone()),
             plane: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0))),
             // (Its axis down Z: the cylinders are turned onto it.)
             drum: meshes.add(Cylinder::new(DRUM_R, DRUM_DEEP)),
@@ -217,8 +220,14 @@ fn dress_lamps(
             axis: Vec3::NEG_Y.extend(0.0),
             origin: Vec4::new(0.0, 0.0, 0.0, l.half_angle.tan()),
         };
-        let beam_mat = searches.add(SearchMaterial {
-            params: params(false),
+        let beam_mat = fog_beams.add(FogBeamMaterial {
+            params: FogBeamParams {
+                light: PALE.extend(1.0),
+                apex: Vec4::new(0.0, 0.0, 0.0, l.half_angle.tan()),
+                axis: Vec3::NEG_Y.extend(l.landed),
+                air: Vec4::new(0.5, 1.0, -1000.0, 0.0),
+            },
+            inside: false,
         });
         let pool_mat = searches.add(SearchMaterial {
             params: params(true),
@@ -226,7 +235,7 @@ fn dress_lamps(
         let beam = commands
             .spawn((
                 Name::new("Searchlight beam"),
-                Mesh3d(s.cone.clone()),
+                Mesh3d(s.fog_cone.clone()),
                 MeshMaterial3d(beam_mat.clone()),
                 beam_transform(l.half_angle, l.landed),
                 NotShadowCaster,
@@ -360,10 +369,13 @@ fn light_lamps(
     lamps: Query<(&Beam, &LampLook, &GlobalTransform)>,
     mut places: Query<(&mut Transform, &mut Visibility), Without<Beam>>,
     mut searches: ResMut<Assets<SearchMaterial>>,
+    mut fog_beams: ResMut<Assets<FogBeamMaterial>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     weather: Option<Res<crate::world::sky::Weather>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
+    eyes: crate::render::puff::Eyes,
 ) {
+    let eye = crate::render::puff::eye(&eyes);
     let day = weather
         .as_ref()
         .map_or(1.0, |w| 1.0 - w.night.clamp(0.0, 1.0));
@@ -383,7 +395,7 @@ fn light_lamps(
             if (t.scale - want.scale).length() > 0.02 {
                 *t = want;
             }
-            let vis = if on {
+            let vis = if on && !crate::render::fog_beam::hidden() {
                 Visibility::Inherited
             } else {
                 Visibility::Hidden
@@ -414,7 +426,38 @@ fn light_lamps(
             }
         }
         let rim = if set { 1.0 } else { 0.7 };
-        for (mat, pool) in [(&look.beam_mat, false), (&look.pool_mat, true)] {
+        // The shaft: light in fog, as dense as the weather's air.
+        {
+            let density = conditions
+                .as_ref()
+                .map_or(0.5, |c| crate::render::fog_beam::air_density(c));
+            let ground = (from + dir * l.landed).y;
+            let want = FogBeamParams {
+                light: light.extend(strength),
+                apex: from.extend(l.half_angle.tan()),
+                axis: dir.extend(l.landed),
+                air: Vec4::new(density, day, ground, 0.0),
+            };
+            // Which face draws: the back ones with the eye in the beam.
+            let inside = eye.is_some_and(|e| {
+                crate::render::fog_beam::eye_inside(e, from, dir, l.half_angle.tan(), l.landed)
+            });
+            if let Some(m) = fog_beams.get(&look.beam_mat) {
+                let p = m.params;
+                let changed = (p.light - want.light).length() > 0.01
+                    || (p.apex - want.apex).length() > 0.02
+                    || (p.axis - want.axis).length() > 0.003
+                    || (p.air - want.air).length() > 0.02
+                    || m.inside != inside;
+                if changed {
+                    if let Some(mut m) = fog_beams.get_mut(&look.beam_mat) {
+                        m.params = want;
+                        m.inside = inside;
+                    }
+                }
+            }
+        }
+        for (mat, pool) in [(&look.pool_mat, true)] {
             let want = SearchParams {
                 light: light.extend(strength),
                 rim: RIM.extend(if pool { rim } else { 0.0 }),

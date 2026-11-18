@@ -1,0 +1,35 @@
+# The playtest tour: one new or changed thing at a time, no travel
+# (`capture::station`, docs/PLAYTEST.md "The playtest tour"). Played from
+# PLAYTEST TOUR on the camp board, or `extraction --playtest
+# assets/playtest/tour.txt`. Nothing is saved.
+#
+# One station a line:
+#
+#   name | minutes | question (answered 1-5) | game arguments [| what to try]
+#
+# - The arguments are the game's own: --map, --hour, --weather, --spawn
+#   x,y,z,yaw (where you stand; y 0 is the ground), --no-robots, --gallery
+#   specs (src/dev.rs) and so on. They come after the command line's, so
+#   they win.
+# - On leaving a station the board asks the question, then for what
+#   bugged you, out loud for the recording. "What to try", if given, is
+#   on the board while you play it.
+# - A station this build can't stage (a flag it doesn't know yet, an
+#   item --give names that isn't in it) is skipped and noted: a station
+#   for a fix still on its way can sit in the list.
+# - Owners: give one staging line for your thing, tried with
+#   `extraction --flat --playtest <a list with just your line>`.
+# - `cargo test` reads this file (capture::station tests): a line written
+#   wrong fails there.
+
+yard_start | 4 | How clear was it what to do first? | --map training_yard
+searchlights | 3 | How well could you read where the searchlights were looking? | --map marrow_creek --hour dusk --weather clearing --no-robots --camera 40,0,262,0,35 --gallery dirigible,50
+injector | 3 | How did using the injector on yourself feel? | --map training_yard --hurt 40 --give regen_injector,regen_injector,regen_injector
+stim | 3 | Did the slow-down feel right, and how long should it last? | --map training_yard --hurt 40 --give regen_injector,stim_s1 | load the stim into the pen's free slot and jab
+grappler | 4 | Could you fight the grappler's line: cut it, shoot it, or grab and yank it? | --map test_field --hour dusk --stage grappler_tour | watch it hook and swing; cut, shoot or grab-and-yank its line, ideally while it climbs. Then stay out of the spotter's beam: it only sees what its lamp lights
+
+# Arcade #103: walk left along the bench to the gun board's table; five
+# boxes of 5.45 (AP, tracer, mixed, 12 of 30, damp), the AK-74 and two
+# mags on the first table. Needs claude/polish-arcade d6eb6d3 on main.
+ammo_boxes | 4 | How easy were the boxes to tell apart and to load from? | --arcade
+# (injector: Hands #102; --hurt and --give need claude/polish-hands 28873774 on main)

@@ -676,9 +676,6 @@ order or the slow stretches. The changes against those come from the log:
   wind it. Both now say "circle it round the other forearm".
 
 Left for whoever owns them:
-- The dressing still needs 1.5 turns within 7 cm of the forearm
-  (`interact::first_aid`, `ROUND`). The owner should check that a real
-  hand can keep it that close.
 - If the right stick goes down a frame before the left, a mark can still
   flip the safety. The fire selector acts on the press, so fully
   separating the two needs a change in `weapons`.
@@ -753,7 +750,7 @@ thing at a time." In the headset, the truck showed all of these at once, before 
 | 5 | The range | rounds into the mag, seat, rack, safety off, a plate |
 | 6 | Run it dry | as before |
 | 7 | The house | the door, what's inside |
-| 8 | First aid | your wrist, a dressing |
+| 8 | First aid | your wrist, the injector |
 | 9 | The shimmer | a part at the flagged patch; the stone |
 | 10 | Going home | the radio, the cord |
 
