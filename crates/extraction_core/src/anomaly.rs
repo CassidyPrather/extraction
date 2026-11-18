@@ -1467,6 +1467,7 @@ mod tests {
             kind: MarkerKind::Anomaly {
                 kind: "Well".into(),
                 radius: 2.0,
+                crossing: false,
             },
             at: [1000.0, 1000.0],
             rot: 0.0,
@@ -1567,25 +1568,6 @@ mod tests {
             "about a handful of artifacts per cycle (got {n} over 10)"
         );
     }
-}
-#[cfg(test)]
-mod print_layout {
-    #[test]
-    #[ignore]
-    fn print() {
-        let map = crate::map::MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
-        let hm = crate::terrain::Heightmap::build(&map);
-        for a in super::layout(&map, &hm, 1, 0) {
-            eprintln!(
-                "{:?} {:.1?} r{:.1} {:?} h{:.1}",
-                a.kind,
-                a.at,
-                a.radius,
-                a.artifact,
-                hm.height(a.at)
-            );
-        }
-    }
 
     /// Only a frost flagged as a crossing, on the water, may lie on a road
     /// along it: an unflagged one on a road still fails, and so does a
@@ -1620,5 +1602,24 @@ mod print_layout {
             !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Well, 3.0),
             "never another kind"
         );
+    }
+}
+#[cfg(test)]
+mod print_layout {
+    #[test]
+    #[ignore]
+    fn print() {
+        let map = crate::map::MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let hm = crate::terrain::Heightmap::build(&map);
+        for a in super::layout(&map, &hm, 1, 0) {
+            eprintln!(
+                "{:?} {:.1?} r{:.1} {:?} h{:.1}",
+                a.kind,
+                a.at,
+                a.radius,
+                a.artifact,
+                hm.height(a.at)
+            );
+        }
     }
 }
