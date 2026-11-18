@@ -745,16 +745,6 @@ fn init_assets(
         LinearRgba::rgb(0.04, 0.048, 0.062),
         0.55,
     );
-    let mut ground =
-        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, &pool, c, emissive, rough);
-    // Pale dust settled out of the dead air, the ground's colour gone
-    // under it.
-    // Pale as ash, faintly so even in the dark.
-    let hushed = ground(
-        Color::srgba(0.76, 0.76, 0.74, 0.95),
-        LinearRgba::rgb(0.06, 0.06, 0.058),
-        0.95,
-    );
     // Frosted over: pale plates cut by cracks, rime feathering its rim, a
     // little lit of itself. Its colour's in its texture (the cracks show it
     // on snow; a saturated blue read as paint).
@@ -764,6 +754,16 @@ fn init_assets(
         Color::srgba(1.0, 1.0, 1.0, 0.95),
         LinearRgba::rgb(0.012, 0.018, 0.03),
         0.7,
+    );
+    let mut ground =
+        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, &pool, c, emissive, rough);
+    // Pale dust settled out of the dead air, the ground's colour gone
+    // under it.
+    // Pale as ash, faintly so even in the dark.
+    let hushed = ground(
+        Color::srgba(0.76, 0.76, 0.74, 0.95),
+        LinearRgba::rgb(0.06, 0.06, 0.058),
+        0.95,
     );
     // Pressed dark and hard, a faint violet in it (the well's own light:
     // in shadow and at night its edge still shows).
