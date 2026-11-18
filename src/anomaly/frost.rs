@@ -179,7 +179,7 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
                 Some(([d.x, top - c.y, d.y], 1.0))
             } else if g < top + RIME_UP {
                 let fade = 1.0 - (g - top) / RIME_UP;
-                Some(([d.x, g + 0.02 - c.y, d.y], fade * fade))
+                Some(([d.x, g + 0.02 - c.y, d.y], fade))
             } else {
                 None
             });
@@ -243,14 +243,13 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
             if corners.iter().any(|&k| pts[k].is_none()) {
                 continue;
             }
-            // Rime thinning out: a cell mostly gone is nothing, so its edge
-            // wanders up the bank.
-            let thin = corners
+            // A cell all rime, thinned to nothing, isn't laid; where the
+            // rest gives out is the mask's (its edge follows the texture's
+            // grain, not the cells).
+            if corners
                 .iter()
-                .map(|&k| pts[k].map_or(0.0, |(_, o)| o))
-                .sum::<f32>()
-                / 4.0;
-            if thin < 0.3 {
+                .all(|&k| pts[k].is_some_and(|(_, o)| o < 0.02))
+            {
                 continue;
             }
             any_ice |= corners
@@ -342,7 +341,14 @@ fn ice_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let line = Vec3::new(0.36, 0.48, 0.62);
             let col = base.lerp(line, crack.max(hair));
             let px = |v: f32| (v.clamp(0.0, 1.0) * 255.0) as u8;
-            data.extend_from_slice(&[px(col.x), px(col.y), px(col.z), 255]);
+            // Alpha is grain for the mask: the sheet (vertex alpha 1) is
+            // whole, and rime thinning up a bank (vertex alpha falling)
+            // gives out in patches, not along a line.
+            let grain = 0.55
+                + 0.45
+                    * (0.6 * value_noise(p.x * 12.0, p.y * 12.0, 59)
+                        + 0.4 * value_noise(p.x * 40.0, p.y * 40.0, 60));
+            data.extend_from_slice(&[px(col.x), px(col.y), px(col.z), px(grain)]);
         }
     }
     let mut image = Image::new(
@@ -422,11 +428,12 @@ pub fn freeze_water(
                             base_color_texture: Some(ice_texture(images)),
                             perceptual_roughness: 0.55,
                             reflectance: 0.5,
-                            // Opaque: it hides the water and the frost's
-                            // mark on the bed under it, as ice would (blended,
-                            // the mark drew over it). The rime's thinning up
-                            // the banks is its ragged edge, not a fade.
-                            alpha_mode: AlphaMode::Opaque,
+                            // Masked, not blended: solid, so it hides the
+                            // water and the frost's mark on the bed under it
+                            // (blended, the mark drew over it); the rime's
+                            // thinning up the banks is where the mask gives
+                            // out, in patches.
+                            alpha_mode: AlphaMode::Mask(0.5),
                             ..default()
                         })
                     })
