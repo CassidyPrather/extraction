@@ -1037,13 +1037,15 @@ fn gallery(
                         "sentry" => {
                             let toward = -flat;
                             let centre = toward.x.atan2(-toward.z) + turn.to_radians();
+                            // (Its box off to one side, in view, not
+                            // under its mast.)
                             crate::robots::sentry::spawn_sentry(
                                 &mut commands,
                                 &zone,
                                 at.xz(),
                                 centre,
                                 0.0,
-                                at.xz(),
+                                (at + right * 2.5).xz(),
                             )
                         }
                         _ => continue,
