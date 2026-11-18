@@ -319,7 +319,7 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 
 ## One line body (#101)
 
-`robots::lines`: one body for every line a machine hangs by or throws: the dirigible's pod cable (steel, its weak-link shackle 0.6 m over the pod, a grip sleeve a hand's reach above), the spotter's tether (steel, a grip sleeve on each stretch in reach, where the cutters bite), and next the grappler's line (rope). Rope reads pale, fat and fibrous and sags; cable dark, thin and glinting, hanging taut. It frays on the line itself where it's worked: whole, nicked (a strand springs out), half through (thinned, bright cut ends), parting (a thread, the ends splayed). Rounds on a line wear it by its gauge (rope four times as fast as cable); what parts it is its owner's rule.
+`robots::lines`: one body for every line a machine hangs by or throws: the dirigible's pod cable (steel, its weak-link shackle 0.6 m over the pod, a grip sleeve a hand's reach above), the spotter's tether (steel, a grip sleeve on each stretch in reach, where the cutters bite), and next the grappler's line (rope). Rope reads pale, fat and fibrous and sags; cable dark, thin and glinting, hanging taut. It frays on the line itself where it's worked, over a hand's length, large enough to steer a cut by at arm's length: whole, nicked (a bright strand springs out), half through (necked to under half its thickness, bright cut ends splayed at both sides), parting (a clear gap spanned by a single thread, the ends splayed). Rounds on a line wear it by its gauge (rope four times as fast as cable); what parts it is its owner's rule.
 
 | Picture | What it shows |
 |---|---|

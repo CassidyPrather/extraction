@@ -145,8 +145,8 @@ impl Fray {
     pub fn left(self) -> f32 {
         match self {
             Fray::Whole | Fray::Nicked => 1.0,
-            Fray::Half => 0.55,
-            Fray::Parting => 0.25,
+            Fray::Half => 0.45,
+            Fray::Parting => 0.15,
         }
     }
 
@@ -163,8 +163,8 @@ impl Fray {
 
 /// Segments a sagging line is drawn in (a taut one is one).
 const SAG_SEGMENTS: usize = 8;
-/// The worn stretch's length (m), where it frays.
-const FRAY_LEN: f32 = 0.12;
+/// The worn stretch's length (m), where it frays: a hand's length.
+const FRAY_LEN: f32 = 0.2;
 
 /// A line's look: its pieces, drawn separately (its owner's transform is
 /// anything), despawned with it.
@@ -225,7 +225,7 @@ fn assets(
                 .translated_by(Vec3::Y * 0.5),
         ),
         tuft: meshes.add(
-            Cylinder::new(0.006, 1.0)
+            Cylinder::new(0.01, 1.0)
                 .mesh()
                 .resolution(4)
                 .build()
@@ -247,16 +247,16 @@ fn assets(
         // Fresh-cut fibre: near white against the weathered rope.
         rope_ends: materials.add(StandardMaterial {
             base_color: Color::srgb(0.98, 0.95, 0.86),
-            emissive: LinearRgba::rgb(0.15, 0.14, 0.12),
+            emissive: LinearRgba::rgb(0.45, 0.42, 0.36),
             perceptual_roughness: 0.9,
             ..default()
         }),
         // Fresh-cut steel: bright, catching any light.
         cable_ends: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.95, 0.85, 0.62),
+            base_color: Color::srgb(1.0, 0.9, 0.62),
             metallic: 1.0,
             perceptual_roughness: 0.18,
-            emissive: LinearRgba::rgb(0.25, 0.2, 0.12),
+            emissive: LinearRgba::rgb(0.9, 0.7, 0.35),
             ..default()
         }),
         shackle: materials.add(StandardMaterial {
@@ -469,9 +469,9 @@ fn draw_lines(
                 let a = i as f32 * 2.4;
                 let out = Quat::from_axis_angle(along, a) * side;
                 let up = if i % 2 == 0 { 1.0 } else { -1.0 };
-                let from = mid + along * up * FRAY_LEN * 0.4 + out * r * 0.8;
+                let from = mid + along * up * FRAY_LEN * 0.5 + out * r * 0.6;
                 let to =
-                    from + (out * 0.9 + along * up * 0.4).normalize() * (0.06 + 0.015 * i as f32);
+                    from + (out * 0.9 + along * up * 0.4).normalize() * (0.09 + 0.02 * i as f32);
                 let d = to - from;
                 set(
                     t,
