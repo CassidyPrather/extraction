@@ -922,9 +922,10 @@ fn drone_rows(w: &WreckParts, out: &mut Vec<Row>) {
     }
 }
 
-/// Where a drone's cell sits: half out of its top, under the panel the
-/// crash threw off.
-pub const DRONE_CELL_AT: Vec3 = Vec3::new(0.0, 0.05, 0.04);
+/// Where a drone's cell sits: half out of its belly, which a crash turns
+/// to the sky (`wreck`'s drone crash flips it onto its back, belly plate
+/// up): seen from standing, in reach, its hot band showing.
+pub const DRONE_CELL_AT: Vec3 = Vec3::new(0.0, -0.11, 0.06);
 /// And a mender's, on its back behind the spine.
 pub const MENDER_CELL_AT: Vec3 = Vec3::new(0.0, 0.16, -0.06);
 

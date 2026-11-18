@@ -7954,7 +7954,41 @@ mod salvage {
     /// leg was.
     #[test]
     fn a_servo_pack_lifts_out_once_its_bolts_are_undone() {
-        let (mut vr, feet, wreck, seats) = wreck(1.0);
+        let (mut vr, feet, wreck, _) = wreck(1.0);
+        // Its knees are bolted on its legs where they fell (#105): seated
+        // once a leg has come to rest (`wreck::SETTLE_BY` at the latest).
+        let on_its_legs = |vr: &mut Vr| -> Vec<(Entity, SalvageSeat)> {
+            let mut q = vr.app.world_mut().query::<(Entity, &SalvageSeat)>();
+            let all: Vec<(Entity, SalvageSeat)> = q
+                .iter(vr.app.world())
+                .map(|(e, s)| {
+                    (
+                        e,
+                        SalvageSeat {
+                            wreck: s.wreck,
+                            hold: s.hold,
+                            item: s.item,
+                        },
+                    )
+                })
+                .collect();
+            all.into_iter()
+                .filter(|(_, s)| {
+                    vr.app
+                        .world()
+                        .get::<crate::robots::wreck::PieceOf>(s.wreck)
+                        .is_some_and(|p| p.0 == wreck)
+                })
+                .collect()
+        };
+        let mut seats = on_its_legs(&mut vr);
+        for _ in 0..15 {
+            if seats.iter().any(|(_, s)| s.hold == Hold::Bolts) {
+                break;
+            }
+            vr.step(90);
+            seats = on_its_legs(&mut vr);
+        }
         let (seat, servo) = seats
             .iter()
             .filter(|(_, s)| s.hold == Hold::Bolts)
@@ -7971,7 +8005,7 @@ mod salvage {
                 d(b.1.item).total_cmp(&d(a.1.item))
             })
             .map(|(e, s)| (*e, s.item))
-            .expect("a servo pack bolted on");
+            .expect("a knee bolted on its leg");
         let bolts = |vr: &mut Vr| -> Vec<Entity> {
             let mut q = vr.app.world_mut().query::<(Entity, &Bolt)>();
             q.iter(vr.app.world())
