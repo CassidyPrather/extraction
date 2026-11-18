@@ -635,25 +635,23 @@ fn seat_as(side: Side, half: Vec3, item: Transform, slide: f32, rim: bool) -> (S
                 None => open = false,
             }
         }
-        if !open {
+        let Some(thumb) = close_thumb(side, half, &to_box, shift).filter(|_| open) else {
             continue;
+        };
+        curl[4] = thumb.2;
+        let seat = Seat {
+            shift,
+            turn: Quat::IDENTITY,
+            curl,
+            thumb: (thumb.0, thumb.1),
+        };
+        let g = grasp(side, half, item, &seat);
+        if g.fault().is_none() {
+            return (seat, true);
         }
-        for thumb in thumb_closes(side, half, &to_box, shift) {
-            curl[4] = thumb.2;
-            let seat = Seat {
-                shift,
-                turn: Quat::IDENTITY,
-                curl,
-                thumb: (thumb.0, thumb.1),
-            };
-            let g = grasp(side, half, item, &seat);
-            if g.fault().is_none() {
-                return (seat, true);
-            }
-            let score = score(&g);
-            if best.is_none_or(|(s, _)| score > s) {
-                best = Some((score, seat));
-            }
+        let score = score(&g);
+        if best.is_none_or(|(s, _)| score > s) {
+            best = Some((score, seat));
         }
     }
     let fist = Seat {
@@ -687,27 +685,23 @@ pub(crate) const THUMB_BEND: f32 = 0.9;
 /// height on the unrolled glove), nearest its own way first.
 const THUMB_LIFTS: [f32; 8] = [0.0, 0.12, -0.12, 0.24, -0.24, 0.36, 0.5, 0.65];
 
-/// The thumb closed onto the box (its way, bend and curl), every way it
-/// rests on it, raised no more than it must be first (`close_on` for each
-/// lift in turn), then the first way that misses it; none if every way
-/// sinks in. The next is tried where the first rests on a side the
-/// fingers don't oppose.
-fn thumb_closes(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> Vec<(Vec3, f32, f32)> {
+/// The thumb closed onto the box: its way, bend and curl, raised no more
+/// than it must be to rest on it (`close_on` for each lift in turn);
+/// `None` if every way sinks in.
+fn close_thumb(side: Side, half: Vec3, to_box: &Affine3A, shift: Vec3) -> Option<(Vec3, f32, f32)> {
     let way = |c: f32, lift: f32| (thumb_way(side, c) + Vec3::Y * lift).normalize();
-    let mut rests = Vec::new();
     let mut missed = None;
     for lift in THUMB_LIFTS {
         let at = |c: f32| thumb_bones(side, way(c, lift), THUMB_BEND * c);
         match close_on(at, half, to_box, shift) {
-            Some(c) if c != MISS_CURL => rests.push((way(c, lift), THUMB_BEND * c, c)),
+            Some(c) if c != MISS_CURL => return Some((way(c, lift), THUMB_BEND * c, c)),
             Some(c) => {
                 missed.get_or_insert((way(c, lift), THUMB_BEND * c, c));
             }
             None => {}
         }
     }
-    rests.extend(missed);
-    rests
+    missed
 }
 
 #[cfg(test)]
