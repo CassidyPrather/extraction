@@ -76,6 +76,8 @@ impl Plugin for AnomalyVisualsPlugin {
                 xray_parts,
                 glass_eye,
                 steam,
+                dress_steam_banks,
+                light_steam_banks,
             ),
         );
     }
@@ -2507,5 +2509,83 @@ fn steam(
             .with_scale(Vec3::splat(0.4)),
             bevy::light::NotShadowCaster,
         ));
+    }
+}
+
+/// A steam bank (`anomaly::steam`): big soft billows, white, low and
+/// rolling slowly in a dome (`anomaly_particles.wgsl` mode 8). One
+/// particle system, no light.
+fn dress_steam_banks(
+    mut commands: Commands,
+    added: Query<(Entity, &super::steam::SteamBank), Added<super::steam::SteamBank>>,
+    a: Res<AnomalyAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut particles: ResMut<Assets<ParticleMaterial>>,
+) {
+    for (e, bank) in &added {
+        let mut rng = extraction_core::noise::Rng::new(e.to_bits());
+        let (count, size) = (64, 1.4);
+        let color = STEAM_GREY;
+        let r = bank.radius;
+        let ext = r * 2.0 + size * 3.0;
+        commands.entity(e).with_children(|c| {
+            c.spawn((
+                Particles {
+                    color,
+                    alpha: STEAM_ALPHA,
+                },
+                Mesh3d(meshes.add(particle_mesh(count, &mut rng))),
+                MeshMaterial3d(particles.add(ParticleMaterial {
+                    params: ParticleParams {
+                        mode: Vec4::new(8.0, r, r, 0.0),
+                        state: Vec4::new(0.0, 0.0, 0.0, size),
+                        color: color.extend(STEAM_ALPHA),
+                    },
+                    texture: a.radial.clone(),
+                    additive: false,
+                })),
+                Transform::IDENTITY,
+                Aabb::from_min_max(Vec3::new(-ext, -0.5, -ext), Vec3::new(ext, 6.0, ext)),
+                NoAutoAabb,
+                NotShadowCaster,
+                VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: 105.0..120.0,
+                    use_aabb: false,
+                },
+            ));
+        });
+    }
+}
+
+/// Steam's grey at full day, and each billow's opacity at its thickest.
+const STEAM_GREY: Vec3 = Vec3::new(0.66, 0.68, 0.7);
+const STEAM_ALPHA: f32 = 0.32;
+
+/// A steam bank takes the day's light (vapour lit, not glowing: pale grey
+/// a little over the fog by day, dim at night), and knows which way its
+/// burner lies (warmer that side).
+fn light_steam_banks(
+    banks: Query<(&super::steam::SteamBank, &GlobalTransform, &Children)>,
+    anomalies: Query<&GlobalTransform, With<Anomaly>>,
+    systems: Query<&MeshMaterial3d<ParticleMaterial>>,
+    mut mats: ResMut<Assets<ParticleMaterial>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+) {
+    let light = conditions.as_ref().map_or(1.0, |c| c.light);
+    for (bank, gt, kids) in &banks {
+        let toward = anomalies.get(bank.burner).map_or(Vec2::X, |b| {
+            let d = b.translation() - gt.translation();
+            Vec2::new(d.x, d.z).normalize_or(Vec2::X)
+        });
+        for c in kids.iter() {
+            if let Ok(m) = systems.get(c)
+                && let Some(mut mat) = mats.get_mut(&m.0)
+            {
+                mat.params.color = (STEAM_GREY * (0.3 + 0.7 * light)).extend(STEAM_ALPHA);
+                mat.params.state.y = toward.x;
+                mat.params.state.z = toward.y;
+            }
+        }
     }
 }
