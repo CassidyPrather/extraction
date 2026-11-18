@@ -988,6 +988,24 @@
             tags: ["metal"],
         ),
         (
+            id: "drone_eye", dims: Some((0.124, 0.119, 0.127)), name: "Drone eye",
+            description: "A drone's camera dome, twisted off its belly, stamped DR OPT. The lens still glows a little when you turn it to the light.",
+            category: RobotPart, size: Small, mass: 0.4, bulk: 0.6,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "drone_gunpod", dims: Some((0.08, 0.126, 0.365)), name: "Drone gun pod",
+            description: "A drone's gun, cut off its pylon with its leads hanging, stamped DR GUN. Light enough to carry under an arm.",
+            category: RobotPart, size: Medium, mass: 2.2, bulk: 2.0,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "mender_torch", dims: Some((0.1, 0.301, 0.358)), name: "Mender torch arm",
+            description: "A mender's welding arm, unbolted at the shoulder, stamped MN TRC. The nozzle's still warm; the hose still smells of gas.",
+            category: RobotPart, size: Medium, mass: 1.8, bulk: 2.0,
+            tags: ["metal"],
+        ),
+        (
             id: "dirigible_gas_valve", dims: Some((0.368, 0.196, 0.33)), name: "Airship gas valve",
             description: "A lift-gas valve with a scrap of the envelope still clamped under its ring.",
             category: RobotPart, size: Medium, mass: 2.0, bulk: 3.0,

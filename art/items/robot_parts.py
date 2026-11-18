@@ -35,7 +35,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import ALONG_X, UP, centred, item, tube_path, wanted  # noqa: E402
-from common import RX, RY, RZ, T, Part, fillet  # noqa: E402
+from common import RX, RY, RZ, S, T, Part, fillet  # noqa: E402
 
 # (A cyl's or tube's own axis is Z.)
 ALONG_Z = T(0, 0, 0)
@@ -190,6 +190,101 @@ def grappler_drum():
     return centred([p])
 
 
+def drone_eye():
+    p = Part("body")
+    # A drone's camera dome, twisted off its belly (#105): the dark dome in
+    # its pale cowl, the lens glowing in its bezel (art/robots/drone.py,
+    # `sensor`).
+    p.sphere(0.056, (0.0, 0.0, 0.0), "Dark", segs=28, rings=14)
+    p.lathe([(0.0, 0.0), (0.05, 0.0), (0.062, 0.02), (0.062, 0.034), (0.0, 0.036)], "Shell",
+            segs=28, xf=T(0, 0.012, 0) @ UP)
+    aim = RX(math.radians(12))
+    p.cyl(0.032, -0.06, -0.048, "Dark", segs=28, xf=aim, chamfer=0.003)
+    p.lathe([(0.0, -0.0635), (0.012, -0.0628), (0.022, -0.0608), (0.026, -0.059),
+             (0.0, -0.059)], "Eye", segs=28, xf=aim)
+    tube_path(p, [(0.02, 0.046, 0.01), (0.04, 0.06, 0.03), (0.05, 0.05, 0.06)], 0.003, "Red",
+              sides=5, closed=False)
+    return centred([p])
+
+
+def drone_gunpod():
+    p = Part("body")
+    # A drone's gun pod, cut off its pylon: the pale pod, its barrel and
+    # flash hider, the vents down its flanks, the amber muzzle light, the
+    # stub of the pylon (art/robots/drone.py, `gun`).
+    pod = [(0.0, 0.11), (0.024, 0.108), (0.036, 0.09), (0.04, 0.03), (0.039, -0.08),
+           (0.03, -0.13), (0.018, -0.15), (0.0, -0.152)]
+    p.lathe(pod, "Shell", segs=24, xf=S(1.0, 0.95, 1.0))
+    p.tube(0.016, 0.006, -0.25, -0.13, "Dark", segs=18, chamfer=0.002)
+    p.tube(0.019, 0.006, -0.255, -0.235, "Dark", segs=18, chamfer=0.003)
+    for sx in (-1, 1):
+        for i in range(5):
+            p.box((0.006, 0.026, 0.008), (sx * 0.037, 0.0, -0.04 + i * 0.022), "Dark",
+                  bevel=0.002, segs=1)
+    p.prism(fillet([(-0.05, 0.035), (0.05, 0.035), (0.03, 0.07), (-0.03, 0.07)], 0.008, 2),
+            -0.014, 0.014, "Dark", axis="x", bevel=0.004, segs=1)
+    p.box((0.012, 0.006, 0.006), (0.0, 0.024, -0.12), "Eye", bevel=0.002, segs=1)
+    for sx in (-1, 1):
+        tube_path(p, [(sx * 0.008, 0.07, 0.01), (sx * 0.02, 0.085, 0.03), (sx * 0.03, 0.08, 0.06)],
+                  0.003, "Black", sides=5, closed=False)
+    return centred([p])
+
+
+def mender_torch():
+    p = Part("body")
+    # A mender's welding arm, unbolted at its shoulder: two steel links and
+    # their dark joints, the ram under the upper link, the gas hose down
+    # its side with its hazard band, the torch and its glowing nozzle
+    # (art/robots/mender.py, `arm` and `torch`).
+    from mathutils import Vector
+
+    sh, el, wr, tip = (0.0, -0.12, -0.15), (0.0, -0.17, -0.37), (0.0, -0.28, -0.43), \
+        (0.0, -0.38, -0.45)
+
+    def along(a, b):
+        a, b = Vector(a), Vector(b)
+        rot = (b - a).to_track_quat("Z", "Y").to_matrix().to_4x4()
+        return T(*a) @ rot, (b - a).length
+
+    def rod(a, b, r, mat, segs=8):
+        xf, ln = along(a, b)
+        p.cyl(r, 0.0, ln, mat, segs=segs, xf=xf)
+
+    def beam(a, b, w, h, mat):
+        xf, ln = along(a, b)
+        p.box((w, h, ln), (0.0, 0.0, ln / 2), mat, bevel=0.006, segs=1, xf=xf)
+
+    side = RY(math.pi / 2)
+    p.cyl(0.035, -0.05, 0.05, "Dark", segs=24, xf=T(*sh) @ side)
+    beam(sh, el, 0.05, 0.04, "Steel")
+    p.cyl(0.03, -0.045, 0.045, "Dark", segs=24, xf=T(*el) @ side)
+    beam(el, wr, 0.044, 0.036, "Steel")
+    p.cyl(0.026, -0.04, 0.04, "Dark", segs=24, xf=T(*wr) @ side)
+    s, e = Vector(sh), Vector(el)
+    d = (e - s).normalized()
+    down = Vector((0, -1, 0))
+    off = (down - d * down.dot(d)).normalized() * 0.032
+    rod(s + d * 0.04 + off, s + d * 0.15 + off, 0.012, "Dark")
+    rod(s + d * 0.13 + off, s + d * 0.2 + off, 0.007, "Steel", segs=6)
+    pts = [(0.035, -0.12, -0.16), (0.04, -0.15, -0.3), (0.035, -0.19, -0.38),
+           (0.03, -0.27, -0.43)]
+    for a, b in zip(pts, pts[1:]):
+        rod(a, b, 0.007, "Rubber", segs=6)
+    xf, ln = along(el, wr)
+    p.box((0.048, 0.04, 0.03), (0.0, 0.0, ln * 0.5), "Warn", segs=1, xf=xf)
+    xf, ln = along(wr, tip)
+    p.lathe([(0.0, -0.01), (0.02, -0.01), (0.022, 0.0), (0.022, 0.05), (0.016, 0.06),
+             (0.0, 0.06)], "Dark", segs=24, xf=xf)
+    p.lathe([(0.0, 0.055), (0.012, 0.055), (0.01, 0.075), (0.0065, ln - 0.008),
+             (0.0, ln - 0.008)], "Steel", segs=24, xf=xf)
+    p.lathe([(0.0, ln - 0.01), (0.0065, ln - 0.01), (0.005, ln - 0.003), (0.0, ln)], "Glow",
+            segs=24, xf=xf)
+    p.tube(0.026, 0.01, 0.06, 0.066, "Steel", segs=24, xf=xf)
+    # Its shoulder's bolt flange, where it came off.
+    p.box((0.1, 0.012, 0.08), (0.0, -0.085, -0.15), "Dark", bevel=0.003, segs=1)
+    return centred([p])
+
+
 def crawler_capacitor():
     p = Part("body")
     # The spark gun's sleeve, ring and prongs, pointing -Z.
@@ -336,6 +431,9 @@ if __name__ == "__main__":
     for item_id, build in (("drone_rotor_motor", drone_rotor_motor),
                            ("walker_leg_actuator", walker_leg_actuator),
                            ("crawler_capacitor", crawler_capacitor),
+                           ("drone_eye", drone_eye),
+                           ("drone_gunpod", drone_gunpod),
+                           ("mender_torch", mender_torch),
                            ("crawler_leg_servo", crawler_leg_servo),
                            ("hound_hip_servo", hound_hip_servo),
                            ("hound_head", hound_head),

@@ -276,13 +276,6 @@
             Table(name: "weapons_rare", weight: 0.2, from_raid: 4),
             Nothing(weight: 3.0),
         ]),
-        "drone_wreck": (rolls: (1, 2), entries: [
-            Item(id: "drone_rotor_motor", weight: 3.0, condition: (0.2, 0.9)),
-            Item(id: "walker_eye", weight: 1.5, condition: (0.2, 0.9)),
-            Item(id: "electronics", weight: 2.0, from_raid: 1),
-            Item(id: "robot_cell", weight: 0.8, condition: (0.1, 0.8)),
-            Item(id: "robot_ammo_belt", weight: 1.0),
-        ]),
         "pylon_wreck": (rolls: (3, 5), entries: [
             Item(id: "electronics", weight: 3.0, from_raid: 1),
             Item(id: "walker_eye", weight: 1.5, condition: (0.3, 1.0)),

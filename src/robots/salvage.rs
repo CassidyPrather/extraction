@@ -340,6 +340,7 @@ pub struct WreckParts<'a> {
     pub hound: bool,
     pub heavy: bool,
     pub grappler: bool,
+    pub mender: bool,
     /// Its parts still on it: (entity, part, where, a walker's turret).
     pub parts: &'a [(Entity, PartRole, f32, Transform, bool)],
 }
@@ -364,6 +365,10 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
             hot: false,
             replaces: None,
         });
+    }
+    if w.kind == RobotKind::Drone {
+        drone_rows(w, &mut out);
+        return out;
     }
     // (The heavy is a walker too, but its salvage is its own seats,
     // `heavy`: a walker's cell fitted in it was sealed in its hull.)
@@ -489,6 +494,7 @@ fn fit_salvage(
             Has<super::hound::Hound>,
             Has<super::heavy::Heavy>,
             Has<super::grappler::Grappler>,
+            Has<super::mender::Mender>,
         ),
         (
             With<super::wreck::Broken>,
@@ -497,7 +503,11 @@ fn fit_salvage(
         ),
     >,
     parts: Query<(&RobotPart, &Transform, Has<WalkerTurret>)>,
-    mut harpoon: Query<(&crate::render::logistics::HarpoonPart, &mut Visibility)>,
+    mut harpoon: Query<
+        (&crate::render::logistics::HarpoonPart, &mut Visibility),
+        Without<SeatLook>,
+    >,
+    mut seat_looks: Query<(&SeatLook, &mut Visibility)>,
     all_parts: Query<&RobotPart>,
     catalog: Option<Res<Catalog>>,
     // (Not in a headless app: no cable to see there.)
@@ -507,7 +517,8 @@ fn fit_salvage(
     let Some(catalog) = catalog else {
         return;
     };
-    for (e, robot, children, gait, legs, servo, crawler, hound, heavy, grappler) in &wrecks {
+    for (e, robot, children, gait, legs, servo, crawler, hound, heavy, grappler, mender) in &wrecks
+    {
         commands.entity(e).insert(Fitted);
         // Its plates, for prying off (`armour::shed_plates`).
         for c in children.iter() {
@@ -551,6 +562,7 @@ fn fit_salvage(
             hound,
             heavy,
             grappler,
+            mender,
             parts: &on,
         };
         let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
@@ -566,6 +578,17 @@ fn fit_salvage(
             if let Some(piece) = piece {
                 for (h, mut vis) in &mut harpoon {
                     if h.grappler == e && h.what == piece {
+                        *vis = Visibility::Hidden;
+                    }
+                }
+            }
+            // A part's look drawn off the part (`SeatLook`) goes with it.
+            if let Some(role) = row
+                .replaces
+                .and_then(|r| on.iter().find(|o| o.0 == r).map(|o| o.1))
+            {
+                for (l, mut vis) in &mut seat_looks {
+                    if l.robot == e && l.role == role {
                         *vis = Visibility::Hidden;
                     }
                 }
@@ -852,6 +875,62 @@ fn live_cells(
     }
 }
 
+/// A drone's (or a mender's) wreck: each rotor still on its strut, twisted
+/// off by hand; its eye; its cell, hot, where the top panel came off. (Its
+/// gun pod or torch arm and a rotor or so fly off as it crashes: pieces,
+/// [`piece_part`]. Its belly plate pries off: `armour`.)
+fn drone_rows(w: &WreckParts, out: &mut Vec<Row>) {
+    let core = w
+        .parts
+        .iter()
+        .find(|p| p.1 == PartRole::Core)
+        .map_or(0.0, |p| p.2);
+    out.push(Row {
+        item: "robot_cell",
+        at: Transform::from_translation(if w.mender {
+            MENDER_CELL_AT
+        } else {
+            DRONE_CELL_AT
+        }),
+        size: w.size,
+        health: core,
+        fix: Fix::Hand,
+        hot: true,
+        replaces: None,
+    });
+    for &(e, role, health, at, _) in w.parts {
+        let item = match role {
+            PartRole::Rotor(_) => "drone_rotor_motor",
+            PartRole::Sensor => "drone_eye",
+            _ => continue,
+        };
+        out.push(Row {
+            item,
+            at,
+            size: w.size,
+            health,
+            fix: Fix::Hand,
+            hot: false,
+            replaces: Some(e),
+        });
+    }
+}
+
+/// Where a drone's cell sits: half out of its top, under the panel the
+/// crash threw off.
+pub const DRONE_CELL_AT: Vec3 = Vec3::new(0.0, 0.05, 0.04);
+/// And a mender's, on its back behind the spine.
+pub const MENDER_CELL_AT: Vec3 = Vec3::new(0.0, 0.16, -0.06);
+
+/// A look drawn on a machine for one of its parts but not under the part
+/// itself (a mender's rotors hang on its root): hidden when that part's
+/// salvage is seated in its place, as a part's own look goes with it.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct SeatLook {
+    pub robot: Entity,
+    pub role: PartRole,
+}
+
 /// What a fallen piece of a walker-family wreck is worth taking, and how
 /// it's held: a leg's knee (a walker's ram, a crawler's servo, a hound's
 /// hip motor), bolted on; the visor's eye, or a hound's head, by hand.
@@ -862,9 +941,28 @@ pub fn piece_part(
     crawler: bool,
     hound: bool,
     heavy: bool,
+    mender: bool,
     health: f32,
 ) -> Option<super::wreck::SalvagePart> {
     use super::wreck::{Piece, SalvagePart};
+    let by_hand = |item| SalvagePart {
+        item,
+        bolts: 0,
+        cables: 0,
+        pry: false,
+        hot: false,
+        health,
+    };
+    // A drone's: a rotor thrown off, its gun pod (a mender's torch arm)
+    // torn off as it crashed, each lying where it fell.
+    if kind == RobotKind::Drone {
+        return match piece {
+            Piece::Rotor => Some(by_hand("drone_rotor_motor")),
+            Piece::Gun if mender => Some(by_hand("mender_torch")),
+            Piece::Gun => Some(by_hand("drone_gunpod")),
+            _ => None,
+        };
+    }
     if kind != RobotKind::Walker || heavy {
         return None;
     }
@@ -907,15 +1005,16 @@ fn tag_pieces(
         Has<super::indoor::Crawler>,
         Has<super::hound::Hound>,
         Has<super::heavy::Heavy>,
+        Has<super::mender::Mender>,
     )>,
 ) {
     for (e, d, of, health) in &new {
         // (A root already gone: no telling what it was, so nothing.)
-        let Some(Ok((crawler, hound, heavy))) = of.map(|o| roots.get(o.0)) else {
+        let Some(Ok((crawler, hound, heavy, mender))) = of.map(|o| roots.get(o.0)) else {
             continue;
         };
         let health = health.map_or(1.0, |h| h.0);
-        if let Some(part) = piece_part(d.kind, d.piece, crawler, hound, heavy, health) {
+        if let Some(part) = piece_part(d.kind, d.piece, crawler, hound, heavy, mender, health) {
             commands.entity(e).insert(part);
         }
     }
@@ -1287,6 +1386,7 @@ mod tests {
             hound: false,
             heavy: false,
             grappler: false,
+            mender: false,
             parts: &parts,
         };
         let r = rows(&walker);
@@ -1383,6 +1483,7 @@ mod tests {
             hound: false,
             heavy: false,
             grappler: false,
+            mender: false,
             parts,
         }
     }
@@ -1432,29 +1533,40 @@ mod tests {
     fn its_fallen_pieces_are_its_knees_and_eye() {
         use super::super::wreck::Piece;
         let w = RobotKind::Walker;
-        let knee = |c, h| piece_part(w, Piece::LegUpper, c, h, false, 0.7).unwrap();
+        let knee = |c, h| piece_part(w, Piece::LegUpper, c, h, false, false, 0.7).unwrap();
         let k = knee(false, false);
         assert_eq!((k.item, k.bolts as usize), ("walker_leg_actuator", BOLTS));
         assert_eq!(k.health, 0.7);
         assert_eq!(knee(true, false).item, "crawler_leg_servo");
         assert_eq!(knee(false, true).item, "hound_hip_servo");
-        let eye = piece_part(w, Piece::Sensor, false, false, false, 1.0).unwrap();
+        let eye = piece_part(w, Piece::Sensor, false, false, false, false, 1.0).unwrap();
         assert!(eye.item == "walker_eye" && eye.bolts == 0 && eye.cables == 0);
         assert_eq!(
-            piece_part(w, Piece::Sensor, false, true, false, 1.0)
+            piece_part(w, Piece::Sensor, false, true, false, false, 1.0)
                 .unwrap()
                 .item,
             "hound_head"
         );
-        assert!(piece_part(w, Piece::Panel(0), false, false, false, 1.0).is_none());
-        assert!(piece_part(w, Piece::LegLower, false, false, false, 1.0).is_none());
-        assert!(piece_part(w, Piece::LegUpper, false, false, true, 1.0).is_none());
-        assert!(piece_part(RobotKind::Drone, Piece::Sensor, false, false, false, 1.0).is_none());
+        assert!(piece_part(w, Piece::Panel(0), false, false, false, false, 1.0).is_none());
+        assert!(piece_part(w, Piece::LegLower, false, false, false, false, 1.0).is_none());
+        assert!(piece_part(w, Piece::LegUpper, false, false, true, false, 1.0).is_none());
+        assert!(
+            piece_part(
+                RobotKind::Drone,
+                Piece::Sensor,
+                false,
+                false,
+                false,
+                false,
+                1.0
+            )
+            .is_none()
+        );
         // (And every one is an item.)
         let catalog = crate::items::Catalog::load();
         for (c, h) in [(false, false), (true, false), (false, true)] {
             for p in [Piece::LegUpper, Piece::Sensor] {
-                let id = piece_part(w, p, c, h, false, 1.0).unwrap().item;
+                let id = piece_part(w, p, c, h, false, false, 1.0).unwrap().item;
                 assert!(catalog.kind(id).is_some(), "{id}");
             }
         }
@@ -1541,6 +1653,76 @@ mod tests {
             ..default()
         };
         assert_eq!(char_of(&hot).emissive, LinearRgba::BLACK);
+    }
+
+    /// A drone's wreck: its cell (hot, by hand), each rotor still on and
+    /// its eye, twisted off by hand in their places; a mender's cell sits
+    /// on its back. What flew off as it crashed lies where it fell: a
+    /// rotor, its gun pod (a mender's, its torch arm).
+    #[test]
+    fn a_drones_wreck_is_its_rotors_eye_and_cell() {
+        use super::super::wreck::Piece;
+        let rotor = Entity::from_raw_u32(3).unwrap();
+        let eye = Entity::from_raw_u32(4).unwrap();
+        let parts = [
+            (
+                Entity::PLACEHOLDER,
+                PartRole::Core,
+                0.6,
+                Transform::IDENTITY,
+                false,
+            ),
+            (
+                rotor,
+                PartRole::Rotor(1),
+                0.9,
+                Transform::from_xyz(0.3, 0.05, 0.3),
+                false,
+            ),
+            (
+                eye,
+                PartRole::Sensor,
+                0.0,
+                Transform::from_xyz(0.0, -0.06, -0.22),
+                false,
+            ),
+        ];
+        let drone = WreckParts {
+            kind: RobotKind::Drone,
+            ..walker_like(&parts)
+        };
+        let r = rows(&drone);
+        let ids: Vec<_> = r.iter().map(|r| r.item).collect();
+        assert_eq!(
+            ids,
+            ["robot_cell", "drone_rotor_motor", "drone_eye"],
+            "{ids:?}"
+        );
+        assert!(r[0].hot && r[0].health == 0.6 && r[0].at.translation == DRONE_CELL_AT);
+        assert_eq!(r[1].replaces, Some(rotor));
+        assert!(r.iter().all(|r| matches!(r.fix, Fix::Hand)));
+        assert_eq!(r[2].health, 0.0, "a shot-out eye is scrap");
+        let mender = rows(&WreckParts {
+            kind: RobotKind::Drone,
+            mender: true,
+            ..walker_like(&parts)
+        });
+        assert_eq!(mender[0].at.translation, MENDER_CELL_AT);
+        let d = RobotKind::Drone;
+        let piece = |p, m| piece_part(d, p, false, false, false, m, 0.5).map(|s| s.item);
+        assert_eq!(piece(Piece::Rotor, false), Some("drone_rotor_motor"));
+        assert_eq!(piece(Piece::Gun, false), Some("drone_gunpod"));
+        assert_eq!(piece(Piece::Gun, true), Some("mender_torch"));
+        assert_eq!(piece(Piece::Panel(2), false), None);
+        let catalog = crate::items::Catalog::load();
+        for id in [
+            "drone_eye",
+            "drone_gunpod",
+            "mender_torch",
+            "drone_rotor_motor",
+        ] {
+            assert!(catalog.kind(id).is_some(), "{id}");
+        }
     }
 
     #[test]

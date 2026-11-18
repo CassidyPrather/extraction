@@ -575,6 +575,7 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
     drop(a);
     let mut c = Career::from_ron(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let item = |id: &str, rounds: u32| SavedItem {
+        charred: false,
         id: id.into(),
         condition: f32::NAN,
         rounds,
