@@ -69,9 +69,8 @@ def table():
         board(p, (1.02, 0.09, 0.022), (0.0, ay, sz * 0.2845), "Timber", bevel=0.003)
     for sx in (-1, 1):
         board(p, (0.022, 0.09, 0.52), (sx * 0.5345, ay, 0.0), "Timber", bevel=0.003)
-    # A drawer in the front apron: its face proud of the apron, a knob.
-    board(p, (0.42, 0.07, 0.018), (0.0, ay, -0.3055), "Timber", bevel=0.003)
-    rod(p, (0.0, ay, -0.314), (0.0, ay, -0.336), 0.013, "Timber", segs=8, chamfer=0.004)
+    # (No drawer in the apron: a knob that opens nothing is a lie, and a
+    # table's too many to open. Its front apron is plain.)
     # An H of stretchers low down.
     for sx in (-1, 1):
         board(p, (0.03, 0.04, 0.54), (sx * 0.53, 0.16, 0.0), "Timber", bevel=0.003)
@@ -317,8 +316,20 @@ def counter_top():
 
 # --- Stove ------------------------------------------------------------------------------------
 
+# A stove's doors (firebox, ash pit, oven): centre x, y, width, height. Each
+# hangs on its left edge (`door_*`'s origin), the frame's front plane.
+STOVE_DOORS = (("door_fire", -0.13, 0.62, 0.22, 0.15), ("door_ash", -0.13, 0.2, 0.22, 0.1),
+               ("door_oven", 0.16, 0.4, 0.26, 0.3))
+STOVE_FRONT = -0.289
+
+
 def stove():
-    p = Part("static")
+    """A brick range: the carcass (`carcass`) and its three doors, each its
+    own node (`door_fire`, `door_ash`, `door_oven`, `STOVE_DOORS`), its
+    origin on its hinge (its left edge, the frame's front plane, mid-height),
+    swinging out to the room (`world::hinge`); behind each, the dark of the
+    firebox, the ash pit, the oven."""
+    p = Part("carcass")
     # A brick range, whitewashed, on a plinth, under a cast iron plate.
     p.box((0.7, 0.06, 0.6), (0.0, 0.03, 0.0), "Concrete", bevel=0.006, segs=1)
     p.prism(fillet([(-0.33, -0.28), (0.33, -0.28), (0.33, 0.28), (-0.33, 0.28)], 0.03, 3),
@@ -329,15 +340,20 @@ def stove():
         p.cyl(r, 0.84, 0.855, "Cast", segs=20, xf=T(x, 0, -0.06) @ UP, chamfer=0.003)
         p.cyl(r * 0.6, 0.85, 0.86, "Cast", segs=16, xf=T(x, 0, -0.06) @ UP, chamfer=0.002)
         rod(p, (x - r * 0.3, 0.86, -0.06), (x + r * 0.3, 0.86, -0.06), 0.006, "Cast", segs=6)
-    # Doors: firebox, ash pit, oven, each in a frame with a latch.
-    for (x, y, dw, dh) in ((-0.13, 0.62, 0.22, 0.15), (-0.13, 0.2, 0.22, 0.1),
-                           (0.16, 0.4, 0.26, 0.3)):
+    doors = []
+    for (name, x, y, dw, dh) in STOVE_DOORS:
+        # Its frame and the dark behind the door, and its hinges, on the range.
         p.box((dw + 0.04, dh + 0.04, 0.012), (x, y, -0.283), "Cast", bevel=0.003, segs=1)
-        p.box((dw, dh, 0.012), (x, y, -0.295), "Cast", bevel=0.003, segs=1)
-        rod(p, (x + dw / 2 - 0.03, y, -0.301), (x + dw / 2 - 0.03, y, -0.33), 0.006, "Steel")
-        rod(p, (x + dw / 2 - 0.03, y, -0.33), (x + dw / 2 + 0.03, y, -0.33), 0.007, "Steel")
+        p.box((dw - 0.02, dh - 0.02, 0.0015), (x, y, STOVE_FRONT - 0.00075), "Black", segs=1)
         for yy in (y - dh / 2 + 0.02, y + dh / 2 - 0.02):
             p.box((0.03, 0.02, 0.008), (x - dw / 2 + 0.005, yy, -0.305), "Iron")
+        # The door, its latch at its free edge.
+        d = Part(name, origin=(x - dw / 2, y, STOVE_FRONT))
+        # (Hung 3.5 mm proud of its frame, clear of the dark behind it.)
+        d.box((dw, dh, 0.012), (x, y, -0.2985), "Cast", bevel=0.003, segs=1)
+        rod(d, (x + dw / 2 - 0.03, y, -0.304), (x + dw / 2 - 0.03, y, -0.33), 0.006, "Steel")
+        rod(d, (x + dw / 2 - 0.03, y, -0.33), (x + dw / 2 + 0.03, y, -0.33), 0.007, "Steel")
+        doors.append(d)
     # A towel rail along the front.
     for x in (-0.3, 0.3):
         rod(p, (x, 0.77, -0.28), (x, 0.77, -0.33), 0.006, "Steel", segs=6)
@@ -349,7 +365,7 @@ def stove():
     p.cyl(0.076, 1.58, 1.62, "Iron", segs=14, xf=T(x, 0, z) @ UP)
     rod(p, (x - 0.06, 1.3, z), (x - 0.15, 1.3, z), 0.006, "Steel", segs=6)
     p.box((0.03, 0.02, 0.012), (x - 0.16, 1.3, z), "Cast")
-    return [p]
+    return [p] + doors
 
 
 # --- Workbench --------------------------------------------------------------------------------
@@ -388,11 +404,9 @@ def workbench():
     for k in range(4):
         z = -0.3 + k * 0.2
         board(p, (1.86, 0.02, 0.19), (w.j(0.004), 0.141, z), "Boards", w, bevel=0.003)
-    # A drawer pedestal under the right of the top.
+    # A closed pedestal under the right of the top: plain-fronted (its
+    # drawers' pulls opened nothing, a lie).
     board(p, (0.46, 0.66, 0.62), (0.66, 0.48, 0.0), "Painted", bevel=0.004)
-    for k, (y, h) in enumerate(((0.75, 0.16), (0.56, 0.2), (0.32, 0.26))):
-        board(p, (0.42, h - 0.01, 0.016), (0.66, y, -0.315), "Painted", bevel=0.003)
-        handle(p, 0.66, y + h / 2 - 0.045, -0.323, vertical=False)
     # A vice on the front left corner.
     vx = -0.78
     p.box((0.16, 0.06, 0.22), (vx, top1 + 0.03, -0.29), "Painted", bevel=0.006, segs=1)
@@ -480,8 +494,10 @@ def locker():
     p.box((W, T, zb - zf), (0.0, y1 - T / 2, mid), "Painted", bevel=0.003, segs=1)
     # Its back and floor painted pale inside, as lockers were: what's left in
     # one reads against them from the door, in a dim room.
-    p.box((W - 2 * T, y1 - y0 - T, T), (0.0, (y0 + y1 - T) / 2, zb - T / 2), "Cream", segs=1)
-    p.box((W - 2 * T, T, zb - zf - T), (0.0, y0 + T / 2, mid - T / 2), "Cream", segs=1)
+    # Painted inside as out; only the shelf where things are left is pale,
+    # so what's on it reads.
+    p.box((W - 2 * T, y1 - y0 - T, T), (0.0, (y0 + y1 - T) / 2, zb - T / 2), "Painted", segs=1)
+    p.box((W - 2 * T, T, zb - zf - T), (0.0, y0 + T / 2, mid - T / 2), "Painted", segs=1)
     p.box((W - 2 * T, T, zb - zf - T), (0.0, LOCKER_SHELF - T / 2, mid - T / 2), "Painted",
           segs=1)
     p.box((W - 2 * T, T, zb - zf - T), (0.0, LOCKER_MID - T / 2, mid - T / 2), "Cream",

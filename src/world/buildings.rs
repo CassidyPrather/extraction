@@ -1520,7 +1520,11 @@ impl Builder {
         );
         self.dress(
             from,
-            vec![("stove", Transform::from_translation(at).with_rotation(rot))],
+            // (Its doors are their own, swinging: `hinge::fit_counters`.)
+            vec![(
+                "stove#carcass",
+                Transform::from_translation(at).with_rotation(rot),
+            )],
         )
     }
 
