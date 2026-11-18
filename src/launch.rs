@@ -575,6 +575,18 @@ impl LaunchOptions {
             o.map = crate::camp::TRAINING_YARD.into();
             o.map_explicit = true;
         }
+        // A tour station in a valley this build hasn't got opens the yard
+        // instead, to be skipped (`capture::station`): loading a map that
+        // isn't there would end the tour.
+        if o.playtest.is_some()
+            && !crate::asset_root_path()
+                .join("maps")
+                .join(format!("{}.ron", o.map))
+                .exists()
+        {
+            o.unknown_args.push(format!("--map {}", o.map));
+            o.map = crate::camp::TRAINING_YARD.into();
+        }
         o
     }
 }

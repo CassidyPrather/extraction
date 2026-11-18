@@ -595,7 +595,7 @@ fn board_text(
                     ""
                 },
                 match &s.hint {
-                    Some(h) => format!("Try: {h}."),
+                    Some(h) => format!("Try: {}.", h.trim_end_matches('.')),
                     None => "Look it over; say what you notice.".to_owned(),
                 },
             ),
@@ -699,17 +699,18 @@ mod tests {
     fn the_shipped_tour_reads() {
         let path = crate::asset_root_path().join(crate::camp::TOUR);
         let stations = load(&path).unwrap_or_else(|e| panic!("{e}"));
-        for s in &stations {
-            let o = LaunchOptions::parse(s.args.clone());
-            assert!(
-                crate::asset_root_path()
-                    .join("maps")
-                    .join(format!("{}.ron", o.map))
-                    .exists(),
-                "{}: no map {}",
-                s.name,
-                o.map
-            );
+        // A station waiting on a fix not here yet is skipped in play; it
+        // only needs to read. Said, so a typo doesn't hide as "waiting".
+        for (i, s) in stations.iter().enumerate() {
+            let o = LaunchOptions::parse([
+                "--playtest".to_owned(),
+                path.display().to_string(),
+                "--playtest-station".to_owned(),
+                i.to_string(),
+            ]);
+            if !o.unknown_args.is_empty() {
+                eprintln!("{}: skipped in this build: {:?}", s.name, o.unknown_args);
+            }
         }
     }
 
@@ -946,6 +947,53 @@ mod tests {
             !notes.contains("\"start\""),
             "no board for a skipped station"
         );
+    }
+
+    /// A station in a valley this build hasn't got opens the yard, marked
+    /// to be skipped, rather than failing to load a map that isn't there.
+    #[test]
+    fn a_station_in_a_missing_valley_is_skipped() {
+        let p = list("away | 1 | Q? | --map no_such_valley\n");
+        let o = LaunchOptions::parse(["--playtest", &p.display().to_string()].map(String::from));
+        assert_eq!(o.map, crate::camp::TRAINING_YARD);
+        assert_eq!(o.unknown_args, ["--map no_such_valley"]);
+    }
+
+    /// `--stage` a plugin registered plays; one nothing registered is
+    /// skipped like a flag the build doesn't know.
+    #[test]
+    fn a_stage_plays_only_if_something_stages_it() {
+        let p = list("s | 1 | Q? | --map training_yard --no-robots --stage nobodys\n");
+        let data = std::env::temp_dir().join(format!("tour_stage_{}", std::process::id()));
+        let run = |register: bool| {
+            let opts = LaunchOptions::parse(
+                [
+                    "--playtest",
+                    &p.display().to_string(),
+                    "--data-dir",
+                    &data.display().to_string(),
+                ]
+                .map(String::from),
+            );
+            assert_eq!(opts.stage.as_deref(), Some("nobodys"));
+            let mut app = crate::headless_app(opts, false);
+            if register {
+                register_stage(&mut app, "nobodys");
+            }
+            app.finish();
+            app.cleanup();
+            for _ in 0..30 {
+                app.update();
+            }
+            let _ = crate::take_relaunch();
+            app.world().resource::<Tour>().phase
+        };
+        let _one = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        assert_eq!(run(false), Phase::Leaving, "skipped");
+        assert_eq!(run(true), Phase::Playing, "played");
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     /// The tour is a sandbox: no station has a career to save to.
