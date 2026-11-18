@@ -6,7 +6,7 @@ use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
+use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes, spawn_primitives};
 use crate::render::materials::MaterialLibrary;
 use crate::robots::dirigible::{CargoPod, Dirigible, RADIUS};
 use crate::robots::grappler::{Grappler, Tethered};
@@ -116,17 +116,50 @@ fn finish_dressing(
                 &mut materials,
             )
         };
-        for node in &model {
+        // The boom first: the launcher head rides on it.
+        let mut boom: Option<(Entity, Vec3)> = None;
+        let mut order: Vec<&ModelNode> = model.iter().collect();
+        order.sort_by_key(|n| n.name != "launcher");
+        for node in order {
+            // The launcher head hangs on the boom, at its offset from the
+            // foot pin, so it folds with it.
+            let (parent, at) = match (node.name.as_str(), boom) {
+                ("launcher_head", Some((b, foot))) => (
+                    b,
+                    Transform {
+                        translation: node.transform.translation - foot,
+                        ..node.transform
+                    },
+                ),
+                _ => (e, node.transform),
+            };
             let holder = commands
-                .spawn((node.transform, Visibility::default(), ChildOf(e)))
+                .spawn((at, Visibility::default(), ChildOf(parent)))
                 .id();
-            // The derrick's boom (its origin its foot pin) folds back along
-            // the hull when the grappler's wrecked; the pedestal and drum
-            // stand (`grappler_armour::Folds`).
-            if node.name == "launcher" {
-                commands
-                    .entity(holder)
-                    .insert(crate::robots::grappler_armour::Folds);
+            match node.name.as_str() {
+                // The derrick's boom (its origin its foot pin) folds back
+                // along the hull when the grappler's wrecked; the pedestal
+                // and drum stand (`grappler_armour::Folds`).
+                "launcher" => {
+                    commands
+                        .entity(holder)
+                        .insert(crate::robots::grappler_armour::Folds);
+                    boom = Some((holder, node.transform.translation));
+                }
+                // Salvage on their own (Heavy's table): hidden once taken.
+                "launcher_head" => {
+                    commands.entity(holder).insert(HarpoonPart {
+                        grappler: e,
+                        what: HarpoonPiece::LauncherHead,
+                    });
+                }
+                "drum" => {
+                    commands.entity(holder).insert(HarpoonPart {
+                        grappler: e,
+                        what: HarpoonPiece::Drum,
+                    });
+                }
+                _ => {}
             }
             spawn_primitives(&mut commands, holder, node, &mut mat);
         }
@@ -187,6 +220,24 @@ fn pod_blockout(
             }
         });
     }
+}
+
+/// A piece of a grappler's harpoon drawn as its own node, to salvage on
+/// its own (Heavy's table): its holder, which the salvage hides once the
+/// piece is taken (its Visibility). `grappler` is the robot it's on.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HarpoonPart {
+    pub grappler: Entity,
+    pub what: HarpoonPiece,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HarpoonPiece {
+    /// The launcher on the boom's head (with its harpoon): it folds with
+    /// the boom on a wreck.
+    LauncherHead,
+    /// The line drum behind the yoke.
+    Drum,
 }
 
 /// The dirigible's pod cable: steel, its weak-link shackle just above the
