@@ -1354,9 +1354,7 @@ mod fog_beams {
             .into_iter()
             .enumerate()
         {
-            let at = eye
-                + (fwd * a.cos() + side * a.sin()) * r
-                + Vec3::Y * (2.5 + i as f32);
+            let at = eye + (fwd * a.cos() + side * a.sin()) * r + Vec3::Y * (2.5 + i as f32);
             let toward = (eye - at).with_y(0.0).normalize();
             pack.push(lamp(
                 at,
