@@ -15,6 +15,10 @@ that moves nothing, is a lie (`capture::checks::every_handle_is_in_reach`,
 - Wheelie bins (`wheelie_bin#lid`): the lid lifts back over its handle on
   its rail, by the lip under its free edge (`hinge::Frame::SideLid`). They're
   empty.
+- Coal bunkers (`coal_bunker#hatch`, a yard thing): the hatch at the foot of
+  the front lifts out on its top edge, by the bar at its foot; coal behind
+  it. A yard's things' moving parts are fitted as a building's furniture's
+  are (`buildings::yard_models`, `hinge::fit_counters`).
 - A locker's chest-height shelf and each counter's top drawer hold one real
   find in a socket (`buildings::Hold`, `items::loot::roll_holds`). Stoves hold
   nothing.

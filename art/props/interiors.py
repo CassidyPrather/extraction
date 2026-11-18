@@ -313,21 +313,22 @@ def tool_chest():
     t = 0.018
     W, D, y0, y1 = 0.9, 0.5, 0.04, 0.5
     p.box((0.92, 0.04, 0.52), (0.0, 0.02, 0.0), "Iron")
-    # Its walls and floor, the inside bare boards.
+    # Its walls and floor, the floor and tray pale paint so what's left in
+    # it reads at a glance (as a locker's shelf: `loot_sights`).
     for sx in (-1, 1):
         p.box((t, y1 - y0, D), (sx * (W / 2 - t / 2), (y0 + y1) / 2, 0.0), "Painted", bevel=0.004,
               segs=1)
     for sz in (-1, 1):
         p.box((W - 2 * t, y1 - y0, t), (0.0, (y0 + y1) / 2, sz * (D / 2 - t / 2)), "Painted",
               bevel=0.004, segs=1)
-    p.box((W - 2 * t, CHEST_FLOOR - y0, D - 2 * t), (0.0, (y0 + CHEST_FLOOR) / 2, 0.0), "Timber")
+    p.box((W - 2 * t, CHEST_FLOOR - y0, D - 2 * t), (0.0, (y0 + CHEST_FLOOR) / 2, 0.0), "Cream")
     # The tray on its ledges at the ends, across the back half.
     for sx in (-1, 1):
         p.box((0.02, 0.02, D / 2 - t), (sx * (W / 2 - t - 0.01), CHEST_TRAY - 0.03, D / 4 - t / 2),
               "Timber")
     p.box((W - 2 * t - 0.004, 0.012, D / 2 - t - 0.004), (0.0, CHEST_TRAY - 0.006, D / 4 - t / 2),
-          "Timber")
-    p.box((W - 2 * t - 0.004, 0.05, 0.012), (0.0, CHEST_TRAY + 0.02, 0.006), "Timber")
+          "Cream")
+    p.box((W - 2 * t - 0.004, 0.05, 0.012), (0.0, CHEST_TRAY + 0.02, 0.006), "Cream")
     # Iron corner caps.
     for sx in (-1, 1):
         for sz in (-1, 1):
