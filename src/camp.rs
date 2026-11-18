@@ -223,6 +223,8 @@ const BOX_FEET: [Vec3; 4] = [
 ];
 
 const TABLE_TOP: f32 = 0.76;
+/// Where the lantern stands on the table, in the camp's frame.
+const LANTERN: Vec3 = Vec3::new(-0.48, TABLE_TOP, 0.12);
 
 /// Where the board stands on the camp's frame: at the table's back edge,
 /// leaning away.
@@ -241,10 +243,7 @@ pub fn models(zone: Option<&Zone>, pose: &Transform) -> Vec<(&'static str, Trans
         ("camp_table", Transform::IDENTITY),
         ("camp_stool", free(STOOL, &stool_feet())),
         ("camp_box", free(BOX, &BOX_FEET)),
-        (
-            "lantern",
-            Transform::from_translation(Vec3::new(-0.48, TABLE_TOP, 0.12)),
-        ),
+        ("lantern", Transform::from_translation(LANTERN)),
         ("camp_board", board_pose()),
     ]
 }
@@ -281,6 +280,19 @@ fn spawn_camp(
         Transform::from_xyz(0.0, TABLE_TOP - 0.02, 0.0),
         ChildOf(camp),
     ));
+    // The lantern on it is solid too: a hand bumps it, not reaches
+    // through (`world::clutter::carried_body`; not taken).
+    if let Some((crate::world::buildings::Shape::Cylinder(r, h), at)) =
+        crate::world::clutter::carried_body("lantern")
+    {
+        commands.spawn((
+            Name::new("Camp lantern body"),
+            Collider::cylinder(r, h),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_translation(LANTERN + at),
+            ChildOf(camp),
+        ));
+    }
     // The board stands at the table's back edge, leaning away.
     let board = commands
         .spawn((

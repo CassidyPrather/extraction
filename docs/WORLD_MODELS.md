@@ -38,6 +38,20 @@ Rust and shearing: nothing on them suggests a tool would help.
 - `hand_pump`: its handle rusted fast where it last came down, its pivot
   seized in a blister of rust.
 - `rain_barrel`: its tap's key and spigot rusted fast in a blister of rust.
+- `lever_frame`: the signal box's levers rusted in their quadrants, each
+  clamped by its lever collar (the signalman's lock), rusted on.
+- `mill_ore_bin`: its chute gate's lever rusted fast at its pivot, its knob
+  gone.
+- `wall_telephone`: its crank broken off at the arm, a stub on its
+  spindle.
+- `logbook`: the Morse key beside it snapped off at its pivot.
+- `harmonium`: its stops' knobs broken off, shanks snapped short at the
+  stop board (its keys play: `radio::piano`).
+
+## Later
+
+- The harmonium's stops: a pulled stop changing its registration (Radio,
+  after the 20 Nov playtest); its knobs come back then.
 
 ## Chain/padlock: future bolt-cutter targets
 
@@ -49,5 +63,7 @@ cutters cut them; until then they can't be opened. What each would open:
 | `gate_valve` | its handwheel chained to the yoke, a padlock and a red lockout tag | free the wheel: turn the valve to open or shut its flow (a drain, a race, a cold-blast line) |
 | `switch_cabinet` | its door padlocked on a hasp (its breaker's lever is outside it) | open the cabinet: its fuses, and whatever was left in it |
 | `winch` | its drum chained to its sole and padlocked (its crank handles are sheared stubs) | free the drum: let its rope run out, lowering what hangs on it |
+| `warning_door` | the booth's door padlocked on its hasp, under its warning | open the booth: whatever's kept behind its warning |
+| `warning_gate` | its latch padlocked on its post | open the gate into what it fences off |
 
 The chain and padlock are `art/props/_kit.py`'s `chain()` and `padlock()`.

@@ -292,10 +292,10 @@ def wall_telephone():
     rod(p, (0, -0.02, -0.1), (0, 0.0, -0.17), 0.01, "Black", segs=6)
     p.lathe([(0.0, 0.0), (0.015, 0.0), (0.035, 0.035), (0.03, 0.04), (0.0, 0.01)], "Black",
             segs=12, xf=T(0, 0.0, -0.17) @ RX(math.pi))
-    # The crank on the +X side.
-    rod(p, (0.1, -0.02, -0.05), (0.13, -0.02, -0.05), 0.006, "Iron", segs=5)
-    rod(p, (0.13, -0.02, -0.05), (0.13, -0.08, -0.06), 0.005, "Iron", segs=5)
-    rod(p, (0.13, -0.08, -0.06), (0.16, -0.08, -0.06), 0.008, "Black", segs=6)
+    # The crank on the +X side, broken off at its arm: a stub on its
+    # spindle, nothing to turn (`docs/WORLD_MODELS.md`).
+    rod(p, (0.1, -0.02, -0.05), (0.13, -0.02, -0.05), 0.006, "Rusty", segs=5)
+    rod(p, (0.13, -0.02, -0.05), (0.13, -0.035, -0.052), 0.005, "Rusty", segs=5)
     # The hook on the -X side and the receiver hanging on it.
     rod(p, (-0.1, 0.06, -0.05), (-0.14, 0.07, -0.05), 0.005, "Iron", segs=5)
     p.lathe([(0.0, 0.0), (0.022, 0.0), (0.022, 0.03), (0.014, 0.05), (0.014, 0.12),

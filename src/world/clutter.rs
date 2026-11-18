@@ -1277,6 +1277,28 @@ pub fn yard_body(model: &str) -> &'static [(Shape, Vec3)] {
         .map_or(&[], |t| t.body)
 }
 
+/// A hand-sized thing carried about a house (a lamp, a pail, a case, a
+/// can): its body in its own space, matched to what's drawn. Solid but not
+/// taken: whether they're picked up is Hands' and Items' (open, after the
+/// 20 Nov playtest).
+pub fn carried_body(model: &str) -> Option<(Shape, Vec3)> {
+    let cyl = |r: f32, h: f32| (Shape::Cylinder(r, h), Vec3::Y * h * 0.5);
+    Some(match model {
+        "lantern" => cyl(0.06, 0.27),
+        "hurricane_lamp" => cyl(0.075, 0.33),
+        "lunch_pail" => cyl(0.1, 0.26),
+        "suitcase_shut" => (
+            Shape::Box(Vec3::new(0.62, 0.2, 0.46)),
+            Vec3::new(0.0, 0.1, -0.018),
+        ),
+        "watering_can" => (
+            Shape::Box(Vec3::new(0.52, 0.34, 0.16)),
+            Vec3::new(0.096, 0.17, 0.0),
+        ),
+        _ => return None,
+    })
+}
+
 /// Every yard thing.
 const YARD_THINGS: [YardThing; 19] = [
     CLOTHES_LINE,
@@ -2357,6 +2379,70 @@ mod tests {
                     || t.translation.y < table.y - 0.3),
             "something on Hana's table"
         );
+    }
+
+    /// A hand-sized thing carried about a house (a lamp, a case, a can),
+    /// solid since it has a body, is never in a door's swing: every
+    /// valley's houses, every door's leaf swept through its swing (1.75
+    /// rad, `buildings::swing_doors`) clear of every such body.
+    #[test]
+    fn nothing_carried_stands_in_a_doors_swing() {
+        use extraction_core::map::VALLEYS;
+        let mut bad = Vec::new();
+        let mut n = 0;
+        for (name, _) in VALLEYS {
+            let map = crate::world::load_map_def(name);
+            for p in &map.placements {
+                let Some(geo) = super::super::buildings::prefab(&p.prefab) else {
+                    continue;
+                };
+                let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1])
+                    .with_rotation(Quat::from_rotation_y(-p.rot.to_radians()));
+                let things: Vec<_> = geo
+                    .props
+                    .iter()
+                    .flat_map(|d| d.models.iter().copied())
+                    .chain(dress(&map, &p.prefab, &p.tag, &xf, false))
+                    .filter_map(|(m, t)| carried_body(m).map(|b| (m, t, b)))
+                    .collect();
+                n += things.len();
+                for d in &geo.doors {
+                    for (m, t, (shape, at)) in &things {
+                        let inv = (t.compute_affine()
+                            * bevy::math::Affine3A::from_translation(*at))
+                        .inverse();
+                        let hit = (0..=14).any(|k| {
+                            let a = d.yaw + 1.75 * k as f32 / 14.0;
+                            let along = Quat::from_rotation_y(a) * Vec3::X;
+                            (1..=9).any(|i| {
+                                (0..=4).any(|j| {
+                                    let q = d.hinge
+                                        + along * d.width * i as f32 / 9.0
+                                        + Vec3::Y * (0.05 + 0.4 * j as f32);
+                                    let l = inv.transform_point3(q);
+                                    match *shape {
+                                        Shape::Box(s) | Shape::Prism(s) => {
+                                            (l.abs() - s * 0.5).max_element() < 0.0
+                                        }
+                                        Shape::Cylinder(r, h) => {
+                                            l.xz().length() < r && l.y.abs() < h * 0.5
+                                        }
+                                    }
+                                })
+                            })
+                        });
+                        if hit {
+                            bad.push(format!(
+                                "{name} {} at {:?}: {m} in a door's swing (hinge {:?})",
+                                p.prefab, p.at, d.hinge
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(n > 0, "nothing carried in any house");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Every yard thing is solid, its body within what's drawn of it (a
