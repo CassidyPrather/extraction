@@ -118,6 +118,9 @@ pub struct LaunchOptions {
     /// `--spawn x,y,z,yaw`: where the player stands, in a headset or flat
     /// (unlike `--camera`, which flat gives a free camera).
     pub spawn: Option<(Vec3, f32)>,
+    /// Arguments this build doesn't know (a playtest station staged for a
+    /// fix not in it yet is skipped, `capture::station`).
+    pub unknown_args: Vec<String>,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
     /// Dev: the tour's views from a file instead of the placements (see
@@ -208,6 +211,7 @@ impl Default for LaunchOptions {
             playtest: None,
             playtest_station: 0,
             spawn: None,
+            unknown_args: Vec::new(),
             tour_only: None,
             tour_views: None,
             legibility: None,
@@ -479,7 +483,10 @@ impl LaunchOptions {
                     }
                 }
                 flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
-                other => eprintln!("ignoring unknown argument {other}"),
+                other => {
+                    eprintln!("ignoring unknown argument {other}");
+                    o.unknown_args.push(other.to_owned());
+                }
             }
         }
         // The worst minute's light and weather, unless asked for others.
