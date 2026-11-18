@@ -511,8 +511,9 @@ fn lifts(
 pub struct Knocked(pub f32);
 
 /// How long a round knocks a thing out of a lift's hold, seconds: long
-/// enough to fall out of reach of its column.
-pub const KNOCKED: f32 = 1.2;
+/// enough for a featherstone to settle down to where a hand reaches it (a
+/// loose one hovers at chest height, `artifacts::featherstones`).
+pub const KNOCKED: f32 = 3.0;
 
 /// A round striking a loose stone knocks it out of the lift holding it a
 /// moment; the moment passes.
@@ -1292,12 +1293,9 @@ mod tests {
             app.world().get::<Knocked>(stone).is_some(),
             "the round knocked it"
         );
-        let mut ys = Vec::new();
-        for _ in 0..80 {
+        for _ in 0..200 {
             app.update();
-            ys.push(pos(&app, stone).y);
         }
-        eprintln!("knocked stone: {:?}", &ys[..ys.len().min(12)]);
         assert!(
             pos(&app, stone).y < held - 0.8,
             "knocked out, it fell ({held:.2} -> {:.2})",
