@@ -5001,6 +5001,100 @@ mod first_aid {
         );
     }
 
+    /// A stim is felt starting, ending soon, and over (#102): `StimCue`s
+    /// In, Tell, Out, once each; the heart (`Heartbeat`, heard and felt in
+    /// both hands) slow and heavy, then quick in its last two seconds.
+    #[test]
+    fn a_stim_is_felt_in_its_tell_and_out() {
+        use crate::audio_kit::Heartbeat;
+        use crate::items::pen::Stimmed;
+        use crate::items::stim::{BEAT_SLOW, BEAT_TELL, StimCue, TELL};
+        let (mut vr, _) = setup();
+        vr.step(10);
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        let mut cues = Vec::new();
+        let mut beats: Vec<(usize, f32)> = Vec::new();
+        // Seven real seconds, a 90th at a time.
+        for frame in 0..(90 * 7) {
+            vr.step(1);
+            let w = vr.app.world_mut();
+            cues.extend(w.resource_mut::<Messages<StimCue>>().drain());
+            beats.extend(
+                w.resource_mut::<Messages<Heartbeat>>()
+                    .drain()
+                    .map(|b| (frame, b.level)),
+            );
+        }
+        assert_eq!(cues, vec![StimCue::In, StimCue::Tell, StimCue::Out]);
+        let secs = |f: usize| f as f32 / 90.0;
+        let (slow, quick): (Vec<(usize, f32)>, Vec<(usize, f32)>) = beats
+            .iter()
+            .copied()
+            .partition(|(f, _)| secs(*f) < 6.0 - TELL);
+        assert!(
+            (3..=5).contains(&slow.len()),
+            "about one a {BEAT_SLOW} s for 4 s: {slow:?}"
+        );
+        assert!(
+            (3..=5).contains(&quick.len()),
+            "about one a {BEAT_TELL} s for its last {TELL} s: {quick:?}"
+        );
+        assert!(
+            slow.iter().all(|b| b.1 > quick[0].1),
+            "heavier slow than quick"
+        );
+        assert!(
+            beats.iter().all(|(f, _)| secs(*f) <= 6.05),
+            "none after: {beats:?}"
+        );
+    }
+
+    /// In a stim the world's ticks come at 0.4 of frames; a held thing is
+    /// still drawn where the hand holds it on every real frame, not
+    /// stepped on the ticks (the coordinator: a gun juddering in the hand
+    /// makes VR feel broken).
+    #[test]
+    fn in_a_stim_a_held_thing_follows_the_hand_every_frame() {
+        use crate::items::pen::Stimmed;
+        let (mut vr, feet) = setup();
+        let mag = take(&mut vr, feet, "pm_mag");
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        vr.step(60);
+        let centre = vr.hand_state(Side::Right).world.translation;
+        let mut worst: f32 = 0.0;
+        for i in 0..90 {
+            // A hand moving as a hand does: 15 cm round, a turn a second.
+            let a = std::f32::consts::TAU * i as f32 / 90.0;
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.15,
+            );
+            vr.step(1);
+            let hand = vr.hand_state(Side::Right).world;
+            let offset = vr
+                .app
+                .world()
+                .get::<crate::interact::Held>(mag)
+                .unwrap()
+                .offset;
+            let want = hand.mul_transform(offset).translation;
+            let drawn = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(mag)
+                .unwrap()
+                .translation();
+            worst = worst.max(drawn.distance(want));
+        }
+        assert!(worst < 0.002, "drawn {worst} m off the hand in a stim");
+    }
+
     #[test]
     fn an_injector_in_the_air_does_nothing() {
         assert!(!jab(false), "injected into the air");

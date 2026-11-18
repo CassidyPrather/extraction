@@ -75,6 +75,9 @@ pub struct Comfort {
     /// in it (and what), and the one it goes in if let go
     /// (`interact::pockets`). Not in flat mode.
     pub pocket_spheres: bool,
+    /// In a stim (`items::stim`), the view's edges held dim while the
+    /// world's slowed; off, the stim is only heard and felt.
+    pub stim_look: bool,
     /// Iron sights: the front post goes soft as the eye comes down behind
     /// them, focused on the target (`weapons::optics`).
     pub post_blur: bool,
@@ -122,6 +125,7 @@ impl Default for Comfort {
             captions_in_view: true,
             machine_tick: true,
             pocket_spheres: true,
+            stim_look: true,
             post_blur: true,
             body: false,
             msaa: 4,
@@ -357,6 +361,14 @@ impl Comfort {
         }
     }
 
+    pub fn stim_look_label(&self) -> String {
+        if self.stim_look {
+            "STIM LOOK\nedges dim".into()
+        } else {
+            "STIM LOOK\nplain".into()
+        }
+    }
+
     pub fn steady_aim_label(&self) -> String {
         if self.steady_aim {
             "STEADY AIM\ntwo hands, a stock".into()
@@ -453,6 +465,7 @@ impl Comfort {
                 "--wrist-captions" => c.captions_in_view = false,
                 "--no-machine-tick" => c.machine_tick = false,
                 "--no-pocket-spheres" => c.pocket_spheres = false,
+                "--plain-stim" => c.stim_look = false,
                 "--no-post-blur" => c.post_blur = false,
                 "--no-body" => c.body = false,
                 "--body" => c.body = true,

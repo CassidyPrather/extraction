@@ -744,6 +744,12 @@ pub(crate) fn play_at_speed(
     };
     let speed = speed * (1.0 + (rng.f32() as f64 - 0.5) * 2.0 * pitch);
     let player = SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + offset_db));
+    // Out in the world, in a stim, lower and slower (`audio_mix::world_speed`).
+    let speed = if at.is_some() {
+        speed * mix::world_speed()
+    } else {
+        speed
+    };
     let settings = PlaybackSettings::default().with_speed(speed);
     match at {
         Some(p) => {

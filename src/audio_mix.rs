@@ -631,6 +631,26 @@ fn find(name: &str) -> Option<&'static Cue> {
     c
 }
 
+/// The world's pace (`items::stim`), for the world's sounds: in a stim
+/// what's out in the world plays lower and slower, your own head doesn't.
+/// Set by the stim's clock; read by `audio::play_at_speed` for placed
+/// sounds as they start.
+static WORLD_PACE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+
+/// How far a world sound's speed (and so its pitch) goes down at the
+/// stim's slowest: half the way the world does.
+pub const WORLD_PITCH_SHARE: f64 = 0.5;
+
+pub fn set_world_pace(pace: f32) {
+    WORLD_PACE.store(pace.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// What a world sound's speed is multiplied by now (1 out of a stim).
+pub fn world_speed() -> f64 {
+    let pace = f32::from_bits(WORLD_PACE.load(std::sync::atomic::Ordering::Relaxed)) as f64;
+    1.0 - (1.0 - pace.clamp(0.0, 1.0)) * WORLD_PITCH_SHARE
+}
+
 /// The spatial node a cue plays through: its reach, and the gentler muffle.
 pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
     use bevy_seedling::firewheel::dsp::distance_attenuation::DistanceAttenuation;
@@ -648,6 +668,21 @@ pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Out in the world, sounds start lower in a stim (`items::stim`): at
+    /// its slowest (0.4) 0.7 of their speed; out of one, as they were.
+    #[test]
+    fn world_sounds_go_lower_in_a_stim() {
+        let at = |p: f32| {
+            set_world_pace(p);
+            world_speed()
+        };
+        assert!((at(0.4) - 0.7).abs() < 1e-6);
+        let mid = at(0.7);
+        assert!(mid > 0.7 && mid < 1.0);
+        // (Left as it was: the pace is the whole process's.)
+        assert!((at(1.0) - 1.0).abs() < 1e-9);
+    }
 
     /// Narrow dynamics moves every role, and closes the gap between the
     /// quiet ones and the loud ones rather than widening it.

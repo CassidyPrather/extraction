@@ -35,6 +35,8 @@ pub enum ComfortCard {
     MachineTick,
     /// Your slots as spheres, or the pouches drawn.
     PocketSpheres,
+    /// The view's edges in a stim (dimmed, or plain).
+    StimLook,
     Climb,
     /// Your body drawn under you, or not.
     Body,
@@ -85,6 +87,8 @@ pub const CARDS: &[(ComfortCard, f32, f32)] = &[
     // (spheres, or drawn): low, as the seated reach the score card below
     // the captions; further down is behind the stash rack.
     (ComfortCard::PocketSpheres, 0.90, -0.15),
+    // And under it, how a stim looks.
+    (ComfortCard::StimLook, 0.72, -0.15),
     // Past the stash's end, a fifth column: the row that was over
     // the stash, where the rack's brace (once fitted) hid it. Under the
     // driver's note (1.47 m and up, z 0.12 to 0.48), over the second
@@ -151,6 +155,7 @@ fn press_cards(
                 ComfortCard::Captions => comfort.next_captions(),
                 ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
                 ComfortCard::PocketSpheres => comfort.pocket_spheres = !comfort.pocket_spheres,
+                ComfortCard::StimLook => comfort.stim_look = !comfort.stim_look,
                 ComfortCard::Body => comfort.body = !comfort.body,
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
                 ComfortCard::Smoothing => comfort.next_msaa(),
@@ -191,6 +196,7 @@ fn card_text(
             ComfortCard::Captions => comfort.captions_label(),
             ComfortCard::MachineTick => comfort.machine_tick_label(),
             ComfortCard::PocketSpheres => comfort.pocket_spheres_label(),
+            ComfortCard::StimLook => comfort.stim_look_label(),
             ComfortCard::Body => comfort.body_label(),
             ComfortCard::Climb => comfort.climb_label(),
             ComfortCard::Smoothing => comfort.msaa_label(),
@@ -376,6 +382,7 @@ mod tests {
             (ComfortCard::Score, "OFF"),
             (ComfortCard::MachineTick, "OFF"),
             (ComfortCard::PocketSpheres, "POUCHES"),
+            (ComfortCard::StimLook, "plain"),
         ] {
             let card = app
                 .world_mut()
@@ -390,6 +397,7 @@ mod tests {
                     ComfortCard::Binaural => c.binaural,
                     ComfortCard::Score => c.score,
                     ComfortCard::PocketSpheres => c.pocket_spheres,
+                    ComfortCard::StimLook => c.stim_look,
                     _ => c.machine_tick,
                 }
             };
