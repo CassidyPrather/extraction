@@ -479,7 +479,7 @@ fn searchlights(
 /// night` shows its searchlight.
 ///
 /// ```text
-/// scripts/shot.sh docs/shots/sentry/front.png 0,0,36,0,6 90 --map training_yard --new-game --gallery sentry,20,12
+/// scripts/shot.sh docs/shots/sentry/front.png 0,0,36,0,6 90 --map training_yard --new-game --no-captions --gallery sentry,20,12
 /// ```
 #[allow(clippy::too_many_arguments)]
 fn gallery(
