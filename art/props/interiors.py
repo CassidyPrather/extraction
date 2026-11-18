@@ -33,7 +33,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _kit import UP, ALONG_X, Wear, board, bolt, prop, rod  # noqa: E402
+from _kit import UP, ALONG_X, Wear, board, bolt, chain, padlock, prop, rod  # noqa: E402
 from common import Part, RX, RY, RZ, T  # noqa: E402
 
 
@@ -81,7 +81,11 @@ def winch():
         # On the arm's end (RX(a) takes the arm's -Y to -z sin(a): the
         # handles were on the shaft's other side, in the air).
         hy, hz = 0.75 - 0.3 * math.cos(a), -0.3 * math.sin(a)
-        rod(p, (x, hy, hz), (x + sx * 0.18, hy, hz), 0.018, "Timber", segs=6)
+        # Its handle sheared off years since: a rusted stub, nothing to turn.
+        rod(p, (x, hy, hz), (x + sx * 0.035, hy, hz), 0.018, "Rusty", segs=6)
+    # And the drum chained to the sole, locked: it won't turn.
+    chain(p, (0.3, 0.75 + 0.17, -0.02), (0.3, 0.12, -0.33))
+    padlock(p, (0.3, 0.12, -0.33), (0, 0, -1))
     p.cyl(0.17, 0.46, 0.49, "Iron", segs=16, xf=T(0, 0.75, 0) @ ALONG_X)
     rod(p, (0.475, 0.98, -0.3), (0.475, 0.9, -0.12), 0.015, "Iron", segs=5)
     bolt(p, (0.489, 0.98, -0.3), (1, 0, 0))  # the pawl's pivot, on its face (8 mm off)
@@ -165,6 +169,9 @@ def brake_drum():
     rod(p, (0.0, 0.75, -0.62), (0.0, 0.2, -0.6), 0.02, "Iron", segs=6)
     p.box((0.22, 0.26, 0.22), (0.0, 1.32, -0.53), "Cast", bevel=0.015, segs=1)
     p.box((0.05, 0.05, 0.14), (0.0, 1.47, -0.56), "Timber")
+    # The lever chained down to its foot and locked: it doesn't move.
+    chain(p, (0.0, 1.0, -0.6), (0.0, 0.2, -0.82))
+    padlock(p, (0.0, 0.2, -0.82), (0, 0, -1))
     return [p]
 
 
@@ -176,9 +183,10 @@ def control_stand():
     for x, a in ((-0.2, 0.35), (0.2, -0.3)):
         p.lathe([(0.2, -0.015), (0.24, -0.015), (0.24, 0.015), (0.2, 0.015)], "Cast", segs=12,
                 closed=True, sweep=120.0, start=30.0, xf=T(x, 0.95, 0.05) @ RY(math.pi / 2))
-        top = (x, 0.95 + 0.55 * math.cos(a), 0.05 - 0.55 * math.sin(a))
-        rod(p, (x, 0.95, 0.05), top, 0.018, "Steel", segs=6)
-        p.sphere(0.035, top, "Black", segs=8, rings=5)
+        # Each lever snapped off a hand above its quadrant: a stub, its
+        # knob gone, nothing to pull.
+        top = (x, 0.95 + 0.11 * math.cos(a), 0.05 - 0.11 * math.sin(a))
+        rod(p, (x, 0.95, 0.05), top, 0.018, "Rusty", segs=6)
     # The dial and the bucket indicator on a board behind.
     p.box((0.8, 0.45, 0.04), (0.0, 1.2, 0.27), "Timber", bevel=0.006, segs=1)
     p.cyl(0.11, 0.0, 0.04, "Brass", segs=16, xf=T(-0.2, 1.22, 0.25) @ RY(math.pi))
@@ -274,6 +282,10 @@ def gate_valve():
         rod(p, (x, 1.7, 0.0), (x, 2.05, 0.0), 0.025, "Cast", segs=6)
     p.box((0.34, 0.05, 0.12), (0.0, 2.05, 0.0), "Cast")
     wheel(p, (0.0, 2.25, 0.0), 0.32, UP @ RX(0.0), "Iron", spokes=5)
+    # Locked out: chained from its rim to the yoke, padlocked, a red tag on
+    # the lock. It won't be turned.
+    chain(p, (0.3, 2.25, 0.0), (0.17, 2.05, 0.0))
+    padlock(p, (0.17, 2.05, 0.0), (0, 0, -1), tag=True)
     # A chalked tag on the body.
     p.box((0.14, 0.1, 0.004), (0.0, 0.8, -0.377), "Cream")
     # Feet.
