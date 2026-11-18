@@ -798,6 +798,7 @@ fn clear_end_by(
 /// The least of its way a container's part must open clear: a door most
 /// of its swing (it may stop against a wall short of its end), a drawer
 /// all of its run.
+#[cfg(test)]
 fn least_clear(motion: Motion) -> f32 {
     match motion {
         Motion::Hinge { most } => most * 0.75,

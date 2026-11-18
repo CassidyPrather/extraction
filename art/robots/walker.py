@@ -340,7 +340,10 @@ for bx in (-0.12, 0.12):
 # (Kit) at KIT_AT (0, 0.30, 0.36), 0.5 x 0.24 x 0.6; the lamp (Lamp 0) at
 # LAMP_AT (0.25, 0.20, -0.44). Hips (ENGINEER_HIP) at (±0.24, -0.14, ±0.5).
 # All modelled in robot space, facing -Z.
-EX, EY0, EY1, EZ0, EZ1 = 0.31, -0.20, 0.16, -0.36, 0.84
+# (Its front 5 mm behind ENGINEER_CORE's, out of the grappler_core's front
+# plane: the two share this file, and coplanar they'd fight in
+# capture::fighting.)
+EX, EY0, EY1, EZ0, EZ1 = 0.31, -0.20, 0.16, -0.355, 0.84
 EZM = (EZ0 + EZ1) / 2
 hull = Part("engineer_hull")
 # The body, bevelled soft like pressed sheet.
