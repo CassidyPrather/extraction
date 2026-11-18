@@ -155,6 +155,7 @@ impl Plugin for StationPlugin {
             index: opts.playtest_station,
             phase: Phase::Playing,
             board: None,
+            last_at: None,
             synced: false,
             flash: None,
             nudged: false,
@@ -188,6 +189,8 @@ pub struct Tour {
     pub phase: Phase,
     /// The board, once it's up (seconds into the session then).
     board: Option<(Entity, f32)>,
+    /// Where the player stood last frame, to follow a staging's move.
+    last_at: Option<Vec3>,
     synced: bool,
     /// The flash in front of the eye, and frames it has left.
     flash: Option<(Entity, u32)>,
@@ -266,19 +269,8 @@ const BOARD_FROM_PLAYER: Vec3 = Vec3::new(-0.45, 1.25, -0.8);
 
 /// The board, once the player's there: the station's title, NEXT and
 /// three comfort cards (turning, vignette, sound).
-fn put_up_board(
-    mut commands: Commands,
-    mut tour: ResMut<Tour>,
-    players: Query<&GlobalTransform, With<LocalPlayer>>,
-    time: Res<Time>,
-) {
-    if tour.board.is_some() {
-        return;
-    }
-    let Some(player) = players.iter().next() else {
-        return;
-    };
-    let root = player.compute_transform();
+/// The board's pose for a player standing at `root`.
+fn board_pose(root: Transform) -> Transform {
     let flat = Quat::from_rotation_y(root.rotation.to_euler(EulerRot::YXZ).0);
     let at = root.translation + flat * BOARD_FROM_PLAYER;
     let face = Transform::from_translation(at).looking_at(
@@ -286,7 +278,37 @@ fn put_up_board(
         Vec3::Y,
     );
     // Cards face +Z: turn round to face the player.
-    let pose = face.with_rotation(face.rotation * Quat::from_rotation_y(std::f32::consts::PI));
+    face.with_rotation(face.rotation * Quat::from_rotation_y(std::f32::consts::PI))
+}
+
+/// A jump this long in one frame is a staging putting the player
+/// somewhere (the truck, the camp table, the arcade's bench), metres.
+const PLACED: f32 = 2.0;
+/// Seconds into a station a staging may still move the player.
+const PLACING: f32 = 30.0;
+
+fn put_up_board(
+    mut commands: Commands,
+    mut tour: ResMut<Tour>,
+    players: Query<&GlobalTransform, With<LocalPlayer>>,
+    time: Res<Time>,
+) {
+    let Some(player) = players.iter().next() else {
+        return;
+    };
+    let root = player.compute_transform();
+    let last = tour.last_at.replace(root.translation);
+    if let Some((board, since)) = tour.board {
+        // Moved by the station's own staging after the board went up: the
+        // board goes with them.
+        if last.is_some_and(|l| l.distance(root.translation) > PLACED)
+            && time.elapsed_secs() - since < PLACING
+        {
+            commands.entity(board).insert(board_pose(root));
+        }
+        return;
+    }
+    let pose = board_pose(root);
     let board = commands
         .spawn((
             card(TourCard::Title, Vec2::new(0.5, 0.3), ScreenStyle::Paper),
@@ -743,6 +765,46 @@ mod tests {
             Vec2::new(at.x, at.z).distance(Vec2::new(0.0, 40.0)) < 1.5,
             "the player stands at {at}, not (0, 40)"
         );
+    }
+
+    /// A staging that moves the player after the board's up (the arcade
+    /// stands you at its bench) takes the board along.
+    #[test]
+    fn the_board_follows_a_staging_that_moves_you() {
+        let p = list("boxes | 1 | Q? | --arcade\n");
+        let data = std::env::temp_dir().join(format!("tour_arcade_{}", std::process::id()));
+        let opts = LaunchOptions::parse(
+            [
+                "--playtest",
+                &p.display().to_string(),
+                "--data-dir",
+                &data.display().to_string(),
+            ]
+            .map(String::from),
+        );
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..240 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let player = w
+            .query_filtered::<&GlobalTransform, With<LocalPlayer>>()
+            .iter(w)
+            .next()
+            .expect("a player")
+            .translation();
+        let board = w
+            .query::<(&TourCard, &GlobalTransform)>()
+            .iter(w)
+            .find(|(c, _)| **c == TourCard::Title)
+            .expect("the board")
+            .1
+            .translation();
+        let _ = std::fs::remove_dir_all(&data);
+        let off = Vec2::new(board.x - player.x, board.z - player.z).length();
+        assert!(off < 1.5, "the board stands {off:.1} m from the player");
     }
 
     /// The tour is a sandbox: no station has a career to save to.
