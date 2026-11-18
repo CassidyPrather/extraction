@@ -1212,6 +1212,9 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    /// Where the newcomer stands (its feet's height: under a footbridge's
+    /// deck isn't on it).
+    pub(super) me: Query<'w, 's, &'static GlobalTransform, With<LocalPlayer>>,
     /// The ground's collider (left out of what's "in the way" of a step:
     /// banks are `steep_run`'s).
     pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
