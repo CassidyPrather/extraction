@@ -31,9 +31,7 @@ pub enum Family {
     MachineParts,
     /// A helmet, a vest, a plate: let go where it's worn.
     Armour,
-    /// The injector pen and its cartridges: a cartridge let go at the pen
-    /// clicks in (`items::pen`); its tip to you and the trigger, and a
-    /// green one heals (`items::usage`).
+    /// In the thigh: heals (`items::usage`).
     Injector,
     /// Pin out, thrown: a few seconds (`weapons::grenades`, `gadgets`).
     Grenade,
@@ -132,9 +130,7 @@ pub fn family(def: &ItemDef) -> Option<Family> {
         "matches" => Family::Matches,
         "scrap_metal" | "electronics" | "polymer" | "brass" | "powder" => Family::Salvage,
         "helmet" | "vest" | "steel_plate" => Family::Armour,
-        "regen_injector" | "regen_r1" | "regen_r2" | "regen_r3" | "stim_s1" | "stim_s2" => {
-            Family::Injector
-        }
+        "regen_injector" => Family::Injector,
         "rgd5" | "emp_grenade" => Family::Grenade,
         "emp_trap" => Family::EmpTrap,
         "knife" => Family::Knife,
@@ -181,9 +177,7 @@ impl Family {
             Family::Armour => {
                 &["Truck: \"Let a helmet go at your head, a vest at your chest. Plates go in it.\""]
             }
-            Family::Injector => &[
-                "Truck: \"Cartridges click into the pen. Tip on you, pull the trigger: green heals.\"",
-            ],
+            Family::Injector => &["Truck: \"Tip to your thigh, pull the trigger. It heals you.\""],
             Family::Grenade => {
                 &["Truck: \"Pull the pin, then throw it far. You've seconds, not many.\""]
             }
@@ -364,13 +358,7 @@ mod tests {
                 include_str!("../weapons/armour.rs"),
                 "a plate at either of the",
             ),
-            // "Cartridges click into the pen. Tip on you, pull the
-            // trigger: green heals."
-            (
-                "regen_r1",
-                include_str!("../items/pen.rs"),
-                "kind: SocketKind::Mount(Mount::Cartridge)",
-            ),
+            // "Tip to your thigh, pull the trigger. It heals you."
             (
                 "regen_injector",
                 include_str!("../interact/first_aid.rs"),
@@ -379,27 +367,7 @@ mod tests {
             (
                 "regen_injector",
                 include_str!("../items/usage.rs"),
-                "h.hp = (h.hp + jab.heal).min(h.max)",
-            ),
-            (
-                "regen_r2",
-                include_str!("../../assets/data/items.ron"),
-                "Green, two bands",
-            ),
-            (
-                "regen_r3",
-                include_str!("../../assets/data/items.ron"),
-                "Green, three bands",
-            ),
-            (
-                "stim_s1",
-                include_str!("../items/pen.rs"),
-                "kind: SocketKind::Mount(Mount::Cartridge)",
-            ),
-            (
-                "stim_s2",
-                include_str!("../items/pen.rs"),
-                "kind: SocketKind::Mount(Mount::Cartridge)",
+                "h.hp = (h.hp + 45.0).min(h.max)",
             ),
             // "Pull the pin, then throw it far. You've seconds."
             (
