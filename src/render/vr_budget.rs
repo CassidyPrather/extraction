@@ -1501,7 +1501,8 @@ fn gauge_beams_hold_the_stereo_budget() {
 /// none: its billows are placed by their vertex shader, and
 /// `overdraw::measure` counted them at their corners, a point each).
 ///
-/// First measure (18 November, main bb51307b): see `docs/PERFORMANCE.md`.
+/// Measures (main bb51307b uncapped, Kettle inside 104%; main 3e7a3b42 with
+/// Anomalies' billow cap, 44-69%): `docs/PERFORMANCE.md`, "Steam banks".
 #[test]
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
 fn gauge_steam_banks_hold_the_stereo_budget() {
