@@ -1293,13 +1293,15 @@ mod tests {
             app.world().get::<Knocked>(stone).is_some(),
             "the round knocked it"
         );
-        for _ in 0..200 {
+        // While it's out of the lift's hold it settles toward a hand.
+        let mut low = held;
+        for _ in 0..(90.0 * KNOCKED) as usize - 10 {
             app.update();
+            low = low.min(pos(&app, stone).y);
         }
         assert!(
-            pos(&app, stone).y < held - 0.8,
-            "knocked out, it fell ({held:.2} -> {:.2})",
-            pos(&app, stone).y
+            low < held - 0.8,
+            "knocked out, it fell ({held:.2} -> {low:.2})"
         );
     }
 
