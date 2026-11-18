@@ -38,6 +38,12 @@ Rust and shearing: nothing on them suggests a tool would help.
 - `hand_pump`: its handle rusted fast where it last came down, its pivot
   seized in a blister of rust.
 - `rain_barrel`: its tap's key and spigot rusted fast in a blister of rust.
+- `lever_frame`: the signal box's levers rusted in their quadrants, each
+  clamped by its lever collar (the signalman's lock), rusted on.
+- `mill_ore_bin`: its chute gate's lever rusted fast at its pivot, its knob
+  gone.
+- `wall_telephone`: its crank broken off at the arm, a stub on its
+  spindle.
 
 ## Chain/padlock: future bolt-cutter targets
 
