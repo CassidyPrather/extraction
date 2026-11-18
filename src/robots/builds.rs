@@ -48,6 +48,27 @@ pub struct Build {
     pub progress: f32,
 }
 
+/// Why a build is where it is (the mind's, read by the radio's line and
+/// the survey's aim): what of your own doing it answers, and where that
+/// is (the route's narrows, the window you shot from).
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct BuildReason {
+    pub why: Why,
+    pub at: Vec3,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Reflect)]
+pub enum Why {
+    /// A route you took two raids running.
+    Route,
+    /// A spot you shot from.
+    ShotFrom,
+    /// Ground you looted.
+    Looted,
+    /// A gap in the relays.
+    RelayGap,
+}
+
 /// A barricade's strap (done): where hands grip to drag it, and where
 /// cutters bite.
 #[derive(Component, Clone, Copy, Debug)]
@@ -213,7 +234,10 @@ fn panel(x: f32) -> Transform {
 #[allow(clippy::type_complexity)]
 fn frame_builds(
     mut commands: Commands,
-    builds: Query<(Entity, &Build, Option<&Framed>), Or<(Changed<Build>, Without<Framed>)>>,
+    builds: Query<
+        (Entity, &Build, Option<&Framed>),
+        Or<(Changed<Build>, Without<Framed>, Added<Framed>)>,
+    >,
     have: Option<Res<BuildAssets>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -366,10 +390,11 @@ fn frame_builds(
                             ));
                         }
                         (Piece::Strap, true) => {
-                            // What hands and cutters find.
+                            // What hands and cutters find. (Not a sensor: one
+                            // that moves drops out of the spatial queries, and
+                            // the panels drop when it's cut or dragged.)
                             c.insert((
                                 crate::destruction::hooks::Cuttable { needs: 0.0 },
-                                Sensor,
                                 Collider::cuboid(1.0, 1.6, 2.5),
                                 CollisionLayers::new(Layer::Hand, LayerMask::NONE),
                             ));

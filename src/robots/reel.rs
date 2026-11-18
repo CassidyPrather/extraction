@@ -538,7 +538,7 @@ fn reel(
                         let to = at + right * 1.4 + flat * 2.0;
                         e.insert((
                             CameraAim {
-                                yaw: 0.35 - 0.35 * i as f32,
+                                yaw: [0.9, -0.9, 0.7][i.min(2)],
                                 pitch: -0.3,
                                 fix: if p >= 1.0 { 0.8 } else { 0.0 },
                                 ..Default::default()
@@ -1212,6 +1212,10 @@ fn reel(
                 // Facing you.
                 w.yaw = flat.x.atan2(flat.z);
             }
+            if what.starts_with("engineer") {
+                // Side-on, its lamp toward you.
+                w.yaw = flat.x.atan2(flat.z) + std::f32::consts::FRAC_PI_2;
+            }
             let p = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
             w.path = match what {
                 "turn" => vec![
@@ -1244,7 +1248,8 @@ fn reel(
                     path
                 }
                 "wreck" | "zap" | "shot" | "flare" | "eyesfar" | "knockdown" | "strikes"
-                | "disarmed" | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
+                | "disarmed" | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy"
+                | "engineer" | "engineerwork" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
