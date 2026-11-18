@@ -606,6 +606,39 @@ pub fn handles() -> Vec<Handle> {
             albedo: Some((mat_albedo(mat), mat_albedo(Mat::Concrete))),
         });
     }
+    // Every moving part's pull (`world::hinge`): a counter's door or
+    // drawer, a locker's door, a stove's, its pull in its grab box, in the
+    // part's own space.
+    for (drawn, origin, centre, size, flipped) in crate::world::hinge::moving_nodes() {
+        let (model, node) = drawn.split_once('#').unwrap_or((drawn, ""));
+        let (pull, on) = if model == "stove" {
+            ("Steel", "Cast")
+        } else {
+            ("Zinc", "Painted")
+        };
+        let flip = if flipped {
+            bevy::math::Quat::from_rotation_z(std::f32::consts::PI)
+        } else {
+            bevy::math::Quat::IDENTITY
+        };
+        let shown = model_points(
+            model,
+            &[pull],
+            Vec3::splat(-5.0),
+            Vec3::splat(5.0),
+            Some(node),
+            Transform::IDENTITY,
+        )
+        .into_iter()
+        .map(|p| flip.inverse() * (p - origin) - centre)
+        .collect();
+        out.push(Handle {
+            what: format!("{drawn} pull, world::hinge"),
+            grip: size * 0.5,
+            shown,
+            albedo: model_albedo(model, pull).zip(model_albedo(model, on)),
+        });
+    }
     // Every prefab's ladders: their rungs in their climb's box
     // (`hand_climb::Ladder::bundle`).
     let ids = buildings::PREFABS

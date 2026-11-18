@@ -22,6 +22,9 @@ Rust and shearing: nothing on them suggests a tool would help.
 - `brake_drum`: its band rusted fast to the drum, the lever's pivot seized.
 - `control_stand`: both levers snapped off above their quadrants.
 - `filter_unit`: the crank handle sheared, its boss rusted solid.
+- `hand_pump`: its handle rusted fast where it last came down, its pivot
+  seized in a blister of rust.
+- `rain_barrel`: its tap's key and spigot rusted fast in a blister of rust.
 
 ## Chain/padlock: future bolt-cutter targets
 
