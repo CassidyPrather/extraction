@@ -1350,12 +1350,12 @@ mod fog_beams {
         // (0.3 rad, down and ahead), a sentry's (9 degrees, 45 m) within
         // 25 m, and the player's torch (0.38 rad, 14 m).
         let mut pack = Vec::new();
-        for (i, (r, a)) in [(8.0, -0.5), (12.0, 0.3), (17.0, -0.15), (22.0, 0.55)]
+        for (i, (r, a)) in [(8.0f32, -0.5f32), (12.0, 0.3), (17.0, -0.15), (22.0, 0.55)]
             .into_iter()
             .enumerate()
         {
             let at = eye
-                + (fwd * a.cos() as f32 + side * a.sin() as f32) * r
+                + (fwd * a.cos() + side * a.sin()) * r
                 + Vec3::Y * (2.5 + i as f32);
             let toward = (eye - at).with_y(0.0).normalize();
             pack.push(lamp(
