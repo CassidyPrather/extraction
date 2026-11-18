@@ -278,8 +278,8 @@ def pocket_flap(open_):
 def mount():
     """A webbing sleeve on the left shoulder strap, open top and bottom: the
     radio slides down into it, thin side out (its cavity is
-    `src/kit_cavities.rs` MOUNT: 72 x 110 x 50 mm inside); a chemlight or a
-    compass hangs in it."""
+    `src/kit_cavities.rs` MOUNT: 72 x 110 x 50 mm inside); a compass hangs
+    in it."""
     p = Part("mount")
     ix, iz0, iz1 = 0.036, -0.04, 0.01  # inside: half width, front, back (slot z)
     y0, y1 = -0.08, 0.03  # bottom, top (slot y)

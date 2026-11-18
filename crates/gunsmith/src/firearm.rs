@@ -305,14 +305,12 @@ pub struct Hang {
     pub load: Load,
 }
 
-/// What a round's primer and powder add to the misfire chance: surplus,
-/// damp, and (per unit of cold) a cold-soaked round; and the same for a
+/// What a round's primer and powder add to the misfire chance: damp,
+/// and (per unit of cold) a cold-soaked round; and the same for a
 /// hang-fire. A hang-fire goes between [`HANG_MIN`] and [`HANG_MAX`]
 /// seconds after the hammer falls.
-pub const SURPLUS_DUD: f32 = 0.03;
 pub const DAMP_DUD: f32 = 0.15;
 pub const COLD_DUD: f32 = 0.04;
-pub const SURPLUS_HANG: f32 = 0.03;
 pub const DAMP_HANG: f32 = 0.08;
 pub const COLD_HANG: f32 = 0.05;
 pub const HANG_MIN: f32 = 0.3;
@@ -353,9 +351,9 @@ pub const PAPER_DUD: f32 = 0.06;
 pub const RIMFIRE_DUD: f32 = 0.03;
 /// Where a double feed wedges the bolt: it won't come further forward.
 const DOUBLE_FEED_AT: f32 = 0.4;
-/// A re-packed round's chance of a squib, and of a dud on top of the gun's.
+/// A damp round's chance of a squib: its wet powder burns weak and the
+/// bullet stops in the bore. A dry round never squibs.
 pub const SQUIB_CHANCE: f32 = 0.04;
-pub const REPACK_DUD: f32 = 0.02;
 /// What a bulged barrel leaves of the gun's condition.
 pub const BULGE_KEEPS: f32 = 0.3;
 
@@ -737,7 +735,6 @@ impl Firearm {
     /// What a round of `load` adds to the misfire and hang-fire chances.
     pub fn primer(&self, load: Load) -> (f32, f32) {
         let (d, h) = match load {
-            Load::Surplus => (SURPLUS_DUD, SURPLUS_HANG),
             Load::Damp => (DAMP_DUD, DAMP_HANG),
             _ => (0.0, 0.0),
         };
@@ -840,14 +837,9 @@ impl Firearm {
             Some(Round::Live) => {
                 let load = self.chamber_load(c);
                 // Duds are rare and mostly the gun's fault (light strikes);
-                // re-packed primers fail more.
+                // a damp primer fails more (`primer`).
                 let dud_chance = 0.002
                     + 0.02 * (1.0 - self.condition)
-                    + if load == Load::Repacked {
-                        REPACK_DUD
-                    } else {
-                        0.0
-                    }
                     + if self.def.rimfire { RIMFIRE_DUD } else { 0.0 }
                     + if self.def.cartridge == "26mm" {
                         PAPER_DUD
@@ -986,7 +978,7 @@ impl Firearm {
             self.squib = None;
             self.condition *= BULGE_KEEPS;
             events.push(Event::Bulged { barrel });
-        } else if load == Load::Repacked && roll() < SQUIB_CHANCE {
+        } else if load == Load::Damp && roll() < SQUIB_CHANCE {
             self.squib = Some(barrel);
             events.push(Event::Squib { barrel });
             return (events, false);
@@ -1907,7 +1899,7 @@ pub(crate) mod tests {
         move || it.next().unwrap_or(0.99)
     }
 
-    /// A re-packed round squibs: a pop, no shot, the bullet in the bore and
+    /// A damp round squibs: a pop, no shot, the bullet in the bore and
     /// the action unmoved. Fire into it and the barrel bulges; rod it out
     /// first and the next round fires clean.
     #[test]
@@ -1916,11 +1908,11 @@ pub(crate) mod tests {
             let mut gun = Firearm::new(pistol(), 1.0);
             gun.cycle_mode();
             let mut m = mag("pm", 3);
-            m.loads.fill(0, Load::Repacked, 3);
+            m.loads.fill(0, Load::Damp, 3);
             gun.insert_magazine(m).unwrap();
             rack(&mut gun);
-            // The dud roll, then the squib's.
-            let mut r = rolls(&[0.5, 0.01]);
+            // The dud roll, the hang-fire's, then the squib's.
+            let mut r = rolls(&[0.5, 0.5, 0.01]);
             let ev = gun.update(0.016, true, &mut r);
             gun.update(0.016, false, &mut r);
             assert!(ev.contains(&Event::Squib { barrel: 0 }), "{ev:?}");
@@ -2592,45 +2584,33 @@ pub(crate) mod tests {
     }
 
     /// The ammunition's gauge: fresh ball hardly ever misfires or hangs;
-    /// surplus does now and then, damp a lot, a cold-soaked round more
-    /// (the bench's restore makes them fresh ball again). Every hang-fire
+    /// damp a lot, a cold-soaked round more (the bench's restore makes
+    /// damp ones fresh ball again). Every hang-fire
     /// went within its second.
     #[test]
     fn ammo_condition_misfires_and_hang_fires() {
         let n = 4000;
         let fresh = primer_run(Load::Standard, 0.0, n);
-        let surplus = primer_run(Load::Surplus, 0.0, n);
         let damp = primer_run(Load::Damp, 0.0, n);
         let cold = primer_run(Load::Standard, 1.0, n);
-        let repacked = primer_run(Load::Repacked, 0.0, n);
         println!(
-            "misfires/hangs per 100: fresh {:.2}/{:.2}, surplus {:.2}/{:.2}, damp {:.2}/{:.2}, \
-             cold {:.2}/{:.2}, re-packed {:.2}/{:.2}; longest hang {:.2} s",
+            "misfires/hangs per 100: fresh {:.2}/{:.2}, damp {:.2}/{:.2}, \
+             cold {:.2}/{:.2}; longest hang {:.2} s",
             fresh.0,
             fresh.1,
-            surplus.0,
-            surplus.1,
             damp.0,
             damp.1,
             cold.0,
             cold.1,
-            repacked.0,
-            repacked.1,
-            damp.2.max(surplus.2).max(cold.2)
+            damp.2.max(cold.2)
         );
         assert!(fresh.0 < 0.5 && fresh.1 == 0.0, "fresh: {fresh:?}");
         assert!(
-            surplus.0 > 4.0 * fresh.0.max(0.2) && surplus.1 > 1.0,
-            "surplus: {surplus:?}"
-        );
-        assert!(
-            damp.0 > 2.0 * surplus.0 && damp.1 > surplus.1,
+            damp.0 > 8.0 * fresh.0.max(0.2) && damp.1 > 2.0,
             "damp: {damp:?}"
         );
         assert!(cold.0 > fresh.0 && cold.1 > 2.0, "cold: {cold:?}");
-        // (Scavenged re-packs don't hang; their trouble is the squib.)
-        assert!(repacked.1 == 0.0, "re-packed: {repacked:?}");
-        for r in [surplus, damp, cold] {
+        for r in [damp, cold] {
             assert!(r.2 <= HANG_MAX + 0.02, "a hang went {} s", r.2);
         }
     }
@@ -2705,9 +2685,9 @@ pub(crate) mod tests {
     #[test]
     fn rounds_spoil_one_at_a_time() {
         let mut box_of = Loads::default();
-        assert!(box_of.spoil(10, Load::Surplus, 0));
+        assert!(box_of.spoil(10, Load::Subsonic, 0));
         assert_eq!(box_of.top(10), Load::Damp);
-        assert!(box_of.spoil(10, Load::Surplus, 3));
+        assert!(box_of.spoil(10, Load::Subsonic, 3));
         assert_eq!(box_of.0.iter().filter(|l| **l == Load::Damp).count(), 2);
         assert_eq!(box_of.0.len(), 10);
         let mut ap = Loads::default();
