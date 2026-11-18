@@ -280,7 +280,9 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         // billow lit on top by the sky and in its own shade below (a
         // cooler grey, about 0.6 of its top), so the bank has a body
         // against snow and an overcast sky.
-        rgb = rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
+        // (Its own colour, not the texture's: that's dark past the dot's
+        // edge, which drew each billow as a hard disc.)
+        rgb = params.color.rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
         let under = smoothstep(0.25, 0.95, in.uv.y);
         rgb = rgb * mix(vec3<f32>(1.05, 1.05, 1.05), vec3<f32>(0.56, 0.6, 0.66), under);
     } else {
