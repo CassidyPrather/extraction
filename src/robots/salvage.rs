@@ -54,12 +54,9 @@ const CABLE_REACH: f32 = 0.035;
 /// (radians: a turn).
 pub const BOLTS: usize = 3;
 pub const BOLT_TURN: f32 = std::f32::consts::TAU;
-/// How far out of the hip the bolts' heads stand (m): proud of the hull,
-/// so a spanner gets to them.
-const BOLT_PROUD: f32 = 0.1;
 /// Bolts holding the Sorter's servo pack on (a bigger mount).
 pub const SORTER_BOLTS: usize = 4;
-/// Servo packs a walker wreck gives up at most (its soundest hips).
+/// The hips a walker's wreck rolls up bare (`wreck::servo_hips`).
 pub const MOST_SERVOS: usize = 2;
 
 pub struct SalvagePlugin;
@@ -68,6 +65,7 @@ impl Plugin for SalvagePlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Arced>()
             .add_message::<Crackled>()
+            .add_message::<crate::anomaly::cook::PartCooked>()
             .add_systems(
                 Update,
                 (
@@ -78,6 +76,10 @@ impl Plugin for SalvagePlugin {
                     cool_cells,
                     live_cells,
                     live_tells,
+                    tag_pieces,
+                    seat_pieces,
+                    cooked_salvage,
+                    char_looks,
                 )
                     .chain(),
             );
@@ -187,8 +189,6 @@ pub const CELL_AT: Vec3 = Vec3::new(0.0, 0.3, 0.12);
 pub const HOUND_CELL_AT: Vec3 = Vec3::new(0.0, 0.14, 0.08);
 /// A grappler's launcher (its item's middle) from its boom's head pin.
 pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
-/// Whether a grappler's wreck seats its launcher and drum yet.
-const GRAPPLER_SEATS: bool = false;
 /// Bolts through a launcher's flange onto its boom.
 pub const LAUNCHER_BOLTS: usize = 4;
 
@@ -416,28 +416,7 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
         hot: true,
         replaces: None,
     });
-    // The servo packs at the soundest hips, bolted on. (The side its wreck
-    // rolled up: `wreck::servo_hips`.)
-    for i in super::wreck::servo_hips(w.legs) {
-        let hip = w.shape.hip(i) * w.size;
-        let out_dir = Vec3::new(hip.x, 0.0, hip.z).normalize_or(Vec3::X);
-        // Facing out of the hip, the bolts round it.
-        let face = Quat::from_rotation_arc(Vec3::Y, out_dir);
-        out.push(Row {
-            item: "walker_leg_actuator",
-            at: Transform::from_translation(hip).with_rotation(face),
-            size: w.size,
-            health: w.legs[i],
-            fix: Fix::Bolts {
-                n: BOLTS,
-                centre: hip + out_dir * BOLT_PROUD,
-                face,
-                radius: 0.06,
-            },
-            hot: false,
-            replaces: None,
-        });
-    }
+    // (Its knees are on its legs where they fell: `piece_part`.)
     // The gun pod, where the turret was, on its cables.
     for &(e, role, health, at, turret) in w.parts {
         if turret && role == PartRole::Weapon {
@@ -518,6 +497,7 @@ fn fit_salvage(
         ),
     >,
     parts: Query<(&RobotPart, &Transform, Has<WalkerTurret>)>,
+    mut harpoon: Query<(&crate::render::logistics::HarpoonPart, &mut Visibility)>,
     all_parts: Query<&RobotPart>,
     catalog: Option<Res<Catalog>>,
     // (Not in a headless app: no cable to see there.)
@@ -570,14 +550,26 @@ fn fit_salvage(
             crawler,
             hound,
             heavy,
-            // (Not yet: its launcher's head and drum are drawn in the
-            // boom's and pedestal's nodes, and would stay drawn once taken.
-            // Robot bodies is splitting them out.)
-            grappler: grappler && GRAPPLER_SEATS,
+            grappler,
             parts: &on,
         };
         let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
         for row in rows(&w) {
+            // A grappler's launcher head and drum: the seated part is
+            // drawn where its node was, so the node goes.
+            use crate::render::logistics::HarpoonPiece;
+            let piece = match row.item {
+                "grappler_launcher" => Some(HarpoonPiece::LauncherHead),
+                "grappler_drum" => Some(HarpoonPiece::Drum),
+                _ => None,
+            };
+            if let Some(piece) = piece {
+                for (h, mut vis) in &mut harpoon {
+                    if h.grappler == e && h.what == piece {
+                        *vis = Visibility::Hidden;
+                    }
+                }
+            }
             fit(&mut commands, &catalog, e, row, &look);
         }
     }
@@ -860,6 +852,342 @@ fn live_cells(
     }
 }
 
+/// What a fallen piece of a walker-family wreck is worth taking, and how
+/// it's held: a leg's knee (a walker's ram, a crawler's servo, a hound's
+/// hip motor), bolted on; the visor's eye, or a hound's head, by hand.
+/// (The heavy's are its own seats; a piece off anything else isn't one.)
+pub fn piece_part(
+    kind: RobotKind,
+    piece: super::wreck::Piece,
+    crawler: bool,
+    hound: bool,
+    heavy: bool,
+    health: f32,
+) -> Option<super::wreck::SalvagePart> {
+    use super::wreck::{Piece, SalvagePart};
+    if kind != RobotKind::Walker || heavy {
+        return None;
+    }
+    let (item, bolts) = match piece {
+        Piece::LegUpper if hound => ("hound_hip_servo", 2),
+        Piece::LegUpper if crawler => ("crawler_leg_servo", 2),
+        Piece::LegUpper => ("walker_leg_actuator", BOLTS as u8),
+        Piece::Sensor if hound => ("hound_head", 0),
+        Piece::Sensor => ("walker_eye", 0),
+        _ => return None,
+    };
+    Some(SalvagePart {
+        item,
+        bolts,
+        cables: 0,
+        pry: false,
+        hot: false,
+        health,
+    })
+}
+
+/// Each new piece off a wreck that's a part ([`piece_part`]) is marked so:
+/// it's kept from the debris cap, and seated once it's down.
+#[allow(clippy::type_complexity)]
+fn tag_pieces(
+    mut commands: Commands,
+    new: Query<
+        (
+            Entity,
+            &super::wreck::Debris,
+            Option<&super::wreck::PieceOf>,
+            Option<&super::wreck::PieceHealth>,
+        ),
+        (
+            Added<super::wreck::Debris>,
+            Without<super::wreck::SalvagePart>,
+        ),
+    >,
+    roots: Query<(
+        Has<super::indoor::Crawler>,
+        Has<super::hound::Hound>,
+        Has<super::heavy::Heavy>,
+    )>,
+) {
+    for (e, d, of, health) in &new {
+        // (A root already gone: no telling what it was, so nothing.)
+        let Some(Ok((crawler, hound, heavy))) = of.map(|o| roots.get(o.0)) else {
+            continue;
+        };
+        let health = health.map_or(1.0, |h| h.0);
+        if let Some(part) = piece_part(d.kind, d.piece, crawler, hound, heavy, health) {
+            commands.entity(e).insert(part);
+        }
+    }
+}
+
+/// Where a knee sits on its leg piece (local): proud of the thigh, along it.
+const KNEE_ON_LEG: Vec3 = Vec3::new(0.1, 0.0, 0.0);
+
+/// A part piece come to rest is seated where it lies: bolted on its leg (a
+/// knee), or, held by nothing but a hand (an eye, a head), simply the item
+/// lying there, the piece gone.
+#[allow(clippy::type_complexity)]
+fn seat_pieces(
+    mut commands: Commands,
+    settled: Query<(Entity, &super::wreck::SalvagePart, &Transform), Added<super::wreck::Settled>>,
+    catalog: Option<Res<Catalog>>,
+    mut meshes: Option<ResMut<Assets<Mesh>>>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+) {
+    let Some(catalog) = catalog else {
+        return;
+    };
+    if settled.is_empty() {
+        return;
+    }
+    let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+    for (e, part, t) in &settled {
+        let size = t.scale.x.max(0.01);
+        let by_hand = part.bolts == 0 && part.cables == 0 && !part.pry && !part.hot;
+        if by_hand && part.health > 0.0 {
+            let Some(kind) = catalog.kind(part.item) else {
+                continue;
+            };
+            spawn_item(
+                &mut commands,
+                &catalog,
+                SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(t.translation + Vec3::Y * 0.05)
+                        .with_rotation(t.rotation),
+                    condition: condition(part.health),
+                },
+            );
+            commands.entity(e).despawn();
+            continue;
+        }
+        // Along the leg (the item's long side, Z, up the piece's Y).
+        let at = Transform::from_translation(KNEE_ON_LEG * size)
+            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+        let fix = if by_hand {
+            Fix::Hand
+        } else {
+            Fix::Bolts {
+                n: part.bolts as usize,
+                centre: (KNEE_ON_LEG + Vec3::Y * 0.18) * size,
+                face: Quat::IDENTITY,
+                radius: 0.05,
+            }
+        };
+        fit(
+            &mut commands,
+            &catalog,
+            e,
+            Row {
+                item: part.item,
+                at,
+                size,
+                health: part.health,
+                fix,
+                hot: part.hot,
+                replaces: None,
+            },
+            &look,
+        );
+    }
+}
+
+/// A part cooked through in a burner's coals (`anomaly::cook`), for good:
+/// it's dark with char, in the hand as on the wreck ([`char_looks`]).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Charred;
+
+/// A [`Charred`] item's look is charred.
+#[derive(Component, Debug, Clone, Copy)]
+struct CharLooked;
+
+/// A cooked plate pries with this much of the force (its seam's burnt).
+pub const COOKED_PRY: f32 = 1.0 / 3.0;
+/// A cooked part comes off at this much of its condition.
+pub const COOKED_CONDITION: f32 = 0.5;
+
+/// What a burner's coals do to salvage (`anomaly::cook::PartCooked`): a
+/// part's holds burn through (it lifts off by hand), it's heat-struck (half
+/// its condition), a live cell is spent (no arc, no charge), a plate's seam
+/// gives at a third of the force; a cooked wreck cooks all that's on it.
+/// A fast, lossy way to strip a wreck.
+#[allow(clippy::type_complexity)]
+fn cooked_salvage(
+    mut commands: Commands,
+    mut cooked: MessageReader<crate::anomaly::cook::PartCooked>,
+    wrecks: Query<(), (With<Robot>, With<super::wreck::Broken>)>,
+    seats: Query<(Entity, &SalvageSeat)>,
+    holds: Query<(Entity, Option<&Bolt>, Option<&Cable>)>,
+    mut items: Query<&mut crate::items::Item>,
+    mut plates: Query<(
+        Entity,
+        &RobotPart,
+        &mut HealthAtDeath,
+        Option<&mut crate::destruction::hooks::Pryable>,
+    )>,
+    done: Query<(), With<Charred>>,
+    catalog: Option<Res<Catalog>>,
+) {
+    let Some(catalog) = catalog else {
+        return;
+    };
+    for ev in cooked.read() {
+        let e = ev.entity;
+        if wrecks.contains(e) {
+            // All that's on it.
+            let on: Vec<Entity> = seats
+                .iter()
+                .filter(|(_, s)| s.wreck == e)
+                .map(|(_, s)| s.item)
+                .collect();
+            for item in on {
+                cook_item(&mut commands, item, &done, &mut items, &seats, &holds);
+            }
+            let mine: Vec<Entity> = plates
+                .iter()
+                .filter(|(_, part, ..)| part.robot == e)
+                .map(|(p, ..)| p)
+                .collect();
+            for p in mine {
+                cook_plate(&mut commands, p, &done, &mut plates);
+            }
+        } else if plates.contains(e) {
+            cook_plate(&mut commands, e, &done, &mut plates);
+        } else if items.get(e).is_ok_and(|it| {
+            catalog.get(it.kind()).category == extraction_core::items::Category::RobotPart
+        }) {
+            // (A loose part; anything else a burner cooks isn't salvage.)
+            cook_item(&mut commands, e, &done, &mut items, &seats, &holds);
+        }
+    }
+}
+
+/// A part cooked: charred, heat-struck, spent, its holds burnt through.
+#[allow(clippy::type_complexity)]
+fn cook_item(
+    commands: &mut Commands,
+    item: Entity,
+    done: &Query<(), With<Charred>>,
+    items: &mut Query<&mut crate::items::Item>,
+    seats: &Query<(Entity, &SalvageSeat)>,
+    holds: &Query<(Entity, Option<&Bolt>, Option<&Cable>)>,
+) {
+    if done.contains(item) {
+        return;
+    }
+    commands.entity(item).try_insert(Charred);
+    if let Ok(mut it) = items.get_mut(item) {
+        it.condition *= COOKED_CONDITION;
+        it.charge_wh = 0.0;
+    }
+    // Spent: no arc.
+    commands.entity(item).remove::<Live>();
+    for (seat, s) in seats {
+        if s.item != item {
+            continue;
+        }
+        for (h, bolt, cable) in holds {
+            if bolt.is_some_and(|b| b.seat == seat) || cable.is_some_and(|c| c.seat == seat) {
+                commands.entity(h).despawn();
+            }
+        }
+        free(commands, item);
+    }
+}
+
+/// A plate cooked: charred, heat-struck, its seam giving at a third.
+#[allow(clippy::type_complexity)]
+fn cook_plate(
+    commands: &mut Commands,
+    plate: Entity,
+    done: &Query<(), With<Charred>>,
+    plates: &mut Query<(
+        Entity,
+        &RobotPart,
+        &mut HealthAtDeath,
+        Option<&mut crate::destruction::hooks::Pryable>,
+    )>,
+) {
+    if done.contains(plate) {
+        return;
+    }
+    let Ok((p, _, mut h, seam)) = plates.get_mut(plate) else {
+        return;
+    };
+    commands.entity(p).try_insert(Charred);
+    h.0 *= COOKED_CONDITION;
+    if let Some(mut seam) = seam {
+        seam.needs *= COOKED_PRY;
+    }
+}
+
+/// A charred thing looks it: every mesh under it darkened to char, dull,
+/// its glow gone (a spent cell's band is dark). One char material per
+/// material it had.
+fn char_looks(
+    mut commands: Commands,
+    charred: Query<Entity, (With<Charred>, Without<CharLooked>)>,
+    children: Query<&Children>,
+    mut meshes: Query<&mut MeshMaterial3d<StandardMaterial>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut chars: Local<
+        std::collections::HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
+    >,
+) {
+    let Some(mut materials) = materials else {
+        return;
+    };
+    for e in &charred {
+        let mut any = false;
+        for d in std::iter::once(e).chain(children.iter_descendants(e)) {
+            let Ok(mut m) = meshes.get_mut(d) else {
+                continue;
+            };
+            any = true;
+            let id = m.0.id();
+            if chars.values().any(|h| h.id() == id) {
+                continue;
+            }
+            let ch = match chars.get(&id) {
+                Some(h) => h.clone(),
+                None => {
+                    let Some(src) = materials.get(id).cloned() else {
+                        continue;
+                    };
+                    let h = materials.add(char_of(&src));
+                    chars.insert(id, h.clone());
+                    h
+                }
+            };
+            m.0 = ch;
+        }
+        // (Its model may not be in yet: again next frame.)
+        if any {
+            commands.entity(e).try_insert(CharLooked);
+        }
+    }
+}
+
+/// A material, charred: most of its colour burnt to soot, dull, no glow.
+pub fn char_of(src: &StandardMaterial) -> StandardMaterial {
+    let c = src.base_color.to_linear();
+    let soot = LinearRgba::new(0.018, 0.016, 0.015, c.alpha);
+    let k = 0.22;
+    StandardMaterial {
+        base_color: Color::LinearRgba(LinearRgba::new(
+            c.red * k + soot.red,
+            c.green * k + soot.green,
+            c.blue * k + soot.blue,
+            c.alpha,
+        )),
+        perceptual_roughness: 0.95,
+        metallic: src.metallic * 0.3,
+        emissive: LinearRgba::BLACK,
+        ..src.clone()
+    }
+}
+
 /// A live cell tells you it's live before you touch it: it crackles now
 /// and then while you're near (more often as a hand comes close), and
 /// draws a spark to an open hand within [`WARN_REACH`], with a buzz.
@@ -968,10 +1296,9 @@ mod tests {
             1,
             "{ids:?}"
         );
-        assert_eq!(
-            ids.iter().filter(|i| **i == "walker_leg_actuator").count(),
-            MOST_SERVOS,
-            "{ids:?}"
+        assert!(
+            !ids.contains(&"walker_leg_actuator"),
+            "its knees are on its fallen legs: {ids:?}"
         );
         let cell = r.iter().find(|r| r.item == "robot_cell").unwrap();
         assert!(cell.hot && matches!(cell.fix, Fix::Hand));
@@ -979,11 +1306,6 @@ mod tests {
         let pod = r.iter().find(|r| r.item == "robot_gunpod").unwrap();
         assert!(matches!(pod.fix, Fix::Cables { n: CABLES }));
         assert_eq!(pod.replaces, Some(turret));
-        assert!(
-            r.iter()
-                .filter(|r| r.item == "walker_leg_actuator")
-                .all(|r| matches!(r.fix, Fix::Bolts { n: BOLTS, .. }))
-        );
         // The heavy's are its own seats (`heavy`).
         assert!(
             rows(&WreckParts {
@@ -1101,6 +1423,124 @@ mod tests {
             1,
             "the near cell crackled once (then waits); the far one is quiet"
         );
+    }
+
+    /// A walker-family wreck's fallen legs carry its knees (each machine's
+    /// own, bolted) and its visor its eye (a hound's, its head), by hand;
+    /// a panel, and anything off the heavy or another machine, nothing.
+    #[test]
+    fn its_fallen_pieces_are_its_knees_and_eye() {
+        use super::super::wreck::Piece;
+        let w = RobotKind::Walker;
+        let knee = |c, h| piece_part(w, Piece::LegUpper, c, h, false, 0.7).unwrap();
+        let k = knee(false, false);
+        assert_eq!((k.item, k.bolts as usize), ("walker_leg_actuator", BOLTS));
+        assert_eq!(k.health, 0.7);
+        assert_eq!(knee(true, false).item, "crawler_leg_servo");
+        assert_eq!(knee(false, true).item, "hound_hip_servo");
+        let eye = piece_part(w, Piece::Sensor, false, false, false, 1.0).unwrap();
+        assert!(eye.item == "walker_eye" && eye.bolts == 0 && eye.cables == 0);
+        assert_eq!(
+            piece_part(w, Piece::Sensor, false, true, false, 1.0)
+                .unwrap()
+                .item,
+            "hound_head"
+        );
+        assert!(piece_part(w, Piece::Panel(0), false, false, false, 1.0).is_none());
+        assert!(piece_part(w, Piece::LegLower, false, false, false, 1.0).is_none());
+        assert!(piece_part(w, Piece::LegUpper, false, false, true, 1.0).is_none());
+        assert!(piece_part(RobotKind::Drone, Piece::Sensor, false, false, false, 1.0).is_none());
+        // (And every one is an item.)
+        let catalog = crate::items::Catalog::load();
+        for (c, h) in [(false, false), (true, false), (false, true)] {
+            for p in [Piece::LegUpper, Piece::Sensor] {
+                let id = piece_part(w, p, c, h, false, 1.0).unwrap().item;
+                assert!(catalog.kind(id).is_some(), "{id}");
+            }
+        }
+    }
+
+    /// A cooked wreck cooks what's on it: a hot cell's spent (no arc, no
+    /// charge), its holds are burnt off, it's half what it was and
+    /// charred; a plate's seam gives at a third of the force.
+    #[test]
+    fn a_cooked_wreck_strips_lossy() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<crate::anomaly::cook::PartCooked>()
+            .insert_resource(Catalog::load())
+            .add_systems(Update, cooked_salvage);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let w = app.world_mut();
+        let wreck = w
+            .spawn((
+                Robot {
+                    kind: RobotKind::Walker,
+                    wrecked: true,
+                },
+                super::super::wreck::Broken,
+            ))
+            .id();
+        let cell = w
+            .spawn((
+                crate::items::Item(extraction_core::items::ItemState::fresh(
+                    &catalog,
+                    catalog.expect("robot_cell"),
+                    0.8,
+                )),
+                Live {
+                    left: HOT_FOR,
+                    next: 0.0,
+                    tick: 0.0,
+                },
+            ))
+            .id();
+        let seat = w
+            .spawn(SalvageSeat {
+                wreck,
+                hold: Hold::Bolts,
+                item: cell,
+            })
+            .id();
+        let bolt = w.spawn(Bolt { seat }).id();
+        let plate = w
+            .spawn((
+                RobotPart {
+                    robot: wreck,
+                    role: PartRole::Armour(0),
+                    hp: 10.0,
+                    max_hp: 10.0,
+                },
+                HealthAtDeath(1.0),
+                crate::destruction::hooks::Pryable {
+                    needs: 3.0,
+                    seam: Vec3::ZERO,
+                    along: Vec3::X,
+                    held: 0.0,
+                },
+            ))
+            .id();
+        w.write_message(crate::anomaly::cook::PartCooked {
+            entity: wreck,
+            at: Vec3::ZERO,
+        });
+        app.update();
+        let w = app.world();
+        let it = w.get::<crate::items::Item>(cell).unwrap();
+        assert!((it.condition - 0.4).abs() < 1e-5, "{}", it.condition);
+        assert_eq!(it.charge_wh, 0.0, "spent");
+        assert!(w.get::<Live>(cell).is_none(), "no arc");
+        assert!(w.get::<Charred>(cell).is_some());
+        assert!(w.get_entity(bolt).is_err(), "its bolts burnt off");
+        assert!((w.get::<HealthAtDeath>(plate).unwrap().0 - 0.5).abs() < 1e-5);
+        let seam = w.get::<crate::destruction::hooks::Pryable>(plate).unwrap();
+        assert!((seam.needs - 1.0).abs() < 1e-5, "{}", seam.needs);
+        // (And char takes the glow out.)
+        let hot = StandardMaterial {
+            emissive: LinearRgba::rgb(2.0, 0.4, 0.0),
+            ..default()
+        };
+        assert_eq!(char_of(&hot).emissive, LinearRgba::BLACK);
     }
 
     #[test]

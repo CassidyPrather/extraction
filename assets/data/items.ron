@@ -964,7 +964,7 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "hound_hip_servo", aliases: ["servo"], dims: Some((0.133, 0.171, 0.07)), name: "Hound hip servo",
+            id: "hound_hip_servo", aliases: ["servo"], dims: Some((0.137, 0.171, 0.07)), name: "Hound hip servo",
             description: "A hound's hip motor, flat as a tin and stamped HD SRV. It was made to run all night.",
             category: RobotPart, size: Small, mass: 0.9, bulk: 0.6,
             tags: ["electronics", "metal"],

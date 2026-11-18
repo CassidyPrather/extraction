@@ -639,7 +639,10 @@ fn wreck_loot(
         commands.entity(e).insert(Salvaged);
         timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
-        let mut drops = loot.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
+        let mut drops = match wreck_table(robot.kind) {
+            Some(table) => loot.roll(table, &catalog, &mut rng.0),
+            None => Vec::new(),
+        };
         // And whatever came through whole is there to unbolt.
         let whole: Vec<PartRole> = parts
             .iter()
@@ -722,15 +725,17 @@ pub fn part_salvage(
     }
 }
 
-/// The loot table a wreck of this kind rolls.
-pub fn wreck_table(kind: RobotKind) -> &'static str {
+/// The loot table a wreck of this kind rolls, if it still rolls one.
+pub fn wreck_table(kind: RobotKind) -> Option<&'static str> {
     match kind {
-        RobotKind::Drone => "drone_wreck",
-        RobotKind::Walker => "walker_wreck",
-        RobotKind::Dirigible => "dirigible_wreck",
-        RobotKind::Pylon => "pylon_wreck",
+        RobotKind::Drone => Some("drone_wreck"),
+        // (The walker family's wreck is what you see on it, every part
+        // seated: `salvage`, #105.)
+        RobotKind::Walker => None,
+        RobotKind::Dirigible => Some("dirigible_wreck"),
+        RobotKind::Pylon => Some("pylon_wreck"),
         // (Its own table when Models: kit's sorter parts are in.)
-        RobotKind::Sorter => "pylon_wreck",
+        RobotKind::Sorter => Some("pylon_wreck"),
     }
 }
 
