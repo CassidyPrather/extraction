@@ -1438,6 +1438,43 @@ mod tests {
         );
     }
 
+    /// In a storm a lift's pop carries you downwind (`wind`): you land
+    /// further along it than the same pop in still air.
+    #[test]
+    fn wind_carries_a_lift_pop_downwind() {
+        let landing = |weather: &str| {
+            let mut app = app(false);
+            app.world_mut().resource_mut::<LaunchOptions>().weather = Some(weather.into());
+            let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
+            let p = player(&mut app);
+            let ground = app
+                .world()
+                .resource::<crate::world::Zone>()
+                .on_ground(at.x, at.z);
+            app.world_mut().get_mut::<Transform>(p).unwrap().translation = ground;
+            app.world_mut().get_mut::<Transform>(p).unwrap().rotation =
+                Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+            for _ in 0..3 {
+                app.update();
+            }
+            let start = pos(&app, p);
+            app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
+            for i in 0..240 {
+                app.update();
+                if i > 20 && app.world().get::<Body>(p).unwrap().grounded {
+                    return pos(&app, p) - start;
+                }
+            }
+            panic!("never came down in {weather}");
+        };
+        let calm = landing("fog");
+        let storm = landing("storm");
+        let along = Vec3::new(0.8, 0.0, 0.6).normalize();
+        let gained = (storm - calm).dot(along);
+        eprintln!("lift pop: calm {calm:?}, storm {storm:?}, {gained:.2} m downwind");
+        assert!(gained > 0.6, "the storm carried you {gained:.2} m downwind");
+    }
+
     /// A round striking a stone a lift holds knocks it out: it drops.
     #[test]
     fn a_round_knocks_a_stone_out_of_a_lift() {
