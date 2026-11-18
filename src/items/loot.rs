@@ -1147,7 +1147,17 @@ pub(crate) mod tests {
         let loot = app.world().resource::<Loot>().0.clone();
         let mut early = Vec::new();
         for r in 0..6 {
-            let rolled = rolled_on(&mut app, r);
+            rolled_on(&mut app, r);
+            // What came in a thing (a new pen's R-2) came with it: what
+            // was rolled is what lies loose.
+            let cat = app.world().resource::<Catalog>().clone();
+            let mut rolled = BTreeMap::<String, u32>::new();
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&Item, Without<crate::interact::InSocket>>();
+            for it in q.iter(app.world()) {
+                *rolled.entry(cat.0.get(it.kind).id.clone()).or_default() += 1;
+            }
             // Hana's tape is there from the first, by her letter.
             assert!(
                 rolled.contains_key("tape_practice"),
@@ -1217,7 +1227,10 @@ pub(crate) mod tests {
             // (piles climb a little), and how many things each spot has.
             let mut laid = Vec::new();
             let mut per = vec![0usize; spots.len()];
-            let mut q = app.world_mut().query::<(&Item, &GlobalTransform)>();
+            // (What's seated in a thing, a new pen's R-2, lies with it.)
+            let mut q = app
+                .world_mut()
+                .query_filtered::<(&Item, &GlobalTransform), Without<crate::interact::InSocket>>();
             for (item, gt) in q.iter(app.world()) {
                 let at = gt.translation();
                 let Some((k, _)) = spots

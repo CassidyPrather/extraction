@@ -58,6 +58,11 @@ pub const WADING_GLOVES: f32 = 0.3;
 /// What's said when it does.
 pub const TOO_HOT: &str = "Too hot to hold: you drop it. Let it cool, or pocket it.";
 
+/// Rain (`Conditions::rain`) at which a hot stone out of the coals cools
+/// in `HOT_RAIN_SECS`, not `HOT_SECS` (it steams: `visuals`).
+pub const HOT_RAIN: f32 = 0.3;
+pub const HOT_RAIN_SECS: f32 = 8.0;
+
 /// A stone hot from a burner's coals: seconds since it left them.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Hot {
@@ -92,6 +97,7 @@ pub fn heat(
     )>,
     mut players: Query<(&mut Health, Option<&crate::player::Body>)>,
     wetness: Option<Res<crate::world::weather::Wetness>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
     catalog: Res<Catalog>,
     zone: Res<Zone>,
     time: Res<Time>,
@@ -133,7 +139,9 @@ pub fn heat(
                 if in_coals {
                     h.out = 0.0;
                 } else {
-                    h.out += dt;
+                    // Rain on it cools it in `HOT_RAIN_SECS`, steaming.
+                    let rain = conditions.as_ref().is_some_and(|c| c.rain >= HOT_RAIN);
+                    h.out += dt * if rain { HOT_SECS / HOT_RAIN_SECS } else { 1.0 };
                 }
                 if quenched || h.out >= HOT_SECS {
                     commands.entity(e).remove::<Hot>();
@@ -335,6 +343,34 @@ mod tests {
 
     /// With your gloves soaked, a hot stone is held twice as long: a way
     /// in, in the rain.
+    /// Out in a downpour a stone from the coals cools in eight seconds,
+    /// not twenty.
+    #[test]
+    fn rain_cools_a_hot_stone_fast() {
+        let mut app = app();
+        app.world_mut()
+            .resource_mut::<crate::launch::LaunchOptions>()
+            .weather = Some("downpour".into());
+        let (_, at, r) = find(app.world_mut(), AnomalyKind::Burner);
+        let stone = spawn(app.world_mut(), "art_hearth", at + Vec3::Y * 0.3);
+        for _ in 0..10 {
+            app.update();
+        }
+        assert!(app.world().get::<Hot>(stone).is_some(), "hot in the coals");
+        // Out of the coals, into the rain.
+        app.world_mut()
+            .get_mut::<Transform>(stone)
+            .unwrap()
+            .translation = at + Vec3::new(r + 2.0, 0.3, 0.0);
+        for _ in 0..(90.0 * (HOT_RAIN_SECS + 0.5)) as usize {
+            app.update();
+        }
+        assert!(
+            app.world().get::<Hot>(stone).is_none(),
+            "cool in {HOT_RAIN_SECS} s of rain"
+        );
+    }
+
     #[test]
     fn a_wet_hand_holds_a_hot_stone_longer() {
         let mut vr = Vr::new("marrow_creek");

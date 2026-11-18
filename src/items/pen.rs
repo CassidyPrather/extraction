@@ -12,6 +12,10 @@
 //! its `rounds` (a pen has none) records that it has (`1`), so a pen saved
 //! empty loads empty. An old save's single-use injector loads as a new
 //! pen, R-2 and all.
+//!
+//! Taken up, a pen turns about its length so its wells (its top, +Y) face
+//! the eyes ([`wells_to`]): how full each cartridge is reads at a glance.
+//! Its needle points where it did as it was taken.
 
 use bevy::prelude::*;
 
@@ -108,7 +112,9 @@ pub struct PenPlugin;
 
 impl Plugin for PenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(pen_slots).add_systems(Update, prime_pens);
+        app.add_observer(pen_slots)
+            .add_observer(wells_up)
+            .add_systems(Update, prime_pens);
     }
 }
 
@@ -141,6 +147,46 @@ fn pen_slots(
             ChildOf(add.entity),
         ));
     }
+}
+
+/// A pen held at `offset` (in its hand's frame), turned about its length
+/// so its wells (+Y) face `eye` (in the hand's frame too).
+pub fn wells_to(offset: Transform, eye: Vec3) -> Transform {
+    let to = offset.rotation.inverse() * (eye - offset.translation);
+    if to.x.abs() + to.y.abs() < 1e-6 {
+        return offset;
+    }
+    // +Y turned by `a` about Z is (-sin a, cos a).
+    let a = (-to.x).atan2(to.y);
+    offset.with_rotation(offset.rotation * Quat::from_rotation_z(a))
+}
+
+/// A pen taken up turns its wells to the eyes.
+fn wells_up(
+    add: On<Add, crate::interact::Held>,
+    mut held: Query<(&mut crate::interact::Held, &Item)>,
+    hands: Query<&crate::interact::Hand>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    catalog: Res<Catalog>,
+) {
+    let Ok((mut h, item)) = held.get_mut(add.entity) else {
+        return;
+    };
+    if catalog.get(item.kind()).id != PEN {
+        return;
+    }
+    let Ok(hand) = hands.get(h.hand) else {
+        return;
+    };
+    let Some(eye) = heads
+        .iter()
+        .find(|(_, p)| p.parent() == h.player)
+        .map(|(g, _)| g.translation())
+    else {
+        return;
+    };
+    let eye = hand.world.compute_affine().inverse().transform_point3(eye);
+    h.offset = wells_to(h.offset, eye);
 }
 
 /// A new pen (`rounds` 0) gets its R-2, once.
@@ -225,6 +271,24 @@ mod tests {
             }
         );
         assert!(jab_of([]).is_empty());
+        // Turned to the eyes about its length: its top faces them, its
+        // needle where it was.
+        let held = Transform::from_xyz(0.0, 0.0, -0.05)
+            .with_rotation(Quat::from_rotation_x(0.7) * Quat::from_rotation_z(2.5));
+        let eye = Vec3::new(0.1, 0.3, 0.4);
+        let t = wells_to(held, eye);
+        let to_eye = (eye - t.translation).normalize();
+        let along = t.rotation * Vec3::Z;
+        let off_axis = (to_eye - along * to_eye.dot(along)).normalize();
+        assert!(
+            (t.rotation * Vec3::Y).dot(off_axis) > 0.999,
+            "its top to the eyes"
+        );
+        assert!(
+            along.dot(held.rotation * Vec3::Z) > 0.9999,
+            "its needle unmoved"
+        );
+        assert_eq!(t.translation, held.translation);
         // Every cartridge fits the pen's slots.
         for id in ["regen_r1", "regen_r2", "regen_r3", "stim_s1", "stim_s2"] {
             assert_eq!(def(id).fits_mount(), Some(Mount::Cartridge), "{id}");
