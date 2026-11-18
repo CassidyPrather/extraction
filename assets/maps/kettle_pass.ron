@@ -531,6 +531,9 @@
         // A frost on the beck's bank west of the ropeway (#108): its ice is the way over
         // the deep water, saving a 74 m walk round; cold to cross.
         (kind: Anomaly(kind: "Frost", radius: 3.5), at: (-146.0, 15.0), name: "Beck frost"),
+        // Steam: a burner 2.5 m off the Beck frost's rim, the bank between them standing
+        // across the Beck site's view of the beck and the way home from Low farm.
+        (kind: Anomaly(kind: "Burner", radius: 2.0), at: (-146.0, 23.0), name: "Beck burner"),
         (kind: Offering, at: (-9.9, 113.0), name: "The chapel font"),
         (kind: Offering, at: (-93.0, -176.0), name: "The cairn"),
         (kind: WorkSite, at: (-94.2, 12.0), name: "Beck site"),
