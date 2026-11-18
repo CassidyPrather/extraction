@@ -30,9 +30,10 @@ pub const RAKE_MAX: f32 = 4.0;
 
 #[allow(clippy::type_complexity)]
 pub fn rake(
+    mut commands: Commands,
     bars: Query<(Entity, &Crowbar, &GlobalTransform), With<Held>>,
     mut loose: Query<
-        (&GlobalTransform, &ComputedMass, &mut LinearVelocity),
+        (Entity, &GlobalTransform, &ComputedMass, &mut LinearVelocity),
         (With<Item>, Without<Held>, Without<Crowbar>),
     >,
     time: Res<Time>,
@@ -59,7 +60,7 @@ pub fn rake(
             continue;
         }
         let drag = across.clamp_length_max(RAKE_MAX);
-        for (t, mass, mut lv) in &mut loose {
+        for (e, t, mass, mut lv) in &mut loose {
             let rel = t.translation() - claw;
             if Vec2::new(rel.x, rel.z).length() > RAKE_REACH
                 || rel.y.abs() > RAKE_DEPTH
@@ -69,6 +70,8 @@ pub fn rake(
             }
             lv.x = drag.x;
             lv.z = drag.z;
+            // A stone lying still has gone to sleep: wake it to move.
+            commands.entity(e).try_remove::<Sleeping>();
         }
     }
     *last = now;
@@ -129,7 +132,7 @@ mod tests {
         let (bar, _) = bar_low(&mut vr, feet);
         // Lower the claw to the ground, slowly.
         let hand0 = vr.hand_state(Side::Right).world.translation;
-        let low = hand0 - Vec3::Y * 0.75;
+        let low = hand0 - Vec3::Y * 1.0;
         for i in 1..=60 {
             vr.move_hand(Side::Right, hand0.lerp(low, i as f32 / 60.0));
             vr.step(1);
@@ -201,17 +204,18 @@ mod tests {
         vr.stand(feet, 0.0);
         vr.step(4);
         let (bar, _) = bar_low(&mut vr, feet);
+        let hand0 = vr.hand_state(Side::Right).world.translation;
+        for i in 1..=60 {
+            vr.move_hand(Side::Right, hand0 - Vec3::Y * i as f32 / 60.0);
+            vr.step(1);
+        }
+        vr.step(10);
         let c = claw(&vr, bar);
-        let stone = vr.spawn("art_hearth", Transform::from_translation(c));
-        vr.app
-            .world_mut()
-            .entity_mut(stone)
-            .insert(RigidBody::Static);
-        vr.step(2);
-        vr.app
-            .world_mut()
-            .entity_mut(stone)
-            .insert(RigidBody::Dynamic);
+        let stone = vr.spawn(
+            "art_hearth",
+            Transform::from_translation(zone.on_ground(c.x, c.z) + Vec3::Y * 0.1),
+        );
+        vr.step(40);
         let before = pos(&vr, stone);
         // The hand creeps 5 cm over a second.
         let from = vr.hand_state(Side::Right).world.translation;
