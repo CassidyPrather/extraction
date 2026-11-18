@@ -10,7 +10,8 @@ In robot space (src/robots/pylon.rs): the root sits on the ground.
             packed: a drum with three eyes looking out all round, a
             glowing band, a whip antenna
 
-The mast itself is drawn by the game (it grows with the pylon).
+The mast itself is drawn by the game (it grows with the pylon). Also writes
+its salvage: the sensor head as `assets/models/items/pylon_dish.glb`.
 Materials: Shell, Dark, Glow, Eye, Warn, Steel.
 """
 
@@ -55,22 +56,46 @@ core.tube(0.16, 0.13, 1.26, 1.3, "Steel", segs=20, xf=UP)
 
 # --- Sensor head ----------------------------------------------------------
 
-sensor = Part("sensor", origin=(0.0, 1.5, 0.0))
-y = 1.5
-sensor.cyl(0.32, y - 0.14, y + 0.12, "Shell", segs=28, xf=UP, chamfer=0.02)
-sensor.tube(0.325, 0.3, y - 0.03, y + 0.01, "Glow", segs=28, xf=UP)
-sensor.cyl(0.2, y + 0.12, y + 0.2, "Dark", segs=20, xf=UP, chamfer=0.01)
-for k in range(3):
-    a = k * 2 * math.pi / 3
-    xf = RY(a)
-    # An eye in a dark socket on each third of the drum.
-    sensor.box((0.16, 0.11, 0.06), (0.0, y + 0.05, 0.3), "Dark", bevel=0.01, segs=1, xf=xf)
-    sensor.sphere(0.04, (0.0, y + 0.05, 0.335), "Eye", segs=12, rings=6, xf=xf)
-# A whip antenna, a little off centre.
-sensor.cyl(0.008, y + 0.2, y + 0.75, "Steel", segs=6, xf=T(0.08, 0.0, 0.0) @ UP)
-sensor.sphere(0.018, (0.08, y + 0.76, 0.0), "Glow", segs=8, rings=4)
+def sensor_head(name):
+    """The head that rides up the mast."""
+    sensor = Part(name, origin=(0.0, 1.5, 0.0))
+    y = 1.5
+    sensor.cyl(0.32, y - 0.14, y + 0.12, "Shell", segs=28, xf=UP, chamfer=0.02)
+    sensor.tube(0.325, 0.3, y - 0.03, y + 0.01, "Glow", segs=28, xf=UP)
+    sensor.cyl(0.2, y + 0.12, y + 0.2, "Dark", segs=20, xf=UP, chamfer=0.01)
+    for k in range(3):
+        a = k * 2 * math.pi / 3
+        xf = RY(a)
+        # An eye in a dark socket on each third of the drum.
+        sensor.box((0.16, 0.11, 0.06), (0.0, y + 0.05, 0.3), "Dark", bevel=0.01, segs=1, xf=xf)
+        sensor.sphere(0.04, (0.0, y + 0.05, 0.335), "Eye", segs=12, rings=6, xf=xf)
+    # A whip antenna, a little off centre.
+    sensor.cyl(0.008, y + 0.2, y + 0.75, "Steel", segs=6, xf=T(0.08, 0.0, 0.0) @ UP)
+    sensor.sphere(0.018, (0.08, y + 0.76, 0.0), "Glow", segs=8, rings=4)
+
+    return sensor
+
+
+sensor = sensor_head("sensor")
 
 for p in (core, sensor):
     make(p)
 report()
 export("assets/models/robots/pylon.glb")
+
+# --- Salvage --------------------------------------------------------------
+# The sensor head as it is on the pylon (`pylon_dish`), centred on its
+# bounds; `mid` is where that centre was from the head's origin.
+reset()
+obj = make(sensor_head("pylon_dish"))
+me = obj.data
+lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+for v in me.vertices:
+    v.co = [v.co[k] - mid[k] for k in range(3)]
+size = [hi[k] - lo[k] for k in range(3)]
+# (Blender is Z up: game x, y, z = its x, z, -y.)
+print(f"pylon_dish dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+      f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+export("assets/models/items/pylon_dish.glb")
