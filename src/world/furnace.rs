@@ -154,6 +154,13 @@ pub(super) fn wall_pose(
     Some(Transform::from_translation(p + q * Vec3::new(0.0, 0.0, -0.12)).with_rotation(q))
 }
 
+/// A vent's or the crane's lever's grip, its pose's space (full sizes).
+pub const LEVER_BOX: Vec3 = Vec3::new(0.3, 0.4, 0.2);
+
+/// Where a lever's model stands from its pose: its back on the wall, the
+/// pose 0.12 off it (`lever_models`).
+pub const LEVER_WALL: Vec3 = Vec3::new(0.0, 0.0, 0.12);
+
 pub(super) fn lever_bundle(name: &'static str, pose: Transform, site: Entity) -> impl Bundle {
     (
         Name::new(name),
@@ -161,7 +168,7 @@ pub(super) fn lever_bundle(name: &'static str, pose: Transform, site: Entity) ->
         crate::interact::Grabbable {
             points: vec![crate::interact::GrabPoint::free()],
         },
-        Collider::cuboid(0.3, 0.4, 0.2),
+        Collider::cuboid(LEVER_BOX.x, LEVER_BOX.y, LEVER_BOX.z),
         CollisionLayers::new(Layer::Item, LayerMask::NONE),
         pose,
         Visibility::default(),
@@ -707,7 +714,7 @@ fn lever_models(
             commands.entity(k).despawn();
         }
         // (The pose stands 0.12 off the wall; the model's origin is on it.)
-        let wall = Transform::from_xyz(0.0, 0.0, 0.12);
+        let wall = Transform::from_translation(LEVER_WALL);
         spawn_parts(
             &mut commands,
             &mut props,

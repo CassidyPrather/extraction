@@ -56,6 +56,12 @@ pub enum GripRole {
     Handle(u8),
 }
 
+/// How far a hand reaches for something to grip: the sphere about its
+/// grip point that has to touch the thing's collider (`find_grab`). What
+/// a thing shows to be gripped (a handle, a rung) is in reach within this
+/// of its collider (`capture::checks::every_handle_is_in_reach`).
+pub const GRAB_REACH: f32 = 0.07;
+
 #[derive(Clone, Debug)]
 pub struct GrabPoint {
     /// Pose of the hand's grip point in the item's local space.
@@ -780,7 +786,7 @@ fn find_grab(
     spatial: &SpatialQuery,
     terrain: Option<Entity>,
 ) -> Option<(Entity, usize)> {
-    let reach = Collider::sphere(0.07);
+    let reach = Collider::sphere(GRAB_REACH);
     let mut touching = spatial.shape_intersections(
         &reach,
         hand.translation,
