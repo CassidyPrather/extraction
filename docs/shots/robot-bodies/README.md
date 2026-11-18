@@ -327,7 +327,7 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 
 ## The engineer and its builds (#98)
 
-`robots::engineer_body` and `engineer_look`: the engineer, an unarmed worker on a walker's brain and feet (`Shape::Engineer`): a long, low, pale hull on four short legs, its kit bundled on its back with struts standing up out of it, and a scan lamp on a short arm at its front with the orange-red rim. `robots::builds`: what it builds, drawn in stages from the mind's progress. The seam (`Build`, `BuildReason`, `CameraAim`, `CameraCable`, `BarricadeStrap`/`Panel`, `CameraLens`, `ScanLamp`, `Hammering`) is agreed with Robot minds, who own the mind and rules. Silhouette gauge with the engineer in the family: passes, nearest the grappler at 0.51 (ceiling 0.7).
+`robots::engineer_body` and `engineer_look`, dressed from Models' walker.glb nodes (`engineer_hull`, `engineer_kit`, `engineer_lamp`, `engineer_hammer`; the procedural look only where one's missing): the engineer, an unarmed worker on a walker's brain and feet (`Shape::Engineer`): a long, low, pale hull on four short legs, its kit bundled on its back with struts standing up out of it, and a scan lamp on a short arm at its front with the orange-red rim. `robots::builds`: what it builds, drawn in stages from the mind's progress. The seam (`Build`, `BuildReason`, `CameraAim`, `CameraCable`, `BarricadeStrap`/`Panel`, `CameraLens`, `ScanLamp`, `Hammering`) is agreed with Robot minds, who own the mind and rules. Silhouette gauge with the engineer in the family: passes on the model, nearest the grappler at 0.52 (ceiling 0.7).
 
 | Picture | What it shows |
 |---|---|
