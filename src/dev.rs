@@ -1504,9 +1504,19 @@ fn first_person_hands(
     else {
         return;
     };
-    let Some(what) = spec.split(',').next().and_then(|s| s.strip_prefix("fp:")) else {
+    // `fp:WHAT,...`, or any gallery word with `,hold=ITEM` after it: ITEM
+    // in the left hand over that scene (a wreck and a part off it, #105).
+    let fp = spec.starts_with("fp:");
+    let Some(what) = spec
+        .split(',')
+        .next()
+        .and_then(|s| s.strip_prefix("fp:"))
+        .or_else(|| spec.split(',').find_map(|s| s.strip_prefix("hold=")))
+    else {
         return;
     };
+    // (The scene's own numbers aren't this pose's.)
+    let nth = |n: usize| spec.split(',').nth(n).filter(|_| fp);
     // `fp:<gun>+handle`: the right hand on its slide, charging handle or
     // bolt instead of the grip.
     let (what, on_handle) = match what.strip_suffix("+handle") {
@@ -1552,32 +1562,16 @@ fn first_person_hands(
     let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
     let right = flat.cross(Vec3::Y);
     // `fp:WHAT,ZOOM` brings everything ZOOM times closer, for a close look.
-    let zoom: f32 = spec
-        .split(',')
-        .nth(1)
-        .and_then(|z| z.parse().ok())
-        .unwrap_or(1.0);
+    let zoom: f32 = nth(1).and_then(|z| z.parse().ok()).unwrap_or(1.0);
     // `fp:WHAT,ZOOM,TURN` turns it all TURN degrees about the right hand,
     // to see a grip from the side.
-    let turn: f32 = spec
-        .split(',')
-        .nth(2)
-        .and_then(|z| z.parse().ok())
-        .unwrap_or(0.0);
+    let turn: f32 = nth(2).and_then(|z| z.parse().ok()).unwrap_or(0.0);
     // `fp:WHAT,ZOOM,TURN,TRIGGER` pulls the gun hand's trigger (0..1).
-    let trigger: f32 = spec
-        .split(',')
-        .nth(3)
-        .and_then(|z| z.parse().ok())
-        .unwrap_or(0.0);
+    let trigger: f32 = nth(3).and_then(|z| z.parse().ok()).unwrap_or(0.0);
     // `fp:WHAT,ZOOM,TURN,TRIGGER,TILT` then tips it TILT degrees about the
     // view's left-right axis, its underside up to the eye (a supporting
     // hand under a handguard).
-    let tilt: f32 = spec
-        .split(',')
-        .nth(4)
-        .and_then(|z| z.parse().ok())
-        .unwrap_or(0.0);
+    let tilt: f32 = nth(4).and_then(|z| z.parse().ok()).unwrap_or(0.0);
     let pivot = eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom;
     let view = move |t: Transform| {
         let q = Quat::from_axis_angle(right, tilt.to_radians())
