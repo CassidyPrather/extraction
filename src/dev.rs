@@ -1067,7 +1067,8 @@ fn gallery(
                 // `items:tea_tin+matches+bolt`. Each rests on its box's
                 // floor, turned TURN; SHIFT spaces them (0.3 m).
                 // `id@0.5` lies at that condition (a cartridge half
-                // full); `regen_injector/regen_r2/stim_s1@0.5` a pen with
+                // full; a box of rounds with half its rounds left);
+                // `regen_injector/regen_r2/stim_s1@0.5` a pen with
                 // those in its slots, `regen_injector/` an empty one.
                 let ids: Vec<&str> = s["items:".len()..].split('+').collect();
                 let right = Vec3::new(-flat.z, 0.0, flat.x);
@@ -1097,6 +1098,9 @@ fn gallery(
                             commands.queue(move |w: &mut World| {
                                 if let Some(mut it) = w.get_mut::<crate::items::Item>(e) {
                                     it.0.condition = cond;
+                                    if it.0.rounds > 1 {
+                                        it.0.rounds = (it.0.rounds as f32 * cond).round() as _;
+                                    }
                                 }
                             });
                         }
