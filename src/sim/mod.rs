@@ -430,8 +430,14 @@ mod tests {
         use crate::raid::truck::{Truck, base_pose, rv_pose};
         use crate::rig::LocalPlayer;
         use bevy::math::Vec3Swizzles;
-        // Every valley's stops (`EXTRACTION_TEST_MAP` for just one).
-        for map in crate::test_maps() {
+        // Every valley's stops (`EXTRACTION_TEST_MAP` for just one). Not
+        // the yard's: its truck is out of sight and reach till it's
+        // called (#89, `onboarding::gates`), and its boarding there is
+        // the yard's own (`vr_harness`' extract and climb-in tests).
+        for map in crate::test_maps()
+            .into_iter()
+            .filter(|m| m != crate::camp::TRAINING_YARD)
+        {
             let opts = LaunchOptions {
                 robots: false,
                 map: map.clone(),
