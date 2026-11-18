@@ -4949,6 +4949,58 @@ mod first_aid {
         );
     }
 
+    /// The stim's clock (#102): in a stim the world's clock eases down to
+    /// `stim::SLOW`, you walk as far in a real second as without it, and
+    /// after its real seconds the clock comes back and the stim's done.
+    #[test]
+    fn a_stim_slows_the_world_and_not_you() {
+        use crate::items::pen::Stimmed;
+        use crate::items::stim::{EASE, SLOW, WorldPace};
+        let (mut vr, _) = setup();
+        vr.step(10);
+        // (Each step is a 90th of a real second, `headless_app`.)
+        let walk = |vr: &mut Vr, frames: usize| -> f32 {
+            let from = vr.feet();
+            for _ in 0..frames {
+                vr.app
+                    .world_mut()
+                    .get_mut::<RigInput>(vr.player)
+                    .unwrap()
+                    .locomotion = Vec2::new(0.0, 1.0);
+                vr.step(1);
+            }
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::ZERO;
+            vr.step(10);
+            (vr.feet() - from).with_y(0.0).length()
+        };
+        let plain = walk(&mut vr, 90);
+        assert!(plain > 0.5, "walked {plain} m in a second");
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        vr.step((90.0 * (EASE + 0.1)) as usize);
+        let pace = |vr: &Vr| vr.app.world().resource::<Time<Virtual>>().relative_speed();
+        assert!((pace(&vr) - SLOW).abs() < 1e-3, "slowed: {}", pace(&vr));
+        assert!((vr.app.world().resource::<WorldPace>().0 - pace(&vr)).abs() < 1e-4);
+        let stimmed = walk(&mut vr, 90);
+        assert!(
+            (stimmed - plain).abs() < plain * 0.2,
+            "a real second's walk: {stimmed} m stimmed, {plain} m not"
+        );
+        // Its six real seconds, and the ease back.
+        vr.step((90.0 * (6.0 + EASE + 0.2)) as usize);
+        assert!((pace(&vr) - 1.0).abs() < 1e-3, "back: {}", pace(&vr));
+        assert!(
+            vr.app.world().get::<Stimmed>(vr.player).is_none(),
+            "the stim's done"
+        );
+    }
+
     #[test]
     fn an_injector_in_the_air_does_nothing() {
         assert!(!jab(false), "injected into the air");
