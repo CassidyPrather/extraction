@@ -558,7 +558,8 @@
         (kind: ArtifactField, at: (-54.0, -78.8), name: "Mast summit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (90.5, 11.0), name: "The Hollow well"),
-        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-78.0, -102.7), name: "Mast summit mirror"),
+        // A mirror as a route (#108): at the foot of the rock ledge by the Pumping station: through it, up onto the ledge (40 m round).
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-130.0, 4.0), name: "Ledge mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (68.5, 11.0), name: "Hollow hush"),
         (kind: Offering, at: (-32.2, 78.5), name: "The well"),
         (kind: Offering, at: (131.0, -50.0), name: "The stone ring"),
