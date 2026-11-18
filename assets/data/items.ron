@@ -957,6 +957,36 @@
             tags: ["electronics"],
         ),
         (
+            id: "crawler_leg_servo", dims: Some((0.159, 0.05, 0.07)), name: "Crawler leg servo",
+            description: "A crawler's hip drive, stamped CR SRV, a stub of its leg still in the socket. Small, and it never stops trying to turn.",
+            category: RobotPart, size: Small, mass: 0.7, bulk: 0.5,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "hound_hip_servo", dims: Some((0.133, 0.171, 0.07)), name: "Hound hip servo",
+            description: "A hound's hip motor, flat as a tin and stamped HD SRV. It was made to run all night.",
+            category: RobotPart, size: Small, mass: 0.9, bulk: 0.6,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "hound_nose", dims: Some((0.185, 0.08, 0.08)), name: "Hound nose",
+            description: "The sniffing cone off a hound's head, stamped HD OLF. The grille is still damp; the lens at its tip is very good glass.",
+            category: RobotPart, size: Small, mass: 0.5, bulk: 0.6,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "grappler_launcher", dims: Some((0.12, 0.12, 0.62)), name: "Grappler launcher",
+            description: "A grappler's harpoon tube, unbolted with the barbed head still in its mouth, stamped GR LCH.",
+            category: RobotPart, size: Large, mass: 4.5, bulk: 4.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "grappler_drum", dims: Some((0.18, 0.209, 0.238)), name: "Grappler winch drum",
+            description: "A grappler's winch, wound thick with steel cable, stamped GR WCH. A lot of good cable.",
+            category: RobotPart, size: Medium, mass: 3.2, bulk: 2.5,
+            tags: ["metal"],
+        ),
+        (
             id: "dirigible_gas_valve", dims: Some((0.368, 0.196, 0.33)), name: "Airship gas valve",
             description: "A lift-gas valve with a scrap of the envelope still clamped under its ring.",
             category: RobotPart, size: Medium, mass: 2.0, bulk: 3.0,

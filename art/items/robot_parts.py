@@ -99,6 +99,90 @@ def walker_leg_actuator():
     return centred([p])
 
 
+def crawler_leg_servo():
+    p = Part("body")
+    # A crawler's hip servo, small and squat (#105): a dark block with a
+    # teal drive ring on its face, a stub of its pale leg out of one side,
+    # two mounting ears.
+    p.box((0.07, 0.05, 0.06), (0.0, 0.0, 0.0), "Dark", bevel=0.008, segs=2)
+    p.tube(0.024, 0.016, 0.03, 0.036, "Glow", segs=20)
+    p.cyl(0.014, 0.03, 0.04, "Steel", segs=14)
+    for sx in (-1, 1):
+        p.box((0.014, 0.008, 0.03), (sx * 0.042, -0.02, 0.0), "Dark", bevel=0.002, segs=1)
+    p.lathe([(0.0, 0.0), (0.02, 0.0), (0.018, 0.07), (0.014, 0.075), (0.0, 0.075)], "Shell",
+            segs=14, xf=T(0.035, 0, 0) @ ALONG_X)
+    return centred([p])
+
+
+def hound_hip_servo():
+    p = Part("body")
+    # A hound's hip motor: a flat pancake drum (wide, thin), its output hub
+    # and spline in the middle, cooling fins round the rim, a stub of
+    # hip bracket. Round and flat: nothing else is (#105).
+    p.cyl(0.055, -0.016, 0.016, "Dark", segs=32, chamfer=0.004)
+    for k in range(16):
+        a = 2 * math.pi * k / 16
+        p.box((0.012, 0.004, 0.03), (0.06 * math.cos(a), 0.06 * math.sin(a), 0.0), "Dark",
+              xf=RZ(a))
+    p.cyl(0.022, 0.016, 0.026, "Shell", segs=24, chamfer=0.002)
+    p.cyl(0.01, 0.026, 0.038, "Steel", segs=12)
+    p.box((0.03, 0.06, 0.02), (0.0, -0.075, 0.0), "Shell", bevel=0.004, segs=1)
+    tube_path(p, [(0.03, 0.04, -0.012), (0.05, 0.06, -0.02), (0.07, 0.06, -0.03)], 0.0025, "Red",
+              sides=5, closed=False)
+    return centred([p])
+
+
+def hound_nose():
+    p = Part("body")
+    # A hound's nose: the sniffing cone off its head, a pale tapered snout
+    # with a dark grille and a green sensor lens at its tip.
+    p.lathe([(0.0, 0.0), (0.04, 0.0), (0.038, 0.05), (0.024, 0.12), (0.014, 0.135),
+             (0.0, 0.137)], "Shell", segs=24, xf=ALONG_X)
+    for k in range(5):
+        p.tube(0.037 - k * 0.003, 0.03 - k * 0.003, 0.03 + k * 0.012, 0.034 + k * 0.012, "Dark",
+               segs=20, xf=ALONG_X)
+    p.lathe([(0.0, 0.134), (0.012, 0.134), (0.01, 0.142), (0.0, 0.144)], "Lens", segs=16,
+            xf=ALONG_X)
+    tube_path(p, [(0.0, 0.0, 0.01), (-0.02, 0.01, 0.02), (-0.04, 0.0, 0.03)], 0.003, "Black",
+              sides=5, closed=False)
+    return centred([p])
+
+
+def grappler_launcher():
+    p = Part("body")
+    # A grappler's harpoon launcher, unbolted: a long dark tube, a barbed
+    # harpoon head still in its mouth, a red stripe down its length, the
+    # breech block and its bolt flange behind.
+    p.tube(0.035, 0.026, -0.3, 0.12, "Dark", segs=20, chamfer=0.004)
+    p.box((0.006, 0.004, 0.36), (0.0, 0.036, -0.08), "Red")
+    p.box((0.09, 0.08, 0.1), (0.0, 0.0, 0.16), "Shell", bevel=0.01, segs=2)
+    p.cyl(0.06, 0.21, 0.22, "Steel", segs=24)
+    p.lathe([(0.0, -0.4), (0.012, -0.37), (0.022, -0.34), (0.022, -0.3), (0.0, -0.3)], "Steel",
+            segs=16)
+    for k in range(3):
+        a = 2 * math.pi * k / 3
+        p.box((0.004, 0.03, 0.05), (0.0, 0.024, -0.335), "Steel",
+              xf=RZ(a) @ RX(0.5, about=(0.0, 0.024, -0.335)))
+    return centred([p])
+
+
+def grappler_drum():
+    p = Part("body")
+    # A grappler's winch drum: a spool wound thick with steel cable between
+    # copper flanges, its axle, a frayed tail of the tether.
+    p.cyl(0.05, -0.06, 0.06, "Dark", segs=24, xf=ALONG_X)
+    for sx in (-1, 1):
+        p.cyl(0.085, sx * 0.06 - 0.006, sx * 0.06 + 0.006, "Copper", segs=32, xf=ALONG_X,
+              chamfer=0.002)
+    for k in range(6):
+        p.tube(0.072, 0.05, -0.054 + k * 0.018, -0.04 + k * 0.018, "Steel", segs=24,
+               xf=ALONG_X)
+    p.cyl(0.012, -0.09, 0.09, "Steel", segs=12, xf=ALONG_X)
+    tube_path(p, [(0.0, 0.072, 0.0), (0.0, 0.1, 0.04), (0.02, 0.12, 0.1), (0.05, 0.11, 0.15)],
+              0.005, "Steel", sides=6, closed=False)
+    return centred([p])
+
+
 def crawler_capacitor():
     p = Part("body")
     # The spark gun's sleeve, ring and prongs, pointing -Z.
@@ -245,6 +329,11 @@ if __name__ == "__main__":
     for item_id, build in (("drone_rotor_motor", drone_rotor_motor),
                            ("walker_leg_actuator", walker_leg_actuator),
                            ("crawler_capacitor", crawler_capacitor),
+                           ("crawler_leg_servo", crawler_leg_servo),
+                           ("hound_hip_servo", hound_hip_servo),
+                           ("hound_nose", hound_nose),
+                           ("grappler_launcher", grappler_launcher),
+                           ("grappler_drum", grappler_drum),
                            ("dirigible_gas_valve", dirigible_gas_valve),
                            ("pylon_relay_coil", pylon_relay_coil),
                            ("sorter_servo_pack", sorter_servo_pack),
