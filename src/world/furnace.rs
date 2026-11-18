@@ -151,26 +151,48 @@ pub(super) fn wall_pose(
         l.floor_of(room) + up,
         room.at[1] + at[1],
     );
-    Some(Transform::from_translation(p + q * Vec3::new(0.0, 0.0, -LEVER_WALL.z)).with_rotation(q))
+    Some(Transform::from_translation(p + q * Vec3::new(0.0, 0.0, -WALL_OFF)).with_rotation(q))
 }
 
-/// A vent's or the crane's lever's grip, its pose's space (full sizes):
-/// round the drawn arm, pivot to handle, not the louvres behind it
-/// (`capture::checks::every_handle_is_in_reach`).
-pub const LEVER_BOX: Vec3 = Vec3::new(0.3, 0.6, 0.2);
+/// How far off its wall a wall control's pose stands (`wall_pose`): a
+/// wall lever's plate (`render::bench`), a cage bell, an isolator.
+pub const WALL_OFF: f32 = 0.12;
+/// A wall lever's grip, its pose's space (full sizes).
+pub const LEVER_BOX: Vec3 = Vec3::new(0.3, 0.4, 0.2);
 
-/// Where a lever's model stands from its pose: its back on the wall, the
-/// pose out where its arm is, 0.3 off the wall (`lever_models`).
+/// A vent's or the crane's lever's grip: round the cellar vent's drawn
+/// arm, pivot to handle, not the louvres behind it
+/// (`capture::checks::every_handle_is_in_reach`).
+pub const VENT_BOX: Vec3 = Vec3::new(0.3, 0.6, 0.2);
+/// Where a vent's or crane's lever model stands from its pose: its back
+/// on the wall, the pose out where its arm is, 0.3 off the wall
+/// (`lever_models`).
 pub const LEVER_WALL: Vec3 = Vec3::new(0.0, 0.0, 0.3);
 
+/// A vent's or the crane's lever's pose: out from `wall_pose` to where the
+/// cellar vent's arm stands.
+fn vent_pose(pose: Transform) -> Transform {
+    pose * Transform::from_xyz(0.0, 0.0, -(LEVER_WALL.z - WALL_OFF))
+}
+
 pub(super) fn lever_bundle(name: &'static str, pose: Transform, site: Entity) -> impl Bundle {
+    lever_bundle_sized(name, pose, site, LEVER_BOX)
+}
+
+/// `lever_bundle` with a grip box of its own size.
+pub(super) fn lever_bundle_sized(
+    name: &'static str,
+    pose: Transform,
+    site: Entity,
+    size: Vec3,
+) -> impl Bundle {
     (
         Name::new(name),
         crate::raid::truck::Pressable::BenchRun,
         crate::interact::Grabbable {
             points: vec![crate::interact::GrabPoint::free()],
         },
-        Collider::cuboid(LEVER_BOX.x, LEVER_BOX.y, LEVER_BOX.z),
+        Collider::cuboid(size.x, size.y, size.z),
         CollisionLayers::new(Layer::Item, LayerMask::NONE),
         pose,
         Visibility::default(),
@@ -206,7 +228,7 @@ fn wire_furnace(
                 continue;
             };
             commands.spawn((
-                lever_bundle("Vent lever", pose, site),
+                lever_bundle_sized("Vent lever", vent_pose(pose), site, VENT_BOX),
                 VentLever {
                     site,
                     vent: k,
@@ -262,7 +284,7 @@ fn wire_furnace(
                 continue;
             };
             commands.spawn((
-                lever_bundle("Crane lever", pose, site),
+                lever_bundle_sized("Crane lever", vent_pose(pose), site, VENT_BOX),
                 CraneLever { crane },
             ));
         }
