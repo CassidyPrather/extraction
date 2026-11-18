@@ -27,7 +27,7 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| (none) | | | |
+| first_jobs A/B after the gated yard: the cautious bot's WalkTo times out near gate 4 at (12.4, 18) and (0, 18); the reckless bot dies in raids 3 and 5, the one-handed bot in raids 3 and 4 (main was all home). Raids diverge from raid 3: a real fault, or a knock-on of a different yard run? | 9c1135f4 (in 1f40e45c) | Onboarding | seed sweep before calling it chance |
 
 ## Logged, not failing a check
 

@@ -659,6 +659,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "radio_mast" => [2.0, 45.0, 2.0],
         // Its plinth; the cage up top overhangs it, out of reach.
         "siren_mast" => [0.9, crate::siren_mast::HEIGHT, 0.9],
+        // Its post; the pole overhangs it, the long end 6 m out over the
+        // well and up past the roofs, the counterweight above head height.
+        "well_sweep" => [0.4, 11.2, 0.4],
         "mast_hut" => [5.0, 3.0, 4.0],
         "rail_shed" => [20.0, 10.3, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
@@ -1184,6 +1187,7 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "quarantine_gate"
             | "radio_mast"
             | "siren_mast"
+            | "well_sweep"
             | "boxcar"
             | "target"
             | "fence_garden"

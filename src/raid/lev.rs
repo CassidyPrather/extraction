@@ -341,7 +341,8 @@ pub fn cargo(ids: impl Iterator<Item = (String, extraction_core::items::Category
             ("sensor_eye", _) => c.eye = true,
             ("robot_cell", _) => c.cell = true,
             ("tape_practice", _) => c.anna = true,
-            (_, Category::Food) => c.food += 1,
+            // Food: junk that isn't a grenade's leavings.
+            (id, Category::Junk) if !id.starts_with("grenade_") => c.food += 1,
             _ => {}
         }
     }
@@ -516,7 +517,8 @@ mod tests {
         let c = |v: &[(&str, Category)]| cargo(v.iter().map(|(i, k)| (i.to_string(), *k)));
         assert!(c(&[("art_hearth", Category::Artifact)]).artifact);
         assert!(c(&[("sensor_eye", Category::RobotPart)]).eye);
-        assert_eq!(c(&[("canned_stew", Category::Food); 6]).food, 6);
+        assert_eq!(c(&[("canned_stew", Category::Junk); 6]).food, 6);
+        assert_eq!(c(&[("grenade_pin", Category::Junk)]).food, 0);
         let lines = super::super::lines::CARGO_ARTIFACT;
         let art = Cargo {
             artifact: true,

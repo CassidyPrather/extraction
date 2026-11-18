@@ -322,7 +322,7 @@ pub fn run_bench(
                     }
                     stack.reverse();
                     for l in &mut stack {
-                        if matches!(l, Load::Surplus | Load::Damp) {
+                        if *l == Load::Damp {
                             *l = Load::Standard;
                             restored += 1;
                         }
@@ -335,7 +335,7 @@ pub fn run_bench(
                             catalog.get(i.kind()).category == extraction_core::items::Category::Ammo
                         })
                 });
-                bench.last = Some(format!("Re-packed {restored} rounds"));
+                bench.last = Some(format!("Re-primed {restored} damp rounds"));
             }
             Make::Repair(amount) => {
                 // The gun stays; the parts are used up.
@@ -494,20 +494,16 @@ mod tests {
             2,
             "{have:?}"
         );
-        run(&mut app, "pack_545");
-        let have = names(&mut app);
-        assert!(have.contains(&"ammo_545_repack".to_string()), "{have:?}");
         assert!(
             have.contains(&"rotor_assembly".to_string()),
             "untouched: {have:?}"
         );
-        assert!(!have.contains(&"powder".to_string()), "{have:?}");
     }
-    /// A box of surplus with a round gone damp, and powder: the bench's
-    /// restore makes every old and damp round good ball again; the box
-    /// stays and the powder's used.
+    /// A box with rounds gone damp, and powder: the bench's restore makes
+    /// every damp round good ball again; the box stays and the powder's
+    /// used.
     #[test]
-    fn the_bench_restores_old_and_damp_rounds() {
+    fn the_bench_restores_damp_rounds() {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -555,12 +551,12 @@ mod tests {
             ));
             e
         };
-        let box_e = put(&mut app, "ammo_762r_surplus");
+        let box_e = put(&mut app, "ammo_762r");
         put(&mut app, "powder");
         {
             let mut it = app.world_mut().get_mut::<Item>(box_e).unwrap();
             let n = it.rounds;
-            assert!(it.loads.spoil(n, Load::Surplus, 2), "one damp");
+            assert!(it.loads.spoil(n, Load::Standard, 2), "one damp");
         }
         app.update();
         {
@@ -578,7 +574,9 @@ mod tests {
         let it = app.world().get::<Item>(box_e).expect("the box stays");
         let mut loads = it.loads.clone();
         let n = it.rounds;
-        let rounds: Vec<Load> = (0..n).map(|i| loads.pop_or(n - i, Load::Surplus)).collect();
+        let rounds: Vec<Load> = (0..n)
+            .map(|i| loads.pop_or(n - i, Load::Standard))
+            .collect();
         assert_eq!(rounds.len(), 10);
         assert!(
             rounds.iter().all(|l| *l == Load::Standard),

@@ -70,13 +70,10 @@ fn vr_use_button(
     use extraction_core::items::Category;
     let one_handed = comfort.is_some_and(|c| c.one_handed);
     let by_hand = |e: Entity| {
-        items
-            .get(e)
-            .is_ok_and(|i| match catalog.get(i.kind()).category {
-                Category::Food => true,
-                Category::Medical => !one_handed,
-                _ => false,
-            })
+        items.get(e).is_ok_and(|i| {
+            let def = catalog.get(i.kind());
+            def.is_food() || (def.category == Category::Medical && !one_handed)
+        })
     };
     if *driver != crate::rig::RigDriver::Xr {
         return;
@@ -188,14 +185,14 @@ fn use_items(
                 });
                 consume = true;
             }
-            "flashlight" | "weapon_light" => {
+            "flashlight" => {
                 if lights.contains(u.item) {
                     commands.entity(u.item).remove::<LightOn>();
                 } else {
                     commands.entity(u.item).insert(LightOn);
                 }
             }
-            _ if def.category == extraction_core::items::Category::Food => {
+            _ if def.is_food() => {
                 // No hunger meter. Eating is for the ritual of it.
                 if def.tags.iter().any(|t| t == "food:Water") {
                     raid.say("You drink. It tastes of the bottle.");

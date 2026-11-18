@@ -46,8 +46,8 @@ pub enum SignKind {
     Dragged,
     /// A loot spot cleared: a shelf, a table, a locker left bare.
     Looted,
-    /// A light that wasn't there: thrown, lit or switched on (a chemlight,
-    /// a hand flare, a dark room's lamps). Seen further than other signs in
+    /// A light that wasn't there: switched on (a torch, a dark room's
+    /// lamps). Seen further than other signs in
     /// the dark ([`LIGHT_SIGHT`]), and round a corner close by
     /// ([`LIGHT_GLOW`]).
     Light,

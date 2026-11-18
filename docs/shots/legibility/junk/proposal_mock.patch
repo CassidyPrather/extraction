@@ -1,0 +1,48 @@
+diff --git a/src/dev.rs b/src/dev.rs
+index 5957ca19..7a23c0d0 100644
+--- a/src/dev.rs
++++ b/src/dev.rs
+@@ -1367,6 +1367,25 @@ fn first_person_hands(
+         }
+         h
+     };
++    // MOCK #104 (not for commit): a thing in the left hand too.
++    if *stage == 15 {
++        if let Some(kind) = std::env::var("MOCK_LEFT").ok().and_then(|id| catalog.kind(&id)) {
++            let at = eye + (flat * 0.36 - right * 0.13 - Vec3::Y * 0.2) / zoom;
++            let e = crate::items::spawn_item(
++                &mut commands,
++                &catalog,
++                crate::items::SpawnItem {
++                    kind,
++                    transform: Transform::from_translation(at)
++                        .looking_to(flat, Vec3::Y),
++                    condition: 1.0,
++                },
++            );
++            commands
++                .entity(e)
++                .insert((RigidBody::Static, crate::render::said::Posed(Side::Left)));
++        }
++    }
+     // Late enough for a map's cards and buttons to be up.
+     if *stage == 15 {
+         match what {
+diff --git a/src/render/said.rs b/src/render/said.rs
+index 96d11fe8..276d5d13 100644
+--- a/src/render/said.rs
++++ b/src/render/said.rs
+@@ -877,6 +877,13 @@ fn show_callouts(
+                 },
+                 Visibility::Inherited,
+             ));
++            // MOCK #104 (not for commit): a junk tag, muted grey.
++            if std::env::var("MOCK_JUNK").is_ok() && side == crate::rig::Side::Left {
++                commands.entity(e).insert(crate::render::screen::Ink {
++                    ground: Some(Color::srgb(0.16, 0.16, 0.16)),
++                    ink: Color::srgb(0.52, 0.52, 0.5),
++                });
++            }
+             continue;
+         }
+         let size = screen.map_or(Vec2::ONE, |s| s.size);

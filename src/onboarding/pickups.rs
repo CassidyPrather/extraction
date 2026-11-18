@@ -18,9 +18,6 @@ pub enum Family {
     GunCare,
     /// A cleaning rod: a bullet stuck in the bore (`weapons::faults`).
     CleaningRod,
-    /// A chemlight or a hand flare: used, it lights, and lights its holder
-    /// for the machines (`world::glow`).
-    Lights,
     /// A signal flare: pulled, a red star goes up sixty metres
     /// (`items::usage`, #94).
     Signal,
@@ -67,7 +64,6 @@ pub enum Family {
 pub const FAMILIES: &[Family] = &[
     Family::GunCare,
     Family::CleaningRod,
-    Family::Lights,
     Family::Signal,
     Family::Matches,
     Family::Salvage,
@@ -114,7 +110,7 @@ pub const OBVIOUS: &[&str] = &[
 pub fn obvious(id: &str, category: Category) -> bool {
     matches!(
         category,
-        Category::Food | Category::Firearm | Category::Magazine | Category::Artifact
+        Category::Junk | Category::Firearm | Category::Magazine | Category::Artifact
     ) || OBVIOUS.contains(&id)
 }
 
@@ -130,7 +126,6 @@ pub fn family(def: &ItemDef) -> Option<Family> {
     Some(match id {
         "gun_oil" | "cleaning_kit" | "spare_parts" => Family::GunCare,
         "cleaning_rod" => Family::CleaningRod,
-        "chemlight" | "hand_flare" => Family::Lights,
         "signal_flare" => Family::Signal,
         "matches" => Family::Matches,
         "scrap_metal" | "electronics" | "polymer" | "brass" | "powder" => Family::Salvage,
@@ -167,7 +162,6 @@ impl Family {
             Family::CleaningRod => {
                 &["Truck: \"Round stuck in the bore? Knock it out with that, from the muzzle.\""]
             }
-            Family::Lights => &["Truck: \"Use it and it lights. Machines see you by it too.\""],
             Family::Signal => &[
                 "Truck: \"Signal flare. Pull the cord, hold it up: the whole valley sees the star.\"",
             ],
@@ -311,22 +305,6 @@ mod tests {
                 "cleaning_rod",
                 include_str!("../weapons/faults.rs"),
                 "cleaning_rod",
-            ),
-            // "Use it and it lights. Machines see you by it too."
-            (
-                "chemlight",
-                include_str!("../world/glow.rs"),
-                "\"chemlight\" => Some(Self::Chem)",
-            ),
-            (
-                "hand_flare",
-                include_str!("../world/glow.rs"),
-                "\"hand_flare\" => Some(Self::Flare)",
-            ),
-            (
-                "chemlight",
-                include_str!("../world/glow.rs"),
-                "robots::senses::Lighting",
             ),
             // "Pull the cord, hold it up: the whole valley sees the star."
             (
