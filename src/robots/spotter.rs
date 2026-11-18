@@ -11,8 +11,9 @@
 //!   it is blind) and cut the tether with bolt cutters, or wreck the winch:
 //!   it rises and drifts off downwind, trailing its rope, and is gone.
 //! - **The salvage.** Hole the envelope and it sinks to the ground. Its
-//!   gas valve, the envelope's fabric and (if you didn't shoot it out)
-//!   its camera's eye lie in the wreck.
+//!   gas valve is bolted on the slack envelope's crown, its camera (if you
+//!   didn't shoot it out) on its pod beside it, the envelope's fabric in
+//!   the wreck, and its winch's drum bolted to the skid (`spotter_salvage`).
 //! - An EMP blinds it for a while, and it can't call.
 
 use avian3d::prelude::*;
@@ -522,26 +523,68 @@ fn spotter_fly(
     }
 }
 
-/// Its salvage, once it's down: the gas valve, the envelope's fabric, and
-/// its eye if it's whole.
+/// Its salvage, once it's down (`salvage`, #105): what you saw on it is
+/// what comes off. Its pod and camera come to lie on the ground beside the
+/// slack envelope; the gas valve is bolted on the envelope's crown, the
+/// camera is on its pod by hand, and the winch's drum and motor are bolted
+/// to its skid. The envelope's fabric lies in the wreck, loose.
+#[allow(clippy::type_complexity)]
 fn spotter_salvage(
     mut commands: Commands,
     mut events: MessageReader<SpotterEvent>,
-    parts: Query<(&super::RobotPart, &ChildOf)>,
+    mut parts: Query<(Entity, &super::RobotPart, &ChildOf, &mut Transform)>,
+    winches: Query<(Entity, &SpotterPiece, &OfSpotter, &super::RobotPart), Without<ChildOf>>,
     catalog: Res<crate::items::Catalog>,
+    mut seat_looks: Query<(&super::salvage::SeatLook, &mut Visibility)>,
+    (mut meshes, mut materials): (
+        Option<ResMut<Assets<Mesh>>>,
+        Option<ResMut<Assets<StandardMaterial>>>,
+    ),
 ) {
     for ev in events.read() {
         if ev.what != SpotterAct::Down {
             continue;
         }
-        let eye_whole = parts
-            .iter()
-            .any(|(p, c)| c.parent() == ev.spotter && p.role == PartRole::Sensor && p.alive());
-        let mut drops = vec!["dirigible_gas_valve", "polymer", "polymer"];
-        if eye_whole {
-            drops.push("walker_eye");
+        let look = super::salvage::Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        let mut seated = Vec::new();
+        for (c, p, of, mut t) in &mut parts {
+            if of.parent() != ev.spotter {
+                continue;
+            }
+            // Down beside the envelope, not buried under it.
+            if matches!(
+                p.role,
+                PartRole::Sensor | PartRole::Armour(30) | PartRole::Lamp(_)
+            ) {
+                t.translation += DOWN_SHIFT;
+            }
+            let health = (p.hp / p.max_hp.max(1.0)).clamp(0.0, 1.0);
+            let row = match p.role {
+                PartRole::Core => wreck_row(PartRole::Core, VALVE_HEALTH),
+                r => wreck_row(r, health),
+            };
+            if let Some(row) = row {
+                seated.push(p.role);
+                super::salvage::fit(&mut commands, &catalog, c, row, &look);
+            }
         }
-        for (k, id) in drops.into_iter().enumerate() {
+        for (w, piece, of, p) in &winches {
+            if of.0 != ev.spotter || *piece != SpotterPiece::Winch {
+                continue;
+            }
+            let health = (p.hp / p.max_hp.max(1.0)).clamp(0.0, 1.0);
+            if let Some(row) = wreck_row(PartRole::Armour(40), health) {
+                seated.push(PartRole::Armour(40));
+                super::salvage::fit(&mut commands, &catalog, w, row, &look);
+            }
+        }
+        for (l, mut vis) in &mut seat_looks {
+            if l.robot == ev.spotter && seated.contains(&l.role) {
+                *vis = Visibility::Hidden;
+            }
+        }
+        // Its fabric.
+        for (k, id) in ["polymer", "polymer"].into_iter().enumerate() {
             let Some(kind) = catalog.kind(id) else {
                 continue;
             };
@@ -559,6 +602,61 @@ fn spotter_salvage(
             );
         }
     }
+}
+
+/// Where its pod, camera and lamp lie once it's down (from where they hung):
+/// on the ground beside the slack envelope (its middle `ENVELOPE_R * 0.5`
+/// up), off to its side.
+pub const DOWN_SHIFT: Vec3 = Vec3::new(2.3, -GONDOLA.y - ENVELOPE_R * 0.5 + 0.2, 0.0);
+/// The valve on the slack envelope's crown (local to it), and its state:
+/// the envelope's holed, its valve isn't.
+pub const VALVE_AT: Vec3 = Vec3::new(0.0, 0.55, 0.0);
+pub const VALVE_HEALTH: f32 = 0.7;
+pub const VALVE_BOLTS: usize = 4;
+/// The winch's drum and motor on its skid (local to the winch piece,
+/// 0.4 m over the ground), and the bolts down through its feet.
+pub const DRUM_AT: Vec3 = Vec3::new(0.07, -0.01, 0.0);
+pub const DRUM_BOLTS: usize = 3;
+/// The camera's middle on its part (`art/robots/spotter.py` prints it).
+pub const EYE_MID: Vec3 = Vec3::new(0.0, 0.01, -0.012);
+
+/// What a downed spotter gives up for each of its parts, and how it's
+/// held.
+pub fn wreck_row(role: PartRole, health: f32) -> Option<super::salvage::Row> {
+    use super::salvage::{Fix, Row};
+    let row = |item, at: Vec3, fix| Row {
+        item,
+        at: Transform::from_translation(at),
+        size: 1.0,
+        health,
+        fix,
+        hot: false,
+        replaces: None,
+    };
+    Some(match role {
+        PartRole::Core => row(
+            "dirigible_gas_valve",
+            VALVE_AT,
+            Fix::Bolts {
+                n: VALVE_BOLTS,
+                centre: VALVE_AT - Vec3::Y * 0.06,
+                face: Quat::IDENTITY,
+                radius: 0.13,
+            },
+        ),
+        PartRole::Sensor => row("spotter_eye", EYE_MID, Fix::Hand),
+        PartRole::Armour(40) => row(
+            "spotter_winch",
+            DRUM_AT,
+            Fix::Bolts {
+                n: DRUM_BOLTS,
+                centre: DRUM_AT + Vec3::new(0.0, -0.27, 0.0),
+                face: Quat::IDENTITY,
+                radius: 0.3,
+            },
+        ),
+        _ => return None,
+    })
 }
 
 /// The map's spotters, put up once the Zone is in (with robots on).
@@ -797,6 +895,32 @@ pub(crate) mod tests {
             .map(|(i, _)| catalog.get(i.kind()).id.clone())
             .collect();
         assert!(near.iter().any(|s| s == "dirigible_gas_valve"), "{near:?}");
-        assert!(near.iter().any(|s| s == "walker_eye"), "{near:?}");
+        assert!(near.iter().any(|s| s == "spotter_eye"), "{near:?}");
+        // Seated, what you saw on it (`spotter_salvage`): its valve on the
+        // envelope, its camera on its pod, its winch's drum on the skid.
+        // Each above the ground and in a hand's reach from standing (not
+        // buried where the pod hung under the envelope).
+        let seated: Vec<(String, Vec3)> = vr
+            .app
+            .world_mut()
+            .query_filtered::<(&crate::items::Item, &GlobalTransform), With<crate::interact::InSocket>>()
+            .iter(vr.app.world())
+            .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
+            .filter(|(id, _)| id.starts_with("spotter_") || id == "dirigible_gas_valve")
+            .collect();
+        let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            ["dirigible_gas_valve", "spotter_eye", "spotter_winch"],
+            "{seated:?}"
+        );
+        for (id, at) in &seated {
+            let over = at.y - zone.ground(at.x, at.z);
+            assert!(
+                (0.0..1.4).contains(&over),
+                "{id} {over:.2} m over the ground"
+            );
+        }
     }
 }

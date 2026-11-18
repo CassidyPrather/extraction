@@ -1086,6 +1086,18 @@
             tags: ["electronics", "metal"],
         ),
         (
+            id: "spotter_winch", dims: Some((1.04, 0.56, 0.54)), name: "Spotter winch",
+            description: "The drum and motor off an observation balloon's ground winch, stamped SP WCH. Three hundred metres of rubbered cable still wound on it.",
+            category: RobotPart, size: Bulky, mass: 22.0, bulk: 8.0,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "spotter_eye", dims: Some((0.26, 0.24, 0.105)), name: "Spotter camera",
+            description: "The camera off a balloon's pod: a long lens in a hooded bezel. It watched a valley from a hundred metres up.",
+            category: RobotPart, size: Small, mass: 0.9, bulk: 0.6,
+            tags: ["electronics", "glass"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,

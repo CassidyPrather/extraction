@@ -217,6 +217,8 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("sentry_eye", 0.3, Made, "a sentry's visor"),
     ("sentry_lamp", 0.23, Made, "a sentry's searchlight"),
     ("sentry_junction", 0.31, Made, "a sentry's breaker"),
+    ("spotter_winch", 1.04, Made, "a spotter's winch"),
+    ("spotter_eye", 0.26, Made, "a spotter's camera"),
     ("pressure_mine", 0.31, Made, "a mine"),
     ("robot_ammo_belt", 0.08, Made, "a coil of robot belt"),
     ("art_featherstone", 0.036, Made, "an artifact"),
