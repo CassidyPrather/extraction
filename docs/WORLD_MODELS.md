@@ -45,6 +45,13 @@ Rust and shearing: nothing on them suggests a tool would help.
 - `wall_telephone`: its crank broken off at the arm, a stub on its
   spindle.
 - `logbook`: the Morse key beside it snapped off at its pivot.
+- `harmonium`: its stops' knobs broken off, shanks snapped short at the
+  stop board (its keys play: `radio::piano`).
+
+## Later
+
+- The harmonium's stops: a pulled stop changing its registration (Radio,
+  after the 20 Nov playtest); its knobs come back then.
 
 ## Chain/padlock: future bolt-cutter targets
 

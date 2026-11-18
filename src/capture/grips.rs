@@ -78,10 +78,8 @@ pub const LEDGER: &[(&str, Why)] = &[
         Why::Worked("radio::gramophone: wind it by its crank"),
     ),
     ("hand_pump", Why::Seized),
-    (
-        "harmonium",
-        Why::Worked("radio::piano: its keys; its stops are Radio's, set where they are"),
-    ),
+    // (Its keys play, `radio::piano`; its stops' knobs are broken off.)
+    ("harmonium", Why::Seized),
     (
         "hurricane_lamp",
         Why::Form("a lamp's bail; open: Hands/Items: grabbable loose thing?"),
