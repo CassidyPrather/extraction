@@ -435,10 +435,54 @@ pub fn move_parts(
 /// A counter's moving nodes (`art/props/furniture.py`, split by Model
 /// correctness): `model#node`, the node's origin in the model's space
 /// (on a door's hinge, a drawer's middle shut), its box's centre from
-/// that origin and its size (read from the model), whether it opens the
-/// other way round (a right-hand door: its free edge toward -X), and how
-/// it moves.
-struct CounterNode(&'static str, [f32; 3], [f32; 3], [f32; 3], bool, Motion);
+/// that origin and its size (read from the model, in the model's axes),
+/// how its own space is turned from the model's ([`Frame`]), and how it
+/// moves.
+struct CounterNode(&'static str, [f32; 3], [f32; 3], [f32; 3], Frame, Motion);
+
+/// How a moving part's own space is turned from its model's: a hinge
+/// turns about its own Y, a slide runs along its own -Z.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Frame {
+    /// As the model's: a left-hand door, a drawer.
+    Upright,
+    /// Turned over (about Z): a right-hand door, its free edge toward -X,
+    /// opening with the same sense.
+    Over,
+    /// A lid hinged along its back (the model's X), lifting its front.
+    Lid,
+    /// A lid hinged along its model's Z at -X, lifting its +X edge (a
+    /// wheelie bin's, on its rail by the handle).
+    SideLid,
+}
+
+impl Frame {
+    pub fn turn(self) -> Quat {
+        match self {
+            Frame::Upright => Quat::IDENTITY,
+            Frame::Over => Quat::from_rotation_z(std::f32::consts::PI),
+            Frame::Lid => Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2),
+            Frame::SideLid => Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        }
+    }
+}
+
+impl CounterNode {
+    /// Its rest from its prop (`prop`: the prop's placing), unscaled.
+    fn rest(&self, prop: bevy::math::Affine3A) -> Transform {
+        let node =
+            bevy::math::Affine3A::from_rotation_translation(self.4.turn(), Vec3::from(self.1));
+        let (_, rot, at) = (prop * node).to_scale_rotation_translation();
+        Transform::from_translation(at).with_rotation(rot)
+    }
+    /// Its box's centre and size in its own space, its prop scaled by
+    /// `scale` (across only: a counter's run).
+    fn part_box(&self, scale: Vec3) -> (Vec3, Vec3) {
+        let q = self.4.turn().inverse();
+        let size = Vec3::from(self.3) * Vec3::new(scale.x.abs(), 1.0, 1.0);
+        (q * Vec3::from(self.2), (q * size).abs())
+    }
+}
 
 const COUNTER_NODES: &[CounterNode] = &[
     CounterNode(
@@ -446,7 +490,7 @@ const COUNTER_NODES: &[CounterNode] = &[
         [0.0, 0.68, -0.04],
         [0.0, 0.0, -0.013],
         [0.566, 0.244, 0.546],
-        false,
+        Frame::Upright,
         Motion::Slide {
             travel: DRAWER_TRAVEL,
         },
@@ -456,7 +500,7 @@ const COUNTER_NODES: &[CounterNode] = &[
         [0.0, 0.43, -0.04],
         [0.0, 0.0, -0.013],
         [0.566, 0.244, 0.546],
-        false,
+        Frame::Upright,
         Motion::Slide {
             travel: DRAWER_TRAVEL,
         },
@@ -466,7 +510,7 @@ const COUNTER_NODES: &[CounterNode] = &[
         [0.0, 0.205, -0.04],
         [0.0, 0.0, -0.013],
         [0.566, 0.194, 0.546],
-        false,
+        Frame::Upright,
         Motion::Slide {
             travel: DRAWER_TRAVEL,
         },
@@ -478,7 +522,7 @@ const COUNTER_NODES: &[CounterNode] = &[
         [-0.240, 0.62, -0.289],
         [0.110, 0.0, -0.024],
         [0.22, 0.15, 0.048],
-        false,
+        Frame::Upright,
         Motion::Hinge { most: STOVE_DOOR },
     ),
     CounterNode(
@@ -486,7 +530,7 @@ const COUNTER_NODES: &[CounterNode] = &[
         [-0.240, 0.2, -0.289],
         [0.110, 0.0, -0.024],
         [0.22, 0.1, 0.048],
-        false,
+        Frame::Upright,
         Motion::Hinge { most: STOVE_DOOR },
     ),
     CounterNode(
@@ -494,7 +538,7 @@ const COUNTER_NODES: &[CounterNode] = &[
         [0.030, 0.4, -0.289],
         [0.130, 0.0, -0.024],
         [0.26, 0.3, 0.048],
-        false,
+        Frame::Upright,
         Motion::Hinge { most: STOVE_DOOR },
     ),
     // A locker's door, hung on its left (`art/props/furniture.py`
@@ -504,15 +548,35 @@ const COUNTER_NODES: &[CounterNode] = &[
         [-0.238, 0.93, -0.205],
         [0.238, 0.0, -0.02],
         [0.47, 1.7, 0.05],
-        false,
+        Frame::Upright,
         Motion::Hinge { most: LOCKER_DOOR },
+    ),
+    // A tool chest's lid, hinged along its back (`art/props/interiors.py`
+    // `CHEST_HINGE`), lifting past upright.
+    CounterNode(
+        "tool_chest#lid",
+        [0.0, 0.5, 0.25],
+        [0.0, 0.025, -0.25],
+        [0.94, 0.06, 0.54],
+        Frame::Lid,
+        Motion::Hinge { most: CHEST_LID },
+    ),
+    // A wheelie bin's lid on its rail (`art/props/dam.py` `BIN_HINGE`),
+    // lifting back over its handle.
+    CounterNode(
+        "wheelie_bin#lid",
+        [-0.32, 0.93, 0.0],
+        [0.30, 0.045, 0.0],
+        [0.64, 0.07, 0.72],
+        Frame::SideLid,
+        Motion::Hinge { most: BIN_LID },
     ),
     CounterNode(
         "counter_cabinet#door_l",
         [-0.284, 0.455, -0.298],
         [0.14, 0.0, -0.004],
         [0.281, 0.7, 0.047],
-        false,
+        Frame::Upright,
         Motion::Hinge { most: CABINET_DOOR },
     ),
     CounterNode(
@@ -520,29 +584,19 @@ const COUNTER_NODES: &[CounterNode] = &[
         [0.284, 0.455, -0.298],
         [-0.141, 0.0, -0.004],
         [0.281, 0.7, 0.046],
-        true,
+        Frame::Over,
         Motion::Hinge { most: CABINET_DOOR },
     ),
 ];
 
 /// Every moving node a hand takes hold of (`model#node`): its origin in
-/// its model's space, its grab box's centre from there (in the part's own
-/// space, a right-hand door turned over) and size, and whether it's turned
-/// over (`capture::checks::handles`).
-pub fn moving_nodes() -> impl Iterator<Item = (&'static str, Vec3, Vec3, Vec3, bool)> {
+/// its model's space, its grab box's centre from there and its size (in
+/// the part's own space), and how that space is turned from the model's
+/// (`capture::checks::handles`).
+pub fn moving_nodes() -> impl Iterator<Item = (&'static str, Vec3, Vec3, Vec3, Quat)> {
     COUNTER_NODES.iter().map(|n| {
-        let flip = if n.4 {
-            Quat::from_rotation_z(std::f32::consts::PI)
-        } else {
-            Quat::IDENTITY
-        };
-        (
-            n.0,
-            Vec3::from(n.1),
-            flip.inverse() * Vec3::from(n.2),
-            Vec3::from(n.3),
-            n.4,
-        )
+        let (centre, size) = n.part_box(Vec3::ONE);
+        (n.0, Vec3::from(n.1), centre, size, n.4.turn())
     })
 }
 
@@ -570,6 +624,11 @@ pub const CABINET_DOOR: f32 = 1.9;
 pub const LOCKER_DOOR: f32 = 2.0;
 /// How far a stove's doors swing open, radians.
 pub const STOVE_DOOR: f32 = 1.7;
+/// How far a tool chest's lid lifts, radians: a little past upright, so
+/// it stays.
+pub const CHEST_LID: f32 = 1.6;
+/// How far a wheelie bin's lid lifts, radians: back over its handle.
+pub const BIN_LID: f32 = 2.0;
 
 /// A building's counters' drawers and cabinet doors, put up as moving
 /// parts when it's placed (the building draws only their carcasses:
@@ -610,10 +669,7 @@ pub fn fit_counters(
                             (bxf.compute_affine() * bevy::math::Affine3A::from_translation(h.at))
                                 .into(),
                         );
-                        let (_, rot, at) = (prop
-                            * bevy::math::Affine3A::from_translation(Vec3::from(n.1)))
-                        .to_scale_rotation_translation();
-                        let part_rest = Transform::from_translation(at).with_rotation(rot);
+                        let part_rest = n.rest(prop);
                         let seat = part_rest.compute_affine().inverse() * rest.compute_affine();
                         commands.spawn((
                             super::buildings::hold_socket(
@@ -635,21 +691,15 @@ fn spawn_counter_node(
     commands: &mut Commands,
     prop: bevy::math::Affine3A,
     scale: Vec3,
-    CounterNode(drawn, origin, centre, size, flipped, _): &CounterNode,
+    n: &CounterNode,
     motion: Motion,
 ) -> Entity {
-    // Shut, in the world: on its hinge or at its middle, unscaled, a
-    // right-hand door turned over so it opens with the same sense.
-    let flip = if *flipped {
-        Quat::from_rotation_z(std::f32::consts::PI)
-    } else {
-        Quat::IDENTITY
-    };
-    let node = bevy::math::Affine3A::from_rotation_translation(flip, Vec3::from(*origin));
-    let (_, rot, at) = (prop * node).to_scale_rotation_translation();
-    let rest = Transform::from_translation(at).with_rotation(rot);
-    let box_centre = flip.inverse() * Vec3::from(*centre);
-    let box_size = Vec3::from(*size) * Vec3::new(scale.x.abs(), 1.0, 1.0);
+    let drawn = n.0;
+    // Shut, in the world: on its hinge or at its middle, unscaled, turned
+    // as its frame is (a right-hand door over, so it opens with the same
+    // sense; a lid on its side, so it lifts).
+    let rest = n.rest(prop);
+    let (box_centre, box_size) = n.part_box(scale);
     let e = spawn_moving(commands, drawn, rest, motion, box_size, box_centre);
     // Its node drawn where it hangs in the model, from the part's own space.
     let model_at = Transform::from_matrix((rest.compute_affine().inverse() * prop).into());
@@ -768,16 +818,9 @@ fn clear_end_by(
     n: &CounterNode,
 ) -> (f32, Option<crate::render::materials::Mat>) {
     use super::buildings::Shape;
-    let flip = if n.4 {
-        Quat::from_rotation_z(std::f32::consts::PI)
-    } else {
-        Quat::IDENTITY
-    };
-    let node = bevy::math::Affine3A::from_rotation_translation(flip, Vec3::from(n.1));
-    let (_, rot, at) = (xf.compute_affine() * node).to_scale_rotation_translation();
-    let rest = Transform::from_translation(at).with_rotation(rot);
-    let centre = flip.inverse() * Vec3::from(n.2);
-    let half = Vec3::from(n.3) * Vec3::new(xf.scale.x.abs(), 1.0, 1.0) * 0.5;
+    let rest = n.rest(xf.compute_affine());
+    let (centre, size) = n.part_box(xf.scale);
+    let half = size * 0.5;
     let mut m = Moving {
         motion: n.5,
         rest,

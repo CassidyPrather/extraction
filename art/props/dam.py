@@ -142,34 +142,45 @@ def kept_bicycle():
     return [p]
 
 
+# A wheelie bin's lid's hinge, on its rail at -X (`wheelie_bin#lid`).
+BIN_HINGE = (-0.32, 0.93, 0.0)
+
+
 def wheelie_bin():
-    """240 litres, 0.58 x 1.0 x 0.66: a tapered body, the lid and its hinge
-    rail at -X with the handle, two wheels below it."""
-    p = Part("static")
-    lo, hi = 0.06, 0.95
-    rings = []
-    for y, s in [(lo, 0.9), (hi - 0.04, 1.0), (hi, 1.0)]:
-        hw, hd = 0.29 * s, 0.33 * s
-        rings.append([(-hw, y, -hd), (hw, y, -hd), (hw, y, hd), (-hw, y, hd)])
-    p.loft(rings, "Olive")
+    """240 litres, 0.58 x 1.0 x 0.66: a tapered body (`carcass`), hollow and
+    empty, its hinge rail and handle at -X, two wheels below it; its lid
+    (`lid`) its own node on the rail, lifting its +X edge by the lip under
+    it (`world::hinge`)."""
+    p = Part("carcass")
+    lo, hi, t = 0.06, 0.95, 0.012
+    def ring(y, s, inset=0.0):
+        hw, hd = 0.29 * s - inset, 0.33 * s - inset
+        return [(-hw, y, -hd), (hw, y, -hd), (hw, y, hd), (-hw, y, hd)]
+    # Its walls up and over the rim and down inside to its floor.
+    p.loft([ring(lo, 0.9), ring(hi - 0.04, 1.0), ring(hi, 1.0), ring(hi, 1.0, t),
+            ring(lo + 0.03, 0.9, t)], "Olive")
     # Ribs down the front and back.
     for z in (-0.335, 0.335):
         for x in (-0.12, 0.12):
             p.box((0.04, 0.7, 0.012), (x, 0.5, z), "Olive")
-    # Lid, a little over the rim, and the hinge rail and handle at -X.
-    p.box((0.62, 0.05, 0.7), (-0.02, hi + 0.025, 0.0), "Olive", bevel=0.012, segs=1)
+    # The hinge rail and handle at -X.
     p.cyl(0.02, -0.3, 0.3, "Black", segs=10, xf=T(-0.32, hi - 0.02, 0.0))
     p.box((0.06, 0.06, 0.5), (-0.34, hi + 0.01, 0.0), "Black", bevel=0.01, segs=1)
     # Wheels on their axle.
     for z in (-0.26, 0.26):
         p.cyl(0.1, z - 0.03, z + 0.03, "Rubber", segs=14, xf=T(-0.24, 0.1, 0.0))
     p.cyl(0.012, -0.29, 0.29, "Iron", segs=8, xf=T(-0.24, 0.1, 0.0))
-    # The house's number painted on, and the tag on the lid (a blank
-    # pale plate read as a placeholder).
+    # The house's number painted on.
     lettering(p, "14", 0.06, "Cream", T(0.12, 0.75, -0.336) @ RY(math.pi))
-    p.box((0.22, 0.004, 0.14), (0.05, hi + 0.054, 0.0), "Paper")
-    p.box((0.18, 0.004, 0.02), (0.05, hi + 0.058, 0.03), "Black")
-    return [p]
+    # The lid, a little over the rim, the tag on it (a blank pale plate
+    # read as a placeholder), its lip along its free edge.
+    d = Part("lid", origin=BIN_HINGE)
+    d.box((0.62, 0.05, 0.7), (-0.02, hi + 0.025, 0.0), "Olive", bevel=0.012, segs=1)
+    d.box((0.22, 0.004, 0.14), (0.05, hi + 0.054, 0.0), "Paper")
+    d.box((0.18, 0.004, 0.02), (0.05, hi + 0.058, 0.03), "Black")
+    # Its lip: a gloved hand under it (`capture::checks::HANDLE_THICK`).
+    d.box((0.03, 0.024, 0.4), (0.3, hi + 0.014, 0.0), "Rubber", bevel=0.004, segs=1)
+    return [p, d]
 
 
 prop("kept_bus", kept_bus)

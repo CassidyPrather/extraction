@@ -1025,12 +1025,10 @@ fn ball_mill_floor(b: &mut Builder) {
         None,
     );
     b.workbench(Vec3::new(6.0, f, 0.6), 0.0, Some("workshop"));
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
+    b.tool_chest(
         Vec3::new(-INNER + 0.3, f, 6.5),
         std::f32::consts::FRAC_PI_2,
-        Some("tools"),
+        "tools",
     );
     b.pallet(Vec3::new(-8.6, f, 3.0), std::f32::consts::FRAC_PI_2);
     for k in 0..4 {
@@ -1425,13 +1423,7 @@ fn observatory(b: &mut Builder) {
     b.crate_box(Vec3::new(-ix + 0.6, f, -0.3), 0.6, Some("medical"));
     // Upstairs: the store, the observer's chest.
     b.table(Vec3::new(3.0, OBS_UPPER, -1.9), 0.0, Some("curio"));
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
-        Vec3::new(3.8, OBS_UPPER, iz1 - 0.4),
-        0.0,
-        Some("driver_cache"),
-    );
+    b.tool_chest(Vec3::new(3.8, OBS_UPPER, iz1 - 0.4), 0.0, "driver_cache");
     b.crate_box(
         Vec3::new(-ix + 0.6, OBS_UPPER, -1.8),
         0.7,
@@ -2158,13 +2150,7 @@ fn upper_station(b: &mut Builder) {
     for (x, z) in [(5.25, 6.25), (4.65, 6.3), (5.25, 5.65)] {
         b.barrel(Vec3::new(x, f, z));
     }
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
-        Vec3::new(ix1 - 0.3, f, 3.2),
-        half,
-        Some("tools"),
-    );
+    b.tool_chest(Vec3::new(ix1 - 0.3, f, 3.2), half, "tools");
     b.crate_box(Vec3::new(ix1 - 0.45, f, iz0 + 0.45), 0.7, Some("workshop"));
     b.crate_box(Vec3::new(-0.8, f, iz1 - 0.65), 0.6, Some("medical"));
     b.crate_box(Vec3::new(ix0 + 0.4, f, iz0 + 0.4), 0.6, Some("ammo_common"));
