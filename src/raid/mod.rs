@@ -110,9 +110,14 @@ pub enum Show {
     /// As `View`, and no later line takes its place inside its reading
     /// time: danger now (a first contact's advice, the Surge).
     Urgent,
-    /// A callout beside this thing in the hand: a line about it. In the
-    /// view instead when it isn't in a hand.
+    /// A callout beside this thing in the hand: a line about it, what it
+    /// is or how it works. In the view instead when it isn't in a hand.
+    /// Once its kind's been in hand `items::handled::QUIET_AFTER` times it
+    /// waits to be asked for (#107).
     Item(Entity),
+    /// As `Item`, but it always shows: something to do with it now (an
+    /// empty gun, the step being taught).
+    ItemNow(Entity),
 }
 
 /// How many lines wait for the view at most.
@@ -1094,7 +1099,7 @@ mod tests {
         // A line for the wrist alone isn't shown.
         let mut r = app.world_mut().resource_mut::<Raid>();
         r.shown.clear();
-        r.say("You bind the wound.");
+        r.say("Cold, then warm. Something knits.");
         assert!(r.shown.is_empty());
     }
 

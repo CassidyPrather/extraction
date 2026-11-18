@@ -392,10 +392,22 @@ mod tests {
                 .flat_map(|(e, _, p)| [Some(e), p.map(|p| p.parent())])
                 .flatten()
                 .collect();
+            // Parts of a truck kept out of sight, and what they belong to.
+            let unseen: std::collections::HashSet<Entity> = w
+                .query_filtered::<(Entity, Option<&ChildOf>), With<crate::onboarding::gates::Unseen>>()
+                .iter(w)
+                .flat_map(|(e, p)| [Some(e), p.map(|p| p.parent())])
+                .flatten()
+                .collect();
             for (e, t) in traits(w) {
                 // Folded away by the training yard till it's taught
                 // (`onboarding::Folded`): out of sight and reach on purpose.
                 if w.get::<crate::onboarding::Folded>(e).is_some() {
+                    continue;
+                }
+                // The yard's truck, out of sight and reach till it's called
+                // (#89, `onboarding::gates::Unseen`), and what's on it.
+                if unseen.contains(&e) {
                     continue;
                 }
                 let what = w.get::<Name>(e).map_or(format!("{e}"), |n| n.to_string());

@@ -873,7 +873,6 @@ pub const WOKE_LINE: &str = "You went down. You wake in the back of the truck.";
 /// End of a raid: drive home with whatever you're carrying, or wake up in
 /// the truck with nothing.
 fn finish_raid(
-    mut commands: Commands,
     mut raid: ResMut<Raid>,
     time: Res<Time>,
     zone: Res<Zone>,
@@ -915,11 +914,6 @@ fn finish_raid(
         t.translation = base.transform_point(Vec3::new(0.3, FLOOR + 0.05, 0.6));
         t.rotation = base.rotation;
         *h = Health::default();
-        // A broken leg's set in town between raids (never by a night in a
-        // safehouse: out there it's a splint and a limp).
-        commands
-            .entity(e)
-            .remove::<crate::interact::wounds::Fracture>();
         body.velocity = Vec3::ZERO;
     }
     raid.phase = Phase::AtBase;

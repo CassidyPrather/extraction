@@ -198,6 +198,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Wood",
     "Polymer",
     "Shell",
+    "ShellBelly",
     "Steel",
     "Bakelite",
     "Black",
@@ -228,6 +229,11 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Paper",
     "Olive",
     "Copper",
+    // A box's round's point, the band behind it, and a shell's hull:
+    // painted for each round's load (`items::rounds`).
+    "Tip",
+    "TipBand",
+    "Hull",
     "Dark",
     "Rotor",
     "Lens",
@@ -236,6 +242,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "LampRed",
     "Glow",
     "Warn",
+    "Hot",
     "Eye",
     "Strange",
     "Beacon",
@@ -341,6 +348,12 @@ impl ModelMaterials {
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
+            // A robot's underside: the shell scan a shade darker, without
+            // the shell's own faint glow (`robots::visuals`), so the
+            // dirigible's belly stands off the overcast from below (#99).
+            "ShellBelly" => derive(Mat::RobotShell, &|m| {
+                m.base_color = Color::srgb(0.62, 0.63, 0.64);
+            }),
             // Bright steel: the gun-metal scan's relief, without its dark albedo.
             "Steel" => derive(Mat::GunMetal, &|m| {
                 m.base_color_texture = None;
@@ -504,7 +517,10 @@ impl ModelMaterials {
             "Cream" => flat(materials, Color::srgb(0.82, 0.78, 0.66), 0.0, 0.6),
             "Paper" => flat(materials, Color::srgb(0.85, 0.83, 0.76), 0.0, 0.9),
             "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
-            "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
+            "Copper" | "Tip" | "TipBand" => {
+                flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32)
+            }
+            "Hull" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
             // Retroreflective tape by day: a pale cool grey, its beads a
             // little glossy (`render::reflectors` lights it for a torch).
@@ -527,6 +543,9 @@ impl ModelMaterials {
             "LampRed" => glow(materials, Color::srgb(0.5, 0.03, 0.02), (1.6, 0.08, 0.03)),
             "Glow" => glow(materials, Color::srgb(0.1, 0.4, 0.5), (0.5, 3.0, 4.0)),
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
+            // A salvaged cell's charge band (#105): deep orange, warm, not
+            // the yellow a Warn trim reads as.
+            "Hot" => glow(materials, Color::srgb(0.85, 0.22, 0.02), (2.4, 0.45, 0.02)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
             // The machines' boundary stake's lens

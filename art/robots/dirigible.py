@@ -15,7 +15,8 @@ the part's spawn offset, so damage maps to what you see:
 - `prop`    (1.3, -2.9, 1.45) the right engine's propeller, spun by the game
                             (it draws a copy on the left engine too)
 
-Materials: Shell (pale), Dark, Eye (emissive accents), Rotor.
+Materials: Shell (pale), ShellBelly (its underside, a shade darker), Dark, Eye
+(emissive accents), Rotor.
 """
 
 import math
@@ -71,7 +72,13 @@ def cell(i):
         for s in range(12):
             # Leave the top strip for the spine.
             start = 30.0 * s + GAP / 2 + 15.0
-            p.lathe(prof, "Shell", segs=4, start=start, sweep=30.0 - GAP)
+            # The belly a shade darker, the lower five strips (from 30
+            # degrees under the equator round): from the ground the pale
+            # envelope was the overcast's own grey and read see-through,
+            # its ribs and lights a frame on the sky (#99).
+            centre = start + 15.0
+            mat = "ShellBelly" if 195.0 < centre < 345.0 else "Shell"
+            p.lathe(prof, mat, segs=4, start=start, sweep=30.0 - GAP)
     # Dorsal spine: a dark strip following the top, accent lights on it.
     sa, sb = max(z0, -6.6), min(z1, 6.3)
     path = [(z, r_at(z) + 0.03) for z in zs(sa, sb, 10)]

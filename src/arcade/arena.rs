@@ -6,6 +6,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use extraction_core::ammo::{Load, Loads};
 use extraction_core::map::MarkerKind;
 use extraction_core::save::SavedItem;
 
@@ -115,11 +116,47 @@ fn kit(table: usize) -> &'static [Kit] {
             ("pm_pistol", 0, Some(("pm_mag", 8)), [0.2, 0.12], Lie::Side),
             ("pm_mag", 8, None, [0.38, 0.26], Lie::Side),
             ("pm_mag", 8, None, [0.48, 0.26], Lie::Side),
-            ("field_dressing", 0, None, [-0.1, 0.27], Lie::Flat),
-            ("field_dressing", 0, None, [0.05, 0.27], Lie::Flat),
+            ("regen_injector", 0, None, [-0.1, 0.27], Lie::Flat),
         ],
     }
 }
+
+/// On the gun board's table, in front of it: boxes of the AK's rounds to
+/// read and handle (#103, `items::rounds`): an AP box and a tracer box,
+/// shut and full; a ball box with AP and tracers put in it (mixed); an AP
+/// box with twelve left; and a ball box with four rounds gone damp.
+/// (catalog id, rounds, its loads from the bottom, where (x, z)).
+pub const BOX_TABLE_KIT: [(&str, u32, &[Load], [f32; 2]); 5] = [
+    ("ammo_545_ap", 30, &[], [-0.36, 0.25]),
+    ("ammo_545_tracer", 30, &[], [-0.18, 0.25]),
+    (
+        "ammo_545",
+        24,
+        &[
+            Load::Ap,
+            Load::Tracer,
+            Load::Standard,
+            Load::Ap,
+            Load::Tracer,
+            Load::Ap,
+        ],
+        [0.0, 0.25],
+    ),
+    ("ammo_545_ap", 12, &[], [0.18, 0.25]),
+    (
+        "ammo_545",
+        30,
+        &[
+            Load::Damp,
+            Load::Standard,
+            Load::Damp,
+            Load::Damp,
+            Load::Standard,
+            Load::Damp,
+        ],
+        [0.36, 0.25],
+    ),
+];
 
 /// On the board's table, in front of the board: the throwables.
 const BOARD_TABLE_KIT: [Kit; 2] = [
@@ -626,7 +663,7 @@ fn sweep(world: &mut World) {
     }
 }
 
-/// Whole again: health, wounds, a broken leg.
+/// Whole again.
 fn heal(world: &mut World) {
     let players: Vec<Entity> = world
         .query_filtered::<Entity, With<LocalPlayer>>()
@@ -636,13 +673,6 @@ fn heal(world: &mut World) {
         if let Some(mut h) = world.get_mut::<crate::health::Health>(p) {
             *h = crate::health::Health::default();
         }
-        if let Some(mut w) = world.get_mut::<crate::interact::wounds::Wounds>(p) {
-            w.0.clear();
-        }
-        world.entity_mut(p).remove::<(
-            crate::interact::wounds::Fracture,
-            crate::interact::wounds::Bloodied,
-        )>();
     }
 }
 
@@ -679,6 +709,19 @@ fn lay_tables(world: &mut World) {
             }
             if crate::persist::restore_item(world, &saved, at).is_some() {
                 n += 1;
+            }
+        }
+    }
+    // The boxes, on the gun board's table: opened ones torn already.
+    let pose = table_pose(&zone, &bench, GUN_TABLE);
+    for (id, rounds, loads, [x, z]) in BOX_TABLE_KIT {
+        let at = pose * Transform::from_xyz(x, TABLE.y + 0.06, z);
+        let mut saved = saved(id, rounds);
+        saved.loads = Loads(loads.to_vec());
+        if let Some(e) = crate::persist::restore_item(world, &saved, at) {
+            n += 1;
+            if !loads.is_empty() {
+                world.entity_mut(e).insert(crate::items::rounds::Opened);
             }
         }
     }
@@ -769,6 +812,10 @@ mod tests {
     #[test]
     fn every_thing_on_the_bench_is_in_the_catalog() {
         let catalog = crate::items::Catalog::load();
+        for (id, rounds, loads, _) in BOX_TABLE_KIT {
+            let def = catalog.get(catalog.kind(id).expect(id));
+            assert!(rounds <= def.rounds && loads.len() as u32 <= rounds, "{id}");
+        }
         let all = (0..KIT_TABLES)
             .flat_map(|t| kit(t).iter())
             .chain(BOARD_TABLE_KIT.iter());

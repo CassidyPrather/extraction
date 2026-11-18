@@ -7031,6 +7031,17 @@ pub fn dress_buildings(
             let wild = super::overgrowth::reclaim(&geo, &occluders, gseed, ruin);
             growth.vines.extend(wild.vines);
             growth.leaves.extend(wild.leaves);
+            // Kept cut back round the field sets hung on its walls.
+            if let Some(z) = &zone {
+                let f = extraction_core::map::prefab_footprint(&b.prefab);
+                let sets = super::overgrowth::field_set_clearings(
+                    &z.map,
+                    &z.hm,
+                    xf,
+                    Vec2::new(f[0], f[2]) * 0.5,
+                );
+                super::overgrowth::keep_off(&mut growth, &sets);
+            }
             let span = |a: f32, b: f32| bevy::camera::visibility::VisibilityRange {
                 start_margin: if a > 0.0 { a - 5.0..a + 5.0 } else { 0.0..0.0 },
                 end_margin: b - 5.0..b + 5.0,

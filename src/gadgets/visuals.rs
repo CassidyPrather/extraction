@@ -21,6 +21,7 @@ impl Plugin for GadgetVisualsPlugin {
             (
                 beams,
                 low_cell_beams.after(beams),
+                fold_handles,
                 lasers,
                 dress_gadgets,
                 compass_needles,
@@ -44,6 +45,82 @@ impl Plugin for GadgetVisualsPlugin {
 #[derive(Component)]
 struct Beam;
 
+/// The light's carry handle (`art/items/attachments.py`): folded back along
+/// it as modelled, swung up over it while it's in a hand and not on a
+/// rail, so held it's a torch with a handle and clamped a weapon light.
+#[derive(Component, Clone, Copy)]
+struct CarryHandle {
+    rest: Quat,
+    up: f32,
+}
+
+/// How far the handle swings up from folded (about the hinge's X), and
+/// how fast (radians a second).
+const HANDLE_UP: f32 = -std::f32::consts::FRAC_PI_2;
+const HANDLE_SPEED: f32 = 9.0;
+
+/// The handle's angle from folded for a light in a hand (`held`) or not,
+/// on a rail or not.
+pub fn handle_angle(held: bool, on_rail: bool) -> f32 {
+    if held && !on_rail { HANDLE_UP } else { 0.0 }
+}
+
+#[allow(clippy::type_complexity)]
+fn fold_handles(
+    mut commands: Commands,
+    lights: Query<(
+        &Item,
+        &Children,
+        Has<crate::interact::Held>,
+        Option<&crate::interact::InSocket>,
+    )>,
+    roots: Query<&Children, With<crate::items::ItemModelRoot>>,
+    mut parts: Query<(Entity, &Name, &mut Transform, Option<&mut CarryHandle>)>,
+    sockets: Query<&crate::interact::Socket>,
+    catalog: Res<Catalog>,
+    time: Res<Time>,
+) {
+    let step = HANDLE_SPEED * time.delta_secs();
+    for (item, children, held, socket) in &lights {
+        if catalog.get(item.kind()).id != "flashlight" {
+            continue;
+        }
+        let on_rail = socket
+            .and_then(|s| sockets.get(s.socket).ok())
+            .is_some_and(|s| {
+                s.kind == crate::interact::SocketKind::Mount(extraction_core::items::Mount::Rail)
+            });
+        let want = handle_angle(held, on_rail);
+        for root in children.iter().filter_map(|c| roots.get(c).ok()) {
+            for part in root.iter() {
+                let Ok((e, name, mut t, handle)) = parts.get_mut(part) else {
+                    continue;
+                };
+                if name.as_str() != "handle" {
+                    continue;
+                }
+                let mut h = match handle {
+                    Some(h) => *h,
+                    None => {
+                        let h = CarryHandle {
+                            rest: t.rotation,
+                            up: 0.0,
+                        };
+                        commands.entity(e).insert(h);
+                        h
+                    }
+                };
+                if (h.up - want).abs() < 1e-4 {
+                    continue;
+                }
+                h.up += (want - h.up).clamp(-step, step);
+                t.rotation = h.rest * Quat::from_rotation_x(h.up);
+                commands.entity(e).insert(h);
+            }
+        }
+    }
+}
+
 /// A lit torch's beam, down its -Z.
 pub fn torch_beam() -> SpotLight {
     SpotLight {
@@ -58,29 +135,17 @@ pub fn torch_beam() -> SpotLight {
     }
 }
 
-/// Where a light's beam comes from, in its space: the lens, down its -Z.
-fn lens(id: &str) -> f32 {
-    match id {
-        // The torch's model is centred on its box (`art/items/_kit.py`).
-        "flashlight" => -0.0645,
-        _ => -0.06,
-    }
-}
+/// Where a light's beam comes from, in its space: just past the lens,
+/// down its -Z.
+const LENS: f32 = -0.06;
 
 /// Powered lights get a spotlight, pointing down the item's -Z.
 fn beams(
     mut commands: Commands,
-    devices: Query<(
-        Entity,
-        &Device,
-        Option<&crate::items::Item>,
-        Has<Powered>,
-        Option<&Children>,
-    )>,
+    devices: Query<(Entity, &Device, Has<Powered>, Option<&Children>)>,
     beams: Query<Entity, With<Beam>>,
-    catalog: Res<crate::items::Catalog>,
 ) {
-    for (e, dev, item, powered, children) in &devices {
+    for (e, dev, powered, children) in &devices {
         if dev.kind != DeviceKind::Light {
             continue;
         }
@@ -90,11 +155,7 @@ fn beams(
                 commands.entity(e).with_child((
                     Beam,
                     torch_beam(),
-                    Transform::from_xyz(
-                        0.0,
-                        0.0,
-                        lens(item.map_or("", |i| catalog.get(i.kind()).id.as_str())),
-                    ),
+                    Transform::from_xyz(0.0, 0.0, LENS),
                 ));
             }
             (false, Some(b)) => {
@@ -1140,5 +1201,19 @@ mod low_cell_tests {
         assert!(low.iter().all(|l| *l <= 0.3), "dim, guttering");
         assert!(low.iter().any(|l| *l < 0.05), "it drops out");
         assert!(low.iter().filter(|l| **l >= 0.3).count() > 200, "mostly on");
+    }
+}
+
+#[cfg(test)]
+mod handle_tests {
+    use super::*;
+
+    /// The light's handle stands up only in a hand off a rail.
+    #[test]
+    fn the_handle_stands_in_a_hand_and_folds_on_a_rail() {
+        assert_eq!(handle_angle(true, false), HANDLE_UP);
+        assert_eq!(handle_angle(true, true), 0.0, "held by its gun");
+        assert_eq!(handle_angle(false, true), 0.0);
+        assert_eq!(handle_angle(false, false), 0.0, "stowed or lying");
     }
 }

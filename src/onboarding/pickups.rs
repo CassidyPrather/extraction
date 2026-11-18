@@ -18,9 +18,6 @@ pub enum Family {
     GunCare,
     /// A cleaning rod: a bullet stuck in the bore (`weapons::faults`).
     CleaningRod,
-    /// A chemlight or a hand flare: used, it lights, and lights its holder
-    /// for the machines (`world::glow`).
-    Lights,
     /// A signal flare: pulled, a red star goes up sixty metres
     /// (`items::usage`, #94).
     Signal,
@@ -34,9 +31,7 @@ pub enum Family {
     MachineParts,
     /// A helmet, a vest, a plate: let go where it's worn.
     Armour,
-    /// Along a broken shin (`interact::first_aid`).
-    Splint,
-    /// In the thigh: heals, and slows a bleed (`items::usage`).
+    /// In the thigh: heals (`items::usage`).
     Injector,
     /// Pin out, thrown: a few seconds (`weapons::grenades`, `gadgets`).
     Grenade,
@@ -67,13 +62,11 @@ pub enum Family {
 pub const FAMILIES: &[Family] = &[
     Family::GunCare,
     Family::CleaningRod,
-    Family::Lights,
     Family::Signal,
     Family::Matches,
     Family::Salvage,
     Family::MachineParts,
     Family::Armour,
-    Family::Splint,
     Family::Injector,
     Family::Grenade,
     Family::EmpTrap,
@@ -99,7 +92,6 @@ pub const OBVIOUS: &[&str] = &[
     "radio",
     "flashlight",
     "power_cell",
-    "field_dressing",
     "detector",
     "bolt",
     "map_case",
@@ -130,12 +122,10 @@ pub fn family(def: &ItemDef) -> Option<Family> {
     Some(match id {
         "gun_oil" | "cleaning_kit" | "spare_parts" => Family::GunCare,
         "cleaning_rod" => Family::CleaningRod,
-        "chemlight" | "hand_flare" => Family::Lights,
         "signal_flare" => Family::Signal,
         "matches" => Family::Matches,
         "scrap_metal" | "electronics" | "polymer" | "brass" | "powder" => Family::Salvage,
         "helmet" | "vest" | "steel_plate" => Family::Armour,
-        "splint" => Family::Splint,
         "regen_injector" => Family::Injector,
         "rgd5" | "emp_grenade" => Family::Grenade,
         "emp_trap" => Family::EmpTrap,
@@ -167,7 +157,6 @@ impl Family {
             Family::CleaningRod => {
                 &["Truck: \"Round stuck in the bore? Knock it out with that, from the muzzle.\""]
             }
-            Family::Lights => &["Truck: \"Use it and it lights. Machines see you by it too.\""],
             Family::Signal => &[
                 "Truck: \"Signal flare. Pull the cord, hold it up: the whole valley sees the star.\"",
             ],
@@ -183,12 +172,7 @@ impl Family {
             Family::Armour => {
                 &["Truck: \"Let a helmet go at your head, a vest at your chest. Plates go in it.\""]
             }
-            Family::Splint => {
-                &["Truck: \"Leg broken? Hold the splint along the shin, other hand strapping.\""]
-            }
-            Family::Injector => {
-                &["Truck: \"Tip to your thigh, pull the trigger. It heals, slows a bleed.\""]
-            }
+            Family::Injector => &["Truck: \"Tip to your thigh, pull the trigger. It heals you.\""],
             Family::Grenade => {
                 &["Truck: \"Pull the pin, then throw it far. You've seconds, not many.\""]
             }
@@ -312,22 +296,6 @@ mod tests {
                 include_str!("../weapons/faults.rs"),
                 "cleaning_rod",
             ),
-            // "Use it and it lights. Machines see you by it too."
-            (
-                "chemlight",
-                include_str!("../world/glow.rs"),
-                "\"chemlight\" => Some(Self::Chem)",
-            ),
-            (
-                "hand_flare",
-                include_str!("../world/glow.rs"),
-                "\"hand_flare\" => Some(Self::Flare)",
-            ),
-            (
-                "chemlight",
-                include_str!("../world/glow.rs"),
-                "robots::senses::Lighting",
-            ),
             // "Pull the cord, hold it up: the whole valley sees the star."
             (
                 "signal_flare",
@@ -382,22 +350,16 @@ mod tests {
                 include_str!("../weapons/armour.rs"),
                 "a plate at either of the",
             ),
-            // "Hold the splint along the shin."
-            (
-                "splint",
-                include_str!("../interact/first_aid.rs"),
-                "hold it\n//!   along the shin",
-            ),
-            // "Tip to your thigh, pull the trigger. It heals, slows a bleed."
+            // "Tip to your thigh, pull the trigger. It heals you."
             (
                 "regen_injector",
                 include_str!("../interact/first_aid.rs"),
-                "Put its tip to your thigh and pull\n//!   the trigger",
+                "its tip to a thigh",
             ),
             (
                 "regen_injector",
                 include_str!("../items/usage.rs"),
-                "h.bleeding *= 0.3",
+                "h.hp = (h.hp + 45.0).min(h.max)",
             ),
             // "Pull the pin, then throw it far. You've seconds."
             (

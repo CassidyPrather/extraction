@@ -22,11 +22,14 @@ impl Plugin for DevPlugin {
                     turn_line_up.after(gallery),
                     break_line_up.after(gallery),
                     kill_line_up.after(gallery),
+                    strip_half.after(kill_line_up),
+                    no_gloves_over_rows,
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
                     say_for_gallery,
                     camera_over_ground,
+                    hurt_and_give.run_if(world_in),
                 ),
             )
             .add_systems(
@@ -36,7 +39,6 @@ impl Plugin for DevPlugin {
                     carry_for_gallery,
                     climb_for_gallery,
                     fight_for_gallery,
-                    treat_for_gallery,
                     spall_for_gallery,
                     plate_hits_for_gallery.run_if(world_in),
                     impact_hits_for_gallery.run_if(world_in),
@@ -50,6 +52,55 @@ impl Plugin for DevPlugin {
                 PostUpdate,
                 pockets_gallery_eye.before(bevy::transform::TransformSystems::Propagate),
             );
+    }
+}
+
+/// `--hurt HP` and `--give ID,..` (a playtest's station: hurt, and an
+/// injector to try on yourself): once the world's in and the player
+/// stands in it, health set, and the things laid on the ground half a
+/// metre in front, a hand's width apart.
+fn hurt_and_give(
+    mut commands: Commands,
+    opts: Res<crate::launch::LaunchOptions>,
+    mut players: Query<
+        (&mut crate::health::Health, &GlobalTransform),
+        With<crate::rig::LocalPlayer>,
+    >,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+    mut done: Local<bool>,
+) {
+    if *done || (opts.hurt.is_none() && opts.give.is_empty()) {
+        return;
+    }
+    let (Some(zone), Ok((mut health, at))) = (zone, players.single_mut()) else {
+        return;
+    };
+    *done = true;
+    if let Some(hp) = opts.hurt {
+        health.hp = hp.clamp(1.0, health.max);
+    }
+    let fwd = (at.rotation() * Vec3::NEG_Z)
+        .with_y(0.0)
+        .normalize_or(Vec3::NEG_Z);
+    let side = fwd.cross(Vec3::Y);
+    let n = opts.give.len() as f32;
+    for (i, id) in opts.give.iter().enumerate() {
+        let Some(kind) = catalog.kind(id) else {
+            eprintln!("--give: no item {id:?}");
+            continue;
+        };
+        let p = at.translation() + fwd * 0.5 + side * (0.12 * (i as f32 - (n - 1.0) * 0.5));
+        let y = zone.on_ground(p.x, p.z).y + 0.05;
+        crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_xyz(p.x, y, p.z),
+                condition: 1.0,
+            },
+        );
     }
 }
 
@@ -508,6 +559,98 @@ fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::
     }
 }
 
+/// An `items:` row is to look at, not to reach for: the gloves, held out
+/// in front of the view, would cover it.
+fn no_gloves_over_rows(
+    opts: Res<crate::launch::LaunchOptions>,
+    mut gloves: Query<&mut Visibility, With<crate::render::props::PlayerGlove>>,
+) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|s| s.starts_with("items:"))
+    {
+        return;
+    }
+    for mut v in &mut gloves {
+        v.set_if_neq(Visibility::Hidden);
+    }
+}
+
+/// `walker!half` in a line-up: once its salvage is seated (`robots::salvage`)
+/// and it has lain a while, every other seated part and one plate taken off
+/// and laid in a row beside it: a wreck half stripped.
+#[derive(Resource)]
+struct HalfStripped(Vec<Entity>, u32);
+
+fn strip_half(
+    mut commands: Commands,
+    half: Option<ResMut<HalfStripped>>,
+    seats: Query<(Entity, &crate::robots::salvage::SalvageSeat)>,
+    items: Query<&crate::items::Item>,
+    parts: Query<(Entity, &crate::robots::RobotPart)>,
+    places: Query<&GlobalTransform>,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    let (Some(mut half), Some(zone)) = (half, zone) else {
+        return;
+    };
+    half.1 += 1;
+    if half.1 != 400 {
+        return;
+    }
+    for &wreck in &half.0 {
+        let Ok(at) = places.get(wreck).map(|g| g.translation()) else {
+            continue;
+        };
+        let mut taken: Vec<extraction_core::items::ItemKind> = Vec::new();
+        let mut mine: Vec<_> = seats.iter().filter(|(_, s)| s.wreck == wreck).collect();
+        mine.sort_by_key(|(e, _)| e.index_u32());
+        for (k, (seat, s)) in mine.into_iter().enumerate() {
+            if k % 2 == 1 {
+                continue;
+            }
+            if let Ok(item) = items.get(s.item) {
+                taken.push(item.kind());
+            }
+            commands.entity(s.item).despawn();
+            commands.entity(seat).despawn();
+        }
+        if let Some((plate, _)) = parts
+            .iter()
+            .find(|(_, p)| p.robot == wreck && matches!(p.role, crate::robots::PartRole::Armour(_)))
+        {
+            commands.entity(plate).despawn();
+            if let Some(k) = catalog.kind("robot_plate") {
+                taken.push(k);
+            }
+        }
+        info!(
+            "strip_half: taken {:?}",
+            taken
+                .iter()
+                .map(|k| catalog.get(*k).id.clone())
+                .collect::<Vec<_>>()
+        );
+        // In a row on the ground before it, across the view.
+        let n = taken.len() as f32;
+        for (k, kind) in taken.into_iter().enumerate() {
+            let p = at + Vec3::new(-0.7 * (n - 1.0) * 0.5 + 0.7 * k as f32, 0.0, 1.3);
+            let g = zone.on_ground(p.x, p.z) + Vec3::Y * 0.15;
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(g),
+                    condition: 0.7,
+                },
+            );
+        }
+    }
+}
+
 /// `walker!broken` in a line-up: the job-2 walker, its gun dead and one
 /// leg failing (5%), as `robots::reel` breaks a walker. Broken a few frames
 /// in, so it has its parts, and left a second for the smoke and limp.
@@ -551,7 +694,7 @@ fn break_line_up(
 /// are words of its subject (before the first comma), split at `+` and
 /// `:`, matched whole: a substring took `climbing_kit` for the climbing
 /// wall (a slab across the view), `side_rail` for the side-on body view
-/// (the camera level), a `*_repack` for the pack carry and `wristwatch`
+/// (the camera level), a `backpack` for the pack carry and `wristwatch`
 /// for the wrist pose.
 pub fn gallery_word(spec: &str, word: &str) -> bool {
     spec.split(',')
@@ -712,6 +855,7 @@ fn gallery(
                 let mut line_up = Vec::new();
                 let mut broken = Vec::new();
                 let mut dead = Vec::new();
+                let mut halves = Vec::new();
                 let d = dist.unwrap_or(30.0);
                 let right = Vec3::new(-flat.z, 0.0, flat.x);
                 let gap = (d * 0.16).max(3.5);
@@ -721,8 +865,15 @@ fn gallery(
                 for (i, id) in ids.iter().enumerate() {
                     // `heavy!dead`: wrecked once it stands, its salvage
                     // seated on it (`robots::salvage`), to read the wreck.
+                    // `walker!half`: dead, and half its salvage taken off and
+                    // laid beside it, as a hand would (`strip_half`).
+                    let (id, half) = match id.strip_suffix("!half") {
+                        Some(base) => (base, true),
+                        None => (*id, false),
+                    };
                     let (id, wreck): (&str, bool) = match id.strip_suffix("!dead") {
                         Some(base) => (base, true),
+                        None if half => (id, true),
                         None => (id, false),
                     };
                     let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
@@ -847,6 +998,9 @@ fn gallery(
                             )),
                         );
                         dead.push(e);
+                        if half {
+                            halves.push(e);
+                        }
                     } else if id != "sentry" {
                         line_up.push((e, face_cam, None));
                     }
@@ -857,6 +1011,7 @@ fn gallery(
                 commands.insert_resource(LineUp(line_up));
                 commands.insert_resource(BrokenWalkers(broken, 0));
                 commands.insert_resource(DeadLineUp(dead, 0));
+                commands.insert_resource(HalfStripped(halves, 0));
             }
             s if s.starts_with("items:") => {
                 // A row of items lying side by side on the ground DIST
@@ -1714,7 +1869,7 @@ fn wear_kit(
 /// door taken by its two ends off the ground and held up across you;
 /// `drag`: taken by its near end in the right hand and drawn back, the
 /// far end on the ground; `pack`: your pack off the left shoulder, hanging
-/// open in front of you, a dressing in it and the right hand reaching in.
+/// open in front of you, an injector in it and the right hand reaching in.
 #[allow(clippy::too_many_arguments)]
 fn carry_for_gallery(
     mut commands: Commands,
@@ -1777,7 +1932,7 @@ fn carry_for_gallery(
         ));
     }
     if f == 10 && pack {
-        let id = catalog.kind("field_dressing").expect("a dressing");
+        let id = catalog.kind("regen_injector").expect("an injector");
         let mut c = commands.reborrow();
         state.1 = Some(crate::items::spawn_item(
             &mut c,
@@ -1840,7 +1995,7 @@ fn carry_for_gallery(
             return;
         };
         if f == 20 {
-            // A dressing in the pack.
+            // An injector in the pack.
             commands.queue(move |world: &mut World| {
                 if let Some(mut b) = world.get_mut::<crate::interact::body::Backpack>(bag) {
                     b.contents.push(thing);
@@ -2305,115 +2460,6 @@ fn impact_hits_for_gallery(
     }
 }
 
-/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
-/// a body hurt and treated (`interact::wounds`, drawn by
-/// `render::wounds`). An open wound on the right thigh and the left
-/// forearm, a dressing round the right upper arm, a splint strapped on the
-/// right shin, and the left glove, turned palm up, bloody from the wound.
-/// What a dressing round that arm says is said (the upper arm's bound, the
-/// thigh still bleeds); with `wrist` the left wrist is raised to the eye
-/// instead, its screen showing it, and BLEED.
-#[allow(clippy::too_many_arguments)]
-fn treat_for_gallery(
-    mut commands: Commands,
-    opts: Res<LaunchOptions>,
-    mut players: Query<
-        (
-            Entity,
-            &Transform,
-            &mut crate::rig::RigInput,
-            &mut crate::health::Health,
-            Option<&mut crate::interact::wounds::Wounds>,
-        ),
-        With<crate::rig::LocalPlayer>,
-    >,
-    hands: Query<(Entity, &crate::rig::RigHand)>,
-    raid: Option<ResMut<crate::raid::Raid>>,
-    mut frames: Local<u32>,
-) {
-    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
-    use crate::rig::Side;
-    if !opts
-        .gallery
-        .as_deref()
-        .is_some_and(|s| gallery_word(s, "treat"))
-    {
-        return;
-    }
-    let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
-        return;
-    };
-    let Some(mut wounds) = wounds else {
-        return;
-    };
-    *frames += 1;
-    let wound = |limb, along, around, bleed, dressed| Wound {
-        limb,
-        along,
-        around,
-        bleed,
-        dressed,
-    };
-    // Round a limb hanging down, the angle that faces out to your right
-    // and a little forward (`Segment::point`'s frame).
-    let x = Vec3::NEG_Y.any_orthonormal_vector();
-    let y = Vec3::NEG_Y.cross(x);
-    let out = root.rotation * Vec3::new(1.0, 0.0, -0.5).normalize();
-    let facing = out.dot(y).atan2(out.dot(x));
-    wounds.0 = vec![
-        wound(Limb::Thigh(Side::Right), 0.45, facing, 1.0, false),
-        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
-        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
-        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
-    ];
-    // Bleeding as the wounds have it, and in no danger of going down.
-    health.bleeding = 1.6;
-    health.hp = health.max;
-    if *frames == 2 {
-        commands.entity(player).insert(Fracture {
-            leg: Side::Right,
-            splinted: true,
-        });
-        for (h, rh) in &hands {
-            if rh.side == Side::Left {
-                commands.entity(h).insert(Bloodied(1.0));
-            }
-        }
-    }
-    // Said, and said again whenever it's gone from the log (a line lasts
-    // seconds; frames here are slow), so the wrist shows it.
-    if let Some(mut raid) = raid {
-        let line = crate::interact::wounds::dressed_line(
-            Some(Limb::UpperArm(Side::Right)),
-            Some(&wounds),
-            health.bleeding,
-        );
-        if !raid.log.iter().any(|(t, _)| *t == line) {
-            raid.say(line);
-        }
-    }
-    let left = input.hand_mut(Side::Left);
-    left.pose = if opts
-        .gallery
-        .as_deref()
-        .is_some_and(|s| gallery_word(s, "wrist"))
-    {
-        // Across the chest, fingers to the right, the back of the wrist
-        // (its screen) turned up to the eye.
-        Transform::from_xyz(-0.08, 1.2, -0.32).with_rotation(
-            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
-                * Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2)
-                * Quat::from_rotation_y(0.4),
-        )
-    } else {
-        // Low and turned palm up (its palm faces +X, inward).
-        Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
-            Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
-        )
-    };
-    left.tracked = true;
-}
-
 /// How far under the ground (m) a screenshot's camera may be before it's
 /// told: a camera under the ground draws a blank frame (fog and rain).
 pub const CAMERA_UNDER: f32 = 1.0;
@@ -2460,9 +2506,9 @@ fn camera_over_ground(
     }
 }
 
-/// The subjects whose gallery poses the body: the kit on it, wounds
-/// treated on it, climbing, the body itself.
-const BODY_SUBJECTS: [&str; 4] = ["kit", "treat", "climb", "body"];
+/// The subjects whose gallery poses the body: the kit on it, climbing,
+/// the body itself.
+const BODY_SUBJECTS: [&str; 3] = ["kit", "climb", "body"];
 /// The pose words (`pose_body_for_gallery`).
 const BODY_POSES: [&str; 6] = ["stoop", "behind", "above", "down", "side", "crouch"];
 
@@ -2518,10 +2564,10 @@ fn pose_body_for_gallery(
     if !is_body_gallery(spec) {
         return;
     }
-    // A gallery of the body (or of wounds on it) draws it, whatever the
-    // setting (off by default).
+    // A gallery of the body draws it, whatever the setting (off by
+    // default).
     if let Some(mut c) = comfort
-        && (gallery_word(spec, "body") || gallery_word(spec, "treat"))
+        && gallery_word(spec, "body")
         && !c.body
     {
         c.body = true;
@@ -2674,8 +2720,8 @@ mod tests {
         for spec in [
             "kit+stoop",
             "kit+down",
-            "treat,down",
-            "treat+down+wrist",
+            "kit,down",
+            "body+down+wrist",
             "body+down+side",
             "climb+behind",
             "above",
@@ -2731,8 +2777,8 @@ mod gallery_word_tests {
             "words after the comma are numbers"
         );
         let modes = [
-            "carry", "drag", "pack", "climb", "fight", "treat", "wrist", "present", "body",
-            "stoop", "behind", "above", "down", "side", "crouch",
+            "carry", "drag", "pack", "climb", "fight", "wrist", "present", "body", "stoop",
+            "behind", "above", "down", "side", "crouch",
         ];
         let items =
             extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)

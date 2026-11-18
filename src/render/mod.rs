@@ -15,6 +15,7 @@ pub mod far_rest;
 pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
+pub mod fog_beam;
 pub mod gate_lamp;
 pub mod gpu_lost;
 pub mod grade;
@@ -67,7 +68,6 @@ pub mod way_lamps;
 pub mod wayfind_shots;
 pub mod wear;
 pub mod world_props;
-pub mod wounds;
 
 use bevy::camera::Hdr;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -92,6 +92,7 @@ impl Plugin for RenderPlugin {
         app.add_plugins(held_light::HeldLightPlugin);
         app.add_plugins(wear::GunWearPlugin);
         app.add_plugins(pockets::PocketVisualsPlugin);
+        app.add_plugins(fog_beam::FogBeamPlugin);
         app.add_plugins(said::SaidPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
@@ -128,7 +129,6 @@ impl Plugin for RenderPlugin {
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(part_rest::PartRestPlugin)
         .add_plugins(far_rest::FarRestPlugin)
-        .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)

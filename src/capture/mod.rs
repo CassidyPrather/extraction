@@ -74,7 +74,6 @@ fn keep_alive(
     }
     for mut h in &mut players {
         h.hp = h.max;
-        h.bleeding = 0.0;
     }
 }
 

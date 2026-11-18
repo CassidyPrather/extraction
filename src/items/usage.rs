@@ -1,4 +1,4 @@
-//! Using things: the radio, bandages and injectors, food, lights.
+//! Using things: the radio, injectors, food, lights, flares.
 //!
 //! VR: press the primary button (A/X) while holding a non-gun item; food
 //! and medicine are used with the hands instead (`interact::first_aid`),
@@ -26,7 +26,7 @@ pub struct UseItem {
     pub item: Entity,
 }
 
-/// A dressing or an injector used on `player` (recordings count heals
+/// An injector used on `player` (recordings count heals
 /// from this: the item is gone by the time anything else looks).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Treated {
@@ -107,8 +107,6 @@ fn use_items(
     lights: Query<(), With<LightOn>>,
     mut hands: Query<&mut Hand>,
     held: Query<&Held>,
-    on_limb: Query<&crate::interact::first_aid::OnLimb>,
-    wounds: Query<&crate::interact::wounds::Wounds>,
     mut treated: MessageWriter<Treated>,
     at: Query<&GlobalTransform>,
 ) {
@@ -139,45 +137,10 @@ fn use_items(
                     pad: None,
                 });
             }
-            "field_dressing" => {
-                // Wound round a limb, it bound that limb's wounds
-                // (`interact::first_aid`); by the button, every bleed.
-                let limb = on_limb.get(u.item).ok().map(|l| l.0);
-                if let Ok(mut h) = healths.get_mut(u.player) {
-                    if limb.is_none() {
-                        h.bleeding = 0.0;
-                    }
-                    h.hp = (h.hp + 8.0).min(h.max);
-                    // What's true now, not what a dressing usually does.
-                    raid.say(crate::interact::wounds::dressed_line(
-                        limb,
-                        wounds.get(u.player).ok(),
-                        h.bleeding,
-                    ));
-                }
-                treated.write(Treated {
-                    player: u.player,
-                    item: "field_dressing",
-                });
-                consume = true;
-            }
             "regen_injector" => {
                 if let Ok(mut h) = healths.get_mut(u.player) {
-                    let was = h.bleeding;
                     h.hp = (h.hp + 45.0).min(h.max);
-                    h.bleeding *= 0.3;
-                    raid.say(if was < crate::interact::wounds::STILL {
-                        "Cold, then warm. Something knits.".to_string()
-                    } else {
-                        // It slows a bleed; it doesn't stop one.
-                        format!(
-                            "Cold, then warm. Something knits. {}",
-                            crate::interact::wounds::bleeding_now(
-                                wounds.get(u.player).ok(),
-                                h.bleeding
-                            )
-                        )
-                    });
+                    raid.say("Cold, then warm. Something knits.");
                 }
                 treated.write(Treated {
                     player: u.player,
@@ -185,7 +148,7 @@ fn use_items(
                 });
                 consume = true;
             }
-            "flashlight" | "weapon_light" => {
+            "flashlight" => {
                 if lights.contains(u.item) {
                     commands.entity(u.item).remove::<LightOn>();
                 } else {

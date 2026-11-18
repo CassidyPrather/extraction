@@ -396,7 +396,7 @@ mod tests {
         );
         for id in [
             "canned_stew",
-            "field_dressing",
+            "regen_injector",
             "ammo_9x18",
             "power_cell",
             "bolt",
