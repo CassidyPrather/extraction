@@ -24,7 +24,7 @@ impl Plugin for EngineerLookPlugin {
 }
 
 /// Its paint: a pale, sandy workaday cream.
-pub const PAINT: Color = Color::srgb(0.9, 0.86, 0.74);
+pub const PAINT: Color = Color::srgb(0.96, 0.92, 0.74);
 /// The kit's canvas: olive drab.
 pub const KIT: Color = Color::srgb(0.36, 0.4, 0.26);
 /// The lamp's rim: the machines' orange-red lit tell (the searchlights').
@@ -248,9 +248,12 @@ impl Looks {
             lens: meshes.add(Cylinder::new(0.062, 0.01)),
             coil: meshes.add(Torus::new(0.07, 0.11)),
             cone: meshes.add(fog_beam::cone()),
+            // (A touch of its own light, so it stays pale at dusk: a worker
+            // in workaday cream, never a fighter's grey.)
             paint: materials.add(StandardMaterial {
                 base_color: PAINT,
-                perceptual_roughness: 0.8,
+                emissive: LinearRgba::from(PAINT) * 0.08,
+                perceptual_roughness: 0.75,
                 ..default()
             }),
             dark: materials.add(StandardMaterial {

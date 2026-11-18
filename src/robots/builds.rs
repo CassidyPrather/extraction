@@ -152,6 +152,7 @@ struct BuildAssets {
     cone: Handle<Mesh>,
     timber: Handle<StandardMaterial>,
     panel: Handle<StandardMaterial>,
+    rib: Handle<StandardMaterial>,
     strap: Handle<StandardMaterial>,
     mast: Handle<StandardMaterial>,
     head: Handle<StandardMaterial>,
@@ -177,10 +178,20 @@ fn build_assets(
             perceptual_roughness: 0.9,
             ..default()
         }),
+        // Fresh galvanised sheet: light grey, it pops against an overcast
+        // sky and reads new and made.
         panel: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.66, 0.67, 0.66),
-            metallic: 0.15,
-            perceptual_roughness: 0.6,
+            base_color: Color::srgb(0.84, 0.85, 0.84),
+            emissive: LinearRgba::rgb(0.05, 0.05, 0.05),
+            metallic: 0.35,
+            perceptual_roughness: 0.45,
+            ..default()
+        }),
+        // Its ribs and edges: a shade darker, so the sheet reads as one.
+        rib: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.56, 0.58, 0.58),
+            metallic: 0.4,
+            perceptual_roughness: 0.5,
             ..default()
         }),
         // The strap: the one shoot-here orange (cut it).
@@ -290,6 +301,29 @@ fn frame_builds(
                             panel(*x),
                             &|c| {
                                 c.insert(BarricadePanel { of: e });
+                                // Pressed ribs across it and a framed edge
+                                // (in the panel's own unit space).
+                                for (y, h) in [(-0.25, 0.05), (0.0, 0.05), (0.25, 0.05)] {
+                                    c.with_child((
+                                        Mesh3d(a.cube.clone()),
+                                        MeshMaterial3d(a.rib.clone()),
+                                        Transform::from_xyz(0.0, y, -0.6)
+                                            .with_scale(Vec3::new(0.96, h, 0.6)),
+                                    ));
+                                }
+                                for (x, y, w, h) in [
+                                    (0.0, 0.48, 1.0, 0.04),
+                                    (0.0, -0.48, 1.0, 0.04),
+                                    (0.49, 0.0, 0.03, 1.0),
+                                    (-0.49, 0.0, 0.03, 1.0),
+                                ] {
+                                    c.with_child((
+                                        Mesh3d(a.cube.clone()),
+                                        MeshMaterial3d(a.rib.clone()),
+                                        Transform::from_xyz(x, y, -0.6)
+                                            .with_scale(Vec3::new(w, h, 0.6)),
+                                    ));
+                                }
                             },
                         );
                     }
