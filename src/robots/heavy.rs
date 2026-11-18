@@ -1483,6 +1483,11 @@ fn fell_heavy(
     mut out: MessageWriter<HeavyEvent>,
     minds: Query<&super::senses::MindSeed>,
     time: Res<Time>,
+    (mut seat_looks, mut meshes, mut materials): (
+        Query<(&super::salvage::SeatLook, &mut Visibility)>,
+        Option<ResMut<Assets<Mesh>>>,
+        Option<ResMut<Assets<StandardMaterial>>>,
+    ),
 ) {
     let dt = time.delta_secs();
     for (e, mut h, mut t, robot, arm, children, broken) in &mut heavies {
@@ -1520,42 +1525,24 @@ fn fell_heavy(
                     loosen(&mut commands, &fastened, item);
                 }
             }
-            // Whole knees and a whole claw, for the taking.
-            let mut drops: Vec<(&str, Vec3)> = Vec::new();
+            // Its knees, eye, vents and claw are seated where they are,
+            // each held its way (`salvage`, #105): what you see on it is
+            // what comes off.
+            let look = super::salvage::Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
             for c in children.iter() {
-                let Ok((part, hp, gt)) = parts.get(c) else {
+                let Ok((part, hp, _)) = parts.get(c) else {
                     continue;
                 };
-                match hp.0 {
-                    Slot::Knee(_)
-                        if part.alive()
-                            && drops.iter().filter(|d| d.0 == "heavy_knee").count() < 2 =>
-                    {
-                        drops.push(("heavy_knee", gt.translation()));
+                let health = (part.hp / part.max_hp.max(1.0)).clamp(0.0, 1.0);
+                let Some((row, role)) = heavy_row(hp.0, health, arm.alive) else {
+                    continue;
+                };
+                for (l, mut vis) in &mut seat_looks {
+                    if l.robot == e && l.role == role {
+                        *vis = Visibility::Hidden;
                     }
-                    Slot::Arm if part.alive() && arm.alive => {
-                        drops.push(("heavy_claw", arm.claw));
-                    }
-                    _ => {}
                 }
-            }
-            for (id, at) in drops {
-                if let Some(kind) = catalog.kind(id) {
-                    let ground = at.y.min(t.translation.y);
-                    spawn_item(
-                        &mut commands,
-                        &catalog,
-                        SpawnItem {
-                            kind,
-                            transform: Transform::from_translation(Vec3::new(
-                                at.x,
-                                ground.max(at.y - 1.0),
-                                at.z,
-                            )),
-                            condition: 0.6,
-                        },
-                    );
-                }
+                super::salvage::fit(&mut commands, &catalog, c, row, &look);
             }
         }
         let before = h.down_for;
@@ -1725,7 +1712,96 @@ pub fn clear_wrecks(world: &mut World) {
 
 /// The salvage table a heavy's wreck answers to (its parts are its loot:
 /// see `fell_heavy`).
-pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heavy_claw"];
+pub const SALVAGE: [&str; 6] = [
+    "heavy_cell",
+    "heavy_plate",
+    "heavy_knee",
+    "heavy_claw",
+    "heavy_eye",
+    "heavy_vent",
+];
+
+/// Bolts through a heavy's knee drum (its hinge pin's flange); through a
+/// vent grille's frame; hydraulic lines to its claw.
+pub const KNEE_BOLTS: usize = 4;
+pub const VENT_BOLTS: usize = 2;
+pub const CLAW_LINES: usize = 3;
+/// A heavy's claw from its forearm's middle (robot space, along it): the
+/// palm at the far end and the fingers past it.
+const CLAW_FROM_FOREARM: f32 = LOWER * 0.5 + 0.09;
+
+/// A heavy's part seated on its wreck, on the part itself (it rides its
+/// leg or arm), and the role whose look it takes the place of: a knee,
+/// bolted through its drum; the eye, by hand; a vent, bolted in its
+/// window (under its flank plate); the claw on its hydraulic lines.
+pub fn heavy_row(
+    slot: Slot,
+    health: f32,
+    arm_alive: bool,
+) -> Option<(super::salvage::Row, PartRole)> {
+    use super::salvage::{Fix, Row};
+    let row = |item, at: Transform, health, fix| Row {
+        item,
+        at,
+        size: SIZE,
+        health,
+        fix,
+        hot: false,
+        replaces: None,
+    };
+    Some(match slot {
+        Slot::Knee(i) => (
+            row(
+                "heavy_knee",
+                Transform::IDENTITY,
+                health,
+                Fix::Bolts {
+                    n: KNEE_BOLTS,
+                    centre: Vec3::X * 0.08,
+                    face: Quat::from_rotation_arc(Vec3::Y, Vec3::X),
+                    radius: 0.05,
+                },
+            ),
+            PartRole::Leg(i),
+        ),
+        Slot::Eye => (
+            row("heavy_eye", Transform::IDENTITY, health, Fix::Hand),
+            PartRole::Sensor,
+        ),
+        Slot::Vent(v) => {
+            let out = vent_at(v as usize).x.signum();
+            let turn = if v == 0 {
+                Quat::from_rotation_y(std::f32::consts::PI)
+            } else {
+                Quat::IDENTITY
+            };
+            (
+                row(
+                    "heavy_vent",
+                    Transform::from_rotation(turn),
+                    health,
+                    Fix::Bolts {
+                        n: VENT_BOLTS,
+                        centre: Vec3::X * out * 0.035,
+                        face: Quat::from_rotation_arc(Vec3::Y, Vec3::X * out),
+                        radius: 0.1,
+                    },
+                ),
+                PartRole::Armour(30 + v),
+            )
+        }
+        Slot::Arm => (
+            row(
+                "heavy_claw",
+                Transform::from_translation(Vec3::Y * CLAW_FROM_FOREARM),
+                if arm_alive { health } else { 0.0 },
+                Fix::Cables { n: CLAW_LINES },
+            ),
+            PartRole::Weapon,
+        ),
+        _ => return None,
+    })
+}
 
 /// A machine that dresses itself (its own look system), not from the
 /// shared robot models (`visuals`).
@@ -2069,19 +2145,46 @@ pub(crate) mod tests {
         let (_, free) = seated(&mut app, heavy, Slot::Cell).unwrap();
         assert!(!free, "the cell's behind its hatch still");
         let catalog = app.world().resource::<Catalog>().clone();
+        // Seated on it, each held its way (`heavy_row`): the two knees it
+        // still had (the two shot through are scrap), its eye, both vents
+        // and its claw.
         let salvage: Vec<String> = app
             .world_mut()
-            .query_filtered::<&Item, Without<InSocket>>()
+            .query_filtered::<&Item, With<InSocket>>()
             .iter(app.world())
             .map(|i| catalog.get(i.kind()).id.clone())
             .filter(|id| id.starts_with("heavy_"))
             .collect();
-        assert_eq!(
-            salvage.iter().filter(|s| *s == "heavy_knee").count(),
-            2,
-            "{salvage:?}"
-        );
-        assert!(salvage.iter().any(|s| s == "heavy_claw"), "{salvage:?}");
+        let n = |id: &str| salvage.iter().filter(|s| *s == id).count();
+        assert_eq!(n("heavy_knee"), 2, "{salvage:?}");
+        assert_eq!(n("heavy_vent"), 2, "{salvage:?}");
+        assert_eq!((n("heavy_claw"), n("heavy_eye")), (1, 1), "{salvage:?}");
+        // Each on the part it's seated on, not off in the air.
+        let seats: Vec<(Entity, Entity)> = app
+            .world_mut()
+            .query::<(&super::super::salvage::SalvageSeat, &ChildOf)>()
+            .iter(app.world())
+            .map(|(s, c)| (s.item, c.parent()))
+            .collect();
+        for (item, part) in seats {
+            let at = |e| app.world().get::<GlobalTransform>(e).unwrap().translation();
+            let id = catalog
+                .get(app.world().get::<Item>(item).unwrap().kind())
+                .id
+                .clone();
+            let (i, p) = (at(item), at(part));
+            // (The claw at its forearm's end, the rest on the part.)
+            let reach = if id == "heavy_claw" {
+                CLAW_FROM_FOREARM * SIZE + 0.2
+            } else {
+                0.6
+            };
+            assert!(
+                i.distance(p) < reach,
+                "{id} {:.2} m off its part ({i} vs {p})",
+                i.distance(p)
+            );
+        }
         // The generic wreck loot isn't rolled on top.
         assert!(app.world().get::<super::super::Salvaged>(heavy).is_some());
     }

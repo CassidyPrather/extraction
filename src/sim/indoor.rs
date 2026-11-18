@@ -1812,9 +1812,15 @@ mod tests {
             app.cleanup();
             app.update();
             let plans = plans(&mut app);
+            // (Not what's rolled into a container's hold: it's seated in a
+            // socket, never left to settle, and its Transform is its seat's.)
             let laid: Vec<(Entity, Vec3, usize)> = app
                 .world_mut()
-                .query_filtered::<(Entity, &Transform), With<Item>>()
+                .query_filtered::<(Entity, &Transform), (
+                    With<Item>,
+                    Without<crate::items::loot::ToHold>,
+                    Without<crate::interact::InSocket>,
+                )>()
                 .iter(app.world())
                 .filter_map(|(e, t)| {
                     let at = t.translation;
@@ -1836,6 +1842,9 @@ mod tests {
                 let Some(t) = app.world().get::<Transform>(e) else {
                     continue;
                 };
+                if app.world().get::<crate::interact::InSocket>(e).is_some() {
+                    continue;
+                }
                 tried += 1;
                 let at = t.translation;
                 let goal = plan.to_local(at).xz();

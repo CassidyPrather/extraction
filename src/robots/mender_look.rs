@@ -110,7 +110,7 @@ fn dress(
             Transform::IDENTITY,
         );
         for (i, at) in ROTORS.iter().enumerate() {
-            hang(
+            let r = hang(
                 &mut commands,
                 &mut materials,
                 e,
@@ -125,6 +125,14 @@ fn dress(
                 Transform::from_translation(*at + Vec3::Y * BLADES_UP),
             );
             commands.entity(b).insert(Blades(i));
+            // (Salvage hides them when this rotor's motor is seated in their
+            // place, Heavy's #105.)
+            let look = super::salvage::SeatLook {
+                robot: e,
+                role: PartRole::Rotor(i as u8),
+            };
+            commands.entity(r).insert(look);
+            commands.entity(b).insert(look);
         }
         for c in children.iter() {
             let Ok((part, arm)) = parts.get(c) else {

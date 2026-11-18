@@ -519,6 +519,7 @@ fn progress_from_requests(
 fn fresh_save(map: &str) -> SaveGame {
     let mut s = SaveGame::new(map);
     let item = |id: &str, rounds: u32, at: [f32; 3]| SavedItem {
+        charred: false,
         id: id.into(),
         condition: 0.75,
         rounds,
@@ -594,6 +595,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
     // A kind retired since the save: what it became, fresh, where it lay.
     if let Some(now) = extraction_core::save::retired_as(&saved.id) {
         let fresh = SavedItem {
+            charred: saved.charred,
             id: now.to_string(),
             condition: saved.condition,
             rounds: 0,
@@ -641,6 +643,9 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         if saved.charge_wh >= 0.0 {
             it.charge_wh = saved.charge_wh;
         }
+    }
+    if saved.charred {
+        world.entity_mut(e).insert(crate::robots::salvage::Charred);
     }
     if let (Some(g), Some(mut gun)) = (&saved.gun, world.get_mut::<Gun>(e)) {
         let f = &mut gun.firearm;
@@ -1127,6 +1132,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
         gun: None,
         inserted: Vec::new(),
         loads: item.loads.clone(),
+        charred: world.get::<crate::robots::salvage::Charred>(e).is_some(),
     };
     if let Some(gun) = world.get::<Gun>(e) {
         let f = &gun.firearm;
@@ -1340,11 +1346,15 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(saved) = snapshot_item(world, e, Vec3::ZERO) {
+            // Rolled for a hold and not seated yet: saved as held.
+            let held = world
+                .get::<crate::items::loot::ToHold>(e)
+                .map(|w| w.at.to_array());
             save.zone.items.push(PlacedItem {
                 at: p.to_array(),
                 rot: gt.compute_transform().rotation.to_array(),
                 item: saved,
-                held: None,
+                held,
             });
         }
     }
@@ -1360,6 +1370,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             at: at.to_array(),
             rot: [0.0, 0.0, 0.0, 1.0],
             item: SavedItem {
+                charred: false,
                 id: "deployable_cover".into(),
                 condition: 1.0,
                 rounds: 0,
@@ -1952,6 +1963,7 @@ mod tests {
             ("flare_pistol", "scrap_metal"),
         ] {
             let saved = SavedItem {
+                charred: false,
                 id: old.into(),
                 condition: 0.7,
                 rounds: 1,
@@ -1987,6 +1999,7 @@ mod tests {
             let at = zone.on_ground(30.0 + 6.0 * i as f32, -40.0);
             let bag = spawn_remains(world, at);
             let saved = SavedItem {
+                charred: false,
                 id: "canned_stew".into(),
                 condition: 1.0 - 0.05 * i as f32,
                 rounds: 0,
@@ -2388,6 +2401,7 @@ mod tests {
         write_career(&path, &plain);
         let before = by_kind(load(&path).world_mut());
         let old = |id: &str, local: [f32; 3]| SavedItem {
+            charred: false,
             id: id.into(),
             condition: 1.0,
             rounds: 0,

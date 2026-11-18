@@ -525,6 +525,27 @@ const COUNTER_NODES: &[CounterNode] = &[
     ),
 ];
 
+/// Every moving node a hand takes hold of (`model#node`): its origin in
+/// its model's space, its grab box's centre from there (in the part's own
+/// space, a right-hand door turned over) and size, and whether it's turned
+/// over (`capture::checks::handles`).
+pub fn moving_nodes() -> impl Iterator<Item = (&'static str, Vec3, Vec3, Vec3, bool)> {
+    COUNTER_NODES.iter().map(|n| {
+        let flip = if n.4 {
+            Quat::from_rotation_z(std::f32::consts::PI)
+        } else {
+            Quat::IDENTITY
+        };
+        (
+            n.0,
+            Vec3::from(n.1),
+            flip.inverse() * Vec3::from(n.2),
+            Vec3::from(n.3),
+            n.4,
+        )
+    })
+}
+
 /// A moving node's origin in its model's space (`model#node`: a
 /// counter's, a window's leaf), if it's one we move.
 pub fn node_origin(drawn: &str) -> Option<Vec3> {
@@ -798,6 +819,7 @@ fn clear_end_by(
 /// The least of its way a container's part must open clear: a door most
 /// of its swing (it may stop against a wall short of its end), a drawer
 /// all of its run.
+#[cfg(test)]
 fn least_clear(motion: Motion) -> f32 {
     match motion {
         Motion::Hinge { most } => most * 0.75,

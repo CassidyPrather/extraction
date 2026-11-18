@@ -1201,7 +1201,11 @@ mod tests {
         let mut all = pieces.clone();
         all.push(walker);
         for e in all {
-            let t = app.world().get::<Transform>(e).unwrap();
+            // (A piece held by nothing but a hand, the visor's eye, is the
+            // item lying there once it's down: `salvage::seat_pieces`.)
+            let Some(t) = app.world().get::<Transform>(e) else {
+                continue;
+            };
             assert!(t.translation.is_finite() && t.rotation.is_finite());
             let g = zone.ground(t.translation.x, t.translation.z);
             assert!(
@@ -1224,7 +1228,9 @@ mod tests {
         // against World and Robot, and debris is neither.
         let walks = LayerMask::from([Layer::World, Layer::Robot]);
         for e in &pieces {
-            let layers = app.world().get::<CollisionLayers>(*e).unwrap();
+            let Some(layers) = app.world().get::<CollisionLayers>(*e) else {
+                continue;
+            };
             assert_eq!(
                 layers.memberships & walks,
                 LayerMask::NONE,
@@ -1310,6 +1316,19 @@ mod tests {
             .iter(app.world())
             .filter(|d| matches!(d.piece, Piece::Panel(_) | Piece::Gun))
             .count();
+        // (Its pod, once down, is the gun pod item lying there:
+        // `salvage::seat_pieces`.)
+        let pod = app
+            .world()
+            .get_resource::<crate::items::Catalog>()
+            .and_then(|c| c.kind("drone_gunpod"));
+        let pods = app
+            .world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| Some(i.kind()) == pod)
+            .count();
+        let pieces = pieces + pods;
         assert!(pieces >= 2, "shed its panel and pod on impact ({pieces})");
         // At rest by SETTLE_BY after it came down, at the latest.
         for _ in 0..(90.0 * (secs + SETTLE_BY + 0.5 - 12.0).max(0.0)) as usize {

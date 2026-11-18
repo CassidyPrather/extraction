@@ -964,7 +964,7 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "hound_hip_servo", aliases: ["servo"], dims: Some((0.133, 0.171, 0.07)), name: "Hound hip servo",
+            id: "hound_hip_servo", aliases: ["servo"], dims: Some((0.137, 0.171, 0.07)), name: "Hound hip servo",
             description: "A hound's hip motor, flat as a tin and stamped HD SRV. It was made to run all night.",
             category: RobotPart, size: Small, mass: 0.9, bulk: 0.6,
             tags: ["electronics", "metal"],
@@ -985,6 +985,24 @@
             id: "grappler_drum", dims: Some((0.42, 0.492, 0.5)), name: "Grappler line drum",
             description: "A grappler's line drum, cut off its trunnions, stamped GR WCH. A lot of good line on it.",
             category: RobotPart, size: Bulky, mass: 14.0, bulk: 12.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "drone_eye", dims: Some((0.124, 0.119, 0.127)), name: "Drone eye",
+            description: "A drone's camera dome, twisted off its belly, stamped DR OPT. The lens still glows a little when you turn it to the light.",
+            category: RobotPart, size: Small, mass: 0.4, bulk: 0.6,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "drone_gunpod", dims: Some((0.08, 0.126, 0.365)), name: "Drone gun pod",
+            description: "A drone's gun, cut off its pylon with its leads hanging, stamped DR GUN. Light enough to carry under an arm.",
+            category: RobotPart, size: Medium, mass: 2.2, bulk: 2.0,
+            tags: ["metal", "electronics"],
+        ),
+        (
+            id: "mender_torch", dims: Some((0.1, 0.301, 0.358)), name: "Mender torch arm",
+            description: "A mender's welding arm, unbolted at the shoulder, stamped MN TRC. The nozzle's still warm; the hose still smells of gas.",
+            category: RobotPart, size: Medium, mass: 1.8, bulk: 2.0,
             tags: ["metal"],
         ),
         (
@@ -1026,10 +1044,22 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
-            description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
-            category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
+            id: "heavy_claw", dims: Some((0.52, 1.234, 0.52)), name: "Manipulator claw",
+            description: "A demolition unit's hand, cut off its arm at the leads, stamped HV MAN. Three fingers as long as your arm; they tore doors off, and still close if you touch the wrong wire.",
+            category: RobotPart, size: Bulky, mass: 26.0, bulk: 16.0,
             tags: ["electronics", "metal"],
+        ),
+        (
+            id: "heavy_eye", dims: Some((0.56, 0.26, 0.214)), name: "Heavy sensor brow",
+            description: "A demolition unit's brow, three lenses in a dark bar, stamped HV OPT. The middle one is good glass, as wide as your palm.",
+            category: RobotPart, size: Medium, mass: 4.0, bulk: 3.0,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "heavy_vent", dims: Some((0.144, 0.48, 0.88)), name: "Heavy vent grille",
+            description: "A louvred grille off a demolition unit's flank, stamped HV VNT. The slats still glow faintly from inside.",
+            category: RobotPart, size: Bulky, mass: 6.0, bulk: 6.0,
+            tags: ["metal"],
         ),
         (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",

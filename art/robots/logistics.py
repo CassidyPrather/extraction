@@ -117,7 +117,8 @@ for sx in (-1, 1):
                    (0.025, 0.01)], "Steel", segs=12,
                   xf=T(sx * (HX - 0.05), Y_TOP + 0.05, sz * (HZ - 0.05)) @ RY(math.pi / 4 * sx * sz)
                   @ ALONG_X, closed=True)
-make(pod)
+# (Tangents need triangles: its many-sided caps are triangulated on export.)
+make(pod).modifiers.new("tri", "TRIANGULATE")
 report()
 export("assets/models/robots/cargo_pod.glb")
 
@@ -211,7 +212,10 @@ ln.cyl(0.012, 0.0, ll - 0.05, "Steel", segs=6, xf=line @ UP)
 print("muzzle", HEAD[0], HEAD[1] + 0.01, HEAD[2] - 0.66)
 make(pd)
 make(ln)
-make(lh)
+# (Its housing's side profile is a filleted many-sided cap: tangents need
+# triangles, and the export applies the modifier.)
+lh_obj = make(lh)
+lh_obj.modifiers.new("tri", "TRIANGULATE")
 make(dr)
 report()
 export("assets/models/robots/harpoon.glb")

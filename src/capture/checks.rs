@@ -356,6 +356,27 @@ pub fn loot_sights() -> Vec<LootSight> {
                 seen: sky * light * (LOOT_GREY - albedo * near).abs(),
             });
         }
+        // What's left in its containers: a locker's pale shelf, a drawer's
+        // bottom, lit as the room is where you stand to look in
+        // (`render::loot_light`), always indoors.
+        for h in &geo.holds {
+            let (on, albedo) = match h.part {
+                None => ("locker shelf", model_albedo("locker", "Cream")),
+                Some(_) => ("drawer bottom", model_albedo("counter_drawers", "Timber")),
+            };
+            let albedo = albedo.unwrap_or(0.5);
+            let seen_from = h.at + h.out * crate::render::loot_light::HOLD_SEEN_FROM;
+            let light = crate::world::ao::sky_light(occ.lying_at(seen_from));
+            let near = occ.light(h.at + bevy::math::Vec3::Y * 0.002, bevy::math::Vec3::Y);
+            out.push(LootSight {
+                prefab: id,
+                at: h.at,
+                table: h.table,
+                on: on.into(),
+                light,
+                seen: indoors * light * (LOOT_GREY - albedo * near).abs(),
+            });
+        }
     }
     out
 }
@@ -583,6 +604,39 @@ pub fn handles() -> Vec<Handle> {
             grip: crate::world::underground::DRAIN_BOX * 0.5,
             shown: shape_points(shape, at),
             albedo: Some((mat_albedo(mat), mat_albedo(Mat::Concrete))),
+        });
+    }
+    // Every moving part's pull (`world::hinge`): a counter's door or
+    // drawer, a locker's door, a stove's, its pull in its grab box, in the
+    // part's own space.
+    for (drawn, origin, centre, size, flipped) in crate::world::hinge::moving_nodes() {
+        let (model, node) = drawn.split_once('#').unwrap_or((drawn, ""));
+        let (pull, on) = if model == "stove" {
+            ("Steel", "Cast")
+        } else {
+            ("Zinc", "Painted")
+        };
+        let flip = if flipped {
+            bevy::math::Quat::from_rotation_z(std::f32::consts::PI)
+        } else {
+            bevy::math::Quat::IDENTITY
+        };
+        let shown = model_points(
+            model,
+            &[pull],
+            Vec3::splat(-5.0),
+            Vec3::splat(5.0),
+            Some(node),
+            Transform::IDENTITY,
+        )
+        .into_iter()
+        .map(|p| flip.inverse() * (p - origin) - centre)
+        .collect();
+        out.push(Handle {
+            what: format!("{drawn} pull, world::hinge"),
+            grip: size * 0.5,
+            shown,
+            albedo: model_albedo(model, pull).zip(model_albedo(model, on)),
         });
     }
     // Every prefab's ladders: their rungs in their climb's box

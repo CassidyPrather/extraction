@@ -1224,6 +1224,12 @@ mod tests {
         let mut bad = Vec::new();
         world.resource_scope(|_, mut materials: Mut<Assets<StandardMaterial>>| {
             for name in MATERIAL_NAMES {
+                // A far stand-in's white base: its colour is in its vertex
+                // colours, which the base multiplies (`art/items/ammo.py`'s
+                // `merged`); nothing is drawn in the base alone.
+                if *name == "Baked" {
+                    continue;
+                }
                 let h = mm.get(name, &mut lib, &server, &mut materials);
                 let Some(m) = materials.get(&h) else { continue };
                 let lit = m.emissive.red + m.emissive.green + m.emissive.blue > 0.0;

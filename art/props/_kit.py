@@ -164,6 +164,44 @@ def rod(p, a, b, r, mat, segs=8, chamfer=0.0):
     p.cyl(r, 0.0, d.length, mat, segs=segs, xf=T(*a) @ rot, chamfer=chamfer)
 
 
+def chain(p, a, b, mat="Iron", r=0.016, t=0.0045):
+    """A chain of oval-ish links from a to b (game space), each turned a
+    quarter to the last: what holds a seized wheel or lever still."""
+    a, b = Vector(a), Vector(b)
+    d = b - a
+    n = max(1, int(d.length / (r * 1.6)))
+    dirn = d.normalized()
+    side = dirn.cross(Vector((0, 1, 0)))
+    if side.length < 1e-3:
+        side = dirn.cross(Vector((1, 0, 0)))
+    side.normalize()
+    prof = [(r - t, -t), (r + t, -t), (r + t, t), (r - t, t)]
+    for k in range(n + 1):
+        c = a + d * (k / n)
+        axis = side if k % 2 == 0 else dirn.cross(side)
+        rot = Vector((0, 0, 1)).rotation_difference(axis).to_matrix().to_4x4()
+        p.lathe(prof, mat, segs=8, closed=True, xf=T(*c) @ rot)
+
+
+def padlock(p, hook, facing, mat="Brass", tag=False):
+    """A padlock hung by its shackle from `hook` (a chain's last link, a
+    hasp), its face toward `facing` (+/-X or +/-Z): a body and its shackle;
+    `tag`, a red lockout tag hung from its body."""
+    f = Vector(facing)
+    at = Vector(hook) - Vector((0, 0.045, 0))
+    w = Vector((f.z, 0, -f.x))
+    p.box((0.05 if abs(w.x) > 0.5 else 0.022, 0.05, 0.022 if abs(w.x) > 0.5 else 0.05),
+          tuple(at), mat, bevel=0.004, segs=1)
+    for s_ in (-1, 1):
+        rod(p, at + w * (0.016 * s_) + Vector((0, 0.02, 0)),
+            at + w * (0.016 * s_) + Vector((0, 0.05, 0)), 0.004, "Steel", segs=6)
+    rod(p, at + w * -0.016 + Vector((0, 0.05, 0)), at + w * 0.016 + Vector((0, 0.05, 0)),
+        0.004, "Steel", segs=6)
+    if tag:
+        p.box((0.08 if abs(w.x) > 0.5 else 0.003, 0.12, 0.003 if abs(w.x) > 0.5 else 0.08),
+              tuple(at + f * 0.012 - Vector((0, 0.078, 0))), "Red")
+
+
 def bolt(p, at, axis, r=0.008, h=0.006, mat="Iron", segs=6):
     """A round bolt head standing `h` out of a face, `axis` its outward
     direction (a unit vector along X, Y or Z, signed)."""
