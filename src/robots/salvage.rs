@@ -599,13 +599,13 @@ fn fit_salvage(
 }
 
 /// The meshes a part's holds are drawn with (none in a headless app).
-struct Look {
+pub(crate) struct Look {
     bolt: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
     cable: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
 }
 
 impl Look {
-    fn new(
+    pub(crate) fn new(
         meshes: Option<&mut Assets<Mesh>>,
         materials: Option<&mut Assets<StandardMaterial>>,
     ) -> Self {
@@ -640,7 +640,13 @@ impl Look {
 }
 
 /// Seats one row's part on `wreck`, held its way.
-fn fit(commands: &mut Commands, catalog: &Catalog, wreck: Entity, row: Row, look: &Look) {
+pub(crate) fn fit(
+    commands: &mut Commands,
+    catalog: &Catalog,
+    wreck: Entity,
+    row: Row,
+    look: &Look,
+) {
     if let Some(e) = row.replaces {
         if e != Entity::PLACEHOLDER {
             commands.entity(e).despawn();
@@ -1097,6 +1103,11 @@ fn seat_pieces(
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Charred;
 
+/// What cooking does to salvage has been done to it, once ([`cooked_salvage`];
+/// [`Charred`] alone is only the look, which anything cooked may get).
+#[derive(Component, Debug, Clone, Copy)]
+struct SalvageCooked;
+
 /// A [`Charred`] item's look is charred.
 #[derive(Component, Debug, Clone, Copy)]
 struct CharLooked;
@@ -1125,7 +1136,7 @@ fn cooked_salvage(
         &mut HealthAtDeath,
         Option<&mut crate::destruction::hooks::Pryable>,
     )>,
-    done: Query<(), With<Charred>>,
+    done: Query<(), With<SalvageCooked>>,
     catalog: Option<Res<Catalog>>,
 ) {
     let Some(catalog) = catalog else {
@@ -1167,7 +1178,7 @@ fn cooked_salvage(
 fn cook_item(
     commands: &mut Commands,
     item: Entity,
-    done: &Query<(), With<Charred>>,
+    done: &Query<(), With<SalvageCooked>>,
     items: &mut Query<&mut crate::items::Item>,
     seats: &Query<(Entity, &SalvageSeat)>,
     holds: &Query<(Entity, Option<&Bolt>, Option<&Cable>)>,
@@ -1175,7 +1186,7 @@ fn cook_item(
     if done.contains(item) {
         return;
     }
-    commands.entity(item).try_insert(Charred);
+    commands.entity(item).try_insert((Charred, SalvageCooked));
     if let Ok(mut it) = items.get_mut(item) {
         it.condition *= COOKED_CONDITION;
         it.charge_wh = 0.0;
@@ -1200,7 +1211,7 @@ fn cook_item(
 fn cook_plate(
     commands: &mut Commands,
     plate: Entity,
-    done: &Query<(), With<Charred>>,
+    done: &Query<(), With<SalvageCooked>>,
     plates: &mut Query<(
         Entity,
         &RobotPart,
@@ -1214,7 +1225,7 @@ fn cook_plate(
     let Ok((p, _, mut h, seam)) = plates.get_mut(plate) else {
         return;
     };
-    commands.entity(p).try_insert(Charred);
+    commands.entity(p).try_insert((Charred, SalvageCooked));
     h.0 *= COOKED_CONDITION;
     if let Some(mut seam) = seam {
         seam.needs *= COOKED_PRY;
@@ -1593,8 +1604,11 @@ mod tests {
                 super::super::wreck::Broken,
             ))
             .id();
+        // (Charred already, as `anomaly::cook` leaves what it cooks: the
+        // look, not the cooking, which is still to do.)
         let cell = w
             .spawn((
+                Charred,
                 crate::items::Item(extraction_core::items::ItemState::fresh(
                     &catalog,
                     catalog.expect("robot_cell"),

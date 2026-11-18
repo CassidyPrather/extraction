@@ -15,7 +15,7 @@ use extraction_core::heavy::{STALL_AT, Slot};
 
 use super::heavy::{Arm, Heavy, HeavyPart, LegPiece, SHOULDER, SIZE, arm_elbow};
 use super::walker::{LOWER, LegPoses, UPPER};
-use super::{Robot, RobotPart};
+use super::{PartRole, Robot, RobotPart};
 use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes};
 use crate::render::materials::MaterialLibrary;
 
@@ -360,7 +360,8 @@ fn dress_heavies(
             let local = |node: Vec3| Transform::from_translation(node - pt.translation);
             match (part.0, piece) {
                 (Slot::Eye, _) => {
-                    hang(&mut commands, c, "eye", local(pt.translation), None, on);
+                    let h = hang(&mut commands, c, "eye", local(pt.translation), None, on);
+                    seat_look(&mut commands, &h, robot, PartRole::Sensor);
                 }
                 (Slot::Vent(v), _) => {
                     // The right's modelled; the left is it turned round.
@@ -369,7 +370,7 @@ fn dress_heavies(
                     } else {
                         Transform::IDENTITY
                     };
-                    hang(
+                    let h = hang(
                         &mut commands,
                         c,
                         "vent",
@@ -377,6 +378,7 @@ fn dress_heavies(
                         Some(Lit::Vent(v as usize)),
                         on,
                     );
+                    seat_look(&mut commands, &h, robot, PartRole::Armour(30 + v));
                 }
                 (Slot::Bolt { plate, .. }, _) => {
                     let rot = super::heavy::plate_transform(plate as usize).rotation;
@@ -390,8 +392,9 @@ fn dress_heavies(
                         vis,
                     ));
                 }
-                (Slot::Knee(_), Some(LegPiece::Knee(_))) => {
-                    hang(&mut commands, c, "knee", Transform::IDENTITY, None, on);
+                (Slot::Knee(i), Some(LegPiece::Knee(_))) => {
+                    let h = hang(&mut commands, c, "knee", Transform::IDENTITY, None, on);
+                    seat_look(&mut commands, &h, robot, PartRole::Leg(i));
                 }
                 _ => {}
             }
@@ -417,6 +420,12 @@ fn dress_heavies(
                 ))
                 .id();
             hang(&mut commands, limb, name, Transform::IDENTITY, None, on);
+            // The claw on the forearm, its own node: salvage hides it once
+            // it's seated in its place (#105).
+            if matches!(kind, LimbKind::ArmFore) {
+                let h = hang(&mut commands, limb, "hand", Transform::IDENTITY, None, on);
+                seat_look(&mut commands, &h, robot, PartRole::Weapon);
+            }
         }
         if merge {
             let mut merged = Vec::new();
@@ -1253,5 +1262,15 @@ mod tests {
         assert!((0.1..0.15).contains(&far), "{far}");
         assert!(secs >= 0.01);
         assert!(footfall_pulse(FELT_WITHIN + 1.0).is_none());
+    }
+}
+
+/// A heavy's part look, hidden once its salvage is seated in its place
+/// (`salvage::SeatLook`).
+fn seat_look(commands: &mut Commands, holders: &[Entity], robot: Entity, role: PartRole) {
+    for h in holders {
+        commands
+            .entity(*h)
+            .insert(super::salvage::SeatLook { robot, role });
     }
 }

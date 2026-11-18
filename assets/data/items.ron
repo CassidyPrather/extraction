@@ -1044,10 +1044,22 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
-            description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
-            category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
+            id: "heavy_claw", dims: Some((0.52, 1.234, 0.52)), name: "Manipulator claw",
+            description: "A demolition unit's hand, cut off its arm at the leads, stamped HV MAN. Three fingers as long as your arm; they tore doors off, and still close if you touch the wrong wire.",
+            category: RobotPart, size: Bulky, mass: 26.0, bulk: 16.0,
             tags: ["electronics", "metal"],
+        ),
+        (
+            id: "heavy_eye", dims: Some((0.56, 0.26, 0.214)), name: "Heavy sensor brow",
+            description: "A demolition unit's brow, three lenses in a dark bar, stamped HV OPT. The middle one is good glass, as wide as your palm.",
+            category: RobotPart, size: Medium, mass: 4.0, bulk: 3.0,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "heavy_vent", dims: Some((0.144, 0.48, 0.88)), name: "Heavy vent grille",
+            description: "A louvred grille off a demolition unit's flank, stamped HV VNT. The slats still glow faintly from inside.",
+            category: RobotPart, size: Bulky, mass: 6.0, bulk: 6.0,
+            tags: ["metal"],
         ),
         (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
