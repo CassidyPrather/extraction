@@ -197,6 +197,11 @@ pub enum SocketKind {
     /// An attachment point or insert (dovetail, rail, muzzle, battery
     /// compartment, artifact cradle); takes items that fit that mount.
     Mount(extraction_core::items::Mount),
+    /// A place in a container in the world (a locker's shelf, a drawer):
+    /// takes any loose thing that fits under `most` (m, its longest side).
+    Hold {
+        most: f32,
+    },
 }
 
 #[derive(Component, Clone, Debug)]
@@ -1428,6 +1433,8 @@ pub fn accepts_item(
         SocketKind::Body(slot) => slot.accepts(size),
         SocketKind::MagWell(family) => mag_family == Some(family.as_str()),
         SocketKind::Mount(m) => mount == Some(*m),
+        // (Its size is checked by `fits_body_slot`.)
+        SocketKind::Hold { .. } => true,
     }
 }
 
@@ -1437,6 +1444,7 @@ pub fn accepts_item(
 pub fn fits_body_slot(kind: &SocketKind, def: &extraction_core::items::ItemDef) -> bool {
     match kind {
         SocketKind::Body(slot) => body::slot_fit(*slot, 0, def).is_some(),
+        SocketKind::Hold { most } => def.size_m().into_iter().fold(0.0, f32::max) <= *most,
         _ => true,
     }
 }

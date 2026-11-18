@@ -297,6 +297,13 @@ pub fn spawn_moving_open(
     moving(commands, name, rest, motion, point)
 }
 
+/// `EXTRACTION_OPEN_PARTS=1`: every cabinet's door, drawer and locker's
+/// door starts swinging open, to look into them (a capture's aid).
+fn open_for_capture() -> bool {
+    static OPEN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OPEN.get_or_init(|| std::env::var_os("EXTRACTION_OPEN_PARTS").is_some())
+}
+
 fn moving(
     commands: &mut Commands,
     name: &str,
@@ -311,7 +318,7 @@ fn moving(
                 motion,
                 rest,
                 at: 0.0,
-                open: false,
+                open: open_for_capture(),
                 left: false,
             },
             crate::raid::truck::Pressable::Door,
@@ -536,7 +543,31 @@ pub fn fit_counters(
                     .iter()
                     .filter(|n| n.0.starts_with(model) && n.0[model.len()..].starts_with('#'))
                 {
-                    spawn_counter_node(&mut commands, prop, xf.scale, n);
+                    let part = spawn_counter_node(&mut commands, prop, xf.scale, n);
+                    // What's left in it, riding out with it.
+                    let local = xf.compute_affine().inverse();
+                    for h in geo.holds.iter().filter(|h| h.part == Some(n.0)) {
+                        let in_model = local.transform_point3(h.at);
+                        if in_model.x.abs() > 0.32 || in_model.z.abs() > 0.32 {
+                            continue;
+                        }
+                        let rest = Transform::from_matrix(
+                            (bxf.compute_affine() * bevy::math::Affine3A::from_translation(h.at))
+                                .into(),
+                        );
+                        let (_, rot, at) = (prop
+                            * bevy::math::Affine3A::from_translation(Vec3::from(n.1)))
+                        .to_scale_rotation_translation();
+                        let part_rest = Transform::from_translation(at).with_rotation(rot);
+                        let seat = part_rest.compute_affine().inverse() * rest.compute_affine();
+                        commands.spawn((
+                            super::buildings::hold_socket(
+                                h.table,
+                                Transform::from_matrix(seat.into()),
+                            ),
+                            ChildOf(part),
+                        ));
+                    }
                 }
             }
         }
@@ -548,7 +579,7 @@ fn spawn_counter_node(
     prop: bevy::math::Affine3A,
     scale: Vec3,
     CounterNode(drawn, origin, centre, size, flipped, motion): &CounterNode,
-) {
+) -> Entity {
     // Shut, in the world: on its hinge or at its middle, unscaled, a
     // right-hand door turned over so it opens with the same sense.
     let flip = if *flipped {
@@ -572,6 +603,7 @@ fn spawn_counter_node(
         range: crate::render::lod::near_range().end_margin,
         shadow: false,
     });
+    e
 }
 
 /// A window sash's leaves (`window_sash`, `art/props/openings.py`):

@@ -139,7 +139,7 @@ impl Plugin for LootPlugin {
                 .after(crate::world::buildings::spawn_buildings),
         )
         .add_systems(PreUpdate, follow_the_career)
-        .add_systems(Update, dirty_found_guns);
+        .add_systems(Update, (dirty_found_guns, seat_held));
     }
 }
 
@@ -238,6 +238,10 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
                         raid,
                         cluster,
                     );
+                }
+                if let Some(holds) = world.get_resource::<crate::world::buildings::BuildingHolds>()
+                {
+                    roll_holds(&mut commands, zone, holds, loot, catalog, seed, raid);
                 }
             }
             _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map, &|id| {
@@ -522,6 +526,94 @@ fn better_spot(
     let least = pick.iter().map(|&k| pile(k)).min()?;
     let pick: Vec<usize> = pick.into_iter().filter(|&k| pile(k) == least).collect();
     Some(pick[rng.below(pick.len())])
+}
+
+/// A thing rolled for a container's hold (`buildings::Hold`), waiting,
+/// still and out of the physics, for its socket to be put up (a drawer's
+/// is put up with its drawer): then it's seated (`seat_held`).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ToHold {
+    pub at: Vec3,
+}
+
+/// Rolls each container's hold: one thing at most, on the hold's own
+/// stream (`place_key`), apart from the building's spots, so a container
+/// changes no other spot's roll. Nothing too long to lie in it.
+fn roll_holds(
+    commands: &mut Commands,
+    zone: &Zone,
+    holds: &crate::world::buildings::BuildingHolds,
+    loot: &Loot,
+    catalog: &Catalog,
+    seed: u64,
+    raid: Option<u32>,
+) {
+    let valley = extraction_core::loot::valley_key(&zone.map.name);
+    let mut n = 0;
+    for h in &holds.0 {
+        let mut rng = Rng::new(seed ^ 0xB0_1D ^ place_key(h.at));
+        let Some(drop) = loot
+            .0
+            .roll_at(h.table, Some(&valley), raid, catalog, &mut rng)
+            .into_iter()
+            .next()
+        else {
+            continue;
+        };
+        let def = catalog.get(drop.kind);
+        if def.size_m().into_iter().fold(0.0, f32::max) > crate::world::buildings::HOLD_MOST {
+            continue;
+        }
+        let e = spawn_found(
+            commands,
+            catalog,
+            SpawnItem {
+                kind: drop.kind,
+                transform: Transform::from_translation(h.at)
+                    .with_rotation(Quat::from_rotation_y(rng.range(0.0, std::f32::consts::TAU))),
+                condition: drop.condition,
+            },
+        );
+        commands.entity(e).insert((
+            ToHold { at: h.at },
+            avian3d::prelude::RigidBodyDisabled,
+            avian3d::prelude::ColliderDisabled,
+        ));
+        n += 1;
+    }
+    info!("{n} items rolled into {} container holds", holds.0.len());
+}
+
+/// Seats each thing rolled for a hold in its socket, once that's up: the
+/// empty hold socket within a few centimetres of where it was rolled,
+/// lifted by half its height to lie on the hold's floor.
+#[allow(clippy::type_complexity)]
+pub fn seat_held(
+    mut commands: Commands,
+    waiting: Query<(Entity, &ToHold, &Item)>,
+    mut sockets: Query<
+        (Entity, &mut crate::interact::Socket, &GlobalTransform),
+        With<crate::world::buildings::HoldSpot>,
+    >,
+    catalog: Res<Catalog>,
+) {
+    for (e, w, item) in &waiting {
+        let Some((s, mut socket, _)) = sockets
+            .iter_mut()
+            .filter(|(_, s, g)| s.occupant.is_none() && g.translation().distance(w.at) < 0.05)
+            .min_by(|a, b| {
+                a.2.translation()
+                    .distance(w.at)
+                    .total_cmp(&b.2.translation().distance(w.at))
+            })
+        else {
+            continue;
+        };
+        let size = catalog.get(item.kind()).size_m();
+        socket.seat = Transform::from_xyz(0.0, size[1] * 0.5 + 0.005, 0.0);
+        commands.entity(e).remove::<ToHold>();
+        crate::interact::seat_in_socket(&mut commands, e, s, &mut socket);
+    }
 }
 
 /// A place's own stream key: its position to the centimetre. A spot's or
@@ -1383,5 +1475,69 @@ pub(crate) mod tests {
         }
         let (grime, fouling, _) = lay(&mut app, "pm_pistol", 0.3, true);
         assert_eq!((grime, fouling), (0.0, 0.0), "the PM comes clean");
+    }
+}
+
+#[cfg(test)]
+mod hold_tests {
+    use super::*;
+
+    /// What's rolled for a container lies in it: every thing rolled for a
+    /// hold is seated in a hold's socket within a few frames (a locker's
+    /// on the building, a drawer's riding in its drawer), never left loose
+    /// or in a pack, and some valley has both kinds.
+    #[test]
+    fn held_loot_sits_in_its_containers() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let holds = app
+            .world()
+            .resource::<crate::world::buildings::BuildingHolds>()
+            .0
+            .clone();
+        assert!(!holds.is_empty(), "Marrow has no containers' holds");
+        let waiting = app.world_mut().query::<&ToHold>().iter(app.world()).count();
+        assert_eq!(
+            waiting, 0,
+            "things rolled for holds still waiting for a socket"
+        );
+        let mut seated = 0;
+        let mut in_drawers = 0;
+        let mut q = app
+            .world_mut()
+            .query::<(&Item, &crate::interact::InSocket)>();
+        let pairs: Vec<Entity> = q.iter(app.world()).map(|(_, s)| s.socket).collect();
+        for s in pairs {
+            if app
+                .world()
+                .get::<crate::world::buildings::HoldSpot>(s)
+                .is_some()
+            {
+                seated += 1;
+                let parent = app.world().get::<ChildOf>(s).map(|c| c.parent());
+                if parent
+                    .is_some_and(|p| app.world().get::<crate::world::hinge::Moving>(p).is_some())
+                {
+                    in_drawers += 1;
+                }
+            }
+        }
+        println!(
+            "{} holds, {seated} things in them, {in_drawers} in drawers",
+            holds.len()
+        );
+        assert!(seated > 0, "nothing in any container");
+        assert!(in_drawers > 0, "nothing in any drawer");
     }
 }

@@ -148,6 +148,52 @@ pub struct Geo {
     /// The open tops of its chimney stacks, where smoke comes out
     /// (`world::cues`). A stove's pipe isn't one: it stops under the roof.
     pub flues: Vec<Vec3>,
+    /// Places inside its containers (a locker's floor, a counter's top
+    /// drawer) where loot sits in a socket ([`Hold`]).
+    pub holds: Vec<Hold>,
+}
+
+/// A place inside a container that holds a thing in a socket: shut,
+/// building-local (on the floor it rests on), what's rolled there, and the
+/// moving part it rides in (`model#node`, `hinge`), if it's not the
+/// container's carcass. Rolled on its own stream (`items::loot::roll_holds`),
+/// never with the building's loot spots, so a container added changes no
+/// other spot's roll.
+#[derive(Clone, Copy, Debug)]
+pub struct Hold {
+    pub at: Vec3,
+    pub table: &'static str,
+    pub part: Option<&'static str>,
+}
+
+/// The longest thing a hold takes (m).
+pub const HOLD_MOST: f32 = 0.42;
+
+/// A hold's socket in the world, and what's rolled for it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct HoldSpot {
+    pub table: &'static str,
+}
+
+/// Every building's holds, world space shut, as their loot is rolled.
+#[derive(Resource, Default, Clone, Debug)]
+pub struct BuildingHolds(pub Vec<Hold>);
+
+/// A hold's socket: takes any loose thing of a hold's size, seated on the
+/// floor it rests on (`items::loot::seat_held` lifts it by its height).
+pub fn hold_socket(table: &'static str, at: Transform) -> impl Bundle {
+    (
+        Name::new("Hold"),
+        HoldSpot { table },
+        crate::interact::Socket {
+            kind: crate::interact::SocketKind::Hold { most: HOLD_MOST },
+            occupant: None,
+            radius: 0.15,
+            seat: Transform::IDENTITY,
+        },
+        at,
+        Visibility::default(),
+    )
 }
 
 /// A doorway (or a door's opening) in a wall between rooms,
@@ -442,6 +488,12 @@ impl Builder {
             top: false,
             building: 0,
         });
+        self
+    }
+
+    /// A hold inside a container (`Hold`), shut, on the floor it rests on.
+    pub fn hold(&mut self, at: Vec3, table: &'static str, part: Option<&'static str>) -> &mut Self {
+        self.geo.holds.push(Hold { at, table, part });
         self
     }
 
@@ -1395,12 +1447,23 @@ impl Builder {
         let n = (len / 0.6).round().max(1.0);
         let w = len / n;
         let pick = variant(at, 2);
+        let mut holds = Vec::new();
         let mut models: Vec<(&'static str, Transform)> = (0..n as usize)
             .map(|i| {
                 let x = -len * 0.5 + w * (i as f32 + 0.5);
                 // (Their doors and drawers are their own, moving:
                 // `hinge::fit_counters`.)
                 let m = ["counter_cabinet#carcass", "counter_drawers#carcass"][(i + pick) % 2];
+                if m == "counter_drawers#carcass" {
+                    // Something left in its top drawer, on its bottom
+                    // (`art/props/furniture.py`: the top drawer's 0.25 m
+                    // box hangs from 0.56 to 0.80).
+                    holds.push(Hold {
+                        at: at + front * Vec3::new(x, 0.57, -0.03),
+                        table: loot.unwrap_or("house"),
+                        part: Some("counter_drawers#drawer_0"),
+                    });
+                }
                 (
                     m,
                     Transform::from_translation(at + front * Vec3::X * x)
@@ -1416,6 +1479,7 @@ impl Builder {
                 .with_scale(Vec3::new(len, 1.0, 1.0)),
         ));
         self.dress(from, models);
+        self.geo.holds.extend(holds);
         if let Some(t) = loot {
             self.loot_at(at, 0.95, true, t);
         }
@@ -1626,6 +1690,8 @@ impl Builder {
                 ),
             );
         }
+        // Something left on its floor, behind its door.
+        self.hold(at + rot * Vec3::new(0.0, 0.06 + t, mid), "tools", None);
         self.dress(
             from,
             vec![(
@@ -5979,6 +6045,7 @@ pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> 
 /// Logic: colliders, doors and loot spots for every generated prefab.
 pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     let mut loot = BuildingLoot::default();
+    let mut holds = BuildingHolds::default();
     for (i, p) in zone.map.placements.iter().enumerate() {
         let Some(geo) = prefab(&p.prefab) else {
             continue;
@@ -6012,6 +6079,20 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                 ..s.clone()
             });
         }
+        for h in &geo.holds {
+            holds.0.push(Hold {
+                at: t.transform_point(h.at),
+                ..*h
+            });
+            // A carcass's hold is the building's; a drawer's rides in its
+            // drawer (`hinge::fit_counters`).
+            if h.part.is_none() {
+                commands.spawn((
+                    hold_socket(h.table, Transform::from_translation(h.at)),
+                    ChildOf(root),
+                ));
+            }
+        }
         for l in &geo.ladders {
             commands.spawn(
                 crate::interact::hand_climb::Ladder {
@@ -6025,8 +6106,13 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
             );
         }
     }
-    info!("{} building loot spots", loot.0.len());
+    info!(
+        "{} building loot spots, {} holds",
+        loot.0.len(),
+        holds.0.len()
+    );
     commands.insert_resource(loot);
+    commands.insert_resource(holds);
 }
 
 /// How far a loot spot keeps from a note or terminal on the same table,
