@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import ON_TOP, UP, cube, item, panel, ragged, text, wanted
-from common import Part, RX, RY, RZ, T, S, fillet
+from common import MATERIALS, Part, RX, RY, RZ, T, S, fillet
 
 # Cartridge profiles, (r, z) with the base at z 0 and the bullet to -z:
 # (case, bullet, overall length).
@@ -140,8 +140,16 @@ def flat_band(sx, sz, y, h, t=0.0006):
 
 
 def merged(name, parts):
-    """One Part of all of `parts` (a far stand-in)."""
+    """One Part of all of `parts`, for a far stand-in: one mesh in one
+    material ("Baked", white), each face's own material's colour baked into
+    its corners' vertex colour, so it draws in a single call."""
     out = Part(name)
+    col = out.bm.loops.layers.color.new("Col")
+    baked = out._mi("Baked")
+
+    def linear(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
     for q in parts:
         vmap = {v: out.bm.verts.new(v.co) for v in q.bm.verts}
         for f in q.bm.faces:
@@ -149,8 +157,12 @@ def merged(name, parts):
                 nf = out.bm.faces.new([vmap[v] for v in f.verts])
             except ValueError:
                 continue
-            nf.material_index = out._mi(q.mats[f.material_index])
+            rgb = MATERIALS[q.mats[f.material_index]][0]
+            rgba = tuple(linear(c) for c in rgb) + (1.0,)
+            nf.material_index = baked
             nf.smooth = f.smooth
+            for loop in nf.loops:
+                loop[col] = rgba
     return out
 
 
@@ -211,8 +223,44 @@ def boxed(body, slots, band_at, band_mat, seal_at, seal_mat, mix):
     h, xf = mix
     text(m, "MIX", h, "Black", xf, depth=0.0004)  # smallest: 0.0045
     parts.append(m)
-    far = [body] + rounds + ([band] if band else []) + [seal]
-    parts.append(merged("box_lod1", far))
+    # Past a few metres: a low box (its card's bounds, in the seal's
+    # colour, as it comes shut) and its band's four strips (the type's
+    # colour, or the pale backing on ball): about 60 triangles, one draw.
+    def bounds(ps):
+        vs = [v.co for q in ps for v in q.bm.verts]
+        return ([min(v[a] for v in vs) for a in range(3)],
+                [max(v[a] for v in vs) for a in range(3)])
+
+    def far(name, ps, mouth=None):
+        lo, hi = bounds(ps)
+        shell = Part("lod_shell")
+        shell.box(tuple(h - l for l, h in zip(lo, hi)),
+                  tuple((l + h) / 2 for l, h in zip(lo, hi)), seal_mat, segs=1)
+        if mouth is not None:
+            # The open end's face: the rounds' brass showing there.
+            brass = shell._mi("Brass")
+            for f in shell.bm.faces:
+                if f.normal.dot(mouth) > 0.9:
+                    f.material_index = brass
+        strips = Part("lod_band")
+        for size, at in band_at:
+            strips.box(size, off(size, at, 1), band_mat or "Paper", segs=1)
+        return merged(name, [shell, strips])
+
+    # Past a few metres: a low box, its card's bounds in the seal's colour,
+    # and its band's four strips (the type's colour, or the pale backing on
+    # ball): 60 triangles, one draw. Shut, as it comes; open, as tall as
+    # its rounds stand, its open end brass (`items::rounds` shows one).
+    from mathutils import Vector
+    lo, hi = bounds([body])
+    c = Vector([(l + h) / 2 for l, h in zip(lo, hi)])
+    sl, sh = bounds([seal])
+    d = Vector([(l + h) / 2 for l, h in zip(sl, sh)]) - c
+    k = max(range(3), key=lambda a: abs(d[a]) / max(hi[a] - lo[a], 1e-6))
+    mouth = Vector([0.0, 0.0, 0.0])
+    mouth[k] = 1.0 if d[k] > 0 else -1.0
+    parts.append(far("box_lod1", [body]))
+    parts.append(far("box_open_lod1", [body] + rounds, mouth))
     return parts
 
 

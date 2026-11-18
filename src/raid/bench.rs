@@ -451,9 +451,9 @@ mod tests {
         for id in [
             "robot_ammo_belt",
             "robot_ammo_belt",
-            "rotor_assembly",
-            "servo",
-            "servo",
+            "drone_rotor_motor",
+            "hound_hip_servo",
+            "hound_hip_servo",
         ] {
             put(&mut app, id);
         }
@@ -495,7 +495,7 @@ mod tests {
             "{have:?}"
         );
         assert!(
-            have.contains(&"rotor_assembly".to_string()),
+            have.contains(&"drone_rotor_motor".to_string()),
             "untouched: {have:?}"
         );
     }

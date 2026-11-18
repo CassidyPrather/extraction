@@ -72,8 +72,9 @@ for PART in "${PARTS[@]}"; do
         reels)
             # A walker on a shot leg, one with its eye shot dark, one with
             # its core failing, and a drone with a rotor hit, at 24-36 m.
-            reel tells_dusk marrow_creek 40,0,262,0,-6 tells,6,30 dusk
-            reel tells_day marrow_creek 40,0,262,0,-6 tells,6,30 day
+            # From Marrow's south gate, on the map.
+            reel tells_dusk marrow_creek 22,0,148.5,53,-6 tells,6,30 dusk
+            reel tells_day marrow_creek 22,0,148.5,53,-6 tells,6,30 day
             # A walker leaving its prints in the lying snow at Rime's col.
             reel snow_prints rime_fell 60,0,-250,0,-14 walk,8,30 day
             ;;

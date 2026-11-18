@@ -209,6 +209,17 @@ pub fn tell(role: PartRole, health: f32) -> Tell {
             dark: true,
             ..t
         },
+        // The engineer's kit: a bundle of struts and panels, knocked about.
+        (PartRole::Kit, Band::Hurt) => Tell { sparks: 0.4, ..t },
+        (PartRole::Kit, Band::Failing) => Tell {
+            sparks: 0.8,
+            motion: Motion::Hang,
+            ..t
+        },
+        (PartRole::Kit, Band::Gone) => Tell {
+            motion: Motion::Hang,
+            ..t
+        },
         (PartRole::Armour(_), Band::Hurt) => Tell { sparks: 0.6, ..t },
         (PartRole::Armour(_), Band::Failing) => Tell {
             sparks: 0.8,
@@ -284,7 +295,12 @@ mod tests {
 
     /// Every damageable part role, as the bodies use them.
     fn roles() -> Vec<PartRole> {
-        let mut r = vec![PartRole::Core, PartRole::Sensor, PartRole::Weapon];
+        let mut r = vec![
+            PartRole::Core,
+            PartRole::Sensor,
+            PartRole::Weapon,
+            PartRole::Kit,
+        ];
         for i in 0..4 {
             r.extend([
                 PartRole::Rotor(i),

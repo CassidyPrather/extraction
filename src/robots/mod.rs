@@ -14,6 +14,7 @@ pub mod anim;
 pub mod armour;
 pub mod body_shells;
 pub mod broken;
+pub mod builds;
 pub mod collector;
 pub mod damage;
 pub mod devices;
@@ -26,6 +27,8 @@ pub mod doors;
 pub mod drone;
 #[cfg(test)]
 mod drone_drill;
+pub mod engineer_body;
+pub mod engineer_look;
 #[cfg(test)]
 mod feet_gauge;
 pub mod firsts;
@@ -227,6 +230,9 @@ pub enum PartRole {
     /// A searchlight (`searchlight`): shot out, its beam is dark, and what
     /// it lit isn't seen.
     Lamp(u8),
+    /// The engineer's kit bundle on its back (`engineer_body`, #98): what
+    /// it builds with. Shot off, it falls, salvage.
+    Kit,
 }
 
 #[derive(Component, Debug)]
@@ -633,7 +639,10 @@ fn wreck_loot(
         commands.entity(e).insert(Salvaged);
         timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
-        let mut drops = loot.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
+        let mut drops = match wreck_table(robot.kind) {
+            Some(table) => loot.roll(table, &catalog, &mut rng.0),
+            None => Vec::new(),
+        };
         // And whatever came through whole is there to unbolt.
         let whole: Vec<PartRole> = parts
             .iter()
@@ -686,17 +695,16 @@ pub fn part_salvage(
             .collect::<Vec<_>>()
     };
     match kind {
-        RobotKind::Walker if crawler => tries(1, 0.5, "crawler_capacitor", rng),
+        // A crawler's capacitor bank is on its wreck, on its leads
+        // (`salvage`).
+        RobotKind::Walker if crawler => Vec::new(),
         RobotKind::Walker if hound => Vec::new(),
         // A walker's servo packs are bolted on its wreck, taken off by hand
         // (`salvage`), not dropped.
         RobotKind::Walker => Vec::new(),
-        RobotKind::Drone => tries(
-            count(|r| matches!(r, PartRole::Rotor(_))),
-            0.35,
-            "drone_rotor_motor",
-            rng,
-        ),
+        // A drone's rotors are on its wreck, or lie where they flew
+        // (`salvage`).
+        RobotKind::Drone => Vec::new(),
         RobotKind::Dirigible => tries(
             count(|r| matches!(r, PartRole::GasCell(_))),
             0.4,
@@ -714,15 +722,18 @@ pub fn part_salvage(
     }
 }
 
-/// The loot table a wreck of this kind rolls.
-pub fn wreck_table(kind: RobotKind) -> &'static str {
+/// The loot table a wreck of this kind rolls, if it still rolls one.
+pub fn wreck_table(kind: RobotKind) -> Option<&'static str> {
     match kind {
-        RobotKind::Drone => "drone_wreck",
-        RobotKind::Walker => "walker_wreck",
-        RobotKind::Dirigible => "dirigible_wreck",
-        RobotKind::Pylon => "pylon_wreck",
+        // (A drone's, a mender's: what's on it, `salvage`.)
+        RobotKind::Drone => None,
+        // (The walker family's wreck is what you see on it, every part
+        // seated: `salvage`, #105.)
+        RobotKind::Walker => None,
+        RobotKind::Dirigible => Some("dirigible_wreck"),
+        RobotKind::Pylon => Some("pylon_wreck"),
         // (Its own table when Models: kit's sorter parts are in.)
-        RobotKind::Sorter => "pylon_wreck",
+        RobotKind::Sorter => Some("pylon_wreck"),
     }
 }
 
@@ -827,15 +838,9 @@ mod tests {
         let mut rng = extraction_core::noise::Rng::new(9);
         let legs: Vec<PartRole> = (0..4).map(PartRole::Leg).collect();
         let rotors: Vec<PartRole> = (0..4).map(PartRole::Rotor).collect();
-        let mut seen = 0;
-        for _ in 0..200 {
-            let got = part_salvage(RobotKind::Drone, false, false, &rotors, &mut rng);
-            assert!(got.len() <= 2);
-            assert!(got.iter().all(|id| *id == "drone_rotor_motor"));
-            seen += got.len();
-        }
-        // About 0.35 a rotor, four rotors, capped at two.
-        assert!((150..320).contains(&seen), "{seen} motors in 200 wrecks");
+        // A drone's rotors are on its wreck or lie where they flew
+        // (`salvage`, #105), not rolled.
+        assert!(part_salvage(RobotKind::Drone, false, false, &rotors, &mut rng).is_empty());
         assert!(part_salvage(RobotKind::Drone, false, false, &[], &mut rng).is_empty());
         // A walker's servo packs are bolted on (`salvage`), not dropped.
         assert!(part_salvage(RobotKind::Walker, false, false, &legs, &mut rng).is_empty());

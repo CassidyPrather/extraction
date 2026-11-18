@@ -45,6 +45,7 @@ impl Plugin for MachineSoundsPlugin {
             .add_message::<Waking>()
             .add_message::<WreckImpact>()
             .add_message::<Arced>()
+            .add_message::<crate::robots::salvage::Crackled>()
             .add_message::<DeviceNoticed>()
             .add_message::<SquadCall>()
             .add_message::<HazardStruck>()
@@ -273,12 +274,13 @@ fn hound_sounds(
 
 /// Machines' bodies: a resident waking (servos stirring, a clank as it
 /// rises: a Signal, it's coming); a wreck coming down hard, as heavy as
-/// it's big; a hand thrown off a live cell, the arc's crack.
+/// it's big; a live cell's warning tick, and a hand thrown off it, the arc's crack.
 fn body_sounds(
     mut commands: Commands,
     mut wakes: MessageReader<Waking>,
     mut wrecks: MessageReader<WreckImpact>,
     mut arcs: MessageReader<Arced>,
+    mut tells: MessageReader<crate::robots::salvage::Crackled>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
@@ -318,6 +320,21 @@ fn body_sounds(
                 (CRACKLE_SET, "cell.arc", 1.2),
                 ("physical/body_hit", "hit.body", 1.1),
             ],
+        );
+    }
+    // Its warning first: a dry tick while you're near, a sharper snap at
+    // a hand close to it (quicker, higher: short).
+    for t in tells.read() {
+        let (cue, speed) = match t.to_hand {
+            Some(_) => ("cell.warn", 1.6),
+            None => ("cell.crackle", 2.0),
+        };
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            t.at,
+            &[(CRACKLE_SET, cue, speed)],
         );
     }
 }

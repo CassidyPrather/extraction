@@ -297,6 +297,13 @@ pub fn spawn_moving_open(
     moving(commands, name, rest, motion, point)
 }
 
+/// `EXTRACTION_OPEN_PARTS=1`: every cabinet's door, drawer and locker's
+/// door starts swinging open, to look into them (a capture's aid).
+fn open_for_capture() -> bool {
+    static OPEN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OPEN.get_or_init(|| std::env::var_os("EXTRACTION_OPEN_PARTS").is_some())
+}
+
 fn moving(
     commands: &mut Commands,
     name: &str,
@@ -311,7 +318,7 @@ fn moving(
                 motion,
                 rest,
                 at: 0.0,
-                open: false,
+                open: open_for_capture(),
                 left: false,
             },
             crate::raid::truck::Pressable::Door,
@@ -464,6 +471,42 @@ const COUNTER_NODES: &[CounterNode] = &[
             travel: DRAWER_TRAVEL,
         },
     ),
+    // A stove's firebox, ash pit and oven doors, each on its left edge
+    // (`art/props/furniture.py` `STOVE_DOORS`).
+    CounterNode(
+        "stove#door_fire",
+        [-0.240, 0.62, -0.289],
+        [0.110, 0.0, -0.024],
+        [0.22, 0.15, 0.048],
+        false,
+        Motion::Hinge { most: STOVE_DOOR },
+    ),
+    CounterNode(
+        "stove#door_ash",
+        [-0.240, 0.2, -0.289],
+        [0.110, 0.0, -0.024],
+        [0.22, 0.1, 0.048],
+        false,
+        Motion::Hinge { most: STOVE_DOOR },
+    ),
+    CounterNode(
+        "stove#door_oven",
+        [0.030, 0.4, -0.289],
+        [0.130, 0.0, -0.024],
+        [0.26, 0.3, 0.048],
+        false,
+        Motion::Hinge { most: STOVE_DOOR },
+    ),
+    // A locker's door, hung on its left (`art/props/furniture.py`
+    // `LOCKER_HINGE`).
+    CounterNode(
+        "locker#door",
+        [-0.238, 0.93, -0.205],
+        [0.238, 0.0, -0.02],
+        [0.47, 1.7, 0.05],
+        false,
+        Motion::Hinge { most: LOCKER_DOOR },
+    ),
     CounterNode(
         "counter_cabinet#door_l",
         [-0.284, 0.455, -0.298],
@@ -481,6 +524,27 @@ const COUNTER_NODES: &[CounterNode] = &[
         Motion::Hinge { most: CABINET_DOOR },
     ),
 ];
+
+/// Every moving node a hand takes hold of (`model#node`): its origin in
+/// its model's space, its grab box's centre from there (in the part's own
+/// space, a right-hand door turned over) and size, and whether it's turned
+/// over (`capture::checks::handles`).
+pub fn moving_nodes() -> impl Iterator<Item = (&'static str, Vec3, Vec3, Vec3, bool)> {
+    COUNTER_NODES.iter().map(|n| {
+        let flip = if n.4 {
+            Quat::from_rotation_z(std::f32::consts::PI)
+        } else {
+            Quat::IDENTITY
+        };
+        (
+            n.0,
+            Vec3::from(n.1),
+            flip.inverse() * Vec3::from(n.2),
+            Vec3::from(n.3),
+            n.4,
+        )
+    })
+}
 
 /// A moving node's origin in its model's space (`model#node`: a
 /// counter's, a window's leaf), if it's one we move.
@@ -501,6 +565,11 @@ pub fn node_origin(drawn: &str) -> Option<Vec3> {
 /// cabinet's door swings (radians).
 pub const DRAWER_TRAVEL: f32 = 0.4;
 pub const CABINET_DOOR: f32 = 1.9;
+/// How far a locker's door swings open, radians: back against its hinge
+/// side.
+pub const LOCKER_DOOR: f32 = 2.0;
+/// How far a stove's doors swing open, radians.
+pub const STOVE_DOOR: f32 = 1.7;
 
 /// A building's counters' drawers and cabinet doors, put up as moving
 /// parts when it's placed (the building draws only their carcasses:
@@ -523,7 +592,39 @@ pub fn fit_counters(
                     .iter()
                     .filter(|n| n.0.starts_with(model) && n.0[model.len()..].starts_with('#'))
                 {
-                    spawn_counter_node(&mut commands, prop, xf.scale, n);
+                    // As far as it opens clear of the building round it.
+                    let clear = clear_end(&geo.pieces, &d.pieces, xf, n);
+                    let motion = match n.5 {
+                        Motion::Hinge { .. } => Motion::Hinge { most: clear },
+                        Motion::Slide { .. } => Motion::Slide { travel: clear },
+                    };
+                    let part = spawn_counter_node(&mut commands, prop, xf.scale, n, motion);
+                    // What's left in it, riding out with it.
+                    let local = xf.compute_affine().inverse();
+                    for h in geo.holds.iter().filter(|h| h.part == Some(n.0)) {
+                        let in_model = local.transform_point3(h.at);
+                        if in_model.x.abs() > 0.32 || in_model.z.abs() > 0.32 {
+                            continue;
+                        }
+                        let rest = Transform::from_matrix(
+                            (bxf.compute_affine() * bevy::math::Affine3A::from_translation(h.at))
+                                .into(),
+                        );
+                        let (_, rot, at) = (prop
+                            * bevy::math::Affine3A::from_translation(Vec3::from(n.1)))
+                        .to_scale_rotation_translation();
+                        let part_rest = Transform::from_translation(at).with_rotation(rot);
+                        let seat = part_rest.compute_affine().inverse() * rest.compute_affine();
+                        commands.spawn((
+                            super::buildings::hold_socket(
+                                h.table,
+                                rest.translation,
+                                bxf.rotation * h.out,
+                                Transform::from_matrix(seat.into()),
+                            ),
+                            ChildOf(part),
+                        ));
+                    }
                 }
             }
         }
@@ -534,8 +635,9 @@ fn spawn_counter_node(
     commands: &mut Commands,
     prop: bevy::math::Affine3A,
     scale: Vec3,
-    CounterNode(drawn, origin, centre, size, flipped, motion): &CounterNode,
-) {
+    CounterNode(drawn, origin, centre, size, flipped, _): &CounterNode,
+    motion: Motion,
+) -> Entity {
     // Shut, in the world: on its hinge or at its middle, unscaled, a
     // right-hand door turned over so it opens with the same sense.
     let flip = if *flipped {
@@ -548,7 +650,7 @@ fn spawn_counter_node(
     let rest = Transform::from_translation(at).with_rotation(rot);
     let box_centre = flip.inverse() * Vec3::from(*centre);
     let box_size = Vec3::from(*size) * Vec3::new(scale.x.abs(), 1.0, 1.0);
-    let e = spawn_moving(commands, drawn, rest, *motion, box_size, box_centre);
+    let e = spawn_moving(commands, drawn, rest, motion, box_size, box_centre);
     // Its node drawn where it hangs in the model, from the part's own space.
     let model_at = Transform::from_matrix((rest.compute_affine().inverse() * prop).into());
     commands.entity(e).insert(crate::destruction::wood::Drawn {
@@ -559,6 +661,7 @@ fn spawn_counter_node(
         range: crate::render::lod::near_range().end_margin,
         shadow: false,
     });
+    e
 }
 
 /// A window sash's leaves (`window_sash`, `art/props/openings.py`):
@@ -643,8 +746,144 @@ pub fn fit_sash(commands: &mut Commands, prop: bevy::math::Affine3A) -> [Entity;
     })
 }
 
+/// How far a container's moving part (`n`, its carcass posed by `xf` in
+/// a building) opens before it meets another of the building's solid
+/// pieces (not its container's own, `own`): its box swept from shut to
+/// open in 48 steps, no point of it more than 2 cm into a piece. The part
+/// stops there, as a door stops at a wall (`fit_counters`).
+fn clear_end(
+    pieces: &[super::buildings::Piece],
+    own: &std::ops::Range<usize>,
+    xf: &Transform,
+    n: &CounterNode,
+) -> f32 {
+    clear_end_by(pieces, own, xf, n).0
+}
+
+/// `clear_end`, and what it meets (its material), if anything.
+fn clear_end_by(
+    pieces: &[super::buildings::Piece],
+    own: &std::ops::Range<usize>,
+    xf: &Transform,
+    n: &CounterNode,
+) -> (f32, Option<crate::render::materials::Mat>) {
+    use super::buildings::Shape;
+    let flip = if n.4 {
+        Quat::from_rotation_z(std::f32::consts::PI)
+    } else {
+        Quat::IDENTITY
+    };
+    let node = bevy::math::Affine3A::from_rotation_translation(flip, Vec3::from(n.1));
+    let (_, rot, at) = (xf.compute_affine() * node).to_scale_rotation_translation();
+    let rest = Transform::from_translation(at).with_rotation(rot);
+    let centre = flip.inverse() * Vec3::from(n.2);
+    let half = Vec3::from(n.3) * Vec3::new(xf.scale.x.abs(), 1.0, 1.0) * 0.5;
+    let mut m = Moving {
+        motion: n.5,
+        rest,
+        at: 0.0,
+        open: false,
+        left: false,
+    };
+    let end = n.5.end();
+    for step in 1..=48 {
+        m.at = end * step as f32 / 48.0;
+        let pose = m.pose();
+        for i in 0..5 {
+            for j in 0..5 {
+                for k in 0..3 {
+                    let local = centre
+                        + half
+                            * Vec3::new(i as f32 / 2.0 - 1.0, j as f32 / 2.0 - 1.0, k as f32 - 1.0);
+                    let p = pose.transform_point(local);
+                    let hit = pieces.iter().enumerate().find(|(pi, piece)| {
+                        if !piece.collide || own.contains(pi) {
+                            return false;
+                        }
+                        let Shape::Box(size) = piece.shape else {
+                            return false;
+                        };
+                        let q = piece.at.rotation.inverse() * (p - piece.at.translation);
+                        (q.abs() - (size * 0.5 - Vec3::splat(0.02))).max_element() < 0.0
+                    });
+                    if let Some((_, piece)) = hit {
+                        return (end * (step - 1) as f32 / 48.0, Some(piece.mat));
+                    }
+                }
+            }
+        }
+    }
+    (end, None)
+}
+
+/// The least of its way a container's part must open clear: a door most
+/// of its swing (it may stop against a wall short of its end), a drawer
+/// all of its run.
+#[cfg(test)]
+fn least_clear(motion: Motion) -> f32 {
+    match motion {
+        Motion::Hinge { most } => most * 0.75,
+        Motion::Slide { travel } => travel,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// Every container's door swings most of its way and every drawer
+    /// runs all of its way clear of the building around it (its walls,
+    /// other furniture, not its own carcass): a locker shut against a wall
+    /// is a lie too (`clear_end`, `least_clear`). One buried in a drowned
+    /// house's silt is plainly stuck, and stays so.
+    #[test]
+    fn every_container_opens_clear() {
+        use super::super::buildings;
+        let ids = buildings::PREFABS
+            .iter()
+            .chain(super::super::dam::PREFABS.iter())
+            .chain(super::super::fell::PREFABS.iter())
+            .copied()
+            .chain(super::super::underground::ids());
+        let mut bad = Vec::new();
+        let mut parts = 0;
+        for id in ids {
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            for d in &geo.props {
+                for (name, xf) in &d.models {
+                    let Some(model) = name.strip_suffix("#carcass") else {
+                        continue;
+                    };
+                    for n in COUNTER_NODES
+                        .iter()
+                        .filter(|n| n.0.starts_with(model) && n.0[model.len()..].starts_with('#'))
+                    {
+                        parts += 1;
+                        let (clear, by) = clear_end_by(&geo.pieces, &d.pieces, xf, n);
+                        // A door down in a drowned house's silt stays
+                        // shut, plainly buried: no lie.
+                        let buried = by == Some(crate::render::materials::Mat::Silt);
+                        if clear < least_clear(n.5) - 1e-4 && !buried {
+                            bad.push(format!(
+                                "{id}: {} at {:.2?} opens {:.0}% clear",
+                                n.0,
+                                xf.translation,
+                                clear / n.5.end() * 100.0
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        println!("{parts} moving parts swept");
+        assert!(parts > 20, "only {parts} parts");
+        assert!(
+            bad.is_empty(),
+            "containers that can't open:\n{}",
+            bad.join("\n")
+        );
+    }
+
     use super::*;
 
     #[test]

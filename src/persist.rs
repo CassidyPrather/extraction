@@ -519,6 +519,7 @@ fn progress_from_requests(
 fn fresh_save(map: &str) -> SaveGame {
     let mut s = SaveGame::new(map);
     let item = |id: &str, rounds: u32, at: [f32; 3]| SavedItem {
+        charred: false,
         id: id.into(),
         condition: 0.75,
         rounds,
@@ -594,6 +595,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
     // A kind retired since the save: what it became, fresh, where it lay.
     if let Some(now) = extraction_core::save::retired_as(&saved.id) {
         let fresh = SavedItem {
+            charred: saved.charred,
             id: now.to_string(),
             condition: saved.condition,
             rounds: 0,
@@ -641,6 +643,9 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         if saved.charge_wh >= 0.0 {
             it.charge_wh = saved.charge_wh;
         }
+    }
+    if saved.charred {
+        world.entity_mut(e).insert(crate::robots::salvage::Charred);
     }
     if let (Some(g), Some(mut gun)) = (&saved.gun, world.get_mut::<Gun>(e)) {
         let f = &mut gun.firearm;
@@ -1044,7 +1049,16 @@ fn apply_restore(world: &mut World) {
         for p in &save.zone.items {
             let t = Transform::from_translation(v3(p.at)).with_rotation(Quat::from_array(p.rot));
             if let Some(e) = restore_item(world, &p.item, t) {
-                place_unseated(world, e, None);
+                if let Some(h) = p.held {
+                    // Back in its container's hold, once that's up.
+                    world.entity_mut(e).insert((
+                        crate::items::loot::ToHold { at: v3(h) },
+                        RigidBodyDisabled,
+                        ColliderDisabled,
+                    ));
+                } else {
+                    place_unseated(world, e, None);
+                }
                 placed += 1;
             }
         }
@@ -1118,6 +1132,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
         gun: None,
         inserted: Vec::new(),
         loads: item.loads.clone(),
+        charred: world.get::<crate::robots::salvage::Charred>(e).is_some(),
     };
     if let Some(gun) = world.get::<Gun>(e) {
         let f = &gun.firearm;
@@ -1265,6 +1280,19 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                     loadout.slots.push((index, saved));
                 }
             }
+            // In a container's hold: saved with the Zone, to be seated back
+            // in it.
+            if let Some(h) = world.get::<crate::world::buildings::HoldSpot>(s).copied() {
+                if let Some(saved) = snapshot_item(world, e, Vec3::ZERO) {
+                    save.zone.items.push(PlacedItem {
+                        at: h.at.to_array(),
+                        rot: [0.0, 0.0, 0.0, 1.0],
+                        item: saved,
+                        held: Some(h.at.to_array()),
+                    });
+                }
+                continue;
+            }
             // Anything else in a socket (a magazine in a well) is saved
             // with its owner.
             continue;
@@ -1318,10 +1346,15 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(saved) = snapshot_item(world, e, Vec3::ZERO) {
+            // Rolled for a hold and not seated yet: saved as held.
+            let held = world
+                .get::<crate::items::loot::ToHold>(e)
+                .map(|w| w.at.to_array());
             save.zone.items.push(PlacedItem {
                 at: p.to_array(),
                 rot: gt.compute_transform().rotation.to_array(),
                 item: saved,
+                held,
             });
         }
     }
@@ -1337,6 +1370,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             at: at.to_array(),
             rot: [0.0, 0.0, 0.0, 1.0],
             item: SavedItem {
+                charred: false,
                 id: "deployable_cover".into(),
                 condition: 1.0,
                 rounds: 0,
@@ -1347,6 +1381,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 inserted: Vec::new(),
                 loads: Default::default(),
             },
+            held: None,
         });
     }
     save.zone.remains = remains.into_values().collect();
@@ -1928,6 +1963,7 @@ mod tests {
             ("flare_pistol", "scrap_metal"),
         ] {
             let saved = SavedItem {
+                charred: false,
                 id: old.into(),
                 condition: 0.7,
                 rounds: 1,
@@ -1963,6 +1999,7 @@ mod tests {
             let at = zone.on_ground(30.0 + 6.0 * i as f32, -40.0);
             let bag = spawn_remains(world, at);
             let saved = SavedItem {
+                charred: false,
                 id: "canned_stew".into(),
                 condition: 1.0 - 0.05 * i as f32,
                 rounds: 0,
@@ -2146,6 +2183,69 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// What's in a container's hold (a locker's floor, a drawer) is saved
+    /// and comes back seated in the same hold, never dropped loose where
+    /// it lay; a drawer left open comes back shut, its thing in it.
+    #[test]
+    fn container_loot_is_saved_and_comes_back_in_its_holds() {
+        fn held(world: &mut World) -> Vec<(String, [i64; 3])> {
+            let catalog = world.resource::<crate::items::Catalog>().clone();
+            let pairs: Vec<(String, Entity)> = world
+                .query::<(&Item, &InSocket)>()
+                .iter(world)
+                .map(|(i, s)| (catalog.get(i.kind()).id.clone(), s.socket))
+                .collect();
+            let mut out: Vec<(String, [i64; 3])> = pairs
+                .into_iter()
+                .filter_map(|(id, s)| {
+                    let h = world.get::<crate::world::buildings::HoldSpot>(s)?;
+                    let cm = |v: f32| (v * 100.0).round() as i64;
+                    Some((id, [cm(h.at.x), cm(h.at.y), cm(h.at.z)]))
+                })
+                .collect();
+            out.sort();
+            out
+        }
+        fn load(path: &std::path::Path) -> App {
+            let opts = LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                save: Some(path.to_owned()),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..30 {
+                app.update();
+            }
+            app
+        }
+        let path = temp_save("holds.ron");
+        let mut a = load(&path);
+        let before = held(a.world_mut());
+        assert!(
+            before.len() >= 5,
+            "Marrow's containers hold {} things",
+            before.len()
+        );
+        let save = snapshot(a.world_mut());
+        let saved_held = save.zone.items.iter().filter(|p| p.held.is_some()).count();
+        assert_eq!(saved_held, before.len(), "each held thing is saved as held");
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+        let mut b = load(&path);
+        let waiting = b
+            .world_mut()
+            .query::<&crate::items::loot::ToHold>()
+            .iter(b.world())
+            .count();
+        assert_eq!(waiting, 0, "every held thing is seated again");
+        assert_eq!(held(b.world_mut()), before, "back in the same holds");
+        let _ = std::fs::remove_file(&path);
+    }
+
     #[test]
     fn save_and_restore_round_trip() {
         let path = temp_save("round_trip.ron");
@@ -2301,6 +2401,7 @@ mod tests {
         write_career(&path, &plain);
         let before = by_kind(load(&path).world_mut());
         let old = |id: &str, local: [f32; 3]| SavedItem {
+            charred: false,
             id: id.into(),
             condition: 1.0,
             rounds: 0,

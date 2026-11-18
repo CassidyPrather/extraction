@@ -21,6 +21,10 @@ pub const GRAPPLER_CORE_AT: Vec3 = Vec3::new(0.0, -0.025, 0.03);
 /// the visor; the shell itself runs to ±0.426), and its middle.
 pub const CRAWLER_CORE: Vec3 = Vec3::new(1.40, 0.55, 0.77);
 pub const CRAWLER_CORE_AT: Vec3 = Vec3::new(0.0, -0.025, 0.0);
+/// The engineer's hull (#98): narrow, low and long, running back from
+/// behind its eye (its front face at z -0.36), and its middle.
+pub const ENGINEER_CORE: Vec3 = Vec3::new(0.62, 0.36, 1.2);
+pub const ENGINEER_CORE_AT: Vec3 = Vec3::new(0.0, -0.02, 0.24);
 
 /// A core's hit volume for a body (local to the core part, which sits at
 /// the robot's middle).
@@ -35,6 +39,7 @@ pub fn core(shape: Shape) -> Collider {
     match shape {
         Shape::Grappler => boxed(GRAPPLER_CORE, GRAPPLER_CORE_AT),
         Shape::Crawler => boxed(CRAWLER_CORE, CRAWLER_CORE_AT),
+        Shape::Engineer => boxed(ENGINEER_CORE, ENGINEER_CORE_AT),
         _ => Collider::sphere(0.4),
     }
 }

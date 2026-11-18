@@ -672,7 +672,7 @@ fn plough_wreck(
             .entity(e)
             .insert((super::wreck::Broken, super::Salvaged));
         info!("plough: wrecked at {:.0}", g.translation());
-        for (k, id) in ["fuel_can", "scrap_metal", "scrap_metal", "servo"]
+        for (k, id) in ["fuel_can", "scrap_metal", "scrap_metal", "hound_hip_servo"]
             .into_iter()
             .enumerate()
         {

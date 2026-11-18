@@ -141,6 +141,7 @@ mod tests {
         s.lit = true;
         assert!(s.claimed());
         s.stash.push(SavedItem {
+            charred: false,
             id: "canned_stew".into(),
             condition: 1.0,
             rounds: 0,

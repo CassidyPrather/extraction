@@ -11,6 +11,8 @@
 //   5 mirror glints   twinkles on the fold's surface, bright when revealed
 //   6 lift dust       a low swirl over the flattened ring
 //   7 hush dust       hanging dead still in a dome
+//   8 steam bank      big billows, low, rolling where a burner meets a frost
+//   9 charged water   crackles on the water a snare charges, out to its reach
 //
 // Fog is applied here through bevy_pbr's apply_fog, which render/fog.rs
 // patches to add the ground-fog banks and Kettle Pass's cloud cap, so a
@@ -153,14 +155,64 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         p.alpha = tw * (0.25 + 0.75 * max(reveal, flash));
         p.heat = 1.0;
     } else if (mode == 7) {
-        // Hush: dust hanging dead still in a dome, barely drifting.
-        let a = s * TAU;
+        // Hush: dust hanging dead still in a dome, barely drifting; stirred
+        // (charge: what moves in it, `anomaly::hush::stir`) it swirls and
+        // lifts, the silence's one tell of what walks in it.
+        let stir = charge;
+        let a = s * TAU + t * 0.6 * stir * (0.5 + h(s, 6.1));
         let rr = R * sqrt(h(s, 2.3));
         let y = 0.15 + 2.4 * h(s, 4.9) * (1.0 - 0.5 * rr / R);
-        let drift = vec3<f32>(sin(t * 0.05 + s * 7.0), 0.0, cos(t * 0.04 + s * 5.0)) * 0.05;
+        let k = t * (0.05 + 1.1 * stir);
+        let drift = vec3<f32>(sin(k + s * 7.0), 0.6 * stir * sin(k * 1.3 + s * 3.0), cos(k * 0.9 + s * 5.0))
+            * (0.05 + 0.3 * stir);
         p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + drift;
-        p.alpha = 0.6 + 0.4 * reveal;
+        p.alpha = 0.6 + 0.4 * max(reveal, stir);
+        p.size = p.size * (1.0 + 0.4 * stir);
         p.spin = s * 3.0;
+    } else if (mode == 9) {
+        // Charged water (`anomaly::snare_water`): blue crackles flicking on
+        // the water's surface from the snare's edge out to its reach (z),
+        // more and brighter as it charges. The child sits at the water's
+        // level; over dry ground they're under it.
+        let reach = params.mode.z;
+        let a = s * TAU + floor(t * 3.0 + s * 5.0) * 2.4;
+        let rr = mix(R * 0.85, reach, sqrt(h(s + floor(t * 3.0 + s * 5.0), 3.7)));
+        p.pos = vec3<f32>(cos(a) * rr, 0.02, sin(a) * rr);
+        let lit = step(h(s + floor(t * 14.0), 2.9), 0.08 + 0.5 * charge + 0.8 * flash);
+        p.alpha = lit;
+        p.size = p.size * (0.6 + 0.8 * h(s + floor(t * 14.0), 4.1));
+        p.heat = 1.0;
+    } else if (mode == 8) {
+        // Steam (`anomaly::steam`): a low, wide lens of vapour hugging the
+        // gap, thickest at its core and thin enough at its outer third to
+        // see through; a quarter of it tears off the top as wisps that
+        // drift downwind and up, thinning to nothing. reveal/flash carry
+        // the way to the burner (x, z): warmer that side, cooler the frost's.
+        let toward = vec2<f32>(params.state.y, params.state.z);
+        if (h(s, 8.8) < 0.25) {
+            let life = fract(t / (5.0 + 3.0 * h(s, 1.1)) + h(s, 2.6));
+            let a = s * TAU;
+            let start = vec3<f32>(cos(a), 0.0, sin(a)) * R * 0.5 * h(s, 3.3);
+            let drift = vec3<f32>(0.8, 0.0, 0.5) * life * 2.5;
+            p.pos = start + drift + vec3<f32>(0.0, 1.6 + life * 2.4, 0.0);
+            p.size = params.state.w * (0.5 + 0.9 * life);
+            p.alpha = 0.45 * smoothstep(0.0, 0.15, life) * (1.0 - life) * (1.0 - life);
+        } else {
+            let life = fract(t / (7.0 + 5.0 * h(s, 1.3)) + h(s, 6.7));
+            let a = s * TAU + t * 0.08 * (h(s, 2.2) - 0.5);
+            let k = sqrt(h(s, 3.1));
+            let rr = R * 1.1 * k;
+            let y = 0.5 + 1.3 * h(s, 4.3) * (1.0 - k * k) + 0.2 * life;
+            let roll = vec3<f32>(sin(t * 0.25 + s * 9.0), 0.0, cos(t * 0.22 + s * 4.0)) * 0.35;
+            p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + roll;
+            p.size = params.state.w * (0.8 + 0.5 * h(s, 5.9)) * (0.85 + 0.3 * sin(life * 3.14159));
+            // Thick at the core, see-through at the rim.
+            let rim = 1.0 - smoothstep(0.35, 1.0, k);
+            p.alpha = rim * smoothstep(0.0, 0.2, life) * (1.0 - smoothstep(0.75, 1.0, life));
+        }
+        let d = p.pos.xz;
+        p.heat = 0.5 + 0.5 * clamp(dot(d, toward) / R, -1.0, 1.0);
+        p.spin = s * 5.0 + t * 0.04;
     } else {
         let a = s * TAU + t * (0.3 + 0.9 * charge) * (0.6 + 0.4 * h(s, 1.4));
         let r = R * (0.3 + 0.75 * h(s, 2.1));
@@ -210,8 +262,18 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
     let texel = textureSample(tex, tex_sampler, in.uv);
     let glow = params.mode.w;
     var rgb = params.color.rgb * mix(texel.rgb, vec3<f32>(1.0), glow);
-    // Grit falling into a well warms toward its violet glow.
-    rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
+    if (i32(params.mode.x + 0.5) == 8) {
+        // Steam: warmer on its burner's side, cooler on its frost's; each
+        // billow lit on top by the sky and in its own shade below (a
+        // cooler grey, about 0.6 of its top), so the bank has a body
+        // against snow and an overcast sky.
+        rgb = rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
+        let under = smoothstep(0.25, 0.95, in.uv.y);
+        rgb = rgb * mix(vec3<f32>(1.05, 1.05, 1.05), vec3<f32>(0.56, 0.6, 0.66), under);
+    } else {
+        // Grit falling into a well warms toward its violet glow.
+        rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
+    }
     let a = texel.a * params.color.a * in.alpha;
     if (glow > 0.5) {
         // Additive (Bevy's premultiplied blend with no alpha): fog only

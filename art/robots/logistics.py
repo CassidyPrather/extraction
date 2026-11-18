@@ -16,8 +16,12 @@ origin, its top at y 0.25.
               the boom's foot pin, and the line drum behind
 - `launcher`  the derrick's boom, origin at its foot pin (what it folds
               about on a wreck): leaning forward to a head 3 m off the
-              ground with the launcher on it (a barbed harpoon in its
-              muzzle), its ram and its line
+              ground, its ram and its line
+- `launcher_head`  the launcher on the boom's head (a barbed harpoon in
+              its muzzle), origin at the head: salvage on its own, so it
+              comes off the wreck whole (Heavy's table)
+- `drum`      the line drum behind the yoke, origin at its axle: salvage
+              on its own too (its trunnions stay on the pedestal)
 
 Materials: Shell, Dark, Glow, Warn, Yellow, Steel.
 """
@@ -113,7 +117,8 @@ for sx in (-1, 1):
                    (0.025, 0.01)], "Steel", segs=12,
                   xf=T(sx * (HX - 0.05), Y_TOP + 0.05, sz * (HZ - 0.05)) @ RY(math.pi / 4 * sx * sz)
                   @ ALONG_X, closed=True)
-make(pod)
+# (Tangents need triangles: its many-sided caps are triangulated on export.)
+make(pod).modifiers.new("tri", "TRIANGULATE")
 report()
 export("assets/models/robots/cargo_pod.glb")
 
@@ -168,31 +173,33 @@ ln.cyl(0.03, rl * 0.5, rl, "Steel", segs=10, xf=ram @ UP)
 # tube out of its front with the barbed harpoon in it. (No warning stripes
 # up here: they glow, and alone 3 m up they bloomed like a lamp.)
 hx = T(*HEAD)
+lh = Part("launcher_head", origin=HEAD)
 side = fillet([(0.16, -0.08), (0.2, 0.0), (0.14, 0.08), (-0.14, 0.08), (-0.22, 0.04),
                (-0.22, -0.05), (-0.16, -0.08)], [0.02, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02], 3)
-ln.prism([(x, y + HEAD[1]) for x, y in side], -0.09, 0.09, "Shell", axis="x", bevel=0.018,
+lh.prism([(x, y + HEAD[1]) for x, y in side], -0.09, 0.09, "Shell", axis="x", bevel=0.018,
          segs=2, xf=T(0, 0, HEAD[2]))
-ln.cyl(0.05, -0.11, 0.11, "Dark", segs=14, xf=hx @ ALONG_X, chamfer=0.006)
+lh.cyl(0.05, -0.11, 0.11, "Dark", segs=14, xf=hx @ ALONG_X, chamfer=0.006)
 tube = T(0, HEAD[1] + 0.01, HEAD[2])
-ln.tube(0.05, 0.032, -0.5, -0.14, "Dark", segs=14, xf=tube, chamfer=0.004)
+lh.tube(0.05, 0.032, -0.5, -0.14, "Dark", segs=14, xf=tube, chamfer=0.004)
 for i in range(3):
-    ln.tube(0.056, 0.032, -0.26 - i * 0.08, -0.24 - i * 0.08, "Dark", segs=14, xf=tube,
+    lh.tube(0.056, 0.032, -0.26 - i * 0.08, -0.24 - i * 0.08, "Dark", segs=14, xf=tube,
             chamfer=0.004)
-ln.cyl(0.012, -0.56, -0.3, "Steel", segs=10, xf=tube)
-ln.lathe([(0.0, -0.66), (0.012, -0.64), (0.026, -0.585), (0.024, -0.56), (0.0, -0.56)], "Steel",
+lh.cyl(0.012, -0.56, -0.3, "Steel", segs=10, xf=tube)
+lh.lathe([(0.0, -0.66), (0.012, -0.64), (0.026, -0.585), (0.024, -0.56), (0.0, -0.56)], "Steel",
          segs=12, xf=tube)
 for k in range(3):
     a = 2 * math.pi * k / 3 + 0.5
-    ln.box((0.008, 0.008, 0.07), (0.0, 0.0, 0.0), "Steel",
+    lh.box((0.008, 0.008, 0.07), (0.0, 0.0, 0.0), "Steel",
            xf=tube @ RZ(a) @ T(0.03, 0, -0.565) @ RY(-0.35))
 # The line drum behind, on its own trunnions off the yoke: yellow line
 # between dark flanges, as wide as the orb is deep.
 DRUM = (0.0, R + 0.1, 0.46)
+dr = Part("drum", origin=DRUM)
 reel = T(*DRUM) @ ALONG_X
-pd.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=reel)
+dr.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=reel)
 for x in (-0.17, 0.17):
-    pd.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=reel, chamfer=0.004)
-pd.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=reel)
+    dr.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=reel, chamfer=0.004)
+dr.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=reel)
 for sx in (-1, 1):
     pd.box((0.03, 0.06, 0.4), (sx * 0.2, DRUM[1] - 0.02, 0.27), "Dark", bevel=0.01, segs=1)
 # The line from the drum up the boom to the launcher: steel, not the
@@ -205,5 +212,10 @@ ln.cyl(0.012, 0.0, ll - 0.05, "Steel", segs=6, xf=line @ UP)
 print("muzzle", HEAD[0], HEAD[1] + 0.01, HEAD[2] - 0.66)
 make(pd)
 make(ln)
+# (Its housing's side profile is a filleted many-sided cap: tangents need
+# triangles, and the export applies the modifier.)
+lh_obj = make(lh)
+lh_obj.modifiers.new("tri", "TRIANGULATE")
+make(dr)
 report()
 export("assets/models/robots/harpoon.glb")

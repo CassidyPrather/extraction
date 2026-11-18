@@ -9,6 +9,7 @@ import os
 import sys
 
 import bmesh
+import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -63,7 +64,17 @@ def item(item_id, build):
     print(f"{item_id}:")
     report()
     common.FOLDS.clear()
-    export(f"assets/models/items/{item_id}.glb")
+    # Vertex colours where a model has them (a box's far stand-in), its one
+    # set made the active one: with none active the exporter wrote a second
+    # set (COLOR_1), which the game's loader warns of.
+    colors = False
+    for o in bpy.context.scene.objects:
+        if o.type == "MESH" and len(o.data.color_attributes) > 0:
+            ca = o.data.color_attributes
+            ca.active_color = ca[0]
+            ca.render_color_index = 0
+            colors = True
+    export(f"assets/models/items/{item_id}.glb", colors=colors)
 
 
 def transform(parts, m):

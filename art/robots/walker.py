@@ -17,6 +17,10 @@ and their origins (each the spawn offset of its part):
 - `crawler_core` (0, 0, 0)   a crawler's shell in place of the orb: low, wide, flat-topped
 - `grappler_core` (0, 0, 0)  a grappler's winch body in place of the orb: a wide low box
 - `plate_flat` (0, 0, -0.9)  a flat armour plate for the box-bodied, facing -Z like `plate`
+- `engineer_hull` (0, 0, 0)   the engineer's long low pale hull in place of the orb (#98)
+- `engineer_kit` (0, 0.30, 0.36)  its canvas kit bundle with its struts, panel and coil
+- `engineer_lamp` (0.25, 0.20, -0.44)  its scan lamp, facing -Z, the rim `ScanRim`
+- `engineer_hammer` (0, -0.3, -0.7)  the driver under its nose
 
 Leg segments have their bend axis along X (the game points X along the
 normal of the leg's plane) so knees hinge the right way.
@@ -327,8 +331,119 @@ for bx in (-0.12, 0.12):
     for by in (-0.11, 0.11):
         flat.sphere(0.009, (bx, by, -0.917), "Dark", segs=10, rings=5)
 
+# --- The engineer (#98, Robot bodies' Shape::Engineer) ----------------------------------
+# An unarmed worker: a long, low, pale cart (Cream, not armour grey) on a
+# walker's short legs, its kit bundled on its back with struts standing up
+# out of it, a scan lamp on an arm at its front right and a driver under
+# its nose. Robot bodies' parts: the hull (Core) at the robot's middle,
+# collider ENGINEER_CORE 0.62 x 0.36 x 1.2 at (0, -0.02, 0.24); the kit
+# (Kit) at KIT_AT (0, 0.30, 0.36), 0.5 x 0.24 x 0.6; the lamp (Lamp 0) at
+# LAMP_AT (0.25, 0.20, -0.44). Hips (ENGINEER_HIP) at (±0.24, -0.14, ±0.5).
+# All modelled in robot space, facing -Z.
+# (Its front 5 mm behind ENGINEER_CORE's, out of the grappler_core's front
+# plane: the two share this file, and coplanar they'd fight in
+# capture::fighting.)
+EX, EY0, EY1, EZ0, EZ1 = 0.31, -0.20, 0.16, -0.355, 0.84
+EZM = (EZ0 + EZ1) / 2
+hull = Part("engineer_hull")
+# The body, bevelled soft like pressed sheet.
+hull.box((2 * EX, EY1 - EY0 - 0.04, EZ1 - EZ0), (0.0, (EY0 + EY1) / 2 + 0.02, EZM), "Cream",
+         bevel=0.035, segs=3)
+# A dark skirt round its foot.
+hull.box((2 * EX + 0.04, 0.07, EZ1 - EZ0 + 0.04), (0.0, EY0 + 0.03, EZM), "Dark", bevel=0.015,
+         segs=2)
+# The sloped nose under the eye, out over the front hips to a dark bumper
+# that carries them.
+nose = [(EZ0 + 0.02, 0.02), (EZ0 + 0.02, -0.17), (-0.56, -0.17), (-0.56, -0.12), (-0.44, -0.02)]
+hull.prism(nose, -EX + 0.03, EX - 0.03, "Cream", axis="x", bevel=0.012)
+hull.box((2 * EX - 0.02, 0.07, 0.05), (0.0, -0.165, -0.575), "Dark", bevel=0.012, segs=1)
+# A dark face round the visor (the walker's `sensor` at (0, 0.12, -0.36)).
+hull.box((0.42, 0.13, 0.012), (0.0, 0.11, EZ0 - 0.004), "Dark", bevel=0.01, segs=1)
+# Tool rails down both flanks on stand-offs, and a hatch on each flank.
+for sx in (-1, 1):
+    x = sx * (EX + 0.035)
+    hull.cyl(0.016, EZ0 + 0.1, EZ1 - 0.08, "Dark", segs=10, xf=T(x, 0.04, 0.0))
+    for z in (EZ0 + 0.16, EZM, EZ1 - 0.14):
+        hull.box((0.04, 0.025, 0.03), (sx * (EX + 0.018), 0.04, z), "Dark", segs=1)
+    hull.box((0.008, 0.17, 0.26), (sx * (EX + 0.003), -0.06, EZM + 0.05), "Shell", bevel=0.006,
+             segs=1)
+    for by in (-0.13, 0.01):
+        for bz in (EZM - 0.07, EZM + 0.17):
+            hull.sphere(0.008, (sx * (EX + 0.008), by + 0.01, bz), "Dark", segs=8, rings=4)
+# Vent slots on the deck behind the kit, and a tail light housing.
+for i in range(4):
+    hull.box((0.36, 0.008, 0.018), (0.0, EY1 + 0.002, 0.70 + i * 0.03), "Dark", segs=1)
+# The cyan strip round its waist (the line's tell), 5 mm proud.
+for z in (EZ0 - 0.005, EZ1 + 0.005):
+    hull.box((2 * EX - 0.12, 0.03, 0.006), (0.0, -0.09, z), "Glow", bevel=0.002, segs=1)
+for sx in (-1, 1):
+    hull.box((0.006, 0.03, EZ1 - EZ0 - 0.4), (sx * (EX + 0.005), -0.09, EZM - 0.12), "Glow",
+             bevel=0.002, segs=1)
+# Hip sockets where the legs come out: the front ones in the bumper, the
+# back ones through the belly.
+for sx in (-1, 1):
+    for sz in (-1, 1):
+        hull.sphere(0.07, (sx * 0.24, -0.14 - (0.04 if sz > 0 else 0.0), sz * 0.5), "Dark",
+                    segs=16, rings=8)
+
+# The kit: an olive canvas bundle strapped down, its struts standing up out
+# of it (its outline: nothing else in the line-up has them), a folded panel
+# slung on its right and a coil of cable on its left.
+KX, KY, KZ = 0.0, 0.30, 0.36
+kit = Part("engineer_kit", origin=(KX, KY, KZ))
+kit.box((0.5, 0.24, 0.6), (KX, KY, KZ), "Canvas", bevel=0.05, segs=3)
+for dz in (-0.17, 0.17):
+    kit.box((0.52, 0.255, 0.05), (KX, KY + 0.002, KZ + dz), "Dark", bevel=0.01, segs=1)
+    kit.box((0.04, 0.03, 0.06), (KX + 0.1, KY + 0.128, KZ + dz), "Steel", segs=1)
+# Struts: steel tubes leaning a little, capped, a cross-foot at each top.
+for x, z, h, lean in ((-0.14, -0.16, 0.55, -0.12), (0.0, 0.05, 0.7, 0.04),
+                      (0.15, 0.2, 0.48, 0.14)):
+    base = (KX + x, KY - 0.06, KZ + z)
+    xf = T(*base) @ RZ(lean) @ RX(-math.pi / 2)
+    kit.cyl(0.018, 0.0, h, "Steel", segs=10, xf=xf)
+    kit.cyl(0.024, h - 0.02, h + 0.01, "Dark", segs=10, xf=xf)
+    kit.box((0.11, 0.012, 0.012), (0.0, 0.0, h - 0.04), "Steel", segs=1, xf=xf)
+# The folded panel: two leaves of ribbed sheet and their hinge.
+for i, dx in enumerate((0.0, 0.02)):
+    kit.box((0.016, 0.28, 0.44), (KX + 0.27 + dx, KY + 0.01, KZ), "Steel", bevel=0.004, segs=1)
+kit.cyl(0.012, KZ - 0.22, KZ + 0.22, "Dark", segs=8, xf=T(KX + 0.28, KY + 0.15, 0.0))
+for z in (-0.12, 0.0, 0.12):
+    kit.box((0.006, 0.24, 0.018), (KX + 0.299, KY + 0.01, KZ + z), "Dark", segs=1)
+# The coil of cable: three turns side by side, hung on a hook.
+for i in range(3):
+    ring = [(0.09 + 0.022 * math.cos(a), 0.022 * math.sin(a))
+            for a in (k * math.pi / 5 for k in range(10))]
+    kit.lathe(ring, "Rubber", segs=20, closed=True,
+              xf=T(KX - 0.28 - i * 0.03, KY - 0.02, KZ + 0.05) @ RY(math.pi / 2))
+kit.box((0.05, 0.02, 0.02), (KX - 0.26, KY + 0.07, KZ + 0.05), "Steel", segs=1)
+
+# The scan lamp: a drum on a short arm up from the deck, facing -Z, its
+# orange-red rim its own slot (ScanRim: Robot bodies light it) round a pale
+# lens.
+LX, LY, LZ = 0.25, 0.20, -0.44
+lamp = Part("engineer_lamp", origin=(LX, LY, LZ))
+lamp.cyl(0.075, LZ - 0.06, LZ + 0.06, "Dark", segs=20, xf=T(LX, LY, 0.0))
+lamp.cyl(0.06, LZ + 0.06, LZ + 0.08, "Dark", segs=16, xf=T(LX, LY, 0.0))
+lamp.tube(0.085, 0.062, LZ - 0.075, LZ - 0.055, "ScanRim", segs=24, xf=T(LX, LY, 0.0))
+lamp.cyl(0.062, LZ - 0.068, LZ - 0.06, "Lens", segs=20, xf=T(LX, LY, 0.0))
+# The yoke and the arm down to the deck, back over the hull.
+for sx in (-1, 1):
+    lamp.box((0.012, 0.1, 0.05), (LX + sx * 0.085, LY - 0.03, LZ), "Dark", segs=1)
+lamp.box((0.18, 0.02, 0.05), (LX, LY - 0.08, LZ), "Dark", segs=1)
+lamp.box((0.04, 0.05, 0.16), (LX, LY - 0.1, LZ + 0.07), "Dark", bevel=0.006, segs=1)
+
+# The driver under its nose, where its work sparks come from: a ram down
+# from the bumper and a steel hammer head.
+HX, HY, HZ = 0.0, -0.3, -0.7
+ham = Part("engineer_hammer", origin=(HX, HY, HZ))
+ham.cyl(0.028, 0.0, 0.16, "Dark", segs=12, xf=T(0.0, -0.16, -0.56) @ RX(2.4))
+ham.cyl(0.018, 0.0, 0.08, "Steel", segs=10, xf=T(0.0, -0.24, -0.65) @ RX(2.4))
+ham.box((0.14, 0.07, 0.07), (HX, HY, HZ), "Steel", bevel=0.008, segs=2)
+ham.box((0.03, 0.075, 0.075), (HX - 0.075, HY, HZ), "Dark", bevel=0.004, segs=1)
+ham.box((0.03, 0.075, 0.075), (HX + 0.075, HY, HZ), "Dark", bevel=0.004, segs=1)
+
 for p in (core, sensor, turret, upper, lower, panel, emitter, plate, hb, head, crawler, winch,
-          flat):
+          flat, hull, kit, lamp, ham):
     make(p)
 report()
 export("assets/models/robots/walker.glb")
