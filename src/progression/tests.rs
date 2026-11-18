@@ -156,6 +156,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
+            cooked: false,
         });
     }
     assert!(career.progress.is_none());

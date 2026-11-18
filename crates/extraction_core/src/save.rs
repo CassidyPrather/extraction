@@ -244,6 +244,9 @@ pub struct SavedItem {
     /// What its rounds are loaded with, top last (empty: all standard).
     #[serde(default)]
     pub loads: Loads,
+    /// Cooked through in a burner's coals (`anomaly::cook`): charred.
+    #[serde(default)]
+    pub cooked: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -743,6 +746,7 @@ mod tests {
             gun: None,
             inserted: Vec::new(),
             loads: Loads::default(),
+            cooked: false,
         }
     }
 

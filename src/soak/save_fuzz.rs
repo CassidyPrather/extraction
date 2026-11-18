@@ -584,6 +584,7 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
         gun: None,
         inserted: Vec::new(),
         loads: Default::default(),
+        cooked: false,
     };
     // An AK whose well holds a pistol magazine: it no longer fits.
     let mut ak = item("ak74", 0);

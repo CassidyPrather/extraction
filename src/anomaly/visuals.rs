@@ -79,6 +79,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 dress_steam_banks,
                 light_steam_banks,
                 dress_charged_water,
+                char_cooked,
             ),
         );
     }
@@ -2745,3 +2746,59 @@ fn dress_charged_water(
 /// snare creeps).
 #[derive(Component)]
 struct WaterCrackle;
+
+/// A mesh under a cooked thing that's been given its charred material.
+#[derive(Component)]
+struct Charred;
+
+/// What a cooked thing looks like, lastingly (`cook::Cooked`, kept through
+/// a save): every mesh of it darkened and scorched, so a cooked part reads
+/// as one when you pick it up long after its smoke is gone. Each material
+/// is charred once and shared by everything cooked that wore it.
+#[allow(clippy::type_complexity)]
+fn char_cooked(
+    mut commands: Commands,
+    cooked: Query<Entity, With<super::cook::Cooked>>,
+    children: Query<&Children>,
+    meshes: Query<&MeshMaterial3d<StandardMaterial>, Without<Charred>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut charred: Local<
+        std::collections::HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
+    >,
+) {
+    for root in &cooked {
+        for e in std::iter::once(root).chain(children.iter_descendants(root)) {
+            let Ok(m) = meshes.get(e) else {
+                continue;
+            };
+            let id = m.0.id();
+            let burnt = match charred.get(&id) {
+                Some(h) => h.clone(),
+                None => {
+                    let Some(base) = materials.get(&m.0).cloned() else {
+                        continue;
+                    };
+                    let c = base.base_color.to_srgba();
+                    // Scorched: much darker, browned, dull.
+                    let burnt = StandardMaterial {
+                        base_color: Color::srgba(
+                            c.red * 0.32 + 0.02,
+                            c.green * 0.27 + 0.015,
+                            c.blue * 0.24 + 0.01,
+                            c.alpha,
+                        ),
+                        perceptual_roughness: base.perceptual_roughness.max(0.85),
+                        metallic: base.metallic * 0.5,
+                        ..base
+                    };
+                    let h = materials.add(burnt);
+                    charred.insert(id, h.clone());
+                    h
+                }
+            };
+            commands
+                .entity(e)
+                .try_insert((MeshMaterial3d(burnt), Charred));
+        }
+    }
+}

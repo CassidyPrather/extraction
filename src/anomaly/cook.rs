@@ -160,4 +160,27 @@ mod tests {
             "a stone's only hot"
         );
     }
+
+    /// Cooked stays cooked through a save: its snapshot says so, and it's
+    /// restored charred.
+    #[test]
+    fn a_cooked_thing_is_saved_cooked() {
+        let mut app = crate::headless_app(
+            crate::launch::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let e = crate::anomaly::surge::grow(app.world_mut(), "spare_parts", Vec3::ZERO).unwrap();
+        app.world_mut().entity_mut(e).insert(Cooked::default());
+        let saved = crate::persist::snapshot_item(app.world(), e, Vec3::ZERO).unwrap();
+        assert!(saved.cooked, "saved cooked");
+        let back =
+            crate::persist::restore_item(app.world_mut(), &saved, Transform::IDENTITY).unwrap();
+        assert!(app.world().get::<Cooked>(back).is_some(), "restored cooked");
+    }
 }

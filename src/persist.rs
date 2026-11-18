@@ -528,6 +528,7 @@ fn fresh_save(map: &str) -> SaveGame {
         gun: None,
         inserted: Vec::new(),
         loads: Default::default(),
+        cooked: false,
     };
     // On its side, the grip up and toward you, the muzzle away (stood on
     // its grip, from above it was a stick: the top of the slide).
@@ -603,6 +604,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
+            cooked: false,
         };
         return restore_item(world, &fresh, at);
     }
@@ -682,6 +684,12 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
                 world.entity_mut(e).insert(Unseated(vec![m]));
             }
         }
+    }
+    // Charred in a burner's coals once, it stays so (its smoke long gone).
+    if saved.cooked {
+        world.entity_mut(e).insert(crate::anomaly::cook::Cooked {
+            smoulder: crate::anomaly::cook::SMOULDER_SECS,
+        });
     }
     Some(e)
 }
@@ -1118,6 +1126,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
         gun: None,
         inserted: Vec::new(),
         loads: item.loads.clone(),
+        cooked: world.get::<crate::anomaly::cook::Cooked>(e).is_some(),
     };
     if let Some(gun) = world.get::<Gun>(e) {
         let f = &gun.firearm;
@@ -1346,6 +1355,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 gun: None,
                 inserted: Vec::new(),
                 loads: Default::default(),
+                cooked: false,
             },
         });
     }
@@ -1937,6 +1947,7 @@ mod tests {
                 gun: None,
                 inserted: Vec::new(),
                 loads: Default::default(),
+                cooked: false,
             };
             let at = Transform::from_xyz(3.0, 40.0, 7.0);
             let e = restore_item(world, &saved, at).expect(old);
@@ -1972,6 +1983,7 @@ mod tests {
                 gun: None,
                 inserted: Vec::new(),
                 loads: Default::default(),
+                cooked: false,
             };
             assert!(catalog.kind("canned_stew").is_some());
             let e = restore_item(world, &saved, Transform::IDENTITY).unwrap();
@@ -2310,6 +2322,7 @@ mod tests {
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
+            cooked: false,
         };
         save.stash.push(old("field_dressing", [0.2, 0.05, 0.3]));
         save.stash.push(old("field_dressing", [0.2, 0.095, 0.3]));
