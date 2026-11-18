@@ -195,10 +195,11 @@ pub fn lettered(id: &str) -> &'static [(Vec3, Vec3)] {
 
 /// How far up its wall a field set's middle hangs, from the ground at its
 /// marker (`map_extract::field_sets`), and the clearing kept cut back
-/// round it: a set someone uses doesn't vanish under the ivy. (Its board
-/// is 0.56 by 0.5 m.)
+/// round it: a set someone uses doesn't vanish under the ivy. Its board
+/// is 0.56 by 0.5 m, its corners 0.4 m out, and a leaf card rooted just
+/// outside reaches 0.1 m in: the whole board and its band stay clear.
 pub const FIELD_SET_UP: f32 = 1.3;
-pub const FIELD_SET_CLEAR: f32 = 0.4;
+pub const FIELD_SET_CLEAR: f32 = 0.5;
 
 /// The field sets hung on a building's walls, as clearings (middle,
 /// radius) in the building's own space: those within `half` (its
