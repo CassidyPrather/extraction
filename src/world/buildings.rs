@@ -148,6 +148,62 @@ pub struct Geo {
     /// The open tops of its chimney stacks, where smoke comes out
     /// (`world::cues`). A stove's pipe isn't one: it stops under the roof.
     pub flues: Vec<Vec3>,
+    /// Places inside its containers (a locker's floor, a counter's top
+    /// drawer) where loot sits in a socket ([`Hold`]).
+    pub holds: Vec<Hold>,
+}
+
+/// A place inside a container that holds a thing in a socket: shut,
+/// building-local (on the floor it rests on), what's rolled there, and the
+/// moving part it rides in (`model#node`, `hinge`), if it's not the
+/// container's carcass. Rolled on its own stream (`items::loot::roll_holds`),
+/// never with the building's loot spots, so a container added changes no
+/// other spot's roll.
+#[derive(Clone, Copy, Debug)]
+pub struct Hold {
+    pub at: Vec3,
+    pub table: &'static str,
+    pub part: Option<&'static str>,
+    /// The way out of its container, the way its door or drawer opens.
+    pub out: Vec3,
+}
+
+/// The longest thing a hold takes (m).
+pub const HOLD_MOST: f32 = 0.42;
+
+/// A hold's socket in the world, and what's rolled for it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct HoldSpot {
+    pub table: &'static str,
+    /// Where it is shut, in the world (a drawer's, pushed in).
+    pub at: Vec3,
+    /// The way out of its container, in the world.
+    pub out: Vec3,
+}
+
+/// Every building's holds, world space shut, as their loot is rolled.
+#[derive(Resource, Default, Clone, Debug)]
+pub struct BuildingHolds(pub Vec<Hold>);
+
+/// A hold's socket: takes any loose thing of a hold's size, seated on the
+/// floor it rests on (`items::loot::seat_held` lifts it by its height).
+pub fn hold_socket(table: &'static str, shut: Vec3, out: Vec3, at: Transform) -> impl Bundle {
+    (
+        Name::new("Hold"),
+        HoldSpot {
+            table,
+            at: shut,
+            out,
+        },
+        crate::interact::Socket {
+            kind: crate::interact::SocketKind::Hold { most: HOLD_MOST },
+            occupant: None,
+            radius: 0.15,
+            seat: Transform::IDENTITY,
+        },
+        at,
+        Visibility::default(),
+    )
 }
 
 /// A doorway (or a door's opening) in a wall between rooms,
@@ -441,6 +497,23 @@ impl Builder {
             lift: None,
             top: false,
             building: 0,
+        });
+        self
+    }
+
+    /// A hold inside a container (`Hold`), shut, on the floor it rests on.
+    pub fn hold(
+        &mut self,
+        at: Vec3,
+        table: &'static str,
+        part: Option<&'static str>,
+        out: Vec3,
+    ) -> &mut Self {
+        self.geo.holds.push(Hold {
+            at,
+            table,
+            part,
+            out,
         });
         self
     }
@@ -1385,22 +1458,29 @@ impl Builder {
             Mat::Timber,
             true,
         );
-        // The model's doors face the room: towards the building's middle
-        // (behind a shop counter, that's the keeper's side).
-        let front = if (rot * Vec3::NEG_Z).dot(-at.with_y(0.0)) < 0.0 {
-            rot * Quat::from_rotation_y(std::f32::consts::PI)
-        } else {
-            rot
-        };
+        // The model's doors face the room (`facing_room`).
+        let front = self.facing_room(at, rot, 0.6);
         let n = (len / 0.6).round().max(1.0);
         let w = len / n;
         let pick = variant(at, 2);
+        let mut holds = Vec::new();
         let mut models: Vec<(&'static str, Transform)> = (0..n as usize)
             .map(|i| {
                 let x = -len * 0.5 + w * (i as f32 + 0.5);
                 // (Their doors and drawers are their own, moving:
                 // `hinge::fit_counters`.)
                 let m = ["counter_cabinet#carcass", "counter_drawers#carcass"][(i + pick) % 2];
+                if m == "counter_drawers#carcass" {
+                    // Something left in its top drawer, on its bottom
+                    // (`art/props/furniture.py`: the top drawer's 0.25 m
+                    // box hangs from 0.56 to 0.80).
+                    holds.push(Hold {
+                        at: at + front * Vec3::new(x, 0.57, -0.03),
+                        table: loot.unwrap_or("house"),
+                        part: Some("counter_drawers#drawer_0"),
+                        out: front * Vec3::NEG_Z,
+                    });
+                }
                 (
                     m,
                     Transform::from_translation(at + front * Vec3::X * x)
@@ -1416,6 +1496,7 @@ impl Builder {
                 .with_scale(Vec3::new(len, 1.0, 1.0)),
         ));
         self.dress(from, models);
+        self.geo.holds.extend(holds);
         if let Some(t) = loot {
             self.loot_at(at, 0.95, true, t);
         }
@@ -1583,18 +1664,110 @@ impl Builder {
     }
 
     /// A steel locker, its door on -Z.
+    /// How far ahead of `at` along `dir` (flat) there's room, up to `most`:
+    /// the first point at hip or chest height inside a solid piece built so
+    /// far (a wall, a shelf).
+    fn room_ahead(&self, at: Vec3, dir: Vec3, most: f32) -> f32 {
+        let dir = dir.with_y(0.0).normalize_or_zero();
+        let mut d = 0.05;
+        while d <= most {
+            for up in [0.5, 1.2] {
+                let p = at + dir * d + Vec3::Y * up;
+                let inside = self.geo.pieces.iter().any(|piece| {
+                    let Shape::Box(size) = piece.shape else {
+                        return false;
+                    };
+                    piece.collide && {
+                        let q = piece.at.rotation.inverse() * (p - piece.at.translation);
+                        (q.abs() - size * 0.5).max_element() < 0.0
+                    }
+                });
+                if inside {
+                    return d;
+                }
+            }
+            d += 0.05;
+        }
+        most
+    }
+
+    /// Which way a container stood at `at` faces its doors (its model's
+    /// -Z, `rot` or turned round): the way with room for them to open, or,
+    /// with as much either way, toward the building's middle (a counter
+    /// behind a shop's is the keeper's side). A locker turned to its wall
+    /// was a door that couldn't open (`hinge::every_container_opens_clear`).
+    fn facing_room(&self, at: Vec3, rot: Quat, depth: f32) -> Quat {
+        let turned = rot * Quat::from_rotation_y(std::f32::consts::PI);
+        let front = |r: Quat| r * Vec3::NEG_Z;
+        let ahead = |r: Quat| self.room_ahead(at + front(r) * (depth * 0.5), front(r), 0.8);
+        let (a, b) = (ahead(rot), ahead(turned));
+        if (a - b).abs() > 0.1 {
+            return if a > b { rot } else { turned };
+        }
+        if front(rot).dot(-at.with_y(0.0)) < 0.0 {
+            turned
+        } else {
+            rot
+        }
+    }
+
+    /// A steel locker, its door to -Z (`yaw` turned): hollow, its sides,
+    /// top, back, floor and hat shelf the model's carcass's, its door its
+    /// own, hung on its hinge (`hinge::fit_counters`).
     pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
         let from = self.geo.pieces.len();
-        let rot = Quat::from_rotation_y(yaw);
-        self.piece(
-            Shape::Box(Vec3::new(0.5, 1.8, 0.45)),
-            Transform::from_translation(at + Vec3::Y * 0.9).with_rotation(rot),
-            Mat::PaintedMetal,
-            true,
+        let rot = self.facing_room(at, Quat::from_rotation_y(yaw), 0.45);
+        let (w, h, t) = (0.5, 1.8, 0.012);
+        let (zf, zb) = (-0.205, 0.225);
+        let mid = (zf + zb) * 0.5;
+        let mut sheet = |size: Vec3, c: Vec3| {
+            self.piece(
+                Shape::Box(size),
+                Transform::from_translation(at + rot * c).with_rotation(rot),
+                Mat::PaintedMetal,
+                true,
+            );
+        };
+        for sx in [-1.0, 1.0] {
+            sheet(
+                Vec3::new(t, h - 0.06, zb - zf),
+                Vec3::new(sx * (w * 0.5 - t * 0.5), (0.06 + h) * 0.5, mid),
+            );
+        }
+        sheet(Vec3::new(w, t, zb - zf), Vec3::new(0.0, h - t * 0.5, mid));
+        sheet(
+            Vec3::new(w - 2.0 * t, h - 0.06 - t, t),
+            Vec3::new(0.0, (0.06 + h - t) * 0.5, zb - t * 0.5),
+        );
+        // Its floor on the plinth, and the hat shelf.
+        for y in [0.06 + t, LOCKER_MID, LOCKER_SHELF] {
+            sheet(
+                Vec3::new(
+                    w - 2.0 * t,
+                    y - if y < 0.5 { 0.0 } else { y - t },
+                    zb - zf - t,
+                ),
+                Vec3::new(
+                    0.0,
+                    if y < 0.5 { y * 0.5 } else { y - t * 0.5 },
+                    mid - t * 0.5,
+                ),
+            );
+        }
+        // Something left on its shelf at chest height, where a look in
+        // sees it (on the floor it was a speck far below the eye).
+        self.hold(
+            at + rot * Vec3::new(0.0, LOCKER_MID, mid),
+            "tools",
+            None,
+            rot * Vec3::NEG_Z,
         );
         self.dress(
             from,
-            vec![("locker", Transform::from_translation(at).with_rotation(rot))],
+            vec![(
+                "locker#carcass",
+                Transform::from_translation(at).with_rotation(rot),
+            )],
         )
     }
 
@@ -1658,6 +1831,11 @@ impl Builder {
         self.geo
     }
 }
+
+/// The top of a locker's hat shelf (`art/props/furniture.py`).
+pub const LOCKER_SHELF: f32 = 1.42;
+/// The top of a locker's chest-height shelf, where its hold is.
+pub const LOCKER_MID: f32 = 1.15;
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
@@ -3419,7 +3597,7 @@ fn pump_station(b: &mut Builder) {
     // lib suite's `every_thing_in_a_building_is_taken_from_where_it_stops`:
     // a second thing on it lay out of reach behind the chair).
     b.chair(Vec3::new(5.6, f, -2.55), -0.2);
-    b.locker(Vec3::new(6.6, f, -4.45), 0.0);
+    b.locker(Vec3::new(6.2, f, -4.45), 0.0);
     for (x, z) in [(-6.3, 4.2), (-5.6, 4.35), (-6.2, 3.55)] {
         b.barrel(Vec3::new(x, f, z));
     }
@@ -5939,6 +6117,7 @@ pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> 
 /// Logic: colliders, doors and loot spots for every generated prefab.
 pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     let mut loot = BuildingLoot::default();
+    let mut holds = BuildingHolds::default();
     for (i, p) in zone.map.placements.iter().enumerate() {
         let Some(geo) = prefab(&p.prefab) else {
             continue;
@@ -5972,6 +6151,25 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
                 ..s.clone()
             });
         }
+        for h in &geo.holds {
+            holds.0.push(Hold {
+                at: t.transform_point(h.at),
+                ..*h
+            });
+            // A carcass's hold is the building's; a drawer's rides in its
+            // drawer (`hinge::fit_counters`).
+            if h.part.is_none() {
+                commands.spawn((
+                    hold_socket(
+                        h.table,
+                        t.transform_point(h.at),
+                        t.rotation * h.out,
+                        Transform::from_translation(h.at),
+                    ),
+                    ChildOf(root),
+                ));
+            }
+        }
         for l in &geo.ladders {
             commands.spawn(
                 crate::interact::hand_climb::Ladder {
@@ -5985,8 +6183,13 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
             );
         }
     }
-    info!("{} building loot spots", loot.0.len());
+    info!(
+        "{} building loot spots, {} holds",
+        loot.0.len(),
+        holds.0.len()
+    );
     commands.insert_resource(loot);
+    commands.insert_resource(holds);
 }
 
 /// How far a loot spot keeps from a note or terminal on the same table,
