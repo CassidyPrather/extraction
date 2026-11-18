@@ -563,6 +563,7 @@ pub fn fit_counters(
                         commands.spawn((
                             super::buildings::hold_socket(
                                 h.table,
+                                rest.translation,
                                 Transform::from_matrix(seat.into()),
                             ),
                             ChildOf(part),

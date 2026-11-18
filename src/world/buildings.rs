@@ -173,6 +173,8 @@ pub const HOLD_MOST: f32 = 0.42;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HoldSpot {
     pub table: &'static str,
+    /// Where it is shut, in the world (a drawer's, pushed in).
+    pub at: Vec3,
 }
 
 /// Every building's holds, world space shut, as their loot is rolled.
@@ -181,10 +183,10 @@ pub struct BuildingHolds(pub Vec<Hold>);
 
 /// A hold's socket: takes any loose thing of a hold's size, seated on the
 /// floor it rests on (`items::loot::seat_held` lifts it by its height).
-pub fn hold_socket(table: &'static str, at: Transform) -> impl Bundle {
+pub fn hold_socket(table: &'static str, shut: Vec3, at: Transform) -> impl Bundle {
     (
         Name::new("Hold"),
-        HoldSpot { table },
+        HoldSpot { table, at: shut },
         crate::interact::Socket {
             kind: crate::interact::SocketKind::Hold { most: HOLD_MOST },
             occupant: None,
@@ -6088,7 +6090,11 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
             // drawer (`hinge::fit_counters`).
             if h.part.is_none() {
                 commands.spawn((
-                    hold_socket(h.table, Transform::from_translation(h.at)),
+                    hold_socket(
+                        h.table,
+                        t.transform_point(h.at),
+                        Transform::from_translation(h.at),
+                    ),
                     ChildOf(root),
                 ));
             }

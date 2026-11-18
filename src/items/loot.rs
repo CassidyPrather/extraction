@@ -635,21 +635,18 @@ fn roll_holds(
 pub fn seat_held(
     mut commands: Commands,
     waiting: Query<(Entity, &ToHold, &Item)>,
-    mut sockets: Query<
-        (Entity, &mut crate::interact::Socket, &GlobalTransform),
-        With<crate::world::buildings::HoldSpot>,
-    >,
+    mut sockets: Query<(
+        Entity,
+        &mut crate::interact::Socket,
+        &crate::world::buildings::HoldSpot,
+    )>,
     catalog: Res<Catalog>,
 ) {
     for (e, w, item) in &waiting {
         let Some((s, mut socket, _)) = sockets
             .iter_mut()
-            .filter(|(_, s, g)| s.occupant.is_none() && g.translation().distance(w.at) < 0.05)
-            .min_by(|a, b| {
-                a.2.translation()
-                    .distance(w.at)
-                    .total_cmp(&b.2.translation().distance(w.at))
-            })
+            .filter(|(_, s, h)| s.occupant.is_none() && h.at.distance(w.at) < 0.05)
+            .min_by(|a, b| a.2.at.distance(w.at).total_cmp(&b.2.at.distance(w.at)))
         else {
             continue;
         };
