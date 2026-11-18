@@ -44,7 +44,8 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import bmesh
 import bpy
-from common import (Part, RY, RZ, S, T, TO_BLENDER, export, main_guard, make, parent, report)
+from common import (Part, RY, RZ, S, T, TO_BLENDER, box_uv, export, main_guard, make, parent,
+                    report)
 from mathutils import Matrix, Vector
 
 import _gloves_procedural as proc
@@ -64,9 +65,10 @@ PALM_UNDER = -0.0095
 # a gloved finger is round to its tip (`hold.rs` RADII, 9.4 mm at the
 # index's root to 7.3 at its tip).
 WIDTH = [1.25, 1.45, 1.65]
-THUMB_WIDTH = [1.0, 1.35]
+# The thumb narrowed toward its tip: full, it read as a flat paddle wider
+# than the fingers from the eye.
+THUMB_WIDTH = [0.9, 1.1]
 PUFF = 0.0012         # the glove's thickness over the hand
-SMOOTHED = 0.0022     # how far smoothing draws a fingertip back
 # The source's bones (`_L`/`_R` appended) onto the game's joints; the
 # thumb's distal folds into its intermediate (`finger_4_1`).
 MAP = {"Hand": "palm"}
@@ -190,7 +192,7 @@ def bone_map(head, tail, up, tgt, length, width=1.0, reach=None, off=None):
     src = frame(tail - head, up)
     dst = tgt.to_3x3()
     k = (length / (tail - head).length if reach is None
-         else (length - PUFF + SMOOTHED) / reach)
+         else (length - PUFF) / reach)
     # Its skin centred on the joint's axis (`off`: how far the skin's
     # middle stands off the source bone, square to it): held things are
     # seated by the fingers' radii about their joints (`hold.rs`).
@@ -411,12 +413,104 @@ def build(side):
     # Its source scene objects go.
     for o in (body, rig_):
         bpy.data.objects.remove(o, do_unlink=True)
-    glove_it(obj)
+    glove_it(obj, ts)
     return obj, ts
 
 
-def glove_it(obj):
-    """Puff it, smooth it once, paint it a glove."""
+TIP_R = {}  # each fingertip's pad's radius, gloved, by its group
+
+
+def round_tips(obj, ts, rounds=6, bins=16):
+    """Each fingertip one rounded pad: the source's have nails, a lip round
+    the tip that the stretch drew out into a notch. Over its last joint's
+    outer half, lightly smoothed (the lip goes), then set onto its own
+    section where that half begins (by angle round the joint's axis), kept
+    to a hemispherical cap that ends on the segment's length under the
+    glove's puff (pointing ends on `FINGERTIP`)."""
+    to_game = TO_BLENDER.inverted().to_3x3()
+    to_b = TO_BLENDER.to_3x3()
+    gi = {g.name: g.index for g in obj.vertex_groups}
+    lasts = {}
+    for f in range(5):
+        bones = [b for b in FINGER_BONES[f] if b > 0]
+        j = len(bones) - 1
+        lasts[gi[f"finger_{f}_{j}"]] = (chain(f, ts)[j], bones[j])
+    me = obj.data
+    tips = {}
+    for v in me.vertices:
+        for g in v.groups:
+            if g.group in lasts and g.weight >= 0.5:
+                m, L = lasts[g.group]
+                if (m.inverted() @ (to_game @ v.co)).z < -0.5 * L:
+                    tips.setdefault(g.group, []).append(v.index)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.verts.ensure_lookup_table()
+    for g, idx in tips.items():
+        m, L = lasts[g]
+        inv = m.inverted()
+        verts = [bm.verts[i] for i in idx]
+        for _ in range(rounds):
+            bmesh.ops.smooth_vert(bm, verts=verts, factor=0.5, use_axis_x=True,
+                                  use_axis_y=True, use_axis_z=True)
+        qs = [inv @ (to_game @ v.co) for v in verts]
+        z0 = -0.5 * L
+        # Its section where the tip begins: its middle, and its radius by
+        # angle about that middle.
+        ring = [q for q in qs if q.z > z0 - 0.002] or qs
+        cx = (min(q.x for q in ring) + max(q.x for q in ring)) / 2
+        cy = (min(q.y for q in ring) + max(q.y for q in ring)) / 2
+        rad = [[] for _ in range(bins)]
+        for q in ring:
+            a = math.atan2(q.y - cy, q.x - cx)
+            rad[int((a + math.pi) / (2 * math.pi) * bins) % bins].append(
+                math.hypot(q.x - cx, q.y - cy))
+        mean = sum(sum(r) for r in rad) / max(1, sum(len(r) for r in rad))
+        rad = [max(r) if r else mean for r in rad]
+
+        def r_at(a):
+            t = (a + math.pi) / (2 * math.pi) * bins - 0.5
+            k = math.floor(t)
+            u = t - k
+            return rad[k % bins] * (1 - u) + rad[(k + 1) % bins] * u
+
+        z_tip = -L + PUFF
+        R = min(mean, z0 - z_tip)
+        TIP_R[g] = R + PUFF
+        zc = z_tip + R
+        z_min = min(q.z for q in qs)
+
+        def onto(q):
+            """A point onto the pad: behind the cap's middle, out to the
+            section; past it, onto the cap by its direction from the middle
+            (not by how far along it is: the nail overhangs the pad, and so
+            ordered it came out as two lumps)."""
+            a = math.atan2(q.y - cy, q.x - cx)
+            ra = r_at(a)
+            if q.z >= zc:
+                return Vector((cx + ra * math.cos(a), cy + ra * math.sin(a), q.z))
+            d = Vector(((q.x - cx) / ra, (q.y - cy) / ra, (q.z - zc) / R))
+            if d.length < 1e-9:
+                d = Vector((0, 0, -1))
+            d.normalize()
+            return Vector((cx + d.x * ra, cy + d.y * ra, zc + d.z * R))
+
+        # Along first: from where it began to the tip's end.
+        for v, q in zip(verts, qs):
+            q = Vector((q.x, q.y, z_tip + (q.z - z_min) * (z0 - z_tip) / max(z0 - z_min, 1e-6)))
+            v.co = to_b @ (m @ onto(q))
+        for _ in range(6):
+            bmesh.ops.smooth_vert(bm, verts=verts, factor=0.5, use_axis_x=True,
+                                  use_axis_y=True, use_axis_z=True)
+            for v in verts:
+                v.co = to_b @ (m @ onto(inv @ (to_game @ v.co)))
+    bm.to_mesh(me)
+    bm.free()
+
+
+def glove_it(obj, ts):
+    """Round its tips, puff it, smooth it once, paint it a glove."""
+    round_tips(obj, ts)
     me = obj.data
     me.update()
     for v in me.vertices:
@@ -447,6 +541,9 @@ def glove_it(obj):
             mat = 1  # worn through first: the fingertips, leather all round
         p.material_index = mat
         p.use_smooth = True
+    # Its own UVs, the kit's box projection in metres (the source's were
+    # the body's texture atlas: the cloth's texture smeared along them).
+    box_uv(me, obj.location)
 
 
 def material(name):
@@ -512,8 +609,8 @@ def cuff(obj, ts):
 
 def radii(obj, ts):
     """The gloved fingers' radii as `hold.rs` RADII lays them out (at each
-    joint, then 2.5 mm short of the tip; the median about the joint's axis
-    of the skin within 2 mm of there), printed for Hands to match."""
+    joint, the median about the joint's axis of the skin within 2 mm of
+    it; then the tip's pad's), printed for Hands to match."""
     to_game = TO_BLENDER.inverted().to_3x3()
     gi = {g.index: g.name for g in obj.vertex_groups}
     pts = [(to_game @ v.co, {gi[g.group]: g.weight for g in v.groups}) for v in obj.data.vertices]
@@ -522,7 +619,7 @@ def radii(obj, ts):
         bones = [b for b in FINGER_BONES[f] if b > 0]
         joints = chain(f, ts)
         row = []
-        for j in range(len(bones) + 1):
+        for j in range(len(bones)):
             jj = min(j, len(bones) - 1)
             inv = joints[jj].inverted()
             at = 0.0 if j < len(bones) else -(bones[jj] - 0.0025)
@@ -534,6 +631,8 @@ def radii(obj, ts):
                         if sum(w.get(n, 0.0) for n in mine) >= 0.5 and abs(q.z - at) < 0.002
                         and (j > 0 or r < 0.013))
             row.append(round(rs[len(rs) // 2] * 1000, 1) if rs else None)
+        # The tip: its pad's radius (the end sphere's, as RADII's is).
+        row.append(round(TIP_R[obj.vertex_groups[f"finger_{f}_{len(bones) - 1}"].index] * 1000, 1))
         out.append(row)
         print(f"  RADII {f} (mm): {row}")
     return out
