@@ -62,8 +62,11 @@ impl Plugin for WarmupPlugin {
                             shelve::<crate::world::storm::SheetMaterial>,
                             shelve::<crate::world::storm::BoltMaterial>,
                             shelve::<crate::anomaly::visuals::MarkMaterial>,
-                            shelve::<super::pockets::PocketMaterial>,
-                            shelve::<crate::robots::searchlight_look::SearchMaterial>,
+                            (
+                                shelve::<super::pockets::PocketMaterial>,
+                                shelve::<crate::robots::searchlight_look::SearchMaterial>,
+                                shelve::<super::fog_beam::FogBeamMaterial>,
+                            ),
                         ),
                         shelve_unworn,
                         shelve_models,
@@ -1070,6 +1073,10 @@ fn shelve_start(
             // A searchlight's (`robots::searchlight_look`): no dirigible
             // or spotter may be up yet.
             decoys.push(crate::robots::searchlight_look::decoy(world, DECOYS_AT));
+            // Light in fog (`render::fog_beam`): the searchlights' shafts.
+            // Seen from outside and from in one: a face each.
+            decoys.push(super::fog_beam::decoy(world, DECOYS_AT, false));
+            decoys.push(super::fog_beam::decoy(world, DECOYS_AT, true));
             world.resource_mut::<Shelf>().decoys = decoys;
         });
     }
