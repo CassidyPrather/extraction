@@ -67,6 +67,33 @@ the recording up with the logs afterwards:
 Then hand over the recording (or a transcript of it) with the files
 below, and the findings can be pulled out of both together.
 
+## The playtest tour
+
+One new or changed thing at a time, with no travelling between them.
+Press **PLAYTEST TOUR** on the camp board (beside REPORT), or start the
+game with `--playtest assets/playtest/tour.txt`. Nothing you do on the
+tour is saved.
+
+- **Each station** opens straight onto its thing: a valley, an hour,
+  where you stand, what's set out. A small board beside you says which
+  station it is, of how many, and about how long it's meant to take.
+  Look it over and talk about what you notice. Mark anything odd as
+  usual (both sticks, or F9).
+- **NEXT** asks the station's question: press 1 to 5. Then say out loud
+  what bugged you, if anything, and press **NEXT** again. The next
+  station opens.
+- **Record it** as below (the SteamVR mirror in OBS, with your voice).
+  Each station starts with a short rising chirp and a white flash; leave
+  them in. They line the recording up with the game's notes, to the frame.
+- **Afterwards**, press **REPORT** at camp and send the zip with the
+  recording. `scripts/playtest_ingest.py` turns the two into a timeline
+  (speech, stations, ratings, marks), a table of stations with what you
+  said about each, and frames wherever you made a mark or said "bug" or
+  "note".
+
+The stations are lines in `assets/playtest/tour.txt`, one per station, so
+the list changes with each playtest.
+
 ## What's new to look at (since the first headset session)
 
 The first session found the controls mostly dead and a lot of stooping.

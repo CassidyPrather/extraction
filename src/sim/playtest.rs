@@ -29,7 +29,9 @@ impl Plugin for PlaytestPlugin {
         };
         // The yard keeps nothing, but it's recorded like a raid: the first
         // night's 32 minutes there left no trace but the log.
-        let yard = opts.map == crate::camp::TRAINING_YARD
+        // A playtest tour's station keeps nothing either, and is recorded
+        // the same way, marks and all (`capture::station`).
+        let yard = (opts.map == crate::camp::TRAINING_YARD || opts.playtest.is_some())
             && crate::persist::owns_profile(&opts)
             && !opts.tooling();
         if opts.sim_run.is_some()

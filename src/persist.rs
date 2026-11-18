@@ -107,6 +107,8 @@ pub fn career_path(opts: &LaunchOptions) -> Option<PathBuf> {
             || opts.camera.is_some()
             || !owns_profile(opts)
             || opts.gallery.is_some()
+            // A playtest tour is a sandbox: no station touches the career.
+            || opts.playtest.is_some()
             || opts.scene != crate::launch::SceneChoice::Raid =>
         {
             None
