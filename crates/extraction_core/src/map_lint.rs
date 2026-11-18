@@ -3393,7 +3393,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             let road = hm.road_lines.iter().any(|rl| {
                 let (d, s, _) = polyline_closest(&rl.points, a.at);
                 !rl.on_bridge(s) && d < rl.width * 0.5 + a.radius
-            });
+            }) && !crate::anomaly::crossing_road_ok(map, hm, a.at, a.kind, a.radius);
             if road {
                 on_road += 1;
                 first.get_or_insert(a.at);

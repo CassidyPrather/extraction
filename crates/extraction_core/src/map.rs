@@ -465,7 +465,15 @@ pub enum MarkerKind {
     ValleyKey { item: String },
     /// A standing anomaly that the Surge never moves: `kind` names an
     /// `anomaly::AnomalyKind` (Well, Mirror, ...). It lies here every cycle.
-    Anomaly { kind: String, radius: f32 },
+    /// `crossing`: a frost laid across water as a way over it, which may
+    /// reach onto a road where the road runs along that water
+    /// (`anomaly::crossing_road_ok`).
+    Anomaly {
+        kind: String,
+        radius: f32,
+        #[serde(default)]
+        crossing: bool,
+    },
     /// A sentry's mast (`robots::sentry`). Its arc is centred straight
     /// along `rot` (its front faces the way a sign's board would), `arc`
     /// degrees wide; behind it is blind. `power` is where its junction

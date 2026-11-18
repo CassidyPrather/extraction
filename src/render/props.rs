@@ -1305,9 +1305,16 @@ fn dress_gloves(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut bindposes: ResMut<Assets<bevy::mesh::skinning::SkinnedMeshInverseBindposes>>,
+    skins: Res<Assets<bevy::gltf::GltfSkin>>,
 ) {
     for (e, v, parts, mut glove_mat) in &mut gloves {
         let path = glove_model(v.side);
+        // The model's nodes, and its skin if it's a skinned glove: its
+        // joints' names and inverse binds.
+        let mut rig: Option<(
+            Vec<String>,
+            Handle<bevy::mesh::skinning::SkinnedMeshInverseBindposes>,
+        )> = None;
         let model = match models.request(path, &server) {
             None => None,
             Some(h) => match Models::state(&h, &server, &gltfs) {
@@ -1316,7 +1323,17 @@ fn dress_gloves(
                     warn!("{path} failed to load; using boxes");
                     None
                 }
-                ModelState::Ready(g) => Some(model_nodes(g, &nodes, &gltf_meshes)),
+                ModelState::Ready(g) => {
+                    rig = g.skins.first().and_then(|s| skins.get(s)).map(|s| {
+                        let names = s
+                            .joints
+                            .iter()
+                            .map(|j| nodes.get(j).map(|n| n.name.clone()).unwrap_or_default())
+                            .collect();
+                        (names, s.inverse_bind_matrices.clone())
+                    });
+                    Some(model_nodes(g, &nodes, &gltf_meshes))
+                }
             },
         };
         commands.entity(e).remove::<GloveParts>();
@@ -1351,6 +1368,72 @@ fn dress_gloves(
                 ))
                 .id();
             crate::models::spawn_primitives(&mut commands, holder, node, &mut mat);
+        }
+        // A skinned glove (`art/hands/gloves.py`): one continuous mesh,
+        // its vertices weighted over the joints `spawn_hand` made, by name
+        // (its joint nodes rest where those joints do, so its inverse binds
+        // are theirs). The fingers bend as one glove, where rigid segments
+        // crossed at every knuckle.
+        if let (Some((names, poses)), Some(body)) = (&rig, find_node(&model, "glove")) {
+            let joint = |name: &str| -> Option<Entity> {
+                if name == "palm" {
+                    return Some(parts.model);
+                }
+                parts
+                    .joints
+                    .iter()
+                    .find(|((f, j), _)| *name == format!("finger_{f}_{j}"))
+                    .map(|(_, e)| *e)
+            };
+            let joints: Option<Vec<Entity>> = names.iter().map(|n| joint(n)).collect();
+            // (The binds copied to an asset of the glove's own, as the
+            // merged rigid pieces had: drawn on the glTF's, the skin wasn't
+            // found when it was drawn.)
+            let own_poses = bindposes
+                .get(poses)
+                .map(|b| b.to_vec())
+                .map(|b| bindposes.add(bevy::mesh::skinning::SkinnedMeshInverseBindposes::from(b)));
+            if own_poses.is_none() {
+                warn!("{path}'s inverse binds aren't loaded; rigid pieces");
+            }
+            match joints.zip(own_poses) {
+                Some((joints, poses)) => {
+                    for p in &body.primitives {
+                        // (Tangents for the cloth's normal map: the exporter
+                        // writes none for a skinned mesh.)
+                        let mesh = match meshes.get(&p.mesh) {
+                            Some(m) => {
+                                let mut m = m.clone();
+                                if m.attribute(Mesh::ATTRIBUTE_TANGENT).is_none() {
+                                    let _ = m.generate_tangents();
+                                }
+                                meshes.add(m)
+                            }
+                            None => p.mesh.clone(),
+                        };
+                        commands.spawn((
+                            Mesh3d(mesh),
+                            MeshMaterial3d(mat(p.material.as_deref())),
+                            bevy::mesh::skinning::SkinnedMesh {
+                                inverse_bindposes: poses.clone(),
+                                joints: joints.clone(),
+                            },
+                            // A hand is always near; its bounds move with
+                            // every finger.
+                            bevy::camera::visibility::NoFrustumCulling,
+                            Transform::IDENTITY,
+                            Visibility::Inherited,
+                            ChildOf(parts.model),
+                        ));
+                    }
+                    for b in &parts.boxes {
+                        commands.entity(*b).despawn();
+                    }
+                    glove_mat.0 = own.into_iter().map(|(_, h)| h).collect();
+                    continue;
+                }
+                None => warn!("{path}'s skin names a joint the glove hasn't; rigid pieces"),
+            }
         }
         // Every piece with the joint it rides on: the palm, then each
         // finger segment.
@@ -2566,7 +2649,9 @@ mod glove_tests {
     }
 
     /// A node of a .glb: its name, local transform, children and, for a
-    /// mesh, its POSITION bounds.
+    /// mesh, its POSITION bounds; for a skin's joint, the bounds of the
+    /// skinned vertices weighted at least half to it, in its own frame at
+    /// rest (through its inverse bind), as if it were a rigid piece.
     struct Node {
         name: String,
         local: Transform,
@@ -2620,7 +2705,103 @@ mod glove_tests {
                     bounds,
                 }
             })
+            .collect::<Vec<Node>>()
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut n)| {
+                if n.bounds.is_none() {
+                    n.bounds = skinned_bounds(&json, &bytes[20 + len..], i);
+                }
+                n
+            })
             .collect()
+    }
+
+    /// One accessor's elements as f32s (floats, or unsigned bytes or shorts,
+    /// normalised if it says so).
+    fn accessor(json: &serde_json::Value, bin: &[u8], i: usize) -> Vec<Vec<f32>> {
+        let acc = &json["accessors"][i];
+        let view = &json["bufferViews"][acc["bufferView"].as_u64().unwrap() as usize];
+        let n = match acc["type"].as_str().unwrap() {
+            "SCALAR" => 1,
+            "VEC2" => 2,
+            "VEC3" => 3,
+            "VEC4" => 4,
+            "MAT4" => 16,
+            t => panic!("accessor type {t}"),
+        };
+        let (size, norm) = match acc["componentType"].as_u64().unwrap() {
+            5126 => (4, 0.0),
+            5121 => (1, 255.0),
+            5123 => (2, 65535.0),
+            c => panic!("component type {c}"),
+        };
+        let normalized = acc["normalized"].as_bool().unwrap_or(false);
+        let start = view["byteOffset"].as_u64().unwrap_or(0) as usize
+            + acc["byteOffset"].as_u64().unwrap_or(0) as usize;
+        let stride = view["byteStride"].as_u64().map_or(n * size, |s| s as usize);
+        // (The BIN chunk's own 8-byte header first.)
+        let data = &bin[8..];
+        (0..acc["count"].as_u64().unwrap() as usize)
+            .map(|k| {
+                (0..n)
+                    .map(|c| {
+                        let o = start + k * stride + c * size;
+                        let b = &data[o..o + size];
+                        match size {
+                            4 => f32::from_le_bytes(b.try_into().unwrap()),
+                            1 => b[0] as f32 / if normalized { norm } else { 1.0 },
+                            _ => {
+                                u16::from_le_bytes(b.try_into().unwrap()) as f32
+                                    / if normalized { norm } else { 1.0 }
+                            }
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// The bounds, in joint `node`'s rest frame, of the skinned vertices
+    /// weighted at least half to it (none if it isn't a skin's joint).
+    fn skinned_bounds(json: &serde_json::Value, bin: &[u8], node: usize) -> Option<(Vec3, Vec3)> {
+        let skins = json["skins"].as_array()?;
+        let mut b: Option<(Vec3, Vec3)> = None;
+        for (si, skin) in skins.iter().enumerate() {
+            let joints: Vec<usize> = skin["joints"]
+                .as_array()?
+                .iter()
+                .map(|j| j.as_u64().unwrap() as usize)
+                .collect();
+            let Some(slot) = joints.iter().position(|j| *j == node) else {
+                continue;
+            };
+            let ibm = accessor(json, bin, skin["inverseBindMatrices"].as_u64()? as usize);
+            let m = Mat4::from_cols_slice(&ibm[slot]);
+            for n in json["nodes"].as_array()? {
+                if n["skin"].as_u64() != Some(si as u64) {
+                    continue;
+                }
+                let mesh = &json["meshes"][n["mesh"].as_u64()? as usize];
+                for p in mesh["primitives"].as_array()? {
+                    let a = &p["attributes"];
+                    let pos = accessor(json, bin, a["POSITION"].as_u64()? as usize);
+                    let js = accessor(json, bin, a["JOINTS_0"].as_u64()? as usize);
+                    let ws = accessor(json, bin, a["WEIGHTS_0"].as_u64()? as usize);
+                    for ((p, j), w) in pos.iter().zip(&js).zip(&ws) {
+                        let mine: f32 = (0..4)
+                            .filter(|k| j[*k] as usize == slot)
+                            .map(|k| w[k])
+                            .sum();
+                        if mine >= 0.5 {
+                            let q = m.transform_point3(Vec3::new(p[0], p[1], p[2]));
+                            b = Some(b.map_or((q, q), |(lo, hi)| (lo.min(q), hi.max(q))));
+                        }
+                    }
+                }
+            }
+        }
+        b
     }
 
     /// Both gloves have the palm and every finger segment, each with a mesh,

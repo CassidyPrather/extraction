@@ -45,7 +45,7 @@ pub struct ShardCharge(pub f32);
 /// Somewhere a mirror can set something down: open ground in the valley,
 /// and not inside another anomaly's heart.
 fn landing_ok(zone: &Zone, others: &[(Vec2, f32)], p: [f32; 2]) -> bool {
-    extraction_core::anomaly::placeable(&zone.map, &zone.hm, p)
+    extraction_core::anomaly::landable(&zone.map, &zone.hm, p)
         && others
             .iter()
             .all(|(c, r)| c.distance(Vec2::from_array(p)) > r * 0.5)

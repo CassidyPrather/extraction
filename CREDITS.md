@@ -10,6 +10,7 @@ it. Thirty seconds now versus archaeology later.
 
 | Asset | Source | Author | License | Added |
 | --- | --- | --- | --- | --- |
+| `art/hands/source/siroino-body.blend`, and the hands in `assets/models/hands/glove_left.glb`, `glove_right.glb` (cut, re-posed and gloved by `art/hands/gloves.py`) | SiroinoSotai (しろいの素体) 1.0, the body mesh and its armature, via `blender/sources/siroino-body.blend` in <https://github.com/CassidyPrather/cass-avatar> (that file only: the files built from it there mix in AGPL work); upstream <https://siroinoworks.booth.pm/items/8268676> | しろいの (Siroino Works); weight painting by せらすずな, with ちゃかぽ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | 2026-11 |
 | `assets/textures/terrain/*` layer 0 grass | Poly Haven `grass_ground` — <https://polyhaven.com/a/grass_ground> | Charlotte Baglioni | CC0 1.0 | 2026-10 |
 | `assets/textures/terrain/*` layer 1 forest floor | Poly Haven `forest_leaves_02` — <https://polyhaven.com/a/forest_leaves_02> | Rob Tuytel | CC0 1.0 | 2026-10 |
 | `assets/textures/terrain/*` layer 2 mud | Poly Haven `mud_forest` — <https://polyhaven.com/a/mud_forest> | eye-candy.xyz | CC0 1.0 | 2026-10 |

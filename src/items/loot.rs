@@ -760,8 +760,9 @@ fn spawn_building_loot(
     };
     for (j, spot) in spots.0.iter().enumerate() {
         // This spot's own stream (`place_key`).
-        let mut rng = Rng::new(seed ^ 0xB11D ^ place_key(spot.at));
-        let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
+        let key = spot.key();
+        let mut rng = Rng::new(seed ^ 0xB11D ^ place_key(key));
+        let rolls = rolls_for(zone.map.richness_at([key.x, key.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| {
                 loot.0
@@ -782,7 +783,7 @@ fn spawn_building_loot(
     for (j, k, drop) in moving {
         let mut rng = Rng::new(
             seed ^ 0xB11E
-                ^ place_key(spots.0[j].at)
+                ^ place_key(spots.0[j].key())
                 ^ (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15),
         );
         let size = catalog.get(drop.kind).size;

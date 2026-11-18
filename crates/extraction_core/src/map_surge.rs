@@ -615,6 +615,7 @@ mod tests {
                 kind: crate::map::MarkerKind::Anomaly {
                     kind: kind.into(),
                     radius,
+                    crossing: false,
                 },
                 at,
                 rot: 0.0,

@@ -362,13 +362,30 @@ pub const LOOSE_ARTIFACT_CHANCE: f32 = 0.12;
 pub const GLASS_EYE_CHANCE: f32 = 0.1;
 
 /// Somewhere `kind` can sit: as [`placeable`], but a frost may stand on
-/// water (it freezes it: across a beck it's a crossing).
+/// water (it freezes it: across a beck it's a crossing), and so may a
+/// mirror (its fold hangs over it: through it, you're on the far bank).
 pub fn placeable_for(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind) -> bool {
-    if kind == AnomalyKind::Frost && hm.water_level(p).is_some() {
+    if matches!(kind, AnomalyKind::Frost | AnomalyKind::Mirror) && hm.water_level(p).is_some() {
         // The rest of the rules, on the ground under the water.
         return placeable_ignoring_water(map, hm, p);
     }
     placeable(map, hm, p)
+}
+
+/// Somewhere a mirror can set you down: dry, in the valley, not too steep,
+/// not in a building. A road's fine (a mirror by a path, or across a beck
+/// beside one, sets you on it; it's the anomaly that keeps off roads).
+pub fn landable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
+    hm.water_level(p).is_none() && {
+        let half = map.size * 0.5 - map.fence_inset - 4.0;
+        p[0].abs() <= half
+            && p[1].abs() <= half
+            && hm.slope_deg(p) <= 24.0
+            && !map.placements.iter().any(|pl| {
+                let f = crate::map::prefab_footprint(&pl.prefab);
+                geom::dist(pl.at, p) < f[0].max(f[2]) * 0.6 + 2.0
+            })
+    }
 }
 
 fn placeable_ignoring_water(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
@@ -406,6 +423,65 @@ pub fn placeable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
 
 /// Margin an anomaly keeps from the edge of any road or path, metres.
 pub const ROAD_MARGIN: f32 = 1.0;
+
+/// How an anomaly lights the ground round it at night, if it does: how far
+/// (a multiple of its radius) and how strongly (0..1, at full dark). A
+/// burner's coals always; a snare's crackle as it charges. A machine sees
+/// you further standing in that light (Robot minds read it: the game's
+/// `anomaly::glow::AnomalyLight`). The light is a warning's: coal red and
+/// arc blue-white, never a shelter's warm lamp.
+pub fn night_glow(kind: AnomalyKind, charge: f32) -> Option<(f32, f32)> {
+    match kind {
+        AnomalyKind::Burner => Some((2.5, 1.0)),
+        AnomalyKind::Snare => Some((1.6, 0.25 + 0.5 * charge.clamp(0.0, 1.0))),
+        _ => None,
+    }
+}
+
+/// How near water a road must run, inside a crossing frost, for the frost
+/// to lie on it (m): the road along the beck it spans, not one it cuts.
+pub const CROSSING_ALONG_WATER: f32 = 4.0;
+
+/// A standing frost laid as a crossing (`MarkerKind::Anomaly { crossing }`)
+/// may reach onto a road, where the road runs along the water it spans:
+/// its centre on the water, and every bit of road inside its radius (under
+/// its own rime mark, never past it, so never an unseen trap) within
+/// [`CROSSING_ALONG_WATER`] of water. Nothing else may.
+pub fn crossing_road_ok(
+    map: &MapDef,
+    hm: &Heightmap,
+    at: [f32; 2],
+    kind: AnomalyKind,
+    radius: f32,
+) -> bool {
+    if kind != AnomalyKind::Frost || hm.water_level(at).is_none() {
+        return false;
+    }
+    let flagged = map.markers.iter().any(|m| {
+        matches!(&m.kind, MarkerKind::Anomaly { crossing: true, kind: k, .. } if AnomalyKind::from_name(k) == Some(kind))
+            && geom::dist(m.at, at) < 0.01
+    });
+    if !flagged {
+        return false;
+    }
+    let wet_near = |p: [f32; 2]| {
+        (0..16).any(|k| {
+            let a = k as f32 / 16.0 * std::f32::consts::TAU;
+            [0.0, 1.0, 2.0, CROSSING_ALONG_WATER].iter().any(|d| {
+                hm.water_level([p[0] + a.cos() * d, p[1] + a.sin() * d])
+                    .is_some()
+            })
+        })
+    };
+    // The road inside its radius: a grid over the disc, the points on a road.
+    let n = (radius / 0.5).ceil() as i32;
+    (-n..=n).all(|i| {
+        (-n..=n).all(|j| {
+            let p = [at[0] + i as f32 * 0.5, at[1] + j as f32 * 0.5];
+            geom::dist(p, at) > radius || hm.road_at(p).kind.is_none() || wet_near(p)
+        })
+    })
+}
 
 /// Whether an anomaly of `radius` at `p` keeps off every road and path:
 /// the road is the safe, exposed way, and a shimmer across it is a trap
@@ -919,7 +995,7 @@ fn scatter(
     // Surge's draws as they were.
     let mut srng = Rng::new(seed ^ 0x57A4D ^ (cycle as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
     for m in &map.markers {
-        let MarkerKind::Anomaly { kind, radius } = &m.kind else {
+        let MarkerKind::Anomaly { kind, radius, .. } = &m.kind else {
             continue;
         };
         let Some(kind) = AnomalyKind::from_name(kind) else {
@@ -1422,6 +1498,7 @@ mod tests {
             kind: MarkerKind::Anomaly {
                 kind: "Well".into(),
                 radius: 2.0,
+                crossing: false,
             },
             at: [1000.0, 1000.0],
             rot: 0.0,
@@ -1473,7 +1550,7 @@ mod tests {
             let hm = Heightmap::build(&map);
             let mut kinds = Vec::new();
             for m in &map.markers {
-                let MarkerKind::Anomaly { kind, radius } = &m.kind else {
+                let MarkerKind::Anomaly { kind, radius, .. } = &m.kind else {
                     continue;
                 };
                 let kind = AnomalyKind::from_name(kind)
@@ -1492,7 +1569,8 @@ mod tests {
                     m.name
                 );
                 assert!(
-                    clear_of_roads(&hm, m.at, kind.danger_radius(*radius)),
+                    clear_of_roads(&hm, m.at, kind.danger_radius(*radius))
+                        || crossing_road_ok(&map, &hm, m.at, kind, *radius),
                     "{}: {} reaches a road",
                     map.name,
                     m.name
@@ -1520,6 +1598,73 @@ mod tests {
             n >= 10,
             "about a handful of artifacts per cycle (got {n} over 10)"
         );
+    }
+
+    /// Only a frost flagged as a crossing, on the water, may lie on a road
+    /// along it: an unflagged one on a road still fails, and so does a
+    /// flagged one away from water.
+    #[test]
+    fn only_a_crossing_frost_lies_on_a_road() {
+        let (mut map, hm) = marrow();
+        // A road point, and the nearest water to it.
+        let rl = &hm.road_lines[0];
+        let on_road = rl.points[rl.points.len() / 2];
+        let template = map.markers[0].clone();
+        let frost = |crossing| crate::map::Marker {
+            kind: MarkerKind::Anomaly {
+                kind: "Frost".into(),
+                radius: 3.0,
+                crossing,
+            },
+            at: on_road,
+            ..template.clone()
+        };
+        map.markers.push(frost(false));
+        assert!(
+            !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Frost, 3.0),
+            "unflagged, on a road: fails"
+        );
+        map.markers.push(frost(true));
+        assert!(
+            hm.water_level(on_road).is_some()
+                || !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Frost, 3.0),
+            "flagged but off the water: fails"
+        );
+        assert!(
+            !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Well, 3.0),
+            "never another kind"
+        );
+    }
+
+    /// A mirror hung over a beck is a way across it: walked into from
+    /// either bank, it sets you on dry ground on the other.
+    #[test]
+    fn a_mirror_over_a_beck_sets_you_on_the_far_bank() {
+        let src = crate::map::VALLEYS
+            .iter()
+            .find(|v| v.0 == "kettle_pass")
+            .map(|v| v.1)
+            .expect("Kettle Pass");
+        let map = MapDef::from_ron(src).unwrap();
+        let hm = Heightmap::build(&map);
+        // Kettle Beck's narrowest crossing by the Mine path.
+        let c = [-144.4, 12.5];
+        assert!(hm.water_level(c).is_some(), "over the water");
+        assert!(
+            placeable_for(&map, &hm, c, AnomalyKind::Mirror),
+            "a mirror may hang there"
+        );
+        let r = 1.5;
+        let ok = |p: [f32; 2]| landable(&map, &hm, p);
+        // Its banks: the dry ground nearest each way across.
+        let (a, b) = ([-0.5f32, 0.866], [0.5f32, -0.866]);
+        for (from, to) in [(a, b), (b, a)] {
+            let entry = geom::add(c, geom::scale(from, r + 0.3));
+            let exit = mirror_exit(c, entry, r, &ok).expect("a landing");
+            assert!(hm.water_level(exit).is_none(), "dry ({exit:?})");
+            let across = geom::dot(geom::sub(exit, c), to);
+            assert!(across > 0.0, "on the far side ({exit:?})");
+        }
     }
 }
 #[cfg(test)]
