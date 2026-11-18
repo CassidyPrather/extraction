@@ -47,6 +47,9 @@ pub enum Family {
     Wedge,
     /// Held to the eyes, they magnify (`gadgets::Optic`).
     Binoculars,
+    /// The DP-2 field screen (#104): held up, it rings each anomaly round
+    /// you, the way you face; it doesn't see stones (`anomaly::detector`).
+    FieldScreen,
     /// An artifact in it can't be felt, nor help you (`anomaly`).
     LeadCase,
     /// A watch, a photo, a tape: an offering place answers one with where
@@ -75,6 +78,7 @@ pub const FAMILIES: &[Family] = &[
     Family::Bench,
     Family::Wedge,
     Family::Binoculars,
+    Family::FieldScreen,
     Family::LeadCase,
     Family::Trinkets,
     Family::Rounds,
@@ -134,6 +138,7 @@ pub fn family(def: &ItemDef) -> Option<Family> {
         "hacksaw" | "multitool" => Family::Bench,
         "door_wedge" => Family::Wedge,
         "binoculars" => Family::Binoculars,
+        "detector_bear" => Family::FieldScreen,
         "lead_case" => Family::LeadCase,
         _ => match category {
             // (What the driver's jobs ask for: a drone's motor, say, isn't.)
@@ -194,6 +199,9 @@ impl Family {
             }
             Family::LeadCase => {
                 &["Truck: \"A stone in that case: the Zone can't feel it. Nor can you.\""]
+            }
+            Family::FieldScreen => {
+                &["Truck: \"Hold it up and look. Each ring's one, the way you face.\""]
             }
             Family::Trinkets => {
                 &["Truck: \"Leave a trinket at a shrine or well. It tells where a stone lies.\""]
