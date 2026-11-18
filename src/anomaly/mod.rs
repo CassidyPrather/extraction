@@ -19,6 +19,7 @@ pub mod cook;
 pub mod costs;
 pub mod detector;
 pub mod frost;
+pub mod glow;
 pub mod harvest;
 pub mod hush;
 pub mod mirrors;
@@ -199,6 +200,7 @@ impl Plugin for AnomalyPlugin {
             .init_resource::<surge::Agitation>()
             .init_resource::<hush::Hushes>()
             .init_resource::<steam::Steams>()
+            .init_resource::<glow::AnomalyLight>()
             .add_message::<cook::PartCooked>()
             .add_observer(surge::remember_size)
             .add_observer(seed_dice)
@@ -245,6 +247,7 @@ impl Plugin for AnomalyPlugin {
                         frost::freeze_water,
                         frost::creak,
                         steam::pair_up,
+                        glow::gather,
                         snare_water::find_water,
                         cook::cook,
                         measure_attention,

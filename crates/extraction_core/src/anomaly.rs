@@ -424,6 +424,20 @@ pub fn placeable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
 /// Margin an anomaly keeps from the edge of any road or path, metres.
 pub const ROAD_MARGIN: f32 = 1.0;
 
+/// How an anomaly lights the ground round it at night, if it does: how far
+/// (a multiple of its radius) and how strongly (0..1, at full dark). A
+/// burner's coals always; a snare's crackle as it charges. A machine sees
+/// you further standing in that light (Robot minds read it: the game's
+/// `anomaly::glow::AnomalyLight`). The light is a warning's: coal red and
+/// arc blue-white, never a shelter's warm lamp.
+pub fn night_glow(kind: AnomalyKind, charge: f32) -> Option<(f32, f32)> {
+    match kind {
+        AnomalyKind::Burner => Some((2.5, 1.0)),
+        AnomalyKind::Snare => Some((1.6, 0.25 + 0.5 * charge.clamp(0.0, 1.0))),
+        _ => None,
+    }
+}
+
 /// How near water a road must run, inside a crossing frost, for the frost
 /// to lie on it (m): the road along the beck it spans, not one it cuts.
 pub const CROSSING_ALONG_WATER: f32 = 4.0;
