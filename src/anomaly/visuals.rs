@@ -2010,11 +2010,12 @@ fn dress_items(
                     // large as the top allows.
                     parts.push((
                         meshes.add(Cylinder::new(SCREEN_FACE, 0.004).mesh().resolution(48)),
+                        // Dark glass: the rings are what's lit on it.
                         mat(
-                            Color::srgb(0.01, 0.03, 0.015),
+                            Color::srgb(0.006, 0.014, 0.008),
                             0.0,
                             0.15,
-                            LinearRgba::rgb(0.0, 0.02, 0.005),
+                            LinearRgba::rgb(0.0, 0.002, 0.0005),
                         ),
                         Transform::from_xyz(SCREEN_AT.x, 0.022, SCREEN_AT.z),
                     ));
@@ -2151,9 +2152,11 @@ fn dress_items(
                     (r, meshes.add(mesh))
                 })
                 .collect();
+            // Lit green lines on the dark face. Unlit, so it's the base
+            // colour that shows: an unlit material draws no emissive (it
+            // had a black base and a bright emissive, and drew black rings).
             let lit = materials.add(StandardMaterial {
-                base_color: Color::BLACK,
-                emissive: LinearRgba::rgb(0.6, 3.2, 1.0),
+                base_color: Color::srgb(0.45, 1.0, 0.55),
                 unlit: true,
                 ..default()
             });
