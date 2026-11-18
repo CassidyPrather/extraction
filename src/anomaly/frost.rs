@@ -105,7 +105,7 @@ pub struct Frozen {
 /// The ice sheet's thickness, m, and how far its top stands over the
 /// water (so a foot on it is dry).
 pub const ICE_THICK: f32 = 0.15;
-pub const ICE_PROUD: f32 = 0.03;
+pub const ICE_PROUD: f32 = 0.08;
 /// Water shallower than this over the ground isn't worth a sheet, m.
 const ICE_MIN_DEPTH: f32 = 0.05;
 /// How finely the frost's reach is sampled for water, m.
@@ -134,6 +134,9 @@ pub fn frozen_level(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32) -
     (count > 0).then(|| sum / count as f32)
 }
 
+/// A cell of ice rising more than this across it (m) is a step: the sheet
+/// breaks there.
+const ICE_STEP_BREAK: f32 = 0.3;
 /// Rime creeps up the banks this far over the ice, m, thinning out.
 const RIME_UP: f32 = 1.0;
 /// The sheet's mesh: cells this fine, m...
@@ -174,12 +177,17 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
             let g = hm.height(p);
             // On the water where it lies: a beck falls along its run, and a
             // sheet at its mean level sank under it upstream.
+            // Off the water, it lies on the ground (pinned to the water's
+            // mean level, a dry low bank stood up as a wall against the
+            // water upstream).
             let here = hm.water_level(p).filter(|l| *l > g);
             let top = here.map_or(top, |l| l + ICE_PROUD);
             pts.push(if d.length() > rim {
                 None
-            } else if here.is_some() || g < top {
-                Some(([d.x, top.max(g + 0.02) - c.y, d.y], 1.0))
+            } else if let Some(l) = here {
+                Some(([d.x, (l + ICE_PROUD).max(g + 0.02) - c.y, d.y], 1.0))
+            } else if g < top {
+                Some(([d.x, g + 0.02 - c.y, d.y], 1.0))
             } else if g < top + RIME_UP {
                 let fade = 1.0 - (g - top) / RIME_UP;
                 Some(([d.x, g + 0.02 - c.y, d.y], fade))
@@ -253,6 +261,14 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
                 .iter()
                 .all(|&k| pts[k].is_some_and(|(_, o)| o < 0.02))
             {
+                continue;
+            }
+            // Over a step in the water the sheet breaks into plates, each
+            // tilted with its own run, rather than folding up into a wall.
+            let ys = corners.map(|k| pts[k].unwrap().0[1]);
+            let spread = ys.iter().cloned().fold(f32::MIN, f32::max)
+                - ys.iter().cloned().fold(f32::MAX, f32::min);
+            if spread > ICE_STEP_BREAK {
                 continue;
             }
             any_ice |= corners
