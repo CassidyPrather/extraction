@@ -125,11 +125,34 @@ A model without a skin still works: each mesh node named `palm` or
    `fp:round_9x18` (a pinch) at the same cameras as
    `docs/shots/hands/skinned_glove_wip_*.png`, before and after.
 
-## The paused skinned glove
+## The imported hand (now in)
 
-Commit 457f45af (reverted in the next) holds a skinned glove built from
-`gloves.py`: one continuous mesh, each finger a tube from inside the palm
-to its tip, weights blended over each joint (9 mm at the knuckles, 13 mm
-at the thumb's root, 4.5 mm at the finger joints), 13,056 triangles to a
-hand. It renders and poses; its stills are in `docs/shots/hands/` on
-that commit. It is a fallback if the imported hand doesn't come.
+`art/hands/gloves.py` builds both gloves from SiroinoSotai 1.0's hands
+(CC0; `art/hands/source/siroino-body.blend`, `CREDITS.md`), as above:
+
+- **Cut** at the wrist: every vertex of the body weighted at least half to
+  `Hand_L`/`Hand_R` and the bones under it, the largest piece, its wrist
+  capped (the cuff goes over it).
+- **Mapped** bone by bone (`MAP`): `Hand` to `palm`; each finger's
+  Proximal, Intermediate, Distal to `finger_F_0..2`; the thumb's Proximal
+  to `finger_4_0`, its Intermediate and Distal folded into `finger_4_1`.
+- **Re-posed** per vertex by its weights: each bone's head onto its
+  joint, its axis onto the joint's -Z, stretched to `FINGER_BONES` and
+  made fuller across (`WIDTH`, toward `hold.rs` `RADII`), its skin
+  centred on the joint's axis; a fingertip's skin ends on its segment's
+  length (so pointing ends on `FINGERTIP`). The thumb's bend axis is the
+  source thumb's own curl. The palm is scaled to the knuckle line and
+  the wrist (z 0.056), its underside brought to about y -0.013.
+- **Gloved**: 1.2 mm over the skin, smoothed once, `Glove` and `Leather`
+  by facing (the palm, undersides and fingertips leather), with the
+  procedural glove's cuff and `wrist_housing`.
+
+The skin's joints are the rig's bones, resting at `spawn_hand`'s joints;
+`dress_gloves` draws it as a `SkinnedMesh` on them (`render/warmup.rs`
+skips it on the shelf). The props tests read a skin joint's "mesh" as the
+vertices weighted at least half to it, in its frame.
+
+The procedural gloves are the fallback: `art/hands/_gloves_procedural.py`
+run on its own writes the same files (rigid pieces, one per joint), and
+`dress_gloves` hangs a model without a skin rigidly as before. The paused
+skinned glove of 457f45af is superseded.
