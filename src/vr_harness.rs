@@ -4820,14 +4820,279 @@ mod first_aid {
         vr.step(8);
         vr.trigger(Side::Right, 1.0);
         vr.step(3);
-        // Used, and it healed (from 50).
-        gone(&vr, inj) && vr.app.world().get::<Health>(vr.player).unwrap().hp > 90.0
+        // It healed (from 50: its R-2 gives 60), and its cartridge is
+        // spent, still in the pen (`items::pen`).
+        let spent = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::items::Item, &crate::interact::InSocket)>();
+            q.iter(vr.app.world())
+                .filter(|(_, s)| {
+                    vr.app
+                        .world()
+                        .get::<crate::interact::SocketOwner>(s.socket)
+                        .is_some_and(|o| o.0 == inj)
+                })
+                .any(|(it, _)| it.condition == 0.0)
+        };
+        spent && vr.app.world().get::<Health>(vr.player).unwrap().hp > 99.0
     }
 
     /// In at the thigh, it's used, and it heals (from 50).
     #[test]
     fn an_injector_goes_in_at_the_thigh() {
         assert!(jab(true), "the thigh took no injection");
+    }
+
+    /// Half heal, half stim (#102): a new pen comes with an R-2; an S-1
+    /// let go at its other slot clicks in; one jab gives both (60 HP, six
+    /// seconds of stim), and both cartridges are left in it, spent.
+    #[test]
+    fn a_stim_in_the_other_slot_and_one_jab_gives_both() {
+        use crate::items::pen::{PenSlot, SLOTS, Stimmed};
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        // The S-1 in the left hand, to the pen's free slot.
+        let at = feet + Vec3::new(-0.2, 1.1, -0.35);
+        let stim = vr.spawn("stim_s1", Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(stim)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Left, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(stim)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(
+            vr.hand_state(Side::Left).holding,
+            Some(stim),
+            "the S-1 in hand"
+        );
+        let free = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&PenSlot, &crate::interact::Socket, &ChildOf)>();
+            q.iter(vr.app.world())
+                .find(|(_, s, c)| c.parent() == pen && s.occupant.is_none())
+                .map(|(p, ..)| p.0)
+                .expect("a free slot")
+        };
+        for _ in 0..3 {
+            let slot = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(pen)
+                .unwrap()
+                .transform_point(SLOTS[free]);
+            let hand = vr.hand_state(Side::Left).world.translation;
+            let held = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(stim)
+                .unwrap()
+                .translation();
+            vr.move_hand(Side::Left, hand + (slot - held));
+            vr.step(3);
+        }
+        vr.grip(Side::Left, 0.0);
+        vr.step(4);
+        let seated = vr
+            .app
+            .world()
+            .get::<crate::interact::InSocket>(stim)
+            .and_then(|s| vr.app.world().get::<crate::interact::SocketOwner>(s.socket))
+            .map(|o| o.0);
+        assert_eq!(seated, Some(pen), "the S-1 clicked into the pen");
+        // Its tip to the thigh, and the trigger.
+        let thigh = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::interact::body::Torso>>();
+            q.iter(vr.app.world())
+                .next()
+                .unwrap()
+                .transform_point(Vec3::new(0.11, -0.62, -0.04))
+        };
+        let off = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(pen)
+            .unwrap()
+            .transform_point(NEEDLE)
+            - vr.hand_state(Side::Right).world.translation;
+        vr.move_hand(Side::Right, thigh - off);
+        vr.step(8);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        let hp = vr.app.world().get::<Health>(vr.player).unwrap().hp;
+        assert!(hp > 99.0, "healed from 50 by the R-2: {hp}");
+        let s = vr.app.world().get::<Stimmed>(vr.player).copied();
+        assert!(
+            s.is_some_and(|s| (s.total - 6.0).abs() < 1e-3),
+            "six seconds of stim: {s:?}"
+        );
+        assert_eq!(
+            vr.app
+                .world()
+                .get::<crate::items::Item>(stim)
+                .unwrap()
+                .condition,
+            0.0,
+            "the S-1 spent"
+        );
+    }
+
+    /// The stim's clock (#102): in a stim the world's clock eases down to
+    /// `stim::SLOW`, you walk as far in a real second as without it, and
+    /// after its real seconds the clock comes back and the stim's done.
+    #[test]
+    fn a_stim_slows_the_world_and_not_you() {
+        use crate::items::pen::Stimmed;
+        use crate::items::stim::{EASE, SLOW, WorldPace};
+        let (mut vr, _) = setup();
+        vr.step(10);
+        // (Each step is a 90th of a real second, `headless_app`.)
+        let walk = |vr: &mut Vr, frames: usize| -> f32 {
+            let from = vr.feet();
+            for _ in 0..frames {
+                vr.app
+                    .world_mut()
+                    .get_mut::<RigInput>(vr.player)
+                    .unwrap()
+                    .locomotion = Vec2::new(0.0, 1.0);
+                vr.step(1);
+            }
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::ZERO;
+            vr.step(10);
+            (vr.feet() - from).with_y(0.0).length()
+        };
+        let plain = walk(&mut vr, 90);
+        assert!(plain > 0.5, "walked {plain} m in a second");
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        vr.step((90.0 * (EASE + 0.1)) as usize);
+        let pace = |vr: &Vr| vr.app.world().resource::<Time<Virtual>>().relative_speed();
+        assert!((pace(&vr) - SLOW).abs() < 1e-3, "slowed: {}", pace(&vr));
+        assert!((vr.app.world().resource::<WorldPace>().0 - pace(&vr)).abs() < 1e-4);
+        let stimmed = walk(&mut vr, 90);
+        assert!(
+            (stimmed - plain).abs() < plain * 0.2,
+            "a real second's walk: {stimmed} m stimmed, {plain} m not"
+        );
+        // Its six real seconds, and the ease back.
+        vr.step((90.0 * (6.0 + EASE + 0.2)) as usize);
+        assert!((pace(&vr) - 1.0).abs() < 1e-3, "back: {}", pace(&vr));
+        assert!(
+            vr.app.world().get::<Stimmed>(vr.player).is_none(),
+            "the stim's done"
+        );
+    }
+
+    /// A stim is felt starting, ending soon, and over (#102): `StimCue`s
+    /// In, Tell, Out, once each; the heart (`Heartbeat`, heard and felt in
+    /// both hands) slow and heavy, then quick in its last two seconds.
+    #[test]
+    fn a_stim_is_felt_in_its_tell_and_out() {
+        use crate::audio_kit::Heartbeat;
+        use crate::items::pen::Stimmed;
+        use crate::items::stim::{BEAT_SLOW, BEAT_TELL, StimCue, TELL};
+        let (mut vr, _) = setup();
+        vr.step(10);
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        let mut cues = Vec::new();
+        let mut beats: Vec<(usize, f32)> = Vec::new();
+        // Seven real seconds, a 90th at a time.
+        for frame in 0..(90 * 7) {
+            vr.step(1);
+            let w = vr.app.world_mut();
+            cues.extend(w.resource_mut::<Messages<StimCue>>().drain());
+            beats.extend(
+                w.resource_mut::<Messages<Heartbeat>>()
+                    .drain()
+                    .map(|b| (frame, b.level)),
+            );
+        }
+        assert_eq!(cues, vec![StimCue::In, StimCue::Tell, StimCue::Out]);
+        let secs = |f: usize| f as f32 / 90.0;
+        let (slow, quick): (Vec<(usize, f32)>, Vec<(usize, f32)>) = beats
+            .iter()
+            .copied()
+            .partition(|(f, _)| secs(*f) < 6.0 - TELL);
+        assert!(
+            (3..=5).contains(&slow.len()),
+            "about one a {BEAT_SLOW} s for 4 s: {slow:?}"
+        );
+        assert!(
+            (3..=5).contains(&quick.len()),
+            "about one a {BEAT_TELL} s for its last {TELL} s: {quick:?}"
+        );
+        assert!(
+            slow.iter().all(|b| b.1 > quick[0].1),
+            "heavier slow than quick"
+        );
+        assert!(
+            beats.iter().all(|(f, _)| secs(*f) <= 6.05),
+            "none after: {beats:?}"
+        );
+    }
+
+    /// In a stim the world's ticks come at 0.4 of frames; a held thing is
+    /// still drawn where the hand holds it on every real frame, not
+    /// stepped on the ticks (the coordinator: a gun juddering in the hand
+    /// makes VR feel broken).
+    #[test]
+    fn in_a_stim_a_held_thing_follows_the_hand_every_frame() {
+        use crate::items::pen::Stimmed;
+        let (mut vr, feet) = setup();
+        let mag = take(&mut vr, feet, "pm_mag");
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        vr.step(60);
+        let centre = vr.hand_state(Side::Right).world.translation;
+        let mut worst: f32 = 0.0;
+        for i in 0..90 {
+            // A hand moving as a hand does: 15 cm round, a turn a second.
+            let a = std::f32::consts::TAU * i as f32 / 90.0;
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.15,
+            );
+            vr.step(1);
+            let hand = vr.hand_state(Side::Right).world;
+            let offset = vr
+                .app
+                .world()
+                .get::<crate::interact::Held>(mag)
+                .unwrap()
+                .offset;
+            let want = hand.mul_transform(offset).translation;
+            let drawn = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(mag)
+                .unwrap()
+                .translation();
+            worst = worst.max(drawn.distance(want));
+        }
+        assert!(worst < 0.002, "drawn {worst} m off the hand in a stim");
     }
 
     #[test]

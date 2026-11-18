@@ -41,13 +41,13 @@ def field_set():
                   xf=T(x, y, 0.0))
             bolt(p, (x, y, back - 0.001), (0, 0, -1), r=0.01, mat="Iron")
     # The case, and its two flanges bolted to the board.
-    p.box((W, H, D - 0.006), (0.0, 0.0, 0.003), "GreyGreen", bevel=0.008, segs=1)
+    p.box((W, H, D), (0.0, 0.0, 0.0), "GreyGreen", bevel=0.008, segs=1)
     for x in (-W / 2 - 0.025, W / 2 + 0.025):
         p.box((0.05, 0.2, 0.006), (x, 0.0, D / 2 - 0.003), "GreyGreen", bevel=0.002, segs=1)
         for y in (-0.07, 0.07):
             bolt(p, (x, y, D / 2 - 0.006), (0, 0, -1), r=0.009, mat="Iron")
     # The rain hood, sloped off the wall.
-    p.box((W + 0.03, 0.008, D + 0.03), (0.0, H / 2 + 0.012, -0.012), "Painted",
+    p.box((W + 0.03, 0.008, D + 0.03), (0.0, H / 2 + 0.003, -0.012), "Painted",
           bevel=0.002, segs=1, xf=None)
     # The face: a recessed panel, the call button in its guard ring, its
     # lamp, the meter.
@@ -58,12 +58,13 @@ def field_set():
           xf=T(bx, by, 0.0))
     p.cyl(0.014, FRONT - 0.014, FRONT, "LampRed", segs=14, xf=T(bx, 0.075, 0.0))
     p.cyl(0.04, FRONT - 0.006, FRONT, "Cream", segs=20, xf=T(0.07, 0.04, 0.0))
-    rod(p, (0.07, 0.04, FRONT - 0.008), (0.095, 0.065, FRONT - 0.008), 0.002, "Black", segs=3)
+    rod(p, (0.07, 0.04, FRONT - 0.007), (0.095, 0.065, FRONT - 0.007), 0.002, "Black", segs=3)
     p.cyl(0.016, FRONT - 0.02, FRONT, "Bakelite", segs=12, xf=T(0.07, -0.06, 0.0))
     # The handset in its cradle on the right side.
     sx = W / 2
-    p.box((0.02, 0.05, 0.08), (sx + 0.01, 0.06, -0.01), "Black", bevel=0.003, segs=1)
-    p.box((0.03, 0.05, 0.08), (sx + 0.01, -0.07, -0.01), "Black", bevel=0.003, segs=1)
+    # (Each cradle reaches from the case's side to the handset's grip.)
+    for y in (0.06, -0.07):
+        p.box((0.032, 0.05, 0.08), (sx + 0.016, y, -0.01), "Black", bevel=0.003, segs=1)
     rod(p, (sx + 0.035, -0.09, -0.01), (sx + 0.035, 0.09, -0.01), 0.013, "Bakelite", segs=10)
     for y in (-0.1, 0.1):
         p.cyl(0.026, -0.015, 0.015, "Bakelite", segs=16, xf=T(sx + 0.035, y, -0.01) @ ALONG_X)

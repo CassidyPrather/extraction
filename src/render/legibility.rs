@@ -610,6 +610,21 @@ mod tests {
     /// read; every panel says what it is. Notes, signs and terminals are
     /// put up by the client: they're taken from the maps. The wrist and the
     /// radio, the client's too, at their fullest.
+    /// The DP-2 field screen's rings, held up at the wrist's distance:
+    /// a ring is a shape you place, not words, so its line and the smallest
+    /// ring's hole clear the incidental floor (#104; the old stone dot,
+    /// 2.2 mm, didn't). Pinned to Anomalies' sizes, so a shrink fails here.
+    #[test]
+    fn the_field_screens_rings_clear_the_incidental_floor() {
+        use crate::anomaly::visuals::{RING_LINE, RING_MIN_R, SCREEN_FACE, SCREEN_R};
+        let at = TextSource::Wrist.reading().at;
+        let line = angle(RING_LINE, at, 0.0);
+        let hole = angle(2.0 * (RING_MIN_R - RING_LINE / 2.0), at, 0.0);
+        assert!(line >= INCIDENTAL_DEG, "ring line {line:.2} deg");
+        assert!(hole >= INCIDENTAL_DEG, "smallest ring's hole {hole:.2} deg");
+        assert!(SCREEN_R <= SCREEN_FACE, "the range fits the face");
+    }
+
     #[test]
     fn every_panel_in_the_game_clears_its_floor() {
         use crate::raid::bench::ScreenStyle;

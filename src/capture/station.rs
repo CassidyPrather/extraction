@@ -46,6 +46,9 @@ pub struct Station {
     pub question: String,
     /// The game's own arguments for it.
     pub args: Vec<String>,
+    /// What to try, on the board under its name (the list's optional fifth
+    /// field).
+    pub hint: Option<String>,
 }
 
 /// The tour's stations, or what's wrong with the list (naming the line).
@@ -59,9 +62,9 @@ pub fn load(path: &Path) -> Result<Vec<Station>, String> {
         }
         let f: Vec<&str> = line.split('|').map(str::trim).collect();
         let at = || format!("{}:{}", path.display(), n + 1);
-        if f.len() != 4 || f[0].is_empty() {
+        if !(4..=5).contains(&f.len()) || f[0].is_empty() {
             return Err(format!(
-                "{}: want name | minutes | question | game arguments",
+                "{}: want name | minutes | question | game arguments [| what to try]",
                 at()
             ));
         }
@@ -76,6 +79,7 @@ pub fn load(path: &Path) -> Result<Vec<Station>, String> {
             minutes,
             question: f[2].to_owned(),
             args: f[3].split_whitespace().map(String::from).collect(),
+            hint: f.get(4).filter(|h| !h.is_empty()).map(|h| h.to_string()),
         });
     }
     if out.is_empty() {
@@ -126,6 +130,22 @@ pub fn next_args(args: impl IntoIterator<Item = String>, next: usize) -> Vec<Str
     out
 }
 
+/// The `--stage` names something in this build sets up, registered by
+/// their plugins ([`register_stage`]).
+#[derive(Resource, Default)]
+pub struct KnownStages(pub Vec<&'static str>);
+
+/// Says this build stages `name` (`--stage name`): a plugin calls it from
+/// its `build` and sets the staging up when `opts.stage` is `name`. A tour
+/// station whose stage nothing registered is skipped.
+pub fn register_stage(app: &mut App, name: &'static str) {
+    app.init_resource::<KnownStages>()
+        .world_mut()
+        .resource_mut::<KnownStages>()
+        .0
+        .push(name);
+}
+
 pub struct StationPlugin;
 
 impl Plugin for StationPlugin {
@@ -163,7 +183,15 @@ impl Plugin for StationPlugin {
         })
         .add_systems(
             Update,
-            (put_up_board, sync, press_cards, board_text, nudge).chain(),
+            (
+                skip_unstageable,
+                put_up_board,
+                sync,
+                press_cards,
+                board_text,
+                nudge,
+            )
+                .chain(),
         );
     }
 }
@@ -298,6 +326,9 @@ fn put_up_board(
     };
     let root = player.compute_transform();
     let last = tour.last_at.replace(root.translation);
+    if tour.board.is_none() && tour.phase == Phase::Leaving {
+        return;
+    }
     if let Some((board, since)) = tour.board {
         // Moved by the station's own staging after the board went up: the
         // board goes with them.
@@ -456,28 +487,85 @@ fn press_cards(
                 tour.phase = Phase::Leaving;
                 let secs = time.elapsed_secs() - since;
                 tour.note("end", serde_json::json!({ "secs": secs }));
-                let next = tour.index + 1;
-                let to = if next < tour.stations.len() {
-                    crate::request_relaunch(next_args(std::env::args().skip(1), next));
-                    tour.stations[next].name.clone()
-                } else {
-                    tour.note("done", serde_json::json!({}));
-                    "the end of the tour".to_owned()
-                };
-                // A test with its own profile asks, and stays.
-                if !crate::persist::owns_profile(&opts) || opts.headless {
-                    continue;
-                }
-                match leaving.as_deref_mut() {
-                    Some(l) => l.go(&to),
-                    None => {
-                        exit.write(AppExit::Success);
-                    }
-                }
+                move_on(&tour, &opts, &mut exit, leaving.as_deref_mut());
             }
             _ => {}
         }
     }
+}
+
+/// On to the next station (a relaunch with its number), or the tour's
+/// over. A test, with a profile of its own and no window, asks and stays.
+fn move_on(
+    tour: &Tour,
+    opts: &LaunchOptions,
+    exit: &mut MessageWriter<AppExit>,
+    leaving: Option<&mut crate::rig::loading::Leaving>,
+) {
+    let next = tour.index + 1;
+    let to = if next < tour.stations.len() {
+        crate::request_relaunch(next_args(std::env::args().skip(1), next));
+        tour.stations[next].name.clone()
+    } else {
+        tour.note("done", serde_json::json!({}));
+        "the end of the tour".to_owned()
+    };
+    if !crate::persist::owns_profile(opts) || opts.headless {
+        return;
+    }
+    match leaving {
+        Some(l) => l.go(&to),
+        None => {
+            exit.write(AppExit::Success);
+        }
+    }
+}
+
+/// A station staged for a fix this build doesn't have yet (a flag it
+/// doesn't know, or an item `--give` names that isn't in the catalog) is
+/// skipped, noted with why, and the tour moves on: half a station wastes
+/// a playtester's minutes.
+fn skip_unstageable(
+    mut tour: ResMut<Tour>,
+    opts: Res<LaunchOptions>,
+    catalog: Option<Res<crate::items::Catalog>>,
+    mut exit: MessageWriter<AppExit>,
+    mut leaving: Option<ResMut<crate::rig::loading::Leaving>>,
+    known: Option<Res<KnownStages>>,
+    mut checked: Local<bool>,
+) {
+    if *checked {
+        return;
+    }
+    let Some(catalog) = catalog else {
+        return;
+    };
+    *checked = true;
+    let mut why = Vec::new();
+    if !opts.unknown_args.is_empty() {
+        why.push(format!(
+            "this build doesn't know {}",
+            opts.unknown_args.join(" ")
+        ));
+    }
+    if let Some(stage) = &opts.stage {
+        if !known.is_some_and(|k| k.0.contains(&stage.as_str())) {
+            why.push(format!("nothing stages {stage} in this build"));
+        }
+    }
+    if let Some(ids) = flag(&tour.station().args, "--give") {
+        for id in ids.split(',').filter(|i| !i.is_empty()) {
+            if catalog.kind(id).is_none() {
+                why.push(format!("no item {id} in this build"));
+            }
+        }
+    }
+    if why.is_empty() {
+        return;
+    }
+    tour.phase = Phase::Leaving;
+    tour.note("skipped", serde_json::json!({ "why": why.join("; ") }));
+    move_on(&tour, &opts, &mut exit, leaving.as_deref_mut());
 }
 
 /// What the board says, and the rating cards' numbers; once an answer's
@@ -496,7 +584,7 @@ fn board_text(
     for (e, c, mut text, mut vis) in &mut cards {
         let want = match (c, tour.phase) {
             (TourCard::Title, Phase::Playing) => format!(
-                "PLAYTEST {}/{}: {}\n\nAbout {} min{}. Look it over;\nsay what you notice.\nMark anything odd: both sticks (F9).",
+                "PLAYTEST {}/{}: {}\n\nAbout {} min{}.\n{}\nMark anything odd: both sticks (F9).",
                 tour.index + 1,
                 tour.stations.len(),
                 s.name.replace('_', " ").to_uppercase(),
@@ -505,6 +593,10 @@ fn board_text(
                     " (time's up when you're ready)"
                 } else {
                     ""
+                },
+                match &s.hint {
+                    Some(h) => format!("Try: {}.", h.trim_end_matches('.')),
+                    None => "Look it over; say what you notice.".to_owned(),
                 },
             ),
             (TourCard::Title, Phase::Rating) => {
@@ -607,17 +699,18 @@ mod tests {
     fn the_shipped_tour_reads() {
         let path = crate::asset_root_path().join(crate::camp::TOUR);
         let stations = load(&path).unwrap_or_else(|e| panic!("{e}"));
-        for s in &stations {
-            let o = LaunchOptions::parse(s.args.clone());
-            assert!(
-                crate::asset_root_path()
-                    .join("maps")
-                    .join(format!("{}.ron", o.map))
-                    .exists(),
-                "{}: no map {}",
-                s.name,
-                o.map
-            );
+        // A station waiting on a fix not here yet is skipped in play; it
+        // only needs to read. Said, so a typo doesn't hide as "waiting".
+        for (i, s) in stations.iter().enumerate() {
+            let o = LaunchOptions::parse([
+                "--playtest".to_owned(),
+                path.display().to_string(),
+                "--playtest-station".to_owned(),
+                i.to_string(),
+            ]);
+            if !o.unknown_args.is_empty() {
+                eprintln!("{}: skipped in this build: {:?}", s.name, o.unknown_args);
+            }
         }
     }
 
@@ -805,6 +898,102 @@ mod tests {
         let _ = std::fs::remove_dir_all(&data);
         let off = Vec2::new(board.x - player.x, board.z - player.z).length();
         assert!(off < 1.5, "the board stands {off:.1} m from the player");
+    }
+
+    /// A station this build can't stage (a flag it doesn't know, an item
+    /// it hasn't got) is skipped with why, and the tour moves on; the
+    /// optional fifth field is what to try.
+    #[test]
+    fn a_station_this_build_cant_stage_is_skipped() {
+        let _one = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = crate::take_relaunch();
+        let p = list(
+            "future | 1 | Q? | --map training_yard --no-robots --grapple-from-orbit | swing on it\n\
+             next | 1 | Q? | --map training_yard --no-robots\n",
+        );
+        let stations = load(&p).unwrap();
+        assert_eq!(stations[0].hint.as_deref(), Some("swing on it"));
+        assert_eq!(stations[1].hint, None);
+        let data = std::env::temp_dir().join(format!("tour_skip_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        let opts = LaunchOptions::parse(
+            [
+                "--playtest",
+                &p.display().to_string(),
+                "--data-dir",
+                &data.display().to_string(),
+            ]
+            .map(String::from),
+        );
+        assert_eq!(opts.unknown_args, ["--grapple-from-orbit"]);
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        assert_eq!(app.world().resource::<Tour>().phase, Phase::Leaving);
+        let args = crate::take_relaunch().expect("on to the next station");
+        assert_eq!(args[args.len() - 1], "1");
+        let notes = std::fs::read_to_string(data.join("playtest").join("tour.jsonl")).unwrap();
+        let _ = std::fs::remove_dir_all(&data);
+        assert!(
+            notes.contains("\"skipped\"") && notes.contains("--grapple-from-orbit"),
+            "{notes}"
+        );
+        assert!(
+            !notes.contains("\"start\""),
+            "no board for a skipped station"
+        );
+    }
+
+    /// A station in a valley this build hasn't got opens the yard, marked
+    /// to be skipped, rather than failing to load a map that isn't there.
+    #[test]
+    fn a_station_in_a_missing_valley_is_skipped() {
+        let p = list("away | 1 | Q? | --map no_such_valley\n");
+        let o = LaunchOptions::parse(["--playtest", &p.display().to_string()].map(String::from));
+        assert_eq!(o.map, crate::camp::TRAINING_YARD);
+        assert_eq!(o.unknown_args, ["--map no_such_valley"]);
+    }
+
+    /// `--stage` a plugin registered plays; one nothing registered is
+    /// skipped like a flag the build doesn't know.
+    #[test]
+    fn a_stage_plays_only_if_something_stages_it() {
+        let p = list("s | 1 | Q? | --map training_yard --no-robots --stage nobodys\n");
+        let data = std::env::temp_dir().join(format!("tour_stage_{}", std::process::id()));
+        let run = |register: bool| {
+            let opts = LaunchOptions::parse(
+                [
+                    "--playtest",
+                    &p.display().to_string(),
+                    "--data-dir",
+                    &data.display().to_string(),
+                ]
+                .map(String::from),
+            );
+            assert_eq!(opts.stage.as_deref(), Some("nobodys"));
+            let mut app = crate::headless_app(opts, false);
+            if register {
+                register_stage(&mut app, "nobodys");
+            }
+            app.finish();
+            app.cleanup();
+            for _ in 0..30 {
+                app.update();
+            }
+            let _ = crate::take_relaunch();
+            app.world().resource::<Tour>().phase
+        };
+        let _one = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        assert_eq!(run(false), Phase::Leaving, "skipped");
+        assert_eq!(run(true), Phase::Playing, "played");
+        let _ = std::fs::remove_dir_all(&data);
     }
 
     /// The tour is a sandbox: no station has a career to save to.

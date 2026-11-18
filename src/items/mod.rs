@@ -6,8 +6,10 @@ pub mod handled;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
+pub mod pen;
 pub mod rest;
 pub mod rounds;
+pub mod stim;
 pub mod usage;
 
 use avian3d::prelude::*;
@@ -59,6 +61,8 @@ impl Plugin for ItemsPlugin {
             damp::DampPlugin,
             rounds::RoundsPlugin,
             handled::HandledPlugin,
+            pen::PenPlugin,
+            stim::StimPlugin,
         ));
     }
 }

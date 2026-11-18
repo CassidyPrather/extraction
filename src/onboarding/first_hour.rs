@@ -2263,10 +2263,11 @@ pub(super) fn direct_raid(
         // (Nor with a crawler charging at it.)
         && !crawler_at_it(now, state.crawled_at)
     {
-        let injector = world.items.iter().find(|(_, it, _, held, sock, _)| {
+        let injector = world.items.iter().find(|(e, it, _, held, sock, _)| {
             held.is_none()
                 && sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
                 && world.catalog.get(it.kind()).id == "regen_injector"
+                && world.pen_loaded(*e)
         });
         if let Some((e, ..)) = injector {
             state.healed_at = now;

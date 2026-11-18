@@ -252,6 +252,18 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
                 }
             }
         }
+        // A halo's sphere is drawn its aureole's spread bigger, about the
+        // lamp, in its vertex shader (`world::halos::spread`).
+        if let Some(h) = w.get::<MeshMaterial3d<crate::world::halos::HaloMaterial>>(e) {
+            let s = w
+                .resource::<Assets<crate::world::halos::HaloMaterial>>()
+                .get(&h.0)
+                .map_or(1.0, |m| m.params.air.z.max(1.0));
+            let centre = model.translation;
+            for p in world.iter_mut() {
+                *p = Vec3::from(centre) + (*p - Vec3::from(centre)) * s;
+            }
+        }
         // Impostors turn to face the eye in their vertex shader.
         if w.get::<MeshMaterial3d<crate::world::impostors::ImpostorMaterial>>(e)
             .is_some()

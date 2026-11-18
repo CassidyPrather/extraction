@@ -125,8 +125,11 @@ fn drive_hand_bodies(
     )>,
     layers: Query<&CollisionLayers>,
     time: Res<Time>,
+    pace: Option<Res<crate::items::stim::WorldPace>>,
 ) {
     let dt = time.delta_secs().max(1e-4);
+    // In a stim, as fast as your own hand in real time (`items::stim`).
+    let own = pace.map_or(1.0, |p| p.own());
     for (e, mut body, mut pos, mut rot, mut lin, mut ang) in &mut bodies {
         let Ok((hand, gripping)) = hands.get(body.hand) else {
             commands.entity(e).despawn();
@@ -166,21 +169,28 @@ fn drive_hand_bodies(
             pos.0 = target.translation;
             rot.0 = target.rotation;
         }
-        lin.0 = ((target.translation - pos.0) / dt).clamp_length_max(MAX_SPEED);
+        lin.0 = ((target.translation - pos.0) / dt).clamp_length_max(MAX_SPEED * own);
         let dq = target.rotation * rot.0.inverse();
         let (axis, mut angle) = dq.to_axis_angle();
         if angle > std::f32::consts::PI {
             angle -= std::f32::consts::TAU;
         }
-        ang.0 = (axis * angle / dt).clamp_length_max(MAX_SPIN);
+        ang.0 = (axis * angle / dt).clamp_length_max(MAX_SPIN * own);
     }
 }
 
 /// Where each hand's body ended up this tick: the hand you see.
-fn feel_hands(bodies: Query<(&HandBody, &Position, &Rotation)>, mut hands: Query<&mut Hand>) {
+fn feel_hands(
+    bodies: Query<(&HandBody, &Position, &Rotation)>,
+    mut hands: Query<&mut Hand>,
+    pace: Option<Res<crate::items::stim::WorldPace>>,
+) {
+    // In a stim the world's ticks come less often than frames: the glove
+    // goes where your hand is every frame instead (`items::stim`).
+    let stimmed = pace.is_some_and(|p| p.0 < 1.0);
     for (body, pos, rot) in &bodies {
         if let Ok(mut hand) = hands.get_mut(body.hand) {
-            let felt = if hand.holding.is_some() || hand.handle.is_some() {
+            let felt = if stimmed || hand.holding.is_some() || hand.handle.is_some() {
                 None
             } else {
                 Some(Transform::from_translation(pos.0).with_rotation(rot.0))
