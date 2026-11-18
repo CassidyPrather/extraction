@@ -2420,8 +2420,8 @@ struct Wisp {
 
 /// How long a wisp lasts, s, and how often a hot stone gives one off in
 /// the rain (at full heat; less often as it cools).
-const WISP_LIFE: f32 = 1.4;
-const WISP_EVERY: f32 = 0.12;
+const WISP_LIFE: f32 = 1.0;
+const WISP_EVERY: f32 = 0.05;
 
 /// Hot stones in the rain steam as they cool (`harvest::HOT_RAIN`): a few
 /// pale wisps off each, one shared mesh and material.
@@ -2473,10 +2473,10 @@ fn steam(
     let (mesh, material) = look
         .get_or_insert_with(|| {
             (
-                meshes.add(Rectangle::new(0.14, 0.14)),
+                meshes.add(Rectangle::new(0.2, 0.2)),
                 materials.add(StandardMaterial {
-                    base_color: Color::srgba(0.9, 0.92, 0.94, 0.22),
-                    base_color_texture: Some(radial_texture(&mut images)),
+                    base_color: Color::srgba(0.9, 0.92, 0.94, 0.14),
+                    base_color_texture: Some(dot_texture(&mut images)),
                     alpha_mode: AlphaMode::Blend,
                     unlit: true,
                     double_sided: true,
@@ -2497,7 +2497,7 @@ fn steam(
             Name::new("Steam"),
             Wisp {
                 age: 0.0,
-                rise: Vec3::new(j(3) * 0.2, 0.35 + 0.2 * grain_at(*seed, 4), j(5) * 0.2),
+                rise: Vec3::new(j(3) * 0.15, 0.18 + 0.12 * grain_at(*seed, 4), j(5) * 0.15),
             },
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),
