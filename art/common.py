@@ -95,6 +95,9 @@ MATERIALS = {
     "Regen": ((0.1, 0.8, 0.18), 0.0, 0.5, None),
     "Stim": ((0.7, 0.27, 0.0), 0.0, 0.5, None),
     "Vial": ((0.6, 0.62, 0.6), 0.0, 0.1, None),
+    # The engineer's scan lamp rim (#98): the machines' orange-red lit tell
+    # (the searchlights'); Robot bodies light it while it surveys.
+    "ScanRim": ((0.91, 0.34, 0.16), 0.0, 0.4, (0.91, 0.34, 0.16)),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
     # A car's weathered paint (src/models.rs: the painted-metal relief).
     "CarBlue": ((0.21, 0.29, 0.4), 0.25, 0.6, None),
