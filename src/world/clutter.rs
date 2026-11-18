@@ -1137,7 +1137,8 @@ const HANDCART: YardThing = thing("handcart", 0.53, 1.04, false);
 const HAND_PUMP: YardThing = thing("hand_pump", 0.42, 0.72, false);
 const DOG_KENNEL: YardThing = thing("dog_kennel", 0.53, 0.57, false);
 const TUB_IRON: YardThing = thing("tub_iron", 0.75, 0.36, true);
-const COAL_BUNKER: YardThing = thing("coal_bunker", 0.64, 0.72, true);
+// (Its hatch is its own, lifting: `hinge::fit_counters`.)
+const COAL_BUNKER: YardThing = thing("coal_bunker#carcass", 0.64, 0.72, true);
 const SNOW_SHOVEL: YardThing = thing("snow_shovel_out", 0.24, 0.21, true);
 const SLEDGE: YardThing = thing("sledge", 0.24, 0.63, false);
 

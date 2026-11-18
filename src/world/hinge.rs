@@ -571,6 +571,16 @@ const COUNTER_NODES: &[CounterNode] = &[
         Frame::SideLid,
         Motion::Hinge { most: BIN_LID },
     ),
+    // A coal bunker's hatch (`art/props/yards.py` `BUNKER_HATCH`), hinged
+    // along its top edge, its foot lifting out.
+    CounterNode(
+        "coal_bunker#hatch",
+        [0.1, 0.28, -0.462],
+        [0.0, -0.13, 0.0],
+        [0.36, 0.26, 0.016],
+        Frame::Lid,
+        Motion::Hinge { most: BUNKER_HATCH },
+    ),
     CounterNode(
         "counter_cabinet#door_l",
         [-0.284, 0.455, -0.298],
@@ -629,20 +639,32 @@ pub const STOVE_DOOR: f32 = 1.7;
 pub const CHEST_LID: f32 = 1.6;
 /// How far a wheelie bin's lid lifts, radians: back over its handle.
 pub const BIN_LID: f32 = 2.0;
+/// How far a coal bunker's hatch lifts, radians: out to level.
+pub const BUNKER_HATCH: f32 = 1.5;
 
 /// A building's counters' drawers and cabinet doors, put up as moving
 /// parts when it's placed (the building draws only their carcasses:
 /// `Builder::counter`).
 pub fn fit_counters(
     mut commands: Commands,
+    zone: Option<Res<super::Zone>>,
     buildings: Query<(&super::buildings::Building, &Transform), Added<super::buildings::Building>>,
 ) {
     for (b, bxf) in &buildings {
         let Some(geo) = super::buildings::prefab(&b.prefab) else {
             continue;
         };
-        for d in &geo.props {
-            for (name, xf) in &d.models {
+        // Its furniture, and its yard's things (a coal bunker's hatch).
+        let mut sets: Vec<(Vec<(&'static str, Transform)>, std::ops::Range<usize>)> = geo
+            .props
+            .iter()
+            .map(|d| (d.models.clone(), d.pieces.clone()))
+            .collect();
+        if let Some(zone) = &zone {
+            sets.push((super::buildings::yard_models(zone, &b.prefab, bxf), 0..0));
+        }
+        for (models, own) in &sets {
+            for (name, xf) in models {
                 let Some(model) = name.strip_suffix("#carcass") else {
                     continue;
                 };
@@ -652,7 +674,7 @@ pub fn fit_counters(
                     .filter(|n| n.0.starts_with(model) && n.0[model.len()..].starts_with('#'))
                 {
                     // As far as it opens clear of the building round it.
-                    let clear = clear_end(&geo.pieces, &d.pieces, xf, n);
+                    let clear = clear_end(&geo.pieces, own, xf, n);
                     let motion = match n.5 {
                         Motion::Hinge { .. } => Motion::Hinge { most: clear },
                         Motion::Slide { .. } => Motion::Slide { travel: clear },

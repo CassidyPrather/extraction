@@ -613,6 +613,7 @@ pub fn handles() -> Vec<Handle> {
             "stove" => ("Steel", "Cast"),
             "tool_chest" => ("Steel", "Painted"),
             "wheelie_bin" => ("Rubber", "Olive"),
+            "coal_bunker" => ("Iron", "Boards"),
             _ => ("Zinc", "Painted"),
         };
         let shown = model_points(

@@ -6281,6 +6281,27 @@ const LOOT_CLEAR: f32 = 0.55;
 /// corner over a hill (the slag heaps' anomaly) had its loot spawned inside
 /// the hill, falling through it (`docs/SOAK.md`). Underground sites' spots
 /// are under the ground on purpose.
+/// A placed building's map tag (its placement's, found by where it is).
+pub fn placement_tag<'a>(zone: &'a Zone, prefab: &str, at: Vec2) -> &'a str {
+    zone.map
+        .placements
+        .iter()
+        .find(|p| p.prefab == prefab && Vec2::from(p.at).distance(at) < 0.5)
+        .map_or("", |p| p.tag.as_str())
+}
+
+/// A placed building's yard (`clutter::yard`), in its own space: drawn
+/// with it, and its things' moving parts fitted (`hinge::fit_counters`).
+pub fn yard_models(zone: &Zone, prefab: &str, xf: &Transform) -> Vec<(&'static str, Transform)> {
+    let hm = &zone.hm;
+    let ground = |p: Vec2| {
+        let p = [p.x, p.y];
+        hm.water_level(p).is_none().then(|| hm.height(p))
+    };
+    let tag = placement_tag(zone, prefab, Vec2::new(xf.translation.x, xf.translation.z));
+    super::clutter::yard(&zone.map, prefab, tag, xf, &ground)
+}
+
 pub fn loot_spot_at(zone: &Zone, t: &Transform, local: Vec3) -> Vec3 {
     let mut at = clear_of_notes(&zone.map, t.transform_point(local));
     if crate::world::underground::floor_under(zone, at).is_none() {
@@ -6917,12 +6938,7 @@ pub fn dress_buildings(
         // furniture.
         if let Some(zone) = &zone {
             let at = Vec2::new(xf.translation.x, xf.translation.z);
-            let tag = zone
-                .map
-                .placements
-                .iter()
-                .find(|p| p.prefab == b.prefab && Vec2::from(p.at).distance(at) < 0.5)
-                .map_or("", |p| p.tag.as_str());
+            let tag = placement_tag(zone, &b.prefab, at);
             let ending = epilogue.as_ref().is_some_and(|e| e.done);
             let models = super::clutter::dress(&zone.map, &b.prefab, tag, xf, ending);
             if !models.is_empty() {
@@ -6936,12 +6952,7 @@ pub fn dress_buildings(
                 });
             }
             // Its yard (`clutter::yard`), out in the sun.
-            let hm = &zone.hm;
-            let ground = |p: Vec2| {
-                let p = [p.x, p.y];
-                hm.water_level(p).is_none().then(|| hm.height(p))
-            };
-            let models = super::clutter::yard(&zone.map, &b.prefab, tag, xf, &ground);
+            let models = yard_models(zone, &b.prefab, xf);
             if !models.is_empty() {
                 let n = geo.pieces.len();
                 geo.props.push(PropDef {

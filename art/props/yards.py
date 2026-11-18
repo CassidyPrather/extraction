@@ -573,9 +573,17 @@ def tub_iron():
 
 # --- Kettle's coal bunker ---------------------------------------------------------------------
 
+# A coal bunker's hatch's hinge, along its top edge (`coal_bunker#hatch`).
+BUNKER_HATCH = (0.1, 0.28, -0.462)
+
+
 def coal_bunker():
+    """A yard's coal bunker (`clutter::COAL_BUNKER`): its body (`carcass`)
+    and the hatch at the foot of its front (`hatch`), its own node hinged
+    along its top edge, lifting out by the bar at its foot
+    (`world::hinge`); coal behind it and spilled out of it."""
     w = Wear(401)
-    p = Part("static")
+    p = Part("carcass")
     hf, hb, d = 0.7, 0.9, 0.45
     p.prism([(-d, 0.0), (d, 0.0), (d, hb), (-d, hf)], -0.6, 0.6, "Planks", axis="x")
     for sx in (-1, 1):
@@ -588,14 +596,21 @@ def coal_bunker():
     for sx in (-1, 1):
         p.box((0.62, 0.025, run), (0, 0, 0), "Boards",
               xf=T(sx * 0.31, (hf + hb) / 2 + off, 0.0) @ RX(-a) @ RZ(w.j(0.01)))
-    # The hatch at the foot of the front, coal spilled out of it.
-    p.box((0.36, 0.26, 0.016), (0.1, 0.15, -d - 0.008), "Boards", bevel=0.003, segs=1)
+    # The hatch at the foot of the front, the coal behind it (apart from
+    # it: it lifts clear), coal spilled out of it.
+    p.box((0.34, 0.24, 0.002), (0.1, 0.15, -d - 0.002), "Black", segs=1)
+    hatch = Part("hatch", origin=BUNKER_HATCH)
+    hatch.box((0.36, 0.26, 0.016), (0.1, 0.15, -d - 0.012), "Boards", bevel=0.003, segs=1)
+    # Its bar: a gloved hand round it (`capture::checks::HANDLE_THICK`).
+    for x in (0.0, 0.2):
+        rod(hatch, (x, 0.11, -d - 0.02), (x, 0.11, -d - 0.054), 0.008, "Iron", segs=8)
+    rod(hatch, (0.0, 0.11, -d - 0.054), (0.2, 0.11, -d - 0.054), 0.011, "Iron", segs=8)
     for k, (x, z, s) in enumerate(((0.05, -0.5, 0.07), (0.16, -0.52, 0.06),
                                    (0.1, -0.6, 0.055), (-0.02, -0.58, 0.05),
                                    (0.22, -0.6, 0.045), (0.13, -0.68, 0.04))):
         p.sphere(1.0, (0, 0, 0), "Black", segs=5, rings=3,
                  xf=T(x, s * 0.5, z) @ S(s, s * 0.7, s))
-    return [p]
+    return [p, hatch]
 
 
 for name, build in (("clothes_line", clothes_line), ("clothes_line_bare", clothes_line_bare),
