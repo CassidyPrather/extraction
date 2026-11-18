@@ -2430,15 +2430,18 @@ fn steam(
     mut commands: Commands,
     stones: Query<(&GlobalTransform, &super::harvest::Hot)>,
     mut wisps: Query<(Entity, &mut Wisp, &mut Transform)>,
+    eyes: Query<&GlobalTransform, With<Camera3d>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
     mut since: Local<f32>,
     mut seed: Local<u32>,
 ) {
     let dt = time.delta_secs();
+    let eye = eyes.iter().next().map(|g| g.translation());
     for (e, mut w, mut t) in &mut wisps {
         w.age += dt;
         if w.age >= WISP_LIFE {
@@ -2447,8 +2450,14 @@ fn steam(
         }
         let k = w.age / WISP_LIFE;
         t.translation += w.rise * dt;
-        // Swells, then thins to nothing.
+        // Swells, then thins to nothing; a soft quad, turned to the eye.
         t.scale = Vec3::splat((0.4 + 1.6 * k) * (1.0 - k * k));
+        if let Some(eye) = eye {
+            let to = eye - t.translation;
+            if to.length_squared() > 1e-4 {
+                t.rotation = Transform::IDENTITY.looking_to(-to, Vec3::Y).rotation;
+            }
+        }
     }
     let raining = conditions
         .as_ref()
@@ -2464,11 +2473,14 @@ fn steam(
     let (mesh, material) = look
         .get_or_insert_with(|| {
             (
-                meshes.add(Sphere::new(0.05).mesh().ico(1).unwrap()),
+                meshes.add(Rectangle::new(0.14, 0.14)),
                 materials.add(StandardMaterial {
-                    base_color: Color::srgba(0.92, 0.93, 0.95, 0.35),
+                    base_color: Color::srgba(0.9, 0.92, 0.94, 0.22),
+                    base_color_texture: Some(radial_texture(&mut images)),
                     alpha_mode: AlphaMode::Blend,
                     unlit: true,
+                    double_sided: true,
+                    cull_mode: None,
                     ..default()
                 }),
             )
