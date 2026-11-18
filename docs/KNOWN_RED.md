@@ -28,7 +28,6 @@ How it works:
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
-| `render::vr_budget` gauge_steam_banks_hold_the_stereo_budget (#[ignore]): steam bank inside (Kettle) 104% fragments | 2d2f8835 | Anomalies | mode-8 size cap 20° in 2c577d29 (gate 345); Performance to re-measure |
 | `vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached`: drone robot_cell (Live) unseen, out of reach (0.03 m up, under the hull) | bb51307b (lib343) | Heavy | playtest-relevant |
 | `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | bb51307b (lib343) | Heavy | |
 
@@ -77,3 +76,4 @@ How it works:
 | `soak::quiet` no_session_logs_a_warning, no_valley_logs_an_error_without_the_downloads: "Unknown vertex attribute COLOR_" (bevy_gltf) | Arcade 12c412e5 (COLOR_0 only); passes on d6bdf8ef (lib344) |
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | gone: no build warnings since gate 342b (10957625) |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | gone: no build warnings since gate 342b (10957625) |
+| steam-bank gauge, Kettle inside 104% fragments | Anomalies 2c577d29 (20° cap) + Performance dd57552d (replay cap): worst 69% inside, ≤34% at 10 m |
