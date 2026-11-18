@@ -85,6 +85,11 @@ pub enum Category {
 pub struct ItemDef {
     /// Stable string id used by data files and saves (`"pm_pistol"`).
     pub id: String,
+    /// Retired ids this item replaces (#105): an old save, loot row or
+    /// recipe naming one gets this item. [`ItemCatalog::kind`] resolves
+    /// them; nothing new should name one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
     pub name: String,
     #[serde(default)]
     pub description: String,
@@ -231,6 +236,13 @@ impl ItemCatalog {
             }
             validate(def)?;
         }
+        for (i, def) in defs.iter().enumerate() {
+            for a in &def.aliases {
+                if by_id.insert(a.clone(), ItemKind(i as u16)).is_some() {
+                    return Err(CatalogError::DuplicateId(a.clone()));
+                }
+            }
+        }
         Ok(Self { defs, by_id })
     }
 
@@ -238,6 +250,7 @@ impl ItemCatalog {
         &self.defs[kind.0 as usize]
     }
 
+    /// The item `id` names, or the one that replaced it (`aliases`).
     pub fn kind(&self, id: &str) -> Option<ItemKind> {
         self.by_id.get(id).copied()
     }
@@ -247,6 +260,11 @@ impl ItemCatalog {
     pub fn expect(&self, id: &str) -> ItemKind {
         self.kind(id)
             .unwrap_or_else(|| panic!("no item with id `{id}` in the catalog"))
+    }
+
+    /// Whether `id` is a retired id (an alias) rather than an item's own.
+    pub fn is_alias(&self, id: &str) -> bool {
+        self.kind(id).is_some_and(|k| self.get(k).id != id)
     }
 
     pub fn len(&self) -> usize {
@@ -327,6 +345,43 @@ pub const BUILTIN_CATALOG: &str = include_str!("../../../assets/data/items.ron")
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The ids #105 retired still name their item (an old save loads them),
+    /// and no data file names one any more.
+    #[test]
+    fn every_retired_id_resolves_and_nothing_names_one() {
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        for (old, new) in [
+            ("rotor_assembly", "drone_rotor_motor"),
+            ("servo", "hound_hip_servo"),
+            ("sensor_eye", "walker_eye"),
+            ("multitool", "spanner"),
+        ] {
+            assert_eq!(cat.kind(old), Some(cat.expect(new)), "{old}");
+            assert!(cat.is_alias(old) && !cat.is_alias(new));
+        }
+        let files = [
+            ("loot.ron", include_str!("../../../assets/data/loot.ron")),
+            (
+                "scenes.ron",
+                include_str!("../../../assets/data/scenes.ron"),
+            ),
+            ("fabrication.rs", include_str!("fabrication.rs")),
+            ("progression.rs", include_str!("progression.rs")),
+        ];
+        for (_, def) in cat.iter() {
+            for a in &def.aliases {
+                assert!(cat.kind(a).is_some());
+                for (name, text) in files {
+                    assert!(
+                        !text.contains(&format!("\"{a}\"")),
+                        "{name} names the retired id `{a}` (it's `{}` now)",
+                        def.id
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn builtin_catalog_loads() {

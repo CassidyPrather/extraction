@@ -804,11 +804,6 @@
             tags: ["metal"],
         ),
         (
-            id: "multitool", dims: Some((0.078, 0.018, 0.115)), name: "Multitool",
-            category: Tool, size: Small, mass: 0.25, bulk: 0.1,
-            tags: ["metal"],
-        ),
-        (
             id: "crowbar", dims: Some((0.022, 0.037, 0.747)), name: "Crowbar",
             description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
             category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
@@ -869,7 +864,7 @@
             tags: ["steel"],
         ),
         (
-            id: "spanner", dims: Some((0.036, 0.013, 0.279)), name: "Spanner",
+            id: "spanner", aliases: ["multitool"], dims: Some((0.036, 0.013, 0.279)), name: "Spanner",
             description: "A ring spanner. Head on the bolt, swing the handle round it: a turn or two and it's out. A robot's servo packs are bolted on.",
             category: Tool, size: Small, mass: 0.5, bulk: 0.3,
             tags: ["steel"],
@@ -919,24 +914,7 @@
         // Robot parts
         // ---------------------------------------------------------------
         (
-            id: "rotor_assembly", name: "Rotor assembly",
-            description: "A drone's motor, still spinning down.",
-            category: RobotPart, size: Small, mass: 0.4, bulk: 0.6,
-            tags: ["electronics", "metal"],
-        ),
-        (
-            id: "servo", dims: Some((0.082, 0.073, 0.05)), name: "Servo actuator",
-            category: RobotPart, size: Small, mass: 0.6, bulk: 0.4,
-            tags: ["electronics", "metal"],
-        ),
-        (
-            id: "sensor_eye", name: "Sensor eye",
-            description: "The lens still tracks movement for a few seconds after you pull it.",
-            category: RobotPart, size: Small, mass: 0.3, bulk: 0.25,
-            tags: ["electronics", "glass"],
-        ),
-        (
-            id: "walker_eye", dims: Some((0.128, 0.103, 0.128)), name: "Walker eye",
+            id: "walker_eye", aliases: ["sensor_eye"], dims: Some((0.128, 0.103, 0.128)), name: "Walker eye",
             description: "A walker's eye, pulled from its orb. The lens is good glass; the red behind it still follows you a little.",
             category: RobotPart, size: Small, mass: 0.6, bulk: 1.0,
             tags: ["electronics", "glass"],
@@ -962,7 +940,7 @@
         // One part per class, dropped by a robot's part still alive when it
         // dies (robots/wreck.rs).
         (
-            id: "drone_rotor_motor", dims: Some((0.251, 0.082, 0.249)), name: "Drone rotor motor",
+            id: "drone_rotor_motor", aliases: ["rotor_assembly"], dims: Some((0.251, 0.082, 0.249)), name: "Drone rotor motor",
             description: "A drone's motor on its snapped struts, a curl of the duct still on it. The windings are good.",
             category: RobotPart, size: Small, mass: 0.5, bulk: 0.8,
             tags: ["electronics", "metal"],
@@ -986,7 +964,7 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "hound_hip_servo", dims: Some((0.133, 0.171, 0.07)), name: "Hound hip servo",
+            id: "hound_hip_servo", aliases: ["servo"], dims: Some((0.133, 0.171, 0.07)), name: "Hound hip servo",
             description: "A hound's hip motor, flat as a tin and stamped HD SRV. It was made to run all night.",
             category: RobotPart, size: Small, mass: 0.9, bulk: 0.6,
             tags: ["electronics", "metal"],

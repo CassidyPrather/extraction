@@ -1474,7 +1474,7 @@ mod tests {
             let part = piece(&mut c, 0.0);
             let plain = piece(&mut c, 2.0);
             c.entity(part).insert(SalvagePart {
-                item: "servo",
+                item: "hound_hip_servo",
                 bolts: 4,
                 cables: 0,
                 pry: false,
@@ -1762,7 +1762,7 @@ mod tests {
                     &mut c,
                     &catalog,
                     crate::items::SpawnItem {
-                        kind: catalog.kind("servo").unwrap(),
+                        kind: catalog.kind("hound_hip_servo").unwrap(),
                         transform: Transform::from_translation(
                             zone.on_ground(item_at.x, item_at.y) + Vec3::Y * 0.2,
                         ),

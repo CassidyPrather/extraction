@@ -48,21 +48,21 @@ pub const RECIPES: &[Recipe] = &[
     Recipe {
         id: "strip_rotor",
         name: "Strip rotor assembly",
-        needs: &[(Need::Item("rotor_assembly"), 1)],
+        needs: &[(Need::Item("drone_rotor_motor"), 1)],
         makes: Make::Items(&[("electronics", 1)]),
         seconds: 4.0,
     },
     Recipe {
         id: "strip_servo",
         name: "Strip servo",
-        needs: &[(Need::Item("servo"), 1)],
+        needs: &[(Need::Item("hound_hip_servo"), 1)],
         makes: Make::Items(&[("scrap_metal", 1)]),
         seconds: 4.0,
     },
     Recipe {
         id: "strip_eye",
         name: "Strip sensor eye",
-        needs: &[(Need::Item("sensor_eye"), 1)],
+        needs: &[(Need::Item("walker_eye"), 1)],
         makes: Make::Items(&[("electronics", 1)]),
         seconds: 4.0,
     },
@@ -106,25 +106,19 @@ pub const RECIPES: &[Recipe] = &[
         id: "strip_actuator",
         name: "Strip a leg actuator",
         needs: &[(Need::Item("walker_leg_actuator"), 1)],
-        makes: Make::Items(&[("servo", 1), ("scrap_metal", 2)]),
+        makes: Make::Items(&[("hound_hip_servo", 1), ("scrap_metal", 2)]),
         seconds: 8.0,
     },
     Recipe {
         id: "strip_servo_pack",
         name: "Strip a servo pack",
         needs: &[(Need::Item("sorter_servo_pack"), 1)],
-        makes: Make::Items(&[("servo", 2), ("scrap_metal", 4)]),
+        makes: Make::Items(&[("hound_hip_servo", 2), ("scrap_metal", 4)]),
         seconds: 12.0,
     },
     // --- Breaking spares down ------------------------------------------
-    // (A second multitool or torch is clutter; its insides aren't.)
-    Recipe {
-        id: "strip_multitool",
-        name: "Break two multitools for parts",
-        needs: &[(Need::Item("multitool"), 2)],
-        makes: Make::Items(&[("spare_parts", 1)]),
-        seconds: 6.0,
-    },
+    // (A second torch is clutter; its insides aren't. The multitool is a
+    // spanner now, #105, and a spanner's worth keeping.)
     Recipe {
         id: "strip_flashlight",
         name: "Gut two flashlights",
@@ -209,7 +203,7 @@ pub const VICE_RECIPES: &[Recipe] = &[
         needs: &[
             (Need::Item("electronics"), 2),
             (Need::Item("robot_cell"), 1),
-            (Need::Item("servo"), 1),
+            (Need::Item("hound_hip_servo"), 1),
         ],
         makes: Make::Items(&[("emp_trap", 1)]),
         seconds: 16.0,

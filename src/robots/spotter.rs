@@ -539,7 +539,7 @@ fn spotter_salvage(
             .any(|(p, c)| c.parent() == ev.spotter && p.role == PartRole::Sensor && p.alive());
         let mut drops = vec!["dirigible_gas_valve", "polymer", "polymer"];
         if eye_whole {
-            drops.push("sensor_eye");
+            drops.push("walker_eye");
         }
         for (k, id) in drops.into_iter().enumerate() {
             let Some(kind) = catalog.kind(id) else {
@@ -797,6 +797,6 @@ pub(crate) mod tests {
             .map(|(i, _)| catalog.get(i.kind()).id.clone())
             .collect();
         assert!(near.iter().any(|s| s == "dirigible_gas_valve"), "{near:?}");
-        assert!(near.iter().any(|s| s == "sensor_eye"), "{near:?}");
+        assert!(near.iter().any(|s| s == "walker_eye"), "{near:?}");
     }
 }

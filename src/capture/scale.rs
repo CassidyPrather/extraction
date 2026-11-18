@@ -156,7 +156,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("cleaning_kit", 0.25, Hand, "a cleaning kit roll"),
     ("gun_oil", 0.08, Hand, "an oil can"),
     ("spare_parts", 0.1, Hand, "a tin of spare parts"),
-    ("multitool", 0.1, Hand, "a folded multitool"),
     ("crowbar", 0.76, Hand, "a 750 mm crowbar"),
     ("bolt_cutters", 0.61, Hand, "24-inch bolt cutters"),
     ("hacksaw", 0.45, Hand, "a hacksaw"),
@@ -190,9 +189,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("car_wheel", 0.6, Hand, "a Lada's wheel"),
     ("car_bonnet", 1.3, Hand, "a Lada's bonnet"),
     // The machines' parts and the Zone's artifacts: made up.
-    ("rotor_assembly", 0.1, Made, "a drone rotor hub"),
-    ("servo", 0.08, Made, "a servo"),
-    ("sensor_eye", 0.06, Made, "a sensor eye"),
     ("robot_cell", 0.186, Made, "a walker's robot cell"),
     ("walker_eye", 0.128, Made, "a walker's eye"),
     ("robot_gunpod", 1.08, Made, "a robot's gun pod"),
