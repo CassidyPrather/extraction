@@ -68,6 +68,9 @@ MATERIALS = {
     "Tip": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
     "TipBand": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
     "Hull": ((0.5, 0.06, 0.04), 0.0, 0.6, None),
+    # White, for a far stand-in whose colours are baked into its vertex
+    # colours (one draw: `art/items/ammo.py`'s `merged`).
+    "Baked": ((1.0, 1.0, 1.0), 0.0, 0.7, None),
     "Glow": ((0.1, 0.4, 0.5), 0.0, 0.3, (0.2, 0.8, 1.0)),
     "Rope": ((0.5, 0.42, 0.28), 0.0, 0.9, None),
     "Cream": ((0.82, 0.78, 0.66), 0.0, 0.6, None),

@@ -237,6 +237,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Tip",
     "TipBand",
     "Hull",
+    // White, its colours in its vertex colours: a box of rounds' far
+    // stand-in, one draw (`art/items/ammo.py`'s `merged`).
+    "Baked",
     "Dark",
     "Rotor",
     "Lens",
@@ -528,6 +531,7 @@ impl ModelMaterials {
                 flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32)
             }
             "Hull" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
+            "Baked" => flat(materials, Color::WHITE, 0.0, 0.7),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
             // Retroreflective tape by day: a pale cool grey, its beads a
             // little glossy (`render::reflectors` lights it for a torch).
