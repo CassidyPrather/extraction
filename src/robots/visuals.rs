@@ -40,7 +40,11 @@ impl Plugin for RobotVisualsPlugin {
                 super::wear::WearPlugin,
                 super::distress_look::DistressLookPlugin,
                 super::searchlight_look::SearchlightLookPlugin,
-                super::lines::LinesPlugin,
+                (
+                    super::lines::LinesPlugin,
+                    super::engineer_look::EngineerLookPlugin,
+                    super::builds::BuildsPlugin,
+                ),
             ))
             .add_systems(
                 Update,
@@ -293,7 +297,7 @@ fn dress_parts(
         ),
         With<Undressed>,
     >,
-    robots: Query<&Robot>,
+    robots: Query<(&Robot, Has<super::engineer_body::Engineer>)>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
     gltfs: Res<Assets<Gltf>>,
@@ -321,7 +325,7 @@ fn dress_parts(
     };
     let mut cache: Vec<(RobotKind, Option<Vec<ModelNode>>)> = Vec::new();
     for (e, part, gun, turret, leg, emitter) in &parts {
-        let Ok(robot) = robots.get(part.robot) else {
+        let Ok((robot, engineer)) = robots.get(part.robot) else {
             continue;
         };
         // The model's nodes, or None for the blockout; skip while loading.
@@ -389,7 +393,9 @@ fn dress_parts(
         let crawler = crawlers.contains(part.robot);
         // (And a grappler's a winch, a wide low box.)
         let grappler = grapplers.contains(part.robot);
+        // (An engineer's hull is its own: `engineer_look` dresses it.)
         let node_name = match (robot.kind, part.role) {
+            (_, PartRole::Core) if engineer => continue,
             (RobotKind::Sorter, PartRole::Core) => "carriage",
             (RobotKind::Sorter, PartRole::Sensor) => "head",
             (_, PartRole::Core) if hound => "hound_body",

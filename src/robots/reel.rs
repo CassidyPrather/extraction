@@ -484,6 +484,74 @@ fn reel(
                 commands.entity(e).remove::<Senses>().remove::<Brain>();
                 e
             }
+            "engineer" | "engineerwork" => {
+                // The engineer (#98) 5 m off, side-on to you: as it walks
+                // out (`engineer`), or surveying with its lamp lit and
+                // hammering (`engineerwork`).
+                let at = eye + flat * 4.0;
+                let e = super::engineer_body::spawn_engineer(&mut commands, &zone, at, job(at));
+                // (It stands for its picture, side-on: no brain to walk it.)
+                commands.entity(e).remove::<Senses>().remove::<Brain>();
+                if what == "engineerwork" {
+                    commands.entity(e).insert((
+                        super::engineer_body::ScanLamp {
+                            on: true,
+                            aim: Some(at + right * 2.5 - flat * 1.0),
+                        },
+                        super::engineer_body::Hammering(true),
+                    ));
+                }
+                e
+            }
+            "barricade" | "camera" => {
+                // The engineer's builds (#98, `builds`), each stage in a row
+                // 6 m in front of you, side by side: a barricade's struts,
+                // half its panels, its panels, done with its strap; a
+                // camera's mast, its head and lit cone, done with its cable
+                // and a fix building on you.
+                use super::builds::{Build, BuildKind, CameraAim, CameraCable};
+                let stages: &[f32] = if what == "barricade" {
+                    &[0.2, 0.55, 0.8, 1.0]
+                } else {
+                    &[0.25, 0.5, 1.0]
+                };
+                let gap = if what == "barricade" { 4.2 } else { 3.0 };
+                let mut first = None;
+                for (i, &p) in stages.iter().enumerate() {
+                    let x = (i as f32 - (stages.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * 7.0 + right * x;
+                    let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
+                    // Facing you (its -Z toward the eye).
+                    let face = Transform::from_translation(at).looking_to(-flat, Vec3::Y);
+                    let kind = if what == "barricade" {
+                        BuildKind::Barricade
+                    } else {
+                        BuildKind::Camera
+                    };
+                    let mut e = commands.spawn((
+                        Name::new("Reel build"),
+                        Build { kind, progress: p },
+                        face,
+                        Visibility::default(),
+                    ));
+                    if kind == BuildKind::Camera {
+                        let to = at + right * 1.4 + flat * 2.0;
+                        e.insert((
+                            CameraAim {
+                                yaw: 0.35 - 0.35 * i as f32,
+                                pitch: -0.3,
+                                fix: if p >= 1.0 { 0.8 } else { 0.0 },
+                                ..Default::default()
+                            },
+                            CameraCable {
+                                to: Vec3::new(to.x, zone.ground(to.x, to.z) + 0.3, to.z),
+                            },
+                        ));
+                    }
+                    first.get_or_insert(e.id());
+                }
+                first.unwrap()
+            }
             "lines" => {
                 // One line body (`lines`, #101), hung in a row 3 m in front
                 // of you: rope whole and half through, then cable whole

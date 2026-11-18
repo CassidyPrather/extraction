@@ -84,7 +84,14 @@ pub enum Shape {
     /// under its rim (Models' `crawler_core`). Narrower afoot than a
     /// walker: it goes through doors.
     Crawler,
+    /// The engineer's long low hull (`engineer_body`, #98): a pale work
+    /// cart on four short legs at its corners, longer than wide, its kit
+    /// bundled on its back. Slow and careful: a worker, not a fighter.
+    Engineer,
 }
+
+/// The engineer's hips (robot space at size 1): the hull's lower corners.
+pub const ENGINEER_HIP: Vec3 = Vec3::new(0.24, -0.14, 0.5);
 
 /// The grappler's hips (robot space at size 1): the winch box's lower
 /// corners, where Models' sockets are.
@@ -102,6 +109,10 @@ impl Shape {
                     + Vec3::Y * GRAPPLER_HIP.y
             }
             Shape::Crawler => hip_offset(i),
+            Shape::Engineer => {
+                quadrant(i) * Vec3::new(ENGINEER_HIP.x, 0.0, ENGINEER_HIP.z)
+                    + Vec3::Y * ENGINEER_HIP.y
+            }
         }
     }
     /// Where foot `i` rests, standing (robot space, at size 1).
@@ -112,6 +123,7 @@ impl Shape {
             Shape::Heavy => quadrant(i) * Vec3::new(0.9, 0.0, 0.9),
             Shape::Grappler => rest_offset(i) * 1.35,
             Shape::Crawler => rest_offset(i) * 0.75,
+            Shape::Engineer => quadrant(i) * Vec3::new(0.4, 0.0, 0.66),
         }
     }
     /// How high the body rides, at size 1.
@@ -122,6 +134,7 @@ impl Shape {
             Shape::Heavy => 1.35,
             Shape::Grappler => 0.85,
             Shape::Crawler => BODY_HEIGHT * 0.55,
+            Shape::Engineer => 0.62,
         }
     }
     /// Its legs' length against a walker's (`walker::UPPER`, `LOWER`):
@@ -129,6 +142,7 @@ impl Shape {
     pub fn legs(self) -> f32 {
         match self {
             Shape::Crawler => 0.6,
+            Shape::Engineer => 0.7,
             _ => 1.0,
         }
     }
@@ -141,6 +155,8 @@ impl Shape {
             Shape::Hound => (1.41, 3.2, 2.2),
             // ~1.3 m/s at size 2: you can outwalk it, just.
             Shape::Heavy => (0.55, 0.45, 0.45),
+            // Unhurried: a cart picking its way.
+            Shape::Engineer => (0.7, 0.7, 0.6),
         }
     }
     /// The most `Intent::pace` it can take (a hound runs flat out at 2.25).
@@ -149,6 +165,8 @@ impl Shape {
             Shape::Orb | Shape::Grappler | Shape::Crawler => 1.6,
             Shape::Hound => 2.3,
             Shape::Heavy => 1.4,
+            // (It backs off at a trot when you scare it.)
+            Shape::Engineer => 1.5,
         }
     }
 }
@@ -589,6 +607,8 @@ pub fn step_walker_walled(
             // (Long, slow swings: each leg a crane's arm.)
             Shape::Heavy => 1.9,
             Shape::Orb | Shape::Grappler | Shape::Crawler => 1.0,
+            // (Short legs, quick little steps.)
+            Shape::Engineer => 0.85,
         }
         // Held back, each step a labour.
         * (1.0 + HAMPER_STRIDE * g.hamper);

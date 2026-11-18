@@ -27,8 +27,8 @@
 use bevy::prelude::*;
 
 /// The line-up's machines the gauge scores, in their line-up order.
-pub const FAMILY: [&str; 7] = [
-    "walker", "drone", "grappler", "sentry", "hound", "heavy", "crawler",
+pub const FAMILY: [&str; 8] = [
+    "walker", "drone", "grappler", "sentry", "hound", "heavy", "crawler", "engineer",
 ];
 /// The views: how far each machine is turned from facing you (degrees),
 /// and how far off it stands (m).
