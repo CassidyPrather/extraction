@@ -1420,6 +1420,7 @@ pub(crate) mod tests {
             .query_filtered::<(&Item, &GlobalTransform), With<InSocket>>()
             .iter(app.world())
             .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
+            .filter(|(id, _)| id.starts_with("sentry_"))
             .collect();
         let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
         ids.sort();
@@ -1439,6 +1440,15 @@ pub(crate) mod tests {
             };
             assert!(near, "{id} at {at}, head at {}", head.translation);
         }
+        // The breaker is live (it had power): it crackles and sparks
+        // before it bites, as a cell does.
+        let live: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&Item, With<super::super::salvage::Live>>()
+            .iter(app.world())
+            .map(|i| catalog.get(i.kind()).id.clone())
+            .collect();
+        assert_eq!(live, ["sentry_junction"]);
         // No pylon loot thrown about it.
         let loose: Vec<String> = app
             .world_mut()
