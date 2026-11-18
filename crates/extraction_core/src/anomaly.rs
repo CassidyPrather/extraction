@@ -362,13 +362,30 @@ pub const LOOSE_ARTIFACT_CHANCE: f32 = 0.12;
 pub const GLASS_EYE_CHANCE: f32 = 0.1;
 
 /// Somewhere `kind` can sit: as [`placeable`], but a frost may stand on
-/// water (it freezes it: across a beck it's a crossing).
+/// water (it freezes it: across a beck it's a crossing), and so may a
+/// mirror (its fold hangs over it: through it, you're on the far bank).
 pub fn placeable_for(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind) -> bool {
-    if kind == AnomalyKind::Frost && hm.water_level(p).is_some() {
+    if matches!(kind, AnomalyKind::Frost | AnomalyKind::Mirror) && hm.water_level(p).is_some() {
         // The rest of the rules, on the ground under the water.
         return placeable_ignoring_water(map, hm, p);
     }
     placeable(map, hm, p)
+}
+
+/// Somewhere a mirror can set you down: dry, in the valley, not too steep,
+/// not in a building. A road's fine (a mirror by a path, or across a beck
+/// beside one, sets you on it; it's the anomaly that keeps off roads).
+pub fn landable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
+    hm.water_level(p).is_none() && {
+        let half = map.size * 0.5 - map.fence_inset - 4.0;
+        p[0].abs() <= half
+            && p[1].abs() <= half
+            && hm.slope_deg(p) <= 24.0
+            && !map.placements.iter().any(|pl| {
+                let f = crate::map::prefab_footprint(&pl.prefab);
+                geom::dist(pl.at, p) < f[0].max(f[2]) * 0.6 + 2.0
+            })
+    }
 }
 
 fn placeable_ignoring_water(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
@@ -1603,6 +1620,37 @@ mod tests {
             !crossing_road_ok(&map, &hm, on_road, AnomalyKind::Well, 3.0),
             "never another kind"
         );
+    }
+
+    /// A mirror hung over a beck is a way across it: walked into from
+    /// either bank, it sets you on dry ground on the other.
+    #[test]
+    fn a_mirror_over_a_beck_sets_you_on_the_far_bank() {
+        let src = crate::map::VALLEYS
+            .iter()
+            .find(|v| v.0 == "kettle_pass")
+            .map(|v| v.1)
+            .expect("Kettle Pass");
+        let map = MapDef::from_ron(src).unwrap();
+        let hm = Heightmap::build(&map);
+        // Kettle Beck's narrowest crossing by the Mine path.
+        let c = [-144.4, 12.5];
+        assert!(hm.water_level(c).is_some(), "over the water");
+        assert!(
+            placeable_for(&map, &hm, c, AnomalyKind::Mirror),
+            "a mirror may hang there"
+        );
+        let r = 1.5;
+        let ok = |p: [f32; 2]| landable(&map, &hm, p);
+        // Its banks: the dry ground nearest each way across.
+        let (a, b) = ([-0.5f32, 0.866], [0.5f32, -0.866]);
+        for (from, to) in [(a, b), (b, a)] {
+            let entry = geom::add(c, geom::scale(from, r + 0.3));
+            let exit = mirror_exit(c, entry, r, &ok).expect("a landing");
+            assert!(hm.water_level(exit).is_none(), "dry ({exit:?})");
+            let across = geom::dot(geom::sub(exit, c), to);
+            assert!(across > 0.0, "on the far side ({exit:?})");
+        }
     }
 }
 #[cfg(test)]
