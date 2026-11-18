@@ -1840,7 +1840,7 @@ impl Builder {
             "tools",
             None,
             rot * Vec3::NEG_Z,
-            ("tool_chest", "Timber"),
+            ("tool_chest", "Cream"),
         );
         // What it stood for, on its floor in front of the tray, rolled
         // as it was on its lid (`LootSpot::keyed`).
