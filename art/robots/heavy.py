@@ -36,6 +36,8 @@ import math
 import os
 import sys
 
+import bmesh
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from common import Part, RX, RY, RZ, S, T, export, fillet, make, report, reset
 
@@ -201,26 +203,12 @@ def build(lod):
 
     # --- Eye -----------------------------------------------------------------
     eye = Part("eye" + suffix(lod), origin=EYE)
-    ex, ey, ez = EYE
-    eye.box((0.26, 0.11, 0.09), (ex, ey, ez + 0.005), "Dark", bevel=0.015 if lod < 2 else 0.0,
-            segs=2 if full else 1)
-    for k, x in enumerate((-0.075, 0.0, 0.075)):
-        r = 0.026 if k == 1 else 0.018
-        eye.cyl(r, -0.004, 0.012, "Eye", segs=max(6, n), xf=T(ex + x, ey, ez - 0.045) @ RY(math.pi))
-    if full:
-        # A hood over the lenses.
-        eye.box((0.28, 0.02, 0.05), (ex, ey + 0.065, ez - 0.02), "Shell", bevel=0.006, segs=1)
+    eye_parts(eye, lod)
     out.append(eye)
 
     # --- Vent ------------------------------------------------------------------
     vent = Part("vent" + suffix(lod), origin=VENT)
-    vx, vy, vz = VENT
-    vent.box((0.06, 0.24, 0.44), (vx - 0.005, vy, vz), "Dark", bevel=0.006 if lod < 2 else 0.0,
-             segs=1)
-    slats = 7 if full else (4 if lod == 1 else 0)
-    for i in range(slats):
-        y = vy - 0.09 + 0.18 * i / max(1, slats - 1)
-        vent.box((0.012, 0.012, 0.4), (vx + 0.031, y, vz), "Glow", segs=1)
+    vent_parts(vent, lod)
     out.append(vent)
 
     # --- Bolt ------------------------------------------------------------------
@@ -283,20 +271,63 @@ def build(lod):
              bevel=0.03 if lod < 2 else 0.0, segs=2 if full else 1)
     if lod < 2:
         fore.cyl(0.03, 0.1, LOWER - 0.22, "Dark", segs=max(6, n // 2), xf=T(0, 0, -0.11) @ UP)
-    # The palm: a drum the fingers hinge on.
-    fore.cyl(0.13, LOWER - 0.22, LOWER - 0.06, "Dark", segs=n, xf=UP, chamfer=0.015 if lod < 2 else 0.0)
-    # Three long fingers, curled: a hand that tears doors off.
+    out.append(fore)
+    # The claw on its own (in the forearm's space): salvage takes it, so
+    # the game hides it once it's seated in its place (#105).
+    hand = Part("hand" + suffix(lod))
+    hand_parts(hand, lod)
+    out.append(hand)
+    return out
+
+
+def eye_parts(eye, lod):
+    """The sensor brow, three lenses, at EYE (robot space)."""
+    n = SEGS[lod]
+    full = lod == 0
+    ex, ey, ez = EYE
+    eye.box((0.26, 0.11, 0.09), (ex, ey, ez + 0.005), "Dark", bevel=0.015 if lod < 2 else 0.0,
+            segs=2 if full else 1)
+    for k, x in enumerate((-0.075, 0.0, 0.075)):
+        r = 0.026 if k == 1 else 0.018
+        eye.cyl(r, -0.004, 0.012, "Eye", segs=max(6, n), xf=T(ex + x, ey, ez - 0.045) @ RY(math.pi))
+    if full:
+        # A hood over the lenses.
+        eye.box((0.28, 0.02, 0.05), (ex, ey + 0.065, ez - 0.02), "Shell", bevel=0.006, segs=1)
+
+
+def vent_parts(vent, lod):
+    """The right flank's vent, a louvred grille, at VENT (robot space)."""
+    full = lod == 0
+    vx, vy, vz = VENT
+    vent.box((0.06, 0.24, 0.44), (vx - 0.005, vy, vz), "Dark", bevel=0.006 if lod < 2 else 0.0,
+             segs=1)
+    slats = 7 if full else (4 if lod == 1 else 0)
+    for i in range(slats):
+        y = vy - 0.09 + 0.18 * i / max(1, slats - 1)
+        vent.box((0.012, 0.012, 0.4), (vx + 0.031, y, vz), "Glow", segs=1)
+
+
+def hand_parts(hand, lod):
+    """The claw: the palm, a drum the fingers hinge on, and three long
+    curled fingers (the forearm's space, its palm LOWER along it)."""
+    n = SEGS[lod]
+    hand.cyl(0.13, LOWER - 0.22, LOWER - 0.06, "Dark", segs=n, xf=UP,
+             chamfer=0.015 if lod < 2 else 0.0)
     for k in range(3):
         a = k * 2 * math.pi / 3
         fx, fz = math.cos(a) * 0.09, math.sin(a) * 0.09
         rot = RY(-a) @ RZ(0.3)
-        fore.box((0.05, 0.3, 0.07), (0.0, 0.15, 0.0), "Steel", bevel=0.012 if lod < 2 else 0.0,
+        hand.box((0.05, 0.3, 0.07), (0.0, 0.15, 0.0), "Steel", bevel=0.012 if lod < 2 else 0.0,
                  segs=1, xf=T(fx, LOWER - 0.08, fz) @ rot)
         if lod < 2:
-            fore.box((0.045, 0.1, 0.065), (0.0, 0.33, -0.02), "Dark", bevel=0.01, segs=1,
+            hand.box((0.045, 0.1, 0.065), (0.0, 0.33, -0.02), "Dark", bevel=0.01, segs=1,
                      xf=T(fx, LOWER - 0.08, fz) @ rot @ RX(0.5, about=(0, 0.3, 0)))
-    out.append(fore)
-    return out
+
+
+def world_sized(p):
+    """A robot-space part at the world's size (the game's SIZE)."""
+    bmesh.ops.transform(p.bm, matrix=S(SIZE, SIZE, SIZE), verts=p.bm.verts)
+    return p
 
 
 def items():
@@ -341,15 +372,20 @@ def items():
     knee.box((0.16, 0.12, 0.16), (0.0, -0.18, 0.0), "Shell", bevel=0.02, segs=2)
     out.append(knee)
 
+    # The claw, the eye and a vent: the robot's own, at the world's size
+    # (what you saw on it is what comes off).
     claw = Part("heavy_claw")
-    claw.cyl(0.16, 0.12, 0.35, "Dark", segs=24, xf=UP, chamfer=0.02)
-    claw.box((0.2, 0.23, 0.22), (0.0, 0.255, 0.0), "Shell", bevel=0.03, segs=2)
-    for k in range(3):
-        a = k * 2 * math.pi / 3
-        fx, fz = math.cos(a) * 0.11, math.sin(a) * 0.11
-        claw.box((0.06, 0.34, 0.08), (0.0, -0.17, 0.0), "Steel", bevel=0.012, segs=1,
-                 xf=T(fx, 0.14, fz) @ RY(-a) @ RZ(-0.25))
-    out.append(claw)
+    hand_parts(claw, 0)
+    # Its torn hydraulic leads, where the lines were cut.
+    for sx in (-1, 1):
+        claw.cyl(0.012, LOWER - 0.32, LOWER - 0.2, "Red", segs=8, xf=T(sx * 0.07, 0, 0.06) @ UP)
+    out.append(world_sized(claw))
+    eye = Part("heavy_eye")
+    eye_parts(eye, 0)
+    out.append(world_sized(eye))
+    vent = Part("heavy_vent")
+    vent_parts(vent, 0)
+    out.append(world_sized(vent))
     return out
 
 

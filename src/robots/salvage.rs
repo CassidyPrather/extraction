@@ -599,13 +599,13 @@ fn fit_salvage(
 }
 
 /// The meshes a part's holds are drawn with (none in a headless app).
-struct Look {
+pub(crate) struct Look {
     bolt: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
     cable: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
 }
 
 impl Look {
-    fn new(
+    pub(crate) fn new(
         meshes: Option<&mut Assets<Mesh>>,
         materials: Option<&mut Assets<StandardMaterial>>,
     ) -> Self {
@@ -640,7 +640,13 @@ impl Look {
 }
 
 /// Seats one row's part on `wreck`, held its way.
-fn fit(commands: &mut Commands, catalog: &Catalog, wreck: Entity, row: Row, look: &Look) {
+pub(crate) fn fit(
+    commands: &mut Commands,
+    catalog: &Catalog,
+    wreck: Entity,
+    row: Row,
+    look: &Look,
+) {
     if let Some(e) = row.replaces {
         if e != Entity::PLACEHOLDER {
             commands.entity(e).despawn();
