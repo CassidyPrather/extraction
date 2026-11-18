@@ -6166,7 +6166,18 @@ fn walk_open(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
                 (d, [a.xz(), b.xz()])
             })
             .collect();
-    let pts = by_deck_ends(&decks, from, pts);
+    // Started from under a deck, in the gully (its footprint on the map,
+    // its walking height well over the newcomer's feet), it's off it: not
+    // walked off by an end it can't climb to (Map design: up out of the
+    // creek under Marrow's Forest path footbridge, it stood at the bank a
+    // metre from the deck's end, raid 4).
+    let under = world.me.iter().next().is_some_and(|f| {
+        f.translation().xz().distance(from) < 1.0
+            && decks
+                .iter()
+                .any(|(d, _)| d.holds(from, 0.0) && f.translation().y < d.y_at(from) - UNDER_DECK)
+    });
+    let pts = by_deck_ends(&decks, from, under, pts);
     // The grid's waypoints and a bank's sidestep know nothing of buildings:
     // each out of any it lands in (bar the end), and each stretch round any
     // in its way (from by the pump house, a waypoint past it was walked to
@@ -6264,6 +6275,7 @@ const DECK_JOIN: f32 = 1.5;
 fn by_deck_ends(
     decks: &[(crate::world::bridges::Deck, [Vec2; 2])],
     from: Vec2,
+    from_under: bool,
     pts: Vec<Vec2>,
 ) -> Vec<Vec2> {
     let (of, ends) = bridges_of(decks);
@@ -6281,8 +6293,14 @@ fn by_deck_ends(
     };
     let mut out = Vec::with_capacity(pts.len() + 2);
     let mut at = from;
+    let mut under = from_under;
     for p in pts {
-        let (was, is) = (on(at), on(p));
+        let was = if std::mem::take(&mut under) {
+            None
+        } else {
+            on(at)
+        };
+        let is = on(p);
         if was != is {
             // Off one bridge (by the end toward where it's going), then on
             // another (by the end toward where it comes from).
@@ -6314,6 +6332,9 @@ fn by_deck_ends(
 
 /// A waypoint this near a deck's end is at it already (m).
 const DECK_END_NEAR: f32 = 1.0;
+/// Feet this far under a deck's walking height, over its footprint, are
+/// under it, not on it (m).
+const UNDER_DECK: f32 = 1.0;
 
 /// How far out from a doorway, either side, a walk through it lines up
 /// and comes out (m).
@@ -8107,21 +8128,30 @@ the Hollow.";
         // Up from the gully east of it, nearer the far end: lined up, on.
         let gully = Vec2::new(8.0, 16.0);
         assert_eq!(
-            by_deck_ends(&decks, gully, vec![mid]),
+            by_deck_ends(&decks, gully, false, vec![mid]),
             vec![line[1], ends[1], mid]
         );
         // Along it from either end: straight on.
-        assert_eq!(by_deck_ends(&decks, ends[0], vec![mid]), vec![mid]);
-        assert_eq!(by_deck_ends(&decks, ends[1], vec![mid]), vec![mid]);
+        assert_eq!(by_deck_ends(&decks, ends[0], false, vec![mid]), vec![mid]);
+        assert_eq!(by_deck_ends(&decks, ends[1], false, vec![mid]), vec![mid]);
         // Off it, down to the gully by the near end, out along its line.
         let below = Vec2::new(6.0, 3.0);
         assert_eq!(
-            by_deck_ends(&decks, mid, vec![below]),
+            by_deck_ends(&decks, mid, false, vec![below]),
             vec![ends[0], line[0], below]
         );
         // Under it, east to west, never on it: as it was.
         let (e, w) = (Vec2::new(6.0, 10.0), Vec2::new(-6.0, 10.0));
-        assert_eq!(by_deck_ends(&decks, e, vec![w]), vec![w]);
+        assert_eq!(by_deck_ends(&decks, e, false, vec![w]), vec![w]);
+        // From under it (over its footprint, in the gully), out to the
+        // bank: straight up out of it, not off by an end it can't reach.
+        let under = Vec2::new(0.5, 4.0);
+        assert_eq!(by_deck_ends(&decks, under, true, vec![below]), vec![below]);
+        // And from under it up onto it: lined up and on by an end.
+        assert_eq!(
+            by_deck_ends(&decks, under, true, vec![mid]),
+            vec![line[0], ends[0], mid]
+        );
     }
 
     /// A crawler's charge: shot back only with a round to fire (an empty
@@ -8829,7 +8859,7 @@ the Hollow.";
                     {
                         continue;
                     }
-                    let way = by_deck_ends(&decks, beside, vec![mid]);
+                    let way = by_deck_ends(&decks, beside, false, vec![mid]);
                     // Lined up out on its line, then its end, then on.
                     let by_an_end = way.len() == 3
                         && outer.iter().any(|(e, l)| way[0] == *l && way[1] == *e)
@@ -8842,7 +8872,7 @@ the Hollow.";
                     );
                 }
                 for (end, _) in outer {
-                    let way = by_deck_ends(&decks, *end, vec![mid]);
+                    let way = by_deck_ends(&decks, *end, false, vec![mid]);
                     assert_eq!(way, vec![mid], "{map}: from its end {end:?}");
                 }
             }
