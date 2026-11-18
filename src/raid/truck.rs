@@ -554,10 +554,7 @@ pub(crate) fn start_in_truck(
     // Scenarios, screenshots and `--spawn` place the player themselves;
     // the yard starts you on foot in its first bay, the truck not come
     // yet (`onboarding`, #89).
-    if !opts.plays_for_real()
-        || opts.places_player()
-        || opts.map == crate::camp::TRAINING_YARD
-    {
+    if !opts.plays_for_real() || opts.places_player() || opts.map == crate::camp::TRAINING_YARD {
         return;
     }
     let pose = base_pose(&zone);
