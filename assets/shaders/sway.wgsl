@@ -143,10 +143,11 @@ fn in_anomaly(world: vec3<f32>, a: vec4<f32>, kind: f32, weight: f32, phase: f32
         r.still = 1.0;
         r.sink = 0.12;
     } else if (k == 7) {
-        // A frost: stiff, bowed under the rime.
+        // A frost: frozen flat under its plates and rime, none of it
+        // standing up through them (bowed, tufts stood through the ice).
         r.still = 1.0;
-        r.o = vec3<f32>(0.0, -0.08, 0.0) * weight;
-        r.sink = 0.03;
+        r.o = vec3<f32>(0.0, -0.3, 0.0) * weight;
+        r.sink = 0.6;
     }
     r.still *= inside;
     r.o *= inside;
