@@ -547,6 +547,17 @@ fn fresh_save(map: &str) -> SaveGame {
     mag.turn = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array();
     let mut torch = item("flashlight", 0, [0.0, 0.05, 0.2]);
     torch.inserted.push(item("power_cell", 0, [0.0; 3]));
+    // The yard's pistol is the range table's, and it's yours to keep: the
+    // crate holds its magazine, not a second pistol (#89: with both, the
+    // newcomer went out with the range's, empty, in its holster and the
+    // crate's packed, and was caught empty-handed by its third raid).
+    let pistol = if map == crate::camp::TRAINING_YARD {
+        let mut m = item("pm_mag", 8, [0.2, 0.04, -0.4]);
+        m.turn = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2).to_array();
+        m
+    } else {
+        pistol
+    };
     s.stash = vec![
         pistol,
         torch,
@@ -1871,6 +1882,28 @@ mod tests {
         assert_eq!(holding.len(), 1, "the hearth is held by {holding:?}");
         assert_eq!(at, holding.first().copied());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The yard's crate holds no pistol of its own (the range table's is
+    /// the one you keep) but its magazine: one pistol leaves the yard, with
+    /// the rounds a valley's new game starts with.
+    #[test]
+    fn the_yard_crate_holds_the_pistols_magazine_not_a_second_pistol() {
+        let count = |s: &SaveGame, id: &str| s.stash.iter().filter(|i| i.id == id).count();
+        let rounds = |s: &SaveGame| -> u32 {
+            s.stash
+                .iter()
+                .flat_map(|i| std::iter::once(i).chain(i.inserted.iter()))
+                .filter(|i| i.id == "pm_mag")
+                .map(|i| i.rounds)
+                .sum()
+        };
+        let yard = fresh_save(crate::camp::TRAINING_YARD);
+        let valley = fresh_save("marrow_creek");
+        assert_eq!(count(&yard, "pm_pistol"), 0);
+        assert_eq!(count(&valley, "pm_pistol"), 1);
+        assert_eq!(count(&yard, "pm_mag"), 2);
+        assert_eq!(rounds(&yard), rounds(&valley));
     }
 
     /// A new game's crate holds the one medicine there is: an injector.

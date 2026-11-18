@@ -5753,8 +5753,10 @@ mod run_tests {
         app.update();
         let grid = app.world().resource::<Nav>().0.as_ref().clone();
         let zone = app.world().resource::<crate::world::Zone>().clone();
-        // Open ground, and a straight walk across it.
-        let (from, to) = (Vec2::new(-12.0, 30.0), Vec2::new(12.0, 30.0));
+        // Open ground, and a straight walk across it: west of the yard's
+        // bays (#89: through them, a bay's fence turned the walk through
+        // its gate, and a wreck by the gate was laid on its rails).
+        let (from, to) = (Vec2::new(-72.0, 30.0), Vec2::new(-48.0, 30.0));
         let route = travel(&grid, from, to, 1.0).expect("a walk across the open");
         // Halfway along the walk: where the wreck goes.
         let pts: Vec<Vec2> = std::iter::once(from)
