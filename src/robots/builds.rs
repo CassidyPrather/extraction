@@ -104,7 +104,7 @@ impl Default for CameraAim {
     fn default() -> Self {
         Self {
             yaw: 0.0,
-            pitch: -0.25,
+            pitch: -0.1,
             half_angle: 0.3,
             reach: 22.0,
             fix: 0.0,
@@ -530,7 +530,7 @@ fn aim_cameras(
         let end = from + dir * landed;
         let p = FogBeamParams {
             // (A camera sees far: its cone a searchlight's, slow to spread.)
-            light: light.extend(0.8 * wet.max(0.4) + 0.3 * aim.fix),
+            light: light.extend(2.0 * wet.max(0.5) + 0.8 * aim.fix),
             apex: from.extend(tan),
             axis: dir.extend(landed),
             air: Vec4::new(density, day, end.y, 0.0),

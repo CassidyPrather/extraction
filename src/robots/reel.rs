@@ -539,7 +539,7 @@ fn reel(
                         e.insert((
                             CameraAim {
                                 yaw: [0.9, -0.9, 0.7][i.min(2)],
-                                pitch: -0.3,
+                                pitch: -0.1,
                                 fix: if p >= 1.0 { 0.8 } else { 0.0 },
                                 ..Default::default()
                             },
