@@ -109,6 +109,8 @@ fn use_items(
     held: Query<&Held>,
     mut treated: MessageWriter<Treated>,
     at: Query<&GlobalTransform>,
+    children: Query<&Children>,
+    slots: Query<&crate::interact::Socket, With<super::pen::PenSlot>>,
 ) {
     for u in uses.read() {
         let Ok(item) = items.get(u.item) else {
@@ -137,16 +139,40 @@ fn use_items(
                     pad: None,
                 });
             }
-            "regen_injector" => {
-                if let Ok(mut h) = healths.get_mut(u.player) {
-                    h.hp = (h.hp + 45.0).min(h.max);
-                    raid.say("Cold, then warm. Something knits.");
+            // The pen (`items::pen`): what's in both slots, at once; the
+            // cartridges stay, emptied, till they're taken out.
+            super::pen::PEN => {
+                let carts = super::pen::cartridges_in(u.item, &children, &slots, &items, &catalog);
+                let jab = super::pen::jab_of(carts.iter().map(|(_, d, f)| (*d, *f)));
+                if jab.is_empty() {
+                    raid.say("Nothing in it.");
+                    continue;
                 }
+                for (c, ..) in &carts {
+                    commands.entity(*c).queue(|mut e: EntityWorldMut| {
+                        if let Some(mut it) = e.get_mut::<Item>() {
+                            it.0.condition = 0.0;
+                        }
+                    });
+                }
+                if let Ok(mut h) = healths.get_mut(u.player) {
+                    h.hp = (h.hp + jab.heal).min(h.max);
+                }
+                if jab.stim > 0.0 {
+                    commands.entity(u.player).insert(super::pen::Stimmed {
+                        left: jab.stim,
+                        total: jab.stim,
+                    });
+                }
+                raid.say(match (jab.heal > 0.0, jab.stim > 0.0) {
+                    (true, false) => "Cold, then warm. Something knits.",
+                    (false, true) => "Cold, then your heart slows. Everything does.",
+                    _ => "Cold, then warm, then everything slows.",
+                });
                 treated.write(Treated {
                     player: u.player,
-                    item: "regen_injector",
+                    item: super::pen::PEN,
                 });
-                consume = true;
             }
             "flashlight" => {
                 if lights.contains(u.item) {

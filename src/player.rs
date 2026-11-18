@@ -217,6 +217,7 @@ pub fn move_bodies(
     levels: Option<Res<crate::world::underground::Levels>>,
     mut steps: MessageWriter<Footstep>,
     opts: Option<Res<crate::launch::LaunchOptions>>,
+    pace: Option<Res<crate::items::stim::WorldPace>>,
 ) {
     let dt = time.delta_secs();
     let tooling = opts.is_some_and(|o| o.tooling());
@@ -274,7 +275,11 @@ pub fn move_bodies(
         } * enc.speed
             * (1.0 - body.hauling)
             * (1.0 - body.chilled)
-            * if swimming { 1.0 } else { drag };
+            * if swimming { 1.0 } else { drag }
+            // In a stim the world's clock is slowed, yours isn't
+            // (`items::stim`): its steps come less often, so each goes
+            // further.
+            * pace.as_ref().map_or(1.0, |p| p.own());
         let target = if climbing {
             // On a rope the stick climbs (see `gadgets::climbing`).
             Vec3::ZERO

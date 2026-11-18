@@ -692,7 +692,9 @@ pub fn part_salvage(
             .collect::<Vec<_>>()
     };
     match kind {
-        RobotKind::Walker if crawler => tries(1, 0.5, "crawler_capacitor", rng),
+        // A crawler's capacitor bank is on its wreck, on its leads
+        // (`salvage`).
+        RobotKind::Walker if crawler => Vec::new(),
         RobotKind::Walker if hound => Vec::new(),
         // A walker's servo packs are bolted on its wreck, taken off by hand
         // (`salvage`), not dropped.

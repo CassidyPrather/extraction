@@ -27,10 +27,13 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| first_jobs A/B: the reckless bot dies in raids 3 and 5, the one-handed in raids 3 and 4 (main was all home) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a: the yard crate held a second pistol); bot cause #96 (one-handed reload only from a pouch; spare packed) — fix in test |
-| `soak::chaos::chaos_monkey_short` (chaos.rs:1285, findings) | aa4fccff | untriaged (coordinator) | rerun to get its findings |
+| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
+| `capture::attach::tests::model_pieces_touch_what_holds_them`: items/regen_injector, two 11x2x3 mm pieces at (±0.008, 0.010, 0) float 3 mm off the body | bca2242a (lib338) | Models | the injector model's grip tabs |
+| warning: constant `LATER` is never used at src/onboarding/pickups.rs:95 | 950cadec (gate 339) | Onboarding | |
+| warning: function `least_clear` is never used at src/world/hinge.rs:763 | 950cadec (gate 339) | World models | |
+| worst-view stereo draw gauge: Cinder s01_ahead (night, downpour, fight) 2552 of 2400 draws (106%); Cinder insertion_south_gate_2 97%, two fuel-exfil views ~96%, Marrow poi_radio_mast_0 94% — up ~650 draws since 10 Nov, in the smaller groups | 9d495af1 | Performance (finding the group), then that group's owner | cuts only in views ≥85% |
 
 ## Logged, not failing a check
 
@@ -56,3 +59,8 @@ How it works:
 | `audio_machines::tests::the_dangers_are_heard` (Recall) | 88c44a5e (Legibility) |
 | `render::legibility::tests::every_panel_in_the_game_clears_its_floor` | 1744915e (Legibility) |
 | `interact::read::tests::the_logbook_comes_up_to_be_read_and_goes_back` | ae762ae8 (Hands) |
+| `soak::chaos::chaos_monkey_short` | passes on 5f9a23a7 (lib332) |
+| `capture::attach::tests::model_pieces_touch_what_holds_them` (field set pieces in the air) | 6b547021 (Progression) |
+| `render::legibility::tests::every_model_with_letters_is_registered_and_legible` (MIX label) | edfd7666 (Legibility) |
+| `onboarding::pickups` each_line_is_what_the_game_does, every_kind_rollable_before_raid_6 (cartridges, DP-3) | 9f512a16 (Onboarding) |
+| `audio_machines::tests::the_dangers_are_heard` (StimCue), `items::loot` nothing_turns_up_before_its_raid / a_first_raids_small_things_lie_in_sight, `models` every_item_box_is_its_model / no_item_falls_back_to_the_placeholder, `capture::scale` items_are_drawn_near_their_real_size | pass on bca2242a (lib338): Hands 80d205c3, Models 911c7098 |

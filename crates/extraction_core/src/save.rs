@@ -150,6 +150,10 @@ pub struct PlacedItem {
     pub at: [f32; 3],
     pub rot: [f32; 4],
     pub item: SavedItem,
+    /// In a container's hold: the hold's place, shut (it's seated back in
+    /// it, not dropped where it lay: a drawer's comes back shut).
+    #[serde(default)]
+    pub held: Option<[f32; 3]>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -811,6 +815,7 @@ mod tests {
         s.loadout.slots.push((0, ak));
         s.stash.push(item("cleaning_kit"));
         s.zone.items.push(PlacedItem {
+            held: None,
             at: [1.0, 2.0, 3.0],
             rot: [0.0, 0.0, 0.0, 1.0],
             item: item("canned_stew"),
@@ -882,6 +887,7 @@ mod tests {
         s.stash.push(item("cleaning_kit"));
         for i in 0..4 {
             s.zone.items.push(PlacedItem {
+                held: None,
                 at: [10.0 + i as f32, 2.0, -30.5],
                 rot: [0.0, 0.38, 0.0, 0.92],
                 item: item("bolt"),

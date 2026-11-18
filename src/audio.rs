@@ -744,6 +744,12 @@ pub(crate) fn play_at_speed(
     };
     let speed = speed * (1.0 + (rng.f32() as f64 - 0.5) * 2.0 * pitch);
     let player = SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + offset_db));
+    // Out in the world, in a stim, lower and slower (`audio_mix::world_speed`).
+    let speed = if at.is_some() {
+        speed * mix::world_speed()
+    } else {
+        speed
+    };
     let settings = PlaybackSettings::default().with_speed(speed);
     match at {
         Some(p) => {
@@ -2512,6 +2518,9 @@ fn anomaly_sounds(
             // Each thing blinked sounds at both ends (`Blinked`, below).
             AnomalyAct::Blink => continue,
             AnomalyAct::Reveal => ("anomaly/reveal", "anomaly.reveal", 1.0),
+            // Ice taking a foot (`anomaly::frost::creak`): the frost's
+            // crack, slowed to a groan.
+            AnomalyAct::Creak => ("physical/ice_crack", "frost.creak", 0.55),
             // A well crushing something: the thing's metal giving (recorded,
             // slowed), under the knot's deep whump.
             AnomalyAct::Crush => {
@@ -5330,6 +5339,7 @@ fn occlude(
     mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     hush: Res<HushNow>,
+    hushes: Option<Res<crate::anomaly::hush::Hushes>>,
     hearing: Res<crate::hearing::Hearing>,
     zone: Option<Res<Zone>>,
     spatial: SpatialQuery,
@@ -5358,6 +5368,15 @@ fn occlude(
         let o = || {
             let mut o = hearing.path(zone.as_deref(), gt.translation(), ear, Some(&blocked));
             o.cutoff = o.cutoff.min(hush.cutoff);
+            // Made in a Hush you're not in: it never leaves it (a machine
+            // walking in one is silent to you; `anomaly::hush::Hushes::muffles`).
+            if hushes
+                .as_deref()
+                .is_some_and(|h| h.muffles(gt.translation(), ear))
+            {
+                o.db -= HUSH_DEEP.0;
+                o.cutoff = o.cutoff.min(HUSH_DEEP.1);
+            }
             o
         };
         if let Ok(mut node) = nodes.get_effect_mut(effects) {

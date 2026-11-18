@@ -230,8 +230,8 @@ pub fn why_after(item: &str) -> Option<&'static str> {
         "gun_oil" => "Oil. Her well's winch squeals.",
         "electronics" => "Boards. The mast at the fence still talks to itself.",
         "robot_parts" => "Their parts. Nobody's coming for them now.",
-        "sensor_eye" => "An eye. I want one on the shelf where I can see it.",
-        "servo" => "A servo. I'm making her gate open itself.",
+        "walker_eye" => "An eye. I want one on the shelf where I can see it.",
+        "hound_hip_servo" => "A servo. I'm making her gate open itself.",
         _ => return None,
     })
 }

@@ -9,6 +9,7 @@ import os
 import sys
 
 import bmesh
+import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -63,7 +64,10 @@ def item(item_id, build):
     print(f"{item_id}:")
     report()
     common.FOLDS.clear()
-    export(f"assets/models/items/{item_id}.glb")
+    # Vertex colours where a model has them (a box's far stand-in).
+    colors = any(o.type == "MESH" and len(o.data.color_attributes) > 0
+                 for o in bpy.context.scene.objects)
+    export(f"assets/models/items/{item_id}.glb", colors=colors)
 
 
 def transform(parts, m):

@@ -279,7 +279,7 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
     ],
     &[
         (
-            "sensor_eye",
+            "walker_eye",
             1,
             2,
             "Robot eyes. Someone in town pays in diesel.",
@@ -291,7 +291,12 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
             1,
             "One of their cells. I want to see inside.",
         ),
-        ("servo", 1, 2, "A servo or two. I'm making a thing."),
+        (
+            "hound_hip_servo",
+            1,
+            2,
+            "A servo or two. I'm making a thing.",
+        ),
         (
             ANY_PARTS,
             2,
@@ -313,7 +318,12 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
             4,
             "Four of their parts, any. A man in town is building one.",
         ),
-        ("servo", 2, 2, "Two servos. The winch, properly this time."),
+        (
+            "hound_hip_servo",
+            2,
+            2,
+            "Two servos. The winch, properly this time.",
+        ),
         (
             "regen_injector",
             1,
@@ -328,10 +338,10 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
 pub const ANY_PARTS: &str = "robot_parts";
 /// What counts as a robot part.
 pub const PARTS: &[&str] = &[
-    "sensor_eye",
-    "servo",
+    "walker_eye",
+    "hound_hip_servo",
     "robot_cell",
-    "rotor_assembly",
+    "drone_rotor_motor",
     "robot_gunpod",
     "robot_ammo_belt",
     // Taken off a wreck by hand (`robots::salvage`).
@@ -343,8 +353,8 @@ pub const PARTS: &[&str] = &[
 /// What else a fetch of `want` takes: a servo comes off a walker in its
 /// leg, and off the Sorter in a pack.
 const ALSO: &[(&str, &str)] = &[
-    ("servo", "walker_leg_actuator"),
-    ("servo", "sorter_servo_pack"),
+    ("hound_hip_servo", "walker_leg_actuator"),
+    ("hound_hip_servo", "sorter_servo_pack"),
 ];
 
 /// Whether an item of `id` counts toward a fetch of `want`.
@@ -1491,15 +1501,15 @@ mod tests {
 
     #[test]
     fn any_parts_takes_any_robot_part() {
-        assert!(fetch_takes(ANY_PARTS, "servo"));
-        assert!(fetch_takes(ANY_PARTS, "sensor_eye"));
+        assert!(fetch_takes(ANY_PARTS, "hound_hip_servo"));
+        assert!(fetch_takes(ANY_PARTS, "walker_eye"));
         assert!(!fetch_takes(ANY_PARTS, "canned_stew"));
-        assert!(fetch_takes("servo", "servo"));
-        assert!(!fetch_takes("servo", "sensor_eye"));
-        assert!(fetch_takes("servo", "walker_leg_actuator"));
+        assert!(fetch_takes("hound_hip_servo", "hound_hip_servo"));
+        assert!(!fetch_takes("hound_hip_servo", "walker_eye"));
+        assert!(fetch_takes("hound_hip_servo", "walker_leg_actuator"));
         assert!(fetch_takes(ANY_PARTS, "robot_plate"));
         assert_eq!(fetch_condition("robot_gunpod", "robot_gunpod"), 0.5);
-        assert_eq!(fetch_condition(ANY_PARTS, "servo"), 0.3);
+        assert_eq!(fetch_condition(ANY_PARTS, "hound_hip_servo"), 0.3);
         assert_eq!(fetch_condition("canned_stew", "canned_stew"), 0.0);
         let cat = crate::items::ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
         for id in PARTS {

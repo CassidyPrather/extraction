@@ -1212,6 +1212,9 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    /// Where the newcomer stands (its feet's height: under a footbridge's
+    /// deck isn't on it).
+    pub(super) me: Query<'w, 's, &'static GlobalTransform, With<LocalPlayer>>,
     /// The ground's collider (left out of what's "in the way" of a step:
     /// banks are `steep_run`'s).
     pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
@@ -1227,6 +1230,16 @@ pub(super) struct World2<'w, 's> {
     >,
     pub(super) comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
     pub(super) owners: Query<'w, 's, &'static crate::interact::SocketOwner>,
+    /// Injector pens' slots (`items::pen`): what's left in a pen.
+    pub(super) pen_slots: Query<
+        'w,
+        's,
+        (
+            &'static crate::interact::Socket,
+            &'static crate::interact::SocketOwner,
+        ),
+        With<crate::items::pen::PenSlot>,
+    >,
     pub(super) gun_ids: Query<'w, 's, (), With<crate::weapons::Gun>>,
     pub(super) doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     pub(super) door_at:
@@ -1618,6 +1631,19 @@ impl World2<'_, '_> {
 
     pub(super) fn robot_entities(&self) -> Vec<Entity> {
         self.robots.iter().map(|(e, ..)| e).collect()
+    }
+
+    /// A pen with something left in it (a used one keeps its empties).
+    pub(super) fn pen_loaded(&self, pen: Entity) -> bool {
+        self.pen_slots.iter().any(|(s, o)| {
+            o.0 == pen
+                && s.occupant.is_some_and(|c| {
+                    self.items.get(c).is_ok_and(|(_, it, ..)| {
+                        it.condition > 0.0
+                            && crate::items::pen::Dose::of(self.catalog.get(it.kind())).is_some()
+                    })
+                })
+        })
     }
 
     pub(super) fn one_handed(&self) -> bool {
