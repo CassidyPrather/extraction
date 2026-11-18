@@ -109,7 +109,7 @@ mod tests {
         // The barrier arm's pivot pin through its post.
         "gate_post and barrier_arm",
         // The drying rack hung round the stove's pipe.
-        "stove and stove_pipe_rack",
+        "stove#carcass and stove_pipe_rack",
         // The motor's shaft into its gearbox's coupling.
         "gearbox and drive_motor",
         // The cold-blast valves' pipe stubs into the stoves they feed, the

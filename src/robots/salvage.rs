@@ -163,6 +163,14 @@ pub struct Arced {
 
 /// Where a walker's cell sits in its orb (local, before its size).
 pub const CELL_AT: Vec3 = Vec3::new(0.0, 0.3, 0.12);
+/// Where a hound's cell rides, half sunk in its back.
+pub const HOUND_CELL_AT: Vec3 = Vec3::new(0.0, 0.14, 0.08);
+/// A grappler's launcher (its item's middle) from its boom's head pin.
+pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
+/// Whether a grappler's wreck seats its launcher and drum yet.
+const GRAPPLER_SEATS: bool = false;
+/// Bolts through a launcher's flange onto its boom.
+pub const LAUNCHER_BOLTS: usize = 4;
 
 /// Seats an item on a wreck (held back from hands until it's freed).
 fn seat(
@@ -311,6 +319,7 @@ pub struct WreckParts<'a> {
     pub crawler: bool,
     pub hound: bool,
     pub heavy: bool,
+    pub grappler: bool,
     /// Its parts still on it: (entity, part, where, a walker's turret).
     pub parts: &'a [(Entity, PartRole, f32, Transform, bool)],
 }
@@ -338,7 +347,7 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
     }
     // (The heavy is a walker too, but its salvage is its own seats,
     // `heavy`: a walker's cell fitted in it was sealed in its hull.)
-    if w.kind != RobotKind::Walker || w.crawler || w.hound || w.heavy {
+    if w.kind != RobotKind::Walker || w.heavy {
         return out;
     }
     // The cell: the core's health is the cell's (a core shot through
@@ -348,6 +357,36 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
         .iter()
         .find(|p| p.1 == PartRole::Core)
         .map_or(0.0, |p| p.2);
+    // A hound's cell rides in its back, lifted out by hand.
+    if w.hound {
+        out.push(Row {
+            item: "robot_cell",
+            at: Transform::from_translation(HOUND_CELL_AT),
+            size: w.size,
+            health: core,
+            fix: Fix::Hand,
+            hot: true,
+            replaces: None,
+        });
+        return out;
+    }
+    // A crawler's capacitor bank is its spark gun, on two leads.
+    if w.crawler {
+        for &(e, role, health, at, _) in w.parts {
+            if role == PartRole::Weapon {
+                out.push(Row {
+                    item: "crawler_capacitor",
+                    at,
+                    size: w.size,
+                    health,
+                    fix: Fix::Cables { n: CABLES },
+                    hot: true,
+                    replaces: Some(e),
+                });
+            }
+        }
+        return out;
+    }
     out.push(Row {
         item: "robot_cell",
         at: Transform::from_translation(CELL_AT),
@@ -393,6 +432,44 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
             });
         }
     }
+    // A grappler's launcher, bolted on its boom's head where the boom lay
+    // down (`grappler_armour::folded`), and its line drum, held by the
+    // line still run up the boom. Both are as sound as the eye that aimed
+    // them: they've no hit volume of their own.
+    if w.grappler {
+        let eye = w
+            .parts
+            .iter()
+            .find(|p| p.1 == PartRole::Sensor)
+            .map_or(core, |p| p.2);
+        let head = super::grappler_armour::folded(
+            Transform::from_translation(super::grappler_armour::BOOM_HEAD + LAUNCHER_FROM_HEAD),
+            1.0,
+        );
+        out.push(Row {
+            item: "grappler_launcher",
+            at: head,
+            size: w.size,
+            health: eye,
+            fix: Fix::Bolts {
+                n: LAUNCHER_BOLTS,
+                centre: head.transform_point(-LAUNCHER_FROM_HEAD + Vec3::Y * -0.1),
+                face: head.rotation * Quat::from_rotation_x(std::f32::consts::PI),
+                radius: 0.06,
+            },
+            hot: false,
+            replaces: None,
+        });
+        out.push(Row {
+            item: "grappler_drum",
+            at: Transform::from_translation(super::grappler_armour::DRUM_AT),
+            size: w.size,
+            health: core.max(eye),
+            fix: Fix::Cables { n: 1 },
+            hot: false,
+            replaces: None,
+        });
+    }
     out
 }
 
@@ -412,6 +489,7 @@ fn fit_salvage(
             Has<super::indoor::Crawler>,
             Has<super::hound::Hound>,
             Has<super::heavy::Heavy>,
+            Has<super::grappler::Grappler>,
         ),
         (
             With<super::wreck::Broken>,
@@ -429,7 +507,7 @@ fn fit_salvage(
     let Some(catalog) = catalog else {
         return;
     };
-    for (e, robot, children, gait, legs, servo, crawler, hound, heavy) in &wrecks {
+    for (e, robot, children, gait, legs, servo, crawler, hound, heavy, grappler) in &wrecks {
         commands.entity(e).insert(Fitted);
         // Its plates, for prying off (`armour::shed_plates`).
         for c in children.iter() {
@@ -472,6 +550,10 @@ fn fit_salvage(
             crawler,
             hound,
             heavy,
+            // (Not yet: its launcher's head and drum are drawn in the
+            // boom's and pedestal's nodes, and would stay drawn once taken.
+            // Robot bodies is splitting them out.)
+            grappler: grappler && GRAPPLER_SEATS,
             parts: &on,
         };
         let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
@@ -796,6 +878,7 @@ mod tests {
             crawler: false,
             hound: false,
             heavy: false,
+            grappler: false,
             parts: &parts,
         };
         let r = rows(&walker);
@@ -821,22 +904,52 @@ mod tests {
                 .filter(|r| r.item == "walker_leg_actuator")
                 .all(|r| matches!(r.fix, Fix::Bolts { n: BOLTS, .. }))
         );
-        for other in [
-            WreckParts {
-                crawler: true,
-                ..walker_like(&parts)
-            },
-            WreckParts {
-                hound: true,
-                ..walker_like(&parts)
-            },
-            WreckParts {
+        // The heavy's are its own seats (`heavy`).
+        assert!(
+            rows(&WreckParts {
                 heavy: true,
                 ..walker_like(&parts)
-            },
-        ] {
-            assert!(rows(&other).is_empty());
-        }
+            })
+            .is_empty()
+        );
+        // A hound: its cell, hot, by hand.
+        let r = rows(&WreckParts {
+            hound: true,
+            ..walker_like(&parts)
+        });
+        assert_eq!(r.len(), 1);
+        assert!(r[0].item == "robot_cell" && r[0].hot && matches!(r[0].fix, Fix::Hand));
+        // A crawler: its capacitor bank in its gun's place, hot, on leads.
+        let r = rows(&WreckParts {
+            crawler: true,
+            ..walker_like(&parts)
+        });
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].item, "crawler_capacitor");
+        assert!(r[0].hot && matches!(r[0].fix, Fix::Cables { n: CABLES }));
+        assert_eq!(r[0].replaces, Some(turret));
+        // A grappler: a walker's, and its launcher (bolted, lying back
+        // with the boom) and line drum (on its line).
+        let r = rows(&WreckParts {
+            grappler: true,
+            ..walker_like(&parts)
+        });
+        let launcher = r.iter().find(|r| r.item == "grappler_launcher").unwrap();
+        assert!(matches!(
+            launcher.fix,
+            Fix::Bolts {
+                n: LAUNCHER_BOLTS,
+                ..
+            }
+        ));
+        assert!(
+            launcher.at.translation.y < 1.0 && launcher.at.translation.z > 0.5,
+            "it lies back along the hull: {}",
+            launcher.at.translation
+        );
+        let drum = r.iter().find(|r| r.item == "grappler_drum").unwrap();
+        assert!(matches!(drum.fix, Fix::Cables { n: 1 }));
+        assert!(r.iter().any(|r| r.item == "robot_cell"));
         let sorter = WreckParts {
             kind: RobotKind::Sorter,
             servo: Some(ServoAt {
@@ -867,6 +980,7 @@ mod tests {
             crawler: false,
             hound: false,
             heavy: false,
+            grappler: false,
             parts,
         }
     }

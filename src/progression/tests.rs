@@ -144,7 +144,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
     drop(a);
     let mut career = Career::from_game(&extraction_core::save::SaveGame::new("marrow_creek"));
     career.requests.number = 5;
-    career.requests.want = Some(("servo".into(), 2));
+    career.requests.want = Some(("hound_hip_servo".into(), 2));
     for i in 0..60 {
         career.stash.push(extraction_core::save::SavedItem {
             id: "ak74".into(),
@@ -169,7 +169,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
     assert_eq!(
         p.job,
         Some(Job::Fetch {
-            item: "servo".into(),
+            item: "hound_hip_servo".into(),
             n: 2
         }),
         "the one on the card stays"
@@ -534,7 +534,7 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
         let mut p = app.world_mut().resource_mut::<Progression>();
         p.0.done = 1;
         p.0.job = Some(Job::Fetch {
-            item: "rotor_assembly".into(),
+            item: "drone_rotor_motor".into(),
             n: 2,
         });
         p.0.job_raid = 0;
@@ -552,7 +552,7 @@ fn a_fetch_nobody_can_find_gives_way_to_another_job() {
     }
     let job = progress(&app).job.expect("a new job");
     assert!(
-        !matches!(&job, Job::Fetch { item, .. } if item == "rotor_assembly"),
+        !matches!(&job, Job::Fetch { item, .. } if item == "drone_rotor_motor"),
         "{job:?}"
     );
     assert_eq!(progress(&app).done, 1, "a swap isn't a job done");
