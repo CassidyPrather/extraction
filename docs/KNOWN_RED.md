@@ -34,6 +34,7 @@ How it works:
 | `capture::fighting::tests::models_dont_fight_themselves`: walker grappler_core vs engineer_hull 0.13 m² | 77bdea0f (lib341) | Models | fixed in 705f16c9 (on 10957625); confirm |
 | `models::tests::no_flat_model_material_is_paper_white`: "Baked" 1.00 | 77bdea0f (lib341) | Arcade | fixed in 35bc2962 (gate 343) |
 | `onboarding::firsts` every_machine_has_its_first_contact_line, `robots::intent_roster` every_machine_is_on_the_intent_roster: the engineer | 77bdea0f (lib341) | Robot bodies | fixed in d40ba037 (gate 343); Onboarding to word the line |
+| `render::vr_budget` gauge_steam_banks_hold_the_stereo_budget (#[ignore]): steam bank inside (Kettle) 104% fragments | 2d2f8835 | Anomalies | mode-8 size cap 20° in 2c577d29 (gate 345); Performance to re-measure |
 | `vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached`: drone robot_cell (Live) unseen, out of reach (0.03 m up, under the hull) | bb51307b (lib343) | Heavy | playtest-relevant |
 | `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | bb51307b (lib343) | Heavy | |
 | `audio_machines::tests::the_dangers_are_heard`: no sound for PartCooked | 77bdea0f (lib341) | Anomalies | |
