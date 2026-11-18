@@ -183,15 +183,17 @@ fn fit_plates(
             &Robot,
             Has<super::hound::Hound>,
             Has<super::heavy::Heavy>,
+            Has<super::engineer_body::Engineer>,
             Option<&Gait>,
         ),
         Added<Robot>,
     >,
 ) {
-    for (e, robot, hound, heavy, gait) in &robots {
+    for (e, robot, hound, heavy, engineer, gait) in &robots {
         // (A hound's body is all legs and speed; the heavy's plates are
-        // its own, on bolts: `heavy`.)
-        if hound || heavy {
+        // its own, on bolts: `heavy`; the engineer's a helpless worker,
+        // no armour on it.)
+        if hound || heavy || engineer {
             continue;
         }
         let (n, hp, collider) = match robot.kind {
