@@ -178,8 +178,8 @@ fn build_assets(
             ..default()
         }),
         panel: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.49, 0.51, 0.53),
-            metallic: 0.5,
+            base_color: Color::srgb(0.66, 0.67, 0.66),
+            metallic: 0.15,
             perceptual_roughness: 0.6,
             ..default()
         }),
@@ -500,18 +500,21 @@ fn aim_cameras(
         let rot = gt.rotation() * turn;
         let dir = rot * Vec3::NEG_Z;
         let from = gt.transform_point(Vec3::Y * (MAST + 0.1)) + dir * 0.18;
+        // (From clear of its own head: a ray from inside the head's box
+        // lands on it, and the cone is nothing.)
+        const CLEAR: f32 = 0.4;
         let landed = Dir3::new(dir)
             .ok()
             .and_then(|d| {
                 spatial.cast_ray(
-                    from,
+                    from + dir * CLEAR,
                     d,
                     aim.reach,
                     true,
                     &SpatialQueryFilter::from_mask([Layer::World]),
                 )
             })
-            .map_or(aim.reach, |h| h.distance);
+            .map_or(aim.reach, |h| h.distance + CLEAR);
         let tan = aim.half_angle.tan();
         let want = fog_beam::placed(from, dir, tan, landed);
         if t.translation.distance(want.translation) > 0.01
@@ -526,10 +529,11 @@ fn aim_cameras(
             .lerp(super::searchlight_look::ON_YOU, aim.fix.clamp(0.0, 1.0));
         let end = from + dir * landed;
         let p = FogBeamParams {
-            light: light.extend(0.6 * wet + 0.2 * aim.fix),
+            // (A camera sees far: its cone a searchlight's, slow to spread.)
+            light: light.extend(0.8 * wet.max(0.4) + 0.3 * aim.fix),
             apex: from.extend(tan),
             axis: dir.extend(landed),
-            air: Vec4::new(density, day, end.y, fog_beam::LAMP_SPREAD),
+            air: Vec4::new(density, day, end.y, 0.0),
         };
         let inside = eye.is_some_and(|e| fog_beam::eye_inside(e, from, dir, tan, landed));
         if let Some(m) = fog.get(&mat.0) {

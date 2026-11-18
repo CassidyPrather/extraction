@@ -24,7 +24,7 @@ impl Plugin for EngineerLookPlugin {
 }
 
 /// Its paint: a pale, sandy workaday cream.
-pub const PAINT: Color = Color::srgb(0.78, 0.72, 0.58);
+pub const PAINT: Color = Color::srgb(0.9, 0.86, 0.74);
 /// The kit's canvas: olive drab.
 pub const KIT: Color = Color::srgb(0.36, 0.4, 0.26);
 /// The lamp's rim: the machines' orange-red lit tell (the searchlights').
