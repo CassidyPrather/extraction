@@ -95,7 +95,7 @@ parts, and artifacts. They leave the world through sinks:
 | Sink | What it eats |
 | - | - |
 | **Maintenance** | Gun oil, cleaning patches, spare parts; guns degrade with use |
-| **Fabrication** | The truck's bench disassembles robot parts/ammo into materials and re-packs rounds; every recipe loses material |
+| **Fabrication** | The truck's bench disassembles robot parts/ammo into materials, dries damp rounds and packs AP and signal cartridges; every recipe loses material |
 | **Fuel** | Optional truck services (short exfil, choosing your insertion point) burn scavenged fuel |
 | **Offerings** | Weird interactables in the Zone accept items for boons, information, or calm |
 | **Memorial convoy** | Your body and everything on it are hauled off-site unless you intercept the convoy |
@@ -790,7 +790,7 @@ non-firearm pass replaces models and numbers, not systems. Starting set:
 - A double-barrel break-action shotgun (two shells, ejectors)
 
 Robot weapons can be carried home but are awkward to hold and their ammo
-must be broken down at the bench and re-packed into compatible rounds.
+must be broken down at the bench for its powder and brass.
 
 ### Weapon feel
 
@@ -873,28 +873,26 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   bolt brought back short and pushed home has short-stroked
   (`Malfunction::ShortStroke`): the trigger's dead until it's worked
   fully. Gauge: a 10 cm stroke at 2 m/s takes 0.06 s warm, 0.14 s cold.
-- **Ammunition condition** (`Load::Surplus`, `Load::Damp`,
-  `Firearm::ammo_cold`): old surplus lots and rounds that got wet (ball's
-  plain primers; AP, tracers, slugs and stars are sealed) misfire and
-  hang-fire. So does a round as cold as the gun.
+- **Ammunition condition** (`Load::Damp`, `Firearm::ammo_cold`): rounds
+  that got wet (ball's plain primers; AP, tracers, slugs and stars are
+  sealed) misfire and hang-fire. So does a round as cold as the gun.
   - *Wetting*: a box, magazine or gun soaked past 0.6 turns a round damp
     every 45 s.
   - *A hang-fire* is a click, then the shot 0.3 to 1 s later from wherever
     the muzzle is by then. Open the action on it first and it goes off out
     of battery: it hurts the hand and the gun.
-  - *Restoring*: the bench's "Re-pack a box's old or damp rounds" (a box
-    and powder) makes them good ball again.
+  - *Restoring*: the bench's "Dry and re-prime a box's damp rounds" (a
+    box and powder) makes them good ball again.
   - *The gauge*, misfires and hang-fires per 100 rounds:
 
     | Rounds | Misfires | Hang-fires |
     |---|---|---|
     | fresh | 0.17 | 0 |
-    | surplus | 3.2 | 3.3 |
     | damp | 18.8 | 7.9 |
     | cold-soaked | 4.4 | 5.5 |
-    | scavenged re-pack | 4.75 | 0 |
 
-    The re-pack's trouble is the squib. The longest hang was 1.0 s.
+    A damp round also squibs 4 times in 100 (below). The longest hang was
+    1.0 s.
 - **Signatures**: a test, `weapons/signature.rs`, records each gun's
   muzzle path. Each is held as a player would: two hands (a handgun
   cupped), shouldered where there's a stock. The trigger
@@ -933,8 +931,8 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   stovepipe jolts, a failure to feed is a dead click, a double feed
   grinds (`weapons/faults.rs`).
 - **Faults by type**:
-  - *Squib*: the bench's re-packed rounds now and then have too little
-    powder. You get a pop and no kick, the action doesn't move, and the
+  - *Squib*: a damp round's wet powder now and then burns weak (4 in
+    100; a dry round never squibs). You get a pop and no kick, the action doesn't move, and the
     bullet stays in the bore. Rack the case out and push a cleaning rod
     10 cm down the bore from the muzzle to knock the bullet out. Fire on
     it instead and the barrel bulges: a violent jolt, the gun keeps 30%

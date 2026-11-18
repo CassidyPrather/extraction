@@ -66,6 +66,8 @@ pub mod reel;
 pub mod rock;
 pub mod salvage;
 pub mod search;
+pub mod searchlight;
+pub mod searchlight_look;
 pub mod senses;
 pub mod sentry;
 pub mod sentry_look;
@@ -221,6 +223,9 @@ pub enum PartRole {
     /// An armour plate over the body: it takes the rounds that strike it
     /// until it comes loose and drops, exposing what's behind (`armour`).
     Armour(u8),
+    /// A searchlight (`searchlight`): shot out, its beam is dark, and what
+    /// it lit isn't seen.
+    Lamp(u8),
 }
 
 #[derive(Component, Debug)]
@@ -428,6 +433,7 @@ impl Plugin for RobotsPlugin {
             ))
             .add_plugins((
                 hazard_look::HazardLookPlugin,
+                searchlight::SearchlightPlugin,
                 weak_points::WeakPointsPlugin,
                 rock::RockPlugin,
             ))

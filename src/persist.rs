@@ -406,6 +406,7 @@ pub(crate) fn load_save(
     mut requests: ResMut<crate::raid::requests::Requests>,
     mut progression: ResMut<crate::progression::Progression>,
     mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
+    mut handled: ResMut<crate::items::handled::Handled>,
     mut notes: ResMut<crate::raid::board::NotesRead>,
     mut epilogue: ResMut<crate::raid::epilogue::Epilogue>,
     mut safehouse: ResMut<crate::progression::safehouse::Safehouse>,
@@ -488,6 +489,7 @@ pub(crate) fn load_save(
         .clone()
         .unwrap_or_else(|| progress_from_requests(&save.requests));
     firsts.0 = save.firsts.iter().cloned().collect();
+    handled.0 = save.grabs.clone();
     info!(
         "loaded save: {} items, cycle {}, {:.0} s to the Surge",
         save.item_count(),
@@ -1177,6 +1179,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
     save.firsts = world
         .get_resource::<crate::onboarding::firsts::Firsts>()
         .map(|f| f.0.iter().cloned().collect())
+        .unwrap_or_default();
+    save.grabs = world
+        .get_resource::<crate::items::handled::Handled>()
+        .map(|h| h.0.clone())
         .unwrap_or_default();
     save.stats.notes_read = world
         .get_resource::<crate::raid::board::NotesRead>()

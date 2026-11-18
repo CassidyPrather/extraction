@@ -513,7 +513,7 @@
         (kind: FieldSet(pad: "short"), at: (98.70, 216.08), rot: 180.0),
         // Where the truck pulls in for a flare fired from the vantage (#94).
         (kind: FlareStop(vantage: (186.0, -34.0)), at: (97.0, -18.0), name: "the quarry road's end"),
-        (kind: FlareStop(vantage: (-74.2, 115.5)), at: (-125.8, 140.8), name: "the low farm"),
+        (kind: FlareStop(vantage: (-74.2, 120.0)), at: (-125.8, 140.8), name: "the low farm"),
         (kind: RobotGate, at: (-187.5, -191.2), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).

@@ -4718,7 +4718,7 @@ pub fn use_sound(def: &extraction_core::items::ItemDef) -> Option<(&'static str,
     ];
     match def.id.as_str() {
         "radio" | "deployable_cover" | "climbing_kit" | "zipline_kit" | "camera_drone" => None,
-        _ if def.category == Category::Food => Some(if DRINKS.iter().any(|t| def.has_tag(t)) {
+        _ if def.is_food() => Some(if DRINKS.iter().any(|t| def.has_tag(t)) {
             ("physical/drink", "use.drink")
         } else {
             ("physical/eat", "use.eat")
@@ -5708,7 +5708,7 @@ mod tests {
         )
         .unwrap();
         for (_, def) in catalog.0.iter() {
-            if def.category == extraction_core::items::Category::Food {
+            if def.is_food() {
                 assert!(use_sound(def).is_some(), "{} is eaten silently", def.id);
             }
             if let Some((set, _)) = use_sound(def) {

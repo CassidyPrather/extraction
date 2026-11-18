@@ -1,6 +1,8 @@
 //! Items in the world: the catalog as a resource, spawning physical items,
 //! and their placeholder visuals.
 
+pub mod damp;
+pub mod handled;
 pub mod impacts;
 pub mod loot;
 pub mod lost;
@@ -53,6 +55,8 @@ impl Plugin for ItemsPlugin {
             impacts::ImpactPlugin,
             lost::LostItemsPlugin,
             rest::RestPlugin,
+            damp::DampPlugin,
+            handled::HandledPlugin,
         ));
     }
 }
@@ -132,7 +136,7 @@ fn placeholder_color(cat: Category) -> Color {
         Category::Attachment => Color::srgb(0.15, 0.15, 0.16),
         Category::Gadget => Color::srgb(0.25, 0.3, 0.22),
         Category::Medical => Color::srgb(0.7, 0.68, 0.62),
-        Category::Food => Color::srgb(0.5, 0.42, 0.3),
+        Category::Junk => Color::srgb(0.5, 0.42, 0.3),
         Category::Tool => Color::srgb(0.35, 0.3, 0.25),
         Category::Material => Color::srgb(0.38, 0.36, 0.33),
         Category::RobotPart => Color::srgb(0.82, 0.83, 0.85),
@@ -160,7 +164,7 @@ pub struct ItemVisualsPlugin;
 
 impl Plugin for ItemVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_plugins(damp::DampVisualsPlugin).add_systems(
             PostUpdate,
             (placeholder_visuals, finish_item_models)
                 .chain()

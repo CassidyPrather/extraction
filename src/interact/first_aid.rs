@@ -23,7 +23,6 @@ use crate::player::Player;
 use crate::rig::haptics::Haptic;
 use crate::rig::stance::Stance;
 use crate::rig::{RigDriver, RigHand, RigInput, Side};
-use extraction_core::items::Category;
 
 /// How far round a bottle's cap is twisted to come off, turns.
 pub const UNSCREW: f32 = 0.75;
@@ -242,7 +241,7 @@ fn eat_and_drink(
     for (e, item, held, gt, eating, capped) in &mut items {
         let def = catalog.get(item.kind());
         // (A capped bottle doesn't pour.)
-        if def.category != Category::Food || capped {
+        if !def.is_food() || capped {
             continue;
         }
         let Ok((root, input)) = players.get(held.player) else {

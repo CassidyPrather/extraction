@@ -3,7 +3,7 @@
 //!
 //! - A stovepipe jolts; a failure to feed is a dead click; a double feed
 //!   grinds. (The mechanism's rules are `extraction_core::firearm`.)
-//! - A squib (a re-packed round with too little powder) is a soft pop and
+//! - A squib (a damp round whose wet powder burns weak) is a soft pop and
 //!   no kick: the bullet is in the bore. Push a cleaning rod down the bore
 //!   from the muzzle to knock it out ([`rod_bores`]). Fire on it instead
 //!   and the barrel bulges: a violent jolt, the gun mostly ruined, and the
