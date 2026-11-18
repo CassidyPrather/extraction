@@ -78,7 +78,7 @@ impl AnomalyKind {
             AnomalyKind::Well => (1.6, 2.4),
             AnomalyKind::Mirror => (1.2, 1.8),
             AnomalyKind::Hush => (2.5, 4.0),
-            AnomalyKind::Frost => (2.5, 3.5),
+            AnomalyKind::Frost => (2.5, 4.0),
         }
     }
 
@@ -360,6 +360,30 @@ pub const FIELD_ARTIFACT_CHANCE: f32 = 0.35;
 pub const LOOSE_ARTIFACT_CHANCE: f32 = 0.12;
 /// The rarest find: a glass eye, in place of the usual artifact.
 pub const GLASS_EYE_CHANCE: f32 = 0.1;
+
+/// Somewhere `kind` can sit: as [`placeable`], but a frost may stand on
+/// water (it freezes it: across a beck it's a crossing).
+pub fn placeable_for(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind) -> bool {
+    if kind == AnomalyKind::Frost && hm.water_level(p).is_some() {
+        // The rest of the rules, on the ground under the water.
+        return placeable_ignoring_water(map, hm, p);
+    }
+    placeable(map, hm, p)
+}
+
+fn placeable_ignoring_water(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
+    let half = map.size * 0.5 - map.fence_inset - 4.0;
+    if p[0].abs() > half || p[1].abs() > half {
+        return false;
+    }
+    if hm.road_at(p).kind.is_some() || hm.slope_deg(p) > 24.0 {
+        return false;
+    }
+    !map.placements.iter().any(|pl| {
+        let f = crate::map::prefab_footprint(&pl.prefab);
+        geom::dist(pl.at, p) < f[0].max(f[2]) * 0.6 + 2.0
+    })
+}
 
 /// Somewhere an anomaly can sit: dry, off-road, not too steep.
 pub fn placeable(map: &MapDef, hm: &Heightmap, p: [f32; 2]) -> bool {
@@ -655,7 +679,7 @@ pub fn clear_of_first_way(way: Option<([f32; 2], [f32; 2])>, p: [f32; 2], reach:
 /// for how far the kind reaches.
 pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
     let reach = kind.danger_radius(radius);
-    placeable(map, hm, p)
+    placeable_for(map, hm, p, kind)
         && clear_of_roads(hm, p, reach)
         && clear_of_buildings(map, p, reach)
         && clear_of_rendezvous(map, p, reach)
@@ -1462,7 +1486,7 @@ mod tests {
                     m.name
                 );
                 assert!(
-                    placeable(&map, &hm, m.at),
+                    placeable_for(&map, &hm, m.at, kind),
                     "{}: {} is in the way",
                     map.name,
                     m.name

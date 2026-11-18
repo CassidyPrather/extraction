@@ -236,14 +236,20 @@ def carcass(p, w):
     board(p, (0.564, 0.05, 0.02), (0.0, 0.83, -0.27), "Timber", bevel=0.002)
 
 
+# A pull's bar: thick enough for a gloved hand round it (2 cm,
+# `capture::checks::HANDLE_THICK`), standing off far enough to get one in.
+PULL_R = 0.011
+PULL_OFF = 0.035
+
+
 def handle(p, x, y, z, vertical=True):
     """A bent bar handle standing off a front at z."""
     d = 0.05
     a = (x, y - d, z) if vertical else (x - d, y, z)
     b = (x, y + d, z) if vertical else (x + d, y, z)
     for q in (a, b):
-        rod(p, q, (q[0], q[1], z - 0.022), 0.005, "Zinc", segs=6)
-    rod(p, (a[0], a[1], z - 0.022), (b[0], b[1], z - 0.022), 0.006, "Zinc", segs=6)
+        rod(p, q, (q[0], q[1], z - PULL_OFF), 0.008, "Zinc", segs=8)
+    rod(p, (a[0], a[1], z - PULL_OFF), (b[0], b[1], z - PULL_OFF), PULL_R, "Zinc", segs=8)
 
 
 def counter_cabinet():
@@ -357,8 +363,10 @@ def stove():
         # The door, its latch at its free edge.
         d = Part(name, origin=(x - dw / 2, y, STOVE_FRONT))
         d.box((dw, dh, 0.012), (x, y, -0.295), "Cast", bevel=0.003, segs=1)
-        rod(d, (x + dw / 2 - 0.03, y, -0.301), (x + dw / 2 - 0.03, y, -0.33), 0.006, "Steel")
-        rod(d, (x + dw / 2 - 0.03, y, -0.33), (x + dw / 2 + 0.03, y, -0.33), 0.007, "Steel")
+        rod(d, (x + dw / 2 - 0.03, y, -0.301), (x + dw / 2 - 0.03, y, -0.336), 0.008, "Steel",
+            segs=8)
+        rod(d, (x + dw / 2 - 0.03, y, -0.336), (x + dw / 2 + 0.03, y, -0.336), PULL_R, "Steel",
+            segs=8)
         doors.append(d)
     # A towel rail along the front.
     for x in (-0.3, 0.3):

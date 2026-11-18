@@ -171,7 +171,9 @@ fn art_top(id: &str) -> Option<Vec3> {
     let root = crate::asset_root_path().join("models/props");
     let mut best: Option<Vec3> = None;
     for (name, at) in art_of(&geo) {
-        let Some(local) = glb_top(&root.join(format!("{name}.glb"))) else {
+        let Some(local) =
+            glb_top(&root.join(format!("{}.glb", name.split('#').next().unwrap_or(name))))
+        else {
             continue;
         };
         let p = at.transform_point(local);
@@ -733,7 +735,11 @@ mod tests {
                 // floating under an art-only roof.
                 let root = crate::asset_root_path().join("models/props");
                 for (name, _) in art_of(&geo) {
-                    if glb_top(&root.join(format!("{name}.glb"))).is_none() {
+                    if glb_top(
+                        &root.join(format!("{}.glb", name.split('#').next().unwrap_or(name))),
+                    )
+                    .is_none()
+                    {
                         bad.push(format!("no art for {} ({name}.glb)", p.prefab));
                     }
                 }

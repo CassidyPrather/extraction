@@ -34,6 +34,8 @@ How it works:
 | `capture::fighting::tests::models_dont_fight_themselves`: walker grappler_core vs engineer_hull 0.13 m² | 77bdea0f (lib341) | Models | fixed in 705f16c9 (on 10957625); confirm |
 | `models::tests::no_flat_model_material_is_paper_white`: "Baked" 1.00 | 77bdea0f (lib341) | Arcade | fixed in 35bc2962 (gate 343) |
 | `onboarding::firsts` every_machine_has_its_first_contact_line, `robots::intent_roster` every_machine_is_on_the_intent_roster: the engineer | 77bdea0f (lib341) | Robot bodies | fixed in d40ba037 (gate 343); Onboarding to word the line |
+| `vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached`: drone robot_cell (Live) unseen, out of reach (0.03 m up, under the hull) | bb51307b (lib343) | Heavy | playtest-relevant |
+| `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | bb51307b (lib343) | Heavy | |
 | `audio_machines::tests::the_dangers_are_heard`: no sound for PartCooked | 77bdea0f (lib341) | Anomalies | |
 | `render::landmarks::tests::every_landmark_lamp_stands_on_its_building`: no art for ore_mill/observatory (locker#carcass.glb, stove#carcass.glb) | 77bdea0f (lib341) | World models | node renames |
 | `sim::indoor::tests::what_is_laid_on_a_spot_settles_in_reach`: 68 of 1395 laid things out of the plan, seed 4, ~20 m under ground | 77bdea0f (lib341) | World models | playtest-relevant |

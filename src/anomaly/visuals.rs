@@ -78,6 +78,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 steam,
                 dress_steam_banks,
                 light_steam_banks,
+                dress_charged_water,
             ),
         );
     }
@@ -2584,14 +2585,40 @@ fn steam(
 /// A steam bank (`anomaly::steam`): big soft billows, white, low and
 /// rolling slowly in a dome (`anomaly_particles.wgsl` mode 8). One
 /// particle system, no light.
+#[allow(clippy::too_many_arguments)]
 fn dress_steam_banks(
     mut commands: Commands,
-    added: Query<(Entity, &super::steam::SteamBank), Added<super::steam::SteamBank>>,
+    added: Query<(Entity, &super::steam::SteamBank, &Transform), Added<super::steam::SteamBank>>,
     a: Res<AnomalyAssets>,
+    zone: Res<crate::world::Zone>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut particles: ResMut<Assets<ParticleMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut damp: Local<Option<Handle<StandardMaterial>>>,
 ) {
-    for (e, bank) in &added {
+    // The ground under a bank, darkened damp: soft, faint, matte-ish.
+    let damp = damp
+        .get_or_insert_with(|| {
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(0.05, 0.05, 0.055, 0.3),
+                base_color_texture: Some(a.radial.clone()),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.6,
+                depth_bias: 55.0,
+                ..default()
+            })
+        })
+        .clone();
+    for (e, bank, at) in &added {
+        let under = meshes.add(draped_disc(&zone, at.translation, bank.radius * 1.2));
+        commands.entity(e).with_children(|c| {
+            c.spawn((
+                Mesh3d(under),
+                MeshMaterial3d(damp.clone()),
+                Transform::IDENTITY,
+                NotShadowCaster,
+            ));
+        });
         let mut rng = extraction_core::noise::Rng::new(e.to_bits());
         let (count, size) = (64, 1.4);
         let color = STEAM_GREY;
@@ -2682,3 +2709,65 @@ fn plates(px: f32, py: f32) -> (f32, f32) {
     }
     (f1, f2)
 }
+
+/// Crackles on the water a snare charges (`snare_water`): one glowing
+/// particle system, a child of the snare at the water's level, so its
+/// charge and flash drive it with the snare's own (`pulse`).
+#[allow(clippy::type_complexity)]
+fn dress_charged_water(
+    mut commands: Commands,
+    snares: Query<
+        (
+            Entity,
+            &Anomaly,
+            &GlobalTransform,
+            &super::snare_water::ChargesWater,
+        ),
+        Changed<super::snare_water::ChargesWater>,
+    >,
+    old: Query<(Entity, &ChildOf), With<WaterCrackle>>,
+    a: Res<AnomalyAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut particles: ResMut<Assets<ParticleMaterial>>,
+) {
+    for (e, an, gt, w) in &snares {
+        for (o, parent) in &old {
+            if parent.parent() == e {
+                commands.entity(o).despawn();
+            }
+        }
+        let mut rng = extraction_core::noise::Rng::new(e.to_bits() ^ 0x9A7E);
+        let color = Vec3::new(6.0, 12.0, 30.0);
+        let ext = w.reach + 1.0;
+        commands.entity(e).with_children(|c| {
+            c.spawn((
+                WaterCrackle,
+                Particles { color, alpha: 1.0 },
+                Mesh3d(meshes.add(particle_mesh(80, &mut rng))),
+                MeshMaterial3d(particles.add(ParticleMaterial {
+                    params: ParticleParams {
+                        mode: Vec4::new(9.0, an.radius, w.reach, 1.0),
+                        state: Vec4::new(an.charge, 0.0, 0.0, 0.09),
+                        color: color.extend(1.0),
+                    },
+                    texture: a.dot.clone(),
+                    additive: true,
+                })),
+                Transform::from_xyz(0.0, w.level - gt.translation().y, 0.0),
+                Aabb::from_min_max(Vec3::new(-ext, -0.5, -ext), Vec3::new(ext, 0.5, ext)),
+                NoAutoAabb,
+                NotShadowCaster,
+                VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: 50.0..60.0,
+                    use_aabb: false,
+                },
+            ));
+        });
+    }
+}
+
+/// The crackle on a snare's charged water (so it can be replaced when the
+/// snare creeps).
+#[derive(Component)]
+struct WaterCrackle;

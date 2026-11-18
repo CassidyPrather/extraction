@@ -3225,10 +3225,14 @@ pub(crate) const CRACKLE_SET: &str = "device/crackle";
 ///   nearer it is (it fires 1.25 s apart at range, 0.15 s close);
 /// - a wet aegis biting its carrier: a crackle at the chest; a shard's
 ///   late glint, a faint glass tick;
-/// - a hot stone held: a sizzle at the hand for as long as it burns.
+/// - a hot stone held: a sizzle at the hand for as long as it burns;
+/// - a part cooked through in a burner's coals (`anomaly::cook`): a low,
+///   slowed crackle where it lies.
+#[allow(clippy::too_many_arguments)]
 fn anomaly_voices(
     mut commands: Commands,
     mut pings: MessageReader<crate::anomaly::detector::StonePing>,
+    mut cooked: MessageReader<crate::anomaly::cook::PartCooked>,
     mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
     mut burns: MessageReader<crate::anomaly::harvest::Burned>,
     mut sizzle: Query<(Entity, &mut Transform, &SampleEffects), With<BurnLoop>>,
@@ -3239,6 +3243,19 @@ fn anomaly_voices(
     mut last_burn: Local<f32>,
 ) {
     use crate::anomaly::costs::Bite;
+    for c in cooked.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "device/crackle",
+            Some(c.at),
+            "cook.crackle",
+            0.0,
+            0.45,
+            0.1,
+        );
+    }
     for p in pings.read() {
         let speed = 1.0 + 0.3 * p.near.clamp(0.0, 1.0) as f64;
         play_at_speed(
