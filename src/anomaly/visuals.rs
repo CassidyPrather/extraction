@@ -405,13 +405,35 @@ fn mark_texture(images: &mut Assets<Image>, pattern: Pattern) -> (Handle<Image>,
                 // its heart.
                 tone *= 1.0 - 0.7 * veins(px, py, r);
             }
-            let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
+            let mut alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
+            if pattern == Pattern::Frost {
+                // Its edge feathered by the rime, not cut round.
+                let fringe = value_noise(px * 22.0, py * 22.0, 62);
+                alpha *= 1.0 - smooth(0.82, 1.0, r / edge + 0.12 * (fringe - 0.5));
+            }
             // A lift's ground is scoured in a spiral by what it spins:
             // rusty subsoil, grooved (a plain colour can't stand out on
             // grass, ash and silt alike; a pattern does). Coloured here,
             // not by the material: a tint can only darken, and the grit
             // it flings out is pale.
-            let rgb = if spiral {
+            let rgb = if pattern == Pattern::Frost {
+                // Frosted plates, cracked between: the cracks are what
+                // show it on snow (pale hoar on snow was no mark at all;
+                // a saturated blue read as paint). Rime feathers its rim,
+                // whiter, in tufts.
+                let (f1, f2) = plates(px, py);
+                let crack = 1.0 - smooth(0.0, 0.035, f2 - f1);
+                let at = r / edge;
+                let tufts = value_noise(px * 16.0, py * 16.0, 61);
+                let rime = smooth(0.7, 0.9, at) * (0.5 + 0.5 * tufts);
+                let ice = [0.74, 0.82, 0.9].map(|c| c * (0.85 + 0.15 * blot) * grain);
+                let line = [0.32, 0.42, 0.54];
+                let white = [0.93, 0.95, 0.97];
+                std::array::from_fn(|i| {
+                    let c = ice[i] + (line[i] - ice[i]) * crack * (1.0 - rime);
+                    c + (white[i] - c) * rime
+                })
+            } else if spiral {
                 // Broken, not drawn: the grooves come and go.
                 let wear = value_noise(px * 6.0, py * 6.0, 3);
                 let groove = (a * 3.0 + r.max(0.05).ln() * 9.0 + wear * 1.5).sin();
@@ -464,6 +486,8 @@ enum Pattern {
     Spiral,
     /// A snare's: burnt along branching paths out from its heart.
     Veins,
+    /// A frost's: frosted plates cut by cracks, rime feathering its rim.
+    Frost,
 }
 
 /// Branching lines out from the heart, 0..1 (1 on a line): the paths an
@@ -650,6 +674,7 @@ fn init_assets(
     let (mark, _) = mark_texture(&mut images, Pattern::Plain);
     let (scoured, scoured_glow) = mark_texture(&mut images, Pattern::Spiral);
     let (veined, _) = mark_texture(&mut images, Pattern::Veins);
+    let (rimed, _) = mark_texture(&mut images, Pattern::Frost);
     let pool = glow_texture(&mut images, MarkGlow::Pool);
     let coals = glow_texture(&mut images, MarkGlow::Coals);
     let sheen = glow_texture(&mut images, MarkGlow::Sheen);
@@ -730,12 +755,15 @@ fn init_assets(
         LinearRgba::rgb(0.06, 0.06, 0.058),
         0.95,
     );
-    // Glazed in blue ice, a little lit of itself. (Its own valley is under
-    // snow: pale hoar on snow was no mark at all.)
-    let frosted = ground(
-        Color::srgba(0.22, 0.36, 0.62, 0.94),
-        LinearRgba::rgb(0.0, 0.016, 0.06),
-        0.6,
+    // Frosted over: pale plates cut by cracks, rime feathering its rim, a
+    // little lit of itself. Its colour's in its texture (the cracks show it
+    // on snow; a saturated blue read as paint).
+    let frosted = ground_with(
+        &rimed,
+        &pool,
+        Color::srgba(1.0, 1.0, 1.0, 0.95),
+        LinearRgba::rgb(0.012, 0.018, 0.03),
+        0.7,
     );
     // Pressed dark and hard, a faint violet in it (the well's own light:
     // in shadow and at night its edge still shows).
@@ -2629,4 +2657,28 @@ fn light_steam_banks(
             }
         }
     }
+}
+
+/// Plates for a frost's mark: (nearest, second-nearest) distances to a
+/// scatter of cell seeds over the disc (`px`, `py` in radii); where the
+/// two are nearly equal is a crack between plates.
+fn plates(px: f32, py: f32) -> (f32, f32) {
+    let bend = (
+        value_noise(px * 5.0, py * 5.0, 63) - 0.5,
+        value_noise(px * 5.0, py * 5.0, 64) - 0.5,
+    );
+    let (qx, qy) = (px + bend.0 * 0.12, py + bend.1 * 0.12);
+    let (mut f1, mut f2) = (f32::MAX, f32::MAX);
+    for k in 0..22u32 {
+        let sx = grain_at(k, 71) * 2.4 - 1.2;
+        let sy = grain_at(k, 72) * 2.4 - 1.2;
+        let d = ((qx - sx).powi(2) + (qy - sy).powi(2)).sqrt();
+        if d < f1 {
+            f2 = f1;
+            f1 = d;
+        } else if d < f2 {
+            f2 = d;
+        }
+    }
+    (f1, f2)
 }
