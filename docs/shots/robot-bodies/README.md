@@ -335,3 +335,11 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 | `../../robots/workers_2/98_engineer_at_work.png` | `reel:engineerwork` at dusk: its scan lamp lit (the beam's start at the lens) as it surveys |
 | `../../robots/workers_2/98_barricade_stages.png` | `reel:barricade` by day, 7 m off: struts, half the panels, the panels, done with the orange strap (cut it or drag it by it) |
 | `../../robots/workers_2/98_camera_stages.png` | `reel:camera` at dusk: the mast going up, the head with its lit cone sweeping, done with its cable to the network and a fix building (the searchlights' red cast) |
+
+## The grappler's harpoon pieces (Heavy's salvage)
+
+`render::logistics` dresses Models' harpoon.glb `launcher_head` and `drum` as their own pieces (`HarpoonPart`), the head on the folding boom; tested by `the_harpoon_dresses_its_head_and_drum_for_the_salvage`.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/grappler_wreck_head_folded.png` | `--map training_yard --gallery robots:grappler+grappler!dead,90,8` by day (camera `0,0,30,0,-12`, crop 680x340 of 1920x1080 at 2x): a standing grappler, and a wrecked one on its side with the boom folded and the launcher head riding it |
