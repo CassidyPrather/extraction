@@ -31,6 +31,8 @@ How it works:
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
 | `capture::attach::tests::model_pieces_touch_what_holds_them`: items/regen_injector, two 11x2x3 mm pieces at (±0.008, 0.010, 0) float 3 mm off the body | bca2242a (lib338) | Models | the injector model's grip tabs |
+| warning: constant `LATER` is never used at src/onboarding/pickups.rs:95 | 950cadec (gate 339) | Onboarding | |
+| warning: function `least_clear` is never used at src/world/hinge.rs:763 | 950cadec (gate 339) | World models | |
 | worst-view stereo draw gauge: Cinder s01_ahead (night, downpour, fight) 2552 of 2400 draws (106%); Cinder insertion_south_gate_2 97%, two fuel-exfil views ~96%, Marrow poi_radio_mast_0 94% — up ~650 draws since 10 Nov, in the smaller groups | 9d495af1 | Performance (finding the group), then that group's owner | cuts only in views ≥85% |
 
 ## Logged, not failing a check
