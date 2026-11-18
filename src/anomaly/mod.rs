@@ -22,6 +22,7 @@ pub mod harvest;
 pub mod hush;
 pub mod mirrors;
 pub mod offering;
+pub mod rake;
 pub mod scenarios;
 pub mod surge;
 pub mod visuals;
@@ -103,6 +104,8 @@ pub enum AnomalyAct {
     Reveal,
     /// A well's heart started crushing something.
     Crush,
+    /// A frost's ice creaked under a foot.
+    Creak,
 }
 
 /// A snare's discharge reached out to something (an arc to draw): metal
@@ -213,6 +216,8 @@ impl Plugin for AnomalyPlugin {
                         hush::gather,
                         // Before anything can blink or fling what was thrown.
                         detector::reveal,
+                        knock_loose,
+                        rake::rake,
                         costs::feathers_wake_lifts,
                         lifts,
                         burners,
@@ -231,6 +236,8 @@ impl Plugin for AnomalyPlugin {
                         harvest::cool_scald,
                         hush::press,
                         frost::chill,
+                        frost::freeze_water,
+                        frost::creak,
                         measure_attention,
                         spend_attention,
                         age_blooms,
@@ -372,10 +379,16 @@ fn lifts(
             Option<&Item>,
         ),
         // A lift lifts what's loose: never what's in a hand, a socket or a
-        // pack (dragging a body drags its pack along, not out of it).
-        (Without<RigidBodyDisabled>, crate::interact::NotCarried),
+        // pack (dragging a body drags its pack along, not out of it); nor,
+        // a moment, what a round just knocked out of it.
+        (
+            Without<RigidBodyDisabled>,
+            crate::interact::NotCarried,
+            Without<Knocked>,
+        ),
     >,
-    mut players: Query<(&GlobalTransform, &mut Body, &mut Health), With<Player>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Body), With<Player>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
     catalog: Res<Catalog>,
     spatial: SpatialQuery,
     time: Res<Time>,
@@ -448,7 +461,7 @@ fn lifts(
                 forces.apply_force((Vec3::Y * lift * k.sqrt() + swirl) * m);
             }
         }
-        for (pt, mut body, mut health) in &mut players {
+        for (pe, pt, mut body) in &mut players {
             let rel = pt.translation() - c;
             let d = Vec2::new(rel.x, rel.z).length();
             if d > a.radius || rel.y > 4.0 {
@@ -456,12 +469,23 @@ fn lifts(
             }
             occupied = true;
             if popping {
-                let out = Vec3::new(rel.x, 0.0, rel.z).normalize_or(Vec3::X);
-                body.velocity = out * 5.0 + Vec3::Y * 8.5;
+                // It throws you the way you face: a step up onto a roof, a
+                // fling over a wall or a ditch, aimed by where you look.
+                // (Facing nowhere, straight out.) Its throw comes down at
+                // a speed you land from (`health::SAFE_LANDING`), so it's
+                // where you land that can hurt, not the pop.
+                let facing = heads
+                    .iter()
+                    .find(|(_, c)| c.parent() == pe)
+                    .map(|(g, _)| g.forward().as_vec3());
+                let out = facing
+                    .map(|f| Vec3::new(f.x, 0.0, f.z))
+                    .and_then(|f| f.try_normalize())
+                    .or_else(|| Vec3::new(rel.x, 0.0, rel.z).try_normalize())
+                    .unwrap_or(Vec3::X);
+                body.velocity = out * LIFT_FLING + Vec3::Y * LIFT_THROW;
                 body.grounded = false;
                 body.airborne = 1.0;
-                health.hp -= 6.0;
-                health.since_hit = 0.0;
             } else {
                 // Light on your feet: gravity halves, and you're tugged round.
                 let k = falloff(d, a.radius);
@@ -486,6 +510,68 @@ fn lifts(
         }
     }
 }
+
+/// Knocked out of a lift's hold by a round, this many seconds more: it
+/// drops (shoot the featherstone down, and catch it).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Knocked(pub f32);
+
+/// How long a round knocks a thing out of a lift's hold, seconds...
+pub const KNOCKED: f32 = 1.5;
+
+/// Rain (`Conditions::rain`) at which a snare grounds itself...
+pub const SNARE_RAIN: f32 = 0.5;
+/// ...after this long at full charge, seconds, at random between (its
+/// crackle at full is the tell: at least `robots::MIN_TELL`)...
+pub const SNARE_RAIN_HOLD: (f32, f32) = (1.2, 2.8);
+/// ...shocking whoever stands within this of its edge on the wet ground,
+/// m, for this much health.
+pub const SNARE_WET_REACH: f32 = 1.5;
+pub const SNARE_WET_SHOCK: f32 = 8.0;
+/// ...and how hard it shoves it along its way, m/s: out of the column, and
+/// a featherstone out of it settles to chest height
+/// (`artifacts::featherstones`), where a hand takes it.
+pub const KNOCK_SPEED: f32 = 3.0;
+
+/// A round striking a loose stone knocks it out of the lift holding it a
+/// moment; the moment passes.
+fn knock_loose(
+    mut commands: Commands,
+    mut hits: MessageReader<crate::weapons::ballistics::Hit>,
+    mut stones: Query<(&Item, &ComputedMass, Forces)>,
+    catalog: Res<Catalog>,
+    mut knocked: Query<(Entity, &mut Knocked)>,
+    time: Res<Time>,
+) {
+    for h in hits.read() {
+        let Ok((item, mass, mut forces)) = stones.get_mut(h.entity) else {
+            continue;
+        };
+        if h.mass_g <= 0.0
+            || catalog.get(item.kind()).category != extraction_core::items::Category::Artifact
+        {
+            continue;
+        }
+        // Shoved along the round's way, out of the column.
+        let way = Vec3::new(h.velocity.x, 0.0, h.velocity.z).normalize_or(Vec3::X);
+        forces.apply_linear_impulse(way * KNOCK_SPEED * mass.value().max(0.05));
+        commands.entity(h.entity).try_insert(Knocked(KNOCKED));
+    }
+    for (e, mut k) in &mut knocked {
+        k.0 -= time.delta_secs();
+        if k.0 <= 0.0 {
+            commands.entity(e).remove::<Knocked>();
+        }
+    }
+}
+
+/// A lift's pop throws a player this fast up (m/s): with the lift's own
+/// lightness under you, about 3.1 m high, landing back on the flat within
+/// `health::SAFE_LANDING`, and onto a roof up to about 2.4 m.
+pub const LIFT_THROW: f32 = 6.6;
+/// ...and this fast the way they face (m/s). In the air with no stick a
+/// body's way slows (`player`'s air control), so it carries about 4 m.
+pub const LIFT_FLING: f32 = 9.0;
 
 /// Burners: heat that hurts whoever stands in it, and cooks robot parts.
 #[allow(clippy::too_many_arguments)]
@@ -590,8 +676,16 @@ fn snares(
     mut hits: MessageWriter<Hit>,
     mut events: MessageWriter<AnomalyEvent>,
     mut noises: MessageWriter<Noise>,
+    // The weather, the ground, and how long each snare has waited at full
+    // in a downpour.
+    (conditions, zone, mut holding): (
+        Option<Res<crate::world::weather::Conditions>>,
+        Res<Zone>,
+        Local<std::collections::HashMap<Entity, f32>>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let downpour = conditions.as_ref().is_some_and(|c| c.rain >= SNARE_RAIN);
     for (e, mut a, gt, mut dice) in &mut anomalies {
         let rng = &mut dice.0;
         if a.kind != AnomalyKind::Snare {
@@ -604,6 +698,7 @@ fn snares(
         let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
         a.charge = (a.charge + dt * hurry / 3.5).min(1.0);
         if a.charge < 1.0 {
+            holding.remove(&e);
             continue;
         }
         let c = gt.translation() + Vec3::Y * 0.8;
@@ -644,8 +739,57 @@ fn snares(
             })
             .collect();
         if touched.is_empty() && !player_in && metal.is_empty() {
+            // In a downpour, a while at full crackle (its tell) and it fires
+            // into the wet ground of its own accord: arcs where there were
+            // none, and through the wet ground a shock to whoever stands at
+            // its edge. Then it recharges: a window to reach in.
+            if !downpour {
+                continue;
+            }
+            let wait = holding
+                .entry(e)
+                .or_insert_with(|| rng.range(SNARE_RAIN_HOLD.0, SNARE_RAIN_HOLD.1));
+            *wait -= dt;
+            if *wait > 0.0 {
+                continue;
+            }
+            holding.remove(&e);
+            a.charge = 0.0;
+            let at = gt.translation();
+            for _ in 0..3 {
+                let (ang, d) = (
+                    rng.range(0.0, std::f32::consts::TAU),
+                    rng.range(0.3, 1.0) * a.radius,
+                );
+                arcs.write(ArcStrike {
+                    anomaly: e,
+                    from: c,
+                    to: zone.on_ground(at.x + ang.cos() * d, at.z + ang.sin() * d),
+                });
+            }
+            for (_, pt, mut h) in &mut players {
+                let p = pt.translation();
+                if !h.down
+                    && Vec2::new(p.x - at.x, p.z - at.z).length() < a.radius + SNARE_WET_REACH
+                {
+                    h.hp -= SNARE_WET_SHOCK;
+                    h.since_hit = 0.0;
+                }
+            }
+            events.write(AnomalyEvent {
+                anomaly: e,
+                kind: a.kind,
+                at: c,
+                what: AnomalyAct::Discharge,
+            });
+            noises.write(Noise {
+                at: c,
+                radius: 60.0,
+                source: None,
+            });
             continue;
         }
+        holding.remove(&e);
         a.charge = 0.0;
         for (pe, pt, mut h) in &mut players {
             let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
@@ -1098,6 +1242,49 @@ mod tests {
         e
     }
 
+    /// A snare in a downpour, left alone at full charge, fires into the
+    /// wet ground within a few seconds and shocks whoever stands at its
+    /// edge; in the dry it waits.
+    #[test]
+    fn rain_grounds_a_snare_and_its_edge_bites() {
+        for (weather, fires) in [("downpour", true), ("clearing", false)] {
+            let mut app = app(false);
+            app.world_mut().resource_mut::<LaunchOptions>().weather = Some(weather.into());
+            let (snare, at, r) = find(&mut app, AnomalyKind::Snare);
+            let me = player(&mut app);
+            let ground = app
+                .world()
+                .resource::<Zone>()
+                .on_ground(at.x + r + 0.9, at.z);
+            app.world_mut()
+                .get_mut::<Transform>(me)
+                .unwrap()
+                .translation = ground + Vec3::Y * 0.05;
+            app.update();
+            let hp = app.world().get::<crate::health::Health>(me).unwrap().hp;
+            let mut fired_at = None;
+            for f in 0..90 * 5 {
+                app.update();
+                if app.world().get::<Anomaly>(snare).unwrap().charge < 0.5 {
+                    fired_at = Some(f as f32 / 90.0);
+                    break;
+                }
+            }
+            let after = app.world().get::<crate::health::Health>(me).unwrap().hp;
+            if fires {
+                let t = fired_at.expect("it fired into the wet ground");
+                assert!(
+                    t >= SNARE_RAIN_HOLD.0 - 0.1,
+                    "not before its crackle's had time to tell ({t:.2} s)"
+                );
+                assert!(after < hp, "its edge bit through the wet ground");
+            } else {
+                assert!(fired_at.is_none(), "in the dry it waits");
+                assert_eq!(after, hp, "and bites no one");
+            }
+        }
+    }
+
     #[test]
     fn a_thrown_bolt_sets_off_a_snare() {
         let mut app = app(false);
@@ -1140,6 +1327,106 @@ mod tests {
         assert!(
             alone.distance(with) < 1e-4,
             "kicked the same: {alone:?} vs {with:?}"
+        );
+    }
+
+    /// A lift's pop throws you the way you face, high enough onto a
+    /// container's roof, and down at a speed you land from: the pop
+    /// itself doesn't hurt.
+    #[test]
+    fn a_lift_pop_throws_you_the_way_you_face() {
+        assert!(
+            LIFT_THROW <= crate::health::SAFE_LANDING,
+            "lands safe on the flat"
+        );
+        let mut app = app(false);
+        let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
+        let p = player(&mut app);
+        let ground = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(at.x, at.z);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = ground;
+        // Facing +X (the body turned; the head looks along it).
+        app.world_mut().get_mut::<Transform>(p).unwrap().rotation =
+            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+        // (Settled there first: a moved body's world position is a frame
+        // behind, and a pop with nobody in it just resets.)
+        for _ in 0..3 {
+            app.update();
+        }
+        let start = pos(&app, p);
+        let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
+        app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
+        let mut top = start;
+        let mut landed = None;
+        for i in 0..240 {
+            app.update();
+            let now = pos(&app, p);
+            if now.y > top.y {
+                top = now;
+            }
+            if i > 20 && landed.is_none() && app.world().get::<Body>(p).unwrap().grounded {
+                landed = Some(now);
+            }
+        }
+        let up = top.y - start.y;
+        assert!((2.6..4.0).contains(&up), "the pop threw you {up:.2} m up");
+        let moved = landed.expect("and came down") - start;
+        eprintln!(
+            "lift throw: {:.2} m up, landed {moved:?} off",
+            top.y - start.y
+        );
+        assert!(
+            moved.x > 3.0 && moved.z.abs() < moved.x * 0.3,
+            "the way you face: {moved:?}"
+        );
+        assert_eq!(
+            app.world().get::<crate::health::Health>(p).unwrap().hp,
+            hp,
+            "the pop doesn't hurt"
+        );
+    }
+
+    /// A round striking a stone a lift holds knocks it out: it drops.
+    #[test]
+    fn a_round_knocks_a_stone_out_of_a_lift() {
+        let mut app = app(false);
+        let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
+        let stone = drop_item(&mut app, "art_featherstone", at + Vec3::Y * 1.0);
+        for _ in 0..180 {
+            app.update();
+        }
+        let at_stone = pos(&app, stone);
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Hit {
+                entity: stone,
+                point: at_stone,
+                normal: Vec3::Y,
+                velocity: Vec3::X * 300.0,
+                damage: 0.0,
+                shooter: None,
+                mass_g: 8.0,
+                load: Default::default(),
+                blow: None,
+            });
+        app.update();
+        app.update();
+        assert!(
+            app.world().get::<Knocked>(stone).is_some(),
+            "the round knocked it"
+        );
+        // Shoved out of the column, past its edge.
+        let r = app.world().get::<Anomaly>(lift).unwrap().radius;
+        let mut out = 0.0f32;
+        for _ in 0..(90.0 * KNOCKED) as usize - 10 {
+            app.update();
+            let p = pos(&app, stone);
+            out = out.max(Vec2::new(p.x - at.x, p.z - at.z).length());
+        }
+        assert!(
+            out > r,
+            "knocked out of the column ({out:.2} m out, radius {r:.2})"
         );
     }
 

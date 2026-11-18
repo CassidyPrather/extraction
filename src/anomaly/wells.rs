@@ -45,6 +45,33 @@ pub fn heart(at: Vec3) -> Vec3 {
     at + Vec3::Y * WELL_HEIGHT
 }
 
+/// How far round its heart (in heart radii) a loose thing counts as
+/// knotted there.
+pub const WELL_KNOT: f32 = 1.5;
+/// Each thing knotted at its heart takes this share off its drag and
+/// crush on you...
+pub const WELL_CLOG: f32 = 0.2;
+/// ...down to this much of it.
+pub const WELL_CLOGGED: f32 = 0.3;
+
+/// A well's drag and crush on you, as a share, with `knotted` things at
+/// its heart.
+pub fn well_clogged(knotted: usize) -> f32 {
+    (1.0 - WELL_CLOG * knotted as f32).max(WELL_CLOGGED)
+}
+
+#[cfg(test)]
+mod clog_tests {
+    use super::*;
+
+    #[test]
+    fn junk_at_its_heart_clogs_a_well() {
+        assert_eq!(well_clogged(0), 1.0);
+        assert!((well_clogged(2) - 0.6).abs() < 1e-5);
+        assert_eq!(well_clogged(10), WELL_CLOGGED, "never to nothing");
+    }
+}
+
 /// Wells pull loose bodies and walkers in, and crush what reaches the
 /// heart.
 #[allow(clippy::type_complexity)]
@@ -79,6 +106,8 @@ pub fn wells(
         let core = heart(gt.translation());
         let reach = a.kind.reach(a.radius);
         let mut crushing = false;
+        // Loose things knotted at its heart: each one clogs it a little.
+        let mut clog = 0usize;
         for hit in spatial.shape_intersections(
             &Collider::sphere(reach),
             core,
@@ -101,6 +130,9 @@ pub fn wells(
                 continue;
             }
             let rel = bt.translation() - core;
+            if rel.length() < a.radius * WELL_HEART * WELL_KNOT {
+                clog += 1;
+            }
             let m = mass.value().max(0.05);
             let pull = Vec3::from_array(well_pull(rel.to_array(), a.radius, WELL_PULL));
             // Hold it up against gravity as it falls in, and damp it near
@@ -112,6 +144,9 @@ pub fn wells(
             let damp = -v * 2.5 * k * k;
             forces.apply_force((pull + Vec3::Y * 9.81 * k.sqrt() + swirl + damp) * m);
         }
+        // Fed junk, it drags and crushes you less: a knot you can see at
+        // its heart is your way in.
+        let fed = well_clogged(clog);
         for (pe, pt, mut body, mut health) in &mut players {
             let chest = pt.translation() + Vec3::Y * 1.0;
             let rel = chest - core;
@@ -127,10 +162,10 @@ pub fn wells(
                 });
             }
             let pull = Vec3::from_array(well_pull(flat.to_array(), a.radius, WELL_DRAG));
-            body.velocity += pull * dt;
+            body.velocity += pull * fed * dt;
             if flat.length() < a.radius * WELL_HEART && !health.down {
                 crushing = true;
-                health.hp -= WELL_CRUSH * dt;
+                health.hp -= WELL_CRUSH * fed * dt;
                 health.since_hit = 0.0;
             }
         }

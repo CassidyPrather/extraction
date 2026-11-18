@@ -67,7 +67,7 @@ is a raid a player could have played.
 A raid, as the bot plays it:
 
 1. **Kit up.** Step down out of the truck bed, pick up an AK, two
-   magazines, a box of 5.45, the radio and two dressings from the ground by
+   magazines, a box of 5.45, the radio and an injector from the ground by
    the insertion point (the dev cache plus a small sim kit), load, set semi.
 2. **Loot.** Pick a site — a building with loot spots, an outdoor loot
    marker, an artifact field, a wreck it made — scored by what the
@@ -86,8 +86,8 @@ A raid, as the bot plays it:
    moving target), reload from the pouches, rack when it clicks, a few
    steps sideways when its rounds keep hitting a wall. Afterwards it slings
    the gun, picks up the magazines it dropped and tops them up from its
-   ammunition. It dresses wounds between fights, and mid-fight if it's
-   bad. Out of ammunition it runs.
+   ammunition. It uses its injector between fights (under 45 HP), and
+   mid-fight if it's bad (under 35). Out of ammunition it runs.
 4. **Get out.** When the clock says so, the pack is full or too heavy,
    it's hurt (sooner with an artifact on it: the robots keep coming),
    the artifacts it carries draw more attention than its nerve allows
@@ -149,8 +149,8 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `blocked` | `what` (the collider's name: `Building shop`, `World edge`, `Terrain collider`...), `x`, `z`, `y` | A bot round hit something else. |
 | `reload`, `rack`, `refill`, `reposition` | `reload`: `spare`, `cover` | Gun handling (a reload with `cover` steps out of the robot's sight first, then back); stepping aside when rounds hit a wall. |
 | `evade`, `flee` | `robot`, `dist` | Backing off (cautious) or running (no ammunition). |
-| `damage` | `cause`, `amount`, `x`, `z`, `hp` | Damage taken, summed per cause per second. Causes: `Drone`, `Walker`, `Crawler` (their rounds), `Burner`, `Snare`, `Lift` (standing in one), `surge`, `bleeding`, `fall`. |
-| `heal` | `item`, `hp`, `bleeding` | Used a dressing or injector. |
+| `damage` | `cause`, `amount`, `x`, `z`, `hp` | Damage taken, summed per cause per second. Causes: `Drone`, `Walker`, `Crawler` (their rounds), `Burner`, `Snare`, `Lift` (standing in one), `surge`, `fall`. |
+| `heal` | `item`, `hp` | Used an injector. |
 | `anomaly_enter` | `kind`, `x`, `z`, `bloom`, `deliberate` | Walked into an anomaly (`deliberate`: diving for an artifact). |
 | `anomaly` | `kind`, `act` (`Pop`, `Discharge`, `Flare`, `Bloom`), `x`, `z`, `dist` | An anomaly went off within 10 m. |
 | `duck` | `dist`, `x`, `z` | A drone chirped its lock: off to a spot out of its sight `dist` m away. |
@@ -163,7 +163,7 @@ metres, `x` east, `z` south (as in the map files). Format version 1.
 | `decide_extract` | `why` (`time`, `full`, `hurt`, `heat`, `no_ammo`, `done`), `clock` | Heading out. |
 | `radio` | `rv`, `x`, `z`, `walk_secs` | Called the truck. |
 | `extract` | `x`, `z` | Pulled the bell with the truck waiting: out. |
-| `death` | `cause` (what did the most harm in the last 90 s, bleeding aside), `finisher` (what dealt the last point), `x`, `z`, `doing` | Went down. |
+| `death` | `cause` (what did the most harm in the last 90 s), `finisher` (what dealt the last point), `x`, `z`, `doing` | Went down. |
 | `end` | `outcome` (`extracted`, `died`, `timeout`), `raid_time`, `distance`, `loot` (ids), `loot_count`, `shots`, `hits`, `blocked`, `engagements`, `kills` (by kind), `damage` (by cause), `anomaly_entries`, `heals`, `extract_reason`, `death_cause`, `x`, `z`, `job` (the driver's scout job the bot was handed: `place`, `danger`, `seen`; see `docs/PROGRESSION.md`) | Last line. |
 
 ## The report

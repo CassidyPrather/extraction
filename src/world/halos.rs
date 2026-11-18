@@ -40,7 +40,8 @@ impl Plugin for HalosPlugin {
 pub struct HaloParams {
     /// rgb: the lamp's colour; w: its core's radiance.
     pub color: Vec4,
-    /// x: how much the air spreads it (`beams::air`); y: how far you see.
+    /// x: how much the air spreads it (`beams::air`); y: how far you see;
+    /// z: how much wider its aureole's sphere is (`spread`).
     pub air: Vec4,
 }
 
@@ -51,6 +52,10 @@ pub struct HaloMaterial {
 }
 
 impl Material for HaloMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/halo.wgsl".into()
+    }
+
     fn fragment_shader() -> ShaderRef {
         "shaders/halo.wgsl".into()
     }
@@ -116,6 +121,14 @@ const CORE: f32 = 300.0;
 /// How far off a halo is drawn (m): past that a lamp is a point the fog
 /// has, and every halo is a draw.
 const REACH: f32 = 140.0;
+
+/// How much wider than its halo a lamp's aureole reaches (its light in the
+/// wet air round it, #110's light in fog): 1 in dry air, 2.5 in fog. The
+/// sphere is drawn this much bigger (`halo.wgsl`'s vertex stage); the
+/// halo's own core and glow keep their size.
+pub fn spread(air: f32) -> f32 {
+    1.0 + 1.5 * ((air - 0.2) / 0.6).clamp(0.0, 1.0)
+}
 
 /// Whether halos show: only once the light's going (by day a lamp's
 /// halo is lost in the daylight, and every one is a draw).
@@ -188,7 +201,7 @@ fn add_halos(
                 materials.add(HaloMaterial {
                     params: HaloParams {
                         color: Vec4::new(l.red, l.green, l.blue, CORE),
-                        air: Vec4::new(air, weather.visibility, 0.0, 0.0),
+                        air: Vec4::new(air, weather.visibility, spread(air), 0.0),
                     },
                 })
             })
@@ -234,7 +247,7 @@ fn add_glows(
         let material = materials.add(HaloMaterial {
             params: HaloParams {
                 color: glow_color(halo),
-                air: Vec4::new(air, weather.visibility, 0.0, 0.0),
+                air: Vec4::new(air, weather.visibility, spread(air), 0.0),
             },
         });
         let sphere = commands
@@ -368,7 +381,7 @@ fn halo_air(
     }
     let air = super::beams::air(&conditions).0;
     for (_, m) in materials.iter_mut() {
-        m.params.air = Vec4::new(air, weather.visibility, 0.0, 0.0);
+        m.params.air = Vec4::new(air, weather.visibility, spread(air), 0.0);
     }
 }
 

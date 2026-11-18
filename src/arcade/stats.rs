@@ -542,7 +542,7 @@ mod tests {
                 hits: 4,
             },
         );
-        s.items.insert("field_dressing".into(), 1);
+        s.items.insert("regen_injector".into(), 1);
         s.cause = Some("walker".into());
         s.waves_cleared = 2;
         s.picked = vec!["ak74".into()];
@@ -566,7 +566,7 @@ mod tests {
             "5.0 | 1.2 s",
             "2/6",
             "PICKED UP  ak74",
-            "field_dressing",
+            "regen_injector",
         ] {
             assert!(text.contains(want), "{want:?} not in\n{text}");
         }

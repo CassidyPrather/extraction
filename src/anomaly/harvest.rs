@@ -48,8 +48,20 @@ pub fn cool_scald(
 
 /// How long a hand holds a hot stone before it lets go, seconds.
 pub const HOT_GRIP: f32 = 1.5;
+/// ...and how much longer, and how much less it burns, with your gloves
+/// soaked (rain on soaked ground, or wading): a wet hand's a way in.
+pub const WET_GRIP: f32 = 2.0;
+/// Wetness (`world::weather::Wetness`) or wading depth (m) past which your
+/// gloves are soaked.
+pub const WET_GLOVES: f32 = 0.5;
+pub const WADING_GLOVES: f32 = 0.3;
 /// What's said when it does.
 pub const TOO_HOT: &str = "Too hot to hold: you drop it. Let it cool, or pocket it.";
+
+/// Rain (`Conditions::rain`) at which a hot stone out of the coals cools
+/// in `HOT_RAIN_SECS`, not `HOT_SECS` (it steams: `visuals`).
+pub const HOT_RAIN: f32 = 0.3;
+pub const HOT_RAIN_SECS: f32 = 8.0;
 
 /// A stone hot from a burner's coals: seconds since it left them.
 #[derive(Component, Debug, Clone, Copy)]
@@ -83,7 +95,9 @@ pub fn heat(
         Option<&mut Hot>,
         Option<&Held>,
     )>,
-    mut players: Query<&mut Health>,
+    mut players: Query<(&mut Health, Option<&crate::player::Body>)>,
+    wetness: Option<Res<crate::world::weather::Wetness>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
     catalog: Res<Catalog>,
     zone: Res<Zone>,
     time: Res<Time>,
@@ -125,22 +139,27 @@ pub fn heat(
                 if in_coals {
                     h.out = 0.0;
                 } else {
-                    h.out += dt;
+                    // Rain on it cools it in `HOT_RAIN_SECS`, steaming.
+                    let rain = conditions.as_ref().is_some_and(|c| c.rain >= HOT_RAIN);
+                    h.out += dt * if rain { HOT_SECS / HOT_RAIN_SECS } else { 1.0 };
                 }
                 if quenched || h.out >= HOT_SECS {
                     commands.entity(e).remove::<Hot>();
                     continue;
                 }
                 if let Some(held) = held
-                    && let Ok(mut hp) = players.get_mut(held.player)
+                    && let Ok((mut hp, body)) = players.get_mut(held.player)
                     && !hp.down
                 {
+                    let wet = wetness.as_ref().is_some_and(|w| w.level > WET_GLOVES)
+                        || body.is_some_and(|b| b.wading > WADING_GLOVES);
+                    let grip = if wet { WET_GRIP } else { 1.0 };
                     // Nobody holds on to something burning: a moment, and
                     // the hand lets go (someone new, told to take the
                     // stone, held it to death otherwise).
                     let t = gripped.entry(e).or_default();
                     *t += dt;
-                    if *t > HOT_GRIP {
+                    if *t > HOT_GRIP * grip {
                         gripped.remove(&e);
                         actions.write(crate::interact::HandAction::Release {
                             player: held.player,
@@ -152,7 +171,7 @@ pub fn heat(
                             raid.say(TOO_HOT);
                         }
                     }
-                    hp.hp -= HOT_BURN * h.heat().max(0.3) * dt;
+                    hp.hp -= HOT_BURN * h.heat().max(0.3) / grip * dt;
                     hp.since_hit = 0.0;
                     burned.write(Burned {
                         player: held.player,
@@ -322,6 +341,77 @@ mod tests {
         assert!(app.world().get::<Hot>(stone).is_none(), "cool after twenty");
     }
 
+    /// With your gloves soaked, a hot stone is held twice as long: a way
+    /// in, in the rain.
+    /// Out in a downpour a stone from the coals cools in eight seconds,
+    /// not twenty.
+    #[test]
+    fn rain_cools_a_hot_stone_fast() {
+        let mut app = app();
+        app.world_mut()
+            .resource_mut::<crate::launch::LaunchOptions>()
+            .weather = Some("downpour".into());
+        let (_, at, r) = find(app.world_mut(), AnomalyKind::Burner);
+        let stone = spawn(app.world_mut(), "art_hearth", at + Vec3::Y * 0.3);
+        for _ in 0..10 {
+            app.update();
+        }
+        assert!(app.world().get::<Hot>(stone).is_some(), "hot in the coals");
+        // Out of the coals, into the rain.
+        app.world_mut()
+            .get_mut::<Transform>(stone)
+            .unwrap()
+            .translation = at + Vec3::new(r + 2.0, 0.3, 0.0);
+        for _ in 0..(90.0 * (HOT_RAIN_SECS + 0.5)) as usize {
+            app.update();
+        }
+        assert!(
+            app.world().get::<Hot>(stone).is_none(),
+            "cool in {HOT_RAIN_SECS} s of rain"
+        );
+    }
+
+    #[test]
+    fn a_wet_hand_holds_a_hot_stone_longer() {
+        let mut vr = Vr::new("marrow_creek");
+        let (_, at, _) = find(vr.app.world_mut(), AnomalyKind::Burner);
+        let feet = vr
+            .app
+            .world()
+            .resource::<Zone>()
+            .on_ground(at.x + 8.0, at.z);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::world::weather::Wetness>()
+            .level = 1.0;
+        let hand = feet + Vec3::new(0.25, 1.1, -0.35);
+        let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
+        vr.app
+            .world_mut()
+            .entity_mut(stone)
+            .insert((RigidBody::Static, Hot { out: 0.0 }));
+        vr.hand(Side::Right, hand, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(stone), "took it");
+        // Past a dry hand's grip, still held.
+        vr.step((90.0 * (HOT_GRIP + 0.6)) as usize);
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(stone),
+            "wet, still holding"
+        );
+        vr.step((90.0 * (HOT_GRIP * WET_GRIP - HOT_GRIP + 0.4)) as usize);
+        assert_ne!(
+            vr.hand_state(Side::Right).holding,
+            Some(stone),
+            "then let go"
+        );
+    }
+
     /// Held on to, a hot stone is let go of in a moment, with a word why:
     /// it burns, but nobody holds it till it kills them.
     #[test]
@@ -335,6 +425,11 @@ mod tests {
             .on_ground(at.x + 8.0, at.z);
         vr.stand(feet, 0.0);
         vr.step(10);
+        // Dry hands (a soaked glove holds it longer: its own test).
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::world::weather::Wetness>()
+            .level = 0.0;
         let hand = feet + Vec3::new(0.25, 1.1, -0.35);
         let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
         vr.app
@@ -367,6 +462,11 @@ mod tests {
             .on_ground(at.x + 8.0, at.z);
         vr.stand(feet, 0.0);
         vr.step(10);
+        // Dry hands (a soaked glove holds it longer: its own test).
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::world::weather::Wetness>()
+            .level = 0.0;
         let hand = feet + Vec3::new(0.25, 1.1, -0.35);
         let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
         vr.app

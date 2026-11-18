@@ -23,7 +23,7 @@
             (id: "brass", at: (-0.7, 0.9, -1.15)),
             (id: "brass", at: (1.0, 0.7, -0.85), rot: 70.0),
             (id: "ak_mag", at: (-1.1, 0.9, -0.8), rot: 20.0, condition: 0.6),
-            (id: "field_dressing", at: (1.25, 0.7, -1.1)),
+            (id: "regen_injector", at: (1.25, 0.7, -1.1)),
         ],
         note: Some((
             name: "Barricade note",
@@ -186,7 +186,7 @@
         items: [
             (id: "canned_stew", at: (1.2, 0.5, 0.7)),
             (id: "matches", at: (1.1, 0.5, 0.55)),
-            (id: "field_dressing", at: (-1.3, 0.1, 0.0)),
+            (id: "regen_injector", at: (-1.3, 0.1, 0.0)),
         ],
     ),
     (
@@ -882,7 +882,7 @@
             Prop(model: "suitcase_shut", at: (2.4, 0.5, -2.6), rot: -20.0, size: (0.62, 0.22, 0.47)),
         ],
         items: [
-            (id: "field_dressing", at: (2.3, 0.72, -2.6)),
+            (id: "regen_injector", at: (2.3, 0.72, -2.6)),
             (id: "canned_stew", at: (2.55, 0.72, -2.5)),
         ],
         terminal: Some((
@@ -965,7 +965,7 @@
             Crate(at: (0.4, 0.8), size: 0.6),
         ],
         items: [
-            (id: "field_dressing", at: (0.2, 0.6, 1.0)),
+            (id: "regen_injector", at: (0.2, 0.6, 1.0)),
             (id: "water_bottle", at: (0.6, 0.6, 0.9), condition: 0.5),
         ],
         note: Some((

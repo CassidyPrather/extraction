@@ -1081,7 +1081,7 @@ mod tests {
         let feet = on_ground(&vr, OPEN.x, OPEN.z);
         vr.stand(feet, 0.0);
         let at = feet + Vec3::new(0.25, 1.0, -0.4);
-        let item = vr.spawn("field_dressing", Transform::from_translation(at));
+        let item = vr.spawn("regen_injector", Transform::from_translation(at));
         vr.app
             .world_mut()
             .entity_mut(item)
@@ -1954,7 +1954,7 @@ mod tests {
         let feet = on_ground(&vr, OPEN.x, OPEN.z);
         vr.stand(feet, 0.0);
         let item = vr.spawn(
-            "field_dressing",
+            "regen_injector",
             Transform::from_translation(on_ground(&vr, OPEN.x, OPEN.z - 3.0) + Vec3::Y * 0.1),
         );
         vr.step(60);
@@ -2587,7 +2587,7 @@ fn tests_feet(vr: &Vr) -> Vec3 {
 mod onboarding {
     use super::*;
     use crate::onboarding::{Goal, Lamp, OnboardCard, Onboarding, Placed, StationPost};
-    use crate::raid::truck::{FLOOR, Pressable, Stash, Truck};
+    use crate::raid::truck::{FLOOR, Pressable, Truck};
     use crate::weapons::Gun;
 
     fn ob(vr: &Vr) -> Onboarding {
@@ -3320,12 +3320,12 @@ mod onboarding {
         assert!(done(&vr, Goal::Search), "the find counted");
     }
 
-    /// Taking the dressing in the house, the crate catches your watch arm:
-    /// a cut on that forearm, bleeding till it's dressed (not wearing off
-    /// on its own), so first aid has something to find and to wrap.
+    /// Taking the injector in the house, the crate catches your watch arm:
+    /// [`crate::onboarding::SCRATCH`] HP off, and it stays off (nothing
+    /// bleeds, nothing heals by itself), so first aid has something to put
+    /// back.
     #[test]
-    fn the_house_crate_scratches_and_first_aid_has_a_cut_to_dress() {
-        use crate::interact::wounds::{Limb, Wounds};
+    fn the_house_crate_scratches_and_first_aid_has_something_to_heal() {
         let mut vr = Vr::first_run();
         at_station(
             &mut vr,
@@ -3341,28 +3341,24 @@ mod onboarding {
         take(&mut vr, Side::Right, find);
         assert!(done(&vr, Goal::Search));
         vr.step(5);
-        let cut = |vr: &Vr| {
-            let w = vr.app.world().get::<Wounds>(vr.player).expect("wounds");
-            w.0.iter()
-                .find(|w| w.limb == Limb::Forearm(Side::Left))
-                .copied()
+        let hp = |vr: &Vr| {
+            vr.app
+                .world()
+                .get::<crate::health::Health>(vr.player)
+                .unwrap()
+                .hp
         };
-        let c = cut(&vr).expect("a cut on the watch arm");
-        assert!(!c.dressed);
+        let want = 100.0 - crate::onboarding::SCRATCH;
+        assert!((hp(&vr) - want).abs() < 0.5, "scratched to {}", hp(&vr));
         assert!(said(&vr, "got your arm"));
-        // Half a minute on, still bleeding: it waits for the dressing.
+        // Half a minute on: the same.
         vr.step(90 * 30);
-        let h = vr
-            .app
-            .world()
-            .get::<crate::health::Health>(vr.player)
-            .unwrap();
-        assert!(h.bleeding > 0.0, "the cut stopped by itself");
-        assert!(h.hp > 90.0, "a scratch, not a wound: {}", h.hp);
+        assert!((hp(&vr) - want).abs() < 0.5, "then {}", hp(&vr));
     }
 
     /// First aid: raise the left hand and look at the back of it (the
-    /// wrist's screen); then a dressing in hand, the face button.
+    /// wrist's screen); then the injector's tip to the thigh, and the
+    /// trigger.
     #[test]
     fn station_first_aid() {
         let mut vr = Vr::first_run();
@@ -3398,38 +3394,33 @@ mod onboarding {
             .head = look;
         vr.step(60);
         assert!(done(&vr, Goal::Wrist), "the look counted");
-        let d = vr.spawn(
-            "field_dressing",
+        let inj = vr.spawn(
+            "regen_injector",
             Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),
         );
-        vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
-        take(&mut vr, Side::Right, d);
-        // Wound round the left forearm (`interact::first_aid`), round the
-        // forearm the body has: from the wrist back toward its elbow.
-        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
-        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        vr.app.world_mut().entity_mut(inj).insert(RigidBody::Static);
+        take(&mut vr, Side::Right, inj);
+        // Its tip to the right thigh (`interact::first_aid`), the trigger.
+        let thigh = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::interact::body::Torso>>();
+            q.iter(vr.app.world())
+                .next()
+                .unwrap()
+                .transform_point(Vec3::new(0.11, -0.62, -0.04))
+        };
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(inj).unwrap();
+            gt.transform_point(crate::interact::first_aid::NEEDLE)
+                - vr.hand_state(Side::Right).world.translation
+        };
+        vr.move_hand(Side::Right, thigh - off);
+        vr.step(8);
+        vr.trigger(Side::Right, 1.0);
         vr.step(5);
-        let st = vr
-            .app
-            .world()
-            .get::<crate::rig::stance::Stance>(vr.player)
-            .unwrap()
-            .clone();
-        let forearm = crate::interact::wounds::segments(&st, eye, [Some(wrist), None])
-            .into_iter()
-            .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
-            .unwrap();
-        let axis = (forearm.a - forearm.b).normalize();
-        let centre = wrist + axis * 0.12;
-        let u = axis.any_orthonormal_vector();
-        let v = axis.cross(u);
-        for i in 0..=48 {
-            let a = std::f32::consts::TAU * i as f32 / 24.0;
-            vr.move_hand(Side::Right, centre + (u * a.cos() + v * a.sin()) * 0.06);
-            vr.step(1);
-        }
-        vr.step(3);
-        assert!(done(&vr, Goal::Dressing), "the dressing counted");
+        assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
     /// Left-handed: the holster is on the left hip (a pistol let go there
@@ -4773,7 +4764,6 @@ mod first_aid {
         vr.stand(feet, 0.0);
         let mut h = vr.app.world_mut().get_mut::<Health>(vr.player).unwrap();
         h.hp = 50.0;
-        h.bleeding = 1.0;
         (vr, feet)
     }
 
@@ -4804,215 +4794,6 @@ mod first_aid {
         vr.app.world().get_entity(e).is_err()
     }
 
-    /// Wind a dressing round the left forearm (or only hold it there).
-    fn dress(turns: f32) -> (bool, f32, f32) {
-        let (mut vr, feet) = setup();
-        let d = take(&mut vr, feet, "field_dressing");
-        // The bleed's in the left forearm (`interact::wounds`).
-        vr.app
-            .world_mut()
-            .entity_mut(vr.player)
-            .insert(crate::interact::wounds::Wounds(vec![
-                crate::interact::wounds::Wound {
-                    limb: crate::interact::wounds::Limb::Forearm(Side::Left),
-                    along: 0.5,
-                    around: 0.0,
-                    bleed: 1.0,
-                    dressed: false,
-                },
-            ]));
-        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
-        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
-        vr.step(2);
-        // The dressing goes round, so the hand goes where it must be less
-        // where the dressing sits on it.
-        let off = {
-            let gt = vr.app.world().get::<GlobalTransform>(d).unwrap();
-            gt.translation() - vr.hand_state(Side::Right).world.translation
-        };
-        let centre = wrist + Vec3::Z * 0.12;
-        // A turn in two thirds of a second, as quick as a hand goes round.
-        let steps = (turns * 60.0) as usize;
-        for i in 0..=steps.max(30) {
-            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 60.0);
-            vr.move_hand(
-                Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.08 - off,
-            );
-            vr.step(1);
-        }
-        vr.step(3);
-        let h = vr.app.world().get::<Health>(vr.player).unwrap();
-        (gone(&vr, d), h.bleeding, h.hp)
-    }
-
-    /// A person winding a dressing round their own left forearm, as a
-    /// hand in a headset does it: the forearm held out across the chest and
-    /// swaying a little, the right hand circling it `r` from its axis (a
-    /// controller can't pass through the other), `along` it from the elbow
-    /// (1 is the middle of the fist), at `pace` turns a second, the circle
-    /// wobbling by `wobble` of its radius and drifting. Seconds from the
-    /// first circle until it's on, or `None` within `limit`.
-    pub(super) fn human_wind(
-        r: f32,
-        along: f32,
-        pace: f32,
-        wobble: f32,
-        limit: f32,
-    ) -> Option<f32> {
-        wind_by_hand(r, along, pace, wobble, limit, false)
-    }
-
-    /// As [`human_wind`], or, `rock`ing, only rocked half a turn back and
-    /// forth on the arm (fidgeting, not winding).
-    fn wind_by_hand(
-        r: f32,
-        along: f32,
-        pace: f32,
-        wobble: f32,
-        limit: f32,
-        rock: bool,
-    ) -> Option<f32> {
-        let (mut vr, feet) = setup();
-        let d = take(&mut vr, feet, "field_dressing");
-        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
-        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
-        vr.step(4);
-        let off = {
-            let gt = vr.app.world().get::<GlobalTransform>(d).unwrap();
-            gt.translation() - vr.hand_state(Side::Right).world.translation
-        };
-        let forearm = |vr: &mut Vr| {
-            let mut sys = bevy::ecs::system::SystemState::<(
-                Query<
-                    (
-                        &Transform,
-                        &RigInput,
-                        &crate::rig::stance::Stance,
-                        &Children,
-                    ),
-                    With<crate::rig::LocalPlayer>,
-                >,
-                Query<(&RigHand, &Hand)>,
-            )>::new(vr.app.world_mut());
-            let (players, hands) = sys.get(vr.app.world()).unwrap();
-            crate::interact::wounds::player_segments(vr.player, &players, &hands)
-                .unwrap()
-                .into_iter()
-                .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
-                .unwrap()
-        };
-        let dt = 1.0 / 90.0;
-        let ticks = (limit / dt) as usize;
-        let start = vr.hand_state(Side::Right).world.translation;
-        for i in 0..ticks {
-            let time = i as f32 * dt;
-            // The forearm sways as the other hand works round it.
-            let sway = Vec3::new(
-                (time * 1.3).sin() * 0.02,
-                (time * 0.9).sin() * 0.015,
-                (time * 1.7).cos() * 0.015,
-            );
-            vr.move_hand(Side::Left, wrist + sway);
-            let s = forearm(&mut vr);
-            let axis = (s.b - s.a).normalize();
-            let x = axis.cross(Vec3::Y).normalize_or(Vec3::Z);
-            let y = axis.cross(x);
-            let a = if rock {
-                std::f32::consts::FRAC_PI_2 * (std::f32::consts::TAU * pace * time).sin()
-            } else {
-                std::f32::consts::TAU * pace * time
-            };
-            // Wider under the arm, where the wrist turns awkwardly; and
-            // never quite the same twice.
-            let rr = r
-                * (1.0 + wobble * ((time * 2.3).sin() * 0.6 + (time * 5.1).cos() * 0.4))
-                * if a.sin() < 0.0 { 1.0 + wobble } else { 1.0 };
-            let drift = axis * (time * 0.7).sin() * 0.03;
-            let at = s.a.lerp(s.b, along) + drift + (x * a.cos() + y * a.sin()) * rr;
-            // Half a second to bring it in to the arm.
-            let at = if time < 0.5 {
-                start.lerp(at, time / 0.5)
-            } else {
-                at
-            };
-            vr.move_hand(Side::Right, at - off);
-            vr.step(1);
-            if gone(&vr, d) {
-                return Some((time - 0.5).max(0.0));
-            }
-        }
-        None
-    }
-
-    /// How long a wind takes, across the ways people do it (run with
-    /// `--nocapture` to see the table).
-    #[test]
-    fn how_long_a_dressing_takes() {
-        let mut rows = Vec::new();
-        for &(r, along, pace, wobble) in &[
-            (0.09, 0.5, 0.5, 0.15),
-            (0.12, 0.5, 0.5, 0.2),
-            (0.15, 0.5, 0.5, 0.25),
-            (0.12, 0.8, 0.5, 0.2),
-            (0.14, 0.95, 0.4, 0.3),
-            (0.12, 0.5, 0.8, 0.2),
-            (0.17, 0.6, 0.5, 0.3),
-        ] {
-            let t = human_wind(r, along, pace, wobble, 12.0);
-            rows.push(format!(
-                "r {r:.2} along {along:.2} pace {pace:.1}/s wobble {wobble:.2}: {t:?}"
-            ));
-        }
-        eprintln!("time to bind:\n{}", rows.join("\n"));
-    }
-
-    /// Wound round the forearm as a hand in a headset does it (a circle
-    /// 12-17 cm out, wobbling, half a turn a second), it's on in about the
-    /// time one and a half turns take; in the yard it once took minutes.
-    #[test]
-    fn a_dressing_wound_by_hand_goes_on_in_one_try() {
-        for &(r, along, pace, wobble) in &[
-            (0.15, 0.5, 0.5, 0.25),
-            (0.12, 0.5, 0.5, 0.2),
-            (0.14, 0.95, 0.4, 0.3),
-            (0.17, 0.6, 0.5, 0.3),
-        ] {
-            let t = human_wind(r, along, pace, wobble, 10.0);
-            let turns = 1.5 / pace;
-            assert!(
-                t.is_some_and(|t| t < turns + 1.5),
-                "r {r} along {along} pace {pace}: {t:?} (1.5 turns take {turns} s)"
-            );
-        }
-    }
-
-    /// Rocked back and forth on the arm, or circled well clear of it, it
-    /// doesn't go on: it's wound, not waved.
-    #[test]
-    fn a_dressing_rocked_or_waved_clear_does_not_go_on() {
-        assert_eq!(wind_by_hand(0.12, 0.5, 0.6, 0.2, 8.0, true), None, "rocked");
-        assert_eq!(human_wind(0.32, 0.5, 0.5, 0.1, 8.0), None, "waved clear");
-    }
-
-    /// Circled round the forearm, the dressing goes on and the bleeding
-    /// stops.
-    #[test]
-    fn a_dressing_wound_round_the_forearm_stops_the_bleeding() {
-        let (used, bleeding, hp) = dress(2.0);
-        assert!(
-            used && bleeding == 0.0 && hp > 50.0,
-            "{used} {bleeding} {hp}"
-        );
-    }
-
-    /// Only held against it, it doesn't.
-    #[test]
-    fn a_dressing_only_held_to_the_arm_does_nothing() {
-        let (used, bleeding, _) = dress(0.0);
-        assert!(!used && bleeding > 0.0, "{used} {bleeding}");
-    }
-
     /// An injector's tip to the thigh (or out in front), and the trigger.
     fn jab(thigh: bool) -> bool {
         let (mut vr, feet) = setup();
@@ -5039,12 +4820,300 @@ mod first_aid {
         vr.step(8);
         vr.trigger(Side::Right, 1.0);
         vr.step(3);
-        gone(&vr, inj)
+        // It healed (from 50: its R-2 gives 60), and its cartridge is
+        // spent, still in the pen (`items::pen`).
+        let spent = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::items::Item, &crate::interact::InSocket)>();
+            q.iter(vr.app.world())
+                .filter(|(_, s)| {
+                    vr.app
+                        .world()
+                        .get::<crate::interact::SocketOwner>(s.socket)
+                        .is_some_and(|o| o.0 == inj)
+                })
+                .any(|(it, _)| it.condition == 0.0)
+        };
+        spent && vr.app.world().get::<Health>(vr.player).unwrap().hp > 99.0
     }
 
+    /// In at the thigh, it's used, and it heals (from 50).
     #[test]
     fn an_injector_goes_in_at_the_thigh() {
         assert!(jab(true), "the thigh took no injection");
+    }
+
+    /// Half heal, half stim (#102): a new pen comes with an R-2; an S-1
+    /// let go at its other slot clicks in; one jab gives both (60 HP, six
+    /// seconds of stim), and both cartridges are left in it, spent.
+    #[test]
+    fn a_pen_taken_up_shows_its_wells_to_the_eyes() {
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        let eye = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>();
+            q.iter(vr.app.world()).next().unwrap().translation()
+        };
+        let g = vr.app.world().get::<GlobalTransform>(pen).unwrap();
+        let (_, rot, at) = g.to_scale_rotation_translation();
+        let to_eye = (eye - at).normalize();
+        let along = rot * Vec3::Z;
+        let off_axis = (to_eye - along * to_eye.dot(along)).normalize();
+        let top = (rot * Vec3::Y).dot(off_axis);
+        assert!(top > 0.95, "the wells face the eyes ({top:.2})");
+    }
+
+    #[test]
+    fn a_stim_in_the_other_slot_and_one_jab_gives_both() {
+        use crate::items::pen::{PenSlot, SLOTS, Stimmed};
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        // The S-1 in the left hand, to the pen's free slot.
+        let at = feet + Vec3::new(-0.2, 1.1, -0.35);
+        let stim = vr.spawn("stim_s1", Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(stim)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Left, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(stim)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(
+            vr.hand_state(Side::Left).holding,
+            Some(stim),
+            "the S-1 in hand"
+        );
+        let free = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&PenSlot, &crate::interact::Socket, &ChildOf)>();
+            q.iter(vr.app.world())
+                .find(|(_, s, c)| c.parent() == pen && s.occupant.is_none())
+                .map(|(p, ..)| p.0)
+                .expect("a free slot")
+        };
+        for _ in 0..3 {
+            let slot = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(pen)
+                .unwrap()
+                .transform_point(SLOTS[free]);
+            let hand = vr.hand_state(Side::Left).world.translation;
+            let held = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(stim)
+                .unwrap()
+                .translation();
+            vr.move_hand(Side::Left, hand + (slot - held));
+            vr.step(3);
+        }
+        vr.grip(Side::Left, 0.0);
+        vr.step(4);
+        let seated = vr
+            .app
+            .world()
+            .get::<crate::interact::InSocket>(stim)
+            .and_then(|s| vr.app.world().get::<crate::interact::SocketOwner>(s.socket))
+            .map(|o| o.0);
+        assert_eq!(seated, Some(pen), "the S-1 clicked into the pen");
+        // Its tip to the thigh, and the trigger.
+        let thigh = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::interact::body::Torso>>();
+            q.iter(vr.app.world())
+                .next()
+                .unwrap()
+                .transform_point(Vec3::new(0.11, -0.62, -0.04))
+        };
+        let off = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(pen)
+            .unwrap()
+            .transform_point(NEEDLE)
+            - vr.hand_state(Side::Right).world.translation;
+        vr.move_hand(Side::Right, thigh - off);
+        vr.step(8);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(3);
+        let hp = vr.app.world().get::<Health>(vr.player).unwrap().hp;
+        assert!(hp > 99.0, "healed from 50 by the R-2: {hp}");
+        let s = vr.app.world().get::<Stimmed>(vr.player).copied();
+        assert!(
+            s.is_some_and(|s| (s.total - 6.0).abs() < 1e-3),
+            "six seconds of stim: {s:?}"
+        );
+        assert_eq!(
+            vr.app
+                .world()
+                .get::<crate::items::Item>(stim)
+                .unwrap()
+                .condition,
+            0.0,
+            "the S-1 spent"
+        );
+    }
+
+    /// The stim's clock (#102): in a stim the world's clock eases down to
+    /// `stim::SLOW`, you walk as far in a real second as without it, and
+    /// after its real seconds the clock comes back and the stim's done.
+    #[test]
+    fn a_stim_slows_the_world_and_not_you() {
+        use crate::items::pen::Stimmed;
+        use crate::items::stim::{EASE, SLOW, WorldPace};
+        let (mut vr, _) = setup();
+        vr.step(10);
+        // (Each step is a 90th of a real second, `headless_app`.)
+        let walk = |vr: &mut Vr, frames: usize| -> f32 {
+            let from = vr.feet();
+            for _ in 0..frames {
+                vr.app
+                    .world_mut()
+                    .get_mut::<RigInput>(vr.player)
+                    .unwrap()
+                    .locomotion = Vec2::new(0.0, 1.0);
+                vr.step(1);
+            }
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .locomotion = Vec2::ZERO;
+            vr.step(10);
+            (vr.feet() - from).with_y(0.0).length()
+        };
+        let plain = walk(&mut vr, 90);
+        assert!(plain > 0.5, "walked {plain} m in a second");
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        vr.step((90.0 * (EASE + 0.1)) as usize);
+        let pace = |vr: &Vr| vr.app.world().resource::<Time<Virtual>>().relative_speed();
+        assert!((pace(&vr) - SLOW).abs() < 1e-3, "slowed: {}", pace(&vr));
+        assert!((vr.app.world().resource::<WorldPace>().0 - pace(&vr)).abs() < 1e-4);
+        let stimmed = walk(&mut vr, 90);
+        assert!(
+            (stimmed - plain).abs() < plain * 0.2,
+            "a real second's walk: {stimmed} m stimmed, {plain} m not"
+        );
+        // Its six real seconds, and the ease back.
+        vr.step((90.0 * (6.0 + EASE + 0.2)) as usize);
+        assert!((pace(&vr) - 1.0).abs() < 1e-3, "back: {}", pace(&vr));
+        assert!(
+            vr.app.world().get::<Stimmed>(vr.player).is_none(),
+            "the stim's done"
+        );
+    }
+
+    /// A stim is felt starting, ending soon, and over (#102): `StimCue`s
+    /// In, Tell, Out, once each; the heart (`Heartbeat`, heard and felt in
+    /// both hands) slow and heavy, then quick in its last two seconds.
+    #[test]
+    fn a_stim_is_felt_in_its_tell_and_out() {
+        use crate::audio_kit::Heartbeat;
+        use crate::items::pen::Stimmed;
+        use crate::items::stim::{BEAT_SLOW, BEAT_TELL, StimCue, TELL};
+        let (mut vr, _) = setup();
+        vr.step(10);
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        let mut cues = Vec::new();
+        let mut beats: Vec<(usize, f32)> = Vec::new();
+        // Seven real seconds, a 90th at a time.
+        for frame in 0..(90 * 7) {
+            vr.step(1);
+            let w = vr.app.world_mut();
+            cues.extend(w.resource_mut::<Messages<StimCue>>().drain());
+            beats.extend(
+                w.resource_mut::<Messages<Heartbeat>>()
+                    .drain()
+                    .map(|b| (frame, b.level)),
+            );
+        }
+        assert_eq!(cues, vec![StimCue::In, StimCue::Tell, StimCue::Out]);
+        let secs = |f: usize| f as f32 / 90.0;
+        let (slow, quick): (Vec<(usize, f32)>, Vec<(usize, f32)>) = beats
+            .iter()
+            .copied()
+            .partition(|(f, _)| secs(*f) < 6.0 - TELL);
+        assert!(
+            (3..=5).contains(&slow.len()),
+            "about one a {BEAT_SLOW} s for 4 s: {slow:?}"
+        );
+        assert!(
+            (3..=5).contains(&quick.len()),
+            "about one a {BEAT_TELL} s for its last {TELL} s: {quick:?}"
+        );
+        assert!(
+            slow.iter().all(|b| b.1 > quick[0].1),
+            "heavier slow than quick"
+        );
+        assert!(
+            beats.iter().all(|(f, _)| secs(*f) <= 6.05),
+            "none after: {beats:?}"
+        );
+    }
+
+    /// In a stim the world's ticks come at 0.4 of frames; a held thing is
+    /// still drawn where the hand holds it on every real frame, not
+    /// stepped on the ticks (the coordinator: a gun juddering in the hand
+    /// makes VR feel broken).
+    #[test]
+    fn in_a_stim_a_held_thing_follows_the_hand_every_frame() {
+        use crate::items::pen::Stimmed;
+        let (mut vr, feet) = setup();
+        let mag = take(&mut vr, feet, "pm_mag");
+        vr.app.world_mut().entity_mut(vr.player).insert(Stimmed {
+            left: 6.0,
+            total: 6.0,
+        });
+        vr.step(60);
+        let centre = vr.hand_state(Side::Right).world.translation;
+        let mut worst: f32 = 0.0;
+        for i in 0..90 {
+            // A hand moving as a hand does: 15 cm round, a turn a second.
+            let a = std::f32::consts::TAU * i as f32 / 90.0;
+            vr.move_hand(
+                Side::Right,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.15,
+            );
+            vr.step(1);
+            let hand = vr.hand_state(Side::Right).world;
+            let offset = vr
+                .app
+                .world()
+                .get::<crate::interact::Held>(mag)
+                .unwrap()
+                .offset;
+            let want = hand.mul_transform(offset).translation;
+            let drawn = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(mag)
+                .unwrap()
+                .translation();
+            worst = worst.max(drawn.distance(want));
+        }
+        assert!(worst < 0.002, "drawn {worst} m off the hand in a stim");
     }
 
     #[test]
@@ -6624,7 +6693,7 @@ mod carry {
 
     /// Your pack off the left shoulder into the left hand: it hangs open in
     /// front of you, what's in it showing; the right hand reaches in and
-    /// takes a dressing; back over the shoulder it closes, and let go
+    /// takes an injector; back over the shoulder it closes, and let go
     /// there, it's on your back.
     #[test]
     fn the_pack_hangs_open_in_the_off_hand_and_you_take_from_it() {
@@ -6642,8 +6711,8 @@ mod carry {
             })
             .map(|(e, _)| e)
             .unwrap();
-        let dressing = vr.spawn(
-            "field_dressing",
+        let injector = vr.spawn(
+            "regen_injector",
             Transform::from_translation(feet + Vec3::Y),
         );
         vr.app
@@ -6651,8 +6720,8 @@ mod carry {
             .get_mut::<Backpack>(bag)
             .unwrap()
             .contents
-            .push(dressing);
-        vr.app.world_mut().entity_mut(dressing).insert((
+            .push(injector);
+        vr.app.world_mut().entity_mut(injector).insert((
             InBackpack { bag },
             ChildOf(bag),
             Transform::from_xyz(0.05, 0.1, 0.0),
@@ -6684,15 +6753,15 @@ mod carry {
             "it hangs under the hand: {hangs}"
         );
         assert_ne!(
-            vr.app.world().get::<Visibility>(dressing),
+            vr.app.world().get::<Visibility>(injector),
             Some(&Visibility::Hidden),
             "what's in it shows"
         );
-        // The right hand in, to the dressing.
+        // The right hand in, to the injector.
         let inside = vr
             .app
             .world()
-            .get::<GlobalTransform>(dressing)
+            .get::<GlobalTransform>(injector)
             .unwrap()
             .translation();
         vr.hand(Side::Right, inside, Quat::IDENTITY, 0.0, 0.0);
@@ -6701,7 +6770,7 @@ mod carry {
         vr.step(3);
         assert_eq!(
             vr.hand_state(Side::Right).holding,
-            Some(dressing),
+            Some(injector),
             "taken out"
         );
         assert!(
@@ -6710,7 +6779,7 @@ mod carry {
                 .get::<Backpack>(bag)
                 .unwrap()
                 .contents
-                .contains(&dressing)
+                .contains(&injector)
         );
         // Back over the shoulder: it closes; let go, it's on.
         for i in 0..=20 {
@@ -8404,373 +8473,6 @@ mod wreck_reach {
             "salvage a hand can't see or get at:\n{}",
             bad.join("\n")
         );
-    }
-}
-
-/// Wounds where you were hit (`interact::wounds`), bound one limb at a
-/// time by a dressing wound round it.
-#[cfg(test)]
-mod wounds {
-    use super::*;
-    use crate::interact::wounds::{Limb, Wounds, player_segments};
-    use crate::weapons::ballistics::Hit;
-
-    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
-
-    fn setup() -> (Vr, Vec3) {
-        let mut vr = Vr::new("training_yard");
-        let feet = vr
-            .app
-            .world()
-            .resource::<crate::world::Zone>()
-            .on_ground(OPEN.x, OPEN.z);
-        vr.stand(feet, 0.0);
-        vr.hand_local(Side::Left, Vec3::new(-0.25, 1.0, -0.15), 0.0);
-        vr.hand_local(Side::Right, Vec3::new(0.25, 1.0, -0.15), 0.0);
-        vr.step(60);
-        (vr, feet)
-    }
-
-    /// Where on the body `limb` is now, `along` it.
-    fn on(vr: &mut Vr, limb: Limb, along: f32) -> Vec3 {
-        let segs = segments(vr);
-        let s = segs.iter().find(|s| s.limb == limb).expect("that limb");
-        s.a.lerp(s.b, along)
-    }
-
-    /// The body's limbs as they are now.
-    fn segments(vr: &mut Vr) -> Vec<crate::interact::wounds::Segment> {
-        {
-            let mut sys = bevy::ecs::system::SystemState::<(
-                Query<
-                    (
-                        &Transform,
-                        &RigInput,
-                        &crate::rig::stance::Stance,
-                        &Children,
-                    ),
-                    With<crate::rig::LocalPlayer>,
-                >,
-                Query<(&RigHand, &Hand)>,
-            )>::new(vr.app.world_mut());
-            let (players, hands) = sys.get(vr.app.world()).unwrap();
-            player_segments(vr.player, &players, &hands).expect("a stance")
-        }
-    }
-
-    /// Home from a raid, the wounds and the glove's blood are gone.
-    #[test]
-    fn home_from_a_raid_the_wounds_are_gone() {
-        let (mut vr, _) = setup();
-        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
-        vr.step(2);
-        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
-        shot(&mut vr, thigh, 30.0);
-        vr.move_hand(Side::Left, thigh);
-        vr.step(30);
-        assert!(!wounds(&vr).is_empty(), "wounded");
-        let bloody = |vr: &mut Vr| {
-            vr.app
-                .world_mut()
-                .query_filtered::<(), With<crate::interact::wounds::Bloodied>>()
-                .iter(vr.app.world())
-                .count()
-        };
-        assert!(bloody(&mut vr) > 0, "a bloody glove");
-        // Home the way a raid ends: extracted, the truck drives you back
-        // (`raid::truck::finish_raid` makes you whole and sets the phase).
-        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase =
-            crate::raid::Phase::Extracting { left: 0.0 };
-        vr.step(4);
-        assert!(
-            matches!(
-                vr.app.world().resource::<crate::raid::Raid>().phase,
-                crate::raid::Phase::AtBase
-            ),
-            "home"
-        );
-        assert!(
-            wounds(&vr).is_empty(),
-            "no wounds at home: {:?}",
-            wounds(&vr)
-        );
-        assert_eq!(bloody(&mut vr), 0, "clean gloves");
-        // Hurt at base, the phase never changing (in a full run something
-        // else can set it first): the wounds stay while you're hurt, and go
-        // once you're whole.
-        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
-        shot(&mut vr, thigh, 30.0);
-        vr.step(4);
-        assert!(!wounds(&vr).is_empty(), "hurt at base, the wounds show");
-        *vr.app
-            .world_mut()
-            .get_mut::<crate::health::Health>(vr.player)
-            .unwrap() = crate::health::Health::default();
-        vr.step(4);
-        assert!(wounds(&vr).is_empty(), "whole again: {:?}", wounds(&vr));
-    }
-
-    /// The glove of a hand laid on an open wound comes away bloody; the
-    /// other stays clean.
-    #[test]
-    fn a_hand_on_a_wound_comes_away_bloody() {
-        let (mut vr, _) = setup();
-        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
-        shot(&mut vr, thigh, 30.0);
-        let w = wounds(&vr)
-            .into_iter()
-            .find(|w| w.limb == Limb::Thigh(Side::Left))
-            .expect("a thigh wound");
-        let spot = segments(&mut vr)
-            .into_iter()
-            .find(|s| s.limb == w.limb)
-            .unwrap()
-            .point(w.along, w.around);
-        vr.move_hand(Side::Left, spot);
-        vr.step(60);
-        let blood = |vr: &mut Vr, side| {
-            let mut q = vr
-                .app
-                .world_mut()
-                .query::<(&RigHand, Option<&crate::interact::wounds::Bloodied>)>();
-            q.iter(vr.app.world())
-                .find(|(rh, _)| rh.side == side)
-                .and_then(|(_, b)| b.map(|b| b.0))
-                .unwrap_or(0.0)
-        };
-        assert!(blood(&mut vr, Side::Left) > 0.5, "the left glove bloody");
-        assert_eq!(blood(&mut vr, Side::Right), 0.0, "the right clean");
-    }
-
-    /// A hit on the body at `at`.
-    fn shot(vr: &mut Vr, at: Vec3, damage: f32) {
-        let collider = {
-            let mut q = vr
-                .app
-                .world_mut()
-                .query_filtered::<(Entity, &ChildOf), With<crate::player::BodyCollider>>();
-            q.iter(vr.app.world())
-                .find(|(_, c)| c.parent() == vr.player)
-                .map(|(e, _)| e)
-                .expect("a body collider")
-        };
-        vr.app.world_mut().write_message(Hit {
-            entity: collider,
-            point: at,
-            normal: Vec3::Z,
-            velocity: Vec3::NEG_Z * 300.0,
-            damage,
-            shooter: None,
-            mass_g: 8.0,
-            load: Default::default(),
-            blow: None,
-        });
-        vr.step(2);
-    }
-
-    fn wounds(vr: &Vr) -> Vec<crate::interact::wounds::Wound> {
-        vr.app.world().get::<Wounds>(vr.player).unwrap().0.clone()
-    }
-
-    /// Shot in the left thigh and the right upper arm: two wounds, there,
-    /// bleeding. A dressing wound round the thigh binds the thigh; the arm
-    /// bleeds on.
-    #[test]
-    fn a_dressing_binds_the_limb_it_is_wound_round() {
-        let (mut vr, feet) = setup();
-        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
-        shot(&mut vr, thigh, 30.0);
-        let arm = on(&mut vr, Limb::UpperArm(Side::Right), 0.5);
-        shot(&mut vr, arm, 30.0);
-        let w = wounds(&vr);
-        assert!(
-            w.iter()
-                .any(|w| w.limb == Limb::Thigh(Side::Left) && w.bleed > 0.0),
-            "a bleeding wound on the thigh: {w:?}"
-        );
-        assert!(
-            w.iter()
-                .any(|w| w.limb == Limb::UpperArm(Side::Right) && w.bleed > 0.0),
-            "and the arm: {w:?}"
-        );
-        // A dressing in the right hand, round the left thigh twice.
-        let dressing = vr.spawn(
-            "field_dressing",
-            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.15)),
-        );
-        vr.app
-            .world_mut()
-            .entity_mut(dressing)
-            .insert(RigidBody::Static);
-        vr.hand(
-            Side::Right,
-            feet + Vec3::new(0.25, 1.0, -0.15),
-            Quat::IDENTITY,
-            1.0,
-            0.0,
-        );
-        vr.step(4);
-        vr.app
-            .world_mut()
-            .entity_mut(dressing)
-            .insert(RigidBody::Dynamic);
-        vr.step(6);
-        assert_eq!(vr.hand_state(Side::Right).holding, Some(dressing));
-        let off = {
-            let gt = vr.app.world().get::<GlobalTransform>(dressing).unwrap();
-            gt.translation() - vr.hand_state(Side::Right).world.translation
-        };
-        let centre = on(&mut vr, Limb::Thigh(Side::Left), 0.45);
-        for i in 0..=96 {
-            let a = i as f32 / 48.0 * std::f32::consts::TAU;
-            // Round it, in the horizontal plane (the thigh hangs down).
-            let at = centre + Vec3::new(a.cos(), 0.0, a.sin()) * 0.12;
-            vr.move_hand(Side::Right, at - off);
-            vr.step(1);
-        }
-        vr.step(4);
-        let w = wounds(&vr);
-        assert!(
-            w.iter()
-                .filter(|w| w.limb == Limb::Thigh(Side::Left))
-                .all(|w| w.dressed && w.bleed == 0.0),
-            "the thigh bound: {w:?}"
-        );
-        let arm_bleeds = w
-            .iter()
-            .filter(|w| w.limb == Limb::UpperArm(Side::Right))
-            .map(|w| w.bleed)
-            .sum::<f32>();
-        assert!(arm_bleeds > 0.0, "the arm bleeds on: {w:?}");
-        let h = vr
-            .app
-            .world()
-            .get::<crate::health::Health>(vr.player)
-            .unwrap();
-        assert!(
-            (h.bleeding - arm_bleeds).abs() < 0.05,
-            "health's bleeding is the arm's: {}",
-            h.bleeding
-        );
-        // And what's said is what's true: the arm still bleeds, and it's
-        // named.
-        let said = vr
-            .app
-            .world()
-            .resource::<crate::raid::Raid>()
-            .log
-            .iter()
-            .rev()
-            .find(|(t, _)| t.contains("bind") || t.contains("bound"))
-            .map(|(t, _)| t.clone())
-            .expect("a line for the dressing");
-        assert!(
-            said.contains("still bleeding") && said.contains("right upper arm"),
-            "{said}"
-        );
-    }
-
-    /// The broken shin's middle, and which way it runs.
-    fn shin(vr: &mut Vr) -> (Vec3, Vec3) {
-        let leg = vr
-            .app
-            .world()
-            .get::<crate::interact::wounds::Fracture>(vr.player)
-            .expect("a broken leg")
-            .leg;
-        let a = on(vr, Limb::Shin(leg), 0.0);
-        let b = on(vr, Limb::Shin(leg), 1.0);
-        ((a + b) / 2.0, (b - a).normalize())
-    }
-
-    /// A splint held to the shin `upright` (along it) or across it, the
-    /// other hand at the leg, for two seconds.
-    fn strap(upright: bool) -> (bool, f32, bool) {
-        use crate::interact::wounds::Fracture;
-        let (mut vr, feet) = setup();
-        vr.app
-            .world_mut()
-            .get_mut::<crate::player::Body>(vr.player)
-            .unwrap()
-            .impact = 12.0;
-        vr.step(4);
-        assert!(
-            vr.app.world().get::<Fracture>(vr.player).is_some(),
-            "broken"
-        );
-        let limp = vr
-            .app
-            .world()
-            .get::<crate::player::Body>(vr.player)
-            .unwrap()
-            .limping;
-        assert_eq!(limp, crate::interact::wounds::LIMP, "limping");
-        let at = feet + Vec3::new(0.25, 1.0, -0.15);
-        let turn = if upright {
-            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
-        } else {
-            Quat::IDENTITY
-        };
-        let splint = vr.spawn(
-            "splint",
-            Transform::from_translation(at).with_rotation(turn),
-        );
-        vr.app
-            .world_mut()
-            .entity_mut(splint)
-            .insert(RigidBody::Static);
-        vr.hand(Side::Right, at, Quat::IDENTITY, 1.0, 0.0);
-        vr.step(4);
-        vr.app
-            .world_mut()
-            .entity_mut(splint)
-            .insert(RigidBody::Dynamic);
-        vr.step(6);
-        assert_eq!(vr.hand_state(Side::Right).holding, Some(splint));
-        let (mid, _) = shin(&mut vr);
-        let off = {
-            let gt = vr.app.world().get::<GlobalTransform>(splint).unwrap();
-            gt.translation() - vr.hand_state(Side::Right).world.translation
-        };
-        // Alongside the shin, a hand's width out in front of it.
-        let place = mid + Vec3::new(0.0, 0.0, -0.09);
-        for i in 1..=30 {
-            vr.move_hand(Side::Right, at.lerp(place - off, i as f32 / 30.0));
-            vr.step(1);
-        }
-        vr.hand(
-            Side::Left,
-            mid + Vec3::new(0.08, 0.05, -0.05),
-            Quat::IDENTITY,
-            0.0,
-            0.0,
-        );
-        // Two seconds at the fixed rate.
-        vr.step(180);
-        let f = *vr.app.world().get::<Fracture>(vr.player).unwrap();
-        let limp = vr
-            .app
-            .world()
-            .get::<crate::player::Body>(vr.player)
-            .unwrap()
-            .limping;
-        (f.splinted, limp, vr.app.world().get_entity(splint).is_err())
-    }
-
-    /// A hard landing breaks a leg and you limp; a splint held along the
-    /// shin and strapped is on it, and you limp less.
-    #[test]
-    fn a_splint_strapped_along_a_broken_shin() {
-        let (splinted, limp, used) = strap(true);
-        assert!(splinted && used, "strapped on: {splinted} {used}");
-        assert_eq!(limp, crate::interact::wounds::SPLINTED_LIMP);
-    }
-
-    /// Held across the shin, it isn't a splint.
-    #[test]
-    fn a_splint_held_across_the_shin_does_nothing() {
-        let (splinted, _, used) = strap(false);
-        assert!(!splinted && !used);
     }
 }
 

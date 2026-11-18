@@ -189,17 +189,25 @@ fn pod_blockout(
     }
 }
 
+/// The dirigible's pod cable: steel, its weak-link shackle just above the
+/// pod, a grip sleeve over it (`robots::lines`, #101).
 #[derive(Component)]
 struct Cable;
 
 fn cables(
     mut commands: Commands,
     ships: Query<(Entity, &Dirigible, &GlobalTransform)>,
-    mut cables: Query<(&Cable, &mut Transform, &mut Visibility, &ChildOf)>,
+    mut cables: Query<
+        (
+            &mut crate::robots::lines::Line,
+            &mut crate::robots::lines::LineSpan,
+            &mut Visibility,
+        ),
+        With<Cable>,
+    >,
     mut made: Local<Vec<(Entity, Entity)>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    use crate::robots::lines::{Gauge, Line, LineSpan};
     made.retain(|(ship, cable)| {
         if ships.contains(*ship) {
             true
@@ -208,40 +216,50 @@ fn cables(
             false
         }
     });
-    for (e, d, _) in &ships {
-        if !made.iter().any(|(s, _)| *s == e) {
-            let m = mat(&mut materials, Color::srgb(0.05, 0.05, 0.05), 0.8, 0.5);
-            let c = commands
-                .spawn((
-                    Cable,
-                    Mesh3d(meshes.add(Cylinder::new(0.025, 1.0))),
-                    MeshMaterial3d(m),
-                    Transform::default(),
-                    Visibility::Hidden,
-                    NotShadowCaster,
-                    ChildOf(e),
-                ))
-                .id();
-            made.push((e, c));
-        }
-        let _ = d;
-    }
-    for (_, mut t, mut v, parent) in &mut cables {
-        let Ok((_, d, _)) = ships.get(parent.parent()) else {
-            continue;
-        };
+    for (e, d, gt) in &ships {
+        let top = gt.transform_point(Vec3::new(0.0, -RADIUS - 1.1, 0.0));
         let len = d.cable.max(0.0);
-        *v = if len > 0.05 {
+        let span = LineSpan {
+            from: top,
+            to: top - Vec3::Y * len.max(0.01),
+            slack: 0.0,
+        };
+        // The shackle 0.6 m over the pod's lifting eye, the sleeve a hand's
+        // reach over that: where they are on a cable reeled any length.
+        let from_end = |m: f32| (1.0 - m / len.max(0.01)).clamp(0.0, 1.0);
+        let (link, grip) = (from_end(0.6), from_end(1.5));
+        let shown = if len > 0.05 {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
-        let top = -RADIUS - 1.1;
-        *t = Transform::from_xyz(0.0, top - len * 0.5, 0.0).with_scale(Vec3::new(
-            1.0,
-            len.max(0.01),
-            1.0,
-        ));
+        match made.iter().find(|(s, _)| *s == e) {
+            None => {
+                let c = commands
+                    .spawn((
+                        Name::new("Pod cable"),
+                        Cable,
+                        Line::new(Gauge::Cable).with_weak_link(link).with_grip(grip),
+                        span,
+                        Transform::default(),
+                        shown,
+                    ))
+                    .id();
+                made.push((e, c));
+            }
+            Some(&(_, c)) => {
+                if let Ok((mut l, mut s, mut v)) = cables.get_mut(c) {
+                    if *s != span {
+                        *s = span;
+                    }
+                    if l.weak_link != Some(link) || l.grips.first() != Some(&grip) {
+                        l.weak_link = Some(link);
+                        l.grips = vec![grip];
+                    }
+                    v.set_if_neq(shown);
+                }
+            }
+        }
     }
 }
 

@@ -31,10 +31,10 @@ pub enum Family {
     MachineParts,
     /// A helmet, a vest, a plate: let go where it's worn.
     Armour,
-    /// Along a broken shin (`interact::first_aid`).
-    Splint,
-    /// In the thigh: heals, and slows a bleed (`items::usage`).
+    /// In the thigh: heals (`items::usage`).
     Injector,
+    /// A pen's cartridges: REGEN (green) and STIM (amber).
+    Cartridge,
     /// Pin out, thrown: a few seconds (`weapons::grenades`, `gadgets`).
     Grenade,
     /// Set down: the first machine near it drops (`gadgets`).
@@ -49,6 +49,11 @@ pub enum Family {
     Wedge,
     /// Held to the eyes, they magnify (`gadgets::Optic`).
     Binoculars,
+    /// The DP-2 field screen (#104): held up, it rings each anomaly round
+    /// you, the way you face; it doesn't see stones (`anomaly::detector`).
+    FieldScreen,
+    /// The DP-3 sweep: held and pointed.
+    Sweep,
     /// An artifact in it can't be felt, nor help you (`anomaly`).
     LeadCase,
     /// A watch, a photo, a tape: an offering place answers one with where
@@ -69,8 +74,8 @@ pub const FAMILIES: &[Family] = &[
     Family::Salvage,
     Family::MachineParts,
     Family::Armour,
-    Family::Splint,
     Family::Injector,
+    Family::Cartridge,
     Family::Grenade,
     Family::EmpTrap,
     Family::Knife,
@@ -78,11 +83,16 @@ pub const FAMILIES: &[Family] = &[
     Family::Bench,
     Family::Wedge,
     Family::Binoculars,
+    Family::FieldScreen,
+    Family::Sweep,
     Family::LeadCase,
     Family::Trinkets,
     Family::Rounds,
     Family::GunParts,
 ];
+
+/// Families whose kinds first roll after raid 6 (the DP-3 sweep, raid 7).
+const LATER: &[Family] = &[Family::Sweep];
 
 /// Kinds that need no word: plain to see, or the yard taught them (its
 /// stations put each in your hands). With the food and every gun and
@@ -95,7 +105,6 @@ pub const OBVIOUS: &[&str] = &[
     "radio",
     "flashlight",
     "power_cell",
-    "field_dressing",
     "detector",
     "bolt",
     "map_case",
@@ -130,8 +139,8 @@ pub fn family(def: &ItemDef) -> Option<Family> {
         "matches" => Family::Matches,
         "scrap_metal" | "electronics" | "polymer" | "brass" | "powder" => Family::Salvage,
         "helmet" | "vest" | "steel_plate" => Family::Armour,
-        "splint" => Family::Splint,
         "regen_injector" => Family::Injector,
+        "regen_r1" | "regen_r2" | "regen_r3" | "stim_s1" | "stim_s2" => Family::Cartridge,
         "rgd5" | "emp_grenade" => Family::Grenade,
         "emp_trap" => Family::EmpTrap,
         "knife" => Family::Knife,
@@ -139,6 +148,8 @@ pub fn family(def: &ItemDef) -> Option<Family> {
         "hacksaw" | "multitool" => Family::Bench,
         "door_wedge" => Family::Wedge,
         "binoculars" => Family::Binoculars,
+        "detector_bear" => Family::FieldScreen,
+        "detector_sweep" => Family::Sweep,
         "lead_case" => Family::LeadCase,
         _ => match category {
             // (What the driver's jobs ask for: a drone's motor, say, isn't.)
@@ -177,12 +188,10 @@ impl Family {
             Family::Armour => {
                 &["Truck: \"Let a helmet go at your head, a vest at your chest. Plates go in it.\""]
             }
-            Family::Splint => {
-                &["Truck: \"Leg broken? Hold the splint along the shin, other hand strapping.\""]
-            }
-            Family::Injector => {
-                &["Truck: \"Tip to your thigh, pull the trigger. It heals, slows a bleed.\""]
-            }
+            Family::Injector => &["Truck: \"Tip to your thigh, pull the trigger. It heals you.\""],
+            Family::Cartridge => &[
+                "Truck: \"Into the pen, one a slot. Green heals, amber slows the world. More bands, more in it.\"",
+            ],
             Family::Grenade => {
                 &["Truck: \"Pull the pin, then throw it far. You've seconds, not many.\""]
             }
@@ -205,6 +214,12 @@ impl Family {
             Family::LeadCase => {
                 &["Truck: \"A stone in that case: the Zone can't feel it. Nor can you.\""]
             }
+            Family::FieldScreen => {
+                &["Truck: \"Hold it up and look. Each ring's one, the way you face.\""]
+            }
+            Family::Sweep => &[
+                "Truck: \"Sweep it slow. It hears only where it points. Its second voice is a stone.\"",
+            ],
             Family::Trinkets => {
                 &["Truck: \"Leave a trinket at a shrine or well. It tells where a stone lies.\""]
             }
@@ -267,9 +282,18 @@ mod tests {
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
         // Each family with a line is one the first six raids can show
-        // (the knife and the lead case included), bar none.
+        // (the knife and the lead case included), bar the later ones'
+        // (the DP-3 sweep, raid 7), which can show by raid 10.
+        let later: std::collections::BTreeSet<Family> = rollable_before(&catalog, 10)
+            .iter()
+            .filter_map(|d| family(d))
+            .collect();
         for f in FAMILIES {
-            assert!(families.contains(f), "{f:?}: nothing before raid 6 is one");
+            if LATER.contains(f) {
+                assert!(later.contains(f), "{f:?}: nothing before raid 10 is one");
+            } else {
+                assert!(families.contains(f), "{f:?}: nothing before raid 6 is one");
+            }
         }
     }
 
@@ -360,22 +384,16 @@ mod tests {
                 include_str!("../weapons/armour.rs"),
                 "a plate at either of the",
             ),
-            // "Hold the splint along the shin."
-            (
-                "splint",
-                include_str!("../interact/first_aid.rs"),
-                "hold it\n//!   along the shin",
-            ),
-            // "Tip to your thigh, pull the trigger. It heals, slows a bleed."
+            // "Tip to your thigh, pull the trigger. It heals you."
             (
                 "regen_injector",
                 include_str!("../interact/first_aid.rs"),
-                "Put its tip to your thigh and pull\n//!   the trigger",
+                "its tip to a thigh",
             ),
             (
                 "regen_injector",
                 include_str!("../items/usage.rs"),
-                "h.bleeding *= 0.3",
+                "h.hp = (h.hp + jab.heal).min(h.max)",
             ),
             // "Pull the pin, then throw it far. You've seconds."
             (
@@ -420,6 +438,54 @@ mod tests {
                 "binoculars",
                 include_str!("../gadgets/mod.rs"),
                 "\"binoculars\" => {\n            commands.entity(e).insert(Optic",
+            ),
+            // "Hold it up and look. Each ring's one, the way you face": held,
+            // every anomaly in range on its screen, turned by its facing.
+            (
+                "detector_bear",
+                include_str!("../anomaly/detector.rs"),
+                "bear_blip((*c - p).xz().to_array(), yaw, BEAR_RANGE)",
+            ),
+            // "Sweep it slow. It hears only where it points. Its second
+            // voice is a stone": held, a stone in its cone (up and down
+            // too) pings apart from its clicks.
+            (
+                "detector_sweep",
+                include_str!("../anomaly/detector.rs"),
+                "in_cone(fwd.to_array(), (**s - p).to_array(), SWEEP_CONE_DEG)",
+            ),
+            // "Into the pen, one a slot. Green heals, amber slows the world.
+            // More bands, more in it": a slot takes a cartridge let go near
+            // it, and its grade is its dose.
+            (
+                "regen_r1",
+                include_str!("../items/pen.rs"),
+                "kind: SocketKind::Mount(Mount::Cartridge)",
+            ),
+            (
+                "regen_r1",
+                include_str!("../items/pen.rs"),
+                "strip_prefix(\"dose:\")",
+            ),
+            (
+                "regen_r2",
+                include_str!("../items/pen.rs"),
+                "strip_prefix(\"dose:\")",
+            ),
+            (
+                "regen_r3",
+                include_str!("../items/pen.rs"),
+                "strip_prefix(\"dose:\")",
+            ),
+            (
+                "stim_s1",
+                include_str!("../items/pen.rs"),
+                "strip_prefix(\"dose:\")",
+            ),
+            (
+                "stim_s2",
+                include_str!("../items/pen.rs"),
+                "strip_prefix(\"dose:\")",
             ),
             // "A stone in that case: the Zone can't feel it."
             ("lead_case", include_str!("../anomaly/mod.rs"), "lead_case"),

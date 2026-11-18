@@ -1,4 +1,4 @@
-//! Using things: the radio, bandages and injectors, food, lights.
+//! Using things: the radio, injectors, food, lights, flares.
 //!
 //! VR: press the primary button (A/X) while holding a non-gun item; food
 //! and medicine are used with the hands instead (`interact::first_aid`),
@@ -26,7 +26,7 @@ pub struct UseItem {
     pub item: Entity,
 }
 
-/// A dressing or an injector used on `player` (recordings count heals
+/// An injector used on `player` (recordings count heals
 /// from this: the item is gone by the time anything else looks).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Treated {
@@ -107,10 +107,10 @@ fn use_items(
     lights: Query<(), With<LightOn>>,
     mut hands: Query<&mut Hand>,
     held: Query<&Held>,
-    on_limb: Query<&crate::interact::first_aid::OnLimb>,
-    wounds: Query<&crate::interact::wounds::Wounds>,
     mut treated: MessageWriter<Treated>,
     at: Query<&GlobalTransform>,
+    children: Query<&Children>,
+    slots: Query<&crate::interact::Socket, With<super::pen::PenSlot>>,
 ) {
     for u in uses.read() {
         let Ok(item) = items.get(u.item) else {
@@ -139,51 +139,40 @@ fn use_items(
                     pad: None,
                 });
             }
-            "field_dressing" => {
-                // Wound round a limb, it bound that limb's wounds
-                // (`interact::first_aid`); by the button, every bleed.
-                let limb = on_limb.get(u.item).ok().map(|l| l.0);
-                if let Ok(mut h) = healths.get_mut(u.player) {
-                    if limb.is_none() {
-                        h.bleeding = 0.0;
-                    }
-                    h.hp = (h.hp + 8.0).min(h.max);
-                    // What's true now, not what a dressing usually does.
-                    raid.say(crate::interact::wounds::dressed_line(
-                        limb,
-                        wounds.get(u.player).ok(),
-                        h.bleeding,
-                    ));
+            // The pen (`items::pen`): what's in both slots, at once; the
+            // cartridges stay, emptied, till they're taken out.
+            super::pen::PEN => {
+                let carts = super::pen::cartridges_in(u.item, &children, &slots, &items, &catalog);
+                let jab = super::pen::jab_of(carts.iter().map(|(_, d, f)| (*d, *f)));
+                if jab.is_empty() {
+                    raid.say("Nothing in it.");
+                    continue;
                 }
-                treated.write(Treated {
-                    player: u.player,
-                    item: "field_dressing",
-                });
-                consume = true;
-            }
-            "regen_injector" => {
-                if let Ok(mut h) = healths.get_mut(u.player) {
-                    let was = h.bleeding;
-                    h.hp = (h.hp + 45.0).min(h.max);
-                    h.bleeding *= 0.3;
-                    raid.say(if was < crate::interact::wounds::STILL {
-                        "Cold, then warm. Something knits.".to_string()
-                    } else {
-                        // It slows a bleed; it doesn't stop one.
-                        format!(
-                            "Cold, then warm. Something knits. {}",
-                            crate::interact::wounds::bleeding_now(
-                                wounds.get(u.player).ok(),
-                                h.bleeding
-                            )
-                        )
+                for (c, ..) in &carts {
+                    commands.entity(*c).queue(|mut e: EntityWorldMut| {
+                        if let Some(mut it) = e.get_mut::<Item>() {
+                            it.0.condition = 0.0;
+                        }
                     });
                 }
+                if let Ok(mut h) = healths.get_mut(u.player) {
+                    h.hp = (h.hp + jab.heal).min(h.max);
+                }
+                if jab.stim > 0.0 {
+                    commands.entity(u.player).insert(super::pen::Stimmed {
+                        left: jab.stim,
+                        total: jab.stim,
+                    });
+                }
+                raid.say(match (jab.heal > 0.0, jab.stim > 0.0) {
+                    (true, false) => "Cold, then warm. Something knits.",
+                    (false, true) => "Cold, then your heart slows. Everything does.",
+                    _ => "Cold, then warm, then everything slows.",
+                });
                 treated.write(Treated {
                     player: u.player,
-                    item: "regen_injector",
+                    item: super::pen::PEN,
                 });
-                consume = true;
             }
             "flashlight" => {
                 if lights.contains(u.item) {

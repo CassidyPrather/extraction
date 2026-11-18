@@ -198,6 +198,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Wood",
     "Polymer",
     "Shell",
+    "ShellBelly",
     "Steel",
     "Bakelite",
     "Black",
@@ -212,6 +213,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Rope",
     "Yellow",
     "Orange",
+    "Regen",
+    "Stim",
+    "Vial",
     "Blue",
     "CarBlue",
     "RagRed",
@@ -228,6 +232,11 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Paper",
     "Olive",
     "Copper",
+    // A box's round's point, the band behind it, and a shell's hull:
+    // painted for each round's load (`items::rounds`).
+    "Tip",
+    "TipBand",
+    "Hull",
     "Dark",
     "Rotor",
     "Lens",
@@ -342,6 +351,12 @@ impl ModelMaterials {
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
+            // A robot's underside: the shell scan a shade darker, without
+            // the shell's own faint glow (`robots::visuals`), so the
+            // dirigible's belly stands off the overcast from below (#99).
+            "ShellBelly" => derive(Mat::RobotShell, &|m| {
+                m.base_color = Color::srgb(0.62, 0.63, 0.64);
+            }),
             // Bright steel: the gun-metal scan's relief, without its dark albedo.
             "Steel" => derive(Mat::GunMetal, &|m| {
                 m.base_color_texture = None;
@@ -464,6 +479,10 @@ impl ModelMaterials {
             // 12-gauge carton), an orange for carrots and hazard paint.
             "Yellow" => flat(materials, Color::srgb(0.9, 0.74, 0.16), 0.0, 0.55),
             "Orange" => flat(materials, Color::srgb(0.86, 0.38, 0.08), 0.0, 0.6),
+            // The injector cartridges' doses (#102), glossy as a liquid
+            // under glass: REGEN green, STIM amber (and their bands).
+            "Regen" => flat(materials, Color::srgb(0.1, 0.8, 0.18), 0.0, 0.5),
+            "Stim" => flat(materials, Color::srgb(0.7, 0.27, 0.0), 0.0, 0.5),
             "Blue" => flat(materials, Color::srgb(0.1, 0.24, 0.55), 0.0, 0.5),
             // A car's paint after years in the weather: the painted-metal
             // scan's relief and wear, in a blue gone chalky and grey. (The
@@ -505,7 +524,10 @@ impl ModelMaterials {
             "Cream" => flat(materials, Color::srgb(0.82, 0.78, 0.66), 0.0, 0.6),
             "Paper" => flat(materials, Color::srgb(0.85, 0.83, 0.76), 0.0, 0.9),
             "Olive" => flat(materials, Color::srgb(0.22, 0.24, 0.15), 0.0, 0.8),
-            "Copper" => flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32),
+            "Copper" | "Tip" | "TipBand" => {
+                flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32)
+            }
+            "Hull" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
             // Retroreflective tape by day: a pale cool grey, its beads a
             // little glossy (`render::reflectors` lights it for a torch).
@@ -516,6 +538,14 @@ impl ModelMaterials {
                 metallic: 0.3,
                 perceptual_roughness: 0.05,
                 reflectance: 0.9,
+                ..default()
+            }),
+            // The cartridges' glass (#102): a glint, and next to no veil
+            // over the dose (Clear's paled it under the torch).
+            "Vial" => materials.add(StandardMaterial {
+                base_color: Color::srgba(0.6, 0.62, 0.6, 0.04),
+                perceptual_roughness: 0.1,
+                alpha_mode: AlphaMode::Blend,
                 ..default()
             }),
             "Clear" => materials.add(StandardMaterial {

@@ -227,17 +227,6 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 30.0,
     },
     Recipe {
-        id: "pack_flare",
-        name: "Pack two signal cartridges (white)",
-        needs: &[
-            (Need::Item("powder"), 2),
-            (Need::Item("brass"), 1),
-            (Need::Item("polymer"), 1),
-        ],
-        makes: Make::Items(&[("flare_white", 2)]),
-        seconds: 12.0,
-    },
-    Recipe {
         id: "can_suppressor",
         name: "Pack a tin into a suppressor",
         needs: &[(Need::Tagged("can"), 1), (Need::Item("scrap_metal"), 1)],
