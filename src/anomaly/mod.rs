@@ -510,29 +510,36 @@ fn lifts(
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Knocked(pub f32);
 
-/// How long a round knocks a thing out of a lift's hold, seconds: long
-/// enough for a featherstone to settle down to where a hand reaches it (a
-/// loose one hovers at chest height, `artifacts::featherstones`).
-pub const KNOCKED: f32 = 3.0;
+/// How long a round knocks a thing out of a lift's hold, seconds...
+pub const KNOCKED: f32 = 1.5;
+/// ...and how hard it shoves it along its way, m/s: out of the column, and
+/// a featherstone out of it settles to chest height
+/// (`artifacts::featherstones`), where a hand takes it.
+pub const KNOCK_SPEED: f32 = 3.0;
 
 /// A round striking a loose stone knocks it out of the lift holding it a
 /// moment; the moment passes.
 fn knock_loose(
     mut commands: Commands,
     mut hits: MessageReader<crate::weapons::ballistics::Hit>,
-    stones: Query<&Item>,
+    mut stones: Query<(&Item, &ComputedMass, Forces)>,
     catalog: Res<Catalog>,
     mut knocked: Query<(Entity, &mut Knocked)>,
     time: Res<Time>,
 ) {
     for h in hits.read() {
-        if h.mass_g > 0.0
-            && stones.get(h.entity).is_ok_and(|i| {
-                catalog.get(i.kind()).category == extraction_core::items::Category::Artifact
-            })
+        let Ok((item, mass, mut forces)) = stones.get_mut(h.entity) else {
+            continue;
+        };
+        if h.mass_g <= 0.0
+            || catalog.get(item.kind()).category != extraction_core::items::Category::Artifact
         {
-            commands.entity(h.entity).try_insert(Knocked(KNOCKED));
+            continue;
         }
+        // Shoved along the round's way, out of the column.
+        let way = Vec3::new(h.velocity.x, 0.0, h.velocity.z).normalize_or(Vec3::X);
+        forces.apply_linear_impulse(way * KNOCK_SPEED * mass.value().max(0.05));
+        commands.entity(h.entity).try_insert(Knocked(KNOCKED));
     }
     for (e, mut k) in &mut knocked {
         k.0 -= time.delta_secs();
@@ -1268,7 +1275,7 @@ mod tests {
     #[test]
     fn a_round_knocks_a_stone_out_of_a_lift() {
         let mut app = app(false);
-        let (_, at, _) = find(&mut app, AnomalyKind::Lift);
+        let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
         let stone = drop_item(&mut app, "art_featherstone", at + Vec3::Y * 1.0);
         for _ in 0..180 {
             app.update();
@@ -1293,15 +1300,17 @@ mod tests {
             app.world().get::<Knocked>(stone).is_some(),
             "the round knocked it"
         );
-        // While it's out of the lift's hold it settles toward a hand.
-        let mut low = held;
+        // Shoved out of the column, past its edge.
+        let r = app.world().get::<Anomaly>(lift).unwrap().radius;
+        let mut out = 0.0f32;
         for _ in 0..(90.0 * KNOCKED) as usize - 10 {
             app.update();
-            low = low.min(pos(&app, stone).y);
+            let p = pos(&app, stone);
+            out = out.max(Vec2::new(p.x - at.x, p.z - at.z).length());
         }
         assert!(
-            low < held - 0.8,
-            "knocked out, it fell ({held:.2} -> {low:.2})"
+            out > r,
+            "knocked out of the column ({out:.2} m out, radius {r:.2})"
         );
     }
 
