@@ -1431,11 +1431,7 @@ pub(crate) mod tests {
         // Each where a hand reaches from standing, beside the head or on
         // its box.
         for (id, at) in &seated {
-            assert!(
-                at.y - s.foot.y < 1.2,
-                "{id} {:.2} m up",
-                at.y - s.foot.y
-            );
+            assert!(at.y - s.foot.y < 1.2, "{id} {:.2} m up", at.y - s.foot.y);
             let near = if id == "sentry_junction" {
                 at.xz().distance(s.foot.xz()) > 5.0
             } else {
@@ -1450,6 +1446,9 @@ pub(crate) mod tests {
             .iter(app.world())
             .map(|i| catalog.get(i.kind()).id.clone())
             .collect();
-        assert!(!loose.iter().any(|id| id.starts_with("pylon_")), "{loose:?}");
+        assert!(
+            !loose.iter().any(|id| id.starts_with("pylon_")),
+            "{loose:?}"
+        );
     }
 }
