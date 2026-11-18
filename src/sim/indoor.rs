@@ -1902,6 +1902,15 @@ mod tests {
                     {
                         continue;
                     }
+                    // A yard's bay gate, shut till its bay's done (#89): its
+                    // own tests (`onboarding`'s `a_gate_opens_with_its_bay`).
+                    if app
+                        .world()
+                        .get::<crate::world::yard::YardGate>(d.entity)
+                        .is_some()
+                    {
+                        continue;
+                    }
                     let mid = (d.a + d.b) * 0.5;
                     // A metre and a half past the doorway, inside (or as near
                     // as the furniture allows).

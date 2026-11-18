@@ -27,9 +27,14 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| first_jobs A/B after the gated yard: the cautious bot's WalkTo times out near gate 4 at (12.4, 18) and (0, 18); the reckless bot dies in raids 3 and 5, the one-handed bot in raids 3 and 4 (main was all home). Raids diverge from raid 3: a real fault, or a knock-on of a different yard run? | 9c1135f4 (in 1f40e45c) | Onboarding | seed sweep before calling it chance |
+| first_jobs A/B: the reckless bot dies in raids 3 and 5, the one-handed in raids 3 and 4 (main was all home) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a: the yard crate held a second pistol); bot cause #96 (one-handed reload only from a pouch; spare packed) — fix in test |
+| `soak::chaos::chaos_monkey_short` (chaos.rs:1285, findings) | aa4fccff | untriaged (coordinator) | rerun to get its findings |
+| warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
+| warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
 
 ## Logged, not failing a check
+
+- **A wreck lying in a doorway or gateway is invisible to the raider's `Scene::wreck_out_at`** when the ray starts under a lintel, rail or leaf (bot-only). Owner: Onboarding.
 
 - **one-handed first_jobs 4/5**, raid 4 (post_counter): the bot climbs out of the creek bed beside
   the Forest path footbridge deck at (-87.76, -35.05) and stops there. A bot-only stall: the gap is
@@ -41,3 +46,13 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| first_jobs cautious yard WalkTo timeouts near gate 4 | 0ba2aadb (Onboarding) |
+| `render::affordance` every_interactable (yard Bell pull, BenchLever, BenchKnob) | 4cf47a06 (Onboarding) |
+| `sim::tests::a_bot_climbs_into_the_truck` | 4cf47a06 (Onboarding) |
+| `sim::indoor::tests::every_door_lets_a_bot_in` | 4cf47a06 (Onboarding) |
+| `weapons::impacts::plate_tests::every_range_plate_stops_and_marks_a_round` | 70521467 (Onboarding) |
+| `sim::raider::run_tests::a_walk_goes_round_a_wreck_in_the_open` | feb39b12 (Onboarding) |
+| `sim::indoor::tests::every_floor_and_deck_has_a_surface` (yard gates' ground floors) | fcffac03 (Map design) |
+| `audio_machines::tests::the_dangers_are_heard` (Recall) | 88c44a5e (Legibility) |
+| `render::legibility::tests::every_panel_in_the_game_clears_its_floor` | 1744915e (Legibility) |
+| `interact::read::tests::the_logbook_comes_up_to_be_read_and_goes_back` | ae762ae8 (Hands) |

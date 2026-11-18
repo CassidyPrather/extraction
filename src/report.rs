@@ -43,7 +43,8 @@ pub fn write_report(data: &Path) -> std::io::Result<PathBuf> {
          frames/             one line a frame: frame cpu_ms gpu_ms\n\
          settings.ron        your comfort settings\n\
          raid/               the last raid's recording\n\
-         arcade/             the newest arcade runs and their summaries\n\n\
+         arcade/             the newest arcade runs and their summaries\n\
+         playtest/           a playtest tour's stations: start, rating, end\n\n\
          system.txt's \"eye targets\" is the eyes' share of the GPU's memory;\n\
          the rest (textures, meshes, shadows) runs about 1.1 GB a valley\n\
          (the VRAM gauge: 2.0-2.2 GB in all at a 2980-wide eye).\n\n\
@@ -87,6 +88,12 @@ pub fn write_report(data: &Path) -> std::io::Result<PathBuf> {
             &format!("raid/{map}-{}", name(&raid)),
             read(&raid, &scrub).as_bytes(),
         );
+    }
+    // A playtest tour's notes: each station's start, rating and end, on
+    // the wall clock (`capture::station`).
+    let tour = data.join("playtest").join("tour.jsonl");
+    if tour.exists() {
+        zip.add("playtest/tour.jsonl", read(&tour, &scrub).as_bytes());
     }
     // The newest arcade runs: each recording with its summary.
     for run in newest(&data.join("arcade"), "run-", ".jsonl", KEEP) {

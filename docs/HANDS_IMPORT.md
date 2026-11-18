@@ -40,11 +40,19 @@ pointing) only ever moves these. A model is dressed onto them
     running down the joint's own **-Z**.
   - **Curl is a turn about the joint's X, toward -Y** (the palm):
     `JOINT_BEND` 1.4 / 1.65 / 1.1 rad at full curl; the thumb's second
-    joint 0.9 (`THUMB_BEND`). The fingers' first joints also spread about
+    joint 0.9 (`THUMB_BEND` in props.rs, and its own `THUMB_BEND` in
+    `render/hold.rs` for seating: if the new thumb's second segment is
+    another length, move both together). The fingers' first joints also spread about
     Y (`rest_spread`: 0.04 rad a finger away from the index, open). The
     thumb's root swings rather than bends (`finger_aim_spread`): an aim
-    from open (beside the index) through on-a-grip to across the fist,
-    with a fixed roll of 0.6 rad about its Z.
+    from open (beside the index) through on-a-grip (at curl 0.62,
+    `THUMB_ON_GRIP`) to across the fist, `rotation_arc(-Z, aim)`, and
+    after it a roll of `rotation_z(-0.6 · thumb_side)`, mirrored between
+    the hands. An imported thumb rest-posed with that roll already in its
+    mesh comes out rolled twice: model it unrolled along -Z.
+  - **The spread closes as the hand curls**: the first joint turns
+    `rotation_y(-spread · (1 - c) · thumb_side) · curl`, so a fist has
+    no fan.
   - **The rest pose is curl 0, `rest_spread`**: what
     `joint_rotation(side, F, J, 0.0)` gives; joints 1 and 2 are
     unturned at rest, so each finger is straight from its knuckle.
