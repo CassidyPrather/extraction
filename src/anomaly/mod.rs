@@ -22,6 +22,7 @@ pub mod harvest;
 pub mod hush;
 pub mod mirrors;
 pub mod offering;
+pub mod rake;
 pub mod scenarios;
 pub mod surge;
 pub mod visuals;
@@ -214,6 +215,7 @@ impl Plugin for AnomalyPlugin {
                         // Before anything can blink or fling what was thrown.
                         detector::reveal,
                         knock_loose,
+                        rake::rake,
                         costs::feathers_wake_lifts,
                         lifts,
                         burners,
@@ -1281,7 +1283,6 @@ mod tests {
             app.update();
         }
         let at_stone = pos(&app, stone);
-        let held = at_stone.y;
         app.world_mut()
             .write_message(crate::weapons::ballistics::Hit {
                 entity: stone,
