@@ -795,6 +795,16 @@ fn init_assets(
     if let Some(mut m) = marks.get_mut(&flattened) {
         m.base.emissive_texture = Some(scoured_glow);
     }
+    // A mirror's lens (its haze) draws what's behind it from the opaque
+    // pass, which a blended mark isn't in: seen through the lens, from
+    // anywhere but overhead, the mark was gone, the bare ground showing
+    // (on snow, a pale disc). Masked, it's in what the lens shows, with a
+    // crisp rim to it.
+    for h in [&glazed, &glazed_snow] {
+        if let Some(mut m) = marks.get_mut(h) {
+            m.base.alpha_mode = AlphaMode::Mask(0.35);
+        }
+    }
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
     // soft at its edges, not an anomaly's own mark.
     let dragged = materials.add(StandardMaterial {
