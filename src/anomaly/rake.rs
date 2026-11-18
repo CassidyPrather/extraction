@@ -172,6 +172,14 @@ mod tests {
         for i in 1..=steps {
             vr.move_hand(Side::Right, from + Vec3::Z * 1.2 * i as f32 / steps as f32);
             vr.step(1);
+            if i % 8 == 0 {
+                println!(
+                    "claw {} stone {} sleeping {}",
+                    claw(&vr, bar),
+                    pos(&vr, stone),
+                    vr.app.world().get::<Sleeping>(stone).is_some()
+                );
+            }
         }
         vr.step(20);
         let out = pos(&vr, stone);
