@@ -35,7 +35,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import ALONG_X, UP, centred, item, tube_path, wanted  # noqa: E402
-from common import RX, RY, RZ, T, Part  # noqa: E402
+from common import RX, RY, RZ, T, Part, fillet  # noqa: E402
 
 # (A cyl's or tube's own axis is Z.)
 ALONG_Z = T(0, 0, 0)
@@ -132,55 +132,61 @@ def hound_hip_servo():
     return centred([p])
 
 
-def hound_nose():
+def hound_head():
     p = Part("body")
-    # A hound's nose: the sniffing cone off its head, a pale tapered snout
-    # with a dark grille and a green sensor lens at its tip.
-    p.lathe([(0.0, 0.0), (0.04, 0.0), (0.038, 0.05), (0.024, 0.12), (0.014, 0.135),
-             (0.0, 0.137)], "Shell", segs=24, xf=ALONG_X)
-    for k in range(5):
-        z = 0.06 + k * 0.012
-        r = 0.038 - (z - 0.05) * 0.2 + 0.0025  # just proud of the snout
-        p.tube(r, r - 0.008, z, z + 0.005, "Dark", segs=20, xf=ALONG_X)
-    p.lathe([(0.0, 0.134), (0.012, 0.134), (0.01, 0.142), (0.0, 0.144)], "Lens", segs=16,
-            xf=ALONG_X)
-    tube_path(p, [(0.0, 0.0, 0.01), (-0.02, 0.01, 0.02), (-0.04, 0.0, 0.03)], 0.003, "Black",
+    # A hound's head, pulled off its neck whole (#105): the pale wedge the
+    # hound wears (art/robots/walker.py `hound_head`), its dark visor band
+    # with the red eye slit, the jaw under it, a stub of the neck behind.
+    p.box((0.2, 0.12, 0.22), (0.0, 0.0, 0.0), "Shell", bevel=0.025, segs=3)
+    p.box((0.16, 0.026, 0.02), (0.0, 0.012, -0.115), "Dark", bevel=0.006, segs=1)
+    p.box((0.13, 0.012, 0.012), (0.0, 0.012, -0.122), "Eye", bevel=0.003, segs=1)
+    p.box((0.15, 0.03, 0.16), (0.0, -0.075, -0.03), "Dark", bevel=0.01, segs=2)
+    p.cyl(0.055, 0.11, 0.16, "Dark", segs=14, chamfer=0.004)
+    tube_path(p, [(0.02, -0.02, 0.15), (0.04, -0.05, 0.19), (0.03, -0.08, 0.22)], 0.004, "Red",
               sides=5, closed=False)
     return centred([p])
 
 
 def grappler_launcher():
     p = Part("body")
-    # A grappler's harpoon launcher, unbolted: a long dark tube, a barbed
-    # harpoon head still in its mouth, a red stripe down its length, the
-    # breech block and its bolt flange behind.
-    p.tube(0.035, 0.026, -0.3, 0.12, "Dark", segs=20, chamfer=0.004)
-    p.box((0.006, 0.004, 0.36), (0.0, 0.036, -0.08), "Red")
-    p.box((0.09, 0.08, 0.1), (0.0, 0.0, 0.16), "Shell", bevel=0.01, segs=2)
-    p.cyl(0.06, 0.21, 0.22, "Steel", segs=24)
-    p.lathe([(0.0, -0.4), (0.012, -0.37), (0.022, -0.34), (0.022, -0.3), (0.0, -0.3)], "Steel",
-            segs=16)
+    # A grappler's launcher, unbolted off its boom's head: the pale housing,
+    # its trunnion pin, the dark tube out of the front with its rings, the
+    # barbed harpoon still in its mouth (art/robots/logistics.py, the
+    # launcher's head).
+    side = fillet([(0.16, -0.08), (0.2, 0.0), (0.14, 0.08), (-0.14, 0.08), (-0.22, 0.04),
+                   (-0.22, -0.05), (-0.16, -0.08)], [0.02, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02], 3)
+    p.prism(side, -0.09, 0.09, "Shell", axis="x", bevel=0.018, segs=2)
+    p.cyl(0.05, -0.11, 0.11, "Dark", segs=14, xf=ALONG_X, chamfer=0.006)
+    tube = T(0, 0.01, 0)
+    p.tube(0.05, 0.032, -0.5, -0.14, "Dark", segs=14, xf=tube, chamfer=0.004)
+    for i in range(3):
+        p.tube(0.056, 0.032, -0.26 - i * 0.08, -0.24 - i * 0.08, "Dark", segs=14, xf=tube,
+               chamfer=0.004)
+    p.cyl(0.012, -0.56, -0.3, "Steel", segs=10, xf=tube)
+    p.lathe([(0.0, -0.66), (0.012, -0.64), (0.026, -0.585), (0.024, -0.56), (0.0, -0.56)],
+            "Steel", segs=12, xf=tube)
     for k in range(3):
-        a = 2 * math.pi * k / 3
-        p.box((0.004, 0.03, 0.05), (0.0, 0.024, -0.335), "Steel",
-              xf=RZ(a) @ RX(0.5, about=(0.0, 0.024, -0.335)))
+        a = 2 * math.pi * k / 3 + 0.5
+        p.box((0.008, 0.008, 0.07), (0.0, 0.0, 0.0), "Steel",
+              xf=tube @ RZ(a) @ T(0.03, 0, -0.565) @ RY(-0.35))
+    # Its bolt flange where it sat on the boom, and a torn hydraulic lead.
+    p.box((0.16, 0.02, 0.14), (0.0, -0.09, 0.0), "Dark", bevel=0.004, segs=1)
+    tube_path(p, [(0.05, -0.08, 0.1), (0.07, -0.12, 0.15), (0.06, -0.15, 0.2)], 0.005, "Red",
+              sides=5, closed=False)
     return centred([p])
 
 
 def grappler_drum():
     p = Part("body")
-    # A grappler's winch drum: a spool wound thick with steel cable between
-    # copper flanges, its axle, a frayed tail of the tether.
-    p.cyl(0.05, -0.06, 0.06, "Dark", segs=24, xf=ALONG_X)
-    for sx in (-1, 1):
-        p.cyl(0.085, sx * 0.06 - 0.006, sx * 0.06 + 0.006, "Copper", segs=32, xf=ALONG_X,
-              chamfer=0.002)
-    for k in range(6):
-        p.tube(0.072, 0.05, -0.054 + k * 0.018, -0.04 + k * 0.018, "Steel", segs=24,
-               xf=ALONG_X)
-    p.cyl(0.012, -0.09, 0.09, "Steel", segs=12, xf=ALONG_X)
-    tube_path(p, [(0.0, 0.072, 0.0), (0.0, 0.1, 0.04), (0.02, 0.12, 0.1), (0.05, 0.11, 0.15)],
-              0.005, "Steel", sides=6, closed=False)
+    # A grappler's line drum, cut off its trunnions: yellow line wound
+    # between dark flanges, its axle through (the drum behind the orb,
+    # art/robots/logistics.py), and the cut tail of the line.
+    p.cyl(0.2, -0.15, 0.15, "Yellow", segs=16, xf=ALONG_X)
+    for x in (-0.17, 0.17):
+        p.cyl(0.25, x - 0.02, x + 0.02, "Dark", segs=18, xf=ALONG_X, chamfer=0.004)
+    p.cyl(0.04, -0.21, 0.21, "Dark", segs=12, xf=ALONG_X)
+    tube_path(p, [(0.0, 0.2, 0.0), (0.0, 0.22, -0.06), (0.03, 0.2, -0.14), (0.06, 0.16, -0.2)],
+              0.008, "Steel", sides=6, closed=False)
     return centred([p])
 
 
@@ -332,7 +338,7 @@ if __name__ == "__main__":
                            ("crawler_capacitor", crawler_capacitor),
                            ("crawler_leg_servo", crawler_leg_servo),
                            ("hound_hip_servo", hound_hip_servo),
-                           ("hound_nose", hound_nose),
+                           ("hound_head", hound_head),
                            ("grappler_launcher", grappler_launcher),
                            ("grappler_drum", grappler_drum),
                            ("dirigible_gas_valve", dirigible_gas_valve),

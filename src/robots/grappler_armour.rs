@@ -41,7 +41,7 @@ const BOOM_DEEP: f32 = 0.17;
 /// The launcher's housing at the head: across, tall, long (along Z).
 const LAUNCHER: Vec3 = Vec3::new(0.18, 0.16, 0.42);
 /// The line drum: its middle, flange radius and width (axis along X).
-const DRUM_AT: Vec3 = Vec3::new(0.0, 0.50, 0.46);
+pub const DRUM_AT: Vec3 = Vec3::new(0.0, 0.50, 0.46);
 const DRUM_R: f32 = 0.25;
 const DRUM_WIDE: f32 = 0.42;
 
