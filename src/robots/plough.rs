@@ -16,7 +16,10 @@
 //!   into its auger jams it. Jammed, its engine hatch springs open over
 //!   the power cell: shoot the cell and it's done. It clears the jam in
 //!   half a minute and the hatch shuts. An EMP stalls it.
-//! - **The salvage.** Its cell, its fuel, its auger's scrap.
+//! - **The salvage.** What you saw on it: its cell, its sensor bar, its
+//!   beacon, the drive sprockets at the back of its tracks and its auger's
+//!   motor, each seated where it was (`plough_wreck`); its fuel and a piece
+//!   of its auger lie by it.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -654,17 +657,32 @@ fn dig_banks(
     }
 }
 
-/// Wrecked (its cell shot through): it stops where it is; its cell is
-/// done, but its fuel and its auger's scrap lie by it.
+/// Wrecked (its cell shot through): it stops where it is, and what you saw
+/// on it is what comes off (`salvage`, #105). Its cell in its well under
+/// the sprung hatch (scrap if it was shot through; live if not), its
+/// sensor bar sagging off the cab front by its lugs, its beacon snapped
+/// off the roof onto the deck (both by hand, in reach from the ground),
+/// the drive sprocket at the back of each track (three bolts) and the
+/// auger's motor on the housing's right end (four). Its fuel and a
+/// piece of its auger lie by it.
+#[allow(clippy::type_complexity)]
 fn plough_wreck(
     mut commands: Commands,
     ploughs: Query<
-        (Entity, &Robot, &GlobalTransform),
-        (With<Plough>, Without<super::wreck::Broken>),
+        (Entity, &Robot, &GlobalTransform, &Children),
+        // (Not `Broken`: the wreck module marks a pylon-kind machine broken
+        // the moment it's wrecked, before this sees it.)
+        (With<Plough>, Without<super::Salvaged>),
     >,
+    mut parts: Query<(&super::RobotPart, &mut Transform, Has<PloughCell>)>,
     catalog: Res<crate::items::Catalog>,
+    mut seat_looks: Query<(&super::salvage::SeatLook, &mut Visibility)>,
+    (mut meshes, mut materials): (
+        Option<ResMut<Assets<Mesh>>>,
+        Option<ResMut<Assets<StandardMaterial>>>,
+    ),
 ) {
-    for (e, robot, g) in &ploughs {
+    for (e, robot, g, children) in &ploughs {
         if !robot.wrecked {
             continue;
         }
@@ -672,10 +690,45 @@ fn plough_wreck(
             .entity(e)
             .insert((super::wreck::Broken, super::Salvaged));
         info!("plough: wrecked at {:.0}", g.translation());
-        for (k, id) in ["fuel_can", "scrap_metal", "scrap_metal", "hound_hip_servo"]
-            .into_iter()
-            .enumerate()
-        {
+        let look = super::salvage::Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        let mut seated = Vec::new();
+        for c in children.iter() {
+            let Ok((p, mut t, cell)) = parts.get_mut(c) else {
+                continue;
+            };
+            let health = (p.hp / p.max_hp.max(1.0)).clamp(0.0, 1.0);
+            let role = match p.role {
+                PartRole::Core if cell => PartRole::Core,
+                PartRole::Sensor => {
+                    *t = sagged_eye();
+                    PartRole::Sensor
+                }
+                _ => continue,
+            };
+            if let Some(row) = wreck_row(role, health) {
+                seated.push(role);
+                super::salvage::fit(&mut commands, &catalog, c, row, &look);
+            }
+        }
+        // On the root: the beacon, the sprockets, the motor (whole: its
+        // body shrugs off rounds).
+        for role in [
+            PartRole::Lamp(0),
+            PartRole::Leg(0),
+            PartRole::Leg(1),
+            PartRole::Rotor(0),
+        ] {
+            if let Some(row) = wreck_row(role, WHOLE) {
+                seated.push(role);
+                super::salvage::fit(&mut commands, &catalog, e, row, &look);
+            }
+        }
+        for (l, mut vis) in &mut seat_looks {
+            if l.robot == e && seated.contains(&l.role) {
+                *vis = Visibility::Hidden;
+            }
+        }
+        for (k, id) in ["fuel_can", "scrap_metal"].into_iter().enumerate() {
             let Some(kind) = catalog.kind(id) else {
                 continue;
             };
@@ -693,6 +746,86 @@ fn plough_wreck(
             );
         }
     }
+}
+
+/// The condition of what's on its root at its wreck: its body shrugs off
+/// rounds, so its beacon, sprockets and motor come through worn, not shot.
+pub const WHOLE: f32 = 0.75;
+/// Its eye bar, sagged off the cab front by one lug (local to the root).
+pub fn sagged_eye() -> Transform {
+    Transform::from_translation(EYE + Vec3::new(0.15, -0.5, -0.08))
+        .with_rotation(Quat::from_rotation_z(0.3))
+}
+/// Where its beacon lies once it's snapped off the roof: on the engine
+/// deck, by the hatch (local to the root).
+pub const BEACON_DOWN: Vec3 = Vec3::new(0.55, 2.0, 1.0);
+/// The drive sprockets at the back of its tracks, and the auger's motor
+/// (local to the root: `art/robots/plough.py`'s origins), and each
+/// item's middle from there.
+pub const SPROCKET: Vec3 = Vec3::new(0.85, 0.45, 1.77);
+pub const SPROCKET_MID: f32 = -0.05;
+pub const MOTOR: Vec3 = Vec3::new(1.75, 0.75, -2.0);
+pub const MOTOR_MID: Vec3 = Vec3::new(-0.015, 0.11, 0.0);
+pub const SPROCKET_BOLTS: usize = 3;
+pub const MOTOR_BOLTS: usize = 4;
+
+/// What a plough's wreck gives up, and how each is held: `Leg(i)` its
+/// sprockets (0 left, 1 right), `Rotor(0)` its auger's motor, `Lamp(0)`
+/// its beacon (keys its look holders share: `plough_look`).
+pub fn wreck_row(role: PartRole, health: f32) -> Option<super::salvage::Row> {
+    use super::salvage::{Fix, Row};
+    let row = |item, at: Transform, fix, hot| Row {
+        item,
+        at,
+        size: 1.0,
+        health,
+        fix,
+        hot,
+        replaces: None,
+    };
+    Some(match role {
+        PartRole::Core => row("plough_cell", Transform::IDENTITY, Fix::Hand, true),
+        PartRole::Sensor => row("plough_eye", Transform::IDENTITY, Fix::Hand, false),
+        PartRole::Lamp(_) => row(
+            "plough_beacon",
+            Transform::from_translation(BEACON_DOWN),
+            Fix::Hand,
+            false,
+        ),
+        PartRole::Leg(i) => {
+            let sx = if i == 0 { -1.0 } else { 1.0 };
+            let at = Vec3::new(sx * SPROCKET.x, SPROCKET.y, SPROCKET.z);
+            // (The item is the right one: the left is it turned round.)
+            let turn = if i == 0 {
+                Quat::from_rotation_y(std::f32::consts::PI)
+            } else {
+                Quat::IDENTITY
+            };
+            row(
+                "plough_track_drive",
+                Transform::from_translation(at + Vec3::X * sx * SPROCKET_MID).with_rotation(turn),
+                Fix::Bolts {
+                    n: SPROCKET_BOLTS,
+                    centre: at + Vec3::X * sx * 0.22,
+                    face: Quat::from_rotation_arc(Vec3::Y, Vec3::X * sx),
+                    radius: 0.1,
+                },
+                false,
+            )
+        }
+        PartRole::Rotor(0) => row(
+            "plough_auger_motor",
+            Transform::from_translation(MOTOR + MOTOR_MID),
+            Fix::Bolts {
+                n: MOTOR_BOLTS,
+                centre: Vec3::new(1.655, MOTOR.y, MOTOR.z),
+                face: Quat::from_rotation_arc(Vec3::Y, Vec3::X),
+                radius: 0.185,
+            },
+            false,
+        ),
+        _ => return None,
+    })
 }
 
 /// The map's plough, in its shed, once the Zone is in (robots on): one
@@ -1115,5 +1248,69 @@ mod tests {
         let mut s: Vec<i32> = q.iter(vr.app.world()).map(|b| b.slot).collect();
         s.sort();
         s
+    }
+
+    /// Shot through its cell, it stops, and what you saw on it is seated
+    /// where it was, each in a hand's reach from the ground (its beacon
+    /// down on the deck, its eye bar sagged off the cab): its cell's scrap,
+    /// the rest whole.
+    #[test]
+    fn its_wreck_is_what_was_on_it() {
+        let (mut vr, zone, e) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        vr.stand(zone.on_ground(60.0, 230.0), 0.0);
+        vr.step(30);
+        let cell = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &super::super::RobotPart), With<PloughCell>>()
+            .iter(vr.app.world())
+            .find(|(_, p)| p.robot == e)
+            .map(|(c, _)| c)
+            .unwrap();
+        crate::robots::heavy::tests::hit(&mut vr.app, cell, CELL_HP + 10.0);
+        vr.step(90 * 3);
+        assert!(vr.app.world().get::<Robot>(e).unwrap().wrecked);
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let seated: Vec<(String, Vec3)> = vr
+            .app
+            .world_mut()
+            .query_filtered::<(&crate::items::Item, &GlobalTransform), With<crate::interact::InSocket>>()
+            .iter(vr.app.world())
+            .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
+            .filter(|(id, _)| id.starts_with("plough_"))
+            .collect();
+        let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            [
+                "plough_auger_motor",
+                "plough_beacon",
+                "plough_eye",
+                "plough_track_drive",
+                "plough_track_drive"
+            ],
+            "{seated:?}"
+        );
+        let root = *vr.app.world().get::<GlobalTransform>(e).unwrap();
+        for (id, at) in &seated {
+            let over = at.y - zone.ground(at.x, at.z);
+            assert!(
+                (0.0..crate::sim::indoor::MAX_REACH_UP).contains(&over),
+                "{id} {over:.2} m over the ground"
+            );
+            assert!(at.distance(root.translation()) < 3.5, "{id} on it: {at}");
+        }
+        // Its fuel and a piece of its auger by it; nothing that isn't its.
+        let loose: Vec<String> = vr
+            .app
+            .world_mut()
+            .query_filtered::<(&crate::items::Item, &GlobalTransform), Without<crate::interact::InSocket>>()
+            .iter(vr.app.world())
+            .filter(|(_, g)| g.translation().distance(root.translation()) < 4.0)
+            .map(|(i, _)| catalog.get(i.kind()).id.clone())
+            .collect();
+        assert!(!loose.iter().any(|id| id == "hound_hip_servo"), "{loose:?}");
+        assert!(loose.iter().any(|id| id == "fuel_can"), "{loose:?}");
     }
 }

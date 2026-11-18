@@ -159,7 +159,7 @@ fn dress_spotters(
         for c in children.iter() {
             match parts.get(c).map(|p| p.role) {
                 Ok(PartRole::Sensor) => {
-                    hang(
+                    let eye = hang(
                         &mut commands,
                         &mut materials,
                         None,
@@ -167,6 +167,12 @@ fn dress_spotters(
                         "eye",
                         Transform::IDENTITY,
                     );
+                    // (Hidden once its camera is seated in its place,
+                    // `spotter_salvage`.)
+                    commands.entity(eye).insert(super::salvage::SeatLook {
+                        robot: e,
+                        role: PartRole::Sensor,
+                    });
                 }
                 Ok(PartRole::Armour(_)) => {
                     hang(
@@ -205,7 +211,7 @@ fn dress_spotters(
         ));
         let _ = GONDOLA;
     }
-    for (e, piece, _, cuttable) in &pieces {
+    for (e, piece, of, cuttable) in &pieces {
         match piece {
             SpotterPiece::Winch => {
                 hang(
@@ -216,6 +222,20 @@ fn dress_spotters(
                     "winch",
                     Transform::from_xyz(0.0, -WINCH_PART_UP, 0.0),
                 );
+                // Its drum and motor, bolted to the skid: hidden once
+                // they're seated as salvage in their place.
+                let drum = hang(
+                    &mut commands,
+                    &mut materials,
+                    None,
+                    e,
+                    "winch_drum",
+                    Transform::from_xyz(0.0, -WINCH_PART_UP, 0.0),
+                );
+                commands.entity(drum).insert(super::salvage::SeatLook {
+                    robot: of.0,
+                    role: PartRole::Armour(40),
+                });
             }
             SpotterPiece::Tether(_) => {
                 // Steel cable (`lines`, #101): a grip sleeve on a stretch

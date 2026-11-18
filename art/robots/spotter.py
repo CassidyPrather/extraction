@@ -181,7 +181,11 @@ def build(lod):
                         2 if lod < 2 else 1)
         w.prism(runner, wz + sz * 0.355 - 0.03, wz + sz * 0.355 + 0.03, "Steel", axis="z")
     w.box((1.12, 0.04, 0.8), (wx, 0.095, wz), "Dark", bevel=wb, segs=1)
-    # The drum across X, between two cheek plates, on its axle.
+    out.append(w)
+    # The drum across X, between two cheek plates, on its axle, and its
+    # motor: its own object (`winch_drum`), what's bolted to the skid and
+    # comes off it as salvage (`spotter_winch`).
+    w = Part("winch_drum" + suffix(lod), origin=WINCH)
     DX, DY = wx - 0.07, 0.4
     cheek = fillet([(-0.17, 0.11), (0.17, 0.11), (0.12, DY + 0.06), (-0.12, DY + 0.06)],
                    [0, 0, 0.05, 0.05], 2 if lod < 2 else 1)
@@ -198,6 +202,11 @@ def build(lod):
           segs=2 if full else 1)
     w.box((0.26, 0.05, 0.42), (wx + 0.46, 0.16, wz), "Dark", segs=1)
     w.cyl(0.06, DX + 0.3, wx + 0.34, "Dark", segs=max(8, n // 3), xf=T(0, DY, wz) @ SIDE)
+    if full:
+        w.box((0.006, 0.06, 0.25), (wx + 0.583, 0.33, wz), "Warn", segs=1)
+        w.box((0.006, 0.03, 0.03), (wx + 0.583, 0.23, wz - 0.1), "Glow", segs=1)
+    out.append(w)
+    w = Part("winch_guide" + suffix(lod), origin=WINCH)
     # The guide: a post at the back, an arm over the drum, a fairlead
     # ring straight above the origin, the cable down from it to the drum.
     w.box((0.08, 0.86, 0.08), (wx, 0.53, wz + 0.33), "Dark", bevel=wb, segs=1)
@@ -212,8 +221,6 @@ def build(lod):
         # A diagonal brace from the deck to the post.
         rod(w, (wx, 0.11, wz + 0.05), (wx, 0.5, wz + 0.3), 0.02, "Dark", segs=8)
     if full:
-        w.box((0.006, 0.06, 0.25), (wx + 0.583, 0.33, wz), "Warn", segs=1)
-        w.box((0.006, 0.03, 0.03), (wx + 0.583, 0.23, wz - 0.1), "Glow", segs=1)
         # Lifting eyes at the deck corners.
         for sx in (-1, 1):
             for sz in (-1, 1):
@@ -223,9 +230,59 @@ def build(lod):
     return out
 
 
+def merged(lod):
+    """The skid and the guide are one object, `winch`."""
+    out = build(lod)
+    by = {p.name: p for p in out}
+    sfx = suffix(lod)
+    guide = by.pop("winch_guide" + sfx)
+    skid = by["winch" + sfx]
+    _append(skid, guide)
+    return [p for p in out if p.name != "winch_guide" + sfx]
+
+
+def _append(dst, src):
+    """Copies `src`'s geometry and materials into `dst` (same origin)."""
+    import bmesh
+    remap = [dst._mi(m) for m in src.mats]
+    tmp = src.bm.copy()
+    for f in tmp.faces:
+        f.material_index = remap[f.material_index]
+    me = __import__("bpy").data.meshes.new("tmp")
+    tmp.to_mesh(me)
+    dst.bm.from_mesh(me)
+    __import__("bpy").data.meshes.remove(me)
+
+
+def items():
+    """The salvage: the winch's drum and motor, as it is on its skid, and
+    the camera off its pod."""
+    out = []
+    for p in build(0):
+        if p.name in ("winch_drum", "eye"):
+            p.name = {"winch_drum": "spotter_winch", "eye": "spotter_eye"}[p.name]
+            out.append(p)
+    return out
+
+
 reset()
 for lod in (0, 1, 2):
-    for p in build(lod):
+    for p in merged(lod):
         make(p)
 report()
 export("assets/models/robots/spotter.glb")
+
+for p in items():
+    reset()
+    obj = make(p)
+    me = obj.data
+    lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+    hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+    mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+    for v in me.vertices:
+        v.co = [v.co[k] - mid[k] for k in range(3)]
+    size = [hi[k] - lo[k] for k in range(3)]
+    # (Blender is Z up: game x, y, z = its x, z, -y.)
+    print(f"{p.name} dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+          f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+    export(f"assets/models/items/{p.name}.glb")

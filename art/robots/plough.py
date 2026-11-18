@@ -70,6 +70,9 @@ BEACON = (0.0, 2.75, 0.0)
 EYE = (0.0, 2.2, -0.75)
 HATCH = (0.0, 1.75, 1.9)
 CELL = (0.0, 1.5, 1.85)
+# The auger's drive motor on the housing's right bearing (its axis the
+# auger's).
+MOTOR = (1.75, 0.75, -2.0)
 BANK = (6.0, 0.0, 0.0)
 
 # The auger's axis (y, z) and the shroud's radii round it.
@@ -205,7 +208,7 @@ def track(sx, lod):
             z += 0.137
     # Idler at the front, sprocket at the back (raised a touch), four road
     # wheels on the bottom run, two return rollers under the top run.
-    wheels = ([(z_front, ty, 0.32, 0.36), (z_back, ty, 0.33, 0.36)]
+    wheels = ([(z_front, ty, 0.32, 0.36)]
               + [(z, 0.31, 0.2, 0.38) for z in (-0.45, 0.15, 0.75, 1.35)])
     for z, y, rr, w in wheels:
         t.cyl(rr, -w / 2, w / 2, "Dark", segs=n, xf=T(x0, y, z) @ SIDE,
@@ -219,17 +222,72 @@ def track(sx, lod):
                   chamfer=0.008)
     for z in (0.0, 0.9):
         t.cyl(0.07, -0.2, 0.2, "Dark", segs=max(8, n // 2), xf=T(x0, 0.72, z) @ SIDE)
-    if full:
-        # The sprocket's teeth.
-        for k in range(14):
-            a = 2 * math.pi * k / 14
-            t.box((0.12, 0.05, 0.05), (x0, 0.0, 0.335), "Steel", segs=1,
-                  xf=T(0, ty, z_back) @ RX(a))
     # The frame the wheels hang on, between them and the hull.
     xa, xb = sorted((x0 - sx * 0.2, x0 - sx * 0.24))
     t.box((xb - xa, 0.38, 2.4), ((xa + xb) / 2, 0.55, tz), "Dark",
           bevel=0.015 if lod < 2 else 0.0, segs=1)
     return t
+
+
+def sprocket(sx, lod):
+    """The drive sprocket at the back of a track, bolted to its final
+    drive: its own object (`sprocket_l`, `sprocket_r`), salvage
+    (`plough_track_drive`)."""
+    n = SEGS[lod]
+    full = lod == 0
+    x0 = sx * TRACK_X
+    ty, tz = TRACK
+    z_back = tz + 1.37
+    t = Part(("sprocket_l" if sx < 0 else "sprocket_r") + suffix(lod), origin=(x0, ty, z_back))
+    rr, w = 0.33, 0.36
+    t.cyl(rr, -w / 2, w / 2, "Dark", segs=n, xf=T(x0, ty, z_back) @ SIDE,
+          chamfer=0.015 if lod < 2 else 0.0)
+    a, b = sorted((x0, sx * 0.5))
+    t.cyl(0.04, a, b, "Steel", segs=max(6, n // 2), xf=T(0, ty, z_back) @ SIDE)
+    if lod < 2:
+        a, b = sorted((x0 + sx * w / 2 - sx * 0.01, x0 + sx * (w / 2 + 0.04)))
+        t.cyl(rr * 0.45, a, b, "Steel", segs=max(8, n // 2), xf=T(0, ty, z_back) @ SIDE,
+              chamfer=0.008)
+    if full:
+        # Its teeth, and the bolts round its hub.
+        for k in range(14):
+            a = 2 * math.pi * k / 14
+            t.box((0.12, 0.05, 0.05), (x0, 0.0, 0.335), "Steel", segs=1,
+                  xf=T(0, ty, z_back) @ RX(a))
+        for k in range(3):
+            a = 2 * math.pi * k / 3
+            t.cyl(0.018, 0.0, 0.03, "Steel", segs=8,
+                  xf=T(x0 + sx * (w / 2 + 0.04), ty + 0.1 * math.sin(a), z_back + 0.1 * math.cos(a))
+                  @ RY(sx * math.pi / 2))
+    return t
+
+
+def motor(lod):
+    """The auger's drive motor, bolted on the housing's right bearing."""
+    n = SEGS[lod]
+    full = lod == 0
+    mx, my, mz = MOTOR
+    p = Part("auger_motor" + suffix(lod), origin=MOTOR)
+    p.cyl(0.17, 1.6, 1.86, "Dark", segs=n, xf=T(0, my, mz) @ SIDE,
+          chamfer=0.015 if lod < 2 else 0.0)
+    p.cyl(0.2, 1.6, 1.64, "Steel", segs=n, xf=T(0, my, mz) @ SIDE)
+    p.box((0.2, 0.16, 0.24), (mx + 0.02, my + 0.2, mz), "Shell", bevel=0.012 if lod < 2 else 0.0,
+          segs=1)
+    if lod < 2:
+        # Cooling fins round its can.
+        for k in range(5):
+            x = 1.68 + 0.035 * k
+            p.cyl(0.185, x, x + 0.012, "Dark", segs=n, xf=T(0, my, mz) @ SIDE)
+    if full:
+        p.box((0.12, 0.006, 0.08), (mx + 0.02, my + 0.283, mz), "Warn", segs=1)
+        # The four bolts through its flange onto the bearing.
+        for k in range(4):
+            a = 2 * math.pi * k / 4 + math.pi / 4
+            p.cyl(0.016, 1.64, 1.67, "Steel", segs=8,
+                  xf=T(0, my + 0.185 * math.sin(a), mz + 0.185 * math.cos(a)) @ SIDE)
+        # Its cut power lead.
+        p.cyl(0.015, my + 0.28, my + 0.42, "Red", segs=8, xf=T(mx + 0.06, 0, mz + 0.06) @ UP)
+    return p
 
 
 # ---------------------------------------------------------------------------
@@ -638,10 +696,24 @@ def bank(lod):
 
 
 def build(lod):
-    out = [hull(lod), track(-1, lod), track(1, lod), auger(lod), housing(lod), chute(lod),
-           beacon(lod), eye(lod), hatch(lod), cell(lod)]
+    out = [hull(lod), track(-1, lod), track(1, lod), sprocket(-1, lod), sprocket(1, lod),
+           auger(lod), housing(lod), motor(lod), chute(lod), beacon(lod), eye(lod), hatch(lod),
+           cell(lod)]
     if lod < 2:
         out.append(bank(lod))
+    return out
+
+
+def items():
+    """The salvage: the robot's own cell, eye, beacon, a track's drive
+    sprocket and the auger's motor (what you saw on it is what comes off)."""
+    names = {"cell": "plough_cell", "eye": "plough_eye", "beacon": "plough_beacon",
+             "sprocket_r": "plough_track_drive", "auger_motor": "plough_auger_motor"}
+    out = []
+    for p in build(0):
+        if isinstance(p, Part) and p.name in names:
+            p.name = names[p.name]
+            out.append(p)
     return out
 
 
@@ -652,3 +724,18 @@ for lod in (0, 1, 2):
             make(p)
 report()
 export("assets/models/robots/plough.glb")
+
+for p in items():
+    reset()
+    obj = make(p)
+    me = obj.data
+    lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+    hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+    mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+    for v in me.vertices:
+        v.co = [v.co[k] - mid[k] for k in range(3)]
+    size = [hi[k] - lo[k] for k in range(3)]
+    # (Blender is Z up: game x, y, z = its x, z, -y.)
+    print(f"{p.name} dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+          f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+    export(f"assets/models/items/{p.name}.glb")
