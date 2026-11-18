@@ -67,6 +67,9 @@ MATERIALS = {
     "Olive": ((0.25, 0.27, 0.17), 0.0, 0.8, None),
     "Clear": ((0.8, 0.82, 0.8), 0.0, 0.1, None),
     "Warn": ((0.9, 0.6, 0.1), 0.0, 0.4, (1.0, 0.55, 0.07)),
+    # A salvaged cell's charge band (#105): a deep orange that stays orange
+    # under the light, not the yellow Warn blooms to.
+    "Hot": ((0.85, 0.22, 0.02), 0.0, 0.4, (0.9, 0.2, 0.01)),
     "Beacon": ((1.0, 0.75, 0.4), 0.0, 0.3, (1.0, 0.6, 0.2)),
     # The machines' boundary stake's lens (`machine_marker`): frosted and
     # unlit; the game lights it amber (Visual design) through its own

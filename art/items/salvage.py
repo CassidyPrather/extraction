@@ -96,22 +96,61 @@ def sensor_eye():
 
 
 def robot_cell():
-    s = cube(0.5)
     p = Part("body")
-    # A heavy pale cell pack: ribbed shell, dark end caps, terminals, a
-    # charge window.
-    prof = fillet([(-0.032, -0.022), (0.032, -0.022), (0.032, 0.022), (-0.032, 0.022)], 0.008, 3)
-    p.prism(prof, -0.032, 0.032, "Shell", axis="z", bevel=0.003, segs=2)
-    for z in (-0.035, 0.035):
-        p.prism(fillet([(-0.033, -0.023), (0.033, -0.023), (0.033, 0.023), (-0.033, 0.023)],
-                       0.009, 3), z - 0.004, z + 0.004, "Dark", axis="z", bevel=0.002, segs=1)
-    for k in range(4):
-        p.box((0.0655, 0.003, 0.004), (0.0, -0.006 + 0.0, -0.018 + k * 0.012), "Dark")
-    p.box((0.003, 0.008, 0.04), (0.0325, 0.006, 0.0), "Glow", bevel=0.001, segs=1)
-    for x, mat in ((-0.014, "Red"), (0.014, "Black")):
-        p.cyl(0.004, 0.039, 0.046, mat, segs=10, xf=T(x, 0.006, 0), chamfer=0.001)
-    p.box((0.024, 0.006, 0.006), (0.0, 0.023, 0.0), "Dark", bevel=0.002, segs=1)
+    # A walker's power cell, the CUSTODIAN standard: a chunky pale brick
+    # (14 x 10 x 18 cm) you carry by its handle, dark end caps, a ribbed
+    # flank, red and black terminal posts, and round its waist an orange
+    # band that glows while it holds charge: the one hot thing on a wreck
+    # (#105: parts read apart at 2-3 m by shape and colour).
+    w, h, d = 0.07, 0.048, 0.08
+    prof = fillet([(-w, -h), (w, -h), (w, h), (-w, h)], 0.014, 3)
+    p.prism(prof, -d, d, "Shell", axis="z", bevel=0.005, segs=2)
+    for z in (-d - 0.004, d + 0.004):
+        p.prism(fillet([(-w - 0.003, -h - 0.003), (w + 0.003, -h - 0.003), (w + 0.003, h + 0.003),
+                        (-w - 0.003, h + 0.003)], 0.016, 3), z - 0.009, z + 0.009, "Dark",
+                axis="z", bevel=0.003, segs=1)
+    # The hot band round its middle.
+    p.prism(fillet([(-w - 0.002, -h - 0.002), (w + 0.002, -h - 0.002), (w + 0.002, h + 0.002),
+                    (-w - 0.002, h + 0.002)], 0.015, 3), -0.024, 0.024, "Hot", axis="z",
+            bevel=0.002, segs=1)
+    # Ribs down one flank.
+    for k in range(5):
+        p.box((0.004, 0.07, 0.008), (w + 0.002, 0.0, -0.06 + k * 0.03), "Dark", bevel=0.001,
+              segs=1)
+    # Terminals on top, either side of the handle.
+    for x, mat in ((-0.045, "Red"), (0.045, "Black")):
+        p.cyl(0.009, h, h + 0.016, mat, segs=12, xf=T(x, 0, -0.05) @ UP, chamfer=0.002)
+    # The carry handle: a dark loop over the top.
+    tube_path(p, [(0.0, h, -0.06), (0.0, h + 0.03, -0.04), (0.0, h + 0.03, 0.04),
+                  (0.0, h, 0.06)], 0.007, "Dark", sides=8, closed=False)
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
+    return centred([p])
+
+
+def walker_eye():
+    p = Part("body")
+    # A walker's eye pulled from its orb: a big glossy lens dome in a dark
+    # ring, the red iris behind the glass, a torn mount and leads at the
+    # back. A lens, round and dark-and-red: nothing else on a wreck looks
+    # like it.
+    p.lathe([(0.0, -0.035), (0.05, -0.035), (0.062, -0.028), (0.064, 0.0), (0.06, 0.012),
+             (0.0, 0.012)], "Dark", segs=32, xf=UP)
+    p.tube(0.064, 0.054, 0.0, 0.016, "Steel", segs=32, xf=UP, chamfer=0.002)
+    p.lathe([(0.0, 0.03), (0.02, 0.029), (0.04, 0.024), (0.052, 0.016), (0.054, 0.012),
+             (0.0, 0.012)], "Lens", segs=32, xf=UP)
+    p.tube(0.03, 0.016, 0.013, 0.016, "Eye", segs=32, xf=UP)
+    p.cyl(0.012, 0.012, 0.0175, "Black", segs=20, xf=UP)
+    # The iris seen through the glass: a red disc on the dome's crown, its
+    # black pupil (the lens alone read as a dark puck at 1.5 m).
+    p.cyl(0.024, 0.029, 0.0315, "Eye", segs=28, xf=UP)
+    p.cyl(0.009, 0.0315, 0.0325, "Black", segs=16, xf=UP)
+    # The torn mount and its leads.
+    p.box((0.05, 0.022, 0.03), (0.0, -0.046, 0.0), "Dark", bevel=0.004, segs=1)
+    tube_path(p, [(0.012, -0.05, 0.01), (0.025, -0.062, 0.02), (0.04, -0.066, 0.03)], 0.003,
+              "Red", sides=6, closed=False)
+    tube_path(p, [(-0.012, -0.05, 0.01), (-0.028, -0.06, 0.016), (-0.044, -0.068, 0.012)],
+              0.003, "Black", sides=6, closed=False)
+    # Lens up, as it lies.
     return centred([p])
 
 
@@ -338,6 +377,7 @@ def art_aegis():
 
 for item_id, fn in (("rotor_assembly", rotor_assembly), ("servo", servo),
                     ("sensor_eye", sensor_eye), ("robot_cell", robot_cell),
+                    ("walker_eye", walker_eye),
                     ("robot_gunpod", robot_gunpod),
                     ("art_featherstone", art_featherstone), ("art_hearth", art_hearth),
                     ("art_glasseye", art_glasseye), ("art_aegis", art_aegis)):
