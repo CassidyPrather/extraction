@@ -405,8 +405,12 @@ fn lifts(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut events: MessageWriter<AnomalyEvent>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
 ) {
     let dt = time.delta_secs();
+    // The wind carries what a lift throws (its leaves lean with it first:
+    // `visuals`, the cue before the pop).
+    let drift = wind(conditions.as_deref()) * LIFT_WIND;
     for (e, mut a, gt) in &mut anomalies {
         if a.kind != AnomalyKind::Lift {
             continue;
@@ -464,7 +468,7 @@ fn lifts(
             let k = falloff(d, a.radius);
             if popping {
                 let out = Vec3::new(rel.x, 0.0, rel.z).normalize_or(Vec3::X);
-                forces.apply_linear_impulse((out * 4.0 + Vec3::Y * 7.0) * m);
+                forces.apply_linear_impulse((out * 4.0 + Vec3::Y * 7.0 + drift) * m);
             } else {
                 // Cancel gravity and a bit more, toward a hover at the core,
                 // and swirl.
@@ -495,7 +499,7 @@ fn lifts(
                     .and_then(|f| f.try_normalize())
                     .or_else(|| Vec3::new(rel.x, 0.0, rel.z).try_normalize())
                     .unwrap_or(Vec3::X);
-                body.velocity = out * LIFT_FLING + Vec3::Y * LIFT_THROW;
+                body.velocity = out * LIFT_FLING + Vec3::Y * LIFT_THROW + drift;
                 body.grounded = false;
                 body.airborne = 1.0;
             } else {
@@ -581,6 +585,15 @@ fn knock_loose(
 /// lightness under you, about 3.1 m high, landing back on the flat within
 /// `health::SAFE_LANDING`, and onto a roof up to about 2.4 m.
 pub const LIFT_THROW: f32 = 6.6;
+/// How far the wind carries what a lift throws: its speed downwind, m/s,
+/// in the hardest wind (the weather's `wind()`, 1).
+pub const LIFT_WIND: f32 = 2.5;
+
+/// The wind: the way it blows (the grass's: `world::cover`) times how
+/// hard (`Conditions::wind`, 0..1), across the ground.
+pub fn wind(conditions: Option<&crate::world::weather::Conditions>) -> Vec3 {
+    Vec3::new(0.8, 0.0, 0.6) * conditions.map_or(0.0, |c| c.wind())
+}
 /// ...and this fast the way they face (m/s). In the air with no stick a
 /// body's way slows (`player`'s air control), so it carries about 4 m.
 pub const LIFT_FLING: f32 = 9.0;
