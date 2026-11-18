@@ -44,6 +44,17 @@ pub struct LootSpot {
     /// Which of the map's placements it's in (`map.placements` order; 0
     /// in a prefab's own geometry).
     pub building: usize,
+    /// Where it was before it was moved, if it was (a tool chest's, off
+    /// its lid onto its floor): what it rolls is keyed there, so a move
+    /// changes where its loot lies, not what it is (`items::loot`).
+    pub keyed: Option<Vec3>,
+}
+
+impl LootSpot {
+    /// Where what it rolls is keyed.
+    pub fn key(&self) -> Vec3 {
+        self.keyed.unwrap_or(self.at)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -166,6 +177,9 @@ pub struct Hold {
     pub part: Option<&'static str>,
     /// The way out of its container, the way its door or drawer opens.
     pub out: Vec3,
+    /// What it lies on: a model and its material (a locker's pale shelf,
+    /// a drawer's bottom), for how it reads (`capture::checks::loot_sights`).
+    pub on: (&'static str, &'static str),
 }
 
 /// The longest thing a hold takes (m).
@@ -497,6 +511,7 @@ impl Builder {
             lift: None,
             top: false,
             building: 0,
+            keyed: None,
         });
         self
     }
@@ -508,12 +523,14 @@ impl Builder {
         table: &'static str,
         part: Option<&'static str>,
         out: Vec3,
+        on: (&'static str, &'static str),
     ) -> &mut Self {
         self.geo.holds.push(Hold {
             at,
             table,
             part,
             out,
+            on,
         });
         self
     }
@@ -526,6 +543,7 @@ impl Builder {
             lift: Some(lift),
             top,
             building: 0,
+            keyed: None,
         });
         self
     }
@@ -1479,6 +1497,7 @@ impl Builder {
                         table: loot.unwrap_or("house"),
                         part: Some("counter_drawers#drawer_0"),
                         out: front * Vec3::NEG_Z,
+                        on: ("counter_drawers", "Timber"),
                     });
                 }
                 (
@@ -1765,11 +1784,79 @@ impl Builder {
             "tools",
             None,
             rot * Vec3::NEG_Z,
+            ("locker", "Cream"),
         );
         self.dress(
             from,
             vec![(
                 "locker#carcass",
+                Transform::from_translation(at).with_rotation(rot),
+            )],
+        )
+    }
+
+    /// A tool chest 0.9 x 0.5 x 0.5 (`art/props/interiors.py`
+    /// `tool_chest`), its lid its own, lifting (`hinge::fit_counters`):
+    /// hollow, the loot it stood for (`table`) on its floor, and one tool
+    /// on its tray across the back (a crowbar, the bolt cutters: the
+    /// `tools` table), turned so its lid has room to lift.
+    pub fn tool_chest(&mut self, at: Vec3, yaw: f32, table: &'static str) -> &mut Self {
+        let from = self.geo.pieces.len();
+        let rot = self.facing_room(at, Quat::from_rotation_y(yaw), 0.5);
+        let (w, d, t) = (0.9, 0.5, 0.018);
+        let (y0, y1) = (0.04, 0.5);
+        let mut sheet = |size: Vec3, c: Vec3| {
+            self.piece(
+                Shape::Box(size),
+                Transform::from_translation(at + rot * c).with_rotation(rot),
+                Mat::DarkMetal,
+                true,
+            );
+        };
+        sheet(
+            Vec3::new(0.92, CHEST_FLOOR, 0.52),
+            Vec3::Y * CHEST_FLOOR * 0.5,
+        );
+        for sx in [-1.0, 1.0] {
+            sheet(
+                Vec3::new(t, y1 - y0, d),
+                Vec3::new(sx * (w - t) * 0.5, (y0 + y1) * 0.5, 0.0),
+            );
+        }
+        for sz in [-1.0, 1.0] {
+            sheet(
+                Vec3::new(w - 2.0 * t, y1 - y0, t),
+                Vec3::new(0.0, (y0 + y1) * 0.5, sz * (d - t) * 0.5),
+            );
+        }
+        // The tray, across the back half.
+        let tray_z = (d * 0.5 - t) * 0.5;
+        sheet(
+            Vec3::new(w - 2.0 * t, 0.012, d * 0.5 - t),
+            Vec3::new(0.0, CHEST_TRAY - 0.006, tray_z),
+        );
+        self.hold(
+            at + rot * Vec3::new(0.0, CHEST_TRAY, tray_z),
+            "tools",
+            None,
+            rot * Vec3::NEG_Z,
+            ("tool_chest", "Timber"),
+        );
+        // What it stood for, on its floor in front of the tray, rolled
+        // as it was on its lid (`LootSpot::keyed`).
+        self.loot_at(
+            at + rot * Vec3::new(0.0, CHEST_FLOOR, -d * 0.25),
+            0.05,
+            false,
+            table,
+        );
+        if let Some(spot) = self.geo.loot.last_mut() {
+            spot.keyed = Some(at + Vec3::Y * (0.5_f32 + 0.05));
+        }
+        self.dress(
+            from,
+            vec![(
+                "tool_chest#carcass",
                 Transform::from_translation(at).with_rotation(rot),
             )],
         )
@@ -1840,6 +1927,10 @@ impl Builder {
 pub const LOCKER_SHELF: f32 = 1.42;
 /// The top of a locker's chest-height shelf, where its hold is.
 pub const LOCKER_MID: f32 = 1.15;
+/// A tool chest's floor's top and its tray's (`art/props/interiors.py`
+/// `CHEST_FLOOR`, `CHEST_TRAY`).
+pub const CHEST_FLOOR: f32 = 0.058;
+pub const CHEST_TRAY: f32 = 0.36;
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
@@ -4300,12 +4391,10 @@ fn mill_race(b: &mut Builder) {
     // tank.
     b.crate_box(Vec3::new(-2.7, top, -2.7 + MR_SHIFT), 0.1, Some("tools"));
     // In the wheel house by the wheel, the millwright's chest.
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
+    b.tool_chest(
         Vec3::new(-2.7, MR_FLOOR, wz - 1.2 + MR_SHIFT),
         std::f32::consts::FRAC_PI_2,
-        Some("tools"),
+        "tools",
     );
     // The gatekeeper's hut between the tower's feet: plank walls, a
     // doorway on +X, a ceiling under the girts; his winch for hauling up
@@ -4576,13 +4665,7 @@ fn ropeway_station(b: &mut Builder) {
         std::f32::consts::PI,
         None,
     );
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
-        at(2.5, 3.8),
-        0.0,
-        Some("workshop"),
-    );
+    b.tool_chest(at(2.5, 3.8), 0.0, "workshop");
     b.strew("rope_coil", Vec3::new(0.7, 0.12, 0.7), at(-2.6, 3.4), 1.1);
     // On the deck's boards (at z 1.6 it stood over a step 6 cm down).
     b.barrel(at(-3.9, 2.6));
@@ -4966,13 +5049,7 @@ fn blast_furnace(b: &mut Builder) {
         fat(3.0, 0.2, -12.0),
         0.0,
     );
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
-        fat(-5.5, 0.2, -8.0),
-        0.3,
-        Some("workshop"),
-    );
+    b.tool_chest(fat(-5.5, 0.2, -8.0), 0.3, "workshop");
     // The stoves' cold-blast valves at their feet, a chest by the middle
     // one.
     for x in xs {
@@ -4984,13 +5061,7 @@ fn blast_furnace(b: &mut Builder) {
             None,
         );
     }
-    b.furnish(
-        "tool_chest",
-        Vec3::new(0.9, 0.5, 0.5),
-        fat(xs[1] + 1.8, 0.0, sz - sr - 0.9),
-        0.0,
-        Some("tools"),
-    );
+    b.tool_chest(fat(xs[1] + 1.8, 0.0, sz - sr - 0.9), 0.0, "tools");
     // A crate in the platform's bay, one in the cast house.
     b.crate_box(
         Vec3::new(-3.6, BF_DECK, 6.75) + BF_SHIFT,
@@ -6153,6 +6224,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         for s in &geo.loot {
             loot.0.push(LootSpot {
                 at: loot_spot_at(&zone, &t, s.at),
+                keyed: s.keyed.map(|k| loot_spot_at(&zone, &t, k)),
                 building: i,
                 ..s.clone()
             });

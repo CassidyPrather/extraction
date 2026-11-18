@@ -296,38 +296,62 @@ def gate_valve():
     return [p]
 
 
+# A tool chest's lid's hinge (its node's origin, `tool_chest#lid`), its
+# floor's top and its tray's (`Builder::tool_chest`).
+CHEST_HINGE = (0.0, 0.5, 0.25)
+CHEST_FLOOR = 0.058
+CHEST_TRAY = 0.36
+
+
 def tool_chest():
-    p = Part("static")
-    p.box((0.9, 0.46, 0.5), (0.0, 0.27, 0.0), "Painted", bevel=0.01, segs=1)
+    """A millwright's chest 0.9 x 0.5 x 0.5 (`Builder::tool_chest`): the
+    body (`carcass`), hollow, a lift-out tray across its back half, and its
+    lid (`lid`), its own node on its hinge along the back, lifting its
+    front by the bar on it (`world::hinge`). Nothing on it is locked: its
+    hasp hangs open."""
+    p = Part("carcass")
+    t = 0.018
+    W, D, y0, y1 = 0.9, 0.5, 0.04, 0.5
     p.box((0.92, 0.04, 0.52), (0.0, 0.02, 0.0), "Iron")
-    # The lid, hinged at the back, ajar.
-    hinge = (0.0, 0.5, 0.25)
-    lid = T(*hinge) @ RX(-0.35) @ T(*(-v for v in hinge))
-    p.box((0.92, 0.05, 0.52), (0.0, 0.525, 0.0), "Painted", bevel=0.01, segs=1, xf=lid)
-    # Iron corner caps and a band round the lid's edge.
+    # Its walls and floor, the inside bare boards.
+    for sx in (-1, 1):
+        p.box((t, y1 - y0, D), (sx * (W / 2 - t / 2), (y0 + y1) / 2, 0.0), "Painted", bevel=0.004,
+              segs=1)
+    for sz in (-1, 1):
+        p.box((W - 2 * t, y1 - y0, t), (0.0, (y0 + y1) / 2, sz * (D / 2 - t / 2)), "Painted",
+              bevel=0.004, segs=1)
+    p.box((W - 2 * t, CHEST_FLOOR - y0, D - 2 * t), (0.0, (y0 + CHEST_FLOOR) / 2, 0.0), "Timber")
+    # The tray on its ledges at the ends, across the back half.
+    for sx in (-1, 1):
+        p.box((0.02, 0.02, D / 2 - t), (sx * (W / 2 - t - 0.01), CHEST_TRAY - 0.03, D / 4 - t / 2),
+              "Timber")
+    p.box((W - 2 * t - 0.004, 0.012, D / 2 - t - 0.004), (0.0, CHEST_TRAY - 0.006, D / 4 - t / 2),
+          "Timber")
+    p.box((W - 2 * t - 0.004, 0.05, 0.012), (0.0, CHEST_TRAY + 0.02, 0.006), "Timber")
+    # Iron corner caps.
     for sx in (-1, 1):
         for sz in (-1, 1):
             p.box((0.05, 0.44, 0.05), (sx * 0.437, 0.27, sz * 0.237), "Iron", bevel=0.004,
                   segs=1)
-    p.box((0.94, 0.012, 0.54), (0.0, 0.506, 0.0), "Iron", xf=lid)
-    # Strap hinges at the back on their knuckles.
-    for x in (-0.3, 0.3):
-        p.cyl(0.012, x - 0.05, x + 0.05, "Iron", segs=8, xf=T(0, 0.5, 0.255) @ RY(math.pi / 2))
-        p.box((0.06, 0.004, 0.2), (x, 0.551, 0.16), "Iron", xf=lid)
-    # Carrying handles at the ends: an iron bail on two lugs.
-    for sx in (-1, 1):
-        for z in (-0.08, 0.08):
-            p.box((0.02, 0.03, 0.02), (sx * 0.458, 0.36, z), "Iron")
-        rod(p, (sx * 0.47, 0.36, -0.08), (sx * 0.49, 0.32, 0.0), 0.006, "Iron", segs=6)
-        rod(p, (sx * 0.49, 0.32, 0.0), (sx * 0.47, 0.36, 0.08), 0.006, "Iron", segs=6)
     for x in (-0.35, 0.35):
         p.box((0.12, 0.03, 0.03), (x, 0.38, -0.265), "Iron")
-    # The hasp, its staple and the padlock hung open on it.
-    p.box((0.1, 0.08, 0.02), (0.0, 0.46, -0.26), "Brass")
-    p.box((0.03, 0.03, 0.012), (0.0, 0.43, -0.273), "Iron")
-    p.box((0.05, 0.05, 0.02), (0.0, 0.39, -0.288), "Brass", bevel=0.004, segs=1)
-    rod(p, (-0.015, 0.415, -0.289), (-0.015, 0.44, -0.279), 0.004, "Steel", segs=6)
-    return [p]
+    # The hinges' knuckles, and the staple the hasp drops over.
+    for x in (-0.3, 0.3):
+        p.cyl(0.012, x - 0.05, x + 0.05, "Iron", segs=8, xf=T(0, 0.5, 0.255) @ RY(math.pi / 2))
+    p.box((0.03, 0.03, 0.012), (0.0, 0.43, -0.256), "Iron")
+    # The lid, shut, with its band and straps; its bar along the front.
+    d = Part("lid", origin=CHEST_HINGE)
+    d.box((0.92, 0.05, 0.52), (0.0, 0.525, 0.0), "Painted", bevel=0.01, segs=1)
+    d.box((0.94, 0.012, 0.54), (0.0, 0.506, 0.0), "Iron")
+    for x in (-0.3, 0.3):
+        d.box((0.06, 0.004, 0.2), (x, 0.552, 0.16), "Iron")
+    # The hasp, swung up open on the lid's front (no lock on it).
+    d.box((0.1, 0.012, 0.08), (0.0, 0.556, -0.22), "Brass")
+    # Its bar: a gloved hand round it (`capture::checks::HANDLE_THICK`).
+    for x in (-0.12, 0.12):
+        rod(d, (x, 0.525, -0.26), (x, 0.525, -0.295), 0.008, "Steel", segs=8)
+    rod(d, (-0.12, 0.525, -0.295), (0.12, 0.525, -0.295), 0.011, "Steel", segs=8)
+    return [p, d]
 
 
 prop("winch", winch)
