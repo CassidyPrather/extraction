@@ -181,7 +181,7 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         let a = s * TAU + floor(t * 3.0 + s * 5.0) * 2.4;
         let rr = mix(R * 0.85, reach, sqrt(h(s + floor(t * 3.0 + s * 5.0), 3.7)));
         p.pos = vec3<f32>(cos(a) * rr, 0.02, sin(a) * rr);
-        let lit = step(h(s + floor(t * 14.0), 2.9), 0.08 + 0.5 * charge + 0.8 * flash);
+        let lit = step(h(s + floor(t * 14.0), 2.9), 0.12 + 0.6 * charge + 0.8 * flash);
         p.alpha = lit;
         p.size = p.size * (0.6 + 0.8 * h(s + floor(t * 14.0), 4.1));
         p.heat = 1.0;

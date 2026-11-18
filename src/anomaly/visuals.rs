@@ -2737,17 +2737,17 @@ fn dress_charged_water(
             }
         }
         let mut rng = extraction_core::noise::Rng::new(e.to_bits() ^ 0x9A7E);
-        let color = Vec3::new(6.0, 12.0, 30.0);
+        let color = Vec3::new(10.0, 20.0, 50.0);
         let ext = w.reach + 1.0;
         commands.entity(e).with_children(|c| {
             c.spawn((
                 WaterCrackle,
                 Particles { color, alpha: 1.0 },
-                Mesh3d(meshes.add(particle_mesh(80, &mut rng))),
+                Mesh3d(meshes.add(particle_mesh(140, &mut rng))),
                 MeshMaterial3d(particles.add(ParticleMaterial {
                     params: ParticleParams {
                         mode: Vec4::new(9.0, an.radius, w.reach, 1.0),
-                        state: Vec4::new(an.charge, 0.0, 0.0, 0.09),
+                        state: Vec4::new(an.charge, 0.0, 0.0, 0.16),
                         color: color.extend(1.0),
                     },
                     texture: a.dot.clone(),
