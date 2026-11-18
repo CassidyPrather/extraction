@@ -1438,6 +1438,54 @@ mod tests {
         );
     }
 
+    /// A lift set as a step (`map_surge::step_target`), as near the low
+    /// store it faces as the rule lets it stand: its pop lands you on the
+    /// store's 2 m roof.
+    #[test]
+    fn a_stepped_lift_pops_you_onto_the_store() {
+        use extraction_core::map_surge::{STEP_NEAR, STEP_TOP};
+        let mut app = app(false);
+        let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
+        let ground = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(at.x, at.z);
+        // The yard's store: 3.2 m deep along the pop (+X), 2 m up, its
+        // wall the far end of the rule's band off the lift (the hardest).
+        let [w, h, d] = extraction_core::map::prefab_footprint("yard_store");
+        assert!(h <= STEP_TOP);
+        let wall = STEP_NEAR.1;
+        app.world_mut().spawn((
+            Transform::from_translation(ground + Vec3::new(wall + d * 0.5, h * 0.5, 0.0)),
+            RigidBody::Static,
+            Collider::cuboid(d, h, w),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+        ));
+        let p = player(&mut app);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = ground;
+        app.world_mut().get_mut::<Transform>(p).unwrap().rotation =
+            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+        for _ in 0..3 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
+        let mut landed = None;
+        for i in 0..240 {
+            app.update();
+            if i > 20 && app.world().get::<Body>(p).unwrap().grounded {
+                landed = Some(pos(&app, p) - ground);
+                break;
+            }
+        }
+        let landed = landed.expect("came down");
+        eprintln!("stepped lift: landed {landed:?}");
+        assert!(
+            landed.x > wall && landed.x < wall + d,
+            "over the store: {landed:?}"
+        );
+        assert!((landed.y - h).abs() < 0.3, "on its roof: {landed:?}");
+    }
+
     /// In a storm a lift's pop carries you downwind (`wind`): you land
     /// further along it than the same pop in still air.
     #[test]

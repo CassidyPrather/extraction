@@ -473,6 +473,10 @@ pub enum MarkerKind {
         radius: f32,
         #[serde(default)]
         crossing: bool,
+        /// A lift set as a step (`map_surge::step_target`): it may stand
+        /// nearer the one low placement its pop lands you on.
+        #[serde(default)]
+        step: bool,
     },
     /// A sentry's mast (`robots::sentry`). Its arc is centred straight
     /// along `rot` (its front faces the way a sign's board would), `arc`
