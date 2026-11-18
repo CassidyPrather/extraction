@@ -4849,6 +4849,27 @@ mod first_aid {
     /// let go at its other slot clicks in; one jab gives both (60 HP, six
     /// seconds of stim), and both cartridges are left in it, spent.
     #[test]
+    fn a_pen_taken_up_shows_its_wells_to_the_eyes() {
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        let eye = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>();
+            q.iter(vr.app.world()).next().unwrap().translation()
+        };
+        let g = vr.app.world().get::<GlobalTransform>(pen).unwrap();
+        let (_, rot, at) = g.to_scale_rotation_translation();
+        let to_eye = (eye - at).normalize();
+        let along = rot * Vec3::Z;
+        let off_axis = (to_eye - along * to_eye.dot(along)).normalize();
+        let top = (rot * Vec3::Y).dot(off_axis);
+        assert!(top > 0.95, "the wells face the eyes ({top:.2})");
+    }
+
+    #[test]
     fn a_stim_in_the_other_slot_and_one_jab_gives_both() {
         use crate::items::pen::{PenSlot, SLOTS, Stimmed};
         let (mut vr, feet) = setup();
