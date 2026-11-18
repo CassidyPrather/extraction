@@ -945,6 +945,12 @@ fn gallery(
                         "hound" => {
                             crate::robots::hound::spawn_hound(&mut commands, &zone, at, job(at))
                         }
+                        "engineer" => crate::robots::engineer_body::spawn_engineer(
+                            &mut commands,
+                            &zone,
+                            at,
+                            job(at),
+                        ),
                         "heavy" => crate::robots::heavy::spawn_heavy(
                             &mut commands,
                             &zone,
@@ -1805,7 +1811,10 @@ fn first_person_hands(
     } else {
         // In the left hand as a hand takes it (`render::hold::taken`), the
         // glove seated on it as the game seats it; the right open.
-        let half = catalog.kind(what).map_or(Vec3::splat(0.02), |k| {
+        // Its id, without a condition or a pen's loads (`regen_injector/
+        // regen_r2`).
+        let id = what.split(['/', '@']).next().unwrap_or(what);
+        let half = catalog.kind(id).map_or(Vec3::splat(0.02), |k| {
             Vec3::from(catalog.get(k).size_m()) * 0.5
         });
         let mut hand = rest(Side::Left);
@@ -1813,7 +1822,13 @@ fn first_person_hands(
             let palm = hand.rotation * crate::render::hold::palm_normal(Side::Left);
             hand.rotation = Quat::from_rotation_arc(palm, Vec3::Y) * hand.rotation;
         }
-        let in_hand = crate::render::hold::taken(Side::Left, half);
+        let mut in_hand = crate::render::hold::taken(Side::Left, half);
+        // A pen turns its wells to the eyes as the game turns it
+        // (`items::pen::wells_to`).
+        if id == crate::items::pen::PEN && !held_up {
+            let eye_in_hand = hand.compute_affine().inverse().transform_point3(eye);
+            in_hand = crate::items::pen::wells_to(in_hand, eye_in_hand);
+        }
         let seat = crate::render::hold::seat(Side::Left, half, in_hand);
         if held_up {
             let at = eye + (flat * 0.36 - Vec3::Y * 0.1 - right * 0.04) / zoom;

@@ -68,9 +68,18 @@ def regen_injector():
     # The wells' floors, dark, so a cartridge reads against them.
     for x in SLOT_X:
         p.box((0.008, 0.0008, 0.072), (x, SLOT_Y - 0.0062, 0.025), "Black", segs=1)
-    # The catches: a steel bridge over each well on the cartridge's collar.
+    # The catches: a steel clip over each well, its bridge on the cartridge's
+    # collar (which stands 4 mm proud of the top), standing on the body on
+    # a post at the rim and one shared on the ridge between the wells.
+    cy0, cy1 = SLOT_Y + 0.0064, SLOT_Y + 0.008
     for x in SLOT_X:
-        p.box((0.011, 0.0016, 0.003), (x, SLOT_Y + 0.0072, 0.0), "Steel", bevel=0.0004, segs=1)
+        sx = math.copysign(1.0, x)
+        p.box((0.0152, cy1 - cy0, 0.003), (sx * 0.0076, (cy0 + cy1) / 2, 0.0), "Steel",
+              bevel=0.0004, segs=1)
+        p.box((0.0012, cy1 - 0.0032, 0.003), (sx * 0.0148, (cy1 + 0.0032) / 2, 0.0), "Steel",
+              bevel=0.0003, segs=1)
+    p.box((0.0018, cy1 - top + 0.0004, 0.003), (0.0, (cy1 + top - 0.0004) / 2, 0.0), "Steel",
+          bevel=0.0003, segs=1)
     # The thumb eject button, ahead of the wells, ridged.
     p.box((0.010, 0.0062, 0.011), (0.0, top + 0.0031, -0.021), "Black", bevel=0.0015, segs=2)
     for k in range(3):

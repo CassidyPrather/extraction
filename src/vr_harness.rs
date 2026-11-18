@@ -4849,6 +4849,75 @@ mod first_aid {
     /// let go at its other slot clicks in; one jab gives both (60 HP, six
     /// seconds of stim), and both cartridges are left in it, spent.
     #[test]
+    fn a_new_pen_has_an_r2_and_a_found_one_an_r1() {
+        let (mut vr, feet) = setup();
+        let at = feet + Vec3::new(0.0, 0.3, -1.0);
+        let new = vr.spawn("regen_injector", Transform::from_translation(at));
+        // As loot lays it (`loot::spawn_found`): found from the first.
+        let found = {
+            let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+            let kind = catalog.kind("regen_injector").unwrap();
+            let mut commands = vr.app.world_mut().commands();
+            let e = crate::items::loot::spawn_found(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at + Vec3::X * 0.3),
+                    condition: 1.0,
+                },
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(5);
+        let in_pen = |vr: &mut Vr, pen: Entity| -> Vec<String> {
+            let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::items::Item, &crate::interact::InSocket)>();
+            let seated: Vec<(extraction_core::items::ItemKind, Entity)> = q
+                .iter(vr.app.world())
+                .map(|(i, s)| (i.kind(), s.socket))
+                .collect();
+            seated
+                .into_iter()
+                .filter(|(_, s)| {
+                    vr.app
+                        .world()
+                        .get::<crate::interact::SocketOwner>(*s)
+                        .is_some_and(|o| o.0 == pen)
+                })
+                .map(|(k, _)| catalog.get(k).id.clone())
+                .collect()
+        };
+        assert_eq!(in_pen(&mut vr, new), vec!["regen_r2".to_string()]);
+        assert_eq!(in_pen(&mut vr, found), vec!["regen_r1".to_string()]);
+    }
+
+    #[test]
+    fn a_pen_taken_up_shows_its_wells_to_the_eyes() {
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        let eye = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>();
+            q.iter(vr.app.world()).next().unwrap().translation()
+        };
+        let g = vr.app.world().get::<GlobalTransform>(pen).unwrap();
+        let (_, rot, at) = g.to_scale_rotation_translation();
+        let to_eye = (eye - at).normalize();
+        let along = rot * Vec3::Z;
+        let off_axis = (to_eye - along * to_eye.dot(along)).normalize();
+        let top = (rot * Vec3::Y).dot(off_axis);
+        assert!(top > 0.95, "the wells face the eyes ({top:.2})");
+    }
+
+    #[test]
     fn a_stim_in_the_other_slot_and_one_jab_gives_both() {
         use crate::items::pen::{PenSlot, SLOTS, Stimmed};
         let (mut vr, feet) = setup();

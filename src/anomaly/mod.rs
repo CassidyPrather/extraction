@@ -15,6 +15,7 @@
 //!   anomalies blooming across your path.
 
 pub mod artifacts;
+pub mod cook;
 pub mod costs;
 pub mod detector;
 pub mod frost;
@@ -24,6 +25,7 @@ pub mod mirrors;
 pub mod offering;
 pub mod rake;
 pub mod scenarios;
+pub mod steam;
 pub mod surge;
 pub mod visuals;
 pub mod wells;
@@ -195,6 +197,8 @@ impl Plugin for AnomalyPlugin {
             .init_resource::<AttentionBudget>()
             .init_resource::<surge::Agitation>()
             .init_resource::<hush::Hushes>()
+            .init_resource::<steam::Steams>()
+            .add_message::<cook::PartCooked>()
             .add_observer(surge::remember_size)
             .add_observer(seed_dice)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
@@ -235,9 +239,12 @@ impl Plugin for AnomalyPlugin {
                         harvest::heat,
                         harvest::cool_scald,
                         hush::press,
+                        hush::stir,
                         frost::chill,
                         frost::freeze_water,
                         frost::creak,
+                        steam::pair_up,
+                        cook::cook,
                         measure_attention,
                         spend_attention,
                         age_blooms,
@@ -518,6 +525,16 @@ pub struct Knocked(pub f32);
 
 /// How long a round knocks a thing out of a lift's hold, seconds...
 pub const KNOCKED: f32 = 1.5;
+
+/// Rain (`Conditions::rain`) at which a snare grounds itself...
+pub const SNARE_RAIN: f32 = 0.5;
+/// ...after this long at full charge, seconds, at random between (its
+/// crackle at full is the tell: at least `robots::MIN_TELL`)...
+pub const SNARE_RAIN_HOLD: (f32, f32) = (1.2, 2.8);
+/// ...shocking whoever stands within this of its edge on the wet ground,
+/// m, for this much health.
+pub const SNARE_WET_REACH: f32 = 1.5;
+pub const SNARE_WET_SHOCK: f32 = 8.0;
 /// ...and how hard it shoves it along its way, m/s: out of the column, and
 /// a featherstone out of it settles to chest height
 /// (`artifacts::featherstones`), where a hand takes it.
@@ -666,8 +683,16 @@ fn snares(
     mut hits: MessageWriter<Hit>,
     mut events: MessageWriter<AnomalyEvent>,
     mut noises: MessageWriter<Noise>,
+    // The weather, the ground, and how long each snare has waited at full
+    // in a downpour.
+    (conditions, zone, mut holding): (
+        Option<Res<crate::world::weather::Conditions>>,
+        Res<Zone>,
+        Local<std::collections::HashMap<Entity, f32>>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let downpour = conditions.as_ref().is_some_and(|c| c.rain >= SNARE_RAIN);
     for (e, mut a, gt, mut dice) in &mut anomalies {
         let rng = &mut dice.0;
         if a.kind != AnomalyKind::Snare {
@@ -680,6 +705,7 @@ fn snares(
         let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
         a.charge = (a.charge + dt * hurry / 3.5).min(1.0);
         if a.charge < 1.0 {
+            holding.remove(&e);
             continue;
         }
         let c = gt.translation() + Vec3::Y * 0.8;
@@ -720,8 +746,57 @@ fn snares(
             })
             .collect();
         if touched.is_empty() && !player_in && metal.is_empty() {
+            // In a downpour, a while at full crackle (its tell) and it fires
+            // into the wet ground of its own accord: arcs where there were
+            // none, and through the wet ground a shock to whoever stands at
+            // its edge. Then it recharges: a window to reach in.
+            if !downpour {
+                continue;
+            }
+            let wait = holding
+                .entry(e)
+                .or_insert_with(|| rng.range(SNARE_RAIN_HOLD.0, SNARE_RAIN_HOLD.1));
+            *wait -= dt;
+            if *wait > 0.0 {
+                continue;
+            }
+            holding.remove(&e);
+            a.charge = 0.0;
+            let at = gt.translation();
+            for _ in 0..3 {
+                let (ang, d) = (
+                    rng.range(0.0, std::f32::consts::TAU),
+                    rng.range(0.3, 1.0) * a.radius,
+                );
+                arcs.write(ArcStrike {
+                    anomaly: e,
+                    from: c,
+                    to: zone.on_ground(at.x + ang.cos() * d, at.z + ang.sin() * d),
+                });
+            }
+            for (_, pt, mut h) in &mut players {
+                let p = pt.translation();
+                if !h.down
+                    && Vec2::new(p.x - at.x, p.z - at.z).length() < a.radius + SNARE_WET_REACH
+                {
+                    h.hp -= SNARE_WET_SHOCK;
+                    h.since_hit = 0.0;
+                }
+            }
+            events.write(AnomalyEvent {
+                anomaly: e,
+                kind: a.kind,
+                at: c,
+                what: AnomalyAct::Discharge,
+            });
+            noises.write(Noise {
+                at: c,
+                radius: 60.0,
+                source: None,
+            });
             continue;
         }
+        holding.remove(&e);
         a.charge = 0.0;
         for (pe, pt, mut h) in &mut players {
             let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
@@ -1172,6 +1247,49 @@ mod tests {
         };
         queue.apply(app.world_mut());
         e
+    }
+
+    /// A snare in a downpour, left alone at full charge, fires into the
+    /// wet ground within a few seconds and shocks whoever stands at its
+    /// edge; in the dry it waits.
+    #[test]
+    fn rain_grounds_a_snare_and_its_edge_bites() {
+        for (weather, fires) in [("downpour", true), ("clearing", false)] {
+            let mut app = app(false);
+            app.world_mut().resource_mut::<LaunchOptions>().weather = Some(weather.into());
+            let (snare, at, r) = find(&mut app, AnomalyKind::Snare);
+            let me = player(&mut app);
+            let ground = app
+                .world()
+                .resource::<Zone>()
+                .on_ground(at.x + r + 0.9, at.z);
+            app.world_mut()
+                .get_mut::<Transform>(me)
+                .unwrap()
+                .translation = ground + Vec3::Y * 0.05;
+            app.update();
+            let hp = app.world().get::<crate::health::Health>(me).unwrap().hp;
+            let mut fired_at = None;
+            for f in 0..90 * 5 {
+                app.update();
+                if app.world().get::<Anomaly>(snare).unwrap().charge < 0.5 {
+                    fired_at = Some(f as f32 / 90.0);
+                    break;
+                }
+            }
+            let after = app.world().get::<crate::health::Health>(me).unwrap().hp;
+            if fires {
+                let t = fired_at.expect("it fired into the wet ground");
+                assert!(
+                    t >= SNARE_RAIN_HOLD.0 - 0.1,
+                    "not before its crackle's had time to tell ({t:.2} s)"
+                );
+                assert!(after < hp, "its edge bit through the wet ground");
+            } else {
+                assert!(fired_at.is_none(), "in the dry it waits");
+                assert_eq!(after, hp, "and bites no one");
+            }
+        }
     }
 
     #[test]
