@@ -683,8 +683,8 @@ pub(super) struct Newcomer {
     took_ledge: bool,
     /// The radios it went for off its body (`radio_to_fetch`), once a go.
     radios_tried: Vec<Entity>,
-    /// The dressings it went for by its way (`by_the_way`), once each.
-    dressings_tried: Vec<Entity>,
+    /// The injectors it went for by its way (`by_the_way`), once each.
+    injectors_tried: Vec<Entity>,
     /// No gun of its own at the kit: the driver's spare pistol, magazine
     /// and rounds to take, from the crate or the ledge.
     spare_gun: bool,
@@ -737,14 +737,6 @@ pub(super) struct Newcomer {
     pressed_until: f32,
     /// When it last came out from under cover for the truck.
     hurried_at: f32,
-    /// The driver's "bleeding badly ... Get to the truck": how many times
-    /// it has been answered (once a raid), and the last answer's time with
-    /// what the bleed gave it then (s to bleed out; None: it eases first).
-    bleed_heard: usize,
-    bled: Option<(f32, Option<f32>)>,
-    /// The job dropped for it (still out on it when told): home unpaid,
-    /// as it should be.
-    bled_off: bool,
     /// Home with the job left undone, and why ("at the resume", "for the
     /// Surge"): the card's right not to pay.
     left_job: Option<&'static str>,
@@ -763,8 +755,8 @@ pub(super) struct Newcomer {
     seen_trail: Vec<(Vec2, f32)>,
     /// When a walker last had it in its line.
     seen_at: f32,
-    /// When it last put a dressing on.
-    dressed_at: f32,
+    /// When it last used an injector.
+    healed_at: f32,
     /// When it last answered a crawler's crackle.
     crawled_at: f32,
     /// The grappler it saw wind up a throw at it, last.
@@ -800,21 +792,6 @@ impl Newcomer {
         let what = what.into();
         info!("first hour: {now:.0}s {kind:?}: {what}");
         self.moments.push((now, kind, what));
-    }
-
-    /// After "bleeding badly": how long from the line to `how` (in the
-    /// truck, or down), against what the bleed gave it then. Once.
-    fn note_bled(&mut self, now: f32, how: &str) {
-        if let Some((at, left)) = self.bled.take() {
-            let gave = left.map_or("it was easing before it was out".into(), |t| {
-                format!("{t:.0} s to bleed out")
-            });
-            self.note(
-                now,
-                Kind::Learned,
-                format!("bled: {how} {:.0} s after the line ({gave})", now - at),
-            );
-        }
     }
 }
 
@@ -932,7 +909,7 @@ const KIT: [&str; 9] = [
     "pm_pistol",
     "pm_mag",
     "radio",
-    "field_dressing",
+    "regen_injector",
     "flashlight",
     "map_case",
     "compass",
@@ -2192,83 +2169,6 @@ pub(super) fn direct_raid(
                     }
                 }
             }
-            // Bleeding with a heavy still in reach: walking on first, the
-            // dressing once it's behind (bound beside it, the one-handed
-            // newcomer took its second blow).
-            First::Bleeding
-                if state.heavy.is_some_and(|h| {
-                    world
-                        .robot_at(h)
-                        .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
-                }) =>
-            {
-                let from = state
-                    .heavy
-                    .and_then(|h| world.robot_at(h))
-                    .map_or(here + Vec2::Y * 10.0, |g| g.xz());
-                state.note(
-                    now,
-                    Kind::Learned,
-                    "bleeding, with a heavy in reach: on away first, then the dressing",
-                );
-                walk_off_heavy(&world, here, from)
-            }
-            // Bleeding with a crawler charging at it: out of its line first
-            // (its answer's doing that), the dressing once it's behind.
-            First::Bleeding if crawler_at_it(now, state.crawled_at) => {
-                state.note(
-                    now,
-                    Kind::Learned,
-                    "bleeding, with a crawler at it: out of its line first, then the dressing",
-                );
-                vec![]
-            }
-            First::Bleeding => {
-                let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
-                    held.is_none()
-                        && sock.is_some()
-                        && world.catalog.get(it.kind()).id == "field_dressing"
-                });
-                let dress = |e: Entity| {
-                    vec![
-                        Task::Stow(Side::Left),
-                        Task::Grab {
-                            item: e,
-                            side: Side::Left,
-                        },
-                        Task::Use(Side::Left),
-                    ]
-                };
-                // On its way under a roof from a drone: in first, then the
-                // dressing, at the spot it waits (bound in the open, under
-                // the drone's bursts, it lost 60 hp in nine seconds three
-                // metres from the door).
-                let sheltering = state.roof_try.is_some_and(|(_, _, t)| now - t < 25.0);
-                let wait_at = bot.tasks.iter().position(|t| matches!(t, Task::Wait(_)));
-                match dressing {
-                    Some((e, ..)) if sheltering && wait_at.is_some() => {
-                        let at = wait_at.unwrap_or(0);
-                        state.dressed_at = now;
-                        for (k, t) in dress(e).into_iter().enumerate() {
-                            bot.tasks.insert(at + k, t);
-                        }
-                        state.note(
-                            now,
-                            Kind::Learned,
-                            "bleeding: in under the roof first, then the dressing",
-                        );
-                        vec![]
-                    }
-                    Some((e, ..)) => {
-                        state.dressed_at = now;
-                        dress(e)
-                    }
-                    None => {
-                        state.note(now, Kind::Confused, "bleeding, and no dressing on me");
-                        vec![]
-                    }
-                }
-            }
             First::Anomaly => {
                 // Back the way it came, then on round.
                 let away = state
@@ -2340,44 +2240,35 @@ pub(super) fn direct_raid(
             vec![Task::DrawGun, Task::Ready { off_safe: false }],
         );
     }
-    // Bleeding, a dressing on it, nothing at it this moment: the dressing
-    // on, whoever said so and however long ago. (Told once a career, the
-    // careful newcomer shot a walker blind at r10 and bled to death beside
-    // it over twenty seconds, a dressing in its pouch.)
-    if wound_to_dress(
-        world.bleeding(player),
+    // Low, an injector on it, nothing at it this moment: the injector in,
+    // as anyone would once out of the fight.
+    if hurt_to_heal(
+        world.health.get(player).map_or(100.0, |h| h.hp),
         &state.shots,
         now,
-        state.dressed_at,
+        state.healed_at,
         state.line_run_until > now,
     ) && world.alive(player)
-        // (Not twice: the first bleed's own answer, or the last, still on
-        // its way; a second grab found the dressing gone.)
+        // (Not twice: the last, still on its way.)
         && !bot.tasks.iter().any(|t| matches!(t, Task::Use(_) | Task::Grab { .. }))
         // (Not with a heavy in reach: its blows aren't shots, so "nothing
-        // at it" was wrong, and the one-handed newcomer bound its wound
-        // beside one and took the second blow.)
+        // at it" would be wrong.)
         && !state.heavy.is_some_and(|h| {
             world
                 .robot_at(h)
-                .is_some_and(|g| g.xz().distance(here) < HEAVY_DRESS_CLEAR)
+                .is_some_and(|g| g.xz().distance(here) < HEAVY_HEAL_CLEAR)
         })
-        // (Nor with a crawler charging at it: bound in its line, the careful
-        // newcomer took the next zap.)
+        // (Nor with a crawler charging at it.)
         && !crawler_at_it(now, state.crawled_at)
     {
-        let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
+        let injector = world.items.iter().find(|(_, it, _, held, sock, _)| {
             held.is_none()
                 && sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
-                && world.catalog.get(it.kind()).id == "field_dressing"
+                && world.catalog.get(it.kind()).id == "regen_injector"
         });
-        if let Some((e, ..)) = dressing {
-            state.dressed_at = now;
-            state.note(
-                now,
-                Kind::Learned,
-                "bleeding, nothing at it: the dressing on",
-            );
+        if let Some((e, ..)) = injector {
+            state.healed_at = now;
+            state.note(now, Kind::Learned, "hurt, nothing at it: the injector in");
             super::second_hour::cut_in(
                 &mut bot,
                 vec![
@@ -2391,10 +2282,8 @@ pub(super) fn direct_raid(
             );
         }
     }
-    // A dressing lying by its way, none on it: picked up, as anyone would
-    // (the careful and the one-handed newcomers won the first fight on
-    // Marrow and bled out after it, their one dressing on the first wound).
-    // Out on the job only, clear of any fight, and each once.
+    // An injector lying by its way, none on it: picked up, as anyone
+    // would. Out on the job only, clear of any fight, and each once.
     if raid.phase == Phase::Out
         && world.alive(player)
         && now - state.fought_at > CLEAR_TO_PICK
@@ -2409,7 +2298,7 @@ pub(super) fn direct_raid(
                 Task::Use(_) | Task::Grab { .. } | Task::GrabFromHere { .. }
             )
         })
-        && carried(&world, &view, player, "field_dressing").is_empty()
+        && carried(&world, &view, player, "regen_injector").is_empty()
     {
         let loose = world
             .items
@@ -2418,16 +2307,16 @@ pub(super) fn direct_raid(
                 held.is_none()
                     && sock.is_none()
                     && bag.is_none()
-                    && world.catalog.get(it.kind()).id == "field_dressing"
+                    && world.catalog.get(it.kind()).id == "regen_injector"
                     && !view.stash.iter().any(|b| b.contents.contains(e))
             })
             .map(|(e, _, gt, ..)| (e, gt.translation()));
         // (Not up a tower's stairs: a thing it passes, not a climb.)
-        if let Some((e, at)) = by_the_way(here, loose, &state.dressings_tried, |at| {
+        if let Some((e, at)) = by_the_way(here, loose, &state.injectors_tried, |at| {
             in_reach(&world, &plans, at) && way_down(&world, &plans, at).is_empty()
         }) {
-            state.dressings_tried.push(e);
-            state.note(now, Kind::Learned, "a dressing by the way, picked up");
+            state.injectors_tried.push(e);
+            state.note(now, Kind::Learned, "an injector by the way, picked up");
             let mut t = way_to(&world, &view, &plans, here, at);
             t.extend([
                 Task::Grab {
@@ -2582,7 +2471,6 @@ pub(super) fn direct_raid(
     if matches!(raid.phase, Phase::Down { .. }) {
         if state.leg != Leg::Done {
             state.note(now, Kind::Killed, "went down");
-            state.note_bled(now, "down");
             state.leg = Leg::Done;
         }
         // That's this first hour over: nothing left of the walk (down
@@ -2679,71 +2567,6 @@ pub(super) fn direct_raid(
             return;
         }
     }
-    // "You're bleeding badly, nothing to bind it. Get to the truck." A
-    // person told that goes: the job's off, the truck's called now, from
-    // where it stands (one-handed v the walker heard it at 97 s, walked on
-    // to the farm and back to the gate as the card said, and was in the
-    // truck at 292 s).
-    let told = state
-        .heard
-        .iter()
-        .filter(|l| *l == super::firsts::BLEEDING_BADLY_LINE)
-        .count();
-    if told > state.bleed_heard {
-        state.bleed_heard = told;
-        let left = view
-            .health
-            .single()
-            .ok()
-            .and_then(|h| bleeds_out_in(h.hp, h.bleeding));
-        state.bled = Some((now, left));
-        if matches!(state.leg, Leg::Out | Leg::Place)
-            && bleed_answer(state.leg, &raid.phase).is_some()
-        {
-            state.bled_off = true;
-        }
-        let gave = left.map_or("it eases before it's out".into(), |t| {
-            format!("out in {t:.0} s")
-        });
-        match bleed_answer(state.leg, &raid.phase) {
-            Some(BleedGo::ToTruck) => {
-                state.note(
-                    now,
-                    Kind::Learned,
-                    format!("bleeding badly: out to the truck ({gave})"),
-                );
-                state.roof_try = None;
-                bot.tasks.clear();
-                bot.walk = None;
-                bot.tasks.extend(world.go_home(here, &raid, state.tries));
-                bot.tasks.push_back(Task::Wait(IDLE));
-                bot.restart();
-                state.leg = Leg::Board;
-                return;
-            }
-            Some(BleedGo::Call) => {
-                state.note(
-                    now,
-                    Kind::Learned,
-                    format!("bleeding badly: called the truck from here ({gave})"),
-                );
-                state.leg = Leg::Call;
-                // (Not back to the gate first: there's no time for it.)
-                state.at_gate = true;
-                state.roof_try = None;
-                bot.tasks.clear();
-                bot.tasks.push_back(Task::Wait(IDLE));
-                bot.walk = None;
-                bot.restart();
-                return;
-            }
-            None => state.note(
-                now,
-                Kind::Learned,
-                format!("bleeding badly: already on its way to the truck ({gave})"),
-            ),
-        }
-    }
     // A time sense: in cover or on the job, the clock still runs. A person
     // under a roof keeps half an eye on the time, and goes when it's short:
     // the Surge close (the driver's warning is said once a career: told
@@ -2811,8 +2634,6 @@ pub(super) fn direct_raid(
     if p.reckless
         && armed
         && now - state.fought_at > 60.0
-        // (Bleeding badly, it's home it wants, not a fight.)
-        && state.bled.is_none()
         && matches!(state.leg, Leg::Place | Leg::Rendezvous | Leg::Call)
         && world
             .nearest_robot(here)
@@ -3668,7 +3489,6 @@ pub(super) fn direct_raid(
         Leg::Board => match raid.phase {
             Phase::Extracting { .. } | Phase::AtBase => {
                 state.note(now, Kind::Learned, "in the truck and away");
-                state.note_bled(now, "in the truck");
                 state.leg = Leg::Paid;
                 state.tries = 0;
             }
@@ -3754,14 +3574,6 @@ pub(super) fn direct_raid(
                     now,
                     Kind::Learned,
                     "home, the job given up: unpaid, as it should be",
-                );
-                state.leg = Leg::Done;
-            } else if state.tries >= 3 && state.bled_off {
-                // Gone home bleeding, as the driver said: not done either.
-                state.note(
-                    now,
-                    Kind::Learned,
-                    "home, the job dropped for the bleed: unpaid, as it should be",
                 );
                 state.leg = Leg::Done;
             } else if state.tries >= 3
@@ -4156,8 +3968,8 @@ fn under_a_roof(
     Some((tasks, d.building))
 }
 
-/// Nearer a heavy than this, a wound waits: on away first.
-const HEAVY_DRESS_CLEAR: f32 = 12.0;
+/// Nearer a heavy than this, the injector waits: on away first.
+const HEAVY_HEAL_CLEAR: f32 = 12.0;
 
 /// Off from a heavy, as the driver says ("walk away, and keep going"): a
 /// longer leg than [`walk_away`]'s and no stand at its end, renewed
@@ -4420,43 +4232,6 @@ fn time_short(
         .then_some(Hurry::Truck)
 }
 
-/// How a bleed eases by itself (HP a second, each second: `health`).
-const BLEED_EASES: f32 = 0.02;
-
-/// Seconds till `hp` is bled away at `rate` HP a second, the rate easing
-/// by `BLEED_EASES` each second; None if it stops first. (Health lost
-/// by t is rate·t − ½·BLEED_EASES·t².)
-fn bleeds_out_in(hp: f32, rate: f32) -> Option<f32> {
-    if hp <= 0.0 {
-        return Some(0.0);
-    }
-    let disc = rate * rate - 2.0 * BLEED_EASES * hp;
-    (rate > 0.0 && disc >= 0.0).then(|| (rate - disc.sqrt()) / BLEED_EASES)
-}
-
-/// What "bleeding badly ... Get to the truck" means from where it is.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum BleedGo {
-    /// The truck's at the rendezvous: to it, now.
-    ToTruck,
-    /// Call it from here (off the job; not back to the gate first).
-    Call,
-}
-
-fn bleed_answer(leg: Leg, phase: &Phase) -> Option<BleedGo> {
-    let truck_there = matches!(phase, Phase::TruckWaiting { .. });
-    match leg {
-        Leg::Out | Leg::Place | Leg::Call | Leg::Rendezvous if truck_there => {
-            Some(BleedGo::ToTruck)
-        }
-        Leg::Out | Leg::Place => Some(BleedGo::Call),
-        // Called already, but still out on its way back to the gate or
-        // under a roof: from here, now.
-        Leg::Call if matches!(phase, Phase::Out) => Some(BleedGo::Call),
-        _ => None,
-    }
-}
-
 /// The eye of the walker after it: the one that last aimed, else the
 /// nearest walker with it in mind, else the nearest walker in reach (the
 /// first warning can come before any aim it's told of, or a mind that has
@@ -4564,13 +4339,13 @@ fn no_way_out(
         && shots.iter().filter(|t| now - **t < SHOT_WINDOW).count() >= 2
 }
 
-/// Whether to dress a wound now: bleeding enough to matter, no round at
-/// it in the last few seconds, not on a run to cover, and not again for a
+/// Whether to use an injector now: low enough to matter, no round at it
+/// in the last few seconds, not on a run to cover, and not again for a
 /// few seconds after the last (its use takes that long).
-fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, running: bool) -> bool {
-    bleeding > BLEED_WORTH
+fn hurt_to_heal(hp: f32, shots: &[f32], now: f32, healed_at: f32, running: bool) -> bool {
+    hp < HEAL_BELOW
         && !running
-        && now - dressed_at > DRESS_EVERY
+        && now - healed_at > HEAL_EVERY
         && shots.iter().all(|t| now - t > CONTACT_FOR)
 }
 
@@ -4578,7 +4353,7 @@ fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, runni
 /// come every 2 s or so, and the answer takes longer.
 const CRAWLER_EVERY: f32 = 3.0;
 /// A crawler that charged at it this lately (s) is still at it: no keeping
-/// still, no dressing in its line.
+/// still, no injector in its line.
 const CRAWLER_CLEAR: f32 = 5.0;
 /// A wait this long (s) is one to keep still in, and goes when a crawler
 /// charges.
@@ -4610,10 +4385,11 @@ fn crawler_answer(armed: bool, rounds: bool, packed_loaded: bool) -> CrawlerAnsw
     }
 }
 
-/// A bleed this fast is worth stopping to dress (hp/s).
-const BLEED_WORTH: f32 = 0.3;
+/// Under this (HP) an injector's worth stopping for: it gives 45, so
+/// none of it is wasted.
+const HEAL_BELOW: f32 = 55.0;
 /// Not more often than this (s).
-const DRESS_EVERY: f32 = 8.0;
+const HEAL_EVERY: f32 = 8.0;
 /// Shot at within this, it's still in the fight (s).
 const CONTACT_FOR: f32 = 3.0;
 
@@ -5835,9 +5611,9 @@ fn radio_at_feet(
 /// A radio not on `player` to go and get: the nearest in its own remains,
 /// else in anyone's, else lying loose; not one gone for `RADIO_TRIES`
 /// times already (`tried`) and not got. Where it is, to go to.
-/// How long clear of a fight before it stops for a dressing by its way (s).
+/// How long clear of a fight before it stops for an injector by its way (s).
 const CLEAR_TO_PICK: f32 = 15.0;
-/// How far off its way a dressing's worth the steps (m).
+/// How far off its way an injector's worth the steps (m).
 const BY_THE_WAY: f32 = 6.0;
 /// The nearest of `found` within [`BY_THE_WAY`] of `here` that it hasn't
 /// tried and a hand gets to (`reach`): a thing it passes, not one it goes
@@ -8254,7 +8030,7 @@ the Hollow.";
     /// gun's "shot it" was an Engage that ended at once, and the careful
     /// newcomer stood through eight zaps in the shelter's generator room);
     /// its gun out of the pack if that's the loaded one; else out of its
-    /// line. And while one's at it, no keeping still and no dressing.
+    /// line. And while one's at it, no keeping still and no injector.
     /// Where a newcomer with no radio could find one, valley by valley:
     /// each loot spot whose table can roll one, on the ground or up a
     /// floor (a tower's cab), and whether any is on the ground. Run with
@@ -8349,10 +8125,10 @@ the Hollow.";
         );
     }
 
-    /// A dressing it passes is picked up: the nearest a hand gets to, a few
-    /// steps off its way, each once; none it'd have to go looking for.
+    /// An injector it passes is picked up: the nearest a hand gets to, a
+    /// few steps off its way, each once; none it'd have to go looking for.
     #[test]
-    fn a_dressing_by_its_way_is_picked_up_once() {
+    fn an_injector_by_its_way_is_picked_up_once() {
         use super::{BY_THE_WAY, by_the_way};
         let e = |i: u32| Entity::from_raw_u32(i).unwrap();
         let here = Vec2::ZERO;
@@ -9002,18 +8778,18 @@ the Hollow.";
     }
 
     #[test]
-    fn a_bleed_is_dressed_once_out_of_contact() {
+    fn the_injector_goes_in_once_out_of_contact() {
         let now = 400.0;
-        // Bleeding, nothing at it for a while: dress it.
-        assert!(wound_to_dress(1.5, &[now - 10.0], now, 0.0, false));
+        // Low, nothing at it for a while: in.
+        assert!(hurt_to_heal(30.0, &[now - 10.0], now, 0.0, false));
         // Still being shot at, or running to cover: not yet.
-        assert!(!wound_to_dress(1.5, &[now - 1.0], now, 0.0, false));
-        assert!(!wound_to_dress(1.5, &[now - 10.0], now, 0.0, true));
-        // A graze that's stopping: no.
-        assert!(!wound_to_dress(0.1, &[], now, 0.0, false));
-        // Just put one on: not again at once.
-        assert!(!wound_to_dress(1.5, &[], now, now - 2.0, false));
-        assert!(wound_to_dress(1.5, &[], now, now - 20.0, false));
+        assert!(!hurt_to_heal(30.0, &[now - 1.0], now, 0.0, false));
+        assert!(!hurt_to_heal(30.0, &[now - 10.0], now, 0.0, true));
+        // Hardly hurt: no (it would waste most of it).
+        assert!(!hurt_to_heal(90.0, &[], now, 0.0, false));
+        // Just used one: not again at once.
+        assert!(!hurt_to_heal(30.0, &[], now, now - 2.0, false));
+        assert!(hurt_to_heal(30.0, &[], now, now - 20.0, false));
     }
 
     #[test]
@@ -9115,68 +8891,6 @@ the Hollow.";
             // Not every frame: once in 30 s.
             assert_eq!(time_short(&running, far, leg, true, false, true, 5.0), None);
         }
-    }
-
-    /// "Bleeding badly ... Get to the truck": off the job, the truck called
-    /// from where it stands; the truck there, to it; already boarding or at
-    /// the camp, nothing new.
-    #[test]
-    fn bleeding_badly_goes_for_the_truck() {
-        let there = Phase::TruckWaiting { rv: 0, left: 60.0 };
-        let called = Phase::TruckCalled { rv: 0, eta: 60.0 };
-        for leg in [Leg::Out, Leg::Place] {
-            assert_eq!(
-                bleed_answer(leg, &Phase::Out),
-                Some(BleedGo::Call),
-                "{leg:?}"
-            );
-        }
-        // Called, but still out (on its way back to the gate, or under a
-        // roof): from here, now.
-        assert_eq!(bleed_answer(Leg::Call, &Phase::Out), Some(BleedGo::Call));
-        for leg in [Leg::Out, Leg::Place, Leg::Call, Leg::Rendezvous] {
-            assert_eq!(bleed_answer(leg, &there), Some(BleedGo::ToTruck), "{leg:?}");
-        }
-        assert_eq!(bleed_answer(Leg::Rendezvous, &called), None);
-        assert_eq!(bleed_answer(Leg::Board, &there), None);
-        for leg in [Leg::Camp, Leg::Kit, Leg::Card, Leg::Paid, Leg::Done] {
-            assert_eq!(bleed_answer(leg, &Phase::Out), None, "{leg:?}");
-        }
-    }
-
-    /// Time to bleed out, against the game's own bleed stepped second by
-    /// second (`health`: hp less the rate, the rate easing).
-    #[test]
-    fn bleeds_out_in_matches_the_bleed() {
-        let step = |mut hp: f32, mut rate: f32| {
-            let dt = 0.001;
-            let mut t = 0.0;
-            while rate > 0.0 && t < 1000.0 {
-                hp -= rate * dt;
-                rate = (rate - BLEED_EASES * dt).max(0.0);
-                t += dt;
-                if hp <= 0.0 {
-                    return Some(t);
-                }
-            }
-            None
-        };
-        for (hp, rate) in [
-            (65.0, 1.5),
-            (40.0, 1.1),
-            (80.0, 3.0),
-            (20.0, 1.0),
-            (30.0, 1.0),
-        ] {
-            match (bleeds_out_in(hp, rate), step(hp, rate)) {
-                (Some(a), Some(b)) => assert!((a - b).abs() < 0.1, "{hp} {rate}: {a} v {b}"),
-                (a, b) => assert_eq!(a.is_some(), b.is_some(), "{hp} {rate}: {a:?} v {b:?}"),
-            }
-        }
-        // 1 HP a second eases off after 25 HP: 30 is never bled away.
-        assert_eq!(bleeds_out_in(30.0, 1.0), None);
-        assert!(bleeds_out_in(20.0, 1.0).is_some());
-        assert_eq!(bleeds_out_in(50.0, 0.0), None);
     }
 }
 

@@ -101,6 +101,12 @@ pub struct LaunchOptions {
     pub stress: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
+    /// Dev: once the world's in, your health set to this (`--hurt 40`):
+    /// something for an injector to put back.
+    pub hurt: Option<f32>,
+    /// Dev: once the world's in, these laid on the ground in front of you
+    /// (`--give regen_injector,canned_stew`).
+    pub give: Vec<String>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
     /// (see `dev::gallery`).
     pub gallery: Option<String>,
@@ -226,6 +232,8 @@ impl Default for LaunchOptions {
             report: false,
             stress: false,
             surge_in: None,
+            hurt: None,
+            give: Vec::new(),
             gallery: None,
             weather: None,
             snow: None,
@@ -327,6 +335,13 @@ impl LaunchOptions {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
+                "--hurt" => o.hurt = val().parse().ok(),
+                "--give" => o.give.extend(
+                    val()
+                        .split(',')
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned),
+                ),
                 "--weather" => {
                     let v = val();
                     if !crate::world::weather::WEATHERS.contains(&v.as_str()) {

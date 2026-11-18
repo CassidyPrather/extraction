@@ -31,7 +31,6 @@ pub mod read;
 pub mod stow;
 pub mod tools;
 pub mod touch;
-pub mod wounds;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -350,7 +349,6 @@ impl Plugin for InteractPlugin {
                 touch::TouchPlugin,
                 carry::CarryPlugin,
                 fight::FightPlugin,
-                wounds::WoundsPlugin,
                 read::ReadPlugin,
             ))
             .add_plugins(pockets::PocketsPlugin);

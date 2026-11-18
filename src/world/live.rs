@@ -491,7 +491,6 @@ mod tests {
                 .get_mut::<crate::health::Health>(player)
                 .unwrap();
             h.hp = h.max;
-            h.bleeding = 0.0;
             h.down = false;
         };
 
