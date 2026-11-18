@@ -202,11 +202,14 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
             if corners.iter().any(|&k| pts[k].is_none()) {
                 continue;
             }
-            // A cell all rime, faded out, is nothing.
-            if corners
+            // Rime thinning out: a cell mostly gone is nothing, so its edge
+            // wanders up the bank.
+            let thin = corners
                 .iter()
-                .all(|&k| pts[k].is_some_and(|(_, o)| o < 0.02))
-            {
+                .map(|&k| pts[k].map_or(0.0, |(_, o)| o))
+                .sum::<f32>()
+                / 4.0;
+            if thin < 0.3 {
                 continue;
             }
             any_ice |= corners
@@ -378,9 +381,11 @@ pub fn freeze_water(
                             base_color_texture: Some(ice_texture(images)),
                             perceptual_roughness: 0.55,
                             reflectance: 0.5,
-                            // Opaque where it's a sheet; the vertex alpha
-                            // only thins the rime up the banks.
-                            alpha_mode: AlphaMode::Blend,
+                            // Opaque: it hides the water and the frost's
+                            // mark on the bed under it, as ice would (blended,
+                            // the mark drew over it). The rime's thinning up
+                            // the banks is its ragged edge, not a fade.
+                            alpha_mode: AlphaMode::Opaque,
                             ..default()
                         })
                     })
