@@ -4849,6 +4849,45 @@ mod first_aid {
     /// let go at its other slot clicks in; one jab gives both (60 HP, six
     /// seconds of stim), and both cartridges are left in it, spent.
     #[test]
+    fn a_new_pen_has_an_r2_and_a_found_one_an_r1() {
+        let (mut vr, feet) = setup();
+        let at = feet + Vec3::new(0.0, 0.3, -1.0);
+        let new = vr.spawn("regen_injector", Transform::from_translation(at));
+        let found = vr.spawn(
+            "regen_injector",
+            Transform::from_translation(at + Vec3::X * 0.3),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(found)
+            .insert(crate::items::loot::Found);
+        vr.step(5);
+        let in_pen = |vr: &mut Vr, pen: Entity| -> Vec<String> {
+            let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&crate::items::Item, &crate::interact::InSocket)>();
+            let seated: Vec<(extraction_core::items::ItemKind, Entity)> = q
+                .iter(vr.app.world())
+                .map(|(i, s)| (i.kind(), s.socket))
+                .collect();
+            seated
+                .into_iter()
+                .filter(|(_, s)| {
+                    vr.app
+                        .world()
+                        .get::<crate::interact::SocketOwner>(*s)
+                        .is_some_and(|o| o.0 == pen)
+                })
+                .map(|(k, _)| catalog.get(k).id.clone())
+                .collect()
+        };
+        assert_eq!(in_pen(&mut vr, new), vec!["regen_r2".to_string()]);
+        assert_eq!(in_pen(&mut vr, found), vec!["regen_r1".to_string()]);
+    }
+
+    #[test]
     fn a_pen_taken_up_shows_its_wells_to_the_eyes() {
         let (mut vr, feet) = setup();
         let pen = take(&mut vr, feet, "regen_injector");
