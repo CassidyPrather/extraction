@@ -45,8 +45,9 @@ seats on it still on, and one of its parts held up in the left hand:
   line drum and the harpoon launcher are still seated on its back.
 - `wreck_crawler.png`: a crawler at 2.6 m, turned to face you, a leg servo
   in hand.
-- `wreck_hound.png`: a hound, a hip servo in hand. Its cell (orange band)
-  sits on its back, and its head has come off as a loose item.
+- `wreck_hound.png`: a hound at 2.8 m (it fell toward you, lower left), a
+  hip servo in hand (half behind the hand). Its cell, with the orange band,
+  sits on its back, and its head lies loose at the bottom left.
 
 Each is one gallery word, `WHO!dead,TURN,DIST,0,hold=ITEM`. The robot is
 killed 90 frames in, after it is posed, so its pieces fall and are seated
@@ -61,4 +62,4 @@ the way they are in a raid:
 
 The others: `grappler!dead,0,4.2,0,hold=robot_cell`,
 `crawler!dead,180,2.6,0,hold=crawler_leg_servo`,
-`hound!dead,90,4.2,0,hold=hound_hip_servo+up`.
+`hound!dead,0,2.8,0,hold=hound_hip_servo`.
