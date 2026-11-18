@@ -1036,6 +1036,30 @@ pub(crate) mod tests {
         }
     }
 
+    /// The survey sets come as a ladder (#104): the clicker first, the
+    /// field screen later, the sweep last, each rarer than the one before.
+    #[test]
+    fn the_survey_sets_come_in_order_each_rarer() {
+        let app = career_app();
+        let loot = app.world().resource::<Loot>().clone();
+        let first = |id: &str| loot.0.arrives(id).expect(id);
+        assert!(first("detector") < first("detector_bear"));
+        assert!(first("detector_bear") < first("detector_sweep"));
+        let mut rng = Rng::new(3);
+        let cat = app.world().resource::<Catalog>().clone();
+        let mut n = std::collections::HashMap::<String, u32>::new();
+        for _ in 0..20_000 {
+            for d in loot.0.roll_at("gadgets", None, None, &cat.0, &mut rng) {
+                *n.entry(cat.get(d.kind).id.clone()).or_default() += 1;
+            }
+        }
+        let c = |id: &str| n.get(id).copied().unwrap_or(0);
+        assert!(
+            c("detector") > c("detector_bear") && c("detector_bear") > c("detector_sweep"),
+            "{n:?}"
+        );
+    }
+
     /// `cargo test -- --ignored item_census --nocapture`: every item in
     /// each valley once it's settled, by kind, junk (food and the like:
     /// its `food:` tag, or the Junk category) apart from the rest (#104).
