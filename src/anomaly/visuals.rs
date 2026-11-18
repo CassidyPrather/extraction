@@ -2667,9 +2667,17 @@ fn light_steam_banks(
     systems: Query<&MeshMaterial3d<ParticleMaterial>>,
     mut mats: ResMut<Assets<ParticleMaterial>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let light = conditions.as_ref().map_or(1.0, |c| c.light);
     for (bank, gt, kids) in &banks {
+        // Cold and bright (snow lying, by day): its underside deeper and
+        // cooler and its core thicker, so it holds a body against white.
+        let lying = snow.as_ref().map_or(0.0, |s| {
+            s.above(gt.translation().y)
+                .max(if s.floor > 0.0 { 1.0 } else { 0.0 })
+        });
+        let cold = (lying * light).clamp(0.0, 1.0);
         let toward = anomalies.get(bank.burner).map_or(Vec2::X, |b| {
             let d = b.translation() - gt.translation();
             Vec2::new(d.x, d.z).normalize_or(Vec2::X)
@@ -2679,6 +2687,7 @@ fn light_steam_banks(
                 && let Some(mut mat) = mats.get_mut(&m.0)
             {
                 mat.params.color = (STEAM_GREY * (0.3 + 0.7 * light)).extend(STEAM_ALPHA);
+                mat.params.state.x = cold;
                 mat.params.state.y = toward.x;
                 mat.params.state.z = toward.y;
             }

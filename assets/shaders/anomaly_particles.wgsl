@@ -284,7 +284,11 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         // edge, which drew each billow as a hard disc.)
         rgb = params.color.rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
         let under = smoothstep(0.25, 0.95, in.uv.y);
-        rgb = rgb * mix(vec3<f32>(1.05, 1.05, 1.05), vec3<f32>(0.56, 0.6, 0.66), under);
+        // Cold and bright (charge: snow lying, by day), the shade below
+        // deeper and a little bluer, so the bank has a body against snow.
+        let cold = params.state.x;
+        let shade = mix(vec3<f32>(0.56, 0.6, 0.66), vec3<f32>(0.42, 0.47, 0.56), cold);
+        rgb = rgb * mix(vec3<f32>(1.05, 1.05, 1.05), shade, under);
     } else {
         // Grit falling into a well warms toward its violet glow.
         rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
@@ -295,7 +299,8 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         // edge, so no billow has an edge to see, near or far.
         let d = length(in.uv - vec2<f32>(0.5)) * 2.0;
         let soft = 1.0 - smoothstep(0.0, 1.0, d);
-        a = params.color.a * in.alpha * soft * soft;
+        // Its core a little thicker in the cold, to hold its shape on white.
+        a = params.color.a * in.alpha * soft * soft * (1.0 + 0.35 * params.state.x * (1.0 - d));
     }
     if (glow > 0.5) {
         // Additive (Bevy's premultiplied blend with no alpha): fog only
