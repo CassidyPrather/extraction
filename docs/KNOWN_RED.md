@@ -30,6 +30,10 @@ How it works:
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
+| `audio_machines::tests::the_dangers_are_heard`: "no sound for: [StimCue]" | 4143aafa | Hands | #102 step 2 |
+| `onboarding::pickups::tests::every_kind_rollable_before_raid_6_has_a_line_or_is_obvious`, `each_line_is_what_the_game_does` | 4143aafa | Hands | cartridges/pen need first-pickup lines (Onboarding's file) |
+| `items::loot::tests::nothing_turns_up_before_its_raid`, `a_first_raids_small_things_lie_in_sight` | 4143aafa | Hands | medical table's cartridges |
+| `models::tests::every_item_box_is_its_model`, `no_item_falls_back_to_the_placeholder`, `capture::scale::tests::items_are_drawn_near_their_real_size` | 4143aafa | Hands / Models | cartridges had no model; Models' 911c7098 (in gate 335) should cure — confirm on the next lib run |
 
 ## Logged, not failing a check
 
