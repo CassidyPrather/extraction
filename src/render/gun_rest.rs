@@ -18,6 +18,16 @@
 //! Marrow's fuel exfil), so it rests merged too. Its rounds change only
 //! in hand, which wakes it. One seated in a gun rests with the gun.
 //!
+//! A box of rounds (`items::rounds`) is the same again: its body, bands
+//! and seal, every round it shows at four meshes a round, and its far
+//! stand-in (`box_lod1`, past `models::ITEM_LOD`). One open box of 5.45
+//! was 57 draws an eye; Cinder's s01_ahead went from 1829 to 2333-2552
+//! draws when they came in (18 November). It rests merged per material
+//! and per draw range (its near meshes stop where its stand-in starts),
+//! in the paint it was left in, a mixed box's mix too. Its rounds go in
+//! and out only in hand, which wakes it; a node of it shown or hidden
+//! (a round, the seal, a band) wakes it too, however that came about.
+//!
 //! `EXTRACTION_GUN_REST=0` leaves every gun as its parts.
 
 use bevy::camera::visibility::VisibilityRange;
@@ -57,6 +67,9 @@ pub struct AtRest {
     merged: Vec<Entity>,
     /// The range its merged meshes were given (the gun's leaves').
     range: Option<VisibilityRange>,
+    /// The nodes between it and the merged leaves (a box's rounds, seal,
+    /// bands): one shown or hidden wakes it.
+    nodes: Vec<Entity>,
 }
 
 /// On a gun not worth merging (a draw or two already), with how many
@@ -200,14 +213,46 @@ const LIVE: [&str; 3] = ["Muzzle crown", "Vignette", "Lens fog"];
 
 /// What a merged mesh shares: its material and how it casts the sun's
 /// shadow.
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 struct Shade {
+    /// The material it wears: the first of its leaves'.
     mat: Handle<StandardMaterial>,
+    /// What that material is (`look_of`): leaves alike merge however
+    /// many copies they wear. Rain and damp give every part lying out a
+    /// copy of its own (`items::damp`, `weapons::weather`); grouped by
+    /// handle, each was a group of one, and a box, drum or magazine
+    /// lying in a storm was declined (153 meshes in 153 groups).
+    look: u64,
     reach: Option<u32>,
     caster: bool,
     /// Under something fitted to the gun (a seated magazine, a scope): the
     /// gun's far level is the gun alone, so these stay drawn past it.
     fitted: bool,
+    /// The leaves' draw range: a box's near meshes and its stand-in
+    /// (`models::item_lod_range`) merge apart, each keeping its own.
+    range: Option<VisibilityRange>,
+}
+
+impl PartialEq for Shade {
+    fn eq(&self, o: &Self) -> bool {
+        self.look == o.look
+            && self.reach == o.reach
+            && self.caster == o.caster
+            && self.fitted == o.fitted
+            && self.range == o.range
+    }
+}
+
+/// What a material is, as a key: alike in every field (colours, maps,
+/// flags) is alike, whichever copy. Unloaded: its handle.
+fn look_of(h: &Handle<StandardMaterial>, materials: &Assets<StandardMaterial>) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut k = std::collections::hash_map::DefaultHasher::new();
+    match materials.get(h) {
+        Some(m) => format!("{m:?}").hash(&mut k),
+        None => h.id().hash(&mut k),
+    }
+    k.finish()
 }
 
 /// A merged mesh of what's fitted to a resting gun (see `Shade::fitted`).
@@ -311,6 +356,18 @@ fn wake_handled(
             wake = rest.leaves.iter().any(|(e, _)| rematerialled.contains(e));
             if wake && std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
                 eprintln!("gun_rest: {gun} woken: a part given a material of its own");
+            }
+        }
+        // A node over merged leaves shown or hidden (a box's round taken or
+        // put back, its seal torn, its band swapped for MIX): the merge
+        // shows it as it was. (Read through `vis`, unwritten: no change.)
+        if !wake {
+            wake = rest
+                .nodes
+                .iter()
+                .any(|n| vis.get_mut(*n).is_ok_and(|v| v.is_changed()));
+            if wake && std::env::var_os("EXTRACTION_GUN_REST_LOG").is_some() {
+                eprintln!("gun_rest: {gun} woken: a node of it shown or hidden");
             }
         }
         if !wake && reparented {
@@ -543,6 +600,32 @@ struct Building {
     all: Vec<Entity>,
     taken: Vec<(Entity, Visibility)>,
     range: Option<VisibilityRange>,
+    nodes: Vec<Entity>,
+}
+
+/// The entities between `root` and the `taken` leaves (not either end).
+fn nodes_above(
+    root: Entity,
+    taken: &[(Entity, Visibility)],
+    parents: &Query<&ChildOf>,
+) -> Vec<Entity> {
+    let mut out = Vec::new();
+    for (leaf, _) in taken {
+        let mut at = *leaf;
+        for _ in 0..24 {
+            let Ok(p) = parents.get(at) else {
+                break;
+            };
+            at = p.parent();
+            if at == root {
+                break;
+            }
+            out.push(at);
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
 
 fn group_key(parts: &[(AssetId<Mesh>, Mat4)]) -> u64 {
@@ -566,6 +649,7 @@ fn put_to_rest(
     all: Vec<Entity>,
     taken: Vec<(Entity, Visibility)>,
     range: Option<VisibilityRange>,
+    nodes: Vec<Entity>,
 ) {
     let mut stand_ins = Vec::new();
     for (shade, handle) in groups {
@@ -577,7 +661,7 @@ fn put_to_rest(
             Transform::IDENTITY,
             ChildOf(gun),
         ));
-        if let Some(r) = &range {
+        if let Some(r) = &shade.range {
             ec.insert(r.clone());
         }
         if shade.fitted {
@@ -602,6 +686,7 @@ fn put_to_rest(
         leaves: taken,
         merged: stand_ins,
         range,
+        nodes,
     });
 }
 
@@ -666,6 +751,7 @@ fn finish_building(
             std::mem::take(&mut b.all),
             std::mem::take(&mut b.taken),
             b.range.take(),
+            std::mem::take(&mut b.nodes),
         );
     }
 }
@@ -678,14 +764,29 @@ fn rest_idle(
     cache: Res<RestCache>,
     mesh_assets: Res<Assets<Mesh>>,
     guns: Query<
-        (Entity, &GlobalTransform, &InheritedVisibility),
         (
-            Or<(With<crate::weapons::Gun>, With<crate::weapons::Mag>)>,
+            Entity,
+            &GlobalTransform,
+            &InheritedVisibility,
+            Option<&crate::items::Item>,
+            Has<crate::weapons::Gun>,
+            Has<crate::weapons::Mag>,
+        ),
+        (
+            Or<(
+                With<crate::weapons::Gun>,
+                With<crate::weapons::Mag>,
+                With<crate::items::Item>,
+            )>,
             Without<AtRest>,
             Without<Building>,
         ),
     >,
-    in_guns: Query<(), With<crate::weapons::Gun>>,
+    (catalog, in_guns, materials): (
+        Option<Res<crate::items::Catalog>>,
+        Query<(), With<crate::weapons::Gun>>,
+        Res<Assets<StandardMaterial>>,
+    ),
     hands: Query<
         (),
         Or<(
@@ -717,9 +818,19 @@ fn rest_idle(
 ) {
     settling.retain(|e, _| guns.contains(*e));
     let mut done = 0;
-    for (gun, gun_gt, shown) in &guns {
+    for (gun, gun_gt, shown, item, is_gun, is_mag) in &guns {
         if done >= PER_FRAME {
             break;
+        }
+        // Guns, magazines and boxes of rounds (other items are a draw or
+        // two, and many: asked nothing).
+        if !is_gun
+            && !is_mag
+            && !item
+                .zip(catalog.as_deref())
+                .is_some_and(|(i, c)| crate::items::rounds::mouth_dir(c.get(i.kind())).is_some())
+        {
+            continue;
         }
         if !shown.get() || handled(gun, &hands, &players, &parents) {
             settling.remove(&gun);
@@ -793,10 +904,12 @@ fn rest_idle(
             }
             let shade = Shade {
                 mat: mat.0.clone(),
+                look: look_of(&mat.0, &materials),
                 reach: reach.map(|r| r.0.to_bits()),
                 // (A small part's flag is `ShadowReach`'s to set.)
                 caster: reach.is_some() || !no_shadow,
                 fitted: fitted_to(gun, e, &fitted, &parents),
+                range: r.cloned(),
             };
             match groups.iter_mut().find(|(k, _)| *k == shade) {
                 Some((_, l)) => l.push((mesh.0.id(), local)),
@@ -846,8 +959,9 @@ fn rest_idle(
             .iter()
             .map(|(shade, key, _)| cache.meshes.get(key).map(|h| (shade.clone(), h.clone())))
             .collect();
+        let nodes = nodes_above(gun, &taken, &parents);
         if let Some(hits) = hits {
-            put_to_rest(&mut commands, gun, &hits, all, taken, range);
+            put_to_rest(&mut commands, gun, &hits, all, taken, range, nodes);
             continue;
         }
         let work: Vec<(u64, Vec<(Mesh, Mat4)>)> = keyed
@@ -890,6 +1004,7 @@ fn rest_idle(
             all,
             taken,
             range,
+            nodes,
         });
     }
 }
@@ -1167,10 +1282,15 @@ mod tests {
         let mesh = w
             .resource_mut::<Assets<Mesh>>()
             .add(Cuboid::new(0.01, 0.03, 0.01));
+        // (Materials told apart by what they are: each its own colour.)
         let mats: Vec<Handle<StandardMaterial>> = (0..3)
-            .map(|_| {
+            .map(|i| {
                 w.resource_mut::<Assets<StandardMaterial>>()
-                    .add(StandardMaterial::default())
+                    .add(StandardMaterial::from(Color::srgb(
+                        i as f32 * 0.1,
+                        0.2,
+                        0.3,
+                    )))
             })
             .collect();
         let mag = w
@@ -1241,6 +1361,182 @@ mod tests {
             });
         app.update();
         awake(&mut app, mag, &leaves, "a magazine taken in hand");
+    }
+
+    /// A box of rounds lying out (`items::rounds`: a body, twelve rounds
+    /// at four meshes each, and its far stand-in, 61 meshes) rests as one
+    /// mesh per material and draw range, its near meshes stopping where
+    /// its stand-in starts. A round of it hidden (taken) wakes it, as does
+    /// a hand. Boxes were left as their parts: one open box of 5.45 was 57
+    /// draws an eye at Cinder's s01_ahead.
+    #[test]
+    fn a_box_of_rounds_rests_merged_by_range_and_wakes() {
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::asset::AssetPlugin::default(),
+            TransformPlugin,
+            bevy::camera::visibility::VisibilityPlugin,
+            GunRestPlugin,
+        ))
+        .init_asset::<Mesh>()
+        .init_asset::<StandardMaterial>()
+        .init_asset::<bevy::mesh::skinning::SkinnedMeshInverseBindposes>();
+        let catalog = crate::items::Catalog::load();
+        let kind = catalog.0.kind("ammo_545").expect("a box of 5.45");
+        assert!(crate::items::rounds::mouth_dir(catalog.0.get(kind)).is_some());
+        let state = extraction_core::items::ItemState::fresh(&catalog.0, kind, 1.0);
+        app.insert_resource(catalog);
+        let w = app.world_mut();
+        let mesh = w
+            .resource_mut::<Assets<Mesh>>()
+            .add(Cuboid::new(0.01, 0.03, 0.01));
+        // Card, band, print; tip, band, hull, case.
+        // (Materials told apart by what they are: each its own colour.)
+        let mats: Vec<Handle<StandardMaterial>> = (0..7)
+            .map(|i| {
+                w.resource_mut::<Assets<StandardMaterial>>()
+                    .add(StandardMaterial::from(Color::srgb(
+                        i as f32 * 0.1,
+                        0.2,
+                        0.3,
+                    )))
+            })
+            .collect();
+        let item = w
+            .spawn((
+                crate::items::Item(state),
+                Transform::from_xyz(2.0, 0.0, 1.0),
+                Visibility::default(),
+            ))
+            .id();
+        let root = w
+            .spawn((Transform::IDENTITY, Visibility::default(), ChildOf(item)))
+            .id();
+        let mut leaves = Vec::new();
+        let mut node = |w: &mut World, name: &str, y: f32, mats: &[Handle<StandardMaterial>]| {
+            let range = crate::models::item_lod_range(name, true).unwrap();
+            let n = w
+                .spawn((
+                    Name::new(name.to_string()),
+                    Transform::from_xyz(0.0, y, 0.0),
+                    Visibility::default(),
+                    ChildOf(root),
+                ))
+                .id();
+            for m in mats {
+                leaves.push(
+                    w.spawn((
+                        Mesh3d(mesh.clone()),
+                        MeshMaterial3d(m.clone()),
+                        Transform::IDENTITY,
+                        Visibility::default(),
+                        range.clone(),
+                        ChildOf(n),
+                    ))
+                    .id(),
+                );
+            }
+            n
+        };
+        node(w, "body", 0.0, &mats[0..3]);
+        let rounds: Vec<Entity> = (0..12)
+            .map(|i| node(w, &format!("round_{i}"), 0.01 * i as f32, &mats[3..7]))
+            .collect();
+        node(w, "box_lod1", 0.0, &mats);
+        let rested = |app: &mut App| app.world().get::<AtRest>(item).is_some();
+        for _ in 0..SETTLE * 4 {
+            app.update();
+            if rested(&mut app) {
+                break;
+            }
+        }
+        assert!(rested(&mut app), "a box of rounds rests");
+        let merged: Vec<Option<VisibilityRange>> = app
+            .world_mut()
+            .query_filtered::<(&ChildOf, Option<&VisibilityRange>), With<RestMesh>>()
+            .iter(app.world())
+            .filter(|(c, _)| c.parent() == item)
+            .map(|(_, r)| r.cloned())
+            .collect();
+        let near = crate::models::item_lod_range("body", true);
+        let far = crate::models::item_lod_range("box_lod1", true);
+        let count = |r: &Option<VisibilityRange>| merged.iter().filter(|m| *m == r).count();
+        assert_eq!(
+            (count(&near), count(&far), merged.len()),
+            (7, 7, 14),
+            "61 meshes: 7 materials near, 7 far, each drawn over its own range"
+        );
+        assert!(
+            leaves
+                .iter()
+                .all(|l| app.world().get::<Visibility>(*l) == Some(&Visibility::Hidden)),
+            "its own meshes hidden while it rests"
+        );
+        // A round taken (`items::rounds` hides its node).
+        app.world_mut()
+            .entity_mut(rounds[11])
+            .insert(Visibility::Hidden);
+        app.update();
+        awake(&mut app, item, &leaves, "a round of it hidden");
+        // At rest again, then taken in hand.
+        for _ in 0..SETTLE * 4 {
+            app.update();
+            if rested(&mut app) {
+                break;
+            }
+        }
+        assert!(rested(&mut app), "the box rests again, a round short");
+        let hand = app.world_mut().spawn_empty().id();
+        app.world_mut()
+            .entity_mut(item)
+            .insert(crate::interact::Held {
+                player: hand,
+                hand,
+                side: crate::rig::Side::Right,
+                point: 0,
+                offset: Transform::IDENTITY,
+            });
+        app.update();
+        awake(&mut app, item, &leaves, "a box taken in hand");
+        // Put down in the rain: every mesh given a copy of its own
+        // material (`items::damp`). It wakes, and rests again as before,
+        // not declined as 61 materials.
+        app.world_mut()
+            .entity_mut(item)
+            .remove::<crate::interact::Held>();
+        for l in &leaves {
+            let w = app.world_mut();
+            let h = w
+                .get::<MeshMaterial3d<StandardMaterial>>(*l)
+                .unwrap()
+                .0
+                .clone();
+            let copy = w
+                .resource::<Assets<StandardMaterial>>()
+                .get(&h)
+                .unwrap()
+                .clone();
+            let copy = w.resource_mut::<Assets<StandardMaterial>>().add(copy);
+            w.entity_mut(*l).insert(MeshMaterial3d(copy));
+        }
+        for _ in 0..SETTLE * 4 {
+            app.update();
+            if rested(&mut app) {
+                break;
+            }
+        }
+        assert!(
+            rested(&mut app),
+            "a box whose meshes each wear a copy of their material rests"
+        );
+        let merged = app
+            .world_mut()
+            .query_filtered::<&ChildOf, With<RestMesh>>()
+            .iter(app.world())
+            .filter(|c| c.parent() == item)
+            .count();
+        assert_eq!(merged, 14, "copies alike merge as one material");
     }
 
     /// A hand taking a resting gun, a magazine pushed into one lying on a
