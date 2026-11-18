@@ -1633,6 +1633,12 @@ mod tests {
         ("plough", Err("never looks for you: it drives its lane")),
         ("pylon", Err("a relay mast: nothing toward you")),
         ("sorter", Err("the Depot's gantry: its own alarm says it")),
+        (
+            "engineer",
+            Err(
+                "a placeholder, Onboarding's to word: unarmed, it builds; its mind (Robot minds') isn't in",
+            ),
+        ),
         ("debris", Err("a wreck's pieces, not a machine")),
     ];
 
