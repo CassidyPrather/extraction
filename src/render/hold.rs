@@ -28,14 +28,14 @@ pub const TOUCH: f32 = 0.003;
 /// The glove's finger radius at each joint and at the tip: the drawn
 /// glove's, as `art/hands/gloves.py` measures it on every build (#106, the
 /// skinned CC0 hand: the median distance from the joint's axis of the skin
-/// within 2 mm of each station; the tip's 2.5 mm short of its end). The
+/// within 2 mm of each joint; the tip's, its pad's end sphere). The
 /// thumb's are its root, its bend and its tip.
 const RADII: [[f32; 4]; 5] = [
     [0.0086, 0.0081, 0.0081, 0.0068],
-    [0.0087, 0.0083, 0.0083, 0.0072],
-    [0.0079, 0.0081, 0.0079, 0.0071],
-    [0.0074, 0.0071, 0.0070, 0.0060],
-    [0.0111, 0.0091, 0.0093, 0.0],
+    [0.0087, 0.0083, 0.0083, 0.0071],
+    [0.0079, 0.0081, 0.0079, 0.0070],
+    [0.0074, 0.0071, 0.0070, 0.0058],
+    [0.0111, 0.0079, 0.0064, 0.0],
 ];
 
 /// One bone of a finger in the hand's frame: its ends and radius.
