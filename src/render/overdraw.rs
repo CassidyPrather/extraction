@@ -192,6 +192,10 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         panic!("{e}");
     }
     let eye_pos;
+    let (cam_right, cam_up) = {
+        let g = w.get::<GlobalTransform>(cam).unwrap();
+        (g.right().as_vec3(), g.up().as_vec3())
+    };
     let (view, f, eye) = {
         let g = w.get::<GlobalTransform>(cam).unwrap();
         let Projection::Perspective(p) = w.get::<Projection>(cam).unwrap() else {
@@ -262,6 +266,34 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
             let centre = model.translation;
             for p in world.iter_mut() {
                 *p = Vec3::from(centre) + (*p - Vec3::from(centre)) * s;
+            }
+        }
+        // An anomaly's particles (`anomaly::visuals`) are placed by their
+        // vertex shader from each quad's seed and the time
+        // (`anomaly_particles.wgsl`): replayed (`particle_at`). Left at
+        // their corners they were a point each, and steam, hush dust and
+        // burner smoke counted nothing.
+        if let Some(h) = w.get::<MeshMaterial3d<crate::anomaly::visuals::ParticleMaterial>>(e) {
+            let m = w
+                .resource::<Assets<crate::anomaly::visuals::ParticleMaterial>>()
+                .get(&h.0);
+            if let (Some(m), Some(VertexAttributeValues::Float32x2(seeds))) =
+                (m, mesh.attribute(Mesh::ATTRIBUTE_UV_1))
+            {
+                let t = w.resource::<Time>().elapsed_secs_wrapped();
+                let centre = Vec3::from(model.translation);
+                for (i, p) in world.iter_mut().enumerate() {
+                    let q = particle_at(&m.params, seeds[i][0], t);
+                    let corner = Vec2::new(pos[i][0], pos[i][1]);
+                    let (sn, c) = q.spin.sin_cos();
+                    let corner =
+                        Vec2::new(corner.x * c - corner.y * sn, corner.x * sn + corner.y * c);
+                    let far = (centre + q.pos).distance(eye_pos);
+                    let glow = m.params.mode.w;
+                    let grow = (far / (15.0 + (7.0 - 15.0) * glow)).clamp(1.0, 2.0 + 0.5 * glow);
+                    let half = q.size * grow;
+                    *p = centre + q.pos + (cam_right * corner.x + cam_up * corner.y) * half;
+                }
             }
         }
         // Impostors turn to face the eye in their vertex shader.
@@ -758,4 +790,95 @@ mod tests {
         let shown = add_sky(&mut layers, &sky, &vec![0u16; n]);
         assert_eq!(shown as usize, n, "through a card, the whole sky");
     }
+}
+
+/// One anomaly particle where its vertex shader puts it
+/// (`anomaly_particles.wgsl`'s `particle`): its place from the system's
+/// centre, size and spin. Steam (8), hush dust (7) and burner smoke (2),
+/// the big soft ones, as the shader has them; the others by its default
+/// ring, close enough for their small quads.
+pub(crate) struct Particle {
+    pub pos: Vec3,
+    pub size: f32,
+    pub spin: f32,
+}
+
+pub(crate) fn particle_at(
+    params: &crate::anomaly::visuals::ParticleParams,
+    s: f32,
+    t: f32,
+) -> Particle {
+    use std::f32::consts::{PI, TAU};
+    // The shader's hash: fract(sin(s k + 0.17) 43758.5453), fract as GLSL's.
+    let h = |k: f32| {
+        let x = (s * k + 0.17).sin() * 43758.5453;
+        x - x.floor()
+    };
+    let fract = |x: f32| x - x.floor();
+    let mode = (params.mode.x + 0.5) as i32;
+    let r = params.mode.y;
+    let charge = params.state.x;
+    let w = params.state.w;
+    let mut size = w * (0.6 + 0.8 * h(3.1));
+    let spin;
+    let pos;
+    match mode {
+        2 => {
+            let life = fract(t / (8.0 + 4.0 * h(1.9)) + h(6.1));
+            let a = s * TAU;
+            let start = Vec3::new(a.cos(), 0.0, a.sin()) * r * 0.5 * h(3.7);
+            let drift = Vec3::new(0.8, 0.0, 0.5) * life * life * 2.5;
+            pos = start + drift + Vec3::new(0.0, 0.4 + life * 5.0, 0.0);
+            size = w * (0.6 + life * 2.2) * (1.0 - life).sqrt();
+            spin = s * 7.0 + t * 0.1;
+        }
+        7 => {
+            let stir = charge;
+            let a = s * TAU + t * 0.6 * stir * (0.5 + h(6.1));
+            let rr = r * h(2.3).sqrt();
+            let y = 0.15 + 2.4 * h(4.9) * (1.0 - 0.5 * rr / r.max(1e-4));
+            let k = t * (0.05 + 1.1 * stir);
+            let drift = Vec3::new(
+                (k + s * 7.0).sin(),
+                0.6 * stir * (k * 1.3 + s * 3.0).sin(),
+                (k * 0.9 + s * 5.0).cos(),
+            ) * (0.05 + 0.3 * stir);
+            pos = Vec3::new(a.cos() * rr, y, a.sin() * rr) + drift;
+            size *= 1.0 + 0.4 * stir;
+            spin = s * 3.0;
+        }
+        8 => {
+            if h(8.8) < 0.25 {
+                let life = fract(t / (5.0 + 3.0 * h(1.1)) + h(2.6));
+                let a = s * TAU;
+                let start = Vec3::new(a.cos(), 0.0, a.sin()) * r * 0.5 * h(3.3);
+                let drift = Vec3::new(0.8, 0.0, 0.5) * life * 2.5;
+                pos = start + drift + Vec3::new(0.0, 1.6 + life * 2.4, 0.0);
+                size = w * (0.5 + 0.9 * life);
+            } else {
+                let life = fract(t / (7.0 + 5.0 * h(1.3)) + h(6.7));
+                let a = s * TAU + t * 0.08 * (h(2.2) - 0.5);
+                let k = h(3.1).sqrt();
+                let rr = r * 1.1 * k;
+                let y = 0.5 + 1.3 * h(4.3) * (1.0 - k * k) + 0.2 * life;
+                let roll =
+                    Vec3::new((t * 0.25 + s * 9.0).sin(), 0.0, (t * 0.22 + s * 4.0).cos()) * 0.35;
+                pos = Vec3::new(a.cos() * rr, y, a.sin() * rr) + roll;
+                size = w * (0.8 + 0.5 * h(5.9)) * (0.85 + 0.3 * (life * PI).sin());
+            }
+            spin = s * 5.0 + t * 0.04;
+        }
+        _ => {
+            let a = s * TAU + t * (0.3 + 0.9 * charge) * (0.6 + 0.4 * h(1.4));
+            let rr = r * (0.3 + 0.75 * h(2.1));
+            pos = Vec3::new(
+                a.cos() * rr,
+                0.08 + 0.35 * h(3.9) * (1.0 + 2.0 * charge),
+                a.sin() * rr,
+            );
+            size = w * (0.6 + 0.8 * h(5.1));
+            spin = a;
+        }
+    }
+    Particle { pos, size, spin }
 }

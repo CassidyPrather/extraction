@@ -360,10 +360,8 @@ pub fn loot_sights() -> Vec<LootSight> {
         // bottom, lit as the room is where you stand to look in
         // (`render::loot_light`), always indoors.
         for h in &geo.holds {
-            let (on, albedo) = match h.part {
-                None => ("locker shelf", model_albedo("locker", "Cream")),
-                Some(_) => ("drawer bottom", model_albedo("counter_drawers", "Timber")),
-            };
+            let on = format!("{} {}", h.on.0, h.on.1);
+            let albedo = model_albedo(h.on.0, h.on.1);
             let albedo = albedo.unwrap_or(0.5);
             let seen_from = h.at + h.out * crate::render::loot_light::HOLD_SEEN_FROM;
             let light = crate::world::ao::sky_light(occ.lying_at(seen_from));
@@ -604,6 +602,36 @@ pub fn handles() -> Vec<Handle> {
             grip: crate::world::underground::DRAIN_BOX * 0.5,
             shown: shape_points(shape, at),
             albedo: Some((mat_albedo(mat), mat_albedo(Mat::Concrete))),
+        });
+    }
+    // Every moving part's pull (`world::hinge`): a counter's door or
+    // drawer, a locker's door, a stove's, its pull in its grab box, in the
+    // part's own space.
+    for (drawn, origin, centre, size, turn) in crate::world::hinge::moving_nodes() {
+        let (model, node) = drawn.split_once('#').unwrap_or((drawn, ""));
+        let (pull, on) = match model {
+            "stove" => ("Steel", "Cast"),
+            "tool_chest" => ("Steel", "Painted"),
+            "wheelie_bin" => ("Rubber", "Olive"),
+            "coal_bunker" => ("Iron", "Boards"),
+            _ => ("Zinc", "Painted"),
+        };
+        let shown = model_points(
+            model,
+            &[pull],
+            Vec3::splat(-5.0),
+            Vec3::splat(5.0),
+            Some(node),
+            Transform::IDENTITY,
+        )
+        .into_iter()
+        .map(|p| turn.inverse() * (p - origin) - centre)
+        .collect();
+        out.push(Handle {
+            what: format!("{drawn} pull, world::hinge"),
+            grip: size * 0.5,
+            shown,
+            albedo: model_albedo(model, pull).zip(model_albedo(model, on)),
         });
     }
     // Every prefab's ladders: their rungs in their climb's box

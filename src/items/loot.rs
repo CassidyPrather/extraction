@@ -75,8 +75,12 @@ pub fn jam_room(gun: &extraction_core::firearm::Firearm) -> f32 {
 
 /// `spawn_item`, for something found lying about ([`Found`]).
 pub fn spawn_found(commands: &mut Commands, catalog: &Catalog, item: SpawnItem) -> Entity {
+    #[cfg(test)]
+    let rolled = item.transform.translation;
     let e = spawn_item(commands, catalog, item);
     commands.entity(e).insert(Found);
+    #[cfg(test)]
+    commands.entity(e).insert(RolledAt(rolled));
     e
 }
 
@@ -532,6 +536,12 @@ fn better_spot(
     Some(pick[rng.below(pick.len())])
 }
 
+/// Where a found thing was rolled to, before the physics moved it (a
+/// test's: what a roll gave, apart from how it settled).
+#[cfg(test)]
+#[derive(Component, Clone, Copy)]
+pub(crate) struct RolledAt(pub Vec3);
+
 /// Rolls no container's holds: a test's world as it was before them.
 #[cfg(test)]
 #[derive(Resource)]
@@ -750,8 +760,9 @@ fn spawn_building_loot(
     };
     for (j, spot) in spots.0.iter().enumerate() {
         // This spot's own stream (`place_key`).
-        let mut rng = Rng::new(seed ^ 0xB11D ^ place_key(spot.at));
-        let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
+        let key = spot.key();
+        let mut rng = Rng::new(seed ^ 0xB11D ^ place_key(key));
+        let rolls = rolls_for(zone.map.richness_at([key.x, key.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
             .flat_map(|_| {
                 loot.0
@@ -772,7 +783,7 @@ fn spawn_building_loot(
     for (j, k, drop) in moving {
         let mut rng = Rng::new(
             seed ^ 0xB11E
-                ^ place_key(spots.0[j].at)
+                ^ place_key(spots.0[j].key())
                 ^ (k as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15),
         );
         let size = catalog.get(drop.kind).size;
@@ -1588,14 +1599,20 @@ mod hold_tests {
         let catalog = app.world().resource::<Catalog>().clone();
         let mut q = app
             .world_mut()
-            .query::<(&Item, &GlobalTransform, Has<crate::interact::InSocket>)>();
+            .query::<(&Item, Option<&RolledAt>, Has<crate::interact::InSocket>)>();
         let mut placed = Vec::new();
         let mut kinds = std::collections::BTreeMap::new();
-        for (item, g, socketed) in q.iter(app.world()) {
+        for (item, rolled, socketed) in q.iter(app.world()) {
             let id = catalog.get(item.kind()).id.clone();
             *kinds.entry(id.clone()).or_insert(0) += 1;
+            // Where it was rolled, not how it settled: more bodies in the
+            // world change the physics' order, and a round thing rolls a
+            // few centimetres either way. The player's kit wasn't rolled.
+            let Some(RolledAt(p)) = rolled else {
+                continue;
+            };
             if !socketed {
-                let p = g.translation();
+                let p = *p;
                 let cm = |v: f32| (v * 100.0).round() as i64;
                 placed.push((id, [cm(p.x), cm(p.y), cm(p.z)]));
             }
@@ -1618,19 +1635,24 @@ mod hold_tests {
                 after.len(),
                 "{map}: loot outside the holds changed in number"
             );
-            // The same things laid in the same places: what settles may
-            // come to rest a centimetre apart (more bodies in the world, a
-            // different order to the physics' step), not a roll.
-            let near = |a: &(String, [i64; 3]), b: &(String, [i64; 3])| {
-                a.0 == b.0 && (0..3).all(|k| (a.1[k] - b.1[k]).abs() <= 3)
-            };
+            // The same things rolled to the same places, to the centimetre.
+            let near = |a: &(String, [i64; 3]), b: &(String, [i64; 3])| a == b;
             let moved: Vec<_> = before
                 .iter()
                 .filter(|x| !after.iter().any(|y| near(x, y)))
                 .collect();
+            let to: Vec<_> = moved
+                .iter()
+                .filter_map(|m| {
+                    after
+                        .iter()
+                        .filter(|y| y.0 == m.0 && !before.iter().any(|x| near(x, y)))
+                        .min_by_key(|y| (0..3).map(|k| (y.1[k] - m.1[k]).abs()).sum::<i64>())
+                })
+                .collect();
             assert!(
                 moved.is_empty(),
-                "{map}: loot outside the holds moved or changed: {moved:?}"
+                "{map}: loot outside the holds moved or changed: {moved:?}, to {to:?}"
             );
             let total = |k: &std::collections::BTreeMap<String, usize>| k.values().sum::<usize>();
             println!(

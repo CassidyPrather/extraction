@@ -599,13 +599,13 @@ fn fit_salvage(
 }
 
 /// The meshes a part's holds are drawn with (none in a headless app).
-struct Look {
+pub(crate) struct Look {
     bolt: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
     cable: Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
 }
 
 impl Look {
-    fn new(
+    pub(crate) fn new(
         meshes: Option<&mut Assets<Mesh>>,
         materials: Option<&mut Assets<StandardMaterial>>,
     ) -> Self {
@@ -640,7 +640,13 @@ impl Look {
 }
 
 /// Seats one row's part on `wreck`, held its way.
-fn fit(commands: &mut Commands, catalog: &Catalog, wreck: Entity, row: Row, look: &Look) {
+pub(crate) fn fit(
+    commands: &mut Commands,
+    catalog: &Catalog,
+    wreck: Entity,
+    row: Row,
+    look: &Look,
+) {
     if let Some(e) = row.replaces {
         if e != Entity::PLACEHOLDER {
             commands.entity(e).despawn();
@@ -916,9 +922,10 @@ fn drone_rows(w: &WreckParts, out: &mut Vec<Row>) {
     }
 }
 
-/// Where a drone's cell sits: half out of its top, under the panel the
-/// crash threw off.
-pub const DRONE_CELL_AT: Vec3 = Vec3::new(0.0, 0.05, 0.04);
+/// Where a drone's cell sits: half out of its belly, which a crash turns
+/// to the sky (`wreck`'s drone crash flips it onto its back, belly plate
+/// up): seen from standing, in reach, its hot band showing.
+pub const DRONE_CELL_AT: Vec3 = Vec3::new(0.0, -0.11, 0.06);
 /// And a mender's, on its back behind the spine.
 pub const MENDER_CELL_AT: Vec3 = Vec3::new(0.0, 0.16, -0.06);
 
@@ -1020,8 +1027,17 @@ fn tag_pieces(
     }
 }
 
-/// Where a knee sits on its leg piece (local): proud of the thigh, along it.
-const KNEE_ON_LEG: Vec3 = Vec3::new(0.1, 0.0, 0.0);
+/// How far a knee sits proud of its leg piece's axis (local, m).
+const KNEE_PROUD: f32 = 0.1;
+
+/// Of a lying leg piece's sides (its local ±X, ±Z: across it, its length
+/// is Y), the one most nearly up, given how it lies.
+pub fn up_side(rotation: Quat) -> Vec3 {
+    [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
+        .into_iter()
+        .max_by(|a, b| (rotation * *a).y.total_cmp(&(rotation * *b).y))
+        .unwrap_or(Vec3::X)
+}
 
 /// A part piece come to rest is seated where it lies: bolted on its leg (a
 /// knee), or, held by nothing but a hand (an eye, a head), simply the item
@@ -1061,16 +1077,20 @@ fn seat_pieces(
             commands.entity(e).despawn();
             continue;
         }
-        // Along the leg (the item's long side, Z, up the piece's Y).
-        let at = Transform::from_translation(KNEE_ON_LEG * size)
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+        // On the side of the leg that's uppermost as it lies, along it (the
+        // item's long side, Z, up the piece's Y), its bolts' heads to the
+        // sky: seen from standing, a spanner put to them from above.
+        let up = up_side(t.rotation);
+        // (Its long side, Z, along the leg; its top, Y, up.)
+        let lie = Quat::from_mat3(&Mat3::from_cols(up.cross(Vec3::Y), up, Vec3::Y));
+        let at = Transform::from_translation(up * KNEE_PROUD * size).with_rotation(lie);
         let fix = if by_hand {
             Fix::Hand
         } else {
             Fix::Bolts {
                 n: part.bolts as usize,
-                centre: (KNEE_ON_LEG + Vec3::Y * 0.18) * size,
-                face: Quat::IDENTITY,
+                centre: (up * (KNEE_PROUD + 0.05) + Vec3::Y * 0.18) * size,
+                face: Quat::from_rotation_arc(Vec3::Y, up),
                 radius: 0.05,
             }
         };
@@ -1096,6 +1116,11 @@ fn seat_pieces(
 /// it's dark with char, in the hand as on the wreck ([`char_looks`]).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Charred;
+
+/// What cooking does to salvage has been done to it, once ([`cooked_salvage`];
+/// [`Charred`] alone is only the look, which anything cooked may get).
+#[derive(Component, Debug, Clone, Copy)]
+struct SalvageCooked;
 
 /// A [`Charred`] item's look is charred.
 #[derive(Component, Debug, Clone, Copy)]
@@ -1125,7 +1150,7 @@ fn cooked_salvage(
         &mut HealthAtDeath,
         Option<&mut crate::destruction::hooks::Pryable>,
     )>,
-    done: Query<(), With<Charred>>,
+    done: Query<(), With<SalvageCooked>>,
     catalog: Option<Res<Catalog>>,
 ) {
     let Some(catalog) = catalog else {
@@ -1167,7 +1192,7 @@ fn cooked_salvage(
 fn cook_item(
     commands: &mut Commands,
     item: Entity,
-    done: &Query<(), With<Charred>>,
+    done: &Query<(), With<SalvageCooked>>,
     items: &mut Query<&mut crate::items::Item>,
     seats: &Query<(Entity, &SalvageSeat)>,
     holds: &Query<(Entity, Option<&Bolt>, Option<&Cable>)>,
@@ -1175,7 +1200,7 @@ fn cook_item(
     if done.contains(item) {
         return;
     }
-    commands.entity(item).try_insert(Charred);
+    commands.entity(item).try_insert((Charred, SalvageCooked));
     if let Ok(mut it) = items.get_mut(item) {
         it.condition *= COOKED_CONDITION;
         it.charge_wh = 0.0;
@@ -1200,7 +1225,7 @@ fn cook_item(
 fn cook_plate(
     commands: &mut Commands,
     plate: Entity,
-    done: &Query<(), With<Charred>>,
+    done: &Query<(), With<SalvageCooked>>,
     plates: &mut Query<(
         Entity,
         &RobotPart,
@@ -1214,7 +1239,7 @@ fn cook_plate(
     let Ok((p, _, mut h, seam)) = plates.get_mut(plate) else {
         return;
     };
-    commands.entity(p).try_insert(Charred);
+    commands.entity(p).try_insert((Charred, SalvageCooked));
     h.0 *= COOKED_CONDITION;
     if let Some(mut seam) = seam {
         seam.needs *= COOKED_PRY;
@@ -1593,8 +1618,11 @@ mod tests {
                 super::super::wreck::Broken,
             ))
             .id();
+        // (Charred already, as `anomaly::cook` leaves what it cooks: the
+        // look, not the cooking, which is still to do.)
         let cell = w
             .spawn((
+                Charred,
                 crate::items::Item(extraction_core::items::ItemState::fresh(
                     &catalog,
                     catalog.expect("robot_cell"),
@@ -1723,6 +1751,20 @@ mod tests {
         ] {
             assert!(catalog.kind(id).is_some(), "{id}");
         }
+    }
+
+    /// A knee goes on whichever side of its lying leg is up.
+    #[test]
+    fn a_knee_sits_on_top_of_its_leg() {
+        // A leg lying along the ground, its local X turned to the sky.
+        let lying = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+        let up = up_side(lying);
+        assert!((lying * up).y > 0.99, "{up}");
+        // On its back the other way: -X up.
+        assert!(
+            (up_side(Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2)) - Vec3::NEG_X).length()
+                < 1e-5
+        );
     }
 
     #[test]

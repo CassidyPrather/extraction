@@ -1346,11 +1346,15 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(saved) = snapshot_item(world, e, Vec3::ZERO) {
+            // Rolled for a hold and not seated yet: saved as held.
+            let held = world
+                .get::<crate::items::loot::ToHold>(e)
+                .map(|w| w.at.to_array());
             save.zone.items.push(PlacedItem {
                 at: p.to_array(),
                 rot: gt.compute_transform().rotation.to_array(),
                 item: saved,
-                held: None,
+                held,
             });
         }
     }

@@ -1044,9 +1044,45 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
-            description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
-            category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
+            id: "heavy_claw", dims: Some((0.52, 1.234, 0.52)), name: "Manipulator claw",
+            description: "A demolition unit's hand, cut off its arm at the leads, stamped HV MAN. Three fingers as long as your arm; they tore doors off, and still close if you touch the wrong wire.",
+            category: RobotPart, size: Bulky, mass: 26.0, bulk: 16.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "heavy_eye", dims: Some((0.56, 0.26, 0.214)), name: "Heavy sensor brow",
+            description: "A demolition unit's brow, three lenses in a dark bar, stamped HV OPT. The middle one is good glass, as wide as your palm.",
+            category: RobotPart, size: Medium, mass: 4.0, bulk: 3.0,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "heavy_vent", dims: Some((0.144, 0.48, 0.88)), name: "Heavy vent grille",
+            description: "A louvred grille off a demolition unit's flank, stamped HV VNT. The slats still glow faintly from inside.",
+            category: RobotPart, size: Bulky, mass: 6.0, bulk: 6.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "sentry_gun", dims: Some((0.21, 0.18, 1.005)), name: "Sentry gun pod",
+            description: "A guard post's twin-barrelled gun, cut from under its head, stamped ST GUN. The feed is jammed with the last of its belt.",
+            category: RobotPart, size: Bulky, mass: 9.0, bulk: 5.0,
+            tags: ["metal", "steel"],
+        ),
+        (
+            id: "sentry_eye", dims: Some((0.3, 0.15, 0.087)), name: "Sentry visor",
+            description: "A guard post's visor, one red lens in a dark bar. It stared down a gate for years; the glass is still clean.",
+            category: RobotPart, size: Small, mass: 0.6, bulk: 0.4,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "sentry_lamp", dims: Some((0.233, 0.21, 0.21)), name: "Sentry searchlight",
+            description: "The searchlight off a guard post's brow. A thick lens in a dark drum; wire it to a cell and it throws a beam you can read by across a field.",
+            category: RobotPart, size: Small, mass: 1.2, bulk: 0.8,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "sentry_junction", dims: Some((0.22, 0.31, 0.12)), name: "Sentry breaker",
+            description: "The breaker out of a guard post's junction box, its leads cut. Copper terminals, a lit window. Pull it while it's live and you'll know.",
+            category: RobotPart, size: Small, mass: 1.4, bulk: 0.6,
             tags: ["electronics", "metal"],
         ),
         (

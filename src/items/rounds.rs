@@ -8,7 +8,9 @@
 //!   behind it, and a shell's hull) is painted for its load, read from the
 //!   box's per-round [`Loads`]: a mixed box shows its mix. A box holding a
 //!   load its factory box doesn't is *mixed*: it wears a hatched band and
-//!   MIX in place of its type's band. A shut box shows its seal.
+//!   MIX in place of its type's band. A shut box shows its seal; past a
+//!   few metres it's its shut stand-in (`box_lod1`), an open one its open
+//!   stand-in (`box_open_lod1`: as tall as its rounds, the end brass).
 //! - **Shut and open**: a box comes shut and full, and doesn't spill. Torn
 //!   open (used in the hand, or the other hand's trigger pinched at its
 //!   end), it stays open; one that isn't full is open.
@@ -426,6 +428,9 @@ struct BoxParts {
     band_mix: Option<Entity>,
     seal: Option<Entity>,
     print_mix: Option<Entity>,
+    /// The far stand-ins, shut and open (one shows).
+    far_shut: Option<Entity>,
+    far_open: Option<Entity>,
     shown: Option<(u32, Loads, bool, bool)>,
 }
 
@@ -483,6 +488,8 @@ fn show_rounds(
                     band_mix: None,
                     seal: None,
                     print_mix: None,
+                    far_shut: None,
+                    far_open: None,
                     shown: None,
                 };
                 let mut slots: Vec<(u32, Entity)> = Vec::new();
@@ -495,6 +502,8 @@ fn show_rounds(
                         "band_mix" => found.band_mix = Some(node),
                         "seal" => found.seal = Some(node),
                         "print_mix" => found.print_mix = Some(node),
+                        "box_lod1" => found.far_shut = Some(node),
+                        "box_open_lod1" => found.far_open = Some(node),
                         n => {
                             if let Some(i) = n.strip_prefix("round_").and_then(|i| i.parse().ok()) {
                                 slots.push((i, node));
@@ -560,6 +569,10 @@ fn show_rounds(
             }
         };
         set(&mut vis, parts.seal, !open);
+        if parts.far_open.is_some() {
+            set(&mut vis, parts.far_shut, !open);
+            set(&mut vis, parts.far_open, open);
+        }
         set(&mut vis, parts.band, !mixed);
         set(&mut vis, parts.band_mix, mixed);
         set(&mut vis, parts.print_mix, mixed);
