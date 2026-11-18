@@ -84,6 +84,9 @@ MATERIALS = {
     "MarkerLens": ((0.82, 0.82, 0.8), 0.0, 0.2, None),
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
+    # The engineer's scan lamp rim (#98): the machines' orange-red lit tell
+    # (the searchlights'); Robot bodies light it while it surveys.
+    "ScanRim": ((0.91, 0.34, 0.16), 0.0, 0.4, (0.91, 0.34, 0.16)),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
     # A car's weathered paint (src/models.rs: the painted-metal relief).
     "CarBlue": ((0.21, 0.29, 0.4), 0.25, 0.6, None),
