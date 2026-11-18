@@ -403,3 +403,57 @@ fn tether_lines(
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The grappler's harpoon is dressed with its launcher head and line
+    /// drum as their own pieces, tagged for the salvage (Heavy's table),
+    /// the head riding on the boom (it folds with it): a model that drops
+    /// either node, or a redesign that forgets them (#100), fails here.
+    #[test]
+    fn the_harpoon_dresses_its_head_and_drum_for_the_salvage() {
+        let opts = crate::LaunchOptions {
+            map: "training_yard".into(),
+            map_explicit: true,
+            new_game: true,
+            robots: false,
+            gallery: Some("robots:grappler,0,12".into()),
+            camera: Some((Vec3::new(0.0, 0.0, 30.0), 0.0, -1.0)),
+            ..Default::default()
+        };
+        let mut app = crate::soak::drive::client_app(opts);
+        for _ in 0..400 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let grappler = w
+            .query_filtered::<Entity, With<Grappler>>()
+            .iter(w)
+            .next()
+            .expect("the line-up stood a grappler");
+        let parts: Vec<(Entity, HarpoonPart)> = w
+            .query::<(Entity, &HarpoonPart)>()
+            .iter(w)
+            .map(|(e, p)| (e, *p))
+            .collect();
+        for what in [HarpoonPiece::LauncherHead, HarpoonPiece::Drum] {
+            assert!(
+                parts
+                    .iter()
+                    .any(|(_, p)| p.grappler == grappler && p.what == what),
+                "{what:?} dressed as its own piece: {parts:?}"
+            );
+        }
+        let (head, _) = parts
+            .iter()
+            .find(|(_, p)| p.what == HarpoonPiece::LauncherHead)
+            .unwrap();
+        let on = w.get::<ChildOf>(*head).map(|c| c.parent());
+        assert!(
+            on.is_some_and(|b| w.get::<crate::robots::grappler_armour::Folds>(b).is_some()),
+            "the head rides on the boom (it folds with it)"
+        );
+    }
+}
