@@ -761,4 +761,57 @@ mod tests {
             .copied();
         assert!(f.is_some_and(|f| f.ice.is_none()), "no water, no ice");
     }
+
+    /// A frost standing on Kettle Beck (where Map design puts it) freezes
+    /// it right across: its reach has dry ground on two opposite sides,
+    /// water between, and ice on the water.
+    #[test]
+    fn a_frost_on_the_beck_spans_it() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: "kettle_pass".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let (c, r) = (Vec2::new(-143.6, 11.1), 4.0);
+        assert!(
+            zone.hm.water_level([c.x, c.y]).is_some(),
+            "its centre's on the water"
+        );
+        assert!(
+            extraction_core::anomaly::placeable_for(
+                &zone.map,
+                &zone.hm,
+                [c.x, c.y],
+                AnomalyKind::Frost
+            ),
+            "a frost may stand there"
+        );
+        let dry = |p: Vec2| zone.hm.water_level([p.x, p.y]).is_none();
+        let spans = (0..36).any(|k| {
+            let a = k as f32 / 36.0 * std::f32::consts::TAU;
+            let d = Vec2::new(a.cos(), a.sin());
+            let side = |sign: f32| (1..=8).any(|i| dry(c + d * sign * r * 0.9 * i as f32 / 8.0));
+            side(1.0) && side(-1.0)
+        });
+        assert!(
+            spans,
+            "dry ground within its reach on both sides of the beck"
+        );
+        let at = zone.on_ground(c.x, c.y);
+        let frost = super::super::spawn_anomaly(app.world_mut(), AnomalyKind::Frost, at, r, None);
+        app.update();
+        app.update();
+        assert!(
+            app.world()
+                .get::<Frozen>(frost)
+                .and_then(|f| f.ice)
+                .is_some(),
+            "the beck's iced over"
+        );
+    }
 }
