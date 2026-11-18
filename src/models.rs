@@ -216,6 +216,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Regen",
     "Stim",
     "Vial",
+    "ScanRim",
     "Blue",
     "CarBlue",
     "RagRed",
@@ -557,6 +558,8 @@ impl ModelMaterials {
             "Lamp" => glow(materials, Color::srgb(0.9, 0.85, 0.7), (3.0, 2.6, 1.8)),
             "LampRed" => glow(materials, Color::srgb(0.5, 0.03, 0.02), (1.6, 0.08, 0.03)),
             "Glow" => glow(materials, Color::srgb(0.1, 0.4, 0.5), (0.5, 3.0, 4.0)),
+            // The engineer's scan lamp rim (#98): the orange-red lit tell.
+            "ScanRim" => glow(materials, Color::srgb(0.91, 0.34, 0.16), (1.8, 0.67, 0.31)),
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A salvaged cell's charge band (#105): deep orange, warm, not
             // the yellow a Warn trim reads as.
