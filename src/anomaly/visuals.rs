@@ -542,14 +542,14 @@ fn glow_texture(images: &mut Assets<Image>, glow: MarkGlow) -> Handle<Image> {
 }
 
 /// Hermite step from `a` to `b`.
-fn smooth(a: f32, b: f32, x: f32) -> f32 {
+pub(crate) fn smooth(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
 
 /// Smooth value noise, 0..1, a lattice point a unit apart (`seed` picks
 /// the field).
-fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
+pub(crate) fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = (x - x0, y - y0);
     let at = |i: f32, j: f32| {
@@ -1483,6 +1483,7 @@ fn react_to_events(
             AnomalyAct::Bloom => 0.8,
             AnomalyAct::Flare | AnomalyAct::Crush => 0.6,
             AnomalyAct::Reveal => 0.4,
+            AnomalyAct::Creak => 0.0,
         });
         if ev.what == AnomalyAct::Discharge {
             for c in kids.iter() {

@@ -522,6 +522,7 @@ pub const MIX: &[Cue] = &[
     cue!("anomaly.frost", "anomaly/frost", -26.0, 50.0, 4.0, Signal, 2.0),
     cue!("frost.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
     cue!("frost.bite", "physical/ice_crack", -8.0, 80.0, 0.0, Action),
+    cue!("frost.creak", "physical/ice_crack", -20.0, 45.0, 0.0, Detail),
     cue!("anomaly.blink", "anomaly/mirror_blink", -9.5, 95.0, 8.0, Action, 7.0),
     cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
     cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),

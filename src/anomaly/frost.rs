@@ -134,8 +134,198 @@ pub fn frozen_level(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32) -
     (count > 0).then(|| sum / count as f32)
 }
 
+/// Rime creeps up the banks this far over the ice, m, thinning out.
+const RIME_UP: f32 = 0.45;
+/// The sheet's mesh: cells this fine, m...
+const ICE_CELL: f32 = 0.25;
+/// ...its rim this ragged, a share of the radius...
+const ICE_RAGGED: f32 = 0.08;
+/// ...and its crack texture tiles every so many metres.
+const ICE_TILE: f32 = 3.0;
+
+/// The ice a frost lays, as one mesh in the frost's own space (centre `c`,
+/// radius `r`, the water's level `w`): over the water a flat sheet, its
+/// rim ragged; where it meets the banks, rime lying on the ground and
+/// thinning to nothing a little way up them. Vertex colour carries the
+/// rime's fade. None if there's no ice to lay.
+pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f32) -> Option<Mesh> {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::mesh::Indices;
+    use bevy::render::render_resource::PrimitiveTopology;
+    let n = ((r * (1.0 + ICE_RAGGED)) / ICE_CELL).ceil() as i32 + 1;
+    let side = (2 * n + 1) as usize;
+    let top = w + ICE_PROUD;
+    // Each lattice point: where (frost space) and how opaque, or none.
+    let mut pts: Vec<Option<([f32; 3], f32)>> = Vec::with_capacity(side * side);
+    for j in -n..=n {
+        for i in -n..=n {
+            let d = Vec2::new(i as f32, j as f32) * ICE_CELL;
+            let a = d.y.atan2(d.x);
+            let rim = r
+                * (1.0
+                    + ICE_RAGGED
+                        * (super::visuals::value_noise(
+                            a.cos() * 3.0 + 7.0,
+                            a.sin() * 3.0 + 7.0,
+                            41,
+                        ) * 2.0
+                            - 1.0));
+            let p = [c.x + d.x, c.z + d.y];
+            let g = hm.height(p);
+            let wet = hm.water_level(p).is_some_and(|l| l > g);
+            pts.push(if d.length() > rim {
+                None
+            } else if wet || g < top {
+                Some(([d.x, top - c.y, d.y], 1.0))
+            } else if g < top + RIME_UP {
+                let fade = 1.0 - (g - top) / RIME_UP;
+                Some(([d.x, g + 0.02 - c.y, d.y], fade * fade))
+            } else {
+                None
+            });
+        }
+    }
+    let mut positions = Vec::new();
+    let mut colours = Vec::new();
+    let mut uvs = Vec::new();
+    let mut index_of = vec![u32::MAX; pts.len()];
+    let mut indices: Vec<u32> = Vec::new();
+    let mut any_ice = false;
+    for j in 0..side - 1 {
+        for i in 0..side - 1 {
+            let corners = [
+                j * side + i,
+                j * side + i + 1,
+                (j + 1) * side + i,
+                (j + 1) * side + i + 1,
+            ];
+            if corners.iter().any(|&k| pts[k].is_none()) {
+                continue;
+            }
+            // A cell all rime, faded out, is nothing.
+            if corners
+                .iter()
+                .all(|&k| pts[k].is_some_and(|(_, o)| o < 0.02))
+            {
+                continue;
+            }
+            any_ice |= corners
+                .iter()
+                .any(|&k| pts[k].is_some_and(|(_, o)| o >= 1.0));
+            let mut ids = [0u32; 4];
+            for (m, &k) in corners.iter().enumerate() {
+                if index_of[k] == u32::MAX {
+                    let (q, o) = pts[k].unwrap();
+                    index_of[k] = positions.len() as u32;
+                    positions.push(q);
+                    // Rime's whiter than the sheet.
+                    let b = 1.0 - o;
+                    colours.push([1.0, 1.0 + 0.04 * b, 1.0 + 0.06 * b, o]);
+                    uvs.push([(c.x + q[0]) / ICE_TILE, (c.z + q[2]) / ICE_TILE]);
+                }
+                ids[m] = index_of[k];
+            }
+            indices.extend_from_slice(&[ids[0], ids[2], ids[1], ids[1], ids[2], ids[3]]);
+        }
+    }
+    if !any_ice {
+        return None;
+    }
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+    .with_inserted_indices(Indices::U32(indices));
+    mesh.compute_smooth_normals();
+    Some(mesh)
+}
+
+/// Frosted ice: white-blue, mottled with trapped air, cut into plates by
+/// cracks (cell edges), tiling. Opaque: you see it's solid.
+fn ice_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    use super::visuals::{smooth, value_noise};
+    use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor};
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    let n = 256u32;
+    // Plates: a few seeds in the tile, wrapped so it repeats.
+    let seeds: Vec<Vec2> = (0..14)
+        .map(|k| {
+            Vec2::new(
+                value_noise(k as f32 * 3.7, 1.3, 51),
+                value_noise(2.1, k as f32 * 5.3, 52),
+            )
+        })
+        .collect();
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let p = Vec2::new((x as f32 + 0.5) / n as f32, (y as f32 + 0.5) / n as f32);
+            // Wandering edges: the point bent by noise before it's placed.
+            let bend = Vec2::new(
+                value_noise(p.x * 9.0, p.y * 9.0, 53) - 0.5,
+                value_noise(p.x * 9.0, p.y * 9.0, 54) - 0.5,
+            ) * 0.05;
+            let q = p + bend;
+            let (mut f1, mut f2) = (f32::MAX, f32::MAX);
+            for s in &seeds {
+                for ox in -1..=1 {
+                    for oy in -1..=1 {
+                        let d = (q - (*s + Vec2::new(ox as f32, oy as f32))).length();
+                        if d < f1 {
+                            f2 = f1;
+                            f1 = d;
+                        } else if d < f2 {
+                            f2 = d;
+                        }
+                    }
+                }
+            }
+            let crack = 1.0 - smooth(0.0, 0.012, f2 - f1);
+            // Hairlines within plates, fainter.
+            let hair =
+                (1.0 - smooth(
+                    0.0,
+                    0.05,
+                    ((p.x * 31.0 + value_noise(p.x * 6.0, p.y * 6.0, 55) * 4.0).sin()).abs(),
+                )) * value_noise(p.x * 4.0, p.y * 4.0, 56)
+                    * 0.35;
+            let air = value_noise(p.x * 24.0, p.y * 24.0, 57) * 0.5
+                + value_noise(p.x * 70.0, p.y * 70.0, 58) * 0.5;
+            let base = Vec3::new(0.78, 0.86, 0.94) + Vec3::splat(0.1) * (air - 0.5);
+            let line = Vec3::new(0.36, 0.48, 0.62);
+            let col = base.lerp(line, crack.max(hair));
+            let px = |v: f32| (v.clamp(0.0, 1.0) * 255.0) as u8;
+            data.extend_from_slice(&[px(col.x), px(col.y), px(col.z), 255]);
+        }
+    }
+    let mut image = Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    );
+    image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        mag_filter: ImageFilterMode::Linear,
+        min_filter: ImageFilterMode::Linear,
+        mipmap_filter: ImageFilterMode::Linear,
+        ..default()
+    });
+    images.add(image)
+}
+
 /// Lays (and relays, when a frost creeps or grows) the ice on water in
-/// each frost's reach.
+/// each frost's reach: one mesh, and the collider is that mesh, so the
+/// ice ends where you see it end. Its footsteps are hard (glass's).
 #[allow(clippy::type_complexity)]
 pub fn freeze_water(
     mut commands: Commands,
@@ -143,6 +333,7 @@ pub fn freeze_water(
     zone: Res<crate::world::Zone>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut images: Option<ResMut<Assets<Image>>>,
     mut ice_look: Local<Option<Handle<StandardMaterial>>>,
 ) {
     use avian3d::prelude::*;
@@ -157,32 +348,44 @@ pub fn freeze_water(
         if let Some(old) = frozen.and_then(|f| f.ice) {
             commands.entity(old).try_despawn();
         }
-        let ice = frozen_level(&zone.hm, c, a.radius).map(|w| {
-            let top = w + ICE_PROUD;
+        let sheet = frozen_level(&zone.hm, c, a.radius)
+            .and_then(|w| ice_mesh(&zone.hm, c, a.radius, w))
+            .and_then(|mesh| Some((Collider::trimesh_from_mesh(&mesh)?, mesh)));
+        let ice = sheet.map(|(collider, mesh)| {
             let mut sheet = commands.spawn((
                 Name::new("Frost ice"),
                 RigidBody::Static,
-                Collider::cylinder(a.radius, ICE_THICK),
-                Transform::from_translation(Vec3::new(0.0, top - ICE_THICK * 0.5 - c.y, 0.0)),
+                collider,
+                crate::world::surfaces::Surfaces(vec![(
+                    Vec3::new(
+                        a.radius * (1.0 + ICE_RAGGED),
+                        0.2,
+                        a.radius * (1.0 + ICE_RAGGED),
+                    ),
+                    Transform::IDENTITY,
+                    crate::render::materials::Mat::Glass,
+                )]),
+                Transform::IDENTITY,
                 Visibility::default(),
             ));
-            if let (Some(meshes), Some(materials)) = (meshes.as_mut(), materials.as_mut()) {
+            if let (Some(meshes), Some(materials), Some(images)) =
+                (meshes.as_mut(), materials.as_mut(), images.as_mut())
+            {
                 let look = ice_look
                     .get_or_insert_with(|| {
                         materials.add(StandardMaterial {
-                            // Pale, rough-skinned ice over dark water.
-                            base_color: Color::srgba(0.72, 0.82, 0.92, 0.92),
-                            perceptual_roughness: 0.45,
+                            base_color: Color::WHITE,
+                            base_color_texture: Some(ice_texture(images)),
+                            perceptual_roughness: 0.55,
                             reflectance: 0.5,
+                            // Opaque where it's a sheet; the vertex alpha
+                            // only thins the rime up the banks.
                             alpha_mode: AlphaMode::Blend,
                             ..default()
                         })
                     })
                     .clone();
-                sheet.insert((
-                    Mesh3d(meshes.add(Cylinder::new(a.radius, ICE_THICK).mesh().resolution(40))),
-                    MeshMaterial3d(look),
-                ));
+                sheet.insert((Mesh3d(meshes.add(mesh)), MeshMaterial3d(look)));
             }
             let id = sheet.id();
             commands.entity(e).add_child(id);
@@ -193,6 +396,77 @@ pub fn freeze_water(
             at: c,
             radius: a.radius,
         });
+    }
+}
+
+/// A foot on the ice: it creaks as you step on, and now and then as you
+/// cross.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct OnIce {
+    pub next: f32,
+}
+
+/// Seconds between creaks while you cross, and the random spread.
+pub const CREAK_EVERY: f32 = 2.2;
+
+/// Creaks underfoot: an `AnomalyAct::Creak` as a walker steps onto a
+/// frost's ice and every couple of seconds on it while they move.
+#[allow(clippy::type_complexity)]
+pub fn creak(
+    mut commands: Commands,
+    frosts: Query<(Entity, &Anomaly, &GlobalTransform, &Frozen)>,
+    mut walkers: Query<(Entity, &GlobalTransform, &Body, Option<&mut OnIce>), With<Player>>,
+    zone: Res<crate::world::Zone>,
+    time: Res<Time>,
+    mut events: MessageWriter<super::AnomalyEvent>,
+) {
+    let dt = time.delta_secs();
+    for (who, gt, body, on) in &mut walkers {
+        let feet = gt.translation();
+        let p = [feet.x, feet.z];
+        let ice = frosts.iter().find(|(_, a, g, f)| {
+            f.ice.is_some()
+                && Vec2::new(feet.x - g.translation().x, feet.z - g.translation().z).length()
+                    < a.radius
+                && zone
+                    .hm
+                    .water_level(p)
+                    .is_some_and(|w| w > zone.hm.height(p) && (feet.y - w).abs() < 0.3)
+        });
+        let Some((frost, ..)) = ice else {
+            if on.is_some() {
+                commands.entity(who).remove::<OnIce>();
+            }
+            continue;
+        };
+        let moving = Vec2::new(body.velocity.x, body.velocity.z).length() > 0.5;
+        let mut say = || {
+            events.write(super::AnomalyEvent {
+                anomaly: frost,
+                kind: AnomalyKind::Frost,
+                at: feet,
+                what: super::AnomalyAct::Creak,
+            });
+        };
+        match on {
+            None => {
+                say();
+                let jitter = (time.elapsed_secs() * 7.13).fract();
+                commands.entity(who).insert(OnIce {
+                    next: CREAK_EVERY * (0.7 + 0.6 * jitter),
+                });
+            }
+            Some(mut o) => {
+                if moving {
+                    o.next -= dt;
+                }
+                if o.next <= 0.0 {
+                    say();
+                    let jitter = (time.elapsed_secs() * 7.13).fract();
+                    o.next = CREAK_EVERY * (0.7 + 0.6 * jitter);
+                }
+            }
+        }
     }
 }
 
@@ -409,6 +683,10 @@ mod tests {
             (feet.y - (w + ICE_PROUD)).abs() < 0.1,
             "standing on the ice: feet {:.2}, water {w:.2}",
             feet.y
+        );
+        assert!(
+            app.world().get::<OnIce>(p).is_some(),
+            "it creaked as you stepped on"
         );
         // Gone with its frost.
         app.world_mut().entity_mut(frost).despawn();

@@ -104,6 +104,8 @@ pub enum AnomalyAct {
     Reveal,
     /// A well's heart started crushing something.
     Crush,
+    /// A frost's ice creaked under a foot.
+    Creak,
 }
 
 /// A snare's discharge reached out to something (an arc to draw): metal
@@ -235,6 +237,7 @@ impl Plugin for AnomalyPlugin {
                         hush::press,
                         frost::chill,
                         frost::freeze_water,
+                        frost::creak,
                         measure_attention,
                         spend_attention,
                         age_blooms,

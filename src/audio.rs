@@ -2512,6 +2512,9 @@ fn anomaly_sounds(
             // Each thing blinked sounds at both ends (`Blinked`, below).
             AnomalyAct::Blink => continue,
             AnomalyAct::Reveal => ("anomaly/reveal", "anomaly.reveal", 1.0),
+            // Ice taking a foot (`anomaly::frost::creak`): the frost's
+            // crack, slowed to a groan.
+            AnomalyAct::Creak => ("physical/ice_crack", "frost.creak", 0.55),
             // A well crushing something: the thing's metal giving (recorded,
             // slowed), under the knot's deep whump.
             AnomalyAct::Crush => {
