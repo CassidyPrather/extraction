@@ -451,35 +451,56 @@ def chair():
     return [p]
 
 
+# Where a locker's door hangs (its hinge: the left edge, the front face's
+# plane, mid-height) and its shelf's top.
+LOCKER_HINGE = (-0.238, 0.93, -0.205)
+LOCKER_SHELF = 1.42
+
+
 def locker():
     """A steel locker 0.5 x 1.8 x 0.45 (`Builder::locker`), its door on
-    -Z: louvres, a latch handle, a number plate, dents of wear."""
+    -Z: the carcass (`carcass`: sheet sides, top, back, a floor on its
+    plinth and a hat shelf near the top, hollow so it holds things) and its
+    door (`door`, louvres, the latch handle, a number plate), its own node
+    with its origin on the hinge (`LOCKER_HINGE`), swinging about Y out to
+    the room (`world::hinge`)."""
     w = Wear(47)
-    p = Part("static")
+    p = Part("carcass")
     W, H, D = 0.5, 1.8, 0.45
-    # Body: sides, top, back as sheet; a plinth.
-    p.box((W, H - 0.06, D - 0.02), (0.0, 0.06 + (H - 0.06) / 2, 0.01), "Painted", bevel=0.006,
+    T = 0.012
+    y0, y1 = 0.06, H
+    zf, zb = -D / 2 + 0.02, D / 2
+    mid = (zf + zb) / 2
+    # Sheet sides, top and back; a floor on the plinth; the shelf.
+    for sx in (-1, 1):
+        p.box((T, y1 - y0, zb - zf), (sx * (W / 2 - T / 2), (y0 + y1) / 2, mid), "Painted",
+              bevel=0.003, segs=1)
+    p.box((W, T, zb - zf), (0.0, y1 - T / 2, mid), "Painted", bevel=0.003, segs=1)
+    p.box((W - 2 * T, y1 - y0 - T, T), (0.0, (y0 + y1 - T) / 2, zb - T / 2), "Painted", segs=1)
+    p.box((W - 2 * T, T, zb - zf - T), (0.0, y0 + T / 2, mid - T / 2), "Painted", segs=1)
+    p.box((W - 2 * T, T, zb - zf - T), (0.0, LOCKER_SHELF - T / 2, mid - T / 2), "Painted",
           segs=1)
     p.box((W - 0.04, 0.06, D - 0.06), (0.0, 0.03, 0.02), "Cast", bevel=0.003, segs=1)
+    # Its hinge pins on the left, on the carcass.
+    for y in (0.35, 1.5):
+        rod(p, (-W / 2 + 0.012, y - 0.04, zf - 0.012), (-W / 2 + 0.012, y + 0.04, zf - 0.012),
+            0.007, "Iron", segs=6)
     # The door, a hair proud, its louvres pressed out top and bottom.
-    dz = -D / 2 + 0.02
-    p.box((W - 0.03, H - 0.1, 0.012), (0.0, 0.06 + (H - 0.06) / 2, dz - 0.006), "Painted",
+    d = Part("door", origin=LOCKER_HINGE)
+    dz = zf
+    d.box((W - 0.03, H - 0.1, 0.012), (0.0, 0.06 + (H - 0.06) / 2, dz - 0.006), "Painted",
           bevel=0.003, segs=1)
-    for y0 in (1.55, 0.2):
+    for yl in (1.55, 0.2):
         for k in range(5):
-            p.box((0.26, 0.012, 0.008), (0.0, y0 + k * 0.03, dz - 0.016), "Painted",
+            d.box((0.26, 0.012, 0.008), (0.0, yl + k * 0.03, dz - 0.016), "Painted",
                   bevel=0.002, segs=1)
     # Handle, a hasp for a padlock, the plate.
-    p.box((0.03, 0.14, 0.01), (W / 2 - 0.07, 1.0, dz - 0.017), "Zinc", bevel=0.002, segs=1)
-    rod(p, (W / 2 - 0.07, 1.05, dz - 0.02), (W / 2 - 0.07, 1.05, dz - 0.045), 0.006, "Zinc")
-    rod(p, (W / 2 - 0.07, 0.95, dz - 0.02), (W / 2 - 0.07, 0.95, dz - 0.045), 0.006, "Zinc")
-    rod(p, (W / 2 - 0.07, 0.94, dz - 0.045), (W / 2 - 0.07, 1.06, dz - 0.045), 0.007, "Zinc")
-    p.box((0.1, 0.05, 0.004), (0.0, 1.72, dz - 0.014), "Cream")  # on the door's face
-    # Hinges on the left.
-    for y in (0.35, 1.5):
-        rod(p, (-W / 2 + 0.012, y - 0.04, dz - 0.012), (-W / 2 + 0.012, y + 0.04, dz - 0.012),
-            0.007, "Iron", segs=6)
-    return [p]
+    d.box((0.03, 0.14, 0.01), (W / 2 - 0.07, 1.0, dz - 0.017), "Zinc", bevel=0.002, segs=1)
+    rod(d, (W / 2 - 0.07, 1.05, dz - 0.02), (W / 2 - 0.07, 1.05, dz - 0.045), 0.006, "Zinc")
+    rod(d, (W / 2 - 0.07, 0.95, dz - 0.02), (W / 2 - 0.07, 0.95, dz - 0.045), 0.006, "Zinc")
+    rod(d, (W / 2 - 0.07, 0.94, dz - 0.045), (W / 2 - 0.07, 1.06, dz - 0.045), 0.007, "Zinc")
+    d.box((0.1, 0.05, 0.004), (0.0, 1.72, dz - 0.014), "Cream")
+    return [p, d]
 
 
 prop("chair", chair)

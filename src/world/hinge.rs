@@ -464,6 +464,16 @@ const COUNTER_NODES: &[CounterNode] = &[
             travel: DRAWER_TRAVEL,
         },
     ),
+    // A locker's door, hung on its left (`art/props/furniture.py`
+    // `LOCKER_HINGE`).
+    CounterNode(
+        "locker#door",
+        [-0.238, 0.93, -0.205],
+        [0.238, 0.0, -0.02],
+        [0.47, 1.7, 0.05],
+        false,
+        Motion::Hinge { most: LOCKER_DOOR },
+    ),
     CounterNode(
         "counter_cabinet#door_l",
         [-0.284, 0.455, -0.298],
@@ -501,6 +511,9 @@ pub fn node_origin(drawn: &str) -> Option<Vec3> {
 /// cabinet's door swings (radians).
 pub const DRAWER_TRAVEL: f32 = 0.4;
 pub const CABINET_DOOR: f32 = 1.9;
+/// How far a locker's door swings open, radians: back against its hinge
+/// side.
+pub const LOCKER_DOOR: f32 = 2.0;
 
 /// A building's counters' drawers and cabinet doors, put up as moving
 /// parts when it's placed (the building draws only their carcasses:

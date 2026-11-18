@@ -1583,18 +1583,55 @@ impl Builder {
     }
 
     /// A steel locker, its door on -Z.
+    /// A steel locker, its door to -Z (`yaw` turned): hollow, its sides,
+    /// top, back, floor and hat shelf the model's carcass's, its door its
+    /// own, hung on its hinge (`hinge::fit_counters`).
     pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
         let from = self.geo.pieces.len();
         let rot = Quat::from_rotation_y(yaw);
-        self.piece(
-            Shape::Box(Vec3::new(0.5, 1.8, 0.45)),
-            Transform::from_translation(at + Vec3::Y * 0.9).with_rotation(rot),
-            Mat::PaintedMetal,
-            true,
+        let (w, h, t) = (0.5, 1.8, 0.012);
+        let (zf, zb) = (-0.205, 0.225);
+        let mid = (zf + zb) * 0.5;
+        let mut sheet = |size: Vec3, c: Vec3| {
+            self.piece(
+                Shape::Box(size),
+                Transform::from_translation(at + rot * c).with_rotation(rot),
+                Mat::PaintedMetal,
+                true,
+            );
+        };
+        for sx in [-1.0, 1.0] {
+            sheet(
+                Vec3::new(t, h - 0.06, zb - zf),
+                Vec3::new(sx * (w * 0.5 - t * 0.5), (0.06 + h) * 0.5, mid),
+            );
+        }
+        sheet(Vec3::new(w, t, zb - zf), Vec3::new(0.0, h - t * 0.5, mid));
+        sheet(
+            Vec3::new(w - 2.0 * t, h - 0.06 - t, t),
+            Vec3::new(0.0, (0.06 + h - t) * 0.5, zb - t * 0.5),
         );
+        // Its floor on the plinth, and the hat shelf.
+        for y in [0.06 + t, LOCKER_SHELF] {
+            sheet(
+                Vec3::new(
+                    w - 2.0 * t,
+                    y - if y < 0.5 { 0.0 } else { y - t },
+                    zb - zf - t,
+                ),
+                Vec3::new(
+                    0.0,
+                    if y < 0.5 { y * 0.5 } else { y - t * 0.5 },
+                    mid - t * 0.5,
+                ),
+            );
+        }
         self.dress(
             from,
-            vec![("locker", Transform::from_translation(at).with_rotation(rot))],
+            vec![(
+                "locker#carcass",
+                Transform::from_translation(at).with_rotation(rot),
+            )],
         )
     }
 
@@ -1658,6 +1695,9 @@ impl Builder {
         self.geo
     }
 }
+
+/// The top of a locker's hat shelf (`art/props/furniture.py`).
+pub const LOCKER_SHELF: f32 = 1.42;
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
