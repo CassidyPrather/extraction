@@ -234,6 +234,7 @@ impl Plugin for AnomalyPlugin {
                         harvest::cool_scald,
                         hush::press,
                         frost::chill,
+                        frost::freeze_water,
                         measure_attention,
                         spend_attention,
                         age_blooms,

@@ -90,6 +90,112 @@ pub fn chill(
     }
 }
 
+/// Ice a frost lays on water in its reach: a flat floor at the water's
+/// level, so a frost by a stream or across a reservoir's arm is a crossing
+/// (cold to walk: it's in the frost). One disc the frost's size; under dry
+/// ground it's buried and nothing knows it's there.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Frozen {
+    pub ice: Option<Entity>,
+    /// Where and how big the frost was when its ice was laid.
+    pub at: Vec3,
+    pub radius: f32,
+}
+
+/// The ice sheet's thickness, m, and how far its top stands over the
+/// water (so a foot on it is dry).
+pub const ICE_THICK: f32 = 0.15;
+pub const ICE_PROUD: f32 = 0.03;
+/// Water shallower than this over the ground isn't worth a sheet, m.
+const ICE_MIN_DEPTH: f32 = 0.05;
+/// How finely the frost's reach is sampled for water, m.
+const ICE_STEP: f32 = 0.5;
+
+/// Where the water in a frost's reach lies (centre `c`, radius `r`): its
+/// mean level, if any of the disc is water.
+pub fn frozen_level(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32) -> Option<f32> {
+    let n = (r / ICE_STEP).ceil() as i32;
+    let (mut sum, mut count) = (0.0f32, 0u32);
+    for i in -n..=n {
+        for j in -n..=n {
+            let d = Vec2::new(i as f32, j as f32) * ICE_STEP;
+            if d.length() > r {
+                continue;
+            }
+            let p = [c.x + d.x, c.z + d.y];
+            if let Some(w) = hm.water_level(p)
+                && w - hm.height(p) > ICE_MIN_DEPTH
+            {
+                sum += w;
+                count += 1;
+            }
+        }
+    }
+    (count > 0).then(|| sum / count as f32)
+}
+
+/// Lays (and relays, when a frost creeps or grows) the ice on water in
+/// each frost's reach.
+#[allow(clippy::type_complexity)]
+pub fn freeze_water(
+    mut commands: Commands,
+    frosts: Query<(Entity, &Anomaly, &GlobalTransform, Option<&Frozen>)>,
+    zone: Res<crate::world::Zone>,
+    mut meshes: Option<ResMut<Assets<Mesh>>>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut ice_look: Local<Option<Handle<StandardMaterial>>>,
+) {
+    use avian3d::prelude::*;
+    for (e, a, gt, frozen) in &frosts {
+        if a.kind != AnomalyKind::Frost {
+            continue;
+        }
+        let c = gt.translation();
+        if frozen.is_some_and(|f| f.at.distance(c) < 0.05 && (f.radius - a.radius).abs() < 0.05) {
+            continue;
+        }
+        if let Some(old) = frozen.and_then(|f| f.ice) {
+            commands.entity(old).try_despawn();
+        }
+        let ice = frozen_level(&zone.hm, c, a.radius).map(|w| {
+            let top = w + ICE_PROUD;
+            let mut sheet = commands.spawn((
+                Name::new("Frost ice"),
+                RigidBody::Static,
+                Collider::cylinder(a.radius, ICE_THICK),
+                Transform::from_translation(Vec3::new(0.0, top - ICE_THICK * 0.5 - c.y, 0.0)),
+                Visibility::default(),
+            ));
+            if let (Some(meshes), Some(materials)) = (meshes.as_mut(), materials.as_mut()) {
+                let look = ice_look
+                    .get_or_insert_with(|| {
+                        materials.add(StandardMaterial {
+                            // Pale, rough-skinned ice over dark water.
+                            base_color: Color::srgba(0.72, 0.82, 0.92, 0.92),
+                            perceptual_roughness: 0.45,
+                            reflectance: 0.5,
+                            alpha_mode: AlphaMode::Blend,
+                            ..default()
+                        })
+                    })
+                    .clone();
+                sheet.insert((
+                    Mesh3d(meshes.add(Cylinder::new(a.radius, ICE_THICK).mesh().resolution(40))),
+                    MeshMaterial3d(look),
+                ));
+            }
+            let id = sheet.id();
+            commands.entity(e).add_child(id);
+            id
+        });
+        commands.entity(e).try_insert(Frozen {
+            ice,
+            at: c,
+            radius: a.radius,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,5 +349,85 @@ mod tests {
             app.update();
         }
         assert_eq!(hp(&app, p), full, "the coals don't take");
+    }
+
+    /// A frost over the canal freezes it: you stand on the ice, dry, where
+    /// without it you'd be swimming.
+    #[test]
+    fn a_frost_freezes_water_walkable() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: "cinder_works".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let p = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let (at, w) = (25..60)
+            .filter_map(|z| {
+                let q = [-70.0, z as f32];
+                zone.hm
+                    .water_level(q)
+                    .map(|w| (q, w, w - zone.hm.height(q)))
+            })
+            .max_by(|a, b| a.2.total_cmp(&b.2))
+            .map(|(q, w, _)| (q, w))
+            .expect("the canal");
+        let frost = super::super::spawn_anomaly(
+            app.world_mut(),
+            AnomalyKind::Frost,
+            Vec3::new(at[0], zone.hm.height(at), at[1]),
+            3.0,
+            None,
+        );
+        app.update();
+        app.update();
+        let ice = app.world().get::<Frozen>(frost).and_then(|f| f.ice);
+        assert!(ice.is_some(), "ice on the canal");
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation =
+            Vec3::new(at[0] + 1.0, w + 0.4, at[1]);
+        for _ in 0..90 {
+            app.update();
+        }
+        let feet = app.world().get::<Transform>(p).unwrap().translation;
+        let body = app.world().get::<Body>(p).unwrap();
+        assert!(
+            !body.swimming && body.wading < 0.01,
+            "on the ice, dry (wading {:.2}, swimming {})",
+            body.wading,
+            body.swimming
+        );
+        assert!(
+            (feet.y - (w + ICE_PROUD)).abs() < 0.1,
+            "standing on the ice: feet {:.2}, water {w:.2}",
+            feet.y
+        );
+        // Gone with its frost.
+        app.world_mut().entity_mut(frost).despawn();
+        app.update();
+        assert!(app.world().get_entity(ice.unwrap()).is_err(), "it melts");
+    }
+
+    /// Frosts on dry ground lay no ice.
+    #[test]
+    fn a_frost_on_dry_ground_lays_no_ice() {
+        let (mut app, _) = app();
+        app.update();
+        app.update();
+        let f = app
+            .world_mut()
+            .query::<&Frozen>()
+            .iter(app.world())
+            .next()
+            .copied();
+        assert!(f.is_some_and(|f| f.ice.is_none()), "no water, no ice");
     }
 }
