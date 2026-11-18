@@ -1439,13 +1439,8 @@ impl Builder {
             Mat::Timber,
             true,
         );
-        // The model's doors face the room: towards the building's middle
-        // (behind a shop counter, that's the keeper's side).
-        let front = if (rot * Vec3::NEG_Z).dot(-at.with_y(0.0)) < 0.0 {
-            rot * Quat::from_rotation_y(std::f32::consts::PI)
-        } else {
-            rot
-        };
+        // The model's doors face the room (`facing_room`).
+        let front = self.facing_room(at, rot, 0.6);
         let n = (len / 0.6).round().max(1.0);
         let w = len / n;
         let pick = variant(at, 2);
@@ -1649,12 +1644,59 @@ impl Builder {
     }
 
     /// A steel locker, its door on -Z.
+    /// How far ahead of `at` along `dir` (flat) there's room, up to `most`:
+    /// the first point at hip or chest height inside a solid piece built so
+    /// far (a wall, a shelf).
+    fn room_ahead(&self, at: Vec3, dir: Vec3, most: f32) -> f32 {
+        let dir = dir.with_y(0.0).normalize_or_zero();
+        let mut d = 0.05;
+        while d <= most {
+            for up in [0.5, 1.2] {
+                let p = at + dir * d + Vec3::Y * up;
+                let inside = self.geo.pieces.iter().any(|piece| {
+                    let Shape::Box(size) = piece.shape else {
+                        return false;
+                    };
+                    piece.collide && {
+                        let q = piece.at.rotation.inverse() * (p - piece.at.translation);
+                        (q.abs() - size * 0.5).max_element() < 0.0
+                    }
+                });
+                if inside {
+                    return d;
+                }
+            }
+            d += 0.05;
+        }
+        most
+    }
+
+    /// Which way a container stood at `at` faces its doors (its model's
+    /// -Z, `rot` or turned round): the way with room for them to open, or,
+    /// with as much either way, toward the building's middle (a counter
+    /// behind a shop's is the keeper's side). A locker turned to its wall
+    /// was a door that couldn't open (`hinge::every_container_opens_clear`).
+    fn facing_room(&self, at: Vec3, rot: Quat, depth: f32) -> Quat {
+        let turned = rot * Quat::from_rotation_y(std::f32::consts::PI);
+        let front = |r: Quat| r * Vec3::NEG_Z;
+        let ahead = |r: Quat| self.room_ahead(at + front(r) * (depth * 0.5), front(r), 0.8);
+        let (a, b) = (ahead(rot), ahead(turned));
+        if (a - b).abs() > 0.1 {
+            return if a > b { rot } else { turned };
+        }
+        if front(rot).dot(-at.with_y(0.0)) < 0.0 {
+            turned
+        } else {
+            rot
+        }
+    }
+
     /// A steel locker, its door to -Z (`yaw` turned): hollow, its sides,
     /// top, back, floor and hat shelf the model's carcass's, its door its
     /// own, hung on its hinge (`hinge::fit_counters`).
     pub fn locker(&mut self, at: Vec3, yaw: f32) -> &mut Self {
         let from = self.geo.pieces.len();
-        let rot = Quat::from_rotation_y(yaw);
+        let rot = self.facing_room(at, Quat::from_rotation_y(yaw), 0.45);
         let (w, h, t) = (0.5, 1.8, 0.012);
         let (zf, zb) = (-0.205, 0.225);
         let mid = (zf + zb) * 0.5;
@@ -3527,7 +3569,7 @@ fn pump_station(b: &mut Builder) {
     // lib suite's `every_thing_in_a_building_is_taken_from_where_it_stops`:
     // a second thing on it lay out of reach behind the chair).
     b.chair(Vec3::new(5.6, f, -2.55), -0.2);
-    b.locker(Vec3::new(6.6, f, -4.45), 0.0);
+    b.locker(Vec3::new(6.2, f, -4.45), 0.0);
     for (x, z) in [(-6.3, 4.2), (-5.6, 4.35), (-6.2, 3.55)] {
         b.barrel(Vec3::new(x, f, z));
     }
