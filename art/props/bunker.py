@@ -54,11 +54,10 @@ def filter_unit():
         a = k * math.pi / 2 + 0.3
         rod(p, (cx, cy, z - 0.07), (cx + math.cos(a) * 0.185, cy + math.sin(a) * 0.185, z - 0.07),
             0.009, "Iron", segs=6)
-    # Its handle sheared off: a stub on the rim, and the wheel chained to
-    # the panel's bolt and locked. It won't be turned.
+    # Its handle sheared off, a rusted stub on the rim; the boss rusted
+    # solid. It won't be turned.
     rod(p, (cx + 0.19, cy, z - 0.075), (cx + 0.19, cy, z - 0.1), 0.012, "Rusty", segs=8)
-    chain(p, (cx, cy - 0.19, z - 0.08), (cx + 0.07, 0.3, z - 0.02))
-    padlock(p, (cx + 0.07, 0.3, z - 0.02), (0, 0, -1))
+    p.cyl(0.058, 0.0, 0.074, "Rusty", segs=12, xf=T(cx, cy, z - 0.074))
     # A gauge: bezel, dark face.
     gx, gy = 0.34, 1.2
     p.cyl(0.07, 0.0, 0.03, "Zinc", segs=16, xf=T(gx, gy, z - 0.03))
