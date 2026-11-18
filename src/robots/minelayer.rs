@@ -792,7 +792,7 @@ fn minelayer_wreck(
             .entity(e)
             .insert((super::wreck::Broken, super::Salvaged));
         let at = gt.translation();
-        let mut drops = vec!["robot_cell", "servo"];
+        let mut drops = vec!["robot_cell", "hound_hip_servo"];
         for _ in 0..m.hopper.min(3) {
             drops.push("pressure_mine");
         }

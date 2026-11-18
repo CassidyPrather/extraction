@@ -14,6 +14,7 @@ pub mod anim;
 pub mod armour;
 pub mod body_shells;
 pub mod broken;
+pub mod builds;
 pub mod collector;
 pub mod damage;
 pub mod devices;
@@ -26,6 +27,8 @@ pub mod doors;
 pub mod drone;
 #[cfg(test)]
 mod drone_drill;
+pub mod engineer_body;
+pub mod engineer_look;
 #[cfg(test)]
 mod feet_gauge;
 pub mod firsts;
@@ -48,6 +51,7 @@ pub mod hound_mind;
 pub mod indoor;
 #[cfg(test)]
 mod intent_roster;
+pub mod lines;
 pub mod memory;
 pub mod mender;
 pub mod mender_look;
@@ -226,6 +230,9 @@ pub enum PartRole {
     /// A searchlight (`searchlight`): shot out, its beam is dark, and what
     /// it lit isn't seen.
     Lamp(u8),
+    /// The engineer's kit bundle on its back (`engineer_body`, #98): what
+    /// it builds with. Shot off, it falls, salvage.
+    Kit,
 }
 
 #[derive(Component, Debug)]
@@ -685,7 +692,9 @@ pub fn part_salvage(
             .collect::<Vec<_>>()
     };
     match kind {
-        RobotKind::Walker if crawler => tries(1, 0.5, "crawler_capacitor", rng),
+        // A crawler's capacitor bank is on its wreck, on its leads
+        // (`salvage`).
+        RobotKind::Walker if crawler => Vec::new(),
         RobotKind::Walker if hound => Vec::new(),
         // A walker's servo packs are bolted on its wreck, taken off by hand
         // (`salvage`), not dropped.

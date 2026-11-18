@@ -6,7 +6,7 @@ use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use crate::models::{ModelMaterials, ModelState, Models, model_nodes, spawn_primitives};
+use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes, spawn_primitives};
 use crate::render::materials::MaterialLibrary;
 use crate::robots::dirigible::{CargoPod, Dirigible, RADIUS};
 use crate::robots::grappler::{Grappler, Tethered};
@@ -116,17 +116,50 @@ fn finish_dressing(
                 &mut materials,
             )
         };
-        for node in &model {
+        // The boom first: the launcher head rides on it.
+        let mut boom: Option<(Entity, Vec3)> = None;
+        let mut order: Vec<&ModelNode> = model.iter().collect();
+        order.sort_by_key(|n| n.name != "launcher");
+        for node in order {
+            // The launcher head hangs on the boom, at its offset from the
+            // foot pin, so it folds with it.
+            let (parent, at) = match (node.name.as_str(), boom) {
+                ("launcher_head", Some((b, foot))) => (
+                    b,
+                    Transform {
+                        translation: node.transform.translation - foot,
+                        ..node.transform
+                    },
+                ),
+                _ => (e, node.transform),
+            };
             let holder = commands
-                .spawn((node.transform, Visibility::default(), ChildOf(e)))
+                .spawn((at, Visibility::default(), ChildOf(parent)))
                 .id();
-            // The derrick's boom (its origin its foot pin) folds back along
-            // the hull when the grappler's wrecked; the pedestal and drum
-            // stand (`grappler_armour::Folds`).
-            if node.name == "launcher" {
-                commands
-                    .entity(holder)
-                    .insert(crate::robots::grappler_armour::Folds);
+            match node.name.as_str() {
+                // The derrick's boom (its origin its foot pin) folds back
+                // along the hull when the grappler's wrecked; the pedestal
+                // and drum stand (`grappler_armour::Folds`).
+                "launcher" => {
+                    commands
+                        .entity(holder)
+                        .insert(crate::robots::grappler_armour::Folds);
+                    boom = Some((holder, node.transform.translation));
+                }
+                // Salvage on their own (Heavy's table): hidden once taken.
+                "launcher_head" => {
+                    commands.entity(holder).insert(HarpoonPart {
+                        grappler: e,
+                        what: HarpoonPiece::LauncherHead,
+                    });
+                }
+                "drum" => {
+                    commands.entity(holder).insert(HarpoonPart {
+                        grappler: e,
+                        what: HarpoonPiece::Drum,
+                    });
+                }
+                _ => {}
             }
             spawn_primitives(&mut commands, holder, node, &mut mat);
         }
@@ -189,17 +222,43 @@ fn pod_blockout(
     }
 }
 
+/// A piece of a grappler's harpoon drawn as its own node, to salvage on
+/// its own (Heavy's table): its holder, which the salvage hides once the
+/// piece is taken (its Visibility). `grappler` is the robot it's on.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HarpoonPart {
+    pub grappler: Entity,
+    pub what: HarpoonPiece,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HarpoonPiece {
+    /// The launcher on the boom's head (with its harpoon): it folds with
+    /// the boom on a wreck.
+    LauncherHead,
+    /// The line drum behind the yoke.
+    Drum,
+}
+
+/// The dirigible's pod cable: steel, its weak-link shackle just above the
+/// pod, a grip sleeve over it (`robots::lines`, #101).
 #[derive(Component)]
 struct Cable;
 
 fn cables(
     mut commands: Commands,
     ships: Query<(Entity, &Dirigible, &GlobalTransform)>,
-    mut cables: Query<(&Cable, &mut Transform, &mut Visibility, &ChildOf)>,
+    mut cables: Query<
+        (
+            &mut crate::robots::lines::Line,
+            &mut crate::robots::lines::LineSpan,
+            &mut Visibility,
+        ),
+        With<Cable>,
+    >,
     mut made: Local<Vec<(Entity, Entity)>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    use crate::robots::lines::{Gauge, Line, LineSpan};
     made.retain(|(ship, cable)| {
         if ships.contains(*ship) {
             true
@@ -208,40 +267,50 @@ fn cables(
             false
         }
     });
-    for (e, d, _) in &ships {
-        if !made.iter().any(|(s, _)| *s == e) {
-            let m = mat(&mut materials, Color::srgb(0.05, 0.05, 0.05), 0.8, 0.5);
-            let c = commands
-                .spawn((
-                    Cable,
-                    Mesh3d(meshes.add(Cylinder::new(0.025, 1.0))),
-                    MeshMaterial3d(m),
-                    Transform::default(),
-                    Visibility::Hidden,
-                    NotShadowCaster,
-                    ChildOf(e),
-                ))
-                .id();
-            made.push((e, c));
-        }
-        let _ = d;
-    }
-    for (_, mut t, mut v, parent) in &mut cables {
-        let Ok((_, d, _)) = ships.get(parent.parent()) else {
-            continue;
-        };
+    for (e, d, gt) in &ships {
+        let top = gt.transform_point(Vec3::new(0.0, -RADIUS - 1.1, 0.0));
         let len = d.cable.max(0.0);
-        *v = if len > 0.05 {
+        let span = LineSpan {
+            from: top,
+            to: top - Vec3::Y * len.max(0.01),
+            slack: 0.0,
+        };
+        // The shackle 0.6 m over the pod's lifting eye, the sleeve a hand's
+        // reach over that: where they are on a cable reeled any length.
+        let from_end = |m: f32| (1.0 - m / len.max(0.01)).clamp(0.0, 1.0);
+        let (link, grip) = (from_end(0.6), from_end(1.5));
+        let shown = if len > 0.05 {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         };
-        let top = -RADIUS - 1.1;
-        *t = Transform::from_xyz(0.0, top - len * 0.5, 0.0).with_scale(Vec3::new(
-            1.0,
-            len.max(0.01),
-            1.0,
-        ));
+        match made.iter().find(|(s, _)| *s == e) {
+            None => {
+                let c = commands
+                    .spawn((
+                        Name::new("Pod cable"),
+                        Cable,
+                        Line::new(Gauge::Cable).with_weak_link(link).with_grip(grip),
+                        span,
+                        Transform::default(),
+                        shown,
+                    ))
+                    .id();
+                made.push((e, c));
+            }
+            Some(&(_, c)) => {
+                if let Ok((mut l, mut s, mut v)) = cables.get_mut(c) {
+                    if *s != span {
+                        *s = span;
+                    }
+                    if l.weak_link != Some(link) || l.grips.first() != Some(&grip) {
+                        l.weak_link = Some(link);
+                        l.grips = vec![grip];
+                    }
+                    v.set_if_neq(shown);
+                }
+            }
+        }
     }
 }
 
@@ -332,5 +401,59 @@ fn tether_lines(
             Transform::default(),
             NotShadowCaster,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The grappler's harpoon is dressed with its launcher head and line
+    /// drum as their own pieces, tagged for the salvage (Heavy's table),
+    /// the head riding on the boom (it folds with it): a model that drops
+    /// either node, or a redesign that forgets them (#100), fails here.
+    #[test]
+    fn the_harpoon_dresses_its_head_and_drum_for_the_salvage() {
+        let opts = crate::LaunchOptions {
+            map: "training_yard".into(),
+            map_explicit: true,
+            new_game: true,
+            robots: false,
+            gallery: Some("robots:grappler,0,12".into()),
+            camera: Some((Vec3::new(0.0, 0.0, 30.0), 0.0, -1.0)),
+            ..Default::default()
+        };
+        let mut app = crate::soak::drive::client_app(opts);
+        for _ in 0..400 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let grappler = w
+            .query_filtered::<Entity, With<Grappler>>()
+            .iter(w)
+            .next()
+            .expect("the line-up stood a grappler");
+        let parts: Vec<(Entity, HarpoonPart)> = w
+            .query::<(Entity, &HarpoonPart)>()
+            .iter(w)
+            .map(|(e, p)| (e, *p))
+            .collect();
+        for what in [HarpoonPiece::LauncherHead, HarpoonPiece::Drum] {
+            assert!(
+                parts
+                    .iter()
+                    .any(|(_, p)| p.grappler == grappler && p.what == what),
+                "{what:?} dressed as its own piece: {parts:?}"
+            );
+        }
+        let (head, _) = parts
+            .iter()
+            .find(|(_, p)| p.what == HarpoonPiece::LauncherHead)
+            .unwrap();
+        let on = w.get::<ChildOf>(*head).map(|c| c.parent());
+        assert!(
+            on.is_some_and(|b| w.get::<crate::robots::grappler_armour::Folds>(b).is_some()),
+            "the head rides on the boom (it folds with it)"
+        );
     }
 }

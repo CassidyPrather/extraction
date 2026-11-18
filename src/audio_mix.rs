@@ -363,6 +363,10 @@ pub const MIX: &[Cue] = &[
     cue!("relay.filed", "signal/filed", -14.0, 80.0, 20.0, Signal, 8.0),
     cue!("wreck.thud", "impacts/metal", -2.0, 100.0, 20.0, Action, 10.0),
     cue!("cell.arc", "device/crackle", -9.0, 95.0, 1.0, Action),
+    // A live cell's warning before it arcs (`salvage::Crackled`): a quiet
+    // tick heard near it, and a sharper snap at a hand close to it.
+    cue!("cell.crackle", "device/crackle", -26.0, 58.0, 1.0, Detail, 4.0),
+    cue!("cell.warn", "device/crackle", -17.0, 70.0, 0.5, Action, 3.0),
     cue!("you.hurt", "physical/body_hit", -8.0, 85.0, 0.0, Detail),
     cue!("you.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
     cue!("you.down", "physical/body_hit", -9.0, 95.0, 0.0, Action),
@@ -522,6 +526,7 @@ pub const MIX: &[Cue] = &[
     cue!("anomaly.frost", "anomaly/frost", -26.0, 50.0, 4.0, Signal, 2.0),
     cue!("frost.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
     cue!("frost.bite", "physical/ice_crack", -8.0, 80.0, 0.0, Action),
+    cue!("frost.creak", "physical/ice_crack", -20.0, 45.0, 0.0, Detail),
     cue!("anomaly.blink", "anomaly/mirror_blink", -9.5, 95.0, 8.0, Action, 7.0),
     cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
     cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),
@@ -636,6 +641,26 @@ fn find(name: &str) -> Option<&'static Cue> {
     c
 }
 
+/// The world's pace (`items::stim`), for the world's sounds: in a stim
+/// what's out in the world plays lower and slower, your own head doesn't.
+/// Set by the stim's clock; read by `audio::play_at_speed` for placed
+/// sounds as they start.
+static WORLD_PACE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x3f80_0000);
+
+/// How far a world sound's speed (and so its pitch) goes down at the
+/// stim's slowest: half the way the world does.
+pub const WORLD_PITCH_SHARE: f64 = 0.5;
+
+pub fn set_world_pace(pace: f32) {
+    WORLD_PACE.store(pace.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+/// What a world sound's speed is multiplied by now (1 out of a stim).
+pub fn world_speed() -> f64 {
+    let pace = f32::from_bits(WORLD_PACE.load(std::sync::atomic::Ordering::Relaxed)) as f64;
+    1.0 - (1.0 - pace.clamp(0.0, 1.0)) * WORLD_PITCH_SHARE
+}
+
 /// The spatial node a cue plays through: its reach, and the gentler muffle.
 pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
     use bevy_seedling::firewheel::dsp::distance_attenuation::DistanceAttenuation;
@@ -653,6 +678,21 @@ pub fn spatial(name: &str) -> bevy_seedling::prelude::SpatialBasicNode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Out in the world, sounds start lower in a stim (`items::stim`): at
+    /// its slowest (0.4) 0.7 of their speed; out of one, as they were.
+    #[test]
+    fn world_sounds_go_lower_in_a_stim() {
+        let at = |p: f32| {
+            set_world_pace(p);
+            world_speed()
+        };
+        assert!((at(0.4) - 0.7).abs() < 1e-6);
+        let mid = at(0.7);
+        assert!(mid > 0.7 && mid < 1.0);
+        // (Left as it was: the pace is the whole process's.)
+        assert!((at(1.0) - 1.0).abs() < 1e-9);
+    }
 
     /// Narrow dynamics moves every role, and closes the gap between the
     /// quiet ones and the loud ones rather than widening it.

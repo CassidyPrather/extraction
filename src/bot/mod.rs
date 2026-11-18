@@ -2177,7 +2177,7 @@ mod tests {
                 &mut c,
                 &catalog,
                 crate::items::SpawnItem {
-                    kind: catalog.kind("servo").unwrap(),
+                    kind: catalog.kind("hound_hip_servo").unwrap(),
                     transform: Transform::from_translation(world(b, 0.3)),
                     condition: 0.6,
                 },

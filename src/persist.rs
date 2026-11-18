@@ -1044,7 +1044,16 @@ fn apply_restore(world: &mut World) {
         for p in &save.zone.items {
             let t = Transform::from_translation(v3(p.at)).with_rotation(Quat::from_array(p.rot));
             if let Some(e) = restore_item(world, &p.item, t) {
-                place_unseated(world, e, None);
+                if let Some(h) = p.held {
+                    // Back in its container's hold, once that's up.
+                    world.entity_mut(e).insert((
+                        crate::items::loot::ToHold { at: v3(h) },
+                        RigidBodyDisabled,
+                        ColliderDisabled,
+                    ));
+                } else {
+                    place_unseated(world, e, None);
+                }
                 placed += 1;
             }
         }
@@ -1265,6 +1274,19 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                     loadout.slots.push((index, saved));
                 }
             }
+            // In a container's hold: saved with the Zone, to be seated back
+            // in it.
+            if let Some(h) = world.get::<crate::world::buildings::HoldSpot>(s).copied() {
+                if let Some(saved) = snapshot_item(world, e, Vec3::ZERO) {
+                    save.zone.items.push(PlacedItem {
+                        at: h.at.to_array(),
+                        rot: [0.0, 0.0, 0.0, 1.0],
+                        item: saved,
+                        held: Some(h.at.to_array()),
+                    });
+                }
+                continue;
+            }
             // Anything else in a socket (a magazine in a well) is saved
             // with its owner.
             continue;
@@ -1322,6 +1344,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 at: p.to_array(),
                 rot: gt.compute_transform().rotation.to_array(),
                 item: saved,
+                held: None,
             });
         }
     }
@@ -1347,6 +1370,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 inserted: Vec::new(),
                 loads: Default::default(),
             },
+            held: None,
         });
     }
     save.zone.remains = remains.into_values().collect();
@@ -2146,6 +2170,69 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// What's in a container's hold (a locker's floor, a drawer) is saved
+    /// and comes back seated in the same hold, never dropped loose where
+    /// it lay; a drawer left open comes back shut, its thing in it.
+    #[test]
+    fn container_loot_is_saved_and_comes_back_in_its_holds() {
+        fn held(world: &mut World) -> Vec<(String, [i64; 3])> {
+            let catalog = world.resource::<crate::items::Catalog>().clone();
+            let pairs: Vec<(String, Entity)> = world
+                .query::<(&Item, &InSocket)>()
+                .iter(world)
+                .map(|(i, s)| (catalog.get(i.kind()).id.clone(), s.socket))
+                .collect();
+            let mut out: Vec<(String, [i64; 3])> = pairs
+                .into_iter()
+                .filter_map(|(id, s)| {
+                    let h = world.get::<crate::world::buildings::HoldSpot>(s)?;
+                    let cm = |v: f32| (v * 100.0).round() as i64;
+                    Some((id, [cm(h.at.x), cm(h.at.y), cm(h.at.z)]))
+                })
+                .collect();
+            out.sort();
+            out
+        }
+        fn load(path: &std::path::Path) -> App {
+            let opts = LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                save: Some(path.to_owned()),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..30 {
+                app.update();
+            }
+            app
+        }
+        let path = temp_save("holds.ron");
+        let mut a = load(&path);
+        let before = held(a.world_mut());
+        assert!(
+            before.len() >= 5,
+            "Marrow's containers hold {} things",
+            before.len()
+        );
+        let save = snapshot(a.world_mut());
+        let saved_held = save.zone.items.iter().filter(|p| p.held.is_some()).count();
+        assert_eq!(saved_held, before.len(), "each held thing is saved as held");
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+        let mut b = load(&path);
+        let waiting = b
+            .world_mut()
+            .query::<&crate::items::loot::ToHold>()
+            .iter(b.world())
+            .count();
+        assert_eq!(waiting, 0, "every held thing is seated again");
+        assert_eq!(held(b.world_mut()), before, "back in the same holds");
+        let _ = std::fs::remove_file(&path);
+    }
+
     #[test]
     fn save_and_restore_round_trip() {
         let path = temp_save("round_trip.ron");
@@ -2191,6 +2278,83 @@ mod tests {
         assert!(loaded_guns >= 1, "the starter pistol keeps its magazine");
         let again = snapshot(b.world_mut());
         assert_eq!(again.item_count(), save.item_count());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A pen saved with its R-2 part used (#102) loads with it as it was,
+    /// and no second R-2: a pen is given its cartridge once.
+    #[test]
+    fn a_pen_loads_as_it_was_saved() {
+        let r2_fill = |world: &mut World| -> Vec<f32> {
+            let catalog = world.resource::<crate::items::Catalog>().clone();
+            world
+                .query::<&Item>()
+                .iter(world)
+                .filter(|i| catalog.get(i.kind()).id == crate::items::pen::PRIMED_WITH)
+                .map(|i| i.condition)
+                .collect()
+        };
+        let path = temp_save("pen_fill.ron");
+        let mut app = app_with_save(&path);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let before = r2_fill(app.world_mut()).len();
+        let pen = {
+            let mut queue = CommandQueue::default();
+            let e = crate::items::spawn_item(
+                &mut Commands::new(&mut queue, app.world()),
+                &catalog,
+                SpawnItem {
+                    kind: catalog.kind(crate::items::pen::PEN).unwrap(),
+                    transform: Transform::from_xyz(0.0, 40.0, 0.0),
+                    condition: 1.0,
+                },
+            );
+            queue.apply(app.world_mut());
+            e
+        };
+        for _ in 0..4 {
+            app.update();
+        }
+        let fills = r2_fill(app.world_mut());
+        assert_eq!(fills.len(), before + 1, "a new pen comes with an R-2");
+        // Part used, and in the stash.
+        {
+            let world = app.world_mut();
+            let cart = world
+                .query::<(Entity, &Item, &InSocket)>()
+                .iter(world)
+                .find(|(_, i, s)| {
+                    catalog.get(i.kind()).id == crate::items::pen::PRIMED_WITH
+                        && world
+                            .get::<SocketOwner>(s.socket)
+                            .is_some_and(|o| o.0 == pen)
+                })
+                .map(|(e, ..)| e)
+                .expect("its R-2");
+            world.get_mut::<Item>(cart).unwrap().condition = 0.4;
+        }
+        let stash = app
+            .world_mut()
+            .query_filtered::<Entity, With<Stash>>()
+            .iter(app.world())
+            .next()
+            .expect("the stash");
+        put_in_bag(app.world_mut(), pen, stash, Vec3::new(0.0, 0.1, 0.0));
+        app.update();
+        let save = snapshot(app.world_mut());
+        let mut career = app.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+        let mut app = app_with_save(&path);
+        for _ in 0..10 {
+            app.update();
+        }
+        let fills = r2_fill(app.world_mut());
+        assert_eq!(fills.len(), before + 1, "no second R-2: {fills:?}");
+        assert!(
+            fills.iter().any(|f| (f - 0.4).abs() < 1e-4),
+            "its R-2 still 0.4 full: {fills:?}"
+        );
         let _ = std::fs::remove_file(&path);
     }
 

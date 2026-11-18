@@ -750,7 +750,8 @@ fn concentrate_shed(b: &mut Builder) {
     b.chair(Vec3::new(7.0, f, -18.25), 0.0);
     b.locker(Vec3::new(9.35, f, -17.2), -std::f32::consts::FRAC_PI_2);
     b.shelf(Vec3::new(5.2, f, -19.45), 0.0, None);
-    b.stove(Vec3::new(8.9, f, -19.25), 0.0);
+    // Its back to the wall, its doors to the room.
+    b.stove(Vec3::new(8.9, f, -19.25), std::f32::consts::PI);
     b.furnish(
         "tally_board",
         Vec3::new(0.6, 0.8, 0.04),
@@ -1420,7 +1421,7 @@ fn observatory(b: &mut Builder) {
         from,
         vec![("obs_bunk", Transform::from_xyz(-ix + 1.0, f, iz1 - 1.0))],
     );
-    b.stove(Vec3::new(-ix + 0.5, f, -1.6), std::f32::consts::FRAC_PI_2);
+    b.stove(Vec3::new(-ix + 0.5, f, -1.6), -std::f32::consts::FRAC_PI_2);
     b.crate_box(Vec3::new(-ix + 0.6, f, -0.3), 0.6, Some("medical"));
     // Upstairs: the store, the observer's chest.
     b.table(Vec3::new(3.0, OBS_UPPER, -1.9), 0.0, Some("curio"));
@@ -1819,7 +1820,7 @@ fn lower_station(b: &mut Builder) {
         s.pew(Vec3::new(w * 0.5 - 0.3, f, 2.95), -half);
         s.pew(Vec3::new(w * 0.5 - 0.3, f, 6.45), -half);
         s.pew(Vec3::new(-w * 0.5 + 0.3, f, 2.3), half);
-        s.stove(Vec3::new(-w * 0.5 + 0.6, f, 5.6), half);
+        s.stove(Vec3::new(-w * 0.5 + 0.6, f, 5.6), -half);
         board(s, Vec3::new(0.35, f + 1.85, pz + 0.06), Vec3::Z, 1.0, 0.9);
         // A chimney up from the office through the roof.
         let ridge = f + h + (w + 0.36) * 0.5 * 35f32.to_radians().tan();

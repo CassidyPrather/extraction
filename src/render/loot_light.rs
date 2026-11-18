@@ -24,6 +24,8 @@ impl Plugin for LootLightPlugin {
 
 /// Steps the light is shared out in (of before the field).
 const STEP: f32 = 0.125;
+/// How far in front of a container a thing in its hold is lit from (m).
+const HOLD_SEEN_FROM: f32 = 0.6;
 /// How far an item moves before it's lit afresh (m).
 const MOVED: f32 = 0.25;
 
@@ -65,7 +67,18 @@ pub fn light_at(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn tint_loot(
     mut commands: Commands,
-    items: Query<(Entity, &GlobalTransform, Has<Held>, Option<&Lit>, &Children), With<Item>>,
+    items: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            Has<Held>,
+            Option<&Lit>,
+            &Children,
+            Option<&crate::interact::InSocket>,
+        ),
+        With<Item>,
+    >,
+    holds: Query<&crate::world::buildings::HoldSpot>,
     roots: Query<(), With<ItemModelRoot>>,
     children: Query<&Children>,
     mut mats: Query<(&mut MeshMaterial3d<StandardMaterial>, Option<&OwnMaterial>)>,
@@ -78,7 +91,7 @@ fn tint_loot(
     let Some(entrances) = entrances else {
         return;
     };
-    for (e, gt, held, lit, kids) in &items {
+    for (e, gt, held, lit, kids, socket) in &items {
         // Its model in.
         let Some(root) = kids.iter().find(|c| roots.contains(*c)) else {
             continue;
@@ -93,7 +106,15 @@ fn tint_loot(
             if lit.is_some_and(|l| moving || l.at.distance(p) < MOVED) {
                 continue;
             }
-            (light_at(p, &entrances, &rooms) / STEP).round().max(1.0) as u16
+            // In a container's hold: lit as the room is where you stand
+            // to look in, not as the dark inside it (a thing in a shut box
+            // read as a black sliver).
+            let seen_from = socket
+                .and_then(|s| holds.get(s.socket).ok())
+                .map_or(p, |h| h.at + h.out * HOLD_SEEN_FROM);
+            (light_at(seen_from, &entrances, &rooms) / STEP)
+                .round()
+                .max(1.0) as u16
         };
         if lit.is_some_and(|l| l.step == step) {
             if !held {

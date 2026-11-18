@@ -484,6 +484,155 @@ fn reel(
                 commands.entity(e).remove::<Senses>().remove::<Brain>();
                 e
             }
+            "engineer" | "engineerwork" => {
+                // The engineer (#98) 5 m off, side-on to you: as it walks
+                // out (`engineer`), or surveying with its lamp lit and
+                // hammering (`engineerwork`).
+                let at = eye + flat * 4.0;
+                let e = super::engineer_body::spawn_engineer(&mut commands, &zone, at, job(at));
+                // (It stands for its picture, side-on: no brain to walk it.)
+                commands.entity(e).remove::<Senses>().remove::<Brain>();
+                if what == "engineerwork" {
+                    commands.entity(e).insert((
+                        super::engineer_body::ScanLamp {
+                            on: true,
+                            aim: Some(at + right * 2.5 - flat * 1.0),
+                        },
+                        super::engineer_body::Hammering(true),
+                    ));
+                }
+                e
+            }
+            "barricade" | "camera" => {
+                // The engineer's builds (#98, `builds`), each stage in a row
+                // 6 m in front of you, side by side: a barricade's struts,
+                // half its panels, its panels, done with its strap; a
+                // camera's mast, its head and lit cone, done with its cable
+                // and a fix building on you.
+                use super::builds::{Build, BuildKind, CameraAim, CameraCable};
+                let stages: &[f32] = if what == "barricade" {
+                    &[0.2, 0.55, 0.8, 1.0]
+                } else {
+                    &[0.25, 0.5, 1.0]
+                };
+                let gap = if what == "barricade" { 4.2 } else { 3.0 };
+                let mut first = None;
+                for (i, &p) in stages.iter().enumerate() {
+                    let x = (i as f32 - (stages.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * 7.0 + right * x;
+                    let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
+                    // Facing you (its -Z toward the eye).
+                    let face = Transform::from_translation(at).looking_to(-flat, Vec3::Y);
+                    let kind = if what == "barricade" {
+                        BuildKind::Barricade
+                    } else {
+                        BuildKind::Camera
+                    };
+                    let mut e = commands.spawn((
+                        Name::new("Reel build"),
+                        Build { kind, progress: p },
+                        face,
+                        Visibility::default(),
+                    ));
+                    if kind == BuildKind::Camera {
+                        let to = at + right * 1.4 + flat * 2.0;
+                        e.insert((
+                            CameraAim {
+                                yaw: [0.9, -0.9, 0.7][i.min(2)],
+                                pitch: -0.1,
+                                fix: if p >= 1.0 { 0.8 } else { 0.0 },
+                                ..Default::default()
+                            },
+                            CameraCable {
+                                to: Vec3::new(to.x, zone.ground(to.x, to.z) + 0.3, to.z),
+                            },
+                        ));
+                    }
+                    first.get_or_insert(e.id());
+                }
+                first.unwrap()
+            }
+            "lines" => {
+                // One line body (`lines`, #101), hung in a row 3 m in front
+                // of you: rope whole and half through, then cable whole
+                // (with its weak-link shackle and a grip sleeve), nicked,
+                // half through and parting.
+                use super::lines::{Gauge, Line, LineSpan};
+                let rows = [
+                    (Gauge::Rope, 0.0, 0.6),
+                    (Gauge::Rope, 0.6, 0.6),
+                    (Gauge::Cable, 0.0, 0.0),
+                    (Gauge::Cable, 0.3, 0.0),
+                    (Gauge::Cable, 0.6, 0.0),
+                    (Gauge::Cable, 0.9, 0.0),
+                ];
+                let mut first = None;
+                for (i, (gauge, wear, slack)) in rows.into_iter().enumerate() {
+                    let x = (i as f32 - 2.5) * 0.55;
+                    let foot = eye + flat * 3.0 + right * x;
+                    let ground = zone.ground(foot.x, foot.z);
+                    let top = Vec3::new(foot.x, ground + 2.6, foot.z);
+                    // A rope sags from its peg; a cable hangs straight.
+                    let from = top;
+                    let to = Vec3::new(
+                        foot.x + if slack > 0.0 { 0.4 } else { 0.0 },
+                        ground + 0.4,
+                        foot.z,
+                    );
+                    let mut line = Line::new(gauge);
+                    line.wear = wear;
+                    line.fray_at = 0.3;
+                    if i == 2 {
+                        line = line.with_weak_link(0.85).with_grip(0.35);
+                    }
+                    let e = commands
+                        .spawn((
+                            Name::new("Reel line"),
+                            line,
+                            LineSpan { from, to, slack },
+                            Transform::default(),
+                            Visibility::default(),
+                        ))
+                        .id();
+                    first.get_or_insert(e);
+                }
+                first.unwrap()
+            }
+            "lamps" => {
+                // Lit beams in the air (`render::fog_beam`): three drones
+                // hovering 8-14 m off, their belly lamps down and ahead, a
+                // sentry 16 m off facing you (its lamp lit after dark), and a
+                // hand torch at your hip, pointed out ahead.
+                // (The sentry is the subject: a subject drone is flown.)
+                for (d, x, up) in [
+                    (8.0f32, -3.5f32, 2.6f32),
+                    (11.0, 2.5, 3.4),
+                    (14.0, -0.5, 4.2),
+                ] {
+                    let at = eye + flat * d + right * x;
+                    let at = Vec3::new(at.x, zone.ground(at.x, at.z) + up, at.z);
+                    let drone = spawn_drone(&mut commands, at, job(at));
+                    commands.entity(drone).remove::<Senses>().remove::<Brain>();
+                }
+                let s = eye + flat * 16.0 + right * 4.0;
+                let toward = -flat;
+                let sentry = super::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    s.xz(),
+                    toward.x.atan2(-toward.z),
+                    0.0,
+                    (s - flat * 3.0).xz(),
+                );
+                let hip = eye + right * 0.3 - Vec3::Y * 0.45;
+                commands.spawn((
+                    Name::new("Reel torch"),
+                    crate::gadgets::visuals::torch_beam(),
+                    Transform::from_translation(hip)
+                        .looking_to(flat - Vec3::Y * 0.12 - right * 0.05, Vec3::Y),
+                ));
+                sentry
+            }
             "flare" => {
                 // A walker 15 m off facing you, and a sentry beside it,
                 // each put into its flare's tell (`flare_tell`): the tube
@@ -1063,6 +1212,10 @@ fn reel(
                 // Facing you.
                 w.yaw = flat.x.atan2(flat.z);
             }
+            if what.starts_with("engineer") {
+                // Side-on, its lamp toward you.
+                w.yaw = flat.x.atan2(flat.z) + std::f32::consts::FRAC_PI_2;
+            }
             let p = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
             w.path = match what {
                 "turn" => vec![
@@ -1095,7 +1248,8 @@ fn reel(
                     path
                 }
                 "wreck" | "zap" | "shot" | "flare" | "eyesfar" | "knockdown" | "strikes"
-                | "disarmed" | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy" => {
+                | "disarmed" | "pin" | "melee" | "stalk" | "aim" | "awarewalker" | "awareheavy"
+                | "engineer" | "engineerwork" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],

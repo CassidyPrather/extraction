@@ -200,9 +200,15 @@ What changed, and worth a comment each:
   cut panel leaves a gap you can walk through.
 - **Health, simply (#102).** A hit takes HP, a hard landing hurts, and
   that's all: nothing bleeds, no leg breaks, and there are no dressings
-  or splints. The injector is the only medicine: put its tip to your
-  thigh and pull the trigger (45 HP back). The A/X button does it with
-  the one-handed comfort setting. Hold food to your mouth to eat, and tip
+  or splints. The injector pen is the only medicine: its tip anywhere on
+  you (thigh, arm, the other hand, chest, neck) and the trigger gives
+  what's in its two cartridge slots (a new pen has an R-2: 60 HP). Let a
+  cartridge go at the pen's free slot and it clicks in: a STIM there
+  (try `--give regen_injector,stim_s1`) slows the world for six real
+  seconds while your hands keep up; your heart slows and pounds, then
+  quickens just before it ends. The A/X button does it with the
+  one-handed comfort setting. Is six seconds long enough to get out of
+  trouble? Does the slowed world feel good, or sick-making? Hold food to your mouth to eat, and tip
   a bottle up to drink; the canteen comes capped (take the cap in your
   other hand with the trigger and twist three quarters of a turn). Do you
   miss the bleed's pressure to get out, or is a plain HP number calmer?
@@ -825,6 +831,7 @@ on or off is worth as much as the milliseconds.
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--hurt HP` | Start hurt (try 40), to try the injector on yourself |
+| `--plain-stim` | A stim without the dimmed edges (heard and felt only) |
 | `--give ID,ID` | Lay these on the ground in front of you (try `regen_injector`) |
 | `--weather NAME` | `drizzle` (or `rain`), `fog`, `downpour`, `storm` (a downpour with lightning), `clearing`; anything else stops with an error |
 | `--snow N` | Kettle Pass: snow falling now, and this much (0 to 1) already lying above the snow line |

@@ -213,6 +213,10 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Rope",
     "Yellow",
     "Orange",
+    "Regen",
+    "Stim",
+    "Vial",
+    "ScanRim",
     "Blue",
     "CarBlue",
     "RagRed",
@@ -234,6 +238,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Tip",
     "TipBand",
     "Hull",
+    // White, its colours in its vertex colours: a box of rounds' far
+    // stand-in, one draw (`art/items/ammo.py`'s `merged`).
+    "Baked",
     "Dark",
     "Rotor",
     "Lens",
@@ -476,6 +483,10 @@ impl ModelMaterials {
             // 12-gauge carton), an orange for carrots and hazard paint.
             "Yellow" => flat(materials, Color::srgb(0.9, 0.74, 0.16), 0.0, 0.55),
             "Orange" => flat(materials, Color::srgb(0.86, 0.38, 0.08), 0.0, 0.6),
+            // The injector cartridges' doses (#102), glossy as a liquid
+            // under glass: REGEN green, STIM amber (and their bands).
+            "Regen" => flat(materials, Color::srgb(0.1, 0.8, 0.18), 0.0, 0.5),
+            "Stim" => flat(materials, Color::srgb(0.7, 0.27, 0.0), 0.0, 0.5),
             "Blue" => flat(materials, Color::srgb(0.1, 0.24, 0.55), 0.0, 0.5),
             // A car's paint after years in the weather: the painted-metal
             // scan's relief and wear, in a blue gone chalky and grey. (The
@@ -521,6 +532,7 @@ impl ModelMaterials {
                 flat(materials, Color::srgb(0.78, 0.44, 0.28), 1.0, 0.32)
             }
             "Hull" => flat(materials, Color::srgb(0.5, 0.06, 0.04), 0.0, 0.6),
+            "Baked" => flat(materials, Color::WHITE, 0.0, 0.7),
             "Dark" => flat(materials, Color::srgb(0.08, 0.085, 0.09), 0.7, 0.4),
             // Retroreflective tape by day: a pale cool grey, its beads a
             // little glossy (`render::reflectors` lights it for a torch).
@@ -533,6 +545,14 @@ impl ModelMaterials {
                 reflectance: 0.9,
                 ..default()
             }),
+            // The cartridges' glass (#102): a glint, and next to no veil
+            // over the dose (Clear's paled it under the torch).
+            "Vial" => materials.add(StandardMaterial {
+                base_color: Color::srgba(0.6, 0.62, 0.6, 0.04),
+                perceptual_roughness: 0.1,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            }),
             "Clear" => materials.add(StandardMaterial {
                 base_color: Color::srgba(0.85, 0.88, 0.85, 0.16),
                 perceptual_roughness: 0.15,
@@ -542,6 +562,8 @@ impl ModelMaterials {
             "Lamp" => glow(materials, Color::srgb(0.9, 0.85, 0.7), (3.0, 2.6, 1.8)),
             "LampRed" => glow(materials, Color::srgb(0.5, 0.03, 0.02), (1.6, 0.08, 0.03)),
             "Glow" => glow(materials, Color::srgb(0.1, 0.4, 0.5), (0.5, 3.0, 4.0)),
+            // The engineer's scan lamp rim (#98): the orange-red lit tell.
+            "ScanRim" => glow(materials, Color::srgb(0.91, 0.34, 0.16), (1.8, 0.67, 0.31)),
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A salvaged cell's charge band (#105): deep orange, warm, not
             // the yellow a Warn trim reads as.

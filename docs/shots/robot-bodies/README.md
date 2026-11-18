@@ -312,3 +312,34 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 | `light_in_fog_day_before_after.png` | `reel:search,4,40` by day, clearing, frame 0 (camera `40,0,262,0,8`, crop 1400x1080 of 1920x1080): the solid cone before, hazy shafts under the lamps after; pools and rims unchanged |
 | `light_in_fog_dusk_before_after.png` | Dusk, frame 2, beams steered across the field toward you: flat translucent slabs before, light through drifting haze after |
 | `light_in_fog_night_drizzle_before_after.png` | Night in drizzle, frame 2: white slabs before; after, shafts bright at the lamp, billowing, thinning down their length |
+| `light_in_fog_lamps_night_drizzle_before_after.png` | Every spotlight's beam onto the same look (`world::beams`): `reel:lamps,4,30`, night in drizzle, frame 2 (camera `40,0,262,0,0`, crop 1440x800 of 1920x1080). Three drones' belly lamps 8-14 m off, a sentry's lamp 16 m off facing you, a hand torch at your hip. Before: faint additive wedges under the drones, the torch and sentry barely there. After: each drone's light falls through the drizzle, cold, and thins to the ground. The torch in your hand is a faint shaft, shown by what it lights, never a haze over where you point it. A lamp's haze is cold whatever its colour (a warm glow reads as shelter light), and lamps whose beams come near the eye share one haze, so three drones and a torch never wash the view |
+| `light_in_fog_lamps_night_clearing_before_after.png` | The same on a clear night: a lamp's haze goes with the wet in the air (`world::beams::lamp_haze`), so next to nothing shows |
+| `light_in_fog_halo_waylamp_night_drizzle_before_after.png` | The lamps' halos (`world::halos`) onto the same look: `--wayfind-lamps` shot 12, night in drizzle (crop 1120x660 of 1920x1080). A way lamp: a hard little disc before; after, its light hangs in the wet air round it as a soft aureole, the beams' slow billows drifting through it, with no edge. The core, its glare caps and its hue are as they were (the halo's sphere is drawn wider for the aureole, `halos::spread`: none in dry air, 2.5x in fog) |
+| `light_in_fog_halo_lamps_orange_night_drizzle_before_after.png` | Shot 7: the Depot's orange lamps through the trees, and a red landmark lamp up the tower. The orange keeps its hue; the red at range is unchanged |
+
+## One line body (#101)
+
+`robots::lines`: one body for every line a machine hangs by or throws: the dirigible's pod cable (steel, its weak-link shackle 0.6 m over the pod, a grip sleeve a hand's reach above), the spotter's tether (steel, a grip sleeve on each stretch in reach, where the cutters bite), and next the grappler's line (rope). Rope reads pale, fat and fibrous and sags; cable dark, thin and glinting, hanging taut. It frays on the line itself where it's worked, over a hand's length, large enough to steer a cut by at arm's length: whole, nicked (a bright strand springs out), half through (necked to under half its thickness, bright cut ends splayed at both sides), parting (a clear gap spanned by a single thread, the ends splayed). Rounds on a line wear it by its gauge (rope four times as fast as cable); what parts it is its owner's rule.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/101_body_lines.png` | `reel:lines,4,20` by day (camera `40,0,262,0,8`, crop 900x700 of 1920x1080 at 2x): rope whole and half through, then cable whole with its orange shackle and a grip sleeve, nicked, half through and parting |
+
+## The engineer and its builds (#98)
+
+`robots::engineer_body` and `engineer_look`, dressed from Models' walker.glb nodes (`engineer_hull`, `engineer_kit`, `engineer_lamp`, `engineer_hammer`; the procedural look only where one's missing): the engineer, an unarmed worker on a walker's brain and feet (`Shape::Engineer`): a long, low, pale hull on four short legs, its kit bundled on its back with struts standing up out of it, and a scan lamp on a short arm at its front with the orange-red rim. `robots::builds`: what it builds, drawn in stages from the mind's progress. The seam (`Build`, `BuildReason`, `CameraAim`, `CameraCable`, `BarricadeStrap`/`Panel`, `CameraLens`, `ScanLamp`, `Hammering`) is agreed with Robot minds, who own the mind and rules. Silhouette gauge with the engineer in the family: passes on the model, nearest the grappler at 0.52 (ceiling 0.7).
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/98_engineer.png` | `reel:engineer` by day in drizzle, 4 m off (2x crop): the body side-on |
+| `../../robots/workers_2/98_engineer_at_work.png` | `reel:engineerwork` at dusk: its scan lamp lit (the beam's start at the lens) as it surveys |
+| `../../robots/workers_2/98_barricade_stages.png` | `reel:barricade` by day, 7 m off: struts, half the panels, the panels, done with the orange strap (cut it or drag it by it) |
+| `../../robots/workers_2/98_camera_stages.png` | `reel:camera` at dusk: the mast going up, the head with its lit cone sweeping, done with its cable to the network and a fix building (the searchlights' red cast) |
+
+## The grappler's harpoon pieces (Heavy's salvage)
+
+`render::logistics` dresses Models' harpoon.glb `launcher_head` and `drum` as their own pieces (`HarpoonPart`), the head on the folding boom; tested by `the_harpoon_dresses_its_head_and_drum_for_the_salvage`.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/grappler_wreck_head_folded.png` | `--map training_yard --gallery robots:grappler+grappler!dead,90,8` by day (camera `0,0,30,0,-12`, crop 680x340 of 1920x1080 at 2x): a standing grappler, and a wrecked one on its side with the boom folded and the launcher head riding it |
