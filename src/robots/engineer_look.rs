@@ -19,7 +19,10 @@ pub struct EngineerLookPlugin;
 
 impl Plugin for EngineerLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress_engineers, scan_beams, hammer_sparks));
+        app.add_systems(
+            Update,
+            (dress_engineers, make_beams, scan_beams, hammer_sparks),
+        );
     }
 }
 
@@ -32,6 +35,15 @@ pub const RIM: Color = Color::srgb(0.91, 0.34, 0.16);
 
 #[derive(Component)]
 struct Dressed;
+
+/// No model to dress this engineer part from (walker.glb's `engineer_*`
+/// nodes missing, or the model failed): its procedural look.
+#[derive(Component)]
+pub struct EngineerFallback;
+
+/// Its scan beam is made.
+#[derive(Component)]
+struct Beamed;
 
 /// Its scan beam (a child of the lamp part) and the beam's material.
 #[derive(Component)]
@@ -47,11 +59,10 @@ const SCAN_HALF: f32 = 0.22;
 #[allow(clippy::too_many_arguments)]
 fn dress_engineers(
     mut commands: Commands,
-    parts: Query<(Entity, &RobotPart), Without<Dressed>>,
+    parts: Query<(Entity, &RobotPart), (With<EngineerFallback>, Without<Dressed>)>,
     engineers: Query<(), With<Engineer>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut fog: ResMut<Assets<FogBeamMaterial>>,
     mut looks: Local<Option<Looks>>,
 ) {
     for (e, part) in &parts {
@@ -192,29 +203,6 @@ fn dress_engineers(
                     &l.lens_mat,
                     Transform::from_translation(Vec3::new(0.0, -0.062, 0.0)),
                 );
-                // Its beam, dark until it surveys.
-                let material = fog.add(FogBeamMaterial {
-                    params: FogBeamParams {
-                        light: Vec4::new(0.85, 0.92, 1.0, 0.0),
-                        apex: Vec4::new(0.0, 0.0, 0.0, SCAN_HALF.tan()),
-                        axis: Vec3::NEG_Z.extend(SCAN_REACH),
-                        air: Vec4::new(0.5, 0.0, -1000.0, fog_beam::LAMP_SPREAD),
-                    },
-                    inside: false,
-                });
-                commands.spawn((
-                    Name::new("Engineer scan beam"),
-                    ScanBeam {
-                        robot: part.robot,
-                        material: material.clone(),
-                    },
-                    Mesh3d(l.cone.clone()),
-                    MeshMaterial3d(material),
-                    Transform::default(),
-                    Visibility::Hidden,
-                    NotShadowCaster,
-                    NotShadowReceiver,
-                ));
             }
             _ => {}
         }
@@ -229,7 +217,6 @@ struct Looks {
     ring: Handle<Mesh>,
     lens: Handle<Mesh>,
     coil: Handle<Mesh>,
-    cone: Handle<Mesh>,
     paint: Handle<StandardMaterial>,
     dark: Handle<StandardMaterial>,
     kit: Handle<StandardMaterial>,
@@ -247,7 +234,6 @@ impl Looks {
             ring: meshes.add(Torus::new(0.06, 0.085)),
             lens: meshes.add(Cylinder::new(0.062, 0.01)),
             coil: meshes.add(Torus::new(0.07, 0.11)),
-            cone: meshes.add(fog_beam::cone()),
             // (A touch of its own light, so it stays pale at dusk: a worker
             // in workaday cream, never a fighter's grey.)
             paint: materials.add(StandardMaterial {
@@ -283,6 +269,49 @@ impl Looks {
                 ..default()
             }),
         }
+    }
+}
+
+/// Its scan lamp's beam (dark until it surveys), however the lamp is
+/// dressed.
+fn make_beams(
+    mut commands: Commands,
+    lamps: Query<(Entity, &RobotPart), Without<Beamed>>,
+    engineers: Query<(), With<Engineer>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut fog: ResMut<Assets<FogBeamMaterial>>,
+    mut cone: Local<Option<Handle<Mesh>>>,
+) {
+    for (e, part) in &lamps {
+        if !matches!(part.role, PartRole::Lamp(_)) || !engineers.contains(part.robot) {
+            continue;
+        }
+        let cone = cone
+            .get_or_insert_with(|| meshes.add(fog_beam::cone()))
+            .clone();
+        let material = fog.add(FogBeamMaterial {
+            params: FogBeamParams {
+                light: Vec4::new(0.85, 0.92, 1.0, 0.0),
+                apex: Vec4::new(0.0, 0.0, 0.0, SCAN_HALF.tan()),
+                axis: Vec3::NEG_Z.extend(SCAN_REACH),
+                air: Vec4::new(0.5, 0.0, -1000.0, fog_beam::LAMP_SPREAD),
+            },
+            inside: false,
+        });
+        commands.spawn((
+            Name::new("Engineer scan beam"),
+            ScanBeam {
+                robot: part.robot,
+                material: material.clone(),
+            },
+            Mesh3d(cone),
+            MeshMaterial3d(material),
+            Transform::default(),
+            Visibility::Hidden,
+            NotShadowCaster,
+            NotShadowReceiver,
+        ));
+        commands.entity(e).insert(Beamed);
     }
 }
 

@@ -279,6 +279,14 @@ fn robot_material(
                 mat.emissive = LinearRgba::rgb(0.22, 0.22, 0.23);
             })
         }
+        Some("Cream") => {
+            // The engineer's workaday cream (#98), with the shell's faint
+            // glow of its own so it stays pale at dusk.
+            let base = model_mats.get("Cream", lib, server, materials);
+            model_mats.derived("RobotCream", materials, &base, |mat| {
+                mat.emissive = LinearRgba::rgb(0.07, 0.066, 0.055);
+            })
+        }
         Some(name) => model_mats.get(super::weak_points::paint(name), lib, server, materials),
         None => m.dark.clone(),
     }
@@ -370,7 +378,20 @@ fn dress_parts(
             ));
             continue;
         }
+        // An engineer's own parts with no model to dress from: its
+        // procedural look (`engineer_look`).
+        let engineer_own = engineer
+            && matches!(
+                part.role,
+                PartRole::Core | PartRole::Kit | PartRole::Lamp(_)
+            );
         let Some(model) = model else {
+            if engineer_own {
+                commands
+                    .entity(e)
+                    .insert(super::engineer_look::EngineerFallback);
+                continue;
+            }
             dress_blockout(
                 &mut commands,
                 e,
@@ -395,7 +416,9 @@ fn dress_parts(
         let grappler = grapplers.contains(part.robot);
         // (An engineer's hull is its own: `engineer_look` dresses it.)
         let node_name = match (robot.kind, part.role) {
-            (_, PartRole::Core) if engineer => continue,
+            (_, PartRole::Core) if engineer => "engineer_hull",
+            (_, PartRole::Kit) => "engineer_kit",
+            (_, PartRole::Lamp(_)) if engineer => "engineer_lamp",
             (RobotKind::Sorter, PartRole::Core) => "carriage",
             (RobotKind::Sorter, PartRole::Sensor) => "head",
             (_, PartRole::Core) if hound => "hound_body",
@@ -421,6 +444,38 @@ fn dress_parts(
             },
             _ => continue,
         };
+        // (Models' engineer nodes, #98; its procedural look if they're
+        // missing.)
+        if engineer_own {
+            let Some(node) = ModelNode::find(model, node_name) else {
+                commands
+                    .entity(e)
+                    .insert(super::engineer_look::EngineerFallback);
+                continue;
+            };
+            // The lamp part is turned Rx(+90°) to face forward; the node is
+            // modelled facing -Z unturned.
+            let at = if matches!(part.role, PartRole::Lamp(_)) {
+                Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+            } else {
+                Transform::IDENTITY
+            };
+            attach(&mut commands, e, node, at, e, &mut mat);
+            // Its hammer under the nose, on the hull.
+            if part.role == PartRole::Core {
+                if let Some(hammer) = ModelNode::find(model, "engineer_hammer") {
+                    attach(
+                        &mut commands,
+                        e,
+                        hammer,
+                        Transform::from_translation(hammer.transform.translation),
+                        e,
+                        &mut mat,
+                    );
+                }
+            }
+            continue;
+        }
         match (robot.kind, part.role) {
             (RobotKind::Drone, PartRole::Rotor(i)) => {
                 let (Some(rotor), Some(blades)) = (
