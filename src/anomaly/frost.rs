@@ -135,7 +135,7 @@ pub fn frozen_level(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32) -
 }
 
 /// Rime creeps up the banks this far over the ice, m, thinning out.
-const RIME_UP: f32 = 0.45;
+const RIME_UP: f32 = 1.0;
 /// The sheet's mesh: cells this fine, m...
 const ICE_CELL: f32 = 0.25;
 /// ...its rim this ragged, a share of the radius...
