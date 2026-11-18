@@ -169,18 +169,36 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         p.size = p.size * (1.0 + 0.4 * stir);
         p.spin = s * 3.0;
     } else if (mode == 8) {
-        // Steam (`anomaly::steam`): a bank of billows hanging low in a
-        // dome, each rolling slowly round and swelling and thinning, so
-        // the bank churns but never clears.
-        let life = fract(t / (6.0 + 4.0 * h(s, 1.3)) + h(s, 6.7));
-        let a = s * TAU + t * 0.12 * (h(s, 2.2) - 0.5);
-        let rr = R * 0.85 * sqrt(h(s, 3.1));
-        let y = 0.3 + 2.4 * h(s, 4.3) * (1.0 - 0.45 * rr / R) + life * 0.6;
-        let roll = vec3<f32>(sin(t * 0.3 + s * 9.0), 0.0, cos(t * 0.27 + s * 4.0)) * 0.4;
-        p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + roll;
-        p.size = params.state.w * (0.7 + 0.6 * h(s, 5.9)) * (0.8 + 0.4 * sin(life * 3.14159));
-        p.alpha = smoothstep(0.0, 0.2, life) * (1.0 - smoothstep(0.75, 1.0, life));
-        p.spin = s * 5.0 + t * 0.05;
+        // Steam (`anomaly::steam`): a low, wide lens of vapour hugging the
+        // gap, thickest at its core and thin enough at its outer third to
+        // see through; a quarter of it tears off the top as wisps that
+        // drift downwind and up, thinning to nothing. reveal/flash carry
+        // the way to the burner (x, z): warmer that side, cooler the frost's.
+        let toward = vec2<f32>(params.state.y, params.state.z);
+        if (h(s, 8.8) < 0.25) {
+            let life = fract(t / (5.0 + 3.0 * h(s, 1.1)) + h(s, 2.6));
+            let a = s * TAU;
+            let start = vec3<f32>(cos(a), 0.0, sin(a)) * R * 0.5 * h(s, 3.3);
+            let drift = vec3<f32>(0.8, 0.0, 0.5) * life * 2.5;
+            p.pos = start + drift + vec3<f32>(0.0, 1.6 + life * 2.4, 0.0);
+            p.size = params.state.w * (0.5 + 0.9 * life);
+            p.alpha = 0.45 * smoothstep(0.0, 0.15, life) * (1.0 - life) * (1.0 - life);
+        } else {
+            let life = fract(t / (7.0 + 5.0 * h(s, 1.3)) + h(s, 6.7));
+            let a = s * TAU + t * 0.08 * (h(s, 2.2) - 0.5);
+            let k = sqrt(h(s, 3.1));
+            let rr = R * 1.1 * k;
+            let y = 0.5 + 1.3 * h(s, 4.3) * (1.0 - k * k) + 0.2 * life;
+            let roll = vec3<f32>(sin(t * 0.25 + s * 9.0), 0.0, cos(t * 0.22 + s * 4.0)) * 0.35;
+            p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + roll;
+            p.size = params.state.w * (0.8 + 0.5 * h(s, 5.9)) * (0.85 + 0.3 * sin(life * 3.14159));
+            // Thick at the core, see-through at the rim.
+            let rim = 1.0 - smoothstep(0.35, 1.0, k);
+            p.alpha = rim * smoothstep(0.0, 0.2, life) * (1.0 - smoothstep(0.75, 1.0, life));
+        }
+        let d = p.pos.xz;
+        p.heat = 0.5 + 0.5 * clamp(dot(d, toward) / R, -1.0, 1.0);
+        p.spin = s * 5.0 + t * 0.04;
     } else {
         let a = s * TAU + t * (0.3 + 0.9 * charge) * (0.6 + 0.4 * h(s, 1.4));
         let r = R * (0.3 + 0.75 * h(s, 2.1));
@@ -230,8 +248,13 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
     let texel = textureSample(tex, tex_sampler, in.uv);
     let glow = params.mode.w;
     var rgb = params.color.rgb * mix(texel.rgb, vec3<f32>(1.0), glow);
-    // Grit falling into a well warms toward its violet glow.
-    rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
+    if (i32(params.mode.x + 0.5) == 8) {
+        // Steam: warmer on its burner's side, cooler on its frost's.
+        rgb = rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
+    } else {
+        // Grit falling into a well warms toward its violet glow.
+        rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
+    }
     let a = texel.a * params.color.a * in.alpha;
     if (glow > 0.5) {
         // Additive (Bevy's premultiplied blend with no alpha): fog only

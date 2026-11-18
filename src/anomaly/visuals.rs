@@ -77,6 +77,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 glass_eye,
                 steam,
                 dress_steam_banks,
+                light_steam_banks,
             ),
         );
     }
@@ -2523,19 +2524,22 @@ fn dress_steam_banks(
 ) {
     for (e, bank) in &added {
         let mut rng = extraction_core::noise::Rng::new(e.to_bits());
-        let (count, size) = (46, 1.7);
-        let color = Vec3::new(0.86, 0.88, 0.9);
+        let (count, size) = (64, 1.4);
+        let color = STEAM_GREY;
         let r = bank.radius;
         let ext = r * 2.0 + size * 3.0;
         commands.entity(e).with_children(|c| {
             c.spawn((
-                Particles { color, alpha: 0.55 },
+                Particles {
+                    color,
+                    alpha: STEAM_ALPHA,
+                },
                 Mesh3d(meshes.add(particle_mesh(count, &mut rng))),
                 MeshMaterial3d(particles.add(ParticleMaterial {
                     params: ParticleParams {
                         mode: Vec4::new(8.0, r, r, 0.0),
                         state: Vec4::new(0.0, 0.0, 0.0, size),
-                        color: color.extend(0.55),
+                        color: color.extend(STEAM_ALPHA),
                     },
                     texture: a.radial.clone(),
                     additive: false,
@@ -2551,5 +2555,37 @@ fn dress_steam_banks(
                 },
             ));
         });
+    }
+}
+
+/// Steam's grey at full day, and each billow's opacity at its thickest.
+const STEAM_GREY: Vec3 = Vec3::new(0.66, 0.68, 0.7);
+const STEAM_ALPHA: f32 = 0.32;
+
+/// A steam bank takes the day's light (vapour lit, not glowing: pale grey
+/// a little over the fog by day, dim at night), and knows which way its
+/// burner lies (warmer that side).
+fn light_steam_banks(
+    banks: Query<(&super::steam::SteamBank, &GlobalTransform, &Children)>,
+    anomalies: Query<&GlobalTransform, With<Anomaly>>,
+    systems: Query<&MeshMaterial3d<ParticleMaterial>>,
+    mut mats: ResMut<Assets<ParticleMaterial>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+) {
+    let light = conditions.as_ref().map_or(1.0, |c| c.light);
+    for (bank, gt, kids) in &banks {
+        let toward = anomalies.get(bank.burner).map_or(Vec2::X, |b| {
+            let d = b.translation() - gt.translation();
+            Vec2::new(d.x, d.z).normalize_or(Vec2::X)
+        });
+        for c in kids.iter() {
+            if let Ok(m) = systems.get(c)
+                && let Some(mut mat) = mats.get_mut(&m.0)
+            {
+                mat.params.color = (STEAM_GREY * (0.3 + 0.7 * light)).extend(STEAM_ALPHA);
+                mat.params.state.y = toward.x;
+                mat.params.state.z = toward.y;
+            }
+        }
     }
 }
