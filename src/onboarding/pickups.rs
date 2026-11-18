@@ -413,6 +413,13 @@ mod tests {
                 include_str!("../gadgets/mod.rs"),
                 "\"binoculars\" => {\n            commands.entity(e).insert(Optic",
             ),
+            // "Hold it up and look. Each ring's one, the way you face": held,
+            // every anomaly in range on its screen, turned by its facing.
+            (
+                "detector_bear",
+                include_str!("../anomaly/detector.rs"),
+                "bear_blip((*c - p).xz().to_array(), yaw, BEAR_RANGE)",
+            ),
             // "A stone in that case: the Zone can't feel it."
             ("lead_case", include_str!("../anomaly/mod.rs"), "lead_case"),
         ];
