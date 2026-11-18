@@ -2431,6 +2431,7 @@ const WISP_EVERY: f32 = 0.05;
 fn steam(
     mut commands: Commands,
     stones: Query<(&GlobalTransform, &super::harvest::Hot)>,
+    cooked: Query<(&GlobalTransform, &super::cook::Cooked)>,
     mut wisps: Query<(Entity, &mut Wisp, &mut Transform)>,
     eyes: Query<&GlobalTransform, With<Camera3d>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
@@ -2439,6 +2440,7 @@ fn steam(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+    mut smoke_look: Local<Option<Handle<StandardMaterial>>>,
     mut since: Local<f32>,
     mut seed: Local<u32>,
 ) {
@@ -2464,14 +2466,53 @@ fn steam(
     let raining = conditions
         .as_ref()
         .is_some_and(|c| c.rain >= super::harvest::HOT_RAIN);
-    if !raining {
-        return;
-    }
     *since += dt;
     if *since < WISP_EVERY {
         return;
     }
     *since = 0.0;
+    // A thing cooked through in a burner smoulders a while: dark smoke off
+    // it, thinning as it cools (`cook::SMOULDER_SECS`).
+    let smoke = smoke_look
+        .get_or_insert_with(|| {
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(0.16, 0.15, 0.14, 0.3),
+                base_color_texture: Some(dot_texture(&mut images)),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                double_sided: true,
+                cull_mode: None,
+                ..default()
+            })
+        })
+        .clone();
+    for (gt, c) in &cooked {
+        let left = 1.0 - c.smoulder / super::cook::SMOULDER_SECS;
+        *seed = seed.wrapping_add(1);
+        if left <= 0.0 || grain_at(*seed, 19) > left {
+            continue;
+        }
+        let j = |k: u32| grain_at(*seed, k) - 0.5;
+        if let Some((mesh, _)) = look.as_ref() {
+            commands.spawn((
+                Name::new("Smoke"),
+                Wisp {
+                    age: 0.0,
+                    rise: Vec3::new(j(3) * 0.3, 0.3 + 0.2 * grain_at(*seed, 4), j(5) * 0.3),
+                },
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(smoke.clone()),
+                Transform::from_translation(
+                    gt.translation() + Vec3::new(j(1) * 0.2, 0.1, j(2) * 0.2),
+                )
+                .with_scale(Vec3::splat(0.5)),
+                bevy::light::NotShadowCaster,
+            ));
+        }
+    }
+    if !raining {
+        return;
+    }
     let (mesh, material) = look
         .get_or_insert_with(|| {
             (
