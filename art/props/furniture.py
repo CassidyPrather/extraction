@@ -455,6 +455,8 @@ def chair():
 # plane, mid-height) and its shelf's top.
 LOCKER_HINGE = (-0.238, 0.93, -0.205)
 LOCKER_SHELF = 1.42
+# A shelf at chest height, where what's left in it is seen from the door.
+LOCKER_MID = 1.15
 
 
 def locker():
@@ -481,6 +483,8 @@ def locker():
     p.box((W - 2 * T, y1 - y0 - T, T), (0.0, (y0 + y1 - T) / 2, zb - T / 2), "Cream", segs=1)
     p.box((W - 2 * T, T, zb - zf - T), (0.0, y0 + T / 2, mid - T / 2), "Cream", segs=1)
     p.box((W - 2 * T, T, zb - zf - T), (0.0, LOCKER_SHELF - T / 2, mid - T / 2), "Painted",
+          segs=1)
+    p.box((W - 2 * T, T, zb - zf - T), (0.0, LOCKER_MID - T / 2, mid - T / 2), "Cream",
           segs=1)
     p.box((W - 0.04, 0.06, D - 0.06), (0.0, 0.03, 0.02), "Cast", bevel=0.003, segs=1)
     # Its hinge pins on the left, on the carcass.

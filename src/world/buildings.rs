@@ -1740,7 +1740,7 @@ impl Builder {
             Vec3::new(0.0, (0.06 + h - t) * 0.5, zb - t * 0.5),
         );
         // Its floor on the plinth, and the hat shelf.
-        for y in [0.06 + t, LOCKER_SHELF] {
+        for y in [0.06 + t, LOCKER_MID, LOCKER_SHELF] {
             sheet(
                 Vec3::new(
                     w - 2.0 * t,
@@ -1754,9 +1754,10 @@ impl Builder {
                 ),
             );
         }
-        // Something left on its floor, behind its door.
+        // Something left on its shelf at chest height, where a look in
+        // sees it (on the floor it was a speck far below the eye).
         self.hold(
-            at + rot * Vec3::new(0.0, 0.06 + t, mid),
+            at + rot * Vec3::new(0.0, LOCKER_MID, mid),
             "tools",
             None,
             rot * Vec3::NEG_Z,
@@ -1833,6 +1834,8 @@ impl Builder {
 
 /// The top of a locker's hat shelf (`art/props/furniture.py`).
 pub const LOCKER_SHELF: f32 = 1.42;
+/// The top of a locker's chest-height shelf, where its hold is.
+pub const LOCKER_MID: f32 = 1.15;
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
