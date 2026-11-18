@@ -279,12 +279,12 @@
         // Ammunition (boxes; rounds come out one at a time)
         // ---------------------------------------------------------------
         (
-            id: "ammo_9x18", dims: Some((0.04, 0.03, 0.07)), name: "9x18 rounds (box)",
+            id: "ammo_9x18", dims: Some((0.044, 0.034, 0.07)), name: "9x18 rounds (box)",
             category: Ammo, size: Small, mass: 0.17, bulk: 0.12, cartridge: Some("9x18"), rounds: 16,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 rounds (box)",
+            id: "ammo_545", dims: Some((0.053, 0.038, 0.1)), name: "5.45x39 rounds (box)",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30,
             tags: ["brass", "powder"],
         ),
@@ -303,27 +303,27 @@
             tags: ["metal"],
         ),
         (
-            id: "ammo_762x39", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 rounds (box)",
+            id: "ammo_762x39", dims: Some((0.064, 0.046, 0.031)), name: "7.62x39 rounds (box)",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x38r", dims: Some((0.072, 0.023, 0.046)), name: "7.62 Nagant rounds (packet)",
+            id: "ammo_762x38r", dims: Some((0.075, 0.025, 0.046)), name: "7.62 Nagant rounds (packet)",
             category: Ammo, size: Small, mass: 0.19, bulk: 0.08, cartridge: Some("7.62x38R"), rounds: 14,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x25", dims: Some((0.1, 0.037, 0.074)), name: "7.62x25 rounds (box)",
+            id: "ammo_762x25", dims: Some((0.104, 0.037, 0.075)), name: "7.62x25 rounds (box)",
             category: Ammo, size: Small, mass: 0.85, bulk: 0.5, cartridge: Some("7.62x25"), rounds: 70,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762r", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R rounds (box)",
+            id: "ammo_762r", dims: Some((0.048, 0.033, 0.09)), name: "7.62x54R rounds (box)",
             category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_12ga", dims: Some((0.071, 0.07, 0.12)), name: "12 gauge buckshot (box)",
+            id: "ammo_12ga", dims: Some((0.074, 0.069, 0.124)), name: "12 gauge buckshot (box)",
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10,
             tags: ["brass", "powder", "polymer"],
         ),
@@ -331,61 +331,61 @@
         // streak along the flight) and 12 gauge slugs. Their tips are
         // painted as on the real thing.
         (
-            id: "ammo_545_ap", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 AP rounds (box)",
+            id: "ammo_545_ap", dims: Some((0.053, 0.038, 0.1)), name: "5.45x39 AP rounds (box)",
             description: "Steel-cored 7N22, black tips. Through a plate where ball stops; a little less to flesh.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Ap,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_tracer", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 tracer rounds (box)",
+            id: "ammo_545_tracer", dims: Some((0.053, 0.038, 0.1)), name: "5.45x39 tracer rounds (box)",
             description: "7T3, green tips. Each one burns a streak you can follow to where it went.",
             category: Ammo, size: Small, mass: 0.31, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Tracer,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_t4", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 rounds, every fourth a tracer (box)",
+            id: "ammo_545_t4", dims: Some((0.053, 0.038, 0.1)), name: "5.45x39 rounds, every fourth a tracer (box)",
             description: "Packed as a section draws it: three ball, one tracer. Load them in order and every fourth shot shows you where they go.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, tracer_every: 4,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_545_us", dims: Some((0.051, 0.036, 0.1)), name: "5.45x39 subsonic rounds (box)",
+            id: "ammo_545_us", dims: Some((0.053, 0.038, 0.1)), name: "5.45x39 subsonic rounds (box)",
             description: "7U1, black and green tips: a long heavy bullet on a light charge, slower than sound. No crack down the range, and under a suppressor hardly a cough. It drops fast and hits soft.",
             category: Ammo, size: Small, mass: 0.34, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Subsonic,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_us", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 subsonic rounds (box)",
+            id: "ammo_762x39_us", dims: Some((0.064, 0.046, 0.031)), name: "7.62x39 subsonic rounds (box)",
             description: "7.62 US, black and green tips: a heavy bullet slower than sound. No crack, and under a suppressor hardly a cough. It drops fast.",
             category: Ammo, size: Small, mass: 0.4, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Subsonic,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_ap", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 AP rounds (box)",
+            id: "ammo_762x39_ap", dims: Some((0.064, 0.046, 0.031)), name: "7.62x39 AP rounds (box)",
             description: "Steel-cored BZ, black and red tips.",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Ap,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762x39_tracer", dims: Some((0.06, 0.046, 0.029)), name: "7.62x39 tracer rounds (box)",
+            id: "ammo_762x39_tracer", dims: Some((0.064, 0.046, 0.031)), name: "7.62x39 tracer rounds (box)",
             description: "T-45, green tips.",
             category: Ammo, size: Small, mass: 0.35, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Tracer,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762r_ap", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R AP rounds (box)",
+            id: "ammo_762r_ap", dims: Some((0.048, 0.033, 0.09)), name: "7.62x54R AP rounds (box)",
             description: "B-32, black and red tips. Through a new plate.",
             category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Ap,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_762r_tracer", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R tracer rounds (box)",
+            id: "ammo_762r_tracer", dims: Some((0.048, 0.033, 0.09)), name: "7.62x54R tracer rounds (box)",
             description: "T-46, green tips.",
             category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Tracer,
             tags: ["brass", "powder"],
         ),
         (
-            id: "ammo_12ga_slug", dims: Some((0.071, 0.07, 0.12)), name: "12 gauge slugs (box)",
+            id: "ammo_12ga_slug", dims: Some((0.074, 0.069, 0.124)), name: "12 gauge slugs (box)",
             description: "One heavy ball each instead of nine: a rifle's reach for the double, and a robot's plate.",
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Slug,
             tags: ["brass", "powder", "polymer"],
@@ -693,16 +693,6 @@
         // Medical
         // ---------------------------------------------------------------
         (
-            id: "field_dressing", dims: Some((0.133, 0.039, 0.085)), name: "Field dressing",
-            category: Medical, size: Small, mass: 0.08, bulk: 0.1,
-        ),
-        (
-            id: "splint", dims: Some((0.062, 0.017, 0.44)), name: "Splint",
-            description: "Two slats and three straps. Bind it along a broken shin and you can walk on it.",
-            category: Medical, size: Medium, mass: 0.35, bulk: 0.8,
-            tags: ["wood"],
-        ),
-        (
             id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Regen injector",
             description: "Jab it in your thigh. Something in the Zone makes these work better than they should.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,
@@ -913,8 +903,15 @@
             tags: ["electronics", "glass"],
         ),
         (
-            id: "robot_cell", dims: Some((0.067, 0.049, 0.085)), name: "Robot power cell",
-            category: RobotPart, size: Small, mass: 0.9, bulk: 0.5, battery_wh: 120.0,
+            id: "walker_eye", dims: Some((0.128, 0.103, 0.128)), name: "Walker eye",
+            description: "A walker's eye, pulled from its orb. The lens is good glass; the red behind it still follows you a little.",
+            category: RobotPart, size: Small, mass: 0.6, bulk: 1.0,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "robot_cell", dims: Some((0.147, 0.136, 0.186)), name: "Robot power cell",
+            description: "A walker's cell, stamped CUSTODIAN STD. The orange band is warm while it holds a charge; carry it by the handle.",
+            category: RobotPart, size: Small, mass: 2.4, bulk: 3.0, battery_wh: 120.0,
             tags: ["electronics"],
         ),
         (
@@ -938,8 +935,8 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "walker_leg_actuator", dims: Some((0.141, 0.386, 0.163)), name: "Walker knee actuator",
-            description: "A walker's knee, torn off between thigh and shin. The screw jack behind it could lift a truck.",
+            id: "walker_leg_actuator", dims: Some((0.094, 0.12, 0.497)), name: "Walker knee actuator",
+            description: "A walker's knee ram, unbolted whole, stamped WK ACT. The rod still runs out smooth; it could lift a truck.",
             category: RobotPart, size: Medium, mass: 3.5, bulk: 2.5,
             tags: ["electronics", "metal"],
         ),

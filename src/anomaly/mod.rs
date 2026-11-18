@@ -375,7 +375,8 @@ fn lifts(
         // pack (dragging a body drags its pack along, not out of it).
         (Without<RigidBodyDisabled>, crate::interact::NotCarried),
     >,
-    mut players: Query<(&GlobalTransform, &mut Body, &mut Health), With<Player>>,
+    mut players: Query<(Entity, &GlobalTransform, &mut Body), With<Player>>,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
     catalog: Res<Catalog>,
     spatial: SpatialQuery,
     time: Res<Time>,
@@ -448,7 +449,7 @@ fn lifts(
                 forces.apply_force((Vec3::Y * lift * k.sqrt() + swirl) * m);
             }
         }
-        for (pt, mut body, mut health) in &mut players {
+        for (pe, pt, mut body) in &mut players {
             let rel = pt.translation() - c;
             let d = Vec2::new(rel.x, rel.z).length();
             if d > a.radius || rel.y > 4.0 {
@@ -456,12 +457,23 @@ fn lifts(
             }
             occupied = true;
             if popping {
-                let out = Vec3::new(rel.x, 0.0, rel.z).normalize_or(Vec3::X);
-                body.velocity = out * 5.0 + Vec3::Y * 8.5;
+                // It throws you the way you face: a step up onto a roof, a
+                // fling over a wall or a ditch, aimed by where you look.
+                // (Facing nowhere, straight out.) Its throw comes down at
+                // a speed you land from (`health::SAFE_LANDING`), so it's
+                // where you land that can hurt, not the pop.
+                let facing = heads
+                    .iter()
+                    .find(|(_, c)| c.parent() == pe)
+                    .map(|(g, _)| g.forward().as_vec3());
+                let out = facing
+                    .map(|f| Vec3::new(f.x, 0.0, f.z))
+                    .and_then(|f| f.try_normalize())
+                    .or_else(|| Vec3::new(rel.x, 0.0, rel.z).try_normalize())
+                    .unwrap_or(Vec3::X);
+                body.velocity = out * LIFT_FLING + Vec3::Y * LIFT_THROW;
                 body.grounded = false;
                 body.airborne = 1.0;
-                health.hp -= 6.0;
-                health.since_hit = 0.0;
             } else {
                 // Light on your feet: gravity halves, and you're tugged round.
                 let k = falloff(d, a.radius);
@@ -486,6 +498,14 @@ fn lifts(
         }
     }
 }
+
+/// A lift's pop throws a player this fast up (m/s): with the lift's own
+/// lightness under you, about 3.1 m high, landing back on the flat within
+/// `health::SAFE_LANDING`, and onto a roof up to about 2.4 m.
+pub const LIFT_THROW: f32 = 6.6;
+/// ...and this fast the way they face (m/s). In the air with no stick a
+/// body's way slows (`player`'s air control), so it carries about 4 m.
+pub const LIFT_FLING: f32 = 9.0;
 
 /// Burners: heat that hurts whoever stands in it, and cooks robot parts.
 #[allow(clippy::too_many_arguments)]
@@ -1140,6 +1160,64 @@ mod tests {
         assert!(
             alone.distance(with) < 1e-4,
             "kicked the same: {alone:?} vs {with:?}"
+        );
+    }
+
+    /// A lift's pop throws you the way you face, high enough onto a
+    /// container's roof, and down at a speed you land from: the pop
+    /// itself doesn't hurt.
+    #[test]
+    fn a_lift_pop_throws_you_the_way_you_face() {
+        assert!(
+            LIFT_THROW <= crate::health::SAFE_LANDING,
+            "lands safe on the flat"
+        );
+        let mut app = app(false);
+        let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
+        let p = player(&mut app);
+        let ground = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(at.x, at.z);
+        app.world_mut().get_mut::<Transform>(p).unwrap().translation = ground;
+        // Facing +X (the body turned; the head looks along it).
+        app.world_mut().get_mut::<Transform>(p).unwrap().rotation =
+            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+        // (Settled there first: a moved body's world position is a frame
+        // behind, and a pop with nobody in it just resets.)
+        for _ in 0..3 {
+            app.update();
+        }
+        let start = pos(&app, p);
+        let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
+        app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
+        let mut top = start;
+        let mut landed = None;
+        for i in 0..240 {
+            app.update();
+            let now = pos(&app, p);
+            if now.y > top.y {
+                top = now;
+            }
+            if i > 20 && landed.is_none() && app.world().get::<Body>(p).unwrap().grounded {
+                landed = Some(now);
+            }
+        }
+        let up = top.y - start.y;
+        assert!((2.6..4.0).contains(&up), "the pop threw you {up:.2} m up");
+        let moved = landed.expect("and came down") - start;
+        eprintln!(
+            "lift throw: {:.2} m up, landed {moved:?} off",
+            top.y - start.y
+        );
+        assert!(
+            moved.x > 3.0 && moved.z.abs() < moved.x * 0.3,
+            "the way you face: {moved:?}"
+        );
+        assert_eq!(
+            app.world().get::<crate::health::Health>(p).unwrap().hp,
+            hp,
+            "the pop doesn't hurt"
         );
     }
 

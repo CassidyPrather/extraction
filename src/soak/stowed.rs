@@ -207,7 +207,7 @@ mod tests {
         for (k, id) in [
             "ammo_545",
             "radio",
-            "field_dressing",
+            "regen_injector",
             "ak_mag",
             "flashlight",
         ]
@@ -361,7 +361,7 @@ mod tests {
         for (k, (id, bag)) in [
             ("ammo_545", pack),
             ("radio", pack),
-            ("field_dressing", pack),
+            ("regen_injector", pack),
             ("ak_mag", crate_),
             ("flashlight", crate_),
         ]
@@ -459,7 +459,7 @@ mod tests {
         let ids = [
             "ak_mag",
             "ammo_545",
-            "field_dressing",
+            "regen_injector",
             "radio",
             "pm_pistol",
             "canned_stew",
@@ -558,7 +558,7 @@ mod tests {
             .collect();
         let mut seated = Vec::new();
         // (What fits which slot isn't the point: how it sits there is.)
-        for (pouch, id) in pouches.iter().zip(["radio", "field_dressing", "ammo_545"]) {
+        for (pouch, id) in pouches.iter().zip(["radio", "regen_injector", "ammo_545"]) {
             let item = vr.spawn(id, Transform::from_translation(feet + Vec3::Y));
             vr.step(1);
             let mut q = bevy::ecs::system::SystemState::<(Commands, Query<&mut Socket>)>::new(
@@ -680,7 +680,7 @@ mod tests {
         for (k, (id, bag)) in [
             ("ammo_545", pack),
             ("radio", pack),
-            ("field_dressing", pack),
+            ("regen_injector", pack),
             ("ak_mag", crate_),
             ("flashlight", crate_),
         ]
@@ -700,7 +700,7 @@ mod tests {
             put.push((id, bag == pack, pose));
         }
         let mut seated = Vec::new();
-        for (pouch, id) in pouches.iter().zip(["field_dressing", "ammo_545"]) {
+        for (pouch, id) in pouches.iter().zip(["regen_injector", "ammo_545"]) {
             let e = spawn(&mut a, id);
             let mut q = bevy::ecs::system::SystemState::<(Commands, Query<&mut Socket>)>::new(
                 a.world_mut(),

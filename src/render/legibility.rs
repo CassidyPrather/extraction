@@ -705,7 +705,6 @@ mod tests {
                 "SURGE 12M",
                 14.2,
                 100.0,
-                true,
                 Some(crate::render::comfort::Said::Plain(
                     &"The driver says something long enough to fill the screen. ".repeat(3),
                 )),
@@ -721,7 +720,6 @@ mod tests {
                 "SURGE 12M",
                 14.2,
                 100.0,
-                true,
                 Some(crate::render::comfort::Said::Captioned(
                     "MACHINES AT 12",
                     &"The driver says something long enough to fill the screen. ".repeat(3),

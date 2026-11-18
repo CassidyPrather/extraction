@@ -25,6 +25,7 @@ use extraction_core::siren_mast;
 use super::{Phase, RadioCall, Raid, SHORT_EXFIL};
 use crate::interact::{GrabPoint, Grabbable, InteractEvent};
 use crate::raid::truck::Pressable;
+use crate::render::world_props::{Blockout, SwapIn};
 use crate::robots::pressure::Transmitted;
 use crate::world::{Layer, Zone};
 
@@ -97,6 +98,9 @@ pub fn gauge_horn(zone: &Zone) -> Option<Vec3> {
 
 /// The set's box (m): a field set bolted on, its face to you.
 const SIZE: Vec3 = Vec3::new(0.32, 0.26, 0.14);
+/// How far a set's back stands off its wall: on its board, on standoffs,
+/// proud of the ivy (`art/props/field_set.py`, `OFF`).
+const OFF_WALL: f32 = 0.13;
 /// Its middle this high off the ground.
 const CHEST: f32 = 1.3;
 /// The beacon pole's radius (`render::rv_beacons`), and the gap to it.
@@ -136,7 +140,10 @@ pub fn sets(zone: &Zone) -> Vec<Site> {
             // its +Z, which a yaw of -rot turns there.
             let yaw = -rot.to_radians();
             let front = Quat::from_rotation_y(yaw) * Vec3::Z;
-            (zone.on_ground(at[0], at[1]) + front * SIZE.z * 0.5, yaw)
+            (
+                zone.on_ground(at[0], at[1]) + front * (OFF_WALL + SIZE.z * 0.5),
+                yaw,
+            )
         })
     };
     let middle = |at: [f32; 2]| {
@@ -250,16 +257,34 @@ fn spawn_sets(
             Visibility::default(),
         ));
         if let Some(l) = &looks {
-            e.insert((Mesh3d(l.body.clone()), MeshMaterial3d(l.olive.clone())))
-                .with_child((
-                    Name::new("Field set grille"),
+            // A box and its grille until the model's in (`art/props/
+            // field_set.py`: its front is -Z, the set's face +Z).
+            e.insert(SwapIn(vec![(
+                MODEL,
+                Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+            )]))
+            .with_children(|c| {
+                c.spawn((
+                    Name::new("Field set (blockout)"),
+                    Blockout,
+                    Mesh3d(l.body.clone()),
+                    MeshMaterial3d(l.olive.clone()),
+                    Transform::IDENTITY,
+                ));
+                c.spawn((
+                    Name::new("Field set grille (blockout)"),
+                    Blockout,
                     Mesh3d(l.grille.clone()),
                     MeshMaterial3d(l.dark.clone()),
                     Transform::from_xyz(0.0, 0.0, SIZE.z * 0.5 + 0.005),
                 ));
+            });
         }
     }
 }
+
+/// The set's model under `models/props/`.
+pub const MODEL: &str = "field_set";
 
 /// The gate's post.
 #[derive(Component)]
@@ -513,10 +538,8 @@ mod tests {
                     .find(|w| w.0 == pad)
                     .unwrap_or_else(|| panic!("{valley}: no wall for {pad}"));
                 let flat = Vec2::new(site.at.x - at[0], site.at.z - at[1]);
-                assert!(
-                    flat.length() < SIZE.z,
-                    "{valley} {pad}: {flat} off its mark"
-                );
+                let off = flat.length() - (OFF_WALL + SIZE.z * 0.5);
+                assert!(off.abs() < 0.01, "{valley} {pad}: {flat} off its mark");
                 let up = site.at.y - zone.ground(at[0], at[1]);
                 assert!((up - CHEST).abs() < 0.3, "{valley} {pad}: {up} m up");
                 let face = Quat::from_rotation_y(site.yaw) * Vec3::Z;

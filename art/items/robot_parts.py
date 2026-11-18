@@ -37,6 +37,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from _kit import ALONG_X, UP, centred, item, tube_path, wanted  # noqa: E402
 from common import RX, RY, RZ, T, Part  # noqa: E402
 
+# (A cyl's or tube's own axis is Z.)
+ALONG_Z = T(0, 0, 0)
+
 
 def drone_rotor_motor():
     p = Part("body")
@@ -69,23 +72,29 @@ def drone_rotor_motor():
 
 def walker_leg_actuator():
     p = Part("body")
-    # The knee: the hinge drum across X, white caps, the glow rings.
-    p.cyl(0.052, -0.055, 0.055, "Dark", segs=24, xf=ALONG_X, chamfer=0.006)
-    for sx in (-1, 1):
-        p.cyl(0.04, 0.0, 0.012, "Shell", segs=24, xf=T(sx * 0.055, 0, 0) @ RY(sx * math.pi / 2),
-              chamfer=0.003)
-        p.tube(0.036, 0.024, 0.0105, 0.0155, "Glow", segs=24,
-               xf=T(sx * 0.055, 0, 0) @ RY(sx * math.pi / 2))
-    # A stub of thigh up from it and a stub of shin down, torn off ragged.
-    p.lathe([(0.0, 0.0), (0.05, 0.0), (0.055, 0.05), (0.052, 0.16), (0.044, 0.17),
-             (0.0, 0.17)], "Shell", segs=16, xf=T(0, 0.03, 0) @ UP)
-    p.lathe([(0.0, 0.0), (0.05, 0.0), (0.048, 0.12), (0.04, 0.13), (0.0, 0.13)], "Shell",
-            segs=16, xf=RX(math.pi / 2 + 0.35) @ T(0, 0, 0.03))
-    # The screw jack behind the knee, from thigh to shin.
-    p.cyl(0.011, 0.0, 0.2, "Steel", segs=10, xf=T(0, 0.12, 0.05) @ RX(math.pi / 2 + 0.2))
-    p.cyl(0.018, 0.0, 0.07, "Dark", segs=12, xf=T(0, 0.12, 0.05) @ RX(math.pi / 2 + 0.2),
-          chamfer=0.004)
-    tube_path(p, [(0.02, 0.17, 0.0), (0.03, 0.2, 0.02), (0.02, 0.22, 0.05)], 0.003, "Red",
+    # A walker's knee ram, unbolted whole: a long pale barrel with a bright
+    # steel rod run out of it, a clevis eye at each end where it pinned to
+    # thigh and shin, yellow-and-black hazard bands at the rod end and the
+    # dead glow ring of its drive. Long and banded: a ram, not a box (#105).
+    L = 0.2
+    p.cyl(0.042, -L, 0.06, "Shell", segs=24, xf=ALONG_Z, chamfer=0.006)
+    p.cyl(0.046, -L - 0.03, -L, "Dark", segs=24, xf=ALONG_Z, chamfer=0.004)
+    p.tube(0.047, 0.04, -0.05, -0.04, "Glow", segs=24, xf=ALONG_Z)
+    # Hazard bands at the rod end.
+    for k in range(4):
+        p.tube(0.0445, 0.04, 0.02 + k * 0.01, 0.025 + k * 0.01, "Warn" if k % 2 == 0 else "Black",
+               segs=24, xf=ALONG_Z)
+    p.cyl(0.046, 0.06, 0.075, "Dark", segs=24, xf=ALONG_Z, chamfer=0.003)
+    # The rod, run out.
+    p.cyl(0.016, 0.075, 0.2, "Steel", segs=16, xf=ALONG_Z)
+    # Clevis eyes, a pin hole across each.
+    for z, r in ((0.2, 0.024), (-L - 0.03, 0.03)):
+        p.box((0.02, r * 2, r * 1.6), (0.0, 0.0, z + (0.012 if z > 0 else -0.012)), "Dark",
+              bevel=0.004, segs=1)
+        p.cyl(r * 0.45, -0.012, 0.012, "Black", segs=12,
+              xf=T(0, 0, z + (0.012 if z > 0 else -0.012)) @ ALONG_X)
+    # Its leads, torn.
+    tube_path(p, [(0.0, 0.042, -0.15), (0.02, 0.06, -0.17), (0.03, 0.07, -0.2)], 0.003, "Red",
               sides=5, closed=False)
     return centred([p])
 

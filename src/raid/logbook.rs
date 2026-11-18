@@ -14,8 +14,6 @@ use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::rig::LocalPlayer;
 use crate::robots::{PartDestroyed, PartRole, Robot, RobotKind};
 
-/// The line for a raid lost to bleeding.
-pub const BLED_OUT: &str = "Bled out. Carry two dressings.";
 /// The line for a raid lost to the Surge.
 pub const SURGE_CAUGHT: &str = "Caught by the Surge. Be home before it.";
 
@@ -23,9 +21,7 @@ pub const SURGE_CAUGHT: &str = "Caught by the Surge. Be home before it.";
 /// line of what would have helped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cause {
-    /// Still bleeding, nothing hit or fell for [`BLED_AFTER`] seconds.
-    Bled,
-    /// A machine's hit in the last [`BLED_AFTER`] seconds, by name.
+    /// A machine's hit in the last [`HIT_WITHIN`] seconds, by name.
     Machine(&'static str),
     /// Out in the Surge.
     Surge,
@@ -34,7 +30,6 @@ pub enum Cause {
 impl Cause {
     pub fn line(self) -> String {
         match self {
-            Cause::Bled => BLED_OUT.to_owned(),
             Cause::Surge => SURGE_CAUGHT.to_owned(),
             Cause::Machine(name) => {
                 let a = if name.starts_with(['a', 'e', 'i', 'o', 'u']) {
@@ -62,14 +57,12 @@ pub struct RaidEntry {
     pub artifacts: Vec<String>,
     /// Nights slept out, in the safehouse.
     pub nights: u32,
-    /// A leg broken out there: splinted or not, at the end.
-    pub leg: Option<bool>,
     /// What put you down, when it's knowable (a raid lost).
     pub cause: Option<Cause>,
 }
 
-/// Seconds since the last hit or fall for a death to be the bleeding's.
-pub const BLED_AFTER: f32 = 2.0;
+/// A machine's hit this recent (s) is what put you down.
+pub const HIT_WITHIN: f32 = 2.0;
 
 #[derive(Resource, Default, Debug)]
 pub struct Logbook {
@@ -198,14 +191,7 @@ fn tally_wrecks(
 fn write_entries(
     raid: Res<Raid>,
     mut book: ResMut<Logbook>,
-    players: Query<
-        (
-            Entity,
-            Option<&crate::interact::wounds::Fracture>,
-            Option<&crate::health::Health>,
-        ),
-        With<LocalPlayer>,
-    >,
+    players: Query<Entity, With<LocalPlayer>>,
     carried: Query<(&Item, &CarriedBy)>,
     catalog: Res<Catalog>,
     house: Option<Res<crate::progression::safehouse::Safehouse>>,
@@ -228,7 +214,7 @@ fn write_entries(
     if !home && !matches!(raid.phase, Phase::Down { .. }) {
         return;
     }
-    let Some((player, fracture, health)) = players.iter().next() else {
+    let Some(player) = players.iter().next() else {
         return;
     };
     let mut items = 0;
@@ -252,9 +238,8 @@ fn write_entries(
         items,
         artifacts,
         nights: house.map_or(0, |h| h.nights_out),
-        leg: fracture.map(|f| f.splinted),
         cause: (!home)
-            .then(|| cause(&raid, health, book.last_hurt, time.elapsed_secs()))
+            .then(|| cause(&raid, book.last_hurt, time.elapsed_secs()))
             .flatten(),
     };
     book.written = Some(entry_text(&entry));
@@ -264,23 +249,14 @@ fn write_entries(
 /// What put you down: the Surge, a machine's recent hit, or an open wound
 /// with nothing else for a while. Anything else isn't named (gas, a fall,
 /// an anomaly: no line rather than a wrong one).
-fn cause(
-    raid: &Raid,
-    health: Option<&crate::health::Health>,
-    last_hurt: Option<(f32, Option<&'static str>)>,
-    now: f32,
-) -> Option<Cause> {
+fn cause(raid: &Raid, last_hurt: Option<(f32, Option<&'static str>)>, now: f32) -> Option<Cause> {
     if raid.surging() {
         return Some(Cause::Surge);
     }
-    if let Some((at, Some(name))) = last_hurt {
-        if now - at <= BLED_AFTER {
-            return Some(Cause::Machine(name));
-        }
+    match last_hurt {
+        Some((at, Some(name))) if now - at <= HIT_WITHIN => Some(Cause::Machine(name)),
+        _ => None,
     }
-    health
-        .filter(|h| h.bleeding > 0.0 && h.since_hit >= BLED_AFTER)
-        .map(|_| Cause::Bled)
 }
 
 /// "3 drones, 1 walker".
@@ -315,11 +291,6 @@ fn entry_text(e: &RaidEntry) -> String {
         } else {
             format!("{} nights out", e.nights)
         });
-    }
-    match e.leg {
-        Some(true) => lines.push("Broke a leg, splinted".to_owned()),
-        Some(false) => lines.push("Broke a leg".to_owned()),
-        None => {}
     }
     if let Some(c) = e.cause {
         lines.push(c.line());
@@ -474,19 +445,6 @@ mod tests {
             at: Vec3::ZERO,
         });
         app.world_mut().resource_mut::<Raid>().clock += 600.0;
-        // And a hard landing breaks a leg; a splint goes on.
-        let player = app
-            .world_mut()
-            .query_filtered::<Entity, With<LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .expect("a player");
-        app.world_mut()
-            .entity_mut(player)
-            .insert(crate::interact::wounds::Fracture {
-                leg: crate::rig::Side::Left,
-                splinted: true,
-            });
         app.update();
         app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 4.0 };
         app.update();
@@ -510,17 +468,6 @@ mod tests {
             .clone();
         assert!(text.contains("HOME, 10 MIN"), "{text}");
         assert!(text.contains("Wrecked 1 drone"), "{text}");
-        assert!(text.contains("Broke a leg, splinted"), "{text}");
-        // Home, it's set: the next raid starts on two good legs.
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 0.0 };
-        app.update();
-        assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
-        assert!(
-            app.world()
-                .get::<crate::interact::wounds::Fracture>(player)
-                .is_none(),
-            "mended at home"
-        );
     }
 
     /// A raid lost, and the job still out there: the logbook says what's
@@ -561,15 +508,11 @@ mod tests {
     }
 
     /// What put you down is named, with one plain line of what would have
-    /// helped: bleeding (nothing hit for a while, the wound open; Marrow's
-    /// first fight: the one dressing on the first wound, the second wound
-    /// bled out in 15 s), a machine's hit, the Surge. Anything else isn't
-    /// named.
+    /// helped: a machine's hit, the Surge. Anything else isn't named.
     #[test]
     fn a_raid_lost_names_what_put_you_down() {
         #[derive(Clone, Copy)]
         enum How {
-            Bled,
             Shot,
             Surge,
             Clean,
@@ -631,26 +574,18 @@ mod tests {
                     .unwrap();
                 h.hp = 0.0;
                 h.down = true;
-                h.bleeding = if let How::Clean = how { 0.0 } else { 2.2 };
-                h.since_hit = if let How::Bled | How::Clean = how {
-                    14.0
-                } else {
-                    0.5
-                };
+                h.since_hit = if let How::Clean = how { 14.0 } else { 0.5 };
             }
             app.world_mut().resource_mut::<Raid>().phase = Phase::Down { left: 6.0 };
             app.update();
             app.world().resource::<Logbook>().written.clone().unwrap()
         };
-        let bled = lost(How::Bled);
-        assert!(bled.contains(BLED_OUT), "{bled}");
         let shot = lost(How::Shot);
         assert!(shot.contains("Killed by a drone."), "{shot}");
-        assert!(!shot.contains(BLED_OUT), "a hit took it: {shot}");
         let surge = lost(How::Surge);
         assert!(surge.contains(SURGE_CAUGHT), "{surge}");
         let clean = lost(How::Clean);
-        for line in [BLED_OUT, SURGE_CAUGHT, "Killed by"] {
+        for line in [SURGE_CAUGHT, "Killed by"] {
             assert!(!clean.contains(line), "nothing knowable: {clean}");
         }
         assert_eq!(

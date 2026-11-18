@@ -101,7 +101,7 @@ pub enum Task {
     Press(Entity),
     /// Walk to a door and press it if it's shut; done when it's open.
     OpenDoor(Entity),
-    /// Use the item in this hand (radio, dressing, food): what VR's primary
+    /// Use the item in this hand (radio, injector, food): what VR's primary
     /// button and flat mode's U do.
     Use(Side),
     /// Grab `item` as `Grab` does, unless it still lies within `radius` of

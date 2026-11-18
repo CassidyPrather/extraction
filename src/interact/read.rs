@@ -180,16 +180,9 @@ mod tests {
     /// wall.
     #[test]
     fn the_logbook_comes_up_to_be_read_and_goes_back() {
-        let mut vr = Vr::new("training_yard");
-        // The yard folds the truck's own boards away till it's time to go
-        // home (`onboarding::yard_shows`): there.
-        {
-            use crate::onboarding::{Goal, Onboarding, all_goals};
-            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
-            o.done = all_goals()
-                .filter(|g| !matches!(g, Goal::CallTruck | Goal::PullCord))
-                .collect();
-        }
+        // A valley's base: the yard keeps its truck out of sight till it's
+        // called (`onboarding::gates`).
+        let mut vr = Vr::new("marrow_creek");
         vr.step(5);
         let (book, home) = vr
             .app

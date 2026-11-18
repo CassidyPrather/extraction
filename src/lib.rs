@@ -111,6 +111,8 @@ impl Plugin for GamePlugin {
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
         .add_plugins(wildlife::WildlifePlugin)
         .add_plugins(transform_guard::TransformGuardPlugin)
+        // A playtest tour's board and notes, headless too (a bot walks one).
+        .add_plugins(capture::station::StationPlugin)
         // Adds nothing outside `--arcade`.
         .add_plugins(arcade::ArcadePlugin);
     }
@@ -465,6 +467,18 @@ pub fn request_fresh_restart(map: &str) {
         map: map.to_owned(),
         fresh: true,
     });
+}
+
+static RELAUNCH_WITH: std::sync::Mutex<Option<Vec<String>>> = std::sync::Mutex::new(None);
+
+/// Open the game again with exactly these arguments (a playtest tour's
+/// next station, `capture::station`). `main` re-launches with them.
+pub fn request_relaunch(args: Vec<String>) {
+    *RELAUNCH_WITH.lock().unwrap() = Some(args);
+}
+
+pub fn take_relaunch() -> Option<Vec<String>> {
+    RELAUNCH_WITH.lock().unwrap().take()
 }
 
 pub fn take_restart() -> Option<Restart> {

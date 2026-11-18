@@ -27,6 +27,7 @@ pub mod path;
 pub mod scale;
 pub mod seated;
 pub mod sightline;
+pub mod station;
 pub mod stowed;
 pub mod sweep;
 pub mod torchlit;
@@ -73,7 +74,6 @@ fn keep_alive(
     }
     for mut h in &mut players {
         h.hp = h.max;
-        h.bleeding = 0.0;
     }
 }
 
