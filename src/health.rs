@@ -1,5 +1,6 @@
-//! Player health: bullets hurt, dressings and injectors heal, and going
-//! down ends the raid.
+//! Player health: hits and hard landings take HP, an injector gives it
+//! back, and going down ends the raid. Nothing bleeds: a hit's harm is
+//! all at once.
 
 use bevy::prelude::*;
 
@@ -10,9 +11,6 @@ use crate::weapons::ballistics::Hit;
 pub struct Health {
     pub hp: f32,
     pub max: f32,
-    /// HP lost per second until bandaged. (Anything may lower `hp`
-    /// directly; `bleed` notices when it reaches zero.)
-    pub bleeding: f32,
     pub down: bool,
     /// Seconds since the last hit (for screen and audio effects).
     pub since_hit: f32,
@@ -23,7 +21,6 @@ impl Default for Health {
         Self {
             hp: 100.0,
             max: 100.0,
-            bleeding: 0.0,
             down: false,
             since_hit: 99.0,
         }
@@ -67,12 +64,12 @@ impl Plugin for HealthPlugin {
             })
             .add_systems(
                 FixedUpdate,
-                (take_hits, falls, bleed).chain().in_set(HealthSystems),
+                (take_hits, falls, go_down).chain().in_set(HealthSystems),
             );
     }
 }
 
-/// Hits, falls and bleeding, each fixed tick (`interact::wounds` follows).
+/// Hits, falls and going down, each fixed tick.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct HealthSystems;
 
@@ -117,8 +114,6 @@ fn take_hits(
         }
         h.hp -= damage;
         h.since_hit = 0.0;
-        // Most hits bleed a little.
-        h.bleeding = (h.bleeding + damage * 0.04).min(3.0);
         hurt.write(Hurt {
             player,
             amount: damage,
@@ -143,7 +138,6 @@ fn falls(mut players: Query<(&mut Health, &mut crate::player::Body)>) {
             let dmg = (v - SAFE_LANDING) * 9.0;
             h.hp -= dmg;
             h.since_hit = 0.0;
-            h.bleeding = (h.bleeding + dmg * 0.02).min(3.0);
         }
     }
 }
@@ -151,7 +145,9 @@ fn falls(mut players: Query<(&mut Health, &mut crate::player::Body)>) {
 /// Landing speed (m/s) you walk away from.
 pub const SAFE_LANDING: f32 = 8.0;
 
-fn bleed(
+/// The clock since the last hit, and down when anything (a hit, a fall,
+/// an anomaly, the Surge) has taken the last of it.
+fn go_down(
     mut players: Query<(Entity, &mut Health, &GlobalTransform)>,
     time: Res<Time>,
     mut downed: MessageWriter<Downed>,
@@ -162,13 +158,6 @@ fn bleed(
         if h.down {
             continue;
         }
-        if h.bleeding > 0.0 {
-            h.hp -= h.bleeding * dt;
-            // Small wounds clot on their own, slowly.
-            h.bleeding = (h.bleeding - 0.02 * dt).max(0.0);
-        }
-        // Whatever took the last of it (bleeding, a fall, an anomaly, the
-        // Surge), down is down.
         if h.hp <= 0.0 {
             h.down = true;
             downed.write(Downed {

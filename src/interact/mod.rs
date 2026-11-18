@@ -31,7 +31,6 @@ pub mod read;
 pub mod stow;
 pub mod tools;
 pub mod touch;
-pub mod wounds;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -55,6 +54,12 @@ pub enum GripRole {
     /// A moving part: slide, charging handle, bolt. The id is the part's.
     Handle(u8),
 }
+
+/// How far a hand reaches for something to grip: the sphere about its
+/// grip point that has to touch the thing's collider (`find_grab`). What
+/// a thing shows to be gripped (a handle, a rung) is in reach within this
+/// of its collider (`capture::checks::every_handle_is_in_reach`).
+pub const GRAB_REACH: f32 = 0.07;
 
 #[derive(Clone, Debug)]
 pub struct GrabPoint {
@@ -350,7 +355,6 @@ impl Plugin for InteractPlugin {
                 touch::TouchPlugin,
                 carry::CarryPlugin,
                 fight::FightPlugin,
-                wounds::WoundsPlugin,
                 read::ReadPlugin,
             ))
             .add_plugins(pockets::PocketsPlugin);
@@ -780,7 +784,7 @@ fn find_grab(
     spatial: &SpatialQuery,
     terrain: Option<Entity>,
 ) -> Option<(Entity, usize)> {
-    let reach = Collider::sphere(0.07);
+    let reach = Collider::sphere(GRAB_REACH);
     let mut touching = spatial.shape_intersections(
         &reach,
         hand.translation,

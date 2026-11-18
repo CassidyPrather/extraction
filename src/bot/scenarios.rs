@@ -1147,11 +1147,12 @@ fn finish_scenario(
     // What data it ran on: an A/B is only one if both read the same.
     println!("{}", crate::asset_identity());
     println!(
-        "scenario {}: {} passed, {} failed -> {}",
+        "scenario {}: {} passed, {} failed -> {} ({:.1} s of game time)",
         opts.scenario.as_deref().unwrap_or(""),
         bot.passed,
         bot.failed,
-        if ok { "OK" } else { "FAILED" }
+        if ok { "OK" } else { "FAILED" },
+        time.elapsed_secs()
     );
     for line in &bot.log {
         println!("  {line}");

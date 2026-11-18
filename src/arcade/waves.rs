@@ -308,29 +308,20 @@ fn light_lamps(arcade: Res<Arcade>, mut lamps: Query<&mut GateLamp>) {
 fn downed(
     mut commands: Commands,
     mut events: MessageReader<crate::health::Downed>,
-    mut locals: Query<
-        (
-            &mut crate::health::Health,
-            Option<&mut crate::interact::wounds::Wounds>,
-        ),
-        With<LocalPlayer>,
-    >,
+    mut locals: Query<&mut crate::health::Health, With<LocalPlayer>>,
     machines: Query<Entity, With<WaveMachine>>,
     mut arcade: ResMut<Arcade>,
     mut raid: ResMut<Raid>,
     mut over: MessageWriter<RunOver>,
 ) {
     for ev in events.read() {
-        let Ok((mut health, wounds)) = locals.get_mut(ev.player) else {
+        let Ok(mut health) = locals.get_mut(ev.player) else {
             continue;
         };
         raid.phase = Phase::Out;
         // Up again at once, the ground quiet: the summary's on the board,
         // what you carried still on you until RESTART.
         *health = crate::health::Health::default();
-        if let Some(mut w) = wounds {
-            w.0.clear();
-        }
         for m in &machines {
             commands.entity(m).despawn();
         }

@@ -70,9 +70,6 @@ pub struct Comfort {
     /// A faint tick on the wrist when a machine nearby turns certain of
     /// you (`rig::haptics`).
     pub machine_tick: bool,
-    /// A heartbeat on the wrist while you bleed, faster and harder the
-    /// faster you bleed (`rig::haptics`).
-    pub bleed_pulse: bool,
     /// Faint grey spheres on your pouches, pockets, holster and sling
     /// while you hold something: which would take it, which has something
     /// in it (and what), and the one it goes in if let go
@@ -124,7 +121,6 @@ impl Default for Comfort {
             captions: true,
             captions_in_view: true,
             machine_tick: true,
-            bleed_pulse: true,
             pocket_spheres: true,
             post_blur: true,
             body: false,
@@ -353,14 +349,6 @@ impl Comfort {
         }
     }
 
-    pub fn bleed_pulse_label(&self) -> String {
-        if self.bleed_pulse {
-            "HEARTBEAT\non the wrist".into()
-        } else {
-            "HEARTBEAT\nOFF".into()
-        }
-    }
-
     pub fn pocket_spheres_label(&self) -> String {
         if self.pocket_spheres {
             "POCKETS\nspheres".into()
@@ -464,7 +452,6 @@ impl Comfort {
                 "--no-captions" => c.captions = false,
                 "--wrist-captions" => c.captions_in_view = false,
                 "--no-machine-tick" => c.machine_tick = false,
-                "--no-bleed-pulse" => c.bleed_pulse = false,
                 "--no-pocket-spheres" => c.pocket_spheres = false,
                 "--no-post-blur" => c.post_blur = false,
                 "--no-body" => c.body = false,

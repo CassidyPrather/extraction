@@ -68,8 +68,12 @@ fn main() -> AppExit {
     extraction::render::timeline::mark("closed (world dropped)");
     // The truck drove to another valley: open the game again there. A
     // tooling run ends where it is.
-    if let Some(to) = extraction::take_restart().filter(|_| !tooling) {
-        let args = extraction::relaunch_args(std::env::args().skip(1), &to);
+    // A playtest tour's next station: its own arguments, as given.
+    let relaunch = extraction::take_relaunch().filter(|_| !tooling);
+    let restart = extraction::take_restart().filter(|_| !tooling);
+    if let Some(args) = relaunch
+        .or_else(|| restart.map(|to| extraction::relaunch_args(std::env::args().skip(1), &to)))
+    {
         if let Ok(exe) = std::env::current_exe() {
             if let Err(e) = std::process::Command::new(exe).args(&args).spawn() {
                 eprintln!("couldn't reopen the game: {e}");

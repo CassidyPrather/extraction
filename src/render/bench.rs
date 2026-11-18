@@ -257,6 +257,13 @@ fn dress_controls(
     }
 }
 
+/// Where a wall lever's knob is, in its control's space, and how big:
+/// the hand takes hold of it (`capture::checks::every_handle_is_in_reach`).
+pub fn wall_lever_knob() -> Vec3 {
+    Quat::from_rotation_x(-0.5) * Vec3::new(0.0, 0.26, 0.0) + Vec3::Z * 0.02
+}
+pub const WALL_LEVER_KNOB_R: f32 = 0.035;
+
 /// A pull lever on a wall: a yellow back plate, a dark steel arm and a red
 /// knob at its end, the knob where the hand goes (`docs/LEGIBILITY.md`,
 /// affordances: contrast and a shape that says pull).
@@ -298,9 +305,9 @@ fn wall_lever(
                 .with_rotation(arm),
         ));
         c.spawn((
-            Mesh3d(meshes.add(Sphere::new(0.035).mesh().uv(16, 10))),
+            Mesh3d(meshes.add(Sphere::new(WALL_LEVER_KNOB_R).mesh().uv(16, 10))),
             MeshMaterial3d(knob),
-            Transform::from_translation(arm * Vec3::new(0.0, 0.27, 0.0) + Vec3::Z * 0.02),
+            Transform::from_translation(wall_lever_knob()),
         ));
     });
 }

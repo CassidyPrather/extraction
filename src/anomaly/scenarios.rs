@@ -169,7 +169,7 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             let stone = c + Vec3::Y * 0.3;
             let mut t = vec![
                 Log(s(
-                    "harvest burner: shoot the stone out of the coals, let it cool, take it",
+                    "harvest burner: shoot the stone out of the coals, take it and pocket it before it burns through",
                 )),
                 Teleport(c + Vec3::X * (r + ARRIVE)),
                 stand(c, r + 4.0),
@@ -200,8 +200,10 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                     shots: 3,
                 },
                 Stow(Side::Right),
-                // Twenty seconds out of the coals and it's cool.
-                Wait(22.0),
+                // Out of the coals: take it and pocket it before it burns
+                // through the glove (`harvest::HOT_GRIP`); no waiting
+                // twenty seconds for it to cool.
+                Wait(1.0),
                 PickUp {
                     id: s("art_hearth"),
                     side: Side::Right,
