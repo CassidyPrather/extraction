@@ -356,6 +356,27 @@ pub fn loot_sights() -> Vec<LootSight> {
                 seen: sky * light * (LOOT_GREY - albedo * near).abs(),
             });
         }
+        // What's left in its containers: a locker's pale shelf, a drawer's
+        // bottom, lit as the room is where you stand to look in
+        // (`render::loot_light`), always indoors.
+        for h in &geo.holds {
+            let (on, albedo) = match h.part {
+                None => ("locker shelf", model_albedo("locker", "Cream")),
+                Some(_) => ("drawer bottom", model_albedo("counter_drawers", "Timber")),
+            };
+            let albedo = albedo.unwrap_or(0.5);
+            let seen_from = h.at + h.out * crate::render::loot_light::HOLD_SEEN_FROM;
+            let light = crate::world::ao::sky_light(occ.lying_at(seen_from));
+            let near = occ.light(h.at + bevy::math::Vec3::Y * 0.002, bevy::math::Vec3::Y);
+            out.push(LootSight {
+                prefab: id,
+                at: h.at,
+                table: h.table,
+                on: on.into(),
+                light,
+                seen: indoors * light * (LOOT_GREY - albedo * near).abs(),
+            });
+        }
     }
     out
 }
