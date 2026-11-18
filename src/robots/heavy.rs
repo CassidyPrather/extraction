@@ -2145,19 +2145,20 @@ pub(crate) mod tests {
         let (_, free) = seated(&mut app, heavy, Slot::Cell).unwrap();
         assert!(!free, "the cell's behind its hatch still");
         let catalog = app.world().resource::<Catalog>().clone();
+        // Seated on it, each held its way (`heavy_row`): the two knees it
+        // still had (the two shot through are scrap), its eye, both vents
+        // and its claw.
         let salvage: Vec<String> = app
             .world_mut()
-            .query_filtered::<&Item, Without<InSocket>>()
+            .query_filtered::<&Item, With<InSocket>>()
             .iter(app.world())
             .map(|i| catalog.get(i.kind()).id.clone())
             .filter(|id| id.starts_with("heavy_"))
             .collect();
-        assert_eq!(
-            salvage.iter().filter(|s| *s == "heavy_knee").count(),
-            2,
-            "{salvage:?}"
-        );
-        assert!(salvage.iter().any(|s| s == "heavy_claw"), "{salvage:?}");
+        let n = |id: &str| salvage.iter().filter(|s| *s == id).count();
+        assert_eq!(n("heavy_knee"), 2, "{salvage:?}");
+        assert_eq!(n("heavy_vent"), 2, "{salvage:?}");
+        assert_eq!((n("heavy_claw"), n("heavy_eye")), (1, 1), "{salvage:?}");
         // The generic wreck loot isn't rolled on top.
         assert!(app.world().get::<super::super::Salvaged>(heavy).is_some());
     }
