@@ -46,6 +46,8 @@ MATERIALS = {
     "Black": ((0.025, 0.025, 0.025), 0.5, 0.5, None),
     "Brass": ((0.75, 0.55, 0.25), 1.0, 0.3, None),
     "Shell": ((0.84, 0.85, 0.86), 0.0, 0.32, None),
+    # A robot's underside, a shade under its shell (the dirigible's belly).
+    "ShellBelly": ((0.62, 0.63, 0.64), 0.0, 0.36, None),
     "Dark": ((0.06, 0.065, 0.07), 0.7, 0.4, None),
     "Eye": ((0.1, 0.02, 0.02), 0.0, 0.3, (1.0, 0.14, 0.07)),
     "Rotor": ((0.06, 0.06, 0.065), 0.3, 0.45, None),
