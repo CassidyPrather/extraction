@@ -6,7 +6,6 @@
 //! goes slack and lies flat on the ground.
 
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
-use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use super::heavy_look::{lod_name, lod_range};
@@ -55,7 +54,15 @@ struct EnvelopeMesh;
 fn dress_spotters(
     mut commands: Commands,
     spotters: Query<(Entity, &Children), (With<Spotter>, Without<Dressed>)>,
-    pieces: Query<(Entity, &SpotterPiece, &OfSpotter), Without<Dressed>>,
+    pieces: Query<
+        (
+            Entity,
+            &SpotterPiece,
+            &OfSpotter,
+            Has<crate::destruction::hooks::Cuttable>,
+        ),
+        Without<Dressed>,
+    >,
     parts: Query<&RobotPart>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
@@ -65,8 +72,6 @@ fn dress_spotters(
     mut model_mats: ResMut<ModelMaterials>,
     mut lib: ResMut<MaterialLibrary>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut tether: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
     if spotters.is_empty() && pieces.is_empty() {
         return;
@@ -88,14 +93,6 @@ fn dress_spotters(
             return;
         }
     };
-    let (line, line_mat) = tether
-        .get_or_insert_with(|| {
-            (
-                meshes.add(Cylinder::new(0.014, 1.0)),
-                model_mats.get("Rubber", &mut lib, &server, &mut materials),
-            )
-        })
-        .clone();
     let base_lamp = model_mats.get("Lamp", &mut lib, &server, &mut materials);
     let mut hang = |commands: &mut Commands,
                     materials: &mut Assets<StandardMaterial>,
@@ -208,7 +205,7 @@ fn dress_spotters(
         ));
         let _ = GONDOLA;
     }
-    for (e, piece, _) in &pieces {
+    for (e, piece, _, cuttable) in &pieces {
         match piece {
             SpotterPiece::Winch => {
                 hang(
@@ -221,30 +218,46 @@ fn dress_spotters(
                 );
             }
             SpotterPiece::Tether(_) => {
-                // A unit cylinder along Y, turned onto the stretch's Z.
-                commands.spawn((
-                    Mesh3d(line.clone()),
-                    MeshMaterial3d(line_mat.clone()),
-                    Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-                    NotShadowCaster,
-                    ChildOf(e),
-                ));
+                // Steel cable (`lines`, #101): a grip sleeve on a stretch
+                // in a hand's reach, where the cutters bite.
+                let line = super::lines::Line::new(super::lines::Gauge::Cable);
+                let line = if cuttable { line.with_grip(0.5) } else { line };
+                commands.entity(e).insert(line);
             }
         }
         commands.entity(e).insert(Dressed);
     }
 }
 
-/// Each stretch of tether drawn its length.
+/// Each stretch of tether's line runs along it (its Z), its length.
 fn tether_lines(
-    stretches: Query<(&TetherLength, &Children), Changed<TetherLength>>,
-    mut lines: Query<&mut Transform, With<Mesh3d>>,
+    mut commands: Commands,
+    stretches: Query<
+        (
+            Entity,
+            &Transform,
+            &TetherLength,
+            Option<&super::lines::LineSpan>,
+        ),
+        (
+            With<super::lines::Line>,
+            Or<(
+                Changed<Transform>,
+                Changed<TetherLength>,
+                Added<super::lines::Line>,
+            )>,
+        ),
+    >,
 ) {
-    for (len, children) in &stretches {
-        for c in children.iter() {
-            if let Ok(mut t) = lines.get_mut(c) {
-                t.scale = Vec3::new(1.0, len.0.max(0.01), 1.0);
-            }
+    for (e, t, len, had) in &stretches {
+        let half = t.rotation * Vec3::Z * (len.0.max(0.01) * 0.5);
+        let span = super::lines::LineSpan {
+            from: t.translation - half,
+            to: t.translation + half,
+            slack: 0.0,
+        };
+        if had != Some(&span) {
+            commands.entity(e).insert(span);
         }
     }
 }
