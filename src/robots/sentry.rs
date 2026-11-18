@@ -21,7 +21,9 @@
 //!   rounds meant for you.
 //!
 //! What it sees it reports (a response team follows). Shoot its head
-//! through and it's a wreck, a landmark: the head hangs off its mast.
+//! through and it's a wreck: the head breaks off and falls at the foot of
+//! its mast, the bare mast a landmark, and what was on the head (its gun,
+//! its visor, its searchlight) in reach, salvage (`seat_wreck`, #105).
 //!
 //! Built from robot parts like any other machine: the head (core), its
 //! eye and its gun ride the robot root, which sits at the top of the mast
@@ -76,6 +78,8 @@ pub struct Sentry {
     pub foot: Vec3,
     /// Rounds fired: with its foot, each round's scatter seed.
     pub fired: u64,
+    /// Seconds since its head came off its mast (wrecked).
+    pub fell: f32,
 }
 
 /// One of a sentry's pieces that isn't on its head: the mast, the box, a
@@ -125,7 +129,13 @@ impl Plugin for SentryPlugin {
             .add_observer(cable_gone)
             .add_systems(
                 FixedUpdate,
-                (knock_sentries, sentry_power, sentry_mind, sentry_report)
+                (
+                    knock_sentries,
+                    sentry_power,
+                    sentry_mind,
+                    sentry_report,
+                    seat_wreck,
+                )
                     .chain()
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
@@ -186,6 +196,21 @@ pub fn head_transform(foot: Vec3, yaw: f32, pitch: f32) -> Transform {
         .with_scale(Vec3::splat(HEAD_SCALE))
 }
 
+/// Its head, fallen: on its side at the foot of its mast, a stride out
+/// in front of it, its searchlight up and its gun and visor to the side,
+/// where a hand can get at them.
+pub fn lying(foot: Vec3, yaw: f32) -> Transform {
+    let face = Quat::from_rotation_y(-yaw.to_radians());
+    Transform::from_translation(foot + face * Vec3::NEG_Z * FALLS_OUT + Vec3::Y * LIES_HIGH)
+        .with_rotation(face * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2))
+        .with_scale(Vec3::splat(HEAD_SCALE))
+}
+
+/// How far out from its mast a fallen head lies, and its middle's height
+/// off the ground on its side (its half width with the cheek plates).
+pub const FALLS_OUT: f32 = 1.0;
+pub const LIES_HIGH: f32 = 0.255 * HEAD_SCALE;
+
 /// The head (and everything on it) at this size against its model: big
 /// enough to read on its mast from across a field.
 pub const HEAD_SCALE: f32 = 1.5;
@@ -225,6 +250,7 @@ pub fn spawn_sentry(
                 report: 0.0,
                 foot,
                 fired: 0,
+                fell: 0.0,
             },
             Senses {
                 sight: rules::SIGHT,
@@ -509,12 +535,15 @@ fn sentry_mind(
         .collect();
     for (e, mut s, mut t, aware, robot, children, stunned) in &mut sentries {
         if robot.wrecked {
-            // Its head hangs off the mast, still.
-            let hang = head_transform(s.foot, s.yaw, -55.0);
-            t.rotation = t.rotation.slerp(hang.rotation, (2.0 * dt).min(1.0));
-            t.translation = t
-                .translation
-                .lerp(hang.translation - Vec3::Y * 0.25, (2.0 * dt).min(1.0));
+            // Its head breaks off the mast and falls, turning onto its
+            // side, at its foot.
+            s.fell += dt;
+            let from = head_transform(s.foot, s.yaw, s.pitch);
+            let to = lying(s.foot, s.yaw);
+            let drop = (from.translation.y - to.translation.y).max(0.01);
+            let k = (0.5 * 9.8 * s.fell * s.fell / drop).min(1.0);
+            t.translation = from.translation.lerp(to.translation, k);
+            t.rotation = from.rotation.slerp(to.rotation, k);
             continue;
         }
         if !s.powered || stunned {
@@ -656,6 +685,109 @@ fn sentry_mind(
             GunAct::Quiet => {}
         }
     }
+}
+
+/// Its salvage (`salvage`, #105): what you saw on it is what comes off.
+/// Its gun on its two feed leads (bolt cutters), its visor and searchlight
+/// by hand, all on the head where it lies; the breaker in its junction
+/// box by hand, live while it still has power. (The head's own looks of
+/// them hide as each is seated in its place.)
+#[allow(clippy::type_complexity)]
+fn seat_wreck(
+    mut commands: Commands,
+    sentries: Query<(Entity, &Sentry, &Robot, &Children), Without<super::Salvaged>>,
+    parts: Query<&super::RobotPart>,
+    boxes: Query<(Entity, &SentryPiece, &OfSentry, &super::RobotPart)>,
+    catalog: Res<crate::items::Catalog>,
+    mut seat_looks: Query<(&super::salvage::SeatLook, &mut Visibility)>,
+    (mut meshes, mut materials): (
+        Option<ResMut<Assets<Mesh>>>,
+        Option<ResMut<Assets<StandardMaterial>>>,
+    ),
+) {
+    for (e, s, robot, children) in &sentries {
+        if !robot.wrecked {
+            continue;
+        }
+        commands.entity(e).insert(super::Salvaged);
+        let look = super::salvage::Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        let health = |p: &super::RobotPart| (p.hp / p.max_hp.max(1.0)).clamp(0.0, 1.0);
+        let mut seated = Vec::new();
+        let head = children
+            .iter()
+            .filter_map(|c| parts.get(c).ok())
+            .find(|p| p.role == PartRole::Core)
+            .map_or(0.0, health);
+        for c in children.iter() {
+            let Ok(p) = parts.get(c) else {
+                continue;
+            };
+            if let Some(row) = wreck_row(p.role, health(p)) {
+                seated.push(p.role);
+                super::salvage::fit(&mut commands, &catalog, c, row, &look);
+            }
+        }
+        // The searchlight on its brow goes as the head does.
+        let lamp = PartRole::Lamp(0);
+        if let Some(row) = wreck_row(lamp, head) {
+            seated.push(lamp);
+            super::salvage::fit(&mut commands, &catalog, e, row, &look);
+        }
+        for (l, mut vis) in &mut seat_looks {
+            if l.robot == e && seated.contains(&l.role) {
+                *vis = Visibility::Hidden;
+            }
+        }
+        for (b, piece, of, part) in &boxes {
+            if of.0 != e || !matches!(piece, SentryPiece::Box) {
+                continue;
+            }
+            let mut row = wreck_row(PartRole::Armour(40), health(part)).expect("its box");
+            row.hot = s.powered;
+            super::salvage::fit(&mut commands, &catalog, b, row, &look);
+        }
+    }
+}
+
+/// Feed leads from a sentry's gun into its head.
+pub const GUN_LEADS: usize = 2;
+/// Where each item's middle sits on its part (local to the part, the
+/// model's own space: `art/robots/sentry.py` prints them).
+pub const GUN_MID: Vec3 = Vec3::new(0.0, 0.0, -0.065);
+pub const EYE_MID: Vec3 = Vec3::new(0.0, 0.0, 0.006);
+pub const LAMP_MID: Vec3 = Vec3::new(-0.007, 0.0, 0.01);
+/// The breaker sits on top of its box (local to the box's middle).
+pub const BREAKER_AT: Vec3 = Vec3::new(0.0, 0.615, 0.0);
+
+/// What a sentry's wreck gives up for each of its parts, and how it's held.
+pub fn wreck_row(role: PartRole, health: f32) -> Option<super::salvage::Row> {
+    use super::salvage::{Fix, Row};
+    let row = |item, at: Vec3, size, fix| Row {
+        item,
+        at: Transform::from_translation(at),
+        size,
+        health,
+        fix,
+        hot: false,
+        replaces: None,
+    };
+    Some(match role {
+        PartRole::Weapon => row(
+            "sentry_gun",
+            GUN_MID,
+            HEAD_SCALE,
+            Fix::Cables { n: GUN_LEADS },
+        ),
+        PartRole::Sensor => row("sentry_eye", EYE_MID, HEAD_SCALE, Fix::Hand),
+        PartRole::Lamp(_) => row(
+            "sentry_lamp",
+            super::sentry_look::LAMP + LAMP_MID,
+            HEAD_SCALE,
+            Fix::Hand,
+        ),
+        PartRole::Armour(40) => row("sentry_junction", BREAKER_AT, 1.0, Fix::Hand),
+        _ => return None,
+    })
 }
 
 /// What it sees it reports: a response team follows, now and then.
@@ -1254,5 +1386,69 @@ pub(crate) mod tests {
         mut n: ResMut<RobotHits>,
     ) {
         n.0 += hits.read().filter(|h| parts.contains(h.entity)).count() as u32;
+    }
+
+    /// Shot through, its head comes off its mast and lies at its foot,
+    /// and what was on it is seated there in reach (its gun on its leads,
+    /// its visor and searchlight), the breaker in its box: its salvage,
+    /// not the pylon's rolls.
+    #[test]
+    fn its_wreck_lies_in_reach() {
+        use crate::items::{Catalog, InSocket, Item};
+        let (mut app, e) = world_with_sentry([40.0, 230.0], 0.0, 160.0);
+        for _ in 0..30 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Robot>(e).unwrap().wrecked = true;
+        for _ in 0..(90 * 4) {
+            app.update();
+        }
+        let s = app.world().get::<Sentry>(e).unwrap().clone();
+        let head = *app.world().get::<Transform>(e).unwrap();
+        let lie = lying(s.foot, s.yaw);
+        assert!(
+            head.translation.distance(lie.translation) < 0.05,
+            "{} vs {}",
+            head.translation,
+            lie.translation
+        );
+        assert!(app.world().get::<super::super::Salvaged>(e).is_some());
+        let catalog = app.world().resource::<Catalog>().clone();
+        let seated: Vec<(String, Vec3)> = app
+            .world_mut()
+            .query_filtered::<(&Item, &GlobalTransform), With<InSocket>>()
+            .iter(app.world())
+            .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
+            .collect();
+        let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            ["sentry_eye", "sentry_gun", "sentry_junction", "sentry_lamp"],
+            "{seated:?}"
+        );
+        // Each where a hand reaches from standing, beside the head or on
+        // its box.
+        for (id, at) in &seated {
+            assert!(
+                at.y - s.foot.y < 1.2,
+                "{id} {:.2} m up",
+                at.y - s.foot.y
+            );
+            let near = if id == "sentry_junction" {
+                at.xz().distance(s.foot.xz()) > 5.0
+            } else {
+                at.distance(head.translation) < 0.9
+            };
+            assert!(near, "{id} at {at}, head at {}", head.translation);
+        }
+        // No pylon loot thrown about it.
+        let loose: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&Item, Without<InSocket>>()
+            .iter(app.world())
+            .map(|i| catalog.get(i.kind()).id.clone())
+            .collect();
+        assert!(!loose.iter().any(|id| id.starts_with("pylon_")), "{loose:?}");
     }
 }

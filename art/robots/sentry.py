@@ -1,6 +1,8 @@
 """The sentry (src/robots/sentry.rs): an armoured turret head on a mast,
 a searchlight on its brow, a twin-barrelled gun slung under it, and a
-junction box at the end of its cable. Writes assets/models/robots/sentry.glb.
+junction box at the end of its cable. Writes assets/models/robots/sentry.glb,
+and its salvage (`items()`): its gun, eye and searchlight as they are on it,
+and the breaker from inside its junction box, in assets/models/items/.
 
 World scale, metres, +Y up, -Z forward. Objects and their origins (each
 the spawn offset of its part or piece):
@@ -29,11 +31,15 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import Part, RX, RY, T, export, fillet, make, report, reset
+import bmesh
+
+from common import Part, RX, RY, S, T, export, fillet, make, report, reset
 
 UP = RX(-math.pi / 2)  # cyl axis Z -> Y
 SIDE = RY(math.pi / 2)  # cyl axis Z -> X
 MAST = 4.6
+# The game draws the head (and what's on it) at this size (sentry.rs).
+HEAD_SCALE = 1.5
 SEGS = (24, 12, 6)
 # (The box and the cable stand apart from the rest in the file: in the
 # game they're metres away. Their meshes are relative to these.)
@@ -157,9 +163,54 @@ def build(lod):
     return out
 
 
+def items():
+    """The salvage: the robot's own gun, eye and searchlight (what you saw
+    on it is what comes off), and the breaker out of its junction box."""
+    out = []
+    for p in build(0):
+        if p.name in ("eye", "lamp", "gun"):
+            p.name = "sentry_" + p.name
+            # At the size the game draws its head (sentry.rs HEAD_SCALE).
+            bmesh.ops.transform(p.bm, matrix=S(HEAD_SCALE, HEAD_SCALE, HEAD_SCALE),
+                                verts=p.bm.verts)
+            p.origin = p.origin * HEAD_SCALE
+            out.append(p)
+    # The breaker: a block of black bakelite with a lit window, its
+    # terminals copper, two cut leads where it was wired in.
+    brk = Part("sentry_junction")
+    brk.box((0.22, 0.16, 0.1), (0.0, 0.0, 0.0), "Dark", bevel=0.012, segs=2)
+    brk.box((0.2, 0.03, 0.08), (0.0, 0.095, 0.0), "Shell", bevel=0.006, segs=1)
+    brk.box((0.08, 0.03, 0.006), (0.04, 0.02, -0.053), "Glow", segs=1)
+    brk.box((0.03, 0.05, 0.02), (-0.06, 0.02, -0.06), "Warn", bevel=0.004, segs=1)
+    for sx in (-0.06, 0.0, 0.06):
+        brk.cyl(0.014, -0.11, -0.08, "Copper", segs=10, xf=T(sx, 0.0, 0.0) @ UP)
+    for sx in (-0.06, 0.06):
+        brk.cyl(0.009, -0.2, -0.11, "Red", segs=8, xf=T(sx, 0.0, 0.025) @ UP)
+    out.append(brk)
+    return out
+
+
 reset()
 for lod in (0, 1, 2):
     for p in build(lod):
         make(p)
 report()
 export("assets/models/robots/sentry.glb")
+
+for p in items():
+    reset()
+    obj = make(p)
+    # Centred on its bounds: the item's box (items.ron dims) sits round its
+    # origin. `mid` is where that centre was from the part's origin, which
+    # is where the game seats it.
+    me = obj.data
+    lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+    hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+    mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+    for v in me.vertices:
+        v.co = [v.co[k] - mid[k] for k in range(3)]
+    size = [hi[k] - lo[k] for k in range(3)]
+    # (Blender is Z up: game x, y, z = its x, z, y; game z = -its y.)
+    print(f"{p.name} dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+          f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+    export(f"assets/models/items/{p.name}.glb")
