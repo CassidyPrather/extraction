@@ -185,6 +185,47 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
             });
         }
     }
+    // The rim: a lattice point at the sheet's edge (a neighbour off it) is
+    // moved out onto the ragged rim along its own bearing, so the edge
+    // wanders as ice does rather than stepping as the lattice does.
+    let rim_at = |d: Vec2| {
+        let a = d.y.atan2(d.x);
+        r * (1.0
+            + ICE_RAGGED
+                * (super::visuals::value_noise(a.cos() * 3.0 + 7.0, a.sin() * 3.0 + 7.0, 41) * 2.0
+                    - 1.0))
+    };
+    let edge: Vec<bool> = (0..pts.len())
+        .map(|k| {
+            let (i, j) = ((k % side) as i32, (k / side) as i32);
+            pts[k].is_some_and(|(_, o)| o >= 1.0)
+                && [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|(di, dj)| {
+                    let (a, b) = (i + di, j + dj);
+                    a < 0
+                        || b < 0
+                        || a >= side as i32
+                        || b >= side as i32
+                        || pts[b as usize * side + a as usize].is_none()
+                })
+        })
+        .collect();
+    for k in 0..pts.len() {
+        if !edge[k] {
+            continue;
+        }
+        if let Some((q, o)) = pts[k].as_mut().map(|(q, o)| (q, *o)) {
+            let d = Vec2::new(q[0], q[2]);
+            if d.length() > 1e-3 && o >= 1.0 {
+                let to = d.normalize() * rim_at(d);
+                // Only outward, and never past where the lattice would
+                // have had its next point.
+                if to.length() > d.length() && to.length() < d.length() + ICE_CELL * 1.5 {
+                    q[0] = to.x;
+                    q[2] = to.y;
+                }
+            }
+        }
+    }
     let mut positions = Vec::new();
     let mut colours = Vec::new();
     let mut uvs = Vec::new();
