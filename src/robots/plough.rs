@@ -670,7 +670,9 @@ fn plough_wreck(
     mut commands: Commands,
     ploughs: Query<
         (Entity, &Robot, &GlobalTransform, &Children),
-        (With<Plough>, Without<super::wreck::Broken>),
+        // (Not `Broken`: the wreck module marks a pylon-kind machine broken
+        // the moment it's wrecked, before this sees it.)
+        (With<Plough>, Without<super::Salvaged>),
     >,
     mut parts: Query<(&super::RobotPart, &mut Transform, Has<PloughCell>)>,
     catalog: Res<crate::items::Catalog>,
