@@ -239,7 +239,9 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
                         cluster,
                     );
                 }
-                if let Some(holds) = world.get_resource::<crate::world::buildings::BuildingHolds>()
+                if let Some(holds) = world
+                    .get_resource::<crate::world::buildings::BuildingHolds>()
+                    .filter(|_| !holds_off(world))
                 {
                     roll_holds(&mut commands, zone, holds, loot, catalog, seed, raid);
                 }
@@ -526,6 +528,22 @@ fn better_spot(
     let least = pick.iter().map(|&k| pile(k)).min()?;
     let pick: Vec<usize> = pick.into_iter().filter(|&k| pile(k) == least).collect();
     Some(pick[rng.below(pick.len())])
+}
+
+/// Rolls no container's holds: a test's world as it was before them.
+#[cfg(test)]
+#[derive(Resource)]
+pub(crate) struct NoHolds;
+
+/// Whether a test asked for no holds to be rolled (`NoHolds`).
+fn holds_off(world: &World) -> bool {
+    #[cfg(test)]
+    return world.get_resource::<NoHolds>().is_some();
+    #[cfg(not(test))]
+    {
+        let _ = world;
+        false
+    }
 }
 
 /// A thing rolled for a container's hold (`buildings::Hold`), waiting,
@@ -1481,6 +1499,94 @@ pub(crate) mod tests {
 #[cfg(test)]
 mod hold_tests {
     use super::*;
+
+    /// Every item's kind and where it is (to the centimetre), outside the
+    /// sockets, after the roll has settled; and every kind's count.
+    #[allow(clippy::type_complexity)]
+    fn census(
+        map: &str,
+        holds: bool,
+    ) -> (
+        Vec<(String, [i64; 3])>,
+        std::collections::BTreeMap<String, usize>,
+    ) {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                ..Default::default()
+            },
+            false,
+        );
+        if !holds {
+            app.insert_resource(NoHolds);
+        }
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let catalog = app.world().resource::<Catalog>().clone();
+        let mut q = app
+            .world_mut()
+            .query::<(&Item, &GlobalTransform, Has<crate::interact::InSocket>)>();
+        let mut placed = Vec::new();
+        let mut kinds = std::collections::BTreeMap::new();
+        for (item, g, socketed) in q.iter(app.world()) {
+            let id = catalog.get(item.kind()).id.clone();
+            *kinds.entry(id.clone()).or_insert(0) += 1;
+            if !socketed {
+                let p = g.translation();
+                let cm = |v: f32| (v * 100.0).round() as i64;
+                placed.push((id, [cm(p.x), cm(p.y), cm(p.z)]));
+            }
+        }
+        placed.sort();
+        (placed, kinds)
+    }
+
+    /// A container's hold changes no other roll: in every valley the loot
+    /// lying outside the holds is the same things in the same places with
+    /// the holds rolled as without them. Prints each valley's census by
+    /// kind, without and with (`-- --nocapture`).
+    #[test]
+    fn holds_leave_every_other_roll_as_it_was() {
+        for map in crate::test_maps() {
+            let (before, kinds_before) = census(&map, false);
+            let (after, kinds_after) = census(&map, true);
+            assert_eq!(
+                before.len(),
+                after.len(),
+                "{map}: loot outside the holds changed in number"
+            );
+            // The same things laid in the same places: what settles may
+            // come to rest a centimetre apart (more bodies in the world, a
+            // different order to the physics' step), not a roll.
+            let near = |a: &(String, [i64; 3]), b: &(String, [i64; 3])| {
+                a.0 == b.0 && (0..3).all(|k| (a.1[k] - b.1[k]).abs() <= 3)
+            };
+            let moved: Vec<_> = before
+                .iter()
+                .filter(|x| !after.iter().any(|y| near(x, y)))
+                .collect();
+            assert!(
+                moved.is_empty(),
+                "{map}: loot outside the holds moved or changed: {moved:?}"
+            );
+            let total = |k: &std::collections::BTreeMap<String, usize>| k.values().sum::<usize>();
+            println!(
+                "census {map}: {} items without holds, {} with",
+                total(&kinds_before),
+                total(&kinds_after)
+            );
+            for (k, n) in &kinds_after {
+                let was = kinds_before.get(k).copied().unwrap_or(0);
+                if *n != was {
+                    println!("census {map}   {k}: {was} -> {n}");
+                }
+            }
+        }
+    }
 
     /// What's rolled for a container lies in it: every thing rolled for a
     /// hold is seated in a hold's socket within a few frames (a locker's
