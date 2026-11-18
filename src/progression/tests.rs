@@ -147,6 +147,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
     career.requests.want = Some(("hound_hip_servo".into(), 2));
     for i in 0..60 {
         career.stash.push(extraction_core::save::SavedItem {
+            charred: false,
             id: "ak74".into(),
             condition: 0.5,
             rounds: 0,
@@ -156,7 +157,6 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
-            cooked: false,
         });
     }
     assert!(career.progress.is_none());

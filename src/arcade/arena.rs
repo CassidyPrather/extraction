@@ -736,6 +736,7 @@ fn lay_tables(world: &mut World) {
 
 fn saved(id: &str, rounds: u32) -> SavedItem {
     SavedItem {
+        charred: false,
         id: id.into(),
         condition: 0.9,
         rounds,
@@ -745,7 +746,6 @@ fn saved(id: &str, rounds: u32) -> SavedItem {
         gun: None,
         inserted: Vec::new(),
         loads: Default::default(),
-        cooked: false,
     }
 }
 

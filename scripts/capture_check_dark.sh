@@ -11,7 +11,8 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 MAP="${1:-marrow_creek}"
-CAM="${2:-40,0,262,0,-6}"
+# Marrow's south gate, on the map (it spans +-194 m since it shrank).
+CAM="${2:-22,0,148.5,53,-6}"
 shift $(( $# > 2 ? 2 : $# ))
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
 . scripts/capture_common.sh

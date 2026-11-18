@@ -141,6 +141,7 @@ mod tests {
         s.lit = true;
         assert!(s.claimed());
         s.stash.push(SavedItem {
+            charred: false,
             id: "canned_stew".into(),
             condition: 1.0,
             rounds: 0,
@@ -150,7 +151,6 @@ mod tests {
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
-            cooked: false,
         });
         // A quiet raid: nothing comes.
         assert!(s.found(FOUND_AT - 1, 0.0).is_none());

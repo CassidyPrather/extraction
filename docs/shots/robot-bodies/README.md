@@ -64,8 +64,8 @@ To make one again (about 2 s a frame under lavapipe):
 ```bash
 cargo build --profile fast
 WGPU_BACKEND=vulkan xvfb-run -a -s "-screen 0 1600x900x24" target/fast/extraction \
-    --screenshot /tmp/reel/wreck.png --frames 99999 --camera 40,0,262,0,-12 \
-    --no-robots --data-dir /tmp/reel-data --gallery reel:wreck,16,5 --size 960x540
+    --screenshot /tmp/reel/wreck.png --frames 99999 --camera 0,0,36,0,-12 \
+    --map training_yard --new-game --no-captions --no-robots --data-dir /tmp/reel-data --gallery reel:wreck,16,5 --size 960x540
 python3 scripts/contact_sheet.py docs/shots/robot-bodies/walker_wreck.png 4 \
     /tmp/reel/wreck_[0-9]*.png --crop 230,150,500,300 --scale 0.6
 ```
@@ -168,7 +168,7 @@ Before and after, the walker and the drone 5 m off on the training yard in fog, 
 ![walker wreck](wreck_rests_on_bare_side_walker_before_after.png)
 ![drone wreck](wreck_rests_on_bare_side_drone_before_after.png)
 
-> **Reel spot.** Most recipes above put the camera at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
+> **Reel spot.** The recipes now film in the training yard (`--map training_yard --new-game --no-captions --camera 0,0,36,…`), on the map. `--no-captions` keeps the yard's radio lines off the frames; a reel's first two frames come before the yard's ground has loaded (bare white), so start the sheet at frame 2. Pictures made before 18 November (their captions name `40,0,262`) were filmed at `40,0,262` on Marrow Creek, the default map. That spot is about 63 m past the map's north edge (its ground runs to ±194 m). It looks like ground, but nothing there has a collider, so a wreck filmed there falls through. Film anything that falls (wrecks, debris, salvage) on the map: for example `--map training_yard --camera 0,0,36,0,-14`.
 
 ## Feet that hold the ground
 
@@ -335,3 +335,11 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 | `../../robots/workers_2/98_engineer_at_work.png` | `reel:engineerwork` at dusk: its scan lamp lit (the beam's start at the lens) as it surveys |
 | `../../robots/workers_2/98_barricade_stages.png` | `reel:barricade` by day, 7 m off: struts, half the panels, the panels, done with the orange strap (cut it or drag it by it) |
 | `../../robots/workers_2/98_camera_stages.png` | `reel:camera` at dusk: the mast going up, the head with its lit cone sweeping, done with its cable to the network and a fix building (the searchlights' red cast) |
+
+## The grappler's harpoon pieces (Heavy's salvage)
+
+`render::logistics` dresses Models' harpoon.glb `launcher_head` and `drum` as their own pieces (`HarpoonPart`), the head on the folding boom; tested by `the_harpoon_dresses_its_head_and_drum_for_the_salvage`.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/grappler_wreck_head_folded.png` | `--map training_yard --gallery robots:grappler+grappler!dead,90,8` by day (camera `0,0,30,0,-12`, crop 680x340 of 1920x1080 at 2x): a standing grappler, and a wrecked one on its side with the boom folded and the launcher head riding it |

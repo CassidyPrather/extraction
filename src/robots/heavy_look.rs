@@ -777,7 +777,7 @@ fn light_heavies(
 /// `scripts/heavy_raise.sh`).
 ///
 /// ```text
-/// scripts/shot.sh docs/shots/heavy/front.png 40,0,262,0,0 60 --gallery heavy,200
+/// scripts/shot.sh docs/shots/heavy/front.png 0,0,36,0,0 60 --map training_yard --new-game --no-captions --gallery heavy,200
 /// ```
 #[allow(clippy::too_many_arguments)]
 fn gallery(

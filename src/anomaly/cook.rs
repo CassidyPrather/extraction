@@ -105,10 +105,13 @@ pub fn cook(
             Some(mut c) => {
                 c.0 += dt;
                 if c.0 >= COOK_SECS {
+                    // Charred for good (`robots::salvage::Charred`: its look,
+                    // kept through a save), whatever it was; salvage reads
+                    // the message for what cooking does to a part.
                     commands
                         .entity(e)
                         .remove::<Cooking>()
-                        .try_insert(Cooked::default());
+                        .try_insert((Cooked::default(), crate::robots::salvage::Charred));
                     cooked.write(PartCooked { entity: e, at: p });
                 }
             }
@@ -161,10 +164,9 @@ mod tests {
         );
     }
 
-    /// Cooked stays cooked through a save: its snapshot says so, and it's
-    /// restored charred.
+    /// Cooked stays charred through a save (Heavy's `SavedItem.charred`).
     #[test]
-    fn a_cooked_thing_is_saved_cooked() {
+    fn a_cooked_thing_is_saved_charred() {
         let mut app = crate::headless_app(
             crate::launch::LaunchOptions {
                 robots: false,
@@ -175,12 +177,24 @@ mod tests {
         app.finish();
         app.cleanup();
         app.update();
-        let e = crate::anomaly::surge::grow(app.world_mut(), "spare_parts", Vec3::ZERO).unwrap();
-        app.world_mut().entity_mut(e).insert(Cooked::default());
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(0.0, 30.0);
+        super::super::spawn_anomaly(app.world_mut(), AnomalyKind::Burner, at, 2.0, None);
+        let e = crate::anomaly::surge::grow(app.world_mut(), "spare_parts", at + Vec3::Y * 0.2)
+            .unwrap();
+        app.world_mut()
+            .entity_mut(e)
+            .insert(avian3d::prelude::RigidBody::Static);
+        for _ in 0..(90.0 * (COOK_SECS + 0.5)) as usize {
+            app.update();
+        }
+        assert!(
+            app.world()
+                .get::<crate::robots::salvage::Charred>(e)
+                .is_some(),
+            "charred"
+        );
         let saved = crate::persist::snapshot_item(app.world(), e, Vec3::ZERO).unwrap();
-        assert!(saved.cooked, "saved cooked");
-        let back =
-            crate::persist::restore_item(app.world_mut(), &saved, Transform::IDENTITY).unwrap();
-        assert!(app.world().get::<Cooked>(back).is_some(), "restored cooked");
+        assert!(saved.charred, "saved charred");
     }
 }
