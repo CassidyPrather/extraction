@@ -30,6 +30,10 @@ How it works:
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
+| `audio_machines::tests::the_dangers_are_heard`: "no sound for: [StimCue]" | 4143aafa | Hands | #102 step 2 |
+| `items::loot::tests::nothing_turns_up_before_its_raid`, `a_first_raids_small_things_lie_in_sight` | 4143aafa | Hands | medical table's cartridges |
+| `models::tests::every_item_box_is_its_model`, `no_item_falls_back_to_the_placeholder`, `capture::scale::tests::items_are_drawn_near_their_real_size` | 4143aafa | Hands / Models | cartridges had no model; Models' 911c7098 (in gate 335) should cure — confirm on the next lib run |
+| worst-view stereo draw gauge: Cinder s01_ahead (night, downpour, fight) 2552 of 2400 draws (106%); Cinder insertion_south_gate_2 97%, two fuel-exfil views ~96%, Marrow poi_radio_mast_0 94% — up ~650 draws since 10 Nov, in the smaller groups | 9d495af1 | Performance (finding the group), then that group's owner | cuts only in views ≥85% |
 
 ## Logged, not failing a check
 
@@ -58,3 +62,4 @@ How it works:
 | `soak::chaos::chaos_monkey_short` | passes on 5f9a23a7 (lib332) |
 | `capture::attach::tests::model_pieces_touch_what_holds_them` (field set pieces in the air) | 6b547021 (Progression) |
 | `render::legibility::tests::every_model_with_letters_is_registered_and_legible` (MIX label) | edfd7666 (Legibility) |
+| `onboarding::pickups` each_line_is_what_the_game_does, every_kind_rollable_before_raid_6 (cartridges, DP-3) | 9f512a16 (Onboarding) |
