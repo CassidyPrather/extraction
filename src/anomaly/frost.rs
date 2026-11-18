@@ -172,11 +172,14 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
                             - 1.0));
             let p = [c.x + d.x, c.z + d.y];
             let g = hm.height(p);
-            let wet = hm.water_level(p).is_some_and(|l| l > g);
+            // On the water where it lies: a beck falls along its run, and a
+            // sheet at its mean level sank under it upstream.
+            let here = hm.water_level(p).filter(|l| *l > g);
+            let top = here.map_or(top, |l| l + ICE_PROUD);
             pts.push(if d.length() > rim {
                 None
-            } else if wet || g < top {
-                Some(([d.x, top - c.y, d.y], 1.0))
+            } else if here.is_some() || g < top {
+                Some(([d.x, top.max(g + 0.02) - c.y, d.y], 1.0))
             } else if g < top + RIME_UP {
                 let fade = 1.0 - (g - top) / RIME_UP;
                 Some(([d.x, g + 0.02 - c.y, d.y], fade))
