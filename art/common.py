@@ -63,6 +63,11 @@ MATERIALS = {
     "LampRed": ((0.5, 0.03, 0.02), 0.0, 0.2, (1.0, 0.05, 0.02)),
     "Lens": ((0.08, 0.1, 0.14), 0.5, 0.05, None),
     "Copper": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
+    # A box's round's point and the band behind it, and a shell's hull:
+    # painted by the game for each round's load (`items::rounds`).
+    "Tip": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
+    "TipBand": ((0.72, 0.38, 0.22), 1.0, 0.35, None),
+    "Hull": ((0.5, 0.06, 0.04), 0.0, 0.6, None),
     "Glow": ((0.1, 0.4, 0.5), 0.0, 0.3, (0.2, 0.8, 1.0)),
     "Rope": ((0.5, 0.42, 0.28), 0.0, 0.9, None),
     "Cream": ((0.82, 0.78, 0.66), 0.0, 0.6, None),

@@ -7,6 +7,7 @@ pub mod impacts;
 pub mod loot;
 pub mod lost;
 pub mod rest;
+pub mod rounds;
 pub mod usage;
 
 use avian3d::prelude::*;
@@ -56,6 +57,7 @@ impl Plugin for ItemsPlugin {
             lost::LostItemsPlugin,
             rest::RestPlugin,
             damp::DampPlugin,
+            rounds::RoundsPlugin,
             handled::HandledPlugin,
         ));
     }
@@ -164,12 +166,13 @@ pub struct ItemVisualsPlugin;
 
 impl Plugin for ItemVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(damp::DampVisualsPlugin).add_systems(
-            PostUpdate,
-            (placeholder_visuals, finish_item_models)
-                .chain()
-                .before(TransformSystems::Propagate),
-        );
+        app.add_plugins((damp::DampVisualsPlugin, rounds::RoundsVisualsPlugin))
+            .add_systems(
+                PostUpdate,
+                (placeholder_visuals, finish_item_models)
+                    .chain()
+                    .before(TransformSystems::Propagate),
+            );
     }
 }
 

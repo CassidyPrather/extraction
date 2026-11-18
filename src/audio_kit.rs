@@ -50,6 +50,7 @@ impl Plugin for KitSoundsPlugin {
                     treatment_sounds,
                     frost_sounds,
                     gunsmith_sounds,
+                    box_sounds,
                 ),
             );
     }
@@ -332,6 +333,36 @@ fn bump_sounds(
             "gun.bump",
             db,
             1.15,
+            0.08,
+        );
+    }
+}
+
+/// A box of rounds torn open (`box.tear`, a paper rasp, quick), and each
+/// round out of it or back in (`box.round`, a case's light clink; going
+/// in a touch higher) (`items::rounds`).
+fn box_sounds(
+    mut commands: Commands,
+    mut events: MessageReader<crate::items::rounds::BoxEvent>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::items::rounds::BoxEvent;
+    for ev in events.read() {
+        let (set, cue, at, speed) = match *ev {
+            BoxEvent::Torn { at, .. } => ("physical/zip", "box.tear", at, 1.6),
+            BoxEvent::Out { at, .. } => ("guns/casing", "box.round", at, 1.0),
+            BoxEvent::In { at, .. } => ("guns/casing", "box.round", at, 1.15),
+        };
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            cue,
+            0.0,
+            speed,
             0.08,
         );
     }
@@ -664,6 +695,8 @@ mod tests {
         let mut cues = vec![
             ("guns/pistol_shot", "flare.pop"),
             ("anomaly/burner_roar", "flare.burn"),
+            ("physical/zip", "box.tear"),
+            ("guns/casing", "box.round"),
             ("machines/clank", "bipod.lock"),
             ("physical/handle_metal", "bipod.swing"),
             ("physical/drop_metal", "gun.bump"),

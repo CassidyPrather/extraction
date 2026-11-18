@@ -24,7 +24,11 @@ ARCADE card, next to TRAINING YARD.
     - the MP-133 with a box of shells, and the PM with two spare
       magazines and an injector;
   - a fourth table with the board and two RGD-5s;
-  - a fifth, the other side, with the gun board (below).
+  - a fifth, the other side, with the gun board (below) and, in front of
+    it, five boxes of 5.45 to read and handle (`items::rounds`): an AP box
+    and a tracer box, shut and full; a ball box with AP and tracers put in
+    it (mixed: a hatched band and MIX); an AP box with twelve left; and a
+    ball box with four rounds gone damp (darker, and said when taken).
 - **The board**: the sheet shows what is on, what comes next and through
   which gate, and the next four waves of the ladder. The cards are:
   - CALL WAVE;
