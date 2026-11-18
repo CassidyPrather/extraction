@@ -471,6 +471,32 @@ const COUNTER_NODES: &[CounterNode] = &[
             travel: DRAWER_TRAVEL,
         },
     ),
+    // A stove's firebox, ash pit and oven doors, each on its left edge
+    // (`art/props/furniture.py` `STOVE_DOORS`).
+    CounterNode(
+        "stove#door_fire",
+        [-0.240, 0.62, -0.289],
+        [0.110, 0.0, -0.024],
+        [0.22, 0.15, 0.048],
+        false,
+        Motion::Hinge { most: STOVE_DOOR },
+    ),
+    CounterNode(
+        "stove#door_ash",
+        [-0.240, 0.2, -0.289],
+        [0.110, 0.0, -0.024],
+        [0.22, 0.1, 0.048],
+        false,
+        Motion::Hinge { most: STOVE_DOOR },
+    ),
+    CounterNode(
+        "stove#door_oven",
+        [0.030, 0.4, -0.289],
+        [0.130, 0.0, -0.024],
+        [0.26, 0.3, 0.048],
+        false,
+        Motion::Hinge { most: STOVE_DOOR },
+    ),
     // A locker's door, hung on its left (`art/props/furniture.py`
     // `LOCKER_HINGE`).
     CounterNode(
@@ -521,6 +547,8 @@ pub const CABINET_DOOR: f32 = 1.9;
 /// How far a locker's door swings open, radians: back against its hinge
 /// side.
 pub const LOCKER_DOOR: f32 = 2.0;
+/// How far a stove's doors swing open, radians.
+pub const STOVE_DOOR: f32 = 1.7;
 
 /// A building's counters' drawers and cabinet doors, put up as moving
 /// parts when it's placed (the building draws only their carcasses:
@@ -708,6 +736,16 @@ fn clear_end(
     xf: &Transform,
     n: &CounterNode,
 ) -> f32 {
+    clear_end_by(pieces, own, xf, n).0
+}
+
+/// `clear_end`, and what it meets (its material), if anything.
+fn clear_end_by(
+    pieces: &[super::buildings::Piece],
+    own: &std::ops::Range<usize>,
+    xf: &Transform,
+    n: &CounterNode,
+) -> (f32, Option<crate::render::materials::Mat>) {
     use super::buildings::Shape;
     let flip = if n.4 {
         Quat::from_rotation_z(std::f32::consts::PI)
@@ -737,8 +775,8 @@ fn clear_end(
                         + half
                             * Vec3::new(i as f32 / 2.0 - 1.0, j as f32 / 2.0 - 1.0, k as f32 - 1.0);
                     let p = pose.transform_point(local);
-                    let hit = pieces.iter().enumerate().any(|(pi, piece)| {
-                        if !piece.collide || own.contains(&pi) {
+                    let hit = pieces.iter().enumerate().find(|(pi, piece)| {
+                        if !piece.collide || own.contains(pi) {
                             return false;
                         }
                         let Shape::Box(size) = piece.shape else {
@@ -747,14 +785,14 @@ fn clear_end(
                         let q = piece.at.rotation.inverse() * (p - piece.at.translation);
                         (q.abs() - (size * 0.5 - Vec3::splat(0.02))).max_element() < 0.0
                     });
-                    if hit {
-                        return end * (step - 1) as f32 / 48.0;
+                    if let Some((_, piece)) = hit {
+                        return (end * (step - 1) as f32 / 48.0, Some(piece.mat));
                     }
                 }
             }
         }
     }
-    end
+    (end, None)
 }
 
 /// The least of its way a container's part must open clear: a door most
@@ -772,7 +810,8 @@ mod tests {
     /// Every container's door swings most of its way and every drawer
     /// runs all of its way clear of the building around it (its walls,
     /// other furniture, not its own carcass): a locker shut against a wall
-    /// is a lie too (`clear_end`, `least_clear`).
+    /// is a lie too (`clear_end`, `least_clear`). One buried in a drowned
+    /// house's silt is plainly stuck, and stays so.
     #[test]
     fn every_container_opens_clear() {
         use super::super::buildings;
@@ -798,8 +837,11 @@ mod tests {
                         .filter(|n| n.0.starts_with(model) && n.0[model.len()..].starts_with('#'))
                     {
                         parts += 1;
-                        let clear = clear_end(&geo.pieces, &d.pieces, xf, n);
-                        if clear < least_clear(n.5) - 1e-4 {
+                        let (clear, by) = clear_end_by(&geo.pieces, &d.pieces, xf, n);
+                        // A door down in a drowned house's silt stays
+                        // shut, plainly buried: no lie.
+                        let buried = by == Some(crate::render::materials::Mat::Silt);
+                        if clear < least_clear(n.5) - 1e-4 && !buried {
                             bad.push(format!(
                                 "{id}: {} at {:.2?} opens {:.0}% clear",
                                 n.0,
