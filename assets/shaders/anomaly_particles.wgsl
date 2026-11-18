@@ -11,6 +11,7 @@
 //   5 mirror glints   twinkles on the fold's surface, bright when revealed
 //   6 lift dust       a low swirl over the flattened ring
 //   7 hush dust       hanging dead still in a dome
+//   8 steam bank      big billows, low, rolling where a burner meets a frost
 //
 // Fog is applied here through bevy_pbr's apply_fog, which render/fog.rs
 // patches to add the ground-fog banks and Kettle Pass's cloud cap, so a
@@ -167,6 +168,19 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         p.alpha = 0.6 + 0.4 * max(reveal, stir);
         p.size = p.size * (1.0 + 0.4 * stir);
         p.spin = s * 3.0;
+    } else if (mode == 8) {
+        // Steam (`anomaly::steam`): a bank of billows hanging low in a
+        // dome, each rolling slowly round and swelling and thinning, so
+        // the bank churns but never clears.
+        let life = fract(t / (6.0 + 4.0 * h(s, 1.3)) + h(s, 6.7));
+        let a = s * TAU + t * 0.12 * (h(s, 2.2) - 0.5);
+        let rr = R * 0.85 * sqrt(h(s, 3.1));
+        let y = 0.3 + 2.4 * h(s, 4.3) * (1.0 - 0.45 * rr / R) + life * 0.6;
+        let roll = vec3<f32>(sin(t * 0.3 + s * 9.0), 0.0, cos(t * 0.27 + s * 4.0)) * 0.4;
+        p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + roll;
+        p.size = params.state.w * (0.7 + 0.6 * h(s, 5.9)) * (0.8 + 0.4 * sin(life * 3.14159));
+        p.alpha = smoothstep(0.0, 0.2, life) * (1.0 - smoothstep(0.75, 1.0, life));
+        p.spin = s * 5.0 + t * 0.05;
     } else {
         let a = s * TAU + t * (0.3 + 0.9 * charge) * (0.6 + 0.4 * h(s, 1.4));
         let r = R * (0.3 + 0.75 * h(s, 2.1));

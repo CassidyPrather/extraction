@@ -76,6 +76,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 xray_parts,
                 glass_eye,
                 steam,
+                dress_steam_banks,
             ),
         );
     }
@@ -2507,5 +2508,48 @@ fn steam(
             .with_scale(Vec3::splat(0.4)),
             bevy::light::NotShadowCaster,
         ));
+    }
+}
+
+/// A steam bank (`anomaly::steam`): big soft billows, white, low and
+/// rolling slowly in a dome (`anomaly_particles.wgsl` mode 8). One
+/// particle system, no light.
+fn dress_steam_banks(
+    mut commands: Commands,
+    added: Query<(Entity, &super::steam::SteamBank), Added<super::steam::SteamBank>>,
+    a: Res<AnomalyAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut particles: ResMut<Assets<ParticleMaterial>>,
+) {
+    for (e, bank) in &added {
+        let mut rng = extraction_core::noise::Rng::new(e.to_bits());
+        let (count, size) = (46, 1.7);
+        let color = Vec3::new(0.86, 0.88, 0.9);
+        let r = bank.radius;
+        let ext = r * 2.0 + size * 3.0;
+        commands.entity(e).with_children(|c| {
+            c.spawn((
+                Particles { color, alpha: 0.55 },
+                Mesh3d(meshes.add(particle_mesh(count, &mut rng))),
+                MeshMaterial3d(particles.add(ParticleMaterial {
+                    params: ParticleParams {
+                        mode: Vec4::new(8.0, r, r, 0.0),
+                        state: Vec4::new(0.0, 0.0, 0.0, size),
+                        color: color.extend(0.55),
+                    },
+                    texture: a.radial.clone(),
+                    additive: false,
+                })),
+                Transform::IDENTITY,
+                Aabb::from_min_max(Vec3::new(-ext, -0.5, -ext), Vec3::new(ext, 6.0, ext)),
+                NoAutoAabb,
+                NotShadowCaster,
+                VisibilityRange {
+                    start_margin: 0.0..0.0,
+                    end_margin: 105.0..120.0,
+                    use_aabb: false,
+                },
+            ));
+        });
     }
 }
