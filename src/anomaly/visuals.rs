@@ -752,15 +752,16 @@ fn init_assets(
         LinearRgba::rgb(0.04, 0.048, 0.062),
         0.55,
     );
-    // The same glaze on snow, where pale reads as nothing: darker and
-    // glossier, a silvered sheet giving back the grey sky, so it holds as
-    // a shape against the white round it.
+    // The same glaze on snow, where pale reads as nothing: a darker,
+    // dulled silver, so it holds as a shape against the white round it.
+    // (Glossier, it gave back the bright sky at a glance along the ground
+    // and was as pale as the snow from 10 m.)
     let glazed_snow = ground_with(
         &mark,
         &sheen,
-        Color::srgba(0.3, 0.35, 0.43, 0.8),
+        Color::srgba(0.24, 0.28, 0.35, 0.85),
         LinearRgba::rgb(0.03, 0.036, 0.048),
-        0.15,
+        0.42,
     );
     // Frosted over: pale plates cut by cracks, rime feathering its rim, a
     // little lit of itself. Its colour's in its texture (the cracks show it
