@@ -81,7 +81,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("ppsh_drum", 0.19, Fit, "PPSh 71-round drum"),
     ("sks_clip", 0.08, Fit, "7.62x39 stripper clip with rounds"),
     // Attachments.
-    ("weapon_light", 0.09, Fit, "a weapon light"),
     ("laser_module", 0.07, Fit, "a laser module"),
     ("pu_scope", 0.27, Fit, "PU 3.5x, 270 mm"),
     ("pso_scope", 0.375, Fit, "PSO-1 with shade, 375 mm"),
@@ -101,7 +100,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("vest", 0.46, Hand, "a plate carrier"),
     ("steel_plate", 0.3, Hand, "a 250 x 300 mm plate"),
     ("helmet", 0.29, Hand, "SSh-68"),
-    ("flashlight", 0.19, Hand, "a two-cell torch"),
+    ("flashlight", 0.1, Fit, "a weapon light with a carry handle"),
     ("power_cell", 0.06, Fit, "a D-size cell, 61 mm"),
     (
         "compass",
@@ -126,8 +125,6 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("zipline_kit", 0.3, Hand, "a coiled line and trolley"),
     ("matches", 0.05, Hand, "a Soviet matchbox, 50 mm"),
     ("door_wedge", 0.13, Hand, "a wooden door wedge"),
-    ("chemlight", 0.15, Hand, "a 6-inch lightstick"),
-    ("hand_flare", 0.23, Hand, "a hand flare"),
     ("signal_flare", 0.2, Hand, "a hand-fired red star"),
     ("relay_box", 0.16, Made, "a relay box"),
     ("camera", 0.14, Hand, "Zorki-4, 140 mm"),
@@ -294,10 +291,8 @@ pub fn ammo(id: &str) -> Option<(f32, Rule)> {
             i if i.contains("22lr") => 0.076,
             _ => return None,
         };
-        // As issued: a packet's size is its count of rounds. Re-packed
-        // ones are whatever box came to hand.
-        let rule = if id.contains("repack") { Made } else { Fit };
-        return Some((pack, rule));
+        // As issued: a packet's size is its count of rounds.
+        return Some((pack, Fit));
     }
     None
 }

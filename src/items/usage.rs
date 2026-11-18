@@ -185,7 +185,7 @@ fn use_items(
                 });
                 consume = true;
             }
-            "flashlight" | "weapon_light" => {
+            "flashlight" => {
                 if lights.contains(u.item) {
                     commands.entity(u.item).remove::<LightOn>();
                 } else {

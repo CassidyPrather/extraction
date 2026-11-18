@@ -308,7 +308,7 @@ impl Comfort {
         if !self.captions {
             "CAPTIONS\noff".into()
         } else if self.captions_in_view {
-            "CAPTIONS\nin view".into()
+            "CAPTIONS\nin view\nask: hold it up".into()
         } else {
             "CAPTIONS\non the wrist".into()
         }
