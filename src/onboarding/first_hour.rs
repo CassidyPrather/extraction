@@ -765,6 +765,8 @@ pub(super) struct Newcomer {
     seen_at: f32,
     /// When it last put a dressing on.
     dressed_at: f32,
+    /// When it last moved a loaded spare out of its pack into a pouch.
+    topped_at: f32,
     /// When it last answered a crawler's crackle.
     crawled_at: f32,
     /// The grappler it saw wind up a throw at it, last.
@@ -2387,6 +2389,79 @@ pub(super) fn direct_raid(
                         side: Side::Left,
                     },
                     Task::Use(Side::Left),
+                ],
+            );
+        }
+    }
+    // Its pouches dry and a loaded spare in its pack, nothing at it this
+    // moment: one out of the pack into a pouch, as a player tops up in a
+    // lull. A reload is from a pouch (one-handed, from nowhere else): the
+    // one-handed newcomer emptied both pouched spares in a fight and went
+    // down in the next with two loaded ones packed (#96).
+    {
+        let wells: Vec<Entity> = world
+            .carried_guns
+            .iter()
+            .filter_map(|(g, ..)| g.magwell)
+            .collect();
+        let w = &world;
+        let loaded_mag = |e: Entity| {
+            w.items.get(e).is_ok_and(|(_, it, ..)| {
+                it.rounds > 0 && w.catalog.get(it.kind()).magazine.is_some()
+            })
+        };
+        let pouched = world.items.iter().any(|(e, _, _, held, sock, _)| {
+            held.is_none()
+                && loaded_mag(e)
+                && sock.is_some_and(|s| {
+                    !wells.contains(&s.socket)
+                        && world.owners.get(s.socket).is_ok_and(|o| o.0 == player)
+                })
+        });
+        let packed = world
+            .items
+            .iter()
+            .find(|(e, _, _, _, _, bag)| {
+                loaded_mag(*e)
+                    && bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player))
+            })
+            .map(|(e, ..)| e);
+        if spare_to_pouch(
+            pouched,
+            packed.is_some(),
+            &state.shots,
+            now,
+            state.topped_at,
+            state.line_run_until > now,
+        ) && world.alive(player)
+            && !bot.tasks.iter().any(|t| {
+                matches!(
+                    t,
+                    Task::Use(_) | Task::Grab { .. } | Task::GrabFromHere { .. }
+                )
+            })
+            && !crawler_at_it(now, state.crawled_at)
+            && let Some(m) = packed
+        {
+            state.topped_at = now;
+            state.note(
+                now,
+                Kind::Learned,
+                "pouches dry: a loaded spare out of the pack into one",
+            );
+            super::second_hour::cut_in(
+                &mut bot,
+                vec![
+                    Task::Stow(Side::Left),
+                    Task::ToggleBackpack,
+                    Task::Wait(0.6),
+                    Task::GrabFromHere {
+                        item: m,
+                        side: Side::Left,
+                    },
+                    Task::ToggleBackpack,
+                    Task::Wait(0.5),
+                    Task::Stow(Side::Left),
                 ],
             );
         }
@@ -4573,6 +4648,29 @@ fn wound_to_dress(bleeding: f32, shots: &[f32], now: f32, dressed_at: f32, runni
         && now - dressed_at > DRESS_EVERY
         && shots.iter().all(|t| now - t > CONTACT_FOR)
 }
+
+/// Whether to move a loaded spare out of the pack into a pouch now: none
+/// loaded in a pouch, one in the pack, no round at it in the last few
+/// seconds, not on a run to cover, and not again till the last has had
+/// its time.
+fn spare_to_pouch(
+    pouched: bool,
+    packed: bool,
+    shots: &[f32],
+    now: f32,
+    topped_at: f32,
+    running: bool,
+) -> bool {
+    !pouched
+        && packed
+        && !running
+        && now - topped_at > TOP_UP_EVERY
+        && shots.iter().all(|t| now - t > CONTACT_FOR)
+}
+
+/// Not topping up a pouch again sooner than this (s): the pack open, the
+/// spare out and in takes about that long.
+const TOP_UP_EVERY: f32 = 6.0;
 
 /// Not answering a crawler's crackle again sooner than this (s): its zaps
 /// come every 2 s or so, and the answer takes longer.
@@ -8999,6 +9097,22 @@ the Hollow.";
         assert!(!fight.heeds_tells());
         fight.machine = Some(("walker".into(), Vec2::ZERO));
         assert!(fight.heeds_tells());
+    }
+
+    #[test]
+    fn a_dry_pouch_is_topped_up_from_the_pack_out_of_contact() {
+        use super::spare_to_pouch;
+        let now = 100.0;
+        // Dry pouches, a loaded one packed, nothing at it: topped up.
+        assert!(spare_to_pouch(false, true, &[now - 10.0], now, 0.0, false));
+        // One already pouched, or none packed: nothing to do.
+        assert!(!spare_to_pouch(true, true, &[], now, 0.0, false));
+        assert!(!spare_to_pouch(false, false, &[], now, 0.0, false));
+        // Shot at a moment ago, or running for cover: not now.
+        assert!(!spare_to_pouch(false, true, &[now - 1.0], now, 0.0, false));
+        assert!(!spare_to_pouch(false, true, &[], now, 0.0, true));
+        // Not again straight after the last.
+        assert!(!spare_to_pouch(false, true, &[], now, now - 2.0, false));
     }
 
     #[test]
