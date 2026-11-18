@@ -2451,7 +2451,7 @@ fn steam(
         let k = w.age / WISP_LIFE;
         t.translation += w.rise * dt;
         // Swells, then thins to nothing; a soft quad, turned to the eye.
-        t.scale = Vec3::splat((0.4 + 1.6 * k) * (1.0 - k * k));
+        t.scale = Vec3::splat((0.5 + 2.5 * k) * (1.0 - k * k));
         if let Some(eye) = eye {
             let to = eye - t.translation;
             if to.length_squared() > 1e-4 {
@@ -2475,7 +2475,7 @@ fn steam(
             (
                 meshes.add(Rectangle::new(0.2, 0.2)),
                 materials.add(StandardMaterial {
-                    base_color: Color::srgba(0.9, 0.92, 0.94, 0.14),
+                    base_color: Color::srgba(0.9, 0.92, 0.94, 0.11),
                     base_color_texture: Some(dot_texture(&mut images)),
                     alpha_mode: AlphaMode::Blend,
                     unlit: true,
@@ -2497,7 +2497,7 @@ fn steam(
             Name::new("Steam"),
             Wisp {
                 age: 0.0,
-                rise: Vec3::new(j(3) * 0.15, 0.18 + 0.12 * grain_at(*seed, 4), j(5) * 0.15),
+                rise: Vec3::new(j(3) * 0.45, 0.15 + 0.12 * grain_at(*seed, 4), j(5) * 0.45),
             },
             Mesh3d(mesh.clone()),
             MeshMaterial3d(material.clone()),
