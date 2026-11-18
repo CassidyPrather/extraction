@@ -248,6 +248,10 @@ pub struct SavedItem {
     /// What its rounds are loaded with, top last (empty: all standard).
     #[serde(default)]
     pub loads: Loads,
+    /// Cooked through in a burner's coals: it stays charred to look at
+    /// (`robots::salvage::Charred`, #105).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub charred: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -736,8 +740,27 @@ mod tests {
         }
     }
 
+    /// A charred part stays charred through a save; an item saved before
+    /// there was char loads as it was, not charred, and an uncharred one
+    /// writes no `charred` at all.
+    #[test]
+    fn charred_survives_a_save_and_old_saves_load_unchanged() {
+        let mut it = item("robot_cell");
+        let plain = ron::to_string(&it).unwrap();
+        assert!(!plain.contains("charred"), "{plain}");
+        let back: SavedItem = ron::from_str(&plain).unwrap();
+        assert_eq!(back, it);
+        it.charred = true;
+        let text = ron::to_string(&it).unwrap();
+        assert!(ron::from_str::<SavedItem>(&text).unwrap().charred);
+        let old = r#"(id: "robot_cell", condition: 0.5, rounds: 0, charge_wh: 0.0)"#;
+        let old: SavedItem = ron::from_str(old).unwrap();
+        assert!(!old.charred && old.condition == 0.5);
+    }
+
     fn item(id: &str) -> SavedItem {
         SavedItem {
+            charred: false,
             id: id.into(),
             condition: 0.8,
             rounds: 0,

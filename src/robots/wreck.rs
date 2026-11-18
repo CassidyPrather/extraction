@@ -1316,6 +1316,19 @@ mod tests {
             .iter(app.world())
             .filter(|d| matches!(d.piece, Piece::Panel(_) | Piece::Gun))
             .count();
+        // (Its pod, once down, is the gun pod item lying there:
+        // `salvage::seat_pieces`.)
+        let pod = app
+            .world()
+            .get_resource::<crate::items::Catalog>()
+            .and_then(|c| c.kind("drone_gunpod"));
+        let pods = app
+            .world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| Some(i.kind()) == pod)
+            .count();
+        let pieces = pieces + pods;
         assert!(pieces >= 2, "shed its panel and pod on impact ({pieces})");
         // At rest by SETTLE_BY after it came down, at the latest.
         for _ in 0..(90.0 * (secs + SETTLE_BY + 0.5 - 12.0).max(0.0)) as usize {
