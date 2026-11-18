@@ -777,7 +777,9 @@ mod tests {
         app.cleanup();
         app.update();
         let zone = app.world().resource::<crate::world::Zone>().clone();
-        let (c, r) = (Vec2::new(-143.6, 11.1), 4.0);
+        // The beck's narrowest crossing there (about 4.75 m bank to bank),
+        // its middle.
+        let (c, r) = (Vec2::new(-144.4, 12.5), 4.0);
         assert!(
             zone.hm.water_level([c.x, c.y]).is_some(),
             "its centre's on the water"
