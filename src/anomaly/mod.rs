@@ -1283,7 +1283,6 @@ mod tests {
             app.update();
         }
         let at_stone = pos(&app, stone);
-        let held = at_stone.y;
         app.world_mut()
             .write_message(crate::weapons::ballistics::Hit {
                 entity: stone,

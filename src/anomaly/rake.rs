@@ -77,7 +77,8 @@ pub fn rake(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interact::{GripRole, Side};
+    use crate::interact::GripRole;
+    use crate::rig::Side;
     use crate::vr_harness::Vr;
     use extraction_core::anomaly::AnomalyKind;
 
