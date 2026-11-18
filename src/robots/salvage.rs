@@ -1027,8 +1027,17 @@ fn tag_pieces(
     }
 }
 
-/// Where a knee sits on its leg piece (local): proud of the thigh, along it.
-const KNEE_ON_LEG: Vec3 = Vec3::new(0.1, 0.0, 0.0);
+/// How far a knee sits proud of its leg piece's axis (local, m).
+const KNEE_PROUD: f32 = 0.1;
+
+/// Of a lying leg piece's sides (its local ±X, ±Z: across it, its length
+/// is Y), the one most nearly up, given how it lies.
+pub fn up_side(rotation: Quat) -> Vec3 {
+    [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
+        .into_iter()
+        .max_by(|a, b| (rotation * *a).y.total_cmp(&(rotation * *b).y))
+        .unwrap_or(Vec3::X)
+}
 
 /// A part piece come to rest is seated where it lies: bolted on its leg (a
 /// knee), or, held by nothing but a hand (an eye, a head), simply the item
@@ -1068,16 +1077,20 @@ fn seat_pieces(
             commands.entity(e).despawn();
             continue;
         }
-        // Along the leg (the item's long side, Z, up the piece's Y).
-        let at = Transform::from_translation(KNEE_ON_LEG * size)
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+        // On the side of the leg that's uppermost as it lies, along it (the
+        // item's long side, Z, up the piece's Y), its bolts' heads to the
+        // sky: seen from standing, a spanner put to them from above.
+        let up = up_side(t.rotation);
+        // (Its long side, Z, along the leg; its top, Y, up.)
+        let lie = Quat::from_mat3(&Mat3::from_cols(up.cross(Vec3::Y), up, Vec3::Y));
+        let at = Transform::from_translation(up * KNEE_PROUD * size).with_rotation(lie);
         let fix = if by_hand {
             Fix::Hand
         } else {
             Fix::Bolts {
                 n: part.bolts as usize,
-                centre: (KNEE_ON_LEG + Vec3::Y * 0.18) * size,
-                face: Quat::IDENTITY,
+                centre: (up * (KNEE_PROUD + 0.05) + Vec3::Y * 0.18) * size,
+                face: Quat::from_rotation_arc(Vec3::Y, up),
                 radius: 0.05,
             }
         };
@@ -1738,6 +1751,20 @@ mod tests {
         ] {
             assert!(catalog.kind(id).is_some(), "{id}");
         }
+    }
+
+    /// A knee goes on whichever side of its lying leg is up.
+    #[test]
+    fn a_knee_sits_on_top_of_its_leg() {
+        // A leg lying along the ground, its local X turned to the sky.
+        let lying = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+        let up = up_side(lying);
+        assert!((lying * up).y > 0.99, "{up}");
+        // On its back the other way: -X up.
+        assert!(
+            (up_side(Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2)) - Vec3::NEG_X).length()
+                < 1e-5
+        );
     }
 
     #[test]
