@@ -578,7 +578,10 @@ mod tests {
         );
         for (id, at, live) in &seated {
             let over = at.y - site.y;
-            assert!((0.0..1.6).contains(&over), "{id} {over:.2} m up");
+            assert!(
+                (0.0..crate::sim::indoor::MAX_REACH_UP).contains(&over),
+                "{id} {over:.2} m up"
+            );
             assert_eq!(*live, id != "pylon_dish", "{id} live: {live}");
         }
         // Its own salvage, not the pylon table's rolls on top.
