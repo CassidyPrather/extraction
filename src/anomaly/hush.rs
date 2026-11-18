@@ -38,6 +38,62 @@ impl Hushes {
     pub fn in_standing(&self, at: Vec3) -> bool {
         hushed(at.to_array(), &self.standing)
     }
+
+    /// A sound made at `src` is held in a Hush anomaly that `ear` isn't
+    /// in: it never reaches them (Audio deadens it, as it deadens the
+    /// world to someone inside). A machine walking in one is silent to
+    /// you outside it; its dust stirring is how you know ([`stir`]).
+    pub fn muffles(&self, src: Vec3, ear: Vec3) -> bool {
+        self.standing.iter().any(|(c, r)| {
+            let c = Vec3::from_array(*c);
+            src.distance(c) < *r && ear.distance(c) >= *r
+        })
+    }
+}
+
+/// How fast things moving in a Hush stir its hanging dust: the sum of
+/// their speeds, m/s, that stirs it full...
+pub const STIR_FULL: f32 = 2.5;
+/// ...how fast it rises to that, and settles after, a second.
+pub const STIR_RISE: f32 = 4.0;
+pub const STIR_SETTLE: f32 = 0.6;
+
+/// Whatever moves in a Hush stirs its dust (a walker, a drone, you, a
+/// thrown thing): the silence's tell, since what moves in it makes no
+/// sound. Kept as the anomaly's `charge` (a Hush has none of its own),
+/// which its dust reads (`visuals`, `anomaly_particles.wgsl` mode 7).
+pub fn stir(
+    mut hushes: Query<(&mut Anomaly, &GlobalTransform)>,
+    movers: Query<(&GlobalTransform, &avian3d::prelude::LinearVelocity)>,
+    walkers: Query<(&GlobalTransform, &crate::player::Body)>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (mut a, g) in &mut hushes {
+        if a.kind != AnomalyKind::Hush {
+            continue;
+        }
+        let c = g.translation() + Vec3::Y * 1.0;
+        let inside = |p: Vec3| p.distance(c) < a.radius;
+        let speed: f32 = movers
+            .iter()
+            .filter(|(t, _)| inside(t.translation()))
+            .map(|(_, v)| v.0.length())
+            .chain(
+                walkers
+                    .iter()
+                    .filter(|(t, _)| inside(t.translation() + Vec3::Y * 0.9))
+                    .map(|(_, b)| Vec2::new(b.velocity.x, b.velocity.z).length()),
+            )
+            .sum();
+        let want = (speed / STIR_FULL).min(1.0);
+        let rate = if want > a.charge {
+            STIR_RISE
+        } else {
+            STIR_SETTLE
+        };
+        a.charge += (want - a.charge) * (rate * dt).min(1.0);
+    }
 }
 
 /// Seconds a player has spent in a Hush, this stay.
@@ -385,5 +441,58 @@ mod tests {
             !reported(&mut app, p, me),
             "with a hushstone on you, it isn't"
         );
+    }
+
+    /// A sound made in a Hush doesn't reach an ear outside it; one inside
+    /// hears it (dulled with the rest), and one outside hears the world.
+    #[test]
+    fn a_hush_keeps_its_sounds_from_ears_outside() {
+        let h = Hushes {
+            zones: vec![([0.0, 1.0, 0.0], 3.0)],
+            standing: vec![([0.0, 1.0, 0.0], 3.0)],
+        };
+        let inside = Vec3::new(1.0, 1.0, 0.0);
+        let outside = Vec3::new(10.0, 1.0, 0.0);
+        assert!(h.muffles(inside, outside), "in to out: held");
+        assert!(
+            !h.muffles(inside, inside + Vec3::X * 0.5),
+            "in to in: heard"
+        );
+        assert!(
+            !h.muffles(outside, inside),
+            "out to in: the Hush's own deadening, not this"
+        );
+    }
+
+    /// Something moving in a Hush stirs its dust; still, it settles.
+    #[test]
+    fn what_moves_in_a_hush_stirs_its_dust() {
+        let (mut app, _, at, _) = app();
+        let hush = app
+            .world_mut()
+            .query::<(Entity, &Anomaly)>()
+            .iter(app.world())
+            .find(|(_, a)| a.kind == AnomalyKind::Hush)
+            .map(|(e, _)| e)
+            .unwrap();
+        let mover = app
+            .world_mut()
+            .spawn((
+                Transform::from_translation(at + Vec3::Y * 1.0),
+                GlobalTransform::from_translation(at + Vec3::Y * 1.0),
+                avian3d::prelude::LinearVelocity(Vec3::X * 2.0),
+            ))
+            .id();
+        for _ in 0..60 {
+            app.update();
+        }
+        let stirred = app.world().get::<Anomaly>(hush).unwrap().charge;
+        assert!(stirred > 0.5, "stirred ({stirred:.2})");
+        app.world_mut().entity_mut(mover).despawn();
+        for _ in 0..90 * 6 {
+            app.update();
+        }
+        let still = app.world().get::<Anomaly>(hush).unwrap().charge;
+        assert!(still < 0.1, "settles ({still:.2})");
     }
 }

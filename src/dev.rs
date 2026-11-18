@@ -945,6 +945,12 @@ fn gallery(
                         "hound" => {
                             crate::robots::hound::spawn_hound(&mut commands, &zone, at, job(at))
                         }
+                        "engineer" => crate::robots::engineer_body::spawn_engineer(
+                            &mut commands,
+                            &zone,
+                            at,
+                            job(at),
+                        ),
                         "heavy" => crate::robots::heavy::spawn_heavy(
                             &mut commands,
                             &zone,

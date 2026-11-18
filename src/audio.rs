@@ -5339,6 +5339,7 @@ fn occlude(
     mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     hush: Res<HushNow>,
+    hushes: Option<Res<crate::anomaly::hush::Hushes>>,
     hearing: Res<crate::hearing::Hearing>,
     zone: Option<Res<Zone>>,
     spatial: SpatialQuery,
@@ -5367,6 +5368,15 @@ fn occlude(
         let o = || {
             let mut o = hearing.path(zone.as_deref(), gt.translation(), ear, Some(&blocked));
             o.cutoff = o.cutoff.min(hush.cutoff);
+            // Made in a Hush you're not in: it never leaves it (a machine
+            // walking in one is silent to you; `anomaly::hush::Hushes::muffles`).
+            if hushes
+                .as_deref()
+                .is_some_and(|h| h.muffles(gt.translation(), ear))
+            {
+                o.db -= HUSH_DEEP.0;
+                o.cutoff = o.cutoff.min(HUSH_DEEP.1);
+            }
             o
         };
         if let Ok(mut node) = nodes.get_effect_mut(effects) {
