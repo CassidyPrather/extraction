@@ -308,7 +308,10 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         let dim = mix(vec3<f32>(1.0), keep, 0.75);
         return vec4<f32>(rgb * a * dim, 0.0);
     }
-    if (a < 0.02) {
+    // (Steam fades to far fainter than that before it's let go: cut at
+    // 0.02, each big billow's feathered rim stood as a faint hard ring.)
+    let cut = select(0.02, 0.003, i32(params.mode.x + 0.5) == 8);
+    if (a < cut) {
         discard;
     }
 #ifdef DISTANCE_FOG
