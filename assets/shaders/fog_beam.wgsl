@@ -47,10 +47,23 @@ const MARCH: i32 = 12;
 const STEP: f32 = 1.5;
 const FEWEST: i32 = 5;
 
-// Where a ray from `o` along `d` (unit), already in the cone at `t0`,
-// leaves it: its wall, or its end. The cone's true surface, not the
-// mesh's facets, so the march is the same length whichever face drew it.
-fn exit_at(o: vec3<f32>, d: vec3<f32>, t0: f32) -> f32 {
+// Whether `p` is in the cone (between its lamp and its end, within its
+// angle).
+fn in_cone(p: vec3<f32>) -> bool {
+    let rel = p - b.apex.xyz;
+    let along = dot(rel, b.axis.xyz);
+    let off = length(rel - b.axis.xyz * along);
+    return along > 0.0 && along < b.axis.w && off <= along * b.apex.w + 1e-3;
+}
+
+// The stretch of a ray from `o` along `d` (unit) that is in the cone,
+// from `o` on: the cone's true surface, not the mesh's facets, so the
+// march is the same whichever face drew it. The wall's crossings and the
+// end's, sorted; the first stretch whose middle is in the cone. (From
+// just outside it, an eye by its wall, the first crossing is where the
+// ray comes in, not where it leaves.) Solved from `o`, the face or the
+// eye, where the terms are small.
+fn in_stretch(o: vec3<f32>, d: vec3<f32>) -> vec2<f32> {
     let v = b.axis.xyz;
     let len = b.axis.w;
     let co = o - b.apex.xyz;
@@ -60,30 +73,56 @@ fn exit_at(o: vec3<f32>, d: vec3<f32>, t0: f32) -> f32 {
     let qa = dv * dv - c2;
     let qb = 2.0 * (dv * cv - c2 * dot(d, co));
     let qc = cv * cv - c2 * dot(co, co);
-    var best = t0 + 2.0 * (len * b.apex.w + 1.0);
-    // Its end.
-    if (dv > 1e-4) {
+    let none = 1e9;
+    var t = array<f32, 4>(0.0, none, none, none);
+    if (abs(dv) > 1e-5) {
         let tc = (len - cv) / dv;
-        if (tc > t0) {
-            best = min(best, tc);
+        if (tc > 0.0) {
+            t[1] = tc;
         }
     }
-    // Its wall (on the lamp's side of the apex, past where it starts).
-    if (abs(qa) > 1e-6) {
+    if (abs(qa) > 1e-7) {
         let disc = qb * qb - 4.0 * qa * qc;
         if (disc >= 0.0) {
+            // (The stable pair: no difference of near-equal terms.)
             let s = sqrt(disc);
-            let r1 = (-qb - s) / (2.0 * qa);
-            let r2 = (-qb + s) / (2.0 * qa);
-            for (var k = 0; k < 2; k = k + 1) {
-                let r = select(r2, r1, k == 0);
-                if (r > t0 + 0.02 && cv + r * dv > 0.0) {
-                    best = min(best, r);
-                }
+            let q = -0.5 * (qb + select(-s, s, qb >= 0.0));
+            let r1 = q / qa;
+            let r2 = select(qc / q, r1, abs(q) < 1e-9);
+            if (r1 > 0.0) {
+                t[2] = r1;
+            }
+            if (r2 > 0.0) {
+                t[3] = r2;
+            }
+        }
+    } else if (abs(qb) > 1e-7) {
+        let r = -qc / qb;
+        if (r > 0.0) {
+            t[2] = r;
+        }
+    }
+    // Sort the four (a few swaps).
+    for (var i = 0; i < 3; i = i + 1) {
+        for (var j = 0; j < 3 - i; j = j + 1) {
+            if (t[j] > t[j + 1]) {
+                let x = t[j];
+                t[j] = t[j + 1];
+                t[j + 1] = x;
             }
         }
     }
-    return best;
+    for (var i = 0; i < 3; i = i + 1) {
+        if (t[i + 1] >= none) {
+            break;
+        }
+        // (A crossing at the start itself, a ray come in on the wall
+        // where two faces meet, leaves a stretch of nothing: past it.)
+        if (t[i + 1] - t[i] > 0.02 && in_cone(o + d * (0.5 * (t[i] + t[i + 1])))) {
+            return vec2<f32>(t[i], t[i + 1]);
+        }
+    }
+    return vec2<f32>(0.0, 0.0);
 }
 
 fn hash3(p: vec3<f32>) -> f32 {
@@ -173,12 +212,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     if (inside) {
         t0 = 0.0;
     }
-    let p0 = eye + rd * t0;
-    var span = exit_at(eye, rd, t0) - t0;
-    if (inside) {
-        span = min(span, dist);
-    }
-    span = max(span, 0.05);
+    let o = eye + rd * t0;
+    let stretch = in_stretch(o, rd);
+    let p0 = o + rd * stretch.x;
+    let span = max(stretch.y - stretch.x, 0.05);
     let n = clamp(i32(ceil(span / STEP)), FEWEST, MARCH);
     let ds = span / f32(n);
     // A jitter on where the samples fall (no banding), fixed in the world
