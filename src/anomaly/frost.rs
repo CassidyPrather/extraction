@@ -136,7 +136,7 @@ pub fn frozen_level(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32) -
 
 /// A cell of ice rising more than this across it (m) is a step: the sheet
 /// breaks there.
-const ICE_STEP_BREAK: f32 = 0.3;
+const ICE_STEP_BREAK: f32 = 0.15;
 /// Rime creeps up the banks this far over the ice, m, thinning out.
 const RIME_UP: f32 = 1.0;
 /// The sheet's mesh: cells this fine, m...
