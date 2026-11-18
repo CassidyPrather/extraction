@@ -6221,6 +6221,26 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         for d in &geo.doors {
             spawn_door(&mut commands, root, *d);
         }
+        // Its yard's things, solid (`clutter::yard_body`): drawn only, a
+        // bunker or a cart was walked through, no cover from a robot.
+        for (model, xf) in yard_models(&zone, &p.prefab, &t) {
+            for (shape, at) in super::clutter::yard_body(model) {
+                let collider = match *shape {
+                    Shape::Box(s) | Shape::Prism(s) => Collider::cuboid(s.x, s.y, s.z),
+                    Shape::Cylinder(r, h) => Collider::cylinder(r, h),
+                };
+                commands.spawn((
+                    Name::new(format!("Yard {model}")),
+                    RigidBody::Static,
+                    collider,
+                    CollisionLayers::new(Layer::World, LayerMask::ALL),
+                    Transform::from_matrix(
+                        (xf.compute_affine() * bevy::math::Affine3A::from_translation(*at)).into(),
+                    ),
+                    ChildOf(root),
+                ));
+            }
+        }
         for s in &geo.loot {
             loot.0.push(LootSpot {
                 at: loot_spot_at(&zone, &t, s.at),
