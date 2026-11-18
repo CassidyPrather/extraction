@@ -243,7 +243,9 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
                     .get_resource::<crate::world::buildings::BuildingHolds>()
                     .filter(|_| !holds_off(world))
                 {
-                    roll_holds(&mut commands, zone, holds, loot, catalog, seed, raid);
+                    if !HOLDLESS.contains(&opts.map.as_str()) {
+                        roll_holds(&mut commands, zone, holds, loot, catalog, seed, raid);
+                    }
                 }
             }
             _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map, &|id| {
@@ -554,6 +556,21 @@ pub struct ToHold {
     pub at: Vec3,
 }
 
+/// The maps whose containers hold nothing (their ids): the training
+/// yard's start is designed, and the arcade is its own kit.
+const HOLDLESS: [&str; 2] = ["training_yard", "arcade"];
+
+/// The tables a hold rolls from as they are; any other (a kitchen's, a
+/// pantry's) rolls as a house's.
+const REAL_HOLD_TABLES: [&str; 6] = [
+    "house",
+    "tools",
+    "medical",
+    "ammo_common",
+    "gadgets",
+    "workshop",
+];
+
 /// Rolls each container's hold: one thing at most, on the hold's own
 /// stream (`place_key`), apart from the building's spots, so a container
 /// changes no other spot's roll. Nothing too long to lie in it.
@@ -570,16 +587,25 @@ fn roll_holds(
     let mut n = 0;
     for h in &holds.0 {
         let mut rng = Rng::new(seed ^ 0xB0_1D ^ place_key(h.at));
+        // A hold is a real find (#104): from the real tables, a kitchen's
+        // as a house's, never junk (that's dressing, rolled apart).
+        let table = if REAL_HOLD_TABLES.contains(&h.table) {
+            h.table
+        } else {
+            "house"
+        };
         let Some(drop) = loot
             .0
-            .roll_at(h.table, Some(&valley), raid, catalog, &mut rng)
+            .roll_at(table, Some(&valley), raid, catalog, &mut rng)
             .into_iter()
             .next()
         else {
             continue;
         };
         let def = catalog.get(drop.kind);
-        if def.size_m().into_iter().fold(0.0, f32::max) > crate::world::buildings::HOLD_MOST {
+        if def.category == extraction_core::items::Category::Junk
+            || def.size_m().into_iter().fold(0.0, f32::max) > crate::world::buildings::HOLD_MOST
+        {
             continue;
         }
         let e = spawn_found(
