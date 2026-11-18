@@ -35,6 +35,10 @@ struct Params {
     state: vec4<f32>,
     // rgb: colour (linear, may exceed 1 for glow), a: opacity
     color: vec4<f32>,
+    // xz: the wind across the ground (way times strength): a lift's leaves
+    // lean downwind, the higher the more, the cue before its pop carries
+    // what it throws that way.
+    wind: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> params: Params;
@@ -101,6 +105,8 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
                 * (1.0 + 0.5 * charge);
             p.pos = vec3<f32>(cos(a) * r, y, sin(a) * r);
         }
+        // Leaning with the wind, more the higher up the column.
+        p.pos = p.pos + vec3<f32>(params.wind.x, 0.0, params.wind.z) * (p.pos.y / 3.0) * 1.1;
         p.spin = t * (1.3 + charge * 3.0) + s * 20.0;
         p.tumble = 1.0;
     } else if (mode == 1) {

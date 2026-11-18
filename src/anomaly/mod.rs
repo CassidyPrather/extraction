@@ -405,8 +405,12 @@ fn lifts(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut events: MessageWriter<AnomalyEvent>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
 ) {
     let dt = time.delta_secs();
+    // The wind carries what a lift throws (its leaves lean with it first:
+    // `visuals`, the cue before the pop).
+    let drift = wind(conditions.as_deref()) * LIFT_WIND;
     for (e, mut a, gt) in &mut anomalies {
         if a.kind != AnomalyKind::Lift {
             continue;
@@ -464,7 +468,7 @@ fn lifts(
             let k = falloff(d, a.radius);
             if popping {
                 let out = Vec3::new(rel.x, 0.0, rel.z).normalize_or(Vec3::X);
-                forces.apply_linear_impulse((out * 4.0 + Vec3::Y * 7.0) * m);
+                forces.apply_linear_impulse((out * 4.0 + Vec3::Y * 7.0 + drift) * m);
             } else {
                 // Cancel gravity and a bit more, toward a hover at the core,
                 // and swirl.
@@ -495,7 +499,7 @@ fn lifts(
                     .and_then(|f| f.try_normalize())
                     .or_else(|| Vec3::new(rel.x, 0.0, rel.z).try_normalize())
                     .unwrap_or(Vec3::X);
-                body.velocity = out * LIFT_FLING + Vec3::Y * LIFT_THROW;
+                body.velocity = out * LIFT_FLING + Vec3::Y * LIFT_THROW + drift;
                 body.grounded = false;
                 body.airborne = 1.0;
             } else {
@@ -581,6 +585,15 @@ fn knock_loose(
 /// lightness under you, about 3.1 m high, landing back on the flat within
 /// `health::SAFE_LANDING`, and onto a roof up to about 2.4 m.
 pub const LIFT_THROW: f32 = 6.6;
+/// How far the wind carries what a lift throws: its speed downwind, m/s,
+/// in the hardest wind (the weather's `wind()`, 1).
+pub const LIFT_WIND: f32 = 2.5;
+
+/// The wind: the way it blows (the grass's: `world::cover`) times how
+/// hard (`Conditions::wind`, 0..1), across the ground.
+pub fn wind(conditions: Option<&crate::world::weather::Conditions>) -> Vec3 {
+    Vec3::new(0.8, 0.0, 0.6) * conditions.map_or(0.0, |c| c.wind())
+}
 /// ...and this fast the way they face (m/s). In the air with no stick a
 /// body's way slows (`player`'s air control), so it carries about 4 m.
 pub const LIFT_FLING: f32 = 9.0;
@@ -1423,6 +1436,43 @@ mod tests {
             hp,
             "the pop doesn't hurt"
         );
+    }
+
+    /// In a storm a lift's pop carries you downwind (`wind`): you land
+    /// further along it than the same pop in still air.
+    #[test]
+    fn wind_carries_a_lift_pop_downwind() {
+        let landing = |weather: &str| {
+            let mut app = app(false);
+            app.world_mut().resource_mut::<LaunchOptions>().weather = Some(weather.into());
+            let (lift, at, _) = find(&mut app, AnomalyKind::Lift);
+            let p = player(&mut app);
+            let ground = app
+                .world()
+                .resource::<crate::world::Zone>()
+                .on_ground(at.x, at.z);
+            app.world_mut().get_mut::<Transform>(p).unwrap().translation = ground;
+            app.world_mut().get_mut::<Transform>(p).unwrap().rotation =
+                Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+            for _ in 0..3 {
+                app.update();
+            }
+            let start = pos(&app, p);
+            app.world_mut().get_mut::<Anomaly>(lift).unwrap().charge = 1.0;
+            for i in 0..240 {
+                app.update();
+                if i > 20 && app.world().get::<Body>(p).unwrap().grounded {
+                    return pos(&app, p) - start;
+                }
+            }
+            panic!("never came down in {weather}");
+        };
+        let calm = landing("fog");
+        let storm = landing("storm");
+        let along = Vec3::new(0.8, 0.0, 0.6).normalize();
+        let gained = (storm - calm).dot(along);
+        eprintln!("lift pop: calm {calm:?}, storm {storm:?}, {gained:.2} m downwind");
+        assert!(gained > 0.6, "the storm carried you {gained:.2} m downwind");
     }
 
     /// A round striking a stone a lift holds knocks it out: it drops.
