@@ -28,6 +28,14 @@ const TRACKS: [(&str, Vec3); 2] = [
 const HOUSING: Vec3 = Vec3::new(0.0, 0.85, -1.95);
 const CHUTE: Vec3 = Vec3::new(0.6, 2.0, -1.2);
 const BEACON: Vec3 = Vec3::new(0.0, 2.75, 0.0);
+/// The drive sprockets and the auger's motor, each its own object: what's
+/// seated in its place on a wreck hides it (`plough::plough_wreck`, its
+/// `wreck_row` keys).
+const SEATED_PIECES: [(&str, PartRole); 3] = [
+    ("sprocket_l", PartRole::Leg(0)),
+    ("sprocket_r", PartRole::Leg(1)),
+    ("auger_motor", PartRole::Rotor(0)),
+];
 /// Where the housing part sits (see `plough::spawn_plough`).
 const HOUSING_PART: Vec3 = Vec3::new(0.0, 0.85, -2.0);
 
@@ -125,6 +133,11 @@ fn dress(
         holder
     };
     for (e, children) in &ploughs {
+        let seat_look = |commands: &mut Commands, holder: Entity, role: PartRole| {
+            commands
+                .entity(holder)
+                .insert(super::salvage::SeatLook { robot: e, role });
+        };
         for (name, at) in TRACKS {
             hang(
                 &mut commands,
@@ -134,6 +147,24 @@ fn dress(
                 Transform::from_translation(at),
                 3,
             );
+        }
+        for (name, role) in SEATED_PIECES {
+            let at = match role {
+                PartRole::Leg(i) => {
+                    let s = super::plough::SPROCKET;
+                    Vec3::new(if i == 0 { -s.x } else { s.x }, s.y, s.z)
+                }
+                _ => super::plough::MOTOR,
+            };
+            let h = hang(
+                &mut commands,
+                &mut materials,
+                e,
+                name,
+                Transform::from_translation(at),
+                3,
+            );
+            seat_look(&mut commands, h, role);
         }
         let auger = hang(
             &mut commands,
@@ -151,7 +182,7 @@ fn dress(
             Transform::from_translation(CHUTE),
             3,
         );
-        hang(
+        let b = hang(
             &mut commands,
             &mut materials,
             e,
@@ -159,6 +190,7 @@ fn dress(
             Transform::from_translation(BEACON),
             3,
         );
+        seat_look(&mut commands, b, PartRole::Lamp(0));
         let mut hatch = None;
         for c in children.iter() {
             if hatches.contains(c) {
@@ -173,7 +205,7 @@ fn dress(
                 continue;
             }
             if cells.contains(c) {
-                hang(
+                let h = hang(
                     &mut commands,
                     &mut materials,
                     c,
@@ -181,6 +213,7 @@ fn dress(
                     Transform::IDENTITY,
                     3,
                 );
+                seat_look(&mut commands, h, PartRole::Core);
                 continue;
             }
             match parts.get(c).map(|p| p.role) {
@@ -205,7 +238,7 @@ fn dress(
                     );
                 }
                 Ok(PartRole::Sensor) => {
-                    hang(
+                    let h = hang(
                         &mut commands,
                         &mut materials,
                         c,
@@ -213,6 +246,7 @@ fn dress(
                         Transform::IDENTITY,
                         3,
                     );
+                    seat_look(&mut commands, h, PartRole::Sensor);
                 }
                 _ => {}
             }

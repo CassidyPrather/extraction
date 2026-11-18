@@ -152,14 +152,20 @@ fn cone() -> Mesh {
 
 fn dress_lamps(
     mut commands: Commands,
-    lamps: Query<(Entity, &Beam), Added<Beam>>,
+    lamps: Query<(Entity, &Beam, Option<&super::RobotPart>), Added<Beam>>,
     mut shared: Local<Option<Shared>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut searches: ResMut<Assets<SearchMaterial>>,
     mut fog_beams: ResMut<Assets<FogBeamMaterial>>,
 ) {
-    for (e, l) in &lamps {
+    for (e, l, part) in &lamps {
+        // Its drum, lens and rim hide once the lamp's seated as salvage in
+        // their place (`salvage::SeatLook`, the spotter's wreck).
+        let seat = part.map(|p| super::salvage::SeatLook {
+            robot: p.robot,
+            role: p.role,
+        });
         let s = shared.get_or_insert_with(|| Shared {
             fog_cone: meshes.add(crate::render::fog_beam::cone()),
             plane: meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0))),
@@ -193,25 +199,34 @@ fn dress_lamps(
             ..default()
         });
         commands.entity(e).with_children(|c| {
-            c.spawn((
+            let mut drum = c.spawn((
                 Mesh3d(s.drum.clone()),
                 MeshMaterial3d(s.dark.clone()),
                 Transform::from_xyz(0.0, 0.0, DRUM_DEEP * 0.5).with_rotation(along),
             ));
-            c.spawn((
+            if let Some(sl) = seat {
+                drum.insert(sl);
+            }
+            let mut face = c.spawn((
                 Mesh3d(s.lens.clone()),
                 MeshMaterial3d(lens.clone()),
                 Transform::from_xyz(0.0, 0.0, -0.005).with_rotation(along),
                 NotShadowCaster,
                 HeldHead(Vec3::new(0.0, 0.0, -0.005)),
             ));
-            c.spawn((
+            if let Some(sl) = seat {
+                face.insert(sl);
+            }
+            let mut ring = c.spawn((
                 Mesh3d(s.ring.clone()),
                 MeshMaterial3d(rim.clone()),
                 Transform::from_xyz(0.0, 0.0, -0.01).with_rotation(along),
                 NotShadowCaster,
                 HeldHead(Vec3::new(0.0, 0.0, -0.01)),
             ));
+            if let Some(sl) = seat {
+                ring.insert(sl);
+            }
         });
         let params = |pool: bool| SearchParams {
             light: PALE.extend(1.0),

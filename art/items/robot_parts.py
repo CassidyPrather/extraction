@@ -378,6 +378,24 @@ def sorter_servo_pack():
     return centred([p])
 
 
+def robot_searchlight():
+    p = Part("body")
+    # A machine's searchlight, off its mount (#105): the dark drum the game
+    # draws on spotters and airships (src/robots/searchlight_look.rs, its
+    # DRUM_R and DRUM_DEEP), the pale lens and the orange warning rim on its
+    # face (looking -Z), a yoke stub and its torn leads at the back.
+    r, deep = 0.32, 0.45
+    p.cyl(r, 0.0, deep, "Dark", segs=32, chamfer=0.01)
+    p.cyl(r * 0.82, -0.012, 0.0, "Lens", segs=32)
+    p.tube(r * 1.02, r * 0.84, -0.026, 0.004, "Warn", segs=32, chamfer=0.004)
+    for sx in (-1, 1):
+        p.box((0.04, 0.12, 0.16), (sx * (r + 0.02), 0.0, deep * 0.5), "Steel", bevel=0.008, segs=1)
+    p.cyl(0.04, deep, deep + 0.06, "Steel", segs=12)
+    for sx in (-0.08, 0.08):
+        p.cyl(0.012, deep, deep + 0.14, "Red", segs=8, xf=T(sx, 0.06, 0))
+    return centred([p])
+
+
 def robot_plate():
     """A walker's hull plate, pried off: a curved section of its white
     shell (the hull's own curve, gently), the dark backing rim round its
@@ -442,6 +460,7 @@ if __name__ == "__main__":
                            ("dirigible_gas_valve", dirigible_gas_valve),
                            ("pylon_relay_coil", pylon_relay_coil),
                            ("sorter_servo_pack", sorter_servo_pack),
-                           ("robot_plate", robot_plate)):
+                           ("robot_plate", robot_plate),
+                           ("robot_searchlight", robot_searchlight)):
         if wanted(item_id):
             item(item_id, build)
