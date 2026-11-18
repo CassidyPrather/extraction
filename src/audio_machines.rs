@@ -1331,6 +1331,10 @@ mod tests {
         ("SiteGrid", "a nav grid"),
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
+        (
+            "StimCue",
+            "a stim is heard as its Heartbeat (a beat as it starts, quick in its tell, none once it's out) and in the world's lowered pitch; sounds of its own are to come",
+        ),
         ("ToggleBackpack", "flat mode's pack; opening it is heard"),
         (
             "Transmitted",
@@ -1338,7 +1342,7 @@ mod tests {
         ),
         (
             "Treated",
-            "telemetry's note of a dressing or injector used; the use is heard",
+            "telemetry's note of an injector pen's jab; the jab is heard",
         ),
     ];
 
