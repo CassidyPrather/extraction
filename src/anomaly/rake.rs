@@ -175,19 +175,10 @@ mod tests {
         for i in 1..=steps {
             vr.move_hand(Side::Right, from + Vec3::Z * 1.2 * i as f32 / steps as f32);
             vr.step(1);
-            if i % 8 == 0 {
-                println!(
-                    "claw {} stone {} sleeping {}",
-                    claw(&vr, bar),
-                    pos(&vr, stone),
-                    vr.app.world().get::<Sleeping>(stone).is_some()
-                );
-            }
         }
         vr.step(20);
         let out = pos(&vr, stone);
         let rel = out - zone.on_ground(fire.x, fire.z);
-        println!("raked from {set} to {out}");
         assert!(
             Vec2::new(rel.x, rel.z).length() > r,
             "raked out of the coals ({:.2} m from the fire, radius {r})",
