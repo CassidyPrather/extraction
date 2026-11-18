@@ -167,20 +167,32 @@ def boxed(body, slots, band_at, band_mat, seal_at, seal_mat, mix):
         draw(r)
         rounds.append(r)
     parts = [body] + rounds
+
+    def off(size, at, k):
+        """A strip moved `k` of its thicknesses further off the box."""
+        thin = min(range(3), key=lambda a: size[a])
+        at = list(at)
+        at[thin] += k * math.copysign(size[thin], at[thin] or 1.0)
+        return tuple(at)
+
+    # The band's backing on the box: a pale paper strip a little wider than
+    # it, so any band reads on any card (black on olive was lost).
+    for size, at in band_at:
+        thin = min(range(3), key=lambda a: size[a])
+        long = max(range(3), key=lambda a: size[a])
+        wide = list(size)
+        wide[3 - thin - long] += 0.003
+        body.box(tuple(wide), at, "Paper", segs=1)
     band = None
     if band_mat:
         band = Part("band")
         for size, at in band_at:
-            band.box(size, at, band_mat, segs=1)
+            band.box(size, off(size, at, 1), band_mat, segs=1)
         parts.append(band)
     hatch = Part("band_mix")
     for size, at in band_at:
-        # Out past the type's band (never both at once): its thin side
-        # moved off the box by its own thickness.
-        thin = min(range(3), key=lambda a: size[a])
-        at = list(at)
-        at[thin] += math.copysign(size[thin], at[thin] or 1.0)
-        at = tuple(at)
+        # Out past the type's band (never both at once).
+        at = off(size, at, 2)
         # Stripes across its length: black, green, blue.
         k = max(range(3), key=lambda a: size[a])
         n = 9
