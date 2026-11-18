@@ -75,6 +75,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 bear_screens,
                 xray_parts,
                 glass_eye,
+                steam,
             ),
         );
     }
@@ -542,14 +543,14 @@ fn glow_texture(images: &mut Assets<Image>, glow: MarkGlow) -> Handle<Image> {
 }
 
 /// Hermite step from `a` to `b`.
-fn smooth(a: f32, b: f32, x: f32) -> f32 {
+pub(crate) fn smooth(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
 
 /// Smooth value noise, 0..1, a lattice point a unit apart (`seed` picks
 /// the field).
-fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
+pub(crate) fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
     let (x0, y0) = (x.floor(), y.floor());
     let (fx, fy) = (x - x0, y - y0);
     let at = |i: f32, j: f32| {
@@ -1483,6 +1484,7 @@ fn react_to_events(
             AnomalyAct::Bloom => 0.8,
             AnomalyAct::Flare | AnomalyAct::Crush => 0.6,
             AnomalyAct::Reveal => 0.4,
+            AnomalyAct::Creak => 0.0,
         });
         if ev.what == AnomalyAct::Discharge {
             for c in kids.iter() {
@@ -2010,11 +2012,12 @@ fn dress_items(
                     // large as the top allows.
                     parts.push((
                         meshes.add(Cylinder::new(SCREEN_FACE, 0.004).mesh().resolution(48)),
+                        // Dark glass: the rings are what's lit on it.
                         mat(
-                            Color::srgb(0.01, 0.03, 0.015),
+                            Color::srgb(0.006, 0.014, 0.008),
                             0.0,
                             0.15,
-                            LinearRgba::rgb(0.0, 0.02, 0.005),
+                            LinearRgba::rgb(0.0, 0.002, 0.0005),
                         ),
                         Transform::from_xyz(SCREEN_AT.x, 0.022, SCREEN_AT.z),
                     ));
@@ -2151,9 +2154,11 @@ fn dress_items(
                     (r, meshes.add(mesh))
                 })
                 .collect();
+            // Lit green lines on the dark face. Unlit, so it's the base
+            // colour that shows: an unlit material draws no emissive (it
+            // had a black base and a bright emissive, and drew black rings).
             let lit = materials.add(StandardMaterial {
-                base_color: Color::BLACK,
-                emissive: LinearRgba::rgb(0.6, 3.2, 1.0),
+                base_color: Color::srgb(0.45, 1.0, 0.55),
                 unlit: true,
                 ..default()
             });
@@ -2403,5 +2408,104 @@ fn glass_eye(
         if *v != want {
             *v = want;
         }
+    }
+}
+
+/// A wisp of steam off a hot stone in the rain: rises, swells, thins out.
+#[derive(Component)]
+struct Wisp {
+    age: f32,
+    rise: Vec3,
+}
+
+/// How long a wisp lasts, s, and how often a hot stone gives one off in
+/// the rain (at full heat; less often as it cools).
+const WISP_LIFE: f32 = 1.0;
+const WISP_EVERY: f32 = 0.05;
+
+/// Hot stones in the rain steam as they cool (`harvest::HOT_RAIN`): a few
+/// pale wisps off each, one shared mesh and material.
+#[allow(clippy::type_complexity)]
+fn steam(
+    mut commands: Commands,
+    stones: Query<(&GlobalTransform, &super::harvest::Hot)>,
+    mut wisps: Query<(Entity, &mut Wisp, &mut Transform)>,
+    eyes: Query<&GlobalTransform, With<Camera3d>>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+    time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+    mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+    mut since: Local<f32>,
+    mut seed: Local<u32>,
+) {
+    let dt = time.delta_secs();
+    let eye = eyes.iter().next().map(|g| g.translation());
+    for (e, mut w, mut t) in &mut wisps {
+        w.age += dt;
+        if w.age >= WISP_LIFE {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let k = w.age / WISP_LIFE;
+        t.translation += w.rise * dt;
+        // Swells, then thins to nothing; a soft quad, turned to the eye.
+        t.scale = Vec3::splat((0.5 + 2.5 * k) * (1.0 - k * k));
+        if let Some(eye) = eye {
+            let to = eye - t.translation;
+            if to.length_squared() > 1e-4 {
+                t.rotation = Transform::IDENTITY.looking_to(-to, Vec3::Y).rotation;
+            }
+        }
+    }
+    let raining = conditions
+        .as_ref()
+        .is_some_and(|c| c.rain >= super::harvest::HOT_RAIN);
+    if !raining {
+        return;
+    }
+    *since += dt;
+    if *since < WISP_EVERY {
+        return;
+    }
+    *since = 0.0;
+    let (mesh, material) = look
+        .get_or_insert_with(|| {
+            (
+                meshes.add(Rectangle::new(0.2, 0.2)),
+                materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.9, 0.92, 0.94, 0.11),
+                    base_color_texture: Some(dot_texture(&mut images)),
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                }),
+            )
+        })
+        .clone();
+    for (gt, hot) in &stones {
+        *seed = seed.wrapping_add(1);
+        // Fewer as it cools.
+        if grain_at(*seed, 17) > hot.heat() {
+            continue;
+        }
+        let j = |k: u32| grain_at(*seed, k) - 0.5;
+        commands.spawn((
+            Name::new("Steam"),
+            Wisp {
+                age: 0.0,
+                rise: Vec3::new(j(3) * 0.45, 0.15 + 0.12 * grain_at(*seed, 4), j(5) * 0.45),
+            },
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            Transform::from_translation(
+                gt.translation() + Vec3::new(j(1) * 0.06, 0.04, j(2) * 0.06),
+            )
+            .with_scale(Vec3::splat(0.4)),
+            bevy::light::NotShadowCaster,
+        ));
     }
 }

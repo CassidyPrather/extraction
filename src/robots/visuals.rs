@@ -40,6 +40,7 @@ impl Plugin for RobotVisualsPlugin {
                 super::wear::WearPlugin,
                 super::distress_look::DistressLookPlugin,
                 super::searchlight_look::SearchlightLookPlugin,
+                super::lines::LinesPlugin,
             ))
             .add_systems(
                 Update,
