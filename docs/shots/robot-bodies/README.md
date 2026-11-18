@@ -324,3 +324,14 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 | Picture | What it shows |
 |---|---|
 | `../../robots/workers_2/101_body_lines.png` | `reel:lines,4,20` by day (camera `40,0,262,0,8`, crop 900x700 of 1920x1080 at 2x): rope whole and half through, then cable whole with its orange shackle and a grip sleeve, nicked, half through and parting |
+
+## The engineer and its builds (#98)
+
+`robots::engineer_body` and `engineer_look`: the engineer, an unarmed worker on a walker's brain and feet (`Shape::Engineer`): a long, low, pale hull on four short legs, its kit bundled on its back with struts standing up out of it, and a scan lamp on a short arm at its front with the orange-red rim. `robots::builds`: what it builds, drawn in stages from the mind's progress. The seam (`Build`, `BuildReason`, `CameraAim`, `CameraCable`, `BarricadeStrap`/`Panel`, `CameraLens`, `ScanLamp`, `Hammering`) is agreed with Robot minds, who own the mind and rules. Silhouette gauge with the engineer in the family: passes, nearest the grappler at 0.51 (ceiling 0.7).
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/98_engineer.png` | `reel:engineer` by day in drizzle, 4 m off (2x crop): the body side-on |
+| `../../robots/workers_2/98_engineer_at_work.png` | `reel:engineerwork` at dusk: its scan lamp lit (the beam's start at the lens) as it surveys |
+| `../../robots/workers_2/98_barricade_stages.png` | `reel:barricade` by day, 7 m off: struts, half the panels, the panels, done with the orange strap (cut it or drag it by it) |
+| `../../robots/workers_2/98_camera_stages.png` | `reel:camera` at dusk: the mast going up, the head with its lit cone sweeping, done with its cable to the network and a fix building (the searchlights' red cast) |
