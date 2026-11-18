@@ -758,9 +758,9 @@ fn init_assets(
     let glazed_snow = ground_with(
         &mark,
         &sheen,
-        Color::srgba(0.2, 0.24, 0.31, 0.88),
+        Color::srgba(0.3, 0.35, 0.43, 0.8),
         LinearRgba::rgb(0.03, 0.036, 0.048),
-        0.22,
+        0.15,
     );
     // Frosted over: pale plates cut by cracks, rime feathering its rim, a
     // little lit of itself. Its colour's in its texture (the cracks show it
