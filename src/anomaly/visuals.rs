@@ -2744,11 +2744,11 @@ fn dress_charged_water(
             c.spawn((
                 WaterCrackle,
                 Particles { color, alpha: 1.0 },
-                Mesh3d(meshes.add(particle_mesh(48, &mut rng))),
+                Mesh3d(meshes.add(particle_mesh(80, &mut rng))),
                 MeshMaterial3d(particles.add(ParticleMaterial {
                     params: ParticleParams {
                         mode: Vec4::new(9.0, an.radius, w.reach, 1.0),
-                        state: Vec4::new(an.charge, 0.0, 0.0, 0.05),
+                        state: Vec4::new(an.charge, 0.0, 0.0, 0.09),
                         color: color.extend(1.0),
                     },
                     texture: a.dot.clone(),
