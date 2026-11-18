@@ -287,7 +287,14 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         // Grit falling into a well warms toward its violet glow.
         rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
     }
-    let a = texel.a * params.color.a * in.alpha;
+    var a = texel.a * params.color.a * in.alpha;
+    if (i32(params.mode.x + 0.5) == 8) {
+        // Steam: each billow feathered from its heart to nothing at its
+        // edge, so no billow has an edge to see, near or far.
+        let d = length(in.uv - vec2<f32>(0.5)) * 2.0;
+        let soft = 1.0 - smoothstep(0.0, 1.0, d);
+        a = params.color.a * in.alpha * soft * soft;
+    }
     if (glow > 0.5) {
         // Additive (Bevy's premultiplied blend with no alpha): fog only
         // dims it. The fog is mix(x, F, f), so f is 1 - (fog(1) - fog(0)).
