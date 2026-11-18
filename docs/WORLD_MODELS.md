@@ -12,6 +12,9 @@ that moves nothing, is a lie (`capture::checks::every_handle_is_in_reach`,
   (`stove#door_fire/_ash/_oven`): moving parts in the hand (`world::hinge`).
 - Tool chests (`tool_chest#lid`): the lid lifts on its back hinge, by the
   bar along its front (`hinge::Frame::Lid`). Its hasp hangs open, no lock.
+- Wheelie bins (`wheelie_bin#lid`): the lid lifts back over its handle on
+  its rail, by the lip under its free edge (`hinge::Frame::SideLid`). They're
+  empty.
 - A locker's chest-height shelf and each counter's top drawer hold one real
   find in a socket (`buildings::Hold`, `items::loot::roll_holds`). Stoves hold
   nothing.

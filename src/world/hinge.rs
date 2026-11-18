@@ -451,6 +451,9 @@ pub enum Frame {
     Over,
     /// A lid hinged along its back (the model's X), lifting its front.
     Lid,
+    /// A lid hinged along its model's Z at -X, lifting its +X edge (a
+    /// wheelie bin's, on its rail by the handle).
+    SideLid,
 }
 
 impl Frame {
@@ -459,6 +462,7 @@ impl Frame {
             Frame::Upright => Quat::IDENTITY,
             Frame::Over => Quat::from_rotation_z(std::f32::consts::PI),
             Frame::Lid => Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2),
+            Frame::SideLid => Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
         }
     }
 }
@@ -557,6 +561,16 @@ const COUNTER_NODES: &[CounterNode] = &[
         Frame::Lid,
         Motion::Hinge { most: CHEST_LID },
     ),
+    // A wheelie bin's lid on its rail (`art/props/dam.py` `BIN_HINGE`),
+    // lifting back over its handle.
+    CounterNode(
+        "wheelie_bin#lid",
+        [-0.32, 0.93, 0.0],
+        [0.30, 0.045, 0.0],
+        [0.64, 0.07, 0.72],
+        Frame::SideLid,
+        Motion::Hinge { most: BIN_LID },
+    ),
     CounterNode(
         "counter_cabinet#door_l",
         [-0.284, 0.455, -0.298],
@@ -613,6 +627,8 @@ pub const STOVE_DOOR: f32 = 1.7;
 /// How far a tool chest's lid lifts, radians: a little past upright, so
 /// it stays.
 pub const CHEST_LID: f32 = 1.6;
+/// How far a wheelie bin's lid lifts, radians: back over its handle.
+pub const BIN_LID: f32 = 2.0;
 
 /// A building's counters' drawers and cabinet doors, put up as moving
 /// parts when it's placed (the building draws only their carcasses:

@@ -612,6 +612,7 @@ pub fn handles() -> Vec<Handle> {
         let (pull, on) = match model {
             "stove" => ("Steel", "Cast"),
             "tool_chest" => ("Steel", "Painted"),
+            "wheelie_bin" => ("Rubber", "Olive"),
             _ => ("Zinc", "Painted"),
         };
         let shown = model_points(
