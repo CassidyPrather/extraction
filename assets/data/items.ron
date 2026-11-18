@@ -696,7 +696,7 @@
         // one jab gives both (`items::pen`). A cartridge's condition is
         // how full it is.
         (
-            id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Injector pen",
+            id: "regen_injector", dims: Some((0.032, 0.027, 0.13)), name: "Injector pen",
             description: "Two cartridges, one jab, anywhere you can reach. A new one comes with a REGEN R-2 in it.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,
         ),

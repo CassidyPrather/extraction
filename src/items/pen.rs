@@ -23,9 +23,13 @@ use extraction_core::items::{ItemDef, Mount};
 pub const PEN: &str = "regen_injector";
 /// What a new pen comes with.
 pub const PRIMED_WITH: &str = "regen_r2";
-/// The slots, in the pen's frame (it lies along Z, the needle at -Z): a
-/// cartridge rides along each side.
-pub const SLOTS: [Vec3; 2] = [Vec3::new(0.017, 0.0, 0.025), Vec3::new(-0.017, 0.0, 0.025)];
+/// The slots, in the pen's frame (it lies along Z, the needle at -Z): two
+/// wells side by side in its body, open on top (each a cartridge's centre
+/// line).
+pub const SLOTS: [Vec3; 2] = [
+    Vec3::new(0.0075, 0.002, 0.025),
+    Vec3::new(-0.0075, 0.002, 0.025),
+];
 /// How near a slot a cartridge let go seats in it (m).
 pub const SLOT_REACH: f32 = 0.06;
 
