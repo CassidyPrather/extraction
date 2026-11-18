@@ -302,8 +302,9 @@ fn spotter_loose(
     mut spotters: Query<(Entity, &mut Spotter, &Robot, &Transform)>,
     mut out: MessageWriter<SpotterEvent>,
 ) {
-    for (e, _, of) in &pieces {
-        if !spotters.contains(of.0) {
+    for (e, piece, of) in &pieces {
+        // (Its winch stays where it stood, salvage: `spotter_salvage`.)
+        if !spotters.contains(of.0) && *piece != SpotterPiece::Winch {
             commands.entity(e).despawn();
         }
     }
@@ -542,12 +543,19 @@ fn spotter_salvage(
     ),
 ) {
     for ev in events.read() {
-        if ev.what != SpotterAct::Down {
-            continue;
-        }
+        // Down: its wreck and its winch. Gone off on the wind: its winch,
+        // left on the ground where it stood.
+        let down = match ev.what {
+            SpotterAct::Down => true,
+            SpotterAct::Gone => false,
+            _ => continue,
+        };
         let look = super::salvage::Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
         let mut seated = Vec::new();
         for (c, p, of, mut t) in &mut parts {
+            if !down {
+                break;
+            }
             if of.parent() != ev.spotter {
                 continue;
             }
@@ -584,7 +592,8 @@ fn spotter_salvage(
             }
         }
         // Its fabric.
-        for (k, id) in ["polymer", "polymer"].into_iter().enumerate() {
+        let fabric: &[&str] = if down { &["polymer", "polymer"] } else { &[] };
+        for (k, id) in fabric.iter().enumerate() {
             let Some(kind) = catalog.kind(id) else {
                 continue;
             };
@@ -617,8 +626,11 @@ pub const VALVE_BOLTS: usize = 4;
 /// 0.4 m over the ground), and the bolts down through its feet.
 pub const DRUM_AT: Vec3 = Vec3::new(0.07, -0.01, 0.0);
 pub const DRUM_BOLTS: usize = 3;
-/// The camera's middle on its part (`art/robots/spotter.py` prints it).
+/// The camera's middle on its part (`art/robots/spotter.py` prints it);
+/// the searchlight's on its lamp (its drum's face at the lamp, back along
+/// +Z: `searchlight_look`).
 pub const EYE_MID: Vec3 = Vec3::new(0.0, 0.01, -0.012);
+pub const LAMP_MID: Vec3 = Vec3::new(0.0, 0.0, 0.282);
 
 /// What a downed spotter gives up for each of its parts, and how it's
 /// held.
@@ -645,6 +657,7 @@ pub fn wreck_row(role: PartRole, health: f32) -> Option<super::salvage::Row> {
             },
         ),
         PartRole::Sensor => row("spotter_eye", EYE_MID, Fix::Hand),
+        PartRole::Lamp(_) => row("robot_searchlight", LAMP_MID, Fix::Hand),
         PartRole::Armour(40) => row(
             "spotter_winch",
             DRUM_AT,
@@ -906,13 +919,20 @@ pub(crate) mod tests {
             .query_filtered::<(&crate::items::Item, &GlobalTransform), With<crate::interact::InSocket>>()
             .iter(vr.app.world())
             .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
-            .filter(|(id, _)| id.starts_with("spotter_") || id == "dirigible_gas_valve")
+            .filter(|(id, _)| {
+                id.starts_with("spotter_") || id == "dirigible_gas_valve" || id == "robot_searchlight"
+            })
             .collect();
         let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
         ids.sort();
         assert_eq!(
             ids,
-            ["dirigible_gas_valve", "spotter_eye", "spotter_winch"],
+            [
+                "dirigible_gas_valve",
+                "robot_searchlight",
+                "spotter_eye",
+                "spotter_winch"
+            ],
             "{seated:?}"
         );
         for (id, at) in &seated {
@@ -922,5 +942,43 @@ pub(crate) mod tests {
                 "{id} {over:.2} m over the ground"
             );
         }
+    }
+
+    /// Cut loose, it drifts off and is gone; its winch stays where it
+    /// stood, its drum seated on the skid as salvage.
+    #[test]
+    fn cut_loose_its_winch_stays() {
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            let e = spawn_spotter(&mut c, &zone, Vec2::new(40.0, 230.0));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.stand(zone.on_ground(40.0, 236.0), 0.0);
+        vr.step(5);
+        vr.app.world_mut().resource_mut::<Severed>().0.push(e);
+        vr.step((90.0 * (rules::GONE_AFTER + 2.0)) as usize);
+        assert!(vr.app.world().get_entity(e).is_err(), "gone on the wind");
+        let winch: Vec<Entity> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &SpotterPiece)>()
+            .iter(vr.app.world())
+            .filter(|(_, p)| **p == SpotterPiece::Winch)
+            .map(|(w, _)| w)
+            .collect();
+        assert_eq!(winch.len(), 1, "its winch stays");
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let seated: Vec<String> = vr
+            .app
+            .world_mut()
+            .query_filtered::<&crate::items::Item, With<crate::interact::InSocket>>()
+            .iter(vr.app.world())
+            .map(|i| catalog.get(i.kind()).id.clone())
+            .filter(|id| id.starts_with("spotter_"))
+            .collect();
+        assert_eq!(seated, ["spotter_winch"]);
     }
 }

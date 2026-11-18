@@ -1098,6 +1098,12 @@
             tags: ["electronics", "glass"],
         ),
         (
+            id: "robot_searchlight", dims: Some((0.72, 0.653, 0.616)), name: "Machine searchlight",
+            description: "A searchlight drum off a balloon or an airship, its rim still painted warning orange. The lens is as wide as a dinner plate; wire it to a cell and it lights a field.",
+            category: RobotPart, size: Bulky, mass: 7.5, bulk: 6.0,
+            tags: ["electronics", "glass", "metal"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,
