@@ -174,11 +174,14 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         // the water's surface from the snare's edge out to its reach (z),
         // more and brighter as it charges. The child sits at the water's
         // level; over dry ground they're under it.
-        let reach = params.mode.z;
+        // Its reach through the water: the snare's radius and 3 m more
+        // (`snare_water::SNARE_WATER`). (Not mode.z: `pulse` sets that to
+        // the snare's own reach, its radius, each frame.)
+        let reach = R + 3.0;
         let a = s * TAU + floor(t * 3.0 + s * 5.0) * 2.4;
         let rr = mix(R * 0.85, reach, sqrt(h(s + floor(t * 3.0 + s * 5.0), 3.7)));
         p.pos = vec3<f32>(cos(a) * rr, 0.02, sin(a) * rr);
-        let lit = step(h(s + floor(t * 14.0), 2.9), 0.08 + 0.5 * charge + 0.8 * flash);
+        let lit = step(h(s + floor(t * 14.0), 2.9), 0.12 + 0.6 * charge + 0.8 * flash);
         p.alpha = lit;
         p.size = p.size * (0.6 + 0.8 * h(s + floor(t * 14.0), 4.1));
         p.heat = 1.0;
@@ -224,6 +227,9 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
     return p;
 }
 
+// tan(20 degrees): a steam billow's widest, half-angle, at the eye.
+const STEAM_CAP_TAN: f32 = 0.364;
+
 @vertex
 fn vertex(v: Vertex) -> VOut {
     let world_from_local = mesh_functions::get_world_from_local(v.instance_index);
@@ -241,7 +247,14 @@ fn vertex(v: Vertex) -> VOut {
     // ember keeps a pixel or two at 20 m instead of flickering out.
     let far = distance(centre + p.pos, view.world_position);
     let grow = clamp(far / mix(15.0, 7.0, params.mode.w), 1.0, mix(2.0, 2.5, params.mode.w));
-    let world = centre + p.pos + (right * corner.x + up * corner.y) * p.size * grow;
+    var size = p.size * grow;
+    if (i32(params.mode.x + 0.5) == 8) {
+        // Steam, near: no billow wider than 40 degrees of the view (as
+        // `render::puff` caps puffs), so standing in a bank isn't a stack
+        // of screen-filling layers; still thick at the eye.
+        size = min(size, 2.0 * far * STEAM_CAP_TAN);
+    }
+    let world = centre + p.pos + (right * corner.x + up * corner.y) * size;
     var out: VOut;
     out.clip = position_world_to_clip(world);
     out.uv = v.uv;
@@ -267,14 +280,28 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         // billow lit on top by the sky and in its own shade below (a
         // cooler grey, about 0.6 of its top), so the bank has a body
         // against snow and an overcast sky.
-        rgb = rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
+        // (Its own colour, not the texture's: that's dark past the dot's
+        // edge, which drew each billow as a hard disc.)
+        rgb = params.color.rgb * mix(vec3<f32>(0.9, 0.95, 1.05), vec3<f32>(1.08, 1.0, 0.92), in.heat);
         let under = smoothstep(0.25, 0.95, in.uv.y);
-        rgb = rgb * mix(vec3<f32>(1.05, 1.05, 1.05), vec3<f32>(0.56, 0.6, 0.66), under);
+        // Cold and bright (charge: snow lying, by day), the shade below
+        // deeper and a little bluer, so the bank has a body against snow.
+        let cold = params.state.x;
+        let shade = mix(vec3<f32>(0.56, 0.6, 0.66), vec3<f32>(0.36, 0.41, 0.5), cold);
+        rgb = rgb * mix(vec3<f32>(1.05, 1.05, 1.05), shade, under);
     } else {
         // Grit falling into a well warms toward its violet glow.
         rgb = mix(rgb, vec3<f32>(2.0, 0.8, 4.0), in.heat * (1.0 - glow) * 0.6);
     }
-    let a = texel.a * params.color.a * in.alpha;
+    var a = texel.a * params.color.a * in.alpha;
+    if (i32(params.mode.x + 0.5) == 8) {
+        // Steam: each billow feathered from its heart to nothing at its
+        // edge, so no billow has an edge to see, near or far.
+        let d = length(in.uv - vec2<f32>(0.5)) * 2.0;
+        let soft = 1.0 - smoothstep(0.0, 1.0, d);
+        // Its core a little thicker in the cold, to hold its shape on white.
+        a = params.color.a * in.alpha * soft * soft * (1.0 + 0.7 * params.state.x * (1.0 - d));
+    }
     if (glow > 0.5) {
         // Additive (Bevy's premultiplied blend with no alpha): fog only
         // dims it. The fog is mix(x, F, f), so f is 1 - (fog(1) - fog(0)).
@@ -286,7 +313,10 @@ fn fragment(in: VOut) -> @location(0) vec4<f32> {
         let dim = mix(vec3<f32>(1.0), keep, 0.75);
         return vec4<f32>(rgb * a * dim, 0.0);
     }
-    if (a < 0.02) {
+    // (Steam fades to far fainter than that before it's let go: cut at
+    // 0.02, each big billow's feathered rim stood as a faint hard ring.)
+    let cut = select(0.02, 0.003, i32(params.mode.x + 0.5) == 8);
+    if (a < cut) {
         discard;
     }
 #ifdef DISTANCE_FOG

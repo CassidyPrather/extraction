@@ -1062,6 +1062,30 @@
             tags: ["metal"],
         ),
         (
+            id: "sentry_gun", dims: Some((0.21, 0.18, 1.005)), name: "Sentry gun pod",
+            description: "A guard post's twin-barrelled gun, cut from under its head, stamped ST GUN. The feed is jammed with the last of its belt.",
+            category: RobotPart, size: Bulky, mass: 9.0, bulk: 5.0,
+            tags: ["metal", "steel"],
+        ),
+        (
+            id: "sentry_eye", dims: Some((0.3, 0.15, 0.087)), name: "Sentry visor",
+            description: "A guard post's visor, one red lens in a dark bar. It stared down a gate for years; the glass is still clean.",
+            category: RobotPart, size: Small, mass: 0.6, bulk: 0.4,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "sentry_lamp", dims: Some((0.233, 0.21, 0.21)), name: "Sentry searchlight",
+            description: "The searchlight off a guard post's brow. A thick lens in a dark drum; wire it to a cell and it throws a beam you can read by across a field.",
+            category: RobotPart, size: Small, mass: 1.2, bulk: 0.8,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "sentry_junction", dims: Some((0.22, 0.31, 0.12)), name: "Sentry breaker",
+            description: "The breaker out of a guard post's junction box, its leads cut. Copper terminals, a lit window. Pull it while it's live and you'll know.",
+            category: RobotPart, size: Small, mass: 1.4, bulk: 0.6,
+            tags: ["electronics", "metal"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,

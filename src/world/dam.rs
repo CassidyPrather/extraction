@@ -773,7 +773,8 @@ fn bicycles(b: &mut Builder) {
     b.dress(from, models);
 }
 
-/// Wheelie bins in a rank along z, lids shut, 20 m of them.
+/// Wheelie bins in a rank along z, lids shut, 20 m of them: hollow and
+/// empty, each lid its own, lifting (`hinge::fit_counters`).
 fn bins(b: &mut Builder) {
     let len = 20.0;
     let n = 27;
@@ -786,14 +787,29 @@ fn bins(b: &mut Builder) {
         } else {
             Mat::Polymer
         };
-        b.bx(Vec3::new(0.58, 0.95, 0.66), Vec3::new(0.0, 0.5, z), mat);
-        b.deco(Vec3::new(0.62, 0.06, 0.7), Vec3::new(-0.02, 1.0, z), mat);
+        // Its floor and walls, the rim at 0.95.
+        let (hi, t) = (0.95, 0.02);
+        b.bx(Vec3::new(0.52, 0.09, 0.6), Vec3::new(0.0, 0.045, z), mat);
+        for sx in [-1.0, 1.0] {
+            b.bx(
+                Vec3::new(t, hi, 0.66),
+                Vec3::new(sx * (0.29 - t * 0.5), hi * 0.5, z),
+                mat,
+            );
+        }
+        for sz in [-1.0, 1.0] {
+            b.bx(
+                Vec3::new(0.58 - 2.0 * t, hi, t),
+                Vec3::new(0.0, hi * 0.5, z + sz * (0.33 - t * 0.5)),
+                mat,
+            );
+        }
         b.deco(
             Vec3::new(0.06, 0.08, 0.5),
             Vec3::new(-0.33, 0.95, z),
             Mat::DarkMetal,
         );
-        models.push(("wheelie_bin", Transform::from_xyz(0.0, 0.0, z)));
+        models.push(("wheelie_bin#carcass", Transform::from_xyz(0.0, 0.0, z)));
     }
     b.dress(from, models);
 }

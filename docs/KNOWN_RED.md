@@ -28,20 +28,9 @@ How it works:
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
-| warning: unused import `Stash` at src/vr_harness.rs:2590 | aa4fccff | vr_harness's owner (to confirm) | |
-| warning: unused `held` at src/anomaly/mod.rs:1284 | (Legibility's report, 18 Nov) | Anomalies | |
-| `capture::attach::tests::model_pieces_touch_what_holds_them`: items/hound_hip_servo fin 3 mm off; props/stove doors 2-14 mm off | 77bdea0f (lib341) | Heavy (servo, fixed in 37a452bb, gate 343); World models (stove, fixed in 73fa36b6, on 10957625) | |
-| `capture::fighting::tests::models_dont_fight_themselves`: walker grappler_core vs engineer_hull 0.13 m² | 77bdea0f (lib341) | Models | fixed in 705f16c9 (on 10957625); confirm |
-| `models::tests::no_flat_model_material_is_paper_white`: "Baked" 1.00 | 77bdea0f (lib341) | Arcade | fixed in 35bc2962 (gate 343) |
-| `onboarding::firsts` every_machine_has_its_first_contact_line, `robots::intent_roster` every_machine_is_on_the_intent_roster: the engineer | 77bdea0f (lib341) | Robot bodies | fixed in d40ba037 (gate 343); Onboarding to word the line |
+| `render::vr_budget` gauge_steam_banks_hold_the_stereo_budget (#[ignore]): steam bank inside (Kettle) 104% fragments | 2d2f8835 | Anomalies | mode-8 size cap 20° in 2c577d29 (gate 345); Performance to re-measure |
 | `vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached`: drone robot_cell (Live) unseen, out of reach (0.03 m up, under the hull) | bb51307b (lib343) | Heavy | playtest-relevant |
 | `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | bb51307b (lib343) | Heavy | |
-| `audio_machines::tests::the_dangers_are_heard`: no sound for PartCooked | 77bdea0f (lib341) | Anomalies | |
-| `render::landmarks::tests::every_landmark_lamp_stands_on_its_building`: no art for ore_mill/observatory (locker#carcass.glb, stove#carcass.glb) | 77bdea0f (lib341) | World models | node renames |
-| `sim::indoor::tests::what_is_laid_on_a_spot_settles_in_reach`: 68 of 1395 laid things out of the plan, seed 4, ~20 m under ground | 77bdea0f (lib341) | World models | playtest-relevant |
-| `soak::save_fuzz` relocating_keeps_every_item, every_item_is_saved_once..., a_poisoned_career_loads_whole...: save holds ~17-21 more items than the world | 77bdea0f (lib341) | World models (holds, to confirm) | playtest-relevant |
-| `items::loot::hold_tests::holds_leave_every_other_roll_as_it_was`: rime_fell flashlight moved | 10957625 (lib342) | World models (or Map design if the Scree burner re-seeds) | |
-| `soak::quiet` no_session_logs_a_warning, no_valley_logs_an_error_without_the_downloads: "Unknown vertex attribute COLOR_" (bevy_gltf) | 77bdea0f (lib341) | Arcade | box_lod1 vertex colours |
 
 ## Logged, not failing a check
 
@@ -76,3 +65,15 @@ How it works:
 | warning: constant `LATER` is never used at src/onboarding/pickups.rs:95 | 0f34cacf (Onboarding) |
 | warning: function `least_clear` is never used at src/world/hinge.rs:763 | e2a5ef5a (World models) |
 | worst-view stereo draw gauge: Cinder s01_ahead (night, downpour, fight) 2552 of 2400 draws (106%); Cinder insertion_south_gate_2 97%, two fuel-exfil views ~96%, Marrow poi_radio_mast_0 94% — up ~650 draws since 10 Nov, in the smaller groups | draws: 8a42f400 (Performance) + 95c32584 (Arcade); five-valley table on 10957625 green |
+| `capture::attach::tests::model_pieces_touch_what_holds_them`: items/hound_hip_servo fin 3 mm off; props/stove doors 2-14 mm off | Heavy 37a452bb, World models 73fa36b6; passes on d6bdf8ef (lib344) |
+| `capture::fighting::tests::models_dont_fight_themselves`: walker grappler_core vs engineer_hull 0.13 m² | Models 705f16c9; passes on d6bdf8ef (lib344) |
+| `models::tests::no_flat_model_material_is_paper_white`: "Baked" 1.00 | Arcade 35bc2962; passes on d6bdf8ef (lib344) |
+| `onboarding::firsts` every_machine_has_its_first_contact_line, `robots::intent_roster` every_machine_is_on_the_intent_roster: the engineer | Robot bodies d40ba037; passes on d6bdf8ef (lib344) |
+| `audio_machines::tests::the_dangers_are_heard`: no sound for PartCooked | Anomalies (PartCooked crackle); passes on d6bdf8ef (lib344) |
+| `render::landmarks::tests::every_landmark_lamp_stands_on_its_building`: no art for ore_mill/observatory (locker#carcass.glb, stove#carcass.glb) | World models 313a9753; passes on d6bdf8ef (lib344) |
+| `sim::indoor::tests::what_is_laid_on_a_spot_settles_in_reach`: 68 of 1395 laid things out of the plan, seed 4, ~20 m under ground | World models 313a9753 (test model was stale; nothing fell); passes on d6bdf8ef (lib344) |
+| `soak::save_fuzz` relocating_keeps_every_item, every_item_is_saved_once..., a_poisoned_career_loads_whole...: save holds ~17-21 more items than the world | World models 0c655f2d (fuzz model was stale; ToHold gap closed); passes on d6bdf8ef (lib344) |
+| `items::loot::hold_tests::holds_leave_every_other_roll_as_it_was`: rime_fell flashlight moved | World models 0c8b13f9 (compares rolled-at); passes on d6bdf8ef (lib344) |
+| `soak::quiet` no_session_logs_a_warning, no_valley_logs_an_error_without_the_downloads: "Unknown vertex attribute COLOR_" (bevy_gltf) | Arcade 12c412e5 (COLOR_0 only); passes on d6bdf8ef (lib344) |
+| warning: unused import `Stash` at src/vr_harness.rs:2590 | gone: no build warnings since gate 342b (10957625) |
+| warning: unused `held` at src/anomaly/mod.rs:1284 | gone: no build warnings since gate 342b (10957625) |

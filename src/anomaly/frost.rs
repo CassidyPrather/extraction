@@ -134,9 +134,12 @@ pub fn frozen_level(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32) -
     (count > 0).then(|| sum / count as f32)
 }
 
+/// The water a frost freezes lies within this of its mean level (m): a
+/// beck falling through it is frozen where it's level, open where it falls.
+const ICE_LEVEL_SPAN: f32 = 0.35;
 /// A cell of ice rising more than this across it (m) is a step: the sheet
 /// breaks there.
-const ICE_STEP_BREAK: f32 = 0.3;
+const ICE_STEP_BREAK: f32 = 0.15;
 /// Rime creeps up the banks this far over the ice, m, thinning out.
 const RIME_UP: f32 = 1.0;
 /// The sheet's mesh: cells this fine, m...
@@ -185,7 +188,10 @@ pub fn ice_mesh(hm: &extraction_core::terrain::Heightmap, c: Vec3, r: f32, w: f3
             pts.push(if d.length() > rim {
                 None
             } else if let Some(l) = here {
-                Some(([d.x, (l + ICE_PROUD).max(g + 0.02) - c.y, d.y], 1.0))
+                // Only the stretch near its own level: up a beck's fall the
+                // ice climbed with the water into a pale wall.
+                ((l - w).abs() < ICE_LEVEL_SPAN)
+                    .then(|| ([d.x, (l + ICE_PROUD).max(g + 0.02) - c.y, d.y], 1.0))
             } else if g < top {
                 Some(([d.x, g + 0.02 - c.y, d.y], 1.0))
             } else if g < top + RIME_UP {

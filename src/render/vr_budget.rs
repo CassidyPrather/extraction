@@ -1494,3 +1494,106 @@ fn gauge_beams_hold_the_stereo_budget() {
         over.join("\n")
     );
 }
+
+/// Steam banks (`anomaly::steam`): each bank's view from 10 m (four
+/// sides) and from inside it, through both eyes in the reference weather,
+/// within the stereo budget; the bank's own fragments counted (they were
+/// none: its billows are placed by their vertex shader, and
+/// `overdraw::measure` counted them at their corners, a point each).
+///
+/// First measure (18 November, main bb51307b): see `docs/PERFORMANCE.md`.
+#[test]
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_steam_banks_hold_the_stereo_budget() {
+    let _counting = super::budget::tests::counted();
+    let b = budget();
+    let px = eye_px();
+    let mut over = Vec::new();
+    for map in ["kettle_pass", "rime_fell"] {
+        let mut app = super::budget::tests::client_threads(map, "drizzle", None);
+        for _ in 0..300 {
+            app.update();
+        }
+        super::budget::tests::settle(&mut app);
+        let eyes = both_eyes(&mut app);
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let w = app.world_mut();
+        let banks: Vec<(Entity, Vec3)> = w
+            .query_filtered::<(Entity, &GlobalTransform), With<crate::anomaly::steam::SteamBank>>()
+            .iter(w)
+            .map(|(e, g)| (e, g.translation()))
+            .collect();
+        assert!(!banks.is_empty(), "{map}: no steam bank to measure");
+        for (bank, c) in banks {
+            let g = zone.ground(c.x, c.z);
+            let mut views: Vec<(String, Vec3, Vec3)> = (0..4)
+                .map(|k| {
+                    let a = k as f32 * std::f32::consts::FRAC_PI_2;
+                    let (x, z) = (c.x + a.cos() * 10.0, c.z + a.sin() * 10.0);
+                    (
+                        format!("10 m, side {k}"),
+                        Vec3::new(x, zone.ground(x, z) + 1.7, z),
+                        c + Vec3::Y,
+                    )
+                })
+                .collect();
+            views.push((
+                "inside".into(),
+                Vec3::new(c.x, g + 1.7, c.z),
+                Vec3::new(c.x + 5.0, g + 1.7, c.z),
+            ));
+            for (name, eye, look) in views {
+                {
+                    let w = app.world_mut();
+                    let mut q = w.query_filtered::<(&mut Transform, &mut Projection), With<super::FreeCamera>>();
+                    let (mut t, mut p) = q.single_mut(w).unwrap();
+                    *t = Transform::from_translation(eye).looking_at(look, Vec3::Y);
+                    if let Projection::Perspective(p) = &mut *p {
+                        p.fov = super::budget::EYE_FOV_DEG.to_radians();
+                        p.aspect_ratio = 1.0;
+                    }
+                }
+                let fragments = |app: &mut App| {
+                    for _ in 0..30 {
+                        app.update();
+                    }
+                    let od_l = super::overdraw::measure(app.world_mut(), eyes.0);
+                    let od_r = super::overdraw::measure(app.world_mut(), eyes.1);
+                    (od_l.mean + od_r.mean) * px * px / 1e6
+                };
+                app.world_mut().entity_mut(bank).insert(Visibility::Hidden);
+                let bare = fragments(&mut app);
+                app.world_mut()
+                    .entity_mut(bank)
+                    .insert(Visibility::Inherited);
+                let with = fragments(&mut app);
+                let (l, r, _) = measure(&mut app, eyes);
+                let (draws, tris) = (l.draws + r.draws, l.tris + r.tris);
+                println!(
+                    "{map} steam bank at {:.0},{:.0},{:.0}, {name}: draws {draws} ({:.0}%), {}k triangles ({:.0}%), {with:.1}M fragments ({:.0}%), the steam's {:.1}M",
+                    c.x,
+                    c.y,
+                    c.z,
+                    draws as f32 / b.draws as f32 * 100.0,
+                    tris / 1000,
+                    tris as f32 / b.tris as f32 * 100.0,
+                    with / b.fragments_m * 100.0,
+                    with - bare
+                );
+                if with - bare < 0.2 {
+                    over.push(format!(
+                        "{map} {name}: the steam counted {:.2}M fragments: not seen",
+                        with - bare
+                    ));
+                }
+                if with > b.fragments_m * 0.95 || draws > b.draws || tris > b.tris {
+                    over.push(format!(
+                        "{map} {name}: {with:.1}M fragments, {draws} draws, {}k triangles",
+                        tris / 1000
+                    ));
+                }
+            }
+        }
+    }
+    assert!(over.is_empty(), "steam banks:\n{}", over.join("\n"));
+}
