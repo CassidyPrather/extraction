@@ -389,6 +389,11 @@ mod tests {
             .on_ground(at.x + 8.0, at.z);
         vr.stand(feet, 0.0);
         vr.step(10);
+        // Dry hands (a soaked glove holds it longer: its own test).
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::world::weather::Wetness>()
+            .level = 0.0;
         let hand = feet + Vec3::new(0.25, 1.1, -0.35);
         let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
         vr.app
@@ -421,6 +426,11 @@ mod tests {
             .on_ground(at.x + 8.0, at.z);
         vr.stand(feet, 0.0);
         vr.step(10);
+        // Dry hands (a soaked glove holds it longer: its own test).
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::world::weather::Wetness>()
+            .level = 0.0;
         let hand = feet + Vec3::new(0.25, 1.1, -0.35);
         let stone = spawn(vr.app.world_mut(), "art_hearth", hand);
         vr.app

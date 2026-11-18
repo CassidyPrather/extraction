@@ -1286,9 +1286,18 @@ mod tests {
                 load: Default::default(),
                 blow: None,
             });
+        app.update();
+        app.update();
+        assert!(
+            app.world().get::<Knocked>(stone).is_some(),
+            "the round knocked it"
+        );
+        let mut ys = Vec::new();
         for _ in 0..80 {
             app.update();
+            ys.push(pos(&app, stone).y);
         }
+        eprintln!("knocked stone: {:?}", &ys[..ys.len().min(12)]);
         assert!(
             pos(&app, stone).y < held - 0.8,
             "knocked out, it fell ({held:.2} -> {:.2})",
