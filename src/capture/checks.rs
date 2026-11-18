@@ -509,7 +509,7 @@ pub fn handles() -> Vec<Handle> {
     );
     out.push(Handle {
         what: "vent and crane levers (cellar_vent), world::furnace::lever_bundle".into(),
-        grip: crate::world::furnace::LEVER_BOX * 0.5,
+        grip: crate::world::furnace::VENT_BOX * 0.5,
         shown: lever,
         albedo: model_albedo("cellar_vent", "Blued").zip(model_albedo("cellar_vent", "Cast")),
     });
@@ -539,6 +539,30 @@ pub fn handles() -> Vec<Handle> {
         });
         let _ = (shape, at);
     }
+    // A wall lever's knob (`render::bench`): the cage's bells, the live
+    // rooms' isolators, a bench lever off its bench (`furnace::lever_bundle`).
+    let knob = crate::render::bench::wall_lever_knob();
+    let r = crate::render::bench::WALL_LEVER_KNOB_R;
+    out.push(Handle {
+        what: "wall lever knob (cage bells, isolators), render::bench::wall_lever".into(),
+        grip: crate::world::furnace::LEVER_BOX * 0.5,
+        shown: [
+            Vec3::X,
+            Vec3::NEG_X,
+            Vec3::Y,
+            Vec3::NEG_Y,
+            Vec3::Z,
+            Vec3::NEG_Z,
+        ]
+        .iter()
+        .map(|d| knob + *d * r)
+        .collect(),
+        // A red knob on a yellow plate.
+        albedo: Some((
+            luminance(bevy::color::Color::srgb(0.7, 0.07, 0.05)),
+            luminance(bevy::color::Color::srgb(0.8, 0.6, 0.08)),
+        )),
+    });
     // A drain's valve wheel's rim and hand pump's handle.
     for (kind, name, part) in [
         (
