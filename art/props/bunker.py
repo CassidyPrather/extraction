@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import UP, ALONG_X, Wear, board, bolt, prop, rod  # noqa: E402
+from _kit import UP, ALONG_X, Wear, board, bolt, chain, padlock, prop, rod  # noqa: E402
 from common import Part, T, fillet  # noqa: E402
 
 
@@ -54,7 +54,10 @@ def filter_unit():
         a = k * math.pi / 2 + 0.3
         rod(p, (cx, cy, z - 0.07), (cx + math.cos(a) * 0.185, cy + math.sin(a) * 0.185, z - 0.07),
             0.009, "Iron", segs=6)
-    rod(p, (cx + 0.19, cy, z - 0.075), (cx + 0.19, cy, z - 0.17), 0.012, "Black", segs=8)
+    # Its handle sheared off, a rusted stub on the rim; the boss rusted
+    # solid. It won't be turned.
+    rod(p, (cx + 0.19, cy, z - 0.075), (cx + 0.19, cy, z - 0.1), 0.012, "Rusty", segs=8)
+    p.cyl(0.058, 0.0, 0.074, "Rusty", segs=12, xf=T(cx, cy, z - 0.074))
     # A gauge: bezel, dark face.
     gx, gy = 0.34, 1.2
     p.cyl(0.07, 0.0, 0.03, "Zinc", segs=16, xf=T(gx, gy, z - 0.03))
@@ -72,8 +75,12 @@ def switch_cabinet():
     p = Part("static")
     p.box((0.8, 1.4, 0.38), (0.0, 0.7, 0.01), "Painted", bevel=0.008)
     board(p, (0.72, 1.28, 0.012), (w.j(0.002), 0.72, -0.185), "Painted", bevel=0.004)
-    # Handle, hinges, a yellow plate.
+    # Handle, hinges, a yellow plate; the door padlocked shut on a hasp
+    # by its handle (its breaker's lever is outside it).
     rod(p, (0.28, 0.6, -0.198), (0.28, 0.8, -0.198), 0.01, "Zinc", segs=8)
+    p.box((0.04, 0.06, 0.008), (0.33, 0.7, -0.195), "Zinc")
+    rod(p, (0.33, 0.68, -0.199), (0.33, 0.68, -0.215), 0.005, "Zinc", segs=6)
+    padlock(p, (0.33, 0.68, -0.215), (0, 0, -1))
     for y in (0.25, 1.2):
         p.cyl(0.012, 0.0, 0.08, "Iron", segs=8, xf=T(-0.365, y - 0.04, -0.19) @ UP)
     board(p, (0.2, 0.14, 0.004), (0.0, 1.15, -0.1935), "Yellow", bevel=0.0)

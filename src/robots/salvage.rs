@@ -39,6 +39,12 @@ pub const SCRAP: f32 = 0.05;
 pub const KG_A_SCRAP: f32 = 2.0;
 /// How near a closed hand has to be to a live cell to be thrown off (m).
 const ARC_REACH: f32 = 0.14;
+/// A live cell crackles while you're this near it (m), so the arc that
+/// throws your hand off isn't the first you know of it.
+pub const CRACKLE_HEARD: f32 = 4.0;
+/// An open hand this near a live cell (m) draws a little spark to it, and
+/// a buzz: it's live, before you take hold.
+pub const WARN_REACH: f32 = 0.35;
 /// Cables holding a gun pod on.
 pub const CABLES: usize = 2;
 /// How thick a cable is to the cutters' jaws (m): a hand needn't find a
@@ -60,18 +66,21 @@ pub struct SalvagePlugin;
 
 impl Plugin for SalvagePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Arced>().add_systems(
-            Update,
-            (
-                fit_salvage,
-                follow_wrecks,
-                bolts_turned,
-                holds_gone,
-                cool_cells,
-                live_cells,
-            )
-                .chain(),
-        );
+        app.add_message::<Arced>()
+            .add_message::<Crackled>()
+            .add_systems(
+                Update,
+                (
+                    fit_salvage,
+                    follow_wrecks,
+                    bolts_turned,
+                    holds_gone,
+                    cool_cells,
+                    live_cells,
+                    live_tells,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -152,6 +161,17 @@ pub struct Live {
     pub left: f32,
     /// To the next arc it may throw.
     pub next: f32,
+    /// To its next crackle (`live_tells`).
+    pub tick: f32,
+}
+
+/// A live cell crackled, or drew a spark to a hand near it (`to_hand`):
+/// a small spark and a tick, the warning before an [`Arced`].
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Crackled {
+    pub cell: Entity,
+    pub at: Vec3,
+    pub to_hand: Option<Vec3>,
 }
 
 /// A hand thrown off a live cell.
@@ -626,6 +646,7 @@ fn fit(commands: &mut Commands, catalog: &Catalog, wreck: Entity, row: Row, look
         commands.entity(item).insert(Live {
             left: HOT_FOR,
             next: 0.0,
+            tick: 0.0,
         });
     }
     match row.fix {
@@ -839,6 +860,65 @@ fn live_cells(
     }
 }
 
+/// A live cell tells you it's live before you touch it: it crackles now
+/// and then while you're near (more often as a hand comes close), and
+/// draws a spark to an open hand within [`WARN_REACH`], with a buzz.
+fn live_tells(
+    mut cells: Query<(Entity, &mut Live, &GlobalTransform)>,
+    hands: Query<(&Hand, &GlobalTransform, &crate::rig::RigHand)>,
+    heads: Query<&GlobalTransform, With<crate::player::Player>>,
+    mut tells: MessageWriter<Crackled>,
+    mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (cell, mut live, gt) in &mut cells {
+        live.tick -= dt;
+        if live.tick > 0.0 {
+            continue;
+        }
+        let at = gt.translation();
+        if !heads
+            .iter()
+            .any(|h| h.translation().distance(at) < CRACKLE_HEARD)
+        {
+            continue;
+        }
+        let near = hands
+            .iter()
+            .filter(|(h, hgt, _)| !h.grip_down && hgt.translation().distance(at) < WARN_REACH)
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(at)
+                    .total_cmp(&b.1.translation().distance(at))
+            });
+        match near {
+            Some((_, hgt, rig)) => {
+                tells.write(Crackled {
+                    cell,
+                    at,
+                    to_hand: Some(hgt.translation()),
+                });
+                haptics.write(crate::rig::haptics::Haptic {
+                    side: rig.side,
+                    amplitude: 0.25,
+                    seconds: 0.05,
+                });
+                live.tick = 0.3;
+            }
+            None => {
+                tells.write(Crackled {
+                    cell,
+                    at,
+                    to_hand: None,
+                });
+                // (Irregular, as a fault is: 0.8 to 1.6 s.)
+                live.tick = 0.8 + 0.8 * ((live.left * 7.31).sin() * 0.5 + 0.5);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -983,6 +1063,44 @@ mod tests {
             grappler: false,
             parts,
         }
+    }
+
+    /// A live cell crackles while you're near it, before any hand's on
+    /// it, and not when no one's there to see it.
+    #[test]
+    fn a_live_cell_warns_before_it_burns() {
+        #[derive(Resource, Default)]
+        struct Heard(usize);
+        fn count(mut r: MessageReader<Crackled>, mut n: ResMut<Heard>) {
+            n.0 += r.read().count();
+        }
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_message::<Crackled>()
+            .add_message::<crate::rig::haptics::Haptic>()
+            .init_resource::<Heard>()
+            .add_systems(Update, (live_tells, count).chain());
+        let live = || Live {
+            left: HOT_FOR,
+            next: 0.0,
+            tick: 0.0,
+        };
+        app.world_mut()
+            .spawn((live(), GlobalTransform::from_xyz(0.0, 0.0, 0.0)));
+        app.world_mut()
+            .spawn((live(), GlobalTransform::from_xyz(50.0, 0.0, 0.0)));
+        app.world_mut().spawn((
+            crate::player::Player,
+            GlobalTransform::from_xyz(1.5, 1.6, 0.0),
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        assert_eq!(
+            app.world().resource::<Heard>().0,
+            1,
+            "the near cell crackled once (then waits); the far one is quiet"
+        );
     }
 
     #[test]

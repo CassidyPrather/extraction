@@ -342,16 +342,22 @@ def stove():
         rod(p, (x - r * 0.3, 0.86, -0.06), (x + r * 0.3, 0.86, -0.06), 0.006, "Cast", segs=6)
     doors = []
     for (name, x, y, dw, dh) in STOVE_DOORS:
-        # Its frame and the dark behind the door, and its hinges, on the range.
-        p.box((dw + 0.04, dh + 0.04, 0.012), (x, y, -0.283), "Cast", bevel=0.003, segs=1)
-        p.box((dw - 0.02, dh - 0.02, 0.0015), (x, y, STOVE_FRONT - 0.00075), "Black", segs=1)
+        # Its frame, a ring round the opening, and the dark recessed in it
+        # (behind the door, apart from it); its hinges, on the range.
+        # (Its bars reach 5 mm in under the door's edges: the door shuts on
+        # them.)
+        for (fx, fy, fw, fh) in ((x, y + dh / 2 + 0.0075, dw + 0.04, 0.025),
+                                 (x, y - dh / 2 - 0.0075, dw + 0.04, 0.025),
+                                 (x - dw / 2 - 0.0075, y, 0.025, dh),
+                                 (x + dw / 2 + 0.0075, y, 0.025, dh)):
+            p.box((fw, fh, 0.012), (fx, fy, -0.283), "Cast", bevel=0.002, segs=1)
+        p.box((dw, dh, 0.006), (x, y, -0.281), "Black", segs=1)
         for yy in (y - dh / 2 + 0.02, y + dh / 2 - 0.02):
             p.box((0.03, 0.02, 0.008), (x - dw / 2 + 0.005, yy, -0.305), "Iron")
         # The door, its latch at its free edge.
         d = Part(name, origin=(x - dw / 2, y, STOVE_FRONT))
-        # (Hung 3.5 mm proud of its frame, clear of the dark behind it.)
-        d.box((dw, dh, 0.012), (x, y, -0.2985), "Cast", bevel=0.003, segs=1)
-        rod(d, (x + dw / 2 - 0.03, y, -0.304), (x + dw / 2 - 0.03, y, -0.33), 0.006, "Steel")
+        d.box((dw, dh, 0.012), (x, y, -0.295), "Cast", bevel=0.003, segs=1)
+        rod(d, (x + dw / 2 - 0.03, y, -0.301), (x + dw / 2 - 0.03, y, -0.33), 0.006, "Steel")
         rod(d, (x + dw / 2 - 0.03, y, -0.33), (x + dw / 2 + 0.03, y, -0.33), 0.007, "Steel")
         doors.append(d)
     # A towel rail along the front.

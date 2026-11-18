@@ -91,7 +91,9 @@ pub const FAMILIES: &[Family] = &[
     Family::GunParts,
 ];
 
-/// Families whose kinds first roll after raid 6 (the DP-3 sweep, raid 7).
+/// Families whose kinds first roll after raid 6 (the DP-3 sweep, raid 7),
+/// for the before-raid-6 test.
+#[cfg(test)]
 const LATER: &[Family] = &[Family::Sweep];
 
 /// Kinds that need no word: plain to see, or the yard taught them (its
