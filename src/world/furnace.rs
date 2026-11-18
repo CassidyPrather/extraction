@@ -151,15 +151,17 @@ pub(super) fn wall_pose(
         l.floor_of(room) + up,
         room.at[1] + at[1],
     );
-    Some(Transform::from_translation(p + q * Vec3::new(0.0, 0.0, -0.12)).with_rotation(q))
+    Some(Transform::from_translation(p + q * Vec3::new(0.0, 0.0, -LEVER_WALL.z)).with_rotation(q))
 }
 
-/// A vent's or the crane's lever's grip, its pose's space (full sizes).
-pub const LEVER_BOX: Vec3 = Vec3::new(0.3, 0.4, 0.2);
+/// A vent's or the crane's lever's grip, its pose's space (full sizes):
+/// round the drawn arm, pivot to handle, not the louvres behind it
+/// (`capture::checks::every_handle_is_in_reach`).
+pub const LEVER_BOX: Vec3 = Vec3::new(0.3, 0.6, 0.2);
 
 /// Where a lever's model stands from its pose: its back on the wall, the
-/// pose 0.12 off it (`lever_models`).
-pub const LEVER_WALL: Vec3 = Vec3::new(0.0, 0.0, 0.12);
+/// pose out where its arm is, 0.3 off the wall (`lever_models`).
+pub const LEVER_WALL: Vec3 = Vec3::new(0.0, 0.0, 0.3);
 
 pub(super) fn lever_bundle(name: &'static str, pose: Transform, site: Entity) -> impl Bundle {
     (
@@ -690,7 +692,7 @@ fn lever_looks(
                 metallic: 0.5,
                 ..default()
             })),
-            Transform::from_xyz(0.0, 0.0, 0.12 - 0.125),
+            Transform::from_xyz(0.0, 0.0, LEVER_WALL.z - 0.125),
             ChildOf(e),
         ));
     }
@@ -713,7 +715,7 @@ fn lever_models(
         for k in kids.iter().filter(|k| blockouts.contains(*k)) {
             commands.entity(k).despawn();
         }
-        // (The pose stands 0.12 off the wall; the model's origin is on it.)
+        // (The pose stands `LEVER_WALL` off the wall; the model's origin is on it.)
         let wall = Transform::from_translation(LEVER_WALL);
         spawn_parts(
             &mut commands,

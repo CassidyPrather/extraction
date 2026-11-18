@@ -513,30 +513,32 @@ pub fn handles() -> Vec<Handle> {
         shown: lever,
         albedo: model_albedo("cellar_vent", "Blued").zip(model_albedo("cellar_vent", "Cast")),
     });
-    // A breaker's switch (`underground::switch_pose`): on its cabinet's
-    // face, 1.2 up and 0.26 out from its middle; what of the cabinet's
-    // metal fittings stands in reach of it.
-    let cabinet = Transform::from_xyz(0.0, -1.2, 0.26);
-    let half =
-        crate::world::underground::POWER_BOX * 0.5 + Vec3::splat(crate::interact::GRAB_REACH);
-    let shown: Vec<Vec3> = model_points(
-        "switch_cabinet",
-        &["Iron", "Zinc"],
-        Vec3::splat(-5.0),
-        Vec3::splat(5.0),
-        None,
-        cabinet,
-    )
-    .into_iter()
-    .filter(|p| p.abs().cmple(half).all())
-    .collect();
-    out.push(Handle {
-        what: "breaker (switch_cabinet), world::underground::switch_pose".into(),
-        grip: crate::world::underground::POWER_BOX * 0.5,
-        shown,
-        albedo: model_albedo("switch_cabinet", "Iron")
-            .zip(model_albedo("switch_cabinet", "Painted")),
-    });
+    // A power switch's lever or pull-start (`underground::power_parts`)
+    // on its board or machine.
+    for (kind, name) in [
+        (
+            extraction_core::underground::PowerKind::Breaker,
+            "breaker lever",
+        ),
+        (
+            extraction_core::underground::PowerKind::Generator,
+            "generator pull-start",
+        ),
+    ] {
+        let parts = crate::world::underground::power_parts(kind);
+        let (shape, at, mat, _) = parts[parts.len() - 1];
+        out.push(Handle {
+            what: format!("{name}, world::underground::power_parts"),
+            grip: crate::world::underground::POWER_BOX * 0.5,
+            shown: parts
+                .iter()
+                .skip(1)
+                .flat_map(|(s, t, ..)| shape_points(*s, *t))
+                .collect(),
+            albedo: Some((mat_albedo(mat), mat_albedo(Mat::PaintedMetal))),
+        });
+        let _ = (shape, at);
+    }
     // A drain's valve wheel's rim and hand pump's handle.
     for (kind, name, part) in [
         (
@@ -561,7 +563,12 @@ pub fn handles() -> Vec<Handle> {
     }
     // Every prefab's ladders: their rungs in their climb's box
     // (`hand_climb::Ladder::bundle`).
-    for id in buildings::PREFABS {
+    let ids = buildings::PREFABS
+        .iter()
+        .chain(crate::world::dam::PREFABS.iter())
+        .chain(crate::world::fell::PREFABS.iter())
+        .chain(crate::world::way_lamps::PREFABS.iter());
+    for id in ids {
         let Some(geo) = buildings::prefab(id) else {
             continue;
         };
@@ -865,12 +872,15 @@ mod tests {
         let mut bad = Vec::new();
         for h in &all {
             let (thin, _) = h.sizes();
+            let span = bounds(h.shown.iter().copied());
             println!(
-                "{:<70} {:4} points, {:+.3} m past reach, {:.3} m thick",
+                "{:<70} {:4} points, {:+.3} m past reach, {:.3} m thick, in {:?} of {:?}",
                 h.what,
                 h.shown.len(),
                 h.out_of_reach(),
-                thin
+                thin,
+                span,
+                h.grip
             );
             if h.shown.is_empty() {
                 bad.push(format!("{}: nothing shows where to take hold", h.what));
@@ -928,7 +938,7 @@ mod tests {
                     ));
                 }
             }
-            if !h.shown.is_empty() && wide < across {
+            if h.shown.is_empty() || wide < across {
                 bad.push(format!(
                     "{}: {wide:.3} m across, under {across:.3} at {HANDLE_SEEN_FROM} m",
                     h.what

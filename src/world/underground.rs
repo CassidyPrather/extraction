@@ -165,6 +165,14 @@ fn build(l: &'static Layout, r: &'static Raster) -> Geo {
             prop(&mut b, PropKind::Cabinet, at, -p.rot.to_radians(), None);
         }
     }
+    // The power switches: a breaker's lever, a generator's pull-start.
+    for stage in 0..l.power.len() {
+        if let Some(pose) = switch_pose(l, stage) {
+            for (shape, at, mat, collide) in power_parts(l.power[stage].kind) {
+                b.piece(shape, pose * at, mat, collide);
+            }
+        }
+    }
     // The drains' fittings: a valve wheel on its spindle, a pump's
     // barrel and handle.
     for d in &l.drains {
@@ -1425,6 +1433,49 @@ pub const POWER_BOX: Vec3 = Vec3::new(0.3, 0.3, 0.15);
 /// A drain's valve wheel's or hand pump's grip, its pose's space.
 pub const DRAIN_BOX: Vec3 = Vec3::new(0.4, 0.4, 0.2);
 
+/// What draws a power switch, in its pose's space (`switch_pose`; it
+/// faces -Z): a breaker's thrown lever on its plate, standing off its
+/// board's face; a generator's pull-start, its T-grip off the housing.
+/// Each plate is sunk a centimetre into what it's on.
+pub fn power_parts(kind: ug::PowerKind) -> Vec<(Shape, Transform, Mat, bool)> {
+    match kind {
+        ug::PowerKind::Breaker => vec![
+            (
+                Shape::Box(Vec3::new(0.12, 0.18, 0.04)),
+                Transform::from_xyz(0.0, 0.0, 0.05),
+                Mat::DarkMetal,
+                false,
+            ),
+            (
+                Shape::Box(Vec3::new(0.03, 0.2, 0.03)),
+                Transform::from_xyz(0.0, 0.07, -0.02).with_rotation(Quat::from_rotation_x(0.5)),
+                Mat::DarkMetal,
+                false,
+            ),
+            (
+                Shape::Box(Vec3::new(0.12, 0.03, 0.03)),
+                Transform::from_xyz(0.0, 0.16, -0.07),
+                Mat::RustyMetal,
+                false,
+            ),
+        ],
+        ug::PowerKind::Generator => vec![
+            (
+                Shape::Box(Vec3::new(0.12, 0.12, 0.04)),
+                Transform::from_xyz(0.0, 0.0, 0.04),
+                Mat::DarkMetal,
+                false,
+            ),
+            (
+                Shape::Box(Vec3::new(0.14, 0.03, 0.03)),
+                Transform::from_xyz(0.0, 0.0, -0.04),
+                Mat::RustyMetal,
+                false,
+            ),
+        ],
+    }
+}
+
 /// What draws a drain's control, in its pose's space (it faces -Z, out
 /// into the room): a valve's wheel on its spindle; a pump's barrel
 /// standing on the floor and its handle.
@@ -1433,7 +1484,7 @@ pub fn drain_parts(kind: ug::DrainKind) -> Vec<(Shape, Transform, Mat, bool)> {
     match kind {
         ug::DrainKind::Valve => vec![
             (
-                Shape::Cylinder(0.28, 0.05),
+                Shape::Cylinder(0.26, 0.05),
                 Transform::from_rotation(flat),
                 Mat::RustyMetal,
                 false,
@@ -1454,10 +1505,12 @@ pub fn drain_parts(kind: ug::DrainKind) -> Vec<(Shape, Transform, Mat, bool)> {
                     Mat::PaintedMetal,
                     true,
                 ),
+                // Its handle raised from the barrel's head, ready to
+                // pump: within its grip (`DRAIN_BOX`).
                 (
-                    Shape::Box(Vec3::new(0.06, 0.06, 0.7)),
-                    Transform::from_translation(-Vec3::Z * 0.1)
-                        .with_rotation(Quat::from_rotation_x(-0.4)),
+                    Shape::Box(Vec3::new(0.05, 0.36, 0.05)),
+                    Transform::from_xyz(0.0, 0.08, -0.06)
+                        .with_rotation(Quat::from_rotation_x(-0.25)),
                     Mat::DarkMetal,
                     false,
                 ),
