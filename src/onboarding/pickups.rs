@@ -145,7 +145,7 @@ pub fn family(def: &ItemDef) -> Option<Family> {
         "emp_trap" => Family::EmpTrap,
         "knife" => Family::Knife,
         "spanner" => Family::Spanner,
-        "hacksaw" | "multitool" => Family::Bench,
+        "hacksaw" => Family::Bench,
         "door_wedge" => Family::Wedge,
         "binoculars" => Family::Binoculars,
         "detector_bear" => Family::FieldScreen,
@@ -421,11 +421,6 @@ mod tests {
                 "hacksaw",
                 include_str!("../weapons/gunsmith.rs"),
                 "\"hacksaw\"",
-            ),
-            (
-                "multitool",
-                include_str!("../../crates/extraction_core/src/fabrication.rs"),
-                "Need::Item(\"multitool\")",
             ),
             // "Jam a door shut with it."
             (
