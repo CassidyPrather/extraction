@@ -174,7 +174,10 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         // the water's surface from the snare's edge out to its reach (z),
         // more and brighter as it charges. The child sits at the water's
         // level; over dry ground they're under it.
-        let reach = params.mode.z;
+        // Its reach through the water: the snare's radius and 3 m more
+        // (`snare_water::SNARE_WATER`). (Not mode.z: `pulse` sets that to
+        // the snare's own reach, its radius, each frame.)
+        let reach = R + 3.0;
         let a = s * TAU + floor(t * 3.0 + s * 5.0) * 2.4;
         let rr = mix(R * 0.85, reach, sqrt(h(s + floor(t * 3.0 + s * 5.0), 3.7)));
         p.pos = vec3<f32>(cos(a) * rr, 0.02, sin(a) * rr);
