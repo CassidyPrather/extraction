@@ -153,13 +153,19 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
         p.alpha = tw * (0.25 + 0.75 * max(reveal, flash));
         p.heat = 1.0;
     } else if (mode == 7) {
-        // Hush: dust hanging dead still in a dome, barely drifting.
-        let a = s * TAU;
+        // Hush: dust hanging dead still in a dome, barely drifting; stirred
+        // (charge: what moves in it, `anomaly::hush::stir`) it swirls and
+        // lifts, the silence's one tell of what walks in it.
+        let stir = charge;
+        let a = s * TAU + t * 0.6 * stir * (0.5 + h(s, 6.1));
         let rr = R * sqrt(h(s, 2.3));
         let y = 0.15 + 2.4 * h(s, 4.9) * (1.0 - 0.5 * rr / R);
-        let drift = vec3<f32>(sin(t * 0.05 + s * 7.0), 0.0, cos(t * 0.04 + s * 5.0)) * 0.05;
+        let k = t * (0.05 + 1.1 * stir);
+        let drift = vec3<f32>(sin(k + s * 7.0), 0.6 * stir * sin(k * 1.3 + s * 3.0), cos(k * 0.9 + s * 5.0))
+            * (0.05 + 0.3 * stir);
         p.pos = vec3<f32>(cos(a) * rr, y, sin(a) * rr) + drift;
-        p.alpha = 0.6 + 0.4 * reveal;
+        p.alpha = 0.6 + 0.4 * max(reveal, stir);
+        p.size = p.size * (1.0 + 0.4 * stir);
         p.spin = s * 3.0;
     } else {
         let a = s * TAU + t * (0.3 + 0.9 * charge) * (0.6 + 0.4 * h(s, 1.4));

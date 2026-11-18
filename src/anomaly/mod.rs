@@ -235,6 +235,7 @@ impl Plugin for AnomalyPlugin {
                         harvest::heat,
                         harvest::cool_scald,
                         hush::press,
+                        hush::stir,
                         frost::chill,
                         frost::freeze_water,
                         frost::creak,
