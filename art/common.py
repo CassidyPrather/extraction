@@ -84,6 +84,14 @@ MATERIALS = {
     "MarkerLens": ((0.82, 0.82, 0.8), 0.0, 0.2, None),
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
+    # The injector cartridges' doses (#102): REGEN a strong green, STIM a
+    # deep amber-orange, far apart in hue and value so heal and stim tell
+    # apart at arm's length by torchlight; and their bands. Their glass is
+    # Vial: a glint and next to no veil (Clear's whitened the doses to
+    # mint and peach under the torch).
+    "Regen": ((0.1, 0.8, 0.18), 0.0, 0.5, None),
+    "Stim": ((0.7, 0.27, 0.0), 0.0, 0.5, None),
+    "Vial": ((0.6, 0.62, 0.6), 0.0, 0.1, None),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
     # A car's weathered paint (src/models.rs: the painted-metal relief).
     "CarBlue": ((0.21, 0.29, 0.4), 0.25, 0.6, None),
