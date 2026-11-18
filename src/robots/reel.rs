@@ -484,6 +484,87 @@ fn reel(
                 commands.entity(e).remove::<Senses>().remove::<Brain>();
                 e
             }
+            "lines" => {
+                // One line body (`lines`, #101), hung in a row 3 m in front
+                // of you: rope whole and half through, then cable whole
+                // (with its weak-link shackle and a grip sleeve), nicked,
+                // half through and parting.
+                use super::lines::{Gauge, Line, LineSpan};
+                let rows = [
+                    (Gauge::Rope, 0.0, 0.6),
+                    (Gauge::Rope, 0.6, 0.6),
+                    (Gauge::Cable, 0.0, 0.0),
+                    (Gauge::Cable, 0.3, 0.0),
+                    (Gauge::Cable, 0.6, 0.0),
+                    (Gauge::Cable, 0.9, 0.0),
+                ];
+                let mut first = None;
+                for (i, (gauge, wear, slack)) in rows.into_iter().enumerate() {
+                    let x = (i as f32 - 2.5) * 0.55;
+                    let foot = eye + flat * 3.0 + right * x;
+                    let ground = zone.ground(foot.x, foot.z);
+                    let top = Vec3::new(foot.x, ground + 2.6, foot.z);
+                    // A rope sags from its peg; a cable hangs straight.
+                    let from = top;
+                    let to = Vec3::new(
+                        foot.x + if slack > 0.0 { 0.4 } else { 0.0 },
+                        ground + 0.4,
+                        foot.z,
+                    );
+                    let mut line = Line::new(gauge);
+                    line.wear = wear;
+                    line.fray_at = 0.3;
+                    if i == 2 {
+                        line = line.with_weak_link(0.85).with_grip(0.35);
+                    }
+                    let e = commands
+                        .spawn((
+                            Name::new("Reel line"),
+                            line,
+                            LineSpan { from, to, slack },
+                            Transform::default(),
+                            Visibility::default(),
+                        ))
+                        .id();
+                    first.get_or_insert(e);
+                }
+                first.unwrap()
+            }
+            "lamps" => {
+                // Lit beams in the air (`render::fog_beam`): three drones
+                // hovering 8-14 m off, their belly lamps down and ahead, a
+                // sentry 16 m off facing you (its lamp lit after dark), and a
+                // hand torch at your hip, pointed out ahead.
+                // (The sentry is the subject: a subject drone is flown.)
+                for (d, x, up) in [
+                    (8.0f32, -3.5f32, 2.6f32),
+                    (11.0, 2.5, 3.4),
+                    (14.0, -0.5, 4.2),
+                ] {
+                    let at = eye + flat * d + right * x;
+                    let at = Vec3::new(at.x, zone.ground(at.x, at.z) + up, at.z);
+                    let drone = spawn_drone(&mut commands, at, job(at));
+                    commands.entity(drone).remove::<Senses>().remove::<Brain>();
+                }
+                let s = eye + flat * 16.0 + right * 4.0;
+                let toward = -flat;
+                let sentry = super::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    s.xz(),
+                    toward.x.atan2(-toward.z),
+                    0.0,
+                    (s - flat * 3.0).xz(),
+                );
+                let hip = eye + right * 0.3 - Vec3::Y * 0.45;
+                commands.spawn((
+                    Name::new("Reel torch"),
+                    crate::gadgets::visuals::torch_beam(),
+                    Transform::from_translation(hip)
+                        .looking_to(flat - Vec3::Y * 0.12 - right * 0.05, Vec3::Y),
+                ));
+                sentry
+            }
             "flare" => {
                 // A walker 15 m off facing you, and a sentry beside it,
                 // each put into its flare's tell (`flare_tell`): the tube

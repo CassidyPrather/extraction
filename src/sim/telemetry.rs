@@ -425,14 +425,11 @@ fn record_frame(
     }
     tr.recent_air = body.airborne.max(tr.recent_air - dt);
 
-    // A player's dressings and injectors.
+    // A player's injectors.
     for u in treated.read() {
         if u.player == me && player {
             log.stats.heals += 1;
-            log.event(
-                "heal",
-                json!({"item": u.item, "hp": round(health.hp, 0), "bleeding": round(health.bleeding, 2)}),
-            );
+            log.event("heal", json!({"item": u.item, "hp": round(health.hp, 0)}));
         }
     }
     // A player's kills: a robot they'd just hit, wrecked. (Bots count
@@ -553,15 +550,7 @@ fn record_frame(
             } else if raid.surging() {
                 parts.push(("surge".to_string(), rest));
             } else {
-                let bleed = if health.bleeding > 0.0 {
-                    rest.min(health.bleeding * dt * 1.5 + 1e-3)
-                } else {
-                    0.0
-                };
-                if bleed > 0.0 {
-                    parts.push(("bleeding".to_string(), bleed));
-                }
-                let left = rest - bleed;
+                let left = rest;
                 if left > 1e-4 {
                     let cause = if in_gas {
                         "gas"
@@ -669,8 +658,7 @@ pub fn finish(
     let mut outcome = None;
     for d in downed.read() {
         if d.player == me {
-            // Name the death after what did the most harm lately (bleeding
-            // out is the wound's fault, not the blood's).
+            // Name the death after what did the most harm lately.
             let (cause, finisher) = death_cause(&log);
             if let Some(mut c) = raider.combat.take() {
                 c.close(&mut log, "died");
@@ -768,14 +756,11 @@ pub fn finish(
 }
 
 /// What killed the bot: the cause that did the most harm in the last 90
-/// seconds (bleeding out is the wound's fault), and what dealt the last
-/// point.
+/// seconds, and what dealt the last point.
 pub(crate) fn death_cause(log: &SimLog) -> (String, String) {
     let mut by: BTreeMap<&str, f32> = BTreeMap::new();
     for (_, c, a) in &log.recent {
-        if c != "bleeding" {
-            *by.entry(c.as_str()).or_default() += a;
-        }
+        *by.entry(c.as_str()).or_default() += a;
     }
     let worst = by
         .into_iter()

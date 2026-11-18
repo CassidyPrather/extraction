@@ -150,8 +150,6 @@ pub enum TextSource {
     StationBoard,
     /// The yard's list of stations by the tailgate.
     TrainingList,
-    /// The yard's first board, hung in the truck over the crate.
-    TruckBoard,
     /// The headset's loading view: the valley's name, or where to.
     Loading,
     /// A line about the thing in hand, beside it (`render::said`).
@@ -163,7 +161,7 @@ pub enum TextSource {
 }
 
 impl TextSource {
-    pub const ALL: [TextSource; 25] = [
+    pub const ALL: [TextSource; 24] = [
         TextSource::Wrist,
         TextSource::Radio,
         TextSource::BenchDisplay,
@@ -184,7 +182,6 @@ impl TextSource {
         TextSource::Epilogue,
         TextSource::StationBoard,
         TextSource::TrainingList,
-        TextSource::TruckBoard,
         TextSource::Loading,
         TextSource::Callout,
         TextSource::Caption,
@@ -220,9 +217,6 @@ impl TextSource {
             TextSource::StationBoard => read(MustRead, 2.0, 0.0, "at the station, by its post"),
             TextSource::TrainingList => {
                 read(MustRead, 2.0, 0.0, "in the truck bed, by the tailgate")
-            }
-            TextSource::TruckBoard => {
-                read(MustRead, 1.2, 10.0, "standing in the bed, at the crate")
             }
             TextSource::Loading => read(MustRead, 2.0, 0.0, "in the headset, between valleys"),
             TextSource::Callout => read(
@@ -616,6 +610,21 @@ mod tests {
     /// read; every panel says what it is. Notes, signs and terminals are
     /// put up by the client: they're taken from the maps. The wrist and the
     /// radio, the client's too, at their fullest.
+    /// The DP-2 field screen's rings, held up at the wrist's distance:
+    /// a ring is a shape you place, not words, so its line and the smallest
+    /// ring's hole clear the incidental floor (#104; the old stone dot,
+    /// 2.2 mm, didn't). Pinned to Anomalies' sizes, so a shrink fails here.
+    #[test]
+    fn the_field_screens_rings_clear_the_incidental_floor() {
+        use crate::anomaly::visuals::{RING_LINE, RING_MIN_R, SCREEN_FACE, SCREEN_R};
+        let at = TextSource::Wrist.reading().at;
+        let line = angle(RING_LINE, at, 0.0);
+        let hole = angle(2.0 * (RING_MIN_R - RING_LINE / 2.0), at, 0.0);
+        assert!(line >= INCIDENTAL_DEG, "ring line {line:.2} deg");
+        assert!(hole >= INCIDENTAL_DEG, "smallest ring's hole {hole:.2} deg");
+        assert!(SCREEN_R <= SCREEN_FACE, "the range fits the face");
+    }
+
     #[test]
     fn every_panel_in_the_game_clears_its_floor() {
         use crate::raid::bench::ScreenStyle;
@@ -711,7 +720,6 @@ mod tests {
                 "SURGE 12M",
                 14.2,
                 100.0,
-                true,
                 Some(crate::render::comfort::Said::Plain(
                     &"The driver says something long enough to fill the screen. ".repeat(3),
                 )),
@@ -727,7 +735,6 @@ mod tests {
                 "SURGE 12M",
                 14.2,
                 100.0,
-                true,
                 Some(crate::render::comfort::Said::Captioned(
                     "MACHINES AT 12",
                     &"The driver says something long enough to fill the screen. ".repeat(3),
@@ -766,7 +773,31 @@ mod tests {
             };
             check("yard station board", &board, Some(TextSource::StationBoard));
         }
+        // What's put in the view (#90): a caption and a callout, at their
+        // longest and with a speaker, as `render::said` sizes them.
+        {
+            use crate::render::said::*;
+            let long = "Move off quiet, then go still. Something heard you, and it's coming.";
+            let caption = panel(
+                Some("LEV, RADIO"),
+                long,
+                CAPTION_COLS,
+                CAPTION_AT,
+                CAPTION_X_DEG,
+            );
+            check("caption, long", &caption, Some(TextSource::Caption));
+            let callout = panel(
+                Some("PM pistol"),
+                long,
+                CALLOUT_COLS,
+                CALLOUT_AT,
+                CALLOUT_X_DEG,
+            );
+            check("callout, long", &callout, Some(TextSource::Callout));
+        }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+        // (The yard's tailgate list and the truck's crate board went with
+        // #89's gated yard: the yard has no truck till it's called.)
         assert!(seen.len() >= 15, "sources seen: {seen:?}");
     }
 

@@ -744,6 +744,12 @@ pub(crate) fn play_at_speed(
     };
     let speed = speed * (1.0 + (rng.f32() as f64 - 0.5) * 2.0 * pitch);
     let player = SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + offset_db));
+    // Out in the world, in a stim, lower and slower (`audio_mix::world_speed`).
+    let speed = if at.is_some() {
+        speed * mix::world_speed()
+    } else {
+        speed
+    };
     let settings = PlaybackSettings::default().with_speed(speed);
     match at {
         Some(p) => {
@@ -4708,7 +4714,7 @@ fn truck_sounds(
 }
 
 /// What using a thing sounds like, by what it is: eating, drinking,
-/// tearing a dressing open, a switch.
+/// an injector's plunger, a switch.
 pub fn use_sound(def: &extraction_core::items::ItemDef) -> Option<(&'static str, &'static str)> {
     use extraction_core::items::Category;
     const DRINKS: &[&str] = &[
@@ -4720,7 +4726,6 @@ pub fn use_sound(def: &extraction_core::items::ItemDef) -> Option<(&'static str,
         "food:Soup",
     ];
     match def.id.as_str() {
-        "field_dressing" => Some(("physical/bandage", "use.bandage")),
         "radio" | "deployable_cover" | "climbing_kit" | "zipline_kit" | "camera_drone" => None,
         _ if def.is_food() => Some(if DRINKS.iter().any(|t| def.has_tag(t)) {
             ("physical/drink", "use.drink")
@@ -5704,7 +5709,7 @@ mod tests {
         };
         assert_eq!(sound("crackers"), Some("physical/eat"));
         assert_eq!(sound("water_bottle"), Some("physical/drink"));
-        assert_eq!(sound("field_dressing"), Some("physical/bandage"));
+        assert_eq!(sound("regen_injector"), Some("physical/switch"));
         assert_eq!(sound("flashlight"), Some("physical/switch"));
         assert_eq!(sound("radio"), None, "the radio has its own");
         let bank: serde_json::Value = serde_json::from_str(

@@ -24,7 +24,6 @@ runner's hard to hit.").
 | Lamed | a walker loses a leg | it can't follow; get out of its sight |
 | Pack full | something won't go in | leave the worst of it |
 | Worn gun | a gun in hand under half condition | it'll jam; the bench, when you're back |
-| Bleeding | hit, and bleeding (faster than 0.1 HP a second) | dressing on it now, before you drop |
 | Detector | the detector ticking fast near you | faster means nearer; sweep it slow |
 | Revealed | a thrown thing shows one up | that's how you find them; bolts are cheap |
 | Fold | through a fold, somewhere else | stop; look before you step |
@@ -78,7 +77,6 @@ Last run (260 s, the merged tree with the bracing fix):
 | Heard | 2 | move off low, then keep still | yes |
 | Jam (failure to feed) | 2 | rack it | yes |
 | Drone lock | 2 | get behind something (indoors, beside the door) | yes |
-| Bleeding | 2 | dressing on it (and every wound after) | yes |
 | Lost you | 2 | stay low a while | yes |
 | Underground | 2 | torch on, go slow (down the stair, 25 s at the foot) | yes |
 | Lamed | 2 | walk away from it, out of its sight (behind the kiosk) | yes |
@@ -165,7 +163,8 @@ went into the game for that kind of player:
   only sign was "BLEED" on the wrist's status line, and the bot (like a
   player who missed it) bled out later, waiting for the truck. Now Lev
   says it once ("Dressing on, now: you're bleeding. Before you drop."),
-  the moment the yard's first-aid station was for.
+  the moment the yard's first-aid station was for. (All of it went in
+  #102: nothing bleeds now, and the moment and its line are gone.)
 - **A lamed walker can't chase you, but it can still shoot.** Walking off
   in the open, as the old line ("it can't chase you now") suggested, got
   the bot shot. Walking off out of its sight (behind the bunker's kiosk)

@@ -101,6 +101,12 @@ pub struct LaunchOptions {
     pub stress: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
+    /// Dev: once the world's in, your health set to this (`--hurt 40`):
+    /// something for an injector to put back.
+    pub hurt: Option<f32>,
+    /// Dev: once the world's in, these laid on the ground in front of you
+    /// (`--give regen_injector,canned_stew`).
+    pub give: Vec<String>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
     /// (see `dev::gallery`).
     pub gallery: Option<String>,
@@ -109,6 +115,21 @@ pub struct LaunchOptions {
     pub tour: Option<std::path::PathBuf>,
     /// Set up the camp table even where the game wouldn't (a screenshot).
     pub camp: bool,
+    /// `--playtest TOUR.txt`: a playtest tour, one station a session
+    /// (`capture::station`). Saves nothing.
+    pub playtest: Option<std::path::PathBuf>,
+    /// The tour's station this session plays (`--playtest-station N`, from
+    /// 0); its arguments are spliced in after the command line's.
+    pub playtest_station: usize,
+    /// `--spawn x,y,z,yaw`: where the player stands, in a headset or flat
+    /// (unlike `--camera`, which flat gives a free camera).
+    pub spawn: Option<(Vec3, f32)>,
+    /// Arguments this build doesn't know (a playtest station staged for a
+    /// fix not in it yet is skipped, `capture::station`).
+    pub unknown_args: Vec<String>,
+    /// `--stage NAME`: a playtest station's staging, set up by whichever
+    /// plugin registered NAME (`capture::station::register_stage`).
+    pub stage: Option<String>,
     /// Dev: only the tour views whose file name contains this.
     pub tour_only: Option<String>,
     /// Dev: the tour's views from a file instead of the placements (see
@@ -196,6 +217,11 @@ impl Default for LaunchOptions {
             torch_dip: 0.0,
             terrain_debug: false,
             tour: None,
+            playtest: None,
+            playtest_station: 0,
+            spawn: None,
+            unknown_args: Vec::new(),
+            stage: None,
             tour_only: None,
             tour_views: None,
             legibility: None,
@@ -214,6 +240,8 @@ impl Default for LaunchOptions {
             report: false,
             stress: false,
             surge_in: None,
+            hurt: None,
+            give: Vec::new(),
             gallery: None,
             weather: None,
             snow: None,
@@ -272,12 +300,22 @@ impl LaunchOptions {
             && self.scene != SceneChoice::Arcade
     }
 
+    /// The command line says where the player stands (`--camera` or
+    /// `--spawn`): the truck, the camp table and the arcade's bench leave
+    /// them there.
+    pub fn places_player(&self) -> bool {
+        self.camera.is_some() || self.spawn.is_some()
+    }
+
     pub fn from_args() -> Self {
         Self::parse(std::env::args().skip(1))
     }
 
     pub fn parse(args: impl IntoIterator<Item = String>) -> Self {
         let mut o = Self::default();
+        // A playtest tour's station plays with its own arguments too, after
+        // the command line's (so they win).
+        let args = crate::capture::station::with_station_args(args.into_iter().collect());
         let mut args = args.into_iter();
         while let Some(a) = args.next() {
             let mut val = || args.next().unwrap_or_default();
@@ -305,6 +343,13 @@ impl LaunchOptions {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
+                "--hurt" => o.hurt = val().parse().ok(),
+                "--give" => o.give.extend(
+                    val()
+                        .split(',')
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_owned),
+                ),
                 "--weather" => {
                     let v = val();
                     if !crate::world::weather::WEATHERS.contains(&v.as_str()) {
@@ -362,6 +407,18 @@ impl LaunchOptions {
                 "--map" => {
                     o.map = val();
                     o.map_explicit = true;
+                }
+                "--playtest" => o.playtest = Some(PathBuf::from(val())),
+                "--stage" => o.stage = Some(val()),
+                "--playtest-station" => o.playtest_station = val().parse().unwrap_or(0),
+                "--spawn" => {
+                    let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
+                    if v.len() >= 3 {
+                        o.spawn = Some((
+                            Vec3::new(v[0], v[1], v[2]),
+                            v.get(3).copied().unwrap_or(0.0),
+                        ));
+                    }
                 }
                 "--seed" => {
                     o.seed = val().parse().unwrap_or(1);
@@ -446,7 +503,10 @@ impl LaunchOptions {
                     }
                 }
                 flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
-                other => eprintln!("ignoring unknown argument {other}"),
+                other => {
+                    eprintln!("ignoring unknown argument {other}");
+                    o.unknown_args.push(other.to_owned());
+                }
             }
         }
         // The worst minute's light and weather, unless asked for others.
@@ -514,6 +574,18 @@ impl LaunchOptions {
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
             o.map = crate::camp::TRAINING_YARD.into();
             o.map_explicit = true;
+        }
+        // A tour station in a valley this build hasn't got opens the yard
+        // instead, to be skipped (`capture::station`): loading a map that
+        // isn't there would end the tour.
+        if o.playtest.is_some()
+            && !crate::asset_root_path()
+                .join("maps")
+                .join(format!("{}.ron", o.map))
+                .exists()
+        {
+            o.unknown_args.push(format!("--map {}", o.map));
+            o.map = crate::camp::TRAINING_YARD.into();
         }
         o
     }

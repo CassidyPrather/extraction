@@ -4,7 +4,7 @@
 //! that heard you (and when it loses you), a drone's lock-on chirp, the
 //! air going wrong ahead, the way underground, the sky turning before the
 //! Surge, a walker you've lamed, a full pack, a gun that's getting worn,
-//! the first wound that bleeds, the detector ticking, a thrown thing
+//! the detector ticking, a thrown thing
 //! showing one up, a fold, a well's pull.
 //! And the first time you go down, what came back and what didn't.
 //!
@@ -40,8 +40,6 @@ pub enum First {
     Lamed,
     PackFull,
     Worn,
-    /// Hit, and bleeding: it doesn't stop on its own.
-    Bleeding,
     /// The detector ticking fast: an anomaly's edge is near.
     Detector,
     /// A thrown thing showed one up.
@@ -152,7 +150,6 @@ pub const ALL: &[First] = &[
     First::Lamed,
     First::PackFull,
     First::Worn,
-    First::Bleeding,
     First::Detector,
     First::Revealed,
     First::Blinked,
@@ -184,7 +181,6 @@ pub const ALL: &[First] = &[
     First::Picked(Family::Salvage),
     First::Picked(Family::MachineParts),
     First::Picked(Family::Armour),
-    First::Picked(Family::Splint),
     First::Picked(Family::Injector),
     First::Picked(Family::Grenade),
     First::Picked(Family::EmpTrap),
@@ -227,7 +223,6 @@ impl First {
                 | First::Underground
                 | First::Surge
                 | First::Lamed
-                | First::Bleeding
                 | First::Blinked
                 | First::Well
                 | First::Aimed
@@ -280,7 +275,6 @@ impl First {
             First::Worn => {
                 &["Truck: \"That gun's tired. It'll jam on you. Bench, when you're back.\""]
             }
-            First::Bleeding => &["Truck: \"Dressing on, now: you're bleeding. Before you drop.\""],
             First::Detector => &["Truck: \"Hear it ticking? Faster's nearer. Sweep it slow.\""],
             First::Revealed => {
                 &["Truck: \"That's how you find them. Bolts are cheap. Legs aren't.\""]
@@ -478,7 +472,6 @@ impl Plugin for FirstsPlugin {
                         pack_full,
                         places,
                         worn,
-                        bleeding,
                         anomaly_kit,
                         zone_on_machines,
                         deaths,
@@ -991,69 +984,6 @@ fn worn(guns: Query<(&Gun, &Held)>, locals: Query<(), With<LocalPlayer>>, mut m:
     }
 }
 
-/// Hit, and bleeding: the wrist's "BLEED" is easy to miss, and a wound
-/// doesn't stop on its own. Bleeding badly with no dressing on you, the
-/// driver says so, once a raid (the careful newcomer won its first fight,
-/// its one dressing on the first wound, and bled out after it with nothing
-/// said: the first time's line is once a career).
-fn bleeding(
-    locals: Query<(Entity, &crate::health::Health), With<LocalPlayer>>,
-    items: Query<(
-        &crate::items::Item,
-        Option<&crate::anomaly::artifacts::CarriedBy>,
-    )>,
-    packs: Query<&crate::interact::body::Backpack>,
-    catalog: Res<crate::items::Catalog>,
-    raid: Res<Raid>,
-    mut said_badly: Local<bool>,
-    mut m: Meet,
-) {
-    if raid.phase == Phase::AtBase {
-        *said_badly = false;
-        return;
-    }
-    let Some((me, h)) = locals.iter().next() else {
-        return;
-    };
-    if h.down {
-        return;
-    }
-    let is_dressing = |e: Entity| {
-        items
-            .get(e)
-            .is_ok_and(|(it, _)| catalog.get(it.kind()).id == "field_dressing")
-    };
-    // On you: in a hand, a pouch, or the pack on your back.
-    let dressed = || {
-        items.iter().any(|(it, by)| {
-            by.is_some_and(|b| b.0 == me) && catalog.get(it.kind()).id == "field_dressing"
-        }) || packs
-            .iter()
-            .any(|b| b.owner == me && b.carried && b.contents.iter().any(|e| is_dressing(*e)))
-    };
-    if h.bleeding > BLEEDING_BADLY && !dressed() {
-        if !*said_badly {
-            *said_badly = true;
-            m.queue
-                .lines
-                .push_back((BLEEDING_BADLY_LINE.into(), Show::Urgent));
-        }
-        // ("Dressing on, now" with none to put on is no help.)
-        return;
-    }
-    if !m.met(First::Bleeding) && h.bleeding > BLEEDING {
-        m.meet(First::Bleeding);
-    }
-}
-
-/// Bleeding faster than this (HP a second) with no dressing on you is
-/// worth a word every raid: it kills in well under a minute.
-const BLEEDING_BADLY: f32 = 1.0;
-
-/// What the driver says then (once a raid).
-pub const BLEEDING_BADLY_LINE: &str =
-    "Truck: \"You're bleeding badly, nothing to bind it. Get to the truck.\"";
-
 /// The detector, a thrown thing, a fold: how you find anomalies, and
 /// what one did to you.
 fn anomaly_kit(
@@ -1088,10 +1018,6 @@ fn anomaly_kit(
 
 /// Near enough to you to be yours: a detector on you, a thing you threw.
 const NEAR_ME: f32 = 30.0;
-
-/// Bleeding faster than this (HP a second) is worth a word: a graze
-/// that's about to stop isn't.
-const BLEEDING: f32 = 0.1;
 
 /// The first time you wake in the truck after going down: what's in the
 /// crate (all that came back), and how much lies where you fell.
@@ -1194,11 +1120,6 @@ pub const SPARE_RADIO: &str = "Truck: \"No radio on you. My spare's in the crate
 /// hoarder died two minutes in, four raids running; handed through the
 /// hatch, they came after a quick newcomer had left the truck.)
 pub const SPARE_GUN: &str = "Truck: \"No gun on you. Here, my spare. Don't lose this one.\"";
-
-/// No dressing on you, in the crate or the stash (the first was used): one
-/// in the crate, never a second while one is unused.
-pub const SPARE_DRESSING: &str =
-    "Truck: \"Put a dressing in the crate. Don't make me do it twice.\"";
 
 /// The same for what a job needs taken out (a thing to leave, the camera):
 /// lost at a fall, the job couldn't be done.
@@ -1361,12 +1282,6 @@ fn spare_radio(
         }
         m.queue.lines.push_back((SPARE_GUN.into(), Show::View));
     }
-    // No dressing anywhere of yours (the first used, none stashed): one,
-    // and never a second while it lies there unused.
-    if !have("field_dressing") && opts.map != crate::camp::TRAINING_YARD {
-        give.push(("field_dressing".into(), 1.0));
-        m.queue.lines.push_back((SPARE_DRESSING.into(), Show::View));
-    }
     if let Some(id) = wanted.filter(|id| !have(id)) {
         let name = catalog
             .kind(&id)
@@ -1476,11 +1391,11 @@ pub const PICKED_A_RAID: usize = 3;
 
 /// The first of a family in your hand out there (`pickups`): its line,
 /// once a career, when it's calm (nothing waiting to be said, no machine
-/// after you, no bleed), and no more than [`PICKED_A_RAID`] a raid.
+/// after you), and no more than [`PICKED_A_RAID`] a raid.
 #[allow(clippy::too_many_arguments)]
 fn picked_up(
     held: Query<(Entity, &crate::items::Item, &Held)>,
-    locals: Query<(Entity, &crate::health::Health), With<LocalPlayer>>,
+    locals: Query<Entity, With<LocalPlayer>>,
     minds: Query<&Awareness>,
     catalog: Res<crate::items::Catalog>,
     raid: Res<Raid>,
@@ -1498,7 +1413,7 @@ fn picked_up(
         }
         return;
     }
-    let Some((me, health)) = locals.iter().next() else {
+    let Some(me) = locals.iter().next() else {
         return;
     };
     for (e, item, h) in &held {
@@ -1516,7 +1431,6 @@ fn picked_up(
     let calm = m.queue.lines.is_empty()
         && m.queue.quiet <= 0.0
         && m.queue.has_you <= 0.0
-        && health.bleeding <= BLEEDING
         // (One that has noticed you, not any that tracks you: a glimpse or a
         // sound sets its target till its search gives up, which out there
         // is most of a raid, and the first jobs' finds went unnamed.)
@@ -1682,7 +1596,7 @@ mod tests {
                     ("plain", Said::Plain(l)),
                     ("captioned", Said::Captioned("LEV, RADIO", &words)),
                 ] {
-                    let page = flat(&wrist_text("SURGE 12M", 9.0, 90.0, false, Some(said), 0));
+                    let page = flat(&wrist_text("SURGE 12M", 9.0, 90.0, Some(said), 0));
                     assert!(
                         page.contains(&act),
                         "{f:?}, {how}: \"{act}\" not on page one:\n{page}"
@@ -2359,41 +2273,6 @@ mod tests {
         assert!(at.is_some_and(|i| i <= 1), "aimed said late: {spoken:?}");
     }
 
-    /// The first wound that bleeds is named once, not on every hit after.
-    #[test]
-    fn the_first_bleed_is_said_once() {
-        let mut app = app();
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        let me = app
-            .world_mut()
-            .query_filtered::<Entity, With<LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .expect("a player");
-        let line = First::Bleeding.lines()[0];
-        for _ in 0..2 {
-            app.world_mut()
-                .get_mut::<crate::health::Health>(me)
-                .unwrap()
-                .bleeding = 0.5;
-            for _ in 0..90 {
-                app.update();
-            }
-            // Dressed.
-            app.world_mut()
-                .get_mut::<crate::health::Health>(me)
-                .unwrap()
-                .bleeding = 0.0;
-            for _ in 0..90 * 6 {
-                app.update();
-            }
-        }
-        let spoken = &app.world().resource::<Spoken>().0;
-        let n = spoken.iter().filter(|s| *s == line).count();
-        assert_eq!(n, 1, "said {n} times");
-        assert!(app.world().resource::<Firsts>().met(First::Bleeding));
-    }
-
     /// The detector ticking near you, a thrown thing showing one up, and a
     /// fold you went through: each met from the anomalies' own messages,
     /// and said once.
@@ -2554,7 +2433,7 @@ mod tests {
             .find(|(_, b)| b.owner == player && b.carried)
             .map(|(e, _)| e)
             .expect("a pack");
-        for id in ["canned_stew", "field_dressing"] {
+        for id in ["canned_stew", "regen_injector"] {
             let catalog = app.world().resource::<crate::items::Catalog>().clone();
             let kind = catalog.kind(id).unwrap();
             let mut queue = bevy::ecs::world::CommandQueue::default();
@@ -2613,190 +2492,6 @@ mod tests {
         let want = fill(First::Death.lines()[1], in_crate, 2);
         assert!(spoken.contains(&want), "{want:?} not in {spoken:#?}");
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// The driver's bleeding-badly line, said or waiting its turn.
-    fn said_badly(app: &App) -> usize {
-        let spoken = app.world().resource::<Spoken>().0.iter();
-        let queued = app.world().resource::<Queue>().lines.iter().map(|(l, _)| l);
-        spoken
-            .chain(queued)
-            .filter(|l| *l == BLEEDING_BADLY_LINE)
-            .count()
-    }
-
-    fn bleed(app: &mut App, rate: f32) {
-        let mut q = app
-            .world_mut()
-            .query_filtered::<&mut crate::health::Health, With<LocalPlayer>>();
-        for mut h in q.iter_mut(app.world_mut()) {
-            h.bleeding = rate;
-        }
-    }
-
-    /// Out, bleeding badly with no dressing on you: "nothing to bind it",
-    /// once a raid, and again the next raid; not with a dressing on you,
-    /// nor bleeding slowly. It fits the wrist.
-    #[test]
-    fn bleeding_badly_with_nothing_to_bind_it_is_said_once_a_raid() {
-        let n = crate::render::screen::wrap(BLEEDING_BADLY_LINE, 26, usize::MAX).len();
-        assert!(n <= 3, "{n} lines: {BLEEDING_BADLY_LINE}");
-        let mut app = app();
-        drop_dressings(&mut app);
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        bleed(&mut app, 0.5);
-        for _ in 0..10 {
-            app.update();
-        }
-        assert_eq!(said_badly(&app), 0, "a slow bleed: not this line");
-        bleed(&mut app, 2.0);
-        for _ in 0..30 {
-            app.update();
-            bleed(&mut app, 2.0);
-        }
-        assert_eq!(said_badly(&app), 1, "bleeding badly: said, once");
-        // Home and out again: said again.
-        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
-        app.update();
-        drop_dressings(&mut app);
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        for _ in 0..10 {
-            app.update();
-            bleed(&mut app, 2.0);
-        }
-        assert_eq!(said_badly(&app), 2, "the next raid: said again");
-    }
-
-    /// A dressing on you (in the pack): no "nothing to bind it".
-    #[test]
-    fn bleeding_badly_with_a_dressing_on_you_is_not_nothing_to_bind_it() {
-        let mut app = app();
-        drop_dressings(&mut app);
-        let me = app
-            .world_mut()
-            .query_filtered::<Entity, With<LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .expect("a player");
-        let pack = app
-            .world_mut()
-            .query::<(Entity, &crate::interact::body::Backpack)>()
-            .iter(app.world())
-            .find(|(_, b)| b.owner == me && b.carried)
-            .map(|(e, _)| e)
-            .expect("a pack");
-        let catalog = app.world().resource::<crate::items::Catalog>().clone();
-        let kind = catalog.kind("field_dressing").unwrap();
-        let mut queue = bevy::ecs::world::CommandQueue::default();
-        let e = {
-            let mut commands = Commands::new(&mut queue, app.world());
-            crate::items::spawn_item(
-                &mut commands,
-                &catalog,
-                crate::items::SpawnItem {
-                    kind,
-                    transform: Transform::default(),
-                    condition: 1.0,
-                },
-            )
-        };
-        queue.apply(app.world_mut());
-        app.world_mut()
-            .get_mut::<crate::interact::body::Backpack>(pack)
-            .unwrap()
-            .contents
-            .push(e);
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        for _ in 0..30 {
-            app.update();
-            bleed(&mut app, 2.0);
-        }
-        assert_eq!(said_badly(&app), 0);
-    }
-
-    /// Every field dressing in the world.
-    fn dressings(app: &mut App) -> usize {
-        let catalog = app.world().resource::<crate::items::Catalog>().clone();
-        app.world_mut()
-            .query::<&crate::items::Item>()
-            .iter(app.world())
-            .filter(|i| catalog.get(i.kind()).id == "field_dressing")
-            .count()
-    }
-
-    fn drop_dressings(app: &mut App) {
-        let catalog = app.world().resource::<crate::items::Catalog>().clone();
-        let all: Vec<Entity> = app
-            .world_mut()
-            .query::<(Entity, &crate::items::Item)>()
-            .iter(app.world())
-            .filter(|(_, i)| catalog.get(i.kind()).id == "field_dressing")
-            .map(|(e, _)| e)
-            .collect();
-        for e in all {
-            app.world_mut().despawn(e);
-        }
-    }
-
-    /// Out on a raid and home again, long enough for the driver's spares.
-    fn out_and_home(app: &mut App) {
-        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
-        app.update();
-        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
-        for _ in 0..(8 * 90) {
-            app.update();
-        }
-    }
-
-    /// The driver's dressing line, said or waiting its turn to be.
-    fn said_dressing(app: &App) -> usize {
-        let spoken = app.world().resource::<Spoken>().0.iter();
-        let queued = app.world().resource::<Queue>().lines.iter().map(|(l, _)| l);
-        spoken
-            .chain(queued)
-            .filter(|l| *l == SPARE_DRESSING)
-            .count()
-    }
-
-    /// No dressing anywhere (the first was used, the stash has none): one
-    /// is in the crate at the next raid's start, and the driver says so
-    /// (with none, every bite and every wound bled out).
-    #[test]
-    fn no_dressing_anywhere_gets_one_in_the_crate() {
-        let mut app = app();
-        drop_dressings(&mut app);
-        out_and_home(&mut app);
-        assert_eq!(dressings(&mut app), 1, "one dressing in the crate");
-        assert_eq!(said_dressing(&app), 1);
-    }
-
-    /// One in the stash crate already: none added, nothing said.
-    #[test]
-    fn a_dressing_in_the_stash_gets_no_spare() {
-        let mut app = app();
-        drop_dressings(&mut app);
-        out_and_home(&mut app);
-        assert_eq!(dressings(&mut app), 1, "the spare");
-        let before = said_dressing(&app);
-        out_and_home(&mut app);
-        assert_eq!(
-            dressings(&mut app),
-            1,
-            "no second while one is in the crate"
-        );
-        assert_eq!(said_dressing(&app), before, "nothing said");
-    }
-
-    /// Unused raid after raid, the spare never piles up.
-    #[test]
-    fn the_spare_dressing_never_accumulates() {
-        let mut app = app();
-        drop_dressings(&mut app);
-        for _ in 0..4 {
-            out_and_home(&mut app);
-        }
-        assert_eq!(dressings(&mut app), 1, "one, however many raids");
-        assert_eq!(said_dressing(&app), 1);
     }
 
     /// The first of a family in your hand out there: its line, once a

@@ -74,10 +74,26 @@ how far robots see, and rain covers footsteps. It drives the sky, distance
 and ground fog, the sun, GPU-animated rain streaks and the rain bed.
 
 A new game starts with an empty stash except for a starter kit (a
-pistol, a spare magazine, a box of rounds, the radio, a light, a
-dressing, a tin of stew and a cleaning kit). `--new-game` starts over;
+pistol, a spare magazine, a box of rounds, the radio, a light, an
+injector, a tin of stew and a cleaning kit). `--new-game` starts over;
 `--save PATH` saves elsewhere. Scenarios, screenshots and test scenes
 never save.
+
+**Your health** is one number (`health`). A hit takes HP at once and a
+hard landing just hurts; nothing bleeds, nothing breaks, and nothing comes
+back by itself. The injector pen is the only medicine (`items::pen`): two
+cartridges ride in its slots, and its tip anywhere sensible on you (a
+thigh, an arm, the other hand, the chest, the neck) and the trigger, or
+one-handed the face button, gives what's in both. REGEN cartridges heal
+(R-1 30, R-2 60, R-3 100 HP); a STIM slows the world round you for a few
+real seconds (S-1 6, S-2 12) while your head and hands keep real time
+(`items::stim`): a panic button, felt in a slow heavy heart that
+quickens near its end. A part-used cartridge gives its share; a new pen
+comes with an R-2; a cartridge let go at a slot clicks in, so half heal,
+half stim is what you put in it. At
+none you're down, and the raid's over. (Bleeding, placed wounds, broken
+legs, dressings and splints were taken out in #102: too situational to be
+worth their weight.)
 
 ### No cash, and the resource sinks
 

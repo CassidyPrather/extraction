@@ -4973,7 +4973,6 @@ fn the_pinner_suppresses_while_one_moves_up() {
             // (It's the cadence being counted, not you going down.)
             if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
                 h.hp = h.max;
-                h.bleeding = 0.0;
             }
             app.update();
         }
@@ -5871,12 +5870,7 @@ fn a_hound_loses_you_low_and_still() {
     let mut last = hp(&app, player);
     for _ in 0..90 * 20 {
         app.update();
-        let mut h = app
-            .world_mut()
-            .get_mut::<crate::health::Health>(player)
-            .unwrap();
-        h.bleeding = 0.0;
-        let now = h.hp;
+        let now = hp(&app, player);
         if now < last - 0.5 {
             later += 1;
         }
@@ -6980,7 +6974,6 @@ fn the_broken_walker_feeds_nothing() {
             // (Kept up: a downed player's raid isn't out, and resets it.)
             if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
                 h.hp = h.max;
-                h.bleeding = 0.0;
                 h.down = false;
             }
             // Its sight kept on you (as in a fight), the Zone ticks.

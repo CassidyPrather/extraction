@@ -360,31 +360,31 @@ fn stepping_off_the_truck_without_kit_is_told_once() {
 }
 
 #[test]
-fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
+fn the_cabinet_has_an_injector_each_raid_and_the_aerial_warns_early() {
     let mut app = crate::raid::requests::tests::app();
     {
         let mut p = app.world_mut().resource_mut::<Progression>();
         p.0.upgrades = Upgrade::ALL.iter().map(|u| u.id().to_owned()).collect();
     }
     let catalog = app.world().resource::<Catalog>().clone();
-    let dressing = catalog.kind("field_dressing").unwrap();
-    let dressings = |app: &mut App| {
+    let injector = catalog.kind("regen_injector").unwrap();
+    let injectors = |app: &mut App| {
         app.world_mut()
             .query::<&Item>()
             .iter(app.world())
-            .filter(|i| i.kind() == dressing)
+            .filter(|i| i.kind() == injector)
             .count()
     };
-    let before = dressings(&mut app);
+    let before = injectors(&mut app);
     app.world_mut().resource_mut::<Raid>().raids = 1;
     for _ in 0..3 {
         app.update();
     }
-    assert_eq!(dressings(&mut app), before + 1, "one on the shelf");
+    assert_eq!(injectors(&mut app), before + 1, "one on the shelf");
     for _ in 0..3 {
         app.update();
     }
-    assert_eq!(dressings(&mut app), before + 1, "once a raid");
+    assert_eq!(injectors(&mut app), before + 1, "once a raid");
     // And it stays on the shelf.
     for _ in 0..60 {
         app.update();
@@ -402,10 +402,10 @@ fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
         .world_mut()
         .query::<(&Item, &GlobalTransform)>()
         .iter(app.world())
-        .filter(|(i, _)| i.kind() == dressing)
+        .filter(|(i, _)| i.kind() == injector)
         .map(|(_, g)| g.translation().distance(shelf))
         .fold(f32::MAX, f32::min);
-    assert!(on < 0.25, "the dressing is {on:.2} m from the shelf");
+    assert!(on < 0.25, "the injector is {on:.2} m from the shelf");
     // Out, with the radio, ten minutes before the Surge.
     let player = one::<With<LocalPlayer>>(&mut app);
     // (Its own radio: the world's loot and the truck's kit move about.)
@@ -773,7 +773,7 @@ fn upkeep_comes_out_of_the_stash_or_the_fitting_lies_up() {
     // Due at 36: scrap for both racks, no oil.
     stash(&mut app, "scrap_metal", 4);
     stash(&mut app, "electronics", 1);
-    stash(&mut app, "field_dressing", 1);
+    stash(&mut app, "matches", 2);
     let scrap = count(&mut app, "scrap_metal");
     homecoming(&mut app, 36);
     assert_eq!(

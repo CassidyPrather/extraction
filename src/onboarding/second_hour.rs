@@ -34,8 +34,6 @@ const PROBE_ABOVE_GROUND: f32 = 3.0;
 /// An anomaly's event this near where the thing was thrown is its answer
 /// (m: a snare's or a lift's reach round its heart).
 const ANSWERED_NEAR: f32 = 6.0;
-/// A walker's round, as one lands (hp): the wound set up when none came.
-const STAGED_WOUND: f32 = 14.0;
 /// A note this near is walked to and read (m: Marrow's survey table is
 /// 42 m on from the lift the bolt is thrown at).
 const NOTE_WALK: f32 = 60.0;
@@ -103,8 +101,6 @@ pub struct Run {
     seated: bool,
     /// The walker to lame.
     walker: Option<Entity>,
-    /// When it last put a dressing on.
-    dressed: f32,
     /// Things it's gone for in the pack step.
     tried: Vec<Entity>,
     /// Salvage set down for the pack step.
@@ -214,7 +210,7 @@ pub(super) fn direct(
                     run.probed = Some(at);
                     // Thrown from here, not walked on into (the rest of
                     // the walk to the anomaly's heart, after the throw,
-                    // took the bot into it: zapped and bleeding, and its
+                    // took the bot into it: zapped and hurt, and its
                     // own body what set it off).
                     bot.tasks.retain(|t| !matches!(t, Task::WalkTo { .. }));
                     (
@@ -343,15 +339,6 @@ pub(super) fn direct(
                     ),
                 }
             }
-            // A dressing from its kit, on (setup gives it one, as the
-            // crate would).
-            First::Bleeding => {
-                run.dressed = now;
-                (
-                    "dressing on it",
-                    world.dress(&mut commands, root.translation),
-                )
-            }
             First::Death => ("go back for it", vec![]),
             _ => ("", vec![]),
         };
@@ -374,17 +361,6 @@ pub(super) fn direct(
         } else {
             run.pending.push((row, now + 3.0));
         }
-    }
-    // Told once, it dresses every wound after (as anyone would).
-    if firsts.met(First::Bleeding)
-        && world.alive(player)
-        && world.bleeding(player) > 0.3
-        && now - run.dressed > 8.0
-    {
-        run.dressed = now;
-        bot.log.push("  (bleeding again: dressing on it)".into());
-        let dress = world.dress(&mut commands, root.translation);
-        cut_in(&mut bot, dress);
     }
     // Get low for the machine that heard you, and in cover.
     // (And low while it sets up being heard: stood up in the open by day,
@@ -434,7 +410,6 @@ pub(super) fn direct(
             First::Underground => {
                 world.alive(player) && run.torch.is_some_and(|(t, _)| world.lit(t))
             }
-            First::Bleeding => world.alive(player) && world.bleeding(player) == 0.0,
             First::Lamed => {
                 world.alive(player)
                     && run
@@ -901,15 +876,6 @@ pub(super) fn direct(
         Step::Lamed => {
             let leg = run.walker.and_then(|w| world.leg_of(w, root.translation));
             if firsts.met(First::Lamed) || run.tries >= 25 {
-                // No wound by now (the walker never hit it): one set up, as
-                // the drills set things up, for the bleeding's moment. (It
-                // used to come from the walker's shot as the bot broke its
-                // line; reaching cover unhit, it never came.)
-                if !firsts.met(First::Bleeding) && world.alive(player) {
-                    world.wound(&mut commands, player);
-                    bot.log
-                        .push("  (staged: a wound, the walker never having hit)".into());
-                }
                 // Not left about for the walk back for its kit.
                 if let Some(w) = run.walker {
                     commands.entity(w).try_despawn();
@@ -1246,6 +1212,9 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    /// Where the newcomer stands (its feet's height: under a footbridge's
+    /// deck isn't on it).
+    pub(super) me: Query<'w, 's, &'static GlobalTransform, With<LocalPlayer>>,
     /// The ground's collider (left out of what's "in the way" of a step:
     /// banks are `steep_run`'s).
     pub(super) terrain: Query<'w, 's, Entity, With<crate::world::TerrainCollider>>,
@@ -1261,6 +1230,16 @@ pub(super) struct World2<'w, 's> {
     >,
     pub(super) comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
     pub(super) owners: Query<'w, 's, &'static crate::interact::SocketOwner>,
+    /// Injector pens' slots (`items::pen`): what's left in a pen.
+    pub(super) pen_slots: Query<
+        'w,
+        's,
+        (
+            &'static crate::interact::Socket,
+            &'static crate::interact::SocketOwner,
+        ),
+        With<crate::items::pen::PenSlot>,
+    >,
     pub(super) gun_ids: Query<'w, 's, (), With<crate::weapons::Gun>>,
     pub(super) doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     pub(super) door_at:
@@ -1654,41 +1633,25 @@ impl World2<'_, '_> {
         self.robots.iter().map(|(e, ..)| e).collect()
     }
 
-    /// A dressing from its kit (set down, as from the crate), in the left
-    /// hand, used.
-    pub(super) fn dress(&self, commands: &mut Commands, at: Vec3) -> Vec<Task> {
-        let dressing = self.drop_items(commands, at, &["field_dressing"]);
-        let mut t = vec![Task::Stow(Side::Left), Task::Wait(0.5)];
-        t.extend(dressing.first().map(|&item| Task::GrabFromHere {
-            item,
-            side: Side::Left,
-        }));
-        t.push(Task::Use(Side::Left));
-        t
+    /// A pen with something left in it (a used one keeps its empties).
+    pub(super) fn pen_loaded(&self, pen: Entity) -> bool {
+        self.pen_slots.iter().any(|(s, o)| {
+            o.0 == pen
+                && s.occupant.is_some_and(|c| {
+                    self.items.get(c).is_ok_and(|(_, it, ..)| {
+                        it.condition > 0.0
+                            && crate::items::pen::Dose::of(self.catalog.get(it.kind())).is_some()
+                    })
+                })
+        })
     }
 
     pub(super) fn one_handed(&self) -> bool {
         self.comfort.as_ref().is_some_and(|c| c.one_handed)
     }
 
-    pub(super) fn bleeding(&self, player: Entity) -> f32 {
-        self.health.get(player).map_or(0.0, |h| h.bleeding)
-    }
-
     pub(super) fn alive(&self, player: Entity) -> bool {
         self.health.get(player).is_ok_and(|h| !h.down)
-    }
-
-    /// A walker's hit, as it lands (`health::take_hits`): health off, and
-    /// the bleed a hit that size starts.
-    pub(super) fn wound(&self, commands: &mut Commands, player: Entity) {
-        commands.entity(player).queue(|mut e: EntityWorldMut| {
-            if let Some(mut h) = e.get_mut::<crate::health::Health>() {
-                h.hp -= STAGED_WOUND;
-                h.since_hit = 0.0;
-                h.bleeding = (h.bleeding + STAGED_WOUND * 0.04).min(3.0);
-            }
-        });
     }
 
     pub(super) fn fall(&self, commands: &mut Commands, player: Entity) {

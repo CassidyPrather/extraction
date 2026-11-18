@@ -21,7 +21,7 @@ pub enum Upgrade {
     BenchVice,
     /// A whip aerial on the cab: earlier warnings.
     Aerial,
-    /// A medicine cabinet: a dressing in it every raid.
+    /// A medicine cabinet: an injector in it every raid.
     MedCabinet,
     /// A shelf on the wall: more room again.
     StashRack2,
@@ -79,7 +79,7 @@ impl Upgrade {
             Upgrade::StashRack | Upgrade::StashRack2 => &[("scrap_metal", 2)],
             Upgrade::BenchVice => &[("gun_oil", 1)],
             Upgrade::Aerial => &[("electronics", 1)],
-            Upgrade::MedCabinet => &[("field_dressing", 1)],
+            Upgrade::MedCabinet => &[("matches", 2)],
         }
     }
 
@@ -89,7 +89,7 @@ impl Upgrade {
             Upgrade::StashRack => "stash +100 L",
             Upgrade::BenchVice => "seven more recipes",
             Upgrade::Aerial => "Surge warning at 10 min",
-            Upgrade::MedCabinet => "a dressing each raid",
+            Upgrade::MedCabinet => "an injector each raid",
             Upgrade::StashRack2 => "stash +100 L",
         }
     }
@@ -272,7 +272,7 @@ pub const WANTS: [&[(&str, u32, u32, &str)]; 3] = [
     &[
         ("canned_stew", 2, 3, "Something hot that isn't my cooking."),
         ("scrap_metal", 3, 5, "Scrap. The tailgate hinge is going."),
-        ("field_dressing", 2, 3, "Dressings. Not for me. Don't ask."),
+        ("water_bottle", 1, 2, "Canteens. Mine's split."),
         ("gun_oil", 1, 1, "Gun oil. The winch is seizing."),
         ("matches", 2, 3, "Matches. Out again."),
         ("tea_tin", 1, 1, "Tea. Real tea."),

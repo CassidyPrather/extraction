@@ -44,6 +44,9 @@ pub struct Director {
     station: Option<usize>,
     /// Holding the mag release for its step.
     releasing: bool,
+    /// Gone to read a station's board: the step's own way is planned
+    /// after, from where reading left it (not a try).
+    read: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -147,7 +150,9 @@ pub(super) fn direct(
         return;
     };
     if state.goal == Some(goal) {
-        state.tries += 1;
+        if !std::mem::take(&mut state.read) {
+            state.tries += 1;
+        }
     } else {
         state.goal = Some(goal);
         state.tries = 0;
@@ -202,6 +207,15 @@ pub(super) fn direct(
                 post(station).y,
             )));
             tasks.push(Task::Wait(4.0));
+            // The step's own way next time round, from where reading left
+            // it: planned from where it stood before, the way from first
+            // aid's board went back north into gate 4's fence.
+            state.station = Some(station);
+            state.read = true;
+            let idle = bot.tasks.pop_back();
+            bot.tasks.extend(tasks);
+            bot.tasks.extend(idle);
+            return;
         }
         if p.hoards {
             // Not what this station's about to use: that stays out.
@@ -412,7 +426,17 @@ impl DirectorWorld<'_, '_> {
         let mut t = Vec::new();
         let on_track = |p: Vec2| Vec2::new(0.0, p.y);
         let mut at = from;
-        if from.distance(to) > 6.0 {
+        // Far, or in another bay: by the track, through the gates on it
+        // (straight across, from by the gate into bay 2, it went into
+        // gate 1's fence).
+        let gate_between = self
+            .zone
+            .map
+            .placements
+            .iter()
+            .filter(|p| p.prefab == "yard_gate")
+            .any(|g| (from.y - g.at[1]) * (to.y - g.at[1]) < 0.0);
+        if from.distance(to) > 6.0 || gate_between {
             t.extend(self.walk(at, on_track(from), 1.5));
             at = on_track(from);
             t.extend(self.walk(at, on_track(to), 1.5));
@@ -647,17 +671,17 @@ impl DirectorWorld<'_, '_> {
                 t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
                 t.push(Wait(0.8));
             }
-            Goal::Dressing => {
-                let dressing = if self.holding(Side::Right).and_then(|e| self.id(e))
-                    == Some("field_dressing")
+            Goal::Inject => {
+                let injector = if self.holding(Side::Right).and_then(|e| self.id(e))
+                    == Some("regen_injector")
                 {
                     None
                 } else {
                     // Lying there, or already in a pocket (a hoarder's).
-                    self.loose("field_dressing", here)
-                        .or_else(|| self.on_body("field_dressing"))
+                    self.loose("regen_injector", here)
+                        .or_else(|| self.on_body("regen_injector"))
                 };
-                if let Some(e) = dressing {
+                if let Some(e) = injector {
                     t.extend(self.free_hands());
                     t.push(Grab {
                         item: e,

@@ -6,7 +6,8 @@ The round: a short straight brass case with a wide rim and no primer (it
 fires on the rim), a greased lead round-nosed bullet as wide as the case.
 The box: a Soviet slide box like a big matchbox, a white sleeve printed
 with a blue band and the calibre, its card tray of fifty standing on their
-noses in five rows of ten pushed half out, the brass heads showing.
+noses in five rows of ten pushed half out, the brass heads showing; each
+head a `round_<i>` node, so the box empties as it's used (`items::rounds`).
 """
 
 import os
@@ -73,23 +74,31 @@ def ammo_22lr():
     head_prof = [(0.0, -0.0062), (CASE, -0.0062)] + CASE_PROF[1:6][::-1] + [(0.0, 0.0)]
     hidden_prof = [(0.0, -0.0062), (CASE, -0.0062), (CASE, -0.0011), (RIM, -0.0009), (RIM, 0.0),
                    (0.0, 0.0)]
+    # Each its own `round_<i>` (`items::rounds` hides them as the box
+    # empties, the last first): a file at a time from one side, its front
+    # (out of the sleeve) first, so what's left always shows in proportion
+    # (emptied a row at a time, the three rows under the sleeve were left
+    # and the box read empty at 30).
+    rounds = []
     for i in range(10):
-        for j in range(5):
+        for j in reversed(range(5)):
+            r = Part(f"round_{len(rounds)}")
             x = (i - 4.5) * pitch_x
             z = tr0 + wall + 0.0004 + RIM + j * pitch_z
             xf = T(x, head, z) @ UP
             if z + RIM > sl0:
                 # Under the sleeve: seen only edge-on through its open back.
-                p.lathe(hidden_prof, "Brass", segs=6, xf=xf)
+                r.lathe(hidden_prof, "Brass", segs=6, xf=xf)
             else:
-                p.lathe(head_prof, "Brass", segs=10, xf=xf)
+                r.lathe(head_prof, "Brass", segs=10, xf=xf)
+            rounds.append(r)
     # The calibre in black on the sleeve's top and its sides; the count.
     text(p, "5.6", 0.011, "Black", T(0.0, sy, 0.0075) @ ON_TOP, depth=0.0004)
     text(p, "50 ПАТРОНОВ", 0.0048, "Black", T(0.0, sy, -0.0045) @ ON_TOP, depth=0.0004)
     for s in (-1, 1):
         text(p, "5.6", 0.008, "Black", T(s * sx / 2, 0.0125, (sl0 + sl1) / 2) @ RY(s * 1.5707963),
              depth=0.0004)
-    return centred([p])
+    return centred([p] + rounds)
 
 
 if __name__ == "__main__":

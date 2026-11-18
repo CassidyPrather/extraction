@@ -1613,8 +1613,9 @@ mod tests {
             for plan in plans(&mut app) {
                 for d in &plan.doors {
                     let Some(entry) = d.outside else { continue };
-                    // Earth floors are the ground's.
-                    if plan.name == "barn" {
+                    // Earth floors are the ground's; so is a yard gate's,
+                    // a leaf between two fences out in the open.
+                    if plan.name == "barn" || plan.name == "yard_gate" {
                         continue;
                     }
                     let mid = (d.a + d.b) * 0.5;
@@ -1897,6 +1898,15 @@ mod tests {
                     if app
                         .world()
                         .get::<crate::world::underground::PowerLocked>(d.entity)
+                        .is_some()
+                    {
+                        continue;
+                    }
+                    // A yard's bay gate, shut till its bay's done (#89): its
+                    // own tests (`onboarding`'s `a_gate_opens_with_its_bay`).
+                    if app
+                        .world()
+                        .get::<crate::world::yard::YardGate>(d.entity)
                         .is_some()
                     {
                         continue;
