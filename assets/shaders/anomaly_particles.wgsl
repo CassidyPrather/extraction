@@ -224,6 +224,9 @@ fn particle(mode: i32, s: f32, s2: f32, t: f32) -> P {
     return p;
 }
 
+// tan(20 degrees): a steam billow's widest, half-angle, at the eye.
+const STEAM_CAP_TAN: f32 = 0.364;
+
 @vertex
 fn vertex(v: Vertex) -> VOut {
     let world_from_local = mesh_functions::get_world_from_local(v.instance_index);
@@ -241,7 +244,14 @@ fn vertex(v: Vertex) -> VOut {
     // ember keeps a pixel or two at 20 m instead of flickering out.
     let far = distance(centre + p.pos, view.world_position);
     let grow = clamp(far / mix(15.0, 7.0, params.mode.w), 1.0, mix(2.0, 2.5, params.mode.w));
-    let world = centre + p.pos + (right * corner.x + up * corner.y) * p.size * grow;
+    var size = p.size * grow;
+    if (i32(params.mode.x + 0.5) == 8) {
+        // Steam, near: no billow wider than 40 degrees of the view (as
+        // `render::puff` caps puffs), so standing in a bank isn't a stack
+        // of screen-filling layers; still thick at the eye.
+        size = min(size, 2.0 * far * STEAM_CAP_TAN);
+    }
+    let world = centre + p.pos + (right * corner.x + up * corner.y) * size;
     var out: VOut;
     out.clip = position_world_to_clip(world);
     out.uv = v.uv;
