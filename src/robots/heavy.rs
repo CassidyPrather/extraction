@@ -2159,6 +2159,32 @@ pub(crate) mod tests {
         assert_eq!(n("heavy_knee"), 2, "{salvage:?}");
         assert_eq!(n("heavy_vent"), 2, "{salvage:?}");
         assert_eq!((n("heavy_claw"), n("heavy_eye")), (1, 1), "{salvage:?}");
+        // Each on the part it's seated on, not off in the air.
+        let seats: Vec<(Entity, Entity)> = app
+            .world_mut()
+            .query::<(&super::super::salvage::SalvageSeat, &ChildOf)>()
+            .iter(app.world())
+            .map(|(s, c)| (s.item, c.parent()))
+            .collect();
+        for (item, part) in seats {
+            let at = |e| app.world().get::<GlobalTransform>(e).unwrap().translation();
+            let id = catalog
+                .get(app.world().get::<Item>(item).unwrap().kind())
+                .id
+                .clone();
+            let (i, p) = (at(item), at(part));
+            // (The claw at its forearm's end, the rest on the part.)
+            let reach = if id == "heavy_claw" {
+                CLAW_FROM_FOREARM * SIZE + 0.2
+            } else {
+                0.6
+            };
+            assert!(
+                i.distance(p) < reach,
+                "{id} {:.2} m off its part ({i} vs {p})",
+                i.distance(p)
+            );
+        }
         // The generic wreck loot isn't rolled on top.
         assert!(app.world().get::<super::super::Salvaged>(heavy).is_some());
     }

@@ -592,12 +592,18 @@ fn turn_line_up(
 #[derive(Resource)]
 struct DeadLineUp(Vec<Entity>, u32);
 
+/// The frame a `!dead` line-up is wrecked on.
+const KILL_AT: u32 = 90;
+
 fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::robots::Robot>) {
     let Some(mut dead) = dead else {
         return;
     };
     dead.1 += 1;
-    if dead.1 != 4 {
+    // (A second and a half standing first, as one would before it's shot:
+    // wrecked as it spawned, a heavy's knees were never posed, and what's
+    // seated on them hung where they started.)
+    if dead.1 != KILL_AT {
         return;
     }
     for e in &dead.0 {
