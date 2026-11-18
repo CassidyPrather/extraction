@@ -1578,6 +1578,7 @@ mod tests {
         // A road point, and the nearest water to it.
         let rl = &hm.road_lines[0];
         let on_road = rl.points[rl.points.len() / 2];
+        let template = map.markers[0].clone();
         let frost = |crossing| crate::map::Marker {
             kind: MarkerKind::Anomaly {
                 kind: "Frost".into(),
@@ -1585,7 +1586,7 @@ mod tests {
                 crossing,
             },
             at: on_road,
-            ..map.markers[0].clone()
+            ..template.clone()
         };
         map.markers.push(frost(false));
         assert!(
