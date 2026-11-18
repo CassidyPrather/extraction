@@ -2637,7 +2637,7 @@ fn dress_steam_banks(
                         state: Vec4::new(0.0, 0.0, 0.0, size),
                         color: color.extend(STEAM_ALPHA),
                     },
-                    texture: a.radial.clone(),
+                    texture: a.dot.clone(),
                     additive: false,
                 })),
                 Transform::IDENTITY,
