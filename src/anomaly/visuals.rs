@@ -329,6 +329,7 @@ struct AnomalyAssets {
     flattened: Handle<MarkMaterial>,
     glassy: Handle<MarkMaterial>,
     glazed: Handle<MarkMaterial>,
+    glazed_snow: Handle<MarkMaterial>,
     crushed: Handle<MarkMaterial>,
     hushed: Handle<MarkMaterial>,
     frosted: Handle<MarkMaterial>,
@@ -751,6 +752,16 @@ fn init_assets(
         LinearRgba::rgb(0.04, 0.048, 0.062),
         0.55,
     );
+    // The same glaze on snow, where pale reads as nothing: darker and
+    // glossier, a silvered sheet giving back the grey sky, so it holds as
+    // a shape against the white round it.
+    let glazed_snow = ground_with(
+        &mark,
+        &sheen,
+        Color::srgba(0.2, 0.24, 0.31, 0.88),
+        LinearRgba::rgb(0.03, 0.036, 0.048),
+        0.22,
+    );
     // Frosted over: pale plates cut by cracks, rime feathering its rim, a
     // little lit of itself. Its colour's in its texture (the cracks show it
     // on snow; a saturated blue read as paint).
@@ -827,6 +838,7 @@ fn init_assets(
         flattened,
         glassy,
         glazed,
+        glazed_snow,
         crushed,
         hushed,
         frosted,
@@ -1285,13 +1297,19 @@ fn dress_anomalies(
             .with_children(|c| {
                 if let Some(mark) = mark {
                     let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
-                    c.spawn((
+                    let mut m = c.spawn((
                         Mesh3d(disc),
                         MeshMaterial3d(mark.clone()),
                         Transform::IDENTITY,
                         NotShadowCaster,
                         near(90.0),
                     ));
+                    if kind == AnomalyKind::Mirror {
+                        m.insert(OnSnow {
+                            bare: mark.clone(),
+                            snow: a.glazed_snow.clone(),
+                        });
+                    }
                 }
                 if kind == AnomalyKind::Burner {
                     // Shown only while snow lies there (`melt_rings`).
@@ -2878,21 +2896,45 @@ fn melt_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
-/// A burner's melt ring shows where snow lies round it (above the valley's
-/// snow line, or its lasting snow), not on bare ground.
+/// A mark with another look for where snow lies round it (a pale mark
+/// that reads on grass is lost on white).
+#[derive(Component)]
+struct OnSnow {
+    bare: Handle<MarkMaterial>,
+    snow: Handle<MarkMaterial>,
+}
+
+/// Whether snow lies at this height: above the valley's snow line, or its
+/// lasting snow.
+fn snow_lies(snow: &crate::world::snow::Snow, y: f32) -> bool {
+    snow.lies(y) > 0.2 || snow.floor > 0.0
+}
+
+/// A burner's melt ring shows where snow lies round it, not on bare
+/// ground; a mark with a snow look (`OnSnow`) wears it there.
 fn melt_rings(
     mut rings: Query<(&GlobalTransform, &mut Visibility), With<MeltRing>>,
+    mut marks: Query<(&GlobalTransform, &OnSnow, &mut MeshMaterial3d<MarkMaterial>)>,
     snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let Some(snow) = snow else {
         return;
     };
     for (gt, mut vis) in &mut rings {
-        let lies = snow.lies(gt.translation().y) > 0.2 || snow.floor > 0.0;
-        vis.set_if_neq(if lies {
+        vis.set_if_neq(if snow_lies(&snow, gt.translation().y) {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         });
+    }
+    for (gt, looks, mut mat) in &mut marks {
+        let want = if snow_lies(&snow, gt.translation().y) {
+            &looks.snow
+        } else {
+            &looks.bare
+        };
+        if mat.0 != *want {
+            mat.0 = want.clone();
+        }
     }
 }
