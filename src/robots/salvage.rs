@@ -693,6 +693,7 @@ fn seat_sorter_jaw(
             continue;
         }
         let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        info!("salvage: a sorter's grab seated on its fallen forearm");
         fit(&mut commands, &catalog, piece, sorter_jaw_row(), &look);
         // Its grab's look, hung on this piece: hidden, with its jaws.
         let robot = grabs
