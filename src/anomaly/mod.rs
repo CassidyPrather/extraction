@@ -550,6 +550,18 @@ pub const SNARE_WET_SHOCK: f32 = 8.0;
 /// pushes in.
 pub const SNARE_RIM_BRUSH: f32 = 0.3;
 
+/// How far past a snare's radius its body test reaches (m): a body's
+/// half-width, from its chest to the snare's heart.
+pub const SNARE_BODY: f32 = 0.3;
+
+/// How far from its heart a snare strikes a body standing by it: its
+/// radius and a body's half-width. Its scorch is drawn out to exactly
+/// this (`visuals::mark_radius`): standing on the scorch is struck,
+/// standing off it is safe.
+pub fn snare_strikes_within(radius: f32) -> f32 {
+    radius + SNARE_BODY
+}
+
 /// Whether a hand at `hand` has reached into a snare whose heart is at
 /// `heart`: down to the heart's height or below anywhere inside its
 /// radius (reaching down for its stone), or, held higher, well in past
@@ -789,7 +801,7 @@ fn snares(
             })
         };
         let player_in = players.iter().any(|(pe, pt, _, body)| {
-            (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
+            (pt.translation() + Vec3::Y * 0.9).distance(c) < snare_strikes_within(a.radius)
                 || reaching.contains(&pe)
                 || in_its_water(pt, body)
         });
@@ -857,7 +869,8 @@ fn snares(
         holding.remove(&e);
         a.charge = 0.0;
         for (pe, pt, mut h, body) in &mut players {
-            let inside = (pt.translation() + Vec3::Y * 0.9).distance(c) < a.radius + 0.3
+            let inside = (pt.translation() + Vec3::Y * 0.9).distance(c)
+                < snare_strikes_within(a.radius)
                 || reaching.contains(&pe)
                 || in_its_water(pt, body);
             let grounded = metal.iter().any(|(p, _)| *p == pe);
@@ -1537,6 +1550,30 @@ mod tests {
         let gained = (storm - calm).dot(along);
         eprintln!("lift pop: calm {calm:?}, storm {storm:?}, {gained:.2} m downwind");
         assert!(gained > 0.6, "the storm carried you {gained:.2} m downwind");
+    }
+
+    /// A snare's scorch is drawn out to exactly where it strikes a body:
+    /// a step on its edge is struck, a step off it is safe.
+    #[test]
+    fn a_snares_scorch_is_where_it_strikes() {
+        use super::visuals::{MARK_PAD, mark_radius};
+        for r in [1.2_f32, 1.92, 2.5] {
+            let drawn = mark_radius(AnomalyKind::Snare, r);
+            assert_eq!(drawn, snare_strikes_within(r), "radius {r}");
+            // The disc carries the texture's fade past its drawn edge.
+            assert!(MARK_PAD * drawn > drawn * 1.02);
+            // The body test, as the discharge runs it: chest 0.9 m up,
+            // the heart 0.8 m up.
+            let heart = Vec3::new(0.0, 0.8, 0.0);
+            let struck = |along: f32| {
+                (Vec3::new(along, 0.0, 0.0) + Vec3::Y * 0.9).distance(heart)
+                    < snare_strikes_within(r)
+            };
+            assert!(struck(drawn - 0.05), "on the scorch's edge, struck");
+            assert!(!struck(drawn + 0.05), "off it, safe");
+        }
+        // Every other kind draws its radius.
+        assert_eq!(mark_radius(AnomalyKind::Burner, 2.0), 2.0);
     }
 
     /// A snare fires at a hand reached in, not at one brushing its rim.
