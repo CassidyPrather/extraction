@@ -46,7 +46,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import UP, Wear, board, bolt, prop, rod  # noqa: E402
+from _kit import UP, Wear, board, bolt, padlock, prop, rod  # noqa: E402
 from common import RX, RY, RZ, T, Part, empty  # noqa: E402
 
 
@@ -300,13 +300,16 @@ def warning_door():
               xf=T(0, y, zf) @ RX(-0.5) @ T(0, -y, -zf))
     p.box((1.18, 0.04, 0.012), (0.0, acy - ah / 2 - 0.1, zf + 0.006), "Painted", bevel=0.003,
           segs=1)
-    # Hinges on the left, a handle and a hasp on the right.
+    # Hinges on the left, a handle and a hasp on the right, padlocked: it
+    # doesn't open (`docs/WORLD_MODELS.md`).
     for y in (0.35, 1.12, 1.95):
         p.cyl(0.018, y - 0.06, y + 0.06, "Iron", segs=10, xf=T(-0.63, 0.0, zf + 0.01) @ UP)
     rod(p, (0.52, 1.02, zf + 0.04), (0.52, 1.18, zf + 0.04), 0.011, "Steel")
     for y in (1.02, 1.18):
         rod(p, (0.52, y, zf), (0.52, y, zf + 0.04), 0.009, "Steel")
     p.box((0.05, 0.12, 0.008), (0.58, 0.9, zf + 0.004), "Iron", bevel=0.002, segs=1)
+    p.box((0.016, 0.03, 0.03), (0.58, 0.87, zf + 0.023), "Iron")
+    padlock(p, (0.58, 0.87, zf + 0.03), (0, 0, 1))
     # A rusted kick plate at the foot, off the panel.
     p.box((1.16, 0.16, 0.008), (0.0, 0.12, zf + 0.002), "Rusty", bevel=0.002, segs=1)
     return [p]

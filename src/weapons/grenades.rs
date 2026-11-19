@@ -24,6 +24,13 @@ use crate::player::{BodyCollider, Player};
 use crate::rig::RigInput;
 use crate::world::Layer;
 
+/// A blast's push on a dynamic body at its centre, N·s (less as the
+/// square of the way out to its edge).
+pub const BLAST_PUSH: f32 = 6.0;
+/// The weight (kg) below which a blast throws a thing no faster than it
+/// would one this heavy: at most `BLAST_PUSH / BLAST_LIGHT`, 24 m/s.
+pub const BLAST_LIGHT: f32 = 0.25;
+
 /// A grenade item's fuse, and who pulled its pin.
 #[derive(Component, Debug)]
 pub struct Live {
@@ -203,7 +210,7 @@ fn burn_fuses(
     mut hands: Query<&mut Hand>,
     parts: Query<(Entity, &GlobalTransform), With<crate::robots::RobotPart>>,
     bodies: Query<(Entity, &GlobalTransform), With<BodyCollider>>,
-    mut pushed: Query<(&GlobalTransform, &RigidBody, Forces)>,
+    mut pushed: Query<(&GlobalTransform, &RigidBody, Option<&ComputedMass>, Forces)>,
     spatial: SpatialQuery,
     time: Res<Time>,
     mut hits: MessageWriter<Hit>,
@@ -289,7 +296,7 @@ fn burn_fuses(
                 });
             }
         }
-        for (pgt, rb, mut forces) in &mut pushed {
+        for (pgt, rb, mass, mut forces) in &mut pushed {
             if *rb != RigidBody::Dynamic {
                 continue;
             }
@@ -297,7 +304,12 @@ fn burn_fuses(
             let k = 1.0 - p.distance(at) / def.blast_radius.max(0.1);
             if k > 0.0 && sees(p) {
                 let dir = (p - at).normalize_or(Vec3::Y) + Vec3::Y * 0.3;
-                forces.apply_linear_impulse(dir * 6.0 * k * k);
+                // A thing lighter than BLAST_LIGHT is thrown as one of that
+                // weight would be, not harder: a 20 g cartridge took 300 m/s
+                // of a full blast's push (the chaos soak's stim, 59 m/s).
+                let m = mass.map_or(BLAST_LIGHT, |m| m.value());
+                let light = (m / BLAST_LIGHT).min(1.0);
+                forces.apply_linear_impulse(dir * BLAST_PUSH * k * k * light);
             }
         }
         // Gone, out of whatever hand had it.

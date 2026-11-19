@@ -21,6 +21,7 @@ pub mod cinematic;
 pub mod fighting;
 pub mod footing;
 pub mod glb;
+pub mod grips;
 pub mod landmarks;
 pub mod overlap;
 pub mod path;

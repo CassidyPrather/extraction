@@ -6221,6 +6221,28 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         for d in &geo.doors {
             spawn_door(&mut commands, root, *d);
         }
+        // Its yard's things, solid (`clutter::yard_body`): drawn only, a
+        // bunker or a cart was walked through, no cover from a robot.
+        for (model, xf) in yard_models(&zone, &p.prefab, &t) {
+            for (shape, at) in super::clutter::yard_body(model) {
+                spawn_body(&mut commands, root, model, &xf, *shape, *at);
+            }
+        }
+        // What's carried about the house, hand-sized (a lamp, a pail, a
+        // case, a can), solid but not taken (`clutter::carried_body`): a
+        // hand bumps it, not closes on nothing.
+        let tag = placement_tag(&zone, &p.prefab, Vec2::new(p.at[0], p.at[1]));
+        let dressed = super::clutter::dress(&zone.map, &p.prefab, tag, &t, false);
+        for (model, xf) in geo
+            .props
+            .iter()
+            .flat_map(|d| d.models.iter().copied())
+            .chain(dressed)
+        {
+            if let Some((shape, at)) = super::clutter::carried_body(model) {
+                spawn_body(&mut commands, root, model, &xf, shape, at);
+            }
+        }
         for s in &geo.loot {
             loot.0.push(LootSpot {
                 at: loot_spot_at(&zone, &t, s.at),
@@ -6281,6 +6303,33 @@ const LOOT_CLEAR: f32 = 0.55;
 /// corner over a hill (the slag heaps' anomaly) had its loot spawned inside
 /// the hill, falling through it (`docs/SOAK.md`). Underground sites' spots
 /// are under the ground on purpose.
+/// A static body for a thing drawn at `xf` (building-local) under
+/// `root`: `shape` at `at` in its own space.
+fn spawn_body(
+    commands: &mut Commands,
+    root: Entity,
+    model: &str,
+    xf: &Transform,
+    shape: Shape,
+    at: Vec3,
+) {
+    let collider = match shape {
+        Shape::Box(s) | Shape::Prism(s) => Collider::cuboid(s.x, s.y, s.z),
+        Shape::Cylinder(r, h) => Collider::cylinder(r, h),
+    };
+    commands.spawn((
+        Name::new(format!("Body {model}")),
+        RigidBody::Static,
+        collider,
+        CollisionLayers::new(Layer::World, LayerMask::ALL),
+        // (Unscaled, exactly: a collider's shape carries its size, and a
+        // not-quite-unit scale re-derived from the matrix drifts:
+        // `perf::no_collider_scale_drifts`.)
+        Transform::from_translation(xf.transform_point(at)).with_rotation(xf.rotation.normalize()),
+        ChildOf(root),
+    ));
+}
+
 /// A placed building's map tag (its placement's, found by where it is).
 pub fn placement_tag<'a>(zone: &'a Zone, prefab: &str, at: Vec2) -> &'a str {
     zone.map

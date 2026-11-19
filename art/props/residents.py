@@ -377,11 +377,11 @@ def logbook():
         for k in range(9):
             p.box((0.09, 0.0006, 0.002), (sx * 0.06 - 0.06, 0.0172, -0.08 + k * 0.02), "Black")
     p.box((0.08, 0.012, 0.05), (0.13, 0.006, 0.02), "Black", bevel=0.003, segs=1)
-    # The lever's pivot block (it stood on nothing, 7 mm over the base).
+    # The lever's pivot block (it stood on nothing, 7 mm over the base),
+    # its lever snapped off at the pivot: a key nothing taps
+    # (`docs/WORLD_MODELS.md`).
     p.box((0.014, 0.009, 0.014), (0.13, 0.0155, 0.02), "Brass")
-    p.box((0.07, 0.006, 0.012), (0.13, 0.022, 0.02), "Brass",
-          xf=T(0.13, 0.022, 0.02) @ RZ(0.08) @ T(-0.13, -0.022, -0.02))
-    p.cyl(0.01, 0.0, 0.008, "Black", segs=8, xf=T(0.165, 0.026, 0.02) @ UP)
+    p.box((0.016, 0.006, 0.012), (0.13, 0.022, 0.02), "Brass")
     return [p]
 
 

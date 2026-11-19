@@ -295,8 +295,67 @@ pub fn roof_field(map: &MapDef, hm: &Heightmap) -> (NavGrid, Vec<f32>) {
 /// counts as its wall: the hole's edge is under it), and every door the
 /// [`DOOR_STRIP`] in front of it.
 pub fn anomaly_room(map: &MapDef, p: P2) -> (f32, String) {
+    anomaly_room_but(map, p, None)
+}
+
+/// [`anomaly_room`] for a stepped lift (`MarkerKind::Anomaly { step }`):
+/// the one low placement its pop lands you on ([`step_target`]) keeps no
+/// [`WALL_CLEAR`] from it; every other wall and every door as ever.
+pub fn anomaly_room_stepped(map: &MapDef, p: P2) -> (f32, String) {
+    anomaly_room_but(map, p, step_target(map, p))
+}
+
+/// How near (from its wall, m) a stepped lift may stand to the placement
+/// it pops you onto: about where the pop lands you (some 4.1 m out) is
+/// then a metre or more onto its top.
+pub const STEP_NEAR: (f32, f32) = (2.5, 3.0);
+/// The highest top a stepped lift may pop you onto (m): the pop throws
+/// you some 2.6 m up.
+pub const STEP_TOP: f32 = 2.2;
+/// How deep the placement must be along the pop's line, from its wall
+/// (m), so you land on it, not past it.
+pub const STEP_DEPTH: f32 = 2.0;
+
+/// The placement (its index in `map.placements`) a lift at `p` may be
+/// stepped onto: the nearest within [`STEP_NEAR`] of its wall, no higher
+/// than [`STEP_TOP`], at least [`STEP_DEPTH`] deep along the line from
+/// `p` to its nearest point.
+pub fn step_target(map: &MapDef, p: P2) -> Option<usize> {
+    let mut best: Option<(usize, f32)> = None;
+    for (i, s) in solids(map).iter().enumerate().take(map.placements.len()) {
+        let d = s.rect.sdf(p);
+        if !(STEP_NEAR.0..=STEP_NEAR.1).contains(&d) {
+            continue;
+        }
+        if crate::map::prefab_footprint(&s.prefab)[1] > STEP_TOP {
+            continue;
+        }
+        // The pop's line: from `p` down the wall's gradient.
+        let e = 0.01;
+        let g = [
+            s.rect.sdf([p[0] + e, p[1]]) - s.rect.sdf([p[0] - e, p[1]]),
+            s.rect.sdf([p[0], p[1] + e]) - s.rect.sdf([p[0], p[1] - e]),
+        ];
+        let n = geom::len(g).max(1e-6);
+        let dir = [-g[0] / n, -g[1] / n];
+        let inside = (0..400)
+            .map(|k| d + k as f32 * 0.025)
+            .filter(|t| s.rect.sdf(geom::add(p, geom::scale(dir, *t))) <= 0.0)
+            .count() as f32
+            * 0.025;
+        if inside < STEP_DEPTH {
+            continue;
+        }
+        if best.is_none_or(|(_, bd)| d < bd) {
+            best = Some((i, d));
+        }
+    }
+    best.map(|(i, _)| i)
+}
+
+fn anomaly_room_but(map: &MapDef, p: P2, skip: Option<usize>) -> (f32, String) {
     let mut best = (f32::INFINITY, String::new());
-    for s in solids(map) {
+    for (i, s) in solids(map).into_iter().enumerate() {
         if s.prefab == "anomaly_core" {
             continue;
         }
@@ -305,7 +364,7 @@ pub fn anomaly_room(map: &MapDef, p: P2) -> (f32, String) {
             continue;
         }
         let wall = s.rect.sdf(p) - WALL_CLEAR;
-        if wall < best.0 {
+        if wall < best.0 && skip != Some(i) {
             best = (wall, format!("the {}'s wall", s.name));
         }
         for (at, out, width) in doors_of(&s) {
@@ -491,7 +550,11 @@ pub fn check(
             for a in crate::anomaly::layout(map, hm, seed, cycle) {
                 total += 1;
                 let reach = a.kind.danger_radius(a.radius);
-                let (room, what) = anomaly_room(map, a.at);
+                let (room, what) = if crate::anomaly::stepped(map, a.at, a.kind) {
+                    anomaly_room_stepped(map, a.at)
+                } else {
+                    anomaly_room(map, a.at)
+                };
                 if room >= reach {
                     continue;
                 }
@@ -596,6 +659,52 @@ mod tests {
         );
     }
 
+    /// A lift a step off a low store keeps clear of it only when the map
+    /// sets it as a step, and only of that store: a tall shed, or another
+    /// wall as near, still counts.
+    #[test]
+    fn only_a_stepped_lift_stands_by_the_store_it_steps_onto() {
+        let mut map = MapDef::from_ron(crate::map::TRAINING_YARD).unwrap();
+        let template = map.placements[0].clone();
+        let store = |prefab: &str, at: P2| Placement {
+            prefab: prefab.into(),
+            at,
+            rot: 0.0,
+            ..template.clone()
+        };
+        let reach = crate::anomaly::AnomalyKind::Lift.danger_radius(2.5);
+        let rc = Rect::of("yard_store", [0.0, 0.0], 0.0);
+        // 2.7 m off its south wall.
+        let p = [0.0, -(rc.half[1] + 2.7)];
+        map.placements = vec![store("yard_store", [0.0, 0.0])];
+        assert!(anomaly_room(&map, p).0 < reach, "unflagged, it's too near");
+        assert_eq!(step_target(&map, p), Some(0));
+        assert!(
+            anomaly_room_stepped(&map, p).0 >= reach,
+            "a step onto it: {:?}",
+            anomaly_room_stepped(&map, p)
+        );
+        // Too far in, too far out: not a step.
+        assert_eq!(step_target(&map, [0.0, -(rc.half[1] + 2.0)]), None);
+        assert_eq!(step_target(&map, [0.0, -(rc.half[1] + 3.5)]), None);
+        // Too high a top.
+        map.placements = vec![store("shed", [0.0, 0.0])];
+        let sh = Rect::of("shed", [0.0, 0.0], 0.0);
+        assert_eq!(step_target(&map, [0.0, -(sh.half[1] + 2.7)]), None);
+        // Low enough but too shallow along the pop: a wreck, from its side
+        // (1.8 m across); end on (4.3 m), a step.
+        map.placements = vec![store("wreck_lada", [0.0, 0.0])];
+        let w = Rect::of("wreck_lada", [0.0, 0.0], 0.0);
+        assert_eq!(step_target(&map, w.world([w.half[0] + 2.7, 0.0])), None);
+        assert_eq!(step_target(&map, w.world([0.0, w.half[1] + 2.7])), Some(0));
+        // Another wall as near still counts.
+        map.placements = vec![
+            store("yard_store", [0.0, 0.0]),
+            store("yard_store", [4.5, p[1]]),
+        ];
+        assert!(anomaly_room_stepped(&map, p).0 < reach, "the other store");
+    }
+
     #[test]
     fn an_anomaly_against_a_wall_or_in_a_doorway_is_found() {
         let mut map = MapDef::from_ron(CINDER_WORKS).unwrap();
@@ -616,6 +725,7 @@ mod tests {
                     kind: kind.into(),
                     radius,
                     crossing: false,
+                    step: false,
                 },
                 at,
                 rot: 0.0,

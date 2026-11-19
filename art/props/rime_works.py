@@ -44,7 +44,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _kit import ALONG_X, UP, Wear, board, bolt, prop, rod  # noqa: E402
-from common import Part, RX, RY, RZ, T  # noqa: E402
+from common import Part, RX, RY, RZ, S, T  # noqa: E402
 
 ALONG_Z = RX(0.0)
 
@@ -393,9 +393,12 @@ def ore_bin():
     p.box((top_w + 0.06, 0.06, top_d + 0.06), (0.0, y_top - 0.03, 0.0), "Iron")
     p.box((neck, 0.8, neck), (0.0, y_neck - 0.4, 0.0), "Rusty", bevel=0.01, segs=1)
     p.box((neck + 0.1, 0.05, neck + 0.1), (0.0, y_neck - 0.79, 0.0), "Iron")
+    # Its gate's lever rusted fast: the pivot seized in a blister of rust,
+    # its knob gone (`docs/WORLD_MODELS.md`).
     rod(p, (neck / 2 + 0.05, y_neck - 0.6, 0.0), (neck / 2 + 0.7, y_neck - 0.2, 0.0), 0.02,
-        "Iron", segs=6)
-    p.sphere(0.04, (neck / 2 + 0.7, y_neck - 0.2, 0.0), "Black", segs=8, rings=5)
+        "Rusty", segs=6)
+    p.sphere(1.0, (0, 0, 0), "Rusty", segs=8, rings=5,
+             xf=T(neck / 2 + 0.06, y_neck - 0.6, 0.0) @ S(0.05, 0.05, 0.05))
     return [p]
 
 

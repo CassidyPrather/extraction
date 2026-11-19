@@ -438,6 +438,17 @@ pub fn night_glow(kind: AnomalyKind, charge: f32) -> Option<(f32, f32)> {
     }
 }
 
+/// Whether the map stands a lift at `at` as a step
+/// (`MarkerKind::Anomaly { step: true }`): it may stand nearer the low
+/// placement it pops you onto (`map_surge::anomaly_room_stepped`).
+pub fn stepped(map: &MapDef, at: [f32; 2], kind: AnomalyKind) -> bool {
+    kind == AnomalyKind::Lift
+        && map.markers.iter().any(|m| {
+            matches!(&m.kind, MarkerKind::Anomaly { step: true, kind: k, .. } if AnomalyKind::from_name(k) == Some(kind))
+                && geom::dist(m.at, at) < 0.01
+        })
+}
+
 /// How near water a road must run, inside a crossing frost, for the frost
 /// to lie on it (m): the road along the beck it spans, not one it cuts.
 pub const CROSSING_ALONG_WATER: f32 = 4.0;
@@ -1499,6 +1510,7 @@ mod tests {
                 kind: "Well".into(),
                 radius: 2.0,
                 crossing: false,
+                step: false,
             },
             at: [1000.0, 1000.0],
             rot: 0.0,
@@ -1615,6 +1627,7 @@ mod tests {
                 kind: "Frost".into(),
                 radius: 3.0,
                 crossing,
+                step: false,
             },
             at: on_road,
             ..template.clone()
