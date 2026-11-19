@@ -231,6 +231,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ),
     ("plough_auger_motor", 0.62, Made, "a plough's auger motor"),
     ("pylon_dish", 0.92, Made, "a pylon's sensor head"),
+    ("sorter_head", 0.37, Made, "a sorter's scanning head"),
     ("pressure_mine", 0.31, Made, "a mine"),
     ("robot_ammo_belt", 0.08, Made, "a coil of robot belt"),
     ("art_featherstone", 0.036, Made, "an artifact"),

@@ -125,3 +125,30 @@ for p in (car, head, plate, upper, lower, grab, jaw, bridge, rail, tote):
     make(p)
 report()
 export("assets/models/robots/sorter.glb")
+
+# --- Salvage (#105) ----------------------------------------------------------
+# Its scanning head, as it hangs under the carriage (the `head` object's own
+# lines, at its own origin): `assets/models/items/sorter_head.glb`, centred on
+# its bounds; `mid` is where that centre was from the head's origin.
+item = Part("sorter_head", origin=HEAD)
+item.box((0.34, 0.2, 0.3), (hx, hy, hz), "Shell", bevel=0.04, segs=2)
+item.box((0.26, 0.05, 0.03), (hx, hy - 0.01, hz - 0.15), "Dark", bevel=0.01, segs=1)
+item.box((0.22, 0.02, 0.012), (hx, hy - 0.01, hz - 0.163), "Eye", bevel=0.004, segs=1)
+item.cyl(0.05, hy + 0.08, hy + 0.2, "Dark", segs=12, xf=T(hx, 0, hz) @ UP)
+# (Its torn leads, where it came off its mount.)
+for sx in (-0.03, 0.03):
+    item.cyl(0.008, hy + 0.2, hy + 0.27, "Red", segs=6, xf=T(hx + sx, 0, hz) @ UP)
+reset()
+obj = make(item)
+me = obj.data
+lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+for v in me.vertices:
+    v.co = [v.co[k] - mid[k] for k in range(3)]
+obj.location = (0.0, 0.0, 0.0)
+size = [hi[k] - lo[k] for k in range(3)]
+# (Blender is Z up: game x, y, z = its x, z, -y.)
+print(f"sorter_head dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+      f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+export("assets/models/items/sorter_head.glb")

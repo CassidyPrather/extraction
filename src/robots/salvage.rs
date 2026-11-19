@@ -189,6 +189,10 @@ pub const CELL_AT: Vec3 = Vec3::new(0.0, 0.3, 0.12);
 pub const HOUND_CELL_AT: Vec3 = Vec3::new(0.0, 0.14, 0.08);
 /// A grappler's launcher (its item's middle) from its boom's head pin.
 pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
+/// The Sorter's head's middle from its part's origin (`art/robots/sorter.py`
+/// prints it), and the bolts through its stalk.
+pub const SORTER_HEAD_MID: Vec3 = Vec3::new(0.0, 0.085, -0.01);
+pub const SORTER_HEAD_BOLTS: usize = 2;
 /// Bolts through a launcher's flange onto its boom.
 pub const LAUNCHER_BOLTS: usize = 4;
 
@@ -365,6 +369,28 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
             hot: false,
             replaces: None,
         });
+    }
+    // The Sorter's scanning head, bolted under its carriage's front by its
+    // stalk: it comes off in its place (its own look goes with its part).
+    if w.kind == RobotKind::Sorter {
+        if let Some(&(e, _, health, at, _)) = w.parts.iter().find(|p| p.1 == PartRole::Sensor) {
+            let mid = at.rotation * SORTER_HEAD_MID;
+            out.push(Row {
+                item: "sorter_head",
+                at: Transform::from_translation(at.translation + mid).with_rotation(at.rotation),
+                size: 1.0,
+                health,
+                fix: Fix::Bolts {
+                    n: SORTER_HEAD_BOLTS,
+                    centre: at.translation + at.rotation * Vec3::Y * 0.2,
+                    face: at.rotation,
+                    radius: 0.04,
+                },
+                hot: false,
+                replaces: (e != Entity::PLACEHOLDER).then_some(e),
+            });
+        }
+        return out;
     }
     if w.kind == RobotKind::Drone {
         drone_rows(w, &mut out);
@@ -1486,8 +1512,24 @@ mod tests {
             ..walker_like(&parts)
         };
         let r = rows(&sorter);
-        assert_eq!(r.len(), 1);
+        // Its servo pack, and its head (the test's parts have a Sensor).
         assert_eq!(r[0].item, "sorter_servo_pack");
+        let head = r.iter().find(|r| r.item == "sorter_head");
+        assert_eq!(
+            head.is_some(),
+            parts.iter().any(|p| p.1 == PartRole::Sensor),
+            "{:?}",
+            r.iter().map(|r| r.item).collect::<Vec<_>>()
+        );
+        if let Some(h) = head {
+            assert!(matches!(
+                h.fix,
+                Fix::Bolts {
+                    n: SORTER_HEAD_BOLTS,
+                    ..
+                }
+            ));
+        }
         assert!(matches!(
             r[0].fix,
             Fix::Bolts {
