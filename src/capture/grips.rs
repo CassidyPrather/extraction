@@ -153,6 +153,9 @@ pub const LEDGER: &[(&str, Why)] = &[
     ),
 ];
 
+// (Test-only from here: the scan reads the art's sources, on the build
+// machine.)
+#[cfg(test)]
 /// What names a grip in the art.
 const WORDS: &[&str] = &[
     "handle", "handles", "knob", "knobs", "lever", "levers", "crank", "cranks", "bail", "bails",
@@ -162,6 +165,7 @@ const WORDS: &[&str] = &[
 /// Every prop model whose builder (or a helper it calls, in its own
 /// file) names a grip, in its code or its comments: the model, its file
 /// and the words.
+#[cfg(test)]
 pub fn named_grips() -> std::collections::BTreeMap<String, (String, Vec<String>)> {
     use std::collections::{BTreeMap, BTreeSet};
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("art/props");
