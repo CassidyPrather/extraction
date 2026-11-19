@@ -8,12 +8,13 @@ in hand.
   the grass; a gas valve shows on the crown, seated on the drape
   (`dirigible_look::down_point` + 0.12 m), not floating at the cells' taut
   radius.
-- `wreck_sorter.png`: the sorter down at 3.5 m. Its carriage on the grass,
-  the travel motor bolted on its top beside where the bridge ran, its arm's
-  two pieces lying off its right. **Open:** the grab (`sorter_jaw`) doesn't
-  show at the forearm's end in this render, and two orange-tipped jaw shapes
-  sit on the carriage's top instead. The headless test seats one
-  `sorter_jaw` on the forearm piece; the render differs, under review.
+- `wreck_sorter.png`: the sorter down at 4 m. Its carriage on the grass,
+  the travel motor bolted on its top beside where the bridge ran; its arm
+  folded back under it as it came down one end first. Its grab, its wrist
+  under the carriage out of sight and reach, tore off in the fall and lies
+  clear off the carriage's right, its cut leads up (`sorter_jaw`,
+  `salvage::torn_clear`). **Still open, Robot bodies':** the carriage
+  hovers a little over the grass, and its cyan strip is still lit.
 
     sheet: robots:dirigible!dead,0,16,0   camera 92.9,0,131.9,90,-10
-           robots:sorter!dead,0,3.5,0     camera 92.9,0,131.9,0,-35
+           robots:sorter!dead,0,4,0       camera 92.9,0,131.9,0,-32
