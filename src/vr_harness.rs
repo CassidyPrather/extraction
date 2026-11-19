@@ -1073,6 +1073,53 @@ mod tests {
         assert_eq!(vr.hand_state(Side::Right).holding, Some(bag));
     }
 
+    /// A pack in your hand as you're moved far off (a teleport, a ride)
+    /// comes along, and let go it's on you, not hanging where you were
+    /// (chaos: a pack left 220 m off took what was stowed with it).
+    #[test]
+    fn a_pack_held_across_a_teleport_comes_along() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.step(10);
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<crate::interact::body::Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .expect("a backpack");
+        let at = feet + Vec3::new(0.15, 1.6, 0.12);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(bag));
+        // Moved 60 m in a frame, the hand where it was on you.
+        let far = on_ground(&vr, OPEN.x + 60.0, OPEN.z);
+        vr.stand(far, 0.0);
+        vr.step(4);
+        let pack_at = |vr: &Vr| {
+            vr.app
+                .world()
+                .get::<GlobalTransform>(bag)
+                .unwrap()
+                .translation()
+        };
+        let hand = vr.hand_state(Side::Right).world.translation;
+        let gap = pack_at(&vr).distance(hand);
+        assert!(gap < 1.0, "the pack came along: {gap:.1} m from the hand");
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        let off = pack_at(&vr).distance(far);
+        assert!(off < 2.0, "let go, it's on you: {off:.1} m off");
+    }
+
     /// Something in your hand, over the shoulder, let go: it's put away,
     /// not dropped.
     #[test]
