@@ -5212,6 +5212,19 @@ mod first_aid {
             Some(r2),
             "the spent R-2 out into the hand"
         );
+        // A spent one doesn't go in (nor swap with a spent one).
+        let dud = in_left(&mut vr, "regen_r1");
+        vr.app
+            .world_mut()
+            .get_mut::<crate::items::Item>(dud)
+            .unwrap()
+            .0
+            .condition = 0.0;
+        vr.app.world_mut().write_message(Combine::all(pen, dud));
+        vr.step(4);
+        assert_eq!(well_of(&mut vr, dud), None, "a spent one isn't loaded");
+        vr.app.world_mut().entity_mut(dud).despawn();
+        vr.step(2);
         // Both good: a third doesn't go.
         vr.app.world_mut().entity_mut(r2).despawn();
         vr.step(2);
