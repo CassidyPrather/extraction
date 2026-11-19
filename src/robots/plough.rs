@@ -774,6 +774,10 @@ fn plough_plate_off(
         let Ok(root) = ploughs.get(d.robot) else {
             continue;
         };
+        info!(
+            "plough: its rail plate prised off at {:.0}",
+            root.translation()
+        );
         let Some(kind) = catalog.kind("plough_plate") else {
             continue;
         };
@@ -783,7 +787,7 @@ fn plough_plate_off(
             &catalog,
             crate::items::SpawnItem {
                 kind,
-                transform: Transform::from_translation(root.transform_point(PLATE_AT))
+                transform: Transform::from_translation(root.transform_point(PLATE_DROP))
                     .with_rotation(rot),
                 condition: PLATE_CONDITION,
             },
@@ -799,6 +803,9 @@ fn plough_plate_off(
 /// The housing plate's middle (local to the root: `art/robots/plough.py`
 /// prints it from the housing's origin), and its state when it comes off.
 pub const PLATE_AT: Vec3 = Vec3::new(0.0, 0.85 + 0.251, -1.95 - 0.499);
+/// Where it falls once it's off: just out in front of the housing, clear of
+/// the housing's own collider (spawned inside it, it would be thrown).
+pub const PLATE_DROP: Vec3 = Vec3::new(0.0, 0.6, -2.85);
 pub const PLATE_CONDITION: f32 = 0.7;
 
 /// The condition of what's on its root at its wreck: its body shrugs off
@@ -1374,6 +1381,9 @@ mod tests {
     fn a_crowbar_takes_its_rail_plate_not_its_hull() {
         use crate::destruction::hooks::{Pried, Pryable};
         let (mut vr, zone, e) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        // (Jammed: running, it would bank what falls in its lane, the
+        // plate with it.)
+        vr.app.world_mut().get_mut::<Plough>(e).unwrap().jammed = 1.0e6;
         vr.stand(zone.on_ground(60.0, 230.0), 0.0);
         vr.step(5);
         let part = |vr: &mut crate::vr_harness::Vr, role| {
