@@ -18,7 +18,7 @@ pub struct SorterLookPlugin;
 
 impl Plugin for SorterLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress, follow, swing_cable).chain());
+        app.add_systems(Update, ((dress, follow, swing_cable).chain(), go_dark));
     }
 }
 
@@ -239,6 +239,66 @@ fn follow(
     }
 }
 
+/// A mesh of a wrecked sorter's already gone dark (or never lit).
+#[derive(Component)]
+struct Dark;
+
+/// A wrecked sorter goes dark: its carriage's cyan strip, its eye and every
+/// other lit tell on it and its arm's fallen pieces, as a dead sentry's
+/// lamp and eye do. (Its look is hung from the model's own materials, which
+/// the robots' eye-dimming doesn't know.)
+#[allow(clippy::type_complexity)]
+fn go_dark(
+    mut commands: Commands,
+    wrecks: Query<Entity, (With<Sorter>, With<super::wreck::Broken>)>,
+    debris: Query<(Entity, &super::wreck::Debris)>,
+    kids: Query<&Children>,
+    lit: Query<&MeshMaterial3d<StandardMaterial>, Without<Dark>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dark: Local<
+        bevy::platform::collections::HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
+    >,
+) {
+    let roots = wrecks.iter().chain(
+        debris
+            .iter()
+            .filter(|(_, d)| d.kind == super::RobotKind::Sorter)
+            .map(|(e, _)| e),
+    );
+    for root in roots {
+        for e in std::iter::once(root).chain(kids.iter_descendants(root)) {
+            let Ok(m) = lit.get(e) else {
+                continue;
+            };
+            let id = m.0.id();
+            if dark.values().any(|h| h.id() == id) {
+                commands.entity(e).insert(Dark);
+                continue;
+            }
+            let h = match dark.get(&id) {
+                Some(h) => h.clone(),
+                None => {
+                    // (Not loaded yet: next frame.)
+                    let Some(src) = materials.get(&m.0) else {
+                        continue;
+                    };
+                    let em = src.emissive;
+                    if em.red + em.green + em.blue < 0.05 {
+                        commands.entity(e).insert(Dark);
+                        continue;
+                    }
+                    let mut out = src.clone();
+                    out.emissive = LinearRgba::BLACK;
+                    let h = materials.add(out);
+                    dark.insert(id, h.clone());
+                    h
+                }
+            };
+            commands.entity(e).insert((MeshMaterial3d(h), Dark));
+        }
+    }
+}
+
 /// A festoon from the bridge's end truck to the carriage: a sag that
 /// deepens as the carriage runs out, swinging back when it stops.
 fn swing_cable(
@@ -362,6 +422,32 @@ mod tests {
             hung - top,
             now - top
         );
+        // Dark: nothing on it or its arm's pieces still lit.
+        let mut all = vec![sorter];
+        let pieces: Vec<Entity> = w
+            .query::<(Entity, &super::super::wreck::Debris)>()
+            .iter(w)
+            .filter(|(_, d)| d.kind == super::super::RobotKind::Sorter)
+            .map(|(e, _)| e)
+            .collect();
+        all.extend(pieces);
+        let mut k = 0;
+        while k < all.len() {
+            if let Some(ch) = w.get::<Children>(all[k]) {
+                all.extend(ch.iter());
+            }
+            k += 1;
+        }
+        let mats = w.resource::<Assets<StandardMaterial>>();
+        let lit: Vec<Entity> = all
+            .into_iter()
+            .filter(|e| {
+                w.get::<MeshMaterial3d<StandardMaterial>>(*e)
+                    .and_then(|m| mats.get(&m.0))
+                    .is_some_and(|m| m.emissive.red + m.emissive.green + m.emissive.blue > 0.05)
+            })
+            .collect();
+        assert!(lit.is_empty(), "its tells dark, but lit: {lit:?}");
         // The grab and both jaws hide when the jaw's seated (Heavy's salvage).
         let tagged = w
             .query::<&super::super::salvage::SeatLook>()
