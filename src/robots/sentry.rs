@@ -1461,4 +1461,33 @@ pub(crate) mod tests {
             "{loose:?}"
         );
     }
+
+    /// Its junction box prised open with a crowbar cuts its power: its lamp
+    /// and eye go dark (`sentry_look::light_sentries` reads `powered`).
+    #[test]
+    fn a_crowbar_in_its_box_cuts_its_power() {
+        use crate::destruction::hooks::{Pried, Pryable};
+        let (mut app, e) = world_with_sentry([40.0, 230.0], 0.0, 160.0);
+        for _ in 0..5 {
+            app.update();
+        }
+        let b = app
+            .world_mut()
+            .query::<(Entity, &SentryPiece, &OfSentry)>()
+            .iter(app.world())
+            .find(|(_, p, o)| matches!(p, SentryPiece::Box) && o.0 == e)
+            .map(|(b, ..)| b)
+            .unwrap();
+        assert!(app.world().get::<Pryable>(b).is_some(), "a seam on its box");
+        assert!(app.world().get::<Sentry>(e).unwrap().powered);
+        for _ in 0..60 {
+            app.world_mut().write_message(Pried {
+                target: b,
+                torque: 1.0e4,
+                by: Entity::PLACEHOLDER,
+            });
+            app.update();
+        }
+        assert!(!app.world().get::<Sentry>(e).unwrap().powered, "dark");
+    }
 }

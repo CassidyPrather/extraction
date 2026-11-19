@@ -1152,6 +1152,12 @@
             tags: ["electronics", "metal"],
         ),
         (
+            id: "plough_plate", dims: Some((3.08, 0.211, 0.18)), name: "Plough rail plate",
+            description: "The chevroned plate off a snow plough's auger housing, three metres of black steel striped orange. Two people to carry it, or one who drags.",
+            category: RobotPart, size: Bulky, mass: 28.0, bulk: 10.0,
+            tags: ["metal", "steel"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,

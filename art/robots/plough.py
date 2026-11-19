@@ -468,13 +468,16 @@ def housing(lod):
     nrm = Vector((0, math.sin(tr), -math.cos(tr)))
     tan = Vector((0, math.cos(tr), math.sin(tr)))
     zc, yc = at(th, 0.57)
-    p.box((3.08, 0.06, 0.24), (0, 0, 0), "Dark", bevel=bev, segs=1,
+    # (Its own object, `housing_plate`: it comes off with a crowbar, salvage,
+    # `plough_plate`.)
+    q = Part("housing_plate" + suffix(lod), origin=HOUSING)
+    q.box((3.08, 0.06, 0.24), (0, 0, 0), "Dark", bevel=bev, segs=1,
           xf=T(0, yc, zc) @ RX(tr - math.pi / 2))
     rail = (Vector((0, yc, zc)) + nrm * 0.03, Vector((1, 0, 0)), tan, nrm)
     if lod < 2:
-        chevrons(p, rail, 1.5, -0.1, 0.1, width=0.07, pitch=0.17)
+        chevrons(q, rail, 1.5, -0.1, 0.1, width=0.07, pitch=0.17)
     else:
-        plate(p, [(-1.5, -0.08), (1.5, -0.08), (1.5, 0.08), (-1.5, 0.08)], rail, -0.001, 0.006,
+        plate(q, [(-1.5, -0.08), (1.5, -0.08), (1.5, 0.08), (-1.5, 0.08)], rail, -0.001, 0.006,
               "Warn")
     # The cutting edge along the bottom at the back of the opening.
     p.prism([(-1.85, 0.32), (-1.79, 0.30), (-1.90, 0.03), (-1.97, 0.05)], -1.5, 1.5, "Steel",
@@ -523,7 +526,7 @@ def housing(lod):
         # A hazard stripe on the trunk's downhill side.
         zs = -1.86 + (CZ + 1.86) * (1.62 - 1.15) / (y_top - 1.15)
         p.box((0.006, 0.07, 0.24), (CX + hx + 0.0025, 1.62, zs), "Warn", segs=1)
-    return p
+    return [p, q]
 
 
 def chute(lod):
@@ -697,7 +700,7 @@ def bank(lod):
 
 def build(lod):
     out = [hull(lod), track(-1, lod), track(1, lod), sprocket(-1, lod), sprocket(1, lod),
-           auger(lod), housing(lod), motor(lod), chute(lod), beacon(lod), eye(lod), hatch(lod),
+           auger(lod), *housing(lod), motor(lod), chute(lod), beacon(lod), eye(lod), hatch(lod),
            cell(lod)]
     if lod < 2:
         out.append(bank(lod))
@@ -708,7 +711,8 @@ def items():
     """The salvage: the robot's own cell, eye, beacon, a track's drive
     sprocket and the auger's motor (what you saw on it is what comes off)."""
     names = {"cell": "plough_cell", "eye": "plough_eye", "beacon": "plough_beacon",
-             "sprocket_r": "plough_track_drive", "auger_motor": "plough_auger_motor"}
+             "sprocket_r": "plough_track_drive", "auger_motor": "plough_auger_motor",
+             "housing_plate": "plough_plate"}
     out = []
     for p in build(0):
         if isinstance(p, Part) and p.name in names:
