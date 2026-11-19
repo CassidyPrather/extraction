@@ -544,6 +544,22 @@ pub const SNARE_RAIN_HOLD: (f32, f32) = (1.2, 2.8);
 /// m, for this much health.
 pub const SNARE_WET_REACH: f32 = 1.5;
 pub const SNARE_WET_SHOCK: f32 = 8.0;
+
+/// How far inside a snare's rim a hand held above its heart must come to
+/// set it off (m): a resting hand carried past brushes the rim, a reach
+/// pushes in.
+pub const SNARE_RIM_BRUSH: f32 = 0.3;
+
+/// Whether a hand at `hand` has reached into a snare whose heart is at
+/// `heart`: down to the heart's height or below anywhere inside its
+/// radius (reaching down for its stone), or, held higher, well in past
+/// its rim. A hand brushing the rim at chest height as you pass (in a
+/// seed-5 run, 2 cm inside, 0.5 m above the heart, the body outside) set
+/// it off for 22 with nothing to warn of it.
+pub fn hand_reaches_in(hand: Vec3, heart: Vec3, radius: f32) -> bool {
+    let d = hand.distance(heart);
+    d < radius && (hand.y <= heart.y || d < radius - SNARE_RIM_BRUSH)
+}
 /// ...and how hard it shoves it along its way, m/s: out of the column, and
 /// a featherstone out of it settles to chest height
 /// (`artifacts::featherstones`), where a hand takes it.
@@ -760,7 +776,7 @@ fn snares(
             .collect();
         let reaching: Vec<Entity> = hands
             .iter()
-            .filter(|(g, _)| g.translation().distance(c) < a.radius)
+            .filter(|(g, _)| hand_reaches_in(g.translation(), c, a.radius))
             .map(|(_, p)| p.parent())
             .collect();
         // Wading in the water it charges (`snare_water`): its reach runs
@@ -1521,6 +1537,38 @@ mod tests {
         let gained = (storm - calm).dot(along);
         eprintln!("lift pop: calm {calm:?}, storm {storm:?}, {gained:.2} m downwind");
         assert!(gained > 0.6, "the storm carried you {gained:.2} m downwind");
+    }
+
+    /// A snare fires at a hand reached in, not at one brushing its rim.
+    #[test]
+    fn a_hand_brushing_a_snares_rim_is_not_a_reach() {
+        let heart = Vec3::new(0.0, 0.8, 0.0);
+        let r: f32 = 1.92;
+        // The seed-5 graze: 2 cm inside the rim, 0.5 m above the heart.
+        let over = Vec3::Y * 0.5;
+        let rim = heart + over + Vec3::X * ((r - 0.02).powi(2) - 0.25).sqrt();
+        assert!(!hand_reaches_in(rim, heart, r), "a brush at the rim");
+        // Reaching down for its stone, near the rim and at its heart.
+        assert!(hand_reaches_in(
+            heart + Vec3::new(r - 0.1, -0.5, 0.0),
+            heart,
+            r
+        ));
+        assert!(hand_reaches_in(heart + Vec3::new(0.2, -0.6, 0.0), heart, r));
+        // At the heart's height, well in; and a straight arm at chest
+        // height pushed well in.
+        assert!(hand_reaches_in(heart + Vec3::X * (r - 0.5), heart, r));
+        assert!(hand_reaches_in(
+            heart + Vec3::new(r - 0.8, 0.5, 0.0),
+            heart,
+            r
+        ));
+        // Outside is outside, at any height.
+        assert!(!hand_reaches_in(
+            heart + Vec3::new(r + 0.05, -0.5, 0.0),
+            heart,
+            r
+        ));
     }
 
     /// A round striking a stone a lift holds knocks it out: it drops.
