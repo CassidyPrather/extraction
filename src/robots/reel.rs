@@ -484,6 +484,32 @@ fn reel(
                 commands.entity(e).remove::<Senses>().remove::<Brain>();
                 e
             }
+            "dirigibledown" => {
+                // A dirigible holed in two cells, coming down 24 m off,
+                // side-on to you: it settles on the grass with its cells
+                // going slack over the gondola (`dirigible_look`).
+                let d = eye + flat * 24.0;
+                let at = Vec3::new(
+                    d.x,
+                    zone.ground(d.x, d.z) + super::dirigible::RADIUS + 1.6,
+                    d.z,
+                );
+                let e = super::dirigible::spawn_dirigible(&mut commands, at, job(at));
+                let yaw = right.x.atan2(right.z);
+                commands.entity(e).remove::<Senses>().insert((
+                    Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)),
+                    super::dirigible::Dirigible {
+                        cells: [false, true, false],
+                        cable: 0.0,
+                        pod: None,
+                        velocity: Vec3::ZERO,
+                        yaw,
+                        report_cooldown: 1.0e6,
+                        sinking: true,
+                    },
+                ));
+                e
+            }
             "engineer" | "engineerwork" => {
                 // The engineer (#98) 5 m off, side-on to you: as it walks
                 // out (`engineer`), or surveying with its lamp lit and
