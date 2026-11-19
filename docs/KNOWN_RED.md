@@ -28,8 +28,8 @@ How it works:
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
-| Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s). Anomalies traced it (19 Nov): the Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot walks the snare's edge with its hand over the drawn mark while the snare is at full crackle, then stands through the 3.5 s recharge. The tell is shown and early, so no anomaly change. Also: raid 5 struck two Player entities 3.9 m apart in one discharge | 6d425f1d (Onboarding re-measure) | Robot minds (bot route: keep hands off a drawn snare mark, step out in the recharge); Onboarding (the second Player entity) | snare unchanged by ruling: a hand over the mark is in |
-| `robots::recall::every_robot_keyed_local_is_in_the_table` + `soak::entity_keyed_locals_forget_what_is_gone`: src/robots/sorter_look.rs:177 `waited` Local<HashMap<Entity,..>> neither in recall/NOT_MEMORY_LOCALS nor pruned | 33580e7a (lib357) | Robot bodies | carriage-motor dressing; prune on despawn + NOT_MEMORY_LOCALS line (or BOUNDED with why) |
+| Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s), Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot's resting hand (chest height, 0.5 m above the heart) grazes 1-3 cm inside the rim while its body is 2.1 m out: a passing brush, not a reach. Ruling changed 19 Nov 12:00: a brush at the rim doesn't fire; a real reach (down for the stone, or in toward the heart) does. No second Player entity (Anomalies mixed two worlds' logs) | 6d425f1d (Onboarding re-measure) | Anomalies (reach margin + tests) | |
+| `soak::chaos::chaos_monkey_short`: 2 items off the map after a player teleport. (a) training_yard seed 1: pm_pistol held in Left, teleport to door (-27.6,12.1,93.2), item ends at (-21.6,20.2,131.0). (b) marrow_creek seed 3: after a teleport, the toz_double is stowed "into pack at (-341.6,21.4,-54.6)" while the player is at about (-121,13.6,-92), then ends at (-311.8,35.3,-59.6). Looks like the pack/body sockets don't follow the rig on a teleport (no second Player: that was a log mix-up) | f504d325 (lib360) | Hands (held items and sockets across a teleport) | |
 
 ## Logged, not failing a check
 
@@ -45,6 +45,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| `robots::recall` + `soak::entity_keyed_locals_forget_what_is_gone` (sorter_look `waited`) | bcf4a1dc (Robot bodies), green on lib360 |
 | `capture::checks::models_are_a_believable_size` items/plough_plate 3.08 m | 39c11074 (Heavy: two 1.54 m halves), green on lib357 |
 | `asset_path_tests::game_code_never_reads_from_the_build_machine` (grips.rs CARGO_MANIFEST_DIR) | 81b48bb7 (World models), green on lib354 |
 | first_jobs cautious yard WalkTo timeouts near gate 4 | 0ba2aadb (Onboarding) |

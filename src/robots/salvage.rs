@@ -195,6 +195,13 @@ pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
 /// prints it), and the bolts through its stalk.
 pub const SORTER_HEAD_MID: Vec3 = Vec3::new(0.0, 0.085, -0.01);
 pub const SORTER_HEAD_BOLTS: usize = 2;
+/// A fallen Sorter's carriage (half extents, local; it lies on its belly,
+/// its underside on the ground), and where its head and servo pack are
+/// seated on it: against its front and its flank, on the ground beside it,
+/// where a hand reaches them (what hung under it is under it on a wreck).
+pub const SORTER_CARRIAGE_HALF: Vec3 = Vec3::new(0.7, 0.3, 0.6);
+pub const SORTER_HEAD_ON_WRECK: Vec3 = Vec3::new(0.0, -0.3 + 0.19, -0.6 - 0.17);
+pub const SORTER_SERVO_ON_WRECK: Vec3 = Vec3::new(0.7 + 0.44, -0.3 + 0.18, 0.0);
 /// The Sorter's carriage motor's middle (on the carriage's top), its bolts,
 /// and its state (the carriage shot through; its motor on top, worn), and
 /// the key its look is hidden by (`sorter_look`'s `carriage_motor` holder).
@@ -363,16 +370,20 @@ pub struct WreckParts<'a> {
 pub fn rows(w: &WreckParts) -> Vec<Row> {
     let mut out = Vec::new();
     // The Sorter's servo pack, bolted on at its shoulder.
+    // (Its wreck lies on its belly, the shoulder under it: the pack's seated
+    // where a hand reaches it, laid on its side against the carriage's
+    // flank, bolted to it.)
     if let Some(sv) = w.servo {
+        let side = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2);
         out.push(Row {
             item: "sorter_servo_pack",
-            at: Transform::from_translation(sv.local),
+            at: Transform::from_translation(SORTER_SERVO_ON_WRECK).with_rotation(side),
             size: 1.0,
             health: sv.health,
             fix: Fix::Bolts {
                 n: SORTER_BOLTS,
-                centre: sv.local + Vec3::Y * 0.2,
-                face: Quat::IDENTITY,
+                centre: Vec3::new(SORTER_CARRIAGE_HALF.x + 0.02, SORTER_SERVO_ON_WRECK.y, 0.0),
+                face: Quat::from_rotation_arc(Vec3::Y, Vec3::X),
                 radius: 0.15,
             },
             hot: false,
@@ -383,16 +394,18 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
     // stalk: it comes off in its place (its own look goes with its part).
     if w.kind == RobotKind::Sorter {
         if let Some(&(e, _, health, at, _)) = w.parts.iter().find(|p| p.1 == PartRole::Sensor) {
-            let mid = at.rotation * SORTER_HEAD_MID;
+            // (Its wreck on its belly, the head that hung under its front
+            // is seated against the front, on the ground, in reach.)
+            let _ = at;
             out.push(Row {
                 item: "sorter_head",
-                at: Transform::from_translation(at.translation + mid).with_rotation(at.rotation),
+                at: Transform::from_translation(SORTER_HEAD_ON_WRECK),
                 size: 1.0,
                 health,
                 fix: Fix::Bolts {
                     n: SORTER_HEAD_BOLTS,
-                    centre: at.translation + at.rotation * Vec3::Y * 0.2,
-                    face: at.rotation,
+                    centre: SORTER_HEAD_ON_WRECK + Vec3::new(0.0, 0.0, 0.17),
+                    face: Quat::from_rotation_arc(Vec3::Y, Vec3::Z),
                     radius: 0.04,
                 },
                 hot: false,
@@ -664,7 +677,9 @@ fn seat_sorter_jaw(
             Without<super::wreck::SalvagePart>,
         ),
     >,
-    settled: Query<(Entity, &super::wreck::Debris), Added<super::wreck::Settled>>,
+    settled: Query<(Entity, &super::wreck::Debris, &GlobalTransform), Added<super::wreck::Settled>>,
+    sorters: Query<&GlobalTransform, With<super::sorter::Sorter>>,
+    zone: Option<Res<crate::world::Zone>>,
     grabs: Query<(&SeatLook, &ChildOf)>,
     mut looks: Query<(&SeatLook, &mut Visibility)>,
     catalog: Option<Res<Catalog>>,
@@ -688,12 +703,39 @@ fn seat_sorter_jaw(
             });
         }
     }
-    for (piece, d) in &settled {
+    for (piece, d, pg) in &settled {
         if d.kind != RobotKind::Sorter || d.piece != super::wreck::Piece::Arm(1) {
             continue;
         }
-        let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
-        fit(&mut commands, &catalog, piece, sorter_jaw_row(), &look);
+        let wrist = pg.transform_point(Vec3::Y * super::sorter::LOWER * 0.5);
+        // The carriage nearest, if its wreck lies over the wrist: there the
+        // grab's out of sight and a hand's reach, so it tore off in the fall
+        // and lies clear of the carriage, on the forearm's line.
+        let under = sorters
+            .iter()
+            .min_by(|a, b| {
+                a.translation()
+                    .distance(wrist)
+                    .total_cmp(&b.translation().distance(wrist))
+            })
+            .and_then(|c| torn_clear(c, wrist, pg.transform_point(Vec3::ZERO)));
+        if let (Some(at), Some(kind)) = (under, catalog.kind("sorter_jaw")) {
+            let ground = zone.as_ref().map_or(at.y, |z| z.ground(at.x, at.z));
+            info!("salvage: a sorter's grab torn off in its fall, clear of its carriage");
+            spawn_item(
+                &mut commands,
+                &catalog,
+                SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at.with_y(ground + 0.25)),
+                    condition: condition(SORTER_JAW_HEALTH),
+                },
+            );
+        } else {
+            let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+            info!("salvage: a sorter's grab seated on its fallen forearm");
+            fit(&mut commands, &catalog, piece, sorter_jaw_row(), &look);
+        }
         // Its grab's look, hung on this piece: hidden, with its jaws.
         let robot = grabs
             .iter()
@@ -708,6 +750,31 @@ fn seat_sorter_jaw(
         }
     }
 }
+
+/// Where a Sorter's grab lies, torn off, if its wrist (`wrist`, world) came
+/// to rest within its fallen carriage's footprint (`carriage`, its wreck's
+/// place): out from the carriage's middle past its edge, along the forearm
+/// from its middle (`mid`) to the wrist where that points out, else
+/// straight out. `None`: the wrist is clear, the grab stays on it.
+pub fn torn_clear(carriage: &GlobalTransform, wrist: Vec3, mid: Vec3) -> Option<Vec3> {
+    let local = carriage.affine().inverse().transform_point3(wrist);
+    let inside = local.x.abs() < SORTER_FOOTPRINT.x && local.z.abs() < SORTER_FOOTPRINT.y;
+    if !inside {
+        return None;
+    }
+    let c = carriage.translation();
+    let flat = |v: Vec3| Vec3::new(v.x, 0.0, v.z);
+    let along = flat(wrist - mid).normalize_or_zero();
+    let out = flat(wrist - c).normalize_or(Vec3::X);
+    let dir = if along.dot(out) > 0.0 { along } else { out };
+    Some(c + dir * SORTER_CLEAR)
+}
+
+/// A fallen Sorter's carriage footprint (half extents, X and Z, local to
+/// it: the carriage 1.4 x 1.2, and a hand's clearance), and how far from
+/// its middle a torn-off grab lies (past its corner, clear of its collider).
+pub const SORTER_FOOTPRINT: Vec2 = Vec2::new(0.85, 0.75);
+pub const SORTER_CLEAR: f32 = 1.5;
 
 /// The Sorter's grab on its forearm's piece (local: the piece's +Y runs to
 /// the wrist, `LOWER` long; the grab hangs on past it, turned to hang that

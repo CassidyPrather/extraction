@@ -974,6 +974,18 @@ fn wreck_sorters(
             AngularDamping(0.8),
             Friction::new(0.8),
         ));
+        // Its head (under its front) and its arm's part don't hold it up
+        // off the ground: the arm comes down as its own pieces, the head is
+        // taken as salvage, and propped on the head's collider the carriage
+        // hung a hand clear of the grass. It settles on its own underside.
+        for c in children.iter() {
+            if parts
+                .get(c)
+                .is_ok_and(|p| matches!(p.role, PartRole::Sensor | PartRole::Leg(0)))
+            {
+                commands.entity(c).insert(ColliderDisabled);
+            }
+        }
         // The arm, if it's still on, comes down with it on its joints.
         let arm = children.iter().find(|c| {
             parts
@@ -1059,6 +1071,7 @@ fn land(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
 
     #[test]
     fn the_arm_keeps_its_lengths_and_the_throw_lands() {
@@ -1213,6 +1226,19 @@ mod tests {
         assert!(t.translation.is_finite());
         let over = t.translation.y - hall.translation.y;
         assert!(over < 1.2, "it came down ({over:.2} m up)");
+        // On its own underside (or side), not propped a hand clear of the
+        // floor on its head: its carriage box's lowest corner on the floor.
+        let low = [-1.0f32, 1.0]
+            .iter()
+            .flat_map(|x| [-1.0f32, 1.0].map(move |y| (*x, y)))
+            .flat_map(|(x, y)| [-1.0f32, 1.0].map(move |z| Vec3::new(x * 0.7, y * 0.3, z * 0.6)))
+            .map(|c| t.transform_point(c).y)
+            .fold(f32::MAX, f32::min);
+        assert!(
+            low - hall.translation.y < 0.08,
+            "it lies on the floor, its lowest corner {:.2} m up",
+            low - hall.translation.y
+        );
         assert_eq!(
             app.world().get::<RigidBody>(sorter),
             Some(&RigidBody::Static),
@@ -1241,25 +1267,16 @@ mod tests {
             })
             .collect();
         assert_eq!(seats.len(), 1, "its servo pack seated");
-        // And its grab on its fallen forearm, on its two cut leads (#105).
-        let jaws: Vec<Entity> = app
+        // And its grab: on its fallen forearm on its two cut leads, or, its
+        // wrist come down under the carriage, torn off and lying clear
+        // (#105; `a_grab_under_its_carriage_tears_off_clear`).
+        let jaws = app
             .world_mut()
-            .query::<(&super::super::salvage::SalvageSeat, &ChildOf)>()
+            .query::<&crate::items::Item>()
             .iter(app.world())
-            .filter(|(s, _)| s.hold == super::super::salvage::Hold::Cables)
-            .map(|(s, c)| (s.item, c.parent()))
-            .filter(|(item, parent)| {
-                app.world()
-                    .get::<crate::items::Item>(*item)
-                    .is_some_and(|it| catalog.get(it.0.kind).id == "sorter_jaw")
-                    && app
-                        .world()
-                        .get::<Debris>(*parent)
-                        .is_some_and(|d| d.piece == Piece::Arm(1))
-            })
-            .map(|(item, _)| item)
-            .collect();
-        assert_eq!(jaws.len(), 1, "its grab seated on its forearm");
+            .filter(|it| catalog.get(it.kind()).id == "sorter_jaw")
+            .count();
+        assert_eq!(jaws, 1, "its grab, seated or torn off");
         let (seat, item) = seats[0];
         let it = app.world().get::<crate::items::Item>(item).unwrap();
         assert_eq!(catalog.get(it.0.kind).id, "sorter_servo_pack");
@@ -1276,5 +1293,61 @@ mod tests {
             .filter(|b| b.seat == seat)
             .count();
         assert_eq!(bolts, super::super::salvage::SORTER_BOLTS);
+    }
+
+    /// Its forearm folds back under its carriage as it falls: there its grab
+    /// is out of sight and reach, so it tore off and lies loose, clear of the
+    /// carriage, on the ground, in a hand's reach from standing, inside no
+    /// other collider (salvage, #105: seen and reached from standing).
+    #[test]
+    fn a_grab_under_its_carriage_tears_off_clear() {
+        let (mut app, sorter, _) = app_with_sorter();
+        for _ in 0..90 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Robot>(sorter).unwrap().wrecked = true;
+        // (Coming down one end first, its arm folds back under it: its
+        // wrist rests under the carriage, as in `docs/robots/wreck_sorter.png`.)
+        for _ in 0..(90 * 16) {
+            app.update();
+        }
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let carriage = *app.world().get::<GlobalTransform>(sorter).unwrap();
+        let jaws: Vec<(Entity, Vec3, bool)> = app
+            .world_mut()
+            .query::<(
+                Entity,
+                &crate::items::Item,
+                &GlobalTransform,
+                Has<crate::interact::InSocket>,
+            )>()
+            .iter(app.world())
+            .filter(|(_, i, ..)| catalog.get(i.kind()).id == "sorter_jaw")
+            .map(|(e, _, g, seated)| (e, g.translation(), seated))
+            .collect();
+        assert_eq!(jaws.len(), 1, "{jaws:?}");
+        let (jaw, at, seated) = jaws[0];
+        assert!(!seated, "torn off, loose");
+        let local = carriage.affine().inverse().transform_point3(at);
+        assert!(
+            local.x.abs() > 0.7 || local.z.abs() > 0.6,
+            "clear of the carriage: {local}"
+        );
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let over = at.y - zone.ground(at.x, at.z);
+        assert!(
+            (-0.05..crate::sim::indoor::MAX_REACH_UP).contains(&over),
+            "on the ground in reach: {over:.2}"
+        );
+        let inside: Vec<Entity> = app
+            .world_mut()
+            .run_system_once(move |q: SpatialQuery| {
+                q.point_intersections(
+                    at,
+                    &SpatialQueryFilter::default().with_excluded_entities([jaw]),
+                )
+            })
+            .unwrap();
+        assert!(inside.is_empty(), "inside nothing: {inside:?}");
     }
 }
