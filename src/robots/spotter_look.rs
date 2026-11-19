@@ -159,7 +159,7 @@ fn dress_spotters(
         for c in children.iter() {
             match parts.get(c).map(|p| p.role) {
                 Ok(PartRole::Sensor) => {
-                    hang(
+                    let eye = hang(
                         &mut commands,
                         &mut materials,
                         None,
@@ -167,6 +167,12 @@ fn dress_spotters(
                         "eye",
                         Transform::IDENTITY,
                     );
+                    // (Hidden once its camera is seated in its place,
+                    // `spotter_salvage`.)
+                    commands.entity(eye).insert(super::salvage::SeatLook {
+                        robot: e,
+                        role: PartRole::Sensor,
+                    });
                 }
                 Ok(PartRole::Armour(_)) => {
                     hang(
@@ -205,7 +211,7 @@ fn dress_spotters(
         ));
         let _ = GONDOLA;
     }
-    for (e, piece, _, cuttable) in &pieces {
+    for (e, piece, of, cuttable) in &pieces {
         match piece {
             SpotterPiece::Winch => {
                 hang(
@@ -216,6 +222,20 @@ fn dress_spotters(
                     "winch",
                     Transform::from_xyz(0.0, -WINCH_PART_UP, 0.0),
                 );
+                // Its drum and motor, bolted to the skid: hidden once
+                // they're seated as salvage in their place.
+                let drum = hang(
+                    &mut commands,
+                    &mut materials,
+                    None,
+                    e,
+                    "winch_drum",
+                    Transform::from_xyz(0.0, -WINCH_PART_UP, 0.0),
+                );
+                commands.entity(drum).insert(super::salvage::SeatLook {
+                    robot: of.0,
+                    role: PartRole::Armour(40),
+                });
             }
             SpotterPiece::Tether(_) => {
                 // Steel cable (`lines`, #101): a grip sleeve on a stretch
@@ -316,24 +336,138 @@ fn beacons(
     }
 }
 
-/// Holed, the envelope goes slack: it sags as it sinks and lies flat once
-/// it's down.
+/// Holed, the envelope goes slack: it sags as it sinks, and once it's down
+/// it lies draped on the ground (`drape`), its fabric spread and creased,
+/// not a balloon squashed.
+#[derive(Component)]
+struct Draped;
+
+#[allow(clippy::type_complexity)]
 fn slack_envelopes(
+    mut commands: Commands,
     spotters: Query<(&Spotter, &Children)>,
-    mut envelopes: Query<&mut Transform, With<EnvelopeMesh>>,
+    mut envelopes: Query<(Entity, &mut Transform, &Children, Has<Draped>), With<EnvelopeMesh>>,
+    mut prims: Query<&mut Mesh3d>,
+    meshes: Option<ResMut<Assets<Mesh>>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
+    let mut meshes = meshes;
     for (s, children) in &spotters {
-        let want = match s.float {
-            Float::Sinking => Vec3::new(1.05, 0.7, 1.05),
-            Float::Down => Vec3::new(1.4, 0.28, 1.4),
-            _ => continue,
-        };
         for c in children.iter() {
-            if let Ok(mut t) = envelopes.get_mut(c) {
-                t.scale = t.scale.lerp(want, (0.6 * dt).min(1.0));
+            let Ok((e, mut t, prim_children, draped)) = envelopes.get_mut(c) else {
+                continue;
+            };
+            match s.float {
+                Float::Sinking => {
+                    let want = Vec3::new(1.05, 0.7, 1.05);
+                    t.scale = t.scale.lerp(want, (0.6 * dt).min(1.0));
+                }
+                Float::Down if !draped => {
+                    t.scale = Vec3::ONE;
+                    if let Some(meshes) = meshes.as_deref_mut() {
+                        for p in prim_children.iter() {
+                            let Ok(mut m) = prims.get_mut(p) else {
+                                continue;
+                            };
+                            if let Some(d) = meshes.get(&m.0).map(drape) {
+                                m.0 = meshes.add(d);
+                            }
+                        }
+                    }
+                    commands.entity(e).insert(Draped);
+                }
+                _ => {}
             }
         }
+    }
+}
+
+/// An envelope's mesh, slack on the ground (local to the spotter, whose
+/// middle is `ENVELOPE_R * 0.5` over the ground once it's down).
+fn drape(mesh: &Mesh) -> Mesh {
+    let mut out = mesh.clone();
+    if let Some(bevy::mesh::VertexAttributeValues::Float32x3(ps)) =
+        out.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    {
+        for p in ps.iter_mut() {
+            *p = draped(Vec3::from(*p)).to_array();
+        }
+    }
+    out.remove_attribute(Mesh::ATTRIBUTE_TANGENT);
+    if out.indices().is_some() {
+        out.compute_smooth_normals();
+    } else {
+        out.compute_flat_normals();
+    }
+    out
+}
+
+/// Where a point of the inflated envelope (local, centred on its middle)
+/// lies once it's slack on the ground: pressed down to a fraction of its
+/// height, spread wider at its foot as fabric falls outward, creased along
+/// its gores, drooping at its rim, and sagging more on one side, where the
+/// last of the gas sits.
+pub fn draped(p: Vec3) -> Vec3 {
+    use super::spotter::ENVELOPE_R;
+    let ground = -ENVELOPE_R * 0.5 + 0.015;
+    // (Its foot, the load collar, to the crown's valve cap.)
+    let (base, tall) = (-1.8, 3.6);
+    let up = ((p.y - base) / tall).clamp(0.0, 1.0);
+    let spread = 1.22 + 0.2 * (1.0 - up);
+    let (x, z) = (p.x * spread, p.z * spread);
+    let r = (x * x + z * z).sqrt();
+    let a = z.atan2(x);
+    let mut y = ground + up * DRAPED_TALL;
+    // Creases along the gores, and across them, deeper toward the rim.
+    y +=
+        (0.05 * (a * 12.0 + p.y * 2.5).sin() + 0.025 * (r * 7.0).sin()) * (r / ENVELOPE_R).min(1.0);
+    // The rim droops to the ground.
+    let rim = ((r - ENVELOPE_R) / (0.6 * ENVELOPE_R)).clamp(0.0, 1.0);
+    y -= 0.2 * rim * rim * (3.0 - 2.0 * rim);
+    // One side fuller than the other.
+    y += 0.05 * (x - 0.4 * z);
+    Vec3::new(x, y.max(ground), z)
+}
+
+/// A slack envelope's height off the ground at its crown (m).
+pub const DRAPED_TALL: f32 = 0.42;
+
+#[cfg(test)]
+mod drape_tests {
+    use super::*;
+    use crate::robots::spotter::ENVELOPE_R;
+
+    /// Down, its envelope lies on the ground, not hovering: every point of
+    /// the inflated shape lands between the ground and a hand's height, its
+    /// rim on the ground, and it spreads wider than it flew.
+    #[test]
+    fn a_slack_envelope_lies_on_the_ground() {
+        let ground = -ENVELOPE_R * 0.5;
+        let mut lowest_rim = f32::MAX;
+        let mut widest = 0.0f32;
+        for i in 0..24 {
+            for j in 0..=12 {
+                let a = i as f32 / 24.0 * std::f32::consts::TAU;
+                let v = j as f32 / 12.0 * std::f32::consts::PI;
+                let p = Vec3::new(
+                    ENVELOPE_R * v.sin() * a.cos(),
+                    -1.6 * v.cos(),
+                    ENVELOPE_R * v.sin() * a.sin(),
+                );
+                let d = draped(p);
+                assert!(
+                    (ground..ground + 0.65).contains(&d.y),
+                    "{p} lies at {} over the ground",
+                    d.y - ground
+                );
+                if j == 6 {
+                    lowest_rim = lowest_rim.min(d.y - ground);
+                }
+                widest = widest.max(d.xz().length());
+            }
+        }
+        assert!(lowest_rim < 0.1, "its rim on the ground: {lowest_rim}");
+        assert!(widest > ENVELOPE_R * 1.2, "spread: {widest}");
     }
 }

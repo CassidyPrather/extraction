@@ -79,6 +79,7 @@ impl Plugin for SalvagePlugin {
                     tag_pieces,
                     seat_pieces,
                     cooked_salvage,
+                    dirigible_salvage,
                     char_looks,
                 )
                     .chain(),
@@ -189,6 +190,17 @@ pub const CELL_AT: Vec3 = Vec3::new(0.0, 0.3, 0.12);
 pub const HOUND_CELL_AT: Vec3 = Vec3::new(0.0, 0.14, 0.08);
 /// A grappler's launcher (its item's middle) from its boom's head pin.
 pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
+/// The Sorter's head's middle from its part's origin (`art/robots/sorter.py`
+/// prints it), and the bolts through its stalk.
+pub const SORTER_HEAD_MID: Vec3 = Vec3::new(0.0, 0.085, -0.01);
+pub const SORTER_HEAD_BOLTS: usize = 2;
+/// The Sorter's carriage motor's middle (on the carriage's top), its bolts,
+/// and its state (the carriage shot through; its motor on top, worn), and
+/// the key its look is hidden by (`sorter_look`'s `carriage_motor` holder).
+pub const SORTER_MOTOR_AT: Vec3 = Vec3::new(-0.33, 0.464, 0.0);
+pub const SORTER_MOTOR_BOLTS: usize = 4;
+pub const SORTER_MOTOR_HEALTH: f32 = 0.7;
+pub const SORTER_MOTOR_LOOK: PartRole = PartRole::Rotor(0);
 /// Bolts through a launcher's flange onto its boom.
 pub const LAUNCHER_BOLTS: usize = 4;
 
@@ -365,6 +377,43 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
             hot: false,
             replaces: None,
         });
+    }
+    // The Sorter's scanning head, bolted under its carriage's front by its
+    // stalk: it comes off in its place (its own look goes with its part).
+    if w.kind == RobotKind::Sorter {
+        if let Some(&(e, _, health, at, _)) = w.parts.iter().find(|p| p.1 == PartRole::Sensor) {
+            let mid = at.rotation * SORTER_HEAD_MID;
+            out.push(Row {
+                item: "sorter_head",
+                at: Transform::from_translation(at.translation + mid).with_rotation(at.rotation),
+                size: 1.0,
+                health,
+                fix: Fix::Bolts {
+                    n: SORTER_HEAD_BOLTS,
+                    centre: at.translation + at.rotation * Vec3::Y * 0.2,
+                    face: at.rotation,
+                    radius: 0.04,
+                },
+                hot: false,
+                replaces: (e != Entity::PLACEHOLDER).then_some(e),
+            });
+        }
+        // Its travel drive, bolted on the carriage's top.
+        out.push(Row {
+            item: "sorter_carriage_motor",
+            at: Transform::from_translation(SORTER_MOTOR_AT),
+            size: 1.0,
+            health: SORTER_MOTOR_HEALTH,
+            fix: Fix::Bolts {
+                n: SORTER_MOTOR_BOLTS,
+                centre: SORTER_MOTOR_AT - Vec3::Y * 0.09,
+                face: Quat::IDENTITY,
+                radius: 0.25,
+            },
+            hot: false,
+            replaces: None,
+        });
+        return out;
     }
     if w.kind == RobotKind::Drone {
         drone_rows(w, &mut out);
@@ -583,9 +632,11 @@ fn fit_salvage(
                 }
             }
             // A part's look drawn off the part (`SeatLook`) goes with it.
+            let keyed = (row.item == "sorter_carriage_motor").then_some(SORTER_MOTOR_LOOK);
             if let Some(role) = row
                 .replaces
                 .and_then(|r| on.iter().find(|o| o.0 == r).map(|o| o.1))
+                .or(keyed)
             {
                 for (l, mut vis) in &mut seat_looks {
                     if l.robot == e && l.role == role {
@@ -596,6 +647,159 @@ fn fit_salvage(
             fit(&mut commands, &catalog, e, row, &look);
         }
     }
+}
+
+/// A downed dirigible's wreck is what was on it (#105), not a table's
+/// rolls: wrecked, it's `Salvaged` at once (nothing rolled while it sinks);
+/// down, a gas valve bolted on the flank of each cell, its gondola's cell
+/// by hand (live), its eye taken off the gondola's front (its part, under
+/// the gondola, comes to lie in the ground), and its envelope's fabric and
+/// a piece of its frame lying loose.
+#[derive(Component)]
+struct DirigibleSeated;
+
+#[allow(clippy::type_complexity)]
+fn dirigible_salvage(
+    mut commands: Commands,
+    ships: Query<
+        (
+            Entity,
+            &super::dirigible::Dirigible,
+            &super::Robot,
+            &Children,
+            &GlobalTransform,
+            Has<super::Salvaged>,
+        ),
+        Without<DirigibleSeated>,
+    >,
+    parts: Query<&RobotPart>,
+    catalog: Option<Res<Catalog>>,
+    mut meshes: Option<ResMut<Assets<Mesh>>>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+) {
+    let Some(catalog) = catalog else {
+        return;
+    };
+    for (e, d, robot, children, g, salvaged) in &ships {
+        if !robot.wrecked {
+            continue;
+        }
+        if !salvaged {
+            commands.entity(e).insert(super::Salvaged);
+        }
+        // Down: it's stopped on the ground.
+        if !(d.sinking && d.velocity == Vec3::ZERO) {
+            continue;
+        }
+        commands.entity(e).insert(DirigibleSeated);
+        let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        let mut gondola = None;
+        let mut eye = None;
+        for c in children.iter() {
+            let Ok(p) = parts.get(c) else {
+                continue;
+            };
+            match p.role {
+                PartRole::GasCell(_) => {
+                    fit(
+                        &mut commands,
+                        &catalog,
+                        c,
+                        dirigible_row(p.role, DIRIGIBLE_VALVE_HEALTH, None).unwrap(),
+                        &look,
+                    );
+                }
+                PartRole::Core => gondola = Some((c, p.hp / p.max_hp.max(1.0))),
+                PartRole::Sensor => eye = Some((c, p.hp / p.max_hp.max(1.0))),
+                _ => {}
+            }
+        }
+        if let Some((gc, health)) = gondola {
+            if let Some(row) = dirigible_row(PartRole::Core, health, None) {
+                fit(&mut commands, &catalog, gc, row, &look);
+            }
+            if let Some((ec, health)) = eye {
+                if let Some(row) = dirigible_row(PartRole::Sensor, health, Some(ec)) {
+                    fit(&mut commands, &catalog, gc, row, &look);
+                }
+            }
+        }
+        for (k, id) in ["polymer", "polymer", "scrap_metal"]
+            .into_iter()
+            .enumerate()
+        {
+            let Some(kind) = catalog.kind(id) else {
+                continue;
+            };
+            let a = k as f32 * 2.1;
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(
+                        g.translation()
+                            .with_y(g.translation().y - super::dirigible::RADIUS)
+                            + Vec3::new(a.cos() * 3.5, 0.0, a.sin() * 3.5),
+                    ),
+                    condition: 0.6,
+                },
+            );
+        }
+    }
+}
+
+/// A dirigible's gas valves come through its cells being holed (they're
+/// on the frame, not the fabric).
+pub const DIRIGIBLE_VALVE_HEALTH: f32 = 0.7;
+pub const DIRIGIBLE_VALVE_BOLTS: usize = 4;
+/// Where things sit on a downed dirigible: a valve low on each cell's
+/// flank (local to the cell: its underside is over the gondola), the cell
+/// in the gondola's side, the eye on the gondola's nose (local to it).
+pub const DIRIGIBLE_VALVE_AT: Vec3 = Vec3::new(1.85, -1.85, 0.0);
+pub const DIRIGIBLE_CELL_AT: Vec3 = Vec3::new(0.62, 0.05, 1.0);
+pub const DIRIGIBLE_EYE_AT: Vec3 = Vec3::new(0.0, -0.1, -2.08);
+
+/// What a downed dirigible gives up, part by part, and how it's held
+/// (`replaces`: the eye part it's taken in place of).
+pub fn dirigible_row(role: PartRole, health: f32, replaces: Option<Entity>) -> Option<Row> {
+    let row = |item, at: Transform, fix, hot| Row {
+        item,
+        at,
+        size: 1.0,
+        health,
+        fix,
+        hot,
+        replaces,
+    };
+    let out = Vec3::new(1.0, -1.0, 0.0).normalize();
+    Some(match role {
+        PartRole::GasCell(_) => row(
+            "dirigible_gas_valve",
+            Transform::from_translation(DIRIGIBLE_VALVE_AT)
+                .with_rotation(Quat::from_rotation_arc(Vec3::Y, out)),
+            Fix::Bolts {
+                n: DIRIGIBLE_VALVE_BOLTS,
+                centre: DIRIGIBLE_VALVE_AT - out * 0.06,
+                face: Quat::from_rotation_arc(Vec3::Y, out),
+                radius: 0.13,
+            },
+            false,
+        ),
+        PartRole::Core => row(
+            "robot_cell",
+            Transform::from_translation(DIRIGIBLE_CELL_AT),
+            Fix::Hand,
+            true,
+        ),
+        PartRole::Sensor => row(
+            "walker_eye",
+            Transform::from_translation(DIRIGIBLE_EYE_AT),
+            Fix::Hand,
+            false,
+        ),
+        _ => return None,
+    })
 }
 
 /// The meshes a part's holds are drawn with (none in a headless app).
@@ -1486,8 +1690,25 @@ mod tests {
             ..walker_like(&parts)
         };
         let r = rows(&sorter);
-        assert_eq!(r.len(), 1);
+        // Its servo pack, and its head (the test's parts have a Sensor).
         assert_eq!(r[0].item, "sorter_servo_pack");
+        let head = r.iter().find(|r| r.item == "sorter_head");
+        assert_eq!(
+            head.is_some(),
+            parts.iter().any(|p| p.1 == PartRole::Sensor),
+            "{:?}",
+            r.iter().map(|r| r.item).collect::<Vec<_>>()
+        );
+        assert!(r.iter().any(|r| r.item == "sorter_carriage_motor"));
+        if let Some(h) = head {
+            assert!(matches!(
+                h.fix,
+                Fix::Bolts {
+                    n: SORTER_HEAD_BOLTS,
+                    ..
+                }
+            ));
+        }
         assert!(matches!(
             r[0].fix,
             Fix::Bolts {
@@ -1775,5 +1996,110 @@ mod tests {
         assert_eq!(scrap_for(6.0), 3);
         assert_eq!(scrap_for(7.5), 4);
         assert_eq!(scrap_for(0.9), 1);
+    }
+}
+
+#[cfg(test)]
+mod dirigible_tests {
+    use super::*;
+    use crate::interact::InSocket;
+    use crate::items::Item;
+
+    /// Two cells holed, a dirigible sinks; down, what was on it is seated
+    /// where a hand reaches from the ground (a valve on each cell's flank,
+    /// its gondola's cell, live, its eye on the gondola's nose), its fabric
+    /// and frame loose, and no table rolled over it.
+    #[test]
+    fn a_downed_dirigible_is_what_was_on_it() {
+        let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let ground = zone.on_ground(40.0, 230.0);
+        let e = {
+            let mut c = app.world_mut().commands();
+            let at = ground + Vec3::Y * 9.0;
+            let e = super::super::dirigible::spawn_dirigible(
+                &mut c,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 1.0e6,
+                    exit: at,
+                },
+            );
+            app.world_mut().flush();
+            e
+        };
+        app.update();
+        app.world_mut()
+            .get_mut::<super::super::dirigible::Dirigible>(e)
+            .unwrap()
+            .sinking = true;
+        for _ in 0..90 * 15 {
+            app.update();
+        }
+        assert!(app.world().get::<super::super::Robot>(e).unwrap().wrecked);
+        assert!(app.world().get::<super::super::Salvaged>(e).is_some());
+        let catalog = app.world().resource::<Catalog>().clone();
+        let seated: Vec<(String, Vec3, bool)> = app
+            .world_mut()
+            .query_filtered::<(&Item, &GlobalTransform, Has<Live>), With<InSocket>>()
+            .iter(app.world())
+            .map(|(i, g, live)| (catalog.get(i.kind()).id.clone(), g.translation(), live))
+            .filter(|(id, at, _)| {
+                at.xz().distance(ground.xz()) < 12.0
+                    && ["dirigible_gas_valve", "robot_cell", "walker_eye"].contains(&id.as_str())
+            })
+            .collect();
+        let mut ids: Vec<&str> = seated.iter().map(|(id, ..)| id.as_str()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            [
+                "dirigible_gas_valve",
+                "dirigible_gas_valve",
+                "dirigible_gas_valve",
+                "robot_cell",
+                "walker_eye"
+            ],
+            "{seated:?}"
+        );
+        for (id, at, live) in &seated {
+            let over = at.y - zone.ground(at.x, at.z);
+            assert!(
+                (0.0..crate::sim::indoor::MAX_REACH_UP).contains(&over),
+                "{id} {over:.2} m over the ground"
+            );
+            assert_eq!(*live, id == "robot_cell", "{id} live: {live}");
+        }
+        let loose: Vec<String> = app
+            .world_mut()
+            .query_filtered::<(&Item, &GlobalTransform), Without<InSocket>>()
+            .iter(app.world())
+            .filter(|(_, g)| g.translation().xz().distance(ground.xz()) < 12.0)
+            .map(|(i, _)| catalog.get(i.kind()).id.clone())
+            // (Its own, not the map's: the table's rolls were these and more.)
+            .filter(|id| {
+                [
+                    "polymer",
+                    "scrap_metal",
+                    "electronics",
+                    "walker_eye",
+                    "hound_hip_servo",
+                ]
+                .contains(&id.as_str())
+            })
+            .collect();
+        let mut loose_ids: Vec<&str> = loose.iter().map(|s| s.as_str()).collect();
+        loose_ids.sort();
+        assert_eq!(loose_ids, ["polymer", "polymer", "scrap_metal"]);
     }
 }

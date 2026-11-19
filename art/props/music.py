@@ -517,14 +517,15 @@ def harmonium():
 
     parts += keyboard(HARM_LO, HARM_HI, -harmonium_offset())
 
-    # Stops: a row of turned knobs with ivory faces out of the stop board.
+    # Stops: a row of them out of the stop board, their turned knobs and
+    # ivory faces broken off long since: shanks snapped short, nothing to
+    # pull (a stop changes nothing yet: `docs/WORLD_MODELS.md`).
     sp = (0.0, 0.8, -0.07)
     stops = Part("stops", origin=sp)
     for x in (-0.45, -0.36, -0.27, -0.18, -0.09, 0.09, 0.18, 0.27, 0.36, 0.45):
         xf = T(x, sp[1], sp[2]) @ RY(math.pi)
-        stops.lathe([(0.0, -0.003), (0.006, -0.003), (0.006, 0.012), (0.01, 0.015),
-                     (0.011, 0.022), (0.0095, 0.027), (0.0, 0.027)], "Wood", segs=16, xf=xf)
-        stops.cyl(0.0075, 0.026, 0.031, "Cream", segs=16, xf=xf)
+        stops.lathe([(0.0, -0.003), (0.006, -0.003), (0.006, 0.006), (0.0045, 0.008),
+                     (0.0, 0.008)], "Wood", segs=12, xf=xf)
     parts.append(stops)
 
     # Treadles: carpeted boards hinged at the back of the well, their

@@ -343,3 +343,11 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 | Picture | What it shows |
 |---|---|
 | `../../robots/workers_2/grappler_wreck_head_folded.png` | `--map training_yard --gallery robots:grappler+grappler!dead,90,8` by day (camera `0,0,30,0,-12`, crop 680x340 of 1920x1080 at 2x): a standing grappler, and a wrecked one on its side with the boom folded and the launcher head riding it |
+
+## A dirigible come down holed (`dirigible_look`)
+
+A holed cell sags in the air; down on the ground the cells lie draped over the gondola and the grass, pressed flat below, spread wide and creased along their gores, the holed ones flatter than the one still holding gas (a mound). Its eye is tucked under the gondola's nose, clear of the ground (or Heavy's salvage eye is seated there in its place). `slack_point` / `down_point` say where a point of a taut cell has gone, for anything seated on one.
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/dirigible_down_slack.png` | `reel:dirigibledown,5,60` frame 4 in the training yard by day (`--map training_yard --new-game --no-captions --camera 0,0,36,0,-6`, crop 1080x280 of 1920x1080 at 2x): holed in its end cells, down 12 m off, side-on |

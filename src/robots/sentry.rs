@@ -1420,6 +1420,7 @@ pub(crate) mod tests {
             .query_filtered::<(&Item, &GlobalTransform), With<InSocket>>()
             .iter(app.world())
             .map(|(i, g)| (catalog.get(i.kind()).id.clone(), g.translation()))
+            .filter(|(id, _)| id.starts_with("sentry_"))
             .collect();
         let mut ids: Vec<&str> = seated.iter().map(|(id, _)| id.as_str()).collect();
         ids.sort();
@@ -1439,6 +1440,15 @@ pub(crate) mod tests {
             };
             assert!(near, "{id} at {at}, head at {}", head.translation);
         }
+        // The breaker is live (it had power): it crackles and sparks
+        // before it bites, as a cell does.
+        let live: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&Item, With<super::super::salvage::Live>>()
+            .iter(app.world())
+            .map(|i| catalog.get(i.kind()).id.clone())
+            .collect();
+        assert_eq!(live, ["sentry_junction"]);
         // No pylon loot thrown about it.
         let loose: Vec<String> = app
             .world_mut()
@@ -1450,5 +1460,34 @@ pub(crate) mod tests {
             !loose.iter().any(|id| id.starts_with("pylon_")),
             "{loose:?}"
         );
+    }
+
+    /// Its junction box prised open with a crowbar cuts its power: its lamp
+    /// and eye go dark (`sentry_look::light_sentries` reads `powered`).
+    #[test]
+    fn a_crowbar_in_its_box_cuts_its_power() {
+        use crate::destruction::hooks::{Pried, Pryable};
+        let (mut app, e) = world_with_sentry([40.0, 230.0], 0.0, 160.0);
+        for _ in 0..5 {
+            app.update();
+        }
+        let b = app
+            .world_mut()
+            .query::<(Entity, &SentryPiece, &OfSentry)>()
+            .iter(app.world())
+            .find(|(_, p, o)| matches!(p, SentryPiece::Box) && o.0 == e)
+            .map(|(b, ..)| b)
+            .unwrap();
+        assert!(app.world().get::<Pryable>(b).is_some(), "a seam on its box");
+        assert!(app.world().get::<Sentry>(e).unwrap().powered);
+        for _ in 0..60 {
+            app.world_mut().write_message(Pried {
+                target: b,
+                torque: 1.0e4,
+                by: Entity::PLACEHOLDER,
+            });
+            app.update();
+        }
+        assert!(!app.world().get::<Sentry>(e).unwrap().powered, "dark");
     }
 }

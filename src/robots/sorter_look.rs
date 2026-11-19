@@ -124,14 +124,21 @@ fn dress(
             .spawn((Bridge(e), Transform::default(), Visibility::default()))
             .id();
         hang(&mut commands, bridge, "bridge", Transform::IDENTITY);
+        // (Hidden when its jaw is seated as salvage on the wreck's forearm:
+        // `salvage::SeatLook`.)
+        let seat = super::salvage::SeatLook {
+            robot: e,
+            role: super::PartRole::Leg(0),
+        };
         let grab = commands
-            .spawn((Grab(e), Transform::default(), Visibility::default()))
+            .spawn((Grab(e), seat, Transform::default(), Visibility::default()))
             .id();
         hang(&mut commands, grab, "grab", Transform::IDENTITY);
         for side in [1.0f32, -1.0] {
             let jaw = commands
                 .spawn((
                     Jaw(side),
+                    seat,
                     Transform::from_xyz(0.12 * side, -0.18, 0.0),
                     Visibility::default(),
                     ChildOf(grab),
@@ -157,16 +164,20 @@ fn dress(
     }
 }
 
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn follow(
-    sorters: Query<(&Sorter, &ArmPose)>,
+    sorters: Query<(&Sorter, &ArmPose, Has<super::wreck::Broken>)>,
     mut bridges: Query<(Entity, &Bridge, &mut Transform), Without<Grab>>,
     mut grabs: Query<(Entity, &Grab, &mut Transform, &Children), Without<Bridge>>,
     mut jaws: Query<(&Jaw, &mut Transform), (Without<Bridge>, Without<Grab>)>,
+    joints: Query<&super::wreck::WreckJoint>,
+    pieces: Query<&Transform, (Without<Bridge>, Without<Grab>, Without<Jaw>)>,
     mut commands: Commands,
     time: Res<Time>,
+    mut waited: Local<bevy::platform::collections::HashMap<Entity, u8>>,
 ) {
     for (b, bridge, mut t) in &mut bridges {
-        let Ok((s, _)) = sorters.get(bridge.0) else {
+        let Ok((s, _, _)) = sorters.get(bridge.0) else {
             commands.entity(b).despawn();
             continue;
         };
@@ -174,10 +185,43 @@ fn follow(
     }
     let dt = time.delta_secs();
     for (g, grab, mut t, children) in &mut grabs {
-        let Ok((s, pose)) = sorters.get(grab.0) else {
+        let Ok((s, pose, broken)) = sorters.get(grab.0) else {
             commands.entity(g).despawn();
             continue;
         };
+        // Wrecked, its arm's two debris pieces (`sorter::wreck_sorters`,
+        // jointed shoulder to upper arm to forearm) fall and its pose stops:
+        // the grab goes onto the forearm where it hung from the wrist, and
+        // falls and settles with it. (No forearm, the arm shot off before:
+        // nothing to hang from, so it's not drawn.)
+        if broken {
+            let forearm = joints
+                .iter()
+                .find(|j| j.a == grab.0)
+                .and_then(|up| joints.iter().find(|j| j.a == up.b))
+                .map(|f| f.b);
+            match forearm.and_then(|f| pieces.get(f).ok().map(|ft| (f, ft))) {
+                Some((f, ft)) => {
+                    let local = ft.compute_affine().inverse() * t.compute_affine();
+                    commands
+                        .entity(g)
+                        .remove::<Grab>()
+                        .insert((Transform::from_matrix(local.into()), ChildOf(f)));
+                }
+                // (The pieces come a frame or two after it breaks.)
+                None if *waited.entry(g).or_default() < 10 => {
+                    *waited.entry(g).or_default() += 1;
+                }
+                None => {
+                    waited.remove(&g);
+                    commands
+                        .entity(g)
+                        .remove::<Grab>()
+                        .insert(Visibility::Hidden);
+                }
+            }
+            continue;
+        }
         // Hung from the wrist, along the forearm, turned to the hall.
         let dir = (pose.elbow - pose.wrist).normalize_or(Vec3::Y);
         let hang = Quat::from_rotation_arc(Vec3::Y, dir);
@@ -231,5 +275,97 @@ fn swing_cable(
         *t = Transform::from_translation((p0 + p1) * 0.5)
             .with_rotation(Quat::from_rotation_arc(Vec3::Y, (p1 - p0) / len))
             .with_scale(Vec3::new(1.0, len, 1.0));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::world::Layer;
+    use avian3d::prelude::*;
+
+    /// Wrecked, its grab and jaws don't stay hanging where the wrist was:
+    /// they go onto the forearm's piece and come down with it, and they're
+    /// tagged to hide when the jaw is seated as salvage there.
+    #[test]
+    fn a_wrecked_sorters_grab_comes_down_with_its_forearm() {
+        let opts = crate::LaunchOptions {
+            map: "training_yard".into(),
+            map_explicit: true,
+            new_game: true,
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::soak::drive::client_app(opts);
+        for _ in 0..30 {
+            app.update();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let c = Vec2::new(0.0, 10.0);
+        let mut top = f32::MIN;
+        for i in -12..=12 {
+            for j in -8..=8 {
+                top = top.max(zone.ground(c.x + i as f32, c.y + j as f32));
+            }
+        }
+        let hall = Transform::from_xyz(c.x, top, c.y);
+        let sorter = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            c.spawn((
+                RigidBody::Static,
+                Collider::cuboid(30.0, 0.2, 20.0),
+                CollisionLayers::new(Layer::World, [Layer::Item, Layer::Robot, Layer::Player]),
+                Transform::from_xyz(hall.translation.x, top - 0.1, hall.translation.z),
+            ));
+            let e = super::super::sorter::spawn_sorter(
+                &mut c,
+                hall,
+                Vec2::new(12.0, 8.0),
+                6.0,
+                super::super::sorter::depot_spots(),
+                4,
+            );
+            c.entity(e).remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..90 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let grab = w
+            .query::<(Entity, &Grab)>()
+            .iter(w)
+            .find(|(_, g)| g.0 == sorter)
+            .map(|(e, _)| e)
+            .expect("its grab drawn");
+        let hung = w.get::<GlobalTransform>(grab).unwrap().translation().y;
+        w.get_mut::<super::super::Robot>(sorter).unwrap().wrecked = true;
+        for _ in 0..(90 * 10) {
+            app.update();
+        }
+        let w = app.world_mut();
+        let on = w.get::<ChildOf>(grab).map(|c| c.parent());
+        let piece = on.and_then(|p| w.get::<super::super::wreck::Debris>(p));
+        assert!(
+            piece.is_some_and(|d| d.piece == super::super::wreck::Piece::Arm(1)),
+            "the grab on the forearm's piece: {:?}",
+            piece.map(|d| d.piece)
+        );
+        let now = w.get::<GlobalTransform>(grab).unwrap().translation().y;
+        assert!(
+            now < hung - 1.0 && now < top + 2.0,
+            "it came down: hung at {:.2}, now {:.2} over the floor",
+            hung - top,
+            now - top
+        );
+        // The grab and both jaws hide when the jaw's seated (Heavy's salvage).
+        let tagged = w
+            .query::<&super::super::salvage::SeatLook>()
+            .iter(w)
+            .filter(|s| s.robot == sorter && s.role == super::super::PartRole::Leg(0))
+            .count();
+        assert!(tagged >= 3, "grab and jaws tagged: {tagged}");
     }
 }

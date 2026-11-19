@@ -79,6 +79,7 @@ impl Plugin for AnomalyVisualsPlugin {
                 dress_steam_banks,
                 light_steam_banks,
                 dress_charged_water,
+                melt_rings,
             ),
         );
     }
@@ -147,6 +148,9 @@ pub struct ParticleParams {
     pub state: Vec4,
     /// rgb: colour, a: opacity.
     pub color: Vec4,
+    /// xz: the wind across the ground (the way, times how hard): a lift's
+    /// leaves lean with it.
+    pub wind: Vec4,
 }
 
 /// One anomaly particle system: a mesh of quads moved in the shader.
@@ -325,10 +329,12 @@ struct AnomalyAssets {
     flattened: Handle<MarkMaterial>,
     glassy: Handle<MarkMaterial>,
     glazed: Handle<MarkMaterial>,
+    glazed_snow: Handle<MarkMaterial>,
     crushed: Handle<MarkMaterial>,
     hushed: Handle<MarkMaterial>,
     frosted: Handle<MarkMaterial>,
     hush_ring: Handle<StandardMaterial>,
+    melt_ring: Handle<StandardMaterial>,
     dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
@@ -746,6 +752,17 @@ fn init_assets(
         LinearRgba::rgb(0.04, 0.048, 0.062),
         0.55,
     );
+    // The same glaze on snow, where pale reads as nothing: a darker,
+    // dulled silver, so it holds as a shape against the white round it.
+    // (Glossier, it gave back the bright sky at a glance along the ground
+    // and was as pale as the snow from 10 m.)
+    let glazed_snow = ground_with(
+        &mark,
+        &sheen,
+        Color::srgba(0.24, 0.28, 0.35, 0.85),
+        LinearRgba::rgb(0.03, 0.036, 0.048),
+        0.42,
+    );
     // Frosted over: pale plates cut by cracks, rime feathering its rim, a
     // little lit of itself. Its colour's in its texture (the cracks show it
     // on snow; a saturated blue read as paint).
@@ -779,6 +796,16 @@ fn init_assets(
     if let Some(mut m) = marks.get_mut(&flattened) {
         m.base.emissive_texture = Some(scoured_glow);
     }
+    // A mirror's lens (its haze) draws what's behind it from the opaque
+    // pass, which a blended mark isn't in: seen through the lens, from
+    // anywhere but overhead, the mark was gone, the bare ground showing
+    // (on snow, a pale disc). Masked, it's in what the lens shows, with a
+    // crisp rim to it.
+    for h in [&glazed, &glazed_snow] {
+        if let Some(mut m) = marks.get_mut(h) {
+            m.base.alpha_mode = AlphaMode::Mask(0.35);
+        }
+    }
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
     // soft at its edges, not an anomaly's own mark.
     let dragged = materials.add(StandardMaterial {
@@ -792,6 +819,17 @@ fn init_assets(
     // Its edge: pale dust settled in a ragged line on the ground, which you
     // can step up to.
     let ring = ring_texture(&mut images);
+    // Round a burner in snow, the snow melted back to dark wet ground in
+    // a broad ragged ring: seen from far off, a burner gives itself away.
+    let melt = melt_texture(&mut images);
+    let melt_ring = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.07, 0.06, 0.05, 0.9),
+        base_color_texture: Some(melt),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.35,
+        depth_bias: 45.0,
+        ..default()
+    });
     let hush_ring = materials.add(StandardMaterial {
         base_color: Color::srgba(0.85, 0.85, 0.82, 0.85),
         base_color_texture: Some(ring),
@@ -811,10 +849,12 @@ fn init_assets(
         flattened,
         glassy,
         glazed,
+        glazed_snow,
         crushed,
         hushed,
         frosted,
         hush_ring,
+        melt_ring,
         dragged,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
@@ -1268,12 +1308,31 @@ fn dress_anomalies(
             .with_children(|c| {
                 if let Some(mark) = mark {
                     let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
-                    c.spawn((
+                    let mut m = c.spawn((
                         Mesh3d(disc),
                         MeshMaterial3d(mark.clone()),
                         Transform::IDENTITY,
                         NotShadowCaster,
                         near(90.0),
+                    ));
+                    if kind == AnomalyKind::Mirror {
+                        m.insert(OnSnow {
+                            bare: mark.clone(),
+                            snow: a.glazed_snow.clone(),
+                        });
+                    }
+                }
+                if kind == AnomalyKind::Burner {
+                    // Shown only while snow lies there (`melt_rings`).
+                    let disc = meshes.add(draped_disc(&zone, at.translation, r * MELT_OUT));
+                    c.spawn((
+                        MeltRing,
+                        Mesh3d(disc),
+                        MeshMaterial3d(a.melt_ring.clone()),
+                        Transform::IDENTITY,
+                        NotShadowCaster,
+                        near(120.0),
+                        Visibility::Hidden,
                     ));
                 }
                 if kind == AnomalyKind::Hush {
@@ -1300,6 +1359,7 @@ fn dress_anomalies(
                                 mode: Vec4::new(s.mode, r, reach, s.additive as u8 as f32),
                                 state: Vec4::new(anomaly.charge, 0.0, 0.0, s.size),
                                 color: s.color.extend(s.alpha),
+                                wind: Vec4::ZERO,
                             },
                             texture: s.texture,
                             additive: s.additive,
@@ -1455,9 +1515,11 @@ fn pulse(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     agitation: Option<Res<super::surge::Agitation>>,
     time: Res<Time>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
 ) {
     let t = time.elapsed_secs();
     let dt = time.delta_secs();
+    let wind = super::wind(conditions.as_deref());
     let eye = eye_position(&heads, &locals, &cams);
     let stirred = agitation.map_or(0.0, |a| a.0);
     for (e, a, touched, mut look, gt, children) in &mut anomalies {
@@ -1496,6 +1558,7 @@ fn pulse(
                 && let Some(mut mat) = particle_mats.get_mut(&m.0)
             {
                 mat.params.state.x = a.charge;
+                mat.params.wind = wind.extend(0.0);
                 // The Surge swells them.
                 mat.params.mode.y = a.radius;
                 mat.params.mode.z = a.kind.reach(a.radius);
@@ -2656,6 +2719,7 @@ fn dress_steam_banks(
                         mode: Vec4::new(8.0, r, r, 0.0),
                         state: Vec4::new(0.0, 0.0, 0.0, size),
                         color: color.extend(STEAM_ALPHA),
+                        wind: Vec4::ZERO,
                     },
                     texture: a.dot.clone(),
                     additive: false,
@@ -2778,6 +2842,7 @@ fn dress_charged_water(
                         mode: Vec4::new(9.0, an.radius, w.reach, 1.0),
                         state: Vec4::new(an.charge, 0.0, 0.0, 0.16),
                         color: color.extend(1.0),
+                        wind: Vec4::ZERO,
                     },
                     texture: a.dot.clone(),
                     additive: true,
@@ -2800,3 +2865,87 @@ fn dress_charged_water(
 /// snare creeps).
 #[derive(Component)]
 struct WaterCrackle;
+
+/// A burner's melt ring reaches this far, in its radii.
+const MELT_OUT: f32 = 2.2;
+
+/// A burner's ring of melted snow (shown while snow lies there).
+#[derive(Component)]
+struct MeltRing;
+
+/// Dark wet ground in a broad ragged ring: from the burner's edge (its
+/// disc's inner 0.45) out to its rim, thickest just outside the burner,
+/// thinning and ragged as it goes out.
+fn melt_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 256u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let r = (u * u + v * v).sqrt();
+            let a = v.atan2(u);
+            let rag = 0.06 * (value_noise(a.cos() * 4.0 + 9.0, a.sin() * 4.0 + 9.0, 70) - 0.5)
+                + 0.03 * (value_noise(u * 12.0, v * 12.0, 71) - 0.5);
+            let inner = smooth(0.38, 0.46, r);
+            let outer = 1.0 - smooth(0.7 + rag, 0.95 + rag, r);
+            let wet = 0.75 + 0.25 * value_noise(u * 20.0, v * 20.0, 72);
+            let alpha = (inner * outer * wet).clamp(0.0, 1.0);
+            data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+/// A mark with another look for where snow lies round it (a pale mark
+/// that reads on grass is lost on white).
+#[derive(Component)]
+struct OnSnow {
+    bare: Handle<MarkMaterial>,
+    snow: Handle<MarkMaterial>,
+}
+
+/// Whether snow lies at this height: above the valley's snow line, or its
+/// lasting snow.
+fn snow_lies(snow: &crate::world::snow::Snow, y: f32) -> bool {
+    snow.lies(y) > 0.2 || snow.floor > 0.0
+}
+
+/// A burner's melt ring shows where snow lies round it, not on bare
+/// ground; a mark with a snow look (`OnSnow`) wears it there.
+fn melt_rings(
+    mut rings: Query<(&GlobalTransform, &mut Visibility), With<MeltRing>>,
+    mut marks: Query<(&GlobalTransform, &OnSnow, &mut MeshMaterial3d<MarkMaterial>)>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+) {
+    let Some(snow) = snow else {
+        return;
+    };
+    for (gt, mut vis) in &mut rings {
+        vis.set_if_neq(if snow_lies(&snow, gt.translation().y) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
+    }
+    for (gt, looks, mut mat) in &mut marks {
+        let want = if snow_lies(&snow, gt.translation().y) {
+            &looks.snow
+        } else {
+            &looks.bare
+        };
+        if mat.0 != *want {
+            mat.0 = want.clone();
+        }
+    }
+}

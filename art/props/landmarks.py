@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import UP, board, prop, rod  # noqa: E402
-from common import Part, RY, T, fillet  # noqa: E402
+from common import Part, RY, S, T, fillet  # noqa: E402
 
 import _kit  # noqa: E402
 
@@ -274,7 +274,8 @@ def lever_frame():
     """The signal box's lever frame, 2.4 x 1.0 x 0.5 (origin on the floor
     under its centre, the signalman's side -Z): a cast frame, twelve levers
     in their quadrants, some pulled, number plates, a shelf of block
-    instruments over it."""
+    instruments over it. Its levers are seized: rusted in their quadrants,
+    each clamped by its lever collar, rusted on (`docs/WORLD_MODELS.md`)."""
     p = Part("static")
     p.box((2.4, 0.35, 0.45), (0.0, 0.175, 0.04), "Cast", bevel=0.01, segs=1)
     p.box((2.44, 0.06, 0.5), (0.0, 0.38, 0.04), "Cast", bevel=0.006, segs=1)
@@ -283,8 +284,15 @@ def lever_frame():
         pulled = k in (2, 3, 7, 10)
         a = -0.35 if pulled else 0.3
         top = (x, 0.41 + 0.6 * math.cos(a), 0.04 + 0.6 * math.sin(a))
-        rod(p, (x, 0.41, 0.04), top, 0.015, "Steel", segs=6)
+        rod(p, (x, 0.41, 0.04), top, 0.015, "Rusty", segs=6)
         p.box((0.05, 0.1, 0.05), top, "Red" if k % 3 == 0 else "Cream", bevel=0.005, segs=1)
+        # Its collar, clamped round it under the grip, and rust where it
+        # comes out of its quadrant.
+        lo = [a0 + (b0 - a0) * 0.72 for a0, b0 in zip((x, 0.41, 0.04), top)]
+        hi = [a0 + (b0 - a0) * 0.84 for a0, b0 in zip((x, 0.41, 0.04), top)]
+        rod(p, tuple(lo), tuple(hi), 0.027, "Rusty", segs=8)
+        p.sphere(1.0, (0, 0, 0), "Rusty", segs=8, rings=5,
+                 xf=T(x, 0.415, 0.04) @ S(0.03, 0.02, 0.035))
         p.box((0.12, 0.05, 0.004), (x, 0.3, -0.18), "Cream")
     # The block instruments on a shelf behind.
     p.box((2.4, 0.03, 0.25), (0.0, 1.3, 0.2), "Timber", bevel=0.004, segs=1)

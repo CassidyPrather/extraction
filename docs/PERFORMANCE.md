@@ -2083,6 +2083,42 @@ the same race. Robot wear had a narrower form of it (a part worn while its
 model was still undressed); Robot bodies' fix is `wear::Redress` (bac81dd3,
 on its way through their gate).
 
+## Steam banks and the particles' share (18 November)
+
+The fragment gauges counted no anomaly particles at all: their quads are
+placed by `anomaly_particles.wgsl` from each one's seed and the time, so
+`overdraw::measure` saw a point per particle. It now replays the shader's
+placement (`overdraw::particle_at`: steam, hush dust and burner smoke as the
+shader has them, the other modes by its default ring) and counts each quad
+whole. Counting the quad, not what survives the shader's alpha discard,
+over-counts a little; the gauges stay on the safe side.
+
+With particles counted, the other fragment gauges all still pass. The largest
+rise was Cinder c08_ash_pit, 13.6 to 18.5M; the highest view was 42.6M (66%).
+
+`gauge_steam_banks_hold_the_stereo_budget` views each bank from four sides at
+10 m and from inside, in drizzle by day, both eyes. It measures the frame with
+the bank hidden and then shown, so the steam's own share is known.
+
+| bank | view | main bb51307b, uncapped | main 3e7a3b42, capped |
+|---|---|---|---|
+| Kettle | 10 m, four sides | 24-34% | 25-34% |
+| Kettle | inside | 67.2M (104%), the steam 55.1M | 28.6-44.9M (44-69%), the steam 16.5-32.8M |
+| Rime | 10 m, four sides | 20-23% | 21-24% |
+| Rime | inside | 26.5M (41%), the steam 17.3M | 25.9-33.4M (40-52%), the steam 16.7-24.7M |
+
+Anomalies capped a steam billow's apparent size at 40 degrees of the view
+(the shader's `STEAM_CAP_TAN`, tan 20°; 29f8606b). The replay applies the same
+cap. The billows roll with time, so the inside views swing between runs; the
+capped range is four runs. Draws stay at 35% or under and triangles at 63% or
+under.
+
+Live-cell sparks were measured with the steam: 3-5 sparks of 12 mm, lasting
+50-130 ms, with a cap of 96. Their cost is negligible.
+
+If Anomalies changes the placement or size maths of modes 2, 7 or 8, or adds a
+mode that can cover a lot of the screen, `particle_at` has to follow.
+
 ## What's next (paused 2 November)
 
 Where Performance stopped, in order:

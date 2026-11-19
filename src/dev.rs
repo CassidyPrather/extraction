@@ -998,7 +998,20 @@ fn gallery(
                             0,
                         ),
                         "spotter" => {
-                            crate::robots::spotter::spawn_spotter(&mut commands, &zone, at.xz())
+                            // (Dead, its winch upwind by the drift of its
+                            // sink from its tether's height: its wreck
+                            // comes down here, in view.)
+                            let drift = if wreck {
+                                use extraction_core::spotter as sp;
+                                Vec2::from(sp::WIND) * 0.25 * (sp::TETHER / sp::SINK)
+                            } else {
+                                Vec2::ZERO
+                            };
+                            crate::robots::spotter::spawn_spotter(
+                                &mut commands,
+                                &zone,
+                                at.xz() - drift,
+                            )
                         }
                         "minelayer" => {
                             let nav = nav.as_ref().map(|n| n.0.clone());
@@ -1026,8 +1039,10 @@ fn gallery(
                         ),
                         "plough" => {
                             // (It stands at its road's start, its shed:
-                            // here, in its place in the line.)
-                            let (a, b) = (at, at + right * 12.0);
+                            // here, in its place in the line. Dead, a
+                            // road too short to drive off along before
+                            // it's killed.)
+                            let (a, b) = (at, at + right * if wreck { 0.5 } else { 12.0 });
                             crate::robots::plough::spawn_plough(
                                 &mut commands,
                                 &zone,
@@ -1037,13 +1052,15 @@ fn gallery(
                         "sentry" => {
                             let toward = -flat;
                             let centre = toward.x.atan2(-toward.z) + turn.to_radians();
+                            // (Its box off to one side, in view, not
+                            // under its mast.)
                             crate::robots::sentry::spawn_sentry(
                                 &mut commands,
                                 &zone,
                                 at.xz(),
                                 centre,
                                 0.0,
-                                at.xz(),
+                                (at + right * 2.5).xz(),
                             )
                         }
                         _ => continue,

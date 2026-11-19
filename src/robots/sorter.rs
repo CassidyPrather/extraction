@@ -1227,12 +1227,18 @@ mod tests {
         assert_eq!(arm, 2);
         // Its servo pack is still on it, bolted, to be undone by hand.
         let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        // (Beside its head and its carriage motor, also bolted: #105.)
         let seats: Vec<(Entity, Entity)> = app
             .world_mut()
             .query::<(Entity, &super::super::salvage::SalvageSeat)>()
             .iter(app.world())
             .filter(|(_, s)| s.wreck == sorter && s.hold == super::super::salvage::Hold::Bolts)
             .map(|(e, s)| (e, s.item))
+            .filter(|(_, item)| {
+                app.world()
+                    .get::<crate::items::Item>(*item)
+                    .is_some_and(|it| catalog.get(it.0.kind).id == "sorter_servo_pack")
+            })
             .collect();
         assert_eq!(seats.len(), 1, "its servo pack seated");
         let (seat, item) = seats[0];
