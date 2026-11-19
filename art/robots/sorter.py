@@ -5,6 +5,8 @@ Objects and their origins:
 
 - `carriage` (0, 0, 0)   the trolley under the bridge, 1.4 x 0.6 x 1.2; wheels
                          on top, a cyan strip round it, the shoulder mount below
+- `carriage_motor` (0, 0.48, 0)  its travel drive on the carriage's top
+                         between the wheels (salvage: hidden when seated)
 - `head`     (0, -0.42, -0.5)  the scanning head under the front, an eye slit
 - `plate`    (0.74, 0, 0)  an armour plate on the carriage's +X side (the game
                          turns a copy to -X)
@@ -49,6 +51,33 @@ car.cyl(0.16, -0.46, -0.34, "Steel", segs=20, xf=UP, chamfer=0.01)
 # Hazard chevrons on the ends.
 for sz in (-1, 1):
     car.box((0.9, 0.12, 0.012), (0.0, 0.15, sz * 0.605), "Warn", bevel=0.004, segs=1)
+
+# --- Carriage motor ---------------------------------------------------------
+# Its travel drive, bolted on the carriage's top between the wheels: its own
+# object, salvage (`sorter_carriage_motor`), hidden when it's seated.
+MOTOR = (0.0, 0.48, 0.0)
+
+
+def carriage_motor(name):
+    mx, my, mz = MOTOR
+    m = Part(name, origin=MOTOR)
+    # A finned can across X, a gearbox on one end, a flange under it.
+    m.box((0.5, 0.025, 0.3), (mx, my - 0.1, mz), "Steel", bevel=0.006, segs=1)
+    m.cyl(0.09, mx - 0.2, mx + 0.1, "Dark", segs=20, xf=T(0, my, mz) @ SIDE, chamfer=0.01)
+    for k in range(5):
+        x = mx - 0.17 + 0.05 * k
+        m.cyl(0.1, x, x + 0.012, "Dark", segs=20, xf=T(0, my, mz) @ SIDE)
+    m.box((0.14, 0.16, 0.18), (mx + 0.17, my - 0.01, mz), "Shell", bevel=0.015, segs=1)
+    m.box((0.06, 0.04, 0.006), (mx + 0.17, my + 0.03, mz - 0.093), "Warn", segs=1)
+    # Its bolts at the flange's corners, and its power lead.
+    for sx in (-0.22, 0.22):
+        for sz in (-0.12, 0.12):
+            m.cyl(0.012, my - 0.09, my - 0.07, "Steel", segs=8, xf=T(mx + sx, 0, mz + sz) @ UP)
+    m.cyl(0.012, my - 0.05, my + 0.08, "Red", segs=6, xf=T(mx - 0.12, 0, mz + 0.1) @ UP)
+    return m
+
+
+motor = carriage_motor("carriage_motor")
 
 # --- Head -----------------------------------------------------------------
 HEAD = (0.0, -0.42, -0.5)
@@ -121,7 +150,7 @@ for sz in (-1, 1):
              bevel=0.006, segs=1)
 tote.box((0.2, 0.06, 0.006), (0, 0.06, D / 2 + 0.004), "Shell", bevel=0.002, segs=1)
 
-for p in (car, head, plate, upper, lower, grab, jaw, bridge, rail, tote):
+for p in (car, motor, head, plate, upper, lower, grab, jaw, bridge, rail, tote):
     make(p)
 report()
 export("assets/models/robots/sorter.glb")
@@ -152,3 +181,17 @@ size = [hi[k] - lo[k] for k in range(3)]
 print(f"sorter_head dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
       f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
 export("assets/models/items/sorter_head.glb")
+
+reset()
+obj = make(carriage_motor("sorter_carriage_motor"))
+me = obj.data
+lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+for v in me.vertices:
+    v.co = [v.co[k] - mid[k] for k in range(3)]
+obj.location = (0.0, 0.0, 0.0)
+size = [hi[k] - lo[k] for k in range(3)]
+print(f"sorter_carriage_motor dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+      f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+export("assets/models/items/sorter_carriage_motor.glb")

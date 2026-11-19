@@ -194,6 +194,13 @@ pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
 /// prints it), and the bolts through its stalk.
 pub const SORTER_HEAD_MID: Vec3 = Vec3::new(0.0, 0.085, -0.01);
 pub const SORTER_HEAD_BOLTS: usize = 2;
+/// The Sorter's carriage motor's middle (on the carriage's top), its bolts,
+/// and its state (the carriage shot through; its motor on top, worn), and
+/// the key its look is hidden by (`sorter_look`'s `carriage_motor` holder).
+pub const SORTER_MOTOR_AT: Vec3 = Vec3::new(0.0, 0.474, 0.0);
+pub const SORTER_MOTOR_BOLTS: usize = 4;
+pub const SORTER_MOTOR_HEALTH: f32 = 0.7;
+pub const SORTER_MOTOR_LOOK: PartRole = PartRole::Rotor(0);
 /// Bolts through a launcher's flange onto its boom.
 pub const LAUNCHER_BOLTS: usize = 4;
 
@@ -391,6 +398,21 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
                 replaces: (e != Entity::PLACEHOLDER).then_some(e),
             });
         }
+        // Its travel drive, bolted on the carriage's top.
+        out.push(Row {
+            item: "sorter_carriage_motor",
+            at: Transform::from_translation(SORTER_MOTOR_AT),
+            size: 1.0,
+            health: SORTER_MOTOR_HEALTH,
+            fix: Fix::Bolts {
+                n: SORTER_MOTOR_BOLTS,
+                centre: SORTER_MOTOR_AT - Vec3::Y * 0.09,
+                face: Quat::IDENTITY,
+                radius: 0.25,
+            },
+            hot: false,
+            replaces: None,
+        });
         return out;
     }
     if w.kind == RobotKind::Drone {
@@ -610,9 +632,11 @@ fn fit_salvage(
                 }
             }
             // A part's look drawn off the part (`SeatLook`) goes with it.
+            let keyed = (row.item == "sorter_carriage_motor").then_some(SORTER_MOTOR_LOOK);
             if let Some(role) = row
                 .replaces
                 .and_then(|r| on.iter().find(|o| o.0 == r).map(|o| o.1))
+                .or(keyed)
             {
                 for (l, mut vis) in &mut seat_looks {
                     if l.robot == e && l.role == role {
@@ -1675,6 +1699,7 @@ mod tests {
             "{:?}",
             r.iter().map(|r| r.item).collect::<Vec<_>>()
         );
+        assert!(r.iter().any(|r| r.item == "sorter_carriage_motor"));
         if let Some(h) = head {
             assert!(matches!(
                 h.fix,
