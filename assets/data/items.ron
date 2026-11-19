@@ -1146,7 +1146,7 @@
             tags: ["electronics", "glass"],
         ),
         (
-            id: "sorter_carriage_motor", dims: Some((0.5, 0.212, 0.3)), name: "Gantry travel motor",
+            id: "sorter_carriage_motor", dims: Some((0.3, 0.213, 0.5)), name: "Gantry travel motor",
             description: "The motor that ran the Depot gantry's carriage along its bridge: a finned can on a steel flange, its gearbox stamped SR DRV.",
             category: RobotPart, size: Medium, mass: 9.0, bulk: 3.0,
             tags: ["electronics", "metal"],

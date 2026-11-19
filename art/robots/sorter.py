@@ -5,8 +5,8 @@ Objects and their origins:
 
 - `carriage` (0, 0, 0)   the trolley under the bridge, 1.4 x 0.6 x 1.2; wheels
                          on top, a cyan strip round it, the shoulder mount below
-- `carriage_motor` (0, 0.48, 0)  its travel drive on the carriage's top
-                         between the wheels (salvage: hidden when seated)
+- `carriage_motor` (-0.33, 0.47, 0)  its travel drive on the carriage's top,
+                         along Z beside the bridge beam (salvage: hidden when seated)
 - `head`     (0, -0.42, -0.5)  the scanning head under the front, an eye slit
 - `plate`    (0.74, 0, 0)  an armour plate on the carriage's +X side (the game
                          turns a copy to -X)
@@ -28,6 +28,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import bmesh
+from mathutils import Matrix
+
 from common import Part, RX, RY, T, export, make, report, reset
 
 UP = RX(-math.pi / 2)  # lathe/cyl axis Z -> Y
@@ -53,9 +56,10 @@ for sz in (-1, 1):
     car.box((0.9, 0.12, 0.012), (0.0, 0.15, sz * 0.605), "Warn", bevel=0.004, segs=1)
 
 # --- Carriage motor ---------------------------------------------------------
-# Its travel drive, bolted on the carriage's top between the wheels: its own
-# object, salvage (`sorter_carriage_motor`), hidden when it's seated.
-MOTOR = (0.0, 0.48, 0.0)
+# Its travel drive, bolted on the carriage's top beside the bridge beam (which
+# runs over the carriage's middle, |x| < 0.18), along Z inside the wheels: its
+# own object, salvage (`sorter_carriage_motor`), hidden when it's seated.
+MOTOR = (-0.33, 0.47, 0.0)
 
 
 def carriage_motor(name):
@@ -74,6 +78,9 @@ def carriage_motor(name):
         for sz in (-0.12, 0.12):
             m.cyl(0.012, my - 0.09, my - 0.07, "Steel", segs=8, xf=T(mx + sx, 0, mz + sz) @ UP)
     m.cyl(0.012, my - 0.05, my + 0.08, "Red", segs=6, xf=T(mx - 0.12, 0, mz + 0.1) @ UP)
+    # (Built across X, then turned to run along Z.)
+    bmesh.ops.rotate(m.bm, cent=MOTOR, matrix=Matrix.Rotation(math.pi / 2, 3, "Y"),
+                     verts=m.bm.verts)
     return m
 
 

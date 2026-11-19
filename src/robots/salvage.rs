@@ -197,7 +197,7 @@ pub const SORTER_HEAD_BOLTS: usize = 2;
 /// The Sorter's carriage motor's middle (on the carriage's top), its bolts,
 /// and its state (the carriage shot through; its motor on top, worn), and
 /// the key its look is hidden by (`sorter_look`'s `carriage_motor` holder).
-pub const SORTER_MOTOR_AT: Vec3 = Vec3::new(0.0, 0.474, 0.0);
+pub const SORTER_MOTOR_AT: Vec3 = Vec3::new(-0.33, 0.464, 0.0);
 pub const SORTER_MOTOR_BOLTS: usize = 4;
 pub const SORTER_MOTOR_HEALTH: f32 = 0.7;
 pub const SORTER_MOTOR_LOOK: PartRole = PartRole::Rotor(0);
