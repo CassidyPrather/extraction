@@ -28,7 +28,7 @@ How it works:
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
-| `asset_path_tests::game_code_never_reads_from_the_build_machine`: src/capture/grips.rs:167 env!("CARGO_MANIFEST_DIR") in named_grips() | 6efac71d (lib351) | World models | grip ledger; gate it cfg(test) |
+| `capture::checks::models_are_a_believable_size`: items/plough_plate 3.08 m across, outside the 0.01..1.6 m items bound (scale.rs lists it at 3.08 m, Made) | 0fcb2355 (lib354) | Heavy | crowbar pass d2cd2be7; either a smaller carried piece or a sized exemption the check honours |
 
 ## Logged, not failing a check
 
@@ -44,6 +44,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| `asset_path_tests::game_code_never_reads_from_the_build_machine` (grips.rs CARGO_MANIFEST_DIR) | 81b48bb7 (World models), green on lib354 |
 | first_jobs cautious yard WalkTo timeouts near gate 4 | 0ba2aadb (Onboarding) |
 | `render::affordance` every_interactable (yard Bell pull, BenchLever, BenchKnob) | 4cf47a06 (Onboarding) |
 | `sim::tests::a_bot_climbs_into_the_truck` | 4cf47a06 (Onboarding) |
