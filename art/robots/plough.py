@@ -424,6 +424,31 @@ def auger(lod):
     return p
 
 
+RAIL_W = 3.08
+
+
+def rail_plate(name, lod, width):
+    """The chevroned plate along the housing's top rail, `width` across,
+    centred on the rail (the housing's is the whole rail; the salvage, a
+    half of it)."""
+    bev = 0.012 if lod < 2 else 0.0
+    th = math.radians(38.0)
+    nrm = Vector((0, math.sin(th), -math.cos(th)))
+    tan = Vector((0, math.cos(th), math.sin(th)))
+    zc, yc = AZ - 0.57 * math.cos(th), AY + 0.57 * math.sin(th)
+    q = Part(name, origin=HOUSING)
+    q.box((width, 0.06, 0.24), (0, 0, 0), "Dark", bevel=bev, segs=1,
+          xf=T(0, yc, zc) @ RX(th - math.pi / 2))
+    rail = (Vector((0, yc, zc)) + nrm * 0.03, Vector((1, 0, 0)), tan, nrm)
+    half = width / 2 - 0.04
+    if lod < 2:
+        chevrons(q, rail, half, -0.1, 0.1, width=0.07, pitch=0.17)
+    else:
+        plate(q, [(-half, -0.08), (half, -0.08), (half, 0.08), (-half, 0.08)], rail, -0.001,
+              0.006, "Warn")
+    return q
+
+
 def housing(lod):
     n = SEGS[lod]
     full = lod == 0
@@ -468,17 +493,9 @@ def housing(lod):
     nrm = Vector((0, math.sin(tr), -math.cos(tr)))
     tan = Vector((0, math.cos(tr), math.sin(tr)))
     zc, yc = at(th, 0.57)
-    # (Its own object, `housing_plate`: it comes off with a crowbar, salvage,
-    # `plough_plate`.)
-    q = Part("housing_plate" + suffix(lod), origin=HOUSING)
-    q.box((3.08, 0.06, 0.24), (0, 0, 0), "Dark", bevel=bev, segs=1,
-          xf=T(0, yc, zc) @ RX(tr - math.pi / 2))
-    rail = (Vector((0, yc, zc)) + nrm * 0.03, Vector((1, 0, 0)), tan, nrm)
-    if lod < 2:
-        chevrons(q, rail, 1.5, -0.1, 0.1, width=0.07, pitch=0.17)
-    else:
-        plate(q, [(-1.5, -0.08), (1.5, -0.08), (1.5, 0.08), (-1.5, 0.08)], rail, -0.001, 0.006,
-              "Warn")
+    # (Its own object, `housing_plate`: it comes off with a crowbar in two
+    # halves, salvage, `plough_plate`.)
+    q = rail_plate("housing_plate" + suffix(lod), lod, RAIL_W)
     # The cutting edge along the bottom at the back of the opening.
     p.prism([(-1.85, 0.32), (-1.79, 0.30), (-1.90, 0.03), (-1.97, 0.05)], -1.5, 1.5, "Steel",
             axis="x")
@@ -711,13 +728,15 @@ def items():
     """The salvage: the robot's own cell, eye, beacon, a track's drive
     sprocket and the auger's motor (what you saw on it is what comes off)."""
     names = {"cell": "plough_cell", "eye": "plough_eye", "beacon": "plough_beacon",
-             "sprocket_r": "plough_track_drive", "auger_motor": "plough_auger_motor",
-             "housing_plate": "plough_plate"}
+             "sprocket_r": "plough_track_drive", "auger_motor": "plough_auger_motor"}
     out = []
     for p in build(0):
         if isinstance(p, Part) and p.name in names:
             p.name = names[p.name]
             out.append(p)
+    # A half of its rail plate: it comes off in two (a carried piece, not a
+    # three-metre one).
+    out.append(rail_plate("plough_plate", 0, RAIL_W / 2))
     return out
 
 
