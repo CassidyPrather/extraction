@@ -222,6 +222,114 @@ fn prime_pens(
     }
 }
 
+/// The well a cartridge goes in, loaded by hand (flat mode's combine key,
+/// the bot's): the first empty one, else the first whose cartridge is
+/// spent (to swap it out). `wells` are each well's index and what's in it,
+/// as `Some(how full)`. None if both hold something still good.
+pub fn well_for(wells: &[(usize, Option<f32>)]) -> Option<usize> {
+    let mut w = wells.to_vec();
+    w.sort_by_key(|(i, _)| *i);
+    w.iter()
+        .find(|(_, c)| c.is_none())
+        .or_else(|| w.iter().find(|(_, c)| c.is_some_and(|f| f <= 0.0)))
+        .map(|(i, _)| *i)
+}
+
+/// A held cartridge `cart` loaded into a held `pen` without bringing hand
+/// to well (flat mode, the bot): it goes in the well [`well_for`] picks,
+/// and a spent one there comes out into the hand the new one left. Both
+/// wells full of good ones: nothing happens. True if it went in.
+pub fn load_by_hand(world: &mut World, pen: Entity, cart: Entity) -> bool {
+    use crate::interact::{Hand, HandAction, Held, InSocket, InteractEvent, Supported};
+    use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
+    let Some(children) = world.get::<Children>(pen).map(|c| c.to_vec()) else {
+        return false;
+    };
+    let wells: Vec<(Entity, usize, Option<Entity>)> = children
+        .iter()
+        .filter_map(|s| {
+            let i = world.get::<PenSlot>(*s)?.0;
+            Some((*s, i, world.get::<Socket>(*s)?.occupant))
+        })
+        .collect();
+    let fills: Vec<(usize, Option<f32>)> = wells
+        .iter()
+        .map(|(_, i, o)| {
+            (
+                *i,
+                o.map(|c| world.get::<Item>(c).map_or(0.0, |it| it.0.condition)),
+            )
+        })
+        .collect();
+    let Some(want) = well_for(&fills) else {
+        return false;
+    };
+    let Some(&(slot, _, spent)) = wells.iter().find(|(_, i, _)| *i == want) else {
+        return false;
+    };
+    // Out of its hand.
+    let held = world.get::<Held>(cart).copied();
+    if let Some(h) = held {
+        if let Some(mut hand) = world.get_mut::<Hand>(h.hand) {
+            hand.holding = None;
+        }
+    }
+    let at = world
+        .get::<GlobalTransform>(cart)
+        .map(|g| g.compute_transform())
+        .unwrap_or_default();
+    // A spent one out, where the new one was.
+    if let Some(old) = spent {
+        if let Some(mut s) = world.get_mut::<Socket>(slot) {
+            s.occupant = None;
+        }
+        world
+            .entity_mut(old)
+            .remove::<(ChildOf, InSocket, RigidBodyDisabled, ColliderDisabled)>()
+            .insert((
+                at,
+                avian3d::prelude::Position(at.translation),
+                avian3d::prelude::Rotation(at.rotation),
+                avian3d::prelude::LinearVelocity::ZERO,
+            ));
+        world.write_message(InteractEvent::Unsocketed {
+            item: old,
+            socket: slot,
+        });
+        if let Some(h) = held {
+            world.write_message(HandAction::Grab {
+                player: h.player,
+                side: h.side,
+                item: old,
+                point: None,
+            });
+        }
+    }
+    // The new one in.
+    let seat = {
+        let Some(mut s) = world.get_mut::<Socket>(slot) else {
+            return false;
+        };
+        s.occupant = Some(cart);
+        s.seat
+    };
+    world
+        .entity_mut(cart)
+        .remove::<(Held, Supported)>()
+        .insert((
+            InSocket { socket: slot },
+            RigidBodyDisabled,
+            ColliderDisabled,
+            ChildOf(slot),
+            seat,
+        ));
+    world.write_message(InteractEvent::Socketed {
+        item: cart,
+        socket: slot,
+    });
+    true
+}
+
 /// The cartridges in a pen's slots: each, its grade, how full.
 pub fn cartridges_in(
     pen: Entity,
@@ -248,6 +356,17 @@ mod tests {
 
     /// A cartridge's grade is its tag; a part-used one gives its share; a
     /// regen and a stim in one pen give both.
+    /// By hand, a cartridge goes in the first empty well, else in place of
+    /// a spent one; two good ones and it doesn't go.
+    #[test]
+    fn a_cartridge_by_hand_takes_an_empty_well_then_a_spent_one() {
+        assert_eq!(well_for(&[(0, Some(1.0)), (1, None)]), Some(1));
+        assert_eq!(well_for(&[(1, None), (0, None)]), Some(0));
+        assert_eq!(well_for(&[(0, Some(0.5)), (1, Some(0.0))]), Some(1));
+        assert_eq!(well_for(&[(0, Some(0.0)), (1, Some(0.0))]), Some(0));
+        assert_eq!(well_for(&[(0, Some(1.0)), (1, Some(0.3))]), None);
+    }
+
     #[test]
     fn a_jab_gives_what_is_in_both_slots() {
         let catalog =
