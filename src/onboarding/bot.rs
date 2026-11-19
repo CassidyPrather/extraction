@@ -691,6 +691,20 @@ impl DirectorWorld<'_, '_> {
                 t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
                 t.push(Use(Side::Right));
             }
+            // Into the lift's middle, facing the store's roof, and still
+            // till it pops (about 4 s from empty): it throws you the way
+            // you face (`anomaly`'s lift; no jump, in any access mode).
+            Goal::RideSwirl => {
+                let lift = Vec2::from(super::LIFT_AT);
+                let roof = Vec2::from(super::STORE_AT);
+                t.extend(self.go(here, lift, 0.4));
+                t.push(LookAt(Vec3::new(
+                    roof.x,
+                    self.zone.ground(roof.x, roof.y) + super::STORE_ROOF + 1.0,
+                    roof.y,
+                )));
+                t.push(Wait(8.0));
+            }
             Goal::Probe => {
                 t.extend(self.free_hands());
                 let crate_at = Vec2::from(super::PARTS_CRATE_AT);

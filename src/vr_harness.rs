@@ -3509,12 +3509,45 @@ mod onboarding {
         assert!(done(&vr, Goal::Wrist), "the right wrist's watch");
     }
 
+    /// The shimmer's first step: stood in the flagged swirl, facing the
+    /// store, still, the lift pops and throws you onto its roof (no jump:
+    /// the same in every access mode).
+    #[test]
+    fn station_shimmer_ride_the_swirl_onto_the_roof() {
+        let mut vr = Vr::first_run();
+        at_station(&mut vr, crate::onboarding::station_of(Goal::RideSwirl), &[]);
+        vr.step(30);
+        let lift = crate::onboarding::LIFT_AT;
+        // In its middle, facing the store (-Z, south of it).
+        let feet = ground(&vr, lift);
+        vr.stand(feet, 0.0);
+        let mut on = false;
+        for _ in 0..(90 * 10) {
+            vr.step(1);
+            if done(&vr, Goal::RideSwirl) {
+                on = true;
+                break;
+            }
+        }
+        let at = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation;
+        assert!(on, "not on the store's roof after 10 s: feet at {at:.2?}");
+    }
+
     /// The shimmer: a part thrown by hand (grip, swing, open) sets off the
     /// snare on the way in, from outside it.
     #[test]
     fn station_shimmer_throw_a_part_first() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, crate::onboarding::station_of(Goal::Probe), &[]);
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Probe),
+            &[Goal::RideSwirl],
+        );
         vr.step(30);
         let snare = crate::onboarding::SNARE_AT;
         let r = crate::onboarding::SNARE_R;
@@ -3559,7 +3592,7 @@ mod onboarding {
         at_station(
             &mut vr,
             crate::onboarding::station_of(Goal::Probe),
-            &[Goal::Probe],
+            &[Goal::RideSwirl, Goal::Probe],
         );
         let heart = crate::onboarding::SHIMMER_AT;
         let r = crate::onboarding::SHIMMER_R;
@@ -3631,7 +3664,11 @@ mod onboarding {
         look_at_the_wrist(&mut vr, feet);
         assert!(done(&vr, Goal::Wrist), "the wrist at First aid");
         // At the shimmer, the stone before the part thrown.
-        at_station(&mut vr, crate::onboarding::station_of(Goal::Probe), &[]);
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Probe),
+            &[Goal::RideSwirl],
+        );
         let heart = crate::onboarding::SHIMMER_AT;
         let r = crate::onboarding::SHIMMER_R;
         let stone = placed(&mut vr, Placed::Stone);
