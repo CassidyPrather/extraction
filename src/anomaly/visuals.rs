@@ -393,8 +393,8 @@ fn mark_texture(images: &mut Assets<Image>, pattern: Pattern) -> (Handle<Image>,
         for x in 0..n {
             let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
-            // In the anomaly's radii.
-            let r = (u * u + v * v).sqrt() * 1.1;
+            // In the anomaly's radii (the disc reaches MARK_PAD of them).
+            let r = (u * u + v * v).sqrt() * MARK_PAD;
             let a = v.atan2(u);
             let edge = 1.0 + 0.012 * (a * 7.0).sin() + 0.008 * (a * 17.0 + 1.3).sin();
             // Full to 0.93 of it, nothing past 1.02.
@@ -903,6 +903,20 @@ fn particle_mesh(n: usize, rng: &mut extraction_core::noise::Rng) -> Mesh {
     .with_inserted_indices(Indices::U32(idx))
 }
 
+/// A mark's disc reaches this far past what it draws (its texture is
+/// full to 0.93 of the drawn radius and gone by 1.02 of it).
+pub const MARK_PAD: f32 = 1.1;
+
+/// How far from its heart an anomaly's mark is drawn: its radius, but a
+/// snare's out to where it strikes a body (`snare_strikes_within`), so
+/// its scorch is exactly where it hurts.
+pub fn mark_radius(kind: AnomalyKind, r: f32) -> f32 {
+    match kind {
+        AnomalyKind::Snare => super::snare_strikes_within(r),
+        _ => r,
+    }
+}
+
 /// A ground mark fades out on steep ground, from the first slope (degrees)
 /// to gone by the second: draped up a bank it stood as a wall.
 pub const MARK_SLOPE_FADE: (f32, f32) = (25.0, 35.0);
@@ -1307,7 +1321,11 @@ fn dress_anomalies(
             .insert(Look::default())
             .with_children(|c| {
                 if let Some(mark) = mark {
-                    let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
+                    let disc = meshes.add(draped_disc(
+                        &zone,
+                        at.translation,
+                        mark_radius(kind, r) * MARK_PAD,
+                    ));
                     let mut m = c.spawn((
                         Mesh3d(disc),
                         MeshMaterial3d(mark.clone()),
