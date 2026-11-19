@@ -283,14 +283,6 @@
             Item(id: "scrap_metal", weight: 2.0),
             Item(id: "power_cell", weight: 1.0),
         ]),
-        "dirigible_wreck": (rolls: (5, 8), entries: [
-            Item(id: "electronics", weight: 3.0, from_raid: 1),
-            Item(id: "scrap_metal", weight: 3.0),
-            Item(id: "polymer", weight: 2.0, from_raid: 2),
-            Item(id: "robot_cell", weight: 2.0, condition: (0.2, 0.9)),
-            Item(id: "walker_eye", weight: 1.0, condition: (0.2, 0.9)),
-            Item(id: "hound_hip_servo", weight: 1.5, condition: (0.2, 0.9), from_raid: 4),
-        ]),
         "cargo_pod": (rolls: (4, 7), entries: [
             Item(id: "robot_cell", weight: 2.0, condition: (0.6, 1.0)),
             Item(id: "electronics", weight: 3.0, from_raid: 1),
