@@ -214,6 +214,9 @@ pub struct ToggleBackpack {
 const BACK: Vec3 = Vec3::new(0.0, -0.12, 0.2);
 /// Where flat mode hangs the open backpack, relative to the torso.
 const FRONT: Vec3 = Vec3::new(0.0, -0.22, -0.48);
+/// A pack let go further than this from the chest (m) is out of any
+/// arm's reach: it goes on your back ([`backpack_released`]).
+const PACK_LET_GO_REACH: f32 = 1.5;
 
 pub struct BodyPlugin;
 
@@ -790,8 +793,8 @@ fn hang_held_pack(
     mut packs: Query<(
         &mut Backpack,
         &Held,
-        &Position,
-        &Rotation,
+        &mut Position,
+        &mut Rotation,
         &mut LinearVelocity,
         &mut AngularVelocity,
     )>,
@@ -801,7 +804,7 @@ fn hang_held_pack(
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
-    for (mut bag, held, pos, rot, mut lin, mut ang) in &mut packs {
+    for (mut bag, held, mut pos, mut rot, mut lin, mut ang) in &mut packs {
         if !bag.carried {
             continue;
         }
@@ -814,6 +817,12 @@ fn hang_held_pack(
         let torso = torso.compute_transform();
         let want = Transform::from_translation(hand.world.translation - Vec3::Y * HANG)
             .with_rotation(torso.rotation * Quat::from_rotation_x(-HANG_TILT));
+        // Left far behind (you were moved, not walked: a teleport, a ride):
+        // back under the hand at once, as a held thing is (`LEASH_FAR`).
+        if want.translation.is_finite() && pos.0.distance(want.translation) > super::LEASH_FAR {
+            pos.0 = want.translation;
+            rot.0 = want.rotation;
+        }
         lin.0 = ((want.translation - pos.0) / dt).clamp_length_max(8.0);
         let (axis, mut angle) = (want.rotation * rot.0.inverse()).to_axis_angle();
         if angle > std::f32::consts::PI {
@@ -923,7 +932,11 @@ fn backpack_released(
         };
         let local = torso_gt.affine().inverse() * gt.affine();
         let local = Transform::from_matrix(local.into());
-        let behind = local.translation.distance(BACK) < 0.35 || local.translation.z > 0.05;
+        // Let go out of reach (it had been left behind as you were moved):
+        // it goes on, rather than hanging that far off you for good.
+        let behind = local.translation.distance(BACK) < 0.35
+            || local.translation.z > 0.05
+            || local.translation.length() > PACK_LET_GO_REACH;
         bag.open = !behind;
         let t = if behind {
             Transform::from_translation(BACK)

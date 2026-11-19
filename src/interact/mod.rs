@@ -1538,7 +1538,7 @@ fn hand_of(
 /// How far a held item can lag its hand before it's put back in it.
 const LEASH: f32 = 0.6;
 /// Past this the item goes back to the hand even through a wall.
-const LEASH_FAR: f32 = 2.0;
+pub(crate) const LEASH_FAR: f32 = 2.0;
 
 /// Held items with something solid between them and their hand this tick
 /// (`leash_check`): the leash doesn't snap them back through it.
