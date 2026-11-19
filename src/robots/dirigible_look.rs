@@ -54,9 +54,14 @@ pub struct Floor {
 
 impl Floor {
     pub fn at(&self, x: f32, z: f32) -> f32 {
+        // Full over the gondola, rounding off to the grass round it: the
+        // fabric drapes over a hump, not a block.
         match self.gondola {
-            Some((top, mid, half)) if (x - mid.x).abs() < half.x && (z - mid.y).abs() < half.y => {
-                self.ground.max(top)
+            Some((top, mid, half)) if top > self.ground => {
+                let d = ((x - mid.x).abs() - half.x).max(0.0);
+                let e = ((z - mid.y).abs() - half.y).max(0.0);
+                let k = (1.0 - (d * d + e * e).sqrt() / GONDOLA_FALL).clamp(0.0, 1.0);
+                self.ground + (top - self.ground) * k * k * (3.0 - 2.0 * k)
             }
             _ => self.ground,
         }
@@ -142,8 +147,10 @@ pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
 /// What the fabric drapes over once the ship is down (in the ship's
 /// space): the gondola with its engine pods and their mounts, a little
 /// clear so none of it shows through the fabric's coarse mesh.
-const GONDOLA_TOP: f32 = -RADIUS - 0.5 + 0.55 + 0.35;
-const GONDOLA_HALF: Vec2 = Vec2::new(1.35, 2.4);
+const GONDOLA_TOP: f32 = -RADIUS - 0.5 + 0.55 + 0.3;
+const GONDOLA_HALF: Vec2 = Vec2::new(0.8, 2.1);
+/// How far round it the hump falls away to the grass (m).
+const GONDOLA_FALL: f32 = 1.2;
 
 /// A cell's look, settling from one slack to the next.
 #[derive(Component, Clone, Copy, Debug)]
