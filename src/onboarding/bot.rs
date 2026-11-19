@@ -691,6 +691,37 @@ impl DirectorWorld<'_, '_> {
                 t.extend(self.go(here, self.station(goal) + Vec2::new(-1.5, 0.0), 1.0));
                 t.push(Use(Side::Right));
             }
+            // The pen in the gun hand, the crate's cartridge to its empty
+            // well: the other hand's and the combine key (flat's T), or
+            // one-handed the pen brought down onto it where it lies.
+            Goal::LoadPen => {
+                let pen = self
+                    .holding(Side::Right)
+                    .filter(|e| self.id(*e) == Some("regen_injector"))
+                    .or_else(|| self.on_body("regen_injector"))
+                    .or_else(|| self.loose("regen_injector", here));
+                if let (Some((cart, at)), Some(pen)) = (self.placed(Placed::Cartridge), pen) {
+                    t.extend(self.go(here, at.xz() + Vec2::new(-0.7, 0.0), 0.4));
+                    if self.holding(Side::Right) != Some(pen) {
+                        t.extend(self.free_hands());
+                        t.push(Grab {
+                            item: pen,
+                            side: Side::Right,
+                        });
+                    } else if self.holding(Side::Left).is_some() {
+                        t.push(Stow(Side::Left));
+                    }
+                    if self.one_handed() {
+                        t.push(OneHandCombine(cart));
+                    } else {
+                        t.push(Grab {
+                            item: cart,
+                            side: Side::Left,
+                        });
+                        t.push(Combine);
+                    }
+                }
+            }
             // Into the lift's middle, facing the store's roof, and still
             // till it pops (about 4 s from empty): it throws you the way
             // you face (`anomaly`'s lift; no jump, in any access mode).
