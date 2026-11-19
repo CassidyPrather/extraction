@@ -28,7 +28,7 @@ How it works:
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
-| `perf::tests::no_collider_scale_drifts`: "Yard rain_barrel" collider scale (1, 1, 1.0000001) | c91aea7e (lib348) | World models | yard colliders 71111912 |
+| `asset_path_tests::game_code_never_reads_from_the_build_machine`: src/capture/grips.rs:167 env!("CARGO_MANIFEST_DIR") in named_grips() | 6efac71d (lib351) | World models | grip ledger; gate it cfg(test) |
 
 ## Logged, not failing a check
 
@@ -81,3 +81,4 @@ How it works:
 | `robots::sentry::tests::its_wreck_lies_in_reach` (counted every item) | Heavy 0d575202; passes on c91aea7e (lib348) |
 | `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
 | `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
+| `perf::tests::no_collider_scale_drifts` rain_barrel scale | World models e567e778; passes on 6efac71d (lib351) |
