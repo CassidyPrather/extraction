@@ -599,8 +599,9 @@ fn load_one_round(world: &mut World, player: Entity, gun_e: Entity) {
     }
 }
 
-/// Two held items brought together: load a magazine from ammo, clean or
-/// repair a gun.
+/// Two held items brought together: load a magazine from ammo or a
+/// cartridge into a pen (`items::pen::load_by_hand`), clean or repair a
+/// gun.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct Combine {
     pub a: Entity,
@@ -636,6 +637,15 @@ pub fn apply_combines(
             };
             let dx = catalog.get(ix.kind()).clone();
             let dy = catalog.get(iy.kind()).clone();
+            // A cartridge into an injector pen's well.
+            if dx.fits_mount() == Some(extraction_core::items::Mount::Cartridge)
+                && dy.id == crate::items::pen::PEN
+            {
+                commands.queue(move |world: &mut World| {
+                    crate::items::pen::load_by_hand(world, y, x);
+                });
+                break;
+            }
             let my = my.cloned();
             // Ammo into a magazine.
             if let (Some(cart), Some(mag)) = (&dx.cartridge, &dy.magazine) {

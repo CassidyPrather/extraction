@@ -354,10 +354,14 @@ fn dress_props(
                     ChildOf(e),
                 ));
             }
-            Prop::SnareFlags => {
-                // Six survey flags round it, red, knee high: where to throw.
+            Prop::Flags(r, colour) => {
+                // Six survey flags round it, knee high: red where to throw,
+                // blue where to stand.
                 let red = materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.85, 0.08, 0.06),
+                    base_color: match colour {
+                        super::Flag::Red => Color::srgb(0.85, 0.08, 0.06),
+                        super::Flag::Blue => Color::srgb(0.08, 0.3, 0.85),
+                    },
                     perceptual_roughness: 0.8,
                     double_sided: true,
                     cull_mode: None,
@@ -366,7 +370,7 @@ fn dress_props(
                 let pole = lib.get(Mat::Timber, &server, &mut materials);
                 for k in 0..6 {
                     let a = k as f32 * std::f32::consts::TAU / 6.0;
-                    let at = Vec3::new(a.cos(), 0.0, a.sin()) * (super::SNARE_R + 0.15);
+                    let at = Vec3::new(a.cos(), 0.0, a.sin()) * (r + 0.15);
                     commands.spawn((
                         Mesh3d(meshes.add(metric_box(Vec3::new(0.02, 0.9, 0.02)))),
                         MeshMaterial3d(pole.clone()),

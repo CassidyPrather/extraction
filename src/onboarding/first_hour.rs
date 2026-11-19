@@ -5932,8 +5932,24 @@ fn one_up<'a>(
     player: Entity,
 ) -> bool {
     guns.any(|(g, by, packed)| {
-        by == player && !packed && g.firearm.chambers.iter().any(|c| c.is_some())
+        let f = &g.firearm;
+        by == player
+            && !packed
+            && round_up(
+                f.chambers.iter().any(|c| c.is_some()),
+                f.bolt_travel,
+                f.locked_back,
+                f.magazine.as_ref().map_or(0, |m| m.rounds),
+            )
     })
+}
+
+/// A round up: in the chamber, or on its way there, the action cycling
+/// after a shot with rounds left to feed. (Noticed mid-shot, the careful
+/// newcomer's slide was back between rounds, the magazine at 6, and it was
+/// written down as unready: first_jobs raid 2, the broken walker.)
+fn round_up(chambered: bool, bolt_travel: f32, locked_back: bool, mag_rounds: u32) -> bool {
+    chambered || (bolt_travel > 0.0 && !locked_back && mag_rounds > 0)
 }
 
 /// `legs`, round the buildings in the way.
@@ -8904,6 +8920,21 @@ the Hollow.";
         assert!(!fight.heeds_tells());
         fight.machine = Some(("walker".into(), Vec2::ZERO));
         assert!(fight.heeds_tells());
+    }
+
+    #[test]
+    fn a_round_on_its_way_is_a_round_up() {
+        use super::round_up;
+        // Chambered: up.
+        assert!(round_up(true, 0.0, false, 0));
+        // Mid-cycle after a shot, rounds left: the next is on its way.
+        assert!(round_up(false, 0.6, false, 6));
+        // Locked back on an empty magazine, or closed on an empty chamber:
+        // not up.
+        assert!(!round_up(false, 1.0, true, 0));
+        assert!(!round_up(false, 0.0, false, 6));
+        // Mid-cycle with nothing left to feed: not up.
+        assert!(!round_up(false, 0.6, false, 0));
     }
 
     #[test]

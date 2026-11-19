@@ -81,6 +81,8 @@ pub enum Goal {
     Search,
     Wrist,
     Inject,
+    /// Up onto the store's roof by the lift's pop (#108).
+    RideSwirl,
     Probe,
     Artifact,
     Button,
@@ -115,6 +117,7 @@ impl Goal {
             Goal::Wrist => "You're hurt: look",
             Goal::Inject => "Inject your thigh",
             Goal::Probe => "A part at the sparks",
+            Goal::RideSwirl => "Ride the swirl",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
             Goal::CallTruck => "Call the truck",
@@ -208,6 +211,8 @@ impl Goal {
             // one-handed, the button (`how_for`).
             (Goal::Inject, false) => &["thigh", "trigger"],
             (Goal::Inject, true) => &["u"],
+            // `watch_moves`: on the store's roof (the lift's pop does it).
+            (Goal::RideSwirl, _) => &["stand", "face", "still"],
             (Goal::Probe, false) => &["grip", "open your hand"],
             (Goal::Probe, true) => &["q"],
             (Goal::Artifact, false) => &["point", "grip", "flick"],
@@ -314,6 +319,9 @@ impl Goal {
             (Goal::Wrist, true) => "You're hurt. Hold H\nto check yourself.",
             (Goal::Inject, false) => "Its tip to your thigh.\nSqueeze TRIGGER.",
             (Goal::Inject, true) => "Hold it. Press U.",
+            // No button: keeping still is the whole of it.
+            (Goal::RideSwirl, false) => "Stand in the blue flags,\nface the roof, hands still.",
+            (Goal::RideSwirl, true) => "Stand in the blue flags,\nface the roof. Hold still.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the sparks.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo at the sparks.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
@@ -485,8 +493,8 @@ pub const STATIONS: &[Station] = &[
         at: [4.5, -30.0],
         rot: 90.0,
         bay: 6,
-        goals: &[Goal::Probe, Goal::Artifact],
-        where_: "through the gate, by the sparks on the right",
+        goals: &[Goal::RideSwirl, Goal::Probe, Goal::Artifact],
+        where_: "through the gate, the flags on the right",
         tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
         in_order: true,
     },
@@ -550,6 +558,24 @@ const BEAM_STACK: Vec3 = Vec3::new(0.8, BEAM_CLEAR, 0.8);
 /// A snare on the way in, nothing in it: you can't see where it ends until
 /// something sets it off. Throw a thing in first.
 pub const SNARE_AT: [f32; 2] = [9.0, -31.5];
+/// Bay 6's lift (the map's "Bay 6 lift", #108) and the store whose roof
+/// its pop throws you onto: the store's middle, its roof's half extent
+/// (x, z) and its top over the ground there, and how near that top the
+/// feet are on it (m).
+pub const LIFT_AT: [f32; 2] = [15.5, -22.0];
+pub const LIFT_R: f32 = 2.5;
+pub const STORE_AT: [f32; 2] = [15.5, -27.0];
+pub const STORE_HALF: [f32; 2] = [2.1, 1.6];
+pub const STORE_ROOF: f32 = 2.0;
+const ON_ROOF: f32 = 0.3;
+
+/// Feet at `feet` on the store's roof: over it, and up at its top.
+pub fn on_store_roof(zone: &Zone, feet: Vec3) -> bool {
+    let c = Vec2::from(STORE_AT);
+    let d = (feet.xz() - c).abs();
+    let top = zone.ground(c.x, c.y) + STORE_ROOF;
+    d.x <= STORE_HALF[0] && d.y <= STORE_HALF[1] && (feet.y - top).abs() <= ON_ROOF
+}
 pub const SNARE_R: f32 = 1.8;
 /// An anomaly this near one of the map's own markers stands there (m).
 const STANDING_NEAR: f32 = 0.5;
@@ -706,9 +732,19 @@ pub enum Prop {
     Stump,
     /// Two stacks of crates across the track with a beam over the gap.
     LowBeam,
-    /// Little red flags round the training snare: "throw a part in" has
-    /// somewhere to throw it (the playtest threw at the burner).
-    SnareFlags,
+    /// Little red flags round something that hides till it's set off (a
+    /// training snare, a lift), this far out: "throw a part in" has
+    /// somewhere to throw it (the playtest threw at the burner), and
+    /// "stand in the swirl" somewhere to stand. Red round the snare,
+    /// blue round the lift: the one's a trap, the other's to stand in.
+    Flags(f32, Flag),
+}
+
+/// A ring of flags' colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Flag {
+    Red,
+    Blue,
 }
 
 /// Things put out for a goal.
@@ -1660,8 +1696,14 @@ fn setup(
     ));
     commands.spawn((
         Name::new("Snare flags"),
-        Prop::SnareFlags,
+        Prop::Flags(SNARE_R, Flag::Red),
         Transform::from_translation(ground(&zone, SNARE_AT)),
+        Visibility::default(),
+    ));
+    commands.spawn((
+        Name::new("Lift flags"),
+        Prop::Flags(LIFT_R, Flag::Blue),
+        Transform::from_translation(ground(&zone, LIFT_AT)),
         Visibility::default(),
     ));
     let size = Vec3::new(0.5, 0.75, 0.45);
@@ -1949,11 +1991,16 @@ fn watch_moves(
     players: Query<(&crate::rig::RigInput, &Transform), With<LocalPlayer>>,
     driver: Res<RigDriver>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    zone: Res<Zone>,
     mut swung: Local<(Option<f32>, f32)>,
 ) {
     let Some((input, t)) = players.iter().next() else {
         return;
     };
+    // Up on the store's roof: the lift's pop threw you there.
+    if on_store_roof(&zone, t.translation) {
+        complete(&mut ob, Goal::RideSwirl, &mut out);
+    }
     let yaw = t.rotation.to_euler(EulerRot::YXZ).0;
     if let Some(last) = swung.0 {
         let d = (yaw - last + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
