@@ -230,6 +230,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
         "a plough's drive sprocket",
     ),
     ("plough_auger_motor", 0.62, Made, "a plough's auger motor"),
+    ("pylon_dish", 0.92, Made, "a pylon's sensor head"),
     ("pressure_mine", 0.31, Made, "a mine"),
     ("robot_ammo_belt", 0.08, Made, "a coil of robot belt"),
     ("art_featherstone", 0.036, Made, "an artifact"),

@@ -6,7 +6,9 @@
 //! While it runs, the pylon is a sentry: what its dish sees, it reports,
 //! and a response team follows. It's a robot like any other underneath:
 //! shoot the dish and it's blind, wreck the cabinet and it's salvage —
-//! loudly, with its builders standing next to it.
+//! loudly, with its builders standing next to it: its mast comes down into
+//! the burst cabinet, its head on the collar and its relay coil and cell
+//! out of its front, each in reach (`pylon_salvage`).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -63,6 +65,7 @@ impl Plugin for PylonPlugin {
                 run_pylons,
                 pose_pylons,
                 report_pylons,
+                pylon_salvage,
             )
                 .chain()
                 .after(super::perceive),
@@ -169,6 +172,9 @@ fn run_pylons(
     for (e, mut p, robot, t) in &mut pylons {
         p.age += dt;
         if robot.wrecked {
+            // Its mast telescopes down into the burst cabinet, the head
+            // coming down onto its collar, in reach (`pylon_salvage`).
+            p.progress = (p.progress - dt / FALL_TIME).max(0.0);
             continue;
         }
         let site = t.translation;
@@ -249,6 +255,109 @@ fn pose_pylons(
             }
         }
     }
+}
+
+/// Seconds for a wrecked pylon's mast to come down into its cabinet.
+pub const FALL_TIME: f32 = 0.6;
+
+/// Its salvage (`salvage`, #105), once its mast is down: its sensor head
+/// on the cabinet's collar (three bolts), and out of the burst cabinet's
+/// front its relay coil on its two leads and its cell by hand, both live.
+/// (The cell's the cabinet's own health: shot through, it's scrap.) The
+/// head's own look goes with its part, hidden; the item is in its place.
+#[allow(clippy::type_complexity)]
+fn pylon_salvage(
+    mut commands: Commands,
+    pylons: Query<(Entity, &Pylon, &Robot, &Children), Without<super::Salvaged>>,
+    mut parts: Query<(&RobotPart, &mut Visibility)>,
+    catalog: Res<crate::items::Catalog>,
+    (mut meshes, mut materials): (
+        Option<ResMut<Assets<Mesh>>>,
+        Option<ResMut<Assets<StandardMaterial>>>,
+    ),
+) {
+    for (e, p, robot, children) in &pylons {
+        if !robot.wrecked || p.progress > 0.0 {
+            continue;
+        }
+        commands.entity(e).insert(super::Salvaged);
+        let look = super::salvage::Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        let health = |p: &RobotPart| (p.hp / p.max_hp.max(1.0)).clamp(0.0, 1.0);
+        let Some(core) = children
+            .iter()
+            .find(|c| parts.get(*c).is_ok_and(|(p, _)| p.role == PartRole::Core))
+        else {
+            continue;
+        };
+        let mut dish = 0.0;
+        for c in children.iter() {
+            if let Ok((part, mut vis)) = parts.get_mut(c) {
+                if part.role == PartRole::Sensor {
+                    dish = health(part);
+                    *vis = Visibility::Hidden;
+                }
+            }
+        }
+        let cabinet = parts.get(core).map_or(0.0, |(p, _)| health(p));
+        for row in [
+            wreck_row(PartRole::Sensor, dish),
+            wreck_row(PartRole::Lamp(0), COIL_HEALTH),
+            wreck_row(PartRole::Core, cabinet),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            super::salvage::fit(&mut commands, &catalog, core, row, &look);
+        }
+    }
+}
+
+/// Where things sit on a wrecked pylon's cabinet (local to it, its middle
+/// 0.6 m up): the head's middle on its collar, mast down
+/// (`art/robots/pylon.py` prints the head's middle), the coil and the
+/// cell out of its burst front.
+pub const DISH_AT: Vec3 = Vec3::new(0.0, 1.29, 0.025);
+pub const DISH_BOLTS: usize = 3;
+pub const COIL_AT: Vec3 = Vec3::new(-0.2, 0.0, -0.56);
+pub const CELL_AT: Vec3 = Vec3::new(0.22, -0.15, -0.6);
+/// Its relay coil comes through the cabinet bursting (it's in a can).
+pub const COIL_HEALTH: f32 = 0.7;
+pub const COIL_LEADS: usize = 2;
+
+/// What a wrecked pylon gives up, and how each is held (`Lamp(0)` keys its
+/// relay coil: it has no lamp).
+pub fn wreck_row(role: PartRole, health: f32) -> Option<super::salvage::Row> {
+    use super::salvage::{Fix, Row};
+    let row = |item, at: Vec3, fix, hot| Row {
+        item,
+        at: Transform::from_translation(at),
+        size: 1.0,
+        health,
+        fix,
+        hot,
+        replaces: None,
+    };
+    Some(match role {
+        PartRole::Sensor => row(
+            "pylon_dish",
+            DISH_AT,
+            Fix::Bolts {
+                n: DISH_BOLTS,
+                centre: Vec3::new(0.0, 0.8, 0.0),
+                face: Quat::IDENTITY,
+                radius: 0.17,
+            },
+            false,
+        ),
+        PartRole::Lamp(0) => row(
+            "pylon_relay_coil",
+            COIL_AT,
+            Fix::Cables { n: COIL_LEADS },
+            true,
+        ),
+        PartRole::Core => row("robot_cell", CELL_AT, Fix::Hand, true),
+        _ => return None,
+    })
 }
 
 /// A running pylon reports what its dish sees: a response team follows.
@@ -446,5 +555,36 @@ mod tests {
         }
         assert!(app.world().get::<Robot>(pylon).unwrap().wrecked);
         assert!(near(&mut app) >= before + 3, "salvage spilled out");
+        // Seated in reach (`pylon_salvage`): its head on the collar, mast
+        // down; its coil and cell out of the cabinet's front, live.
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let seated: Vec<(String, Vec3, bool)> = app
+            .world_mut()
+            .query_filtered::<(
+                &crate::items::Item,
+                &GlobalTransform,
+                Has<super::super::salvage::Live>,
+            ), With<crate::interact::InSocket>>()
+            .iter(app.world())
+            .filter(|(_, g, _)| g.translation().distance(site) < 3.0)
+            .map(|(i, g, live)| (catalog.get(i.kind()).id.clone(), g.translation(), live))
+            .collect();
+        let mut ids: Vec<&str> = seated.iter().map(|(id, ..)| id.as_str()).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            ["pylon_dish", "pylon_relay_coil", "robot_cell"],
+            "{seated:?}"
+        );
+        for (id, at, live) in &seated {
+            let over = at.y - site.y;
+            assert!(
+                (0.0..crate::sim::indoor::MAX_REACH_UP).contains(&over),
+                "{id} {over:.2} m up"
+            );
+            assert_eq!(*live, id != "pylon_dish", "{id} live: {live}");
+        }
+        // Its own salvage, not the pylon table's rolls on top.
+        assert!(app.world().get::<super::super::Salvaged>(pylon).is_some());
     }
 }

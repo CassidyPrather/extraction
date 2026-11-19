@@ -1134,6 +1134,12 @@
             tags: ["electronics", "metal"],
         ),
         (
+            id: "pylon_dish", dims: Some((0.66, 0.918, 0.7)), name: "Pylon sensor head",
+            description: "A relay pylon's head: a white drum with three eyes looking out all round, a glowing band and a whip antenna. It saw a whole hillside at once.",
+            category: RobotPart, size: Bulky, mass: 9.0, bulk: 7.0,
+            tags: ["electronics", "glass", "metal"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,
