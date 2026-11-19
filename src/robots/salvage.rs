@@ -657,6 +657,13 @@ fn fit_salvage(
 #[allow(clippy::type_complexity)]
 fn seat_sorter_jaw(
     mut commands: Commands,
+    fallen: Query<
+        (Entity, &super::wreck::Debris),
+        (
+            Added<super::wreck::Debris>,
+            Without<super::wreck::SalvagePart>,
+        ),
+    >,
     settled: Query<(Entity, &super::wreck::Debris), Added<super::wreck::Settled>>,
     grabs: Query<(&SeatLook, &ChildOf)>,
     mut looks: Query<(&SeatLook, &mut Visibility)>,
@@ -667,6 +674,20 @@ fn seat_sorter_jaw(
     let Some(catalog) = catalog else {
         return;
     };
+    // Its forearm, fallen: a part worth taking, so it's kept and settled
+    // (`wreck::settle`). (No `PieceOf` on a Sorter's arm for `tag_pieces`.)
+    for (piece, d) in &fallen {
+        if d.kind == RobotKind::Sorter && d.piece == super::wreck::Piece::Arm(1) {
+            commands.entity(piece).insert(super::wreck::SalvagePart {
+                item: "sorter_jaw",
+                bolts: 0,
+                cables: SORTER_JAW_LEADS as u8,
+                pry: false,
+                hot: false,
+                health: SORTER_JAW_HEALTH,
+            });
+        }
+    }
     for (piece, d) in &settled {
         if d.kind != RobotKind::Sorter || d.piece != super::wreck::Piece::Arm(1) {
             continue;
@@ -774,7 +795,8 @@ fn dirigible_salvage(
                         pt.translation,
                         holed,
                     );
-                    let shift = down - DIRIGIBLE_VALVE_AT;
+                    // (Its middle half its height up off the fabric.)
+                    let shift = down + Vec3::Y * DIRIGIBLE_VALVE_LIFT - DIRIGIBLE_VALVE_AT;
                     row.at.translation += shift;
                     if let Fix::Bolts { centre, .. } = &mut row.fix {
                         *centre += shift;
@@ -825,6 +847,8 @@ fn dirigible_salvage(
 /// on the frame, not the fabric).
 pub const DIRIGIBLE_VALVE_HEALTH: f32 = 0.7;
 pub const DIRIGIBLE_VALVE_BOLTS: usize = 4;
+/// A valve's middle over the fabric it's bolted to.
+pub const DIRIGIBLE_VALVE_LIFT: f32 = 0.12;
 /// Where things sit on a downed dirigible: a valve low on each cell's
 /// flank (local to the cell, taut: its underside is over the gondola; it's
 /// seated where that point lies on the sagged fabric, `down_point`), the cell
@@ -1335,6 +1359,10 @@ fn seat_pieces(
     }
     let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
     for (e, part, t) in &settled {
+        // (A Sorter's grab is seated on its forearm its own way.)
+        if part.item == "sorter_jaw" {
+            continue;
+        }
         let size = t.scale.x.max(0.01);
         let by_hand = part.bolts == 0 && part.cables == 0 && !part.pry && !part.hot;
         if by_hand && part.health > 0.0 {
