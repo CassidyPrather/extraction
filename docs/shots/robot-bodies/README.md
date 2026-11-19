@@ -346,7 +346,7 @@ The user on the #99 pictures: "Lights on fog look much prettier than that! Not l
 
 ## A dirigible come down holed (`dirigible_look`)
 
-A holed cell sags in the air; down on the ground the cells lie draped over the gondola and the grass, pressed flat below, spread wide and creased along their gores, the holed ones flatter than the one still holding gas (a mound). Its eye is tucked under the gondola's nose, clear of the ground (or Heavy's salvage eye is seated there in its place). `slack_point` / `down_point` say where a point of a taut cell has gone, for anything seated on one.
+A holed cell sags in the air; down on the ground the cells lie draped over the gondola and the grass, pressed flat below, spread wide and creased along their gores, the holed ones flatter; even the one still holding gas slumps to a low pillow (under half a taut cell's height) over a rounded hump at the gondola, its ends down on the grass. Its eye is tucked under the gondola's nose, clear of the ground (or Heavy's salvage eye is seated there in its place). `slack_point` / `down_point` say where a point of a taut cell has gone, for anything seated on one.
 
 | Picture | What it shows |
 |---|---|
