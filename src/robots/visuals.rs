@@ -44,6 +44,7 @@ impl Plugin for RobotVisualsPlugin {
                     super::lines::LinesPlugin,
                     super::engineer_look::EngineerLookPlugin,
                     super::builds::BuildsPlugin,
+                    super::dirigible_look::DirigibleLookPlugin,
                 ),
             ))
             .add_systems(
@@ -475,6 +476,32 @@ fn dress_parts(
                 }
             }
             continue;
+        }
+        // The sorter's carriage motor (Heavy's `carriage_motor`, salvage) on
+        // its carriage, hidden when it's seated on the wreck in its place
+        // (`salvage::SeatLook`, Rotor(0): the sorter has no rotors).
+        if robot.kind == RobotKind::Sorter && part.role == PartRole::Core {
+            if let Some(motor) = ModelNode::find(model, "carriage_motor") {
+                let holder = commands
+                    .spawn((
+                        Transform::from_translation(motor.transform.translation),
+                        Visibility::default(),
+                        super::salvage::SeatLook {
+                            robot: part.robot,
+                            role: PartRole::Rotor(0),
+                        },
+                        ChildOf(e),
+                    ))
+                    .id();
+                attach(
+                    &mut commands,
+                    holder,
+                    motor,
+                    Transform::IDENTITY,
+                    e,
+                    &mut mat,
+                );
+            }
         }
         match (robot.kind, part.role) {
             (RobotKind::Drone, PartRole::Rotor(i)) => {
