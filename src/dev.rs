@@ -595,7 +595,13 @@ struct DeadLineUp(Vec<Entity>, u32);
 /// The frame a `!dead` line-up is wrecked on.
 const KILL_AT: u32 = 90;
 
-fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::robots::Robot>) {
+fn kill_line_up(
+    dead: Option<ResMut<DeadLineUp>>,
+    mut robots: Query<(
+        &mut crate::robots::Robot,
+        Option<&mut crate::robots::dirigible::Dirigible>,
+    )>,
+) {
     let Some(mut dead) = dead else {
         return;
     };
@@ -607,8 +613,12 @@ fn kill_line_up(dead: Option<ResMut<DeadLineUp>>, mut robots: Query<&mut crate::
         return;
     }
     for e in &dead.0 {
-        if let Ok(mut r) = robots.get_mut(*e) {
+        if let Ok((mut r, ship)) = robots.get_mut(*e) {
             r.wrecked = true;
+            // (A dirigible's wreck is one that's come down: holed, it sinks.)
+            if let Some(mut d) = ship {
+                d.sinking = true;
+            }
         }
     }
 }
