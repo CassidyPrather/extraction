@@ -27,7 +27,8 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
+| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
+| Seed-5 one-handed first_jobs: two HurtUnwarned 22 HP hits (raid 4 at 65 s, raid 5 at 68 s; a second 22 about 1 s later) walking (-6,60)→(-12,44). The anomaly discharge (anomaly/mod.rs ~849: inside, in its water or grounded through held metal) lands with no warning the bot perceived. Hazards warn before they hurt | 6d425f1d (Onboarding re-measure) | Anomalies | check the tell before this discharge: whether it's perceivable, and whether the bot reads it; bot route side → Robot minds once their push lands |
 | `robots::recall::every_robot_keyed_local_is_in_the_table` + `soak::entity_keyed_locals_forget_what_is_gone`: src/robots/sorter_look.rs:177 `waited` Local<HashMap<Entity,..>> neither in recall/NOT_MEMORY_LOCALS nor pruned | 33580e7a (lib357) | Robot bodies | carriage-motor dressing; prune on despawn + NOT_MEMORY_LOCALS line (or BOUNDED with why) |
 
 ## Logged, not failing a check
