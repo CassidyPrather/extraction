@@ -104,6 +104,29 @@ pub fn slack_point(p: Vec3, half: Vec3, slack: Slack, floor: &Floor) -> Vec3 {
     }
 }
 
+/// Where a point of a taut cell (`local`, in its part's space, as seated
+/// things are placed) lies once the ship is down with that cell `holed` or
+/// not: on the draped fabric, for anything seated on a cell (its gas
+/// valve). `cell_at` is the cell part's place in the ship (`dirigible`
+/// spawns them at z = -4.8, 0, 4.8). The ship down, its root stands
+/// RADIUS + 1 over the ground.
+pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
+    let floor = Floor {
+        ground: -RADIUS - 1.0 - cell_at.y,
+        gondola: Some((
+            -RADIUS - 0.5 + 0.55 - cell_at.y,
+            Vec2::new(-cell_at.x, -cell_at.z),
+            Vec2::new(0.75, 2.05),
+        )),
+    };
+    slack_point(
+        local,
+        Vec3::new(RADIUS, RADIUS, RADIUS),
+        Slack::Down { holed },
+        &floor,
+    )
+}
+
 /// A cell's look, settling from one slack to the next.
 #[derive(Component, Clone, Copy, Debug)]
 struct CellLook {
@@ -386,6 +409,17 @@ mod tests {
             assert!(lowest_rim < 0.15, "its rim on the ground: {lowest_rim}");
             assert!(widest > RADIUS * 1.15, "spread: {widest}");
             assert!(highest < 2.0 * RADIUS * 0.5, "flat, not round: {highest}");
+        }
+    }
+
+    /// Something seated on a cell's lower flank (Heavy's gas valve) lies
+    /// on the draped fabric once the ship is down: low, over the ground.
+    #[test]
+    fn a_valve_on_a_downed_cell_lies_on_the_fabric() {
+        for (z, holed) in [(-4.8, true), (0.0, false), (4.8, true)] {
+            let p = down_point(Vec3::new(1.85, -1.85, 0.0), Vec3::new(0.0, 0.0, z), holed);
+            let over = p.y - (-RADIUS - 1.0);
+            assert!((0.0..0.6).contains(&over), "{z}: {over} over the ground");
         }
     }
 
