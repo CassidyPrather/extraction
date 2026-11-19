@@ -1241,6 +1241,25 @@ mod tests {
             })
             .collect();
         assert_eq!(seats.len(), 1, "its servo pack seated");
+        // And its grab on its fallen forearm, on its two cut leads (#105).
+        let jaws: Vec<Entity> = app
+            .world_mut()
+            .query::<(&super::super::salvage::SalvageSeat, &ChildOf)>()
+            .iter(app.world())
+            .filter(|(s, _)| s.hold == super::super::salvage::Hold::Cables)
+            .map(|(s, c)| (s.item, c.parent()))
+            .filter(|(item, parent)| {
+                app.world()
+                    .get::<crate::items::Item>(*item)
+                    .is_some_and(|it| catalog.get(it.0.kind).id == "sorter_jaw")
+                    && app
+                        .world()
+                        .get::<Debris>(*parent)
+                        .is_some_and(|d| d.piece == Piece::Arm(1))
+            })
+            .map(|(item, _)| item)
+            .collect();
+        assert_eq!(jaws.len(), 1, "its grab seated on its forearm");
         let (seat, item) = seats[0];
         let it = app.world().get::<crate::items::Item>(item).unwrap();
         assert_eq!(catalog.get(it.0.kind).id, "sorter_servo_pack");

@@ -189,6 +189,34 @@ print(f"sorter_head dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
       f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
 export("assets/models/items/sorter_head.glb")
 
+# Its grab, cut off its forearm: the claw's housing and both jaws as they
+# hang shut (the `grab` and `jaw` objects' own lines; the -X jaw the +X
+# one turned round), and its two cut leads: `sorter_jaw`.
+item = Part("sorter_jaw")
+item.cyl(0.13, -0.16, 0.0, "Dark", segs=20, xf=UP, chamfer=0.012)
+item.box((0.34, 0.08, 0.2), (0, -0.19, 0), "Steel", bevel=0.015, segs=1)
+item.box((0.2, 0.012, 0.012), (0, -0.04, -0.131), "Glow", bevel=0.003, segs=1)
+for side in (1, -1):
+    turn = RY(0.0 if side > 0 else math.pi)
+    item.box((0.04, 0.34, 0.16), (0.14, -0.36, 0.0), "Dark", bevel=0.012, segs=1, xf=turn)
+    item.box((0.09, 0.04, 0.16), (0.11, -0.2, 0.0), "Dark", bevel=0.01, segs=1, xf=turn)
+    item.box((0.05, 0.04, 0.17), (0.105, -0.52, 0.0), "Orange", bevel=0.01, segs=1, xf=turn)
+for sx in (-0.05, 0.05):
+    item.cyl(0.012, 0.0, 0.1, "Red", segs=6, xf=T(sx, 0, 0.04) @ UP)
+reset()
+obj = make(item)
+me = obj.data
+lo = [min(v.co[k] for v in me.vertices) for k in range(3)]
+hi = [max(v.co[k] for v in me.vertices) for k in range(3)]
+mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+for v in me.vertices:
+    v.co = [v.co[k] - mid[k] for k in range(3)]
+obj.location = (0.0, 0.0, 0.0)
+size = [hi[k] - lo[k] for k in range(3)]
+print(f"sorter_jaw dims {size[0]:.3f} {size[2]:.3f} {size[1]:.3f} "
+      f"mid {mid[0]:.3f} {mid[2]:.3f} {-mid[1]:.3f}")
+export("assets/models/items/sorter_jaw.glb")
+
 reset()
 obj = make(carriage_motor("sorter_carriage_motor"))
 me = obj.data

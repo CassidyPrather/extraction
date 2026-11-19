@@ -1158,6 +1158,12 @@
             tags: ["metal", "steel"],
         ),
         (
+            id: "sorter_jaw", dims: Some((0.34, 0.64, 0.267)), name: "Gantry grab",
+            description: "The Depot gantry's grab, cut off its forearm: a claw housing and two jaws tipped orange, still shut on nothing. Its leads hang out of the top.",
+            category: RobotPart, size: Medium, mass: 7.0, bulk: 3.0,
+            tags: ["metal", "electronics"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,

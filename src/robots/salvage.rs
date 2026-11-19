@@ -80,6 +80,7 @@ impl Plugin for SalvagePlugin {
                     seat_pieces,
                     cooked_salvage,
                     dirigible_salvage,
+                    seat_sorter_jaw,
                     char_looks,
                 )
                     .chain(),
@@ -649,6 +650,69 @@ fn fit_salvage(
     }
 }
 
+/// The Sorter's grab, come down with its forearm (its look rides the
+/// forearm's piece once it's broken, `sorter_look`, tagged `SeatLook`
+/// `Leg(0)`): once the piece has settled, seated at its wrist end on its
+/// two cut leads, in the grab's place (the grab's look goes).
+#[allow(clippy::type_complexity)]
+fn seat_sorter_jaw(
+    mut commands: Commands,
+    settled: Query<(Entity, &super::wreck::Debris), Added<super::wreck::Settled>>,
+    grabs: Query<(&SeatLook, &ChildOf)>,
+    mut looks: Query<(&SeatLook, &mut Visibility)>,
+    catalog: Option<Res<Catalog>>,
+    mut meshes: Option<ResMut<Assets<Mesh>>>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+) {
+    let Some(catalog) = catalog else {
+        return;
+    };
+    for (piece, d) in &settled {
+        if d.kind != RobotKind::Sorter || d.piece != super::wreck::Piece::Arm(1) {
+            continue;
+        }
+        let look = Look::new(meshes.as_deref_mut(), materials.as_deref_mut());
+        fit(&mut commands, &catalog, piece, sorter_jaw_row(), &look);
+        // Its grab's look, hung on this piece: hidden, with its jaws.
+        let robot = grabs
+            .iter()
+            .find(|(l, c)| c.parent() == piece && l.role == PartRole::Leg(0))
+            .map(|(l, _)| l.robot);
+        if let Some(robot) = robot {
+            for (l, mut vis) in &mut looks {
+                if l.robot == robot && l.role == PartRole::Leg(0) {
+                    *vis = Visibility::Hidden;
+                }
+            }
+        }
+    }
+}
+
+/// The Sorter's grab on its forearm's piece (local: the piece's +Y runs to
+/// the wrist, `LOWER` long; the grab hangs on past it, turned to hang that
+/// way), its leads, and its state.
+pub fn sorter_jaw_row() -> Row {
+    let wrist = Vec3::Y * super::sorter::LOWER * 0.5;
+    let hang = Quat::from_rotation_z(std::f32::consts::PI);
+    Row {
+        item: "sorter_jaw",
+        at: Transform::from_translation(wrist + hang * SORTER_JAW_MID).with_rotation(hang),
+        size: 1.0,
+        health: SORTER_JAW_HEALTH,
+        fix: Fix::Cables {
+            n: SORTER_JAW_LEADS,
+        },
+        hot: false,
+        replaces: None,
+    }
+}
+
+/// The grab's middle from its wrist (`art/robots/sorter.py` prints it), its
+/// leads, and its state (its arm came down with it, not shot off it).
+pub const SORTER_JAW_MID: Vec3 = Vec3::new(0.0, -0.22, -0.003);
+pub const SORTER_JAW_LEADS: usize = 2;
+pub const SORTER_JAW_HEALTH: f32 = 0.7;
+
 /// A downed dirigible's wreck is what was on it (#105), not a table's
 /// rolls: wrecked, it's `Salvaged` at once (nothing rolled while it sinks);
 /// down, a gas valve bolted on the flank of each cell, its gondola's cell
@@ -672,7 +736,7 @@ fn dirigible_salvage(
         ),
         Without<DirigibleSeated>,
     >,
-    parts: Query<&RobotPart>,
+    parts: Query<(&RobotPart, &Transform)>,
     catalog: Option<Res<Catalog>>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
@@ -696,18 +760,26 @@ fn dirigible_salvage(
         let mut gondola = None;
         let mut eye = None;
         for c in children.iter() {
-            let Ok(p) = parts.get(c) else {
+            let Ok((p, pt)) = parts.get(c) else {
                 continue;
             };
             match p.role {
-                PartRole::GasCell(_) => {
-                    fit(
-                        &mut commands,
-                        &catalog,
-                        c,
-                        dirigible_row(p.role, DIRIGIBLE_VALVE_HEALTH, None).unwrap(),
-                        &look,
+                PartRole::GasCell(i) => {
+                    // On its fabric where it lies sagged on the ground (its
+                    // part stays at full radius: `dirigible_look::down_point`).
+                    let holed = !d.cells.get(i as usize).copied().unwrap_or(true);
+                    let mut row = dirigible_row(p.role, DIRIGIBLE_VALVE_HEALTH, None).unwrap();
+                    let down = super::dirigible_look::down_point(
+                        DIRIGIBLE_VALVE_AT,
+                        pt.translation,
+                        holed,
                     );
+                    let shift = down - DIRIGIBLE_VALVE_AT;
+                    row.at.translation += shift;
+                    if let Fix::Bolts { centre, .. } = &mut row.fix {
+                        *centre += shift;
+                    }
+                    fit(&mut commands, &catalog, c, row, &look);
                 }
                 PartRole::Core => gondola = Some((c, p.hp / p.max_hp.max(1.0))),
                 PartRole::Sensor => eye = Some((c, p.hp / p.max_hp.max(1.0))),
@@ -754,7 +826,8 @@ fn dirigible_salvage(
 pub const DIRIGIBLE_VALVE_HEALTH: f32 = 0.7;
 pub const DIRIGIBLE_VALVE_BOLTS: usize = 4;
 /// Where things sit on a downed dirigible: a valve low on each cell's
-/// flank (local to the cell: its underside is over the gondola), the cell
+/// flank (local to the cell, taut: its underside is over the gondola; it's
+/// seated where that point lies on the sagged fabric, `down_point`), the cell
 /// in the gondola's side, the eye on the gondola's nose (local to it).
 pub const DIRIGIBLE_VALVE_AT: Vec3 = Vec3::new(1.85, -1.85, 0.0);
 pub const DIRIGIBLE_CELL_AT: Vec3 = Vec3::new(0.62, 0.05, 1.0);
