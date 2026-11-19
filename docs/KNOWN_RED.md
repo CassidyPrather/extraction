@@ -83,4 +83,5 @@ How it works:
 | `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | Heavy acb939c3; passes on d0b692c0 (lib346) |
 | sentry/spotter/plough/pylon item models off their boxes | Heavy fdedaa97; passes on c91aea7e (lib348) |
 | `robots::sentry::tests::its_wreck_lies_in_reach` (counted every item) | Heavy 0d575202; passes on c91aea7e (lib348) |
+| `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
 | `perf::tests::no_collider_scale_drifts` rain_barrel scale | World models e567e778; passes on 6efac71d (lib351) |
