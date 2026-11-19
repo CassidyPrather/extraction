@@ -974,6 +974,18 @@ fn wreck_sorters(
             AngularDamping(0.8),
             Friction::new(0.8),
         ));
+        // Its head (under its front) and its arm's part don't hold it up
+        // off the ground: the arm comes down as its own pieces, the head is
+        // taken as salvage, and propped on the head's collider the carriage
+        // hung a hand clear of the grass. It settles on its own underside.
+        for c in children.iter() {
+            if parts
+                .get(c)
+                .is_ok_and(|p| matches!(p.role, PartRole::Sensor | PartRole::Leg(0)))
+            {
+                commands.entity(c).insert(ColliderDisabled);
+            }
+        }
         // The arm, if it's still on, comes down with it on its joints.
         let arm = children.iter().find(|c| {
             parts
@@ -1214,6 +1226,19 @@ mod tests {
         assert!(t.translation.is_finite());
         let over = t.translation.y - hall.translation.y;
         assert!(over < 1.2, "it came down ({over:.2} m up)");
+        // On its own underside (or side), not propped a hand clear of the
+        // floor on its head: its carriage box's lowest corner on the floor.
+        let low = [-1.0f32, 1.0]
+            .iter()
+            .flat_map(|x| [-1.0f32, 1.0].map(move |y| (*x, y)))
+            .flat_map(|(x, y)| [-1.0f32, 1.0].map(move |z| Vec3::new(x * 0.7, y * 0.3, z * 0.6)))
+            .map(|c| t.transform_point(c).y)
+            .fold(f32::MAX, f32::min);
+        assert!(
+            low - hall.translation.y < 0.08,
+            "it lies on the floor, its lowest corner {:.2} m up",
+            low - hall.translation.y
+        );
         assert_eq!(
             app.world().get::<RigidBody>(sorter),
             Some(&RigidBody::Static),

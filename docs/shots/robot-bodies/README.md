@@ -351,3 +351,9 @@ A holed cell sags in the air; down on the ground the cells lie draped over the g
 | Picture | What it shows |
 |---|---|
 | `../../robots/workers_2/dirigible_down_slack.png` | `reel:dirigibledown,5,60` frame 4 in the training yard by day (`--map training_yard --new-game --no-captions --camera 0,0,36,0,-6`, crop 1080x280 of 1920x1080 at 2x): holed in its end cells, down 12 m off, side-on |
+
+## A wrecked sorter on the grass, dark
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/sorter_wreck_dark.png` | Heavy's `robots:sorter!dead,0,3.5,0` (camera `92.9,0,131.9,0,-35`, 700 frames, killed at frame 90, 1920x980): its carriage on its own underside (its head and arm part colliders off once broken), its cyan strip and every lit tell dark (`sorter_look::go_dark`), the arm down in its two pieces |
