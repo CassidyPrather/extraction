@@ -3423,6 +3423,58 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// One player, with its two hands, in every access mode: a discharge,
+    /// a noise or a robot's look counts each `Player` it finds, and a
+    /// second one would be counted twice (Anomalies saw two hits
+    /// "at once" in a one-handed run: two raids' worlds, it turned out).
+    #[test]
+    fn one_player_in_every_access_mode() {
+        use crate::rig::comfort::Comfort;
+        for (name, c) in [
+            ("plain", Comfort::default()),
+            (
+                "left-handed",
+                Comfort {
+                    left_handed: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "one-handed",
+                Comfort {
+                    one_handed: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "seated",
+                Comfort {
+                    seated: true,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            let mut vr = Vr::first_run();
+            *vr.app.world_mut().resource_mut::<Comfort>() = c;
+            vr.step(120);
+            let players: Vec<Entity> = vr
+                .app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::player::Player>>()
+                .iter(vr.app.world())
+                .collect();
+            assert_eq!(players.len(), 1, "{name}: players {players:?}");
+            let hands = vr
+                .app
+                .world_mut()
+                .query_filtered::<&ChildOf, With<crate::rig::RigHand>>()
+                .iter(vr.app.world())
+                .filter(|p| p.parent() == players[0])
+                .count();
+            assert_eq!(hands, 2, "{name}: hands");
+        }
+    }
+
     /// First aid's last step: the crate's cartridge into the pen's empty
     /// well, each way it's taught. Let go at the well with two hands;
     /// one-handed, the pen brought down onto it where it lies; flat, the
