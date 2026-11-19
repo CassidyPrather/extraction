@@ -3423,6 +3423,147 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// One player, with its two hands, in every access mode: a discharge,
+    /// a noise or a robot's look counts each `Player` it finds, and a
+    /// second one would be counted twice (Anomalies saw two hits
+    /// "at once" in a one-handed run: two raids' worlds, it turned out).
+    #[test]
+    fn one_player_in_every_access_mode() {
+        use crate::rig::comfort::Comfort;
+        for (name, c) in [
+            ("plain", Comfort::default()),
+            (
+                "left-handed",
+                Comfort {
+                    left_handed: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "one-handed",
+                Comfort {
+                    one_handed: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "seated",
+                Comfort {
+                    seated: true,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            let mut vr = Vr::first_run();
+            *vr.app.world_mut().resource_mut::<Comfort>() = c;
+            vr.step(120);
+            let players: Vec<Entity> = vr
+                .app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::player::Player>>()
+                .iter(vr.app.world())
+                .collect();
+            assert_eq!(players.len(), 1, "{name}: players {players:?}");
+            let hands = vr
+                .app
+                .world_mut()
+                .query_filtered::<&ChildOf, With<crate::rig::RigHand>>()
+                .iter(vr.app.world())
+                .filter(|p| p.parent() == players[0])
+                .count();
+            assert_eq!(hands, 2, "{name}: hands");
+        }
+    }
+
+    /// First aid's last step: the crate's cartridge into the pen's empty
+    /// well, each way it's taught. Let go at the well with two hands;
+    /// one-handed, the pen brought down onto it where it lies; flat, the
+    /// combine key (T) with one in each hand.
+    #[test]
+    fn station_first_aid_load_the_pen() {
+        use crate::items::pen::{PenSlot, SLOTS};
+        for how in ["let go", "one-handed", "combine key"] {
+            let mut vr = Vr::first_run();
+            vr.app
+                .world_mut()
+                .resource_mut::<crate::rig::comfort::Comfort>()
+                .one_handed = how == "one-handed";
+            at_station(
+                &mut vr,
+                crate::onboarding::station_of(Goal::Wrist),
+                &[Goal::Wrist, Goal::Inject],
+            );
+            vr.step(5);
+            let cart = placed(&mut vr, Placed::Cartridge);
+            let cart_at = at(&vr, cart);
+            let feet = ground(&vr, [cart_at.x - 0.5, cart_at.z]);
+            vr.stand(feet, -std::f32::consts::FRAC_PI_2);
+            vr.step(20);
+            let cart_at = at(&vr, cart);
+            let pen = vr.spawn(
+                "regen_injector",
+                Transform::from_translation(feet + Vec3::new(0.1, 1.0, 0.35)),
+            );
+            vr.app.world_mut().entity_mut(pen).insert(RigidBody::Static);
+            vr.step(3);
+            take(&mut vr, Side::Right, pen);
+            assert!(!done(&vr, Goal::LoadPen), "{how}: not before");
+            match how {
+                "let go" | "combine key" => {
+                    take(&mut vr, Side::Left, cart);
+                    if how == "combine key" {
+                        vr.app
+                            .world_mut()
+                            .write_message(crate::weapons::flat::Combine::all(pen, cart));
+                        vr.step(4);
+                    } else {
+                        let free = {
+                            let mut q =
+                                vr.app
+                                    .world_mut()
+                                    .query::<(&PenSlot, &crate::interact::Socket, &ChildOf)>();
+                            q.iter(vr.app.world())
+                                .find(|(_, s, c)| c.parent() == pen && s.occupant.is_none())
+                                .map(|(p, ..)| p.0)
+                                .expect("a free well")
+                        };
+                        for _ in 0..3 {
+                            let well = vr
+                                .app
+                                .world()
+                                .get::<GlobalTransform>(pen)
+                                .unwrap()
+                                .transform_point(SLOTS[free]);
+                            let hand = vr.hand_state(Side::Left).world.translation;
+                            vr.move_hand(Side::Left, hand + (well - at(&vr, cart)));
+                            vr.step(3);
+                        }
+                        vr.grip(Side::Left, 0.0);
+                        vr.step(4);
+                    }
+                }
+                _ => {
+                    // The pen, not the hand, down onto the cartridge.
+                    for _ in 0..3 {
+                        let hand = vr.hand_state(Side::Right).world.translation;
+                        let to = cart_at + Vec3::Y * 0.04;
+                        vr.move_hand(Side::Right, hand + (to - at(&vr, pen)));
+                        vr.step(4);
+                    }
+                    vr.step(6);
+                }
+            }
+            let seated = vr
+                .app
+                .world()
+                .get::<crate::interact::InSocket>(cart)
+                .and_then(|s| vr.app.world().get::<crate::interact::SocketOwner>(s.socket))
+                .map(|o| o.0);
+            assert_eq!(seated, Some(pen), "{how}: the cartridge in the pen");
+            assert!(done(&vr, Goal::LoadPen), "{how}: the step counted");
+        }
+    }
+
     /// Left-handed: the holster is on the left hip (a pistol let go there
     /// from the left hand goes in it), and the watch is on the right wrist
     /// (looking at the left one doesn't count).

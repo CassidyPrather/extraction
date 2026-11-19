@@ -834,7 +834,16 @@ fn touch_to_combine(
                 {
                     continue;
                 }
-                if let Some(reach) = combine_reach(da, catalog.get(ib.kind())) {
+                let db = catalog.get(ib.kind());
+                // And the pen in hand onto a cartridge set down: there's no
+                // other hand to bring the cartridge to its well.
+                let pen = |p: &extraction_core::items::ItemDef,
+                           c: &extraction_core::items::ItemDef| {
+                    p.id == crate::items::pen::PEN
+                        && c.fits_mount() == Some(extraction_core::items::Mount::Cartridge)
+                };
+                let reach = combine_reach(da, db).or((pen(da, db) || pen(db, da)).then_some(TOUCH));
+                if let Some(reach) = reach {
                     touch(a, b, ga, gb, reach);
                 }
             }
