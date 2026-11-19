@@ -41,7 +41,7 @@ pub enum Slack {
 /// A slack cell's crown over the ground (m): one that's lost its gas, and
 /// one that still has some.
 pub const DOWN_TALL_HOLED: f32 = 0.9;
-pub const DOWN_TALL: f32 = 1.2;
+pub const DOWN_TALL: f32 = 0.5;
 
 /// The ground (and what lies on it) under a cell, in the cell's space: its
 /// height at x, z.
@@ -116,7 +116,14 @@ pub fn slack_point(p: Vec3, half: Vec3, slack: Slack, floor: &Floor) -> Vec3 {
             // there's no flat top and its end rims come down to the grass.
             let end = (p.z.abs() / half.z).clamp(0.0, 1.0);
             y = floor.ground + (y - floor.ground) * (1.0 - 0.6 * end * end);
-            Vec3::new(x, y.max(floor.at(x, z) + 0.02), z)
+            // Its upper fabric rides up over the hump at the gondola, its
+            // foot doesn't: a smooth maximum of the two, not pressed up to
+            // it, so the fabric never folds back over itself (a fold shades
+            // dark).
+            let hump = (floor.at(x, z) - floor.ground) * u.sqrt();
+            let above = y - floor.ground;
+            y = floor.ground + 0.5 * (above + hump + ((above - hump).powi(2) + 0.0225).sqrt());
+            Vec3::new(x, y.max(floor.ground + 0.02), z)
         }
     }
 }
@@ -147,7 +154,7 @@ pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
 /// What the fabric drapes over once the ship is down (in the ship's
 /// space): the gondola with its engine pods and their mounts, a little
 /// clear so none of it shows through the fabric's coarse mesh.
-const GONDOLA_TOP: f32 = -RADIUS - 0.5 + 0.55 + 0.3;
+const GONDOLA_TOP: f32 = -RADIUS - 0.5 + 0.55 + 0.15;
 const GONDOLA_HALF: Vec2 = Vec2::new(0.8, 2.1);
 /// How far round it the hump falls away to the grass (m).
 const GONDOLA_FALL: f32 = 1.2;
@@ -641,7 +648,7 @@ mod tests {
         }
         assert!(slack >= 3, "its cells reshaped: {slack}");
         assert!(
-            highest < DOWN_TALL + 0.6,
+            highest < RADIUS * 0.6,
             "its cells lie low: {highest} over the ground"
         );
     }
