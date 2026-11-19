@@ -63,3 +63,35 @@ the way they are in a raid:
 The others: `grappler!dead,0,4.2,0,hold=robot_cell`,
 `crawler!dead,180,2.6,0,hold=crawler_leg_servo`,
 `hound!dead,0,2.8,0,hold=hound_hip_servo`.
+
+# Sentry, spotter, plough and pylon, wrecked (step 6)
+
+The same framing as the walker family: 2x from standing height by day, the
+bottom 100 px cut off, one of its parts held low in the left hand.
+
+- `wreck_sentry.png`: a sentry at 3.4 m, its visor in hand. Its head has
+  broken off its mast and lies at the foot of the bare mast, with its gun,
+  visor and searchlight still on it. To the right, its junction box with
+  the breaker sitting on top (live while it had power).
+- `wreck_spotter.png`: a spotter at 6 m, its camera in hand. The slack
+  envelope lies with its gas valve on the crown; beside it, the pod with
+  its camera and searchlight. Up the field, the winch, its drum and motor
+  bolted to the skid, with the tether lying slack to the wreck.
+- `wreck_plough.png`: a plough at 8 m, side on, its beacon in hand. Its
+  roof beacon has snapped off onto the engine deck, and its sensor bar
+  hangs off the cab front, both in reach from the ground. The drive
+  sprocket at the back of each track and the auger motor on the housing's
+  far end are bolted on.
+- `wreck_pylon.png`: a pylon at 3 m, turned to show its cabinet front, its
+  relay coil in hand. Its mast has telescoped down into the burst cabinet,
+  and its sensor head sits on the collar. Out of the cabinet's front: its
+  relay coil on two leads and its cell, both live.
+
+Each is one gallery word as before. The gallery keeps a dead plough from
+driving off, and puts a dead spotter's winch upwind so its wreck comes down
+in view:
+
+    sentry!dead,0,3.4,0,hold=sentry_eye      (camera pitch -24)
+    spotter!dead,0,6,0,hold=spotter_eye      (camera pitch -18)
+    plough!dead,0,8,0,hold=plough_beacon     (camera pitch -16)
+    pylon!dead,180,3,0,hold=pylon_relay_coil (camera pitch -24)
