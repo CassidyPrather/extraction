@@ -617,9 +617,10 @@ fn spotter_salvage(
 /// on the ground beside the slack envelope (its middle `ENVELOPE_R * 0.5`
 /// up), off to its side.
 pub const DOWN_SHIFT: Vec3 = Vec3::new(2.3, -GONDOLA.y - ENVELOPE_R * 0.5 + 0.2, 0.0);
-/// The valve on the slack envelope's crown (local to it), and its state:
+/// The valve on the slack envelope's crown, lying on the ground
+/// (`spotter_look::draped`: its crown is 0.42 m up), local to it, and its state:
 /// the envelope's holed, its valve isn't.
-pub const VALVE_AT: Vec3 = Vec3::new(0.0, 0.55, 0.0);
+pub const VALVE_AT: Vec3 = Vec3::new(0.0, -ENVELOPE_R * 0.5 + 0.47, 0.0);
 pub const VALVE_HEALTH: f32 = 0.7;
 pub const VALVE_BOLTS: usize = 4;
 /// The winch's drum and motor on its skid (local to the winch piece,
