@@ -562,6 +562,12 @@ fn damage_parts(
 #[derive(Component)]
 pub struct Salvaged;
 
+/// An armour part a crowbar finds no seam on (`interact::tools::crowbar`):
+/// nothing comes off it, so it's not offered (a plough's hull, a spotter's
+/// camera pod).
+#[derive(Component)]
+pub struct ShrugsOffPry;
+
 /// A robot's own seed, from where and what it was when it came into the
 /// world: whatever a robot's body does by chance (which legs tear off,
 /// where its pieces fly, how a plate falls) is drawn from this, not from

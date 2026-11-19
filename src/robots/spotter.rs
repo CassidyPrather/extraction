@@ -212,6 +212,8 @@ pub fn spawn_spotter(commands: &mut Commands, zone: &Zone, at: Vec2) -> Entity {
                 Collider::cuboid(0.5, 0.4, 0.5),
                 Transform::from_translation(GONDOLA),
             ),
+            // (Nothing to prise off it: its camera comes off by hand.)
+            super::ShrugsOffPry,
         ));
     });
     commands.spawn((
@@ -981,5 +983,68 @@ pub(crate) mod tests {
             .filter(|id| id.starts_with("spotter_"))
             .collect();
         assert_eq!(seated, ["spotter_winch"]);
+    }
+
+    /// Its winch prised off its skid with a crowbar frees it: it lifts
+    /// away on the wind. (Its camera pod has no seam: nothing to prise.)
+    #[test]
+    fn a_crowbar_on_its_winch_sets_it_loose() {
+        use crate::destruction::hooks::{Pried, Pryable};
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            let e = spawn_spotter(&mut c, &zone, Vec2::new(40.0, 230.0));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.stand(zone.on_ground(40.0, 236.0), 0.0);
+        vr.step(5);
+        let gondola = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &super::super::RobotPart)>()
+            .iter(vr.app.world())
+            .find(|(_, p)| p.robot == e && p.role == PartRole::Armour(30))
+            .map(|(c, _)| c)
+            .unwrap();
+        assert!(
+            vr.app.world().get::<Pryable>(gondola).is_none(),
+            "no seam on its pod"
+        );
+        let w = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &SpotterPiece)>()
+            .iter(vr.app.world())
+            .find(|(_, p)| **p == SpotterPiece::Winch)
+            .map(|(w, _)| w)
+            .unwrap();
+        assert!(
+            vr.app.world().get::<Pryable>(w).is_some(),
+            "a seam on its winch"
+        );
+        let before = vr.app.world().get::<Transform>(e).unwrap().translation;
+        for _ in 0..60 {
+            vr.app.world_mut().write_message(Pried {
+                target: w,
+                torque: 1.0e4,
+                by: Entity::PLACEHOLDER,
+            });
+            vr.step(1);
+        }
+        assert!(
+            matches!(
+                vr.app.world().get::<Spotter>(e).unwrap().float,
+                Float::Loose(..)
+            ),
+            "loose"
+        );
+        vr.step(90 * 4);
+        let after = vr.app.world().get::<Transform>(e).unwrap().translation;
+        assert!(
+            after.y > before.y + 0.5,
+            "it lifts away: {before} -> {after}"
+        );
     }
 }

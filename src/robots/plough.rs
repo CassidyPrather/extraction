@@ -192,7 +192,13 @@ impl Plugin for PloughPlugin {
             .init_resource::<Lanes>()
             .add_systems(
                 FixedUpdate,
-                (plough_drive, plough_mouth, dig_banks, plough_wreck)
+                (
+                    plough_drive,
+                    plough_mouth,
+                    dig_banks,
+                    plough_wreck,
+                    plough_plate_off,
+                )
                     .chain()
                     .before(PhysicsSystems::First),
             )
@@ -255,6 +261,8 @@ pub fn spawn_plough(commands: &mut Commands, zone: &Zone, road: Vec<[f32; 2]>) -
                 Collider::cuboid(2.2, 1.4, 3.1),
                 Transform::from_translation(HULL - Vec3::Z * 0.35),
             ),
+            // (Its body shrugs off a crowbar as it does rounds.)
+            super::ShrugsOffPry,
         ));
         c.spawn((
             Name::new("Plough cell"),
@@ -747,6 +755,51 @@ fn plough_wreck(
         }
     }
 }
+
+/// The chevroned plate along its auger housing's top rail, prised off with
+/// a crowbar (its seam is the housing's, `crowbar::pryable_plates`):
+/// salvage, `plough_plate`, dropped where it was; its look goes
+/// (`plough_look`, keyed `Armour(1)`).
+fn plough_plate_off(
+    mut commands: Commands,
+    mut destroyed: MessageReader<super::PartDestroyed>,
+    ploughs: Query<&GlobalTransform, With<Plough>>,
+    catalog: Res<crate::items::Catalog>,
+    mut seat_looks: Query<(&super::salvage::SeatLook, &mut Visibility)>,
+) {
+    for d in destroyed.read() {
+        if d.role != PartRole::Armour(1) {
+            continue;
+        }
+        let Ok(root) = ploughs.get(d.robot) else {
+            continue;
+        };
+        let Some(kind) = catalog.kind("plough_plate") else {
+            continue;
+        };
+        let (_, rot, _) = root.to_scale_rotation_translation();
+        crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(root.transform_point(PLATE_AT))
+                    .with_rotation(rot),
+                condition: PLATE_CONDITION,
+            },
+        );
+        for (l, mut vis) in &mut seat_looks {
+            if l.robot == d.robot && l.role == PartRole::Armour(1) {
+                *vis = Visibility::Hidden;
+            }
+        }
+    }
+}
+
+/// The housing plate's middle (local to the root: `art/robots/plough.py`
+/// prints it from the housing's origin), and its state when it comes off.
+pub const PLATE_AT: Vec3 = Vec3::new(0.0, 0.85 + 0.251, -1.95 - 0.499);
+pub const PLATE_CONDITION: f32 = 0.7;
 
 /// The condition of what's on its root at its wreck: its body shrugs off
 /// rounds, so its beacon, sprockets and motor come through worn, not shot.
@@ -1312,5 +1365,57 @@ mod tests {
             .collect();
         assert!(!loose.iter().any(|id| id == "hound_hip_servo"), "{loose:?}");
         assert!(loose.iter().any(|id| id == "fuel_can"), "{loose:?}");
+    }
+
+    /// A crowbar finds no seam on its hull (nothing comes off it), but on
+    /// its auger housing it prises off the chevroned rail plate: salvage,
+    /// dropped where it was.
+    #[test]
+    fn a_crowbar_takes_its_rail_plate_not_its_hull() {
+        use crate::destruction::hooks::{Pried, Pryable};
+        let (mut vr, zone, e) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        vr.stand(zone.on_ground(60.0, 230.0), 0.0);
+        vr.step(5);
+        let part = |vr: &mut crate::vr_harness::Vr, role| {
+            vr.app
+                .world_mut()
+                .query::<(Entity, &super::super::RobotPart)>()
+                .iter(vr.app.world())
+                .find(|(_, p)| p.robot == e && p.role == role)
+                .map(|(c, _)| c)
+                .unwrap()
+        };
+        let hull = part(&mut vr, PartRole::Armour(0));
+        let housing = part(&mut vr, PartRole::Armour(1));
+        assert!(
+            vr.app.world().get::<Pryable>(hull).is_none(),
+            "no seam on its hull"
+        );
+        assert!(vr.app.world().get::<Pryable>(housing).is_some());
+        for _ in 0..60 {
+            vr.app.world_mut().write_message(Pried {
+                target: housing,
+                torque: 1.0e4,
+                by: Entity::PLACEHOLDER,
+            });
+            vr.step(1);
+        }
+        let root = *vr.app.world().get::<GlobalTransform>(e).unwrap();
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let plates: Vec<Vec3> = vr
+            .app
+            .world_mut()
+            .query::<(&crate::items::Item, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .filter(|(i, _)| catalog.get(i.kind()).id == "plough_plate")
+            .map(|(_, g)| g.translation())
+            .collect();
+        assert_eq!(plates.len(), 1, "{plates:?}");
+        assert!(
+            plates[0].distance(root.translation()) < 5.0,
+            "by it: {} vs {}",
+            plates[0],
+            root.translation()
+        );
     }
 }
