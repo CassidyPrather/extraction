@@ -223,6 +223,7 @@ fn pryable_plates(
             Added<crate::robots::RobotPart>,
             Without<Pryable>,
             Without<crate::robots::heavy::HeavyPart>,
+            Without<crate::robots::ShrugsOffPry>,
         ),
     >,
 ) {

@@ -1140,6 +1140,24 @@
             tags: ["electronics", "glass", "metal"],
         ),
         (
+            id: "sorter_head", dims: Some((0.34, 0.37, 0.319)), name: "Sorter scanning head",
+            description: "The Depot gantry's scanning head, a pale box with one long eye slit, its stalk sheared where it hung under the carriage.",
+            category: RobotPart, size: Medium, mass: 4.5, bulk: 2.5,
+            tags: ["electronics", "glass"],
+        ),
+        (
+            id: "sorter_carriage_motor", dims: Some((0.3, 0.213, 0.5)), name: "Gantry travel motor",
+            description: "The motor that ran the Depot gantry's carriage along its bridge: a finned can on a steel flange, its gearbox stamped SR DRV.",
+            category: RobotPart, size: Medium, mass: 9.0, bulk: 3.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "plough_plate", dims: Some((3.08, 0.211, 0.18)), name: "Plough rail plate",
+            description: "The chevroned plate off a snow plough's auger housing, three metres of black steel striped orange. Two people to carry it, or one who drags.",
+            category: RobotPart, size: Bulky, mass: 28.0, bulk: 10.0,
+            tags: ["metal", "steel"],
+        ),
+        (
             id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
             description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
             category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,

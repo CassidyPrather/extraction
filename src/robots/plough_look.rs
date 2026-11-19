@@ -236,6 +236,17 @@ fn dress(
                         Transform::from_translation(HOUSING - HOUSING_PART),
                         3,
                     );
+                    // Its top rail's plate: gone once it's prised off
+                    // (`plough::plough_plate_off`).
+                    let h = hang(
+                        &mut commands,
+                        &mut materials,
+                        c,
+                        "housing_plate",
+                        Transform::from_translation(HOUSING - HOUSING_PART),
+                        3,
+                    );
+                    seat_look(&mut commands, h, PartRole::Armour(1));
                 }
                 Ok(PartRole::Sensor) => {
                     let h = hang(

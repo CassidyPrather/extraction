@@ -313,10 +313,10 @@ fn pylon_salvage(
 }
 
 /// Where things sit on a wrecked pylon's cabinet (local to it, its middle
-/// 0.6 m up): the head's middle on its collar, mast down
-/// (`art/robots/pylon.py` prints the head's middle), the coil and the
+/// 0.6 m up): the head's middle on its collar, its foot on the collar's
+/// rim (`art/robots/pylon.py` prints the head's middle), the coil and the
 /// cell out of its burst front.
-pub const DISH_AT: Vec3 = Vec3::new(0.0, 1.29, 0.025);
+pub const DISH_AT: Vec3 = Vec3::new(0.0, 1.17, 0.025);
 pub const DISH_BOLTS: usize = 3;
 pub const COIL_AT: Vec3 = Vec3::new(-0.2, 0.0, -0.56);
 pub const CELL_AT: Vec3 = Vec3::new(0.22, -0.15, -0.6);

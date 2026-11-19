@@ -563,6 +563,12 @@ fn damage_parts(
 #[derive(Component)]
 pub struct Salvaged;
 
+/// An armour part a crowbar finds no seam on (`interact::tools::crowbar`):
+/// nothing comes off it, so it's not offered (a plough's hull, a spotter's
+/// camera pod).
+#[derive(Component)]
+pub struct ShrugsOffPry;
+
 /// A robot's own seed, from where and what it was when it came into the
 /// world: whatever a robot's body does by chance (which legs tear off,
 /// where its pieces fly, how a plate falls) is drawn from this, not from
@@ -706,12 +712,8 @@ pub fn part_salvage(
         // A drone's rotors are on its wreck, or lie where they flew
         // (`salvage`).
         RobotKind::Drone => Vec::new(),
-        RobotKind::Dirigible => tries(
-            count(|r| matches!(r, PartRole::GasCell(_))),
-            0.4,
-            "dirigible_gas_valve",
-            rng,
-        ),
+        // Its valves are bolted on its wreck (`salvage::dirigible_salvage`).
+        RobotKind::Dirigible => Vec::new(),
         RobotKind::Pylon => tries(
             count(|r| *r == PartRole::Sensor),
             0.6,
@@ -731,7 +733,8 @@ pub fn wreck_table(kind: RobotKind) -> Option<&'static str> {
         // (The walker family's wreck is what you see on it, every part
         // seated: `salvage`, #105.)
         RobotKind::Walker => None,
-        RobotKind::Dirigible => Some("dirigible_wreck"),
+        // (A dirigible's, what's on it once it's down: `salvage`.)
+        RobotKind::Dirigible => None,
         RobotKind::Pylon => Some("pylon_wreck"),
         // (Its own table when Models: kit's sorter parts are in.)
         RobotKind::Sorter => Some("pylon_wreck"),

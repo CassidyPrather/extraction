@@ -212,6 +212,8 @@ pub fn spawn_spotter(commands: &mut Commands, zone: &Zone, at: Vec2) -> Entity {
                 Collider::cuboid(0.5, 0.4, 0.5),
                 Transform::from_translation(GONDOLA),
             ),
+            // (Nothing to prise off it: its camera comes off by hand.)
+            super::ShrugsOffPry,
         ));
     });
     commands.spawn((
@@ -617,9 +619,10 @@ fn spotter_salvage(
 /// on the ground beside the slack envelope (its middle `ENVELOPE_R * 0.5`
 /// up), off to its side.
 pub const DOWN_SHIFT: Vec3 = Vec3::new(2.3, -GONDOLA.y - ENVELOPE_R * 0.5 + 0.2, 0.0);
-/// The valve on the slack envelope's crown (local to it), and its state:
+/// The valve on the slack envelope's crown, lying on the ground
+/// (`spotter_look::draped`: its crown is 0.42 m up), local to it, and its state:
 /// the envelope's holed, its valve isn't.
-pub const VALVE_AT: Vec3 = Vec3::new(0.0, 0.55, 0.0);
+pub const VALVE_AT: Vec3 = Vec3::new(0.0, -ENVELOPE_R * 0.5 + 0.47, 0.0);
 pub const VALVE_HEALTH: f32 = 0.7;
 pub const VALVE_BOLTS: usize = 4;
 /// The winch's drum and motor on its skid (local to the winch piece,
@@ -980,5 +983,68 @@ pub(crate) mod tests {
             .filter(|id| id.starts_with("spotter_"))
             .collect();
         assert_eq!(seated, ["spotter_winch"]);
+    }
+
+    /// Its winch prised off its skid with a crowbar frees it: it lifts
+    /// away on the wind. (Its camera pod has no seam: nothing to prise.)
+    #[test]
+    fn a_crowbar_on_its_winch_sets_it_loose() {
+        use crate::destruction::hooks::{Pried, Pryable};
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            let e = spawn_spotter(&mut c, &zone, Vec2::new(40.0, 230.0));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.stand(zone.on_ground(40.0, 236.0), 0.0);
+        vr.step(5);
+        let gondola = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &super::super::RobotPart)>()
+            .iter(vr.app.world())
+            .find(|(_, p)| p.robot == e && p.role == PartRole::Armour(30))
+            .map(|(c, _)| c)
+            .unwrap();
+        assert!(
+            vr.app.world().get::<Pryable>(gondola).is_none(),
+            "no seam on its pod"
+        );
+        let w = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &SpotterPiece)>()
+            .iter(vr.app.world())
+            .find(|(_, p)| **p == SpotterPiece::Winch)
+            .map(|(w, _)| w)
+            .unwrap();
+        assert!(
+            vr.app.world().get::<Pryable>(w).is_some(),
+            "a seam on its winch"
+        );
+        let before = vr.app.world().get::<Transform>(e).unwrap().translation;
+        for _ in 0..60 {
+            vr.app.world_mut().write_message(Pried {
+                target: w,
+                torque: 1.0e4,
+                by: Entity::PLACEHOLDER,
+            });
+            vr.step(1);
+        }
+        assert!(
+            matches!(
+                vr.app.world().get::<Spotter>(e).unwrap().float,
+                Float::Loose(..)
+            ),
+            "loose"
+        );
+        vr.step(90 * 4);
+        let after = vr.app.world().get::<Transform>(e).unwrap().translation;
+        assert!(
+            after.y > before.y + 0.5,
+            "it lifts away: {before} -> {after}"
+        );
     }
 }
