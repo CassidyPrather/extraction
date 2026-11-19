@@ -27,8 +27,9 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
-| `capture::checks::models_are_a_believable_size`: items/plough_plate 3.08 m across, outside the 0.01..1.6 m items bound (scale.rs lists it at 3.08 m, Made) | 0fcb2355 (lib354) | Heavy | crowbar pass d2cd2be7; either a smaller carried piece or a sized exemption the check honours |
+| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
+| Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s). Anomalies traced it (19 Nov): the Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot walks the snare's edge with its hand over the drawn mark while the snare is at full crackle, then stands through the 3.5 s recharge. The tell is shown and early, so no anomaly change. Also: raid 5 struck two Player entities 3.9 m apart in one discharge | 6d425f1d (Onboarding re-measure) | Robot minds (bot route: keep hands off a drawn snare mark, step out in the recharge); Onboarding (the second Player entity) | snare unchanged by ruling: a hand over the mark is in |
+| `robots::recall::every_robot_keyed_local_is_in_the_table` + `soak::entity_keyed_locals_forget_what_is_gone`: src/robots/sorter_look.rs:177 `waited` Local<HashMap<Entity,..>> neither in recall/NOT_MEMORY_LOCALS nor pruned | 33580e7a (lib357) | Robot bodies | carriage-motor dressing; prune on despawn + NOT_MEMORY_LOCALS line (or BOUNDED with why) |
 
 ## Logged, not failing a check
 
@@ -44,6 +45,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| `capture::checks::models_are_a_believable_size` items/plough_plate 3.08 m | 39c11074 (Heavy: two 1.54 m halves), green on lib357 |
 | `asset_path_tests::game_code_never_reads_from_the_build_machine` (grips.rs CARGO_MANIFEST_DIR) | 81b48bb7 (World models), green on lib354 |
 | first_jobs cautious yard WalkTo timeouts near gate 4 | 0ba2aadb (Onboarding) |
 | `render::affordance` every_interactable (yard Bell pull, BenchLever, BenchKnob) | 4cf47a06 (Onboarding) |

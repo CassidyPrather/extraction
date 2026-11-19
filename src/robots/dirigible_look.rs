@@ -22,7 +22,7 @@ pub struct DirigibleLookPlugin;
 
 impl Plugin for DirigibleLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (slacken_cells, tuck_eye));
+        app.add_systems(Update, (slacken_cells, tuck_eye, two_sided));
     }
 }
 
@@ -41,7 +41,7 @@ pub enum Slack {
 /// A slack cell's crown over the ground (m): one that's lost its gas, and
 /// one that still has some.
 pub const DOWN_TALL_HOLED: f32 = 0.9;
-pub const DOWN_TALL: f32 = 1.7;
+pub const DOWN_TALL: f32 = 0.5;
 
 /// The ground (and what lies on it) under a cell, in the cell's space: its
 /// height at x, z.
@@ -54,9 +54,14 @@ pub struct Floor {
 
 impl Floor {
     pub fn at(&self, x: f32, z: f32) -> f32 {
+        // Full over the gondola, rounding off to the grass round it: the
+        // fabric drapes over a hump, not a block.
         match self.gondola {
-            Some((top, mid, half)) if (x - mid.x).abs() < half.x && (z - mid.y).abs() < half.y => {
-                self.ground.max(top)
+            Some((top, mid, half)) if top > self.ground => {
+                let d = ((x - mid.x).abs() - half.x).max(0.0);
+                let e = ((z - mid.y).abs() - half.y).max(0.0);
+                let k = (1.0 - (d * d + e * e).sqrt() / GONDOLA_FALL).clamp(0.0, 1.0);
+                self.ground + (top - self.ground) * k * k * (3.0 - 2.0 * k)
             }
             _ => self.ground,
         }
@@ -92,16 +97,33 @@ pub fn slack_point(p: Vec3, half: Vec3, slack: Slack, floor: &Floor) -> Vec3 {
             let z = p.z * (1.0 + 0.05 * (1.0 - u));
             // (Its lower half pressed flat; only toward the crown does it
             // stand off the ground.)
-            let mut y = floor.ground + 0.02 + u.powf(2.2) * tall;
+            // A holed cell's lower half pressed flat; a full one a pillow,
+            // its shoulders rounded off.
+            let lift = if holed { u.powf(2.2) } else { u.powf(1.8) };
+            let mut y = floor.ground + 0.02 + lift * tall;
             // Creases along the gores, and across them, deeper toward the
             // rim.
-            y += (0.07 * (a * 10.0 + p.z * 1.6).sin() + 0.035 * (z * 3.3 + x * 2.1).sin()) * side;
+            let deep = if holed { 1.0 } else { 1.5 };
+            y += (0.07 * (a * 10.0 + p.z * 1.6).sin() + 0.035 * (z * 3.3 + x * 2.1).sin())
+                * side
+                * deep;
             // The rim droops to the ground.
             let rim = ((x.abs() - half.x) / (0.5 * half.x)).clamp(0.0, 1.0);
             y -= 0.4 * rim * rim * (3.0 - 2.0 * rim);
             // One side fuller than the other.
             y += 0.04 * x;
-            Vec3::new(x, y.max(floor.at(x, z) + 0.02), z)
+            // Slumped toward its ends too: no lift holds it up now, so
+            // there's no flat top and its end rims come down to the grass.
+            let end = (p.z.abs() / half.z).clamp(0.0, 1.0);
+            y = floor.ground + (y - floor.ground) * (1.0 - 0.6 * end * end);
+            // Its upper fabric rides up over the hump at the gondola, its
+            // foot doesn't: a smooth maximum of the two, not pressed up to
+            // it, so the fabric never folds back over itself (a fold shades
+            // dark).
+            let hump = (floor.at(x, z) - floor.ground) * u.sqrt();
+            let above = y - floor.ground;
+            y = floor.ground + 0.5 * (above + hump + ((above - hump).powi(2) + 0.0225).sqrt());
+            Vec3::new(x, y.max(floor.ground + 0.02), z)
         }
     }
 }
@@ -116,9 +138,9 @@ pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
     let floor = Floor {
         ground: -RADIUS - 1.0 - cell_at.y,
         gondola: Some((
-            -RADIUS - 0.5 + 0.55 - cell_at.y,
+            GONDOLA_TOP - cell_at.y,
             Vec2::new(-cell_at.x, -cell_at.z),
-            Vec2::new(0.75, 2.05),
+            GONDOLA_HALF,
         )),
     };
     slack_point(
@@ -128,6 +150,14 @@ pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
         &floor,
     )
 }
+
+/// What the fabric drapes over once the ship is down (in the ship's
+/// space): the gondola with its engine pods and their mounts, a little
+/// clear so none of it shows through the fabric's coarse mesh.
+const GONDOLA_TOP: f32 = -RADIUS - 0.5 + 0.55 + 0.15;
+const GONDOLA_HALF: Vec2 = Vec2::new(0.8, 2.1);
+/// How far round it the hump falls away to the grass (m).
+const GONDOLA_FALL: f32 = 1.2;
 
 /// A cell's look, settling from one slack to the next.
 #[derive(Component, Clone, Copy, Debug)]
@@ -290,9 +320,9 @@ fn draw_cell(
     // and footprint as `dirigible` spawns it, in the ship's space).
     let ground = zone.ground(at.x, at.z) - at.y;
     let gondola = (
-        -RADIUS - 0.5 + 0.55 - local.translation.y,
+        GONDOLA_TOP - local.translation.y,
         Vec2::new(-local.translation.x, -local.translation.z),
-        Vec2::new(0.75, 2.05),
+        GONDOLA_HALF,
     );
     let floor = Floor {
         ground,
@@ -322,6 +352,40 @@ fn draw_cell(
         commands
             .entity(e)
             .insert((Mesh3d(h), Slackened { original }));
+    }
+}
+
+/// Slack fabric folds over itself, turning some of its faces inward: a
+/// reshaped cell is drawn two-sided, its inside faces shaded as its
+/// outside, so a fold reads as a fold and not a hole in it.
+fn two_sided(
+    mut commands: Commands,
+    slack: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<Slackened>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: Local<
+        bevy::platform::collections::HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
+    >,
+) {
+    for (e, m) in &slack {
+        let id = m.0.id();
+        if made.values().any(|h| h.id() == id) {
+            continue;
+        }
+        let h = match made.get(&id) {
+            Some(h) => h.clone(),
+            None => {
+                let Some(src) = materials.get(&m.0) else {
+                    continue;
+                };
+                let mut two = src.clone();
+                two.double_sided = true;
+                two.cull_mode = None;
+                let h = materials.add(two);
+                made.insert(id, h.clone());
+                h
+            }
+        };
+        commands.entity(e).insert(MeshMaterial3d(h));
     }
 }
 
@@ -362,7 +426,7 @@ mod tests {
     fn floor(ground: f32) -> Floor {
         Floor {
             ground,
-            gondola: Some((ground + 1.1, Vec2::ZERO, Vec2::new(0.75, 2.05))),
+            gondola: Some((ground + 1.1, Vec2::ZERO, GONDOLA_HALF)),
         }
     }
 
@@ -411,6 +475,30 @@ mod tests {
             assert!(lowest_rim < 0.15, "its rim on the ground: {lowest_rim}");
             assert!(widest > RADIUS * 1.15, "spread: {widest}");
             assert!(highest < 2.0 * RADIUS * 0.5, "flat, not round: {highest}");
+            // Even the cell still holding gas is a low pillow: under half a
+            // taut cell's height (2 RADIUS), and its ends lower than its
+            // middle.
+            if !holed {
+                assert!(highest <= RADIUS, "a low pillow: {highest}");
+                let end = slack_point(
+                    Vec3::new(0.0, RADIUS * 0.5, 2.9),
+                    half,
+                    Slack::Down { holed },
+                    &f,
+                );
+                let mid = slack_point(
+                    Vec3::new(0.0, RADIUS * 0.5, 0.0),
+                    half,
+                    Slack::Down { holed },
+                    &f,
+                );
+                assert!(
+                    end.y < mid.y - 0.2,
+                    "its ends slumped: {} vs {}",
+                    end.y,
+                    mid.y
+                );
+            }
         }
     }
 
@@ -560,7 +648,7 @@ mod tests {
         }
         assert!(slack >= 3, "its cells reshaped: {slack}");
         assert!(
-            highest < DOWN_TALL + 0.6,
+            highest < RADIUS * 0.6,
             "its cells lie low: {highest} over the ground"
         );
     }

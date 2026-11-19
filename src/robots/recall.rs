@@ -956,6 +956,10 @@ mod tests {
             "whether it fought you and has said it's coming back, for ComingBack",
         ),
         ("senses.rs", "a door's last state, to see it open"),
+        (
+            "sorter_look.rs",
+            "how long a wrecked sorter's grab has waited for its forearm piece",
+        ),
         ("tracks.rs", "how often it looks for prints"),
         ("visuals.rs", "a material made"),
         ("visuals.rs", "a lamp's flicker"),
