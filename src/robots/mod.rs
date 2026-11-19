@@ -705,12 +705,8 @@ pub fn part_salvage(
         // A drone's rotors are on its wreck, or lie where they flew
         // (`salvage`).
         RobotKind::Drone => Vec::new(),
-        RobotKind::Dirigible => tries(
-            count(|r| matches!(r, PartRole::GasCell(_))),
-            0.4,
-            "dirigible_gas_valve",
-            rng,
-        ),
+        // Its valves are bolted on its wreck (`salvage::dirigible_salvage`).
+        RobotKind::Dirigible => Vec::new(),
         RobotKind::Pylon => tries(
             count(|r| *r == PartRole::Sensor),
             0.6,
@@ -730,7 +726,8 @@ pub fn wreck_table(kind: RobotKind) -> Option<&'static str> {
         // (The walker family's wreck is what you see on it, every part
         // seated: `salvage`, #105.)
         RobotKind::Walker => None,
-        RobotKind::Dirigible => Some("dirigible_wreck"),
+        // (A dirigible's, what's on it once it's down: `salvage`.)
+        RobotKind::Dirigible => None,
         RobotKind::Pylon => Some("pylon_wreck"),
         // (Its own table when Models: kit's sorter parts are in.)
         RobotKind::Sorter => Some("pylon_wreck"),
