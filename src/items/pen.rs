@@ -242,6 +242,22 @@ pub fn well_for(wells: &[(usize, Option<f32>)]) -> Option<usize> {
 pub fn load_by_hand(world: &mut World, pen: Entity, cart: Entity) -> bool {
     use crate::interact::{Hand, HandAction, Held, InSocket, InteractEvent, Supported};
     use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
+    // A spent one isn't worth loading (and, swapped out onto the pen, one
+    // would swap back in for the other spent one, and back, every touch).
+    if world
+        .get::<Item>(cart)
+        .is_none_or(|it| it.0.condition <= 0.0)
+    {
+        return false;
+    }
+    // Already in one of this pen's wells: it stays.
+    if world
+        .get::<InSocket>(cart)
+        .and_then(|s| world.get::<crate::interact::SocketOwner>(s.socket))
+        .is_some_and(|o| o.0 == pen)
+    {
+        return false;
+    }
     let Some(children) = world.get::<Children>(pen).map(|c| c.to_vec()) else {
         return false;
     };
@@ -267,6 +283,30 @@ pub fn load_by_hand(world: &mut World, pen: Entity, cart: Entity) -> bool {
     let Some(&(slot, _, spent)) = wells.iter().find(|(_, i, _)| *i == want) else {
         return false;
     };
+    // Out of wherever it was: a pocket (one-handed, the pen touched to
+    // one on you), the pack.
+    if let Some(from) = world.get::<InSocket>(cart).map(|s| s.socket) {
+        if let Some(mut s) = world.get_mut::<Socket>(from) {
+            if s.occupant == Some(cart) {
+                s.occupant = None;
+            }
+        }
+        world.write_message(InteractEvent::Unsocketed {
+            item: cart,
+            socket: from,
+        });
+    }
+    if let Some(bag) = world
+        .get::<crate::interact::body::InBackpack>(cart)
+        .map(|b| b.bag)
+    {
+        if let Some(mut b) = world.get_mut::<crate::interact::body::Backpack>(bag) {
+            b.contents.retain(|e| *e != cart);
+        }
+        world
+            .entity_mut(cart)
+            .remove::<crate::interact::body::InBackpack>();
+    }
     // Out of its hand.
     let held = world.get::<Held>(cart).copied();
     if let Some(h) = held {
