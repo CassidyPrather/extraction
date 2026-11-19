@@ -503,16 +503,13 @@ mod tests {
         // down (Heavy's walker_eye on the gondola's nose, which takes the
         // part's place).
         let catalog = w.resource::<crate::items::Catalog>().clone();
-        let seated: Vec<Entity> = w
-            .query::<&super::super::salvage::SalvageSeat>()
+        let seated_eye = w
+            .query::<(Entity, &crate::items::Item, &GlobalTransform)>()
             .iter(w)
-            .filter(|s| s.wreck == ship)
-            .map(|s| s.item)
-            .collect();
-        let seated_eye = seated.into_iter().find(|i| {
-            w.get::<crate::items::Item>(*i)
-                .is_some_and(|it| catalog.get(it.0.kind).id == "walker_eye")
-        });
+            .find(|(_, it, g)| {
+                catalog.get(it.0.kind).id == "walker_eye" && g.translation().distance(root) < 8.0
+            })
+            .map(|(e, ..)| e);
         let eye = parts
             .iter()
             .find(|(_, r)| *r == PartRole::Sensor)
