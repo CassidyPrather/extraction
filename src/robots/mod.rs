@@ -20,6 +20,7 @@ pub mod damage;
 pub mod devices;
 pub mod director;
 pub mod dirigible;
+pub mod dirigible_look;
 pub mod distress;
 pub mod distress_look;
 pub mod disturbed;

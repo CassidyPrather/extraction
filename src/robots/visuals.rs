@@ -44,6 +44,7 @@ impl Plugin for RobotVisualsPlugin {
                     super::lines::LinesPlugin,
                     super::engineer_look::EngineerLookPlugin,
                     super::builds::BuildsPlugin,
+                    super::dirigible_look::DirigibleLookPlugin,
                 ),
             ))
             .add_systems(
