@@ -74,7 +74,8 @@ bottom 100 px cut off, one of its parts held low in the left hand.
   visor and searchlight still on it. To the right, its junction box with
   the breaker sitting on top (live while it had power).
 - `wreck_spotter.png`: a spotter at 6 m, its camera in hand. The slack
-  envelope lies with its gas valve on the crown; beside it, the pod with
+  envelope lies draped on the grass, creased along its gores, a fin flat
+  under its rim, with its gas valve on the crown; beside it, the pod with
   its camera and searchlight. Up the field, the winch, its drum and motor
   bolted to the skid, with the tether lying slack to the wreck.
 - `wreck_plough.png`: a plough at 8 m, side on, its beacon in hand. Its
