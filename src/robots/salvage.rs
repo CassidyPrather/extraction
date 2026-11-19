@@ -195,6 +195,13 @@ pub const LAUNCHER_FROM_HEAD: Vec3 = Vec3::new(0.0, 0.0, -0.23);
 /// prints it), and the bolts through its stalk.
 pub const SORTER_HEAD_MID: Vec3 = Vec3::new(0.0, 0.085, -0.01);
 pub const SORTER_HEAD_BOLTS: usize = 2;
+/// A fallen Sorter's carriage (half extents, local; it lies on its belly,
+/// its underside on the ground), and where its head and servo pack are
+/// seated on it: against its front and its flank, on the ground beside it,
+/// where a hand reaches them (what hung under it is under it on a wreck).
+pub const SORTER_CARRIAGE_HALF: Vec3 = Vec3::new(0.7, 0.3, 0.6);
+pub const SORTER_HEAD_ON_WRECK: Vec3 = Vec3::new(0.0, -0.3 + 0.19, -0.6 - 0.17);
+pub const SORTER_SERVO_ON_WRECK: Vec3 = Vec3::new(0.7 + 0.44, -0.3 + 0.18, 0.0);
 /// The Sorter's carriage motor's middle (on the carriage's top), its bolts,
 /// and its state (the carriage shot through; its motor on top, worn), and
 /// the key its look is hidden by (`sorter_look`'s `carriage_motor` holder).
@@ -363,16 +370,20 @@ pub struct WreckParts<'a> {
 pub fn rows(w: &WreckParts) -> Vec<Row> {
     let mut out = Vec::new();
     // The Sorter's servo pack, bolted on at its shoulder.
+    // (Its wreck lies on its belly, the shoulder under it: the pack's seated
+    // where a hand reaches it, laid on its side against the carriage's
+    // flank, bolted to it.)
     if let Some(sv) = w.servo {
+        let side = Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2);
         out.push(Row {
             item: "sorter_servo_pack",
-            at: Transform::from_translation(sv.local),
+            at: Transform::from_translation(SORTER_SERVO_ON_WRECK).with_rotation(side),
             size: 1.0,
             health: sv.health,
             fix: Fix::Bolts {
                 n: SORTER_BOLTS,
-                centre: sv.local + Vec3::Y * 0.2,
-                face: Quat::IDENTITY,
+                centre: Vec3::new(SORTER_CARRIAGE_HALF.x + 0.02, SORTER_SERVO_ON_WRECK.y, 0.0),
+                face: Quat::from_rotation_arc(Vec3::Y, Vec3::X),
                 radius: 0.15,
             },
             hot: false,
@@ -383,16 +394,18 @@ pub fn rows(w: &WreckParts) -> Vec<Row> {
     // stalk: it comes off in its place (its own look goes with its part).
     if w.kind == RobotKind::Sorter {
         if let Some(&(e, _, health, at, _)) = w.parts.iter().find(|p| p.1 == PartRole::Sensor) {
-            let mid = at.rotation * SORTER_HEAD_MID;
+            // (Its wreck on its belly, the head that hung under its front
+            // is seated against the front, on the ground, in reach.)
+            let _ = at;
             out.push(Row {
                 item: "sorter_head",
-                at: Transform::from_translation(at.translation + mid).with_rotation(at.rotation),
+                at: Transform::from_translation(SORTER_HEAD_ON_WRECK),
                 size: 1.0,
                 health,
                 fix: Fix::Bolts {
                     n: SORTER_HEAD_BOLTS,
-                    centre: at.translation + at.rotation * Vec3::Y * 0.2,
-                    face: at.rotation,
+                    centre: SORTER_HEAD_ON_WRECK + Vec3::new(0.0, 0.0, 0.17),
+                    face: Quat::from_rotation_arc(Vec3::Y, Vec3::Z),
                     radius: 0.04,
                 },
                 hot: false,
