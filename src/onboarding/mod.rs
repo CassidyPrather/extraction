@@ -81,6 +81,8 @@ pub enum Goal {
     Search,
     Wrist,
     Inject,
+    /// A fresh cartridge into the pen's empty well (#102).
+    LoadPen,
     /// Up onto the store's roof by the lift's pop (#108).
     RideSwirl,
     Probe,
@@ -116,6 +118,7 @@ impl Goal {
             Goal::Search => "Take the injector",
             Goal::Wrist => "You're hurt: look",
             Goal::Inject => "Inject your thigh",
+            Goal::LoadPen => "Load the pen",
             Goal::Probe => "A part at the sparks",
             Goal::RideSwirl => "Ride the swirl",
             Goal::Artifact => "Take the stone",
@@ -136,6 +139,7 @@ impl Goal {
                 }
                 Goal::Rack => Some("Press B or Y on the gun\nhand: it racks."),
                 Goal::Inject => Some("Hold it. Press A or X\non that hand."),
+                Goal::LoadPen => Some("Pen in hand. Touch it to\nthe cartridge on the crate."),
                 _ => None,
             };
             if let Some(t) = one {
@@ -211,6 +215,10 @@ impl Goal {
             // one-handed, the button (`how_for`).
             (Goal::Inject, false) => &["thigh", "trigger"],
             (Goal::Inject, true) => &["u"],
+            // `watch_hands`: a cartridge seated in a held pen's well (let
+            // go at it; flat, the combine key; one-handed, touched).
+            (Goal::LoadPen, false) => &["well"],
+            (Goal::LoadPen, true) => &["t"],
             // `watch_moves`: on the store's roof (the lift's pop does it).
             (Goal::RideSwirl, _) => &["stand", "face", "still"],
             (Goal::Probe, false) => &["grip", "open your hand"],
@@ -243,6 +251,7 @@ impl Goal {
             Goal::Search => Names::Placed(Placed::HouseFind),
             Goal::Probe => Names::Snare,
             Goal::Artifact => Names::Placed(Placed::Stone),
+            Goal::LoadPen => Names::Placed(Placed::Cartridge),
             Goal::CallTruck => Names::FieldSet,
             Goal::PullCord => Names::Cord,
             _ => return None,
@@ -319,6 +328,8 @@ impl Goal {
             (Goal::Wrist, true) => "You're hurt. Hold H\nto check yourself.",
             (Goal::Inject, false) => "Its tip to your thigh.\nSqueeze TRIGGER.",
             (Goal::Inject, true) => "Hold it. Press U.",
+            (Goal::LoadPen, false) => "Cartridge in one hand: let\ngo at the pen's empty well.",
+            (Goal::LoadPen, true) => "Pen in one hand, cartridge\nin the other. Press T.",
             // No button: keeping still is the whole of it.
             (Goal::RideSwirl, false) => "Stand in the blue flags,\nface the roof, hands still.",
             (Goal::RideSwirl, true) => "Stand in the blue flags,\nface the roof. Hold still.",
@@ -483,7 +494,7 @@ pub const STATIONS: &[Station] = &[
         at: [4.5, 8.0],
         rot: 90.0,
         bay: 5,
-        goals: &[Goal::Wrist, Goal::Inject],
+        goals: &[Goal::Wrist, Goal::Inject, Goal::LoadPen],
         where_: "through the gate, the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
         in_order: false,
@@ -753,6 +764,8 @@ pub enum Placed {
     FarBox,
     HouseFind,
     Stone,
+    /// The cartridge on First aid's crate, for the pen.
+    Cartridge,
     /// The full magazine on the range table.
     SpareMag,
     /// The range's own pistol, and its empty magazine.
@@ -1637,8 +1650,16 @@ fn setup(
     spawn(
         &mut commands,
         "canned_stew",
-        Transform::from_translation(at + Vec3::Y * (size.y + 0.06)),
+        Transform::from_translation(at + Vec3::new(-0.1, size.y + 0.06, 0.0)),
     );
+    // And a cartridge beside it, for the pen's empty well.
+    if let Some(e) = spawn(
+        &mut commands,
+        "regen_r1",
+        Transform::from_translation(at + Vec3::new(0.12, size.y + 0.03, 0.0)),
+    ) {
+        commands.entity(e).insert(Placed::Cartridge);
+    }
 
     // The shimmer: one burner where you can see it from the track, its
     // stone at its heart. The Surge's own anomalies stay off the course
@@ -1836,6 +1857,16 @@ fn watch_hands(
                         if id(*item) == Some("pm_pistol") {
                             complete(&mut ob, Goal::PutAway, &mut out);
                         }
+                    }
+                    // A cartridge into a well of a pen in a local hand.
+                    if matches!(
+                        s.kind,
+                        SocketKind::Mount(extraction_core::items::Mount::Cartridge)
+                    ) && owner.is_some_and(|o| {
+                        held.get(o.0)
+                            .is_ok_and(|(_, h, _)| locals.contains(h.player))
+                    }) {
+                        complete(&mut ob, Goal::LoadPen, &mut out);
                     }
                 }
             }
