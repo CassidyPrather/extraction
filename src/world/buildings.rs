@@ -6322,9 +6322,10 @@ fn spawn_body(
         RigidBody::Static,
         collider,
         CollisionLayers::new(Layer::World, LayerMask::ALL),
-        Transform::from_matrix(
-            (xf.compute_affine() * bevy::math::Affine3A::from_translation(at)).into(),
-        ),
+        // (Unscaled, exactly: a collider's shape carries its size, and a
+        // not-quite-unit scale re-derived from the matrix drifts:
+        // `perf::no_collider_scale_drifts`.)
+        Transform::from_translation(xf.transform_point(at)).with_rotation(xf.rotation.normalize()),
         ChildOf(root),
     ));
 }
