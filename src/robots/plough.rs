@@ -757,7 +757,7 @@ fn plough_wreck(
 }
 
 /// The chevroned plate along its auger housing's top rail, prised off with
-/// a crowbar (its seam is the housing's, `crowbar::pryable_plates`):
+/// a crowbar in two halves (its seam is the housing's, `crowbar::pryable_plates`):
 /// salvage, `plough_plate`, dropped where it was; its look goes
 /// (`plough_look`, keyed `Armour(1)`).
 fn plough_plate_off(
@@ -782,16 +782,21 @@ fn plough_plate_off(
             continue;
         };
         let (_, rot, _) = root.to_scale_rotation_translation();
-        crate::items::spawn_item(
-            &mut commands,
-            &catalog,
-            crate::items::SpawnItem {
-                kind,
-                transform: Transform::from_translation(root.transform_point(PLATE_DROP))
+        // (It comes off in two halves, a piece a person carries each.)
+        for side in [-1.0, 1.0] {
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(
+                        root.transform_point(PLATE_DROP + Vec3::X * side * PLATE_HALF_APART),
+                    )
                     .with_rotation(rot),
-                condition: PLATE_CONDITION,
-            },
-        );
+                    condition: PLATE_CONDITION,
+                },
+            );
+        }
         for (l, mut vis) in &mut seat_looks {
             if l.robot == d.robot && l.role == PartRole::Armour(1) {
                 *vis = Visibility::Hidden;
@@ -807,6 +812,8 @@ pub const PLATE_AT: Vec3 = Vec3::new(0.0, 0.85 + 0.251, -1.95 - 0.499);
 /// the housing's own collider (spawned inside it, it would be thrown).
 pub const PLATE_DROP: Vec3 = Vec3::new(0.0, 0.6, -2.85);
 pub const PLATE_CONDITION: f32 = 0.7;
+/// Its two halves' middles, either side of the plate's.
+pub const PLATE_HALF_APART: f32 = 0.8;
 
 /// The condition of what's on its root at its wreck: its body shrugs off
 /// rounds, so its beacon, sprockets and motor come through worn, not shot.
@@ -1420,7 +1427,7 @@ mod tests {
             .filter(|(i, _)| catalog.get(i.kind()).id == "plough_plate")
             .map(|(_, g)| g.translation())
             .collect();
-        assert_eq!(plates.len(), 1, "{plates:?}");
+        assert_eq!(plates.len(), 2, "in two halves: {plates:?}");
         assert!(
             plates[0].distance(root.translation()) < 5.0,
             "by it: {} vs {}",

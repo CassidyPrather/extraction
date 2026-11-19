@@ -1152,9 +1152,9 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "plough_plate", dims: Some((3.08, 0.211, 0.18)), name: "Plough rail plate",
-            description: "The chevroned plate off a snow plough's auger housing, three metres of black steel striped orange. Two people to carry it, or one who drags.",
-            category: RobotPart, size: Bulky, mass: 28.0, bulk: 10.0,
+            id: "plough_plate", dims: Some((1.54, 0.211, 0.18)), name: "Plough rail plate",
+            description: "Half the chevroned plate off a snow plough's auger housing, a length of black steel striped orange. It came off in two.",
+            category: RobotPart, size: Large, mass: 14.0, bulk: 5.0,
             tags: ["metal", "steel"],
         ),
         (
