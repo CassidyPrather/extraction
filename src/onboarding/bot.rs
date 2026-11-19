@@ -309,6 +309,10 @@ impl DirectorWorld<'_, '_> {
         self.comfort.as_ref().is_some_and(|c| c.one_handed)
     }
 
+    fn left_handed(&self) -> bool {
+        self.comfort.as_ref().is_some_and(|c| c.left_handed)
+    }
+
     fn id(&self, e: Entity) -> Option<&str> {
         self.items
             .get(e)
@@ -695,20 +699,23 @@ impl DirectorWorld<'_, '_> {
             // well: the other hand's and the combine key (flat's T), or
             // one-handed the pen brought down onto it where it lies.
             Goal::LoadPen => {
+                // Tasks name sides as for the right-handed (`Task::mirrored`);
+                // the hands as they are.
+                let gun = Side::Right.mirrored(self.left_handed());
                 let pen = self
-                    .holding(Side::Right)
+                    .holding(gun)
                     .filter(|e| self.id(*e) == Some("regen_injector"))
                     .or_else(|| self.on_body("regen_injector"))
                     .or_else(|| self.loose("regen_injector", here));
                 if let (Some((cart, at)), Some(pen)) = (self.placed(Placed::Cartridge), pen) {
                     t.extend(self.go(here, at.xz() + Vec2::new(-0.7, 0.0), 0.4));
-                    if self.holding(Side::Right) != Some(pen) {
+                    if self.holding(gun) != Some(pen) {
                         t.extend(self.free_hands());
                         t.push(Grab {
                             item: pen,
                             side: Side::Right,
                         });
-                    } else if self.holding(Side::Left).is_some() {
+                    } else if self.holding(gun.other()).is_some() {
                         t.push(Stow(Side::Left));
                     }
                     if self.one_handed() {
