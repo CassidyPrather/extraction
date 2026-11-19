@@ -4917,6 +4917,90 @@ mod first_aid {
         assert!(top > 0.95, "the wells face the eyes ({top:.2})");
     }
 
+    /// Flat mode's combine key (and the bot's): a cartridge in the other
+    /// hand goes into the pen's empty well; one more, and the spent one
+    /// comes out into that hand.
+    #[test]
+    fn the_combine_key_loads_a_pen_and_swaps_out_a_spent_one() {
+        use crate::items::pen::PenSlot;
+        use crate::weapons::flat::Combine;
+        let (mut vr, feet) = setup();
+        let pen = take(&mut vr, feet, "regen_injector");
+        vr.step(5);
+        let in_left = |vr: &mut Vr, id: &str| -> Entity {
+            let at = feet + Vec3::new(-0.2, 1.1, -0.35);
+            vr.grip(Side::Left, 0.0);
+            vr.step(2);
+            let e = vr.spawn(id, Transform::from_translation(at));
+            vr.app.world_mut().entity_mut(e).insert(RigidBody::Static);
+            vr.hand(Side::Left, at, Quat::IDENTITY, 1.0, 0.0);
+            vr.step(3);
+            vr.app.world_mut().entity_mut(e).insert(RigidBody::Dynamic);
+            vr.step(2);
+            assert_eq!(vr.hand_state(Side::Left).holding, Some(e), "{id} in hand");
+            e
+        };
+        let well_of = |vr: &mut Vr, c: Entity| -> Option<usize> {
+            let s = vr.app.world().get::<crate::interact::InSocket>(c)?.socket;
+            let owner = vr.app.world().get::<crate::interact::SocketOwner>(s)?.0;
+            (owner == pen).then(|| vr.app.world().get::<PenSlot>(s).map(|p| p.0))?
+        };
+        // The R-2 it came with is in well 0; the S-1 goes in well 1.
+        let stim = in_left(&mut vr, "stim_s1");
+        vr.app.world_mut().write_message(Combine::all(pen, stim));
+        vr.step(4);
+        assert_eq!(well_of(&mut vr, stim), Some(1), "the S-1 in the empty well");
+        assert_eq!(
+            vr.hand_state(Side::Left).holding,
+            None,
+            "the hand let it go"
+        );
+        // The R-2 used up: an R-1 takes its place, the R-2 to the hand.
+        let r2 = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &crate::interact::InSocket)>();
+            let seated: Vec<Entity> = q.iter(vr.app.world()).map(|(e, _)| e).collect();
+            seated
+                .into_iter()
+                .find(|e| well_of(&mut vr, *e) == Some(0))
+                .expect("the R-2 in well 0")
+        };
+        vr.app
+            .world_mut()
+            .get_mut::<crate::items::Item>(r2)
+            .unwrap()
+            .0
+            .condition = 0.0;
+        let r1 = in_left(&mut vr, "regen_r1");
+        vr.app.world_mut().write_message(Combine::all(r1, pen));
+        vr.step(6);
+        assert_eq!(
+            well_of(&mut vr, r1),
+            Some(0),
+            "the R-1 in the spent one's well"
+        );
+        assert_eq!(well_of(&mut vr, stim), Some(1), "the S-1 left be");
+        assert_eq!(
+            vr.hand_state(Side::Left).holding,
+            Some(r2),
+            "the spent R-2 out into the hand"
+        );
+        // Both good: a third doesn't go.
+        vr.app.world_mut().entity_mut(r2).despawn();
+        vr.step(2);
+        let r1b = in_left(&mut vr, "regen_r1");
+        vr.app.world_mut().write_message(Combine::all(pen, r1b));
+        vr.step(4);
+        assert_eq!(well_of(&mut vr, r1b), None, "no room for a third");
+        assert_eq!(
+            vr.hand_state(Side::Left).holding,
+            Some(r1b),
+            "still in hand"
+        );
+    }
+
     #[test]
     fn a_stim_in_the_other_slot_and_one_jab_gives_both() {
         use crate::items::pen::{PenSlot, SLOTS, Stimmed};
