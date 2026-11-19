@@ -126,9 +126,9 @@ pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
     let floor = Floor {
         ground: -RADIUS - 1.0 - cell_at.y,
         gondola: Some((
-            -RADIUS - 0.5 + 0.55 - cell_at.y,
+            GONDOLA_TOP - cell_at.y,
             Vec2::new(-cell_at.x, -cell_at.z),
-            Vec2::new(0.75, 2.05),
+            GONDOLA_HALF,
         )),
     };
     slack_point(
@@ -138,6 +138,12 @@ pub fn down_point(local: Vec3, cell_at: Vec3, holed: bool) -> Vec3 {
         &floor,
     )
 }
+
+/// What the fabric drapes over once the ship is down (in the ship's
+/// space): the gondola with its engine pods and their mounts, a little
+/// clear so none of it shows through the fabric's coarse mesh.
+const GONDOLA_TOP: f32 = -RADIUS - 0.5 + 0.55 + 0.35;
+const GONDOLA_HALF: Vec2 = Vec2::new(1.35, 2.4);
 
 /// A cell's look, settling from one slack to the next.
 #[derive(Component, Clone, Copy, Debug)]
@@ -300,9 +306,9 @@ fn draw_cell(
     // and footprint as `dirigible` spawns it, in the ship's space).
     let ground = zone.ground(at.x, at.z) - at.y;
     let gondola = (
-        -RADIUS - 0.5 + 0.55 - local.translation.y,
+        GONDOLA_TOP - local.translation.y,
         Vec2::new(-local.translation.x, -local.translation.z),
-        Vec2::new(0.75, 2.05),
+        GONDOLA_HALF,
     );
     let floor = Floor {
         ground,
@@ -372,7 +378,7 @@ mod tests {
     fn floor(ground: f32) -> Floor {
         Floor {
             ground,
-            gondola: Some((ground + 1.1, Vec2::ZERO, Vec2::new(0.75, 2.05))),
+            gondola: Some((ground + 1.1, Vec2::ZERO, GONDOLA_HALF)),
         }
     }
 
