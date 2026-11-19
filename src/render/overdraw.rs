@@ -291,7 +291,12 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
                     let far = (centre + q.pos).distance(eye_pos);
                     let glow = m.params.mode.w;
                     let grow = (far / (15.0 + (7.0 - 15.0) * glow)).clamp(1.0, 2.0 + 0.5 * glow);
-                    let half = q.size * grow;
+                    let mut half = q.size * grow;
+                    if (m.params.mode.x + 0.5) as i32 == 8 {
+                        // As the shader caps a steam billow: no wider than
+                        // 40 degrees of the view (STEAM_CAP_TAN, tan 20).
+                        half = half.min(2.0 * far * 0.364);
+                    }
                     *p = centre + q.pos + (cam_right * corner.x + cam_up * corner.y) * half;
                 }
             }

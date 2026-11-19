@@ -450,7 +450,8 @@
         (kind: ArtifactField, at: (-140.0, 0.0), name: "The ash pit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
         (kind: Anomaly(kind: "Well", radius: 2.2), at: (174.0, -84.0), name: "Slag heap well"),
-        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-163.1, -6.3), name: "Ash pit mirror"),
+        // A mirror as a route (#108): over the spoil heap's 4 m bank by the canal: through it, up and over (147 m round).
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-15.0, 57.0), name: "Heap mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (111.0, -127.0), name: "Slag heap hush"),
         (kind: Offering, at: (-5.0, 153.5), name: "The memorial plinth"),
         (kind: Offering, at: (-75.0, -178.5), name: "The burnt chapel"),

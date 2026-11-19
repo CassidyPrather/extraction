@@ -24,7 +24,7 @@
 use bevy::prelude::*;
 use extraction_core::map::{MapDef, MarkerKind};
 
-use super::buildings::Ruin;
+use super::buildings::{Ruin, Shape};
 
 /// How near (xz) a note or terminal marker keeps a slot empty, metres.
 pub const NOTE_CLEAR: f32 = 0.6;
@@ -1102,48 +1102,204 @@ fn special(valley: Valley, base: &str, tag: &str, at: Vec2) -> Option<Story> {
 // --- Yards ------------------------------------------------------------------------------------
 
 /// A yard thing (`art/props/yards.py`): its model, half its footprint
-/// along its own x and z, and whether it stands against a wall, its back
-/// (+Z) to it, or out in the yard.
+/// along its own x and z, whether it stands against a wall, its back (+Z)
+/// to it, or out in the yard, and what a body bumps into (its own space:
+/// boxes and cylinders matched to what's drawn; a clothes line's posts,
+/// not its line).
 #[derive(Clone, Copy, Debug)]
 struct YardThing {
     model: &'static str,
     hx: f32,
     hz: f32,
     wall: bool,
+    body: &'static [(Shape, Vec3)],
 }
 
-const fn thing(model: &'static str, hx: f32, hz: f32, wall: bool) -> YardThing {
+const fn thing(
+    model: &'static str,
+    hx: f32,
+    hz: f32,
+    wall: bool,
+    body: &'static [(Shape, Vec3)],
+) -> YardThing {
     YardThing {
         model,
         hx,
         hz,
         wall,
+        body,
     }
 }
 
-const CLOTHES_LINE: YardThing = thing("clothes_line", 2.1, 0.35, false);
-const CLOTHES_LINE_BARE: YardThing = thing("clothes_line_bare", 2.1, 0.35, false);
-const BED_CABBAGE: YardThing = thing("garden_bed_cabbage", 1.22, 0.52, false);
-const BED_ROOTS: YardThing = thing("garden_bed_roots", 1.22, 0.52, false);
-const BENCH: YardThing = thing("bench_yard", 0.78, 0.2, true);
-const BENCH_CHARRED: YardThing = thing("bench_charred", 0.78, 0.2, true);
-const RAIN_BARREL: YardThing = thing("rain_barrel", 0.33, 0.37, true);
-const WOODPILE: YardThing = thing("woodpile_lean", 1.13, 0.47, true);
-const WASHTUB: YardThing = thing("washtub_stand", 0.4, 0.36, true);
-const CHOPPING_BLOCK: YardThing = thing("chopping_block", 0.6, 0.36, false);
-const BEEHIVE: YardThing = thing("beehive", 0.27, 0.33, false);
-const HEN_COOP: YardThing = thing("hen_coop", 0.8, 0.74, false);
-const HANDCART: YardThing = thing("handcart", 0.53, 1.04, false);
-const HAND_PUMP: YardThing = thing("hand_pump", 0.42, 0.72, false);
-const DOG_KENNEL: YardThing = thing("dog_kennel", 0.53, 0.57, false);
-const TUB_IRON: YardThing = thing("tub_iron", 0.75, 0.36, true);
-// (Its hatch is its own, lifting: `hinge::fit_counters`.)
-const COAL_BUNKER: YardThing = thing("coal_bunker#carcass", 0.64, 0.72, true);
-const SNOW_SHOVEL: YardThing = thing("snow_shovel_out", 0.24, 0.21, true);
-const SLEDGE: YardThing = thing("sledge", 0.24, 0.63, false);
+/// A box `x` by `y` by `z` standing on the ground at (`cx`, `cz`).
+const fn bx(x: f32, y: f32, z: f32, cx: f32, cz: f32) -> (Shape, Vec3) {
+    (Shape::Box(Vec3::new(x, y, z)), Vec3::new(cx, y * 0.5, cz))
+}
 
-/// Every yard model, for the tests.
-#[cfg(test)]
+/// A clothes line's two posts.
+const LINE_POSTS: &[(Shape, Vec3)] = &[
+    bx(0.08, 1.9, 0.08, -2.0, 0.0),
+    bx(0.08, 1.9, 0.08, 2.0, 0.0),
+];
+
+const CLOTHES_LINE: YardThing = thing("clothes_line", 2.1, 0.35, false, LINE_POSTS);
+const CLOTHES_LINE_BARE: YardThing = thing("clothes_line_bare", 2.1, 0.35, false, LINE_POSTS);
+const BED_CABBAGE: YardThing = thing(
+    "garden_bed_cabbage",
+    1.22,
+    0.52,
+    false,
+    &[bx(2.4, 0.28, 1.0, 0.0, 0.0)],
+);
+const BED_ROOTS: YardThing = thing(
+    "garden_bed_roots",
+    1.22,
+    0.52,
+    false,
+    &[bx(2.4, 0.28, 1.0, 0.0, 0.0)],
+);
+const BENCH: YardThing = thing(
+    "bench_yard",
+    0.78,
+    0.2,
+    true,
+    &[bx(1.5, 0.45, 0.34, 0.0, 0.0)],
+);
+const BENCH_CHARRED: YardThing = thing(
+    "bench_charred",
+    0.78,
+    0.2,
+    true,
+    &[bx(1.5, 0.47, 0.34, 0.0, 0.0)],
+);
+const RAIN_BARREL: YardThing = thing(
+    "rain_barrel",
+    0.33,
+    0.37,
+    true,
+    &[(Shape::Cylinder(0.31, 1.0), Vec3::new(0.0, 0.5, 0.0))],
+);
+const WOODPILE: YardThing = thing(
+    "woodpile_lean",
+    1.13,
+    0.47,
+    true,
+    &[bx(2.24, 1.5, 0.9, 0.0, -0.015)],
+);
+const WASHTUB: YardThing = thing(
+    "washtub_stand",
+    0.4,
+    0.36,
+    true,
+    &[bx(0.76, 1.19, 0.68, 0.0, 0.0)],
+);
+const CHOPPING_BLOCK: YardThing = thing(
+    "chopping_block",
+    0.6,
+    0.36,
+    false,
+    &[bx(1.0, 0.77, 0.6, 0.06, 0.045)],
+);
+const BEEHIVE: YardThing = thing(
+    "beehive",
+    0.27,
+    0.33,
+    false,
+    &[bx(0.52, 0.79, 0.6, 0.0, -0.02)],
+);
+const HEN_COOP: YardThing = thing(
+    "hen_coop",
+    0.8,
+    0.74,
+    false,
+    &[bx(1.34, 1.17, 1.12, 0.115, -0.165)],
+);
+const HANDCART: YardThing = thing(
+    "handcart",
+    0.53,
+    1.04,
+    false,
+    &[bx(1.06, 0.91, 1.64, 0.0, -0.2)],
+);
+const HAND_PUMP: YardThing = thing(
+    "hand_pump",
+    0.42,
+    0.72,
+    false,
+    &[
+        bx(0.8, 0.12, 0.8, 0.0, 0.0),
+        (Shape::Cylinder(0.1, 1.13), Vec3::new(0.0, 0.565, 0.0)),
+    ],
+);
+const DOG_KENNEL: YardThing = thing(
+    "dog_kennel",
+    0.53,
+    0.57,
+    false,
+    &[bx(1.06, 1.02, 1.14, 0.0, 0.0)],
+);
+const TUB_IRON: YardThing = thing(
+    "tub_iron",
+    0.75,
+    0.36,
+    true,
+    &[bx(1.5, 0.58, 0.72, 0.0, 0.0)],
+);
+// (Its hatch is its own, lifting: `hinge::fit_counters`.)
+const COAL_BUNKER: YardThing = thing(
+    "coal_bunker#carcass",
+    0.64,
+    0.72,
+    true,
+    &[bx(1.26, 0.85, 0.94, 0.0, 0.02)],
+);
+const SNOW_SHOVEL: YardThing = thing(
+    "snow_shovel_out",
+    0.24,
+    0.21,
+    true,
+    &[bx(0.48, 1.29, 0.4, 0.0, -0.205)],
+);
+const SLEDGE: YardThing = thing(
+    "sledge",
+    0.24,
+    0.63,
+    false,
+    &[bx(0.48, 0.35, 1.18, 0.0, -0.035)],
+);
+
+/// What a yard model's body bumps into, in its own space
+/// (`buildings::spawn_buildings`).
+pub fn yard_body(model: &str) -> &'static [(Shape, Vec3)] {
+    YARD_THINGS
+        .iter()
+        .find(|t| t.model == model)
+        .map_or(&[], |t| t.body)
+}
+
+/// A hand-sized thing carried about a house (a lamp, a pail, a case, a
+/// can): its body in its own space, matched to what's drawn. Solid but not
+/// taken: whether they're picked up is Hands' and Items' (open, after the
+/// 20 Nov playtest).
+pub fn carried_body(model: &str) -> Option<(Shape, Vec3)> {
+    let cyl = |r: f32, h: f32| (Shape::Cylinder(r, h), Vec3::Y * h * 0.5);
+    Some(match model {
+        "lantern" => cyl(0.06, 0.27),
+        "hurricane_lamp" => cyl(0.075, 0.33),
+        "lunch_pail" => cyl(0.1, 0.26),
+        "suitcase_shut" => (
+            Shape::Box(Vec3::new(0.62, 0.2, 0.46)),
+            Vec3::new(0.0, 0.1, -0.018),
+        ),
+        "watering_can" => (
+            Shape::Box(Vec3::new(0.52, 0.34, 0.16)),
+            Vec3::new(0.096, 0.17, 0.0),
+        ),
+        _ => return None,
+    })
+}
+
+/// Every yard thing.
 const YARD_THINGS: [YardThing; 19] = [
     CLOTHES_LINE,
     CLOTHES_LINE_BARE,
@@ -2223,6 +2379,119 @@ mod tests {
                     || t.translation.y < table.y - 0.3),
             "something on Hana's table"
         );
+    }
+
+    /// A hand-sized thing carried about a house (a lamp, a case, a can),
+    /// solid since it has a body, is never in a door's swing: every
+    /// valley's houses, every door's leaf swept through its swing (1.75
+    /// rad, `buildings::swing_doors`) clear of every such body.
+    #[test]
+    fn nothing_carried_stands_in_a_doors_swing() {
+        use extraction_core::map::VALLEYS;
+        let mut bad = Vec::new();
+        let mut n = 0;
+        for (name, _) in VALLEYS {
+            let map = crate::world::load_map_def(name);
+            for p in &map.placements {
+                let Some(geo) = super::super::buildings::prefab(&p.prefab) else {
+                    continue;
+                };
+                let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1])
+                    .with_rotation(Quat::from_rotation_y(-p.rot.to_radians()));
+                let things: Vec<_> = geo
+                    .props
+                    .iter()
+                    .flat_map(|d| d.models.iter().copied())
+                    .chain(dress(&map, &p.prefab, &p.tag, &xf, false))
+                    .filter_map(|(m, t)| carried_body(m).map(|b| (m, t, b)))
+                    .collect();
+                n += things.len();
+                for d in &geo.doors {
+                    for (m, t, (shape, at)) in &things {
+                        let inv = (t.compute_affine()
+                            * bevy::math::Affine3A::from_translation(*at))
+                        .inverse();
+                        let hit = (0..=14).any(|k| {
+                            let a = d.yaw + 1.75 * k as f32 / 14.0;
+                            let along = Quat::from_rotation_y(a) * Vec3::X;
+                            (1..=9).any(|i| {
+                                (0..=4).any(|j| {
+                                    let q = d.hinge
+                                        + along * d.width * i as f32 / 9.0
+                                        + Vec3::Y * (0.05 + 0.4 * j as f32);
+                                    let l = inv.transform_point3(q);
+                                    match *shape {
+                                        Shape::Box(s) | Shape::Prism(s) => {
+                                            (l.abs() - s * 0.5).max_element() < 0.0
+                                        }
+                                        Shape::Cylinder(r, h) => {
+                                            l.xz().length() < r && l.y.abs() < h * 0.5
+                                        }
+                                    }
+                                })
+                            })
+                        });
+                        if hit {
+                            bad.push(format!(
+                                "{name} {} at {:?}: {m} in a door's swing (hinge {:?})",
+                                p.prefab, p.at, d.hinge
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(n > 0, "nothing carried in any house");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every yard thing is solid, its body within what's drawn of it (a
+    /// few centimetres' play) and standing most of its height: drawn only,
+    /// a bunker or a cart was walked through.
+    #[test]
+    fn every_yard_thing_has_a_body() {
+        let root = crate::asset_root_path();
+        let mut bad = Vec::new();
+        for t in YARD_THINGS {
+            if t.body.is_empty() {
+                bad.push(format!("{}: no body", t.model));
+                continue;
+            }
+            let path = root.join(crate::render::world_props::path(t.model));
+            let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+            for tr in crate::capture::glb::triangles(&path)
+                .unwrap_or_default()
+                .iter()
+                .filter(|t| !t.node.contains("_lod"))
+            {
+                for p in tr.p {
+                    lo = lo.min(p);
+                    hi = hi.max(p);
+                }
+            }
+            let mut top = 0.0f32;
+            for (shape, at) in t.body {
+                let half = match *shape {
+                    Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                };
+                let play = Vec3::splat(0.05);
+                if (*at - half).cmplt(lo - play).any() || (*at + half).cmpgt(hi + play).any() {
+                    bad.push(format!(
+                        "{}: body {:?} at {at:?} past what's drawn {lo:?}..{hi:?}",
+                        t.model, shape
+                    ));
+                }
+                top = top.max(at.y + half.y);
+            }
+            // (A garden bed's body is its frame: what grows in it is soft,
+            // brushed through.)
+            let soft = t.model.starts_with("garden_bed");
+            if top < hi.y * 0.8 && !soft {
+                bad.push(format!("{}: body {top:.2} m of its {:.2} m", t.model, hi.y));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Every yard model is built.

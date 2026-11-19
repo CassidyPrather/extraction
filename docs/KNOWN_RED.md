@@ -28,9 +28,7 @@ How it works:
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | game cause fixed (8bb2a19a); bot cause #96 (one-handed reload only from a pouch; spare packed) — first fix didn't trigger, under investigation |
-| `render::vr_budget` gauge_steam_banks_hold_the_stereo_budget (#[ignore]): steam bank inside (Kettle) 104% fragments | 2d2f8835 | Anomalies | mode-8 size cap 20° in 2c577d29 (gate 345); Performance to re-measure |
-| `vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached`: drone robot_cell (Live) unseen, out of reach (0.03 m up, under the hull) | bb51307b (lib343) | Heavy | playtest-relevant |
-| `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | bb51307b (lib343) | Heavy | |
+| `perf::tests::no_collider_scale_drifts`: "Yard rain_barrel" collider scale (1, 1, 1.0000001) | c91aea7e (lib348) | World models | yard colliders 71111912 |
 
 ## Logged, not failing a check
 
@@ -56,7 +54,6 @@ How it works:
 | `audio_machines::tests::the_dangers_are_heard` (Recall) | 88c44a5e (Legibility) |
 | `render::legibility::tests::every_panel_in_the_game_clears_its_floor` | 1744915e (Legibility) |
 | `interact::read::tests::the_logbook_comes_up_to_be_read_and_goes_back` | ae762ae8 (Hands) |
-| `soak::chaos::chaos_monkey_short` | passes on 5f9a23a7 (lib332) |
 | `capture::attach::tests::model_pieces_touch_what_holds_them` (field set pieces in the air) | 6b547021 (Progression) |
 | `render::legibility::tests::every_model_with_letters_is_registered_and_legible` (MIX label) | edfd7666 (Legibility) |
 | `onboarding::pickups` each_line_is_what_the_game_does, every_kind_rollable_before_raid_6 (cartridges, DP-3) | 9f512a16 (Onboarding) |
@@ -77,3 +74,10 @@ How it works:
 | `soak::quiet` no_session_logs_a_warning, no_valley_logs_an_error_without_the_downloads: "Unknown vertex attribute COLOR_" (bevy_gltf) | Arcade 12c412e5 (COLOR_0 only); passes on d6bdf8ef (lib344) |
 | warning: unused import `Stash` at src/vr_harness.rs:2590 | gone: no build warnings since gate 342b (10957625) |
 | warning: unused `held` at src/anomaly/mod.rs:1284 | gone: no build warnings since gate 342b (10957625) |
+| steam-bank gauge, Kettle inside 104% fragments | Anomalies 2c577d29 (20° cap) + Performance dd57552d (replay cap): worst 69% inside, ≤34% at 10 m |
+| `vr_harness::wreck_reach::every_wrecks_salvage_is_seen_and_reached`: drone robot_cell (Live) unseen, out of reach (0.03 m up, under the hull) | Heavy acb939c3; passes on d0b692c0 (lib346) |
+| `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | Heavy acb939c3; passes on d0b692c0 (lib346) |
+| sentry/spotter/plough/pylon item models off their boxes | Heavy fdedaa97; passes on c91aea7e (lib348) |
+| `robots::sentry::tests::its_wreck_lies_in_reach` (counted every item) | Heavy 0d575202; passes on c91aea7e (lib348) |
+| `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
+| `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
