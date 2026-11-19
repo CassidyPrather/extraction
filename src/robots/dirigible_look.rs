@@ -499,12 +499,33 @@ mod tests {
             .filter(|(_, p)| p.robot == ship)
             .map(|(e, p)| (e, p.role))
             .collect();
-        let (eye, _) = parts.iter().find(|(_, r)| *r == PartRole::Sensor).unwrap();
-        let eye_y = w.get::<GlobalTransform>(*eye).unwrap().translation().y;
+        // Its eye: the part, or the salvage seated in its place once it's
+        // down (Heavy's walker_eye on the gondola's nose, which takes the
+        // part's place).
+        let catalog = w.resource::<crate::items::Catalog>().clone();
+        let seated: Vec<Entity> = w
+            .query::<&super::super::salvage::SalvageSeat>()
+            .iter(w)
+            .filter(|s| s.wreck == ship)
+            .map(|s| s.item)
+            .collect();
+        let seated_eye = seated.into_iter().find(|i| {
+            w.get::<crate::items::Item>(*i)
+                .is_some_and(|it| catalog.get(it.0.kind).id == "walker_eye")
+        });
+        let eye = parts
+            .iter()
+            .find(|(_, r)| *r == PartRole::Sensor)
+            .map(|(e, _)| *e)
+            .or(seated_eye)
+            .expect("its eye, as a part or seated");
+        let eye_y = w.get::<GlobalTransform>(eye).unwrap().translation().y;
+        // (The part's a 0.3 m sphere; the seated eye sits on the nose.)
+        let under = if seated_eye == Some(eye) { 0.0 } else { 0.3 };
         assert!(
-            eye_y - 0.3 > ground,
+            eye_y - under > ground,
             "the eye clear: {}",
-            eye_y - 0.3 - ground
+            eye_y - under - ground
         );
         // Every drawn point of its cells lies low.
         let mut highest = f32::MIN;
