@@ -85,7 +85,9 @@ pub fn slack_point(p: Vec3, half: Vec3, slack: Slack, floor: &Floor) -> Vec3 {
             let tall = if holed { DOWN_TALL_HOLED } else { DOWN_TALL };
             // 0 at its belly to 1 at its crown.
             let u = up * 0.5 + 0.5;
-            let spread = 1.15 + 0.25 * (1.0 - u);
+            // Wide at its foot, drawing in toward the crown: a mound, not
+            // a box.
+            let spread = (1.15 + 0.25 * (1.0 - u)) * (1.0 - 0.35 * u * u);
             let x = p.x * spread;
             let z = p.z * (1.0 + 0.05 * (1.0 - u));
             // (Its lower half pressed flat; only toward the crown does it

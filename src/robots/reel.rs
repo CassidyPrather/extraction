@@ -485,10 +485,10 @@ fn reel(
                 e
             }
             "dirigibledown" => {
-                // A dirigible holed in two cells, coming down 24 m off,
+                // A dirigible holed in two cells, coming down 12 m off,
                 // side-on to you: it settles on the grass with its cells
                 // going slack over the gondola (`dirigible_look`).
-                let d = eye + flat * 24.0;
+                let d = eye + flat * 12.0;
                 let at = Vec3::new(
                     d.x,
                     zone.ground(d.x, d.z) + super::dirigible::RADIUS + 1.6,
