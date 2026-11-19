@@ -22,7 +22,7 @@ pub struct DirigibleLookPlugin;
 
 impl Plugin for DirigibleLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (slacken_cells, tuck_eye));
+        app.add_systems(Update, (slacken_cells, tuck_eye, two_sided));
     }
 }
 
@@ -345,6 +345,40 @@ fn draw_cell(
         commands
             .entity(e)
             .insert((Mesh3d(h), Slackened { original }));
+    }
+}
+
+/// Slack fabric folds over itself, turning some of its faces inward: a
+/// reshaped cell is drawn two-sided, its inside faces shaded as its
+/// outside, so a fold reads as a fold and not a hole in it.
+fn two_sided(
+    mut commands: Commands,
+    slack: Query<(Entity, &MeshMaterial3d<StandardMaterial>), Added<Slackened>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: Local<
+        bevy::platform::collections::HashMap<AssetId<StandardMaterial>, Handle<StandardMaterial>>,
+    >,
+) {
+    for (e, m) in &slack {
+        let id = m.0.id();
+        if made.values().any(|h| h.id() == id) {
+            continue;
+        }
+        let h = match made.get(&id) {
+            Some(h) => h.clone(),
+            None => {
+                let Some(src) = materials.get(&m.0) else {
+                    continue;
+                };
+                let mut two = src.clone();
+                two.double_sided = true;
+                two.cull_mode = None;
+                let h = materials.add(two);
+                made.insert(id, h.clone());
+                h
+            }
+        };
+        commands.entity(e).insert(MeshMaterial3d(h));
     }
 }
 
