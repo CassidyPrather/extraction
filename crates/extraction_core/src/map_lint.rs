@@ -589,7 +589,9 @@ pub const VIEW_MAX: usize = 16;
 /// roof, nothing inside. So is a snow pole: one 9 cm stick, painted; and
 /// a yard lamp: a post and its arm; a marker post: one post; a machine
 /// marker: one stake; and a siren mast: a pole, its ladder and cage, a
-/// horn and a lamp; a well sweep: a post and a pole.
+/// horn and a lamp; a well sweep: a post and a pole; a yard store (a lift's
+/// perch): one plain block, its slab, a painted kerb and a shut door, no
+/// windows and nothing inside.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -605,6 +607,7 @@ pub const VIEW_LIGHT: &[&str] = &[
     "yard_gate",
     "siren_mast",
     "well_sweep",
+    "yard_store",
 ];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav

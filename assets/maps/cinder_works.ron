@@ -265,6 +265,9 @@
     ],
 
     placements: [
+        // A perch (#108): a 2 m concrete roof the lift beside it pops you onto, from
+        // which the Cinder wood site is in sight over the ground (not from the ground here).
+        (prefab: "yard_store", at: (-150.0, -122.0), rot: 0.0),
         // The Gate's line: machine stakes on its 60 m circle, where a key carried
         // inside for 6 s calls a heavy; every walkable spot of the line within
         // 25 m of one (Heavy's gate_line_is_staked).
@@ -422,6 +425,8 @@
     ],
 
     markers: [
+        // The perch\'s lift (#108), aimed at the store (step: map_surge::step_target).
+        (kind: Anomaly(kind: "Lift", radius: 2.5, step: true), at: (-150.0, -126.55), name: "Perch lift"),
         // The arrival faces the way on to the first job (map_vista).
         (kind: Insertion, at: (-71.0, 198.7), rot: 21.0, name: "South gate"),
         (kind: TruckStop, at: (-74.4, 228.0), rot: 0.0, name: "South gate"),

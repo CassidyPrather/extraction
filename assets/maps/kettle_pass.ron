@@ -280,6 +280,9 @@
         (at: (4.0, -176.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // A perch (#108): a 2 m concrete roof the lift beside it pops you onto, from
+        // which the Beck site is in sight over the ground (not from the ground here).
+        (prefab: "yard_store", at: (-134.0, -22.0), rot: 225.0),
         // The Gate's line: machine stakes on its 60 m circle, where a key carried
         // inside for 6 s calls a heavy; every walkable spot of the line within
         // 25 m of one (Heavy's gate_line_is_staked).
@@ -498,6 +501,8 @@
     ],
 
     markers: [
+        // The perch\'s lift (#108), aimed at the store (step: map_surge::step_target).
+        (kind: Anomaly(kind: "Lift", radius: 2.5, step: true), at: (-137.22, -18.78), name: "Perch lift"),
         // The arrival faces the way on to the first job (map_vista).
         (kind: Insertion, at: (90.9, 202.4), rot: 58.0, name: "South gate"),
         (kind: TruckStop, at: (90.9, 232.4), rot: 0.0, name: "South gate"),

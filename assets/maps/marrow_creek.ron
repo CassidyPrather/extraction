@@ -313,6 +313,9 @@
         (at: (117.5, -40.0), radius: 1.6, stones: 3),
     ],
     placements: [
+        // A perch (#108): a 2 m concrete roof the lift beside it pops you onto, from
+        // which the Forest clearing site is in sight over the ground (not from the ground here).
+        (prefab: "yard_store", at: (-139.0, 24.0), rot: 0.0),
         // The Gate's line: machine stakes on its 60 m circle, where a key carried
         // inside for 6 s calls a heavy; every walkable spot of the line within
         // 25 m of one (Heavy's gate_line_is_staked).
@@ -528,6 +531,8 @@
     ],
 
     markers: [
+        // The perch\'s lift (#108), aimed at the store (step: map_surge::step_target).
+        (kind: Anomaly(kind: "Lift", radius: 2.5, step: true), at: (-139.0, 19.45), name: "Perch lift"),
         // The arrival faces the way on to the first job (map_vista).
         (kind: Insertion, at: (22.0, 148.5), rot: 53.0, name: "South gate"),
         (kind: TruckStop, at: (22.0, 178.5), rot: 0.0, name: "South gate"),
