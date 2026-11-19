@@ -2054,7 +2054,10 @@ mod dirigible_tests {
             .query_filtered::<(&Item, &GlobalTransform, Has<Live>), With<InSocket>>()
             .iter(app.world())
             .map(|(i, g, live)| (catalog.get(i.kind()).id.clone(), g.translation(), live))
-            .filter(|(_, at, _)| at.xz().distance(ground.xz()) < 12.0)
+            .filter(|(id, at, _)| {
+                at.xz().distance(ground.xz()) < 12.0
+                    && ["dirigible_gas_valve", "robot_cell", "walker_eye"].contains(&id.as_str())
+            })
             .collect();
         let mut ids: Vec<&str> = seated.iter().map(|(id, ..)| id.as_str()).collect();
         ids.sort();
@@ -2083,6 +2086,17 @@ mod dirigible_tests {
             .iter(app.world())
             .filter(|(_, g)| g.translation().xz().distance(ground.xz()) < 12.0)
             .map(|(i, _)| catalog.get(i.kind()).id.clone())
+            // (Its own, not the map's: the table's rolls were these and more.)
+            .filter(|id| {
+                [
+                    "polymer",
+                    "scrap_metal",
+                    "electronics",
+                    "walker_eye",
+                    "hound_hip_servo",
+                ]
+                .contains(&id.as_str())
+            })
             .collect();
         let mut loose_ids: Vec<&str> = loose.iter().map(|s| s.as_str()).collect();
         loose_ids.sort();
