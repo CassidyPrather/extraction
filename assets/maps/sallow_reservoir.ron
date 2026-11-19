@@ -468,6 +468,9 @@
         (at: (231.0, 56.0), radius: 1.5, stones: 3),
     ],
     placements: [
+        // A perch (#108): a 2 m concrete roof the lift beside it pops you onto, from
+        // which the Causeway site is in sight over the ground (not from the ground here).
+        (prefab: "yard_store", at: (-84.0, -122.0), rot: 90.0),
         // Where the way crosses into hot ground: something of the place
         // tells of it before you're in it (map_gradient).
         (prefab: "wreck_uaz", at: (214.0, 77.3), rot: 45.0),  // into the catchwater down the East shore road
@@ -647,6 +650,8 @@
     ],
 
     markers: [
+        // The perch\'s lift (#108), aimed at the store (step: map_surge::step_target).
+        (kind: Anomaly(kind: "Lift", radius: 2.5, step: true), at: (-79.45, -122.0), name: "Perch lift"),
         // Where the way crosses into hot ground: something of the place
         // tells of it before you're in it (map_gradient). Texts: Fifth valley.
         (kind: Sign(text: "MACHINES\nAT WORK"), at: (-247.5, -114.5), rot: 0.0, name: "New Sallow works sign"),
