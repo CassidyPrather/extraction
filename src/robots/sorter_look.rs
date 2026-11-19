@@ -183,6 +183,8 @@ fn follow(
         };
         *t = s.hall * Transform::from_xyz(s.pos.x, s.carriage_y(), 0.0);
     }
+    // (Forget a grab once it's rehung, hidden or gone.)
+    waited.retain(|g, _| grabs.contains(*g));
     let dt = time.delta_secs();
     for (g, grab, mut t, children) in &mut grabs {
         let Ok((s, pose, broken)) = sorters.get(grab.0) else {
