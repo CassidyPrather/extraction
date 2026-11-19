@@ -551,6 +551,8 @@ const BEAM_STACK: Vec3 = Vec3::new(0.8, BEAM_CLEAR, 0.8);
 /// something sets it off. Throw a thing in first.
 pub const SNARE_AT: [f32; 2] = [9.0, -31.5];
 pub const SNARE_R: f32 = 1.8;
+/// An anomaly this near one of the map's own markers stands there (m).
+const STANDING_NEAR: f32 = 0.5;
 /// The crate of spare parts to throw, by the shimmer's post.
 pub const PARTS_CRATE_AT: [f32; 2] = [4.6, -28.4];
 /// The pen the far-grab box sits in.
@@ -1613,8 +1615,24 @@ fn setup(
         Vec2::from(FAR_STAND_AT),
         Vec2::from(RANGE_TABLE_AT),
     ]);
-    for (e, gt, _) in &anomalies {
-        let p = gt.translation().xz();
+    // The map's own standing anomalies are the yard's, not the Surge's
+    // (bay 6's lift, 11.5 m from the snare, was swept away on load and
+    // never seen).
+    let standing: Vec<Vec2> = zone
+        .map
+        .markers
+        .iter()
+        .filter(|m| matches!(m.kind, extraction_core::map::MarkerKind::Anomaly { .. }))
+        .map(|m| Vec2::from(m.at))
+        .collect();
+    // (Where each stands by its own Transform: at PostStartup a Startup
+    // spawn's GlobalTransform isn't propagated yet, and every one read as
+    // the origin, on the track: all were swept, the map's own lift too.)
+    for (e, _, t) in &anomalies {
+        let p = t.translation.xz();
+        if standing.iter().any(|m| m.distance(p) < STANDING_NEAR) {
+            continue;
+        }
         // The track runs north along x = 0.
         if p.x.abs() < 14.0 || keep_clear.iter().any(|c| c.distance(p) < 14.0) {
             commands.entity(e).despawn();
@@ -2543,6 +2561,59 @@ mod tests {
     /// it, nor its crate's kit (the designer: the truck at the start
     /// "exposes them to a whole bunch of stuff at once"). Nothing in reach
     /// where you load.
+    /// The map's own standing anomalies stand in the yard once it's
+    /// loaded: the course is cleared of the Surge's, not of them (bay 6's
+    /// lift, 11.5 m from the snare, was swept away and never seen).
+    #[test]
+    fn the_yards_own_anomalies_stand_where_its_map_puts_them() {
+        use extraction_core::map::MarkerKind;
+        let dir = std::env::temp_dir().join(format!("extraction-yard-lift-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: super::TRAINING_YARD.into(),
+            data_dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let marks: Vec<(String, Vec2)> = w
+            .resource::<crate::world::Zone>()
+            .map
+            .markers
+            .iter()
+            .filter_map(|m| match &m.kind {
+                MarkerKind::Anomaly { kind, .. } => Some((kind.clone(), Vec2::from(m.at))),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            marks
+                .iter()
+                .any(|(k, at)| k == "Lift" && at.distance(Vec2::new(15.5, -22.0)) < 0.5),
+            "the yard's map has its bay-6 lift: {marks:?}"
+        );
+        let standing: Vec<Vec2> = w
+            .query::<(&crate::anomaly::Anomaly, &GlobalTransform)>()
+            .iter(w)
+            .map(|(_, gt)| gt.translation().xz())
+            .collect();
+        for (kind, at) in &marks {
+            assert!(
+                standing
+                    .iter()
+                    .any(|p| p.distance(*at) < super::STANDING_NEAR),
+                "the yard's {kind} at {at} isn't standing there (standing: {standing:?})"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_truck_and_its_kit_wait_for_the_extract() {
         // A first run's profile: the crate's filled.
