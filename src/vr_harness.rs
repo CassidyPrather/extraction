@@ -3530,6 +3530,62 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// A station done, the way on lies on the ground: dots from it,
+    /// through the gate in the hoarding, to the next station; there,
+    /// they're gone (playtest 2026-11-22, 6:20).
+    #[test]
+    fn a_trail_leads_through_the_gate_to_the_next_station() {
+        use crate::onboarding::STATIONS;
+        use crate::onboarding::trail::{DOT_EVERY, TrailLeg};
+        let mut vr = Vr::first_run();
+        let to = crate::onboarding::station_of(Goal::TakePistol);
+        at_station(&mut vr, to, &[]);
+        let from = Vec2::from(STATIONS[to - 1].at);
+        let dest = Vec2::from(STATIONS[to].at);
+        vr.stand(ground(&vr, from.into()), 0.0);
+        vr.step(10);
+        let leg = vr.app.world().resource::<TrailLeg>().clone();
+        assert_eq!(leg.to, Some(to), "leads to the range");
+        assert!(leg.dots.len() >= 5, "{} dots", leg.dots.len());
+        for w in leg.dots.windows(2) {
+            let d = w[0].xz().distance(w[1].xz());
+            assert!(d <= DOT_EVERY + 0.05, "dots {d:.2} m apart");
+        }
+        assert!(
+            leg.dots[0].xz().distance(from) < 3.0,
+            "starts at the last station"
+        );
+        assert!(
+            leg.dots.last().unwrap().xz().distance(dest) < 3.0,
+            "ends at the next"
+        );
+        // Through the gate out of bay 2, in its gap, not over the hoarding.
+        let gate = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .map
+            .placements
+            .iter()
+            .find(|p| p.prefab == "yard_gate" && p.tag == "gate_2")
+            .map(|p| Vec2::from(p.at))
+            .expect("gate 2");
+        let cross = leg
+            .dots
+            .windows(2)
+            .find(|w| (w[0].z - gate.y) * (w[1].z - gate.y) <= 0.0)
+            .expect("crosses gate 2's line");
+        let x = (cross[0].x + cross[1].x) * 0.5;
+        assert!((x - gate.x).abs() < 1.5, "through the gap: x {x:.1}");
+        // There: gone.
+        vr.stand(ground(&vr, dest.into()), 0.0);
+        vr.step(5);
+        assert!(
+            vr.app.world().resource::<TrailLeg>().dots.is_empty(),
+            "at the station, no trail"
+        );
+    }
+
     /// Gone down at the shimmer, you come round by it, not back at the
     /// start in the truck (playtest 2026-11-22, 16:04).
     #[test]
