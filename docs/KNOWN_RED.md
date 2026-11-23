@@ -44,7 +44,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
-| `render::puff::tests::no_puff_is_a_sphere` (handle_glow.rs) | c592c24 (Hands: the glow is a soft quad halo), gate 375; confirm on lib375 |
+| `render::puff::tests::no_puff_is_a_sphere` (handle_glow.rs) | c592c24 (Hands: the glow is a soft quad halo), green on lib375 (2c306a07: 1880/0) |
 | `soak::ledges::tests::no_valley_has_a_ledge_trap` (rime ore mill's high sills, solid since a41e3ff) | f31200ce (World models: only sills within reach are solid), green on lib373 (0a173357: 1873/1) |
 | scenario `walker_hunt` (0 wrecked: bots' sights turned to an eye 32 mm off the head) | 2bc1856 (Hands: a bot sights from its head), green on gate 372 |
 | `audio_machines::tests::the_dangers_are_heard` (MachineSpent) | 00ed3f59 (Arcade), green on lib371 (4f146f94: 1863/1) |
