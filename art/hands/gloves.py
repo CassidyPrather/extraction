@@ -582,12 +582,13 @@ def cuff(obj, ts):
         return Vector((math.copysign(abs(c) ** e, c) * (w + grow),
                        yc + math.copysign(abs(s) ** e, s) * (h + grow), 0.0))
 
-    # Its hand end a rolled hem, standing 4 mm proud of the glove, its edge
-    # following the wrist's oval (further toward the fingers at the middle
-    # of the back and of the palm than at the sides): butted on in a flat
-    # ring, the leather palm ended in a dead-straight cut across the wrist
-    # (the 22 November playtest, 1:02, "wrist seam").
-    HEM = 0.026
+    # Its hand end a rolled hem, standing 4 mm proud of the glove and lapping
+    # 10 mm on over the leather, its edge following the wrist's oval
+    # (further toward the fingers at the middle of the back and of the palm
+    # than at the sides): butted on in a flat ring, the leather palm ended
+    # in a dead-straight cut across the wrist (the 22 November playtest,
+    # 1:02, "wrist seam").
+    HEM = 0.020
     prof = [  # (z, grow over the wrist, scale about its centre)
         (HEM - 0.0006, 0.0010, 1), (HEM, 0.0036, 1), (HEM + 0.0016, 0.0046, 1),
         (HEM + 0.0034, 0.0044, 1), (HEM + 0.0048, 0.0030, 1),
@@ -606,15 +607,45 @@ def cuff(obj, ts):
         fade = min(max((0.046 - z) / (0.046 - HEM), 0.0), 1.0)
         return -0.006 * abs(math.sin(th)) ** 1.5 * fade
 
-    rings = [[centre + (point(th, g) - centre) * sc + Vector((0, 0, z + dip(th, z)))
+    # Each ring sized to the hand where it goes over it: its section there
+    # (the middle, width and height of its skin within 5 mm, 3 mm over it), the wrist's
+    # further up. Sized to the wrist alone, the hand stood through the
+    # cuff's front (a hard edge) and the hem sank into the leather but for
+    # a notch where it dipped.
+    to_game = TO_BLENDER.inverted().to_3x3()
+    skin = [to_game @ v.co for v in obj.data.vertices]
+    wrist = (0.0, w, yc, h)
+
+    def section(z):
+        near = [q for q in skin if abs(q.z - z) < 0.005]
+        if z >= 0.046 or len(near) < 12:
+            return wrist
+        xs = [q.x for q in near]
+        ys = [q.y for q in near]
+        sec = ((max(xs) + min(xs)) / 2, (max(xs) - min(xs)) / 2 + 0.003,
+               (max(ys) + min(ys)) / 2, (max(ys) - min(ys)) / 2 + 0.003)
+        # Never narrower than the hand there or the wrist; its middle eased
+        # into the wrist's up the cuff.
+        t = min(max((z - HEM) / (0.046 - HEM), 0.0), 1.0)
+        return (sec[0] * (1 - t), max(sec[1], w), sec[2] * (1 - t) + yc * t, max(sec[3], h))
+
+    def at(th, z, zr, g, sc):
+        cx, ww, cy, hh = section(zr)
+        c, s_ = math.cos(th), math.sin(th)
+        q = Vector((math.copysign(abs(c) ** e, c) * (ww + g),
+                    math.copysign(abs(s_) ** e, s_) * (hh + g), 0.0))
+        return Vector((cx, cy, z)) + q * sc
+
+    rings = [[at(th, z + dip(th, z), z, g, sc)
               for th in (2 * math.pi * k / segs for k in range(segs))] for z, g, sc in prof]
     _, faces = p.loft(rings, "Glove")
     for f in faces:
         c = f.calc_center_median()
         if 0.0563 < c.z < 0.0787 and f.normal.z * f.normal.z < 0.5:
             f.material_index = p._mi("Padding")
-        # The hem, in the padding's dark.
-        elif c.z < HEM + 0.006:
+        # The hem, in the padding's dark: its first 5 mm behind the edge
+        # (wherever the edge dips to).
+        elif c.z - dip(math.atan2(c.y - yc, c.x), HEM) < HEM + 0.0052:
             f.material_index = p._mi("Padding")
     # The strap's tab on the little finger's side, sewn down at its end.
     x = -ts * (w + 0.0055)
@@ -622,6 +653,16 @@ def cuff(obj, ts):
           bevel=0.0018, segs=2)
     c = make(p)
     c.vertex_groups.new(name="palm").add([v.index for v in c.data.vertices], 1.0, "REPLACE")
+    # The hand's own skin under the cuff drawn in toward the wrist's middle
+    # (up to 15%, from 3 mm behind the hem's edge over 8 mm), so none of it
+    # can stand through the cuff (the thumb's root did, at a corner).
+    to_b = TO_BLENDER.to_3x3()
+    for v in obj.data.vertices:
+        q = to_game @ v.co
+        k = smooth((q.z - (HEM + 0.003)) / 0.008)
+        if k > 0:
+            f = 1.0 - 0.15 * k
+            v.co = to_b @ Vector((q.x * f, yc + (q.y - yc) * f, q.z))
     return c
 
 
