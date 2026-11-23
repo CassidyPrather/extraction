@@ -1478,6 +1478,66 @@ mod tests {
         clashes
     }
 
+    /// A fingertip that bounces on a button (out past its release and back
+    /// in, 100 ms) clicks it once: NEW CAREER went twice that way and
+    /// relaunched the game twice (playtest 2026-11-22). Pushed again after
+    /// a breath, it clicks again.
+    #[test]
+    fn a_bounced_finger_clicks_a_button_once() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        use crate::raid::comfort_board::ComfortCard;
+        let mut vr = Vr::new("training_yard");
+        settings_out(&mut vr);
+        vr.step(5);
+        let card = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &ComfortCard)>()
+            .iter(vr.app.world())
+            .find(|(_, c)| **c == ComfortCard::Vignette)
+            .map(|(e, _)| e)
+            .expect("the vignette card");
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(b, _)| b.target == card)
+            .map(|(_, gt)| gt)
+            .expect("a button on it");
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        let clicks = |vr: &Vr| vr.pressed().iter().filter(|e| **e == card).count();
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..10 {
+            vr.move_hand(Side::Right, tip_at(0.08 - k as f32 * 0.006));
+            vr.step(1);
+        }
+        let push = |vr: &mut Vr| {
+            for k in 0..6 {
+                vr.move_hand(Side::Right, tip_at(CAP - k as f32 * 0.003));
+                vr.step(1);
+            }
+        };
+        push(&mut vr);
+        vr.step(1);
+        assert_eq!(clicks(&vr), 1, "pushed home: one click");
+        // Out past the release and straight back in: about 100 ms.
+        vr.move_hand(Side::Right, tip_at(CAP + 0.01));
+        vr.step(2);
+        push(&mut vr);
+        vr.step(1);
+        assert_eq!(clicks(&vr), 1, "a bounce isn't a second press");
+        // Out, a breath, in again: a press.
+        vr.move_hand(Side::Right, tip_at(CAP + 0.01));
+        vr.step(40);
+        push(&mut vr);
+        vr.step(1);
+        assert_eq!(clicks(&vr), 2, "a second push, a second click");
+    }
+
     /// A finger on the VIGNETTE card's button: held just short of the cap
     /// nothing happens; pushed in, it clicks once and the setting moves on.
     #[test]
@@ -4026,6 +4086,8 @@ mod onboarding {
         tug(&mut vr);
         assert!(crate::take_restart().is_none(), "one pull only asks");
         assert!(said(&vr, "Pull again"));
+        // A second pull, not the first one bounced (`interact::PRESS_GAP`).
+        vr.step(40);
         tug(&mut vr);
         assert!(crate::take_restart().is_some(), "the second goes");
     }

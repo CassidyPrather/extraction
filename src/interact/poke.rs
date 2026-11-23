@@ -94,6 +94,8 @@ pub(super) fn poke_buttons(
     targets: Query<&Visibility>,
     driver: Res<RigDriver>,
     mut events: MessageWriter<InteractEvent>,
+    mut last: ResMut<super::LastPress>,
+    time: Res<Time>,
 ) {
     if *driver != RigDriver::Xr {
         return;
@@ -138,7 +140,7 @@ pub(super) fn poke_buttons(
         button.depth = depth;
         if !button.down && depth > TRAVEL * 0.75 {
             button.down = true;
-            if let Some(player) = by {
+            if let Some(player) = by.filter(|_| last.take(button.target, time.elapsed_secs())) {
                 events.write(InteractEvent::Pressed {
                     item: button.target,
                     player,
