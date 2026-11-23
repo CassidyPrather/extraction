@@ -176,9 +176,12 @@ fn hoarding(b: &mut Builder, x0: f32, x1: f32) {
     let n = ((x1 - x0) / BAY).round() as usize;
     let h = HOARDING;
     for k in 0..=n {
+        // Inset at the ends as a fence run's are (`end_inset`): runs laid
+        // end to end don't draw the same post twice.
+        let inset = end_inset(k, n);
         b.bx(
-            Vec3::new(POST, h + 0.05, POST),
-            Vec3::new(x0 + k as f32 * BAY, (h + 0.05) * 0.5, 0.0),
+            Vec3::new(POST - 2.0 * inset, h + 0.05 - inset, POST - 2.0 * inset),
+            Vec3::new(x0 + k as f32 * BAY, (h + 0.05 - inset) * 0.5, 0.0),
             Mat::Timber,
         );
     }
@@ -209,8 +212,10 @@ pub const GATE_POST_LAMP_Y: f32 = 1.9;
 /// on one hangs [`GATE_POST_LAMP_Y`] up, on whichever face looks into the
 /// bay it lights (`onboarding`'s trail).
 pub fn gate_post_anchors(at: Vec2, rot_deg: f32) -> [Vec2; 2] {
+    // Placements turn by -rot about y (`buildings`): local +x goes to
+    // (cos, sin) of it.
     let r = rot_deg.to_radians();
-    let along = Vec2::new(r.cos(), -r.sin());
+    let along = Vec2::new(r.cos(), r.sin());
     // Half the gate's 4 m gap in the line (its footprint).
     let h = 2.0;
     [at - along * h, at + along * h]
@@ -396,8 +401,8 @@ mod tests {
     /// gate line is boarded right up to its rails.
     #[test]
     fn each_yard_gate_has_a_hoarding_post_either_side() {
-        let map = extraction_core::map::MapDef::from_ron(extraction_core::map::TRAINING_YARD)
-            .unwrap();
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::TRAINING_YARD).unwrap();
         let ends: Vec<Vec2> = map
             .placements
             .iter()
@@ -405,12 +410,16 @@ mod tests {
             .flat_map(|p| {
                 let half = extraction_core::map::prefab_footprint(&p.prefab)[0] * 0.5 - 0.06;
                 let r = p.rot.to_radians();
-                let along = Vec2::new(r.cos(), -r.sin());
+                let along = Vec2::new(r.cos(), r.sin());
                 let at = Vec2::new(p.at[0], p.at[1]);
                 [at - along * half, at + along * half]
             })
             .collect();
-        let gates: Vec<_> = map.placements.iter().filter(|p| p.prefab == "yard_gate").collect();
+        let gates: Vec<_> = map
+            .placements
+            .iter()
+            .filter(|p| p.prefab == "yard_gate")
+            .collect();
         assert!(gates.len() >= 6);
         for g in gates {
             for a in gate_post_anchors(Vec2::new(g.at[0], g.at[1]), g.rot) {
