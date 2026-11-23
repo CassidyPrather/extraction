@@ -1492,6 +1492,31 @@ pub(super) fn direct_raid(
         bot.tasks.pop_front();
         super::second_hour::cut_in(&mut bot, t);
     }
+    // A snare's scorch in view that its next leg would cross: round it,
+    // its strike line and a half-metre off, as it comes in sight (a walk
+    // is laid out from far off, before it can be seen: seed 5's one-
+    // handed newcomer walked onto a charged one's scorch and stood there,
+    // struck twice, KNOWN_RED row 31).
+    if let Some(Task::WalkTo { to, within }) = bot.tasks.front().cloned() {
+        let round = round_snares(&world.snares_in_view(here), here, vec![to]);
+        if round.len() > 1 {
+            state.note(
+                now,
+                Kind::Learned,
+                "a snare's scorch on its way: went round it",
+            );
+            let mut t: Vec<Task> = round[..round.len() - 1]
+                .iter()
+                .map(|p| Task::WalkTo {
+                    to: *p,
+                    within: 1.0,
+                })
+                .collect();
+            t.push(Task::WalkTo { to, within });
+            bot.tasks.pop_front();
+            super::second_hour::cut_in(&mut bot, t);
+        }
+    }
     // A machine still firing at it, hit or miss: one fight, heard all
     // through (a drone's bursts 1.8 s apart never let it re-lock).
     // (Not the round that hits: only those before it, `shot_warns`.)
@@ -6259,10 +6284,6 @@ fn walk_open(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     // by the District bridge's north end, the way cut the deck's corner
     // (Map design's wreck repro), where the waypoints before it hadn't.
     let way = round_deck_sides(&decks, from, way, &|p: Vec2| world.zone.ground(p.x, p.y));
-    // Round any snare whose scorch it can see from here: its strike line
-    // and a half-metre (seed 5's one-handed newcomer walked onto a charged
-    // one's scorch and stood there, struck twice, KNOWN_RED row 31).
-    let way = round_snares(&world.snares_in_view(from), from, way);
     let mut t = vec![];
     let mut at = from;
     for q in way {

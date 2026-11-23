@@ -570,7 +570,17 @@ pub(super) fn direct(
         }
         Step::Anomaly => match world.anomaly_to_probe(here) {
             Some(target) if !firsts.met(First::Anomaly) && run.tries < 2 => {
-                tasks.extend(legs(here, target.xz(), 12.0, 1.0));
+                // Up to it, not into it: to its scorch's edge and a
+                // half-metre (`snares_in_view`'s keep), which is well inside
+                // where the air's felt to go wrong. Walked to its heart, the
+                // one-handed newcomer stood on a charged snare's scorch till
+                // it struck, twice (seed 5, KNOWN_RED row 31).
+                let heart = target.xz();
+                let keep = world.nearest_anomaly(heart).map_or(3.0, |(a, _)| {
+                    crate::anomaly::snare_strikes_within(a.radius) + SNARE_SPARE
+                });
+                let stop = heart + (here - heart).normalize_or(Vec2::Y) * keep;
+                tasks.extend(legs(here, stop, 12.0, 1.0));
                 run.tries += 1;
             }
             _ => advance(&mut run, Step::Note),
