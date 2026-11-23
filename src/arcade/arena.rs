@@ -171,7 +171,7 @@ impl Plugin for ArenaPlugin {
         app.init_resource::<Laid>()
             .add_systems(
                 Update,
-                (set_up, stand_at_bench)
+                (set_up, stand_at_bench, hush_the_driver)
                     .chain()
                     .in_set(ArcadeSystems::Setup),
             )
@@ -187,6 +187,26 @@ impl Plugin for ArenaPlugin {
                     .chain()
                     .after(crate::raid::drop_everything),
             );
+    }
+}
+
+/// The arcade is a sandbox, not the first hour: the driver's first-time
+/// lines (heard, aimed at, coming to look, lost you, the anomaly...) are
+/// all taken as said, so none comes over the radio in the middle of a
+/// wave (the 22 November playtest: "Lev, not now, not the time!"). A run's
+/// own lines (the waves, the board) and the gun's prompts still speak.
+fn hush_the_driver(firsts: Option<ResMut<crate::onboarding::firsts::Firsts>>) {
+    use crate::onboarding::firsts::ALL;
+    let Some(mut firsts) = firsts else {
+        return;
+    };
+    // Only when one's missing (a career's firsts read in, a reset), so the
+    // set isn't marked changed every frame.
+    if ALL.iter().all(|f| firsts.met(*f)) {
+        return;
+    }
+    for f in ALL {
+        firsts.0.insert(f.key());
     }
 }
 
@@ -450,13 +470,24 @@ fn stand_at_bench(
     }
 }
 
+/// A card pressed again this soon is the same press: a fingertip
+/// trembling at the button's travel, or the button pushed while the hand
+/// also squeezes the card (the 22 November playtest: one press of "4 good"
+/// fired twice in 78 ms). The feel cards are one control: after an answer,
+/// none takes another for [`FEEL_GAP`], or one press answers two guns.
+pub const PRESS_GAP: f32 = 0.4;
+pub const FEEL_GAP: f32 = 0.6;
+
 fn press_cards(
     mut events: MessageReader<InteractEvent>,
     cards: Query<&ArcadeCard>,
     mut arcade: ResMut<Arcade>,
     mut feel: ResMut<super::record::Feel>,
     mut calls: MessageWriter<WaveCalled>,
+    time: Res<Time>,
+    mut last: Local<(std::collections::HashMap<Entity, f32>, f32)>,
 ) {
+    let now = time.elapsed_secs();
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
@@ -464,6 +495,9 @@ fn press_cards(
         let Ok(c) = cards.get(*item) else {
             continue;
         };
+        if !pressed_anew(&mut last, *item, matches!(c, ArcadeCard::Feel(_)), now) {
+            continue;
+        }
         match c {
             ArcadeCard::Call => {
                 calls.write(WaveCalled);
@@ -486,6 +520,27 @@ fn press_cards(
             ArcadeCard::Feel(n) => feel.answer(*n),
         }
     }
+}
+
+/// Whether a press of `card` at `now` is a new one (not within
+/// [`PRESS_GAP`] of its last, nor a feel card within [`FEEL_GAP`] of the
+/// last feel answer), noting it if so.
+fn pressed_anew(
+    last: &mut (std::collections::HashMap<Entity, f32>, f32),
+    card: Entity,
+    feel: bool,
+    now: f32,
+) -> bool {
+    let again = last.0.get(&card).is_some_and(|t| now - t < PRESS_GAP);
+    let feel_again = feel && last.1 > 0.0 && now - last.1 < FEEL_GAP;
+    if again || feel_again {
+        return false;
+    }
+    last.0.insert(card, now);
+    if feel {
+        last.1 = now;
+    }
+    true
 }
 
 /// The board's sheet: what's on, what comes next and from where, the
@@ -809,6 +864,38 @@ pub fn fullest_panels() -> Vec<(String, ScreenText, TextSource)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One press is one press: the same card again within the gap is
+    /// dropped, as is any feel card soon after a feel answer; a press after
+    /// the gap counts.
+    #[test]
+    fn a_press_counts_once() {
+        let mut last = Default::default();
+        let (a, b) = (
+            Entity::from_raw_u32(1).unwrap(),
+            Entity::from_raw_u32(2).unwrap(),
+        );
+        assert!(pressed_anew(&mut last, a, true, 10.0));
+        assert!(
+            !pressed_anew(&mut last, a, true, 10.078),
+            "the playtest's double"
+        );
+        assert!(
+            !pressed_anew(&mut last, b, true, 10.2),
+            "another rating, same press"
+        );
+        assert!(
+            pressed_anew(&mut last, b, true, 10.7),
+            "the next gun's answer"
+        );
+        let c = Entity::from_raw_u32(3).unwrap();
+        assert!(
+            pressed_anew(&mut last, c, false, 10.71),
+            "CALL isn't a feel card"
+        );
+        assert!(!pressed_anew(&mut last, c, false, 11.0));
+        assert!(pressed_anew(&mut last, c, false, 11.2));
+    }
 
     #[test]
     fn every_thing_on_the_bench_is_in_the_catalog() {
