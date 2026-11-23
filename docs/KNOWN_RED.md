@@ -25,6 +25,8 @@ How it works:
 
 ## Open
 
+Last full lib run: lib377 on 6e09b2d8 (23 Nov), 1884 passed, 0 failed.
+
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
 | Seed-5 one-handed first_jobs: 22 HP from the body test (raid 4 at 64.8 s): the bot's chest stands 2.19 m from the heart against the 2.22 m strike line, on the drawn scorch at full crackle, for about 4 s. Not the snare (no hand fires it since bc8d75be; scorch drawn where it strikes) | 6d425f1d; re-measured on 2c306a07 (23 Nov) | Onboarding (first_jobs bot's route, onboarding/first_hour.rs: keep the body r + 0.3 + 0.5 m off a seen scorch) | A/B seeds 1-5 against main with the fix |
