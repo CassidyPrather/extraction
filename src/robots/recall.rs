@@ -941,6 +941,10 @@ mod tests {
         ("fx.rs", "an effect's next puff"),
         ("fx.rs", "a failing machine's next wisp of soot"),
         ("grip.rs", "how long it's been held: a fight in progress"),
+        (
+            "grip.rs",
+            "how long a plate's been pulled on: a pry in progress",
+        ),
         ("mod.rs", "a wreck's loot timer"),
         ("search.rs", "a call's cooldown"),
         ("search.rs", "the wrist's line pacing"),

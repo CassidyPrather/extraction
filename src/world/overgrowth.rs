@@ -508,17 +508,40 @@ fn colonise(
         };
         for _ in 0..n {
             let off = Vec2::new(rng.f32() - 0.5, rng.f32() - 0.5) * 0.14;
-            let q = *p + off;
-            if q.x.abs() > f.hu || q.y < 0.05 || q.y > 2.0 * f.hv {
-                continue;
-            }
             let tilt = (rng.f32() - 0.5) * 1.2;
             let up = (f.v * tilt.cos() + f.u * tilt.sin()).normalize();
+            let size = 0.11 + rng.f32() * 0.09;
+            let lift = 0.02 + rng.f32() * 0.04;
+            let lean = (rng.f32() - 0.5) * 0.4;
+            // Its card (`leaf_mesh`: 2.3 times its size across) over the
+            // wall at every corner, not out over a window into the room past
+            // it (the 22 November playtest, 28:06: leaves in the guard
+            // booth's cupboards): as it fell, else smaller and closer in,
+            // else small on its stem. (Probed 5 mm into the wall: a sheet
+            // wall is thin.)
+            let fits = |q: Vec2, size: f32| {
+                let reach = size * 2.3 * 0.5;
+                q.x.abs() <= f.hu
+                    && q.y >= 0.05
+                    && q.y <= 2.0 * f.hv
+                    && [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+                        .iter()
+                        .all(|(a, b)| {
+                            occ.inside(to3(q.x + a * reach, q.y + b * reach) - f.n * 0.02)
+                        })
+            };
+            let Some((q, size)) = [(off, size), (off * 0.3, 0.07), (Vec2::ZERO, 0.05)]
+                .into_iter()
+                .map(|(o, s)| (*p + o, s))
+                .find(|(q, s)| fits(*q, *s))
+            else {
+                continue;
+            };
             out.leaves.push(Leaf {
-                at: to3(q.x, q.y) + f.n * (0.02 + rng.f32() * 0.04),
-                normal: (f.n + up * -0.35 + f.u * (rng.f32() - 0.5) * 0.4).normalize(),
+                at: to3(q.x, q.y) + f.n * lift,
+                normal: (f.n + up * -0.35 + f.u * lean).normalize(),
                 up,
-                size: 0.11 + rng.f32() * 0.09,
+                size,
                 sway: (q.y / height).clamp(0.0, 1.0) * if leaf[i] { 1.0 } else { 0.6 },
             });
         }

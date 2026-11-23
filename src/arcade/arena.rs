@@ -900,7 +900,10 @@ mod tests {
             "CALL isn't a feel card"
         );
         assert!(!pressed_anew(&mut last, c, false, 10.9));
-        assert!(pressed_anew(&mut last, c, false, 11.0), "a 0.3 s stroke counts");
+        assert!(
+            pressed_anew(&mut last, c, false, 11.0),
+            "a 0.3 s stroke counts"
+        );
     }
 
     #[test]
