@@ -1,7 +1,7 @@
 // Pocket spheres (`render::pockets`, `interact::pockets`): one material
 // for all of them and their icons, each one's look in its `MeshTag`, so
 // they draw together. The tag: bits 0-7 alpha, 8-15 grey, bit 16 an icon
-// (flat, no rim).
+// (flat, no rim, in its parts' own colours).
 //
 // A sphere is a soap-bubble: faint in its middle, stronger at its rim,
 // so it reads as a round thing in the air and doesn't fog what's in it.
@@ -20,7 +20,13 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let icon = ((tag >> 16u) & 1u) == 1u;
     let color = vec3<f32>(grey, grey, min(grey * 1.03, 1.0));
     if icon {
+        // In its own colours, a little dimmed (`render::pockets`): a white
+        // copy read as a bug (playtest 2026-11-22).
+#ifdef VERTEX_COLORS
+        return vec4<f32>(in.color.rgb * 0.8, alpha);
+#else
         return vec4<f32>(color, alpha);
+#endif
     }
     let v = normalize(view.world_position - in.world_position.xyz);
     let n = normalize(in.world_normal);
