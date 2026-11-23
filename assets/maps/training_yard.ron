@@ -246,7 +246,7 @@
         // well off the snare, the shimmer and the lift.
         (prefab: "log_pile", at: (4.5, 64.0), rot: 0.0),
         (prefab: "wreck_uaz", at: (6.0, 50.0), rot: 35.0),
-        (prefab: "log_pile", at: (24.0, -42.0), rot: 90.0),
+        (prefab: "log_pile", at: (14.5, -43.0), rot: 90.0),
         // Bay 6's store (#108): a lift beside it pops you onto its 2 m roof.
         (prefab: "yard_store", at: (15.5, -27.0), rot: 0.0),
         // Bay 7, north.
