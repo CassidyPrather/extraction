@@ -44,8 +44,8 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 import bmesh
 import bpy
-from common import (Part, RY, RZ, S, T, TO_BLENDER, box_uv, export, main_guard, make, parent,
-                    report)
+from common import (Part, RY, RZ, S, T, TO_BLENDER, box_uv, export, fillet, main_guard, make,
+                    parent, report)
 from mathutils import Matrix, Vector
 
 import _gloves_procedural as proc
@@ -582,8 +582,16 @@ def cuff(obj, ts):
         return Vector((math.copysign(abs(c) ** e, c) * (w + grow),
                        yc + math.copysign(abs(s) ** e, s) * (h + grow), 0.0))
 
+    # Its hand end a rolled hem, standing 4 mm proud of the glove, its edge
+    # following the wrist's oval (further toward the fingers at the middle
+    # of the back and of the palm than at the sides): butted on in a flat
+    # ring, the leather palm ended in a dead-straight cut across the wrist
+    # (the 22 November playtest, 1:02, "wrist seam").
+    HEM = 0.026
     prof = [  # (z, grow over the wrist, scale about its centre)
-        (0.030, 0.0008, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
+        (HEM - 0.0006, 0.0010, 1), (HEM, 0.0036, 1), (HEM + 0.0016, 0.0046, 1),
+        (HEM + 0.0034, 0.0044, 1), (HEM + 0.0048, 0.0030, 1),
+        (0.034, 0.0016, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
         (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
         (0.079, 0.0030, 1), (0.090, 0.0034, 1),
         (0.0935, 0.0034, 0.985), (0.0968, 0.0034, 0.940), (0.1000, 0.0034, 0.866),
@@ -591,12 +599,22 @@ def cuff(obj, ts):
         (0.1088, 0.0034, 0.342), (0.1097, 0.0034, 0.174), (0.1100, 0.0034, 0.000),
     ]
     centre = Vector((0.0, yc, 0.0))
-    rings = [[centre + (point(2 * math.pi * k / segs, g) - centre) * sc + Vector((0, 0, z))
-              for k in range(segs)] for z, g, sc in prof]
+
+    def dip(th, z):
+        """How far the edge reaches on toward the fingers at angle `th`
+        (most at the back's and palm's middles), fading out up the cuff."""
+        fade = min(max((0.046 - z) / (0.046 - HEM), 0.0), 1.0)
+        return -0.006 * abs(math.sin(th)) ** 1.5 * fade
+
+    rings = [[centre + (point(th, g) - centre) * sc + Vector((0, 0, z + dip(th, z)))
+              for th in (2 * math.pi * k / segs for k in range(segs))] for z, g, sc in prof]
     _, faces = p.loft(rings, "Glove")
     for f in faces:
         c = f.calc_center_median()
         if 0.0563 < c.z < 0.0787 and f.normal.z * f.normal.z < 0.5:
+            f.material_index = p._mi("Padding")
+        # The hem, in the padding's dark.
+        elif c.z < HEM + 0.006:
             f.material_index = p._mi("Padding")
     # The strap's tab on the little finger's side, sewn down at its end.
     x = -ts * (w + 0.0055)
@@ -638,6 +656,26 @@ def radii(obj, ts):
     return out
 
 
+def housing():
+    """The wrist display's housing, strapped over the cuff's back: its own
+    node (`wrist_housing`), drawn only on the hand that isn't the gun hand
+    (`render::props`). Its top where the panel lies 4 mm over it (y 0.0195,
+    `wrist_on_glove`), as long and wide as the panel needs
+    (`render::comfort::WRIST_SIZE`, 78 x 48 mm); its ends sloped and
+    rounded down onto the cuff and its long edges rounded, a watch's case
+    (with square ends it read as a slab sat on the cuff, playtest
+    2026-11-22, 1:02). Inside z 0.0145-0.1105: the sleeve's hem stops at
+    0.112 to clear it."""
+    p = Part("wrist_housing")
+    y0, y1 = 0.0125, 0.0195
+    side = fillet([(0.0145, y0), (0.1105, y0), (0.1025, y1), (0.0225, y1)],
+                  [0.002, 0.002, 0.003, 0.003], 4)
+    p.prism(side, -0.026, 0.026, "Padding", axis="x", bevel=0.0025, segs=3)
+    # Its strap across the wrist, under it.
+    p.box((0.058, 0.004, 0.012), (0.0, 0.0155, 0.0625), "Padding", bevel=0.0015, segs=2)
+    return p
+
+
 def glove(side):
     main_guard()
     obj, ts = build(side)
@@ -654,7 +692,7 @@ def glove(side):
     obj.parent = arm
     mod = obj.modifiers.new("rig", "ARMATURE")
     mod.object = arm
-    house = make(proc.housing())
+    house = make(housing())
     parent(house, arm)
     report()
     export(f"assets/models/hands/glove_{side}.glb")
