@@ -399,12 +399,15 @@ impl Builder {
     fn sill(&mut self, at: Vec3, width: f32, height: f32, rot: Quat, thick: f32, mat: Mat) {
         let out = thick * 0.5 + 0.04;
         let edge = thick * 0.5 + if self.exterior { SILL_IN } else { 0.04 };
+        // Solid: a thing set on it stays on it. (It was drawn only: a
+        // magazine set on a sill fell through: the 22 November playtest,
+        // 24:46.)
         self.piece(
             Shape::Box(Vec3::new(width + 0.1, 0.05, out + edge)),
             Transform::from_translation(at + rot * Vec3::Z * ((edge - out) * 0.5))
                 .with_rotation(rot),
             mat,
-            false,
+            true,
         );
         if self.exterior {
             self.geo.sills.push(Sill {
@@ -2860,9 +2863,12 @@ fn fence_garden(b: &mut Builder) {
     let x0 = -(n as f32) * span * 0.5;
     for k in 0..=n {
         let x = x0 + k as f32 * span;
+        // Its end posts inset, inside a post they meet: laid end to end,
+        // two alike fought (`yard::end_inset`).
+        let i = super::yard::end_inset(k, n);
         b.bx(
-            Vec3::new(post, 1.55, post),
-            Vec3::new(x, 1.3 - 0.775, 0.0),
+            Vec3::new(post - 2.0 * i, 1.55 - i, post - 2.0 * i),
+            Vec3::new(x, 1.3 - 0.775 - i * 0.5, 0.0),
             Mat::Timber,
         );
     }

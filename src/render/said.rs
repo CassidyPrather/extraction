@@ -392,6 +392,15 @@ pub fn caption_place(held: &[(Vec2, Vec2)], half: Vec2) -> Vec2 {
         })
 }
 
+/// An injector held with its tip at the neck: going in, not held up to
+/// be asked about (the neck is the one place a pen goes that's also
+/// before the eyes).
+fn at_the_neck(pen: &Transform, neck: Vec3) -> bool {
+    pen.transform_point(crate::interact::first_aid::NEEDLE)
+        .distance(neck)
+        < crate::interact::first_aid::ON_TRUNK
+}
+
 /// The eye at a gun's sights, as the gun's handling has it (the post
 /// blur and the sight fix go by the same).
 fn at_the_sights(h: &crate::weapons::feel::Handling) -> bool {
@@ -684,8 +693,9 @@ pub fn looked_at(eye: &GlobalTransform, at: Vec3) -> bool {
 
 /// Asking what a thing in hand is (#107): holding it up to the eyes and
 /// looking at it (in the headset), or holding the menu button (Touch's
-/// left one; flat, I). Not while eating or drinking it, reading it, or
-/// with a gun at the sights. Once a hold; again after letting go.
+/// left one; flat, I). Not while eating or drinking it, reading it, with
+/// a gun at the sights, or an injector at the neck. Once a hold; again
+/// after letting go.
 #[allow(clippy::too_many_arguments)]
 fn ask_about(
     time: Res<Time>,
@@ -699,6 +709,7 @@ fn ask_about(
     eating: Query<(), With<crate::interact::first_aid::Eating>>,
     reading: Query<&crate::interact::read::Reading>,
     guns: Query<&crate::weapons::feel::Handling>,
+    stances: Query<&crate::rig::stance::Stance, With<crate::rig::LocalPlayer>>,
     mut looks: Local<std::collections::HashMap<Entity, (f32, bool)>>,
     mut menu: Local<(f32, bool)>,
     mut ask: MessageWriter<Recall>,
@@ -727,8 +738,13 @@ fn ask_about(
         return;
     };
     looks.retain(|e, _| hands.iter().any(|h| h.0 == *e));
+    let neck = stances.iter().next().map(|s| s.neck);
     for (e, place, _, side) in &hands {
+        let injector = held
+            .get(*e)
+            .is_ok_and(|(_, _, item, ..)| catalog.get(item.kind()).id == "regen_injector");
         let busy = eating.contains(*e)
+            || (injector && neck.is_some_and(|n| at_the_neck(place, n)))
             || reading
                 .iter()
                 .any(|r| Some(r.player) == me && r.side == *side)
@@ -1948,5 +1964,28 @@ mod tests {
                 .any(|(l, _)| l.starts_with("Gun oil: Touch it to your gun")),
             "{log:?}"
         );
+    }
+
+    /// An injector's tip at the neck is going in, not being asked about;
+    /// the same pen held up before the eyes, either way round, is asked
+    /// about (`looked_at` takes it from as near as `LOOK_NEAR`).
+    #[test]
+    fn an_injector_at_the_neck_isnt_asking() {
+        let neck = Vec3::new(0.0, 1.5, 0.0);
+        let eye = Vec3::new(0.0, 1.65, -0.05);
+        // Tip in, from the side.
+        let pen = Transform::from_translation(neck + Vec3::new(0.09, 0.0, -0.02))
+            .looking_at(neck, Vec3::Y);
+        assert!(at_the_neck(&pen, neck));
+        for d in [LOOK_NEAR, 0.3] {
+            let at = eye + Vec3::NEG_Z * d;
+            for facing in [eye, eye + Vec3::NEG_Z] {
+                let pen = Transform::from_translation(at).looking_at(facing, Vec3::Y);
+                assert!(
+                    !at_the_neck(&pen, neck),
+                    "held up {d} m off, facing {facing}"
+                );
+            }
+        }
     }
 }

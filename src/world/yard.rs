@@ -121,15 +121,35 @@ fn store(b: &mut Builder) {
 fn run(b: &mut Builder, x0: f32, x1: f32) {
     let n = ((x1 - x0) / BAY).round() as usize;
     for k in 0..=n {
-        post(b, x0 + k as f32 * BAY);
+        // Runs are laid end to end, each with a post at both ends, or
+        // butt onto another's post: its end posts are inset all round,
+        // its first by 5 mm (inside a post it meets), its last by 10 mm
+        // (inside the next run's first). (Two the same, in the same
+        // place, fought: the 22 November playtest, 8:43.)
+        post(b, x0 + k as f32 * BAY, end_inset(k, n));
     }
     rails(b, x0, x1);
 }
 
-fn post(b: &mut Builder, x: f32) {
+/// How far a run's `k`th of `n + 1` posts is inset all round (m).
+pub(crate) fn end_inset(k: usize, n: usize) -> f32 {
+    if k == n {
+        0.01
+    } else if k == 0 {
+        0.005
+    } else {
+        0.0
+    }
+}
+
+fn post(b: &mut Builder, x: f32, inset: f32) {
     b.bx(
-        Vec3::new(POST, HEIGHT + 0.05, POST),
-        Vec3::new(x, (HEIGHT + 0.05) * 0.5, 0.0),
+        Vec3::new(
+            POST - 2.0 * inset,
+            HEIGHT + 0.05 - inset,
+            POST - 2.0 * inset,
+        ),
+        Vec3::new(x, (HEIGHT + 0.05 - inset) * 0.5, 0.0),
         Mat::Timber,
     );
 }
@@ -263,6 +283,62 @@ fn tag_gates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// No two placements on a map draw the same box in the same place:
+    /// two alike, coplanar all round, fight (a fence's runs laid end to end,
+    /// each with a post at both ends: the 22 November playtest, 8:43).
+    #[test]
+    fn no_two_placements_draw_the_same_box() {
+        use crate::world::buildings::{Shape, prefab};
+        let maps = [
+            "training_yard",
+            "arcade",
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "rime_fell",
+            "sallow_reservoir",
+        ];
+        let mut bad = Vec::new();
+        for name in maps {
+            let map = crate::world::load_map_def(name);
+            let hm = extraction_core::terrain::Heightmap::build(&map);
+            let mut seen: std::collections::HashMap<[i64; 6], usize> = Default::default();
+            for (i, p) in map.placements.iter().enumerate() {
+                let Some(geo) = prefab(&p.prefab) else {
+                    continue;
+                };
+                let y = if p.absolute {
+                    p.y
+                } else {
+                    hm.footing(&p.prefab, p.at, p.rot) + p.y
+                };
+                let t = Transform::from_xyz(p.at[0], y, p.at[1])
+                    .with_rotation(Quat::from_rotation_y(-p.rot.to_radians()));
+                for piece in geo.pieces.iter() {
+                    let Shape::Box(size) = piece.shape else {
+                        continue;
+                    };
+                    let c = t.transform_point(piece.at.translation);
+                    let e = ((t.rotation * piece.at.rotation) * size).abs();
+                    let q = |v: f32| (v * 200.0).round() as i64;
+                    let key = [q(c.x), q(c.y), q(c.z), q(e.x), q(e.y), q(e.z)];
+                    if let Some(&j) = seen.get(&key) {
+                        if j != i {
+                            bad.push(format!(
+                                "{name}: {} and {} both draw {size:?} at {c:?}",
+                                map.placements[j].prefab, p.prefab
+                            ));
+                        }
+                    } else {
+                        seen.insert(key, i);
+                    }
+                }
+            }
+        }
+        bad.dedup();
+        assert!(bad.is_empty(), "{} alike:\n{}", bad.len(), bad.join("\n"));
+    }
 
     /// A run is solid all along and through its height: its rails are
     /// colliders, and nothing in it breaks.

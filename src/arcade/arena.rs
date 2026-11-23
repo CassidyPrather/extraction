@@ -171,7 +171,7 @@ impl Plugin for ArenaPlugin {
         app.init_resource::<Laid>()
             .add_systems(
                 Update,
-                (set_up, stand_at_bench)
+                (set_up, stand_at_bench, hush_the_driver)
                     .chain()
                     .in_set(ArcadeSystems::Setup),
             )
@@ -187,6 +187,26 @@ impl Plugin for ArenaPlugin {
                     .chain()
                     .after(crate::raid::drop_everything),
             );
+    }
+}
+
+/// The arcade is a sandbox, not the first hour: the driver's first-time
+/// lines (heard, aimed at, coming to look, lost you, the anomaly...) are
+/// all taken as said, so none comes over the radio in the middle of a
+/// wave (the 22 November playtest: "Lev, not now, not the time!"). A run's
+/// own lines (the waves, the board) and the gun's prompts still speak.
+fn hush_the_driver(firsts: Option<ResMut<crate::onboarding::firsts::Firsts>>) {
+    use crate::onboarding::firsts::ALL;
+    let Some(mut firsts) = firsts else {
+        return;
+    };
+    // Only when one's missing (a career's firsts read in, a reset), so the
+    // set isn't marked changed every frame.
+    if ALL.iter().all(|f| firsts.met(*f)) {
+        return;
+    }
+    for f in ALL {
+        firsts.0.insert(f.key());
     }
 }
 
@@ -450,13 +470,21 @@ fn stand_at_bench(
     }
 }
 
+/// The feel cards are one control: after an answer, none takes another
+/// for this long, or one press answers two guns (the 22 November
+/// playtest). A single card pressed twice is `interact::LastPress`'s.
+pub const FEEL_GAP: f32 = 0.6;
+
 fn press_cards(
     mut events: MessageReader<InteractEvent>,
     cards: Query<&ArcadeCard>,
     mut arcade: ResMut<Arcade>,
     mut feel: ResMut<super::record::Feel>,
     mut calls: MessageWriter<WaveCalled>,
+    time: Res<Time>,
+    mut last_feel: Local<f32>,
 ) {
+    let now = time.elapsed_secs();
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
@@ -464,6 +492,9 @@ fn press_cards(
         let Ok(c) = cards.get(*item) else {
             continue;
         };
+        if !pressed_anew(&mut last_feel, matches!(c, ArcadeCard::Feel(_)), now) {
+            continue;
+        }
         match c {
             ArcadeCard::Call => {
                 calls.write(WaveCalled);
@@ -486,6 +517,19 @@ fn press_cards(
             ArcadeCard::Feel(n) => feel.answer(*n),
         }
     }
+}
+
+/// Whether a press at `now` counts: any but a feel card within
+/// [`FEEL_GAP`] of the last feel answer (noted if so).
+fn pressed_anew(last_feel: &mut f32, feel: bool, now: f32) -> bool {
+    if !feel {
+        return true;
+    }
+    if *last_feel > 0.0 && now - *last_feel < FEEL_GAP {
+        return false;
+    }
+    *last_feel = now;
+    true
 }
 
 /// The board's sheet: what's on, what comes next and from where, the
@@ -809,6 +853,23 @@ pub fn fullest_panels() -> Vec<(String, ScreenText, TextSource)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// One press answers one gun: a feel card soon after a feel answer is
+    /// dropped, one after the gap counts, and other cards aren't held.
+    #[test]
+    fn a_press_counts_once() {
+        let mut last = 0.0;
+        assert!(pressed_anew(&mut last, true, 10.0));
+        assert!(
+            !pressed_anew(&mut last, true, 10.2),
+            "another rating, same press"
+        );
+        assert!(pressed_anew(&mut last, true, 10.7), "the next gun's answer");
+        assert!(
+            pressed_anew(&mut last, false, 10.71),
+            "CALL isn't a feel card"
+        );
+    }
 
     #[test]
     fn every_thing_on_the_bench_is_in_the_catalog() {

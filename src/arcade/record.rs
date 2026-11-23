@@ -233,11 +233,31 @@ impl Plugin for RecordPlugin {
                     open_run,
                     telemetry::record.run_if(resource_exists::<SimLog>),
                     note.run_if(resource_exists::<SimLog>),
+                    note_spent.run_if(resource_exists::<SimLog>),
                     close_run,
                 )
                     .chain()
                     .in_set(ArcadeSystems::Record),
             );
+    }
+}
+
+/// A machine that burnt itself out (`waves::spend_machines`): blind too
+/// long, or past the fence. Its `machine_down` follows as any wreck's.
+fn note_spent(
+    mut spent: MessageReader<super::waves::MachineSpent>,
+    machines: Query<&super::waves::WaveMachine>,
+    mut log: ResMut<SimLog>,
+) {
+    for s in spent.read() {
+        let (name, wave) = machines
+            .get(s.machine)
+            .map(|w| (w.kind.name(), w.wave))
+            .unwrap_or(("?", 0));
+        log.event(
+            "machine_spent",
+            json!({"machine": name, "wave": wave, "why": if s.blind { "blind" } else { "out" }}),
+        );
     }
 }
 

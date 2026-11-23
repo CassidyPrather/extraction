@@ -11,7 +11,8 @@
 //!   pistol holds ([`VR_HOLD_DEG`]) at 25 m. Small ones are grown as they're
 //!   made ([`grow`]): a leg gets a ball at its knee (the joint you'd aim at,
 //!   not a fat shin); an eye, a rotor, a gun its box or ball made bigger.
-//! - **Marked** ([`mark`]): a lit orange knee ball, or a ring round an eye,
+//! - **Marked** ([`mark`]): a lit orange knee knuckle (a drum across the
+//!   leg, its axle capped dark), or a ring round an eye,
 //!   a rotor, a gun or a weak core, the size of what you can hit. It goes
 //!   out when the part does: a dead part's no target.
 //! - **A gone part's no target** ([`GoneHitVolume`]): shot off, it lets
@@ -214,6 +215,9 @@ struct MarkAssets {
     ball: Handle<Mesh>,
     ring: Handle<Mesh>,
     mat: Handle<StandardMaterial>,
+    /// A knee's axle caps, either end of its knuckle, and their dark steel.
+    cap: Handle<Mesh>,
+    cap_mat: Handle<StandardMaterial>,
 }
 
 /// Every new part: if it's weak, grow it to [`WEAK_ACROSS`] (at its robot's
@@ -266,9 +270,19 @@ fn mark_weak_points(
         };
         let a = a.get_or_insert_with(|| {
             let m = MarkAssets {
-                ball: meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap()),
+                // A knee's a knuckle, a rounded drum across the leg (along
+                // its own Y here, turned across by `mark`): a joint, not a
+                // plain coloured ball (the 22 November playtest).
+                ball: meshes.add(Capsule3d::new(0.36, 0.34).mesh().rings(6).longitudes(24)),
                 ring: meshes.add(Torus::new(0.5 - RING, 0.5)),
                 mat: materials.add(mark_material()),
+                cap: meshes.add(Cylinder::new(0.2, 0.08)),
+                cap_mat: materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.09, 0.09, 0.1),
+                    metallic: 0.6,
+                    perceptual_roughness: 0.45,
+                    ..default()
+                }),
             };
             commands.insert_resource(m.clone());
             m
@@ -282,13 +296,25 @@ fn mark_weak_points(
             MeshMaterial3d(a.mat.clone()),
             NotShadowCaster,
         ));
+        if shape == Mark::Ball {
+            // Its axle's caps at either end of the knuckle.
+            for y in [-0.52f32, 0.52] {
+                commands.spawn((
+                    Mesh3d(a.cap.clone()),
+                    MeshMaterial3d(a.cap_mat.clone()),
+                    Transform::from_xyz(0.0, y, 0.0),
+                    NotShadowCaster,
+                    ChildOf(mark),
+                ));
+            }
+        }
     }
 }
 
 /// A mark's shape.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mark {
-    /// A lit ball: a knee.
+    /// A lit knuckle across the leg, its axle capped either end: a knee.
     Ball,
     /// A ring round it.
     Ring,
@@ -302,7 +328,11 @@ pub fn mark(role: PartRole, at: Vec3, size: f32) -> (Mark, Transform) {
     match role {
         PartRole::Leg(_) => (
             Mark::Ball,
-            Transform::from_translation(at).with_scale(Vec3::splat(size * 0.8)),
+            // (The knuckle's drum across the leg: its axis turned from the
+            // leg's Y to its X.)
+            Transform::from_translation(at)
+                .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::splat(size * 0.8)),
         ),
         PartRole::Sensor | PartRole::Weapon => (
             Mark::Ring,

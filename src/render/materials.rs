@@ -317,31 +317,56 @@ pub fn metric_box(size: Vec3) -> Mesh {
     mesh
 }
 
-/// A triangular prism (a gable end): base `width` along X, `height` up,
-/// `depth` along Z, apex centred.
+/// A triangular prism (a gable end, a low roof): base `width` along X,
+/// `height` up, `depth` along Z, apex centred: its two ends, its two
+/// slopes and its underside, each wound to face out. (Its ends alone, it
+/// was a roof with no slopes: a boxcar's, seen from on it, was gone, and
+/// what it stood over culled as hidden: the 22 November playtest, 27:26.)
 pub fn gable_prism(width: f32, height: f32, depth: f32) -> Mesh {
     let (w, d) = (width * 0.5, depth * 0.5);
     let a = Vec3::new(-w, 0.0, 0.0);
     let b = Vec3::new(w, 0.0, 0.0);
     let c = Vec3::new(0.0, height, 0.0);
-    let mut pos = Vec::new();
-    let mut nrm = Vec::new();
-    let mut uv = Vec::new();
+    let (fz, bz) = (Vec3::Z * d, Vec3::NEG_Z * d);
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut nrm: Vec<[f32; 3]> = Vec::new();
+    let mut uv: Vec<[f32; 2]> = Vec::new();
     let mut idx: Vec<u32> = Vec::new();
-    for (z, n) in [(d, Vec3::Z), (-d, Vec3::NEG_Z)] {
+    // A flat face (a triangle or a quad, its corners in order round it)
+    // facing `n`: wound counter-clockwise seen from that side.
+    let mut face = |corners: &[Vec3], n: Vec3, uvs: &dyn Fn(Vec3) -> [f32; 2]| {
         let base = pos.len() as u32;
-        for p in [a, b, c] {
-            let q = p + Vec3::Z * z;
-            pos.push(q.to_array());
+        for p in corners {
+            pos.push(p.to_array());
             nrm.push(n.to_array());
-            uv.push([q.x + w, height - q.y]);
+            uv.push(uvs(*p));
         }
-        if n.z > 0.0 {
-            idx.extend_from_slice(&[base, base + 1, base + 2]);
-        } else {
-            idx.extend_from_slice(&[base, base + 2, base + 1]);
+        let ccw = (corners[1] - corners[0])
+            .cross(corners[2] - corners[0])
+            .dot(n)
+            > 0.0;
+        for k in 1..corners.len() as u32 - 1 {
+            if ccw {
+                idx.extend_from_slice(&[base, base + k, base + k + 1]);
+            } else {
+                idx.extend_from_slice(&[base, base + k + 1, base + k]);
+            }
         }
-    }
+    };
+    let end = |q: Vec3| [q.x + w, height - q.y];
+    face(&[a + fz, b + fz, c + fz], Vec3::Z, &end);
+    face(&[a + bz, b + bz, c + bz], Vec3::NEG_Z, &end);
+    let slope_len = Vec2::new(w, height).length();
+    let left = Vec3::new(-height, w, 0.0).normalize_or_zero();
+    let right = Vec3::new(height, w, 0.0).normalize_or_zero();
+    let along = |q: Vec3| [q.z + d, slope_len * (1.0 - q.y / height.max(1e-4))];
+    face(&[a + bz, a + fz, c + fz, c + bz], left, &along);
+    face(&[b + fz, b + bz, c + bz, c + fz], right, &along);
+    face(
+        &[a + bz, b + bz, b + fz, a + fz],
+        Vec3::NEG_Y,
+        &|q: Vec3| [q.x + w, q.z + d],
+    );
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -357,6 +382,33 @@ pub fn gable_prism(width: f32, height: f32, depth: f32) -> Mesh {
 #[cfg(test)]
 mod void_tests {
     use super::*;
+
+    /// A prism is closed and faces out: its signed volume is its own
+    /// (every face there, each wound outward), so a roof made of one has
+    /// slopes to see from above.
+    #[test]
+    fn a_gable_prism_is_closed_and_faces_out() {
+        let (w, h, d) = (3.2, 0.22, 14.2);
+        let m = gable_prism(w, h, d);
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(pos)) =
+            m.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("no positions");
+        };
+        let Some(Indices::U32(idx)) = m.indices() else {
+            panic!("no indices");
+        };
+        let v = |i: u32| Vec3::from(pos[i as usize]);
+        let vol: f32 = idx
+            .chunks(3)
+            .map(|t| v(t[0]).dot(v(t[1]).cross(v(t[2]))) / 6.0)
+            .sum();
+        let want = w * h * 0.5 * d;
+        assert!(
+            (vol - want).abs() < want * 1e-3,
+            "volume {vol}, want {want}"
+        );
+    }
 
     /// A dark opening's mouth: unlit, near black, reflecting nothing, and
     /// fogged like everything else.

@@ -29,6 +29,7 @@ How it works:
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
 | Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s), Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot's resting hand (chest height, 0.5 m above the heart) grazes 1-3 cm inside the rim while its body is 2.1 m out: a passing brush, not a reach. Ruling changed 19 Nov 12:00: a brush at the rim doesn't fire; a real reach (down for the stone, or in toward the heart) does. No second Player entity (Anomalies mixed two worlds' logs) | 6d425f1d (Onboarding re-measure) | Anomalies (reach margin + tests) | |
+| `soak::ledges::tests::no_valley_has_a_ledge_trap`: rime_fell adit_rime at (144.2, 105.2) and (140.2, 105.2), 1 m² perches that drop 3.1 m every way off | lib371 (4f146f94), new since lib369 (7e53ec71); likely World models' closed prism roofs (f08c0f41) or face culling (3eee159) | World models | |
 
 ## Logged, not failing a check
 
@@ -44,6 +45,10 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| scenario `walker_hunt` (0 wrecked: bots' sights turned to an eye 32 mm off the head) | 2bc1856 (Hands: a bot sights from its head), green on gate 372 |
+| `audio_machines::tests::the_dangers_are_heard` (MachineSpent) | 00ed3f59 (Arcade), green on lib371 (4f146f94: 1863/1) |
+| `render::puff::tests::no_puff_is_a_sphere` (weak_points.rs) | 519754a7 (Robot bodies), green on lib371 |
+| `robots::recall` every_robot_keyed_local_is_in_the_table (grip.rs) + `soak` entity_keyed_locals_forget_what_is_gone (arena.rs) | ce7a46e5 (Robot bodies), 0c9f8e34 (Arcade), green on lib371 |
 | `soak::chaos::chaos_monkey_short` items off the map after a teleport (a held pack stayed behind, then hung 224 m off) | 6a8656d2 (Hands), green on lib364 (85daf8f6: 1847/0) |
 | `robots::recall` + `soak::entity_keyed_locals_forget_what_is_gone` (sorter_look `waited`) | bcf4a1dc (Robot bodies), green on lib360 |
 | `capture::checks::models_are_a_believable_size` items/plough_plate 3.08 m | 39c11074 (Heavy: two 1.54 m halves), green on lib357 |
@@ -55,13 +60,11 @@ How it works:
 | `weapons::impacts::plate_tests::every_range_plate_stops_and_marks_a_round` | 70521467 (Onboarding) |
 | `sim::raider::run_tests::a_walk_goes_round_a_wreck_in_the_open` | feb39b12 (Onboarding) |
 | `sim::indoor::tests::every_floor_and_deck_has_a_surface` (yard gates' ground floors) | fcffac03 (Map design) |
-| `audio_machines::tests::the_dangers_are_heard` (Recall) | 88c44a5e (Legibility) |
 | `render::legibility::tests::every_panel_in_the_game_clears_its_floor` | 1744915e (Legibility) |
 | `interact::read::tests::the_logbook_comes_up_to_be_read_and_goes_back` | ae762ae8 (Hands) |
 | `capture::attach::tests::model_pieces_touch_what_holds_them` (field set pieces in the air) | 6b547021 (Progression) |
 | `render::legibility::tests::every_model_with_letters_is_registered_and_legible` (MIX label) | edfd7666 (Legibility) |
 | `onboarding::pickups` each_line_is_what_the_game_does, every_kind_rollable_before_raid_6 (cartridges, DP-3) | 9f512a16 (Onboarding) |
-| `audio_machines::tests::the_dangers_are_heard` (StimCue), `items::loot` nothing_turns_up_before_its_raid / a_first_raids_small_things_lie_in_sight, `models` every_item_box_is_its_model / no_item_falls_back_to_the_placeholder, `capture::scale` items_are_drawn_near_their_real_size | pass on bca2242a (lib338): Hands 80d205c3, Models 911c7098 |
 | `capture::attach::tests::model_pieces_touch_what_holds_them`: items/regen_injector, two 11x2x3 mm pieces at (±0.008, 0.010, 0) float 3 mm off the body | passes on 10957625 (Models fc5d9928) |
 | warning: constant `LATER` is never used at src/onboarding/pickups.rs:95 | 0f34cacf (Onboarding) |
 | warning: function `least_clear` is never used at src/world/hinge.rs:763 | e2a5ef5a (World models) |
@@ -70,7 +73,6 @@ How it works:
 | `capture::fighting::tests::models_dont_fight_themselves`: walker grappler_core vs engineer_hull 0.13 m² | Models 705f16c9; passes on d6bdf8ef (lib344) |
 | `models::tests::no_flat_model_material_is_paper_white`: "Baked" 1.00 | Arcade 35bc2962; passes on d6bdf8ef (lib344) |
 | `onboarding::firsts` every_machine_has_its_first_contact_line, `robots::intent_roster` every_machine_is_on_the_intent_roster: the engineer | Robot bodies d40ba037; passes on d6bdf8ef (lib344) |
-| `audio_machines::tests::the_dangers_are_heard`: no sound for PartCooked | Anomalies (PartCooked crackle); passes on d6bdf8ef (lib344) |
 | `render::landmarks::tests::every_landmark_lamp_stands_on_its_building`: no art for ore_mill/observatory (locker#carcass.glb, stove#carcass.glb) | World models 313a9753; passes on d6bdf8ef (lib344) |
 | `sim::indoor::tests::what_is_laid_on_a_spot_settles_in_reach`: 68 of 1395 laid things out of the plan, seed 4, ~20 m under ground | World models 313a9753 (test model was stale; nothing fell); passes on d6bdf8ef (lib344) |
 | `soak::save_fuzz` relocating_keeps_every_item, every_item_is_saved_once..., a_poisoned_career_loads_whole...: save holds ~17-21 more items than the world | World models 0c655f2d (fuzz model was stale; ToHold gap closed); passes on d6bdf8ef (lib344) |
