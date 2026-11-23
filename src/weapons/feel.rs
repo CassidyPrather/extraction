@@ -2652,6 +2652,55 @@ pub(crate) mod vr_tests {
         }
     }
 
+    /// A held over from the last reload: a magazine seated while it's
+    /// still down stays when it's let go (it dropped: "a weird
+    /// slap-to-lock situation"); the magazine a press held out still drops.
+    #[test]
+    fn a_release_held_over_doesnt_drop_the_new_magazine() {
+        let set_a = |r: &mut Range, down: bool| {
+            r.vr.app
+                .world_mut()
+                .get_mut::<crate::rig::RigInput>(r.vr.player)
+                .unwrap()
+                .hand_mut(Side::Right)
+                .primary = down;
+            r.vr.step(2);
+        };
+        let mut r = hold("ak74", false, false);
+        set_a(&mut r, true);
+        let mag = take(&mut r, "ak_mag", 30);
+        let well = {
+            let g = gun_mut(&mut r);
+            let w = g.magwell.unwrap();
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(w)
+                .unwrap()
+                .translation()
+        };
+        let away = r.vr.hand_state(Side::Left).world.translation;
+        glide(&mut r, away, well - Vec3::Y * 0.25, 15);
+        glide(&mut r, well - Vec3::Y * 0.25, well, 30);
+        r.vr.step(5);
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(5);
+        let seated = |r: &Range| {
+            r.vr.app
+                .world()
+                .get::<crate::interact::InSocket>(mag)
+                .is_some()
+        };
+        assert!(seated(&r), "seated with A still down");
+        set_a(&mut r, false);
+        r.vr.step(10);
+        assert!(seated(&r), "A let go: the new magazine stays");
+        // A pressed now, on it, and let go: it drops.
+        set_a(&mut r, true);
+        set_a(&mut r, false);
+        r.vr.step(10);
+        assert!(!seated(&r), "a press on it drops it");
+    }
+
     /// A gun-hand button for one press (the headset's B is `secondary`).
     pub(crate) fn press(r: &mut Range, which: &str) {
         for down in [true, false] {
