@@ -23,8 +23,8 @@ impl Plugin for HandleGlowPlugin {
 /// The glow's size (m across) and how it breathes (share, Hz): a halo
 /// round the part, larger than a forend's girth, so it shows where the
 /// handle is buried in wood (a pump's forend; a 3.5 cm glow was lost in
-/// it at night).
-pub const GLOW_SIZE: f32 = 0.09;
+/// it at night). The light itself spans `GLOW_REACH` of it, about 9 cm.
+pub const GLOW_SIZE: f32 = 0.15;
 pub const GLOW_BREATH: (f32, f32) = (0.15, 1.5);
 
 /// A glow, on its gun.
@@ -35,15 +35,19 @@ pub struct HandleGlow;
 /// (the coordinator's ruling on the first night shot, a flat green disc;
 /// stacked shells after it still read as bands). It falls off smoothly to
 /// nothing at the rim ([`halo_alpha`]).
-pub const GLOW_PEAK: f32 = 0.5;
+pub const GLOW_PEAK: f32 = 0.35;
+/// Where the halo has faded to nothing, a share of its radius: well inside
+/// the quad, so no edge shows (the coordinator's crop of the last one).
+pub const GLOW_REACH: f32 = 0.6;
 
 /// The halo's opacity `r` of the way out from its middle (0..1): the peak
 /// at the middle, smoothly to nothing at the rim.
 pub fn halo_alpha(r: f32) -> f32 {
-    // Bell-shaped, like light scattered round a lamp: a fifth of the peak
-    // halfway out, next to nothing past four fifths (a smoothstep held its
-    // strength too far out and read as a fuzzy ball).
-    GLOW_PEAK * (1.0 - r.clamp(0.0, 1.0).powi(2)).powi(3)
+    // A smoothstep down to nothing at `GLOW_REACH`: at the quad's own rim,
+    // where the night's exposure showed any faint remainder as a circle,
+    // there's none.
+    let t = (1.0 - r / GLOW_REACH).clamp(0.0, 1.0);
+    GLOW_PEAK * t * t * (3.0 - 2.0 * t)
 }
 
 fn halo_texture(images: &mut Assets<Image>) -> Handle<Image> {
@@ -153,12 +157,12 @@ mod tests {
     /// less outward, nothing at the rim.
     #[test]
     fn the_halo_falls_off_to_nothing() {
-        assert!((halo_alpha(0.0) - GLOW_PEAK).abs() < 1e-6 && GLOW_PEAK <= 0.5);
+        assert!((halo_alpha(0.0) - GLOW_PEAK).abs() < 1e-6 && GLOW_PEAK <= 0.35);
+        assert_eq!(halo_alpha(GLOW_REACH), 0.0, "nothing well inside the quad");
         assert_eq!(halo_alpha(1.0), 0.0);
         let steps: Vec<f32> = (0..=20).map(|i| halo_alpha(i as f32 / 20.0)).collect();
         assert!(steps.windows(2).all(|w| w[1] <= w[0]), "{steps:?}");
-        assert!(halo_alpha(0.8) < 0.03, "faint near the rim");
-        assert!(halo_alpha(0.5) < GLOW_PEAK * 0.5, "softer than a disc");
+        assert!(halo_alpha(0.5) < GLOW_PEAK * 0.1, "faint near its reach");
     }
 
     /// A marked gun's handle glows, where its handle is; worked (the mark
