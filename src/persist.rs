@@ -1949,19 +1949,28 @@ mod tests {
         assert_eq!(n, 1, "{:?}", s.stash);
     }
 
-    /// The tester's old career (playtest 2026-11-22, `career-before.ron`)
-    /// loads clean: nothing mended, every kind in it known (none skipped as
-    /// unknown), and its loose items stay where they lay through a load's
-    /// long first frame and the seconds after (none "fell out of the
-    /// world").
+    /// The tester's old careers (playtest 2026-11-22: `career-old.ron`,
+    /// the one they loaded, and `career-before.ron`, the write before it)
+    /// load clean: nothing mended, every kind in them known (none skipped
+    /// as unknown), and their loose items stay where they lay through a
+    /// load's long first frame and the seconds after (none "fell out of
+    /// the world").
     #[test]
-    fn the_playtests_old_career_loads_clean() {
+    fn the_playtests_old_careers_load_clean() {
+        for name in ["career-old.ron", "career-before.ron"] {
+            old_career_loads_clean(name);
+        }
+    }
+
+    fn old_career_loads_clean(name: &str) {
         use avian3d::prelude::RigidBody;
-        let src = crate::asset_root_path().join("../docs/playtests/2026-11-22/career-before.ron");
+        let src = crate::asset_root_path()
+            .join("../docs/playtests/2026-11-22")
+            .join(name);
         let text = std::fs::read_to_string(&src).unwrap();
         let mut career = Career::from_ron(&text).unwrap();
         let fixed = career.sanitize();
-        assert!(fixed.is_empty(), "mended on load: {fixed:?}");
+        assert!(fixed.is_empty(), "{name}: mended on load: {fixed:?}");
         let catalog =
             extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
                 .unwrap();
@@ -1990,9 +1999,9 @@ mod tests {
             walk(i, &mut ids);
         }
         let unknown: Vec<&&str> = ids.iter().filter(|id| catalog.kind(id).is_none()).collect();
-        assert!(unknown.is_empty(), "unknown kinds: {unknown:?}");
+        assert!(unknown.is_empty(), "{name}: unknown kinds: {unknown:?}");
 
-        let path = temp_save("playtest_career.ron");
+        let path = temp_save(&format!("playtest_{name}"));
         std::fs::write(&path, &text).unwrap();
         let opts = LaunchOptions {
             robots: false,
@@ -2033,7 +2042,7 @@ mod tests {
             .collect();
         assert!(
             moved.is_empty(),
-            "{} moved: {:?}",
+            "{name}: {} moved: {:?}",
             moved.len(),
             &moved[..moved.len().min(5)]
         );
