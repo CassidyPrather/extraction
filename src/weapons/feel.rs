@@ -645,10 +645,11 @@ fn handle_guns(
             continue;
         };
         let mass = gun.mass(catalog.get(item.kind()).mass);
-        let head = heads
+        let head_at = heads
             .iter()
             .find(|(c, _)| c.parent() == held.player)
-            .map(|(_, h)| h.translation());
+            .map(|(_, h)| *h);
+        let head = head_at.map(|h| h.translation());
         let shouldered = match (butt(gun), head) {
             (Some(b), Some(head)) => gt.transform_point(b).distance(head) < SHOULDER_REACH,
             _ => false,
@@ -783,9 +784,9 @@ fn handle_guns(
         // be without it (so it settles rather than chasing itself).
         let front = front_post(gun);
         let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
-        let (want, lined) = match head {
-            Some(eye) if !scoped.iter().any(|m| m.0 == gun_e) => {
-                let eye_now = gt.affine().inverse().transform_point3(eye);
+        let (want, lined) = match head_at {
+            Some(h) if !scoped.iter().any(|m| m.0 == gun_e) => {
+                let eye_now = sight_eye(gun, &gt.affine().inverse(), &h);
                 let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
                 (sight_fix(gun, eye_bare), at_sights(gun, eye_bare))
             }
@@ -798,6 +799,27 @@ fn handle_guns(
         feel.lag = hold.lag(mass);
         feel.steady = if steady_aim { hold.steady() } else { 0.0 };
     }
+}
+
+/// Half the distance between the eyes (m): the head is their middle.
+pub const EYE_HALF: f32 = 0.032;
+
+/// The eye that looks down the sights, in gun space (`to_gun` the gun's
+/// inverse): of the two either side of the head, the one nearer the sight
+/// line. Lining the sights up on the head itself put them between the
+/// eyes, where neither could use them (playtest 2026-11-22: a rifle at the
+/// face snapped to the middle of the view).
+pub fn sight_eye(gun: &Gun, to_gun: &bevy::math::Affine3A, head: &GlobalTransform) -> Vec3 {
+    let s = gun.layout.sight;
+    let off_line = |e: Vec3| {
+        (s.rotation.inverse() * (e - s.translation))
+            .truncate()
+            .length()
+    };
+    let right = head.right().as_vec3() * EYE_HALF;
+    let [a, b] = [head.translation() - right, head.translation() + right]
+        .map(|e| to_gun.transform_point3(e));
+    if off_line(a) <= off_line(b) { a } else { b }
 }
 
 /// How near the rear sight the eye must be for the sights to line up at
@@ -1983,13 +2005,9 @@ pub(crate) mod vr_tests {
             (v - d * v.dot(d)).length()
         };
         assert!(line_miss(rear, front) > 0.009, "starts off the line");
-        let root =
-            r.vr.app
-                .world()
-                .get::<Transform>(r.vr.player)
-                .unwrap()
-                .translation;
-        r.vr.head(eye - root);
+        let root = *r.vr.app.world().get::<Transform>(r.vr.player).unwrap();
+        // The right eye there: the head half the eyes' span to its left.
+        r.vr.head(root.rotation.inverse() * (eye - root.translation) - Vec3::X * EYE_HALF);
         r.vr.step(60);
         let (rear, front, _) = sights(&mut r);
         let miss = line_miss(rear, front);
@@ -2020,7 +2038,15 @@ pub(crate) mod vr_tests {
                 .unwrap()
                 .head
                 .translation;
-        r.vr.head(rear + rot * Vec3::new(0.0, 0.01, 0.06) - root);
+        let turn =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .rotation;
+        r.vr.head(
+            turn.inverse() * (rear + rot * Vec3::new(0.0, 0.01, 0.06) - root) - Vec3::X * EYE_HALF,
+        );
         r.vr.step(60);
         let a = at_eye(&r);
         assert!(a > 0.95, "down behind the sights: {a}");
@@ -2525,6 +2551,55 @@ pub(crate) mod vr_tests {
         }
         rack(&mut r);
         assert_eq!(fire(&mut r, 1, true).len(), 1);
+    }
+
+    /// A magazine brought to the well roughly, its top 6 cm off (to the
+    /// side and short of it), still seats: done by feel in a headset
+    /// (playtest 2026-11-22); 10 cm off, it doesn't.
+    #[test]
+    fn a_magazine_brought_roughly_to_the_well_seats() {
+        for (gun, mag_id) in [("ak74", "ak_mag"), ("pm_pistol", "pm_mag")] {
+            for (off, seats) in [(0.06, true), (0.10, false)] {
+                let mut r = hold(gun, false, false);
+                let mag = take(&mut r, mag_id, 5);
+                let (well, side) = {
+                    let g = gun_mut(&mut r);
+                    let w = g.magwell.unwrap();
+                    let wt = r.vr.app.world().get::<GlobalTransform>(w).unwrap();
+                    (wt.translation(), wt.right().as_vec3())
+                };
+                let h =
+                    r.vr.app
+                        .world()
+                        .get::<crate::weapons::Mag>(mag)
+                        .unwrap()
+                        .height;
+                let top = |r: &Range| {
+                    r.vr.app
+                        .world()
+                        .get::<GlobalTransform>(mag)
+                        .unwrap()
+                        .transform_point(Vec3::Y * h * 0.5)
+                };
+                // Off to the side and a little short below.
+                let aim = well + (side * 0.8 - Vec3::Y * 0.6).normalize() * off;
+                let away = r.vr.hand_state(Side::Left).world.translation;
+                let start = away + (aim - top(&r)) - Vec3::Y * 0.2;
+                glide(&mut r, away, start, 15);
+                for _ in 0..3 {
+                    let hand = r.vr.hand_state(Side::Left).world.translation;
+                    let to = hand + (aim - top(&r));
+                    glide(&mut r, hand, to, 10);
+                }
+                r.vr.step(3);
+                let seated =
+                    r.vr.app
+                        .world()
+                        .get::<crate::interact::InSocket>(mag)
+                        .is_some();
+                assert_eq!(seated, seats, "{gun}: top {off} m off the well");
+            }
+        }
     }
 
     /// A gun-hand button for one press (the headset's B is `secondary`).
