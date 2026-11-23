@@ -29,7 +29,6 @@ How it works:
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
 | Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s), Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot's resting hand (chest height, 0.5 m above the heart) grazes 1-3 cm inside the rim while its body is 2.1 m out: a passing brush, not a reach. Ruling changed 19 Nov 12:00: a brush at the rim doesn't fire; a real reach (down for the stone, or in toward the heart) does. No second Player entity (Anomalies mixed two worlds' logs) | 6d425f1d (Onboarding re-measure) | Anomalies (reach margin + tests) | |
-| scenario `walker_hunt`: a Mosin against a walker up the road, 0 robots wrecked (17.1 s) | gate 370 (fb22a0cf: Hands 48a06d0 sights-on-nearer-eye + mag contact, Progression, Onboarding LastPress + step words, World models, Arcade, Robot bodies Locals); green on gate 369 (7e53ec71) | Hands first (the sight-line change is the likeliest), else bisect | |
 | `soak::ledges::tests::no_valley_has_a_ledge_trap`: rime_fell adit_rime at (144.2, 105.2) and (140.2, 105.2), 1 m² perches that drop 3.1 m every way off | lib371 (4f146f94), new since lib369 (7e53ec71); likely World models' closed prism roofs (f08c0f41) or face culling (3eee159) | World models | |
 
 ## Logged, not failing a check
@@ -46,6 +45,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| scenario `walker_hunt` (0 wrecked: bots' sights turned to an eye 32 mm off the head) | 2bc1856 (Hands: a bot sights from its head), green on gate 372 |
 | `audio_machines::tests::the_dangers_are_heard` (MachineSpent) | 00ed3f59 (Arcade), green on lib371 (4f146f94: 1863/1) |
 | `render::puff::tests::no_puff_is_a_sphere` (weak_points.rs) | 519754a7 (Robot bodies), green on lib371 |
 | `robots::recall` every_robot_keyed_local_is_in_the_table (grip.rs) + `soak` entity_keyed_locals_forget_what_is_gone (arena.rs) | ce7a46e5 (Robot bodies), 0c9f8e34 (Arcade), green on lib371 |
