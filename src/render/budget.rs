@@ -169,15 +169,13 @@ impl Plugin for BudgetPlugin {
         }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
-            use bevy::render::{Render, RenderSystems};
-            render.insert_resource(span.clone()).add_systems(
-                Render,
-                (
-                    start_render.in_set(RenderSystems::ExtractCommands),
-                    end_render
-                        .after(RenderSystems::Prepare)
-                        .before(RenderSystems::Render),
-                ),
+            render.insert_resource(span.clone());
+            time_render(
+                render
+                    .world_mut()
+                    .resource_mut::<bevy::ecs::schedule::Schedules>()
+                    .get_mut(bevy::render::Render)
+                    .expect("the render world's schedule"),
             );
             app.insert_resource(span)
                 .add_systems(Last, read_render.before(end_main));
@@ -805,33 +803,115 @@ pub struct CpuSpans {
     pub physics_ms: f64,
     /// The render world's latest: its per-mesh work (`ExtractCommands`
     /// through `Prepare`: specialise, queue, sort, batch), not encoding or
-    /// submitting the passes. It runs beside the main schedule and has to
-    /// fit in a frame on its own.
+    /// submitting the passes, and not its waits for the headset's runtime
+    /// ([`RuntimeWait`]). It runs beside the main schedule and has to fit
+    /// in a frame on its own.
     pub render_ms: f64,
-    log: Vec<(f64, f64, f64)>,
+    /// The render world encoding and submitting the passes
+    /// (`RenderSystems::Render`: the render graph, on the CPU).
+    pub passes_ms: f64,
+    /// The render world waiting on the headset's runtime ([`RuntimeWait`]):
+    /// the compositor's pace, not this machine's work.
+    pub wait_ms: f64,
+    log: Vec<[f64; 5]>,
 }
 
-/// The render world's span, handed across to the main world.
+/// The render world's waits on the headset's runtime: beginning its frame
+/// and an eye's image coming free (`bevy_mod_xr`'s `PreRender`, between
+/// `ExtractCommands` and `Prepare`). Timed apart from the render world's
+/// own work: a runtime that holds the frame back (SteamVR at half rate)
+/// would otherwise read as a render world twice as slow (playtest
+/// 2026-11-22: "render world 10 ms, 1% 20").
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RuntimeWait;
+
+/// The render world's spans, handed across to the main world.
+#[derive(Default)]
+struct RenderTimes {
+    start: Option<std::time::Instant>,
+    wait_start: Option<std::time::Instant>,
+    wait_ms: f64,
+    prep_ms: f64,
+    passes_start: Option<std::time::Instant>,
+    passes_ms: f64,
+}
+
 #[derive(Resource, Clone, Default)]
-struct RenderSpan(std::sync::Arc<std::sync::Mutex<(Option<std::time::Instant>, f64)>>);
+struct RenderSpan(std::sync::Arc<std::sync::Mutex<RenderTimes>>);
+
+/// Time the render world's schedule: its own work up to the passes, the
+/// passes, and its waits on the runtime, apart.
+fn time_render(render: &mut Schedule) {
+    use bevy::render::RenderSystems;
+    render.configure_sets(
+        RuntimeWait
+            .after(RenderSystems::ExtractCommands)
+            .before(RenderSystems::PrepareViews)
+            .before(RenderSystems::PrepareAssets),
+    );
+    #[cfg(feature = "xr")]
+    render.configure_sets(bevy_mod_xr::session::XrRenderSystems::PreRender.in_set(RuntimeWait));
+    render.add_systems((
+        start_render.in_set(RenderSystems::ExtractCommands),
+        start_wait
+            .after(RenderSystems::ExtractCommands)
+            .before(RuntimeWait),
+        end_wait
+            .after(RuntimeWait)
+            .before(RenderSystems::PrepareViews)
+            .before(RenderSystems::PrepareAssets),
+        end_render
+            .after(RenderSystems::Prepare)
+            .before(RenderSystems::Render),
+        end_passes
+            .after(RenderSystems::Render)
+            .before(RenderSystems::Cleanup),
+    ));
+}
 
 fn start_render(span: Res<RenderSpan>) {
     if let Ok(mut s) = span.0.lock() {
-        s.0 = Some(std::time::Instant::now());
+        s.start = Some(std::time::Instant::now());
+        s.wait_ms = 0.0;
+    }
+}
+
+fn start_wait(span: Res<RenderSpan>) {
+    if let Ok(mut s) = span.0.lock() {
+        s.wait_start = Some(std::time::Instant::now());
+    }
+}
+
+fn end_wait(span: Res<RenderSpan>) {
+    if let Ok(mut s) = span.0.lock() {
+        if let Some(t) = s.wait_start.take() {
+            s.wait_ms = t.elapsed().as_secs_f64() * 1000.0;
+        }
     }
 }
 
 fn end_render(span: Res<RenderSpan>) {
     if let Ok(mut s) = span.0.lock() {
-        if let Some(t) = s.0.take() {
-            s.1 = t.elapsed().as_secs_f64() * 1000.0;
+        if let Some(t) = s.start.take() {
+            s.prep_ms = (t.elapsed().as_secs_f64() * 1000.0 - s.wait_ms).max(0.0);
+        }
+        s.passes_start = Some(std::time::Instant::now());
+    }
+}
+
+fn end_passes(span: Res<RenderSpan>) {
+    if let Ok(mut s) = span.0.lock() {
+        if let Some(t) = s.passes_start.take() {
+            s.passes_ms = t.elapsed().as_secs_f64() * 1000.0;
         }
     }
 }
 
 fn read_render(span: Res<RenderSpan>, mut s: ResMut<CpuSpans>) {
     if let Ok(r) = span.0.lock() {
-        s.render_ms = r.1;
+        s.render_ms = r.prep_ms;
+        s.passes_ms = r.passes_ms;
+        s.wait_ms = r.wait_ms;
     }
 }
 
@@ -849,7 +929,7 @@ fn end_main(mut s: ResMut<CpuSpans>) {
     let physics = std::mem::take(&mut s.physics_now);
     s.main_ms = whole - fixed + fixed / ticks;
     s.physics_ms = physics / ticks;
-    let entry = (s.main_ms, s.physics_ms, s.render_ms);
+    let entry = [s.main_ms, s.physics_ms, s.render_ms, s.passes_ms, s.wait_ms];
     s.log.push(entry);
 }
 
@@ -875,9 +955,11 @@ fn end_physics(mut s: ResMut<CpuSpans>) {
 }
 
 /// Every ten seconds, next to `frames:`: "cpu: main 4.1 ms a frame (1%
-/// 6.0), physics 1.2 (1% 2.3), render world 3.0 (1% 4.2)". The main
-/// schedule and the render world each have to fit in the headset's
-/// 11.1 ms; they run side by side.
+/// 6.0), physics 1.2 (1% 2.3), render world 3.0 (1% 4.2), passes 2.5 (1%
+/// 3.1), runtime wait 0.4 (1% 1.0)". The main schedule and the render
+/// world (its own work and the passes together) each have to fit in the
+/// headset's frame; they run side by side. The runtime wait is the
+/// headset's pace, not this machine's work ([`RuntimeWait`]).
 fn log_cpu(time: Res<Time<Real>>, mut s: ResMut<CpuSpans>, mut since: Local<f32>) {
     *since += time.delta_secs();
     if *since < 10.0 || s.log.is_empty() {
@@ -890,12 +972,15 @@ fn log_cpu(time: Res<Time<Real>>, mut s: ResMut<CpuSpans>, mut since: Local<f32>
         let mean = v.iter().sum::<f64>() / v.len() as f64;
         (mean, v[((v.len() as f64 * 0.99) as usize).min(v.len() - 1)])
     };
-    let (main, main99) = stat(log.iter().map(|l| l.0).collect());
-    let (phys, phys99) = stat(log.iter().map(|l| l.1).collect());
-    let (render, render99) = stat(log.iter().map(|l| l.2).collect());
+    let (main, main99) = stat(log.iter().map(|l| l[0]).collect());
+    let (phys, phys99) = stat(log.iter().map(|l| l[1]).collect());
+    let (render, render99) = stat(log.iter().map(|l| l[2]).collect());
+    let (passes, passes99) = stat(log.iter().map(|l| l[3]).collect());
+    let (wait, wait99) = stat(log.iter().map(|l| l[4]).collect());
     info!(
         "cpu: main {main:.1} ms a frame (1% {main99:.1}), physics {phys:.1} (1% {phys99:.1}), \
-         render world {render:.1} (1% {render99:.1})"
+         render world {render:.1} (1% {render99:.1}), passes {passes:.1} (1% {passes99:.1}), \
+         runtime wait {wait:.1} (1% {wait99:.1})"
     );
 }
 
@@ -1102,6 +1187,42 @@ pub fn hold() -> u32 {
 pub(crate) mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// The render world's time is split three ways: its own work up to the
+    /// passes, the passes, and its waits on the headset's runtime. A wait
+    /// isn't counted as work (playtest 2026-11-22: SteamVR holding frames
+    /// back read as "render world 10 ms, 1% 20").
+    #[test]
+    fn a_runtime_wait_is_not_render_world_work() {
+        use bevy::render::{Render, RenderSystems};
+        fn sleep(ms: u64) -> impl FnMut() {
+            move || std::thread::sleep(std::time::Duration::from_millis(ms))
+        }
+        let mut world = World::new();
+        let span = RenderSpan::default();
+        world.insert_resource(span.clone());
+        let mut schedule = Render::base_schedule();
+        schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
+        time_render(&mut schedule);
+        schedule.add_systems((
+            sleep(40).in_set(RuntimeWait),
+            sleep(5).in_set(RenderSystems::Queue),
+            sleep(10).in_set(RenderSystems::Render),
+        ));
+        schedule.run(&mut world);
+        let t = span.0.lock().unwrap();
+        assert!(t.wait_ms >= 40.0, "the wait is timed: {:.1} ms", t.wait_ms);
+        assert!(
+            (5.0..30.0).contains(&t.prep_ms),
+            "the render world's own work leaves the wait out: {:.1} ms",
+            t.prep_ms
+        );
+        assert!(
+            t.passes_ms >= 10.0,
+            "the passes are timed: {:.1} ms",
+            t.passes_ms
+        );
+    }
 
     /// The whole client with no window and no GPU (as
     /// `client_systems_initialise`): visibility, LOD ranges and the

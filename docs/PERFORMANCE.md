@@ -231,7 +231,10 @@ At the start the worst views were 3316 draws and 970 shadow draws.
 
 Not yet known, and only the headset can say: what MSAA 4x costs on the
 3060 (`EXTRACTION_PERF=msaa=2`/`msaa=1` against the `gpu:` lines), and
-the main schedule's and render world's real CPU time (the `cpu:` line;
+the main schedule's and render world's real CPU time (the `cpu:` line,
+which since the 22 Nov playtest splits the render world's own work and its
+passes from the runtime's wait: that playtest's "render world 10 ms" had
+SteamVR's begin_frame and wait_image inside it;
 under lavapipe both share four cores with the renderer and read 17-31
 ms, which says nothing about the laptop).
 
