@@ -44,7 +44,8 @@
 //! team answers as it sets out, from wherever it starts (so a call
 //! answered far off is the warning that they're coming, heard as the
 //! radio picks up their chatter). While a machine goes about its rounds
-//! within [`IDLE_NEAR`] of someone it mutters now and then.
+//! within [`IDLE_NEAR`] of someone it mutters now and then, and one hunting
+//! about near someone keeps saying what it's doing ([`SEARCH_EVERY`]).
 //!
 //! The synth is logic only: no audio types, runs anywhere.
 
@@ -685,6 +686,21 @@ pub const HURT_GAP: f32 = 1.0;
 /// [`IDLE_EVERY`] s or so.
 pub const IDLE_NEAR: f32 = 70.0;
 pub const IDLE_EVERY: (f32, f32) = (18.0, 40.0);
+/// A machine hunting about (investigating, searching, lost) says so again
+/// within this of a player, m, once every [`SEARCH_EVERY`] s or so: a
+/// walker blinded and casting about keeps telling you what it's doing (the
+/// playtest of 22 November stood beside one and heard "some kind of noise,
+/// but it's too quiet": it had said its one word and gone silent).
+pub const SEARCH_NEAR: f32 = 40.0;
+pub const SEARCH_EVERY: (f32, f32) = (6.0, 10.0);
+
+/// The minds that keep saying so while they last.
+pub fn keeps_saying(said: Utterance) -> bool {
+    matches!(
+        said,
+        Utterance::Investigating | Utterance::Searching | Utterance::Lost
+    )
+}
 /// How many of those near a call answer it.
 pub const ANSWERS: usize = 2;
 
@@ -713,6 +729,9 @@ pub struct Voices {
     last: HashMap<(Entity, Utterance), f32>,
     dead: std::collections::HashSet<Entity>,
     mutter_at: HashMap<Entity, f32>,
+    /// What each robot hunting about last said it was doing
+    /// ([`keeps_saying`]), to say again.
+    minding: HashMap<Entity, Utterance>,
     pending: Vec<(f32, Turned)>,
     /// Until when each robot is still saying its last word.
     busy: HashMap<Entity, f32>,
@@ -773,6 +792,7 @@ fn from_minds(
     mut shifts: MessageReader<MindShift>,
     places: Query<&GlobalTransform>,
     players: Query<&GlobalTransform, With<Player>>,
+    mut voices: ResMut<Voices>,
     mut out: MessageWriter<Turned>,
 ) {
     let mut answers: HashMap<Entity, Vec<(f32, Entity, Vec3)>> = HashMap::new();
@@ -807,6 +827,13 @@ fn from_minds(
             Mind::Hurt => Utterance::Hurt,
             Mind::Dying => Utterance::Dying,
         };
+        // Hunting about, it'll say so again (`mutter`); anything else ends
+        // that, but a cry of pain doesn't (its mind goes on searching).
+        if keeps_saying(said) {
+            voices.minding.insert(m.robot, said);
+        } else if said != Utterance::Hurt {
+            voices.minding.remove(&m.robot);
+        }
         out.write(Turned {
             robot: m.robot,
             said,
@@ -859,25 +886,29 @@ fn mutter(
     v.last.retain(|(e, _), _| robots.contains(*e));
     v.dead.retain(|e| robots.contains(*e));
     v.mutter_at.retain(|e, _| robots.contains(*e));
+    v.minding.retain(|e, _| robots.contains(*e));
     v.busy.retain(|e, _| robots.contains(*e));
     for (e, robot, brain, gt) in &robots {
         let idle = matches!(brain, Brain::Transit { .. } | Brain::Working { .. });
+        // On its rounds, the odd idle word; hunting about, what it's doing.
+        let (said, near, (lo, hi)) = if idle {
+            (Some(Utterance::Idle), IDLE_NEAR, IDLE_EVERY)
+        } else {
+            (voices.minding.get(&e).copied(), SEARCH_NEAR, SEARCH_EVERY)
+        };
         let at = gt.translation();
-        let near = players
-            .iter()
-            .any(|p| p.translation().distance(at) < IDLE_NEAR);
-        if !idle || !near || robot.wrecked {
+        let close = players.iter().any(|p| p.translation().distance(at) < near);
+        let Some(said) = said.filter(|_| close && !robot.wrecked) else {
             voices.mutter_at.remove(&e);
             continue;
-        }
-        let (lo, hi) = IDLE_EVERY;
+        };
         let gap = lo + voices.rng().f32() * (hi - lo);
         let due = *voices.mutter_at.entry(e).or_insert(now + gap);
         if now >= due {
             voices.mutter_at.insert(e, now + gap);
             out.write(Turned {
                 robot: e,
-                said: Utterance::Idle,
+                said,
                 at,
                 delay: 0.0,
             });
@@ -1154,6 +1185,32 @@ mod tests {
             all.extend(app.world_mut().resource_mut::<Messages<Spoke>>().drain());
         }
         all
+    }
+
+    /// A machine left hunting about near you keeps saying so, every
+    /// SEARCH_EVERY or so, not once and then silence; once it engages,
+    /// that stops; far off, it doesn't.
+    #[test]
+    fn a_machine_hunting_about_keeps_saying_so() {
+        let mut app = world();
+        let w = robot(&mut app, RobotKind::Walker, Vec3::ZERO);
+        app.world_mut().entity_mut(w).insert(Brain::Engage);
+        app.world_mut()
+            .spawn((Player, GlobalTransform::from_translation(Vec3::X * 5.0)));
+        shift(&mut app, w, Mind::Searching);
+        let s = said(&mut app, 2.0 * SEARCH_EVERY.1 + 1.0);
+        let searching = s.iter().filter(|s| s.said == Utterance::Searching).count();
+        assert!(searching >= 3, "said it {searching} times in 21 s");
+        shift(&mut app, w, Mind::Engaging);
+        let s = said(&mut app, 2.0 * SEARCH_EVERY.1);
+        assert!(s.iter().all(|s| s.said != Utterance::Searching), "{s:?}");
+        // Far off, a searching machine says it once and no more.
+        let far = robot(&mut app, RobotKind::Walker, Vec3::X * 300.0);
+        app.world_mut().entity_mut(far).insert(Brain::Engage);
+        shift(&mut app, far, Mind::Searching);
+        let s = said(&mut app, 2.0 * SEARCH_EVERY.1);
+        assert_eq!(s.iter().filter(|s| s.robot == far).count(), 1, "{s:?}");
+        assert!(keeps_saying(Utterance::Lost) && !keeps_saying(Utterance::Engaging));
     }
 
     /// Each turn of a mind is said exactly once, by the right voice; the
