@@ -1,7 +1,8 @@
 //! A gun clicked on an empty chamber with rounds in its feed
 //! (`weapons::unchambered::NeedsWorking`): its action's handle (bolt,
 //! slide, charging handle, forend) glows the glove's hover green, breathing
-//! a little, till it's worked. An affordance answering a mistake ("this is
+//! a little, till it's worked: a soft halo of light, not a solid
+//! ([`halo_alpha`]). An affordance answering a mistake ("this is
 //! what to work"), not a warning, and never lit otherwise.
 
 use bevy::light::NotShadowCaster;
@@ -23,35 +24,87 @@ impl Plugin for HandleGlowPlugin {
 /// round the part, larger than a forend's girth, so it shows where the
 /// handle is buried in wood (a pump's forend; a 3.5 cm glow was lost in
 /// it at night).
-pub const GLOW_SIZE: f32 = 0.065;
+pub const GLOW_SIZE: f32 = 0.09;
 pub const GLOW_BREATH: (f32, f32) = (0.15, 1.5);
 
 /// A glow, on its gun.
 #[derive(Component)]
 pub struct HandleGlow;
 
-#[allow(clippy::type_complexity)]
+/// How much of the green the halo adds at its middle: light, not a solid
+/// (the coordinator's ruling on the first night shot, a flat green disc;
+/// stacked shells after it still read as bands). It falls off smoothly to
+/// nothing at the rim ([`halo_alpha`]).
+pub const GLOW_PEAK: f32 = 0.5;
+
+/// The halo's opacity `r` of the way out from its middle (0..1): the peak
+/// at the middle, smoothly to nothing at the rim.
+pub fn halo_alpha(r: f32) -> f32 {
+    // Bell-shaped, like light scattered round a lamp: a fifth of the peak
+    // halfway out, next to nothing past four fifths (a smoothstep held its
+    // strength too far out and read as a fuzzy ball).
+    GLOW_PEAK * (1.0 - r.clamp(0.0, 1.0).powi(2)).powi(3)
+}
+
+fn halo_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    let n = 64u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let a = halo_alpha((u * u + v * v).sqrt());
+            data.extend_from_slice(&[255, 255, 255, (a * 255.0).round() as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+/// The halo is a soft disc of light turned to the eye: it's light round the
+/// part, so it reads the same from any side.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn handle_glows(
     mut commands: Commands,
-    marked: Query<(Entity, Option<&Gun>, &Grabbable), With<NeedsWorking>>,
+    marked: Query<(Entity, Option<&Gun>, &Grabbable, Option<&GlobalTransform>), With<NeedsWorking>>,
     mut glows: Query<(Entity, &ChildOf, &mut Transform), With<HandleGlow>>,
+    eyes: Query<&GlobalTransform, With<Camera3d>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: Option<ResMut<Assets<Image>>>,
     time: Res<Time>,
 ) {
     let breath =
         1.0 + GLOW_BREATH.0 * (time.elapsed_secs() * GLOW_BREATH.1 * std::f32::consts::TAU).sin();
+    let eye = eyes.iter().next().map(|g| g.translation());
     let mut have = std::collections::HashSet::new();
     for (e, parent, mut t) in &mut glows {
-        if marked.contains(parent.parent()) {
-            have.insert(parent.parent());
-            t.scale = Vec3::splat(GLOW_SIZE * breath);
-        } else {
+        let Ok((_, _, _, gun_at)) = marked.get(parent.parent()) else {
             commands.entity(e).despawn();
+            continue;
+        };
+        have.insert(parent.parent());
+        t.scale = Vec3::splat(GLOW_SIZE * breath);
+        // Turned to the eye: its face (+Z) toward it, in the gun's frame.
+        if let (Some(eye), Some(g)) = (eye, gun_at) {
+            let at = g.transform_point(t.translation);
+            let face = Transform::IDENTITY.looking_to(at - eye, Vec3::Y).rotation;
+            t.rotation = g.rotation().inverse() * face;
         }
     }
-    for (gun, g, grab) in &marked {
+    for (gun, g, grab, _) in &marked {
         if have.contains(&gun) {
             continue;
         }
@@ -62,15 +115,18 @@ fn handle_glows(
         };
         let (mesh, mat) = look
             .get_or_insert_with(|| {
+                let texture = images.as_deref_mut().map(halo_texture);
                 (
-                    meshes.add(Sphere::new(0.5)),
+                    meshes.add(Rectangle::new(1.0, 1.0)),
                     materials.add(StandardMaterial {
                         // The glove's hover green (`render::props::tint_gloves`),
-                        // bright enough to read on a small part.
-                        base_color: Color::srgba(0.3, 0.8, 0.4, 0.45),
-                        emissive: LinearRgba::rgb(0.3, 0.8, 0.4),
+                        // its strength the texture's (`halo_alpha`).
+                        base_color: Color::srgb(0.3, 0.8, 0.4),
+                        base_color_texture: texture,
                         unlit: true,
                         alpha_mode: AlphaMode::Add,
+                        double_sided: true,
+                        cull_mode: None,
                         ..default()
                     }),
                 )
@@ -92,6 +148,18 @@ fn handle_glows(
 mod tests {
     use super::*;
     use crate::interact::{GrabPoint, GripRole};
+
+    /// The halo is light: half the green at its middle at most, smoothly
+    /// less outward, nothing at the rim.
+    #[test]
+    fn the_halo_falls_off_to_nothing() {
+        assert!((halo_alpha(0.0) - GLOW_PEAK).abs() < 1e-6 && GLOW_PEAK <= 0.5);
+        assert_eq!(halo_alpha(1.0), 0.0);
+        let steps: Vec<f32> = (0..=20).map(|i| halo_alpha(i as f32 / 20.0)).collect();
+        assert!(steps.windows(2).all(|w| w[1] <= w[0]), "{steps:?}");
+        assert!(halo_alpha(0.8) < 0.03, "faint near the rim");
+        assert!(halo_alpha(0.5) < GLOW_PEAK * 0.5, "softer than a disc");
+    }
 
     /// A marked gun's handle glows, where its handle is; worked (the mark
     /// gone), the glow goes; a gun never marked has none.
