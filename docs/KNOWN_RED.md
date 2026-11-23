@@ -29,6 +29,9 @@ How it works:
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
 | Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s), Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot's resting hand (chest height, 0.5 m above the heart) grazes 1-3 cm inside the rim while its body is 2.1 m out: a passing brush, not a reach. Ruling changed 19 Nov 12:00: a brush at the rim doesn't fire; a real reach (down for the stone, or in toward the heart) does. No second Player entity (Anomalies mixed two worlds' logs) | 6d425f1d (Onboarding re-measure) | Anomalies (reach margin + tests) | |
+| `audio_machines::tests::the_dangers_are_heard`: no sound for `MachineSpent` | 88e9f633 (Arcade, lib369 on 7e53ec71) | Arcade (with Audio) | the burn-out that ends a blind or strayed wave machine needs a sound, or a reason it's exempt |
+| `render::puff::tests::no_puff_is_a_sphere`: robots/weak_points.rs is on the sphere list but has no spheres now | 4aa83872 (Robot bodies, lib369) | Robot bodies | take weak_points.rs off the list |
+| `robots::recall` every_robot_keyed_local_is_in_the_table (grip.rs `prying`) + `soak` entity_keyed_locals_forget_what_is_gone (arena.rs `last`) | 4aa83872 / 88e9f633 (lib369) | Robot bodies / Arcade | fixed in ce7a46e5 and 0c9f8e34, gating now; confirm on the next lib run |
 
 ## Logged, not failing a check
 
