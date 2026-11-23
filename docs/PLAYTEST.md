@@ -252,7 +252,7 @@ What changed, and worth a comment each:
   the size each eye renders at (`eyes: ...`), and every ten seconds,
   next to the frame times, where the GPU's time went (`gpu: ... ms a
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
-  main ..., physics ..., render world ...`). Tell me how it looks
+  main ..., physics ..., render world ..., passes ..., runtime wait ...`). Tell me how it looks
   and how it feels.
 - **Holding the frame rate.** The eyes now render less when the GPU runs
   late and more when it has room. It stays between the size where text
@@ -744,10 +744,12 @@ the same line without the `$env:` and `Remove-Item` parts.
 That's eight runs, about two minutes each.
 
 **At the village, also read the `cpu:` line** (both village runs). It
-ends `render world N ms (1% M)`: the renderer's own CPU time a frame,
-which runs beside the game's. Note both figures. If the 1% figure is over
+ends `render world N (1% M), passes N (1% M), runtime wait N (1% M)`.
+The first two are the renderer's own CPU time a frame, which runs beside
+the game's. Note all three. If render world plus passes at the 1% is over
 11.1 ms, the renderer alone can't keep 90 Hz there; tell us. It decides
-whether we change Bevy's shadow code.
+whether we change Bevy's shadow code. The runtime wait is the headset
+pacing the frame (SteamVR), not this machine's work.
 
 **One raid with the pipeline log on** (any valley, about 10 minutes): set
 `EXTRACTION_PIPELINES=1` the same way and play a raid as usual, a fight
