@@ -264,7 +264,11 @@ for i in range(3):
 
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, 0.018, -0.037))
-trig.sweep(catmull([(-0.037, 0.012), (-0.04, 0.0), (-0.038, -0.012), (-0.032, -0.019)], 5,
+# (Mirrored about its top, 23 November: like every gun's here, its blade was
+# bowed toward the muzzle with its tip hooked back, a trigger hung the wrong way
+# round; the finger pulls on its front face, which is the concave one, its tip
+# curled forward. The PM's playtest, 20:19: "might be backwards".)
+trig.sweep(catmull([(-0.037, 0.012), (-0.034, 0.0), (-0.036, -0.012), (-0.042, -0.019)], 5,
                    closed=False), section_rect(0.0048, 0.0032, 0.0011, 3), "Blued")
 
 SEL_PIVOT = (0.0, 0.01, -0.06)
