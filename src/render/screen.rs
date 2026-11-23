@@ -29,6 +29,7 @@ impl Plugin for ScreenPlugin {
                 update_screens,
                 idle_screens,
                 drop_screens,
+                redraw_undrawn,
                 show_mipped,
                 light_panels,
             )
@@ -584,10 +585,10 @@ fn show_target(
 /// picture is read back to be shown with mipmaps.
 fn idle_screens(
     mut commands: Commands,
-    mut screens: Query<(Entity, &mut ScreenView)>,
+    mut screens: Query<(Entity, &mut ScreenView, &ScreenText, Option<&Redrawn>)>,
     mut drawings: ResMut<Drawings>,
 ) {
-    for (e, mut view) in &mut screens {
+    for (e, mut view, screen, redrawn) in &mut screens {
         if view.drawing.is_none() {
             continue;
         }
@@ -596,10 +597,95 @@ fn idle_screens(
             if let Some(d) = view.drawing.take() {
                 stop_drawing(&mut commands, d);
                 drawings.0.remove(&e);
-                read_back(&mut commands, e, &view);
+                // Checked for its words, unless it has been redrawn so
+                // often that its ink must be out of `has_ink`'s reach: then
+                // shown as it is rather than drawn for ever.
+                let words = !screen.text.trim().is_empty()
+                    && redrawn.is_none_or(|r| r.0 < MAX_REDRAWS);
+                read_back(&mut commands, e, &view, words);
             }
         }
     }
+}
+
+/// A panel whose words came back undrawn (`has_ink`): drawn again.
+#[derive(Component)]
+struct Undrawn;
+
+/// How many times a panel has come back undrawn.
+#[derive(Component, Default)]
+struct Redrawn(u32);
+
+/// Redraws before a panel is shown as it comes (each is `FIRST_FRAMES`;
+/// the playtest's pipelines were all ready about 165 frames in).
+const MAX_REDRAWS: u32 = 20;
+
+/// Panels that came back without their words draw them again, from the
+/// start (the playtest of 22 November: the yard's cards and boards, and
+/// the arcade's, stayed blank. Drawn in the first frames after load, while
+/// the text's pipeline was still being built, their picture was only their
+/// ground, and nothing redrew them till their words changed).
+fn redraw_undrawn(
+    mut commands: Commands,
+    mut screens: Query<(Entity, &ScreenText, &mut ScreenView, Option<&mut Redrawn>), With<Undrawn>>,
+    mut drawings: ResMut<Drawings>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    for (e, screen, mut view, redrawn) in &mut screens {
+        commands.entity(e).remove::<Undrawn>();
+        if view.drawing.is_some() {
+            continue;
+        }
+        let n = redrawn.map_or(1, |mut r| {
+            r.0 += 1;
+            r.0
+        });
+        if n == MAX_REDRAWS {
+            warn!(
+                "screen: {:?} still undrawn after {n} redraws; showing it as it is",
+                screen.text.lines().next().unwrap_or("")
+            );
+        }
+        if n == 1 {
+            commands.entity(e).insert(Redrawn(1));
+            debug!(
+                "screen: {:?} came back undrawn; drawing it again",
+                screen.text.lines().next().unwrap_or("")
+            );
+        }
+        view.generation += 1;
+        show_target(&mut materials, &mut images, &view);
+        let d = start_drawing(&mut commands, &view, &screen.text);
+        view.drawing = Some(d);
+        view.refresh = FIRST_FRAMES;
+        drawings.0.insert(e, d);
+    }
+}
+
+/// Whether a read-back picture has its words in it: some pixels near the
+/// ink. (Antialiased letters always have some; a picture of the ground
+/// alone, paper and all, has none.)
+pub fn has_ink(data: &[u8], w: u32, h: u32, stride: usize, ink: Color) -> bool {
+    let c = ink.to_srgba();
+    let want = [c.blue, c.green, c.red].map(|v| (v * 255.0).round() as i32);
+    // Within this of the ink on every channel (8-bit), and this many such
+    // pixels (a few letters' worth of their cores).
+    const NEAR: i32 = 40;
+    const ENOUGH: usize = 8;
+    let mut n = 0;
+    for y in 0..h as usize {
+        let row = &data[y * stride..y * stride + w as usize * 4];
+        for px in row.chunks_exact(4) {
+            if (0..3).all(|i| (px[i] as i32 - want[i]).abs() <= NEAR) {
+                n += 1;
+                if n >= ENOUGH {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Reads a panel's finished picture back and shows it with a full mip
@@ -609,9 +695,10 @@ fn idle_screens(
 /// moves. The mips are built off the main thread ([`Mipping`]): built on
 /// it, a goal tick's few panels finishing together cost a 50-67 ms frame
 /// (`docs/playtests/2026-10-28`).
-fn read_back(commands: &mut Commands, panel: Entity, view: &ScreenView) {
+fn read_back(commands: &mut Commands, panel: Entity, view: &ScreenView, words: bool) {
     let (w, h) = (view.px.x as u32, view.px.y as u32);
     let (material, emissive, target) = (view.material.clone(), view.emissive, view.image.clone());
+    let ink = view.fg;
     let generation = view.generation;
     read_texture(commands, view.image.clone()).observe(
         move |mut done: On<ReadbackComplete>,
@@ -627,6 +714,12 @@ fn read_back(commands: &mut Commands, panel: Entity, view: &ScreenView) {
             // Rows come padded to 256 bytes.
             let stride = (w as usize * 4).div_ceil(256) * 256;
             if done.data.len() < stride * (h as usize - 1) + w as usize * 4 {
+                return;
+            }
+            // Words that didn't draw: draw them again (`redraw_undrawn`),
+            // and keep showing the render target meanwhile.
+            if words && !has_ink(&done.data, w, h, stride, ink) {
+                commands.entity(panel).try_insert(Undrawn);
                 return;
             }
             // Taken once (above), so its bytes can be moved, not copied.
@@ -885,7 +978,7 @@ mod tests {
             .collect();
         let mut commands = world.commands();
         let panel = commands.spawn_empty().id();
-        read_back(&mut commands, panel, &view);
+        read_back(&mut commands, panel, &view, false);
         world.flush();
         world.entity_mut(panel).insert(view);
         let readback = world
@@ -1022,5 +1115,43 @@ mod tests {
             assert!(t.elapsed().as_secs() < 10, "the pictures never showed");
             app.update();
         }
+    }
+
+    /// A picture read back before the text pipelines were ready is bare
+    /// ground: no pixel in the ink. One with a few letters on it has some.
+    /// Tested on paper too, whose mottle must not pass for ink.
+    #[test]
+    fn a_bare_picture_has_no_ink() {
+        let (w, h) = (64u32, 32u32);
+        let stride = (w as usize * 4).div_ceil(256) * 256;
+        let fill = |c: Color| {
+            let c = c.to_srgba();
+            let px = [c.blue, c.green, c.red, 1.0].map(|v| (v * 255.0).round() as u8);
+            let mut d = vec![0u8; stride * h as usize];
+            for y in 0..h as usize {
+                for x in 0..w as usize {
+                    d[y * stride + x * 4..][..4].copy_from_slice(&px);
+                }
+            }
+            d
+        };
+        let ink = Color::srgb(0.1, 0.1, 0.12);
+        for ground in [Color::srgb(0.84, 0.81, 0.72), Color::WHITE] {
+            let mut d = fill(ground);
+            assert!(!has_ink(&d, w, h, stride, ink), "bare {ground:?}");
+            // A word's worth of strokes.
+            for x in 10..30 {
+                d[16 * stride + x * 4..][..3].copy_from_slice(&[31, 26, 26]);
+            }
+            assert!(has_ink(&d, w, h, stride, ink), "written on {ground:?}");
+        }
+        // Paper's mottle, read back as BGRA, is not ink.
+        let paper = paper_image(Color::srgb(0.84, 0.81, 0.72));
+        let n = paper.width();
+        let mut d: Vec<u8> = paper.data.clone().unwrap();
+        for px in d.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        assert!(!has_ink(&d, n, n, n as usize * 4, ink), "paper");
     }
 }
