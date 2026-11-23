@@ -3,7 +3,8 @@
 //! one's grey and alpha ride in its `MeshTag` (`pockets.wgsl`), so they
 //! draw together.
 //!
-//! The icon in a full slot's sphere is what's in it, small and white: the
+//! The icon in a full slot's sphere is what's in it, small, in its own
+//! colours a little dimmed (each part its material's): the
 //! thing's own meshes merged into one (built once a kind, so a sphere's
 //! icon is one draw), turned so its broad side faces the eye and its long side hangs
 //! down (a gun barrel down, [`icon_face`]), swaying a little.
@@ -30,6 +31,7 @@ type IconPart = (
     &'static Mesh3d,
     &'static GlobalTransform,
     Option<&'static Visibility>,
+    Option<&'static MeshMaterial3d<StandardMaterial>>,
 );
 
 /// An icon's alpha, from its sphere's (up to this).
@@ -144,24 +146,26 @@ fn tag_spheres(mut spheres: Query<(&PocketSphere, &mut MeshTag), Changed<PocketS
 }
 
 /// The occupant's meshes merged into one, in its own frame (positions and
-/// normals: an icon is flat white). None until its meshes are in.
+/// normals, and each part's colour: an icon is flat, in its own colours). None until its meshes are in.
 fn build_icon(
     occupant: Entity,
     meshes: &Assets<Mesh>,
     children: &Query<&Children>,
     parts: &Query<IconPart, Without<PocketSphere>>,
     globals: &Query<&GlobalTransform>,
+    materials: &Assets<StandardMaterial>,
 ) -> Option<(Mesh, Vec3, f32, Quat)> {
     let base = globals.get(occupant).ok()?.affine().inverse();
     let mut positions: Vec<[f32; 3]> = Vec::new();
     let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut colors: Vec<[f32; 4]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
     let mut stack = vec![occupant];
     while let Some(e) = stack.pop() {
         if let Ok(c) = children.get(e) {
             stack.extend(c.iter());
         }
-        let Ok((m, g, vis)) = parts.get(e) else {
+        let Ok((m, g, vis, mat)) = parts.get(e) else {
             continue;
         };
         // Not a part kept hidden (the thing itself is: stowed,
@@ -199,6 +203,16 @@ fn build_icon(
                 .normalize_or_zero()
                 .to_array()
         }));
+        // Each part in its own colour (its material's: playtest
+        // 2026-11-22, a white copy read as a bug).
+        let tint = icon_tint(
+            mat.and_then(|m| materials.get(&m.0))
+                .map_or(LinearRgba::gray(0.6), |m| m.base_color.to_linear()),
+        );
+        colors.extend(std::iter::repeat_n(
+            [tint.red, tint.green, tint.blue, 1.0],
+            p.len(),
+        ));
         match mesh.indices() {
             Some(Indices::U16(i)) => indices.extend(i.iter().map(|&i| start + u32::from(i))),
             Some(Indices::U32(i)) => indices.extend(i.iter().map(|&i| start + i)),
@@ -220,8 +234,23 @@ fn build_icon(
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
     mesh.insert_indices(Indices::U32(indices));
     Some((mesh, (lo + hi) * 0.5, size.max_element().max(0.01), face))
+}
+
+/// The lightest a part of an icon may be dark (linear luminance, before
+/// the shader's dimming): a blued pistol in its own colour was gone
+/// against the ground in its sphere. Darker is lifted with grey, its hue
+/// kept.
+pub const ICON_FLOOR: f32 = 0.18;
+
+/// A part's colour as its icon draws it: its own, lifted to
+/// [`ICON_FLOOR`] if darker.
+pub fn icon_tint(c: LinearRgba) -> LinearRgba {
+    let lum = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+    let lift = (ICON_FLOOR - lum).max(0.0);
+    LinearRgba::rgb(c.red + lift, c.green + lift, c.blue + lift)
 }
 
 /// How an icon of a thing `size` (its own frame) is turned in its sphere:
@@ -263,6 +292,7 @@ fn icons(
     items: Query<&Item>,
     children: Query<&Children>,
     parts: Query<IconPart, Without<PocketSphere>>,
+    std_materials: Res<Assets<StandardMaterial>>,
     globals: Query<&GlobalTransform>,
     locals: Query<(&GlobalTransform, &crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
     time: Res<Time>,
@@ -314,9 +344,14 @@ fn icons(
             continue;
         };
         if !art.icons.contains_key(&kind) {
-            let Some((mesh, mid, across, face)) =
-                build_icon(occupant, &meshes, &children, &parts, &globals)
-            else {
+            let Some((mesh, mid, across, face)) = build_icon(
+                occupant,
+                &meshes,
+                &children,
+                &parts,
+                &globals,
+                &std_materials,
+            ) else {
                 continue;
             };
             let icon = Icon {
@@ -362,6 +397,18 @@ struct IconTag;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A part's own colour stays its own; one too dark to see is lifted
+    /// to the floor, its hue kept.
+    #[test]
+    fn a_dark_part_is_lifted_a_light_one_kept() {
+        let brass = LinearRgba::rgb(0.5, 0.3, 0.08);
+        assert_eq!(icon_tint(brass), brass);
+        let blued = icon_tint(LinearRgba::rgb(0.01, 0.012, 0.02));
+        let lum = 0.2126 * blued.red + 0.7152 * blued.green + 0.0722 * blued.blue;
+        assert!((lum - ICON_FLOOR).abs() < 1e-4, "{lum}");
+        assert!(blued.blue > blued.red, "its blue kept");
+    }
 
     /// An icon shows its broad side and hangs its long axis down, a gun's
     /// muzzle (-Z) lowest: a pistol (long in Z, thin in X), a magazine

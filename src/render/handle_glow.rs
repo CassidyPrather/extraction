@@ -50,6 +50,18 @@ pub fn halo_alpha(r: f32) -> f32 {
     GLOW_PEAK * t * t * (3.0 - 2.0 * t)
 }
 
+/// The ambient light of a day in the open (`world::sky`'s).
+pub const DAY_AMBIENT: f32 = 1100.0;
+/// The least of its strength the halo keeps in the dark, so it still
+/// reads with no light at all.
+pub const DARK_FLOOR: f32 = 0.3;
+
+/// The halo's strength in a scene lit `ambient` (its ambient brightness):
+/// full by day, down with the light to [`DARK_FLOOR`].
+pub fn scene_scale(ambient: f32) -> f32 {
+    (ambient / DAY_AMBIENT).clamp(DARK_FLOOR, 1.0)
+}
+
 fn halo_texture(images: &mut Assets<Image>) -> Handle<Image> {
     use bevy::asset::RenderAssetUsages;
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
@@ -89,10 +101,22 @@ fn handle_glows(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: Option<ResMut<Assets<Image>>>,
     time: Res<Time>,
+    ambient: Option<Res<GlobalAmbientLight>>,
 ) {
     let breath =
         1.0 + GLOW_BREATH.0 * (time.elapsed_secs() * GLOW_BREATH.1 * std::f32::consts::TAU).sin();
     let eye = eyes.iter().next().map(|g| g.translation());
+    // As light as the scene: softer in the dark, where a faint green
+    // reads against black (the coordinator's night crops).
+    if let Some((_, mat)) = look.as_ref()
+        && let Some(mut m) = materials.get_mut(mat)
+    {
+        let k = scene_scale(ambient.as_ref().map_or(DAY_AMBIENT, |a| a.brightness));
+        let want = Color::srgb(0.3, 0.8, 0.4).to_linear() * k;
+        if m.base_color.to_linear() != want {
+            m.base_color = want.into();
+        }
+    }
     let mut have = std::collections::HashSet::new();
     for (e, parent, mut t) in &mut glows {
         let Ok((_, _, _, gun_at)) = marked.get(parent.parent()) else {
@@ -152,6 +176,15 @@ fn handle_glows(
 mod tests {
     use super::*;
     use crate::interact::{GrabPoint, GripRole};
+
+    /// Full by day, down with the light, never below the floor.
+    #[test]
+    fn the_halo_follows_the_light() {
+        assert_eq!(scene_scale(DAY_AMBIENT), 1.0);
+        assert_eq!(scene_scale(3000.0), 1.0);
+        assert!((scene_scale(DAY_AMBIENT * 0.5) - 0.5).abs() < 1e-6);
+        assert_eq!(scene_scale(0.0), DARK_FLOOR);
+    }
 
     /// The halo is light: half the green at its middle at most, smoothly
     /// less outward, nothing at the rim.
