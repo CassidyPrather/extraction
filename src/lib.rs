@@ -40,6 +40,7 @@ pub mod qa;
 pub mod radio;
 pub mod raid;
 pub mod render;
+pub mod reopen;
 pub mod report;
 pub mod rig;
 pub mod robot_voice;
