@@ -3530,6 +3530,50 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// A step's words come to you at its station, not only on its board
+    /// (playtest 2026-11-22, 12:33: turned to the range table, the words
+    /// were on the sign behind). Hands empty: a caption in the view. Then,
+    /// pistol in hand, the next step beside it.
+    #[test]
+    fn a_steps_words_come_to_the_hand() {
+        use crate::raid::{Raid, Show};
+        let mut vr = Vr::first_run();
+        let range = crate::onboarding::station_of(Goal::TakePistol);
+        at_station(&mut vr, range, &[]);
+        let st = crate::onboarding::STATIONS[range].at;
+        vr.stand(ground(&vr, st), 0.0);
+        vr.step(240);
+        let comfort = crate::rig::comfort::Comfort::default();
+        let shown = |vr: &Vr, g: Goal| -> Option<Show> {
+            let how = g.how_for(false, &comfort).replace('\n', " ");
+            vr.app
+                .world()
+                .resource::<Raid>()
+                .shown
+                .iter()
+                .find(|(t, _)| *t == how)
+                .map(|(_, s)| *s)
+        };
+        assert_eq!(
+            shown(&vr, Goal::TakePistol),
+            Some(Show::View),
+            "the first step's words in the view"
+        );
+        assert_eq!(shown(&vr, Goal::PutAway), None, "not ahead of its turn");
+        let gun = placed(&mut vr, Placed::RangeGun);
+        let gun_at = at(&vr, gun);
+        vr.stand(ground(&vr, [gun_at.x, gun_at.z + 0.6]), 0.0);
+        vr.step(10);
+        take(&mut vr, Side::Right, gun);
+        vr.step(5);
+        assert!(done(&vr, Goal::TakePistol), "took it");
+        assert_eq!(
+            shown(&vr, Goal::PutAway),
+            Some(Show::ItemNow(gun)),
+            "the next step's words beside the pistol"
+        );
+    }
+
     /// One player, with its two hands, in every access mode: a discharge,
     /// a noise or a robot's look counts each `Player` it finds, and a
     /// second one would be counted twice (Anomalies saw two hits
