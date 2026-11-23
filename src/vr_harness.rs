@@ -6246,6 +6246,61 @@ mod body {
         }
     }
 
+    /// Onboarding's switch (`pockets::PocketHints`): off, no sphere shows
+    /// and what's in a pocket is drawn as itself; on again, they're back.
+    #[test]
+    fn pocket_hints_off_hide_the_spheres_not_the_kit() {
+        use crate::interact::pockets::{PocketHints, PocketSphere, PocketsShown};
+        let (mut vr, _) = standing();
+        let lit = |vr: &mut Vr| -> usize {
+            vr.step(12);
+            let mut q = vr.app.world_mut().query::<&PocketSphere>();
+            q.iter(vr.app.world())
+                .filter(|s| s.look.alpha > 0.05)
+                .count()
+        };
+        assert!(lit(&mut vr) > 0, "on by default");
+        vr.app.world_mut().resource_mut::<PocketHints>().shown = false;
+        assert_eq!(lit(&mut vr), 0, "off: no spheres");
+        assert!(!vr.app.world().resource::<PocketsShown>().0);
+        // A compass put in a pocket while they're off is still drawn.
+        let pocket = {
+            let mut q = vr.app.world_mut().query::<(Entity, &Socket)>();
+            q.iter(vr.app.world())
+                .find(|(_, s)| s.kind == SocketKind::Body(SlotKind::Pocket) && s.occupant.is_none())
+                .map(|(e, _)| e)
+                .expect("an empty hip pocket")
+        };
+        let compass = vr.spawn("compass", Transform::default());
+        vr.app.world_mut().flush();
+        {
+            let world = vr.app.world_mut();
+            let mut commands = world.commands();
+            let mut socket = Socket {
+                kind: SocketKind::Body(SlotKind::Pocket),
+                occupant: None,
+                radius: 0.0,
+                seat: Transform::IDENTITY,
+            };
+            crate::interact::seat_in_socket(&mut commands, compass, pocket, &mut socket);
+            world.flush();
+            world.get_mut::<Socket>(pocket).unwrap().occupant = Some(compass);
+        }
+        vr.step(4);
+        assert_ne!(
+            vr.app.world().get::<Visibility>(compass),
+            Some(&Visibility::Hidden),
+            "off: the compass in the pocket is drawn"
+        );
+        vr.app.world_mut().resource_mut::<PocketHints>().shown = true;
+        assert!(lit(&mut vr) > 0, "on again");
+        assert_eq!(
+            vr.app.world().get::<Visibility>(compass),
+            Some(&Visibility::Hidden),
+            "on: its sphere stands in for it"
+        );
+    }
+
     /// The pocket spheres (`interact::pockets`), in place of the drawn
     /// pouches: every slot but the worn ones shows, faint, at rest; a
     /// magazine held, none is bright till it's at a pouch, and the one
