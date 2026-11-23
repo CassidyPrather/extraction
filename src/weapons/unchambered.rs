@@ -41,15 +41,25 @@ pub fn answers_a_dry_click(gun: &Gun, grab: Option<&Grabbable>) -> bool {
         gun.firearm.def.action,
         ActionKind::Revolver | ActionKind::BreakAction | ActionKind::Crossbow
     ) && rounds_in_feed(gun) > 0
-        && grab.is_some_and(|g| handle_point(g).is_some())
+        && grab.is_some_and(|g| action_point(gun, g).is_some())
 }
 
-/// The action's handle (bolt, slide, charging handle, forend): the first
-/// `Handle` grab point.
-pub fn handle_point(g: &Grabbable) -> Option<&GrabPoint> {
-    g.points
-        .iter()
-        .find(|p| matches!(p.role, GripRole::Handle(_)))
+/// The part that works the action: the bolt, slide or charging handle
+/// (the first `Handle` grab point), or a pump's forend (its support grip:
+/// a pump has no handle of its own).
+pub fn action_point<'a>(gun: &Gun, g: &'a Grabbable) -> Option<&'a GrabPoint> {
+    action_point_of(gun.firearm.def.action == ActionKind::Pump, g)
+}
+
+/// [`action_point`], told whether it's a pump.
+pub fn action_point_of(pump: bool, g: &Grabbable) -> Option<&GrabPoint> {
+    g.points.iter().find(|p| {
+        if pump {
+            p.role == GripRole::Support
+        } else {
+            matches!(p.role, GripRole::Handle(_))
+        }
+    })
 }
 
 fn mark_unchambered(

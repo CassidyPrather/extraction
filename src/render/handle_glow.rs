@@ -8,7 +8,8 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use crate::interact::Grabbable;
-use crate::weapons::unchambered::{NeedsWorking, handle_point};
+use crate::weapons::Gun;
+use crate::weapons::unchambered::{NeedsWorking, action_point_of};
 
 pub struct HandleGlowPlugin;
 
@@ -18,8 +19,11 @@ impl Plugin for HandleGlowPlugin {
     }
 }
 
-/// The glow's size (m across) and how it breathes (share, Hz).
-pub const GLOW_SIZE: f32 = 0.035;
+/// The glow's size (m across) and how it breathes (share, Hz): a halo
+/// round the part, larger than a forend's girth, so it shows where the
+/// handle is buried in wood (a pump's forend; a 3.5 cm glow was lost in
+/// it at night).
+pub const GLOW_SIZE: f32 = 0.065;
 pub const GLOW_BREATH: (f32, f32) = (0.15, 1.5);
 
 /// A glow, on its gun.
@@ -29,7 +33,7 @@ pub struct HandleGlow;
 #[allow(clippy::type_complexity)]
 fn handle_glows(
     mut commands: Commands,
-    marked: Query<(Entity, &Grabbable), With<NeedsWorking>>,
+    marked: Query<(Entity, Option<&Gun>, &Grabbable), With<NeedsWorking>>,
     mut glows: Query<(Entity, &ChildOf, &mut Transform), With<HandleGlow>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -47,11 +51,13 @@ fn handle_glows(
             commands.entity(e).despawn();
         }
     }
-    for (gun, grab) in &marked {
+    for (gun, g, grab) in &marked {
         if have.contains(&gun) {
             continue;
         }
-        let Some(p) = handle_point(grab) else {
+        let pump =
+            g.is_some_and(|g| g.firearm.def.action == extraction_core::firearm::ActionKind::Pump);
+        let Some(p) = action_point_of(pump, grab) else {
             continue;
         };
         let (mesh, mat) = look
