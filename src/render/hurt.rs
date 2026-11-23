@@ -42,6 +42,35 @@ pub const STIM_EDGE: f32 = 0.35;
 pub const LEAST: f32 = 0.25;
 pub const FULL_AT: f32 = 0.25;
 
+/// How far off the line of sight the red begins, and where it's full
+/// (degrees). Inside what a headset shows: the playtest of 22 November
+/// (Index) saw none of it walking into an anomaly to die, its ring then
+/// starting 51° out, past the lenses' sharp middle and nearly off the
+/// view (a headset shows some 45-55° each way).
+pub const EDGE_FROM: f32 = 28.0;
+pub const EDGE_FULL: f32 = 46.0;
+/// How far ahead of the eye the edges hang (m), and their quad's half
+/// width: wide enough to reach past any headset's view (65°).
+const AHEAD: f32 = 0.068;
+const HALF: f32 = 0.15;
+/// Harm with no direction (a burner's steady heat, a shock) adds up over
+/// this long (time constant, s): a burner's every-frame sip shows as what
+/// it is, a second's worth, not as the faintest hit over and over.
+pub const STEADY: f32 = 1.0;
+
+/// The edges' share at `deg` off the line of sight (0..1), before the side
+/// it's on is weighed.
+pub fn ring_at(deg: f32) -> f32 {
+    let t = ((deg - EDGE_FROM) / (EDGE_FULL - EDGE_FROM)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Directionless harm held over [`STEADY`]: `held` a frame of `dt` on,
+/// with `harm` more taken.
+pub fn steady_harm(held: f32, dt: f32, harm: f32) -> f32 {
+    held * (-dt / STEADY).exp() + harm.max(0.0)
+}
+
 /// The edges, in head space: top (a hit from ahead), right, bottom (from
 /// behind), left.
 const SIDES: [Vec2; 4] = [Vec2::Y, Vec2::X, Vec2::NEG_Y, Vec2::NEG_X];
@@ -109,9 +138,8 @@ fn edge_texture(images: &mut Assets<Image>, side: Vec2) -> Handle<Image> {
             // Image rows run down; head space's up is +Y.
             let v = 1.0 - (y as f32 + 0.5) / n as f32 * 2.0;
             let p = Vec2::new(u, v);
-            let r = p.length();
-            let ring = ((r - 0.34) / 0.36).clamp(0.0, 1.0);
-            let ring = ring * ring * (3.0 - 2.0 * ring);
+            let deg = (p.length() * HALF / AHEAD).atan().to_degrees();
+            let ring = ring_at(deg);
             let lobe = p.normalize_or_zero().dot(side).max(0.0).powf(1.5);
             let a = ring * lobe;
             data.extend_from_slice(&[255, 255, 255, (a * 255.0) as u8]);
@@ -153,7 +181,7 @@ fn add_hurt_vignette(
         if !locals.contains(parent.parent()) {
             continue;
         }
-        let quad = meshes.add(Rectangle::new(0.5, 0.5));
+        let quad = meshes.add(Rectangle::new(2.0 * HALF, 2.0 * HALF));
         let mut vignette = HurtVignette::default();
         // At the eye, not out in the air: no fog to take.
         for side in SIDES {
@@ -172,7 +200,7 @@ fn add_hurt_vignette(
             c.spawn((
                 Name::new("Hurt edges"),
                 vignette,
-                Transform::from_xyz(0.0, 0.0, -0.068),
+                Transform::from_xyz(0.0, 0.0, -AHEAD),
                 Visibility::Hidden,
             ))
             .with_children(|c| {
@@ -199,6 +227,7 @@ fn hurt_vignette(
     time: Res<Time>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut last: Local<Option<(f32, f32)>>,
+    mut steady: Local<f32>,
     pace: Option<Res<crate::items::stim::WorldPace>>,
 ) {
     // In a stim, the edges held dim as far as the world's slowed
@@ -231,12 +260,16 @@ fn hurt_vignette(
         if let Some(h) = health {
             // Harm that came with no direction (a fall, an anomaly, the
             // Surge): `since_hit` restarts and hp drops, with no Hurt.
+            let mut harm = 0.0;
             if let Some((was_hp, was_since)) = *last {
                 let new_hit = h.since_hit < was_since || (h.since_hit < 0.1 && h.hp < was_hp);
                 if new_hit && hurts.is_empty() && h.hp < was_hp {
-                    let s = severity(was_hp - h.hp, h.max);
-                    v.hit([s; 4]);
+                    harm = was_hp - h.hp;
                 }
+            }
+            *steady = steady_harm(*steady, dt, harm);
+            if harm > 0.0 {
+                v.hit([severity(*steady, h.max); 4]);
             }
             *last = Some((h.hp, h.since_hit));
         }
@@ -328,5 +361,30 @@ mod tests {
         }
         assert!(v.levels.iter().all(|l| *l <= 1.0));
         assert!(CAP < 0.75);
+    }
+
+    /// The red sits where a headset shows it: none near the middle of the
+    /// view, full well inside the 45° a headset shows at least each way.
+    #[test]
+    fn the_edges_are_inside_the_view() {
+        assert_eq!(ring_at(20.0), 0.0, "clear in the middle");
+        assert!(ring_at(38.0) > 0.4, "showing by 38°: {}", ring_at(38.0));
+        assert_eq!(ring_at(46.0), 1.0, "full by 46°");
+        // The quad reaches past any headset's view.
+        assert!((HALF / AHEAD).atan().to_degrees() > 60.0);
+    }
+
+    /// A burner's heat, a sip every frame, shows as a second's harm: well
+    /// over the faintest hit. A single shock still shows as itself.
+    #[test]
+    fn steady_harm_adds_up() {
+        let dt = 1.0 / 90.0;
+        let mut held = 0.0;
+        for _ in 0..90 {
+            held = steady_harm(held, dt, 14.0 * dt);
+        }
+        assert!(severity(held, 100.0) > 0.3, "{held}");
+        assert!(severity(14.0 * dt, 100.0) <= LEAST);
+        assert_eq!(severity(steady_harm(0.0, dt, 22.0), 100.0), severity(22.0, 100.0));
     }
 }
