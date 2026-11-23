@@ -628,7 +628,10 @@ fn handle_guns(
     ),
     mut checks: ResMut<BraceChecks>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
-    scoped: Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
+    (scoped, bots): (
+        Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
+        Query<(), With<crate::bot::Bot>>,
+    ),
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
@@ -786,7 +789,13 @@ fn handle_guns(
         let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
         let (want, lined) = match head_at {
             Some(h) if !scoped.iter().any(|m| m.0 == gun_e) => {
-                let eye_now = sight_eye(gun, &gt.affine().inverse(), &h);
+                // A bot sights from its head itself (`AimHint`): it has no
+                // eye to put to one side.
+                let eye_now = if bots.contains(held.player) {
+                    gt.affine().inverse().transform_point3(h.translation())
+                } else {
+                    sight_eye(gun, &gt.affine().inverse(), &h)
+                };
                 let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
                 (sight_fix(gun, eye_bare), at_sights(gun, eye_bare))
             }
