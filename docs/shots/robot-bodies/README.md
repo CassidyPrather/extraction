@@ -357,3 +357,11 @@ A holed cell sags in the air; down on the ground the cells lie draped over the g
 | Picture | What it shows |
 |---|---|
 | `../../robots/workers_2/sorter_wreck_dark.png` | Heavy's `robots:sorter!dead,0,3.5,0` (camera `92.9,0,131.9,0,-35`, 700 frames, killed at frame 90, 1920x980): its carriage on its own underside (its head and arm part colliders off once broken), its cyan strip and every lit tell dark (`sorter_look::go_dark`), the arm down in its two pieces |
+
+## The 22 November playtest: knees, plates by hand
+
+A knee's weak-point mark is a lit orange knuckle across the leg, its axle capped dark, not a plain coloured ball; still the one shoot-here orange, the same size and hit volume (`weak_points`). A walker's or drone's plate held and pulled hard comes off in the hand before it kicks free (`grip`), and a plate off a live machine drops as a `robot_plate` to pick up (`armour`).
+
+| Picture | What it shows |
+|---|---|
+| `../../robots/workers_2/knee_knuckles.png` | `robots:walker,90,4` in the training yard by day (`--map training_yard --new-game --no-captions --camera 0,0,36,0,-8`, crop 480x440 of 1920x1080 at 2x): its knees as capped knuckles |
