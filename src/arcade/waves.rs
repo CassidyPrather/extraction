@@ -121,6 +121,21 @@ pub struct Siren {
     pub at: Vec3,
 }
 
+/// A machine of the run that burnt itself out: blind too long, or gone
+/// outside the fence (`spend_machines`). Said to the record.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct MachineSpent {
+    pub machine: Entity,
+    pub blind: bool,
+}
+
+/// A machine blind this long burns itself out (the playtest's walker,
+/// its eye shot out, stood about for a minute and wandered off the map:
+/// a fight with no end).
+pub const BLIND_FOR: f32 = 30.0;
+/// Further than this outside the fence, a machine burns itself out.
+pub const OUT_BY: f32 = 2.0;
+
 /// The run's end, said by the waves to the record.
 #[derive(Message, Clone, Debug)]
 pub struct RunOver {
@@ -133,12 +148,14 @@ impl Plugin for WavesPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Siren>()
             .add_message::<RunOver>()
+            .add_message::<MachineSpent>()
             .add_systems(
                 Update,
                 (
                     hold_the_zone,
                     call_wave,
                     count_down,
+                    spend_machines,
                     clear_wave,
                     light_lamps,
                 )
@@ -264,6 +281,82 @@ fn count_down(
     arcade.phase = RunPhase::Fighting { wave: n };
 }
 
+/// A machine of the run left blind for [`BLIND_FOR`] (its eye shot out)
+/// or wandered [`OUT_BY`] past the fence burns itself out: its core takes
+/// what it holds, through the robots' own damage, so it smokes and wrecks
+/// as any machine does, and it's said. A wave doesn't hang on a machine
+/// that can't find you or has left.
+#[allow(clippy::too_many_arguments)]
+fn spend_machines(
+    machines: Query<(Entity, &Robot, &GlobalTransform), With<WaveMachine>>,
+    parts: Query<(Entity, &crate::robots::RobotPart, &GlobalTransform)>,
+    zone: Res<Zone>,
+    time: Res<Time>,
+    mut blind: Local<std::collections::HashMap<Entity, f32>>,
+    mut hits: MessageWriter<crate::weapons::ballistics::Hit>,
+    mut burnt: MessageWriter<MachineSpent>,
+    mut raid: ResMut<Raid>,
+) {
+    use crate::robots::PartRole;
+    let dt = time.delta_secs();
+    let inner = zone.map.size * 0.5 - zone.map.fence_inset;
+    blind.retain(|e, _| machines.contains(*e));
+    for (e, robot, gt) in &machines {
+        if robot.wrecked {
+            continue;
+        }
+        let eyeless = parts
+            .iter()
+            .any(|(_, p, _)| p.robot == e && p.role == PartRole::Sensor && !p.alive());
+        let t = blind.entry(e).or_insert(0.0);
+        *t = if eyeless { *t + dt } else { 0.0 };
+        let Some(blind_out) = spent(*t, gt.translation(), inner) else {
+            continue;
+        };
+        let out = !blind_out;
+        let Some((core, part, cgt)) = parts
+            .iter()
+            .find(|(_, p, _)| p.robot == e && p.role == PartRole::Core && p.alive())
+        else {
+            continue;
+        };
+        hits.write(crate::weapons::ballistics::Hit {
+            entity: core,
+            point: cgt.translation(),
+            normal: Vec3::Y,
+            velocity: Vec3::ZERO,
+            damage: part.hp + part.max_hp,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: None,
+        });
+        burnt.write(MachineSpent {
+            machine: e,
+            blind: !out,
+        });
+        raid.say(if out {
+            "A machine past the fence burns itself out."
+        } else {
+            "The blind machine stops, and burns itself out."
+        });
+        blind.remove(&e);
+    }
+}
+
+/// Whether a machine blind `blind_for` seconds and standing `at` (inside
+/// a fence `inner` from the middle each way) burns itself out: Some(true)
+/// blind too long, Some(false) out past the fence, None neither.
+pub fn spent(blind_for: f32, at: Vec3, inner: f32) -> Option<bool> {
+    if at.x.abs() > inner + OUT_BY || at.z.abs() > inner + OUT_BY {
+        Some(false)
+    } else if blind_for >= BLIND_FOR {
+        Some(true)
+    } else {
+        None
+    }
+}
+
 /// A wave is cleared when none of its machines stands inside: wrecked,
 /// or gone back out.
 fn clear_wave(
@@ -341,6 +434,24 @@ fn downed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A machine burns itself out blind past BLIND_FOR, or past the fence;
+    /// a moment blind, or at the fence, it doesn't.
+    #[test]
+    fn a_blind_or_strayed_machine_is_spent() {
+        let inner = 20.0;
+        assert_eq!(spent(5.0, Vec3::new(3.0, 0.0, 4.0), inner), None);
+        assert_eq!(spent(BLIND_FOR, Vec3::ZERO, inner), Some(true));
+        assert_eq!(
+            spent(0.0, Vec3::new(inner + 1.0, 0.0, 0.0), inner),
+            None,
+            "at the fence"
+        );
+        assert_eq!(
+            spent(0.0, Vec3::new(0.0, 0.0, -inner - OUT_BY - 0.5), inner),
+            Some(false)
+        );
+    }
 
     #[test]
     fn the_ladder_climbs_and_goes_round() {
