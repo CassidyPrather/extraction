@@ -74,10 +74,23 @@ fn main() -> AppExit {
     if let Some(args) = relaunch
         .or_else(|| restart.map(|to| extraction::relaunch_args(std::env::args().skip(1), &to)))
     {
-        if let Ok(exe) = std::env::current_exe() {
-            if let Err(e) = std::process::Command::new(exe).args(&args).spawn() {
+        // Opened by a game that's waiting: leave it the next one to open.
+        // Else this is the process the player started: open each next game
+        // and wait for it, so the terminal comes back when the last one
+        // closes (`extraction::reopen`).
+        if let Some(path) = extraction::reopen::handoff() {
+            if let Err(e) = extraction::reopen::leave(&path, &args) {
                 eprintln!("couldn't reopen the game: {e}");
             }
+        } else if let Ok(exe) = std::env::current_exe() {
+            let path = extraction::reopen::handoff_path();
+            return AppExit::from_code(extraction::reopen::supervise(args, &path, |args| {
+                std::process::Command::new(&exe)
+                    .args(args)
+                    .env(extraction::reopen::HANDOFF, &path)
+                    .status()
+                    .map(|s| s.code())
+            }));
         }
     }
     exit
