@@ -9,6 +9,10 @@
 //!   crawler sooner, and its emitter charges at whoever held it): the hand
 //!   is knocked off, hard;
 //! - the **heavy** doesn't notice.
+//!
+//! A walker's or a drone's armour plate held and pulled hard comes off in
+//! the hand ([`PRY_STRAIN`], [`PRY_TIME`]): it drops as a plate to carry
+//! off (`armour::shed_plates`), and what's behind it is open.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -29,6 +33,18 @@ pub const DRONE_MOST: f32 = 1200.0;
 /// [`CRAWLER_KICK_AFTER`].
 pub const KICK_AFTER: f32 = 0.6;
 pub const CRAWLER_KICK_AFTER: f32 = 0.3;
+/// A walker's or a drone's plate held and pulled this far from where the
+/// hand took it (m), for [`PRY_TIME`] s, comes off in the hand: quicker
+/// than a walker kicks. (A leg it kicks free; the heavy's plates are its
+/// own.)
+pub const PRY_STRAIN: f32 = 0.1;
+pub const PRY_TIME: f32 = 0.3;
+/// A hand held this near a plate (m) holds the plate, whatever part of the
+/// shell its fingers closed on.
+pub const PRY_REACH: f32 = 0.15;
+/// A yank this far (m) tears it off at once, before the grip would slip
+/// (`fight::SLIP`).
+pub const PRY_SNAP: f32 = 0.22;
 
 pub struct GripPlugin;
 
@@ -128,7 +144,10 @@ fn fight_grips(
     )>,
     mut velocities: Query<&mut LinearVelocity>,
     hands: Query<(Entity, &RobotGrip, &RigHand)>,
+    parts: Query<(Entity, &super::RobotPart, &GlobalTransform)>,
+    mut destroyed: MessageWriter<super::PartDestroyed>,
     mut held: Local<HashMap<Entity, f32>>,
+    mut prying: Local<HashMap<Entity, f32>>,
     mut kicked: MessageWriter<KickedFree>,
     mut charges: MessageWriter<super::indoor::CrawlerCharge>,
     mut haptics: MessageWriter<Haptic>,
@@ -138,10 +157,72 @@ fn fight_grips(
     // Each robot held this tick, once (two hands on it: one fight), and
     // which way the hands would pull it.
     let mut this_tick: HashMap<Entity, (Vec3, Vec3)> = HashMap::new();
+    // Each plate pulled on this tick, and how hard.
+    let mut pulled: HashMap<Entity, (Entity, f32, Vec3)> = HashMap::new();
     for g in gripped.read() {
         let e = this_tick.entry(g.robot).or_insert((Vec3::ZERO, g.at));
         e.0 += g.strain;
+        let p = pulled.entry(g.part).or_insert((g.robot, 0.0, g.at));
+        p.1 = p.1.max(g.strain.length());
     }
+    // A plate pulled hard enough for long enough comes off in the hand.
+    let mut pulled_now: Vec<Entity> = Vec::new();
+    for (held_part, (robot, strain, at)) in pulled {
+        let Ok((r, _, drone, heavy, _, _)) = robots.get(robot) else {
+            continue;
+        };
+        if r.wrecked || heavy || !(drone || r.kind == super::RobotKind::Walker) {
+            continue;
+        }
+        // The plate held: the part the hand closed on, or (a hand on a
+        // plate closes on the shell behind it as often) the robot's plate
+        // nearest where it's held.
+        let plate = match parts.get(held_part) {
+            Ok((e, p, _)) if matches!(p.role, super::PartRole::Armour(_)) => Some((e, p.role)),
+            _ => parts
+                .iter()
+                .filter(|(_, p, _)| {
+                    p.robot == robot && matches!(p.role, super::PartRole::Armour(_))
+                })
+                .map(|(e, p, g)| (e, p.role, g.translation().distance(at)))
+                .filter(|(.., d)| *d < PRY_REACH)
+                .min_by(|a, b| a.2.total_cmp(&b.2))
+                .map(|(e, role, _)| (e, role)),
+        };
+        let Some((part, role)) = plate else {
+            continue;
+        };
+        pulled_now.push(part);
+        let t = prying.entry(part).or_insert(0.0);
+        if strain < PRY_STRAIN {
+            *t = 0.0;
+            continue;
+        }
+        *t += dt;
+        if *t < PRY_TIME && strain < PRY_SNAP {
+            continue;
+        }
+        prying.remove(&part);
+        // (Torn off: `shed_plates` gives it as good as it was.)
+        destroyed.write(super::PartDestroyed {
+            robot,
+            part,
+            role,
+            at,
+        });
+        for (hand, grip, rig) in &hands {
+            if grip.robot != robot || (grip.part != part && grip.part != held_part) {
+                continue;
+            }
+            commands.entity(hand).remove::<RobotGrip>();
+            haptics.write(Haptic {
+                side: rig.side,
+                amplitude: 1.0,
+                seconds: 0.2,
+            });
+        }
+    }
+    prying.retain(|e, _| pulled_now.contains(e));
     // Let go of: the count starts again.
     held.retain(|e, _| this_tick.contains_key(e));
     for (robot, (strain, at)) in this_tick {
@@ -206,6 +287,14 @@ mod tests {
         assert_eq!(fights(false, false, true), Fights::Kick(CRAWLER_KICK_AFTER));
         assert!(CRAWLER_KICK_AFTER < KICK_AFTER);
         assert_eq!(fights(false, true, false), Fights::Ignores);
+    }
+
+    /// A plate comes off a hard pull before the walker kicks free, and a
+    /// yank tears it off before the grip would slip.
+    #[test]
+    fn a_plate_comes_off_before_the_kick_and_the_slip() {
+        assert!(PRY_TIME < KICK_AFTER);
+        assert!(PRY_STRAIN < PRY_SNAP && PRY_SNAP < crate::interact::fight::SLIP);
     }
 
     /// A held drone's thrust beats the arm's pull within a second or so.
