@@ -385,6 +385,9 @@ mod tests {
         }
         assert!(severity(held, 100.0) > 0.3, "{held}");
         assert!(severity(14.0 * dt, 100.0) <= LEAST);
-        assert_eq!(severity(steady_harm(0.0, dt, 22.0), 100.0), severity(22.0, 100.0));
+        assert_eq!(
+            severity(steady_harm(0.0, dt, 22.0), 100.0),
+            severity(22.0, 100.0)
+        );
     }
 }

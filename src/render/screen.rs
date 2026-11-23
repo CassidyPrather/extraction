@@ -600,8 +600,8 @@ fn idle_screens(
                 // Checked for its words, unless it has been redrawn so
                 // often that its ink must be out of `has_ink`'s reach: then
                 // shown as it is rather than drawn for ever.
-                let words = !screen.text.trim().is_empty()
-                    && redrawn.is_none_or(|r| r.0 < MAX_REDRAWS);
+                let words =
+                    !screen.text.trim().is_empty() && redrawn.is_none_or(|r| r.0 < MAX_REDRAWS);
                 read_back(&mut commands, e, &view, words);
             }
         }

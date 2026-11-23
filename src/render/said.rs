@@ -1981,7 +1981,10 @@ mod tests {
             let at = eye + Vec3::NEG_Z * d;
             for facing in [eye, eye + Vec3::NEG_Z] {
                 let pen = Transform::from_translation(at).looking_at(facing, Vec3::Y);
-                assert!(!at_the_neck(&pen, neck), "held up {d} m off, facing {facing}");
+                assert!(
+                    !at_the_neck(&pen, neck),
+                    "held up {d} m off, facing {facing}"
+                );
             }
         }
     }
