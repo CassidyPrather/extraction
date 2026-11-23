@@ -31,6 +31,14 @@ const IDLE: f32 = 4.5;
 /// An anomaly this near the ground's height over it is out where a walk
 /// reaches it (m; one under a building's floor or a site's roof isn't).
 const PROBE_ABOVE_GROUND: f32 = 3.0;
+/// How far off a snare's scorch is seen to be walked round, and how high
+/// the eye is that sees it (m).
+pub(super) const SNARE_SEEN: f32 = 40.0;
+pub(super) const EYE_UP: f32 = 1.6;
+/// How far outside a snare's strike line the body keeps (m): standing on
+/// its scorch's edge, the one-handed newcomer was struck there at 2.19 m
+/// of 2.22 (seed 5, KNOWN_RED row 31).
+pub(super) const SNARE_SPARE: f32 = 0.5;
 /// An anomaly's event this near where the thing was thrown is its answer
 /// (m: a snare's or a lift's reach round its heart).
 const ANSWERED_NEAR: f32 = 6.0;
@@ -1475,6 +1483,38 @@ impl World2<'_, '_> {
     pub(super) fn nearest_is_burner(&self, near: Vec2) -> bool {
         self.nearest_anomaly(near)
             .is_some_and(|(a, _)| a.kind == extraction_core::anomaly::AnomalyKind::Burner)
+    }
+
+    /// Snares a newcomer standing at `from` can see the scorch of: near
+    /// enough, and nothing solid (the ground included) between the eye and
+    /// it. Each as its heart and how far off to keep the body: its strike
+    /// line (`anomaly::snare_strikes_within`, where its scorch is drawn to)
+    /// and a half-metre more.
+    pub(super) fn snares_in_view(&self, from: Vec2) -> Vec<(Vec2, f32)> {
+        use avian3d::prelude::*;
+        let eye = Vec3::new(from.x, self.zone.ground(from.x, from.y) + EYE_UP, from.y);
+        let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+        self.anomalies
+            .iter()
+            .filter(|(a, _)| a.kind == extraction_core::anomaly::AnomalyKind::Snare)
+            .map(|(a, gt)| (a, gt.translation()))
+            .filter(|(_, p)| p.xz().distance(from) < SNARE_SEEN)
+            .filter(|(_, p)| {
+                let at = Vec3::new(p.x, self.zone.ground(p.x, p.z) + 0.3, p.z);
+                let to = at - eye;
+                Dir3::new(to).ok().is_none_or(|dir| {
+                    self.spatial
+                        .cast_ray(eye, dir, to.length() - 0.3, true, &world)
+                        .is_none()
+                })
+            })
+            .map(|(a, p)| {
+                (
+                    p.xz(),
+                    crate::anomaly::snare_strikes_within(a.radius) + SNARE_SPARE,
+                )
+            })
+            .collect()
     }
 
     pub(super) fn inside_anomaly(&self, near: Vec2) -> bool {
