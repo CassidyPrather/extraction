@@ -108,6 +108,12 @@ pub enum First {
     Dazzled,
     /// A machine in a hush went deaf, in your sight.
     Deafened,
+    /// A walker's search mark on the ground, a ring and a cross
+    /// (`robots::recall::SearchMark`), in plain sight: it looked for you
+    /// there, and while it's bright it won't come to a noise there. The
+    /// arcade's tester saw one and nothing said what it was (playtest
+    /// 2026-11-22, 22:47).
+    SearchMark,
     /// A machine stiffened in a frost, in your sight.
     Stiffened,
 }
@@ -175,6 +181,7 @@ pub const ALL: &[First] = &[
     First::Grappler,
     First::Spotter,
     First::Dirigible,
+    First::SearchMark,
     First::Picked(Family::GunCare),
     First::Picked(Family::CleaningRod),
     First::Picked(Family::Matches),
@@ -281,6 +288,9 @@ impl First {
             }
             First::Blinked => &["Truck: \"Stop. Look before you step. You went through a fold.\""],
             First::Well => &["Truck: \"Back out the way you came. Now. Feel that pull?\""],
+            First::SearchMark => {
+                &["Truck: \"That ring? One hunted you there. A noise won't fetch it back.\""]
+            }
             // `{s}`: things in the crate; `{n}`: things left where you fell.
             First::Death => &[
                 "Truck: \"Got you back. Don't ask how. Crate's as you left it: {s} things.\"",
@@ -474,6 +484,7 @@ impl Plugin for FirstsPlugin {
                         worn,
                         anomaly_kit,
                         zone_on_machines,
+                        search_marks_seen,
                         deaths,
                         convoy,
                         asked,
@@ -722,6 +733,51 @@ fn zone_on_machines(
         if let Some(f) = zone_first(ev.hazard, ev.effect, after_me) {
             m.meet(f);
         }
+    }
+}
+
+/// How near a walker's search mark is seen (m): its paint is on the
+/// ground, so nearer than a machine is.
+const MARK_SEEN: f32 = 20.0;
+
+/// A walker's search mark in plain sight (`First::SearchMark`): near, in
+/// front of you, and nothing solid between.
+fn search_marks_seen(
+    marks: Query<&crate::robots::recall::SearchMark>,
+    spatial: avian3d::prelude::SpatialQuery,
+    heads: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut m: Meet,
+) {
+    if marks.is_empty() || m.met(First::SearchMark) {
+        return;
+    }
+    let Some(me) = locals.iter().next() else {
+        return;
+    };
+    let Some(eye) = heads
+        .iter()
+        .find(|(_, c)| c.parent() == me)
+        .map(|(g, _)| *g)
+    else {
+        return;
+    };
+    let world = avian3d::prelude::SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    let from = eye.translation();
+    let seen = marks.iter().any(|mark| {
+        // To a little over the paint: the ground it's on rolls, and a ray
+        // to the paint itself grazes the near slope.
+        let to = mark.at + Vec3::Y * 0.5 - from;
+        to.length() < MARK_SEEN
+            && seen_happen(from, eye.forward().as_vec3(), mark.at)
+            && Dir3::new(to).ok().is_none_or(|dir| {
+                spatial
+                    .cast_ray(from, dir, to.length() - 0.3, true, &world)
+                    .is_none()
+            })
+    });
+    if seen {
+        m.meet(First::SearchMark);
     }
 }
 
@@ -1805,6 +1861,67 @@ mod tests {
             let held = app.world().resource::<Queue>().has_you > 0.0;
             assert_eq!(held, f != First::Minelayer, "{f:?}: go still held {held}");
         }
+    }
+
+    /// A walker's search mark is told the first time it's seen: in front
+    /// of you and near, not behind you (the arcade's tester saw one and
+    /// nothing said what it was).
+    #[test]
+    fn a_search_mark_is_told_when_seen() {
+        use crate::robots::recall::SearchMark;
+        let mut app = app();
+        // Out of the truck's bed (its cab and sides hide the ground near
+        // by), onto open ground to the side.
+        {
+            let w = app.world_mut();
+            let mut q = w.query_filtered::<&mut Transform, With<LocalPlayer>>();
+            let to = q.single(w).unwrap().translation + Vec3::X * 40.0;
+            let y = w.resource::<crate::world::Zone>().ground(to.x, to.z);
+            q.single_mut(w).unwrap().translation = Vec3::new(to.x, y + 0.05, to.z);
+        }
+        for _ in 0..10 {
+            app.update();
+        }
+        let eye = {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>();
+            *q.single(app.world()).unwrap()
+        };
+        let ahead = eye.forward().as_vec3() * Vec3::new(1.0, 0.0, 1.0);
+        let ground = |app: &App, p: Vec3| {
+            let z = app.world().resource::<crate::world::Zone>();
+            Vec3::new(p.x, z.ground(p.x, p.z), p.z)
+        };
+        let mark = |app: &mut App, at: Vec3| {
+            let at = ground(app, at);
+            app.world_mut().spawn(SearchMark {
+                at,
+                since: 0.0,
+                strength: 1.0,
+            });
+        };
+        let behind = eye.translation() - ahead.normalize() * 12.0;
+        mark(&mut app, behind);
+        for _ in 0..5 {
+            app.update();
+        }
+        assert!(
+            !app.world().resource::<Firsts>().met(First::SearchMark),
+            "one behind you isn't seen"
+        );
+        // Near: the valley's ground rolls, and a rise hides paint further off.
+        let before = eye.translation() + ahead.normalize() * 5.0;
+        mark(&mut app, before);
+        for _ in 0..5 {
+            app.update();
+        }
+        assert!(
+            app.world().resource::<Firsts>().met(First::SearchMark),
+            "one in front of you is (eye {:.1}, mark by {:.1})",
+            eye.translation(),
+            before
+        );
     }
 
     /// The Zone on a machine is told as you see it: before you and near,
