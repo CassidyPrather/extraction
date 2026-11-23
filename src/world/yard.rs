@@ -12,6 +12,11 @@
 //!   `buildings::swing_doors`); tagged `gate_N` in the map, it carries
 //!   [`YardGate`] `{ index: N }`. Set its `Door::open` to open or shut it.
 //!   No hand opens one: a press, a grip and a palm all leave it be.
+//! - `yard_hoarding` (6 m) and `yard_hoarding_2` (2 m): a bay's gate line
+//!   boarded up [`HOARDING`] high, above a standing eye, so from inside a
+//!   bay you see that bay and, through its gate, the next; not every lamp
+//!   and board down the field (the playtest of 22 November). The same runs
+//!   as the fences, posts every 2 m, a solid board face; nothing breaks.
 //! - `yard_store`: a squat concrete store, 4 m by 3 m, its flat roof
 //!   [`STORE_ROOF`] up: low enough for a lift's pop to land you on it
 //!   (#108), its rim kerbed pale so the roof reads as somewhere to land.
@@ -57,6 +62,8 @@ pub fn geo(id: &str) -> Option<Geo> {
     match id {
         "yard_fence" => run(&mut b, -3.0, 3.0),
         "yard_fence_2" => run(&mut b, -1.0, 1.0),
+        "yard_hoarding" => hoarding(&mut b, -3.0, 3.0),
+        "yard_hoarding_2" => hoarding(&mut b, -1.0, 1.0),
         "yard_gate" => gate(&mut b),
         "yard_store" => store(&mut b),
         _ => return None,
@@ -155,6 +162,63 @@ fn rails(b: &mut Builder, x0: f32, x1: f32) {
             Mat::Timber,
         );
     }
+}
+
+/// The hoarding's height: over a tall player's eye (1.85 m), and over
+/// every station's props, so a bay's ground is hidden from the next; the
+/// lamps (`onboarding::LAMP_Y`, 2.32 m) show over it only from near.
+pub const HOARDING: f32 = 2.1;
+
+/// Posts every [`BAY`] from `x0` to `x1`, a face of boards on their north
+/// side from a hand above the ground to the top, a rail along the top and
+/// another at the middle on the south side.
+fn hoarding(b: &mut Builder, x0: f32, x1: f32) {
+    let n = ((x1 - x0) / BAY).round() as usize;
+    let h = HOARDING;
+    for k in 0..=n {
+        // Inset at the ends as a fence run's are (`end_inset`): runs laid
+        // end to end don't draw the same post twice.
+        let inset = end_inset(k, n);
+        b.bx(
+            Vec3::new(POST - 2.0 * inset, h + 0.05 - inset, POST - 2.0 * inset),
+            Vec3::new(x0 + k as f32 * BAY, (h + 0.05 - inset) * 0.5, 0.0),
+            Mat::Timber,
+        );
+    }
+    // The boards, standing on the ground (it can't be crawled under), a
+    // hair short of the posts' tops.
+    let face = 0.04;
+    b.bx(
+        Vec3::new(x1 - x0 + POST, h - 0.02, face),
+        Vec3::new((x0 + x1) * 0.5, (h - 0.02) * 0.5, -(POST + face) * 0.5),
+        Mat::Planks,
+    );
+    for y in [h * 0.5, h - 0.08] {
+        b.bx(
+            Vec3::new(x1 - x0, RAIL.0, RAIL.1),
+            Vec3::new((x0 + x1) * 0.5, y, (POST + RAIL.1) * 0.5),
+            Mat::Timber,
+        );
+    }
+}
+
+/// How high a lamp hangs on a gate's flanking post (m): under the
+/// hoarding's top, above a standing eye.
+pub const GATE_POST_LAMP_Y: f32 = 1.9;
+
+/// The posts either side of a yard gate where its rails meet the gate
+/// line's hoarding, world (x, z): 2 m each way along the line from the
+/// gate's middle, the one to its local -x (west, unturned) first. A lamp
+/// on one hangs [`GATE_POST_LAMP_Y`] up, on whichever face looks into the
+/// bay it lights (`onboarding`'s trail).
+pub fn gate_post_anchors(at: Vec2, rot_deg: f32) -> [Vec2; 2] {
+    // Placements turn by -rot about y (`buildings`): local +x goes to
+    // (cos, sin) of it.
+    let r = rot_deg.to_radians();
+    let along = Vec2::new(r.cos(), r.sin());
+    // Half the gate's 4 m gap in the line (its footprint).
+    let h = 2.0;
+    [at - along * h, at + along * h]
 }
 
 /// The gate's posts, the rails out from them to the fence either side
@@ -298,6 +362,24 @@ mod tests {
         }
     }
 
+    /// A hoarding is solid, breaks nowhere, and stands over a tall
+    /// player's eye along its whole run.
+    #[test]
+    fn a_yard_hoarding_hides_the_next_bay() {
+        for (id, len) in [("yard_hoarding", 6.12), ("yard_hoarding_2", 2.12)] {
+            let g = geo(id).unwrap();
+            assert!(g.breakables.is_empty(), "{id}: breakables");
+            assert!(
+                g.pieces.iter().all(|p| p.collide),
+                "{id}: a piece that isn't solid"
+            );
+            let f = extraction_core::map::prefab_footprint(id);
+            assert_eq!(f[0], len, "{id}: footprint length");
+            assert!(f[1] >= HOARDING && HOARDING > 1.9, "{id}: {f:?}");
+            assert!(extraction_core::map::is_fence(id));
+        }
+    }
+
     /// The gate fills its 4 m in the line: rails out to ±2 m, a 3 m leaf
     /// between posts, hung low enough that nothing walks under it.
     #[test]
@@ -313,6 +395,41 @@ mod tests {
         assert_eq!(extraction_core::map::prefab_footprint("yard_gate")[0], 4.0);
         assert_eq!(gate_index("gate_3"), Some(3));
         assert_eq!(gate_index("wait_north_post"), None);
+    }
+
+    /// Every yard gate has a hoarding's post at both its anchors: the
+    /// gate line is boarded right up to its rails.
+    #[test]
+    fn each_yard_gate_has_a_hoarding_post_either_side() {
+        let map =
+            extraction_core::map::MapDef::from_ron(extraction_core::map::TRAINING_YARD).unwrap();
+        let ends: Vec<Vec2> = map
+            .placements
+            .iter()
+            .filter(|p| p.prefab.starts_with("yard_hoarding"))
+            .flat_map(|p| {
+                let half = extraction_core::map::prefab_footprint(&p.prefab)[0] * 0.5 - 0.06;
+                let r = p.rot.to_radians();
+                let along = Vec2::new(r.cos(), r.sin());
+                let at = Vec2::new(p.at[0], p.at[1]);
+                [at - along * half, at + along * half]
+            })
+            .collect();
+        let gates: Vec<_> = map
+            .placements
+            .iter()
+            .filter(|p| p.prefab == "yard_gate")
+            .collect();
+        assert!(gates.len() >= 6);
+        for g in gates {
+            for a in gate_post_anchors(Vec2::new(g.at[0], g.at[1]), g.rot) {
+                assert!(
+                    ends.iter().any(|e| e.distance(a) < 0.05),
+                    "{:?}: no hoarding post at {a}",
+                    g.tag
+                );
+            }
+        }
     }
 
     /// The store's roof is where the core's footprint says, low enough for

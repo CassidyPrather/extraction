@@ -3530,6 +3530,31 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// Gone down at the shimmer, you come round by it, not back at the
+    /// start in the truck (playtest 2026-11-22, 16:04).
+    #[test]
+    fn down_in_the_yard_you_wake_by_your_station() {
+        use crate::raid::{Phase, Raid};
+        let mut vr = Vr::first_run();
+        let shimmer = crate::onboarding::station_of(Goal::Probe);
+        at_station(&mut vr, shimmer, &[]);
+        let st = Vec2::from(crate::onboarding::STATIONS[shimmer].at);
+        vr.stand(ground(&vr, [st.x - 3.0, st.y - 2.0]), 0.0);
+        vr.step(10);
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::Down { left: 0.2 };
+        vr.step(90);
+        assert!(
+            !matches!(vr.app.world().resource::<Raid>().phase, Phase::Down { .. }),
+            "came round"
+        );
+        let feet = super::tests_feet(&vr);
+        assert!(
+            feet.xz().distance(st) < 4.0,
+            "by the shimmer's post, not the truck: feet at {feet:.1}"
+        );
+        assert!(said(&vr, "brought you back"));
+    }
+
     /// A step's words come to you at its station, not only on its board
     /// (playtest 2026-11-22, 12:33: turned to the range table, the words
     /// were on the sign behind). Hands empty: a caption in the view. Then,
@@ -4415,8 +4440,8 @@ mod onboarding {
     }
 
     /// On the track to the gate, a beam at head height between two stacks
-    /// of crates: walking at it upright, you're stopped; ducked, you go
-    /// under, and it's noticed.
+    /// of crates: told about it as you come up, walking at it upright
+    /// you're stopped; ducked, you go under, and it's noticed.
     #[test]
     fn ducking_under_the_beam() {
         let mut vr = Vr::first_run();
@@ -4425,6 +4450,7 @@ mod onboarding {
         vr.stand(ground(&vr, [beam[0], beam[1] + 2.0]), 0.0);
         vr.head(Vec3::new(0.0, 1.65, 0.0));
         vr.step(20);
+        assert!(said(&vr, "Low beam"), "told as you come up to it");
         let walk = |vr: &mut Vr, frames: usize| {
             vr.app
                 .world_mut()
