@@ -1498,8 +1498,26 @@ pub(super) fn direct_raid(
     // handed newcomer walked onto a charged one's scorch and stood there,
     // struck twice, KNOWN_RED row 31).
     if let Some(Task::WalkTo { to, within }) = bot.tasks.front().cloned() {
-        let round = round_snares(&world.snares_in_view(here), here, vec![to]);
-        if round.len() > 1 {
+        let snares = world.snares_in_view(here);
+        // A place to stand inside one's keep (a waypoint on the way, or a
+        // spot to look round from), unless it's there to take something
+        // up: out to its edge. Seed 5's newcomer stood to look round
+        // 2.71 m from a snare's heart, its strike line and a half-metre
+        // being 2.72, and walking a stretch that ends inside the keep is
+        // taken as going there.
+        let through = !matches!(
+            bot.tasks.get(1),
+            Some(Task::Grab { .. } | Task::PickUp { .. } | Task::GrabFromHere { .. })
+        );
+        let mut to2 = to;
+        if through && let Some(&(heart, keep)) = snares.iter().find(|(h, k)| to.distance(*h) < *k) {
+            let side = (to - heart)
+                .try_normalize()
+                .unwrap_or((to - here).perp().normalize_or(Vec2::X));
+            to2 = heart + side * keep * 1.15;
+        }
+        let round = round_snares(&snares, here, vec![to2]);
+        if round.len() > 1 || to2 != to {
             state.note(
                 now,
                 Kind::Learned,
@@ -1512,7 +1530,7 @@ pub(super) fn direct_raid(
                     within: 1.0,
                 })
                 .collect();
-            t.push(Task::WalkTo { to, within });
+            t.push(Task::WalkTo { to: to2, within });
             bot.tasks.pop_front();
             super::second_hour::cut_in(&mut bot, t);
         }
