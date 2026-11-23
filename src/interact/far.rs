@@ -30,6 +30,29 @@ pub const TOSSED_SPEED: f32 = 1.5;
 /// How near a closed, empty hand a thing in flight is caught (m): about a
 /// hand's breadth past its palm.
 pub const TOSS_CATCH: f32 = 0.18;
+/// A thing just let go isn't caught for this long (s): a throw with the
+/// other hand closed beside it, in a two-handed wind-up, would be caught
+/// straight back.
+pub const LET_GRACE: f32 = 0.4;
+
+/// When each thing was last let go (time, s).
+#[derive(Resource, Default)]
+pub struct RecentlyLet(pub std::collections::HashMap<Entity, f32>);
+
+/// Notes what's let go, and forgets what was let go a while ago.
+pub(super) fn note_lets(
+    mut events: MessageReader<InteractEvent>,
+    mut lets: ResMut<RecentlyLet>,
+    time: Res<Time>,
+) {
+    let now = time.elapsed_secs();
+    lets.0.retain(|_, t| now - *t < LET_GRACE);
+    for ev in events.read() {
+        if let InteractEvent::Released { item, .. } = ev {
+            lets.0.insert(*item, now);
+        }
+    }
+}
 
 /// What can be called: loose things lying about.
 type Loose<'w, 's> = Query<
@@ -62,6 +85,10 @@ pub(super) fn far_grab(
     time: Res<Time>,
     mut actions: MessageWriter<HandAction>,
     mut events: MessageWriter<InteractEvent>,
+    (lets, climbers): (
+        Res<RecentlyLet>,
+        Query<(), With<crate::gadgets::climbing::Climbing>>,
+    ),
 ) {
     if *driver != RigDriver::Xr {
         return;
@@ -99,12 +126,15 @@ pub(super) fn far_grab(
             // A closed, empty hand catches a thing flying into it (a gun
             // tossed to the other hand, to change grip): it needn't close
             // on the very frame it arrives (playtest 2026-11-22, 19:16).
-            if !busy && hand.grip_down {
+            // (Not a hand on a ladder or a ledge: it'd let go of the
+            // climb.)
+            if !busy && hand.grip_down && !climbers.contains(player) {
                 let at = hand.world.translation;
                 let caught = loose
                     .iter()
                     .filter(|(e, gt, vis)| {
                         vis != &Some(&Visibility::Hidden)
+                            && !lets.0.contains_key(e)
                             && bodies
                                 .get(*e)
                                 .is_ok_and(|(_, v, _)| v.0.length() > TOSSED_SPEED)

@@ -243,7 +243,7 @@ fn build_icon(
 /// the shader's dimming): a blued pistol in its own colour was gone
 /// against the ground in its sphere. Darker is lifted with grey, its hue
 /// kept.
-pub const ICON_FLOOR: f32 = 0.18;
+pub const ICON_FLOOR: f32 = 0.4;
 
 /// A part's colour as its icon draws it: its own, lifted to
 /// [`ICON_FLOOR`] if darker.
@@ -402,7 +402,7 @@ mod tests {
     /// to the floor, its hue kept.
     #[test]
     fn a_dark_part_is_lifted_a_light_one_kept() {
-        let brass = LinearRgba::rgb(0.5, 0.3, 0.08);
+        let brass = LinearRgba::rgb(0.75, 0.5, 0.15);
         assert_eq!(icon_tint(brass), brass);
         let blued = icon_tint(LinearRgba::rgb(0.01, 0.012, 0.02));
         let lum = 0.2126 * blued.red + 0.7152 * blued.green + 0.0722 * blued.blue;
