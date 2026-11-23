@@ -74,6 +74,9 @@ struct RaidsDir(std::path::PathBuf);
 #[derive(Resource)]
 struct Yard;
 
+/// Least time between two marks (s).
+pub const MARK_GAP: f32 = 1.0;
+
 /// F9 / both sticks: note the moment.
 fn marks(
     mut commands: Commands,
@@ -84,16 +87,23 @@ fn marks(
     windows: Query<(), With<bevy::window::PrimaryWindow>>,
     mut held: Local<bool>,
     mut count: Local<u32>,
+    time: Res<Time>,
+    mut last: Local<Option<f32>>,
 ) {
     let Some((input, gt)) = players.iter().next() else {
         return;
     };
-    // Once per press (VR reports the sticks held).
+    // Once per press (VR reports the sticks held), and not again within
+    // MARK_GAP: two sticks held down together, one lifts for a moment and
+    // it's a new press (the yard's marks 2 and 3 came 0.68 s apart,
+    // playtest 2026-11-22).
     let pressed = input.mark && !*held;
     *held = input.mark;
-    if !pressed {
+    let now = time.elapsed_secs();
+    if !pressed || last.is_some_and(|t| now - t < MARK_GAP) {
         return;
     }
+    *last = Some(now);
     *count += 1;
     let p = gt.translation();
     warn!(
@@ -296,6 +306,57 @@ fn close_recording(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Both sticks held, one lifting for a moment, is one mark; held
+    /// again a second later, a second (playtest 2026-11-22: marks 2 and 3
+    /// 0.68 s apart).
+    #[test]
+    fn a_bounced_mark_is_one_mark() {
+        let dir = std::env::temp_dir()
+            .join(format!("extraction-test-{}", std::process::id()))
+            .join("marks");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let opts = LaunchOptions {
+            robots: false,
+            save: Some(dir.join("career.ron")),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let set = |app: &mut App, on: bool| {
+            let mut q = app
+                .world_mut()
+                .query_filtered::<&mut crate::rig::RigInput, With<LocalPlayer>>();
+            q.single_mut(app.world_mut()).unwrap().mark = on;
+            app.update();
+        };
+        let marks = |app: &App| {
+            app.world()
+                .resource::<Raid>()
+                .log
+                .iter()
+                .filter(|(t, _)| t.starts_with("Mark "))
+                .count()
+        };
+        set(&mut app, true);
+        set(&mut app, true);
+        set(&mut app, false);
+        set(&mut app, true);
+        set(&mut app, false);
+        assert_eq!(marks(&app), 1, "a bounce is the same mark");
+        for _ in 0..120 {
+            app.update();
+        }
+        set(&mut app, true);
+        set(&mut app, false);
+        assert_eq!(marks(&app), 2, "a second later, a second mark");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_raid_you_play_is_recorded() {
