@@ -5,8 +5,8 @@
 //!
 //! The icon in a full slot's sphere is what's in it, small and white: the
 //! thing's own meshes merged into one (built once a kind, so a sphere's
-//! icon is one draw), turned so its broad side faces the eye, swaying a
-//! little.
+//! icon is one draw), turned so its broad side faces the eye and its long side hangs
+//! down (a gun barrel down, [`icon_face`]), swaying a little.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -213,13 +213,7 @@ fn build_icon(
         |(lo, hi), p| (lo.min(Vec3::from(*p)), hi.max(Vec3::from(*p))),
     );
     let size = hi - lo;
-    let face = if size.x <= size.y && size.x <= size.z {
-        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
-    } else if size.y <= size.z {
-        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
-    } else {
-        Quat::IDENTITY
-    };
+    let face = icon_face(size);
     let mut mesh = Mesh::new(
         PrimitiveTopology::TriangleList,
         RenderAssetUsages::RENDER_WORLD,
@@ -228,6 +222,34 @@ fn build_icon(
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(Indices::U32(indices));
     Some((mesh, (lo + hi) * 0.5, size.max_element().max(0.01), face))
+}
+
+/// How an icon of a thing `size` (its own frame) is turned in its sphere:
+/// its thinnest axis to +Z (its broad side to the eye), then about that so
+/// its longest hangs straight down, the end that leads first (a gun's
+/// muzzle, -Z) at the bottom: a pistol in the holster barrel down, as the
+/// playtest of 2026-11-22 asked, not lying sideways.
+pub fn icon_face(size: Vec3) -> Quat {
+    let face = if size.x <= size.y && size.x <= size.z {
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+    } else if size.y <= size.z {
+        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
+    let long = if size.z >= size.x && size.z >= size.y {
+        Vec3::NEG_Z
+    } else if size.y >= size.x {
+        Vec3::NEG_Y
+    } else {
+        Vec3::NEG_X
+    };
+    let v = face * long;
+    if v.truncate().length_squared() < 1e-6 {
+        return face;
+    }
+    let roll = -std::f32::consts::FRAC_PI_2 - v.y.atan2(v.x);
+    Quat::from_rotation_z(roll) * face
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -336,3 +358,38 @@ fn icons(
 /// An icon's mesh: its tag follows its holder's.
 #[derive(Component)]
 struct IconTag;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An icon shows its broad side and hangs its long axis down, a gun's
+    /// muzzle (-Z) lowest: a pistol (long in Z, thin in X), a magazine
+    /// (tall in Y), a can (any).
+    #[test]
+    fn an_icon_hangs_long_side_down_broad_side_out() {
+        for size in [
+            Vec3::new(0.03, 0.13, 0.19),
+            Vec3::new(0.02, 0.12, 0.06),
+            Vec3::new(0.2, 0.05, 0.08),
+        ] {
+            let q = icon_face(size);
+            let thin = if size.x <= size.y && size.x <= size.z {
+                Vec3::X
+            } else if size.y <= size.z {
+                Vec3::Y
+            } else {
+                Vec3::Z
+            };
+            assert!((q * thin).z.abs() > 0.999, "{size}: broad side out");
+            let long = if size.z >= size.x && size.z >= size.y {
+                Vec3::NEG_Z
+            } else if size.y >= size.x {
+                Vec3::NEG_Y
+            } else {
+                Vec3::NEG_X
+            };
+            assert!((q * long).y < -0.999, "{size}: hangs down, {}", q * long);
+        }
+    }
+}

@@ -18,3 +18,7 @@ posed thing counts as held for the detector (`anomaly::detector`).
 The ring line is 2.6 mm (0.37°) at 0.4 m. The smallest ring's hole is
 3.4 mm (0.49°). Both clear the 0.35° incidental floor
 (`render::legibility::tests::the_field_screens_rings_clear_the_incidental_floor`).
+
+Reshot on 23 November, with Anomalies' lit rings on a dark face
+(dec2e744). By day and by night the rings read green on the screen's dark
+glass, and the light top left reads orange.

@@ -1556,12 +1556,14 @@ mod tests {
     /// a step on its edge is struck, a step off it is safe.
     #[test]
     fn a_snares_scorch_is_where_it_strikes() {
-        use super::visuals::{MARK_PAD, mark_radius};
+        use super::visuals::{MARK_FADE, MARK_PAD, mark_radius};
         for r in [1.2_f32, 1.92, 2.5] {
             let drawn = mark_radius(AnomalyKind::Snare, r);
             assert_eq!(drawn, snare_strikes_within(r), "radius {r}");
-            // The disc carries the texture's fade past its drawn edge.
-            assert!(MARK_PAD * drawn > drawn * 1.02);
+            // The disc carries the texture's fade past its drawn edge, and
+            // the fade straddles it.
+            assert!(MARK_PAD > MARK_FADE.1);
+            assert!(MARK_FADE.0 < 1.0 && MARK_FADE.1 > 1.0);
             // The body test, as the discharge runs it: chest 0.9 m up,
             // the heart 0.8 m up.
             let heart = Vec3::new(0.0, 0.8, 0.0);
