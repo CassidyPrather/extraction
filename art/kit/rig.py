@@ -24,7 +24,7 @@ backpack.glb (lid closed) and backpack_open.glb (lid open), in the pack's space 
 0.1, centred; the harness straps on its -Z face): `pack` (a bag open on its
 outer face, +Z, hollow so what's in it shows when it's open),
 `pack_lid_closed` and `pack_lid_open` (the front panel over the opening,
-zipped shut, or folded down from its bottom edge).
+zipped shut, or rolled down to its bottom edge and strapped).
 
 Slot positions, from body.rs (`slot_layout`), torso space:
 holster (0.22, -0.42, 0.02); pouches (-0.14 + 0.09 k, -0.16, -0.155);
@@ -308,7 +308,14 @@ def mount():
 def pack():
     p = Part("pack")
     hx, hy, hz = 0.175, 0.245, 0.105
-    outline = fillet([(-hx, -hz), (hx, -hz), (hx, hz), (-hx, hz)], 0.04, 4)
+    # Its corners rounded no more than its walls are thick, so the
+    # cavity's square corners stay inside them: rounded 40 mm, the cut
+    # broke through the curves in slits down both sides, at the rim and at
+    # the back (the 22 November playtest: "I can see straight through the
+    # backpack").
+    # (Each at least the ends' 12 mm bevel, which folds round a tighter one.)
+    outline = fillet([(-hx, -hz), (hx, -hz), (hx, hz), (-hx, hz)], [0.02, 0.02, 0.013, 0.013],
+                     4)
     p.prism(outline, -hy, hy, "Canvas", axis="y", bevel=0.012, segs=2)
     # A panel loader: it opens on its outer face (+Z, away from your back),
     # so held in front of you it's the cavity you see, not the top of the
@@ -316,8 +323,8 @@ def pack():
     # grey-green cloth, a shade off the canvas, so the inside reads as a
     # space and what's in it shows.
     inner = Part("pack_inside")
-    w = 0.007
-    io = fillet([(-hx + w, -hy + w), (hx - w, -hy + w), (hx - w, hy - w), (-hx + w, hy - w)],
+    w, wy = 0.014, 0.016  # the walls (past the rim's rounding); the ends (past their bevel)
+    io = fillet([(-hx + w, -hy + wy), (hx - w, -hy + wy), (hx - w, hy - wy), (-hx + w, hy - wy)],
                 0.034, 4)
     inner.prism(io, -hz + 0.012, hz + 0.05, "GreyGreen", axis="z")
     p.cut(inner, paint=True)
@@ -327,12 +334,19 @@ def pack():
 def pack_extras():
     p = Part("pack_extras")
     hx, hy, hz = 0.175, 0.245, 0.105
-    # Side pockets (the big outer pocket rides on the front panel, `lid`).
+    # Compression straps round its sides, two a side, each with its
+    # buckle (the side pockets that were here read as pockets you couldn't
+    # use: "decorative", the playtest said; the big outer pocket rides on
+    # the front panel, `lid`).
     for sx in (-1, 1):
-        prof = fillet([(-0.05, -0.2), (0.05, -0.2), (0.05, -0.02), (-0.05, -0.02)], 0.02, 3)
-        p.prism([(z, y) for z, y in prof], sx * hx - 0.01 * sx, sx * (hx + 0.035), "Canvas",
-                axis="x", bevel=0.008, segs=2)
-        p.box((0.006, 0.03, 0.09), (sx * (hx + 0.037), -0.04, 0.0), "Leather", bevel=0.0015, segs=1)
+        for y in (-0.13, 0.09):
+            # (Sunk a millimetre into the wall: on its face they'd fight.)
+            p.box((0.004, 0.026, 2 * hz - 0.03), (sx * (hx + 0.001), y, 0.0), "Leather",
+                  bevel=0.0012, segs=1)
+            p.box((0.008, 0.034, 0.026), (sx * (hx + 0.006), y, 0.035), "Iron", bevel=0.002,
+                  segs=1)
+            p.box((0.003, 0.02, 0.016), (sx * (hx + 0.0105), y, 0.035), "Leather",
+                  bevel=0.0008, segs=1)
     # Shoulder straps on its back (-Z) face, padded at the top.
     for sx in (-1, 1):
         x = 0.085 * sx
@@ -346,14 +360,16 @@ def pack_extras():
 
 def lid(open_):
     """The front panel over the opening, with the big outer pocket on it;
-    open, it's unzipped round the top and sides and folded down, hanging
-    from the bottom edge."""
-    p = Part("pack_lid_open" if open_ else "pack_lid_closed")
+    open, it's unzipped round the top and sides and rolled down to the
+    bottom edge, strapped there (folded out whole it hung the bag's length
+    again in front of you: "long and clunky", the playtest said)."""
     hx, hy, hz = 0.175, 0.245, 0.105
+    if open_:
+        return lid_rolled(hx, hy, hz)
+    p = Part("pack_lid_closed")
     outline = fillet([(-hx - 0.004, -hy - 0.004), (hx + 0.004, -hy - 0.004),
                       (hx + 0.004, hy + 0.004), (-hx - 0.004, hy + 0.004)], 0.04, 4)
-    hinge = (0.0, -hy, hz)
-    xf = RX(math.pi - 0.2, about=hinge) if open_ else None
+    xf = None
     p.prism(outline, hz - 0.004, hz + 0.016, "Canvas", axis="z", bevel=0.007, segs=2, xf=xf)
     prof = fillet([(-0.13, -0.22), (0.13, -0.22), (0.13, -0.04), (-0.13, -0.04)], 0.03, 3)
     p.prism(prof, hz + 0.01, hz + 0.05, "Canvas", axis="z", bevel=0.01, segs=2, xf=xf)
@@ -364,6 +380,26 @@ def lid(open_):
     # The zip pull, at the panel's top corner.
     p.box((0.008, 0.02, 0.004), (hx - 0.03, hy - 0.005, hz + 0.018), "Iron", bevel=0.001,
           segs=1, xf=xf)
+    return p
+
+
+def lid_rolled(hx, hy, hz):
+    """The front panel rolled down to the opening's bottom edge: a roll of
+    canvas along it, its edge showing as a lip, held by two straps."""
+    p = Part("pack_lid_open")
+    r, y, z = 0.03, -hy + 0.026, hz + 0.024
+    roll = T(0.0, y, z) @ RY(math.pi / 2)
+    p.cyl(r, -hx + 0.006, hx - 0.006, "Canvas", segs=20, xf=roll, chamfer=0.006)
+    # The panel's edge where it leaves the roll, up into the bag's rim.
+    p.box((2 * hx - 0.02, 0.006, 0.03), (0.0, y + 0.012, z - r + 0.012), "Canvas", bevel=0.002,
+          segs=1)
+    # A spiral's step on its end faces, so it reads rolled, not a log.
+    for sx in (-1, 1):
+        p.tube(r * 0.62, r * 0.55, sx * (hx - 0.008) - 0.002, sx * (hx - 0.008) + 0.002,
+               "Leather", segs=16, xf=roll)
+    for x in (-0.07, 0.07):
+        p.tube(r + 0.004, r - 0.001, x - 0.011, x + 0.011, "Leather", segs=20, xf=roll)
+        p.box((0.026, 0.008, 0.02), (x, y, z + r + 0.004), "Iron", bevel=0.0015, segs=1)
     return p
 
 
