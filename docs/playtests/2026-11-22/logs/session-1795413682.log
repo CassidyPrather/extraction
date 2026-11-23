@@ -1,0 +1,145 @@
+2026-11-23T06:01:22.488700Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Windows 10 Home", kernel: "19045", cpu: "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz", core_count: "6", memory: "63.9 GiB" }
+2026-11-23T06:01:22.616310Z  INFO bevy_mod_openxr::openxr::init: Loaded OpenXR runtime: SteamVR/OpenXR 2.18.4
+2026-11-23T06:01:22.616488Z  INFO bevy_mod_openxr::openxr::init: Using system: SteamVR/OpenXR : lighthouse
+2026-11-23T06:01:23.104297Z  INFO extraction::weapons::trigger: triggers: breaks assume a trigger reads 1 at its end, each leaving 0.1 before it
+2026-11-23T06:01:23.114896Z  INFO extraction::render::timeline: load: plugins building at 0.91 s (frame 0)
+2026-11-23T06:01:23.140489Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-11-23T06:01:23.140644Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-11-23T06:01:23.141630Z  INFO extraction::report: report: textures: BC7 where baked
+2026-11-23T06:01:23.142286Z  INFO bevy_winit::system: Creating new window Extraction (65v0)
+2026-11-23T06:01:23.313801Z  INFO extraction::render::timeline: load: startup begins (window, GPU) at 1.10 s (frame 0)
+2026-11-23T06:01:23.313823Z  INFO extraction::persist: saving to C:\Users\prath\AppData\Roaming\extraction\career.ron
+2026-11-23T06:01:23.665682Z  INFO extraction::world: zone `Marrow Creek` built in 352 ms (389x389 heightmap)
+2026-11-23T06:01:23.668417Z  INFO extraction::report: report: runtime: SteamVR/OpenXR 2.18.4
+2026-11-23T06:01:23.668590Z  INFO extraction::report: report: headset: SteamVR/OpenXR : lighthouse
+2026-11-23T06:01:23.668771Z  INFO extraction::rig::xr: eyes: 1800x1800 (60% of the runtime's 2980x2980)
+2026-11-23T06:01:23.668928Z  INFO extraction::report: report: eye targets: about 1084 MB (2 x 2980x2980, MSAA 4x)
+2026-11-23T06:01:23.669070Z  INFO extraction::rig::xr: eyes: holding the frame rate, from 1800x1800 up to 2980x2980
+2026-11-23T06:01:23.671896Z  INFO extraction::player: spawning local player at [22, 20.789047, 148.5] (ground 20.79)
+2026-11-23T06:01:23.682859Z  INFO extraction::audio: sound bank: 106 sets
+2026-11-23T06:01:23.698976Z  INFO extraction::world::trees: 55 trunk colliders
+2026-11-23T06:01:23.723744Z  INFO extraction::world::trees: 769 trees scattered in 45 ms
+2026-11-23T06:01:23.772022Z  INFO extraction::world::rocks: 388 rocks scattered in 92 ms
+2026-11-23T06:01:23.778425Z  INFO extraction::render::first_sight: preload: 294 models asked for at start (render::first_sight)
+2026-11-23T06:01:23.779211Z  INFO extraction::world::buildings: 189 building loot spots, 31 holds
+2026-11-23T06:01:23.794349Z  INFO extraction::wildlife::flock: a flock of 15 Rooks on the ranger_tower at [-146, 38, -82]
+2026-11-23T06:01:23.814841Z  INFO extraction::wildlife::flock: a flock of 16 Rooks on the ranger_tower at [91, 30, 144]
+2026-11-23T06:01:23.815377Z  INFO extraction::wildlife::flock: a flock of 10 Rooks on the boxcar at [57, 25, -140]
+2026-11-23T06:01:23.815504Z  INFO extraction::wildlife::flock: a flock of 18 Rooks on the cabin_log at [-71, 26, 113]
+2026-11-23T06:01:23.815606Z  INFO extraction::wildlife::flock: a flock of 16 Rooks on the shed at [38, 21, 38]
+2026-11-23T06:01:23.815739Z  INFO extraction::wildlife: wildlife: 36 perch sites (1505 perches), 5 flocks, in 147 ms
+2026-11-23T06:01:23.864629Z  INFO extraction::persist: new game: ignoring any existing save
+2026-11-23T06:01:23.864921Z  INFO extraction::persist: no career at C:\Users\prath\AppData\Roaming\extraction\career.ron; starting fresh
+2026-11-23T06:01:23.865139Z  INFO extraction::persist: loaded save: 16 items, cycle 0, 3600 s to the Surge
+2026-11-23T06:01:23.919946Z  INFO extraction::robots::walker: navigation grid built in 55 ms
+2026-11-23T06:01:23.934454Z  INFO extraction::items::loot: 303 items rolled into 189 building loot spots
+2026-11-23T06:01:23.934677Z  INFO extraction::items::loot: 26 items rolled into 31 container holds
+2026-11-23T06:01:23.945941Z  INFO extraction::world::scenes: 16 staged scenes
+2026-11-23T06:01:23.947369Z  INFO extraction::render::timeline: load: startup done (zone, terrain, nav, props) at 1.74 s (frame 0)
+2026-11-23T06:01:23.947442Z  INFO firewheel_cpal: Attempting to start CPAL audio stream...
+2026-11-23T06:01:23.988358Z  INFO firewheel_cpal: Starting output audio stream with device "Some(DeviceId(Wasapi, "{0.0.0.00000000}.{e23a65e7-d231-43f7-b38b-c86a6a192421}"))" with configuration StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(480) } (native sample format: F32)
+2026-11-23T06:01:24.012250Z  INFO extraction::persist: restored 14 items
+2026-11-23T06:01:24.024318Z  INFO extraction::render::timeline: load: first frame at 1.81 s (frame 1)
+2026-11-23T06:01:24.030561Z  INFO extraction::rig::xr: headset: starting the session (the loading view until the world is in)
+2026-11-23T06:01:24.031401Z  INFO extraction::render::timeline: load: headset session asked for at 1.82 s (frame 1)
+2026-11-23T06:01:24.407894Z  INFO extraction::report: report: build: 0.1.0+g5ccaabcc
+2026-11-23T06:01:24.408171Z  INFO extraction::report: report: valley: marrow_creek
+2026-11-23T06:01:24.408271Z  INFO extraction::report: report: gpu: NVIDIA GeForce RTX 3080 (Vulkan, driver NVIDIA 610.88)
+2026-11-23T06:01:25.935628Z  INFO extraction::progression: job 1: Scout { map: "marrow_creek", place: "Old farm", at: [89.5, 88.5], seen: false }
+2026-11-23T06:01:28.304279Z  INFO extraction::world::trees: forest: foliage fetched (cards, impostors)
+2026-11-23T06:01:28.316166Z  INFO extraction::world::trees: forest: 769 trees in 55 chunks
+2026-11-23T06:01:28.400925Z  WARN bevy_light: Point lights and/or spot lights are present, but no entity has `ShadowLodOrigin`, and no camera that renders to the window has been found. Consider using the `ShadowLodOrigin` component to set a LOD origin.
+2026-11-23T06:01:28.414365Z  INFO extraction::render::timeline: load: a 3D view drawing at 6.20 s (frame 1)
+2026-11-23T06:01:28.672583Z  INFO extraction::rig::xr: XR session created: driving the rig from the headset
+2026-11-23T06:01:28.672741Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-11-23T06:01:28.672915Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-11-23T06:01:29.203251Z  INFO extraction::wildlife::herd: 2 Deers about [24, -75]
+2026-11-23T06:01:29.211565Z  INFO extraction::wildlife::ducks: a raft of 6 mallards on the water at [146, 34]
+2026-11-23T06:01:29.211729Z  INFO extraction::wildlife::ducks: a raft of 8 mallards on the water at [-156, -34]
+2026-11-23T06:01:29.236306Z  INFO extraction::robots::doors: 71 doorways in 33 buildings
+2026-11-23T06:01:29.237380Z  INFO extraction::robots::sorter: director: the Sorter wakes in the Depot's sorting hall
+2026-11-23T06:01:29.237434Z  INFO extraction::robots::indoor: director: a crawler on its round at [-12, 12, 63]
+2026-11-23T06:01:29.237618Z  INFO extraction::robots::indoor: director: a crawler on its round at [-12, 12, 63]
+2026-11-23T06:01:29.237723Z  INFO extraction::robots::indoor: director: a crawler on its round at [-83, 15, 5]
+2026-11-23T06:01:29.237825Z  INFO extraction::robots::indoor: director: a crawler on its round at [-122, 16, -110]
+2026-11-23T06:01:29.237930Z  INFO extraction::robots::indoor: director: a crawler on its round at [-128, 12, -87]
+2026-11-23T06:01:29.238094Z  INFO extraction::robots::indoor: director: a crawler on its round at [-116, 12, -79]
+2026-11-23T06:01:29.238295Z  INFO extraction::robots::indoor: director: a crawler on its round at [-154, 8, -83]
+2026-11-23T06:01:29.242652Z  INFO extraction::robots::director: director: 0.085 km² to walk, 3 roaming at most
+2026-11-23T06:01:29.695431Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attaching 1 sessions
+2026-11-23T06:01:29.695802Z  INFO extraction::rig::loading: loading view: held on 9573v0 ("Marrow Creek")
+2026-11-23T06:01:29.695934Z  INFO extraction::rig::loading: loading view: held on 9574v0 ("Marrow Creek")
+2026-11-23T06:01:29.696065Z  INFO extraction::rig::loading: loading view: held on 12805v0 ("Marrow Creek")
+2026-11-23T06:01:29.816959Z  INFO extraction::render::timeline: load: first frame rendered at 7.61 s (frame 2)
+2026-11-23T06:01:29.888280Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attached sessions!
+2026-11-23T06:01:30.708338Z  INFO bevy_mod_openxr::openxr::init: entered XR state IDLE
+2026-11-23T06:01:30.708497Z  INFO bevy_mod_openxr::openxr::init: entered XR state READY
+2026-11-23T06:01:32.244330Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-11-23T06:01:32.244475Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T06:01:32.244608Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-11-23T06:01:32.250007Z  INFO extraction::rig::xr: input: fingers tracked (Left hand first)
+2026-11-23T06:01:32.406544Z  INFO extraction::rig::xr: input: left hand profile none
+2026-11-23T06:01:32.406699Z  INFO extraction::rig::xr: input: right hand profile none
+2026-11-23T06:01:32.413756Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"TRAINING YARD","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:32.413917Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"NEW CAREER","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:32.414031Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"EXTRACTION","what":"Camp","x":27.7,"z":173.6}
+2026-11-23T06:01:32.997872Z  INFO extraction: executors: the valley's in, the main world on one thread
+2026-11-23T06:01:32.997899Z  INFO extraction::render::timeline: load: buildings dressed (props in) at 10.79 s (frame 9)
+2026-11-23T06:01:32.998169Z  INFO extraction::render::timeline: load: every model loaded (preload landed) at 10.79 s (frame 9)
+2026-11-23T06:01:33.087290Z  INFO extraction::raid: raid: Driver: "The yard's kit stays at the yard. Yours is in the crate."
+2026-11-23T06:01:33.203159Z  INFO extraction::rig::xr: input: left hand profile /interaction_profiles/valve/index_controller
+2026-11-23T06:01:33.203309Z  INFO extraction::rig::xr: input: right hand profile /interaction_profiles/valve/index_controller
+2026-11-23T06:01:33.502687Z  INFO extraction::render::timeline: load: every material and pipeline ready (ground and buildings drawn) at 11.29 s (frame 18)
+2026-11-23T06:01:33.549589Z  INFO extraction::world::impostors: impostor captured (256x640)
+2026-11-23T06:01:33.577785Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-11-23T06:01:33.603573Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-11-23T06:01:33.630713Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T06:01:33.643035Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T06:01:33.654559Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T06:01:33.667541Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T06:01:33.687901Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T06:01:33.709169Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T06:01:33.760036Z  INFO extraction::rig::loading: loading view: lifted at 11.6 s, the world in
+2026-11-23T06:01:33.781083Z  INFO extraction::render::timeline: load: forest streamed, impostors captured at 11.57 s (frame 20)
+2026-11-23T06:01:33.781267Z  INFO extraction::render::timeline: load: everything in at 11.57 s (frame 20)
+2026-11-23T06:01:33.782425Z  INFO extraction::render::warmup: warm-up: shelf put away as the world shows (19 frames, 176 kinds)
+2026-11-23T06:01:33.783061Z  INFO extraction::render::timeline: load: warm-up shelf done at 11.57 s (frame 20)
+2026-11-23T06:01:33.783173Z  INFO extraction::render::warmup: warm-up: 176 kinds of thing shelved (319 entries) over 19 frames: {"BoltMaterial": 1, "FogBeamMaterial": 2, "HaloMaterial": 1, "HazeExt>": 1, "ImpostorCut>": 1, "MarkFog>": 2, "ParticleMaterial": 2, "PocketMaterial": 1, "RainMaterial": 1, "SearchMaterial": 1, "ShaftMaterial": 1, "SheetMaterial": 1, "SkyMaterial": 1, "StandardMaterial": 51, "Sway>": 3, "TerrainExt>": 1, "TreeSway>": 2, "WaterExt>": 1, "XrayMaterial": 1, "model": 11, "unworn": 90}
+2026-11-23T06:01:34.073997Z  INFO extraction: frames: 25 in 10 s, mean 400.7 ms, 1% 4652.1 ms, worst 4652.1 ms (AtBase)
+2026-11-23T06:01:34.074176Z  INFO extraction: gpu: 2.1 ms a frame (clustering 1.1, ui 0.2, bin_unpacking 0.2, early_mesh_preprocessing 0.2, upscaling 0.2, main_opaque_pass_3d 0.1)
+2026-11-23T06:01:34.074327Z  INFO extraction::render::budget: cpu: main 245.9 ms a frame (1% 4398.3), physics 2.9 (1% 8.6), render world 53.4 (1% 743.5)
+2026-11-23T06:01:34.982516Z  INFO extraction::capstone: capstone: key_marrow lies at [84.5, -26.0]
+2026-11-23T06:01:36.207682Z  INFO extraction::rig::xr: input: Left grip works
+2026-11-23T06:01:36.756451Z  INFO extraction::rig::xr: input: Right grip works
+2026-11-23T06:01:38.720021Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 10.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:01:43.583375Z  INFO extraction::rig::xr: input: Left primary works
+2026-11-23T06:01:44.077103Z  INFO extraction: frames: 477 in 10 s, mean 21.0 ms, 1% 38.1 ms, worst 53.5 ms (AtBase)
+2026-11-23T06:01:44.077252Z  INFO extraction: gpu: 6.7 ms a frame (main_opaque_pass_3d 5.3, bin_unpacking 0.5, tonemapping 0.4, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:01:44.077394Z  INFO extraction::render::budget: cpu: main 11.4 ms a frame (1% 24.3), physics 2.3 (1% 3.9), render world 10.6 (1% 18.6)
+2026-11-23T06:01:47.855751Z  INFO extraction::rig::xr: input: Left stick works
+2026-11-23T06:01:48.730368Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.5 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:01:49.316882Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"TRAINING YARD","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:49.352350Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"NEW CAREER","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:51.328877Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"EXTRACTION","what":"Camp","x":27.7,"z":173.6}
+2026-11-23T06:01:52.593911Z  INFO extraction::sim::observe: PLAYTEST read {"name":"Comfort card","says":"TURNING","what":"Setting","x":27.6,"z":173.3}
+2026-11-23T06:01:52.594102Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"PACK UP","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:53.012558Z  INFO extraction::sim::observe: PLAYTEST read {"name":"Comfort card","says":"VIGNETTE","what":"Setting","x":27.7,"z":173.2}
+2026-11-23T06:01:53.572812Z  INFO extraction::sim::observe: PLAYTEST read {"name":"Comfort card","says":"SOUND","what":"Setting","x":27.7,"z":173.2}
+2026-11-23T06:01:54.076839Z  INFO extraction: frames: 479 in 10 s, mean 20.9 ms, 1% 29.1 ms, worst 30.2 ms (AtBase)
+2026-11-23T06:01:54.077010Z  INFO extraction: gpu: 7.7 ms a frame (main_opaque_pass_3d 6.2, bin_unpacking 0.6, tonemapping 0.4, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:01:54.077178Z  INFO extraction::render::budget: cpu: main 10.9 ms a frame (1% 13.3), physics 2.2 (1% 3.7), render world 11.0 (1% 18.6)
+2026-11-23T06:01:55.993426Z  INFO extraction::robots::director: director: walker to work site [40.0, -95.0]
+2026-11-23T06:01:58.165889Z  INFO extraction::sim::observe: PLAYTEST press {"card":"NewCareer","name":"","says":"SURE? AGAIN","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:58.757135Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.3 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:01:59.517810Z  INFO extraction::camp: camp: on to training_yard (new career)
+2026-11-23T06:01:59.517961Z  INFO extraction::rig::loading: loading view: leaving for training_yard
+2026-11-23T06:01:59.518149Z  INFO extraction::sim::observe: PLAYTEST press {"card":"NewCareer","name":"","says":"SURE? AGAIN","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:01:59.519150Z  INFO extraction::rig::loading: loading view: held on 12805v0 ("On to Training Yard")
+2026-11-23T06:01:59.519346Z  INFO extraction::rig::loading: loading view: held on 9573v0 ("On to Training Yard")
+2026-11-23T06:01:59.519441Z  INFO extraction::rig::loading: loading view: held on 9574v0 ("On to Training Yard")
+2026-11-23T06:01:59.623517Z  INFO extraction::camp: camp: on to training_yard (new career)
+2026-11-23T06:01:59.623646Z  INFO extraction::rig::loading: loading view: leaving for training_yard
+2026-11-23T06:01:59.623814Z  INFO extraction::sim::observe: PLAYTEST press {"card":"NewCareer","name":"","says":"SURE? AGAIN","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T06:02:00.398174Z  INFO extraction::render::timeline: load: leaving (exit asked) at 38.19 s (frame 1291)
+2026-11-23T06:02:00.779668Z  WARN bevy_render::diagnostic::internal: Failed to download render statistics buffer: Error occurred when trying to async map a buffer
+2026-11-23T06:02:01.525135Z  INFO extraction::render::timeline: load: closed (world dropped) at 39.32 s (frame 1291)

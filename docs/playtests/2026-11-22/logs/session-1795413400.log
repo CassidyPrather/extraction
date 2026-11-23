@@ -1,0 +1,1043 @@
+2026-11-23T05:56:40.761914Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Windows 10 Home", kernel: "19045", cpu: "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz", core_count: "6", memory: "63.9 GiB" }
+2026-11-23T05:56:41.144080Z  INFO bevy_mod_openxr::openxr::init: Loaded OpenXR runtime: SteamVR/OpenXR 2.18.4
+2026-11-23T05:56:41.144317Z  INFO bevy_mod_openxr::openxr::init: Using system: SteamVR/OpenXR : lighthouse
+2026-11-23T05:56:41.836929Z  INFO extraction::weapons::trigger: triggers: breaks assume a trigger reads 1 at its end, each leaving 0.1 before it
+2026-11-23T05:56:41.850930Z  INFO extraction::render::timeline: load: plugins building at 1.84 s (frame 0)
+2026-11-23T05:56:41.876186Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-11-23T05:56:41.876344Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-11-23T05:56:41.877682Z  INFO extraction::report: report: textures: BC7 where baked
+2026-11-23T05:56:41.878469Z  INFO bevy_winit::system: Creating new window Extraction (65v0)
+2026-11-23T05:56:42.042553Z  INFO extraction::persist: saving to C:\Users\prath\AppData\Roaming\extraction\career.ron
+2026-11-23T05:56:42.042542Z  INFO extraction::render::timeline: load: startup begins (window, GPU) at 2.03 s (frame 0)
+2026-11-23T05:56:42.358253Z  INFO extraction::world: zone `Marrow Creek` built in 316 ms (389x389 heightmap)
+2026-11-23T05:56:42.368798Z  INFO extraction::player: spawning local player at [22, 20.789047, 148.5] (ground 20.79)
+2026-11-23T05:56:42.380228Z  INFO extraction::world::trees: 55 trunk colliders
+2026-11-23T05:56:42.385272Z  INFO extraction::audio: sound bank: 106 sets
+2026-11-23T05:56:42.392326Z  INFO extraction::world::trees: 769 trees scattered in 31 ms
+2026-11-23T05:56:42.429103Z  INFO extraction::render::first_sight: preload: 294 models asked for at start (render::first_sight)
+2026-11-23T05:56:42.463422Z  INFO extraction::world::rocks: 388 rocks scattered in 91 ms
+2026-11-23T05:56:42.510975Z  INFO extraction::world::buildings: 189 building loot spots, 31 holds
+2026-11-23T05:56:42.558953Z  INFO extraction::wildlife::flock: a flock of 20 Rooks on the farmhouse at [109, 25, 80]
+2026-11-23T05:56:42.600292Z  INFO extraction::report: report: runtime: SteamVR/OpenXR 2.18.4
+2026-11-23T05:56:42.745680Z  INFO extraction::wildlife::flock: a flock of 17 Rooks on the mast_hut at [-47, 32, -64]
+2026-11-23T05:56:42.746039Z  INFO extraction::report: report: headset: SteamVR/OpenXR : lighthouse
+2026-11-23T05:56:42.746311Z  INFO extraction::wildlife::flock: a flock of 16 Rooks on the chimney at [66, 66, 188]
+2026-11-23T05:56:42.746679Z  INFO extraction::rig::xr: eyes: 1800x1800 (60% of the runtime's 2980x2980)
+2026-11-23T05:56:42.747077Z  INFO extraction::wildlife::flock: a flock of 18 Rooks on the cabin_log at [-111, 26, 113]
+2026-11-23T05:56:42.747380Z  INFO extraction::report: report: eye targets: about 1084 MB (2 x 2980x2980, MSAA 4x)
+2026-11-23T05:56:42.747649Z  INFO extraction::wildlife::flock: a flock of 15 Rooks on the chimney at [-132, 66, -169]
+2026-11-23T05:56:42.747816Z  INFO extraction::rig::xr: eyes: holding the frame rate, from 1800x1800 up to 2980x2980
+2026-11-23T05:56:42.747928Z  INFO extraction::wildlife: wildlife: 36 perch sites (1505 perches), 5 flocks, in 387 ms
+2026-11-23T05:56:42.812645Z  WARN extraction::persist: C:\Users\prath\AppData\Roaming\extraction\career.ron: marrow_creek: 2 item value(s) mended
+2026-11-23T05:56:42.813093Z  INFO extraction::persist: loaded save: 409 items, cycle 0, 2068 s to the Surge
+2026-11-23T05:56:42.858148Z  INFO extraction::robots::walker: navigation grid built in 56 ms
+2026-11-23T05:56:42.863506Z  INFO extraction::world::scenes: 16 staged scenes
+2026-11-23T05:56:42.865556Z  INFO extraction::render::timeline: load: startup done (zone, terrain, nav, props) at 2.85 s (frame 0)
+2026-11-23T05:56:42.865677Z  INFO firewheel_cpal: Attempting to start CPAL audio stream...
+2026-11-23T05:56:42.908479Z  INFO firewheel_cpal: Starting output audio stream with device "Some(DeviceId(Wasapi, "{0.0.0.00000000}.{652340c5-b6f9-45c1-9d3f-e5b40b1e72df}"))" with configuration StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(480) } (native sample format: F32)
+2026-11-23T05:56:42.932756Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.933722Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.933833Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.933972Z  WARN extraction::persist: save: unknown item "hand_flare", skipped
+2026-11-23T05:56:42.934078Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.934584Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.935153Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.936867Z  WARN extraction::persist: save: unknown item "chemlight", skipped
+2026-11-23T05:56:42.943934Z  INFO extraction::persist: restored 375 items
+2026-11-23T05:56:42.977606Z  INFO extraction::render::timeline: load: first frame at 2.96 s (frame 1)
+2026-11-23T05:56:43.040563Z  INFO extraction::rig::xr: headset: starting the session (the loading view until the world is in)
+2026-11-23T05:56:43.041598Z  INFO extraction::render::timeline: load: headset session asked for at 3.03 s (frame 1)
+2026-11-23T05:56:43.645307Z  INFO extraction::report: report: build: 0.1.0+g5ccaabcc
+2026-11-23T05:56:43.645490Z  INFO extraction::report: report: valley: marrow_creek
+2026-11-23T05:56:43.781975Z  INFO extraction::report: report: gpu: NVIDIA GeForce RTX 3080 (Vulkan, driver NVIDIA 610.88)
+2026-11-23T05:56:47.055872Z  INFO extraction::raid: raid: Driver: "The old farm's still waiting. East, 160 m."
+2026-11-23T05:56:47.538556Z  INFO extraction::world::trees: forest: foliage fetched (cards, impostors)
+2026-11-23T05:56:47.552169Z  INFO extraction::world::trees: forest: 769 trees in 55 chunks
+2026-11-23T05:56:47.647277Z  WARN bevy_light: Point lights and/or spot lights are present, but no entity has `ShadowLodOrigin`, and no camera that renders to the window has been found. Consider using the `ShadowLodOrigin` component to set a LOD origin.
+2026-11-23T05:56:47.658974Z  INFO extraction::render::timeline: load: a 3D view drawing at 7.64 s (frame 1)
+2026-11-23T05:56:47.827426Z  INFO extraction::render::timeline: load: first frame rendered at 7.81 s (frame 1)
+2026-11-23T05:56:49.464323Z  INFO extraction::rig::xr: XR session created: driving the rig from the headset
+2026-11-23T05:56:49.464344Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-11-23T05:56:49.464576Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-11-23T05:56:50.026086Z  INFO extraction::wildlife::herd: 4 Deers about [22, -55]
+2026-11-23T05:56:50.033840Z  INFO extraction::wildlife::ducks: a raft of 3 mallards on the water at [-158, -34]
+2026-11-23T05:56:50.034091Z  INFO extraction::wildlife::ducks: a raft of 8 mallards on the water at [144, 34]
+2026-11-23T05:56:50.057203Z  INFO extraction::robots::doors: 71 doorways in 33 buildings
+2026-11-23T05:56:50.058266Z  INFO extraction::robots::indoor: director: a crawler on its round at [-12, 12, 63]
+2026-11-23T05:56:50.058313Z  INFO extraction::robots::sorter: director: the Sorter wakes in the Depot's sorting hall
+2026-11-23T05:56:50.058425Z  INFO extraction::robots::indoor: director: a crawler on its round at [-12, 12, 63]
+2026-11-23T05:56:50.058596Z  INFO extraction::robots::indoor: director: a crawler on its round at [-83, 15, 5]
+2026-11-23T05:56:50.058869Z  INFO extraction::robots::indoor: director: a crawler on its round at [-122, 16, -110]
+2026-11-23T05:56:50.059021Z  INFO extraction::robots::indoor: director: a crawler on its round at [-128, 12, -87]
+2026-11-23T05:56:50.059186Z  INFO extraction::robots::indoor: director: a crawler on its round at [-116, 12, -79]
+2026-11-23T05:56:50.059405Z  INFO extraction::robots::indoor: director: a crawler on its round at [-154, 8, -83]
+2026-11-23T05:56:50.063563Z  INFO extraction::robots::director: director: 0.085 km² to walk, 3 roaming at most
+2026-11-23T05:56:50.432161Z  INFO extraction::rig::xr: window: a card ("In the headset"); the eyes draw to the headset alone
+2026-11-23T05:56:50.434553Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attaching 1 sessions
+2026-11-23T05:56:50.434720Z  INFO extraction::rig::loading: loading view: held on 10086v0 ("Marrow Creek")
+2026-11-23T05:56:50.434951Z  INFO extraction::rig::loading: loading view: held on 10087v0 ("Marrow Creek")
+2026-11-23T05:56:50.559114Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attached sessions!
+2026-11-23T05:56:50.753024Z  INFO bevy_mod_openxr::openxr::init: entered XR state IDLE
+2026-11-23T05:56:50.753164Z  INFO bevy_mod_openxr::openxr::init: entered XR state READY
+2026-11-23T05:56:50.753445Z  WARN bevy_time: time_system did not receive the time from the render world! Calculations depending on the time may be incorrect.
+2026-11-23T05:56:50.773795Z  WARN extraction::items::lost: item 2970v0 fell out of the world at [-161.10336, 17.31021, 15.979479]; put back at [-161.10336, 35.18745, 15.979479]
+2026-11-23T05:56:50.774038Z  WARN extraction::items::lost: item 2929v0 fell out of the world at [135.98532, 13.221257, -7.008224]; put back at [135.98532, 18.24096, -7.008224]
+2026-11-23T05:56:50.774155Z  WARN extraction::items::lost: item 2930v0 fell out of the world at [193.34557, 18.58611, 165.95378]; put back at [193.34557, 28.73616, 165.95378]
+2026-11-23T05:56:50.774267Z  WARN extraction::items::lost: item 2931v0 fell out of the world at [-182.89998, 26.88669, -111.68011]; put back at [-182.89998, 34.189808, -111.68011]
+2026-11-23T05:56:50.774376Z  WARN extraction::items::lost: item 2932v0 fell out of the world at [-182.19995, 25.874783, 187.91998]; put back at [-182.19995, 31.551725, 187.91998]
+2026-11-23T05:56:50.774491Z  WARN extraction::items::lost: item 2933v0 fell out of the world at [160.5, 18.30424, 124.62002]; put back at [160.5, 22.561275, 124.62002]
+2026-11-23T05:56:50.774696Z  WARN extraction::items::lost: item 2934v0 fell out of the world at [194.61127, 18.329708, 163.81908]; put back at [194.61127, 28.806057, 163.81908]
+2026-11-23T05:56:50.774846Z  WARN extraction::items::lost: item 2936v0 fell out of the world at [-20.82136, 12.506845, 103.08455]; put back at [-20.82136, 19.150951, 103.08455]
+2026-11-23T05:56:50.774963Z  WARN extraction::items::lost: item 2938v0 fell out of the world at [177.55556, 20.690851, -207.09474]; put back at [177.55556, 31.29325, -207.09474]
+2026-11-23T05:56:50.775084Z  WARN extraction::items::lost: item 2939v0 fell out of the world at [86.66519, 22.543552, 238.7144]; put back at [86.66519, 29.649353, 238.7144]
+2026-11-23T05:56:50.775220Z  WARN extraction::items::lost: item 2940v0 fell out of the world at [36.061478, 22.831633, -245.49359]; put back at [36.061478, 32.45286, -245.49359]
+2026-11-23T05:56:50.775340Z  WARN extraction::items::lost: item 2941v0 fell out of the world at [225.0285, 20.469683, -226.85027]; put back at [225.0285, 33.038414, -226.85027]
+2026-11-23T05:56:50.775463Z  WARN extraction::items::lost: item 2942v0 fell out of the world at [108.632576, 22.716892, -246.68428]; put back at [108.632576, 32.246323, -246.68428]
+2026-11-23T05:56:50.775682Z  WARN extraction::items::lost: item 2943v0 fell out of the world at [108.407646, 22.720263, -246.78542]; put back at [108.407646, 32.262287, -246.78542]
+2026-11-23T05:56:50.775844Z  WARN extraction::items::lost: item 2944v0 fell out of the world at [-205.66696, 24.772953, 18.545748]; put back at [-205.66696, 35.34875, 18.545748]
+2026-11-23T05:56:50.775975Z  WARN extraction::items::lost: item 2945v0 fell out of the world at [-183.36612, 26.621687, -109.65356]; put back at [-183.36612, 34.591866, -109.65356]
+2026-11-23T05:56:50.776157Z  WARN extraction::items::lost: item 2946v0 fell out of the world at [191.11963, 20.690851, -204.75925]; put back at [191.11963, 32.628193, -204.75925]
+2026-11-23T05:56:50.776259Z  WARN extraction::items::lost: item 2947v0 fell out of the world at [35.715782, 22.831635, -245.4337]; put back at [35.715782, 32.474617, -245.4337]
+2026-11-23T05:56:50.776449Z  WARN extraction::items::lost: item 2633v0 fell out of the world at [-264.90973, 11.004835, -203.01924]; put back at [-264.90973, 34.81792, -203.01924]
+2026-11-23T05:56:50.776568Z  WARN extraction::items::lost: item 2948v0 fell out of the world at [-186.01125, 26.051779, 192.78903]; put back at [-186.01125, 31.934267, 192.78903]
+2026-11-23T05:56:50.776766Z  WARN extraction::items::lost: item 2640v0 fell out of the world at [193.31947, 18.680765, 143.38914]; put back at [193.31947, 28.833315, 143.38914]
+2026-11-23T05:56:50.776941Z  WARN extraction::items::lost: item 2972v0 fell out of the world at [-188.42165, 13.2002125, 39.384613]; put back at [-188.42165, 38.39154, 39.384613]
+2026-11-23T05:56:50.777046Z  WARN extraction::items::lost: item 2971v0 fell out of the world at [0.6000605, 12.201344, 104.52003]; put back at [0.6000605, 18.89342, 104.52003]
+2026-11-23T05:56:50.777191Z  WARN extraction::items::lost: item 2962v0 fell out of the world at [192.69736, 20.477856, -212.34532]; put back at [192.69736, 32.83242, -212.34532]
+2026-11-23T05:56:50.777312Z  WARN extraction::items::lost: item 2965v0 fell out of the world at [35.833298, 23.098064, -230.3544]; put back at [35.833298, 32.467476, -230.3544]
+2026-11-23T05:56:50.777422Z  WARN extraction::items::lost: item 2952v0 fell out of the world at [-221.60002, 19.785534, -221.78001]; put back at [-221.60002, 34.81792, -221.78001]
+2026-11-23T05:56:50.777523Z  WARN extraction::items::lost: item 2953v0 fell out of the world at [-12.200031, 11.901343, 103.51998]; put back at [-12.200031, 20.180405, 103.51998]
+2026-11-23T05:56:50.777636Z  WARN extraction::items::lost: item 2954v0 fell out of the world at [-188.60005, 13.203712, 39.520004]; put back at [-188.60005, 38.36535, 39.520004]
+2026-11-23T05:56:50.777736Z  WARN extraction::items::lost: item 2955v0 fell out of the world at [192.51883, 20.460354, -212.20976]; put back at [192.51883, 32.81026, -212.20976]
+2026-11-23T05:56:50.777829Z  WARN extraction::items::lost: item 2956v0 fell out of the world at [-185.39993, 12.900211, 42.920044]; put back at [-185.39993, 40.174416, 42.920044]
+2026-11-23T05:56:50.777919Z  WARN extraction::items::lost: item 2957v0 fell out of the world at [0.778458, 12.206851, 104.38453]; put back at [0.778458, 18.896717, 104.38453]
+2026-11-23T05:56:50.778016Z  WARN extraction::items::lost: item 2964v0 fell out of the world at [-188.64578, 13.200915, 39.284096]; put back at [-188.64578, 38.289776, 39.284096]
+2026-11-23T05:56:50.778104Z  WARN extraction::items::lost: item 2963v0 fell out of the world at [-221.42154, 19.784836, -221.91545]; put back at [-221.42154, 34.81792, -221.91545]
+2026-11-23T05:56:50.778211Z  WARN extraction::items::lost: item 2961v0 fell out of the world at [36.178345, 23.078062, -230.41544]; put back at [36.178345, 32.444336, -230.41544]
+2026-11-23T05:56:50.778305Z  WARN extraction::items::lost: item 2601v0 fell out of the world at [-169.90009, 19.240276, -28.679848]; put back at [-169.90009, 25.904703, -28.679848]
+2026-11-23T05:56:50.778419Z  WARN extraction::items::lost: item 2602v0 fell out of the world at [14.499988, 23.310558, -218.58005]; put back at [14.499988, 32.85729, -218.58005]
+2026-11-23T05:56:50.778516Z  WARN extraction::items::lost: item 2603v0 fell out of the world at [224.85008, 20.919186, -226.71489]; put back at [224.85008, 33.038414, -226.71489]
+2026-11-23T05:56:50.778623Z  WARN extraction::items::lost: item 2604v0 fell out of the world at [-221.82152, 15.757338, -197.51546]; put back at [-221.82152, 34.81792, -197.51546]
+2026-11-23T05:56:50.778724Z  WARN extraction::items::lost: item 2605v0 fell out of the world at [223.37694, 20.20418, -225.51921]; put back at [223.37694, 33.038414, -225.51921]
+2026-11-23T05:56:50.778829Z  WARN extraction::items::lost: item 2606v0 fell out of the world at [223.15248, 20.20418, -225.61967]; put back at [223.15248, 33.038414, -225.61967]
+2026-11-23T05:56:50.778932Z  WARN extraction::items::lost: item 2607v0 fell out of the world at [-178.2136, 24.87427, 151.95438]; put back at [-178.2136, 30.052309, 151.95438]
+2026-11-23T05:56:50.779115Z  WARN extraction::items::lost: item 2728v0 fell out of the world at [-161.6, 14.893211, 42.51992]; put back at [-161.6, 30.344627, 42.51992]
+2026-11-23T05:56:50.779237Z  WARN extraction::items::lost: item 2916v0 fell out of the world at [-248.59981, 7.8098493, -157.47997]; put back at [-248.59981, 34.98709, -157.47997]
+2026-11-23T05:56:50.779359Z  WARN extraction::items::lost: item 2895v0 fell out of the world at [23.96006, 18.42417, 192.63745]; put back at [23.96006, 28.885437, 192.63745]
+2026-11-23T05:56:50.779464Z  WARN extraction::items::lost: item 2949v0 fell out of the world at [-172, 19.164211, -35.82]; put back at [-172, 25.597017, -35.82]
+2026-11-23T05:56:50.779557Z  WARN extraction::items::lost: item 2950v0 fell out of the world at [-246, 30.497768, -127.319954]; put back at [-246, 36.32121, -127.319954]
+2026-11-23T05:56:50.779710Z  WARN extraction::items::lost: item 2951v0 fell out of the world at [131.95346, 20.338177, -232.17723]; put back at [131.95346, 32.347282, -232.17723]
+2026-11-23T05:56:50.779842Z  WARN extraction::items::lost: item 2958v0 fell out of the world at [-171.90959, 19.156208, -35.831936]; put back at [-171.90959, 25.566269, -35.831936]
+2026-11-23T05:56:50.779978Z  WARN extraction::items::lost: item 2960v0 fell out of the world at [131.86827, 20.342377, -232.14879]; put back at [131.86827, 32.339912, -232.14879]
+2026-11-23T05:56:50.780122Z  WARN extraction::items::lost: item 2967v0 fell out of the world at [132.13199, 20.361681, -232.1535]; put back at [132.13199, 32.36009, -232.1535]
+2026-11-23T05:56:50.780250Z  WARN extraction::items::lost: item 2608v0 fell out of the world at [188.57957, 18.957495, 140.28772]; put back at [188.57957, 28.687847, 140.28772]
+2026-11-23T05:56:50.780378Z  WARN extraction::items::lost: item 2609v0 fell out of the world at [-185.99977, 26.513687, 192.81694]; put back at [-185.99977, 31.934254, 192.81694]
+2026-11-23T05:56:50.780529Z  WARN extraction::items::lost: item 2610v0 fell out of the world at [-221.99994, 16.23174, -190.38]; put back at [-221.99994, 34.692577, -190.38]
+2026-11-23T05:56:50.780647Z  WARN extraction::items::lost: item 2611v0 fell out of the world at [-164.24496, 17.891209, 16.372543]; put back at [-164.24496, 35.618515, 16.372543]
+2026-11-23T05:56:50.780768Z  WARN extraction::items::lost: item 2613v0 fell out of the world at [-185.85385, 26.037777, 192.66595]; put back at [-185.85385, 31.919762, 192.66595]
+2026-11-23T05:56:50.780906Z  WARN extraction::items::lost: item 2614v0 fell out of the world at [-265.60147, 11.781746, -202.87894]; put back at [-265.60147, 34.81792, -202.87894]
+2026-11-23T05:56:50.781041Z  WARN extraction::items::lost: item 2974v0 fell out of the world at [-214.59999, 15.779839, -195.27998]; put back at [-214.59999, 34.81792, -195.27998]
+2026-11-23T05:56:50.781173Z  WARN extraction::items::lost: item 2599v0 fell out of the world at [-188.39996, 12.365214, 43.400066]; put back at [-188.39996, 39.52095, 43.400066]
+2026-11-23T05:56:50.781309Z  WARN extraction::items::lost: item 2642v0 fell out of the world at [-25.693737, 16.282461, 56.58548]; put back at [-25.693737, 18.816046, 56.58548]
+2026-11-23T05:56:50.781424Z  WARN extraction::items::lost: item 2644v0 fell out of the world at [17.3, 22.935509, -239.34999]; put back at [17.3, 32.79895, -239.34999]
+2026-11-23T05:56:50.781535Z  WARN extraction::items::lost: item 2645v0 fell out of the world at [179.69185, 18.587158, 157.68181]; put back at [179.69185, 26.58036, 157.68181]
+2026-11-23T05:56:50.781651Z  WARN extraction::items::lost: item 2646v0 fell out of the world at [181.10606, 18.387157, 156.69185]; put back at [181.10606, 27.02206, 156.69185]
+2026-11-23T05:56:50.781762Z  WARN extraction::items::lost: item 2647v0 fell out of the world at [132.16858, 20.501688, -231.86703]; put back at [132.16858, 32.362522, -231.86703]
+2026-11-23T05:56:50.781873Z  WARN extraction::items::lost: item 2649v0 fell out of the world at [30.749973, 22.64287, -205.00003]; put back at [30.749973, 32.933147, -205.00003]
+2026-11-23T05:56:50.781990Z  WARN extraction::items::lost: item 2650v0 fell out of the world at [29.249973, 22.64287, -204.95003]; put back at [29.249973, 33.02723, -204.95003]
+2026-11-23T05:56:50.782237Z  WARN extraction::items::lost: item 2651v0 fell out of the world at [16.100027, 22.833841, -239.64996]; put back at [16.100027, 32.82244, -239.64996]
+2026-11-23T05:56:50.782346Z  WARN extraction::items::lost: item 2653v0 fell out of the world at [-17.199986, 16.591639, 37.51998]; put back at [-17.199986, 19.561728, 37.51998]
+2026-11-23T05:56:50.782492Z  WARN extraction::items::lost: item 2654v0 fell out of the world at [152.00005, 7.0369434, -44.000027]; put back at [152.00005, 25.596453, -44.000027]
+2026-11-23T05:56:50.782597Z  WARN extraction::items::lost: item 2655v0 fell out of the world at [-188.29999, 12.693689, 40.3]; put back at [-188.29999, 38.66572, 40.3]
+2026-11-23T05:56:50.782699Z  WARN extraction::items::lost: item 2657v0 fell out of the world at [-265.6, 12.252975, -202.88]; put back at [-265.6, 34.81792, -202.88]
+2026-11-23T05:56:50.782883Z  WARN extraction::items::lost: item 2658v0 fell out of the world at [-258.97394, 11.022343, -188.1256]; put back at [-258.97394, 34.62557, -188.1256]
+2026-11-23T05:56:50.782989Z  WARN extraction::items::lost: item 2659v0 fell out of the world at [113.81912, 14.767166, -13.95331]; put back at [113.81912, 17.522543, -13.95331]
+2026-11-23T05:56:50.783086Z  WARN extraction::items::lost: item 2660v0 fell out of the world at [16.349995, 22.82526, -239.5]; put back at [16.349995, 32.816757, -239.5]
+2026-11-23T05:56:50.783192Z  WARN extraction::items::lost: item 2664v0 fell out of the world at [-185.24257, 26.087023, 190.57956]; put back at [-185.24257, 31.815498, 190.57956]
+2026-11-23T05:56:50.783354Z  WARN extraction::items::lost: item 2665v0 fell out of the world at [37.737885, 23.203272, -218.37117]; put back at [37.737885, 32.325943, -218.37117]
+2026-11-23T05:56:50.783474Z  WARN extraction::items::lost: item 2668v0 fell out of the world at [-15.600012, 16.27664, 34.119946]; put back at [-15.600012, 19.579643, 34.119946]
+2026-11-23T05:56:50.783601Z  WARN extraction::items::lost: item 2669v0 fell out of the world at [-17.200003, 16.576323, 31.519999]; put back at [-17.200003, 19.542858, 31.519999]
+2026-11-23T05:56:50.783719Z  WARN extraction::items::lost: item 2671v0 fell out of the world at [-258.39996, 12.234841, -187.88]; put back at [-258.39996, 34.610302, -187.88]
+2026-11-23T05:56:50.783845Z  WARN extraction::items::lost: item 2672v0 fell out of the world at [35.5, 23.336538, -218.58]; put back at [35.5, 32.48773, -218.58]
+2026-11-23T05:56:50.783957Z  WARN extraction::items::lost: item 2673v0 fell out of the world at [132.00002, 20.341682, -231.81999]; put back at [132.00002, 32.351307, -231.81999]
+2026-11-23T05:56:50.784066Z  WARN extraction::items::lost: item 2675v0 fell out of the world at [86.486824, 23.010546, 238.84996]; put back at [86.486824, 29.638847, 238.84996]
+2026-11-23T05:56:50.784168Z  WARN extraction::items::lost: item 2676v0 fell out of the world at [-144.75739, 26.086784, 189.66042]; put back at [-144.75739, 32.273342, 189.66042]
+2026-11-23T05:56:50.784310Z  WARN extraction::items::lost: item 2678v0 fell out of the world at [-265.6, 12.234844, -190.88]; put back at [-265.6, 34.691673, -190.88]
+2026-11-23T05:56:50.784519Z  WARN extraction::items::lost: item 2679v0 fell out of the world at [-17.199976, 16.570107, 32.919994]; put back at [-17.199976, 19.561827, 32.919994]
+2026-11-23T05:56:50.784670Z  WARN extraction::items::lost: item 2680v0 fell out of the world at [-17.199898, 16.121635, 37.519913]; put back at [-17.199898, 19.56173, 37.519913]
+2026-11-23T05:56:50.784825Z  WARN extraction::items::lost: item 2681v0 fell out of the world at [-17.20011, 16.571634, 38.920002]; put back at [-17.20011, 19.5615, 38.920002]
+2026-11-23T05:56:50.784944Z  WARN extraction::items::lost: item 2683v0 fell out of the world at [-161.39993, 15.52946, 40.320023]; put back at [-161.39993, 30.929922, 40.320023]
+2026-11-23T05:56:50.785052Z  WARN extraction::items::lost: item 2684v0 fell out of the world at [-237.99998, 16.233315, -197.37999]; put back at [-237.99998, 34.81792, -197.37999]
+2026-11-23T05:56:50.785167Z  WARN extraction::items::lost: item 2685v0 fell out of the world at [-238, 15.776411, -190.38]; put back at [-238, 34.692577, -190.38]
+2026-11-23T05:56:50.785284Z  WARN extraction::items::lost: item 2686v0 fell out of the world at [-238, 16.233313, -190.37999]; put back at [-238, 34.69258, -190.37999]
+2026-11-23T05:56:50.785399Z  WARN extraction::items::lost: item 2687v0 fell out of the world at [37.3602, 23.1133, -246.88074]; put back at [37.3602, 32.35586, -246.88074]
+2026-11-23T05:56:50.785496Z  WARN extraction::items::lost: item 2690v0 fell out of the world at [192.59993, 19.095829, 149.72003]; put back at [192.59993, 28.842138, 149.72003]
+2026-11-23T05:56:50.785595Z  WARN extraction::items::lost: item 2691v0 fell out of the world at [170.00003, 18.661236, 130.61995]; put back at [170.00003, 24.128572, 130.61995]
+2026-11-23T05:56:50.785695Z  WARN extraction::items::lost: item 2692v0 fell out of the world at [170.10005, 18.54624, 136.41997]; put back at [170.10005, 23.946608, 136.41997]
+2026-11-23T05:56:50.785790Z  WARN extraction::items::lost: item 2695v0 fell out of the world at [-231.50006, 15.618316, -190.37999]; put back at [-231.50006, 34.69258, -190.37999]
+2026-11-23T05:56:50.785879Z  WARN extraction::items::lost: item 2696v0 fell out of the world at [-222.00003, 16.214334, -197.37999]; put back at [-222.00003, 34.81792, -197.37999]
+2026-11-23T05:56:50.785970Z  WARN extraction::items::lost: item 2697v0 fell out of the world at [-194.75, 24.62545, 19.119999]; put back at [-194.75, 35.299675, 19.119999]
+2026-11-23T05:56:50.786102Z  WARN extraction::items::lost: item 2698v0 fell out of the world at [-11.820494, 11.28884, 101.421814]; put back at [-11.820494, 20.180405, 101.421814]
+2026-11-23T05:56:50.786233Z  WARN extraction::items::lost: item 2699v0 fell out of the world at [223.19849, 20.230162, -225.38365]; put back at [223.19849, 33.038414, -225.38365]
+2026-11-23T05:56:50.786353Z  WARN extraction::items::lost: item 2702v0 fell out of the world at [37, 23.28806, -230.28]; put back at [37, 32.384396, -230.28]
+2026-11-23T05:56:50.786475Z  WARN extraction::items::lost: item 2703v0 fell out of the world at [224.85063, 20.486685, -226.7151]; put back at [224.85063, 33.038414, -226.7151]
+2026-11-23T05:56:50.786617Z  WARN extraction::items::lost: item 2704v0 fell out of the world at [-168.49988, 25.825687, 173.12006]; put back at [-168.49988, 28.113796, 173.12006]
+2026-11-23T05:56:50.786834Z  WARN extraction::items::lost: item 2705v0 fell out of the world at [-161.5, 25.816187, 173.12001]; put back at [-161.5, 28.036701, 173.12001]
+2026-11-23T05:56:50.786985Z  WARN extraction::items::lost: item 2706v0 fell out of the world at [188.40004, 18.935085, 140.41985]; put back at [188.40004, 28.657875, 140.41985]
+2026-11-23T05:56:50.787133Z  WARN extraction::items::lost: item 2707v0 fell out of the world at [188.40004, 19.389164, 140.42001]; put back at [188.40004, 28.657871, 140.42001]
+2026-11-23T05:56:50.787260Z  WARN extraction::items::lost: item 2708v0 fell out of the world at [193.44708, 19.425184, 148.11993]; put back at [193.44708, 28.848589, 148.11993]
+2026-11-23T05:56:50.787383Z  WARN extraction::items::lost: item 2711v0 fell out of the world at [-17.199856, 16.103735, 31.519966]; put back at [-17.199856, 19.542856, 31.519966]
+2026-11-23T05:56:50.787497Z  WARN extraction::items::lost: item 2712v0 fell out of the world at [-4.6998363, 12.078342, 101.12003]; put back at [-4.6998363, 19.479631, 101.12003]
+2026-11-23T05:56:50.787599Z  WARN extraction::items::lost: item 2713v0 fell out of the world at [-226.59984, 19.909338, -218.67993]; put back at [-226.59984, 34.81792, -218.67993]
+2026-11-23T05:56:50.787706Z  WARN extraction::items::lost: item 2714v0 fell out of the world at [-222, 15.754841, -190.38]; put back at [-222, 34.692577, -190.38]
+2026-11-23T05:56:50.787860Z  WARN extraction::items::lost: item 2715v0 fell out of the world at [-265.60004, 12.204833, -198.88002]; put back at [-265.60004, 34.81792, -198.88002]
+2026-11-23T05:56:50.788059Z  WARN extraction::items::lost: item 2716v0 fell out of the world at [-265.59995, 11.76484, -190.88002]; put back at [-265.59995, 34.691673, -190.88002]
+2026-11-23T05:56:50.788183Z  WARN extraction::items::lost: item 2717v0 fell out of the world at [-258.40002, 11.759337, -199.88]; put back at [-258.40002, 34.81792, -199.88]
+2026-11-23T05:56:50.788311Z  WARN extraction::items::lost: item 2718v0 fell out of the world at [-205.50009, 24.783953, 18.619953]; put back at [-205.50009, 35.342266, 18.619953]
+2026-11-23T05:56:50.788834Z  WARN extraction::items::lost: item 2719v0 fell out of the world at [-182.9, 27.338188, -111.67998]; put back at [-182.9, 34.189835, -111.67998]
+2026-11-23T05:56:50.789057Z  WARN extraction::items::lost: item 2721v0 fell out of the world at [5.1999483, 22.871653, -248.17998]; put back at [5.1999483, 33.500828, -248.17998]
+2026-11-23T05:56:50.789277Z  WARN extraction::items::lost: item 2722v0 fell out of the world at [177.37704, 20.701853, -206.95934]; put back at [177.37704, 31.297428, -206.95934]
+2026-11-23T05:56:50.789452Z  WARN extraction::items::lost: item 2723v0 fell out of the world at [191.1643, 20.692352, -204.52841]; put back at [191.1643, 32.634163, -204.52841]
+2026-11-23T05:56:50.789624Z  WARN extraction::items::lost: item 2724v0 fell out of the world at [151.70486, 22.028944, -234.46446]; put back at [151.70486, 30.999071, -234.46446]
+2026-11-23T05:56:50.789828Z  WARN extraction::items::lost: item 2725v0 fell out of the world at [87.37886, 22.28505, 240.77463]; put back at [87.37886, 29.664444, 240.77463]
+2026-11-23T05:56:50.789948Z  WARN extraction::items::lost: item 2727v0 fell out of the world at [-164.40004, 17.890207, 16.520039]; put back at [-164.40004, 35.645046, 16.520039]
+2026-11-23T05:56:50.790065Z  WARN extraction::items::lost: item 2729v0 fell out of the world at [-234.49998, 15.594337, -190.38]; put back at [-234.49998, 34.692577, -190.38]
+2026-11-23T05:56:50.790164Z  WARN extraction::items::lost: item 2730v0 fell out of the world at [-225.50006, 15.599839, -190.37997]; put back at [-225.50006, 34.69258, -190.37997]
+2026-11-23T05:56:50.790265Z  WARN extraction::items::lost: item 2731v0 fell out of the world at [-265.6, 11.763419, -198.88004]; put back at [-265.6, 34.81792, -198.88004]
+2026-11-23T05:56:50.790453Z  WARN extraction::items::lost: item 2732v0 fell out of the world at [-260.49973, 11.913846, -197.87997]; put back at [-260.49973, 34.81792, -197.87997]
+2026-11-23T05:56:50.790612Z  WARN extraction::items::lost: item 2734v0 fell out of the world at [-4.5215807, 12.123854, 100.98468]; put back at [-4.5215807, 19.423592, 100.98468]
+2026-11-23T05:56:50.790728Z  WARN extraction::items::lost: item 2735v0 fell out of the world at [-169.3998, 16.190212, 24.520065]; put back at [-169.3998, 37.626347, 24.520065]
+2026-11-23T05:56:50.790906Z  WARN extraction::items::lost: item 2736v0 fell out of the world at [35.882984, 22.852642, -245.35779]; put back at [35.882984, 32.46446, -245.35779]
+2026-11-23T05:56:50.791012Z  WARN extraction::items::lost: item 2737v0 fell out of the world at [108.45509, 22.740011, -246.54848]; put back at [108.45509, 32.258923, -246.54848]
+2026-11-23T05:56:50.791111Z  WARN extraction::items::lost: item 2738v0 fell out of the world at [-222.00002, 15.809852, -197.38008]; put back at [-222.00002, 34.81792, -197.38008]
+2026-11-23T05:56:50.791205Z  WARN extraction::items::lost: item 2739v0 fell out of the world at [-143.84526, 26.961025, 187.36131]; put back at [-143.84526, 31.781977, 187.36131]
+2026-11-23T05:56:50.791363Z  WARN extraction::items::lost: item 2741v0 fell out of the world at [-260.50024, 11.898416, -185.87994]; put back at [-260.50024, 34.510918, -185.87994]
+2026-11-23T05:56:50.791528Z  WARN extraction::items::lost: item 2742v0 fell out of the world at [35.678787, 23.32806, -218.71555]; put back at [35.678787, 32.476868, -218.71555]
+2026-11-23T05:56:50.791666Z  WARN extraction::items::lost: item 2743v0 fell out of the world at [-144.57906, 26.091469, 189.52504]; put back at [-144.57906, 32.23452, 189.52504]
+2026-11-23T05:56:50.791894Z  WARN extraction::items::lost: item 2744v0 fell out of the world at [189.19984, 18.9756, 147.12003]; put back at [189.19984, 28.554045, 147.12003]
+2026-11-23T05:56:50.792069Z  WARN extraction::items::lost: item 2745v0 fell out of the world at [193.38306, 19.076878, 165.92564]; put back at [193.38306, 28.738417, 165.92564]
+2026-11-23T05:56:50.792207Z  WARN extraction::items::lost: item 2748v0 fell out of the world at [-15.421322, 16.256632, 33.98445]; put back at [-15.421322, 19.57988, 33.98445]
+2026-11-23T05:56:50.792866Z  WARN extraction::items::lost: item 2749v0 fell out of the world at [-12.020892, 11.938854, 103.3846]; put back at [-12.020892, 20.180405, 103.3846]
+2026-11-23T05:56:50.793339Z  WARN extraction::items::lost: item 2750v0 fell out of the world at [-237.82156, 15.754835, -197.51541]; put back at [-237.82156, 34.81792, -197.51541]
+2026-11-23T05:56:50.793551Z  WARN extraction::items::lost: item 2751v0 fell out of the world at [-237.82146, 16.229082, -190.51563]; put back at [-237.82146, 34.692333, -190.51563]
+2026-11-23T05:56:50.793731Z  WARN extraction::items::lost: item 2752v0 fell out of the world at [37.937515, 23.1869, -218.52295]; put back at [37.937515, 32.31013, -218.52295]
+2026-11-23T05:56:50.793904Z  WARN extraction::items::lost: item 2753v0 fell out of the world at [-260.32214, 11.918314, -198.01552]; put back at [-260.32214, 34.81792, -198.01552]
+2026-11-23T05:56:50.794118Z  WARN extraction::items::lost: item 2755v0 fell out of the world at [-142.41151, 25.2668, 188.52063]; put back at [-142.41151, 32.02081, 188.52063]
+2026-11-23T05:56:50.794253Z  WARN extraction::items::lost: item 2756v0 fell out of the world at [86.66523, 23.010216, 238.71446]; put back at [86.66523, 29.649355, 238.71446]
+2026-11-23T05:56:50.794383Z  WARN extraction::items::lost: item 2757v0 fell out of the world at [87.557556, 22.289547, 240.63922]; put back at [87.557556, 29.662262, 240.63922]
+2026-11-23T05:56:50.794477Z  WARN extraction::items::lost: item 2758v0 fell out of the world at [87.33326, 22.330555, 240.53796]; put back at [87.33326, 29.665, 240.53796]
+2026-11-23T05:56:50.794572Z  WARN extraction::items::lost: item 2759v0 fell out of the world at [170.17851, 18.655235, 130.48463]; put back at [170.17851, 24.180918, 130.48463]
+2026-11-23T05:56:50.794711Z  WARN extraction::items::lost: item 2760v0 fell out of the world at [194.64345, 18.374285, 163.6694]; put back at [194.64345, 28.80456, 163.6694]
+2026-11-23T05:56:50.794959Z  WARN extraction::items::lost: item 2761v0 fell out of the world at [-237.822, 16.226408, -197.51521]; put back at [-237.822, 34.81792, -197.51521]
+2026-11-23T05:56:50.795057Z  WARN extraction::items::lost: item 2762v0 fell out of the world at [-231.32152, 15.62453, -190.51585]; put back at [-231.32152, 34.692333, -190.51585]
+2026-11-23T05:56:50.795166Z  WARN extraction::items::lost: item 2763v0 fell out of the world at [-205.3215, 24.783949, 18.484505]; put back at [-205.3215, 35.3541, 18.484505]
+2026-11-23T05:56:50.795334Z  WARN extraction::items::lost: item 2764v0 fell out of the world at [-169.90007, 19.712791, -28.680098]; put back at [-169.90007, 25.904533, -28.680098]
+2026-11-23T05:56:50.795455Z  WARN extraction::items::lost: item 2766v0 fell out of the world at [5.3784256, 22.871649, -248.31546]; put back at [5.3784256, 33.480576, -248.31546]
+2026-11-23T05:56:50.795578Z  WARN extraction::items::lost: item 2768v0 fell out of the world at [225.02888, 20.936352, -226.8505]; put back at [225.02888, 33.038414, -226.8505]
+2026-11-23T05:56:50.795699Z  WARN extraction::items::lost: item 2769v0 fell out of the world at [151.8846, 22.031624, -234.59789]; put back at [151.8846, 30.966639, -234.59789]
+2026-11-23T05:56:50.795804Z  WARN extraction::items::lost: item 2771v0 fell out of the world at [192.77829, 19.087158, 149.58492]; put back at [192.77829, 28.850342, 149.58492]
+2026-11-23T05:56:50.795930Z  WARN extraction::items::lost: item 2773v0 fell out of the world at [-20.996933, 12.512717, 103.22553]; put back at [-20.996933, 19.098692, 103.22553]
+2026-11-23T05:56:50.796171Z  WARN extraction::items::lost: item 2774v0 fell out of the world at [-161.42145, 14.894712, 42.384434]; put back at [-161.42145, 30.246733, 42.384434]
+2026-11-23T05:56:50.796332Z  WARN extraction::items::lost: item 2775v0 fell out of the world at [-265.64612, 12.239528, -191.11443]; put back at [-265.64612, 34.69575, -191.11443]
+2026-11-23T05:56:50.796469Z  WARN extraction::items::lost: item 2776v0 fell out of the world at [14.453991, 23.328058, -218.81606]; put back at [14.453991, 32.85821, -218.81606]
+2026-11-23T05:56:50.796633Z  WARN extraction::items::lost: item 2777v0 fell out of the world at [37.178455, 23.272554, -230.41539]; put back at [37.178455, 32.37026, -230.41539]
+2026-11-23T05:56:50.796757Z  WARN extraction::items::lost: item 2779v0 fell out of the world at [-226.4227, 19.939846, -218.81621]; put back at [-226.4227, 34.81792, -218.81621]
+2026-11-23T05:56:50.796884Z  WARN extraction::items::lost: item 2780v0 fell out of the world at [-258.446, 12.234841, -188.1162]; put back at [-258.446, 34.625072, -188.1162]
+2026-11-23T05:56:50.796996Z  WARN extraction::items::lost: item 2781v0 fell out of the world at [37.538742, 23.093632, -247.01605]; put back at [37.538742, 32.341717, -247.01605]
+2026-11-23T05:56:50.797120Z  WARN extraction::items::lost: item 2782v0 fell out of the world at [188.35387, 18.952156, 140.18388]; put back at [188.35387, 28.654346, 140.18388]
+2026-11-23T05:56:50.797260Z  WARN extraction::items::lost: item 2788v0 fell out of the world at [-234.5455, 15.599838, -197.61545]; put back at [-234.5455, 34.81792, -197.61545]
+2026-11-23T05:56:50.797447Z  WARN extraction::items::lost: item 2789v0 fell out of the world at [-231.54594, 15.618314, -190.61563]; put back at [-231.54594, 34.692154, -190.61563]
+2026-11-23T05:56:50.797615Z  WARN extraction::items::lost: item 2790v0 fell out of the world at [-260.5462, 11.918317, -198.11575]; put back at [-260.5462, 34.81792, -198.11575]
+2026-11-23T05:56:50.797735Z  WARN extraction::items::lost: item 2791v0 fell out of the world at [37.705795, 23.183006, -218.6162]; put back at [37.705795, 32.328484, -218.6162]
+2026-11-23T05:56:50.797847Z  WARN extraction::items::lost: item 2792v0 fell out of the world at [-183.2458, 26.63269, -109.8156]; put back at [-183.2458, 34.549515, -109.8156]
+2026-11-23T05:56:50.797958Z  WARN extraction::items::lost: item 2793v0 fell out of the world at [-265.1202, 11.046335, -190.90938]; put back at [-265.1202, 34.69162, -190.90938]
+2026-11-23T05:56:50.798085Z  WARN extraction::items::lost: item 2795v0 fell out of the world at [177.33096, 20.701853, -207.19539]; put back at [177.33096, 31.298506, -207.19539]
+2026-11-23T05:56:50.798216Z  WARN extraction::items::lost: item 2796v0 fell out of the world at [193.50359, 20.672863, -212.03606]; put back at [193.50359, 32.954803, -212.03606]
+2026-11-23T05:56:50.798347Z  WARN extraction::items::lost: item 2797v0 fell out of the world at [146.61404, 22.192732, -235.69023]; put back at [146.61404, 31.287395, -235.69023]
+2026-11-23T05:56:50.798465Z  WARN extraction::items::lost: item 2798v0 fell out of the world at [151.6594, 22.030947, -234.69955]; put back at [151.6594, 31.007278, -234.69955]
+2026-11-23T05:56:50.798587Z  WARN extraction::items::lost: item 2799v0 fell out of the world at [-186.04611, 26.047281, 192.58386]; put back at [-186.04611, 31.932207, 192.58386]
+2026-11-23T05:56:50.798737Z  WARN extraction::items::lost: item 2801v0 fell out of the world at [-4.7459807, 12.102322, 100.883995]; put back at [-4.7459807, 19.487774, 100.883995]
+2026-11-23T05:56:50.798854Z  WARN extraction::items::lost: item 2802v0 fell out of the world at [35.837296, 22.838636, -245.5941]; put back at [35.837296, 32.467236, -245.5941]
+2026-11-23T05:56:50.798987Z  WARN extraction::items::lost: item 2805v0 fell out of the world at [-238.0462, 15.783317, -197.61613]; put back at [-238.0462, 34.81792, -197.61613]
+2026-11-23T05:56:50.799149Z  WARN extraction::items::lost: item 2808v0 fell out of the world at [177.20975, 20.701849, -207.03377]; put back at [177.20975, 31.301344, -207.03377]
+2026-11-23T05:56:50.799291Z  WARN extraction::items::lost: item 2809v0 fell out of the world at [151.53928, 22.031553, -234.53793]; put back at [151.53928, 31.028955, -234.53793]
+2026-11-23T05:56:50.799433Z  WARN extraction::items::lost: item 2810v0 fell out of the world at [-21.166548, 12.523512, 103.1459]; put back at [-21.166548, 19.061794, 103.1459]
+2026-11-23T05:56:50.799599Z  WARN extraction::items::lost: item 2811v0 fell out of the world at [191.34258, 20.742855, -204.66351]; put back at [191.34258, 32.657993, -204.66351]
+2026-11-23T05:56:50.799729Z  WARN extraction::items::lost: item 2812v0 fell out of the world at [-170.2462, 18.986776, -26.815832]; put back at [-170.2462, 26.697432, -26.815832]
+2026-11-23T05:56:50.800067Z  WARN extraction::items::lost: item 2813v0 fell out of the world at [108.29234, 22.74001, -246.62251]; put back at [108.29234, 32.27047, -246.62251]
+2026-11-23T05:56:50.800183Z  WARN extraction::items::lost: item 2814v0 fell out of the world at [37.845516, 23.178913, -218.3943]; put back at [37.845516, 32.317417, -218.3943]
+2026-11-23T05:56:50.800306Z  WARN extraction::items::lost: item 2815v0 fell out of the world at [-143.92317, 26.515133, 187.41911]; put back at [-143.92317, 31.789768, 187.41911]
+2026-11-23T05:56:50.800442Z  WARN extraction::items::lost: item 2817v0 fell out of the world at [-12.245531, 11.91732, 103.283646]; put back at [-12.245531, 20.180405, 103.283646]
+2026-11-23T05:56:50.800574Z  WARN extraction::items::lost: item 2819v0 fell out of the world at [-265.7648, 12.224506, -190.95436]; put back at [-265.7648, 34.69154, -190.95436]
+2026-11-23T05:56:50.800711Z  WARN extraction::items::lost: item 2820v0 fell out of the world at [37.8718, 23.15432, -218.6047]; put back at [37.8718, 32.315334, -218.6047]
+2026-11-23T05:56:50.800837Z  WARN extraction::items::lost: item 2821v0 fell out of the world at [5.1543474, 22.88613, -248.41554]; put back at [5.1543474, 33.506004, -248.41554]
+2026-11-23T05:56:50.800951Z  WARN extraction::items::lost: item 2825v0 fell out of the world at [37.608917, 23.166986, -218.58275]; put back at [37.608917, 32.33616, -218.58275]
+2026-11-23T05:56:50.801058Z  WARN extraction::items::lost: item 2826v0 fell out of the world at [-170.32594, 18.99435, -26.784838]; put back at [-170.32594, 26.720882, -26.784838]
+2026-11-23T05:56:50.801172Z  WARN extraction::items::lost: item 2827v0 fell out of the world at [-183.0215, 26.709698, -109.715546]; put back at [-183.0215, 34.49873, -109.715546]
+2026-11-23T05:56:50.801312Z  WARN extraction::items::lost: item 2828v0 fell out of the world at [14.333336, 23.327728, -218.65463]; put back at [14.333336, 32.860638, -218.65463]
+2026-11-23T05:56:50.801446Z  WARN extraction::items::lost: item 2829v0 fell out of the world at [-258.4022, 12.229851, -199.8815]; put back at [-258.4022, 34.81792, -199.8815]
+2026-11-23T05:56:50.801552Z  WARN extraction::items::lost: item 2830v0 fell out of the world at [37.360554, 23.568647, -246.87796]; put back at [37.360554, 32.355835, -246.87796]
+2026-11-23T05:56:50.801653Z  WARN extraction::items::lost: item 2831v0 fell out of the world at [146.88281, 22.179602, -235.58849]; put back at [146.88281, 31.273592, -235.58849]
+2026-11-23T05:56:50.801770Z  WARN extraction::items::lost: item 2833v0 fell out of the world at [-228.49821, 15.614854, -197.38036]; put back at [-228.49821, 34.81792, -197.38036]
+2026-11-23T05:56:50.801925Z  WARN extraction::items::lost: item 2835v0 fell out of the world at [-238.16664, 16.233313, -190.45506]; put back at [-238.16664, 34.692444, -190.45506]
+2026-11-23T05:56:50.802077Z  WARN extraction::items::lost: item 2836v0 fell out of the world at [-265.21567, 11.0179405, -191.02298]; put back at [-265.21567, 34.692318, -191.02298]
+2026-11-23T05:56:50.802194Z  WARN extraction::items::lost: item 2837v0 fell out of the world at [37.583584, 23.177307, -218.45483]; put back at [37.583584, 32.338165, -218.45483]
+2026-11-23T05:56:50.802310Z  WARN extraction::items::lost: item 2838v0 fell out of the world at [193.4115, 20.652853, -212.27763]; put back at [193.4115, 32.939293, -212.27763]
+2026-11-23T05:56:50.802503Z  WARN extraction::items::lost: item 2839v0 fell out of the world at [-234.66692, 15.618314, -197.45448]; put back at [-234.66692, 34.81792, -197.45448]
+2026-11-23T05:56:50.802647Z  WARN extraction::items::lost: item 2840v0 fell out of the world at [-170.0212, 19.004622, -26.714474]; put back at [-170.0212, 26.626162, -26.714474]
+2026-11-23T05:56:50.802790Z  WARN extraction::items::lost: item 2841v0 fell out of the world at [-183.198, 26.643702, -109.57735]; put back at [-183.198, 34.554417, -109.57735]
+2026-11-23T05:56:50.802938Z  WARN extraction::items::lost: item 2844v0 fell out of the world at [150.00044, 6.8198996, -39.88003]; put back at [150.00044, 24.168482, -39.88003]
+2026-11-23T05:56:50.803038Z  WARN extraction::items::lost: item 2845v0 fell out of the world at [-260.6673, 11.913848, -197.95499]; put back at [-260.6673, 34.81792, -197.95499]
+2026-11-23T05:56:50.803248Z  WARN extraction::items::lost: item 2847v0 fell out of the world at [-170.20001, 19.027838, -26.579613]; put back at [-170.20001, 26.676971, -26.579613]
+2026-11-23T05:56:50.803387Z  WARN extraction::items::lost: item 2848v0 fell out of the world at [-170.36678, 18.986729, -26.654593]; put back at [-170.36678, 26.729774, -26.654593]
+2026-11-23T05:56:50.803494Z  WARN extraction::items::lost: item 2849v0 fell out of the world at [-234.3221, 15.613848, -197.51549]; put back at [-234.3221, 34.81792, -197.51549]
+2026-11-23T05:56:50.803810Z  WARN extraction::items::lost: item 2850v0 fell out of the world at [132.03326, 20.336683, -232.22241]; put back at [132.03326, 32.35352, -232.22241]
+2026-11-23T05:56:50.803923Z  WARN extraction::items::lost: item 2851v0 fell out of the world at [-144.16595, 26.536789, 187.34616]; put back at [-144.16595, 31.779856, 187.34616]
+2026-11-23T05:56:50.804100Z  WARN extraction::items::lost: item 2855v0 fell out of the world at [-170.09732, 18.977781, -26.721518]; put back at [-170.09732, 26.649534, -26.721518]
+2026-11-23T05:56:50.804202Z  WARN extraction::items::lost: item 2856v0 fell out of the world at [-265.53165, 12.20984, -190.84898]; put back at [-265.53165, 34.69173, -190.84898]
+2026-11-23T05:56:50.804310Z  WARN extraction::items::lost: item 2857v0 fell out of the world at [14.6648, 23.31306, -218.72047]; put back at [14.6648, 32.853977, -218.72047]
+2026-11-23T05:56:50.804448Z  WARN extraction::items::lost: item 2858v0 fell out of the world at [-144.03209, 26.511024, 187.1848]; put back at [-144.03209, 31.745275, 187.1848]
+2026-11-23T05:56:50.804572Z  WARN extraction::items::lost: item 2859v0 fell out of the world at [-170.07422, 18.993786, -26.809423]; put back at [-170.07422, 26.644863, -26.809423]
+2026-11-23T05:56:50.804713Z  WARN extraction::items::lost: item 2860v0 fell out of the world at [-143.87027, 26.521572, 187.20537]; put back at [-143.87027, 31.753155, 187.20537]
+2026-11-23T05:56:50.804831Z  WARN extraction::items::lost: item 2864v0 fell out of the world at [-234.41086, 15.613852, -197.3942]; put back at [-234.41086, 34.81792, -197.3942]
+2026-11-23T05:56:50.804940Z  WARN extraction::items::lost: item 2865v0 fell out of the world at [-221.82315, 16.229849, -197.51497]; put back at [-221.82315, 34.81792, -197.51497]
+2026-11-23T05:56:50.805083Z  WARN extraction::items::lost: item 2866v0 fell out of the world at [150.17863, 6.8135915, -40.014053]; put back at [150.17863, 24.207596, -40.014053]
+2026-11-23T05:56:50.805216Z  WARN extraction::items::lost: item 2870v0 fell out of the world at [35.450005, 23.31306, -218.78223]; put back at [35.450005, 32.49077, -218.78223]
+2026-11-23T05:56:50.805363Z  WARN extraction::items::lost: item 2871v0 fell out of the world at [-226.64969, 19.913847, -218.92035]; put back at [-226.64969, 34.81792, -218.92035]
+2026-11-23T05:56:50.805560Z  WARN extraction::items::lost: item 2872v0 fell out of the world at [-205.54681, 24.79396, 18.389534]; put back at [-205.54681, 35.362396, 18.389534]
+2026-11-23T05:56:50.805734Z  WARN extraction::items::lost: item 2873v0 fell out of the world at [146.66013, 22.201714, -235.45221]; put back at [146.66013, 31.285028, -235.45221]
+2026-11-23T05:56:50.805986Z  WARN extraction::items::lost: item 2875v0 fell out of the world at [-169.58641, 18.492443, -28.795141]; put back at [-169.58641, 25.733173, -28.795141]
+2026-11-23T05:56:50.806117Z  WARN extraction::items::lost: item 2876v0 fell out of the world at [-234.4999, 15.614851, -197.37975]; put back at [-234.4999, 34.81792, -197.37975]
+2026-11-23T05:56:50.806208Z  WARN extraction::items::lost: item 2877v0 fell out of the world at [21.31533, 17.69883, 224.7898]; put back at [21.31533, 29.337166, 224.7898]
+2026-11-23T05:56:50.806312Z  WARN extraction::items::lost: item 2878v0 fell out of the world at [194.56035, 17.977547, 165.70514]; put back at [194.56035, 28.750072, 165.70514]
+2026-11-23T05:56:50.806409Z  WARN extraction::items::lost: item 2880v0 fell out of the world at [-16.825312, 15.35088, 31.382708]; put back at [-16.825312, 19.544912, 31.382708]
+2026-11-23T05:56:50.806516Z  WARN extraction::items::lost: item 2882v0 fell out of the world at [-161.13777, 14.318691, 40.200043]; put back at [-161.13777, 30.779919, 40.200043]
+2026-11-23T05:56:50.806624Z  WARN extraction::items::lost: item 2883v0 fell out of the world at [-16.77701, 15.35511, 32.818146]; put back at [-16.77701, 19.568407, 32.818146]
+2026-11-23T05:56:50.806718Z  WARN extraction::items::lost: item 2885v0 fell out of the world at [195.04758, 17.852383, 165.5927]; put back at [195.04758, 28.757236, 165.5927]
+2026-11-23T05:56:50.807052Z  WARN extraction::items::lost: item 2886v0 fell out of the world at [-144.16853, 26.526787, 187.2008]; put back at [-144.16853, 31.75258, 187.2008]
+2026-11-23T05:56:50.807242Z  WARN extraction::items::lost: item 2887v0 fell out of the world at [-16.828989, 15.361324, 37.425087]; put back at [-16.828989, 19.567892, 37.425087]
+2026-11-23T05:56:50.807730Z  WARN extraction::items::lost: item 2888v0 fell out of the world at [-265.23615, 10.989836, -202.72357]; put back at [-265.23615, 34.81792, -202.72357]
+2026-11-23T05:56:50.807970Z  WARN extraction::items::lost: item 2889v0 fell out of the world at [-21.042652, 12.559608, 102.97965]; put back at [-21.042652, 19.095531, 102.97965]
+2026-11-23T05:56:50.808159Z  WARN extraction::items::lost: item 2890v0 fell out of the world at [-177.9368, 24.900234, 151.86368]; put back at [-177.9368, 29.966206, 151.86368]
+2026-11-23T05:56:50.808328Z  WARN extraction::items::lost: item 2891v0 fell out of the world at [-177.92447, 24.87626, 152.16528]; put back at [-177.92447, 29.970722, 152.16528]
+2026-11-23T05:56:50.808464Z  WARN extraction::items::lost: item 2892v0 fell out of the world at [-177.83633, 24.87976, 151.89603]; put back at [-177.83633, 29.934067, 151.89603]
+2026-11-23T05:56:50.808647Z  WARN extraction::items::lost: item 2959v0 fell out of the world at [-245.90953, 30.50107, -127.33188]; put back at [-245.90953, 36.322075, -127.33188]
+2026-11-23T05:56:50.808857Z  WARN extraction::items::lost: item 2643v0 fell out of the world at [40.418743, 23.896236, 301.04303]; put back at [40.418743, 29.838846, 301.04303]
+2026-11-23T05:56:50.808986Z  WARN extraction::items::lost: item 2648v0 fell out of the world at [114.22892, 14.77717, -13.843495]; put back at [114.22892, 17.588825, -13.843495]
+2026-11-23T05:56:50.809098Z  WARN extraction::items::lost: item 2674v0 fell out of the world at [164.99997, 24.846792, 262.72006]; put back at [164.99997, 28.095655, 262.72006]
+2026-11-23T05:56:50.809233Z  WARN extraction::items::lost: item 2629v0 fell out of the world at [-248.6, 8.282341, -157.48001]; put back at [-248.6, 34.987087, -157.48001]
+2026-11-23T05:56:50.809440Z  WARN extraction::items::lost: item 2785v0 fell out of the world at [-189.64624, 15.513715, 27.884104]; put back at [-189.64624, 36.122566, 27.884104]
+2026-11-23T05:56:50.809581Z  WARN extraction::items::lost: item 2852v0 fell out of the world at [-189.76416, 15.51372, 28.045767]; put back at [-189.76416, 36.146877, 28.045767]
+2026-11-23T05:56:50.809709Z  WARN extraction::items::lost: item 2861v0 fell out of the world at [-143.8029, 26.495167, 187.31396]; put back at [-143.8029, 31.775042, 187.31396]
+2026-11-23T05:56:50.809837Z  WARN extraction::items::lost: item 2867v0 fell out of the world at [132.25214, 20.340042, -232.05884]; put back at [132.25214, 32.368084, -232.05884]
+2026-11-23T05:56:50.809976Z  WARN extraction::items::lost: item 2634v0 fell out of the world at [-176.79944, 17.992226, 16.519781]; put back at [-176.79944, 34.849, 16.519781]
+2026-11-23T05:56:50.810139Z  WARN extraction::items::lost: item 2635v0 fell out of the world at [39.00065, 23.685072, -216.4807]; put back at [39.00065, 32.275368, -216.4807]
+2026-11-23T05:56:50.810332Z  WARN extraction::items::lost: item 2637v0 fell out of the world at [39.76932, 24.698254, 301.72046]; put back at [39.76932, 29.806591, 301.72046]
+2026-11-23T05:56:50.810468Z  WARN extraction::items::lost: item 2626v0 fell out of the world at [132.3751, 20.34168, -232.08827]; put back at [132.3751, 32.376266, -232.08827]
+2026-11-23T05:56:50.810648Z  WARN extraction::items::lost: item 2615v0 fell out of the world at [-18.599564, 16.141644, 31.219395]; put back at [-18.599564, 19.526001, 31.219395]
+2026-11-23T05:56:50.810777Z  WARN extraction::items::lost: item 2616v0 fell out of the world at [-3.4001932, 12.303856, 93.12074]; put back at [-3.4001932, 19.192612, 93.12074]
+2026-11-23T05:56:50.810990Z  WARN extraction::items::lost: item 2618v0 fell out of the world at [-17.200556, 16.206646, 32.919575]; put back at [-17.200556, 19.561813, 32.919575]
+2026-11-23T05:56:50.811137Z  WARN extraction::items::lost: item 2620v0 fell out of the world at [-144.11108, 27.051794, 187.39551]; put back at [-144.11108, 31.787092, 187.39551]
+2026-11-23T05:56:50.811327Z  WARN extraction::items::lost: item 2621v0 fell out of the world at [-238.04582, 16.31985, -190.61598]; put back at [-238.04582, 34.69215, -190.61598]
+2026-11-23T05:56:50.811462Z  WARN extraction::items::lost: item 2622v0 fell out of the world at [-188.40042, 12.808698, 40.203136]; put back at [-188.40042, 38.606815, 40.203136]
+2026-11-23T05:56:50.811634Z  WARN extraction::items::lost: item 2623v0 fell out of the world at [-16.50571, 15.356635, 38.82748]; put back at [-16.50571, 19.571823, 38.82748]
+2026-11-23T05:56:50.811772Z  WARN extraction::items::lost: item 2624v0 fell out of the world at [-16.45116, 15.356635, 37.33156]; put back at [-16.45116, 19.572866, 37.33156]
+2026-11-23T05:56:50.811951Z  WARN extraction::items::lost: item 2625v0 fell out of the world at [-258.12482, 12.265874, -188.01445]; put back at [-258.12482, 34.619694, -188.01445]
+2026-11-23T05:56:50.812069Z  WARN extraction::items::lost: item 2910v0 fell out of the world at [179.65717, 18.660593, 158.21329]; put back at [179.65717, 26.572441, 158.21329]
+2026-11-23T05:56:50.812165Z  WARN extraction::items::lost: item 2911v0 fell out of the world at [36.000023, 23.113075, -230.27997]; put back at [36.000023, 32.457344, -230.27997]
+2026-11-23T05:56:50.812269Z  WARN extraction::items::lost: item 2912v0 fell out of the world at [-221.64537, 19.86985, -222.01678]; put back at [-221.64537, 34.81792, -222.01678]
+2026-11-23T05:56:50.812372Z  WARN extraction::items::lost: item 2913v0 fell out of the world at [35.955048, 23.163074, -230.51321]; put back at [35.955048, 32.46008, -230.51321]
+2026-11-23T05:56:50.812477Z  WARN extraction::items::lost: item 2914v0 fell out of the world at [132.06906, 20.376694, -231.83685]; put back at [132.06906, 32.3559, -231.83685]
+2026-11-23T05:56:50.812589Z  WARN extraction::items::lost: item 2915v0 fell out of the world at [132.18896, 20.426765, -232.11586]; put back at [132.18896, 32.36388, -232.11586]
+2026-11-23T05:56:50.812722Z  WARN extraction::items::lost: item 2896v0 fell out of the world at [114.93481, 14.69468, -12.980865]; put back at [114.93481, 17.898464, -12.980865]
+2026-11-23T05:56:50.812860Z  WARN extraction::items::lost: item 2898v0 fell out of the world at [86.48682, 22.55305, 238.84998]; put back at [86.48682, 29.638847, 238.84998]
+2026-11-23T05:56:50.812974Z  WARN extraction::items::lost: item 2900v0 fell out of the world at [-214.59987, 16.22334, -195.27994]; put back at [-214.59987, 34.81792, -195.27994]
+2026-11-23T05:56:50.813097Z  WARN extraction::items::lost: item 2906v0 fell out of the world at [-18.700006, 15.939134, 33.12001]; put back at [-18.700006, 19.532482, 33.12001]
+2026-11-23T05:56:50.813214Z  WARN extraction::items::lost: item 2908v0 fell out of the world at [193.68225, 20.660353, -212.17159]; put back at [193.68225, 32.984894, -212.17159]
+2026-11-23T05:56:50.813349Z  WARN extraction::items::lost: item 2966v0 fell out of the world at [-226.76624, 19.924526, -218.7548]; put back at [-226.76624, 34.81792, -218.7548]
+2026-11-23T05:56:50.813492Z  WARN extraction::items::lost: item 2968v0 fell out of the world at [-169.20038, 15.285226, 43.319645]; put back at [-169.20038, 35.95891, 43.319645]
+2026-11-23T05:56:50.813598Z  WARN extraction::items::lost: item 2977v0 fell out of the world at [146.31584, 14.05941, -22.495218]; put back at [146.31584, 20.060675, -22.495218]
+2026-11-23T05:56:50.813743Z  WARN extraction::items::lost: item 2980v0 fell out of the world at [159.41808, 15.26165, -16.459562]; put back at [159.41808, 21.448189, -16.459562]
+2026-11-23T05:56:50.813909Z  WARN extraction::items::lost: item 2979v0 fell out of the world at [150.3694, 12.22706, -51.136875]; put back at [150.3694, 27.709213, -51.136875]
+2026-11-23T05:56:50.814034Z  WARN extraction::items::lost: item 2969v0 fell out of the world at [132.31195, 20.382692, -231.90482]; put back at [132.31195, 32.372063, -231.90482]
+2026-11-23T05:56:50.814160Z  WARN extraction::items::lost: item 2975v0 fell out of the world at [-161.40004, 18.08521, 16.119942]; put back at [-161.40004, 35.257347, 16.119942]
+2026-11-23T05:56:50.988050Z  INFO extraction::raid: raid: Truck: "No radio on you. My spare's in the crate."
+2026-11-23T05:56:51.096446Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14489v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.096661Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14496v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.096788Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14486v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.096912Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14494v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097034Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14492v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097157Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4827v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097277Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4825v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097394Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4823v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097502Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4821v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097615Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4819v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097714Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4817v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097817Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4815v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.097924Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4813v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098035Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4811v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098197Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4809v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098290Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4807v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098384Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4805v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098539Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4803v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098652Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4801v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098768Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4799v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.098896Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4797v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099015Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4795v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099130Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4793v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099248Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4791v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099380Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4789v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099498Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4787v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099605Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4785v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099723Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4783v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099833Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4781v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.099929Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4779v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100033Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4777v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100125Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4775v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100220Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4773v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100318Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4771v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100458Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4769v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100562Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4767v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100676Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4765v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100780Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4763v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.100879Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4761v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101040Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4759v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101136Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4757v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101243Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4755v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101338Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4753v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101441Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4094v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101549Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4090v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101669Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4086v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101780Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4082v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101887Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4078v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.101993Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4074v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102099Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4070v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102205Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4066v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102310Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4061v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102417Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4057v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102551Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4053v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102658Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4049v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102752Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4045v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102859Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4041v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.102953Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4037v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103056Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4127v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103149Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4547v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103250Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4545v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103349Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4543v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103460Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4541v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103579Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14877v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103694Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14879v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103819Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14881v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.103938Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14883v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104054Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14885v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104170Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14890v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104283Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14892v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104393Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14894v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104536Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14896v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104654Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14898v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104766Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14900v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.104886Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14902v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105007Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14904v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105160Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14906v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105280Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14908v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105395Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14910v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105624Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14912v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105736Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14914v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105846Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14916v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.105956Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14918v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.106129Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14920v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:51.106245Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14922v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:54.430560Z  INFO extraction::render::budget: cpu: main 1792.3 ms a frame (1% 4686.1), physics 3.1 (1% 5.2), render world 686.8 (1% 1030.2)
+2026-11-23T05:56:54.430732Z  INFO extraction: frames: 3 in 10 s, mean 3732.6 ms, 1% 5993.3 ms, worst 5993.3 ms (AtBase)
+2026-11-23T05:56:54.431167Z  INFO extraction: gpu: 0.2 ms a frame (ui 0.2, main_transparent_pass_2d 0.0)
+2026-11-23T05:56:56.318554Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-11-23T05:56:56.561914Z  INFO extraction::rig::xr: input: left hand profile none
+2026-11-23T05:56:56.562117Z  INFO extraction::rig::xr: input: right hand profile none
+2026-11-23T05:56:56.571667Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"TRAINING YARD","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T05:56:56.571849Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"NEW CAREER","what":"Camp","x":27.6,"z":173.3}
+2026-11-23T05:56:56.571931Z  INFO extraction::sim::observe: PLAYTEST read {"name":"","says":"EXTRACTION","what":"Camp","x":27.7,"z":173.6}
+2026-11-23T05:56:56.695586Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16790v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.695772Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16792v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.695901Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16794v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696012Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16796v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696118Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16798v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696234Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16800v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696491Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16802v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696668Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16804v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696784Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16806v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.696895Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16808v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697007Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16810v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697119Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16812v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697222Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16814v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697371Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16816v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697489Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16818v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697605Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16820v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.697758Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16822v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.698000Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16824v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:56.698101Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 16826v0 is invalid; its index now has generation 1.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-11-23T05:56:57.319957Z  INFO extraction: executors: the valley's in, the main world on one thread
+2026-11-23T05:56:57.320045Z  INFO extraction::render::timeline: load: buildings dressed (props in) at 17.31 s (frame 9)
+2026-11-23T05:56:57.321331Z  INFO extraction::render::timeline: load: every model loaded (preload landed) at 17.31 s (frame 9)
+2026-11-23T05:56:58.313263Z  WARN bevy_seedling::platform::cpal: audio stream stopped: Error { kind: StreamInvalidated, message: None }
+2026-11-23T05:56:58.402940Z  INFO firewheel_cpal: Attempting to start CPAL audio stream...
+2026-11-23T05:56:58.466410Z  INFO firewheel_cpal: Starting output audio stream with device "Some(DeviceId(Wasapi, "{0.0.0.00000000}.{e23a65e7-d231-43f7-b38b-c86a6a192421}"))" with configuration StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(480) } (native sample format: F32)
+2026-11-23T05:56:59.189142Z  INFO extraction::render::hold_rate::xr: eyes: 1800x1800 (60% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-11-23T05:57:00.745303Z  INFO extraction::raid: raid: Truck: "No gun on you. Here, my spare. Don't lose this one."
+2026-11-23T05:57:04.230945Z  INFO extraction: frames: 142 in 10 s, mean 70.6 ms, 1% 359.6 ms, worst 1908.6 ms (AtBase)
+2026-11-23T05:57:04.231118Z  INFO extraction: gpu: 3.4 ms a frame (clustering 2.1, bin_unpacking 0.4, early_mesh_preprocessing 0.3, main_opaque_pass_3d 0.3, upscaling 0.2, ui 0.1)
+2026-11-23T05:57:04.231280Z  INFO extraction::render::budget: cpu: main 26.6 ms a frame (1% 149.5), physics 3.9 (1% 6.4), render world 12.7 (1% 73.6)
+2026-11-23T05:57:04.811358Z  INFO extraction::render::timeline: load: every material and pipeline ready (ground and buildings drawn) at 24.80 s (frame 167)
+2026-11-23T05:57:04.989030Z  INFO extraction::world::impostors: impostor captured (256x640)
+2026-11-23T05:57:05.018692Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-11-23T05:57:05.045628Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-11-23T05:57:05.073831Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T05:57:05.085540Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T05:57:05.097619Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T05:57:05.110503Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T05:57:05.133620Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T05:57:05.157515Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T05:57:05.195435Z  INFO extraction::rig::loading: loading view: lifted at 25.2 s, the world in
+2026-11-23T05:57:05.201837Z  INFO extraction::render::timeline: load: forest streamed, impostors captured at 25.19 s (frame 174)
+2026-11-23T05:57:05.202003Z  INFO extraction::render::timeline: load: everything in at 25.19 s (frame 174)
+2026-11-23T05:57:05.203183Z  INFO extraction::render::warmup: warm-up: shelf put away as the world shows (173 frames, 178 kinds)
+2026-11-23T05:57:05.204098Z  INFO extraction::render::timeline: load: warm-up shelf done at 25.19 s (frame 174)
+2026-11-23T05:57:05.204210Z  INFO extraction::render::warmup: warm-up: 178 kinds of thing shelved (853 entries) over 173 frames: {"BoltMaterial": 1, "FogBeamMaterial": 2, "HaloMaterial": 1, "HazeExt>": 1, "ImpostorCut>": 1, "MarkFog>": 2, "ParticleMaterial": 2, "PocketMaterial": 1, "RainMaterial": 1, "SearchMaterial": 1, "ShaftMaterial": 1, "SheetMaterial": 1, "SkyMaterial": 1, "StandardMaterial": 55, "Sway>": 3, "TerrainExt>": 1, "TreeSway>": 2, "WaterExt>": 1, "XrayMaterial": 1, "model": 10, "unworn": 89}
+2026-11-23T05:57:09.072099Z  INFO extraction::render::hold_rate::xr: eyes: 1800x1800 (60% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-11-23T05:57:10.211985Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T05:57:10.212132Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-11-23T05:57:10.789503Z  INFO extraction::rig::xr: input: left hand profile /interaction_profiles/valve/index_controller
+2026-11-23T05:57:10.789662Z  INFO extraction::rig::xr: input: right hand profile /interaction_profiles/valve/index_controller
+2026-11-23T05:57:14.229857Z  INFO extraction: frames: 508 in 10 s, mean 19.7 ms, 1% 45.9 ms, worst 212.2 ms (AtBase)
+2026-11-23T05:57:14.230004Z  INFO extraction: gpu: 1.9 ms a frame (main_opaque_pass_3d 1.2, clustering 0.2, bin_unpacking 0.2, tonemapping 0.2, upscaling 0.1, early_mesh_preprocessing 0.0)
+2026-11-23T05:57:14.230183Z  INFO extraction::render::budget: cpu: main 11.4 ms a frame (1% 18.5), physics 2.7 (1% 3.9), render world 5.4 (1% 15.4)
+2026-11-23T05:57:17.036644Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T05:57:17.036792Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-11-23T05:57:19.071183Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-11-23T05:57:20.233693Z  INFO extraction::robots::director: director: walker to work site [40.0, -95.0]
+2026-11-23T05:57:24.245864Z  INFO extraction: frames: 555 in 10 s, mean 18.1 ms, 1% 28.9 ms, worst 54.0 ms (AtBase)
+2026-11-23T05:57:24.246026Z  INFO extraction: gpu: 1.7 ms a frame (main_opaque_pass_3d 1.4, tonemapping 0.1, bin_unpacking 0.1, clustering 0.0, upscaling 0.0, early_mesh_preprocessing 0.0)
+2026-11-23T05:57:24.246177Z  INFO extraction::render::budget: cpu: main 10.8 ms a frame (1% 15.3), physics 2.6 (1% 3.8), render world 4.9 (1% 16.1)
+2026-11-23T05:57:25.083577Z  INFO bevy_window::system: No windows are open, exiting
+2026-11-23T05:57:25.083711Z  INFO bevy_winit::system: Closing window 65v0
+2026-11-23T05:57:25.403555Z  WARN bevy_render::diagnostic::internal: Failed to download render statistics buffer: Error occurred when trying to async map a buffer
+2026-11-23T05:57:26.255417Z  INFO extraction::render::timeline: load: closed (world dropped) at 46.24 s (frame 1253)

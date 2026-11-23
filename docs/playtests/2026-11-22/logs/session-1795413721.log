@@ -1,0 +1,474 @@
+2026-11-23T06:02:01.878562Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Windows 10 Home", kernel: "19045", cpu: "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz", core_count: "6", memory: "63.9 GiB" }
+2026-11-23T06:02:02.005208Z  INFO bevy_mod_openxr::openxr::init: Loaded OpenXR runtime: SteamVR/OpenXR 2.18.4
+2026-11-23T06:02:02.005342Z  INFO bevy_mod_openxr::openxr::init: Using system: SteamVR/OpenXR : lighthouse
+2026-11-23T06:02:02.433646Z  INFO extraction::weapons::trigger: triggers: breaks assume a trigger reads 1 at its end, each leaving 0.1 before it
+2026-11-23T06:02:02.444500Z  INFO extraction::render::timeline: load: plugins building at 0.90 s (frame 0)
+2026-11-23T06:02:02.470166Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-11-23T06:02:02.470347Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-11-23T06:02:02.471211Z  INFO extraction::report: report: textures: BC7 where baked
+2026-11-23T06:02:02.471716Z  INFO bevy_winit::system: Creating new window Extraction (65v0)
+2026-11-23T06:02:02.644115Z  INFO extraction::render::timeline: load: startup begins (window, GPU) at 1.10 s (frame 0)
+2026-11-23T06:02:02.704023Z  INFO extraction::world: zone `Training Yard` built in 60 ms (241x241 heightmap)
+2026-11-23T06:02:02.706637Z  INFO extraction::player: spawning local player at [0, 12.215615, 96] (ground 12.22)
+2026-11-23T06:02:02.707630Z  INFO extraction::world::trees: 18 trunk colliders
+2026-11-23T06:02:02.707897Z  INFO extraction::world::trees: 88 trees scattered in 1 ms
+2026-11-23T06:02:02.770309Z  INFO extraction::render::first_sight: preload: 294 models asked for at start (render::first_sight)
+2026-11-23T06:02:02.773943Z  INFO extraction::report: report: runtime: SteamVR/OpenXR 2.18.4
+2026-11-23T06:02:02.776169Z  INFO extraction::report: report: headset: SteamVR/OpenXR : lighthouse
+2026-11-23T06:02:02.776707Z  INFO extraction::rig::xr: eyes: 1800x1800 (60% of the runtime's 2980x2980)
+2026-11-23T06:02:02.776826Z  INFO extraction::report: report: eye targets: about 1084 MB (2 x 2980x2980, MSAA 4x)
+2026-11-23T06:02:02.776923Z  INFO extraction::rig::xr: eyes: holding the frame rate, from 1800x1800 up to 2980x2980
+2026-11-23T06:02:02.778375Z  INFO extraction::world::rocks: 466 rocks scattered in 57 ms
+2026-11-23T06:02:02.780817Z  INFO extraction::audio: sound bank: 106 sets
+2026-11-23T06:02:02.815969Z  INFO extraction::wildlife::flock: a flock of 13 Rooks on the shed at [-30, 15, 95]
+2026-11-23T06:02:02.816108Z  INFO extraction::wildlife: wildlife: 3 perch sites (144 perches), 1 flocks, in 110 ms
+2026-11-23T06:02:02.819441Z  INFO extraction::world::buildings: 13 building loot spots, 1 holds
+2026-11-23T06:02:02.890150Z  INFO extraction::robots::walker: navigation grid built in 10 ms
+2026-11-23T06:02:02.890469Z  INFO extraction::items::loot: 0 items rolled into 13 building loot spots
+2026-11-23T06:02:02.892088Z  INFO extraction::world::scenes: 0 staged scenes
+2026-11-23T06:02:02.892752Z  INFO extraction::render::timeline: load: startup done (zone, terrain, nav, props) at 1.35 s (frame 0)
+2026-11-23T06:02:02.892800Z  INFO firewheel_cpal: Attempting to start CPAL audio stream...
+2026-11-23T06:02:02.934001Z  INFO firewheel_cpal: Starting output audio stream with device "Some(DeviceId(Wasapi, "{0.0.0.00000000}.{e23a65e7-d231-43f7-b38b-c86a6a192421}"))" with configuration StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(480) } (native sample format: F32)
+2026-11-23T06:02:02.951978Z  INFO extraction::persist: restored 14 items
+2026-11-23T06:02:02.966558Z  INFO extraction::render::timeline: load: first frame at 1.42 s (frame 1)
+2026-11-23T06:02:02.974825Z  INFO extraction::rig::xr: headset: starting the session (the loading view until the world is in)
+2026-11-23T06:02:02.977196Z  INFO extraction::render::timeline: load: headset session asked for at 1.43 s (frame 1)
+2026-11-23T06:02:03.367252Z  INFO extraction::report: report: build: 0.1.0+g5ccaabcc
+2026-11-23T06:02:03.367473Z  INFO extraction::report: report: valley: training_yard
+2026-11-23T06:02:03.367680Z  INFO extraction::report: report: gpu: NVIDIA GeForce RTX 3080 (Vulkan, driver NVIDIA 610.88)
+2026-11-23T06:02:03.541195Z  INFO extraction::sim::playtest: recording this raid to C:\Users\prath\AppData\Roaming\extraction\raids\training_yard\yard-1795413723.jsonl
+2026-11-23T06:02:03.550135Z  INFO extraction::progression: job 1: Scout { map: "marrow_creek", place: "Old farm", at: [89.5, 88.5], seen: false }
+2026-11-23T06:02:03.673205Z  INFO extraction::world::trees: forest: foliage fetched (cards, impostors)
+2026-11-23T06:02:03.674919Z  INFO extraction::world::trees: forest: 88 trees in 18 chunks
+2026-11-23T06:02:03.712753Z  WARN bevy_light: Point lights and/or spot lights are present, but no entity has `ShadowLodOrigin`, and no camera that renders to the window has been found. Consider using the `ShadowLodOrigin` component to set a LOD origin.
+2026-11-23T06:02:03.725647Z  INFO extraction::render::timeline: load: a 3D view drawing at 2.18 s (frame 1)
+2026-11-23T06:02:03.928042Z  INFO extraction::render::timeline: load: first frame rendered at 2.38 s (frame 1)
+2026-11-23T06:02:04.047338Z  INFO extraction::rig::xr: XR session created: driving the rig from the headset
+2026-11-23T06:02:04.047624Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-11-23T06:02:04.049611Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-11-23T06:02:04.206928Z  INFO extraction::robots::doors: 9 doorways in 9 buildings
+2026-11-23T06:02:04.208730Z  INFO extraction::robots::director: director: 0.037 km² to walk, 3 roaming at most
+2026-11-23T06:02:04.424338Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attaching 1 sessions
+2026-11-23T06:02:04.424441Z  INFO extraction::rig::loading: loading view: held on 3767v0 ("Training Yard")
+2026-11-23T06:02:04.424626Z  INFO extraction::rig::loading: loading view: held on 3768v0 ("Training Yard")
+2026-11-23T06:02:04.424776Z  INFO extraction::rig::loading: loading view: held on 4272v0 ("Training Yard")
+2026-11-23T06:02:04.502185Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attached sessions!
+2026-11-23T06:02:04.614992Z  INFO bevy_mod_openxr::openxr::init: entered XR state IDLE
+2026-11-23T06:02:04.615140Z  INFO bevy_mod_openxr::openxr::init: entered XR state READY
+2026-11-23T06:02:11.329022Z  INFO extraction::render::timeline: load: every model loaded (preload landed) at 9.78 s (frame 4)
+2026-11-23T06:02:11.538778Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-11-23T06:02:11.539001Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T06:02:11.539201Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-11-23T06:02:11.545347Z  INFO extraction::rig::xr: input: fingers tracked (Left hand first)
+2026-11-23T06:02:11.609158Z  INFO extraction::rig::xr: input: left hand profile none
+2026-11-23T06:02:11.609584Z  INFO extraction::rig::xr: input: right hand profile none
+2026-11-23T06:02:11.609695Z  INFO extraction::rig::xr: input: Left grip works
+2026-11-23T06:02:11.610913Z  INFO extraction::rig::xr: input: Right grip works
+2026-11-23T06:02:11.786187Z  INFO extraction: executors: the valley's in, the main world on one thread
+2026-11-23T06:02:11.786223Z  INFO extraction::render::timeline: load: buildings dressed (props in) at 10.24 s (frame 8)
+2026-11-23T06:02:11.981549Z  INFO extraction::raid: raid: Driver: "The board on your left. Push SETTINGS with a finger."
+2026-11-23T06:02:12.573964Z  INFO extraction::rig::xr: input: left hand profile /interaction_profiles/valve/index_controller
+2026-11-23T06:02:12.574148Z  INFO extraction::rig::xr: input: right hand profile /interaction_profiles/valve/index_controller
+2026-11-23T06:02:13.014136Z  INFO extraction: frames: 33 in 10 s, mean 303.9 ms, 1% 6620.0 ms, worst 6620.0 ms (Out)
+2026-11-23T06:02:13.014406Z  INFO extraction: gpu: 1.0 ms a frame (clustering 0.2, upscaling 0.2, early_mesh_preprocessing 0.1, bin_unpacking 0.1, ui 0.1, main_transparent_pass_2d 0.1)
+2026-11-23T06:02:13.014582Z  INFO extraction::render::budget: cpu: main 55.6 ms a frame (1% 759.0), physics 1.7 (1% 2.7), render world 46.7 (1% 567.5)
+2026-11-23T06:02:14.091550Z  INFO extraction::render::hold_rate::xr: eyes: 1800x1800 (60% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-11-23T06:02:15.695609Z  INFO extraction::render::timeline: load: every material and pipeline ready (ground and buildings drawn) at 14.15 s (frame 133)
+2026-11-23T06:02:15.850030Z  INFO extraction::world::impostors: impostor captured (256x640)
+2026-11-23T06:02:15.878324Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-11-23T06:02:15.903997Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-11-23T06:02:15.931956Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T06:02:15.944008Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T06:02:15.956723Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-11-23T06:02:15.969998Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T06:02:15.989934Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T06:02:16.011469Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-11-23T06:02:16.043785Z  INFO extraction::rig::loading: loading view: lifted at 14.5 s, the world in
+2026-11-23T06:02:16.048804Z  INFO extraction::render::timeline: load: forest streamed, impostors captured at 14.50 s (frame 139)
+2026-11-23T06:02:16.048999Z  INFO extraction::render::timeline: load: everything in at 14.50 s (frame 139)
+2026-11-23T06:02:16.049225Z  INFO extraction::render::warmup: warm-up: shelf put away as the world shows (138 frames, 165 kinds)
+2026-11-23T06:02:16.049439Z  INFO extraction::render::timeline: load: warm-up shelf done at 14.50 s (frame 139)
+2026-11-23T06:02:16.049556Z  INFO extraction::render::warmup: warm-up: 165 kinds of thing shelved (789 entries) over 138 frames: {"BoltMaterial": 1, "FogBeamMaterial": 2, "HaloMaterial": 1, "HazeExt>": 1, "ImpostorCut>": 1, "MarkFog>": 2, "ParticleMaterial": 2, "PocketMaterial": 1, "RainMaterial": 1, "SearchMaterial": 1, "ShaftMaterial": 1, "SheetMaterial": 1, "SkyMaterial": 1, "StandardMaterial": 44, "Sway>": 2, "TerrainExt>": 1, "TreeSway>": 1, "model": 10, "unworn": 91}
+2026-11-23T06:02:23.012330Z  INFO extraction: frames: 602 in 10 s, mean 16.6 ms, 1% 36.5 ms, worst 210.3 ms (Out)
+2026-11-23T06:02:23.012548Z  INFO extraction: gpu: 5.3 ms a frame (main_opaque_pass_3d 3.9, clustering 0.5, tonemapping 0.4, bin_unpacking 0.3, early_mesh_preprocessing 0.1, upscaling 0.1)
+2026-11-23T06:02:23.012768Z  INFO extraction::render::budget: cpu: main 7.9 ms a frame (1% 12.4), physics 1.6 (1% 3.4), render world 6.1 (1% 15.1)
+2026-11-23T06:02:24.094267Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-11-23T06:02:26.158786Z  INFO extraction::rig::xr: input: Right trigger works
+2026-11-23T06:02:33.033047Z  INFO extraction: frames: 499 in 10 s, mean 20.1 ms, 1% 30.7 ms, worst 68.4 ms (Out)
+2026-11-23T06:02:33.033238Z  INFO extraction: gpu: 8.0 ms a frame (main_opaque_pass_3d 6.5, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, early_mesh_preprocessing 0.1, upscaling 0.1)
+2026-11-23T06:02:33.033414Z  INFO extraction::render::budget: cpu: main 7.4 ms a frame (1% 10.5), physics 1.5 (1% 3.1), render world 10.5 (1% 19.4)
+2026-11-23T06:02:34.098973Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 4.5 ms of a 13.3 ms frame
+2026-11-23T06:02:35.812744Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T06:02:35.812909Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-11-23T06:02:36.405827Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T06:02:36.405988Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-11-23T06:02:38.941597Z  INFO extraction::rig::xr: input: Left primary works
+2026-11-23T06:02:43.052655Z  INFO extraction: frames: 479 in 10 s, mean 20.9 ms, 1% 29.4 ms, worst 83.8 ms (Out)
+2026-11-23T06:02:43.052789Z  INFO extraction: gpu: 7.0 ms a frame (main_opaque_pass_3d 5.6, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, early_mesh_preprocessing 0.1, upscaling 0.1)
+2026-11-23T06:02:43.052916Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.5), physics 1.1 (1% 2.3), render world 10.1 (1% 20.2)
+2026-11-23T06:02:43.986167Z  INFO extraction::rig::xr: input: Left stick works
+2026-11-23T06:02:44.120357Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.7 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:02:47.344538Z  INFO extraction::rig::xr: input: Right stick works
+2026-11-23T06:02:53.060863Z  INFO extraction: frames: 493 in 10 s, mean 20.3 ms, 1% 28.8 ms, worst 29.7 ms (Out)
+2026-11-23T06:02:53.061063Z  INFO extraction: gpu: 6.8 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:02:53.061243Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.2), physics 1.1 (1% 2.1), render world 10.3 (1% 20.1)
+2026-11-23T06:02:54.125036Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:03:03.065740Z  INFO extraction: frames: 487 in 10 s, mean 20.5 ms, 1% 28.6 ms, worst 29.5 ms (Out)
+2026-11-23T06:03:03.065918Z  INFO extraction: gpu: 6.9 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:03:03.066067Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.9), physics 1.1 (1% 2.0), render world 10.6 (1% 20.1)
+2026-11-23T06:03:04.136320Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:03:13.075075Z  INFO extraction: frames: 494 in 10 s, mean 20.3 ms, 1% 28.9 ms, worst 30.2 ms (Out)
+2026-11-23T06:03:13.075237Z  INFO extraction: gpu: 6.7 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:03:13.075398Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.9), physics 1.1 (1% 2.1), render world 10.1 (1% 20.1)
+2026-11-23T06:03:14.145937Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.7 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:03:23.086384Z  INFO extraction: frames: 490 in 10 s, mean 20.5 ms, 1% 29.0 ms, worst 39.2 ms (Out)
+2026-11-23T06:03:23.086522Z  INFO extraction: gpu: 6.6 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:03:23.086887Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 9.2), physics 1.1 (1% 2.1), render world 10.1 (1% 20.5)
+2026-11-23T06:03:24.140392Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.7 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:03:33.112127Z  INFO extraction: frames: 496 in 10 s, mean 20.2 ms, 1% 29.1 ms, worst 30.0 ms (Out)
+2026-11-23T06:03:33.112284Z  INFO extraction: gpu: 6.7 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, early_mesh_preprocessing 0.1)
+2026-11-23T06:03:33.112456Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.1), physics 1.1 (1% 2.1), render world 10.1 (1% 20.2)
+2026-11-23T06:03:34.162185Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.1 ms of a 13.3 ms frame
+2026-11-23T06:03:43.130385Z  INFO extraction: frames: 482 in 10 s, mean 20.8 ms, 1% 28.9 ms, worst 29.8 ms (Out)
+2026-11-23T06:03:43.130618Z  INFO extraction: gpu: 6.9 ms a frame (main_opaque_pass_3d 5.6, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, early_mesh_preprocessing 0.1, upscaling 0.1)
+2026-11-23T06:03:43.130798Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.1), physics 1.1 (1% 2.0), render world 10.7 (1% 20.1)
+2026-11-23T06:03:44.179016Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 13.3 ms frame
+2026-11-23T06:03:52.467326Z  INFO extraction::onboarding: onboarding: Button done
+2026-11-23T06:03:52.468420Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"Button","station_done":true}
+2026-11-23T06:03:52.468596Z  INFO extraction::sim::observe: PLAYTEST press {"card":null,"name":"Training card","says":"SKIP","what":"Camp","x":-1.1,"z":94.5}
+2026-11-23T06:03:52.468735Z  INFO extraction::raid: raid: Driver: "Good. Next: the lamp on your left, short of the gate."
+2026-11-23T06:03:53.134560Z  INFO extraction: frames: 494 in 10 s, mean 20.3 ms, 1% 29.6 ms, worst 30.3 ms (Out)
+2026-11-23T06:03:53.134731Z  INFO extraction: gpu: 7.0 ms a frame (main_opaque_pass_3d 5.7, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:03:53.134909Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.5), physics 1.1 (1% 1.9), render world 10.0 (1% 20.5)
+2026-11-23T06:03:54.173192Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.4 ms of a 13.3 ms frame
+2026-11-23T06:04:01.458049Z  INFO extraction::sim::observe: PLAYTEST press {"card":null,"name":"Training card","says":"SETTINGS","what":"Camp","x":-1.5,"z":94.5}
+2026-11-23T06:04:03.153191Z  INFO extraction: frames: 495 in 10 s, mean 20.2 ms, 1% 28.4 ms, worst 29.7 ms (Out)
+2026-11-23T06:04:03.153368Z  INFO extraction: gpu: 6.3 ms a frame (main_opaque_pass_3d 4.9, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:04:03.153573Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.1), physics 1.1 (1% 2.0), render world 10.1 (1% 20.0)
+2026-11-23T06:04:04.019644Z  INFO extraction::raid: raid: Driver: "From the top. The board where you started."
+2026-11-23T06:04:04.021181Z  INFO extraction::sim::observe: PLAYTEST press {"card":null,"name":"Training card","says":"START OVER","what":"Camp","x":-1.8,"z":94.5}
+2026-11-23T06:04:04.185769Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.4 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:04:12.310221Z  INFO extraction::onboarding: onboarding: Button done
+2026-11-23T06:04:12.311368Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"Button","station_done":true}
+2026-11-23T06:04:12.311511Z  INFO extraction::sim::observe: PLAYTEST press {"card":null,"name":"Training card","says":"SETTINGS","what":"Camp","x":-1.5,"z":94.5}
+2026-11-23T06:04:12.526509Z  INFO extraction::sim::observe: PLAYTEST press {"card":null,"name":"Training card","says":"SETTINGS","what":"Camp","x":-1.5,"z":94.5}
+2026-11-23T06:04:13.177072Z  INFO extraction: frames: 505 in 10 s, mean 19.8 ms, 1% 28.6 ms, worst 29.2 ms (Out)
+2026-11-23T06:04:13.177286Z  INFO extraction: gpu: 6.4 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:04:13.177431Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.8), physics 1.1 (1% 1.8), render world 9.5 (1% 19.7)
+2026-11-23T06:04:14.191058Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:04:23.179025Z  INFO extraction: frames: 485 in 10 s, mean 20.6 ms, 1% 28.6 ms, worst 30.1 ms (Out)
+2026-11-23T06:04:23.179192Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:04:23.179366Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 7.9), physics 1.1 (1% 2.1), render world 10.7 (1% 20.2)
+2026-11-23T06:04:24.188832Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 13.3 ms frame
+2026-11-23T06:04:33.203855Z  INFO extraction: frames: 485 in 10 s, mean 20.7 ms, 1% 28.9 ms, worst 29.4 ms (Out)
+2026-11-23T06:04:33.203999Z  INFO extraction: gpu: 7.5 ms a frame (main_opaque_pass_3d 6.1, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:04:33.204136Z  INFO extraction::render::budget: cpu: main 6.0 ms a frame (1% 8.1), physics 1.1 (1% 2.0), render world 10.6 (1% 20.2)
+2026-11-23T06:04:33.920100Z  INFO extraction::onboarding: onboarding: Turn done
+2026-11-23T06:04:33.921607Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"Turn","station_done":false}
+2026-11-23T06:04:34.204163Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.5 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:04:43.188405Z  INFO extraction: frames: 490 in 10 s, mean 20.4 ms, 1% 28.8 ms, worst 30.1 ms (Out)
+2026-11-23T06:04:43.188563Z  INFO extraction: gpu: 7.6 ms a frame (main_opaque_pass_3d 6.2, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:04:43.188730Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.9), physics 1.1 (1% 2.4), render world 10.5 (1% 20.3)
+2026-11-23T06:04:44.218574Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:04:53.213869Z  INFO extraction: frames: 496 in 10 s, mean 20.2 ms, 1% 28.9 ms, worst 29.4 ms (Out)
+2026-11-23T06:04:53.214069Z  INFO extraction: gpu: 7.7 ms a frame (main_opaque_pass_3d 6.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:04:53.214244Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.0), physics 1.1 (1% 2.3), render world 10.0 (1% 20.1)
+2026-11-23T06:04:54.234328Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.2 ms of a 13.3 ms frame
+2026-11-23T06:05:03.245075Z  INFO extraction: frames: 493 in 10 s, mean 20.3 ms, 1% 28.4 ms, worst 29.9 ms (Out)
+2026-11-23T06:05:03.245217Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:05:03.245367Z  INFO extraction::render::budget: cpu: main 6.0 ms a frame (1% 8.4), physics 1.1 (1% 2.2), render world 10.1 (1% 20.1)
+2026-11-23T06:05:04.241151Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.2 ms of a 13.3 ms frame
+2026-11-23T06:05:13.246861Z  INFO extraction: frames: 496 in 10 s, mean 20.2 ms, 1% 29.1 ms, worst 32.5 ms (Out)
+2026-11-23T06:05:13.247039Z  INFO extraction: gpu: 6.7 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:05:13.247209Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.8), physics 1.1 (1% 2.1), render world 9.9 (1% 19.8)
+2026-11-23T06:05:14.252399Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.9 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:05:23.255876Z  INFO extraction: frames: 502 in 10 s, mean 19.9 ms, 1% 28.6 ms, worst 29.2 ms (Out)
+2026-11-23T06:05:23.256023Z  INFO extraction: gpu: 6.2 ms a frame (main_opaque_pass_3d 5.0, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:05:23.256205Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.8), physics 1.1 (1% 1.9), render world 9.5 (1% 19.7)
+2026-11-23T06:05:24.256830Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.3 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:05:33.266042Z  INFO extraction: frames: 491 in 10 s, mean 20.4 ms, 1% 28.5 ms, worst 29.7 ms (Out)
+2026-11-23T06:05:33.266201Z  INFO extraction: gpu: 7.1 ms a frame (main_opaque_pass_3d 5.8, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:05:33.266349Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.2), physics 1.1 (1% 2.1), render world 10.4 (1% 20.0)
+2026-11-23T06:05:34.267069Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 13.3 ms frame
+2026-11-23T06:05:43.270376Z  INFO extraction: frames: 494 in 10 s, mean 20.2 ms, 1% 29.0 ms, worst 29.8 ms (Out)
+2026-11-23T06:05:43.270528Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.2, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:05:43.270676Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.4), physics 1.1 (1% 2.2), render world 10.4 (1% 20.4)
+2026-11-23T06:05:44.270699Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.2 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:05:53.296141Z  INFO extraction: frames: 491 in 10 s, mean 20.4 ms, 1% 28.5 ms, worst 29.4 ms (Out)
+2026-11-23T06:05:53.296294Z  INFO extraction: gpu: 6.6 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:05:53.296463Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 7.9), physics 1.1 (1% 2.0), render world 10.5 (1% 20.2)
+2026-11-23T06:05:54.283933Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:05:55.797220Z  INFO extraction::raid: raid: Driver: "Hear them go? Out there the machines hear that too. Crouch and walk, and they let you nearer."
+2026-11-23T06:06:03.303566Z  INFO extraction: frames: 504 in 10 s, mean 19.9 ms, 1% 28.9 ms, worst 29.3 ms (Out)
+2026-11-23T06:06:03.303711Z  INFO extraction: gpu: 6.3 ms a frame (main_opaque_pass_3d 5.0, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:06:03.303907Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.0), physics 1.1 (1% 1.9), render world 9.7 (1% 20.2)
+2026-11-23T06:06:04.284293Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:06:13.312067Z  INFO extraction: frames: 494 in 10 s, mean 20.3 ms, 1% 29.1 ms, worst 31.1 ms (Out)
+2026-11-23T06:06:13.312219Z  INFO extraction: gpu: 6.4 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, bin_unpacking 0.3, clustering 0.2, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:06:13.312396Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 9.0), physics 1.2 (1% 2.5), render world 10.2 (1% 20.5)
+2026-11-23T06:06:14.298805Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 13.3 ms frame
+2026-11-23T06:06:18.393238Z  INFO extraction::sim::observe: PLAYTEST press {"card":null,"name":"Door","says":"","what":"Door","x":-28.5,"z":93.5}
+2026-11-23T06:06:20.495430Z  INFO extraction::raid: raid: Driver: "Only rats. Sat quiet, they'd mean nobody's been in."
+2026-11-23T06:06:23.327028Z  INFO extraction: frames: 555 in 10 s, mean 18.0 ms, 1% 28.2 ms, worst 29.0 ms (Out)
+2026-11-23T06:06:23.327210Z  INFO extraction: gpu: 5.1 ms a frame (main_opaque_pass_3d 3.8, tonemapping 0.4, bin_unpacking 0.3, clustering 0.2, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:06:23.327398Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.7), physics 1.1 (1% 2.1), render world 6.8 (1% 19.9)
+2026-11-23T06:06:24.309402Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 3.4 ms of a 13.3 ms frame
+2026-11-23T06:06:33.327016Z  INFO extraction: frames: 518 in 10 s, mean 19.3 ms, 1% 28.4 ms, worst 30.3 ms (Out)
+2026-11-23T06:06:33.327173Z  INFO extraction: gpu: 6.1 ms a frame (main_opaque_pass_3d 4.8, tonemapping 0.4, bin_unpacking 0.3, clustering 0.2, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:06:33.327337Z  INFO extraction::render::budget: cpu: main 6.0 ms a frame (1% 8.0), physics 1.1 (1% 1.9), render world 8.8 (1% 20.1)
+2026-11-23T06:06:34.324947Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 13.3 ms frame
+2026-11-23T06:06:43.328306Z  INFO extraction: frames: 496 in 10 s, mean 20.2 ms, 1% 28.8 ms, worst 29.6 ms (Out)
+2026-11-23T06:06:43.328461Z  INFO extraction: gpu: 6.4 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, clustering 0.2, bin_unpacking 0.2, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:06:43.328589Z  INFO extraction::render::budget: cpu: main 6.0 ms a frame (1% 8.0), physics 1.1 (1% 1.9), render world 10.0 (1% 20.6)
+2026-11-23T06:06:44.349734Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.7 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:06:53.348148Z  INFO extraction: frames: 501 in 10 s, mean 20.0 ms, 1% 28.4 ms, worst 29.1 ms (Out)
+2026-11-23T06:06:53.348314Z  INFO extraction: gpu: 6.7 ms a frame (main_opaque_pass_3d 5.4, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:06:53.348468Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.9), physics 1.1 (1% 2.3), render world 9.8 (1% 20.4)
+2026-11-23T06:06:54.364172Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.4 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:07:03.361929Z  INFO extraction: frames: 502 in 10 s, mean 19.9 ms, 1% 28.3 ms, worst 30.4 ms (Out)
+2026-11-23T06:07:03.362143Z  INFO extraction: gpu: 6.8 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:07:03.362333Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.1), physics 1.1 (1% 1.9), render world 9.5 (1% 19.8)
+2026-11-23T06:07:04.376740Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:07:13.376560Z  INFO extraction: frames: 505 in 10 s, mean 19.8 ms, 1% 29.2 ms, worst 30.1 ms (Out)
+2026-11-23T06:07:13.376722Z  INFO extraction: gpu: 6.8 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.2, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:07:13.376892Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.9), physics 1.1 (1% 2.1), render world 9.6 (1% 20.6)
+2026-11-23T06:07:14.377759Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.5 ms of a 13.3 ms frame
+2026-11-23T06:07:23.400330Z  INFO extraction: frames: 529 in 10 s, mean 18.9 ms, 1% 28.5 ms, worst 29.6 ms (Out)
+2026-11-23T06:07:23.400517Z  INFO extraction: gpu: 6.6 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, clustering 0.3, bin_unpacking 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:07:23.400683Z  INFO extraction::render::budget: cpu: main 5.9 ms a frame (1% 7.9), physics 1.0 (1% 1.9), render world 8.0 (1% 20.4)
+2026-11-23T06:07:24.402362Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:07:29.084198Z  INFO extraction::onboarding: onboarding: Crouch done
+2026-11-23T06:07:29.084520Z  INFO extraction::raid: raid: Crouched: quieter, slower. Right stick down again to stand.
+2026-11-23T06:07:29.085868Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"Crouch","station_done":false}
+2026-11-23T06:07:33.413746Z  INFO extraction: frames: 481 in 10 s, mean 20.8 ms, 1% 29.2 ms, worst 54.7 ms (Out)
+2026-11-23T06:07:33.413936Z  INFO extraction: gpu: 7.1 ms a frame (main_opaque_pass_3d 5.7, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:07:33.414129Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.7), physics 1.2 (1% 2.2), render world 10.9 (1% 20.0)
+2026-11-23T06:07:33.580091Z  INFO extraction::onboarding: onboarding: Run done
+2026-11-23T06:07:33.581189Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"Run","station_done":true}
+2026-11-23T06:07:33.581348Z  INFO extraction::raid: raid: Driver: "Good. Next: through the gate, the lamp by the pen."
+2026-11-23T06:07:34.401811Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.1 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:07:38.253516Z  INFO extraction::raid: raid: Driver: "Anything odd, stand still, click both sticks: noted."
+2026-11-23T06:07:43.442147Z  INFO extraction: frames: 490 in 10 s, mean 20.5 ms, 1% 29.3 ms, worst 30.6 ms (Out)
+2026-11-23T06:07:43.442300Z  INFO extraction: gpu: 6.9 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:07:43.442495Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.9), physics 1.1 (1% 2.2), render world 10.4 (1% 20.2)
+2026-11-23T06:07:43.986817Z  INFO extraction::rig::xr: input: Right stick click works
+2026-11-23T06:07:44.019970Z  WARN extraction::sim::playtest: PLAYTEST MARK 1 at (-4.3, 11.9, 83.0), raid clock 334 s
+2026-11-23T06:07:44.020134Z  INFO extraction::raid: raid: Mark 1 noted.
+2026-11-23T06:07:44.087597Z  INFO bevy_render::view::window::screenshot: Screenshot saved to C:\Users\prath\AppData\Roaming\extraction\marks\mark-1795414064-1.png
+2026-11-23T06:07:44.404460Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 13.3 ms frame
+2026-11-23T06:07:46.079564Z  WARN extraction::sim::playtest: PLAYTEST MARK 2 at (-4.3, 11.9, 82.2), raid clock 336 s
+2026-11-23T06:07:46.079703Z  INFO extraction::raid: raid: Mark 2 noted.
+2026-11-23T06:07:46.179755Z  INFO bevy_render::view::window::screenshot: Screenshot saved to C:\Users\prath\AppData\Roaming\extraction\marks\mark-1795414066-2.png
+2026-11-23T06:07:46.763402Z  WARN extraction::sim::playtest: PLAYTEST MARK 3 at (-4.6, 11.9, 82.2), raid clock 336 s
+2026-11-23T06:07:46.763542Z  INFO extraction::raid: raid: Mark 3 noted.
+2026-11-23T06:07:46.860632Z  INFO bevy_render::view::window::screenshot: Screenshot saved to C:\Users\prath\AppData\Roaming\extraction\marks\mark-1795414066-3.png
+2026-11-23T06:07:53.466781Z  INFO extraction: frames: 488 in 10 s, mean 20.5 ms, 1% 28.9 ms, worst 33.2 ms (Out)
+2026-11-23T06:07:53.466932Z  INFO extraction: gpu: 7.2 ms a frame (main_opaque_pass_3d 5.7, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:07:53.467078Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 8.9), physics 1.1 (1% 2.2), render world 10.5 (1% 20.0)
+2026-11-23T06:07:54.427547Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:08:03.477995Z  INFO extraction: frames: 493 in 10 s, mean 20.3 ms, 1% 28.8 ms, worst 29.9 ms (Out)
+2026-11-23T06:08:03.478208Z  INFO extraction: gpu: 7.4 ms a frame (main_opaque_pass_3d 6.1, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:08:03.478349Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.2), physics 1.1 (1% 2.1), render world 10.3 (1% 20.1)
+2026-11-23T06:08:04.430885Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.4 ms of a 13.3 ms frame
+2026-11-23T06:08:07.909694Z  INFO extraction::onboarding: onboarding: FarGrab done
+2026-11-23T06:08:07.912372Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"FarGrab","station_done":false}
+2026-11-23T06:08:08.040900Z  INFO extraction::rig::xr: input: Right secondary works
+2026-11-23T06:08:13.482193Z  INFO extraction: frames: 480 in 10 s, mean 20.8 ms, 1% 28.7 ms, worst 32.9 ms (Out)
+2026-11-23T06:08:13.482454Z  INFO extraction: gpu: 7.6 ms a frame (main_opaque_pass_3d 6.4, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:08:13.482679Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 9.8), physics 1.1 (1% 2.0), render world 10.8 (1% 19.8)
+2026-11-23T06:08:14.432674Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.4 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:08:23.495347Z  INFO extraction: frames: 518 in 10 s, mean 19.3 ms, 1% 28.3 ms, worst 29.3 ms (Out)
+2026-11-23T06:08:23.495522Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:08:23.495723Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.1), physics 1.1 (1% 1.9), render world 8.4 (1% 19.9)
+2026-11-23T06:08:24.455599Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:08:32.696119Z  INFO extraction::onboarding: onboarding: Pack done
+2026-11-23T06:08:32.699344Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"Pack","station_done":true}
+2026-11-23T06:08:32.699626Z  INFO extraction::raid: raid: Driver: "Good. Next: through the gate, the range table on the left."
+2026-11-23T06:08:33.496744Z  INFO extraction: frames: 486 in 10 s, mean 20.6 ms, 1% 28.9 ms, worst 30.0 ms (Out)
+2026-11-23T06:08:33.496921Z  INFO extraction: gpu: 6.7 ms a frame (main_opaque_pass_3d 5.4, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:08:33.497230Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 9.5), physics 1.1 (1% 2.1), render world 10.5 (1% 20.1)
+2026-11-23T06:08:34.467399Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:08:43.509890Z  INFO extraction: frames: 500 in 10 s, mean 20.0 ms, 1% 28.5 ms, worst 29.8 ms (Out)
+2026-11-23T06:08:43.510065Z  INFO extraction: gpu: 6.3 ms a frame (main_opaque_pass_3d 5.0, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:08:43.510232Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.2), physics 1.1 (1% 2.0), render world 9.8 (1% 20.2)
+2026-11-23T06:08:44.494787Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:08:53.504511Z  INFO extraction: frames: 505 in 10 s, mean 19.8 ms, 1% 28.3 ms, worst 29.6 ms (Out)
+2026-11-23T06:08:53.504731Z  INFO extraction: gpu: 6.1 ms a frame (main_opaque_pass_3d 4.8, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:08:53.504968Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 7.8), physics 1.1 (1% 1.9), render world 9.5 (1% 20.2)
+2026-11-23T06:08:54.494879Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:09:03.530925Z  INFO extraction: frames: 495 in 10 s, mean 20.2 ms, 1% 28.5 ms, worst 28.8 ms (Out)
+2026-11-23T06:09:03.531064Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:09:03.531195Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 7.9), physics 1.1 (1% 2.0), render world 10.2 (1% 20.1)
+2026-11-23T06:09:04.500068Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.2 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:09:13.533729Z  INFO extraction: frames: 493 in 10 s, mean 20.3 ms, 1% 28.6 ms, worst 29.4 ms (Out)
+2026-11-23T06:09:13.533877Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:09:13.534032Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.2), physics 1.1 (1% 1.9), render world 10.2 (1% 20.2)
+2026-11-23T06:09:14.514926Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:09:23.546945Z  INFO extraction: frames: 491 in 10 s, mean 20.4 ms, 1% 28.3 ms, worst 30.5 ms (Out)
+2026-11-23T06:09:23.547181Z  INFO extraction: gpu: 6.6 ms a frame (main_opaque_pass_3d 5.3, tonemapping 0.4, clustering 0.3, bin_unpacking 0.3, main_transparent_pass_3d 0.2, early_mesh_preprocessing 0.1)
+2026-11-23T06:09:23.547479Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 7.9), physics 1.1 (1% 2.0), render world 10.4 (1% 20.3)
+2026-11-23T06:09:24.533345Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 9.2 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:09:33.543556Z  INFO extraction: frames: 488 in 10 s, mean 20.5 ms, 1% 29.4 ms, worst 35.7 ms (Out)
+2026-11-23T06:09:33.543707Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.4, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:09:33.543897Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.4), physics 1.1 (1% 2.1), render world 10.3 (1% 20.0)
+2026-11-23T06:09:34.545677Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:09:43.555793Z  INFO extraction: frames: 482 in 10 s, mean 20.7 ms, 1% 30.2 ms, worst 140.1 ms (Out)
+2026-11-23T06:09:43.555928Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.2, tonemapping 0.4, clustering 0.3, bin_unpacking 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:09:43.556149Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 9.1), physics 1.1 (1% 2.3), render world 10.1 (1% 20.3)
+2026-11-23T06:09:44.543524Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 13.3 ms frame
+2026-11-23T06:09:53.585257Z  INFO extraction: frames: 483 in 10 s, mean 20.8 ms, 1% 29.4 ms, worst 29.7 ms (Out)
+2026-11-23T06:09:53.585408Z  INFO extraction: gpu: 6.8 ms a frame (main_opaque_pass_3d 5.4, tonemapping 0.4, clustering 0.3, bin_unpacking 0.2, main_transparent_pass_3d 0.2, early_mesh_preprocessing 0.1)
+2026-11-23T06:09:53.585571Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.4), physics 1.2 (1% 2.0), render world 10.7 (1% 20.1)
+2026-11-23T06:09:54.571558Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:10:03.585524Z  INFO extraction: frames: 490 in 10 s, mean 20.4 ms, 1% 29.2 ms, worst 32.2 ms (Out)
+2026-11-23T06:10:03.585665Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.2, tonemapping 0.4, clustering 0.3, bin_unpacking 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:10:03.585847Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.0), physics 1.1 (1% 2.0), render world 10.4 (1% 20.3)
+2026-11-23T06:10:04.573929Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.9 ms of a 13.3 ms frame
+2026-11-23T06:10:13.610589Z  INFO extraction: frames: 485 in 10 s, mean 20.7 ms, 1% 29.1 ms, worst 34.3 ms (Out)
+2026-11-23T06:10:13.610841Z  INFO extraction: gpu: 7.7 ms a frame (main_opaque_pass_3d 6.3, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:10:13.611024Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 9.1), physics 1.2 (1% 2.4), render world 10.8 (1% 20.3)
+2026-11-23T06:10:14.599887Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.5 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:10:23.626535Z  INFO extraction: frames: 484 in 10 s, mean 20.7 ms, 1% 28.9 ms, worst 29.8 ms (Out)
+2026-11-23T06:10:23.626728Z  INFO extraction: gpu: 7.0 ms a frame (main_opaque_pass_3d 5.6, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:10:23.626912Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.2), physics 1.1 (1% 1.9), render world 10.8 (1% 20.0)
+2026-11-23T06:10:24.624364Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.9 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:10:25.083976Z  INFO extraction::onboarding: onboarding: TakePistol done
+2026-11-23T06:10:25.086238Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"TakePistol","station_done":false}
+2026-11-23T06:10:33.619302Z  INFO extraction: frames: 484 in 10 s, mean 20.7 ms, 1% 29.3 ms, worst 30.0 ms (Out)
+2026-11-23T06:10:33.619445Z  INFO extraction: gpu: 7.3 ms a frame (main_opaque_pass_3d 5.8, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:10:33.619622Z  INFO extraction::render::budget: cpu: main 6.6 ms a frame (1% 9.3), physics 1.2 (1% 2.6), render world 10.6 (1% 19.8)
+2026-11-23T06:10:34.621072Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.1 ms of a 13.3 ms frame
+2026-11-23T06:10:43.652105Z  INFO extraction: frames: 488 in 10 s, mean 20.5 ms, 1% 28.7 ms, worst 29.6 ms (Out)
+2026-11-23T06:10:43.652283Z  INFO extraction: gpu: 7.0 ms a frame (main_opaque_pass_3d 5.6, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:10:43.652466Z  INFO extraction::render::budget: cpu: main 6.9 ms a frame (1% 8.9), physics 1.3 (1% 2.2), render world 10.6 (1% 19.5)
+2026-11-23T06:10:44.653739Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.3 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:10:53.649416Z  INFO extraction: frames: 488 in 10 s, mean 20.5 ms, 1% 29.1 ms, worst 30.5 ms (Out)
+2026-11-23T06:10:53.649557Z  INFO extraction: gpu: 6.9 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:10:53.649696Z  INFO extraction::render::budget: cpu: main 6.7 ms a frame (1% 8.8), physics 1.2 (1% 2.6), render world 10.5 (1% 19.6)
+2026-11-23T06:10:54.652243Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 13.3 ms frame
+2026-11-23T06:11:03.667755Z  INFO extraction: frames: 507 in 10 s, mean 19.8 ms, 1% 28.7 ms, worst 29.9 ms (Out)
+2026-11-23T06:11:03.667898Z  INFO extraction: gpu: 6.3 ms a frame (main_opaque_pass_3d 5.0, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1, main_transparent_pass_3d 0.1)
+2026-11-23T06:11:03.668045Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 7.8), physics 1.1 (1% 2.0), render world 9.4 (1% 20.2)
+2026-11-23T06:11:04.668900Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 13.3 ms frame
+2026-11-23T06:11:13.554428Z  INFO extraction::onboarding: onboarding: PutAway done
+2026-11-23T06:11:13.557004Z  INFO extraction::sim::observe: PLAYTEST goal {"goal":"PutAway","station_done":false}
+2026-11-23T06:11:13.689548Z  INFO extraction: frames: 529 in 10 s, mean 18.9 ms, 1% 28.3 ms, worst 29.4 ms (Out)
+2026-11-23T06:11:13.689757Z  INFO extraction: gpu: 6.0 ms a frame (main_opaque_pass_3d 4.8, tonemapping 0.4, clustering 0.3, bin_unpacking 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:11:13.689936Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.3), physics 1.1 (1% 2.0), render world 8.1 (1% 20.2)
+2026-11-23T06:11:14.668330Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:11:23.692605Z  INFO extraction: frames: 522 in 10 s, mean 19.2 ms, 1% 28.5 ms, worst 29.5 ms (Out)
+2026-11-23T06:11:23.692744Z  INFO extraction: gpu: 5.9 ms a frame (main_opaque_pass_3d 4.7, tonemapping 0.4, clustering 0.3, bin_unpacking 0.2, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:11:23.692901Z  INFO extraction::render::budget: cpu: main 6.1 ms a frame (1% 8.4), physics 1.1 (1% 1.9), render world 8.5 (1% 20.4)
+2026-11-23T06:11:24.677440Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 13.3 ms frame
+2026-11-23T06:11:33.709154Z  INFO extraction: frames: 553 in 10 s, mean 18.1 ms, 1% 28.2 ms, worst 30.2 ms (Out)
+2026-11-23T06:11:33.709301Z  INFO extraction: gpu: 5.8 ms a frame (main_opaque_pass_3d 4.6, tonemapping 0.4, clustering 0.3, bin_unpacking 0.2, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:11:33.709442Z  INFO extraction::render::budget: cpu: main 5.9 ms a frame (1% 7.7), physics 1.0 (1% 1.7), render world 6.7 (1% 19.8)
+2026-11-23T06:11:34.678114Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 4.6 ms of a 13.3 ms frame
+2026-11-23T06:11:43.708690Z  INFO extraction: frames: 541 in 10 s, mean 18.5 ms, 1% 28.0 ms, worst 29.8 ms (Out)
+2026-11-23T06:11:43.708824Z  INFO extraction: gpu: 5.8 ms a frame (main_opaque_pass_3d 4.7, tonemapping 0.4, clustering 0.3, bin_unpacking 0.2, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:11:43.708977Z  INFO extraction::render::budget: cpu: main 5.9 ms a frame (1% 7.6), physics 1.0 (1% 1.8), render world 7.4 (1% 20.1)
+2026-11-23T06:11:44.677222Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:11:53.715932Z  INFO extraction: frames: 529 in 10 s, mean 18.9 ms, 1% 28.2 ms, worst 28.7 ms (Out)
+2026-11-23T06:11:53.716058Z  INFO extraction: gpu: 6.3 ms a frame (main_opaque_pass_3d 5.1, tonemapping 0.4, clustering 0.3, bin_unpacking 0.2, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:11:53.716212Z  INFO extraction::render::budget: cpu: main 6.0 ms a frame (1% 7.8), physics 1.0 (1% 1.8), render world 8.0 (1% 20.2)
+2026-11-23T06:11:54.684444Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:12:03.743129Z  INFO extraction: frames: 503 in 10 s, mean 19.9 ms, 1% 28.3 ms, worst 30.3 ms (Out)
+2026-11-23T06:12:03.743309Z  INFO extraction: gpu: 6.5 ms a frame (main_opaque_pass_3d 5.2, tonemapping 0.4, clustering 0.3, bin_unpacking 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:12:03.743452Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 7.8), physics 1.1 (1% 2.2), render world 9.5 (1% 20.1)
+2026-11-23T06:12:04.690048Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:12:13.754848Z  INFO extraction: frames: 508 in 10 s, mean 19.7 ms, 1% 28.8 ms, worst 70.3 ms (Out)
+2026-11-23T06:12:13.755032Z  INFO extraction: gpu: 6.0 ms a frame (main_opaque_pass_3d 4.8, tonemapping 0.4, clustering 0.3, bin_unpacking 0.2, upscaling 0.1, main_transparent_pass_3d 0.1)
+2026-11-23T06:12:13.755195Z  INFO extraction::render::budget: cpu: main 6.2 ms a frame (1% 8.7), physics 1.1 (1% 2.2), render world 9.2 (1% 20.4)
+2026-11-23T06:12:14.705494Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:12:23.768353Z  INFO extraction: frames: 499 in 10 s, mean 20.1 ms, 1% 28.6 ms, worst 30.4 ms (Out)
+2026-11-23T06:12:23.768515Z  INFO extraction: gpu: 6.3 ms a frame (main_opaque_pass_3d 5.0, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:12:23.768681Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 9.4), physics 1.1 (1% 2.1), render world 9.8 (1% 20.0)
+2026-11-23T06:12:24.730260Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:12:33.768791Z  INFO extraction: frames: 483 in 10 s, mean 20.7 ms, 1% 28.6 ms, worst 29.9 ms (Out)
+2026-11-23T06:12:33.768931Z  INFO extraction: gpu: 7.2 ms a frame (main_opaque_pass_3d 5.8, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:12:33.769119Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.3), physics 1.2 (1% 2.1), render world 10.6 (1% 19.6)
+2026-11-23T06:12:34.741234Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.7 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:12:43.795520Z  INFO extraction: frames: 483 in 10 s, mean 20.8 ms, 1% 28.8 ms, worst 29.8 ms (Out)
+2026-11-23T06:12:43.795671Z  INFO extraction: gpu: 6.9 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:12:43.795836Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.0), physics 1.1 (1% 2.2), render world 10.8 (1% 19.6)
+2026-11-23T06:12:44.752706Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.4 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:12:53.805979Z  INFO extraction: frames: 483 in 10 s, mean 20.7 ms, 1% 28.6 ms, worst 30.4 ms (Out)
+2026-11-23T06:12:53.806121Z  INFO extraction: gpu: 6.8 ms a frame (main_opaque_pass_3d 5.4, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:12:53.806286Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.6), physics 1.2 (1% 2.0), render world 10.9 (1% 20.1)
+2026-11-23T06:12:54.755734Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 13.3 ms frame
+2026-11-23T06:12:55.159429Z  INFO extraction::raid: raid: Driver: "Back through the gate. That one's next."
+2026-11-23T06:13:03.821109Z  INFO extraction: frames: 488 in 10 s, mean 20.5 ms, 1% 28.6 ms, worst 29.3 ms (Out)
+2026-11-23T06:13:03.821326Z  INFO extraction: gpu: 6.8 ms a frame (main_opaque_pass_3d 5.4, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:13:03.821545Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.5), physics 1.1 (1% 2.2), render world 10.8 (1% 20.0)
+2026-11-23T06:13:04.782452Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:13:13.820192Z  INFO extraction: frames: 485 in 10 s, mean 20.6 ms, 1% 29.1 ms, worst 45.3 ms (Out)
+2026-11-23T06:13:13.820360Z  INFO extraction: gpu: 7.3 ms a frame (main_opaque_pass_3d 5.7, tonemapping 0.4, main_transparent_pass_3d 0.4, bin_unpacking 0.3, clustering 0.3, early_mesh_preprocessing 0.1)
+2026-11-23T06:13:13.820507Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.7), physics 1.1 (1% 1.9), render world 10.8 (1% 20.0)
+2026-11-23T06:13:14.776703Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 9.1 ms of a 13.3 ms frame
+2026-11-23T06:13:23.846853Z  INFO extraction: frames: 483 in 10 s, mean 20.8 ms, 1% 28.8 ms, worst 30.5 ms (Out)
+2026-11-23T06:13:23.847042Z  INFO extraction: gpu: 7.5 ms a frame (main_opaque_pass_3d 5.7, main_transparent_pass_3d 0.5, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, upscaling 0.1)
+2026-11-23T06:13:23.847214Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.8), physics 1.1 (1% 2.1), render world 11.0 (1% 19.7)
+2026-11-23T06:13:24.809132Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.7 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:13:31.953571Z  INFO extraction::raid: raid: Driver: "Back out. That shimmer burns. Ask me how I know."
+2026-11-23T06:13:33.874011Z  INFO extraction: frames: 482 in 10 s, mean 20.8 ms, 1% 28.7 ms, worst 31.3 ms (Out)
+2026-11-23T06:13:33.874154Z  INFO extraction: gpu: 7.9 ms a frame (main_opaque_pass_3d 5.9, main_transparent_pass_3d 0.7, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3, main_transmissive_pass_3d 0.1)
+2026-11-23T06:13:33.874321Z  INFO extraction::render::budget: cpu: main 6.3 ms a frame (1% 8.4), physics 1.1 (1% 1.9), render world 10.9 (1% 19.8)
+2026-11-23T06:13:34.834263Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.8 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:13:43.882620Z  INFO extraction: frames: 488 in 10 s, mean 20.5 ms, 1% 28.5 ms, worst 30.2 ms (Out)
+2026-11-23T06:13:43.882764Z  INFO extraction: gpu: 8.1 ms a frame (main_opaque_pass_3d 5.8, main_transparent_pass_3d 0.6, main_transmissive_pass_3d 0.4, tonemapping 0.4, bin_unpacking 0.3, clustering 0.3)
+2026-11-23T06:13:43.882905Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.4), physics 1.2 (1% 2.6), render world 10.6 (1% 19.8)
+2026-11-23T06:13:44.839018Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 13.3 ms frame
+2026-11-23T06:13:46.005037Z  INFO extraction::raid: raid: Everything goes grey. Somewhere, a collection order is filed.
+2026-11-23T06:13:52.000573Z  INFO extraction::raid: raid: You went down. You wake in the back of the truck.
+2026-11-23T06:13:52.002491Z  INFO extraction::raid: raid: Driver: "The old farm's still waiting. Marrow Creek."
+2026-11-23T06:13:52.003594Z  INFO extraction::raid: left 2 items in remains at [-16, 12, 22]
+2026-11-23T06:13:53.887949Z  INFO extraction: frames: 472 in 10 s, mean 21.2 ms, 1% 30.6 ms, worst 36.4 ms (AtBase)
+2026-11-23T06:13:53.888155Z  INFO extraction: gpu: 8.2 ms a frame (main_opaque_pass_3d 6.0, main_transparent_pass_3d 0.7, tonemapping 0.4, bin_unpacking 0.4, main_transmissive_pass_3d 0.3, clustering 0.3)
+2026-11-23T06:13:53.888322Z  INFO extraction::render::budget: cpu: main 6.9 ms a frame (1% 12.2), physics 1.3 (1% 2.5), render world 11.5 (1% 19.9)
+2026-11-23T06:13:54.847740Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.5 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:14:03.892781Z  INFO extraction: frames: 467 in 10 s, mean 21.4 ms, 1% 29.5 ms, worst 31.0 ms (AtBase)
+2026-11-23T06:14:03.892922Z  INFO extraction: gpu: 7.9 ms a frame (main_opaque_pass_3d 6.3, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:14:03.893059Z  INFO extraction::render::budget: cpu: main 6.6 ms a frame (1% 8.8), physics 1.2 (1% 2.1), render world 11.7 (1% 20.2)
+2026-11-23T06:14:04.848506Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.2 ms of a 13.3 ms frame
+2026-11-23T06:14:13.893211Z  INFO extraction: frames: 482 in 10 s, mean 20.7 ms, 1% 28.7 ms, worst 30.3 ms (AtBase)
+2026-11-23T06:14:13.893378Z  INFO extraction: gpu: 8.0 ms a frame (main_opaque_pass_3d 6.5, bin_unpacking 0.4, tonemapping 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:14:13.893542Z  INFO extraction::render::budget: cpu: main 6.6 ms a frame (1% 9.1), physics 1.2 (1% 2.3), render world 11.0 (1% 19.6)
+2026-11-23T06:14:14.850419Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.4 ms of a 13.3 ms frame
+2026-11-23T06:14:23.898882Z  INFO extraction: frames: 479 in 10 s, mean 20.9 ms, 1% 28.9 ms, worst 29.8 ms (AtBase)
+2026-11-23T06:14:23.899031Z  INFO extraction: gpu: 7.8 ms a frame (main_opaque_pass_3d 6.5, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.1, upscaling 0.1)
+2026-11-23T06:14:23.899214Z  INFO extraction::render::budget: cpu: main 6.6 ms a frame (1% 9.6), physics 1.2 (1% 2.7), render world 11.2 (1% 19.9)
+2026-11-23T06:14:24.875287Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:14:25.216117Z  INFO extraction::raid: raid: Out of the truck. The Surge is due in about 48 minutes.
+2026-11-23T06:14:33.912356Z  INFO extraction: frames: 490 in 10 s, mean 20.4 ms, 1% 28.6 ms, worst 30.1 ms (Out)
+2026-11-23T06:14:33.912494Z  INFO extraction: gpu: 7.6 ms a frame (main_opaque_pass_3d 6.2, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:14:33.912655Z  INFO extraction::render::budget: cpu: main 6.4 ms a frame (1% 8.1), physics 1.2 (1% 2.1), render world 10.8 (1% 20.2)
+2026-11-23T06:14:34.874340Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:14:43.920274Z  INFO extraction: frames: 484 in 10 s, mean 20.7 ms, 1% 29.4 ms, worst 30.8 ms (Out)
+2026-11-23T06:14:43.920440Z  INFO extraction: gpu: 7.5 ms a frame (main_opaque_pass_3d 6.0, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:14:43.920607Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.6), physics 1.1 (1% 2.1), render world 11.1 (1% 20.4)
+2026-11-23T06:14:44.882100Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:14:53.917695Z  INFO extraction: frames: 480 in 10 s, mean 20.8 ms, 1% 29.1 ms, worst 48.9 ms (Out)
+2026-11-23T06:14:53.917956Z  INFO extraction: gpu: 7.0 ms a frame (main_opaque_pass_3d 5.5, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:14:53.918123Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.3), physics 1.1 (1% 2.1), render world 11.1 (1% 19.6)
+2026-11-23T06:14:54.891605Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 8.3 ms of a 13.3 ms frame (late: the runtime says 13.3)
+2026-11-23T06:15:03.939146Z  INFO extraction: frames: 493 in 10 s, mean 20.3 ms, 1% 29.2 ms, worst 31.2 ms (Out)
+2026-11-23T06:15:03.939292Z  INFO extraction: gpu: 7.3 ms a frame (main_opaque_pass_3d 5.8, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:15:03.939461Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.4), physics 1.1 (1% 2.4), render world 10.6 (1% 19.7)
+2026-11-23T06:15:04.459669Z  WARN extraction::sim::playtest: PLAYTEST MARK 4 at (1.4, 12.0, -49.7), raid clock 735 s
+2026-11-23T06:15:04.459805Z  INFO extraction::raid: raid: Mark 4 noted.
+2026-11-23T06:15:04.526063Z  INFO bevy_render::view::window::screenshot: Screenshot saved to C:\Users\prath\AppData\Roaming\extraction\marks\mark-1795414504-4.png
+2026-11-23T06:15:04.910352Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:15:13.941159Z  INFO extraction: frames: 481 in 10 s, mean 20.8 ms, 1% 28.7 ms, worst 30.0 ms (Out)
+2026-11-23T06:15:13.941327Z  INFO extraction: gpu: 8.0 ms a frame (main_opaque_pass_3d 6.5, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, main_transparent_pass_3d 0.2, upscaling 0.1)
+2026-11-23T06:15:13.941476Z  INFO extraction::render::budget: cpu: main 6.5 ms a frame (1% 8.3), physics 1.1 (1% 2.0), render world 11.2 (1% 20.0)
+2026-11-23T06:15:14.928101Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 13.3 ms frame (late: the runtime says 26.7)
+2026-11-23T06:15:17.506342Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-11-23T06:15:18.292827Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-11-23T06:15:23.943206Z  INFO extraction: frames: 508 in 10 s, mean 19.7 ms, 1% 28.8 ms, worst 29.4 ms (Out)
+2026-11-23T06:15:23.943362Z  INFO extraction: gpu: 8.7 ms a frame (main_opaque_pass_3d 7.3, tonemapping 0.4, bin_unpacking 0.4, clustering 0.3, upscaling 0.1, early_mesh_preprocessing 0.1)
+2026-11-23T06:15:23.943550Z  INFO extraction::render::budget: cpu: main 6.7 ms a frame (1% 8.7), physics 1.2 (1% 2.8), render world 10.3 (1% 20.0)
+2026-11-23T06:15:24.918834Z  INFO extraction::render::hold_rate::xr: eyes: 1734x1734 (58% of the runtime's width), holding the frame rate, gpu 9.2 ms of a 13.3 ms frame
+2026-11-23T06:15:27.004845Z  INFO bevy_window::system: No windows are open, exiting
+2026-11-23T06:15:27.005006Z  INFO bevy_winit::system: Closing window 65v0
+2026-11-23T06:15:27.206990Z  WARN bevy_render::diagnostic::internal: Failed to download render statistics buffer: Error occurred when trying to async map a buffer
+2026-11-23T06:15:27.893403Z  INFO extraction::render::timeline: load: closed (world dropped) at 806.35 s (frame 39495)

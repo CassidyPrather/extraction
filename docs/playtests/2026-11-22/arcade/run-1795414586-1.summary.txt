@@ -1,0 +1,26 @@
+Waves cleared 1, down on wave 2
+Score 50, time 5:50
+Taken down by: Walker
+
+GUN        shots hits  acc reloads mid-fight stoppages
+pm_pistol     15    6  40%       4         3         0
+
+ACCURACY   fight <15m 15-30m >30m | range 10m 25m 50m
+pm_pistol  3/10 30%  3/5 60%  - | -  -  -
+
+STRUCK     part: strikes x mean damage
+pm_pistol  Core 2 x 34, Leg 1 x 34, Sensor 2 x 34, Weapon 1 x 34
+
+RELOAD     median cost (last shot to next) | mid-fight | magazine out to next shot
+pm_pistol  24.6 s | 24.6 s | 28.7 s
+
+HANDLING   stoppages/100 | median to clear | first hit of a string | hits in its first 3 | shot gap median (middle half)
+pm_pistol  0.0 | - | 0.1 s | 6/15 | 2.01 s (1.84-2.18)
+
+PICKED UP  pm_pistol
+
+USED
+pm_mag           4
+
+FEEL       (1 poor to 5 great)
+pm_pistol  4/5
