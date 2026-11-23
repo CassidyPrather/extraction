@@ -488,6 +488,10 @@ fn press_cards(
     mut last: Local<(std::collections::HashMap<Entity, f32>, f32)>,
 ) {
     let now = time.elapsed_secs();
+    // A press older than the gap no longer matters: forget it, and with it
+    // any card despawned since (a restart remakes the board).
+    let (seen, _) = &mut *last;
+    seen.retain(|_, t| now - *t < PRESS_GAP);
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
