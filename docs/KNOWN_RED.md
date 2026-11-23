@@ -45,7 +45,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
-| `soak::ledges::tests::no_valley_has_a_ledge_trap` (rime ore mill's high sills, solid since a41e3ff) | f31200ce (World models: only sills within reach are solid), gate 373; confirm on lib373 |
+| `soak::ledges::tests::no_valley_has_a_ledge_trap` (rime ore mill's high sills, solid since a41e3ff) | f31200ce (World models: only sills within reach are solid), green on lib373 (0a173357: 1873/1) |
 | scenario `walker_hunt` (0 wrecked: bots' sights turned to an eye 32 mm off the head) | 2bc1856 (Hands: a bot sights from its head), green on gate 372 |
 | `audio_machines::tests::the_dangers_are_heard` (MachineSpent) | 00ed3f59 (Arcade), green on lib371 (4f146f94: 1863/1) |
 | `render::puff::tests::no_puff_is_a_sphere` (weak_points.rs) | 519754a7 (Robot bodies), green on lib371 |
