@@ -599,7 +599,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
             id: now.to_string(),
             condition: saved.condition,
             rounds: 0,
-            charge_wh: 0.0,
+            charge_wh: -1.0,
             local: saved.local,
             turn: saved.turn,
             gun: None,
@@ -1947,6 +1947,96 @@ mod tests {
         let s = fresh_save("marrow_creek");
         let n = s.stash.iter().filter(|i| i.id == "regen_injector").count();
         assert_eq!(n, 1, "{:?}", s.stash);
+    }
+
+    /// The tester's old career (playtest 2026-11-22, `career-before.ron`)
+    /// loads clean: nothing mended, every kind in it known (none skipped as
+    /// unknown), and its loose items stay where they lay through a load's
+    /// long first frame and the seconds after (none "fell out of the
+    /// world").
+    #[test]
+    fn the_playtests_old_career_loads_clean() {
+        use avian3d::prelude::RigidBody;
+        let src = crate::asset_root_path().join("../docs/playtests/2026-11-22/career-before.ron");
+        let text = std::fs::read_to_string(&src).unwrap();
+        let mut career = Career::from_ron(&text).unwrap();
+        let fixed = career.sanitize();
+        assert!(fixed.is_empty(), "mended on load: {fixed:?}");
+        let catalog =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        fn walk<'a>(i: &'a SavedItem, out: &mut Vec<&'a str>) {
+            out.push(&i.id);
+            for c in &i.inserted {
+                walk(c, out);
+            }
+        }
+        let mut ids = Vec::new();
+        let loadout = career.loadout.slots.iter().map(|(_, i)| i);
+        let carried = career
+            .stash
+            .iter()
+            .chain(loadout)
+            .chain(&career.loadout.backpack)
+            .chain(&career.loadout.hands);
+        let zones = career.zones.iter().flat_map(|z| {
+            z.items
+                .iter()
+                .map(|p| &p.item)
+                .chain(z.remains.iter().flat_map(|r| &r.items))
+                .chain(z.safehouse.iter().flat_map(|h| &h.stash))
+        });
+        for i in carried.chain(zones) {
+            walk(i, &mut ids);
+        }
+        let unknown: Vec<&&str> = ids.iter().filter(|id| catalog.kind(id).is_none()).collect();
+        assert!(unknown.is_empty(), "unknown kinds: {unknown:?}");
+
+        let path = temp_save("playtest_career.ron");
+        std::fs::write(&path, &text).unwrap();
+        let opts = LaunchOptions {
+            robots: false,
+            save: Some(path),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let loose = |app: &mut App| -> Vec<(Entity, Vec3)> {
+            app.world_mut()
+                .query_filtered::<(Entity, &Transform, &RigidBody), With<crate::items::Item>>()
+                .iter(app.world())
+                .filter(|(_, _, b)| **b == RigidBody::Dynamic)
+                .map(|(e, t, _)| (e, t.translation))
+                .collect()
+        };
+        let before = loose(&mut app);
+        assert!(before.len() > 300, "{} loose items", before.len());
+        // The first frame a headset session takes seconds (5.99 s on the
+        // playtest), then two seconds of play.
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs(6),
+        ));
+        app.update();
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f32(1.0 / 60.0),
+        ));
+        for _ in 0..120 {
+            app.update();
+        }
+        let after: std::collections::HashMap<Entity, Vec3> = loose(&mut app).into_iter().collect();
+        let moved: Vec<(Vec3, Vec3)> = before
+            .iter()
+            .filter_map(|(e, p)| after.get(e).map(|q| (*p, *q)))
+            .filter(|(p, q)| p.distance(*q) > 0.5)
+            .collect();
+        assert!(
+            moved.is_empty(),
+            "{} moved: {:?}",
+            moved.len(),
+            &moved[..moved.len().min(5)]
+        );
     }
 
     /// A save from before the flare pistol was retired loads: its red
