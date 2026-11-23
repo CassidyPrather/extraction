@@ -207,15 +207,20 @@ impl Memorial {
     }
 }
 
-/// Kinds retired from the game, and what one in an old save becomes:
-/// the flare pistol and its 26 mm cartridges, since the hand-fired signal
-/// flare (#94). A red star is still a red star; the others are their
-/// brass, and the pistol scrap.
+/// Kinds retired from the game, and what one in an old save becomes, a
+/// fresh one where it lay (unlike [`RENAMED`], which keeps its count):
+/// - the flare pistol and its 26 mm cartridges, since the hand-fired
+///   signal flare (#94): a red star is still a red star, the others their
+///   brass, the pistol scrap;
+/// - the chemlight and the hand flare (#103): what their contracts pay
+///   now, a power cell.
 pub const RETIRED: &[(&str, &str)] = &[
     ("flare_pistol", "scrap_metal"),
     ("flare_red", "signal_flare"),
     ("flare_white", "brass"),
     ("flare_green", "brass"),
+    ("chemlight", "power_cell"),
+    ("hand_flare", "power_cell"),
 ];
 
 /// What a retired kind becomes ([`RETIRED`]), if `id` is one.
@@ -367,15 +372,29 @@ pub fn current_id(id: &str) -> &str {
 
 impl SavedItem {
     /// Mends what a mangled file can put in an item (NaN, infinities,
-    /// absurd counts), it and what's seated in it, and gives a renamed
-    /// item its current id ([`RENAMED`]). Returns how many values were
-    /// mended.
+    /// absurd counts), it and what's seated in it. Returns how many values
+    /// were mended. A renamed item takes its current id ([`RENAMED`]) and a
+    /// retired one becomes what it became ([`RETIRED`]): neither is damage,
+    /// so neither is counted.
     pub fn sanitize(&mut self) -> usize {
+        if let Some(now) = retired_as(&self.id) {
+            *self = SavedItem {
+                charred: self.charred,
+                id: now.to_owned(),
+                condition: self.condition,
+                rounds: 0,
+                charge_wh: -1.0,
+                local: self.local,
+                turn: self.turn,
+                gun: None,
+                inserted: Vec::new(),
+                loads: Default::default(),
+            };
+        }
         let mut n = 0;
         let id = current_id(&self.id);
         if id != self.id {
             self.id = id.to_owned();
-            n += 1;
         }
         let mut fix = |v: &mut f32, lo: f32, hi: f32, or: f32| {
             let good = if v.is_finite() { v.clamp(lo, hi) } else { or };
@@ -710,6 +729,36 @@ mod tests {
     }
 
     use super::*;
+
+    /// A save holding renamed and retired kinds loads them as what they are
+    /// now, and reports nothing mended: neither is damage (an old career
+    /// warned "2 item value(s) mended" on every load, playtest 2026-11-22).
+    /// A retired kind comes back fresh: a chemlight is a full power cell.
+    #[test]
+    fn renamed_and_retired_kinds_load_as_they_are_now_and_mend_nothing() {
+        let mut s = SaveGame::new("marrow_creek");
+        let mut lamp = item("chemlight");
+        lamp.rounds = 3;
+        lamp.charge_wh = 0.0;
+        s.zone.items = ["weapon_light", "ammo_545_repack", "hand_flare"]
+            .into_iter()
+            .map(item)
+            .chain([lamp])
+            .map(|item| PlacedItem {
+                at: [1.0, 30.0, 2.0],
+                rot: [0.0, 0.0, 0.0, 1.0],
+                item,
+                held: None,
+            })
+            .collect();
+        let mut fixed = Vec::new();
+        s.zone.sanitize(&mut fixed);
+        assert!(fixed.is_empty(), "{fixed:?}");
+        let ids: Vec<&str> = s.zone.items.iter().map(|p| p.item.id.as_str()).collect();
+        assert_eq!(ids, ["flashlight", "ammo_545", "power_cell", "power_cell"]);
+        let cell = &s.zone.items[3].item;
+        assert_eq!((cell.rounds, cell.charge_wh), (0, -1.0), "a fresh cell");
+    }
 
     /// Each retired kind becomes one the game has and hasn't retired, and
     /// nothing hands out a retired kind any more: not the loot, not a
