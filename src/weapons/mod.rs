@@ -41,6 +41,7 @@ pub mod stoppages;
 mod strokes;
 pub mod tracers;
 pub mod trigger;
+pub mod unchambered;
 pub mod visuals;
 pub mod wear;
 pub mod weather;
@@ -267,6 +268,7 @@ impl Plugin for WeaponsPlugin {
                 gunsmith::GunsmithPlugin,
                 legibility::LegibilityPlugin,
                 cycle::CyclePlugin,
+                unchambered::UnchamberedPlugin,
             ))
             .init_resource::<reload::MagApproach>()
             .add_systems(Update, stage_duds)

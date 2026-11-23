@@ -628,7 +628,10 @@ fn handle_guns(
     ),
     mut checks: ResMut<BraceChecks>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
-    scoped: Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
+    (scoped, bots): (
+        Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
+        Query<(), With<crate::bot::Bot>>,
+    ),
 ) {
     let dt = time.delta_secs();
     let terrain = terrain.single().ok();
@@ -786,7 +789,13 @@ fn handle_guns(
         let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
         let (want, lined) = match head_at {
             Some(h) if !scoped.iter().any(|m| m.0 == gun_e) => {
-                let eye_now = sight_eye(gun, &gt.affine().inverse(), &h);
+                // A bot sights from its head itself (`AimHint`): it has no
+                // eye to put to one side.
+                let eye_now = if bots.contains(held.player) {
+                    gt.affine().inverse().transform_point3(h.translation())
+                } else {
+                    sight_eye(gun, &gt.affine().inverse(), &h)
+                };
                 let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
                 (sight_fix(gun, eye_bare), at_sights(gun, eye_bare))
             }
@@ -2598,6 +2607,47 @@ pub(crate) mod vr_tests {
                         .get::<crate::interact::InSocket>(mag)
                         .is_some();
                 assert_eq!(seated, seats, "{gun}: top {off} m off the well");
+            }
+        }
+    }
+
+    /// A Mosin clicked on an empty chamber with five in its magazine is
+    /// marked to be worked (its handle glows, the hand feels a double tap:
+    /// `weapons::unchambered`); its handle lifted, the mark goes. Clicked
+    /// with nothing to feed, it isn't marked.
+    #[test]
+    fn a_mosin_clicked_empty_with_rounds_in_wants_working() {
+        use crate::weapons::unchambered::NeedsWorking;
+        for (gun, rounds, marked) in [("mosin", 5, true), ("mosin", 0, false), ("mp133", 2, true)] {
+            let mut r = hold(gun, false, false);
+            {
+                let mut g = gun_mut(&mut r);
+                let f = &mut g.firearm;
+                f.chambers[0] = None;
+                f.internal_rounds = rounds;
+                f.hammers_cocked[0] = true;
+                while f.fire_mode() == FireMode::Safe {
+                    f.cycle_mode();
+                }
+            }
+            r.vr.trigger(Side::Right, 1.0);
+            r.vr.step(4);
+            r.vr.trigger(Side::Right, 0.0);
+            r.vr.step(2);
+            let has = |r: &Range| r.vr.app.world().get::<NeedsWorking>(r.gun).is_some();
+            assert_eq!(has(&r), marked, "{gun}: {rounds} in the feed");
+            if marked {
+                r.vr.step(30);
+                assert!(has(&r), "{gun}: still marked a while on");
+            }
+            if marked {
+                {
+                    let mut g = gun_mut(&mut r);
+                    g.firearm.set_handle_lift(1.0);
+                    g.firearm.set_bolt_travel(0.5);
+                }
+                r.vr.step(2);
+                assert!(!has(&r), "{gun}: worked");
             }
         }
     }

@@ -203,6 +203,7 @@ fn gun_haptics(
     guns: Query<(
         &crate::weapons::Gun,
         Option<&crate::weapons::feel::Handling>,
+        Option<&crate::interact::Grabbable>,
     )>,
     locals: Query<(), With<LocalPlayer>>,
     mut out: MessageWriter<Haptic>,
@@ -213,6 +214,20 @@ fn gun_haptics(
         let Some((grip, support)) = hands_on(ev.gun, &held, &locals) else {
             continue;
         };
+        // Clicked on an empty chamber with rounds to feed: the firmer
+        // double tap says "work the action" (`weapons::unchambered`).
+        if ev.event == FireEvent::DryFire
+            && guns
+                .get(ev.gun)
+                .is_ok_and(|(g, _, grab)| crate::weapons::unchambered::answers_a_dry_click(g, grab))
+        {
+            shapes.write(HapticShape {
+                side: grip,
+                shape: super::shapes::UNCHAMBERED,
+                scale: 1.0,
+            });
+            continue;
+        }
         let (a, t, support_a) = match handling_feel(&ev.event) {
             // The moments of loading have shapes of their own
             // (`rig::shapes`), the supporting hand feeling them fainter.
@@ -233,17 +248,19 @@ fn gun_haptics(
             }
             Some(HandlingFeel::Pulse(a, t, support_a)) => (a, t, support_a),
             None => match ev.event {
-                FireEvent::Fired { .. } => guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h)| {
-                    // A heavy round comes back down after it shoves.
-                    if let Some(scale) = shot_settle(g.firearm.def.recoil) {
-                        shapes.write(HapticShape {
-                            side: grip,
-                            shape: SHOT_SETTLE,
-                            scale,
-                        });
-                    }
-                    shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
-                }),
+                FireEvent::Fired { .. } => {
+                    guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h, _)| {
+                        // A heavy round comes back down after it shoves.
+                        if let Some(scale) = shot_settle(g.firearm.def.recoil) {
+                            shapes.write(HapticShape {
+                                side: grip,
+                                shape: SHOT_SETTLE,
+                                scale,
+                            });
+                        }
+                        shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
+                    })
+                }
                 _ => continue,
             },
         };
