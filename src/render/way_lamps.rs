@@ -36,7 +36,7 @@ impl Plugin for WayLampsPlugin {
 /// The bulb as the tonemapper gets it (`render::grade::ToTheEye`), its
 /// halo's colour and size, and how far off the halo shows (m). A pale
 /// warm white, shelter: never the machine markers' saturated orange.
-const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.62, 0.32);
+pub const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.62, 0.32);
 const HALO: LinearRgba = LinearRgba::rgb(1.6, 1.05, 0.5);
 const HALO_R: f32 = 0.8;
 const HALO_REACH: f32 = 240.0;

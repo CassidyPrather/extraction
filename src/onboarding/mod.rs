@@ -34,6 +34,7 @@ pub mod hints;
 pub mod pickups;
 pub mod second_hour;
 pub mod steps;
+pub mod trail;
 pub mod visuals;
 
 use avian3d::prelude::*;
@@ -811,6 +812,7 @@ impl Plugin for OnboardingPlugin {
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
             .init_resource::<hints::Known>()
+            .init_resource::<trail::TrailLeg>()
             .add_systems(Update, second_hour::direct)
             .init_resource::<first_hour::Fight>()
             .add_systems(
@@ -848,6 +850,7 @@ impl Plugin for OnboardingPlugin {
                     announce.after(crate::items::usage::UsageSystems),
                     how_by_hand,
                     wake_at_the_station,
+                    trail::lay_trail,
                     the_scratch,
                     the_rooks,
                     the_rats,

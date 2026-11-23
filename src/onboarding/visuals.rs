@@ -24,6 +24,8 @@ impl Plugin for OnboardingVisualsPlugin {
                 light_lamps,
                 flare_lamps,
                 ring_marked,
+                lay_dots,
+                pulse_dots,
             )
                 .chain(),
         );
@@ -474,5 +476,126 @@ fn ring_marked(
             Transform::from_scale(Vec3::splat(1.0 / scale)).with_rotation(t.rotation.inverse()),
             ChildOf(e),
         ));
+    }
+}
+
+/// One of the way-on trail's dots (`super::trail::TrailLeg`): how far
+/// along its leg it is (m), and its own material (each glows in turn).
+#[derive(Component)]
+struct TrailDot {
+    along: f32,
+    mat: Handle<StandardMaterial>,
+}
+
+/// The trail's look (Legibility, 2026-11-23): the way-lamps' warmth
+/// (`render::way_lamps::BULB`, never the machine markers' orange), read by
+/// its pale paint in daylight and drizzle and by its glow only after dusk;
+/// at night fainter than the lamp it leads from. Each dot 14 cm across
+/// (over 12: the incidental floor out to 20 m). Emissive is in scene units
+/// and the grade adapts it: not scaled here as well.
+const DOT_R: f32 = 0.07;
+const DOT_PAINT: Color = Color::srgb(0.85, 0.74, 0.55);
+/// A dot's glow at rest and on the crest, as a share of the bulb's (every
+/// channel stays under 0.5 linear: no bloom).
+const DOT_REST: f32 = 0.15;
+const DOT_CREST: f32 = 0.45;
+/// The crest runs toward where you're going at a walk or slower (m/s: a
+/// dot each 0.5 s), each dot easing up and down over `DOT_EASE` s, then a
+/// pause before it starts again from the near end. No hard on and off.
+const CREST_SPEED: f32 = 3.0;
+const DOT_EASE: f32 = 1.0;
+const CREST_PAUSE: f32 = 1.5;
+
+/// A new leg: its dots laid, the last leg's taken up.
+fn lay_dots(
+    mut commands: Commands,
+    leg: Option<Res<super::trail::TrailLeg>>,
+    old: Query<Entity, With<TrailDot>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(leg) = leg.filter(|l| l.is_changed()) else {
+        return;
+    };
+    for e in &old {
+        commands.entity(e).despawn();
+    }
+    if leg.dots.is_empty() {
+        return;
+    }
+    let mesh = meshes.add(Circle::new(DOT_R));
+    let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+    for (i, p) in leg.dots.iter().enumerate() {
+        let mat = materials.add(StandardMaterial {
+            base_color: DOT_PAINT,
+            emissive: crate::render::way_lamps::BULB * DOT_REST,
+            perceptual_roughness: 0.9,
+            ..default()
+        });
+        commands.spawn((
+            Name::new("Trail dot"),
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(mat.clone()),
+            Transform::from_translation(*p).with_rotation(flat),
+            bevy::light::NotShadowCaster,
+            TrailDot {
+                along: i as f32 * super::trail::DOT_EVERY,
+                mat,
+            },
+        ));
+    }
+}
+
+/// How brightly a dot `along` m down its leg glows at `t` s, as a share of
+/// the bulb's: rest, rising smoothly to the crest as it passes.
+pub fn dot_glow(along: f32, length: f32, t: f32) -> f32 {
+    let period = length / CREST_SPEED + CREST_PAUSE;
+    let crest = (t % period) * CREST_SPEED;
+    let half = CREST_SPEED * DOT_EASE * 0.5;
+    let x = ((along - crest).abs() / half).min(1.0);
+    let k = 0.5 + 0.5 * (std::f32::consts::PI * x).cos();
+    DOT_REST + (DOT_CREST - DOT_REST) * k
+}
+
+fn pulse_dots(
+    time: Res<Time>,
+    dots: Query<&TrailDot>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let length = dots.iter().map(|d| d.along).fold(0.0f32, f32::max) + super::trail::DOT_EVERY;
+    let t = time.elapsed_secs();
+    for d in &dots {
+        if let Some(mut m) = materials.get_mut(&d.mat) {
+            m.emissive = crate::render::way_lamps::BULB * dot_glow(d.along, length, t);
+        }
+    }
+}
+
+#[cfg(test)]
+mod trail_look_tests {
+    use super::*;
+
+    /// Legibility's floors for the trail: its glow never past half a
+    /// linear unit in any channel (no bloom, under the lamp), never under
+    /// rest, and its crest moves at a walk or slower.
+    #[test]
+    fn the_trail_glows_softly_and_leads_at_a_walk() {
+        let bulb = crate::render::way_lamps::BULB;
+        let mut peak = 0.0f32;
+        for i in 0..200 {
+            let t = i as f32 * 0.05;
+            for k in 0..20 {
+                let g = dot_glow(k as f32 * 1.5, 30.0, t);
+                assert!(g >= DOT_REST - 1e-4 && g <= DOT_CREST + 1e-4, "{g}");
+                peak = peak.max(g);
+            }
+        }
+        assert!(bulb.red * peak < 0.5 && bulb.green * peak < 0.5 && bulb.blue * peak < 0.5);
+        assert!(CREST_SPEED <= 4.0, "a walk or slower");
+        assert!(
+            super::super::trail::DOT_EVERY / CREST_SPEED >= 0.4,
+            "a dot each 0.4 s or slower"
+        );
+        assert!(DOT_R * 2.0 >= 0.12, "12 cm across at least");
     }
 }

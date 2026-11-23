@@ -115,7 +115,7 @@ pub const MIX: &[Cue] = &[
     cue!("step.station", "ui/chime_station", -20.0, 65.0, 0.0, Detail),
     // The playtest tour's sync chirp, in your head: loud enough to find
     // on a recording (`capture::station`, scripts/playtest_ingest.py).
-    cue!("tour.sync", "ui/tour_sync", -10.0, 70.0, 0.0, Signal),
+    cue!("tour.sync", "ui/tour_sync", -24.0, 70.0, 0.0, Detail),
     cue!("drop", "physical/drop_metal", -6.0, 70.0, 1.5, Detail),
     cue!("drop.heavy", "impacts/dirt", -6.0, 85.0, 1.5, Event, 25.0),
     // Guns in your hands.
@@ -184,7 +184,7 @@ pub const MIX: &[Cue] = &[
     cue!("gun.grind", "physical/handle_metal", -14.0, 60.0, 0.5, Detail),
     cue!("smith.clamp", "machines/clank", -8.0, 75.0, 1.0, Detail),
     cue!("box.tear", "physical/zip", -14.0, 60.0, 0.5, Detail),
-    cue!("box.round", "guns/casing", -16.0, 55.0, 0.5, Detail),
+    cue!("box.round", "guns/casing", -10.5, 55.0, 0.5, Detail),
     cue!("smith.saw", "physical/handle_metal", -12.0, 65.0, 1.0, Detail),
     cue!("smith.cut", "impacts/metal", -8.0, 80.0, 1.0, Detail),
     cue!("smith.screw", "physical/door_creak", -16.0, 55.0, 0.5, Detail),
@@ -215,7 +215,7 @@ pub const MIX: &[Cue] = &[
     cue!("flock.call", "ambience/crow", -3.5, 75.0, 25.0, Event, 15.0),
     cue!("detector.ping", "device/stone_ping", -14.0, 60.0, 0.5, Signal),
     cue!("bite.fizz", "device/crackle", -16.0, 85.0, 0.8, Signal),
-    cue!("cook.crackle", "device/crackle", -14.0, 30.0, 0.8, Detail),
+    cue!("cook.crackle", "device/crackle", -15.5, 30.0, 0.8, Detail),
     cue!("bite.shock", "device/crackle", -8.0, 85.0, 0.4, Action),
     cue!("bite.glint", "physical/chime", -22.0, 45.0, 0.5, Detail),
     cue!("burn.sizzle", "anomaly/burner_roar", -6.0, 65.0, 0.5, Detail),
@@ -366,7 +366,7 @@ pub const MIX: &[Cue] = &[
     cue!("cell.arc", "device/crackle", -9.0, 95.0, 1.0, Action),
     // A live cell's warning before it arcs (`salvage::Crackled`): a quiet
     // tick heard near it, and a sharper snap at a hand close to it.
-    cue!("cell.crackle", "device/crackle", -26.0, 58.0, 1.0, Detail, 4.0),
+    cue!("cell.crackle", "device/crackle", -19.5, 58.0, 1.0, Detail, 4.0),
     cue!("cell.warn", "device/crackle", -17.0, 70.0, 0.5, Action, 3.0),
     cue!("you.hurt", "physical/body_hit", -8.0, 85.0, 0.0, Detail),
     cue!("you.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
@@ -527,7 +527,7 @@ pub const MIX: &[Cue] = &[
     cue!("anomaly.frost", "anomaly/frost", -26.0, 50.0, 4.0, Signal, 2.0),
     cue!("frost.gasp", "body/breath", -22.0, 55.0, 0.0, Detail),
     cue!("frost.bite", "physical/ice_crack", -8.0, 80.0, 0.0, Action),
-    cue!("frost.creak", "physical/ice_crack", -20.0, 45.0, 0.0, Detail),
+    cue!("frost.creak", "physical/ice_crack", -18.5, 45.0, 0.0, Detail),
     cue!("anomaly.blink", "anomaly/mirror_blink", -9.5, 95.0, 8.0, Action, 7.0),
     cue!("anomaly.blink_air", "physical/whoosh", -10.0, 70.0, 8.0, Detail),
     cue!("anomaly.arc", "anomaly/surge_crack", 2.5, 105.0, 8.0, Action),
