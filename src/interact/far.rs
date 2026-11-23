@@ -25,6 +25,11 @@ const PULL_SPEED: f32 = 1.2;
 const FLICK_SPIN: f32 = 6.0;
 /// Within this of the hand, a closed grip catches it.
 const CATCH: f32 = 0.3;
+/// A loose thing faster than this (m/s) is in flight: tossed, thrown.
+pub const TOSSED_SPEED: f32 = 1.5;
+/// How near a closed, empty hand a thing in flight is caught (m): about a
+/// hand's breadth past its palm.
+pub const TOSS_CATCH: f32 = 0.18;
 
 /// What can be called: loose things lying about.
 type Loose<'w, 's> = Query<
@@ -90,6 +95,36 @@ pub(super) fn far_grab(
                     hand.pulling = None;
                 }
                 continue;
+            }
+            // A closed, empty hand catches a thing flying into it (a gun
+            // tossed to the other hand, to change grip): it needn't close
+            // on the very frame it arrives (playtest 2026-11-22, 19:16).
+            if !busy && hand.grip_down {
+                let at = hand.world.translation;
+                let caught = loose
+                    .iter()
+                    .filter(|(e, gt, vis)| {
+                        vis != &Some(&Visibility::Hidden)
+                            && bodies
+                                .get(*e)
+                                .is_ok_and(|(_, v, _)| v.0.length() > TOSSED_SPEED)
+                            && gt.translation().distance(at) < TOSS_CATCH
+                    })
+                    .min_by(|a, b| {
+                        a.1.translation()
+                            .distance(at)
+                            .total_cmp(&b.1.translation().distance(at))
+                    })
+                    .map(|(e, ..)| e);
+                if let Some(item) = caught {
+                    actions.write(HandAction::Grab {
+                        player,
+                        side: rh.side,
+                        item,
+                        point: None,
+                    });
+                    continue;
+                }
             }
             // Something in reach is the grip's.
             if busy || hand.hover.is_some() {

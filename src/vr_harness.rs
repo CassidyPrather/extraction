@@ -2055,6 +2055,34 @@ mod tests {
     /// Something on the ground three metres off: point at it, squeeze,
     /// flick the hand back, and it's in your hand. Pointing away from it,
     /// the same flick does nothing.
+    /// A pistol tossed to the other hand, already closed, is caught as it
+    /// arrives (playtest 2026-11-22, 19:16: it had to close on the very
+    /// frame); one flying past well wide of it isn't.
+    #[test]
+    fn a_tossed_gun_is_caught_by_a_closed_hand() {
+        for (wide, caught) in [(0.0, true), (0.4, false)] {
+            let mut vr = Vr::new("training_yard");
+            let feet = on_ground(&vr, OPEN.x, OPEN.z);
+            vr.stand(feet, 0.0);
+            let hand = feet + Vec3::new(-0.25, 1.2, -0.4);
+            vr.hand(Side::Left, hand, Quat::IDENTITY, 1.0, 0.0);
+            vr.step(4);
+            assert_eq!(vr.hand_state(Side::Left).holding, None, "closed, empty");
+            let from = hand + Vec3::new(0.6 + wide, 0.15, 0.0);
+            let gun = vr.spawn("pm_pistol", Transform::from_translation(from));
+            let to = hand + Vec3::X * wide;
+            vr.app.world_mut().entity_mut(gun).insert(LinearVelocity(
+                (to - from).normalize() * 3.0 + Vec3::Y * 0.8,
+            ));
+            vr.step(30);
+            assert_eq!(
+                vr.hand_state(Side::Left).holding == Some(gun),
+                caught,
+                "{wide} m wide"
+            );
+        }
+    }
+
     #[test]
     fn point_and_flick_fetches_it() {
         let mut vr = Vr::new("training_yard");
