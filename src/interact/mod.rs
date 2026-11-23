@@ -409,6 +409,13 @@ pub struct Clearing(pub Entity);
 /// How far a pulled magazine's top must get from the well it left before
 /// it can seat there again, metres.
 pub const CLEAR_OF_WELL: f32 = 0.08;
+const _: () = assert!(MAG_CONTACT < CLEAR_OF_WELL);
+
+/// How near a held magazine's top must come to its well to seat (m):
+/// generous, since in a headset it's done by feel (playtest 2026-11-22:
+/// at 4.5 cm a magazine went in only when placed just so). Under
+/// [`CLEAR_OF_WELL`], so one just pulled doesn't seat straight back.
+pub const MAG_CONTACT: f32 = 0.07;
 
 /// A magazine brought up into the well of the gun in your other hand seats
 /// as it arrives: in a headset you don't let go of it first.
@@ -446,7 +453,7 @@ fn seat_on_contact(
             {
                 continue;
             }
-            if top.distance(sgt.translation()) > 0.045 {
+            if top.distance(sgt.translation()) > MAG_CONTACT {
                 continue;
             }
             if let Ok((_, _, mut hand)) = hands.get_mut(h.hand) {
