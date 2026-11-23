@@ -32,6 +32,7 @@ How it works:
 | `audio_machines::tests::the_dangers_are_heard`: no sound for `MachineSpent` | 88e9f633 (Arcade, lib369 on 7e53ec71) | Arcade (with Audio) | the burn-out that ends a blind or strayed wave machine needs a sound, or a reason it's exempt |
 | `render::puff::tests::no_puff_is_a_sphere`: robots/weak_points.rs is on the sphere list but has no spheres now | 4aa83872 (Robot bodies, lib369) | Robot bodies | take weak_points.rs off the list |
 | `robots::recall` every_robot_keyed_local_is_in_the_table (grip.rs `prying`) + `soak` entity_keyed_locals_forget_what_is_gone (arena.rs `last`) | 4aa83872 / 88e9f633 (lib369) | Robot bodies / Arcade | fixed in ce7a46e5 and 0c9f8e34, gating now; confirm on the next lib run |
+| scenario `walker_hunt`: a Mosin against a walker up the road, 0 robots wrecked (17.1 s) | gate 370 (fb22a0cf: Hands 48a06d0 sights-on-nearer-eye + mag contact, Progression, Onboarding LastPress + step words, World models, Arcade, Robot bodies Locals); green on gate 369 (7e53ec71) | Hands first (the sight-line change is the likeliest), else bisect | |
 
 ## Logged, not failing a check
 
