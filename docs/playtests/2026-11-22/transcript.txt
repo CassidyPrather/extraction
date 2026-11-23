@@ -1,0 +1,244 @@
+00:03.18 All right. Hello, hello. All right. How do I launch a new save again? Oh, wow. Even just
+00:24.20 looking around at the start of it. Okay. Real quick, what's going on here is I am playtesting.
+00:29.92 I don't have a ton of time, so I'm going to test two things today. I'm going to test the
+00:32.82 onboarding, which is important, and then I'm going to test the arcade mode. All right.
+00:37.22 Uh, da-da-da-da. Alright, excellent. I'm gonna take off my headset and try, oh, there's gotta
+00:46.53 be a, is there a report button? There's a tour button, which is partly obscured, which
+00:54.54 probably doesn't matter. Oh, the hands look so much better. Uh, you could probably just
+01:02.00 have, okay, no, the hands look good. There's a little bit around the wrists where the wrists
+01:07.42 meet the hand that is ugly and awkward, but that's fine. I'm trying for the life of me.
+01:17.02 You know what? If I run hyphen hyphen help, I'm sure I will remember, so please bear with me for
+01:21.98 just one moment while I restart and remember how to do that. Alright, there we go. Me waking up
+03:36.64 the supercomputer miles away from me so that I can ask it a question instead of using control F.
+03:42.88 Oh, there we go. That's odd. New- oh wait, no, there was a new career button in the main
+03:58.22 menu anyway, that I just didn't see, I guess, so I'm gonna press... okay. Well, did the
+04:11.02 game crash? No, I just got kicked out to the SteamVR loading screen while it was, uh, loading.
+04:19.98 fine. I mean, add it to the list of things to do, right? Is the load in is abrupt and some things
+04:27.00 load in faster than others, making it very uncomfortable. And like you need a loading
+04:31.62 transitory system so that you're not getting messed with in VR. All right. Uh, OBS, how are
+04:40.12 you looking? Are you catching my voice? Yes. Perfect. All right. Immediately I stand in and
+04:51.48 I see there is a sign with literally no text on it at all, and this is a market improvement.
+05:00.58 However, I can still see...
+05:05.96 Okay, well, let's go through things one at a time.
+05:12.97 There's no text on the signs, which is gonna make trying to fedangle my way through this
+05:17.19 without knowing the English language, I guess, kind of interesting.
+05:21.53 so consider this a test of how diegetic the systems in this onboarding are
+05:28.15 for somebody who already knows it right um i'm still being barraged with a lot at once in front
+05:38.43 of me my line of sight is completely unbroken throughout this entire tutorial area which
+05:43.65 isn't the worst right it's way there's a sense of like clarity and direction here that's way
+05:49.69 better than the last time we tried this, um, but there's still perhaps maybe opportunity for
+05:55.95 improvement. Uh, what does this button do? Settings, done, change any time. Well, obviously not,
+06:06.85 because the text isn't rendering at all. That button doesn't seem to do anything. Oh, I have
+06:12.35 teleported. Oh. Push, okay, pushing button tutorial. I mean, I'm glad you have the pushing
+06:20.75 button tutorial. Doesn't really clearly indicate to move on to the next lamp at this stage but
+06:29.00 that could be just because I don't see anything. Maybe like a glow trail along the floor or
+06:35.22 something like that. Not that it's super important. There's a very strange cube lighting texture going
+06:42.26 on on the ground everywhere in this field now that I look at it closer. Uh which is interesting
+06:50.72 because it kind of evokes... It's definitely a bug. I'm trying to be too sympathetic. Okay,
+06:57.34 backpack. Why does the... You know, okay. You don't need to show the backpack's bottom,
+07:07.02 or the flap on the backpack, completely off, right? It's just long and clunky. You could just
+07:14.02 abstract that away if you wanted to. I can see straight through the backpack for these two
+07:20.52 holes on either side. I don't know if that's intentional or what, and I see two pouches on
+07:24.08 the side of the backpack, which I assume are decorative, but hey. Uh, we already know that
+07:30.04 model quality is an issue. On the topic of things that are still issues, the trees in the distance
+07:37.60 have not improved since the last time I have seen them, but there is probably opportunities. I can
+07:44.42 see LODs popping in and out which is good so maybe we should consider how LODs look. The fact
+07:50.90 that the trunk of this tree is visible at this LOD but then when I get closer to it it goes
+07:56.82 invisible from my perspective is definitely worth addressing but I'm more concerned with the very
+08:04.14 very narrow silhouettes of some of these trees right and the very like flat big solid filled
+08:12.18 triangle patterns that look kind of like the tail of one of those 3D printed dragons are
+08:16.84 not great. I do like cute little things like this shed over here and the tutorial area
+08:25.50 that is just available for you to check out if you want. That's fun. I need to work on
+08:38.21 my vocabulary. This isn't like a review, criticism, feedback thing, but one of the things I wanted
+08:43.83 to talk about is like I can call this on the fence post here z-plane fighting I know what to call
+08:50.49 that right but I want to describe okay here's exactly what's wrong with the grass here I don't
+08:56.85 have like a quick word to refer to it I can say it's like I can it's a little the repetition and
+09:04.33 reuse of the asset is too heavily leaned upon and unbroken for me to be able to like suspend my
+09:11.41 disbelief in a way that the grass texture on the floor is broken up in such a way that my brain
+09:16.87 doesn't register it as a repeating texture, right? And there's definitely some still some square
+09:22.01 tiles where the texture blending is completely wrong, so that probably needs a dedicated detailed
+09:29.59 look, right? Um, I'm gonna keep pushing buttons. Okay, I got- okay, some of the text is deciding
+09:46.33 to render now. A lot of it still isn't. The box. Okay, squeeze, grip, grab. Oh boy, why is this so
+10:10.63 hard to target? There's a very narrow band here. Okay, what have I caught? Uh, this is a cleaning
+10:24.17 kit. Okay. Uh, does not fit in any of my pockets. Okay, over your shoulder, open your hand.
+10:38.52 I guess is meant is meant to be find your backpack okay that's what that's about that's fair enough
+10:45.90 maybe if you're not if you're not gonna have the user like use the pockets on their rig at the
+10:52.72 start of the tutorial you could just hide that ui element and introduce it to them when they
+10:57.18 are ready to use the pockets right um I'm also thinking it's like does the first item they pick
+11:04.10 up matter particularly much? I don't know. Why is there a plank here in the middle of the road?
+11:14.10 Was that supposed to be a crouching tutorial at some point that I didn't actually honor?
+11:19.50 I don't know. It is cool being able to see weird anomalies in the distance. Uh, this is a huge step
+11:26.48 up over the last one, right? I would say I am, whatever direction we took to improve visual
+11:33.62 anomaly quality. I like this a lot. Um, a little bit too stark in terms of the contrast with the
+11:41.50 environment, especially along the floor, right? Uh, but I think that there are solutions to that
+11:48.50 that don't require too much more artistic intervention on my end, right? Um, obviously
+11:53.98 mileages may vary, but worth considering, like, okay, what, why is somebody looking at my
+12:01.24 pretty anomaly and going, oh, wow, that's really, really stark, right? And there's certain
+12:08.34 circumstances in which things need to be stark in games too, right? That's just not one of them,
+12:13.54 right? Oh, why does the lightning look so blocky? Or is that even lightning at all?
+12:19.50 And it's going too fast. Okay, let's see. The range, take the pistol, squeeze grip. Okay.
+12:33.51 now I'm at the place with the pistol and I can't see the tutorial text anymore because rather than
+12:40.05 being an annotation on my hand it's on the sign I now have to walk over back to right which I guess
+12:47.07 is the kind of thing you only get with playtesting but like I don't know we'll explore playtesting
+12:54.14 options at some point anyway right almost sometimes I wonder if you could like I don't know
+12:59.78 This is a class of problem. This is a class of UX problem. Hold it at your hip, open your hand.
+13:05.56 Oh, oh, that is delightful. Seeing the hip pocket right there glow like that. Um, I wonder if that
+13:12.78 will be miserable for low FOV headsets, but we'll get there when we get there. That's just a micro
+13:17.80 adjustment, right? Anyway, yeah, that fits in my pocket. Uh, I do not like how it turns white while
+13:26.26 it is in my pocket or turn sideways I would prefer it turn you know barrel facing down and
+13:33.80 how do I grab it out again oh boy we may have uh discovered okay I am now like looking straight
+13:44.05 down to try to get at this thing and my body is spinning wildly that's no good and I think it's
+13:50.17 just it's a little bit too because I want to look at the pistol to grab it but my body is still
+13:54.75 spinning. So that's just, I guess, tuning on the IK. Okay, I have no idea how to pull something out
+13:58.87 of my pocket. I think I might actually have soft-locked myself in the tutorial here,
+14:04.25 which would be incredibly important to not have happen, because I can now no longer see...
+14:14.03 Yeah, no, this is goofy. Why can't I pull that out of my pocket? That's crazy. All right,
+14:20.63 well, your, uh, your pocket code has a bug. I can pick up the magazine, I guess.
+14:32.92 Oh, maybe if the player character were a little bit smaller,
+14:37.14 uh, it would be easier to handle things in VR, right? Like, just imagine they're a smaller person,
+14:47.18 right? Uh, yeah, I think that would do this well. Okay, yeah, I'm, I'm completely stuck in this
+14:57.51 tutorial so no further progress while we made back through the gate that one's next
+15:08.21 thanks love but i just walked into the shooting range all right the floor effects on this anomaly
+15:18.07 oh okay so the lightning doesn't look as weird and blocky when you're close to it it's only at
+15:24.19 a distance that it looks weird and blocky that's probably a rendering bug um this low res
+15:29.93 like, kind of like, thing on the ground below this anomaly, the lightning one. Not sure I'm
+15:36.93 loving that. I'm gonna kill myself on it and see what happens. Thanks, love. I'm not seeing that
+15:48.96 damage feedback we discussed. I mean, obviously the anomaly is doing its thing, but. The old farm
+16:04.06 still waiting. Marrow Creek. Oh, and now I've responded the opposite end of the training course.
+16:08.86 that's funny. I guess this is the radio at the end of the training yard, which should not really
+16:18.30 be a pick-up-able item. It should be, like, the fixed radio transceiver. But I guess that we have...
+16:29.31 This is probably in progress, right? So I won't... Oh, why is it that I see a floating orb in the
+16:34.89 distance? Okay, I shouldn't be troubleshooting the tutorial when I've killed myself to skip it.
+16:44.95 we maybe need like a real solid flow chart of what can the player do in the onboarding section
+16:51.79 all right so last thing right it's like we should consider visually breaking it up more so it's not
+16:56.85 just a flat meadow with some stuff although i will also say every version of the onboarding i have
+17:02.77 seen so far has been an improvement over the last right so i'm not demoralized or anything and i
+17:08.11 don't think you should be either all right um i'm gonna restart the game and test arcade node because
+17:17.10 it's getting late. Hopefully the holster bug fixes itself. If not, well, arcade mode will be
+17:22.40 rather difficult, won't it? Let's see if I can use excess overlay here to actually type in the
+17:31.91 arcade flag. Okay, I closed the window. Now I'm waiting for the executable to actually
+17:45.12 shut down the process is still running it says load closed world dropped at 806 seconds
+17:55.62 or so but the process isn't actually terminating i'll give it a minute no it's been a minute all
+18:15.50 right well the process doesn't terminate when the game closes or at least when the window closes
+18:19.20 that's weird. Control C. Up. Replace the new game flag with Arcade. Run. Game loading.
+18:43.58 I see there's some attempt at a loading screen maybe going on. Uh, none of the text is rendering
+18:50.84 again, so I have no idea how to operate any of this. And I have a bunch of guns. Okay,
+18:57.24 I'll just, uh, I'll pick the pistol. I know the pistol. I can load the pistol.
+19:04.84 Oh, the pistol's already loaded. Shoot. Let's, uh, undo that mistake. Oh, it is hard to toss
+19:16.41 something in the air and then catch it in your hand to readjust your grip. Maybe we could be
+19:21.17 a little bit more forgiving about that. Not impossible, though, clearly. Why can't I stick
+19:27.11 the magazine in it's connecting to the bottom of the pistol oh it's probably just too yeah way too
+19:32.99 restrictive of a contact there um probably this is going to be a similar issue on all the guns so
+19:38.11 yeah consider that my irl hands are blocked by big obtrusive vr controllers so they're going to
+19:45.29 limit the physical motions that i can do that like you might think looking at the visual graphics of
+19:51.65 loading the magazine, what I would do. Okay, back to the slide. Excellent. I love the finger
+19:57.09 animations for that. Yeah, the finger animations are way better. I think the fact that the hands
+20:02.03 are, like, an actual hand model, like, obviously it's rough, right? There's some, like, weird
+20:06.65 pancaking going on around the, like, thumb when I'm holding the pistol, for example, and the thumb
+20:13.43 just goes straight through the pistol, and the index finger is way too far forward. Um, also,
+20:19.21 I think the trigger on the pistol might be backwards I'm not sure I don't know my guns
+20:25.23 um why did that tutorial text just show up is it when I hold it straight up that's interesting
+20:36.76 that's cool though I like that um yeah all right and I can hold the pistol with my second hand and
+20:45.60 it stable. Let's put a magazine in the pocket here. As, just like last time, it's not coming
+20:53.06 out if I put it in the pocket. So I'm just gonna hold the other magazine in the other hand, I guess.
+20:59.78 I'm gonna start pushing buttons until something happens. Wave one on. Yes, okay, I guess the
+21:05.96 correct button to push. All right, come on. All right, I see a walker over there. Cool.
+21:16.68 Oh, those things are noisy.
+21:21.15 Uh, and I need cover.
+21:24.15 Lev, not now, not the time!
+21:27.15 Okay, I'm just gonna get behind this building.
+21:30.15 Lure it around the corner.
+21:34.90 Oh, just- Thank D! Thank you, tutorial.
+21:39.95 Uh, it's fine, I can just kite it, drop mag, while running.
+21:47.60 Oh, there goes my magazine.
+22:00.23 Oh, yep, it's almost found me.
+22:11.39 around the corner. I'll figure out the safety system somehow. Oh, okay, I remember. Okay,
+22:19.59 awesome. Gun, ready, aim. Oh, around this corner, actually, never mind. Okay, hit you in the face.
+22:29.80 Oh, no, now it can't see. Now I can, oh, no, the turret can. All right, buddy. Oh, that's so fun.
+22:38.34 That's so fun, shooting out its camera. Okay, let me try to pull this thing apart with my hands,
+22:43.24 because now I'm just curious, and throw my gun at it for good measure. I missed.
+22:47.08 Why is there an X on the ground? I don't know why there's an X on the ground.
+22:50.28 Grab, grab. Oh, I feel like this thing has voice lines. I'm not sure. It's making some kind of
+22:58.14 noise, but it's too quiet. I can hear rumbling on my controller, so I feel like I'm grabbing
+23:03.54 this stupid thing, but I can't, like, get my fingers under this plate or anything, or on its
+23:09.78 legs. You know, after a certain amount of time of me messing with this, right, it should self-destruct.
+23:22.81 Yeah, I hear, get back here, no, get back here, get back here.
+23:33.02 There's no visual, oh, well, it's gone.
+23:39.78 Uh, I see it dropped a metal plate or something on the ground there, but I can't quite reach
+23:45.54 it or pick it up.
+23:47.14 Uh, where did I drop my gun?
+23:48.62 Here's a magazine, and there's the gun, okay.
+23:55.23 Well, it just wandered off the map, I guess, which is a way we can go.
+24:07.14 Lev is so heavy-handed, my goodness.
+24:10.00 Uh, okay. Call wave two. Sure, why not?
+24:26.84 Clearly, using my hands to try to take that thing apart was- wasn't doing something,
+24:31.96 but because of the haptic feedback, it kind of felt like it was too. I don't think we should
+24:36.76 worry about that. I don't really think that, like, expecting to be able to pull a robot apart with
+24:40.84 your hands without like knowing the specific technique if there is a specific technique
+24:46.44 needs to be something that a new play okay i just tried to put that magazine on the windowsill and
+24:50.92 it fell right through it and i couldn't see it anymore that would be horrible if that happened
+24:55.08 to a player all right i see two robots now and then one of them is flanking me i hope that's
+25:00.60 on purpose so i'm gonna try to shoot the one that missed okay come on buddy maybe they're
+25:07.48 not flanking me on purpose, but it would be cool if they were. Oh, these things are hard to aim at.
+25:12.26 They're too far away, but it doesn't want to get closer. Oh, now it wants to get closer. Come on.
+25:19.96 Come on. Okay, that one's blind. Shoot your friend. Shoot your friend, buddy. Let me try to
+25:32.02 shoot the knee off of one of these. Oh, never mind. My health is almost gone. I'm gonna reload.
+25:42.38 I said reload generous contacts generous contacts come on okay probably do not
+25:53.33 need to rack come on shoot the leg shoot the leg oh buddy buddy buddy buddy we
+26:25.98 can talk about this oh oh it's leg is smoking why are the legs smoking I just
+26:48.12 was targeting the joint. Oh I'm dead. Okay that's why. Well the joints are just
+27:04.29 colored spheres right now and the weak points are colored sphere indicators which I guess is fine
+27:08.85 for a white box test right. I will put the pistol in my holster never to be seen again as I cannot
+27:16.29 remove things from the holster. Climbing on top of this uh thing this trailer yeah this train car
+27:26.02 climbing on top of it, the ceiling disappears, so that's an issue. Oh, I just heard an ominous
+27:33.80 train horn near the train car. That's interesting. Let me just shoot one more, two, one or two more
+27:41.62 guns before I call it here, just for fun. Okay, yeah, well, the bugs make it unplayable. These
+27:48.85 stairs do not climb. I kind of, like, hop up and down them as I'm trying to climb them.
+27:54.93 So, there's a little side check here, so that's probably going to be an indicator that,
+27:58.79 Oh my gosh, we need to now look at everywhere that there are stairs in the game and figure
+28:04.19 out what to do with them.
+28:06.35 Oh, opening and closing the cupboards, by the way, is good.
+28:10.35 It is a little bit unfortunate that the foliage kind of clips into them, but I don't think
+28:14.29 it's too big a deal.
+28:18.34 And there's like some areas where if I'm looking at this little shack from the side and looking
+28:23.82 down, I can see the grass under the shack instead of the top of the foundation like
+28:29.14 I should. I don't even get started on the vehicles right now. Okay, let's see. I'm not a gun nut so
+28:48.74 these all look the same to me but I would recognize that Mosin looking thing anywhere
+28:54.58 so I'm grabbing it. Okay, let's see if I can remember how to operate this because it has been
+29:06.48 a while. Okay, the slide is back and I have one of these speed loaders. It does not go inside.
+29:19.16 Now, I remember having to rotate the bolt.
+29:25.16 Oh, I just think I...
+29:36.65 Now, maybe this is not the type of gun where you rotate the bolt.
+29:43.50 Is this one of those cases where I can't load it?
+29:53.14 Maybe that gun will be the Mosin that I'm familiar with.
+29:56.34 Oh, yeah, maybe it's this one. Okay.
+30:01.45 I'm gonna try to rotate my hand left and...
+30:03.43 Oh, yep, there it is.
+30:04.43 It's tricky to do in VR, but I can do that.
+30:09.05 Now, if I load this...
+30:23.13 Yeah, okay, it just loads all five bullets at once. What a luxury. Dang, we're eating well.
+30:32.58 I see my hand turns green as I get towards the contact for this, right?
+30:38.18 But actually pulling the trigger doesn't do anything.
+30:42.74 I think I might have actually broken the gun with something I did with that state. No, okay,
+30:46.82 I just had to switch hands. Maybe the control state machine was messed in some regard?
+30:52.74 well the grip for the Mosin is uh off to say the least yeah if you're looking for something to burn
+31:03.71 credits on uh clearly not all the hand poses are done for these guns I still do not know why it's
+31:13.55 all pancaked or especially around like the thumb but like hey who am I to complain yeah okay my
+31:19.65 left thumb is a stub what the heck is going on there maybe that's just the model I gave or
+31:26.70 something but okay there we go all reliable let me try and wait why is it that it flicks like
+31:39.56 that when I try to hold it close to my face oh don't don't clip the gun to my face when I'm
+31:46.16 holding it near my face if I want to aim I want to aim it's also it's clipping it to the middle
+31:54.86 of my camera so neither my left eye or my right eye can actually be using that's all right we can
+31:59.90 hit fire. Nope. Okay. The modem feels good to use. Nope. I don't- who needs sights anyway?
+32:18.40 Oh boy, I see now you have a feedback board, buddy, but it's not even functional enough to
+32:24.02 use at the moment. Uh, but sure, we'll say- oh, and now I pushed the button and it took three
+32:33.77 feedback options. So that might not even be good data because there was no debounce. Come on. Nope.
+32:47.83 Yeah with this weird uh auto clip to the front camera thing it's just not doing it for me. Oh
+32:56.33 hey I was able to hit even without being able to use the sights. Let's stick out my arm. Shoot the
+33:04.39 far the middle target. Obviously you would never build a balance again like this but no I missed.
+33:11.19 I think I have one more round. No, I do not. One last. Bazaar. Oh, what happens if you're
+33:55.39 holding A while trying to load the magazine, like, residual from a previous action?
+34:01.11 Oh, that was a weird slap-to-lock situation. Okay, well. One hand!
+35:01.40 Throwing grenades is still difficult. Okay, I'm just thinking around the range. I need to go to
+35:05.20 it's late, good night. Hopefully this is something, sorry we did not get an
+35:10.42 absolute metric ton of data.

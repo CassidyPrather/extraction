@@ -29,7 +29,6 @@ How it works:
 | - | - | - | - |
 | first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
 | Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s), Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot's resting hand (chest height, 0.5 m above the heart) grazes 1-3 cm inside the rim while its body is 2.1 m out: a passing brush, not a reach. Ruling changed 19 Nov 12:00: a brush at the rim doesn't fire; a real reach (down for the stone, or in toward the heart) does. No second Player entity (Anomalies mixed two worlds' logs) | 6d425f1d (Onboarding re-measure) | Anomalies (reach margin + tests) | |
-| `soak::chaos::chaos_monkey_short`: 2 items off the map after a player teleport. (a) training_yard seed 1: pm_pistol held in Left, teleport to door (-27.6,12.1,93.2), item ends at (-21.6,20.2,131.0). (b) marrow_creek seed 3: after a teleport, the toz_double is stowed "into pack at (-341.6,21.4,-54.6)" while the player is at about (-121,13.6,-92), then ends at (-311.8,35.3,-59.6). Looks like the pack/body sockets don't follow the rig on a teleport (no second Player: that was a log mix-up) | f504d325 (lib360) | Hands (held items and sockets across a teleport) | |
 
 ## Logged, not failing a check
 
@@ -45,6 +44,7 @@ How it works:
 
 | What | Fixed by |
 | - | - |
+| `soak::chaos::chaos_monkey_short` items off the map after a teleport (a held pack stayed behind, then hung 224 m off) | 6a8656d2 (Hands), green on lib364 (85daf8f6: 1847/0) |
 | `robots::recall` + `soak::entity_keyed_locals_forget_what_is_gone` (sorter_look `waited`) | bcf4a1dc (Robot bodies), green on lib360 |
 | `capture::checks::models_are_a_believable_size` items/plough_plate 3.08 m | 39c11074 (Heavy: two 1.54 m halves), green on lib357 |
 | `asset_path_tests::game_code_never_reads_from_the_build_machine` (grips.rs CARGO_MANIFEST_DIR) | 81b48bb7 (World models), green on lib354 |
@@ -83,6 +83,5 @@ How it works:
 | `vr_harness::salvage::a_servo_pack_lifts_out_once_its_bolts_are_undone`: "a servo pack bolted on" (seat moved in #105 step 3) | Heavy acb939c3; passes on d0b692c0 (lib346) |
 | sentry/spotter/plough/pylon item models off their boxes | Heavy fdedaa97; passes on c91aea7e (lib348) |
 | `robots::sentry::tests::its_wreck_lies_in_reach` (counted every item) | Heavy 0d575202; passes on c91aea7e (lib348) |
-| `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
 | `soak::chaos::chaos_monkey_short` stim ejected at 59 m/s (grenade impulse on light bodies) | Hands e3e8abb2 (light-body floor in weapons/grenades.rs) |
 | `perf::tests::no_collider_scale_drifts` rain_barrel scale | World models e567e778; passes on 6efac71d (lib351) |

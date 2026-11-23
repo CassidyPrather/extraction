@@ -1,0 +1,484 @@
+# Timeline, 2026-11-22 playtest
+
+Video clock (0:00 = 21:57:52 PST = 05:57:52Z, the OBS file name). Log lines are converted from their UTC stamps;
+they match the speech to within a few seconds (wave 1 called 21:04 / "Wave one on" 20:59; arcade death 26:54 / "Oh I'm dead" ~26:50).
+The session-epoch tag on each log line is the log file it came from (`logs/session-<epoch>.log`).
+
+- 🗣 speech (faster-whisper large-v3; segment start times)
+- 📋 game log
+- 📷 screenshot in `screenshots/`
+
+- **-01:09** 📋 `1795413400` WARN persist: C:\Users\prath\AppData\Roaming\extraction\career.ron: marrow_creek: 2 item value(s) mended
+- **-01:04** 📋 `1795413400` INFO raid: raid: Driver: "The old farm's still waiting. East, 160 m."
+- **-01:04** 📋 `1795413400` INFO timeline: load: first frame rendered at 7.81 s (frame 1)
+- **-01:02** 📋 `1795413400` INFO xr: XR session created: driving the rig from the headset
+- **-01:01** 📋 `1795413400` WARN bevy_time: time_system did not receive the time from the render world! Calculations depending on the time may be incorrect.
+- **-01:01** 📋 `1795413400` INFO raid: raid: Truck: "No radio on you. My spare's in the crate."
+- **-01:00** 📋 `1795413400` WARN handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14489v1 is invalid; its index now has generation 2. (×104 in a row)
+- **-00:53** 📋 `1795413400` WARN cpal: audio stream stopped: Error { kind: StreamInvalidated, message: None }
+- **-00:51** 📋 `1795413400` INFO raid: raid: Truck: "No gun on you. Here, my spare. Don't lose this one."
+- **-00:46** 📋 `1795413400` INFO timeline: load: everything in at 25.19 s (frame 174)
+- **-00:41** 📋 `1795413400` INFO xr: input: left hand profile /interaction_profiles/valve/index_controller
+- **-00:41** 📋 `1795413400` INFO xr: input: right hand profile /interaction_profiles/valve/index_controller
+- **-00:25** 📋 `1795413400` INFO timeline: load: closed (world dropped) at 46.24 s (frame 1253)
+- **-00:07** 📋 `1795413462` WARN persist: C:\Users\prath\AppData\Roaming\extraction\career.ron: marrow_creek: 2 item value(s) mended
+- **-00:03** 📋 `1795413462` INFO raid: raid: Driver: "The old farm's still waiting. East, 160 m."
+- **-00:01** 📋 `1795413462` INFO xr: XR session created: driving the rig from the headset
+- **-00:01** 📋 `1795413462` INFO timeline: load: first frame rendered at 7.88 s (frame 2)
+- **00:00** 📋 `1795413462` INFO raid: raid: Truck: "No radio on you. My spare's in the crate."
+- **00:00** 📋 `1795413462` WARN handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 14512v1 is invalid; its index now has generation 2. (×100 in a row)
+- **00:02** 📋 `1795413462` INFO timeline: load: everything in at 12.56 s (frame 20)
+- **00:03** 🗣 All right. Hello, hello. All right. How do I launch a new save again? Oh, wow. Even just
+- **00:05** 📋 `1795413462` INFO raid: raid: Truck: "No gun on you. Here, my spare. Don't lose this one."
+- **00:06** 📋 `1795413462` INFO xr: input: left hand profile /interaction_profiles/valve/index_controller
+- **00:06** 📋 `1795413462` INFO xr: input: right hand profile /interaction_profiles/valve/index_controller
+- **00:24** 🗣 looking around at the start of it. Okay. Real quick, what's going on here is I am playtesting.
+- **00:29** 🗣 I don't have a ton of time, so I'm going to test two things today. I'm going to test the
+- **00:32** 🗣 onboarding, which is important, and then I'm going to test the arcade mode. All right.
+- **00:37** 🗣 Uh, da-da-da-da. Alright, excellent. I'm gonna take off my headset and try, oh, there's gotta
+- **00:46** 🗣 be a, is there a report button? There's a tour button, which is partly obscured, which
+- **00:50** 📋 `1795413462` INFO xr: input: Left grip works
+- **00:50** 📋 `1795413462` INFO xr: input: Left stick works
+- **00:53** 📋 `1795413462` INFO xr: input: Right grip works
+- **00:54** 🗣 probably doesn't matter. Oh, the hands look so much better. Uh, you could probably just
+- **01:02** 🗣 have, okay, no, the hands look good. There's a little bit around the wrists where the wrists
+- **01:07** 🗣 meet the hand that is ugly and awkward, but that's fine. I'm trying for the life of me.
+- **01:15** 📋 `1795413462` INFO xr: input: Right stick works
+- **01:17** 🗣 You know what? If I run hyphen hyphen help, I'm sure I will remember, so please bear with me for
+- **01:21** 🗣 just one moment while I restart and remember how to do that. Alright, there we go. Me waking up
+- **01:23** 📋 `1795413462` INFO xr: input: Left trigger works
+- **01:35** 📋 `1795413462` INFO timeline: load: closed (world dropped) at 104.73 s (frame 3919)
+- **01:51** 📋 `1795413577` INFO raid: raid: Driver: "The old farm's still waiting. East, 160 m."
+- **01:52** 📋 `1795413577` INFO timeline: load: first frame rendered at 7.11 s (frame 1)
+- **01:52** 📋 `1795413577` INFO xr: XR session created: driving the rig from the headset
+- **01:56** 📋 `1795413577` INFO timeline: load: closed (world dropped) at 10.98 s (frame 4)
+- **03:36** 🗣 the supercomputer miles away from me so that I can ask it a question instead of using control F.
+- **03:36** 📋 `1795413682` INFO xr: XR session created: driving the rig from the headset
+- **03:37** 📋 `1795413682` INFO timeline: load: first frame rendered at 7.61 s (frame 2)
+- **03:41** 📋 `1795413682` INFO raid: raid: Driver: "The yard's kit stays at the yard. Yours is in the crate."
+- **03:41** 📋 `1795413682` INFO xr: input: left hand profile /interaction_profiles/valve/index_controller
+- **03:41** 📋 `1795413682` INFO xr: input: right hand profile /interaction_profiles/valve/index_controller
+- **03:41** 📋 `1795413682` INFO timeline: load: everything in at 11.57 s (frame 20)
+- **03:42** 🗣 Oh, there we go. That's odd. New- oh wait, no, there was a new career button in the main
+- **03:44** 📋 `1795413682` INFO xr: input: Left grip works
+- **03:44** 📋 `1795413682` INFO xr: input: Right grip works
+- **03:51** 📋 `1795413682` INFO xr: input: Left primary works
+- **03:55** 📋 `1795413682` INFO xr: input: Left stick works
+- **03:58** 🗣 menu anyway, that I just didn't see, I guess, so I'm gonna press... okay. Well, did the
+- **04:06** 📋 `1795413682` INFO observe: PLAYTEST press {"card":"NewCareer","name":"","says":"SURE? AGAIN","what":"Camp","x":27.6,"z":173.3}
+- **04:07** 📋 `1795413682` INFO camp: camp: on to training_yard (new career)
+- **04:07** 📋 `1795413682` INFO observe: PLAYTEST press {"card":"NewCareer","name":"","says":"SURE? AGAIN","what":"Camp","x":27.6,"z":173.3}
+- **04:07** 📋 `1795413682` INFO camp: camp: on to training_yard (new career)
+- **04:07** 📋 `1795413682` INFO observe: PLAYTEST press {"card":"NewCareer","name":"","says":"SURE? AGAIN","what":"Camp","x":27.6,"z":173.3}
+- **04:09** 📋 `1795413682` INFO timeline: load: closed (world dropped) at 39.32 s (frame 1291)
+- **04:11** 🗣 game crash? No, I just got kicked out to the SteamVR loading screen while it was, uh, loading.
+- **04:11** 📋 `1795413721` INFO timeline: load: first frame rendered at 2.38 s (frame 1)
+- **04:12** 📋 `1795413721` INFO xr: XR session created: driving the rig from the headset
+- **04:13** 📷 [00413_steamvr_kickout_on_load.jpg](screenshots/00413_steamvr_kickout_on_load.jpg)
+- **04:19** 📋 `1795413721` INFO xr: input: Left grip works
+- **04:19** 📋 `1795413721` INFO xr: input: Right grip works
+- **04:19** 🗣 fine. I mean, add it to the list of things to do, right? Is the load in is abrupt and some things
+- **04:19** 📋 `1795413721` INFO raid: raid: Driver: "The board on your left. Push SETTINGS with a finger."
+- **04:20** 📋 `1795413721` INFO xr: input: left hand profile /interaction_profiles/valve/index_controller
+- **04:20** 📋 `1795413721` INFO xr: input: right hand profile /interaction_profiles/valve/index_controller
+- **04:24** 📋 `1795413721` INFO timeline: load: everything in at 14.50 s (frame 139)
+- **04:27** 🗣 load in faster than others, making it very uncomfortable. And like you need a loading
+- **04:31** 🗣 transitory system so that you're not getting messed with in VR. All right. Uh, OBS, how are
+- **04:34** 📋 `1795413721` INFO xr: input: Right trigger works
+- **04:40** 🗣 you looking? Are you catching my voice? Yes. Perfect. All right. Immediately I stand in and
+- **04:46** 📋 `1795413721` INFO xr: input: Left primary works
+- **04:51** 🗣 I see there is a sign with literally no text on it at all, and this is a market improvement.
+- **04:51** 📋 `1795413721` INFO xr: input: Left stick works
+- **04:55** 📷 [00455_sign_no_text.jpg](screenshots/00455_sign_no_text.jpg)
+- **04:55** 📋 `1795413721` INFO xr: input: Right stick works
+- **05:00** 🗣 However, I can still see...
+- **05:05** 🗣 Okay, well, let's go through things one at a time.
+- **05:12** 🗣 There's no text on the signs, which is gonna make trying to fedangle my way through this
+- **05:17** 🗣 without knowing the English language, I guess, kind of interesting.
+- **05:21** 🗣 so consider this a test of how diegetic the systems in this onboarding are
+- **05:28** 🗣 for somebody who already knows it right um i'm still being barraged with a lot at once in front
+- **05:38** 🗣 of me my line of sight is completely unbroken throughout this entire tutorial area which
+- **05:43** 🗣 isn't the worst right it's way there's a sense of like clarity and direction here that's way
+- **05:49** 🗣 better than the last time we tried this, um, but there's still perhaps maybe opportunity for
+- **05:55** 🗣 improvement. Uh, what does this button do? Settings, done, change any time. Well, obviously not,
+- **06:00** 📋 `1795413721` INFO onboarding: onboarding: Button done
+- **06:00** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"Button","station_done":true}
+- **06:00** 📋 `1795413721` INFO observe: PLAYTEST press {"card":null,"name":"Training card","says":"SKIP","what":"Camp","x":-1.1,"z":94.5}
+- **06:00** 📋 `1795413721` INFO raid: raid: Driver: "Good. Next: the lamp on your left, short of the gate."
+- **06:04** 📷 [00604_settings_button_no_text.jpg](screenshots/00604_settings_button_no_text.jpg)
+- **06:06** 🗣 because the text isn't rendering at all. That button doesn't seem to do anything. Oh, I have
+- **06:09** 📋 `1795413721` INFO observe: PLAYTEST press {"card":null,"name":"Training card","says":"SETTINGS","what":"Camp","x":-1.5,"z":94.5}
+- **06:12** 📋 `1795413721` INFO raid: raid: Driver: "From the top. The board where you started."
+- **06:12** 📋 `1795413721` INFO observe: PLAYTEST press {"card":null,"name":"Training card","says":"START OVER","what":"Camp","x":-1.8,"z":94.5}
+- **06:12** 🗣 teleported. Oh. Push, okay, pushing button tutorial. I mean, I'm glad you have the pushing
+- **06:20** 📋 `1795413721` INFO onboarding: onboarding: Button done
+- **06:20** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"Button","station_done":true}
+- **06:20** 📋 `1795413721` INFO observe: PLAYTEST press {"card":null,"name":"Training card","says":"SETTINGS","what":"Camp","x":-1.5,"z":94.5} (×2 in a row)
+- **06:20** 🗣 button tutorial. Doesn't really clearly indicate to move on to the next lamp at this stage but
+- **06:29** 🗣 that could be just because I don't see anything. Maybe like a glow trail along the floor or
+- **06:35** 🗣 something like that. Not that it's super important. There's a very strange cube lighting texture going
+- **06:38** 📷 [00638_ground_cube_lighting.jpg](screenshots/00638_ground_cube_lighting.jpg)
+- **06:41** 📋 `1795413721` INFO onboarding: onboarding: Turn done
+- **06:41** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"Turn","station_done":false}
+- **06:42** 🗣 on on the ground everywhere in this field now that I look at it closer. Uh which is interesting
+- **06:50** 🗣 because it kind of evokes... It's definitely a bug. I'm trying to be too sympathetic. Okay,
+- **06:57** 🗣 backpack. Why does the... You know, okay. You don't need to show the backpack's bottom,
+- **07:07** 🗣 or the flap on the backpack, completely off, right? It's just long and clunky. You could just
+- **07:10** 📷 [00710_backpack_holes_flap.jpg](screenshots/00710_backpack_holes_flap.jpg)
+- **07:14** 🗣 abstract that away if you wanted to. I can see straight through the backpack for these two
+- **07:20** 🗣 holes on either side. I don't know if that's intentional or what, and I see two pouches on
+- **07:24** 🗣 the side of the backpack, which I assume are decorative, but hey. Uh, we already know that
+- **07:30** 🗣 model quality is an issue. On the topic of things that are still issues, the trees in the distance
+- **07:37** 🗣 have not improved since the last time I have seen them, but there is probably opportunities. I can
+- **07:44** 🗣 see LODs popping in and out which is good so maybe we should consider how LODs look. The fact
+- **07:50** 🗣 that the trunk of this tree is visible at this LOD but then when I get closer to it it goes
+- **07:52** 📷 [00752_tree_lod_trunk.jpg](screenshots/00752_tree_lod_trunk.jpg)
+- **07:56** 🗣 invisible from my perspective is definitely worth addressing but I'm more concerned with the very
+- **08:03** 📋 `1795413721` INFO raid: raid: Driver: "Hear them go? Out there the machines hear that too. Crouch and walk, and they let you nearer."
+- **08:04** 🗣 very narrow silhouettes of some of these trees right and the very like flat big solid filled
+- **08:08** 📷 [00808_tree_silhouettes.jpg](screenshots/00808_tree_silhouettes.jpg)
+- **08:12** 🗣 triangle patterns that look kind of like the tail of one of those 3D printed dragons are
+- **08:16** 🗣 not great. I do like cute little things like this shed over here and the tutorial area
+- **08:25** 🗣 that is just available for you to check out if you want. That's fun. I need to work on
+- **08:26** 📋 `1795413721` INFO observe: PLAYTEST press {"card":null,"name":"Door","says":"","what":"Door","x":-28.5,"z":93.5}
+- **08:28** 📋 `1795413721` INFO raid: raid: Driver: "Only rats. Sat quiet, they'd mean nobody's been in."
+- **08:38** 🗣 my vocabulary. This isn't like a review, criticism, feedback thing, but one of the things I wanted
+- **08:43** 🗣 to talk about is like I can call this on the fence post here z-plane fighting I know what to call
+- **08:46** 📷 [00846_fence_post_zfight.jpg](screenshots/00846_fence_post_zfight.jpg)
+- **08:50** 🗣 that right but I want to describe okay here's exactly what's wrong with the grass here I don't
+- **08:56** 🗣 have like a quick word to refer to it I can say it's like I can it's a little the repetition and
+- **09:04** 🗣 reuse of the asset is too heavily leaned upon and unbroken for me to be able to like suspend my
+- **09:11** 🗣 disbelief in a way that the grass texture on the floor is broken up in such a way that my brain
+- **09:16** 🗣 doesn't register it as a repeating texture, right? And there's definitely some still some square
+- **09:20** 📷 [00920_grass_tile_blend.jpg](screenshots/00920_grass_tile_blend.jpg)
+- **09:22** 🗣 tiles where the texture blending is completely wrong, so that probably needs a dedicated detailed
+- **09:29** 🗣 look, right? Um, I'm gonna keep pushing buttons. Okay, I got- okay, some of the text is deciding
+- **09:37** 📋 `1795413721` INFO onboarding: onboarding: Crouch done
+- **09:37** 📋 `1795413721` INFO raid: raid: Crouched: quieter, slower. Right stick down again to stand.
+- **09:37** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"Crouch","station_done":false}
+- **09:41** 📋 `1795413721` INFO onboarding: onboarding: Run done
+- **09:41** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"Run","station_done":true}
+- **09:41** 📋 `1795413721` INFO raid: raid: Driver: "Good. Next: through the gate, the lamp by the pen."
+- **09:46** 📋 `1795413721` INFO raid: raid: Driver: "Anything odd, stand still, click both sticks: noted."
+- **09:46** 🗣 to render now. A lot of it still isn't. The box. Okay, squeeze, grip, grab. Oh boy, why is this so
+- **09:48** 📷 [00948_text_partly_renders.jpg](screenshots/00948_text_partly_renders.jpg)
+- **09:51** 📋 `1795413721` INFO xr: input: Right stick click works
+- **09:52** 📷 [00952_mark1_ingame.jpg](screenshots/00952_mark1_ingame.jpg)
+- **09:52** 📋 `1795413721` WARN playtest: PLAYTEST MARK 1 at (-4.3, 11.9, 83.0), raid clock 334 s
+- **09:52** 📋 `1795413721` INFO raid: raid: Mark 1 noted.
+- **09:54** 📷 [00954_mark2_ingame.jpg](screenshots/00954_mark2_ingame.jpg)
+- **09:54** 📷 [00954_mark3_ingame.jpg](screenshots/00954_mark3_ingame.jpg)
+- **09:54** 📋 `1795413721` WARN playtest: PLAYTEST MARK 2 at (-4.3, 11.9, 82.2), raid clock 336 s
+- **09:54** 📋 `1795413721` INFO raid: raid: Mark 2 noted.
+- **09:54** 📋 `1795413721` WARN playtest: PLAYTEST MARK 3 at (-4.6, 11.9, 82.2), raid clock 336 s
+- **09:54** 📋 `1795413721` INFO raid: raid: Mark 3 noted.
+- **10:10** 🗣 hard to target? There's a very narrow band here. Okay, what have I caught? Uh, this is a cleaning
+- **10:12** 📷 [01012_fargrab_targeting.jpg](screenshots/01012_fargrab_targeting.jpg)
+- **10:15** 📋 `1795413721` INFO onboarding: onboarding: FarGrab done
+- **10:15** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"FarGrab","station_done":false}
+- **10:16** 📋 `1795413721` INFO xr: input: Right secondary works
+- **10:24** 🗣 kit. Okay. Uh, does not fit in any of my pockets. Okay, over your shoulder, open your hand.
+- **10:38** 🗣 I guess is meant is meant to be find your backpack okay that's what that's about that's fair enough
+- **10:40** 📋 `1795413721` INFO onboarding: onboarding: Pack done
+- **10:40** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"Pack","station_done":true}
+- **10:40** 📋 `1795413721` INFO raid: raid: Driver: "Good. Next: through the gate, the range table on the left."
+- **10:45** 🗣 maybe if you're not if you're not gonna have the user like use the pockets on their rig at the
+- **10:52** 🗣 start of the tutorial you could just hide that ui element and introduce it to them when they
+- **10:57** 🗣 are ready to use the pockets right um I'm also thinking it's like does the first item they pick
+- **11:04** 🗣 up matter particularly much? I don't know. Why is there a plank here in the middle of the road?
+- **11:14** 🗣 Was that supposed to be a crouching tutorial at some point that I didn't actually honor?
+- **11:15** 📷 [01115_plank_in_road.jpg](screenshots/01115_plank_in_road.jpg)
+- **11:19** 🗣 I don't know. It is cool being able to see weird anomalies in the distance. Uh, this is a huge step
+- **11:26** 🗣 up over the last one, right? I would say I am, whatever direction we took to improve visual
+- **11:30** 📷 [01130_anomalies_distance_stark.jpg](screenshots/01130_anomalies_distance_stark.jpg)
+- **11:33** 🗣 anomaly quality. I like this a lot. Um, a little bit too stark in terms of the contrast with the
+- **11:41** 🗣 environment, especially along the floor, right? Uh, but I think that there are solutions to that
+- **11:48** 🗣 that don't require too much more artistic intervention on my end, right? Um, obviously
+- **11:53** 🗣 mileages may vary, but worth considering, like, okay, what, why is somebody looking at my
+- **12:01** 🗣 pretty anomaly and going, oh, wow, that's really, really stark, right? And there's certain
+- **12:08** 🗣 circumstances in which things need to be stark in games too, right? That's just not one of them,
+- **12:13** 🗣 right? Oh, why does the lightning look so blocky? Or is that even lightning at all?
+- **12:16** 📷 [01216_lightning_blocky_far.jpg](screenshots/01216_lightning_blocky_far.jpg)
+- **12:19** 🗣 And it's going too fast. Okay, let's see. The range, take the pistol, squeeze grip. Okay.
+- **12:33** 📋 `1795413721` INFO onboarding: onboarding: TakePistol done
+- **12:33** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"TakePistol","station_done":false}
+- **12:33** 🗣 now I'm at the place with the pistol and I can't see the tutorial text anymore because rather than
+- **12:38** 📷 [01238_range_text_on_sign.jpg](screenshots/01238_range_text_on_sign.jpg)
+- **12:40** 🗣 being an annotation on my hand it's on the sign I now have to walk over back to right which I guess
+- **12:47** 🗣 is the kind of thing you only get with playtesting but like I don't know we'll explore playtesting
+- **12:54** 🗣 options at some point anyway right almost sometimes I wonder if you could like I don't know
+- **12:59** 🗣 This is a class of problem. This is a class of UX problem. Hold it at your hip, open your hand.
+- **13:05** 🗣 Oh, oh, that is delightful. Seeing the hip pocket right there glow like that. Um, I wonder if that
+- **13:08** 📷 [01308_hip_holster_glow.jpg](screenshots/01308_hip_holster_glow.jpg)
+- **13:12** 🗣 will be miserable for low FOV headsets, but we'll get there when we get there. That's just a micro
+- **13:17** 🗣 adjustment, right? Anyway, yeah, that fits in my pocket. Uh, I do not like how it turns white while
+- **13:21** 📋 `1795413721` INFO onboarding: onboarding: PutAway done
+- **13:21** 📋 `1795413721` INFO observe: PLAYTEST goal {"goal":"PutAway","station_done":false}
+- **13:26** 🗣 it is in my pocket or turn sideways I would prefer it turn you know barrel facing down and
+- **13:28** 📷 [01328_pistol_white_in_holster.jpg](screenshots/01328_pistol_white_in_holster.jpg)
+- **13:33** 🗣 how do I grab it out again oh boy we may have uh discovered okay I am now like looking straight
+- **13:44** 🗣 down to try to get at this thing and my body is spinning wildly that's no good and I think it's
+- **13:46** 📷 [01346_body_spinning_looking_down.jpg](screenshots/01346_body_spinning_looking_down.jpg)
+- **13:50** 🗣 just it's a little bit too because I want to look at the pistol to grab it but my body is still
+- **13:54** 🗣 spinning. So that's just, I guess, tuning on the IK. Okay, I have no idea how to pull something out
+- **13:58** 🗣 of my pocket. I think I might actually have soft-locked myself in the tutorial here,
+- **14:04** 🗣 which would be incredibly important to not have happen, because I can now no longer see...
+- **14:14** 🗣 Yeah, no, this is goofy. Why can't I pull that out of my pocket? That's crazy. All right,
+- **14:16** 📷 [01416_cannot_draw_from_holster.jpg](screenshots/01416_cannot_draw_from_holster.jpg)
+- **14:20** 🗣 well, your, uh, your pocket code has a bug. I can pick up the magazine, I guess.
+- **14:32** 🗣 Oh, maybe if the player character were a little bit smaller,
+- **14:37** 🗣 uh, it would be easier to handle things in VR, right? Like, just imagine they're a smaller person,
+- **14:47** 🗣 right? Uh, yeah, I think that would do this well. Okay, yeah, I'm, I'm completely stuck in this
+- **14:57** 🗣 tutorial so no further progress while we made back through the gate that one's next
+- **15:03** 📋 `1795413721` INFO raid: raid: Driver: "Back through the gate. That one's next."
+- **15:08** 🗣 thanks love but i just walked into the shooting range all right the floor effects on this anomaly
+- **15:18** 🗣 oh okay so the lightning doesn't look as weird and blocky when you're close to it it's only at
+- **15:22** 📷 [01522_anomaly_floor_lowres.jpg](screenshots/01522_anomaly_floor_lowres.jpg)
+- **15:24** 🗣 a distance that it looks weird and blocky that's probably a rendering bug um this low res
+- **15:29** 🗣 like, kind of like, thing on the ground below this anomaly, the lightning one. Not sure I'm
+- **15:36** 🗣 loving that. I'm gonna kill myself on it and see what happens. Thanks, love. I'm not seeing that
+- **15:39** 📋 `1795413721` INFO raid: raid: Driver: "Back out. That shimmer burns. Ask me how I know."
+- **15:48** 🗣 damage feedback we discussed. I mean, obviously the anomaly is doing its thing, but. The old farm
+- **15:50** 📷 [01550_no_damage_feedback.jpg](screenshots/01550_no_damage_feedback.jpg)
+- **15:54** 📋 `1795413721` INFO raid: raid: Everything goes grey. Somewhere, a collection order is filed.
+- **16:00** 📋 `1795413721` INFO raid: raid: You went down. You wake in the back of the truck.
+- **16:00** 📋 `1795413721` INFO raid: raid: Driver: "The old farm's still waiting. Marrow Creek."
+- **16:04** 🗣 still waiting. Marrow Creek. Oh, and now I've responded the opposite end of the training course.
+- **16:08** 📷 [01608_respawn_far_end.jpg](screenshots/01608_respawn_far_end.jpg)
+- **16:08** 🗣 that's funny. I guess this is the radio at the end of the training yard, which should not really
+- **16:18** 🗣 be a pick-up-able item. It should be, like, the fixed radio transceiver. But I guess that we have...
+- **16:24** 📷 [01624_radio_pickup_item.jpg](screenshots/01624_radio_pickup_item.jpg)
+- **16:29** 🗣 This is probably in progress, right? So I won't... Oh, why is it that I see a floating orb in the
+- **16:32** 📷 [01632_floating_orb.jpg](screenshots/01632_floating_orb.jpg)
+- **16:33** 📋 `1795413721` INFO raid: raid: Out of the truck. The Surge is due in about 48 minutes.
+- **16:34** 🗣 distance? Okay, I shouldn't be troubleshooting the tutorial when I've killed myself to skip it.
+- **16:44** 🗣 we maybe need like a real solid flow chart of what can the player do in the onboarding section
+- **16:51** 🗣 all right so last thing right it's like we should consider visually breaking it up more so it's not
+- **16:56** 🗣 just a flat meadow with some stuff although i will also say every version of the onboarding i have
+- **17:02** 🗣 seen so far has been an improvement over the last right so i'm not demoralized or anything and i
+- **17:08** 🗣 don't think you should be either all right um i'm gonna restart the game and test arcade node because
+- **17:12** 📷 [01712_mark4_ingame.jpg](screenshots/01712_mark4_ingame.jpg)
+- **17:12** 📋 `1795413721` WARN playtest: PLAYTEST MARK 4 at (1.4, 12.0, -49.7), raid clock 735 s
+- **17:12** 📋 `1795413721` INFO raid: raid: Mark 4 noted.
+- **17:17** 🗣 it's getting late. Hopefully the holster bug fixes itself. If not, well, arcade mode will be
+- **17:22** 🗣 rather difficult, won't it? Let's see if I can use excess overlay here to actually type in the
+- **17:31** 🗣 arcade flag. Okay, I closed the window. Now I'm waiting for the executable to actually
+- **17:35** 📋 `1795413721` INFO timeline: load: closed (world dropped) at 806.35 s (frame 39495)
+- **17:45** 🗣 shut down the process is still running it says load closed world dropped at 806 seconds
+- **17:55** 🗣 or so but the process isn't actually terminating i'll give it a minute no it's been a minute all
+- **18:15** 🗣 right well the process doesn't terminate when the game closes or at least when the window closes
+- **18:19** 🗣 that's weird. Control C. Up. Replace the new game flag with Arcade. Run. Game loading.
+- **18:33** 📋 `1795414583` INFO arena: arcade: bench at [0.0, 12.0, 27.0]
+- **18:33** 📋 `1795414583` INFO arena: arcade: 24 things laid on the bench
+- **18:33** 📋 `1795414583` INFO timeline: load: first frame rendered at 2.27 s (frame 1)
+- **18:33** 📋 `1795414583` INFO xr: XR session created: driving the rig from the headset
+- **18:34** 📋 `1795414583` INFO range: arcade: range at [5.0, 12.1, 33.0]
+- **18:34** 📋 `1795414583` INFO record: arcade: recording to C:\Users\prath\AppData\Roaming\extraction\arcade\run-1795414586-1.jsonl
+- **18:40** 📋 `1795414583` INFO xr: input: Right grip works
+- **18:41** 📋 `1795414583` INFO xr: input: Left primary works
+- **18:41** 📋 `1795414583` INFO xr: input: left hand profile /interaction_profiles/valve/index_controller
+- **18:41** 📋 `1795414583` INFO xr: input: right hand profile /interaction_profiles/valve/index_controller
+- **18:43** 🗣 I see there's some attempt at a loading screen maybe going on. Uh, none of the text is rendering
+- **18:45** 📋 `1795414583` INFO timeline: load: everything in at 14.42 s (frame 196)
+- **18:46** 📷 [01846_arcade_load_no_text.jpg](screenshots/01846_arcade_load_no_text.jpg)
+- **18:49** 📋 `1795414583` INFO xr: input: Left stick works
+- **18:49** 📋 `1795414583` INFO xr: input: Right stick works
+- **18:50** 🗣 again, so I have no idea how to operate any of this. And I have a bunch of guns. Okay,
+- **18:57** 🗣 I'll just, uh, I'll pick the pistol. I know the pistol. I can load the pistol.
+- **19:01** 📋 `1795414583` INFO xr: input: Left grip works
+- **19:04** 📋 `1795414583` INFO xr: input: Right secondary works
+- **19:04** 🗣 Oh, the pistol's already loaded. Shoot. Let's, uh, undo that mistake. Oh, it is hard to toss
+- **19:05** 📋 `1795414583` INFO xr: input: Right primary works
+- **19:16** 🗣 something in the air and then catch it in your hand to readjust your grip. Maybe we could be
+- **19:21** 🗣 a little bit more forgiving about that. Not impossible, though, clearly. Why can't I stick
+- **19:23** 📋 `1795414583` INFO firsts: first time: Recall
+- **19:23** 📋 `1795414583` INFO raid: raid: Truck: "Forgot what that is? Hold it up close and look."
+- **19:27** 🗣 the magazine in it's connecting to the bottom of the pistol oh it's probably just too yeah way too
+- **19:28** 📷 [01928_magazine_wont_seat.jpg](screenshots/01928_magazine_wont_seat.jpg)
+- **19:32** 🗣 restrictive of a contact there um probably this is going to be a similar issue on all the guns so
+- **19:38** 🗣 yeah consider that my irl hands are blocked by big obtrusive vr controllers so they're going to
+- **19:45** 🗣 limit the physical motions that i can do that like you might think looking at the visual graphics of
+- **19:51** 🗣 loading the magazine, what I would do. Okay, back to the slide. Excellent. I love the finger
+- **19:54** 📋 `1795414583` INFO xr: input: Left trigger works
+- **19:57** 🗣 animations for that. Yeah, the finger animations are way better. I think the fact that the hands
+- **20:02** 🗣 are, like, an actual hand model, like, obviously it's rough, right? There's some, like, weird
+- **20:06** 🗣 pancaking going on around the, like, thumb when I'm holding the pistol, for example, and the thumb
+- **20:12** 📷 [02012_thumb_through_pistol.jpg](screenshots/02012_thumb_through_pistol.jpg)
+- **20:13** 🗣 just goes straight through the pistol, and the index finger is way too far forward. Um, also,
+- **20:19** 🗣 I think the trigger on the pistol might be backwards I'm not sure I don't know my guns
+- **20:25** 🗣 um why did that tutorial text just show up is it when I hold it straight up that's interesting
+- **20:28** 📷 [02028_tutorial_text_held_up.jpg](screenshots/02028_tutorial_text_held_up.jpg)
+- **20:36** 🗣 that's cool though I like that um yeah all right and I can hold the pistol with my second hand and
+- **20:45** 🗣 it stable. Let's put a magazine in the pocket here. As, just like last time, it's not coming
+- **20:53** 🗣 out if I put it in the pocket. So I'm just gonna hold the other magazine in the other hand, I guess.
+- **20:55** 📷 [02055_mag_stuck_in_pocket.jpg](screenshots/02055_mag_stuck_in_pocket.jpg)
+- **20:59** 🗣 I'm gonna start pushing buttons until something happens. Wave one on. Yes, okay, I guess the
+- **21:04** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"Arcade card","says":"CALL WAVE 1","what":"Camp","x":3.0,"z":27.4}
+- **21:04** 📋 `1795414583` INFO raid: raid: Wave 1: walker, through the north gate in 10 seconds.
+- **21:05** 🗣 correct button to push. All right, come on. All right, I see a walker over there. Cool.
+- **21:14** 📋 `1795414583` INFO waves: arcade: wave 1 in through the NORTH gate
+- **21:16** 🗣 Oh, those things are noisy.
+- **21:21** 🗣 Uh, and I need cover.
+- **21:22** 📋 `1795414583` INFO firsts: first time: Heard
+- **21:22** 📋 `1795414583` INFO raid: raid: Truck: "Move off quiet, then go still. Something heard you."
+- **21:24** 🗣 Lev, not now, not the time!
+- **21:24** 📋 `1795414583` INFO firsts: first time: Aimed
+- **21:24** 📋 `1795414583` INFO raid: raid: Truck: "Break its line, now. It's aiming at you."
+- **21:27** 🗣 Okay, I'm just gonna get behind this building.
+- **21:30** 🗣 Lure it around the corner.
+- **21:34** 🗣 Oh, just- Thank D! Thank you, tutorial.
+- **21:37** 📋 `1795414583` INFO raid: raid: Safety's on. Click the stick on the gun hand.
+- **21:37** 📋 `1795414583` INFO xr: input: Right trigger works
+- **21:39** 🗣 Uh, it's fine, I can just kite it, drop mag, while running.
+- **21:46** 📋 `1795414583` INFO firsts: first time: ComingToLook
+- **21:46** 📋 `1795414583` INFO raid: raid: Truck: "Low behind it, and keep still. It only finds what moves."
+- **21:46** 📋 `1795414583` INFO raid: raid: Steps again, coming your way. It's back to look.
+- **21:47** 🗣 Oh, there goes my magazine.
+- **22:00** 🗣 Oh, yep, it's almost found me.
+- **22:07** 📋 `1795414583` INFO raid: raid: Crouched: quieter, slower. Right stick down again to stand.
+- **22:11** 🗣 around the corner. I'll figure out the safety system somehow. Oh, okay, I remember. Okay,
+- **22:18** 📋 `1795414583` INFO xr: input: Right stick click works
+- **22:19** 🗣 awesome. Gun, ready, aim. Oh, around this corner, actually, never mind. Okay, hit you in the face.
+- **22:29** 🗣 Oh, no, now it can't see. Now I can, oh, no, the turret can. All right, buddy. Oh, that's so fun.
+- **22:32** 📷 [02232_shot_out_camera.jpg](screenshots/02232_shot_out_camera.jpg)
+- **22:38** 🗣 That's so fun, shooting out its camera. Okay, let me try to pull this thing apart with my hands,
+- **22:43** 🗣 because now I'm just curious, and throw my gun at it for good measure. I missed.
+- **22:47** 🗣 Why is there an X on the ground? I don't know why there's an X on the ground.
+- **22:48** 📷 [02248_x_on_ground.jpg](screenshots/02248_x_on_ground.jpg)
+- **22:50** 🗣 Grab, grab. Oh, I feel like this thing has voice lines. I'm not sure. It's making some kind of
+- **22:58** 🗣 noise, but it's too quiet. I can hear rumbling on my controller, so I feel like I'm grabbing
+- **23:03** 🗣 this stupid thing, but I can't, like, get my fingers under this plate or anything, or on its
+- **23:09** 🗣 legs. You know, after a certain amount of time of me messing with this, right, it should self-destruct.
+- **23:22** 🗣 Yeah, I hear, get back here, no, get back here, get back here.
+- **23:24** 📋 `1795414583` INFO firsts: first time: LostYou
+- **23:24** 📋 `1795414583` INFO raid: raid: Truck: "Lost you, has it? Good. Stay low a while."
+- **23:24** 📋 `1795414583` INFO raid: raid: Close by, a machine goes still, then walks off.
+- **23:33** 🗣 There's no visual, oh, well, it's gone.
+- **23:33** 📋 `1795414583` INFO raid: raid: Wave 1 cleared. Call the next at the bench: 2 walkers.
+- **23:39** 🗣 Uh, I see it dropped a metal plate or something on the ground there, but I can't quite reach
+- **23:41** 📷 [02341_dropped_plate_unreachable.jpg](screenshots/02341_dropped_plate_unreachable.jpg)
+- **23:45** 🗣 it or pick it up.
+- **23:47** 🗣 Uh, where did I drop my gun?
+- **23:48** 🗣 Here's a magazine, and there's the gun, okay.
+- **23:55** 🗣 Well, it just wandered off the map, I guess, which is a way we can go.
+- **23:55** 📋 `1795414583` INFO raid: raid: Crouched: slow, no running. Right stick down to stand.
+- **24:01** 📋 `1795414583` INFO firsts: first time: Anomaly
+- **24:01** 📋 `1795414583` INFO raid: raid: Truck: "Throw something in first. Air's wrong ahead."
+- **24:07** 🗣 Lev is so heavy-handed, my goodness.
+- **24:10** 🗣 Uh, okay. Call wave two. Sure, why not?
+- **24:25** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"Arcade card","says":"CALL WAVE 2","what":"Camp","x":3.0,"z":27.4}
+- **24:25** 📋 `1795414583` INFO raid: raid: Wave 2: 2 walkers, through the east gate in 10 seconds.
+- **24:26** 🗣 Clearly, using my hands to try to take that thing apart was- wasn't doing something,
+- **24:31** 🗣 but because of the haptic feedback, it kind of felt like it was too. I don't think we should
+- **24:35** 📋 `1795414583` INFO waves: arcade: wave 2 in through the EAST gate
+- **24:36** 🗣 worry about that. I don't really think that, like, expecting to be able to pull a robot apart with
+- **24:40** 🗣 your hands without like knowing the specific technique if there is a specific technique
+- **24:46** 🗣 needs to be something that a new play okay i just tried to put that magazine on the windowsill and
+- **24:48** 📷 [02448_mag_through_windowsill.jpg](screenshots/02448_mag_through_windowsill.jpg)
+- **24:50** 🗣 it fell right through it and i couldn't see it anymore that would be horrible if that happened
+- **24:54** 📋 `1795414583` INFO raid: raid: It's coming back. Slow steps, nearer.
+- **24:54** 📋 `1795414583` INFO raid: raid: Steps again, coming your way. It's back to look.
+- **24:55** 🗣 to a player all right i see two robots now and then one of them is flanking me i hope that's
+- **25:00** 🗣 on purpose so i'm gonna try to shoot the one that missed okay come on buddy maybe they're
+- **25:07** 🗣 not flanking me on purpose, but it would be cool if they were. Oh, these things are hard to aim at.
+- **25:12** 🗣 They're too far away, but it doesn't want to get closer. Oh, now it wants to get closer. Come on.
+- **25:19** 🗣 Come on. Okay, that one's blind. Shoot your friend. Shoot your friend, buddy. Let me try to
+- **25:32** 🗣 shoot the knee off of one of these. Oh, never mind. My health is almost gone. I'm gonna reload.
+- **25:42** 🗣 I said reload generous contacts generous contacts come on okay probably do not
+- **25:42** 📋 `1795414583` INFO xr: input: Left secondary works
+- **25:53** 🗣 need to rack come on shoot the leg shoot the leg oh buddy buddy buddy buddy we
+- **26:11** 📋 `1795414583` INFO raid: raid: A machine close by calls out. Others answer.
+- **26:14** 📋 `1795414583` INFO raid: raid: It's coming back. Slow steps, nearer.
+- **26:25** 🗣 can talk about this oh oh it's leg is smoking why are the legs smoking I just
+- **26:30** 📷 [02630_smoking_legs.jpg](screenshots/02630_smoking_legs.jpg)
+- **26:37** 📋 `1795414583` INFO raid: raid: Move off, quiet. They heard that: a whine's rising at the Gate.
+- **26:40** 📋 `1795414583` INFO raid: raid: Truck: "Flare going up. Shoot it before it pops."
+- **26:42** 📋 `1795414583` INFO raid: raid: Truck: "That's a flare. Something's coming to look."
+- **26:48** 🗣 was targeting the joint. Oh I'm dead. Okay that's why. Well the joints are just
+- **26:53** 📋 `1795414583` INFO raid: raid: Slide's back. Press B to let it go.
+- **26:54** 📋 `1795414583` INFO raid: raid: Everything goes grey. Somewhere, a collection order is filed.
+- **26:54** 📋 `1795414583` INFO raid: raid: Down on wave 2. Score 50. RESTART at the bench.
+- **26:54** 📋 `1795414583` INFO record: arcade: run written: C:\Users\prath\AppData\Roaming\extraction\arcade\run-1795414586-1.summary.txt
+- **27:04** 🗣 colored spheres right now and the weak points are colored sphere indicators which I guess is fine
+- **27:06** 📷 [02706_joints_coloured_spheres.jpg](screenshots/02706_joints_coloured_spheres.jpg)
+- **27:08** 🗣 for a white box test right. I will put the pistol in my holster never to be seen again as I cannot
+- **27:16** 🗣 remove things from the holster. Climbing on top of this uh thing this trailer yeah this train car
+- **27:26** 🗣 climbing on top of it, the ceiling disappears, so that's an issue. Oh, I just heard an ominous
+- **27:27** 📋 `1795414583` INFO raid: raid: Keep moving. Machine traffic on the wind, all of it this way.
+- **27:28** 📷 [02728_train_car_roof_vanishes.jpg](screenshots/02728_train_car_roof_vanishes.jpg)
+- **27:33** 🗣 train horn near the train car. That's interesting. Let me just shoot one more, two, one or two more
+- **27:41** 🗣 guns before I call it here, just for fun. Okay, yeah, well, the bugs make it unplayable. These
+- **27:48** 🗣 stairs do not climb. I kind of, like, hop up and down them as I'm trying to climb them.
+- **27:50** 📷 [02750_stairs_hop.jpg](screenshots/02750_stairs_hop.jpg)
+- **27:53** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"Door","says":"","what":"Door","x":-17.5,"z":-7.1}
+- **27:54** 🗣 So, there's a little side check here, so that's probably going to be an indicator that,
+- **27:58** 🗣 Oh my gosh, we need to now look at everywhere that there are stairs in the game and figure
+- **28:04** 🗣 out what to do with them.
+- **28:05** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"counter_cabinet#door_l","says":"","what":"Door","x":-16.7,"z":-5.7}
+- **28:06** 🗣 Oh, opening and closing the cupboards, by the way, is good.
+- **28:07** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"counter_drawers#drawer_0","says":"","what":"Door","x":-17.0,"z":-5.4}
+- **28:09** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"counter_cabinet#door_l","says":"","what":"Door","x":-17.8,"z":-5.7}
+- **28:10** 📷 [02810_cupboard_foliage_clip.jpg](screenshots/02810_cupboard_foliage_clip.jpg)
+- **28:10** 🗣 It is a little bit unfortunate that the foliage kind of clips into them, but I don't think
+- **28:11** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"counter_cabinet#door_r","says":"","what":"Door","x":-17.3,"z":-5.7}
+- **28:14** 🗣 it's too big a deal.
+- **28:18** 🗣 And there's like some areas where if I'm looking at this little shack from the side and looking
+- **28:23** 🗣 down, I can see the grass under the shack instead of the top of the foundation like
+- **28:25** 📷 [02825_grass_under_shack.jpg](screenshots/02825_grass_under_shack.jpg)
+- **28:29** 🗣 I should. I don't even get started on the vehicles right now. Okay, let's see. I'm not a gun nut so
+- **28:48** 🗣 these all look the same to me but I would recognize that Mosin looking thing anywhere
+- **28:54** 🗣 so I'm grabbing it. Okay, let's see if I can remember how to operate this because it has been
+- **29:06** 🗣 a while. Okay, the slide is back and I have one of these speed loaders. It does not go inside.
+- **29:09** 📋 `1795414583` INFO raid: raid: Slide's back. Press B to let it go.
+- **29:15** 📷 [02915_mosin_clip.jpg](screenshots/02915_mosin_clip.jpg)
+- **29:19** 🗣 Now, I remember having to rotate the bolt.
+- **29:25** 🗣 Oh, I just think I...
+- **29:36** 🗣 Now, maybe this is not the type of gun where you rotate the bolt.
+- **29:40** 📋 `1795414583` INFO raid: raid: Slide's back. Press B to let it go.
+- **29:43** 🗣 Is this one of those cases where I can't load it?
+- **29:53** 🗣 Maybe that gun will be the Mosin that I'm familiar with.
+- **29:56** 🗣 Oh, yeah, maybe it's this one. Okay.
+- **30:01** 🗣 I'm gonna try to rotate my hand left and...
+- **30:03** 🗣 Oh, yep, there it is.
+- **30:04** 🗣 It's tricky to do in VR, but I can do that.
+- **30:09** 🗣 Now, if I load this...
+- **30:23** 🗣 Yeah, okay, it just loads all five bullets at once. What a luxury. Dang, we're eating well.
+- **30:32** 🗣 I see my hand turns green as I get towards the contact for this, right?
+- **30:35** 📷 [03035_mosin_trigger_dead.jpg](screenshots/03035_mosin_trigger_dead.jpg)
+- **30:38** 🗣 But actually pulling the trigger doesn't do anything.
+- **30:42** 🗣 I think I might have actually broken the gun with something I did with that state. No, okay,
+- **30:46** 🗣 I just had to switch hands. Maybe the control state machine was messed in some regard?
+- **30:52** 🗣 well the grip for the Mosin is uh off to say the least yeah if you're looking for something to burn
+- **31:03** 🗣 credits on uh clearly not all the hand poses are done for these guns I still do not know why it's
+- **31:13** 🗣 all pancaked or especially around like the thumb but like hey who am I to complain yeah okay my
+- **31:19** 🗣 left thumb is a stub what the heck is going on there maybe that's just the model I gave or
+- **31:22** 📷 [03122_left_thumb_stub.jpg](screenshots/03122_left_thumb_stub.jpg)
+- **31:26** 🗣 something but okay there we go all reliable let me try and wait why is it that it flicks like
+- **31:38** 📷 [03138_gun_clipped_to_face.jpg](screenshots/03138_gun_clipped_to_face.jpg)
+- **31:39** 🗣 that when I try to hold it close to my face oh don't don't clip the gun to my face when I'm
+- **31:46** 🗣 holding it near my face if I want to aim I want to aim it's also it's clipping it to the middle
+- **31:54** 🗣 of my camera so neither my left eye or my right eye can actually be using that's all right we can
+- **31:59** 🗣 hit fire. Nope. Okay. The modem feels good to use. Nope. I don't- who needs sights anyway?
+- **32:18** 🗣 Oh boy, I see now you have a feedback board, buddy, but it's not even functional enough to
+- **32:24** 🗣 use at the moment. Uh, but sure, we'll say- oh, and now I pushed the button and it took three
+- **32:26** 📷 [03226_feedback_board.jpg](screenshots/03226_feedback_board.jpg)
+- **32:31** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"Arcade card","says":"4  good","what":"Camp","x":-4.2,"z":27.5}
+- **32:31** 📋 `1795414583` INFO record: arcade: pm_pistol felt 4/5
+- **32:31** 📋 `1795414583` INFO observe: PLAYTEST press {"card":null,"name":"Arcade card","says":"","what":"Camp","x":-4.2,"z":27.5}
+- **32:33** 🗣 feedback options. So that might not even be good data because there was no debounce. Come on. Nope.
+- **32:36** 📷 [03236_feedback_triple_press.jpg](screenshots/03236_feedback_triple_press.jpg)
+- **32:47** 🗣 Yeah with this weird uh auto clip to the front camera thing it's just not doing it for me. Oh
+- **32:56** 🗣 hey I was able to hit even without being able to use the sights. Let's stick out my arm. Shoot the
+- **33:04** 🗣 far the middle target. Obviously you would never build a balance again like this but no I missed.
+- **33:11** 🗣 I think I have one more round. No, I do not. One last. Bazaar. Oh, what happens if you're
+- **33:18** 📋 `1795414583` INFO raid: raid: Click. Nothing in the chamber: rack the slide or bolt.
+- **33:55** 🗣 holding A while trying to load the magazine, like, residual from a previous action?
+- **33:58** 📷 [03358_slap_to_lock.jpg](screenshots/03358_slap_to_lock.jpg)
+- **34:01** 🗣 Oh, that was a weird slap-to-lock situation. Okay, well. One hand!
+- **34:58** 📋 `1795414583` INFO firsts: first time: Picked(Grenade)
+- **34:58** 📋 `1795414583` INFO raid: raid: Truck: "Pull the pin, then throw it far. You've seconds, not many."
+- **35:01** 🗣 Throwing grenades is still difficult. Okay, I'm just thinking around the range. I need to go to
+- **35:02** 📷 [03502_grenade_throw.jpg](screenshots/03502_grenade_throw.jpg)
+- **35:05** 🗣 it's late, good night. Hopefully this is something, sorry we did not get an
+- **35:10** 🗣 absolute metric ton of data.
+- **35:18** 📋 `1795414583` INFO timeline: load: closed (world dropped) at 1007.11 s (frame 70550)
