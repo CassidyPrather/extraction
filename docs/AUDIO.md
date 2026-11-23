@@ -678,7 +678,8 @@ turn of its mind, and **one grammar for every kind**. Learn the walker's
 and the hound's makes sense.
 
 A machine hunting about (investigating, searching or lost) near someone
-says its word again every 6-10 s, not once and then nothing. The playtest
+says its word again every 6-10 s, up to three times, then is quiet until its
+mind turns again: a reminder, not a nag. The playtest
 of 22 November stood beside a blinded walker casting about and heard "some
 kind of noise, but it's too quiet": it had said its one word and gone
 silent. Its level wasn't the problem. Measured, the walker's words match
