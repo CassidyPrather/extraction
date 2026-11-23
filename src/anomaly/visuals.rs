@@ -218,6 +218,17 @@ pub type MarkMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, MarkFog>;
 /// The marks' fog as particles have it (`FOG_REACH` in
 /// `anomaly_particles.wgsl`).
 pub const MARK_FOG_REACH: f32 = 0.5;
+/// From the first distance (m) to the second, a mark's fog goes from
+/// [`MARK_FOG_REACH`] to the ground's own: up close it shows through the
+/// murk; far off it sits in the scene as the ground round it does (at
+/// half fog a mark 30 m off in the rain stood out stark on the grey).
+pub const MARK_FOG_FULL: (f32, f32) = (12.0, 40.0);
+
+/// A mark's texture, in the radii it's drawn to (`mark_radius`): full
+/// out to the first, gone by the second, the edge between broken by
+/// noise so it feathers into the ground, not cut round (a narrow fade
+/// read as a decal laid on the grass).
+pub const MARK_FADE: (f32, f32) = (0.86, 1.04);
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
 pub struct MarkFog {
@@ -386,7 +397,8 @@ fn grain_at(x: u32, y: u32) -> f32 {
 /// grit lit too would wash them out to a plain lit disc in the dark).
 fn mark_texture(images: &mut Assets<Image>, pattern: Pattern) -> (Handle<Image>, Handle<Image>) {
     let spiral = pattern == Pattern::Spiral;
-    let n = 256u32;
+    // (At 256 a side, a snare's veins 4 m across were a blur at your feet.)
+    let n = 512u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     let mut glow = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
@@ -397,8 +409,11 @@ fn mark_texture(images: &mut Assets<Image>, pattern: Pattern) -> (Handle<Image>,
             let r = (u * u + v * v).sqrt() * MARK_PAD;
             let a = v.atan2(u);
             let edge = 1.0 + 0.012 * (a * 7.0).sin() + 0.008 * (a * 17.0 + 1.3).sin();
-            // Full to 0.93 of it, nothing past 1.02.
-            let fall = ((r - 0.93 * edge) / (0.09 * edge)).clamp(0.0, 1.0);
+            // Feathered, ragged, over MARK_FADE.
+            let rag = 0.05 * (value_noise(u * 6.0 + 3.0, v * 6.0 + 3.0, 8) - 0.5)
+                + 0.025 * (value_noise(u * 19.0, v * 19.0, 9) - 0.5);
+            let span = MARK_FADE.1 - MARK_FADE.0;
+            let fall = ((r - (MARK_FADE.0 + rag) * edge) / (span * edge)).clamp(0.0, 1.0);
             let grain = 0.85 + 0.15 * grain_at(x, y);
             // Blotches a few tenths of a radius across, in its colour (and
             // its glow: a burner's coals in patches, not a lit disc): value
@@ -454,8 +469,10 @@ fn mark_texture(images: &mut Assets<Image>, pattern: Pattern) -> (Handle<Image>,
                 let bank = smooth(0.64, 0.76, at) * (1.0 - smooth(0.95, 0.99, at));
                 let ridge = 1.0 - ((at - 0.93) / 0.04).abs().min(1.0);
                 let lumps = value_noise(px * 14.0, py * 14.0, 4);
-                let grit = (bank * (0.45 + 0.4 * lumps + 0.15 * wear) + 0.4 * ridge).min(0.95);
-                let sand = [0.86, 0.74, 0.58].map(|c| c * grain);
+                // (Muted: pale sand at 0.86 stood out from 30 m as a ring
+                // laid on the grass.)
+                let grit = (bank * (0.3 + 0.3 * lumps + 0.1 * wear) + 0.25 * ridge).min(0.8);
+                let sand = [0.58, 0.5, 0.39].map(|c| c * grain);
                 let lit = ((t * grain * (1.0 - grit)).clamp(0.0, 1.0) * 255.0) as u8;
                 glow.extend_from_slice(&[lit, lit, lit, (alpha * 255.0) as u8]);
                 std::array::from_fn(|i| rust[i] * grain * (1.0 - grit) + sand[i] * grit)
@@ -706,7 +723,7 @@ fn init_assets(
                     ..default()
                 },
                 extension: MarkFog {
-                    reach: Vec4::new(MARK_FOG_REACH, 0.0, 0.0, 0.0),
+                    reach: Vec4::new(MARK_FOG_REACH, MARK_FOG_FULL.0, MARK_FOG_FULL.1, 0.0),
                 },
             })
         };
@@ -903,8 +920,8 @@ fn particle_mesh(n: usize, rng: &mut extraction_core::noise::Rng) -> Mesh {
     .with_inserted_indices(Indices::U32(idx))
 }
 
-/// A mark's disc reaches this far past what it draws (its texture is
-/// full to 0.93 of the drawn radius and gone by 1.02 of it).
+/// A mark's disc reaches this far past what it draws (its texture fades
+/// over [`MARK_FADE`] of the drawn radius).
 pub const MARK_PAD: f32 = 1.1;
 
 /// How far from its heart an anomaly's mark is drawn: its radius, but a
@@ -1089,6 +1106,16 @@ struct Arcs {
 }
 
 const ARC_SEGMENTS: usize = 7;
+/// The narrowest an arc is drawn, radians from the eye: a few eye pixels,
+/// so a charged snare still crawls at 20 m.
+const ARC_FLOOR: f32 = 0.0012;
+/// From the first distance (m) to the second, arcs re-strike from every
+/// 0.05 s to every 0.15 s.
+const ARC_CALM: (f32, f32) = (8.0, 30.0);
+
+fn far_of(eye: &Option<Vec3>, gt: &GlobalTransform) -> f32 {
+    eye.map_or(0.0, |e| e.distance(gt.translation()))
+}
 /// How far past its edge the yard's snare reaches for metal in a hand
 /// (only to show it: it strikes from `SNARE_METAL_REACH`), metres.
 const BECKON: f32 = 2.0;
@@ -1734,7 +1761,9 @@ fn snare_arcs(
         if a.timer > 0.0 {
             continue;
         }
-        a.timer = 0.05;
+        // Re-struck at 20 Hz up close, slower far off, where a fat flicker
+        // read as frantic.
+        a.timer = 0.05 + 0.1 * smooth(ARC_CALM.0, ARC_CALM.1, far_of(&eye, gt));
         *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut rng = extraction_core::noise::Rng::new(*seed);
         let hot = anomaly.charge.max(look.flash).max(look.reveal);
@@ -1743,9 +1772,9 @@ fn snare_arcs(
         // Never thinner than about 0.15 degrees from the eye (a few eye
         // pixels: Legibility's floor), so the crawling arcs of a charged
         // snare still read at 20 m; a few millimetres up close.
-        let thin = eye.map_or(0.006, |e| {
-            (e.distance(gt.translation()) * 0.0026).max(0.006)
-        });
+        // (At 0.0026 rad a far snare's arcs were 8 cm ribbons: blocky.)
+        let far = eye.map_or(0.0, |e| e.distance(gt.translation()));
+        let thin = (far * ARC_FLOOR).max(0.006);
         let width = thin * (1.0 + 2.5 * look.flash);
         for _ in 0..ARCS {
             // None at all while it's spent: dark and still until it charges.
