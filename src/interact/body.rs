@@ -719,6 +719,20 @@ const NECK_PIVOT: Vec3 = Vec3::new(0.0, -0.1, 0.09);
 
 /// The torso trails the head: always under it, turning when the head has
 /// looked far enough away or the player is walking.
+/// Which way a head faces, as a yaw (0 along -Z), steady at any pitch.
+/// The forward flattened onto the ground shrinks to nothing looking
+/// straight down, and its yaw spun with the least wobble (playtest
+/// 2026-11-22, 13:44: looking down at the holster, "my body is spinning
+/// wildly"); the top of the head points the way the face does when
+/// looking down (and back when looking up), so the two together always
+/// give a heading at least as long as the head is tall.
+pub fn facing_yaw(rotation: Quat) -> f32 {
+    let fwd = rotation * Vec3::NEG_Z;
+    let up = rotation * Vec3::Y;
+    let d = fwd - up * fwd.y.signum();
+    (-d.x).atan2(-d.z)
+}
+
 fn follow_head(
     players: Query<(&RigInput, &Children), With<Player>>,
     mut torsos: Query<(&mut Torso, &mut Transform)>,
@@ -730,8 +744,7 @@ fn follow_head(
                 continue;
             };
             let head = input.head;
-            let fwd = head.rotation * Vec3::NEG_Z;
-            let head_yaw = (-fwd.x).atan2(-fwd.z);
+            let head_yaw = facing_yaw(head.rotation);
             let mut diff = head_yaw - torso.yaw;
             while diff > std::f32::consts::PI {
                 diff -= std::f32::consts::TAU;
@@ -999,6 +1012,34 @@ fn carried_mass(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Looking straight down (and a hair either side of it), the body's
+    /// heading is the face's, not a spin; level, it's the plain yaw.
+    #[test]
+    fn looking_straight_down_doesnt_spin_the_body() {
+        for yaw in [0.0f32, 1.0, -2.5] {
+            let level = Quat::from_rotation_y(yaw);
+            assert!((facing_yaw(level) - yaw).abs() < 1e-4, "level {yaw}");
+            for pitch in [-1.5707, -1.5, -1.2, -0.6, 0.6, 1.2, 1.5707] {
+                for wobble in [-0.01f32, 0.0, 0.01] {
+                    let q = Quat::from_rotation_y(yaw)
+                        * Quat::from_rotation_x(pitch)
+                        * Quat::from_rotation_z(wobble);
+                    let mut d = facing_yaw(q) - yaw;
+                    while d > std::f32::consts::PI {
+                        d -= std::f32::consts::TAU;
+                    }
+                    while d < -std::f32::consts::PI {
+                        d += std::f32::consts::TAU;
+                    }
+                    assert!(
+                        d.abs() < 0.05,
+                        "yaw {yaw} pitch {pitch} wobble {wobble}: off by {d}"
+                    );
+                }
+            }
+        }
+    }
 
     fn def(id: &str) -> extraction_core::items::ItemDef {
         let catalog = crate::items::Catalog::load();
