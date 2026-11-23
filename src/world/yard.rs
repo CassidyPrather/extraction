@@ -179,6 +179,23 @@ fn hoarding(b: &mut Builder, x0: f32, x1: f32) {
     }
 }
 
+/// How high a lamp hangs on a gate's flanking post (m): under the
+/// hoarding's top, above a standing eye.
+pub const GATE_POST_LAMP_Y: f32 = 1.9;
+
+/// The posts either side of a yard gate where its rails meet the gate
+/// line's hoarding, world (x, z): 2 m each way along the line from the
+/// gate's middle, the one to its local -x (west, unturned) first. A lamp
+/// on one hangs [`GATE_POST_LAMP_Y`] up, on whichever face looks into the
+/// bay it lights (`onboarding`'s trail).
+pub fn gate_post_anchors(at: Vec2, rot_deg: f32) -> [Vec2; 2] {
+    let r = rot_deg.to_radians();
+    let along = Vec2::new(r.cos(), -r.sin());
+    // Half the gate's 4 m gap in the line (its footprint).
+    let h = 2.0;
+    [at - along * h, at + along * h]
+}
+
 /// The gate's posts, the rails out from them to the fence either side
 /// (the gate fills a 4 m gap in the line), and the leaf.
 fn gate(b: &mut Builder) {
@@ -297,6 +314,37 @@ mod tests {
         assert_eq!(extraction_core::map::prefab_footprint("yard_gate")[0], 4.0);
         assert_eq!(gate_index("gate_3"), Some(3));
         assert_eq!(gate_index("wait_north_post"), None);
+    }
+
+    /// Every yard gate has a hoarding's post at both its anchors: the
+    /// gate line is boarded right up to its rails.
+    #[test]
+    fn each_yard_gate_has_a_hoarding_post_either_side() {
+        let map = extraction_core::map::MapDef::from_ron(extraction_core::map::TRAINING_YARD)
+            .unwrap();
+        let ends: Vec<Vec2> = map
+            .placements
+            .iter()
+            .filter(|p| p.prefab.starts_with("yard_hoarding"))
+            .flat_map(|p| {
+                let half = extraction_core::map::prefab_footprint(&p.prefab)[0] * 0.5 - 0.06;
+                let r = p.rot.to_radians();
+                let along = Vec2::new(r.cos(), -r.sin());
+                let at = Vec2::new(p.at[0], p.at[1]);
+                [at - along * half, at + along * half]
+            })
+            .collect();
+        let gates: Vec<_> = map.placements.iter().filter(|p| p.prefab == "yard_gate").collect();
+        assert!(gates.len() >= 6);
+        for g in gates {
+            for a in gate_post_anchors(Vec2::new(g.at[0], g.at[1]), g.rot) {
+                assert!(
+                    ends.iter().any(|e| e.distance(a) < 0.05),
+                    "{:?}: no hoarding post at {a}",
+                    g.tag
+                );
+            }
+        }
     }
 
     /// The store's roof is where the core's footprint says, low enough for
