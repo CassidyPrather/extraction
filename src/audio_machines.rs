@@ -85,6 +85,7 @@ impl Plugin for MachineSoundsPlugin {
                     gate_edges,
                     stand_down_sounds,
                     mast_sounds,
+                    spent_sounds,
                 ),
             );
     }
@@ -988,6 +989,34 @@ fn mast_sounds(
             &mut rng,
             t.at,
             &[("mast/tell", "mast.tell", 1.0)],
+        );
+    }
+}
+
+/// An arcade machine burning itself out (`arcade::waves::MachineSpent`:
+/// blind too long, or gone outside the fence): an overload crackling
+/// through it and its drives winding down (`spent.burn`, `spent.wind`),
+/// before its core goes and its wreck is heard as any other's.
+fn spent_sounds(
+    mut commands: Commands,
+    mut spent: MessageReader<crate::arcade::waves::MachineSpent>,
+    places: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for s in spent.read() {
+        let Ok(gt) = places.get(s.machine) else {
+            continue;
+        };
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            gt.translation(),
+            &[
+                (CRACKLE_SET, "spent.burn", 0.6),
+                ("machines/servo", "spent.wind", 0.5),
+            ],
         );
     }
 }
