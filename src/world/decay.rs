@@ -170,7 +170,10 @@ pub fn moss(mesh: &mut Mesh, north: Vec3, seed: u64) {
         let (p, n) = (Vec3::from_array(*p), Vec3::from_array(*n));
         // The sky the bake left in alpha: rain falls here.
         let sky = c[3];
-        let up = n.y.max(0.0);
+        // Not on a low top (a plinth's rim, a step): a green band at the
+        // ground there read as grass showing through under the building
+        // (the 22 November playtest, 28:18: the guard booth's plinth).
+        let up = n.y.max(0.0) * smooth(0.8, 1.6, p.y);
         let north_w = n.dot(north).max(0.0) * (1.0 - n.y.abs());
         let foot = (1.0 - (p.y / 1.2).clamp(0.0, 1.0)) * (1.0 - n.y.abs());
         let shade = 1.0 - c[0];
