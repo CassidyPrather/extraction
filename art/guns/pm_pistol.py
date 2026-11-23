@@ -255,13 +255,14 @@ static.sweep(loop, [(x, n) for x, n in section_rect(0.0016, 0.0016, 0.0005, 3)],
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, 0.038, -0.03))
 # (Its blade shortened with the guard, to hang inside it.) It hangs from
-# right under its pin, bowed a little forward so its face is a curve for
-# the finger, its tip a touch behind the pin: it started 4.5 mm ahead of
-# the pin and leaned 9 mm further forward before hooking back, which read
-# as a trigger hung the wrong way round (the 22 November playtest, 20:19:
-# "the trigger on the pistol might be backwards").
+# right under its pin, bowed back toward the grip, its tip curled forward:
+# its front face, where the finger pulls, is the concave one. It was
+# curved the other way, its tip hooked back toward the grip, a trigger
+# hung the wrong way round (the 22 November playtest, 20:19: "the trigger
+# on the pistol might be backwards"). Its rearmost 12 mm from the front
+# strap.
 trig_path = catmull([(z, 0.0345 - (0.0345 - y) * 0.75) for z, y in [
-    (-0.0305, 0.0345), (-0.0325, 0.027), (-0.0335, 0.0195), (-0.031, 0.0125), (-0.0285, 0.0095)]],
+    (-0.0305, 0.0345), (-0.0298, 0.027), (-0.0296, 0.0195), (-0.0318, 0.0125), (-0.0345, 0.0095)]],
     samples=6, closed=False)
 trig.sweep(trig_path, section_rect(0.0045, 0.0032, 0.0012, 3), "Blued")
 
