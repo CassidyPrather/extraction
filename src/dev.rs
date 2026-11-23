@@ -1507,7 +1507,8 @@ enum KitPlace {
 /// height, held still: `fp:open` (both hands open), `fp:point` (the right
 /// index on the nearest push button), or `fp:<item id>` (a gun on its grip
 /// in the right hand, the left on its handguard if it has one;
-/// `fp:<gun>+handle` puts the right hand on its slide or bolt; anything
+/// `fp:<gun>+handle` puts the right hand on its slide or bolt;
+/// `fp:<gun>+unchambered` shows its handle glowing to be worked; anything
 /// else in the left fist); `fp:WHAT,ZOOM,TURN,TRIGGER` brings it all
 /// closer, turns it about the right hand and pulls the trigger. Each glove takes the curl the game gives that
 /// hold (`render::props::hold_curl`).
@@ -1573,6 +1574,12 @@ fn first_person_hands(
     // length before the eyes, its top to them and its front up and away
     // (a field screen, a radio's face).
     let (what, held_up) = match what.strip_suffix("+up") {
+        Some(w) => (w, true),
+        None => (what, false),
+    };
+    // `fp:<gun>+unchambered`: clicked on an empty chamber with its feed
+    // full, its handle glowing to be worked (`weapons::unchambered`).
+    let (what, unchambered) = match what.strip_suffix("+unchambered") {
         Some(w) => (w, true),
         None => (what, false),
     };
@@ -1753,6 +1760,20 @@ fn first_person_hands(
         return;
     }
     *waiting = None;
+    if unchambered {
+        commands.queue(move |world: &mut World| {
+            if let Some(mut gun) = world.get_mut::<crate::weapons::Gun>(item) {
+                let f = &mut gun.firearm;
+                f.internal_rounds = f.def.internal_capacity.max(1);
+                for c in &mut f.chambers {
+                    *c = None;
+                }
+            }
+            world
+                .entity_mut(item)
+                .insert(crate::weapons::unchambered::NeedsWorking);
+        });
+    }
     let point = |role: GripRole| grab.points.iter().find(|p| p.role == role);
     if let Some(primary) = point(GripRole::Primary) {
         let item_at =

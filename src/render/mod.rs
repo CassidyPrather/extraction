@@ -21,6 +21,7 @@ pub mod gpu_lost;
 pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
+pub mod handle_glow;
 pub mod held_light;
 pub mod hold;
 pub mod hold_rate;
@@ -138,6 +139,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(gate_lamp::GateLampPlugin)
         .add_plugins(reflectors::ReflectorsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
+        .add_plugins(handle_glow::HandleGlowPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .add_plugins(body::BodyPlugin)

@@ -2602,6 +2602,39 @@ pub(crate) mod vr_tests {
         }
     }
 
+    /// A Mosin clicked on an empty chamber with five in its magazine is
+    /// marked to be worked (its handle glows, the hand feels a double tap:
+    /// `weapons::unchambered`); its handle lifted, the mark goes. Clicked
+    /// with nothing to feed, it isn't marked.
+    #[test]
+    fn a_mosin_clicked_empty_with_rounds_in_wants_working() {
+        use crate::weapons::unchambered::NeedsWorking;
+        for (rounds, marked) in [(5, true), (0, false)] {
+            let mut r = hold("mosin", false, false);
+            {
+                let mut g = gun_mut(&mut r);
+                let f = &mut g.firearm;
+                f.chambers[0] = None;
+                f.internal_rounds = rounds;
+                f.hammers_cocked[0] = true;
+                while f.fire_mode() == FireMode::Safe {
+                    f.cycle_mode();
+                }
+            }
+            r.vr.trigger(Side::Right, 1.0);
+            r.vr.step(4);
+            r.vr.trigger(Side::Right, 0.0);
+            r.vr.step(2);
+            let has = |r: &Range| r.vr.app.world().get::<NeedsWorking>(r.gun).is_some();
+            assert_eq!(has(&r), marked, "{rounds} in the magazine");
+            if marked {
+                gun_mut(&mut r).firearm.set_handle_lift(1.0);
+                r.vr.step(2);
+                assert!(!has(&r), "the handle lifted: worked");
+            }
+        }
+    }
+
     /// A gun-hand button for one press (the headset's B is `secondary`).
     pub(crate) fn press(r: &mut Range, which: &str) {
         for down in [true, false] {
