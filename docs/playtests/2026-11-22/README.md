@@ -13,8 +13,8 @@ screenshots. Every other picture is a frame from the SteamVR mirror at the momen
 tester was talking about. A frame may sit a second or two off the exact moment.
 
 > **In the repo:** `game-data/logs/` is `logs/`, `game-data/raids/training_yard/` is `raids/`,
-> `game-data/arcade/` is `arcade/`, and `career.ron.bak` is `career-before.ron`. The full-size
-> mark PNGs and `career.ron.old` aren't committed; the `*_ingame.jpg` frames show the marks.
+> `game-data/arcade/` is `arcade/`, `career.ron.bak` is `career-before.ron` and `career.ron.old` (the save actually loaded) is `career-old.ron`. The full-size
+> mark PNGs aren't committed; the `*_ingame.jpg` frames show the marks.
 > Who owns what is in [`ROUTING.md`](ROUTING.md).
 
 ## What's in here

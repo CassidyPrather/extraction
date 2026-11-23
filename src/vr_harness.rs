@@ -1478,6 +1478,66 @@ mod tests {
         clashes
     }
 
+    /// A fingertip that bounces on a button (out past its release and back
+    /// in, 100 ms) clicks it once: NEW CAREER went twice that way and
+    /// relaunched the game twice (playtest 2026-11-22). Pushed again after
+    /// a breath, it clicks again.
+    #[test]
+    fn a_bounced_finger_clicks_a_button_once() {
+        use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
+        use crate::raid::comfort_board::ComfortCard;
+        let mut vr = Vr::new("training_yard");
+        settings_out(&mut vr);
+        vr.step(5);
+        let card = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &ComfortCard)>()
+            .iter(vr.app.world())
+            .find(|(_, c)| **c == ComfortCard::Vignette)
+            .map(|(e, _)| e)
+            .expect("the vignette card");
+        let button = *vr
+            .app
+            .world_mut()
+            .query::<(&PokeButton, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .find(|(b, _)| b.target == card)
+            .map(|(_, gt)| gt)
+            .expect("a button on it");
+        let normal = button.rotation() * Vec3::Z;
+        let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
+        let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
+        let clicks = |vr: &Vr| vr.pressed().iter().filter(|e| **e == card).count();
+        vr.hand(Side::Right, tip_at(0.08), rot, 0.0, 0.0);
+        vr.step(2);
+        for k in 0..10 {
+            vr.move_hand(Side::Right, tip_at(0.08 - k as f32 * 0.006));
+            vr.step(1);
+        }
+        let push = |vr: &mut Vr| {
+            for k in 0..6 {
+                vr.move_hand(Side::Right, tip_at(CAP - k as f32 * 0.003));
+                vr.step(1);
+            }
+        };
+        push(&mut vr);
+        vr.step(1);
+        assert_eq!(clicks(&vr), 1, "pushed home: one click");
+        // Out past the release and straight back in: about 100 ms.
+        vr.move_hand(Side::Right, tip_at(CAP + 0.01));
+        vr.step(2);
+        push(&mut vr);
+        vr.step(1);
+        assert_eq!(clicks(&vr), 1, "a bounce isn't a second press");
+        // Out, a breath, in again: a press.
+        vr.move_hand(Side::Right, tip_at(CAP + 0.01));
+        vr.step(40);
+        push(&mut vr);
+        vr.step(1);
+        assert_eq!(clicks(&vr), 2, "a second push, a second click");
+    }
+
     /// A finger on the VIGNETTE card's button: held just short of the cap
     /// nothing happens; pushed in, it clicks once and the setting moves on.
     #[test]
@@ -3470,6 +3530,50 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// A step's words come to you at its station, not only on its board
+    /// (playtest 2026-11-22, 12:33: turned to the range table, the words
+    /// were on the sign behind). Hands empty: a caption in the view. Then,
+    /// pistol in hand, the next step beside it.
+    #[test]
+    fn a_steps_words_come_to_the_hand() {
+        use crate::raid::{Raid, Show};
+        let mut vr = Vr::first_run();
+        let range = crate::onboarding::station_of(Goal::TakePistol);
+        at_station(&mut vr, range, &[]);
+        let st = crate::onboarding::STATIONS[range].at;
+        vr.stand(ground(&vr, st), 0.0);
+        vr.step(240);
+        let comfort = crate::rig::comfort::Comfort::default();
+        let shown = |vr: &Vr, g: Goal| -> Option<Show> {
+            let how = g.how_for(false, &comfort).replace('\n', " ");
+            vr.app
+                .world()
+                .resource::<Raid>()
+                .shown
+                .iter()
+                .find(|(t, _)| *t == how)
+                .map(|(_, s)| *s)
+        };
+        assert_eq!(
+            shown(&vr, Goal::TakePistol),
+            Some(Show::View),
+            "the first step's words in the view"
+        );
+        assert_eq!(shown(&vr, Goal::PutAway), None, "not ahead of its turn");
+        let gun = placed(&mut vr, Placed::RangeGun);
+        let gun_at = at(&vr, gun);
+        vr.stand(ground(&vr, [gun_at.x, gun_at.z + 0.6]), 0.0);
+        vr.step(10);
+        take(&mut vr, Side::Right, gun);
+        vr.step(5);
+        assert!(done(&vr, Goal::TakePistol), "took it");
+        assert_eq!(
+            shown(&vr, Goal::PutAway),
+            Some(Show::ItemNow(gun)),
+            "the next step's words beside the pistol"
+        );
+    }
+
     /// One player, with its two hands, in every access mode: a discharge,
     /// a noise or a robot's look counts each `Player` it finds, and a
     /// second one would be counted twice (Anomalies saw two hits
@@ -4026,6 +4130,8 @@ mod onboarding {
         tug(&mut vr);
         assert!(crate::take_restart().is_none(), "one pull only asks");
         assert!(said(&vr, "Pull again"));
+        // A second pull, not the first one bounced (`interact::PRESS_GAP`).
+        vr.step(40);
         tug(&mut vr);
         assert!(crate::take_restart().is_some(), "the second goes");
     }
@@ -6029,6 +6135,12 @@ mod body {
                 got.translation.distance(want.translation) < 1e-3
                     && got.rotation.dot(want.rotation).abs() > 0.9999,
                 "{side:?}: in the pocket at {got:?}, it fits at {want:?}"
+            );
+            // Hidden while its sphere stands in (the game's spheres are on).
+            assert_eq!(
+                vr.app.world().get::<Visibility>(compass),
+                Some(&Visibility::Hidden),
+                "{side:?}: drawn by its sphere, not itself"
             );
             // Back out: the hand away, then in at it and closed.
             vr.move_hand(side, past);
@@ -8965,6 +9077,63 @@ mod grips {
         let aware = vr.app.world().get::<Awareness>(walker).unwrap();
         assert_eq!(aware.target, Some(player), "it turns on who held it");
         assert!(aware.suspicion >= 1.0);
+    }
+
+    /// A walker's plate taken in the hand and pulled hard comes off before
+    /// it can kick free: the plate's gone from it and there's a plate to
+    /// pick up (the 22 November playtest: the haptics said the hand had
+    /// it, and nothing came away).
+    #[test]
+    fn a_walkers_plate_pulled_hard_comes_off() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.0, 0.0, -1.1);
+        let walker = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut c = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker(&mut c, &zone, at, job(at));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        // Its plate nearest you.
+        let (plate, on) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, p, _)| p.robot == walker && matches!(p.role, PartRole::Armour(_)))
+                .map(|(e, _, g)| (e, g.translation()))
+                .max_by(|a, b| a.1.z.total_cmp(&b.1.z))
+                .expect("a plate")
+        };
+        vr.hand(Side::Right, on, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(holding(&mut vr, walker), "the hand has hold of its plate");
+        // A hard pull back toward you.
+        vr.hand(Side::Right, on + Vec3::Z * 0.15, Quat::IDENTITY, 1.0, 0.0);
+        let mut off = false;
+        for _ in 0..45 {
+            vr.step(1);
+            if vr.app.world().get_entity(plate).is_err() {
+                off = true;
+                break;
+            }
+        }
+        assert!(off, "the plate came off in the hand");
+        vr.step(5);
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let near = vr
+            .app
+            .world_mut()
+            .query::<(&crate::items::Item, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .any(|(i, g)| {
+                catalog.get(i.0.kind).id == "robot_plate" && g.translation().distance(on) < 2.0
+            });
+        assert!(near, "a plate to pick up where it came off");
     }
 
     /// A drone held by its frame thrusts away harder and harder, and
