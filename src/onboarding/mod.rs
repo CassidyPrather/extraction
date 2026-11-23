@@ -560,7 +560,8 @@ pub const SHIMMER_R: f32 = 1.6;
 pub const STUMP_H: f32 = 0.38;
 /// A beam at head height between two stacks of crates on the track, on
 /// the way to the gate: you can only get under it ducking (the body's
-/// height follows the head's), and you aren't told to.
+/// height follows the head's). The driver says so as you come up to it
+/// (`LOW_BEAM_LINE`).
 pub const BEAM_AT: [f32; 2] = [0.0, 79.0];
 /// The beam's underside, and the gap between the stacks.
 pub const BEAM_CLEAR: f32 = 1.35;
@@ -603,7 +604,7 @@ pub const FAR_CRATE: Vec3 = Vec3::new(0.55, 0.95, 0.55);
 /// The range's table: centre, size; the shooter stands on its south side.
 pub const RANGE_TABLE_AT: [f32; 2] = [-13.5, 43.5];
 pub const TABLE: Vec3 = Vec3::new(1.4, 0.9, 0.6);
-/// A crate at the last station with a spare radio on it.
+/// A crate at the last station, the map and the compass on it.
 pub const HOME_CRATE_AT: [f32; 2] = [5.5, -63.0];
 
 /// Where you are in it.
@@ -846,6 +847,7 @@ impl Plugin for OnboardingPlugin {
                     ),
                     announce.after(crate::items::usage::UsageSystems),
                     how_by_hand,
+                    wake_at_the_station,
                     the_scratch,
                     the_rooks,
                     the_rats,
@@ -1596,11 +1598,14 @@ fn setup(
         CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
 
-    // Going home: a spare radio on a crate, for whoever left theirs.
+    // Going home: a crate with the map and compass. No loose radio on it
+    // (there was one, for whoever left theirs): the tester took it for the
+    // set on the post's pole and asked why it came up in the hand
+    // (playtest 2026-11-22, 16:18). The call is the fixed set's.
     let size = Vec3::new(0.6, 0.7, 0.5);
     let at = ground(&zone, HOME_CRATE_AT);
     commands.spawn((
-        Name::new("Radio crate"),
+        Name::new("Home crate"),
         Prop::Crate(size),
         Transform::from_translation(at),
         Visibility::default(),
@@ -1612,12 +1617,7 @@ fn setup(
         )]),
         CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
-    spawn(
-        &mut commands,
-        "radio",
-        Transform::from_translation(at + Vec3::Y * (size.y + 0.05)),
-    );
-    // And the way home and to the first job: the map the card rings its
+    // The way home and to the first job: the map the card rings its
     // place on, and a compass. Here, not first in the truck's crate.
     spawn(
         &mut commands,
@@ -2145,6 +2145,7 @@ fn watch_duck(
     zone: Res<Zone>,
     mut raid: ResMut<Raid>,
     mut steps: MessageWriter<StepDone>,
+    mut warned: Local<bool>,
 ) {
     if ob.ducked {
         return;
@@ -2153,6 +2154,13 @@ fn watch_duck(
         return;
     };
     let head = t.transform_point(input.head.translation);
+    // Said as you come up to it, so it reads as meant: unsaid, the tester
+    // asked "Why is there a plank here in the middle of the road? Was
+    // that supposed to be a crouching tutorial?" (playtest 2026-11-22).
+    if !*warned && head.xz().distance(Vec2::from(BEAM_AT)) < BEAM_WARN {
+        *warned = true;
+        raid.tell(LOW_BEAM_LINE, Show::View);
+    }
     let rel = head.xz() - Vec2::from(BEAM_AT);
     let under = rel.x.abs() < BEAM_GAP * 0.5 && rel.y.abs() < 0.5;
     let low = head.y - zone.ground(head.x, head.z) < BEAM_CLEAR - 0.05;
@@ -2167,6 +2175,9 @@ fn watch_duck(
 }
 
 pub const DUCK_LINE: &str = "Driver: \"Mind your head. That's it.\"";
+/// Said within [`BEAM_WARN`] m of the beam, before you've ducked it.
+pub const LOW_BEAM_LINE: &str = "Driver: \"Low beam. Crouch to get under it.\"";
+pub const BEAM_WARN: f32 = 4.0;
 
 /// The house's door open.
 fn watch_world(
@@ -2296,6 +2307,47 @@ fn how_by_hand(
         .map_or(Show::View, |(e, _)| Show::ItemNow(e));
     raid.tell(how, show);
 }
+
+/// Gone down in the yard, you come round by the station you're on, not
+/// back at the start in the truck: the tester went down in the shimmer and
+/// woke at the far end of the yard (playtest 2026-11-22, 16:04). What you
+/// carried still lies where you fell, near by (the board's "Go down and
+/// the collector comes for you and your kit").
+fn wake_at_the_station(
+    mut raid: ResMut<Raid>,
+    ob: Res<Onboarding>,
+    zone: Res<Zone>,
+    mut players: Query<(&mut Transform, &mut crate::player::Body), With<LocalPlayer>>,
+    mut was_down: Local<bool>,
+) {
+    // Down no longer (it's at base, or already out of the truck again).
+    let down = matches!(raid.phase, Phase::Down { .. });
+    let woke = *was_down && !down;
+    *was_down = down;
+    let (true, Some(i)) = (woke, ob.current()) else {
+        return;
+    };
+    let p = wake_spot(&zone, i);
+    for (mut t, mut body) in &mut players {
+        t.translation = p + Vec3::Y * 0.05;
+        body.velocity = Vec3::ZERO;
+    }
+    raid.tell(YARD_WOKE_LINE, Show::View);
+}
+
+/// Where you come round at station `i`: two metres from its post toward
+/// the track down the yard's middle.
+pub fn wake_spot(zone: &Zone, i: usize) -> Vec3 {
+    let at = Vec2::from(STATIONS[i].at);
+    let off = if at.x.abs() < 0.5 {
+        Vec2::new(0.0, 2.0)
+    } else {
+        Vec2::new(-at.x.signum() * 2.0, 0.0)
+    };
+    ground(zone, (at + off).into())
+}
+
+pub const YARD_WOKE_LINE: &str = "Driver: \"Up you get. I've brought you back to it.\"";
 
 fn announce(
     mut done: MessageReader<GoalDone>,
@@ -3060,6 +3112,8 @@ mod tests {
             TOO_CLOSE_LINE,
             START_OVER_LINE,
             DUCK_LINE,
+            LOW_BEAM_LINE,
+            YARD_WOKE_LINE,
             MARK_LINE_VR,
             MARK_LINE_FLAT,
             SPENT_LINE,

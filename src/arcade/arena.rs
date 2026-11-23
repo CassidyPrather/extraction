@@ -470,14 +470,9 @@ fn stand_at_bench(
     }
 }
 
-/// A card pressed again this soon is the same press: a fingertip
-/// trembling at the button's travel, or the button pushed while the hand
-/// also squeezes the card (the 22 November playtest: one press of "4 good"
-/// fired twice in 78 ms). The feel cards are one control: after an answer,
-/// none takes another for [`FEEL_GAP`], or one press answers two guns.
-/// No longer than `interact`'s shared gap (0.25 s: the pump station's
-/// 0.3 s strokes must each count); this guard goes once that one lands.
-pub const PRESS_GAP: f32 = 0.25;
+/// The feel cards are one control: after an answer, none takes another
+/// for this long, or one press answers two guns (the 22 November
+/// playtest). A single card pressed twice is `interact::LastPress`'s.
 pub const FEEL_GAP: f32 = 0.6;
 
 fn press_cards(
@@ -487,13 +482,9 @@ fn press_cards(
     mut feel: ResMut<super::record::Feel>,
     mut calls: MessageWriter<WaveCalled>,
     time: Res<Time>,
-    mut last: Local<(std::collections::HashMap<Entity, f32>, f32)>,
+    mut last_feel: Local<f32>,
 ) {
     let now = time.elapsed_secs();
-    // A press older than the gap no longer matters: forget it, and with it
-    // any card despawned since (a restart remakes the board).
-    let (seen, _) = &mut *last;
-    seen.retain(|_, t| now - *t < PRESS_GAP);
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
@@ -501,7 +492,7 @@ fn press_cards(
         let Ok(c) = cards.get(*item) else {
             continue;
         };
-        if !pressed_anew(&mut last, *item, matches!(c, ArcadeCard::Feel(_)), now) {
+        if !pressed_anew(&mut last_feel, matches!(c, ArcadeCard::Feel(_)), now) {
             continue;
         }
         match c {
@@ -528,24 +519,16 @@ fn press_cards(
     }
 }
 
-/// Whether a press of `card` at `now` is a new one (not within
-/// [`PRESS_GAP`] of its last, nor a feel card within [`FEEL_GAP`] of the
-/// last feel answer), noting it if so.
-fn pressed_anew(
-    last: &mut (std::collections::HashMap<Entity, f32>, f32),
-    card: Entity,
-    feel: bool,
-    now: f32,
-) -> bool {
-    let again = last.0.get(&card).is_some_and(|t| now - t < PRESS_GAP);
-    let feel_again = feel && last.1 > 0.0 && now - last.1 < FEEL_GAP;
-    if again || feel_again {
+/// Whether a press at `now` counts: any but a feel card within
+/// [`FEEL_GAP`] of the last feel answer (noted if so).
+fn pressed_anew(last_feel: &mut f32, feel: bool, now: f32) -> bool {
+    if !feel {
+        return true;
+    }
+    if *last_feel > 0.0 && now - *last_feel < FEEL_GAP {
         return false;
     }
-    last.0.insert(card, now);
-    if feel {
-        last.1 = now;
-    }
+    *last_feel = now;
     true
 }
 
@@ -871,38 +854,20 @@ pub fn fullest_panels() -> Vec<(String, ScreenText, TextSource)> {
 mod tests {
     use super::*;
 
-    /// One press is one press: the same card again within the gap is
-    /// dropped, as is any feel card soon after a feel answer; a press after
-    /// the gap counts.
+    /// One press answers one gun: a feel card soon after a feel answer is
+    /// dropped, one after the gap counts, and other cards aren't held.
     #[test]
     fn a_press_counts_once() {
-        let mut last = Default::default();
-        let (a, b) = (
-            Entity::from_raw_u32(1).unwrap(),
-            Entity::from_raw_u32(2).unwrap(),
-        );
-        assert!(pressed_anew(&mut last, a, true, 10.0));
+        let mut last = 0.0;
+        assert!(pressed_anew(&mut last, true, 10.0));
         assert!(
-            !pressed_anew(&mut last, a, true, 10.078),
-            "the playtest's double"
-        );
-        assert!(
-            !pressed_anew(&mut last, b, true, 10.2),
+            !pressed_anew(&mut last, true, 10.2),
             "another rating, same press"
         );
+        assert!(pressed_anew(&mut last, true, 10.7), "the next gun's answer");
         assert!(
-            pressed_anew(&mut last, b, true, 10.7),
-            "the next gun's answer"
-        );
-        let c = Entity::from_raw_u32(3).unwrap();
-        assert!(
-            pressed_anew(&mut last, c, false, 10.71),
+            pressed_anew(&mut last, false, 10.71),
             "CALL isn't a feel card"
-        );
-        assert!(!pressed_anew(&mut last, c, false, 10.9));
-        assert!(
-            pressed_anew(&mut last, c, false, 11.0),
-            "a 0.3 s stroke counts"
         );
     }
 
