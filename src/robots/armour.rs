@@ -21,6 +21,8 @@ pub const DRONE_PLATE_HP: f32 = 20.0;
 pub const SORTER_PLATE_HP: f32 = 70.0;
 /// A dirigible gondola's side plates (the gondola has 260).
 pub const GONDOLA_PLATE_HP: f32 = 80.0;
+/// A plate shot off a live machine is this good (it's been shot through).
+pub const PLATE_SCRAP: f32 = 0.15;
 /// How far out from the orb's centre a walker plate's middle sits.
 const PLATE_OUT: f32 = 0.405;
 
@@ -245,6 +247,7 @@ fn shed_plates(
     // plates and pieces: a sentry's junction box, a minelayer's hopper.)
     heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::heavy::OwnLook>)>>,
     at_death: Query<&super::salvage::HealthAtDeath>,
+    health: Query<&super::RobotPart>,
     catalog: Option<Res<crate::items::Catalog>>,
 ) {
     for ev in events.read() {
@@ -288,6 +291,32 @@ fn shed_plates(
             .map(|v| v.0)
             .or(walker.map(|w| w.velocity))
             .unwrap_or_default();
+        // Off a live walker or drone (shot through, or pried off by hand:
+        // `grip`): a plate to pick up and carry off, thrown off as it would
+        // fall. Shot through it's scrap; pried, about as good as it was.
+        if let (true, Some(kind), Some(catalog)) = (
+            matches!(robot.kind, RobotKind::Walker | RobotKind::Drone),
+            kind,
+            catalog.as_ref(),
+        ) {
+            let left = health
+                .get(ev.part)
+                .map_or(0.0, |p| p.hp / p.max_hp.max(1.0));
+            let item = crate::items::spawn_item(
+                &mut commands,
+                catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at).with_rotation(rot),
+                    condition: left.max(PLATE_SCRAP),
+                },
+            );
+            commands
+                .entity(item)
+                .insert(LinearVelocity(v0 + out * 1.6 + Vec3::Y * 0.6));
+            commands.entity(ev.part).despawn();
+            continue;
+        }
         // Each plate of each robot falls its own way.
         let seed = (robot_seed.map_or(0, |s| s.low() % 1000) + plate as u32 * 7) as f32;
         let (collider, mass, inertia) = if robot.kind == RobotKind::Dirigible {
@@ -577,13 +606,18 @@ mod tests {
             None,
             "the plate came off"
         );
-        let loose = app
+        // Off a live walker it's a plate to pick up (scrap, shot through),
+        // not loose debris no hand can take (the 22 November playtest).
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let plates: Vec<f32> = app
             .world_mut()
-            .query::<&Debris>()
+            .query::<&crate::items::Item>()
             .iter(app.world())
-            .filter(|d| d.piece == Piece::Plate)
-            .count();
-        assert_eq!(loose, 1, "and lies on the ground");
+            .filter(|i| catalog.get(i.0.kind).id == "robot_plate")
+            .map(|i| i.0.condition)
+            .collect();
+        assert_eq!(plates.len(), 1, "and lies there to be picked up");
+        assert!(plates[0] <= 0.2, "shot through: scrap ({})", plates[0]);
         // (Let it fall clear of the line of fire.)
         for _ in 0..90 {
             app.update();
