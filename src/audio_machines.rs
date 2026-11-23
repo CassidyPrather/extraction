@@ -52,9 +52,6 @@ impl Plugin for MachineSoundsPlugin {
             .add_message::<crate::robots::damage::RobotStruck>()
             .add_message::<crate::health::Hurt>()
             .add_message::<crate::health::Downed>()
-            // (The arcade registers it too; this keeps `spent_sounds`'
-            // reader valid in apps without the arcade.)
-            .add_message::<crate::arcade::waves::MachineSpent>()
             .add_systems(
                 Update,
                 (
