@@ -1492,6 +1492,49 @@ pub(super) fn direct_raid(
         bot.tasks.pop_front();
         super::second_hour::cut_in(&mut bot, t);
     }
+    // A snare's scorch in view that its next leg would cross: round it,
+    // its strike line and a half-metre off, as it comes in sight (a walk
+    // is laid out from far off, before it can be seen: seed 5's one-
+    // handed newcomer walked onto a charged one's scorch and stood there,
+    // struck twice, KNOWN_RED row 31).
+    if let Some(Task::WalkTo { to, within }) = bot.tasks.front().cloned() {
+        let snares = world.snares_in_view(here);
+        // A place to stand inside one's keep (a waypoint on the way, or a
+        // spot to look round from), unless it's there to take something
+        // up: out to its edge. Seed 5's newcomer stood to look round
+        // 2.71 m from a snare's heart, its strike line and a half-metre
+        // being 2.72, and walking a stretch that ends inside the keep is
+        // taken as going there.
+        let through = !matches!(
+            bot.tasks.get(1),
+            Some(Task::Grab { .. } | Task::PickUp { .. } | Task::GrabFromHere { .. })
+        );
+        let mut to2 = to;
+        if through && let Some(&(heart, keep)) = snares.iter().find(|(h, k)| to.distance(*h) < *k) {
+            let side = (to - heart)
+                .try_normalize()
+                .unwrap_or((to - here).perp().normalize_or(Vec2::X));
+            to2 = heart + side * keep * 1.15;
+        }
+        let round = round_snares(&snares, here, vec![to2]);
+        if round.len() > 1 || to2 != to {
+            state.note(
+                now,
+                Kind::Learned,
+                "a snare's scorch on its way: went round it",
+            );
+            let mut t: Vec<Task> = round[..round.len() - 1]
+                .iter()
+                .map(|p| Task::WalkTo {
+                    to: *p,
+                    within: 1.0,
+                })
+                .collect();
+            t.push(Task::WalkTo { to: to2, within });
+            bot.tasks.pop_front();
+            super::second_hour::cut_in(&mut bot, t);
+        }
+    }
     // A machine still firing at it, hit or miss: one fight, heard all
     // through (a drone's bursts 1.8 s apart never let it re-lock).
     // (Not the round that hits: only those before it, `shot_warns`.)
@@ -6132,6 +6175,43 @@ pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
 }
 
 /// `walk`, with no pen at either end.
+/// The way round each snare in `snares` (its heart, and how far off its
+/// heart to keep the body): a stretch passing nearer than that gets two
+/// waypoints out on the side it was passing, before it and after. A
+/// stretch that ends inside the keep (it's going there) is left as it is.
+pub(super) fn round_snares(snares: &[(Vec2, f32)], from: Vec2, way: Vec<Vec2>) -> Vec<Vec2> {
+    let mut out = Vec::with_capacity(way.len());
+    let mut at = from;
+    for q in way {
+        for &(heart, keep) in snares {
+            let d = q - at;
+            let len = d.length();
+            if len < 0.1 || q.distance(heart) < keep || at.distance(heart) < keep {
+                continue;
+            }
+            let dir = d / len;
+            let c = at + dir * (heart - at).dot(dir).clamp(0.0, len);
+            if c.distance(heart) >= keep {
+                continue;
+            }
+            let side = (c - heart).try_normalize().unwrap_or(dir.perp());
+            let k = keep * 1.15;
+            for p in [
+                heart + side * k - dir * k * 0.75,
+                heart + side * k + dir * k * 0.75,
+            ] {
+                if (p - at).dot(dir) > 0.0 {
+                    out.push(p);
+                    at = p;
+                }
+            }
+        }
+        out.push(q);
+        at = q;
+    }
+    out
+}
+
 fn walk_open(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut pts: Vec<Vec2> = vec![];
@@ -8765,6 +8845,40 @@ the Hollow.";
     /// its ends (off it) never goes up on a deck's side; and on Marrow, the
     /// leg past the District road bridge's north end that cut its corner
     /// (Map design's wreck repro) goes round.
+    /// A walk past a snare keeps the body its strike line and a half-metre
+    /// off its heart on every stretch, the side it was passing; one that
+    /// already clears it is left be (KNOWN_RED row 31: seed 5 walked its
+    /// chest to 2.19 m of a 2.22 m strike line and stood there).
+    #[test]
+    fn a_walk_goes_round_a_snare_it_can_see() {
+        let heart = Vec2::new(-10.85, 47.45);
+        let keep = crate::anomaly::snare_strikes_within(1.92)
+            + crate::onboarding::second_hour::SNARE_SPARE;
+        let near = |way: &[Vec2], from: Vec2| -> f32 {
+            let mut at = from;
+            let mut best = f32::MAX;
+            for q in way {
+                for k in 0..=50 {
+                    best = best.min(at.lerp(*q, k as f32 / 50.0).distance(heart));
+                }
+                at = *q;
+            }
+            best
+        };
+        // Seed 5's leg: (-6.87, 57.93) to (-14.2, 40.5), past the snare.
+        let (from, to) = (Vec2::new(-6.87, 57.93), Vec2::new(-14.2, 40.5));
+        assert!(near(&[to], from) < keep, "the straight way grazes it");
+        let way = round_snares(&[(heart, keep)], from, vec![to]);
+        assert!(near(&way, from) >= keep * 0.99, "round it: {way:?}");
+        assert_eq!(way.last(), Some(&to), "still gets there");
+        // Well clear already: as it was.
+        let far = Vec2::new(10.0, 57.93);
+        assert_eq!(
+            round_snares(&[(heart, keep)], far, vec![Vec2::new(10.0, 40.5)]),
+            vec![Vec2::new(10.0, 40.5)]
+        );
+    }
+
     #[test]
     fn walks_past_every_bridge_end_keep_off_its_sides() {
         use crate::world::bridges;
