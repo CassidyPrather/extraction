@@ -410,6 +410,13 @@ pub struct Clearing(pub Entity);
 /// How far a pulled magazine's top must get from the well it left before
 /// it can seat there again, metres.
 pub const CLEAR_OF_WELL: f32 = 0.08;
+const _: () = assert!(MAG_CONTACT < CLEAR_OF_WELL);
+
+/// How near a held magazine's top must come to its well to seat (m):
+/// generous, since in a headset it's done by feel (playtest 2026-11-22:
+/// at 4.5 cm a magazine went in only when placed just so). Under
+/// [`CLEAR_OF_WELL`], so one just pulled doesn't seat straight back.
+pub const MAG_CONTACT: f32 = 0.07;
 
 /// A magazine brought up into the well of the gun in your other hand seats
 /// as it arrives: in a headset you don't let go of it first.
@@ -447,7 +454,7 @@ fn seat_on_contact(
             {
                 continue;
             }
-            if top.distance(sgt.translation()) > 0.045 {
+            if top.distance(sgt.translation()) > MAG_CONTACT {
                 continue;
             }
             if let Ok((_, _, mut hand)) = hands.get_mut(h.hand) {
@@ -581,6 +588,9 @@ type GrabTargets<'w, 's> = Query<
         // Seated in something (a magazine in its well, a scope on its
         // mount, a pistol in its holster): see `find_grab`.
         Option<&'static InSocket>,
+        // Hidden in your own slot while its pocket sphere stands in: still
+        // there to take (`pockets::hide_stowed`).
+        Has<pockets::HiddenInSlot>,
     ),
 >;
 
@@ -823,14 +833,16 @@ fn find_grab(
         }
     }
     let mut best: Option<(f32, Entity, usize)> = None;
-    for (e, gt, g, held, disabled, vis, zone, vice, seat) in grabbables.iter() {
+    for (e, gt, g, held, disabled, vis, zone, vice, seat, in_slot) in grabbables.iter() {
         // Moving parts are worked on a gun already in your other hand, or
         // in a vice.
         if reach_for == Reach::Handle && !vice && held.is_none_or(|h| h.player != player) {
             continue;
         }
-        // Out of sight (in a closed bag) is out of reach.
-        if vis == Some(&Visibility::Hidden) {
+        // Out of sight (in a closed bag) is out of reach; in your own
+        // pocket or holster, drawn by its sphere, it isn't (the playtest
+        // of 2026-11-22: a pistol holstered was never had back).
+        if vis == Some(&Visibility::Hidden) && !in_slot {
             continue;
         }
         // A part seated in another thing (a magazine in its well, a scope

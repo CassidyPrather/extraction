@@ -117,7 +117,54 @@ impl Plugin for PocketsPlugin {
                     .chain()
                     .in_set(PocketsSystems)
                     .before(bevy::transform::TransformSystems::Propagate),
-            );
+            )
+            // Before this frame's visibility is worked out.
+            .add_systems(Update, hide_stowed);
+    }
+}
+
+/// Something stowed in your own slot, hidden while the spheres stand in
+/// (its sphere draws it small, `render::pockets`). Hidden, it's still in
+/// reach: `find_grab` takes it out of its slot as if it were drawn.
+#[derive(Component)]
+pub struct HiddenInSlot;
+
+/// What's in your own slots isn't drawn while the spheres stand in (each
+/// sphere draws its own small); taken out, or the spheres off, it is.
+/// (Worn armour is the vest's and the helmet's to show, `show_worn`.)
+#[allow(clippy::type_complexity)]
+pub(crate) fn hide_stowed(
+    mut commands: Commands,
+    spheres: Option<Res<PocketsShown>>,
+    slots: Query<(&Socket, &crate::interact::SocketOwner), With<BodySlot>>,
+    locals: Query<(), With<LocalPlayer>>,
+    mut stowed: Query<(Entity, &crate::interact::InSocket, &mut Visibility), Without<HiddenInSlot>>,
+    mut hidden: Query<
+        (Entity, Option<&crate::interact::InSocket>, &mut Visibility),
+        With<HiddenInSlot>,
+    >,
+) {
+    let on = spheres.is_some_and(|s| s.0);
+    let mine = |socket: Entity| {
+        slots.get(socket).is_ok_and(|(s, o)| {
+            locals.contains(o.0)
+                && !matches!(s.kind, SocketKind::Body(SlotKind::Vest | SlotKind::Head))
+        })
+    };
+    for (e, in_socket, mut v) in &mut hidden {
+        if !on || !in_socket.is_some_and(|s| mine(s.socket)) {
+            v.set_if_neq(Visibility::Inherited);
+            commands.entity(e).remove::<HiddenInSlot>();
+        }
+    }
+    if !on {
+        return;
+    }
+    for (e, in_socket, mut v) in &mut stowed {
+        if mine(in_socket.socket) {
+            v.set_if_neq(Visibility::Hidden);
+            commands.entity(e).insert(HiddenInSlot);
+        }
     }
 }
 

@@ -6162,6 +6162,12 @@ mod body {
                     && got.rotation.dot(want.rotation).abs() > 0.9999,
                 "{side:?}: in the pocket at {got:?}, it fits at {want:?}"
             );
+            // Hidden while its sphere stands in (the game's spheres are on).
+            assert_eq!(
+                vr.app.world().get::<Visibility>(compass),
+                Some(&Visibility::Hidden),
+                "{side:?}: drawn by its sphere, not itself"
+            );
             // Back out: the hand away, then in at it and closed.
             vr.move_hand(side, past);
             vr.step(4);
@@ -9097,6 +9103,63 @@ mod grips {
         let aware = vr.app.world().get::<Awareness>(walker).unwrap();
         assert_eq!(aware.target, Some(player), "it turns on who held it");
         assert!(aware.suspicion >= 1.0);
+    }
+
+    /// A walker's plate taken in the hand and pulled hard comes off before
+    /// it can kick free: the plate's gone from it and there's a plate to
+    /// pick up (the 22 November playtest: the haptics said the hand had
+    /// it, and nothing came away).
+    #[test]
+    fn a_walkers_plate_pulled_hard_comes_off() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.0, 0.0, -1.1);
+        let walker = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut c = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker(&mut c, &zone, at, job(at));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        // Its plate nearest you.
+        let (plate, on) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(_, p, _)| p.robot == walker && matches!(p.role, PartRole::Armour(_)))
+                .map(|(e, _, g)| (e, g.translation()))
+                .max_by(|a, b| a.1.z.total_cmp(&b.1.z))
+                .expect("a plate")
+        };
+        vr.hand(Side::Right, on, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(holding(&mut vr, walker), "the hand has hold of its plate");
+        // A hard pull back toward you.
+        vr.hand(Side::Right, on + Vec3::Z * 0.15, Quat::IDENTITY, 1.0, 0.0);
+        let mut off = false;
+        for _ in 0..45 {
+            vr.step(1);
+            if vr.app.world().get_entity(plate).is_err() {
+                off = true;
+                break;
+            }
+        }
+        assert!(off, "the plate came off in the hand");
+        vr.step(5);
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let near = vr
+            .app
+            .world_mut()
+            .query::<(&crate::items::Item, &GlobalTransform)>()
+            .iter(vr.app.world())
+            .any(|(i, g)| {
+                catalog.get(i.0.kind).id == "robot_plate" && g.translation().distance(on) < 2.0
+            });
+        assert!(near, "a plate to pick up where it came off");
     }
 
     /// A drone held by its frame thrusts away harder and harder, and

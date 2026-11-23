@@ -50,7 +50,7 @@ impl Plugin for KitVisualsPlugin {
             (
                 (dress_slots, dress_pack, mark_torsos),
                 wear_kit,
-                (open_flaps, hide_stowed, open_lids, own_helmet_shadow_only),
+                (open_flaps, open_lids, own_helmet_shadow_only),
             )
                 .chain(),
         )
@@ -124,11 +124,6 @@ struct Undressed {
 /// A slot's own piece (or its box): hidden while the spheres stand in.
 #[derive(Component)]
 struct SlotLook;
-
-/// Something stowed in your own slot, hidden while the spheres stand in
-/// (its sphere draws it small).
-#[derive(Component)]
-struct HiddenInSlot;
 
 /// Which flap a child is: shown while its slot (or bag) is empty
 /// (closed) or full (open).
@@ -507,45 +502,6 @@ fn open_flaps(
                     Visibility::Hidden
                 });
             }
-        }
-    }
-}
-
-/// What's in your own slots isn't drawn while the spheres stand in (each
-/// sphere draws its own small); taken out, or the spheres off, it is.
-/// (Worn armour is the vest's and the helmet's to show, `show_worn`.)
-#[allow(clippy::type_complexity)]
-fn hide_stowed(
-    mut commands: Commands,
-    spheres: Option<Res<crate::interact::pockets::PocketsShown>>,
-    slots: Query<(&Socket, &crate::interact::SocketOwner), With<BodySlot>>,
-    locals: Query<(), With<LocalPlayer>>,
-    mut stowed: Query<(Entity, &crate::interact::InSocket, &mut Visibility), Without<HiddenInSlot>>,
-    mut hidden: Query<
-        (Entity, Option<&crate::interact::InSocket>, &mut Visibility),
-        With<HiddenInSlot>,
-    >,
-) {
-    let on = spheres.is_some_and(|s| s.0);
-    let mine = |socket: Entity| {
-        slots.get(socket).is_ok_and(|(s, o)| {
-            locals.contains(o.0)
-                && !matches!(s.kind, SocketKind::Body(SlotKind::Vest | SlotKind::Head))
-        })
-    };
-    for (e, in_socket, mut v) in &mut hidden {
-        if !on || !in_socket.is_some_and(|s| mine(s.socket)) {
-            v.set_if_neq(Visibility::Inherited);
-            commands.entity(e).remove::<HiddenInSlot>();
-        }
-    }
-    if !on {
-        return;
-    }
-    for (e, in_socket, mut v) in &mut stowed {
-        if mine(in_socket.socket) {
-            v.set_if_neq(Visibility::Hidden);
-            commands.entity(e).insert(HiddenInSlot);
         }
     }
 }

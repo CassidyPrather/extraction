@@ -14,7 +14,8 @@
 #import bevy_pbr::pbr_functions::apply_fog
 #endif
 
-// x: the share of its distance the fog takes it at.
+// x: the share of its distance the fog takes it at up close; from y to z
+// metres off that share goes to the whole of it (fogged as the ground is).
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> reach: vec4<f32>;
 
 @fragment
@@ -24,7 +25,9 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var out: FragmentOutput;
     var c = apply_pbr_lighting(pbr_input);
 #ifdef DISTANCE_FOG
-    let at = view.world_position + (in.world_position.xyz - view.world_position) * reach.x;
+    let off = distance(in.world_position.xyz, view.world_position);
+    let share = mix(reach.x, 1.0, smoothstep(reach.y, reach.z, off));
+    let at = view.world_position + (in.world_position.xyz - view.world_position) * share;
     c = apply_fog(fog, c, at, view.world_position, in.position.xy);
 #endif
     out.color = main_pass_post_lighting_processing(pbr_input, c);
