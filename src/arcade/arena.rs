@@ -475,7 +475,9 @@ fn stand_at_bench(
 /// also squeezes the card (the 22 November playtest: one press of "4 good"
 /// fired twice in 78 ms). The feel cards are one control: after an answer,
 /// none takes another for [`FEEL_GAP`], or one press answers two guns.
-pub const PRESS_GAP: f32 = 0.4;
+/// No longer than `interact`'s shared gap (0.25 s: the pump station's
+/// 0.3 s strokes must each count); this guard goes once that one lands.
+pub const PRESS_GAP: f32 = 0.25;
 pub const FEEL_GAP: f32 = 0.6;
 
 fn press_cards(
@@ -488,6 +490,10 @@ fn press_cards(
     mut last: Local<(std::collections::HashMap<Entity, f32>, f32)>,
 ) {
     let now = time.elapsed_secs();
+    // A press older than the gap no longer matters: forget it, and with it
+    // any card despawned since (a restart remakes the board).
+    let (seen, _) = &mut *last;
+    seen.retain(|_, t| now - *t < PRESS_GAP);
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
             continue;
@@ -893,8 +899,11 @@ mod tests {
             pressed_anew(&mut last, c, false, 10.71),
             "CALL isn't a feel card"
         );
-        assert!(!pressed_anew(&mut last, c, false, 11.0));
-        assert!(pressed_anew(&mut last, c, false, 11.2));
+        assert!(!pressed_anew(&mut last, c, false, 10.9));
+        assert!(
+            pressed_anew(&mut last, c, false, 11.0),
+            "a 0.3 s stroke counts"
+        );
     }
 
     #[test]

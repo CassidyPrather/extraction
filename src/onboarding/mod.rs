@@ -845,6 +845,7 @@ impl Plugin for OnboardingPlugin {
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
+                    how_by_hand,
                     the_scratch,
                     the_rooks,
                     the_rats,
@@ -2254,6 +2255,48 @@ pub fn next_line(station: usize) -> String {
 /// The driver on the radio (your wrist): the opening line, and after each
 /// station, where the next one is. Each tick chimes and clicks both hands
 /// ([`StepDone`]).
+/// How near a station you have to be for its step's how to come to you
+/// (`how_by_hand`), m.
+pub const HOW_NEAR: f32 = 9.0;
+
+/// Each step's how, told where you are as it comes up: beside what's in
+/// your hand (a callout that follows it), else as a caption in the view.
+/// The board keeps it too. Playtest 2026-11-22 (12:33): at the range the
+/// words were only on the sign, so turned to the table and the gun they
+/// were behind you, and the tester walked back to read each one ("this is
+/// a class of UX problem"). Only once you're at the step's station: on the
+/// way there it's the driver's "Next:" that counts.
+#[allow(clippy::too_many_arguments)]
+fn how_by_hand(
+    ob: Res<Onboarding>,
+    mut raid: ResMut<Raid>,
+    driver: crate::rig::KnownDriver,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    me: Query<&GlobalTransform, With<LocalPlayer>>,
+    held: Query<(Entity, &Held)>,
+    locals: Query<(), With<LocalPlayer>>,
+    mut told: Local<Option<Goal>>,
+) {
+    let (Some(flat), Some(goal), Ok(me)) = (driver.flat(), ob.next_goal(), me.single()) else {
+        return;
+    };
+    if !ob.greeted || *told == Some(goal) {
+        return;
+    }
+    let at = Vec2::from(STATIONS[station_of(goal)].at);
+    if me.translation().xz().distance(at) > HOW_NEAR {
+        return;
+    }
+    *told = Some(goal);
+    let comfort = comfort.as_deref().cloned().unwrap_or_default();
+    let how = goal.how_for(flat, &comfort).replace('\n', " ");
+    let show = held
+        .iter()
+        .find(|(_, h)| locals.contains(h.player))
+        .map_or(Show::View, |(e, _)| Show::ItemNow(e));
+    raid.tell(how, show);
+}
+
 fn announce(
     mut done: MessageReader<GoalDone>,
     mut ob: ResMut<Onboarding>,
