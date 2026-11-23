@@ -318,6 +318,7 @@ impl Plugin for InteractPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HandAction>()
             .init_resource::<LeashBlocked>()
+            .init_resource::<LastPress>()
             .add_message::<InteractEvent>()
             .configure_sets(
                 FixedUpdate,
@@ -409,6 +410,13 @@ pub struct Clearing(pub Entity);
 /// How far a pulled magazine's top must get from the well it left before
 /// it can seat there again, metres.
 pub const CLEAR_OF_WELL: f32 = 0.08;
+const _: () = assert!(MAG_CONTACT < CLEAR_OF_WELL);
+
+/// How near a held magazine's top must come to its well to seat (m):
+/// generous, since in a headset it's done by feel (playtest 2026-11-22:
+/// at 4.5 cm a magazine went in only when placed just so). Under
+/// [`CLEAR_OF_WELL`], so one just pulled doesn't seat straight back.
+pub const MAG_CONTACT: f32 = 0.07;
 
 /// A magazine brought up into the well of the gun in your other hand seats
 /// as it arrives: in a headset you don't let go of it first.
@@ -446,7 +454,7 @@ fn seat_on_contact(
             {
                 continue;
             }
-            if top.distance(sgt.translation()) > 0.045 {
+            if top.distance(sgt.translation()) > MAG_CONTACT {
                 continue;
             }
             if let Ok((_, _, mut hand)) = hands.get_mut(h.hand) {
@@ -946,7 +954,10 @@ fn apply_hand_actions(
     mut sockets: Query<(Entity, &GlobalTransform, &mut Socket, Option<&SocketOwner>)>,
     mut backpacks: Query<(Entity, &GlobalTransform, &mut body::Backpack)>,
     catalog: Res<Catalog>,
-    pressables: Query<(), With<crate::raid::truck::Pressable>>,
+    mut pressables: (
+        Query<(), With<crate::raid::truck::Pressable>>,
+        ResMut<LastPress>,
+    ),
     // Things to take up and read (`read`): theirs to handle.
     reading: (Query<(), With<read::Readable>>, Res<crate::rig::RigDriver>),
     // The stash crate stays put; a stone just dropped too hot isn't taken.
@@ -1002,15 +1013,17 @@ fn apply_hand_actions(
             }
             HandAction::Grab { item, .. }
                 if reading.0.contains(item)
-                    && read::reads(*reading.1, pressables.contains(item)) => {}
+                    && read::reads(*reading.1, pressables.0.contains(item)) => {}
             HandAction::Grab {
                 player,
                 side,
                 item,
                 point,
-            } if pressables.contains(item) => {
+            } if pressables.0.contains(item) => {
                 let _ = (side, point);
-                events.write(InteractEvent::Pressed { item, player });
+                if pressables.1.take(item, time.elapsed_secs()) {
+                    events.write(InteractEvent::Pressed { item, player });
+                }
             }
             HandAction::Grab { item, .. } if fixed.0.contains(item) || fixed.1.contains(item) => {}
             HandAction::Grab {
@@ -1544,6 +1557,31 @@ fn hand_of(
 const LEASH: f32 = 0.6;
 /// Past this the item goes back to the hand even through a wall.
 pub(crate) const LEASH_FAR: f32 = 2.0;
+
+/// Least time between two presses of one pressable (s). Presses bounced:
+/// NEW CAREER's "SURE? AGAIN" went twice 106 ms apart (playtest
+/// 2026-11-22), and the feedback board did the same: a finger across the
+/// cap's click and release, or the card moving under it (the arcade's
+/// board went twice in 78 ms). A real second press is slower than this,
+/// a pump's handle worked quickly too (`world::underground`'s, a stroke
+/// each 0.3 s).
+pub const PRESS_GAP: f32 = 0.25;
+
+/// When each pressable last went (`PRESS_GAP`): the fingertip's click
+/// (`poke`) and the grip's (`apply_hand_actions`) both ask it.
+#[derive(Resource, Default, Debug)]
+pub struct LastPress(pub std::collections::HashMap<Entity, f32>);
+
+impl LastPress {
+    /// Whether `item` may press now (and, if so, that it did).
+    pub fn take(&mut self, item: Entity, now: f32) -> bool {
+        if self.0.get(&item).is_some_and(|t| now - t < PRESS_GAP) {
+            return false;
+        }
+        self.0.insert(item, now);
+        true
+    }
+}
 
 /// Held items with something solid between them and their hand this tick
 /// (`leash_check`): the leash doesn't snap them back through it.

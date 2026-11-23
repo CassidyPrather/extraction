@@ -324,19 +324,30 @@ mod tests {
                 let front = super::super::feel::front_post(g);
                 let fix = r.vr.app.world().get::<Handling>(r.gun).unwrap().sight_fix;
                 let bare = front + fix.inverse() * (weld - front);
-                r.vr.head(gt.transform_point(bare) - root);
+                // The right eye at the weld: the head half the eyes' span
+                // to its left (the player stands unturned).
+                let player = *r.vr.app.world().get::<Transform>(r.vr.player).unwrap();
+                r.vr.head(
+                    player.rotation.inverse() * (gt.transform_point(bare) - root)
+                        - Vec3::X * super::super::feel::EYE_HALF,
+                );
                 r.vr.step(30);
             }
             let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            let head = {
+                let mut q =
+                    r.vr.app
+                        .world_mut()
+                        .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>();
+                *q.iter(r.vr.app.world()).next().unwrap()
+            };
             let g = r.vr.app.world().get::<Gun>(r.gun).unwrap();
-            let eye =
-                r.vr.app
-                    .world()
-                    .get::<crate::rig::RigInput>(r.vr.player)
-                    .unwrap()
-                    .head
-                    .translation
-                    + root;
+            // The eye the sights were lined up on, as the game finds it.
+            let eye = gt.transform_point(super::super::feel::sight_eye(
+                g,
+                &gt.affine().inverse(),
+                &head,
+            ));
             let rear = gt.transform_point(g.layout.sight.translation);
             let front = gt.transform_point(super::super::feel::front_post(g));
             let d = (rear - front).normalize();

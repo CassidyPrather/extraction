@@ -631,20 +631,20 @@ pub fn shaded_box(size: Vec3, at: Transform, occ: &Occluders, sky: bool) -> Mesh
         let hn = (n * h).abs().max_element();
         let wn = at.rotation * n;
         let centre = n * hn;
-        // Dropped only when it's covered all over (its middle and its
-        // corners): a shelf's box against the middle of a wall hides only
-        // that much of it (and is drawn as a model, not a box).
-        let covered = [
-            (0.0, 0.0),
-            (-0.9, -0.9),
-            (0.9, -0.9),
-            (0.9, 0.9),
-            (-0.9, 0.9),
-        ]
-        .iter()
-        .all(|&(su, sv)| {
-            let p = centre + u * hu * su + v * hv * sv;
-            occ.inside(world(p) + wn * 0.02)
+        // Dropped only when it's covered all over, out to a centimetre
+        // from its edges: a shelf's box against the middle of a wall hides
+        // only that much of it (and is drawn as a model, not a box). (Its
+        // corners at nine tenths in, a plinth's top under a booth's walls
+        // was dropped, its rim past them a slot down to the grass inside:
+        // the 22 November playtest, 28:18.)
+        let edge = |half: f32| ((half - 0.01) / half.max(1e-4)).max(0.0);
+        let (eu, ev) = (edge(hu), edge(hv));
+        let grid = |e: f32| [-e, -0.5 * e, 0.0, 0.5 * e, e];
+        let covered = grid(eu).iter().all(|&su| {
+            grid(ev).iter().all(|&sv| {
+                let p = centre + u * hu * su + v * hv * sv;
+                occ.inside(world(p) + wn * 0.02)
+            })
         });
         if covered {
             continue;

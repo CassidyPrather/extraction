@@ -756,7 +756,6 @@ mod tests {
                 12,
                 "eyes, shells, envelopes, halos, a flare, a drone's lock glow, a melee machine's lens glow",
             ),
-            ("robots/weak_points.rs", 1, "a knee's mark"),
             ("weapons/flares.rs", 1, "a flare's burning ball"),
             (
                 "weapons/impacts.rs",
