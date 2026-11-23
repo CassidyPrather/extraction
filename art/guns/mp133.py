@@ -276,8 +276,11 @@ bolt.loft(frings, "Wood")
 # --- Trigger --------------------------------------------------------------------------------
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, 0.007, -0.0465))
-trig.sweep(catmull([(-0.0465, 0.001), (-0.0485, -0.010), (-0.0505, -0.019), (-0.0495, -0.026),
-                    (-0.0455, -0.031)], 3, closed=False), section_rect(0.0045, 0.0032, 0.0012),
+# (Mirrored about its top, 23 November: like every gun's here, its blade was
+# bowed toward the muzzle with its tip hooked back, a trigger hung the wrong way
+# round; the finger pulls on its front face, which is the concave one, its tip
+# curled forward. The PM's playtest, 20:19: "might be backwards".)
+trig.sweep(catmull([(-0.0465, 0.001), (-0.0445, -0.01), (-0.0425, -0.019), (-0.0435, -0.026), (-0.0475, -0.031)], 3, closed=False), section_rect(0.0045, 0.0032, 0.0012),
            "Blued")
 
 # --- Build -------------------------------------------------------------------------------------

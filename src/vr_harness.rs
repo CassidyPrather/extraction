@@ -3530,6 +3530,37 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// The pocket hints wait for the range, where pockets are first used:
+    /// off at the start of the yard, on from THE RANGE (playtest
+    /// 2026-11-22, 10:52).
+    #[test]
+    fn pocket_hints_wait_for_the_range() {
+        use crate::interact::pockets::PocketHints;
+        let mut vr = Vr::first_run();
+        vr.step(10);
+        assert!(
+            !vr.app.world().resource::<PocketHints>().shown,
+            "hidden at the start"
+        );
+        let out_of_reach = crate::onboarding::station_of(Goal::FarGrab);
+        at_station(&mut vr, out_of_reach, &[]);
+        vr.step(5);
+        assert!(
+            !vr.app.world().resource::<PocketHints>().shown,
+            "still hidden at the far grab"
+        );
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::TakePistol),
+            &[],
+        );
+        vr.step(5);
+        assert!(
+            vr.app.world().resource::<PocketHints>().shown,
+            "shown at the range"
+        );
+    }
+
     /// A station done, the way on lies on the ground: dots from it,
     /// through the gate in the hoarding, to the next station; there,
     /// they're gone (playtest 2026-11-22, 6:20).

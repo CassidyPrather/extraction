@@ -337,7 +337,11 @@ carrier.origin.z += 0.05
 
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, -0.006, -0.032))
-trig.sweep(catmull([(-0.032, -0.012), (-0.034, -0.022), (-0.031, -0.031), (-0.026, -0.035)], 5,
+# (Mirrored about its top, 23 November: like every gun's here, its blade was
+# bowed toward the muzzle with its tip hooked back, a trigger hung the wrong way
+# round; the finger pulls on its front face, which is the concave one, its tip
+# curled forward. The PM's playtest, 20:19: "might be backwards".)
+trig.sweep(catmull([(-0.032, -0.012), (-0.03, -0.022), (-0.033, -0.031), (-0.038, -0.035)], 5,
                    closed=False), section_rect(0.005, 0.0035, 0.0012), "Blued")
 
 join("static", stock, recv, mag, worn={})

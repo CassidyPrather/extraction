@@ -27,8 +27,7 @@ How it works:
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| first_jobs one-handed bot: 6 deaths on seeds 1-5 vs 2 on main (reckless was chance: 4 vs 4) | 9c1135f4 (in 1f40e45c) | Onboarding | re-measured on 6d425f1d (19 Nov): 1 death per seed, no common cause (logged as balance); seed 5 also has 2 HurtUnwarned, which are the anomaly discharge (row below), not a one-handed fault |
-| Seed-5 one-handed first_jobs: two 22 HP snare hits (raid 4 at 64.8 s and 68.9 s; raid 5 at 68.3 s), Surge snare at (-10.85,47.45) r1.92, hand-reach branch. The bot's resting hand (chest height, 0.5 m above the heart) grazes 1-3 cm inside the rim while its body is 2.1 m out: a passing brush, not a reach. Ruling changed 19 Nov 12:00: a brush at the rim doesn't fire; a real reach (down for the stone, or in toward the heart) does. No second Player entity (Anomalies mixed two worlds' logs) | 6d425f1d (Onboarding re-measure) | Anomalies (reach margin + tests) | |
+| Seed-5 one-handed first_jobs: 22 HP from the body test (raid 4 at 64.8 s): the bot's chest stands 2.19 m from the heart against the 2.22 m strike line, on the drawn scorch at full crackle, for about 4 s. Not the snare (no hand fires it since bc8d75be; scorch drawn where it strikes) | 6d425f1d; re-measured on 2c306a07 (23 Nov) | Onboarding (first_jobs bot's route, onboarding/first_hour.rs: keep the body r + 0.3 + 0.5 m off a seen scorch) | A/B seeds 1-5 against main with the fix |
 
 ## Logged, not failing a check
 
@@ -44,7 +43,8 @@ How it works:
 
 | What | Fixed by |
 | - | - |
-| `render::puff::tests::no_puff_is_a_sphere` (handle_glow.rs) | c592c24 (Hands: the glow is a soft quad halo), gate 375; confirm on lib375 |
+| first_jobs one-handed bot deaths (was 6 vs 2 on main) | closed as balance: re-measured on 2c306a07 (Onboarding, 23 Nov), 4 deaths on seeds 1-5, all late in the last raid with no common cause; it was a branch-vs-main delta |
+| `render::puff::tests::no_puff_is_a_sphere` (handle_glow.rs) | c592c24 (Hands: the glow is a soft quad halo), green on lib375 (2c306a07: 1880/0) |
 | `soak::ledges::tests::no_valley_has_a_ledge_trap` (rime ore mill's high sills, solid since a41e3ff) | f31200ce (World models: only sills within reach are solid), green on lib373 (0a173357: 1873/1) |
 | scenario `walker_hunt` (0 wrecked: bots' sights turned to an eye 32 mm off the head) | 2bc1856 (Hands: a bot sights from its head), green on gate 372 |
 | `audio_machines::tests::the_dangers_are_heard` (MachineSpent) | 00ed3f59 (Arcade), green on lib371 (4f146f94: 1863/1) |

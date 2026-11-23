@@ -405,8 +405,11 @@ kit.sweep(guard, section_rect(0.012, 0.0035, 0.001), "Iron")
 screw(screws, slots, 0.0028, (0.0, -0.0115, -0.106), DOWN, turn=0.7)
 
 trig = Part("trigger", origin=(0.0, 0.002, -0.048))
-trig.sweep(catmull([(-0.048, 0.004), (-0.0485, -0.012), (-0.0465, -0.026), (-0.041, -0.035),
-                    (-0.035, -0.038)], 4, closed=False), section_rect(0.006, 0.0032, 0.001),
+# (Mirrored about its top, 23 November: like every gun's here, its blade was
+# bowed toward the muzzle with its tip hooked back, a trigger hung the wrong way
+# round; the finger pulls on its front face, which is the concave one, its tip
+# curled forward. The PM's playtest, 20:19: "might be backwards".)
+trig.sweep(catmull([(-0.048, 0.004), (-0.0475, -0.012), (-0.0495, -0.026), (-0.055, -0.035), (-0.061, -0.038)], 4, closed=False), section_rect(0.006, 0.0032, 0.001),
            "Iron")
 
 # --- Sling eyes ----------------------------------------------------------------------------------
