@@ -613,7 +613,10 @@ pub fn prefab_shell(id: &str) -> &str {
 /// A fence run: thin, waist high, stood on its lowest ground rather than
 /// levelled for, and never a wall a route may pass close by.
 pub fn is_fence(id: &str) -> bool {
-    matches!(id, "fence_garden" | "yard_fence" | "yard_fence_2")
+    matches!(
+        id,
+        "fence_garden" | "yard_fence" | "yard_fence_2" | "yard_hoarding" | "yard_hoarding_2"
+    )
 }
 
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
@@ -721,6 +724,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // its 3 m leaf hung between its posts.
         "yard_fence" => [6.12, 1.35, 0.12],
         "yard_fence_2" => [2.12, 1.35, 0.12],
+        "yard_hoarding" => [6.12, 2.15, 0.2],
+        "yard_hoarding_2" => [2.12, 2.15, 0.2],
         "yard_gate" => [4.0, 1.5, 0.16],
         "yard_store" => [4.2, 2.0, 3.2],
         // Hero landmarks: a valley's one unmistakable silhouette.
@@ -1206,6 +1211,8 @@ pub fn prefab_wants_pad(id: &str) -> bool {
             | "fence_garden"
             | "yard_fence"
             | "yard_fence_2"
+            | "yard_hoarding"
+            | "yard_hoarding_2"
             | "yard_gate"
             // A pole stands in the snow as it lies; so does a lamp post.
             | "snow_pole"
