@@ -2083,6 +2083,47 @@ mod tests {
         }
     }
 
+    /// Thrown from one hand with the other closed beside it (a
+    /// two-handed wind-up), it isn't caught straight back by the other.
+    #[test]
+    fn a_throw_isnt_caught_back_by_the_other_hand() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let at = feet + Vec3::new(0.15, 1.2, -0.4);
+        let gun = vr.spawn("pm_pistol", Transform::from_translation(at));
+        vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(gun)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun), "in hand");
+        // The left closed beside it, and the right swung across past it
+        // and let go.
+        let left = at + Vec3::new(-0.12, 0.0, 0.0);
+        vr.hand(Side::Left, left, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(4);
+        for i in 1..=4 {
+            vr.move_hand(
+                Side::Right,
+                at + Vec3::new(-0.04 * i as f32, 0.0, -0.04 * i as f32),
+            );
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.step(20);
+        assert_ne!(
+            vr.hand_state(Side::Left).holding,
+            Some(gun),
+            "not caught back by the closed left"
+        );
+    }
+
     #[test]
     fn point_and_flick_fetches_it() {
         let mut vr = Vr::new("training_yard");

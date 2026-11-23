@@ -318,6 +318,7 @@ impl Plugin for InteractPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<HandAction>()
             .init_resource::<LeashBlocked>()
+            .init_resource::<far::RecentlyLet>()
             .init_resource::<LastPress>()
             .add_message::<InteractEvent>()
             .configure_sets(
@@ -336,6 +337,7 @@ impl Plugin for InteractPlugin {
                     (
                         grip_from_input,
                         poke::poke_buttons,
+                        far::note_lets,
                         far::far_grab,
                         apply_hand_actions,
                         seat_on_contact,
