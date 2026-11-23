@@ -354,7 +354,11 @@ bolt.sphere(0.0092, knob, "Steel", segs=24, rings=14)
 # --- Trigger ----------------------------------------------------------------------------
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, -0.014, -0.044))
-trig.sweep(catmull([(-0.044, -0.020), (-0.0445, -0.030), (-0.042, -0.039), (-0.037, -0.044)], 5,
+# (Mirrored about its top, 23 November: like every gun's here, its blade was
+# bowed toward the muzzle with its tip hooked back, a trigger hung the wrong way
+# round; the finger pulls on its front face, which is the concave one, its tip
+# curled forward. The PM's playtest, 20:19: "might be backwards".)
+trig.sweep(catmull([(-0.044, -0.02), (-0.0435, -0.03), (-0.046, -0.039), (-0.051, -0.044)], 5,
                    closed=False), section_rect(0.005, 0.0035, 0.0012, 3), "Blued")
 
 # --- Socket bayonet ----------------------------------------------------------------------

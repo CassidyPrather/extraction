@@ -41,6 +41,7 @@ pub mod stoppages;
 mod strokes;
 pub mod tracers;
 pub mod trigger;
+pub mod unchambered;
 pub mod visuals;
 pub mod wear;
 pub mod weather;
@@ -267,6 +268,7 @@ impl Plugin for WeaponsPlugin {
                 gunsmith::GunsmithPlugin,
                 legibility::LegibilityPlugin,
                 cycle::CyclePlugin,
+                unchambered::UnchamberedPlugin,
             ))
             .init_resource::<reload::MagApproach>()
             .add_systems(Update, stage_duds)
@@ -1128,11 +1130,17 @@ fn buttons(
     catalog: Res<Catalog>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut racks: Local<Vec<(Entity, Entity)>>,
+    // Per gun: the magazine its release was pressed on (`released_on`).
+    (sockets, mut pressed_on): (
+        Query<&Socket>,
+        Local<std::collections::HashMap<Entity, Option<Entity>>>,
+    ),
 ) {
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
     racks.clear();
     // Only guns in hand: every gun ever held stayed in here.
     last.retain(|e, _| guns.contains(*e));
+    pressed_on.retain(|e, _| guns.contains(*e));
     for (e, mut gun, held, gt, item) in &mut guns {
         let Ok(input) = players.get(held.player) else {
             continue;
@@ -1181,9 +1189,20 @@ fn buttons(
                     present_mag.write(reload::PresentMagazine { gun: e });
                 }
             }
+            let in_well = gun
+                .magwell
+                .and_then(|w| sockets.get(w).ok())
+                .and_then(|s| s.occupant);
+            pressed_on.insert(e, in_well);
         }
         if !p && p0 && !revolver {
-            drop_mag.write(DropMagazine { gun: e });
+            let in_well = gun
+                .magwell
+                .and_then(|w| sockets.get(w).ok())
+                .and_then(|s| s.occupant);
+            if released_on(pressed_on.remove(&e).flatten(), in_well) {
+                drop_mag.write(DropMagazine { gun: e });
+            }
         }
         if s && !s0 {
             if revolver {
@@ -1234,6 +1253,16 @@ fn buttons(
             mac.start(gun, flat::macro_steps(flat::MacroKind::Rack, &g.1));
         }
     }
+}
+
+/// Whether letting go of the release drops what's in the well: only the
+/// magazine the press held out. One seated while the button was still
+/// down from before stays (playtest 2026-11-22, 33:55: A held over from
+/// the last reload, the new magazine dropped as it went up: "a weird
+/// slap-to-lock situation"). Nothing in the well when pressed: nothing
+/// to drop.
+pub fn released_on(pressed: Option<Entity>, now: Option<Entity>) -> bool {
+    pressed.is_some() && pressed == now
 }
 
 /// Mag release: the magazine falls out of the well.

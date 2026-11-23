@@ -72,6 +72,9 @@ pub struct DoorDef {
 /// wall's inner face (m): a ledge a radio or a globe stands on, its back
 /// against the frame (`window_sash`'s frame is [`SASH_FRAME`] deep).
 pub const SILL_IN: f32 = 0.23;
+/// The highest a window's foot stands up its wall for its sill to be
+/// solid (m): within a hand's reach from the floor.
+pub const SILL_REACH: f32 = 1.8;
 /// The window frame's depth either side of the wall's centre line (m).
 pub const SASH_FRAME: f32 = 0.035;
 
@@ -396,18 +399,31 @@ impl Builder {
     /// wall's centre line): 4 cm out past the wall's outer face; in a
     /// shell, whose walls' +Z is the room, [`SILL_IN`] into the room (a
     /// ledge things stand on, kept in `Geo::sills`), elsewhere 4 cm.
-    fn sill(&mut self, at: Vec3, width: f32, height: f32, rot: Quat, thick: f32, mat: Mat) {
+    #[allow(clippy::too_many_arguments)]
+    fn sill(
+        &mut self,
+        at: Vec3,
+        width: f32,
+        height: f32,
+        rot: Quat,
+        thick: f32,
+        mat: Mat,
+        solid: bool,
+    ) {
         let out = thick * 0.5 + 0.04;
         let edge = thick * 0.5 + if self.exterior { SILL_IN } else { 0.04 };
-        // Solid: a thing set on it stays on it. (It was drawn only: a
-        // magazine set on a sill fell through: the 22 November playtest,
-        // 24:46.)
+        // Solid within reach (`solid`: its window's foot at most
+        // [`SILL_REACH`] up its wall), so a thing set on it stays on it. (It
+        // was drawn only: a magazine set on a sill fell through: the
+        // 22 November playtest, 24:46.) A high window's sill, out of reach,
+        // stays drawn only: solid, it was a ledge a body fell onto and
+        // couldn't leave (`soak::ledges`: the ore mill's clerestory).
         self.piece(
             Shape::Box(Vec3::new(width + 0.1, 0.05, out + edge)),
             Transform::from_translation(at + rot * Vec3::Z * ((edge - out) * 0.5))
                 .with_rotation(rot),
             mat,
-            true,
+            solid,
         );
         if self.exterior {
             self.geo.sills.push(Sill {
@@ -629,6 +645,7 @@ impl Builder {
                         rot,
                         thick,
                         frame,
+                        o.bottom <= SILL_REACH,
                     );
                 }
                 OpeningKind::Window => {
@@ -709,6 +726,7 @@ impl Builder {
                         rot,
                         thick,
                         frame,
+                        o.bottom <= SILL_REACH,
                     );
                 }
                 OpeningKind::Door => {

@@ -153,6 +153,22 @@ pub fn arc(from: Vec3, to: Vec3, gravity: Vec3) -> Vec3 {
     d / t - gravity * 0.5 * t
 }
 
+/// How far off a hand's line (`ahead`) a thing `to` away is, as a share
+/// of what's still taken (1 at the cone's edge): a cone with a rounded
+/// tip, so small things at a distance are still easy to point at. Wide:
+/// a hand points loosely (playtest 2026-11-22, 10:10: "why is this so
+/// hard to target? There's a very narrow band"); about 13 degrees either
+/// side at a metre and a half, from 9.
+pub fn aim_score(to: Vec3, ahead: Vec3) -> f32 {
+    let along = to.dot(ahead);
+    let off = (to - ahead * along).length();
+    off / (AIM_TIP + along * AIM_SPREAD)
+}
+
+/// The cone's radius at the hand (m) and how much it widens a metre out.
+pub const AIM_TIP: f32 = 0.12;
+pub const AIM_SPREAD: f32 = 0.15;
+
 /// The loose thing nearest the line a hand points along (its `-Z`), in
 /// sight, between arm's length and [`FAR`].
 fn pointed_at(hand: &Transform, loose: &Loose, spatial: &SpatialQuery) -> Option<Entity> {
@@ -169,10 +185,7 @@ fn pointed_at(hand: &Transform, loose: &Loose, spatial: &SpatialQuery) -> Option
         if !(NEAR..=FAR).contains(&along) {
             continue;
         }
-        // A cone with a rounded tip: small things at a distance are still
-        // easy to point at.
-        let off = (to - ahead * along).length();
-        let score = off / (0.08 + along * 0.1);
+        let score = aim_score(to, ahead);
         if score > 1.0 || best.is_some_and(|b| score >= b.0) {
             continue;
         }
@@ -193,6 +206,25 @@ fn pointed_at(hand: &Transform, loose: &Loose, spatial: &SpatialQuery) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A thing 13 degrees off the hand's line at a metre and a half is
+    /// still pointed at; one 20 degrees off isn't.
+    #[test]
+    fn the_far_grab_cone_is_forgiving() {
+        let ahead = Vec3::NEG_Z;
+        let at = |deg: f32| Quat::from_rotation_x(deg.to_radians()) * ahead * 1.5;
+        assert!(
+            aim_score(at(12.0), ahead) <= 1.0,
+            "{}",
+            aim_score(at(12.0), ahead)
+        );
+        assert!(aim_score(at(-12.0), ahead) <= 1.0);
+        assert!(
+            aim_score(at(20.0), ahead) > 1.0,
+            "{}",
+            aim_score(at(20.0), ahead)
+        );
+    }
 
     /// The launch lands where it's aimed, under gravity.
     #[test]

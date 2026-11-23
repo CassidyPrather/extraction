@@ -677,14 +677,24 @@ read a machine's intent by ear: a small vocabulary, one word for each
 turn of its mind, and **one grammar for every kind**. Learn the walker's
 and the hound's makes sense.
 
+A machine hunting about (investigating, searching or lost) near someone
+says its word again every 6-10 s, up to three times, then is quiet until its
+mind turns again: a reminder, not a nag. The playtest
+of 22 November stood beside a blinded walker casting about and heard "some
+kind of noise, but it's too quiet": it had said its one word and gone
+silent. Its level wasn't the problem. Measured, the walker's words match
+the drone's within about 1 LU, and at 20 m they clear a fight's masking
+(walker fire, running, rain and your own shots) by 11-23 dB. At 2 m beside
+its own steps, servos and scan, they clear it by 18-25 dB.
+
 | Mind | The word |
 | --- | --- |
 | on its rounds (within 70 m of someone, every 18-40 s) | two soft low notes, a little apart |
 | noticed something | one note gliding up: a question |
-| investigating | three short notes stepping up |
-| searching | four short notes see-sawing: scanning |
+| investigating (said again every 6-10 s within 40 m) | three short notes stepping up |
+| searching (said again every 6-10 s within 40 m) | four short notes see-sawing: scanning |
 | certain, engaging | two hard notes, high and falling: a statement |
-| lost you, giving up | one long note sinking away |
+| lost you, giving up (said again every 6-10 s within 40 m) | one long note sinking away |
 | calling the others | three pulses rising to a held note |
 | answering a call | the call's top note, then a step down: "heard" |
 | flanking (working round to your side) | a quick low-high pair, twice, running on: "moving" |

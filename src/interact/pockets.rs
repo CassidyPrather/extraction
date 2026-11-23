@@ -111,6 +111,7 @@ impl Plugin for PocketsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PocketsInFlat>()
             .init_resource::<PocketsShown>()
+            .init_resource::<PocketHints>()
             .add_systems(
                 PostUpdate,
                 (add_spheres, pocket_spheres)
@@ -120,6 +121,22 @@ impl Plugin for PocketsPlugin {
             )
             // Before this frame's visibility is worked out.
             .add_systems(Update, hide_stowed);
+    }
+}
+
+/// Whether the pocket spheres show at all, for onboarding to hold back
+/// till it teaches pockets (playtest 2026-11-22: the yard's first far
+/// grab met the spheres before anything had said what they were). Off,
+/// it's as if the spheres were: no spheres, and what's in a slot drawn as
+/// itself on the drawn pouches. Stowing and drawing work the same.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct PocketHints {
+    pub shown: bool,
+}
+
+impl Default for PocketHints {
+    fn default() -> Self {
+        Self { shown: true }
     }
 }
 
@@ -279,7 +296,11 @@ fn pocket_spheres(
     stow: StowQuery,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     driver: Res<crate::rig::RigDriver>,
-    (in_flat, mut shown): (Res<PocketsInFlat>, ResMut<PocketsShown>),
+    (in_flat, mut shown, hints): (
+        Res<PocketsInFlat>,
+        ResMut<PocketsShown>,
+        Option<Res<PocketHints>>,
+    ),
     time: Res<Time>,
     locals: Query<(Entity, &Children), With<LocalPlayer>>,
     hands: Query<(&RigHand, &Hand)>,
@@ -295,7 +316,8 @@ fn pocket_spheres(
     >,
 ) {
     let on = comfort.as_ref().is_none_or(|c| c.pocket_spheres)
-        && (*driver != crate::rig::RigDriver::Flat || in_flat.0);
+        && (*driver != crate::rig::RigDriver::Flat || in_flat.0)
+        && hints.is_none_or(|h| h.shown);
     if shown.0 != on {
         shown.0 = on;
     }

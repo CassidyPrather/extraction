@@ -591,7 +591,8 @@ pub const VIEW_MAX: usize = 16;
 /// marker: one stake; and a siren mast: a pole, its ladder and cage, a
 /// horn and a lamp; a well sweep: a post and a pole; a yard store (a lift's
 /// perch): one plain block, its slab, a painted kerb and a shut door, no
-/// windows and nothing inside.
+/// windows and nothing inside; a yard hoarding: a fence's posts with one
+/// face of boards.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",
@@ -604,6 +605,8 @@ pub const VIEW_LIGHT: &[&str] = &[
     "machine_marker",
     "yard_fence",
     "yard_fence_2",
+    "yard_hoarding",
+    "yard_hoarding_2",
     "yard_gate",
     "siren_mast",
     "well_sweep",
@@ -614,7 +617,13 @@ pub const VIEW_LIGHT: &[&str] = &[
 /// grid blocks only the cells whose middles fall within 0.7 m of a run
 /// (its 0.1 m half depth and the grid's 0.6 m clearance), so a route can
 /// be drawn between two rows of cells straight through a fence.
-pub const FENCES: &[&str] = &["fence_garden", "yard_fence", "yard_fence_2"];
+pub const FENCES: &[&str] = &[
+    "fence_garden",
+    "yard_fence",
+    "yard_fence_2",
+    "yard_hoarding",
+    "yard_hoarding_2",
+];
 pub const FENCE_CLEAR: f32 = 0.5;
 /// A fence isn't levelled for (`map::prefab_wants_pad`): it stands on the
 /// lowest ground under its run, its posts sunk 0.25 m and its panels 0.15 m

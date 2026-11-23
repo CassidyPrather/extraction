@@ -3530,6 +3530,118 @@ mod onboarding {
         assert!(done(&vr, Goal::Inject), "the injector counted");
     }
 
+    /// The pocket hints wait for the range, where pockets are first used:
+    /// off at the start of the yard, on from THE RANGE (playtest
+    /// 2026-11-22, 10:52).
+    #[test]
+    fn pocket_hints_wait_for_the_range() {
+        use crate::interact::pockets::PocketHints;
+        let mut vr = Vr::first_run();
+        vr.step(10);
+        assert!(
+            !vr.app.world().resource::<PocketHints>().shown,
+            "hidden at the start"
+        );
+        let out_of_reach = crate::onboarding::station_of(Goal::FarGrab);
+        at_station(&mut vr, out_of_reach, &[]);
+        vr.step(5);
+        assert!(
+            !vr.app.world().resource::<PocketHints>().shown,
+            "still hidden at the far grab"
+        );
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::TakePistol),
+            &[],
+        );
+        vr.step(5);
+        assert!(
+            vr.app.world().resource::<PocketHints>().shown,
+            "shown at the range"
+        );
+    }
+
+    /// A station done, the way on lies on the ground: dots from it,
+    /// through the gate in the hoarding, to the next station; there,
+    /// they're gone (playtest 2026-11-22, 6:20).
+    #[test]
+    fn a_trail_leads_through_the_gate_to_the_next_station() {
+        use crate::onboarding::STATIONS;
+        use crate::onboarding::trail::{DOT_EVERY, TrailLeg};
+        let mut vr = Vr::first_run();
+        let to = crate::onboarding::station_of(Goal::TakePistol);
+        at_station(&mut vr, to, &[]);
+        let from = Vec2::from(STATIONS[to - 1].at);
+        let dest = Vec2::from(STATIONS[to].at);
+        vr.stand(ground(&vr, from.into()), 0.0);
+        vr.step(10);
+        let leg = vr.app.world().resource::<TrailLeg>().clone();
+        assert_eq!(leg.to, Some(to), "leads to the range");
+        assert!(leg.dots.len() >= 5, "{} dots", leg.dots.len());
+        for w in leg.dots.windows(2) {
+            let d = w[0].xz().distance(w[1].xz());
+            assert!(d <= DOT_EVERY + 0.05, "dots {d:.2} m apart");
+        }
+        assert!(
+            leg.dots[0].xz().distance(from) < 3.0,
+            "starts at the last station"
+        );
+        assert!(
+            leg.dots.last().unwrap().xz().distance(dest) < 3.0,
+            "ends at the next"
+        );
+        // Through the gate out of bay 2, in its gap, not over the hoarding.
+        let gate = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .map
+            .placements
+            .iter()
+            .find(|p| p.prefab == "yard_gate" && p.tag == "gate_2")
+            .map(|p| Vec2::from(p.at))
+            .expect("gate 2");
+        let cross = leg
+            .dots
+            .windows(2)
+            .find(|w| (w[0].z - gate.y) * (w[1].z - gate.y) <= 0.0)
+            .expect("crosses gate 2's line");
+        let x = (cross[0].x + cross[1].x) * 0.5;
+        assert!((x - gate.x).abs() < 1.5, "through the gap: x {x:.1}");
+        // There: gone.
+        vr.stand(ground(&vr, dest.into()), 0.0);
+        vr.step(5);
+        assert!(
+            vr.app.world().resource::<TrailLeg>().dots.is_empty(),
+            "at the station, no trail"
+        );
+    }
+
+    /// Gone down at the shimmer, you come round by it, not back at the
+    /// start in the truck (playtest 2026-11-22, 16:04).
+    #[test]
+    fn down_in_the_yard_you_wake_by_your_station() {
+        use crate::raid::{Phase, Raid};
+        let mut vr = Vr::first_run();
+        let shimmer = crate::onboarding::station_of(Goal::Probe);
+        at_station(&mut vr, shimmer, &[]);
+        let st = Vec2::from(crate::onboarding::STATIONS[shimmer].at);
+        vr.stand(ground(&vr, [st.x - 3.0, st.y - 2.0]), 0.0);
+        vr.step(10);
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::Down { left: 0.2 };
+        vr.step(90);
+        assert!(
+            !matches!(vr.app.world().resource::<Raid>().phase, Phase::Down { .. }),
+            "came round"
+        );
+        let feet = super::tests_feet(&vr);
+        assert!(
+            feet.xz().distance(st) < 4.0,
+            "by the shimmer's post, not the truck: feet at {feet:.1}"
+        );
+        assert!(said(&vr, "brought you back"));
+    }
+
     /// A step's words come to you at its station, not only on its board
     /// (playtest 2026-11-22, 12:33: turned to the range table, the words
     /// were on the sign behind). Hands empty: a caption in the view. Then,
@@ -4415,8 +4527,8 @@ mod onboarding {
     }
 
     /// On the track to the gate, a beam at head height between two stacks
-    /// of crates: walking at it upright, you're stopped; ducked, you go
-    /// under, and it's noticed.
+    /// of crates: told about it as you come up, walking at it upright
+    /// you're stopped; ducked, you go under, and it's noticed.
     #[test]
     fn ducking_under_the_beam() {
         let mut vr = Vr::first_run();
@@ -4425,6 +4537,7 @@ mod onboarding {
         vr.stand(ground(&vr, [beam[0], beam[1] + 2.0]), 0.0);
         vr.head(Vec3::new(0.0, 1.65, 0.0));
         vr.step(20);
+        assert!(said(&vr, "Low beam"), "told as you come up to it");
         let walk = |vr: &mut Vr, frames: usize| {
             vr.app
                 .world_mut()
@@ -6162,6 +6275,61 @@ mod body {
                 "{side:?}: still pocketed"
             );
         }
+    }
+
+    /// Onboarding's switch (`pockets::PocketHints`): off, no sphere shows
+    /// and what's in a pocket is drawn as itself; on again, they're back.
+    #[test]
+    fn pocket_hints_off_hide_the_spheres_not_the_kit() {
+        use crate::interact::pockets::{PocketHints, PocketSphere, PocketsShown};
+        let (mut vr, _) = standing();
+        let lit = |vr: &mut Vr| -> usize {
+            vr.step(12);
+            let mut q = vr.app.world_mut().query::<&PocketSphere>();
+            q.iter(vr.app.world())
+                .filter(|s| s.look.alpha > 0.05)
+                .count()
+        };
+        assert!(lit(&mut vr) > 0, "on by default");
+        vr.app.world_mut().resource_mut::<PocketHints>().shown = false;
+        assert_eq!(lit(&mut vr), 0, "off: no spheres");
+        assert!(!vr.app.world().resource::<PocketsShown>().0);
+        // A compass put in a pocket while they're off is still drawn.
+        let pocket = {
+            let mut q = vr.app.world_mut().query::<(Entity, &Socket)>();
+            q.iter(vr.app.world())
+                .find(|(_, s)| s.kind == SocketKind::Body(SlotKind::Pocket) && s.occupant.is_none())
+                .map(|(e, _)| e)
+                .expect("an empty hip pocket")
+        };
+        let compass = vr.spawn("compass", Transform::default());
+        vr.app.world_mut().flush();
+        {
+            let world = vr.app.world_mut();
+            let mut commands = world.commands();
+            let mut socket = Socket {
+                kind: SocketKind::Body(SlotKind::Pocket),
+                occupant: None,
+                radius: 0.0,
+                seat: Transform::IDENTITY,
+            };
+            crate::interact::seat_in_socket(&mut commands, compass, pocket, &mut socket);
+            world.flush();
+            world.get_mut::<Socket>(pocket).unwrap().occupant = Some(compass);
+        }
+        vr.step(4);
+        assert_ne!(
+            vr.app.world().get::<Visibility>(compass),
+            Some(&Visibility::Hidden),
+            "off: the compass in the pocket is drawn"
+        );
+        vr.app.world_mut().resource_mut::<PocketHints>().shown = true;
+        assert!(lit(&mut vr) > 0, "on again");
+        assert_eq!(
+            vr.app.world().get::<Visibility>(compass),
+            Some(&Visibility::Hidden),
+            "on: its sphere stands in for it"
+        );
     }
 
     /// The pocket spheres (`interact::pockets`), in place of the drawn

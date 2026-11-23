@@ -42,6 +42,9 @@ pub const MAG_SEAT: Shape = Shape(&[(0.0, 0.2, 0.02), (0.045, 0.55, 0.025)]);
 pub const CHAMBER: Shape = Shape(&[(0.0, 0.3, 0.012), (0.025, 0.2, 0.012)]);
 /// The slide or bolt stopping on its catch: one sharp stop, no settle.
 pub const BOLT_CATCH: Shape = Shape(&[(0.0, 0.55, 0.01)]);
+/// A dry click with rounds still in the feed: two firm taps, unlike the
+/// light tick of a gun that's simply empty (`weapons::unchambered`).
+pub const UNCHAMBERED: Shape = Shape(&[(0.0, 0.6, 0.025), (0.11, 0.6, 0.025)]);
 /// A magazine sliding up the well and stalling short: no catch.
 pub const MAG_HALF: Shape = Shape(&[(0.0, 0.2, 0.02), (0.03, 0.12, 0.03)]);
 
@@ -107,8 +110,18 @@ mod tests {
     #[test]
     fn the_shapes_are_on_the_scale_and_distinct() {
         let all = [
-            WOOD, METAL, GLASS, STONE, SKIN, WIRE, BOLT_HOME, MAG_SEAT, CHAMBER, BOLT_CATCH,
+            WOOD,
+            METAL,
+            GLASS,
+            STONE,
+            SKIN,
+            WIRE,
+            BOLT_HOME,
+            MAG_SEAT,
+            CHAMBER,
+            BOLT_CATCH,
             MAG_HALF,
+            UNCHAMBERED,
         ];
         for s in all {
             for (at, amp, secs) in s.0 {

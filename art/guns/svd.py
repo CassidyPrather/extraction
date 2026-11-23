@@ -328,8 +328,11 @@ selector.cyl(0.0058, RX_HW + 0.0005, RX_HW + 0.0036, "Blued", segs=14,
 
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, 0.022, -0.039))
-trig.sweep(catmull([(-0.039, 0.016), (-0.0425, 0.008), (-0.0425, 0.001), (-0.039, -0.005),
-                    (-0.0345, -0.007)], 3, closed=False), section_rect(0.005, 0.0034, 0.0012),
+# (Mirrored about its top, 23 November: like every gun's here, its blade was
+# bowed toward the muzzle with its tip hooked back, a trigger hung the wrong way
+# round; the finger pulls on its front face, which is the concave one, its tip
+# curled forward. The PM's playtest, 20:19: "might be backwards".)
+trig.sweep(catmull([(-0.039, 0.016), (-0.0355, 0.008), (-0.0355, 0.001), (-0.039, -0.005), (-0.0435, -0.007)], 3, closed=False), section_rect(0.005, 0.0034, 0.0012),
            "Blued")
 
 # --- Build ------------------------------------------------------------------------------

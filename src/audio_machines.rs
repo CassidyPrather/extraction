@@ -1255,6 +1255,10 @@ mod tests {
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
         (
+            "MachineSpent",
+            "an arcade machine burning itself out, for its record; the killing Hit on its core is heard as any machine's death (RobotStruck's crack, the core's wreck groan)",
+        ),
+        (
             "RunOver",
             "an arcade run's end, for its record; going down is heard (Downed)",
         ),
