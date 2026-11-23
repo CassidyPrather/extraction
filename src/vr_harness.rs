@@ -6030,6 +6030,12 @@ mod body {
                     && got.rotation.dot(want.rotation).abs() > 0.9999,
                 "{side:?}: in the pocket at {got:?}, it fits at {want:?}"
             );
+            // Hidden while its sphere stands in (the game's spheres are on).
+            assert_eq!(
+                vr.app.world().get::<Visibility>(compass),
+                Some(&Visibility::Hidden),
+                "{side:?}: drawn by its sphere, not itself"
+            );
             // Back out: the hand away, then in at it and closed.
             vr.move_hand(side, past);
             vr.step(4);

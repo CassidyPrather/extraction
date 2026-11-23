@@ -580,6 +580,9 @@ type GrabTargets<'w, 's> = Query<
         // Seated in something (a magazine in its well, a scope on its
         // mount, a pistol in its holster): see `find_grab`.
         Option<&'static InSocket>,
+        // Hidden in your own slot while its pocket sphere stands in: still
+        // there to take (`pockets::hide_stowed`).
+        Has<pockets::HiddenInSlot>,
     ),
 >;
 
@@ -822,14 +825,16 @@ fn find_grab(
         }
     }
     let mut best: Option<(f32, Entity, usize)> = None;
-    for (e, gt, g, held, disabled, vis, zone, vice, seat) in grabbables.iter() {
+    for (e, gt, g, held, disabled, vis, zone, vice, seat, in_slot) in grabbables.iter() {
         // Moving parts are worked on a gun already in your other hand, or
         // in a vice.
         if reach_for == Reach::Handle && !vice && held.is_none_or(|h| h.player != player) {
             continue;
         }
-        // Out of sight (in a closed bag) is out of reach.
-        if vis == Some(&Visibility::Hidden) {
+        // Out of sight (in a closed bag) is out of reach; in your own
+        // pocket or holster, drawn by its sphere, it isn't (the playtest
+        // of 2026-11-22: a pistol holstered was never had back).
+        if vis == Some(&Visibility::Hidden) && !in_slot {
             continue;
         }
         // A part seated in another thing (a magazine in its well, a scope
