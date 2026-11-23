@@ -851,6 +851,7 @@ impl Plugin for OnboardingPlugin {
                     how_by_hand,
                     wake_at_the_station,
                     trail::lay_trail,
+                    pocket_hints,
                     the_scratch,
                     the_rooks,
                     the_rats,
@@ -2351,6 +2352,31 @@ pub fn wake_spot(zone: &Zone, i: usize) -> Vec3 {
 }
 
 pub const YARD_WOKE_LINE: &str = "Driver: \"Up you get. I've brought you back to it.\"";
+
+/// The rig's pocket hints (`interact::pockets::PocketHints`) held back
+/// till the range, where pockets are first used (the holster, then a
+/// pouch): the playtest's first far grab met the spheres before anything
+/// had said what they were, and caught a cleaning kit that fits none
+/// (2026-11-22, 10:52). Only in the yard played as a career's own (not a
+/// test borrowing its open ground); on for good once it's done.
+fn pocket_hints(
+    ob: Res<Onboarding>,
+    opts: Res<LaunchOptions>,
+    mut hints: ResMut<crate::interact::pockets::PocketHints>,
+    mut said: Local<Option<bool>>,
+) {
+    if !crate::persist::owns_profile(&opts) {
+        return;
+    }
+    let shown = ob
+        .current()
+        .is_none_or(|c| c >= station_of(Goal::TakePistol));
+    // Only on a change of its own: what anything else set stays set.
+    if *said != Some(shown) {
+        *said = Some(shown);
+        hints.shown = shown;
+    }
+}
 
 fn announce(
     mut done: MessageReader<GoalDone>,
