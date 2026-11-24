@@ -143,6 +143,9 @@ pub struct HoldFeel {
 /// Per-hand state, on the rig hand entity.
 #[derive(Component, Default, Debug, Clone)]
 pub struct Hand {
+    /// The hand's velocity over the last [`THROW_WINDOW`] (time, m/s),
+    /// oldest first: a throw takes the fastest ([`Hand::throw_velocity`]).
+    pub recent: Vec<(f32, Vec3)>,
     pub holding: Option<Entity>,
     pub supporting: Option<Entity>,
     /// A moving part being worked: (item, handle id).
@@ -176,6 +179,41 @@ pub struct Hand {
     /// Where that body got to: the hand you see, stopped at walls (`None`:
     /// no body, or the hand is holding something and rides on it).
     pub felt: Option<Transform>,
+}
+
+/// How far back a throw looks for the hand's fastest moment (s): in a
+/// headset the hand is already slowing as the fingers open, and the grip
+/// reads open a tick or two after them, so the speed at release came out
+/// short (playtest 2026-11-22, 35:01: "throwing grenades is still
+/// difficult").
+pub const THROW_WINDOW: f32 = 0.1;
+
+impl Hand {
+    /// The velocity a thing let go now leaves with: the hand's fastest over
+    /// the last [`THROW_WINDOW`], its own direction then (the swing's, not
+    /// the follow-through's).
+    ///
+    /// The fastest is averaged with the ticks either side of it, so one bad
+    /// tracking frame can't fling a thing (and the release caps it at
+    /// [`MAX_THROW`]).
+    pub fn throw_velocity(&self) -> Vec3 {
+        let vs: Vec<Vec3> = self
+            .recent
+            .iter()
+            .map(|(_, v)| *v)
+            .chain(std::iter::once(self.velocity))
+            .collect();
+        let Some((peak, _)) = vs
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.length_squared().total_cmp(&b.1.length_squared()))
+        else {
+            return self.velocity;
+        };
+        let lo = peak.saturating_sub(1);
+        let hi = (peak + 1).min(vs.len() - 1);
+        vs[lo..=hi].iter().sum::<Vec3>() / (hi - lo + 1) as f32
+    }
 }
 
 /// A box (in the item's space) that counts as reaching it: the backpack on
@@ -558,6 +596,10 @@ fn track_hands(
             if let Some(last) = hand.last {
                 let v = (world.translation - last.translation) / dt;
                 hand.velocity = hand.velocity.lerp(v, 0.5);
+                let now = time.elapsed_secs();
+                let velocity = hand.velocity;
+                hand.recent.retain(|(t, _)| now - *t <= THROW_WINDOW);
+                hand.recent.push((now, velocity));
                 let dq = world.rotation * last.rotation.inverse();
                 let (axis, angle) = dq.to_axis_angle();
                 let w = if angle > std::f32::consts::PI {
@@ -1192,8 +1234,8 @@ fn apply_hand_actions(
                 let Some(item) = hand.holding.take() else {
                     continue;
                 };
-                let mut velocity =
-                    (hand.velocity + hand_world.forward() * throw).clamp_length_max(MAX_THROW);
+                let mut velocity = (hand.throw_velocity() + hand_world.forward() * throw)
+                    .clamp_length_max(MAX_THROW);
                 let mut angular = hand.angular_velocity.clamp_length_max(MAX_THROW_SPIN);
                 // Something bulky is shoved, not thrown: an arm puts so much
                 // into it, and it hardly turns (`carry`).
@@ -1772,5 +1814,42 @@ pub(crate) fn follow_hands(
         } else {
             Vec3::ZERO
         };
+    }
+}
+
+#[cfg(test)]
+mod throw_tests {
+    use super::*;
+
+    /// A throw leaves at the swing's fastest in the last tenth of a second,
+    /// not at the slower speed the hand had slowed to as it opened.
+    #[test]
+    fn a_throw_takes_the_swings_fastest() {
+        let mut h = Hand::default();
+        h.recent = vec![
+            (0.0, Vec3::new(0.0, 2.0, -6.0)),
+            (0.03, Vec3::new(0.0, 2.5, -8.0)),
+            (0.06, Vec3::new(0.0, 1.0, -4.0)),
+        ];
+        h.velocity = Vec3::new(0.0, 0.5, -2.0);
+        // The peak with a tick either side.
+        let want =
+            (Vec3::new(0.0, 2.0, -6.0) + Vec3::new(0.0, 2.5, -8.0) + Vec3::new(0.0, 1.0, -4.0))
+                / 3.0;
+        assert!((h.throw_velocity() - want).length() < 1e-5);
+        // One wild frame among steady ones doesn't fling it at its speed.
+        h.recent = vec![
+            (0.0, Vec3::NEG_Z * 6.0),
+            (0.01, Vec3::NEG_Z * 40.0),
+            (0.02, Vec3::NEG_Z * 6.0),
+        ];
+        h.velocity = Vec3::NEG_Z * 6.0;
+        assert!(
+            h.throw_velocity().length() < 20.0,
+            "{}",
+            h.throw_velocity().length()
+        );
+        h.recent.clear();
+        assert_eq!(h.throw_velocity(), h.velocity, "nothing recent: as it is");
     }
 }
