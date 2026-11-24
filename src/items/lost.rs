@@ -37,6 +37,7 @@ use bevy::prelude::*;
 use extraction_core::underground as ug;
 
 use super::Item;
+use crate::interact::Held;
 use crate::world::Zone;
 
 /// How far under the ground (or a site's floor) an item may be before it
@@ -96,8 +97,14 @@ fn settle_new_items(
     mut commands: Commands,
     time: Res<Time>,
     new: Query<(Entity, Option<&LinearVelocity>), (Added<Item>, Without<Settling>)>,
-    mut settling: Query<(Entity, &mut Settling, &mut LinearVelocity)>,
+    mut settling: Query<(Entity, &mut Settling, &mut LinearVelocity), Without<Held>>,
+    taken: Query<Entity, (With<Settling>, With<Held>)>,
 ) {
+    // Taken up at once: the hand has it, and its throw is the hand's (a
+    // grab-and-throw within the settle was clipped to a walk).
+    for e in &taken {
+        commands.entity(e).remove::<Settling>();
+    }
     for (e, v) in &new {
         let cap = v.map_or(0.0, |v| v.0.length()).max(GENTLE);
         commands

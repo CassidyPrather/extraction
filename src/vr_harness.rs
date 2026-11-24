@@ -2129,6 +2129,29 @@ mod tests {
     /// 35:01: throws came out short).
     #[test]
     fn a_throw_keeps_the_swings_speed() {
+        // Past a new item's settling (`items::lost::SETTLE`), as a thing
+        // picked up off the ground would be.
+        let (v, peak) = swing_and_throw(60);
+        assert!(v >= 0.9 * peak, "thrown at {v:.1} m/s of a {peak:.1} peak");
+    }
+
+    /// A thing taken up the moment it's spawned (a grenade off the
+    /// bench, loot from a crate) throws at the swing's speed: its settling
+    /// (`items::lost::GENTLE`, 5 m/s for half a second) is for things
+    /// spreading out of a heap, not in a hand.
+    #[test]
+    fn a_new_item_grabbed_at_once_throws_full_speed() {
+        let (v, peak) = swing_and_throw(0);
+        assert!(
+            v > crate::items::lost::GENTLE + 1.0 && v >= 0.9 * peak,
+            "thrown at {v:.1} m/s of a {peak:.1} peak"
+        );
+    }
+
+    /// Spawn a grenade, take it, wait `wait` ticks, swing it forward at 9
+    /// m/s slowing over the last two ticks, and let go: its speed then,
+    /// and the swing's peak.
+    fn swing_and_throw(wait: usize) -> (f32, f32) {
         let mut vr = Vr::new("training_yard");
         let feet = on_ground(&vr, OPEN.x, OPEN.z);
         vr.stand(feet, 0.0);
@@ -2148,9 +2171,7 @@ mod tests {
             .insert(RigidBody::Dynamic);
         vr.step(2);
         assert_eq!(vr.hand_state(Side::Right).holding, Some(item));
-        // Past a new item's settling (`items::lost::SETTLE`: its speed is
-        // capped for half a second).
-        vr.step(60);
+        vr.step(wait);
         // Forward and up at a steady pace, then two slowing ticks.
         let dt = 1.0 / 90.0;
         let fast = Vec3::new(0.0, 0.3, -1.0).normalize() * 9.0;
@@ -2182,7 +2203,7 @@ mod tests {
             .world()
             .get::<LinearVelocity>(item)
             .map_or(0.0, |v| v.0.length());
-        assert!(v >= 0.9 * peak, "thrown at {v:.1} m/s of a {peak:.1} peak");
+        (v, peak)
     }
 
     #[test]
