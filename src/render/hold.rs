@@ -514,10 +514,15 @@ pub fn seat(side: Side, half: Vec3, item: Transform) -> Seat {
             turn,
             ..s
         };
-        if held {
+        // Held as judged in the turned frame, and so in the hand's: a
+        // finger at the edge of touching (a pistol magazine's ring finger,
+        // 3.0 mm off turned and a hair over it back in the hand's frame)
+        // is the one the drawing and the test see.
+        let g = grasp(side, half, item, &s);
+        if held && g.fault().is_none() {
             return s;
         }
-        let sc = score(&grasp(side, half, item, &s));
+        let sc = score(&g);
         if sc > best_score {
             (best, best_score) = (s, sc);
         }
@@ -960,10 +965,7 @@ mod tests {
     /// Kinds known not to be held every way yet, and why: this list only
     /// shrinks. A kind off it that fails, or one on it that now passes,
     /// fails the test (take it off).
-    const STILL_FAILING: &[(&str, &str)] = &[(
-        "pm_mag",
-        "1 of 240 holds since the CC0 glove's thinner fingers (#106): taken flat across the palm, the ring at full curl ends 3 mm short of its end and the thumb rests on a side the index and middle don't oppose; Hands' follow-up",
-    )];
+    const STILL_FAILING: &[(&str, &str)] = &[];
 
     /// Every kind a hand holds free is held: taken every way, in either
     /// hand, the glove sinks no more than `SINK` into its box, the thumb
