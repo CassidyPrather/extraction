@@ -665,6 +665,9 @@ def cuff(obj, ts):
         if k > 0:
             f = 1.0 - 0.2 * k
             v.co = to_b @ Vector((q.x * f, yc + (q.y - yc) * f, q.z))
+    # Its UVs projected again where it now lies (drawn in, the weave's
+    # projection from before pulled into streaks past the housing).
+    box_uv(obj.data, obj.location)
     return c
 
 
