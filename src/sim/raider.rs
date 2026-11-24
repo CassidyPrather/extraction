@@ -811,22 +811,25 @@ impl Scene<'_, '_> {
     }
 
     /// As [`Scene::wreck_at`], out of doors: on what's underfoot there
-    /// (a bridge's deck over a beck's bed, or the ground).
+    /// (a bridge's deck over a beck's bed, or the ground). Each surface a
+    /// ray down meets is tried, and the ground: the first it met was taken
+    /// for the floor, and under a doorway's lintel, a gate's rail or leaf,
+    /// a wreck on the ground below was looked for up there and missed.
     fn wreck_out_at(&self, p: Vec2) -> bool {
         let ground = self.zone.ground(p.x, p.y);
         let from = Vec3::new(p.x, ground + 4.0, p.y);
-        let feet = self
-            .spatial
-            .cast_ray(
-                from,
-                Dir3::NEG_Y,
-                6.0,
-                true,
-                &SpatialQueryFilter::from_mask([Layer::World])
-                    .with_excluded_entities(self.terrain.iter()),
-            )
-            .map_or(ground, |hit| (from.y - hit.distance).max(ground));
-        self.wreck_at_feet(p, feet)
+        let hits = self.spatial.ray_hits(
+            from,
+            Dir3::NEG_Y,
+            6.0,
+            4,
+            true,
+            &SpatialQueryFilter::from_mask([Layer::World])
+                .with_excluded_entities(self.terrain.iter()),
+        );
+        std::iter::once(ground)
+            .chain(hits.iter().map(|h| (from.y - h.distance).max(ground)))
+            .any(|feet| self.wreck_at_feet(p, feet))
     }
 
     /// Where a thing is, on the ground plane.
@@ -5760,6 +5763,60 @@ mod run_tests {
     /// seed 1, 5 November: a walker wrecked on the end of the beck's
     /// footbridge, ten stucks on the way to the RV). A robot still standing
     /// there is left on the walk: it moves.
+    /// A wreck on the ground under something overhead (a doorway's
+    /// lintel, a gate's rail) is still seen there: the ray down met the
+    /// lintel first and looked for the wreck up at it (KNOWN_RED, logged).
+    #[test]
+    fn a_wreck_under_a_lintel_is_seen() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "training_yard".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let at = Vec2::new(-60.0, 30.0);
+        let ground = app
+            .world()
+            .resource::<crate::world::Zone>()
+            .ground(at.x, at.y);
+        app.world_mut()
+            .spawn((
+                Robot {
+                    kind: crate::robots::RobotKind::Walker,
+                    wrecked: true,
+                },
+                Transform::from_xyz(at.x, ground, at.y),
+            ))
+            .with_children(|c| {
+                c.spawn((
+                    Name::new("Walker body"),
+                    Transform::from_xyz(0.0, 0.6, 0.0),
+                    RigidBody::Static,
+                    Collider::cuboid(1.2, 1.2, 1.2),
+                    CollisionLayers::new(Layer::Robot, [Layer::World, Layer::Player, Layer::Robot]),
+                ));
+            });
+        // A lintel over it.
+        app.world_mut().spawn((
+            Name::new("Lintel"),
+            Transform::from_xyz(at.x, ground + 2.1, at.y),
+            RigidBody::Static,
+            Collider::cuboid(1.6, 0.2, 1.6),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+        ));
+        for _ in 0..3 {
+            app.update();
+        }
+        let seen = app
+            .world_mut()
+            .run_system_once(move |scene: Scene| scene.wreck_out_at(at))
+            .unwrap();
+        assert!(seen, "the wreck under the lintel is seen");
+    }
+
     #[test]
     fn a_walk_goes_round_a_wreck_in_the_open() {
         let opts = crate::launch::LaunchOptions {
