@@ -108,7 +108,8 @@ struct ScreenView {
     generation: u32,
     /// Under the words, for paper and cards: paper, not a flat sheet.
     paper: Option<Handle<Image>>,
-    /// Frames its drawing has waited for the UI's pipeline (`UiBuilt`).
+    /// Frames this drawing has waited for the UI's pipeline (`UiBuilt`),
+    /// from 0 at each redraw.
     held: u16,
 }
 
@@ -546,6 +547,7 @@ fn update_screens(
                 let changed = texts.get(d.text).is_ok_and(|(t, _)| t.0 != screen.text);
                 if changed {
                     view.refresh = view.refresh.max(REFRESH_FRAMES);
+                    view.held = 0;
                     view.generation += 1;
                     show_target(&mut materials, &mut images, &view);
                     let size =
@@ -567,6 +569,7 @@ fn update_screens(
                 let d = start_drawing(&mut commands, &view, &screen.text);
                 view.drawing = Some(d);
                 view.refresh = REFRESH_FRAMES;
+                view.held = 0;
                 drawings.0.insert(e, d);
             }
         }
@@ -733,6 +736,7 @@ fn redraw_undrawn(
         let d = start_drawing(&mut commands, &view, &screen.text);
         view.drawing = Some(d);
         view.refresh = FIRST_FRAMES;
+        view.held = 0;
         drawings.0.insert(e, d);
     }
 }
@@ -1274,6 +1278,54 @@ mod tests {
             app.update();
         }
         assert!(!drawing(&app), "still drawing with the UI built");
+    }
+
+    /// A panel that once waited out its whole `MAX_HOLD` waits again on its
+    /// next redraw: a later view can queue a UI pipeline of its own.
+    #[test]
+    fn each_redraw_waits_for_the_ui_afresh() {
+        let mut app = app();
+        app.insert_resource(UiBuilt::default())
+            .init_resource::<Drawings>()
+            .add_systems(Update, (update_screens, idle_screens).chain());
+        let world = app.world_mut();
+        let image = world.resource_mut::<Assets<Image>>().add(Image::default());
+        let material = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let screen = |text: &str| ScreenText {
+            text: text.into(),
+            size: Vec2::new(0.64, 0.32),
+            style: ScreenStyle::Lcd,
+        };
+        let panel = world
+            .spawn((
+                ScreenView {
+                    drawing: None,
+                    image,
+                    refresh: 0,
+                    px: Vec2::new(64.0, 32.0),
+                    font: 20.0,
+                    margin: 0.8,
+                    sign: false,
+                    bg: Color::BLACK,
+                    fg: Color::WHITE,
+                    material,
+                    emissive: false,
+                    generation: 0,
+                    paper: None,
+                    held: MAX_HOLD,
+                },
+                screen("GATE 2"),
+            ))
+            .id();
+        app.update();
+        app.world_mut().entity_mut(panel).insert(screen("GATE 3"));
+        for _ in 0..REFRESH_FRAMES as u32 * 10 {
+            app.update();
+        }
+        let view = app.world().get::<ScreenView>(panel).unwrap();
+        assert!(view.drawing.is_some(), "redrawn without waiting for the UI");
     }
 
     /// A picture read back before the text pipelines were ready is bare
