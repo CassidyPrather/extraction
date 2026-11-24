@@ -25,7 +25,7 @@ How it works:
 
 ## Open
 
-Last full lib run: lib379 on 8c1c93da (23 Nov), 1887 passed, 0 failed.
+Last full lib run: lib382 on 9615fff6 (24 Nov), 1892 passed, 0 failed.
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
@@ -33,18 +33,15 @@ Last full lib run: lib379 on 8c1c93da (23 Nov), 1887 passed, 0 failed.
 
 ## Logged, not failing a check
 
-- **A wreck lying in a doorway or gateway is invisible to the raider's `Scene::wreck_out_at`** when the ray starts under a lintel, rail or leaf (bot-only). Owner: Onboarding.
-
-- **one-handed first_jobs 4/5**, raid 4 (post_counter): the bot climbs out of the creek bed beside
-  the Forest path footbridge deck at (-87.76, -35.05) and stops there. A bot-only stall: the gap is
-  in 45bdef65's bridge-end approach. Owner: Onboarding.
-- **seed-3 one-handed 4/5** (since 863a6150): the one-handed reload looks only in the pouches while
-  the spare is in the pack. Owner: Onboarding, with #52/#53.
+(none)
 
 ## Fixed
 
 | What | Fixed by |
 | - | - |
+| A wreck in a doorway or gateway invisible to the raider's `Scene::wreck_out_at` (ray starting under a lintel, rail or leaf) | cebb06d (Onboarding: tries up to 4 ray hits plus the ground; test a_wreck_under_a_lintel_is_seen), gate 383 |
+| one-handed first_jobs raid 4 stall beside the Forest footbridge deck at (-87.76, -35.05) | no longer reproduces (Onboarding, 10 runs on seeds 1-5 ×2) |
+| seed-3 one-handed reload looking only in the pouches while the spare is in the pack | no longer reproduces (Onboarding, 10 runs on seeds 1-5 ×2) |
 | Seed-5 one-handed first_jobs: 22 HP from the body test (the bot stood inside a seen scorch's strike ring to look round) | 713382c (Onboarding: a standing spot inside a seen snare's ring moves out to its edge; seed 5: raids ok 2/5 → 4/5, HurtUnwarned 2 → 0; seeds 1-4 unchanged), gate 380 |
 | first_jobs one-handed bot deaths (was 6 vs 2 on main) | closed as balance: re-measured on 2c306a07 (Onboarding, 23 Nov), 4 deaths on seeds 1-5, all late in the last raid with no common cause; it was a branch-vs-main delta |
 | `render::puff::tests::no_puff_is_a_sphere` (handle_glow.rs) | c592c24 (Hands: the glow is a soft quad halo), green on lib375 (2c306a07: 1880/0) |

@@ -490,11 +490,19 @@ struct TrailDot {
 /// The trail's look (Legibility, 2026-11-23): the way-lamps' warmth
 /// (`render::way_lamps::BULB`, never the machine markers' orange), read by
 /// its pale paint in daylight and drizzle and by its glow only after dusk;
-/// at night fainter than the lamp it leads from. Each dot 14 cm across
-/// (over 12: the incidental floor out to 20 m). Emissive is in scene units
-/// and the grade adapts it: not scaled here as well.
-const DOT_R: f32 = 0.07;
-const DOT_PAINT: Color = Color::srgb(0.85, 0.74, 0.55);
+/// at night fainter than the lamp it leads from. Emissive is in scene
+/// units and the grade adapts it: not scaled here as well.
+///
+/// Each a rounded dash along the leg, 12 cm by 45 (Legibility, measuring
+/// the stills): a round dot on the ground foreshortens with the square of
+/// its distance, and past 8 m it was 2-3 px tall, under the 0.35 degree
+/// floor. At 38 cm the dash held it to 8.6 m and was a pixel short at 10
+/// (its rounded ends lose about a fifth); 45 holds it to 10 m. And it
+/// points the way. The paint warm enough to part from wet grey by its hue (the first,
+/// paler, read whitish), at the bulb's hue and well off the markers' red.
+const DASH_W: f32 = 0.12;
+const DASH_L: f32 = 0.45;
+const DOT_PAINT: Color = Color::srgb(0.80, 0.66, 0.42);
 /// A dot's glow at rest and on the crest, as a share of the bulb's (every
 /// channel stays under 0.5 linear: no bloom).
 const DOT_REST: f32 = 0.15;
@@ -523,9 +531,18 @@ fn lay_dots(
     if leg.dots.is_empty() {
         return;
     }
-    let mesh = meshes.add(Circle::new(DOT_R));
+    let mesh = meshes.add(Capsule2d::new(DASH_W * 0.5, DASH_L - DASH_W));
+    // Lying flat, its length (the shape's +Y) along -Z; then turned about
+    // the up axis to lie along the leg, the way on.
     let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
+    let n = leg.dots.len();
     for (i, p) in leg.dots.iter().enumerate() {
+        let along = leg.dots[(i + 1).min(n - 1)] - leg.dots[i.saturating_sub(1)];
+        let yaw = if along.xz().length_squared() > 1e-6 {
+            f32::atan2(-along.x, -along.z)
+        } else {
+            0.0
+        };
         let mat = materials.add(StandardMaterial {
             base_color: DOT_PAINT,
             emissive: crate::render::way_lamps::BULB * DOT_REST,
@@ -536,7 +553,7 @@ fn lay_dots(
             Name::new("Trail dot"),
             Mesh3d(mesh.clone()),
             MeshMaterial3d(mat.clone()),
-            Transform::from_translation(*p).with_rotation(flat),
+            Transform::from_translation(*p).with_rotation(Quat::from_rotation_y(yaw) * flat),
             bevy::light::NotShadowCaster,
             TrailDot {
                 along: i as f32 * super::trail::DOT_EVERY,
@@ -596,6 +613,10 @@ mod trail_look_tests {
             super::super::trail::DOT_EVERY / CREST_SPEED >= 0.4,
             "a dot each 0.4 s or slower"
         );
-        assert!(DOT_R * 2.0 >= 0.12, "12 cm across at least");
+        assert!(DASH_W >= 0.12, "12 cm across at least");
+        // Its length on screen, about length x eye height / d^2, holds the
+        // 0.35 degree floor out to 10 m from a 1.7 m eye.
+        let at_10 = (DASH_L * 1.7 / 100.0).to_degrees();
+        assert!(at_10 >= 0.35, "{at_10:.2} deg at 10 m");
     }
 }

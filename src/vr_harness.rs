@@ -2124,6 +2124,67 @@ mod tests {
         );
     }
 
+    /// A swing that slows over the last two ticks before the grip opens
+    /// still throws at nine tenths of its peak (playtest 2026-11-22,
+    /// 35:01: throws came out short).
+    #[test]
+    fn a_throw_keeps_the_swings_speed() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let at = feet + Vec3::new(0.25, 1.3, 0.1);
+        let item = vr.spawn("rgd5", Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Dynamic);
+        vr.step(2);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(item));
+        // Past a new item's settling (`items::lost::SETTLE`: its speed is
+        // capped for half a second).
+        vr.step(60);
+        // Forward and up at a steady pace, then two slowing ticks.
+        let dt = 1.0 / 90.0;
+        let fast = Vec3::new(0.0, 0.3, -1.0).normalize() * 9.0;
+        let mut p = at;
+        let mut peak = 0.0f32;
+        for _ in 0..8 {
+            p += fast * dt;
+            vr.move_hand(Side::Right, p);
+            vr.step(1);
+            peak = peak.max(vr.hand_state(Side::Right).velocity.length());
+        }
+        for k in [0.6, 0.3] {
+            p += fast * dt * k;
+            vr.move_hand(Side::Right, p);
+            vr.step(1);
+        }
+        let slowed = vr.hand_state(Side::Right).velocity.length();
+        assert!(slowed < 0.8 * peak, "it slowed: {slowed:.1} of {peak:.1}");
+        vr.grip(Side::Right, 0.0);
+        for _ in 0..4 {
+            vr.step(1);
+            if vr.hand_state(Side::Right).holding.is_none() {
+                break;
+            }
+        }
+        assert_eq!(vr.hand_state(Side::Right).holding, None, "let go");
+        let v = vr
+            .app
+            .world()
+            .get::<LinearVelocity>(item)
+            .map_or(0.0, |v| v.0.length());
+        assert!(v >= 0.9 * peak, "thrown at {v:.1} m/s of a {peak:.1} peak");
+    }
+
     #[test]
     fn point_and_flick_fetches_it() {
         let mut vr = Vr::new("training_yard");
@@ -3677,6 +3738,14 @@ mod onboarding {
             .expect("crosses gate 2's line");
         let x = (cross[0].x + cross[1].x) * 0.5;
         assert!((x - gate.x).abs() < 1.5, "through the gap: x {x:.1}");
+        // On the track, where a newcomer walks, between stepping off the
+        // one station and onto the other (not through the grass beside it).
+        let on_track = leg
+            .dots
+            .iter()
+            .filter(|d| d.xz().distance(from) > 7.0 && d.xz().distance(dest) > 7.0)
+            .all(|d| (d.x - gate.x).abs() < 1.0);
+        assert!(on_track, "along the track: {:?}", leg.dots);
         // There: gone.
         vr.stand(ground(&vr, dest.into()), 0.0);
         vr.step(5);
