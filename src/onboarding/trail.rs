@@ -34,10 +34,12 @@ pub const ARRIVED: f32 = 6.0;
 pub const DOT_LIFT: f32 = 0.02;
 
 /// The line the trail follows from station `from` to station `to`, on
-/// the ground's plan (x, z). Through the gate between them if they're in
-/// different bays (gate N leads out of bay N): up to it on the track, out
-/// through its gap, and past its post on the far side, the one nearer the
-/// station.
+/// the ground's plan (x, z). Between bays it keeps to the track, where a
+/// newcomer walks: off the station to the track, along it and out through
+/// the gate between (gate N leads out of bay N, and the track runs through
+/// every gate), then off it to the next station. Straight lamp to lamp, it
+/// ran through the grass beside the road, which nobody walks (playtest
+/// stills, 2026-11-23).
 pub fn route(zone: &Zone, from: usize, to: usize) -> Vec<Vec2> {
     let a = Vec2::from(STATIONS[from].at);
     let b = Vec2::from(STATIONS[to].at);
@@ -49,22 +51,26 @@ pub fn route(zone: &Zone, from: usize, to: usize) -> Vec<Vec2> {
         });
         if let Some(g) = gate {
             let at = Vec2::from(g.at);
+            let track = at.x;
             // Which way along the track the next bay lies.
-            let on = Vec2::new(0.0, (b.y - at.y).signum());
-            let posts = crate::world::yard::gate_post_anchors(at, g.rot);
-            let post = if posts[0].distance(b) < posts[1].distance(b) {
-                posts[0]
-            } else {
-                posts[1]
-            };
-            line.push(at - on * 2.0);
-            line.push(at + on * 1.0);
-            line.push(post.lerp(at, 0.3) + on * 1.0);
+            let on = (b.y - at.y).signum();
+            let onto = |p: Vec2| Vec2::new(track, p.y);
+            if (a.x - track).abs() > OFF_TRACK {
+                line.push(onto(a));
+            }
+            line.push(Vec2::new(track, at.y - on * 2.0));
+            line.push(Vec2::new(track, at.y + on * 1.0));
+            if (b.x - track).abs() > OFF_TRACK {
+                line.push(onto(b));
+            }
         }
     }
     line.push(b);
     line
 }
+
+/// A station this near the track (m) is walked to straight along it.
+const OFF_TRACK: f32 = 2.0;
 
 /// Dots every [`DOT_EVERY`] along `line`, none within [`CLEAR_OF_POST`] of
 /// either end, on the ground.
