@@ -1809,7 +1809,16 @@ fn first_person_hands(
                 },
                 hold_curl(Some(handle.role), 0.0, 0.0),
             ),
-            None => glove(&mut commands, Side::Right, level, curl),
+            None => glove(
+                &mut commands,
+                Side::Right,
+                level
+                    * Transform::from_rotation(
+                        guns.get(item)
+                            .map_or(Quat::IDENTITY, |g| g.layout.hand_turn),
+                    ),
+                curl,
+            ),
         };
         match point(GripRole::Support) {
             Some(support) => {

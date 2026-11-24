@@ -248,3 +248,16 @@ over the pouched PM magazine, which is bright: brought on, it seats
 (`seat_from_body`). Drawn in the before view, the kit's 9 meshes; after,
 10 spheres and 4 icons for the belt and chest (one mesh and one material
 for all the spheres, each icon one merged mesh), 33k triangles.
+
+`45_hand_turn/` (`--gallery fp:<gun>,2.5,±90` on marrow_creek, 3200×1800):
+the gun hand's glove turned on a straight stock's wrist
+(`GunLayout::hand_turn`, drawn only: the gun, its grip point and its aim
+are where they were). The befores are `44_mosin_grip/before_mosin_2.5_±90`:
+the pistol-grip hand stood upright on the wrist, its fingers coming out
+high by the receiver on the left. After, on the Mosin, from the bolt side
+(−90) the thumb comes over the tang and the index lies forward to the
+trigger; from the left (90) the three fingers wrap under the wrist in a
+row. The same turn on the SKS and TOZ-8 (`sks_`, `toz8_`); the SVD's
+thumbhole grip is upright and keeps the pistol hand (`svd_*_kept`; turned,
+`svd_*_turned_rejected`, the fingers tip off it and the index pokes out
+ahead of the guard).
