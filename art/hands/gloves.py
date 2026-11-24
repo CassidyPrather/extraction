@@ -582,16 +582,16 @@ def cuff(obj, ts):
         return Vector((math.copysign(abs(c) ** e, c) * (w + grow),
                        yc + math.copysign(abs(s) ** e, s) * (h + grow), 0.0))
 
-    # Its hand end a rolled hem, standing 4 mm proud of the glove and lapping
+    # Its hand end a rolled hem, standing 2.5 mm proud of the glove and lapping
     # 10 mm on over the leather, its edge following the wrist's oval
-    # (further toward the fingers at the middle of the back and of the palm
-    # than at the sides): butted on in a flat ring, the leather palm ended
+    # (further toward the fingers at the middle of the palm than at the
+    # sides): butted on in a flat ring, the leather palm ended
     # in a dead-straight cut across the wrist (the 22 November playtest,
     # 1:02, "wrist seam").
     HEM = 0.020
     prof = [  # (z, grow over the wrist, scale about its centre)
-        (HEM - 0.0006, 0.0010, 1), (HEM, 0.0036, 1), (HEM + 0.0016, 0.0046, 1),
-        (HEM + 0.0034, 0.0044, 1), (HEM + 0.0048, 0.0030, 1),
+        (HEM - 0.0006, 0.0015, 1), (HEM, 0.0024, 1), (HEM + 0.0016, 0.0029, 1),
+        (HEM + 0.0034, 0.0027, 1), (HEM + 0.0048, 0.0018, 1),
         (0.034, 0.0016, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
         (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
         (0.079, 0.0030, 1), (0.090, 0.0034, 1),
@@ -603,12 +603,14 @@ def cuff(obj, ts):
 
     def dip(th, z):
         """How far the edge reaches on toward the fingers at angle `th`
-        (most at the back's and palm's middles), fading out up the cuff."""
+        (most at the palm's middle; not on the back, where the display's
+        housing stands behind it), fading out up the cuff."""
         fade = min(max((0.046 - z) / (0.046 - HEM), 0.0), 1.0)
-        return -0.006 * abs(math.sin(th)) ** 1.5 * fade
+        return -0.006 * max(0.0, -math.sin(th)) ** 1.5 * fade
 
     # Each ring sized to the hand where it goes over it: its section there
-    # (the middle, width and height of its skin within 5 mm, 3 mm over it), the wrist's
+    # (the middle, width and height of its skin within 5 mm, 1.5 mm over it:
+    # 3 mm over it flared it like a gauntlet), the wrist's
     # further up. Sized to the wrist alone, the hand stood through the
     # cuff's front (a hard edge) and the hem sank into the leather but for
     # a notch where it dipped.
@@ -622,8 +624,8 @@ def cuff(obj, ts):
             return wrist
         xs = [q.x for q in near]
         ys = [q.y for q in near]
-        sec = ((max(xs) + min(xs)) / 2, (max(xs) - min(xs)) / 2 + 0.003,
-               (max(ys) + min(ys)) / 2, (max(ys) - min(ys)) / 2 + 0.003)
+        sec = ((max(xs) + min(xs)) / 2, (max(xs) - min(xs)) / 2 + 0.0015,
+               (max(ys) + min(ys)) / 2, (max(ys) - min(ys)) / 2 + 0.0015)
         # Never narrower than the hand there or the wrist; its middle eased
         # into the wrist's up the cuff.
         t = min(max((z - HEM) / (0.046 - HEM), 0.0), 1.0)
@@ -654,14 +656,14 @@ def cuff(obj, ts):
     c = make(p)
     c.vertex_groups.new(name="palm").add([v.index for v in c.data.vertices], 1.0, "REPLACE")
     # The hand's own skin under the cuff drawn in toward the wrist's middle
-    # (up to 15%, from 3 mm behind the hem's edge over 8 mm), so none of it
+    # (up to 20%, from 1 mm behind the hem's edge over 5 mm), so none of it
     # can stand through the cuff (the thumb's root did, at a corner).
     to_b = TO_BLENDER.to_3x3()
     for v in obj.data.vertices:
         q = to_game @ v.co
-        k = smooth((q.z - (HEM + 0.003)) / 0.008)
+        k = smooth((q.z - (HEM + 0.001)) / 0.005)
         if k > 0:
-            f = 1.0 - 0.15 * k
+            f = 1.0 - 0.2 * k
             v.co = to_b @ Vector((q.x * f, yc + (q.y - yc) * f, q.z))
     return c
 
@@ -705,12 +707,16 @@ def housing():
     (`render::comfort::WRIST_SIZE`, 78 x 48 mm); its ends sloped and
     rounded down onto the cuff and its long edges rounded, a watch's case
     (with square ends it read as a slab sat on the cuff, playtest
-    2026-11-22, 1:02). Inside z 0.0145-0.1105: the sleeve's hem stops at
+    2026-11-22, 1:02). Inside z 0.021-0.1105 (its rounded front past the
+    panel's, 0.0235): the sleeve's hem stops at
     0.112 to clear it."""
     p = Part("wrist_housing")
     y0, y1 = 0.0125, 0.0195
-    side = fillet([(0.0145, y0), (0.1105, y0), (0.1025, y1), (0.0225, y1)],
-                  [0.002, 0.002, 0.003, 0.003], 4)
+    # (Its front foot just behind the cuff's hem, its rounded front edge
+    # over the hem's roll like a watch case's: sloped down onto the hem,
+    # it met it in a flat face.)
+    side = fillet([(0.0262, y0), (0.1105, y0), (0.1025, y1), (0.0205, y1)],
+                  [0.0015, 0.002, 0.003, 0.003], 4)
     p.prism(side, -0.026, 0.026, "Padding", axis="x", bevel=0.0025, segs=3)
     # Its strap across the wrist, under it.
     p.box((0.058, 0.004, 0.012), (0.0, 0.0155, 0.0625), "Padding", bevel=0.0015, segs=2)
