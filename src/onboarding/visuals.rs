@@ -493,14 +493,15 @@ struct TrailDot {
 /// at night fainter than the lamp it leads from. Emissive is in scene
 /// units and the grade adapts it: not scaled here as well.
 ///
-/// Each a rounded dash along the leg, 12 cm by 38 (Legibility, measuring
-/// the first stills): a round dot on the ground foreshortens with the
-/// square of its distance, and past 8 m it was 2-3 px tall, under the
-/// 0.35 degree floor. Its length holds that out to 10 m, and it points the
-/// way. The paint warm enough to part from wet grey by its hue (the first,
+/// Each a rounded dash along the leg, 12 cm by 45 (Legibility, measuring
+/// the stills): a round dot on the ground foreshortens with the square of
+/// its distance, and past 8 m it was 2-3 px tall, under the 0.35 degree
+/// floor. At 38 cm the dash held it to 8.6 m and was a pixel short at 10
+/// (its rounded ends lose about a fifth); 45 holds it to 10 m. And it
+/// points the way. The paint warm enough to part from wet grey by its hue (the first,
 /// paler, read whitish), at the bulb's hue and well off the markers' red.
 const DASH_W: f32 = 0.12;
-const DASH_L: f32 = 0.38;
+const DASH_L: f32 = 0.45;
 const DOT_PAINT: Color = Color::srgb(0.80, 0.66, 0.42);
 /// A dot's glow at rest and on the crest, as a share of the bulb's (every
 /// channel stays under 0.5 linear: no bloom).
