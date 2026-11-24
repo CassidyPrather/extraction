@@ -22,6 +22,16 @@ pub struct ScreenPlugin;
 
 impl Plugin for ScreenPlugin {
     fn build(&self, app: &mut App) {
+        // The UI's pipeline built yet, read in the render world
+        // (`watch_ui`); without a renderer (tests, headless) never held.
+        if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
+            let built = UiBuilt::default();
+            render.insert_resource(built.clone()).add_systems(
+                bevy::render::Render,
+                watch_ui.in_set(bevy::render::RenderSystems::Cleanup),
+            );
+            app.insert_resource(built);
+        }
         app.init_resource::<Drawings>().add_systems(
             Update,
             (
@@ -98,6 +108,8 @@ struct ScreenView {
     generation: u32,
     /// Under the words, for paper and cards: paper, not a flat sheet.
     paper: Option<Handle<Image>>,
+    /// Frames its drawing has waited for the UI's pipeline (`UiBuilt`).
+    held: u16,
 }
 
 #[derive(Clone, Copy)]
@@ -507,6 +519,7 @@ fn build_screens(
             material: material.clone(),
             emissive,
             generation: 0,
+            held: 0,
         };
         let d = start_drawing(&mut commands, &view, &screen.text);
         view.drawing = Some(d);
@@ -587,9 +600,16 @@ fn idle_screens(
     mut commands: Commands,
     mut screens: Query<(Entity, &mut ScreenView, &ScreenText, Option<&Redrawn>)>,
     mut drawings: ResMut<Drawings>,
+    ui: Option<Res<UiBuilt>>,
 ) {
+    let built = ui.is_none_or(|u| u.0.load(std::sync::atomic::Ordering::Relaxed));
     for (e, mut view, screen, redrawn) in &mut screens {
         if view.drawing.is_none() {
+            continue;
+        }
+        // Its frames don't count till the UI can draw them.
+        if !built && view.held < MAX_HOLD {
+            view.held += 1;
             continue;
         }
         view.refresh = view.refresh.saturating_sub(1);
@@ -606,6 +626,60 @@ fn idle_screens(
             }
         }
     }
+}
+
+/// Whether the UI's pipeline, which draws every panel's ground and words,
+/// is built: set in the render world (`watch_ui`). The playtest of 22
+/// November: it was queued in the first frame after load, but behind the
+/// world's hundreds it was ready only ~165 frames in, and panels that had
+/// drawn their `FIRST_FRAMES` by then were read back blank.
+#[derive(Resource, Clone, Default)]
+struct UiBuilt(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+/// Frames a panel's drawing waits for the UI's pipeline at most (one that
+/// fails to build, or a panel with nothing for the UI to draw, isn't
+/// waited on for ever).
+const MAX_HOLD: u16 = 1200;
+
+/// A pipeline as `ui_built` sees it.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Build {
+    Waiting,
+    Built,
+    Failed,
+}
+
+/// The UI's pipelines built: at least one, and none still waiting (each
+/// view's own; panels draw with their own `ui_pipeline`).
+fn ui_built<'a>(pipelines: impl Iterator<Item = (Option<&'a str>, Build)>) -> bool {
+    let mut any = false;
+    for (label, build) in pipelines {
+        if label != Some("ui_pipeline") {
+            continue;
+        }
+        match build {
+            Build::Waiting => return false,
+            Build::Built => any = true,
+            Build::Failed => {}
+        }
+    }
+    any
+}
+
+fn watch_ui(cache: Res<bevy::render::render_resource::PipelineCache>, out: Res<UiBuilt>) {
+    use bevy::render::render_resource::{CachedPipelineState as S, PipelineDescriptor};
+    let built = ui_built(cache.pipelines().filter_map(|p| match &p.descriptor {
+        PipelineDescriptor::RenderPipelineDescriptor(d) => Some((
+            d.label.as_deref(),
+            match p.state {
+                S::Ok(_) => Build::Built,
+                S::Err(_) => Build::Failed,
+                _ => Build::Waiting,
+            },
+        )),
+        _ => None,
+    }));
+    out.0.store(built, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// A panel whose words came back undrawn (`has_ink`): drawn again.
@@ -971,6 +1045,7 @@ mod tests {
             emissive: false,
             generation: 0,
             paper: None,
+            held: 0,
         };
         let before: Vec<Entity> = world
             .query_filtered::<Entity, With<Readback>>()
@@ -1115,6 +1190,90 @@ mod tests {
             assert!(t.elapsed().as_secs() < 10, "the pictures never showed");
             app.update();
         }
+    }
+
+    /// The UI's pipeline counts as built once one is and none waits; a
+    /// failed one isn't waited on, and other pipelines don't count.
+    #[test]
+    fn the_ui_is_built_when_its_pipelines_are() {
+        use Build::*;
+        let ui = Some("ui_pipeline");
+        assert!(!ui_built([].into_iter()), "nothing queued yet");
+        assert!(!ui_built([(ui, Waiting)].into_iter()));
+        assert!(!ui_built([(ui, Built), (ui, Waiting)].into_iter()));
+        assert!(ui_built(
+            [(ui, Built), (Some("pbr_opaque_mesh_pipeline"), Waiting)].into_iter()
+        ));
+        assert!(ui_built(
+            [(ui, Built), (ui, Failed), (None, Waiting)].into_iter()
+        ));
+    }
+
+    /// A new panel's frames don't count while the UI's pipeline is still
+    /// being built (the playtest of 22 November: drawn and read back
+    /// before it was, the yard's and the arcade's boards came back blank),
+    /// and it finishes once the pipeline is in.
+    #[test]
+    fn a_panel_waits_for_the_ui_to_draw_its_words() {
+        let mut app = app();
+        let built = UiBuilt::default();
+        app.insert_resource(built.clone())
+            .init_resource::<Drawings>()
+            .add_systems(Update, idle_screens);
+        let world = app.world_mut();
+        let image = world.resource_mut::<Assets<Image>>().add(Image::default());
+        let material = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        let view = ScreenView {
+            drawing: None,
+            image,
+            refresh: FIRST_FRAMES,
+            px: Vec2::new(64.0, 32.0),
+            font: 20.0,
+            margin: 0.8,
+            sign: false,
+            bg: Color::BLACK,
+            fg: Color::WHITE,
+            material,
+            emissive: false,
+            generation: 0,
+            paper: None,
+            held: 0,
+        };
+        let text = "GATE 2";
+        let mut commands = world.commands();
+        let d = start_drawing(&mut commands, &view, text);
+        world.flush();
+        let panel = world
+            .spawn((
+                ScreenView {
+                    drawing: Some(d),
+                    ..view
+                },
+                ScreenText {
+                    text: text.into(),
+                    size: Vec2::new(0.64, 0.32),
+                    style: ScreenStyle::Lcd,
+                },
+            ))
+            .id();
+        let drawing = |app: &App| {
+            app.world()
+                .get::<ScreenView>(panel)
+                .unwrap()
+                .drawing
+                .is_some()
+        };
+        for _ in 0..FIRST_FRAMES as u32 * 4 {
+            app.update();
+        }
+        assert!(drawing(&app), "read back before the UI could draw it");
+        built.0.store(true, std::sync::atomic::Ordering::Relaxed);
+        for _ in 0..=FIRST_FRAMES {
+            app.update();
+        }
+        assert!(!drawing(&app), "still drawing with the UI built");
     }
 
     /// A picture read back before the text pipelines were ready is bare
