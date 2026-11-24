@@ -98,10 +98,30 @@ pub struct GunLayout {
     pub load_port: Vec3,
     /// Hinge for break actions.
     pub hinge: Vec3,
+    /// The gun hand's glove turned on the grip, in the grip's frame: drawn
+    /// only. A straight stock's wrist is held with the hand rolled off the
+    /// controller's axis; turning `grip` to match would turn the gun and
+    /// its aim with it.
+    pub hand_turn: Quat,
     pub parts: Vec<Part>,
 }
 
+/// The glove's turn on a straight stock's wrist (`GunLayout::hand_turn`):
+/// pitched forward off the pistol grip's rake and rolled so the thumb
+/// comes over the tang and the fingers wrap under to the far side, as a
+/// hand holds a Mosin's wrist (playtest 2026-11-22, 30:52; tuned from
+/// both sides in `docs/shots/hands/45_hand_turn`).
+fn straight_wrist() -> Quat {
+    Quat::from_euler(EulerRot::XYZ, -0.35, 0.0, -0.3)
+}
+
 impl GunLayout {
+    /// Where the gun hand's glove is drawn, gun space: the grip, turned by
+    /// `hand_turn`.
+    pub fn glove_grip(&self) -> Transform {
+        self.grip * Transform::from_rotation(self.hand_turn)
+    }
+
     /// The blockout's bounds, (low, high) corners in gun space.
     pub fn bounds(&self) -> (Vec3, Vec3) {
         self.parts.iter().fold(
@@ -217,6 +237,7 @@ fn pm() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.066, -0.0367),
         hinge: Vec3::ZERO,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Grip frame with bakelite panels, raked back.
             part(
@@ -326,6 +347,7 @@ fn ak74() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.07, -0.105),
         hinge: Vec3::ZERO,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Pistol grip.
             part(
@@ -422,6 +444,7 @@ fn mosin() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.07, -0.136),
         hinge: Vec3::ZERO,
+        hand_turn: straight_wrist(),
         parts: vec![
             // The long wooden stock, wrist at the origin.
             part(bx(0.042, 0.06, 0.72), at(0.0, 0.0, -0.45), Wood, Static),
@@ -504,6 +527,7 @@ fn sks() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.075, -0.179),
         hinge: Vec3::ZERO,
+        hand_turn: straight_wrist(),
         parts: vec![
             // One-piece stock: forend, wrist and butt.
             part(bx(0.036, 0.03, 0.47), at(0.0, 0.017, -0.205), Wood, Static),
@@ -587,6 +611,7 @@ fn nagant() -> GunLayout {
         handle: None,
         load_port: gate,
         hinge: Vec3::ZERO,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Frame and grip.
             part(bx(0.022, 0.06, 0.11), at(0.0, 0.055, -0.02), Blued, Static),
@@ -641,6 +666,7 @@ fn ppsh() -> GunLayout {
         }),
         load_port: Vec3::new(0.004, 0.062, -0.16),
         hinge: Vec3::ZERO,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Stock from behind the well to the butt.
             part(bx(0.04, 0.04, 0.13), at(0.0, 0.015, -0.065), Wood, Static),
@@ -705,6 +731,7 @@ fn mp133() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.0, -0.13),
         hinge: Vec3::ZERO,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Stock and wrist.
             part(bx(0.038, 0.045, 0.14), at(0.0, -0.005, 0.03), Wood, Static),
@@ -773,6 +800,8 @@ fn svd() -> GunLayout {
         }),
         load_port: Vec3::new(0.0175, 0.0705, -0.148),
         hinge: Vec3::ZERO,
+        // The thumbhole's grip stands upright, a pistol's: the pistol hand.
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Thumbhole stock and its grip.
             part(
@@ -846,6 +875,7 @@ fn toz8() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.05, -0.15),
         hinge: Vec3::ZERO,
+        hand_turn: straight_wrist(),
         parts: vec![
             part(bx(0.036, 0.05, 0.6), at(0.0, -0.005, -0.33), Wood, Static),
             part(
@@ -951,6 +981,7 @@ fn flare_pistol() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, bore, -0.017),
         hinge,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Grip, raked back about 20 degrees.
             part(
@@ -1001,6 +1032,7 @@ fn crossbow() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.07, -0.15),
         hinge: Vec3::ZERO,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Plank stock and tiller, the rail along its top.
             part(bx(0.035, 0.04, 0.29), at(0.0, 0.03, -0.135), Wood, Static),
@@ -1057,6 +1089,7 @@ fn toz() -> GunLayout {
         }),
         load_port: Vec3::new(0.0, 0.04, -0.12),
         hinge,
+        hand_turn: Quat::IDENTITY,
         parts: vec![
             // Stock and wrist.
             part(bx(0.04, 0.045, 0.14), at(0.0, -0.005, 0.02), Wood, Static),

@@ -1593,7 +1593,11 @@ pub(crate) fn gun_index_curl(
 /// the curl, and how far the finger then passes from the point. In the
 /// unrolled glove's frame, where the index curls in its own (y, z) plane.
 fn index_reach(side: Side, gun: &crate::weapons::layout::GunLayout, point: Vec3) -> (f32, f32) {
-    let in_hand = gun.grip.compute_affine().inverse().transform_point3(point);
+    let in_hand = gun
+        .glove_grip()
+        .compute_affine()
+        .inverse()
+        .transform_point3(point);
     let at = glove_frame(side)
         .compute_affine()
         .inverse()
@@ -1865,6 +1869,14 @@ fn pose_hands(
                 match g.points.get(h.point).map(|p| (p.role, p.local)) {
                     Some((role, local)) if role != GripRole::Free => {
                         pose = igt.mul_transform(local);
+                        // A straight stock's wrist: the glove rolled on it
+                        // as a hand holds one, the gun where it was.
+                        if role == GripRole::Primary
+                            && let Ok(gun) = guns.get(item)
+                        {
+                            pose =
+                                pose.mul_transform(Transform::from_rotation(gun.layout.hand_turn));
+                        }
                     }
                     Some(_) => {
                         if let Ok(collider) = boxes.get(item)
@@ -3225,7 +3237,7 @@ mod glove_tests {
             // (about 8 mm in radius), in its plane: how high the trigger sits
             // is the grip's business, not the finger's.
             let in_hand = gun
-                .grip
+                .glove_grip()
                 .compute_affine()
                 .inverse()
                 .transform_point3(trigger.at.translation);
