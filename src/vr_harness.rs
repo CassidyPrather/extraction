@@ -3608,6 +3608,14 @@ mod onboarding {
             .expect("crosses gate 2's line");
         let x = (cross[0].x + cross[1].x) * 0.5;
         assert!((x - gate.x).abs() < 1.5, "through the gap: x {x:.1}");
+        // On the track, where a newcomer walks, between stepping off the
+        // one station and onto the other (not through the grass beside it).
+        let on_track = leg
+            .dots
+            .iter()
+            .filter(|d| d.xz().distance(from) > 7.0 && d.xz().distance(dest) > 7.0)
+            .all(|d| (d.x - gate.x).abs() < 1.0);
+        assert!(on_track, "along the track: {:?}", leg.dots);
         // There: gone.
         vr.stand(ground(&vr, dest.into()), 0.0);
         vr.step(5);
