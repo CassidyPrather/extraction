@@ -25,11 +25,11 @@ How it works:
 
 ## Open
 
-Last full lib run: lib377 on 6e09b2d8 (23 Nov), 1884 passed, 0 failed.
+Last full lib run: lib379 on 8c1c93da (23 Nov), 1887 passed, 0 failed.
 
 | What | First seen on | Owner | Notes |
 | - | - | - | - |
-| Seed-5 one-handed first_jobs: 22 HP from the body test (raid 4 at 64.8 s): the bot's chest stands 2.19 m from the heart against the 2.22 m strike line, on the drawn scorch at full crackle, for about 4 s. Not the snare (no hand fires it since bc8d75be; scorch drawn where it strikes) | 6d425f1d; re-measured on 2c306a07 (23 Nov) | Onboarding (first_jobs bot's route, onboarding/first_hour.rs: keep the body r + 0.3 + 0.5 m off a seen scorch) | A/B seeds 1-5 against main with the fix |
+| (none) | | | |
 
 ## Logged, not failing a check
 
@@ -45,6 +45,7 @@ Last full lib run: lib377 on 6e09b2d8 (23 Nov), 1884 passed, 0 failed.
 
 | What | Fixed by |
 | - | - |
+| Seed-5 one-handed first_jobs: 22 HP from the body test (the bot stood inside a seen scorch's strike ring to look round) | 713382c (Onboarding: a standing spot inside a seen snare's ring moves out to its edge; seed 5: raids ok 2/5 → 4/5, HurtUnwarned 2 → 0; seeds 1-4 unchanged), gate 380 |
 | first_jobs one-handed bot deaths (was 6 vs 2 on main) | closed as balance: re-measured on 2c306a07 (Onboarding, 23 Nov), 4 deaths on seeds 1-5, all late in the last raid with no common cause; it was a branch-vs-main delta |
 | `render::puff::tests::no_puff_is_a_sphere` (handle_glow.rs) | c592c24 (Hands: the glow is a soft quad halo), green on lib375 (2c306a07: 1880/0) |
 | `soak::ledges::tests::no_valley_has_a_ledge_trap` (rime ore mill's high sills, solid since a41e3ff) | f31200ce (World models: only sills within reach are solid), green on lib373 (0a173357: 1873/1) |

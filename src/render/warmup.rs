@@ -1118,6 +1118,7 @@ fn shelve<M: Material>(
             &MeshMaterial3d<M>,
             Has<bevy::camera::visibility::VisibilityRange>,
             Has<bevy::light::NotShadowCaster>,
+            Has<super::budget::ShadowReach>,
         ),
         (
             Without<bevy::mesh::skinning::SkinnedMesh>,
@@ -1133,42 +1134,54 @@ fn shelve<M: Material>(
         return;
     }
     let ty = std::any::type_name::<M>();
-    for (mesh, mat, ranged, no_shadow) in &worn {
+    for (mesh, mat, ranged, no_shadow, reach) in &worn {
         let Some(m) = materials.get(&mat.0) else {
             continue;
         };
-        // A mesh whose layout can't be read (its data gone to the render
-        // world) counts as its own, and is shelved as itself. One whose
-        // layout isn't recorded yet (`record_layouts`, made this frame)
-        // waits a frame for its twin: shelved as itself, a 147-vertex
-        // generated mesh stood on the shelf drawing.
-        let layout = match shelf.layouts.get(&mesh.0.id()) {
-            Some(l) => *l,
-            None if meshes.contains(mesh.0.id()) => continue,
-            None => hash_of(mesh.0.id()),
+        // A shadow switched by distance (`ShadowReach`) is shelved both
+        // ways: the yard's trees all stand past their cards' reach at
+        // start, and the cards' shadow pipeline was built on the walk up
+        // to them, a frame without their trunks or needles (playtest
+        // 2026-11-22, `00752_tree_lod_trunk.jpg`).
+        let flags: &[bool] = if reach {
+            &[false, true]
+        } else {
+            std::slice::from_ref(&no_shadow)
         };
-        let key = hash_of((
-            ty,
-            m.bind_group_data(),
-            format!("{:?}", m.alpha_mode()),
-            m.depth_bias().to_bits(),
-            layout,
-            ranged,
-            no_shadow,
-        ));
-        if !shelf.seen.insert(key) {
-            continue;
-        }
-        if shelf.kinds.insert(key) {
-            let short = ty.rsplit("::").next().unwrap_or(ty).to_string();
-            *shelf.by_type.entry(short).or_default() += 1;
-        }
-        // Its layout's twin, which draws nothing, where there is one.
-        let shown = shelf.twins.get(&layout).cloned().unwrap_or(mesh.0.clone());
-        if let Some(e) = shelf.put(&mut commands, shown, ranged, !no_shadow) {
-            commands
-                .entity(e)
-                .insert((MeshMaterial3d(mat.0.clone()), ShelfMark));
+        for &no_shadow in flags {
+            // A mesh whose layout can't be read (its data gone to the render
+            // world) counts as its own, and is shelved as itself. One whose
+            // layout isn't recorded yet (`record_layouts`, made this frame)
+            // waits a frame for its twin: shelved as itself, a 147-vertex
+            // generated mesh stood on the shelf drawing.
+            let layout = match shelf.layouts.get(&mesh.0.id()) {
+                Some(l) => *l,
+                None if meshes.contains(mesh.0.id()) => continue,
+                None => hash_of(mesh.0.id()),
+            };
+            let key = hash_of((
+                ty,
+                m.bind_group_data(),
+                format!("{:?}", m.alpha_mode()),
+                m.depth_bias().to_bits(),
+                layout,
+                ranged,
+                no_shadow,
+            ));
+            if !shelf.seen.insert(key) {
+                continue;
+            }
+            if shelf.kinds.insert(key) {
+                let short = ty.rsplit("::").next().unwrap_or(ty).to_string();
+                *shelf.by_type.entry(short).or_default() += 1;
+            }
+            // Its layout's twin, which draws nothing, where there is one.
+            let shown = shelf.twins.get(&layout).cloned().unwrap_or(mesh.0.clone());
+            if let Some(e) = shelf.put(&mut commands, shown, ranged, !no_shadow) {
+                commands
+                    .entity(e)
+                    .insert((MeshMaterial3d(mat.0.clone()), ShelfMark));
+            }
         }
     }
 }
@@ -1431,6 +1444,50 @@ mod tests {
             missing.is_empty(),
             "material types not on the warm-up shelf (add a shelve::<..>): {missing:?}"
         );
+    }
+
+    /// A mesh whose shadow is switched by distance (`ShadowReach`) is
+    /// shelved casting and not, whichever it is now: the yard's tree cards
+    /// all start past their reach, and their shadow pipeline was built on
+    /// the walk up to them, a frame with no trunks or needles drawn
+    /// (playtest 2026-11-22, `00752_tree_lod_trunk.jpg`).
+    #[test]
+    fn a_shadow_switched_by_distance_is_shelved_both_ways() {
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .init_resource::<Shelf>()
+            .add_systems(Update, shelve::<StandardMaterial>);
+        let cam = app.world_mut().spawn(Transform::default()).id();
+        let mesh = app
+            .world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(Mesh::from(Cuboid::new(1.0, 1.0, 1.0)));
+        let mat = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        {
+            let mut shelf = app.world_mut().resource_mut::<Shelf>();
+            shelf.camera = Some(cam);
+            shelf.stocking = true;
+            shelf.layouts.insert(mesh.id(), 7);
+        }
+        app.world_mut().spawn((
+            Mesh3d(mesh),
+            MeshMaterial3d(mat),
+            super::super::budget::ShadowReach(30.0),
+            bevy::light::NotShadowCaster,
+        ));
+        app.update();
+        let w = app.world_mut();
+        let mut casts: Vec<bool> = w
+            .query_filtered::<Has<bevy::light::NotShadowCaster>, With<ShelfMark>>()
+            .iter(w)
+            .map(|off| !off)
+            .collect();
+        casts.sort();
+        assert_eq!(casts, vec![false, true], "shelved casting: {casts:?}");
     }
 
     /// The shelf stocks itself in the first seconds, its decoy anomalies
