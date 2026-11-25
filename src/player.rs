@@ -26,6 +26,12 @@ pub(crate) const CAPSULE_HEIGHT: f32 = 1.75;
 /// The lowest the body goes: crouched as low as a kneel.
 const MIN_HEIGHT: f32 = 0.9;
 const STEP_HEIGHT: f32 = 0.4;
+/// How fast the body rises up a step's riser, and at least how fast it
+/// follows a step's drop down, m/s: about a ramp's pace at a walk (2.7 cm
+/// a tick at 90 Hz), so a flight of stairs is a climb, not a riser a frame.
+const STEP_RISE: f32 = 2.4;
+/// A step not stood on after this long (s) is given up: gravity has you.
+const STEP_GIVE_UP: f32 = 0.6;
 /// Deeper water than this and you float, head and shoulders out.
 pub const FLOAT_DEPTH: f32 = 1.3;
 /// Swimming pace with a kit on your back: a slow paddle.
@@ -71,6 +77,26 @@ pub struct Body {
     /// How much slower a frost's chill makes you (0: not at all;
     /// `anomaly::frost`). Stiff with it, you can't run.
     pub chilled: f32,
+    /// Partway up a step (`Stepping`): rising up its riser, or over its
+    /// edge onto it.
+    pub step: Option<Stepping>,
+}
+
+/// A step being climbed. Met while walking, a riser no taller than
+/// `STEP_HEIGHT` is climbed at once: the body rises at `STEP_RISE` (no
+/// further on into the riser while it does), then walks on at the step's
+/// height until its top is under the feet. (It was put up the whole riser
+/// and a capsule's radius on in one tick: a 17 cm jump of the eye per step,
+/// a lunge forward with it, and a stall riding the nosing first; the
+/// 22 November playtest's stairs.)
+#[derive(Clone, Copy, Debug)]
+pub struct Stepping {
+    /// Where the feet stand on the step, world y.
+    pub top: f32,
+    /// Which way the step was walked into.
+    pub dir: Vec3,
+    /// How long it's been climbed, s.
+    pub t: f32,
 }
 
 /// The capsule collider entity (child of the root).
@@ -405,52 +431,139 @@ pub fn move_bodies(
                 body.feet = Some(Vec2::new(local.x, local.z));
             }
         }
-        let mut grounded = false;
-        let out = move_and_slide.move_and_slide(
-            &shape,
-            centre,
-            Quat::IDENTITY,
-            body.velocity,
-            time.delta(),
-            &config,
-            &filter,
-            |hit| {
-                if hit.normal.y > 0.65 {
-                    grounded = true;
-                }
-                MoveAndSlideHitResponse::Accept
-            },
-        );
-        let mut new_centre = out.position;
-        let mut velocity = out.projected_velocity;
-
-        // Step up: if we were walking on the ground and got stopped short,
-        // try the same move from higher up, then settle down onto the step.
+        // Stairs: a riser met walking is climbed (`Stepping`), started the
+        // tick the capsule touches it rather than once it has ridden up the
+        // nosing and been stopped.
         let wanted = Vec3::new(body.velocity.x, 0.0, body.velocity.z) * dt;
-        let got = Vec3::new(new_centre.x - centre.x, 0.0, new_centre.z - centre.z);
-        if body.grounded && wanted.length() > 1e-4 && got.length() < wanted.length() * 0.5 {
-            let up = centre + Vec3::Y * STEP_HEIGHT;
-            if let Some(stepped) = try_step(&move_and_slide, &shape, up, wanted, &filter) {
-                new_centre = stepped;
-                velocity.y = 0.0;
-                grounded = true;
+        let feet_y = centre.y - height * 0.5;
+        if body.step.is_none() && !climbing && !swimming && body.grounded && wanted.length() > 1e-4
+        {
+            if let Some(top) = riser_ahead(&move_and_slide, &shape, centre, feet_y, wanted, &filter)
+            {
+                body.step = Some(Stepping {
+                    top,
+                    dir: wanted.normalize(),
+                    t: 0.0,
+                });
             }
         }
-
-        // Stick to the ground going down slopes and stairs.
-        if !climbing && !grounded && body.grounded && body.velocity.y <= 0.0 {
-            if let Some(hit) = move_and_slide.spatial_query.cast_shape(
+        if let Some(s) = body.step.as_mut() {
+            s.t += dt;
+            let turned_back = wanted.length() > 1e-4 && wanted.normalize().dot(s.dir) < 0.0;
+            if climbing || swimming || s.t > STEP_GIVE_UP || turned_back || input.jump {
+                body.step = None;
+            }
+        }
+        let mut grounded = false;
+        let mut new_centre;
+        let mut velocity;
+        if let Some(step) = body.step {
+            // The walking speed is kept through the step (a blocked move
+            // bled it off, and the body crawled on from each riser).
+            velocity = Vec3::new(body.velocity.x, 0.0, body.velocity.z);
+            grounded = true;
+            if feet_y < step.top - 1e-3 {
+                // Up the riser.
+                new_centre = centre + Vec3::Y * (step.top - feet_y).min(STEP_RISE * dt);
+            } else {
+                // Over its edge at its height, till its top is underfoot.
+                let out = move_and_slide.move_and_slide(
+                    &shape,
+                    centre,
+                    Quat::IDENTITY,
+                    velocity,
+                    time.delta(),
+                    &config,
+                    &filter,
+                    |_| MoveAndSlideHitResponse::Accept,
+                );
+                new_centre = out.position;
+                velocity.x = out.projected_velocity.x;
+                velocity.z = out.projected_velocity.z;
+                // Its top under the feet themselves, not just under the
+                // capsule's round foot (let down onto the edge, it dipped
+                // and rode back up).
+                let feet = new_centre - Vec3::Y * (height * 0.5 - 0.05);
+                if let Some(hit) =
+                    move_and_slide
+                        .spatial_query
+                        .cast_ray(feet, Dir3::NEG_Y, 0.1, true, &filter)
+                {
+                    if hit.normal.y > 0.65 && feet.y - hit.distance > step.top - 0.03 {
+                        body.step = None;
+                    }
+                }
+            }
+        } else {
+            let out = move_and_slide.move_and_slide(
                 &shape,
-                new_centre,
+                centre,
                 Quat::IDENTITY,
-                Dir3::NEG_Y,
-                &ShapeCastConfig::from_max_distance(STEP_HEIGHT),
+                body.velocity,
+                time.delta(),
+                &config,
                 &filter,
-            ) {
-                if hit.normal1.y > 0.65 {
-                    new_centre.y -= (hit.distance - 0.01).max(0.0);
+                |hit| {
+                    if hit.normal.y > 0.65 {
+                        grounded = true;
+                    }
+                    MoveAndSlideHitResponse::Accept
+                },
+            );
+            new_centre = out.position;
+            velocity = out.projected_velocity;
+
+            // Stopped short walking on the ground (a riser `riser_ahead`
+            // didn't see coming): climb it from here.
+            let got = Vec3::new(new_centre.x - centre.x, 0.0, new_centre.z - centre.z);
+            if body.grounded && wanted.length() > 1e-4 && got.length() < wanted.length() * 0.5 {
+                let riser = (!climbing && !swimming)
+                    .then(|| riser_ahead(&move_and_slide, &shape, centre, feet_y, wanted, &filter))
+                    .flatten();
+                if let Some(top) = riser {
+                    body.step = Some(Stepping {
+                        top,
+                        dir: wanted.normalize(),
+                        t: 0.0,
+                    });
+                    new_centre = centre;
+                    velocity = Vec3::new(body.velocity.x, 0.0, body.velocity.z);
                     grounded = true;
-                    velocity.y = 0.0;
+                } else {
+                    // Barely a step (a seam, a lip) or an odd one: over it.
+                    let up = centre + Vec3::Y * STEP_HEIGHT;
+                    if let Some(stepped) = try_step(&move_and_slide, &shape, up, wanted, &filter) {
+                        new_centre = stepped;
+                        velocity.y = 0.0;
+                        grounded = true;
+                    }
+                }
+            }
+
+            // Stick to the ground going down slopes and stairs: down a
+            // step's drop no faster than a ramp would take you (it was the
+            // whole drop in a tick), quick enough to follow a slope.
+            if !climbing && !grounded && body.grounded && body.velocity.y <= 0.0 {
+                if let Some(hit) = move_and_slide.spatial_query.cast_shape(
+                    &shape,
+                    new_centre,
+                    Quat::IDENTITY,
+                    Dir3::NEG_Y,
+                    &ShapeCastConfig::from_max_distance(STEP_HEIGHT),
+                    &filter,
+                ) {
+                    if hit.normal1.y > 0.65 {
+                        let fall = if wanted.length() > 1e-4 {
+                            STEP_RISE.max(1.2 * wanted.length() / dt.max(1e-4)) * dt
+                        } else {
+                            // Not walking (stood somewhere, a slope crept
+                            // down): straight onto it.
+                            f32::INFINITY
+                        };
+                        new_centre.y -= (hit.distance - 0.01).max(0.0).min(fall);
+                        grounded = true;
+                        velocity.y = 0.0;
+                    }
                 }
             }
         }
@@ -683,6 +796,68 @@ fn walk_over(
     let across = raised + delta;
     let hit = cast(across, Dir3::NEG_Y, STEP_HEIGHT * 2.0)?;
     (hit.normal1.y > 0.65).then(|| across - Vec3::Y * (hit.distance - 0.005).max(0.0))
+}
+
+/// A step's riser met this tick walking `wanted` from `centre` (feet at
+/// `feet_y`): where the feet would stand on its top (world y). Something
+/// struck between a few centimetres and a step's height over the feet,
+/// steeper than ground you can stand on, with a top to stand on beyond it
+/// and room above. (A slope's ground meets the capsule's curve facing up:
+/// not a riser. A wall has no top in reach: not a step.)
+fn riser_ahead(
+    ms: &MoveAndSlide,
+    shape: &Collider,
+    centre: Vec3,
+    feet_y: f32,
+    wanted: Vec3,
+    filter: &SpatialQueryFilter,
+) -> Option<f32> {
+    let dir = Dir3::new(wanted).ok()?;
+    let cast = |from: Vec3, dir: Dir3, d: f32| {
+        ms.spatial_query.cast_shape(
+            shape,
+            from,
+            Quat::IDENTITY,
+            dir,
+            &ShapeCastConfig::from_max_distance(d),
+            filter,
+        )
+    };
+    let hit = cast(centre, dir, wanted.length() + 0.01)?;
+    // The capsule's own normal there (a box's edge has no one normal).
+    let facing_up = -hit.normal2.y;
+    let rise = hit.point1.y - feet_y;
+    if facing_up > 0.65 || !(0.03..STEP_HEIGHT).contains(&rise) {
+        return None;
+    }
+    // Room to rise: the capsule's round foot overlaps the step it's met
+    // (it rises past the nosing, set there, not cast), so look up from
+    // just clear of it, behind.
+    let met = (hit.point1 - centre).with_y(0.0).length();
+    let back = (CAPSULE_RADIUS + 0.01 - met).max(0.0);
+    if cast(centre - dir * back, Dir3::Y, STEP_HEIGHT).is_some() {
+        return None;
+    }
+    // Then room on over the edge: a little past where the riser was met (a
+    // capsule's radius on fell 6 mm short of a 17 cm riser's top, onto
+    // its edge).
+    let raised = centre + Vec3::Y * STEP_HEIGHT;
+    let on = met + 0.05;
+    if cast(raised, dir, on).is_some() {
+        return None;
+    }
+    // The step's top: straight down onto it a little past its edge (a
+    // capsule let down there caught the edge first).
+    let over = raised + dir * on;
+    let from = Vec3::new(over.x, feet_y + STEP_HEIGHT + 0.02, over.z) + dir * 0.03;
+    let top = ms
+        .spatial_query
+        .cast_ray(from, Dir3::NEG_Y, STEP_HEIGHT + 0.05, true, filter)?;
+    if top.normal.y <= 0.65 {
+        return None;
+    }
+    let feet_on = from.y - top.distance + 0.01;
+    (feet_on > feet_y + 0.02 && feet_on < feet_y + STEP_HEIGHT).then_some(feet_on)
 }
 
 fn try_step(
@@ -938,5 +1113,151 @@ mod tests {
         }
         let body = app.world().get::<Body>(player).unwrap();
         assert!(!body.swimming && body.wading < 0.01, "dry land");
+    }
+
+    /// Walked up a flight of stairs on the stick (risers 17 cm, treads
+    /// 30 cm, as `door_steps` builds them), the eye climbs: never more than
+    /// 3 cm a tick, never a stall that bobs it up and back on the first
+    /// nosing, never a lunge forward; and walked back down, it comes down
+    /// as smoothly. (Each riser was a 17 cm jump in one 11 ms tick, with a
+    /// capsule radius's lunge forward: the 22 November playtest, 27:48.)
+    #[test]
+    fn stairs_are_climbed_not_jumped() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>().clone();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // Open ground, away from the truck, on a slab of its own (the
+        // flight's foot level whatever the terrain does).
+        let ground = zone.on_ground(0.0, 200.0);
+        let base = ground + Vec3::Y * 1.0;
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(20.0, 1.0, 30.0),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_translation(base - Vec3::Y * 0.5),
+        ));
+        const RISE: f32 = 0.17;
+        const TREAD: f32 = 0.3;
+        const STEPS: usize = 6;
+        // The flight goes up toward -z from 0.6 m ahead of the feet, a
+        // landing at its top.
+        let start = base.z - 0.6;
+        for i in 0..=STEPS {
+            let tall = RISE * (i + 1).min(STEPS) as f32;
+            let deep = if i == STEPS { 2.0 } else { TREAD };
+            let z = start - TREAD * i as f32 - deep * 0.5;
+            app.world_mut().spawn((
+                RigidBody::Static,
+                Collider::cuboid(2.0, tall, deep),
+                CollisionLayers::new(Layer::World, LayerMask::ALL),
+                Transform::from_xyz(base.x, base.y + tall * 0.5, z),
+            ));
+        }
+        let top = base.y + RISE * STEPS as f32;
+        {
+            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+            t.translation = base + Vec3::Y * 0.02;
+            t.rotation = Quat::IDENTITY;
+        }
+        for _ in 0..30 {
+            app.update();
+        }
+        let walk = |app: &mut App, stick: f32, ticks: usize| -> Vec<Vec3> {
+            let mut path = vec![app.world().get::<Transform>(player).unwrap().translation];
+            for _ in 0..ticks {
+                {
+                    let mut input = app.world_mut().get_mut::<RigInput>(player).unwrap();
+                    input.locomotion = Vec2::new(0.0, stick);
+                    input.head = Transform::from_xyz(0.0, 1.65, 0.0);
+                }
+                app.update();
+                path.push(app.world().get::<Transform>(player).unwrap().translation);
+            }
+            path
+        };
+        let mut up = vec![app.world().get::<Transform>(player).unwrap().translation];
+        for _ in 0..90 * 3 {
+            let last = *up.last().unwrap();
+            up.extend(walk(&mut app, 1.0, 1).into_iter().skip(1));
+            if last.y > top - 0.02 {
+                break;
+            }
+        }
+        // Stand on the landing a moment.
+        walk(&mut app, 0.0, 30);
+        let reached = up.iter().position(|p| p.y > top - 0.02);
+        let trace = |path: &[Vec3]| {
+            path.iter()
+                .step_by(10)
+                .map(|p| format!("{:.2}:{:.3}", p.z - base.z, p.y - base.y))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert!(
+            reached.is_some(),
+            "up the flight to {top:.2}: got to {:.2} (z:y every 10 ticks {})",
+            up.last().unwrap().y,
+            trace(&up)
+        );
+        let climb = &up[..=reached.unwrap()];
+        let rise = climb
+            .windows(2)
+            .map(|w| w[1].y - w[0].y)
+            .fold(0.0, f32::max);
+        let dip = climb
+            .windows(2)
+            .map(|w| w[0].y - w[1].y)
+            .fold(0.0, f32::max);
+        let lunge = climb
+            .windows(2)
+            .map(|w| (w[1] - w[0]).with_y(0.0).length())
+            .fold(0.0, f32::max);
+        let walk_tick = WALK_SPEED / 90.0;
+        assert!(rise <= 0.03, "the eye rose {rise:.3} m in a tick");
+        let at = climb
+            .windows(2)
+            .position(|w| w[0].y - w[1].y >= dip - 1e-6)
+            .unwrap_or(0);
+        let near: Vec<String> = climb[at.saturating_sub(12)..(at + 6).min(climb.len())]
+            .iter()
+            .map(|p| format!("{:.3}:{:.3}", p.z - base.z, p.y - base.y))
+            .collect();
+        assert!(
+            dip <= 0.01,
+            "the eye bobbed back {dip:.3} m on the way up, tick {at}: {}",
+            near.join(" ")
+        );
+        assert!(
+            lunge <= walk_tick * 1.25,
+            "a lunge of {lunge:.3} m in a tick (walking is {walk_tick:.3})"
+        );
+        // And back down, walking backwards.
+        let down = walk(&mut app, -1.0, 90 * 4);
+        let reached = down.iter().position(|p| p.y < base.y + 0.03);
+        assert!(
+            reached.is_some(),
+            "down the flight to {:.2}: got to {:.2} ({})",
+            base.y,
+            down.last().unwrap().y,
+            trace(&down)
+        );
+        let descent = &down[..=reached.unwrap()];
+        let drop = descent
+            .windows(2)
+            .map(|w| w[0].y - w[1].y)
+            .fold(0.0, f32::max);
+        assert!(drop <= 0.035, "the eye dropped {drop:.3} m in a tick");
     }
 }
