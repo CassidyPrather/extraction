@@ -114,6 +114,31 @@ fn fbm(p: vec2<f32>) -> f32 {
     return s;
 }
 
+// Gradient noise, about -0.7..0.7. Value noise (vnoise) puts its
+// extremes on the integer lattice, and sharpened it draws blotches with
+// square, axis-parallel edges; gradient noise is zero there and peaks
+// between, so its shapes are round.
+fn gnoise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    let ga = hash2(i) * 6.2831853;
+    let gb = hash2(i + vec2<f32>(1.0, 0.0)) * 6.2831853;
+    let gc = hash2(i + vec2<f32>(0.0, 1.0)) * 6.2831853;
+    let gd = hash2(i + vec2<f32>(1.0, 1.0)) * 6.2831853;
+    let a = dot(vec2<f32>(cos(ga), sin(ga)), f);
+    let b = dot(vec2<f32>(cos(gb), sin(gb)), f - vec2<f32>(1.0, 0.0));
+    let c = dot(vec2<f32>(cos(gc), sin(gc)), f - vec2<f32>(0.0, 1.0));
+    let d = dot(vec2<f32>(cos(gd), sin(gd)), f - vec2<f32>(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// Domain rotations, so no two octaves share a lattice and none lines up
+// with the world's axes (or a fence, or the yard's lanes).
+const ROT37: mat2x2<f32> = mat2x2<f32>(0.7986355, 0.6018150, -0.6018150, 0.7986355);
+const ROT53: mat2x2<f32> = mat2x2<f32>(0.6018150, 0.7986355, -0.7986355, 0.6018150);
+const ROT71: mat2x2<f32> = mat2x2<f32>(0.3255682, 0.9455186, -0.9455186, 0.3255682);
+
 // ---------------------------------------------------------------------
 // Layer sampling
 // ---------------------------------------------------------------------
@@ -219,13 +244,15 @@ struct Tap {
 
 // One of the three samples: the vertex's offset and rotation applied to
 // the coordinates (and their derivatives), the normal turned back.
-fn hex_tap(i: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, vertex: vec2<f32>) -> Tap {
-    let r = hash22(vertex + vec2<f32>(f32(i) * 7.31, 0.0));
+// `seed` picks the vertices' offsets and turns (the layer's own index, or
+// another for a second variant of the same texture).
+fn hex_tap(i: u32, seed: f32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, vertex: vec2<f32>) -> Tap {
+    let r = hash22(vertex + vec2<f32>(seed * 7.31, 0.0));
     let a = r.x * 6.2831853;
     let cs = cos(a);
     let sn = sin(a);
     let rot = mat2x2<f32>(cs, sn, -sn, cs);
-    let off = hash22(vertex * 1.31 + vec2<f32>(3.7, f32(i)));
+    let off = hash22(vertex * 1.31 + vec2<f32>(3.7, seed));
     let u = rot * uv + off;
     let ddx = rot * dx;
     let ddy = rot * dy;
@@ -242,17 +269,14 @@ fn hex_tap(i: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, vertex: vec2<f32
     return t;
 }
 
-fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
-    if (terrain.textured == 0u) {
-        return procedural_layer(i, wp);
-    }
-    let uv = wp / (terrain.tile / layer_scale(i));
-    let dx = dpdx(uv);
-    let dy = dpdy(uv);
+// One hex-tiled sample of layer `i` at `uv`, its vertices seeded by `seed`.
+// `dx`, `dy`: uv's screen derivatives, taken by the caller before it
+// branches.
+fn hex_sample(i: u32, seed: f32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>) -> Layer {
     let c = hex_cell(uv);
-    let t1 = hex_tap(i, uv, dx, dy, c.v1);
-    let t2 = hex_tap(i, uv, dx, dy, c.v2);
-    let t3 = hex_tap(i, uv, dx, dy, c.v3);
+    let t1 = hex_tap(i, seed, uv, dx, dy, c.v1);
+    let t2 = hex_tap(i, seed, uv, dx, dy, c.v2);
+    let t3 = hex_tap(i, seed, uv, dx, dy, c.v3);
     // Sharpen the blend toward the brighter (higher) sample so the seams
     // between cells read as one surface, not a cross-fade.
     let lum = vec3<f32>(
@@ -263,13 +287,65 @@ fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
     var w = pow(c.weights, vec3<f32>(5.0)) * (1.0 + 2.0 * lum);
     w = w / max(w.x + w.y + w.z, 1e-5);
     var l: Layer;
-    // Large-scale brightness variation so fields don't read as wallpaper.
-    let macro_v = 0.85 + 0.3 * fbm(wp * 0.02 + vec2<f32>(f32(i) * 3.0, 1.0));
-    l.albedo = (t1.albedo * w.x + t2.albedo * w.y + t3.albedo * w.z) * macro_v;
+    l.albedo = t1.albedo * w.x + t2.albedo * w.y + t3.albedo * w.z;
     l.normal = normalize(t1.normal * w.x + t2.normal * w.y + t3.normal * w.z);
     let m = t1.arm * w.x + t2.arm * w.y + t3.arm * w.z;
     l.ao = m.r;
     l.rough = m.g;
+    return l;
+}
+
+// The grass's second variant: the same scan at 1.62 times the size, turned
+// and seeded apart. One 3 m tile of it, however shuffled, showed the same
+// few clumps every 3-5 m up a long slope at a grazing angle (playtest
+// 00920); patches of the larger variant, ten metres or so across with
+// soft edges, break that rhythm.
+const GRASS_B_SCALE: f32 = 1.62;
+const GRASS_B_TURN: mat2x2<f32> = mat2x2<f32>(0.9210610, 0.3894183, -0.3894183, 0.9210610);
+
+fn sample_layer(i: u32, wp: vec2<f32>) -> Layer {
+    if (terrain.textured == 0u) {
+        return procedural_layer(i, wp);
+    }
+    let uv = wp / (terrain.tile / layer_scale(i));
+    let dx = dpdx(uv);
+    let dy = dpdy(uv);
+    var l: Layer;
+    if (i == 0u) {
+        // Low-frequency mask: patches ~10 m, soft-edged.
+        let mq = ROT37 * (wp * 0.085) + vec2<f32>(3.3, 7.1);
+        let mb = smoothstep(-0.22, 0.22, gnoise(mq) + 0.35 * gnoise(ROT71 * (mq * 2.3)));
+        var la: Layer;
+        var lb: Layer;
+        if (mb < 0.99) {
+            la = hex_sample(0u, 0.0, uv, dx, dy);
+        }
+        if (mb > 0.01) {
+            let k = GRASS_B_TURN * (1.0 / GRASS_B_SCALE);
+            lb = hex_sample(0u, 11.0, k * uv + vec2<f32>(0.37, 0.61), k * dx, k * dy);
+            // Turn its normal back by the variant's turn.
+            lb.normal = vec3<f32>(
+                GRASS_B_TURN[0].x * lb.normal.x - GRASS_B_TURN[0].y * lb.normal.y,
+                GRASS_B_TURN[0].y * lb.normal.x + GRASS_B_TURN[0].x * lb.normal.y,
+                lb.normal.z,
+            );
+        }
+        if (mb <= 0.01) {
+            l = la;
+        } else if (mb >= 0.99) {
+            l = lb;
+        } else {
+            l.albedo = mix(la.albedo, lb.albedo, mb);
+            l.normal = normalize(mix(la.normal, lb.normal, mb));
+            l.ao = mix(la.ao, lb.ao, mb);
+            l.rough = mix(la.rough, lb.rough, mb);
+        }
+    } else {
+        l = hex_sample(i, f32(i), uv, dx, dy);
+    }
+    // Large-scale brightness variation so fields don't read as wallpaper.
+    let macro_v = 0.85 + 0.3 * fbm(wp * 0.02 + vec2<f32>(f32(i) * 3.0, 1.0));
+    l.albedo = l.albedo * macro_v;
     l.height = dot(l.albedo, vec3<f32>(0.3, 0.59, 0.11));
     return l;
 }
@@ -497,14 +573,22 @@ fn fragment(
                 l.albedo = l.albedo * mix(vec3<f32>(1.0), vec3<f32>(1.45, 1.38, 1.3), body);
             }
             if (i == 0u) {
+                // Gradient noise on rotated, offset lattices, the whole
+                // domain bent a little by a 3 m warp: value noise on the
+                // world's grid, sharpened, drew the hollows as square
+                // blotches lined up with the axes (the 22 Nov playtest's
+                // "square tiles"). The sharpening is softer too.
                 let tq = wp.xz + vec2<f32>(23.0, 5.0);
-                let tuss = vnoise(tq * 1.7) * 0.55 + vnoise(tq * 3.6) * 0.45;
+                let wq = ROT53 * (tq * 0.3) + vec2<f32>(4.1, 9.3);
+                let q = tq + vec2<f32>(gnoise(wq), gnoise(wq + vec2<f32>(7.7, 2.9))) * 0.45;
+                let tuss = 0.5 + (gnoise(ROT37 * (q * 0.95)) * 0.55
+                    + gnoise(ROT71 * (q * 2.1) + vec2<f32>(5.2, 1.3)) * 0.45) * 1.1;
                 // The small grain dies out before it would crawl: by the
                 // time a 0.15 m spot is under a few pixels.
                 let px = length(fwidth(wp.xz));
-                let grain = (vnoise(tq * 7.3) - 0.5) * (1.0 - smoothstep(0.02, 0.06, px));
+                let grain = gnoise(ROT53 * (q * 4.3) + vec2<f32>(1.7, 8.1)) * (1.0 - smoothstep(0.02, 0.06, px));
                 let t = tuss + grain * 0.35;
-                let crown = smoothstep(0.38, 0.58, t);
+                let crown = smoothstep(0.3, 0.7, t);
                 let hollow = mix(vec3<f32>(0.7, 0.75, 0.62), vec3<f32>(1.0), crown);
                 let thatch = mix(vec3<f32>(1.0), vec3<f32>(1.18, 1.1, 0.84), smoothstep(0.6, 0.8, t));
                 l.albedo = l.albedo * hollow * thatch;
